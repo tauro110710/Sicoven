@@ -5,7 +5,12 @@ const MAX_OBSERVATIONS = 600;
 const SERIES_CODES = new Set(['IPC_AMC','INPC_BCV','ESTIMACION_EXPERTO','ESTUDIO_FCCPV','ESTIMACION_PROPIA_EXCEPCIONAL']);
 const METRIC_TYPES = new Set(['INDEX_LEVEL', 'MONTHLY_VARIATION_PCT']);
 
-function validDate(value) {\n  if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;\n  const parsed = new Date(value + 'T00:00:00.000Z');\n  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;\n}\nfunction validMonth(value) {
+function validDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(value + 'T00:00:00.000Z');
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+function validMonth(value) {
   if (typeof value !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return false;
   const [year, month] = value.split('-').map(Number);
   return year >= 1900 && year <= 2200 && month >= 1 && month <= 12;
@@ -80,8 +85,8 @@ function initializeInflationIndexSchema(db) {
       id TEXT PRIMARY KEY,
       series_code TEXT NOT NULL CHECK(series_code IN ('IPC_AMC','INPC_BCV','ESTIMACION_EXPERTO','ESTUDIO_FCCPV','ESTIMACION_PROPIA_EXCEPCIONAL')),
       metric_type TEXT NOT NULL CHECK(metric_type IN ('INDEX_LEVEL','MONTHLY_VARIATION_PCT')),
-      base_period TEXT, source_id TEXT NOT NULL REFERENCES inflation_index_sources(id),
-      first_period TEXT NOT NULL, last_period TEXT NOT NULL, observation_count INTEGER NOT NULL,
+      base_period TEXT, series_version INTEGER NOT NULL, source_id TEXT NOT NULL REFERENCES inflation_index_sources(id),
+      first_period TEXT NOT NULL, last_period TEXT NOT NULL, observation_count INTEGER NOT NULL, missing_months_json TEXT NOT NULL,
       imported_by TEXT NOT NULL, created_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS inflation_index_observations (
@@ -132,7 +137,7 @@ function validateImportInput(input) {
   const sourceUrl = input.sourceUrl ? String(input.sourceUrl).trim() : null;
   if (sourceUrl && !/^https?:\/\/\S+$/i.test(sourceUrl)) throw new Error('La referencia web debe ser una URL HTTP/HTTPS válida.');
   const sourcePublishedAt = input.sourcePublishedAt ? String(input.sourcePublishedAt) : null;
-  if (sourcePublishedAt && !/^\d{4}-\d{2}-\d{2}$/.test(sourcePublishedAt)) throw new Error('La fecha de publicación debe usar YYYY-MM-DD.');
+  if (sourcePublishedAt && !validDate(sourcePublishedAt)) throw new Error('La fecha de publicación debe usar YYYY-MM-DD.');
   return { ...parsed, seriesCode, metricType, sourceText: input.sourceText, sourceTitle, issuer, sourceReference, fileName, basePeriod, sourceUrl, sourcePublishedAt };
 }
 function importInflationIndexSeries(db, input, actor) {
@@ -140,15 +145,17 @@ function importInflationIndexSeries(db, input, actor) {
   if (actor.role !== 'admin') throw new Error('Solo un administrador puede importar series de índices.');
   const data = validateImportInput(input); const sourceId = crypto.randomUUID(); const seriesId = crypto.randomUUID();
   const now = new Date().toISOString();
+  let seriesVersion = 0;
   const save = db.transaction(() => {
     db.prepare(`INSERT INTO inflation_index_sources
       (id,file_name,source_title,issuer,source_reference,source_url,source_published_at,imported_at,source_sha256,source_bytes,source_text)
       VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(sourceId, data.fileName, data.sourceTitle, data.issuer, data.sourceReference,
       data.sourceUrl, data.sourcePublishedAt, now, data.sourceSha256, data.sourceBytes, data.sourceText);
+    seriesVersion = Number(db.prepare('SELECT COALESCE(MAX(series_version),0)+1 AS nextVersion FROM inflation_index_series WHERE series_code=? AND metric_type=?').get(data.seriesCode, data.metricType).nextVersion);
     db.prepare(`INSERT INTO inflation_index_series
-      (id,series_code,metric_type,base_period,source_id,first_period,last_period,observation_count,imported_by,created_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?)`).run(seriesId, data.seriesCode, data.metricType, data.basePeriod, sourceId,
-      data.firstPeriod, data.lastPeriod, data.observationCount, actor.username, now);
+      (id,series_code,metric_type,base_period,series_version,source_id,first_period,last_period,observation_count,missing_months_json,imported_by,created_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(seriesId, data.seriesCode, data.metricType, data.basePeriod, seriesVersion, sourceId,
+      data.firstPeriod, data.lastPeriod, data.observationCount, JSON.stringify(data.missingMonths), actor.username, now);
     const insert = db.prepare(`INSERT INTO inflation_index_observations
       (id,series_id,period,source_value,normalized_value,created_at) VALUES(?,?,?,?,?,?)`);
     for (const row of data.observations) insert.run(crypto.randomUUID(), seriesId, row.period, row.sourceValue, row.value, now);
@@ -159,7 +166,7 @@ function importInflationIndexSeries(db, input, actor) {
     }));
   });
   save();
-  return { ok: true, seriesId, sourceId, seriesCode: data.seriesCode, metricType: data.metricType,
+  return { ok: true, seriesId, sourceId, seriesCode: data.seriesCode, seriesVersion, metricType: data.metricType,
     firstPeriod: data.firstPeriod, lastPeriod: data.lastPeriod, observationCount: data.observationCount,
     missingMonths: data.missingMonths, sourceSha256: data.sourceSha256, approvalStatus: 'PENDING_REVIEW' };
 }
@@ -184,7 +191,8 @@ function approveInflationIndexSeries(db, seriesId, decision, reason, actor) {
 function getInflationIndexCatalog(db) {
   const rows = db.prepare(`
     SELECT s.id,s.series_code AS seriesCode,s.metric_type AS metricType,s.base_period AS basePeriod,
-      s.first_period AS firstPeriod,s.last_period AS lastPeriod,s.observation_count AS observationCount,\n      s.series_version AS seriesVersion,s.missing_months_json AS missingMonthsJson,
+      s.first_period AS firstPeriod,s.last_period AS lastPeriod,s.observation_count AS observationCount,
+      s.series_version AS seriesVersion,s.missing_months_json AS missingMonthsJson,
       s.imported_by AS importedBy,s.created_at AS createdAt,src.file_name AS fileName,
       src.source_title AS sourceTitle,src.issuer,src.source_reference AS sourceReference,
       src.source_url AS sourceUrl,src.source_published_at AS sourcePublishedAt,src.imported_at AS importedAt,
