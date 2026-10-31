@@ -16,5 +16,9 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   listAuditEvents: (token, limit) => ipcRenderer.invoke('sicoven:audit-list', token, limit),
   save: (token, state) => ipcRenderer.invoke('sicoven:save-state', token, state),
   reopenAccountingPeriod: (token, input) => ipcRenderer.invoke('sicoven:reopen-accounting-period', token, input),
-  resetAccounting: (token) => ipcRenderer.invoke('sicoven:reset-accounting', token)
+  resetAccounting: (token) => ipcRenderer.invoke('sicoven:reset-accounting', token),
+  listInflationIndexSeries: (token) => ipcRenderer.invoke('sicoven:inflation-index-list', token),
+  previewInflationIndexImport: (token, input) => ipcRenderer.invoke('sicoven:inflation-index-preview', token, input),
+  importInflationIndexSeries: (token, input) => ipcRenderer.invoke('sicoven:inflation-index-import', token, input),
+  reviewInflationIndexSeries: (token, input) => ipcRenderer.invoke('sicoven:inflation-index-review', token, input)
 }));
