@@ -75,8 +75,14 @@ export function getInflationRestatementTreatment(
   if (classification === 'NON_MONETARY') {
     if (basis === 'HISTORICAL_COST' || basis === 'GOODS_OR_SERVICES') return 'RESTATE_FROM_ORIGIN';
     if (basis === 'FAIR_VALUE' || basis === 'NET_REALIZABLE_VALUE' || basis === 'REVALUED') {
-      if (!validIsoDate(measurementDate) || !validIsoDate(reportingDate) || measurementDate > reportingDate) {
-        throw new Error('La medición a valor corriente/revaluado requiere fecha válida no posterior a la fecha de reporte.');
+      if (!validIsoDate(measurementDate)) {
+        throw new Error('La fecha de medición debe ser una fecha calendario válida en formato YYYY-MM-DD.');
+      }
+      if (!validIsoDate(reportingDate)) {
+        throw new Error('La fecha de reporte debe ser una fecha calendario válida en formato YYYY-MM-DD.');
+      }
+      if (measurementDate > reportingDate) {
+        throw new Error('La fecha de medición no puede ser posterior a la fecha de reporte.');
       }
       return measurementDate === reportingDate ? 'NOT_RESTATE_CURRENT_MEASURE' : 'RESTATE_FROM_MEASUREMENT_DATE';
     }
