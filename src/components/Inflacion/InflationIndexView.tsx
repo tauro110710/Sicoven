@@ -62,7 +62,7 @@ const initialForm = (): ImportForm => ({
   issuer: '',
   sourceReference: '',
   sourceUrl: '',
-  sourcePublishedAt: new Date().toISOString().slice(0, 10),
+  sourcePublishedAt: '',
   sourceText: ''
 });
 
@@ -100,7 +100,7 @@ export const InflationIndexView: React.FC<{ token: string }> = ({ token }) => {
   const refreshSeries = async () => {
     if (!window.sicovenStore) throw new Error('Esta función requiere SICOVEN de escritorio con SQLite local.');
     const rows = await window.sicovenStore.listInflationIndexSeries(token);
-    setSeries(rows as SeriesRecord[]);
+    setSeries(rows as unknown as SeriesRecord[]);
   };
 
   useEffect(() => {
@@ -109,7 +109,7 @@ export const InflationIndexView: React.FC<{ token: string }> = ({ token }) => {
       try {
         if (!window.sicovenStore) throw new Error('La administración de índices está disponible en SICOVEN Desktop.');
         const rows = await window.sicovenStore.listInflationIndexSeries(token);
-        if (active) setSeries(rows as SeriesRecord[]);
+        if (active) setSeries(rows as unknown as SeriesRecord[]);
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : 'No se pudo consultar el catálogo local.');
       }
