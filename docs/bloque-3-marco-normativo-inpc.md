@@ -89,7 +89,7 @@ Antes de codificar el motor de cálculo se debe:
 5. aprobar la matriz de partidas monetarias/no monetarias y el tratamiento por marco (GE/ PYME);
 6. preparar casos de referencia con resultados esperados revisados por profesional.
 
-Hasta entonces, la funcionalidad permanece en diseño normativo y no se generarán cálculos contables.
+Hasta completar la verificación documental de las series, la funcionalidad permanece en administración de evidencia y no se generarán cálculos contables.
 
 
 ## 8. Subbloque 3.1A — almacenamiento local y protocolo de importación
@@ -144,4 +144,45 @@ Se validan fechas, duplicados, valores, columnas, tamaño máximo de 5 MB y hast
 - `electron/preload.cjs`
 - `src/electron.d.ts`
 
-**Estado 3.1A:** capa SQLite, validación CSV, IPC, control de acceso, versionado, auditoría y pruebas automatizadas preparadas. Pendiente de validación CI del PR y posterior interfaz 3.1B. No se han cargado índices reales.
+**Estado 3.1A:** COMPLETADO e integrado mediante PR #44. CI de escritorio e instalador aprobados. No se han cargado índices reales.
+
+## 9. Subbloque 3.1B — interfaz de administración e importación
+
+**Estado: COMPLETADO mediante PR #45** (commit de fusión `fe641deaae6eb13660986cd0d814a021143fbdeb`).
+
+- Vista de escritorio «Inflación y REME» integrada en la navegación.
+- Consulta de series desde SQLite por IPC autenticado.
+- Selección de CSV UTF-8 y captura de metadatos de fuente, emisor, referencia, fecha de publicación y URL opcional.
+- Validación preliminar antes de guardar; muestra cobertura, observaciones, estados, meses faltantes y SHA-256.
+- Importación como nueva versión inmutable y pendiente de revisión.
+- Aprobación/rechazo documental con justificación.
+- La aprobación no activa factores, reexpresión, REME ni asientos.
+- CI de escritorio aprobado; CI Windows aprobó build del instalador, verificación del artefacto y actualización 1.0.6 → 1.0.7 conservando SQLite. El artefacto fue generado en CI y no publicado como release.
+
+## 10. Subbloque 3.1C — verificación y adquisición de series auténticas
+
+**Estado: INVESTIGACIÓN DE FUENTES REALIZADA; IMPORTACIÓN DE DATOS BLOQUEADA POR FALTA DEL ARCHIVO FUENTE PRIMARIO VERIFICABLE.**
+
+### Evidencia pública localizada
+
+- La FCCPV anunció que el BCV publicó los índices y variaciones mensuales del INPC desde diciembre de 2007 hasta agosto de 2026, disponibles en la sección Estadísticas del BCV y en Federación Virtual, sección Valor Agregado.
+- La FCCPV anunció que la variación porcentual mensual FCCPV/Econométrica cubre enero de 2016 a agosto de 2026 y que septiembre de 2026 se presenta como proyección. Esta última serie debe clasificarse como estimación/proyección según la observación; nunca como INPC observado del BCV.
+- Una fuente secundaria identifica el archivo estadístico BCV como `4_5_7`, pero esta referencia no sustituye la descarga ni la verificación del archivo original.
+
+### Bloqueo de adquisición
+
+- La consulta automatizada a `https://www.bcv.org.ve/estadisticas/consumidor` respondió HTTP 502 durante la investigación.
+- La publicación de FCCPV remite a Federación Virtual para consultar el material de valor agregado; el acceso a algunos documentos puede requerir autenticación gremial.
+- No se obtuvo el archivo fuente BCV ni el libro/archivo original FCCPV-Econométrica en esta etapa.
+- No se importaron valores de sitios secundarios, capturas, extractos parciales ni tablas copiadas sin poder verificar el documento primario.
+
+### Condición para cerrar 3.1C
+
+1. Obtener el archivo original desde BCV o desde el canal oficial autorizado de Federación Virtual.
+2. Conservar el archivo original y registrar URL, emisor, fecha de publicación/consulta, nombre, período, base, unidad y SHA-256.
+3. Comprobar continuidad y cobertura contra el documento original; documentar meses faltantes y revisiones.
+4. Separar INPC oficial observado, IPC-AMC histórico, estimaciones expertas, estudios FCCPV y proyecciones.
+5. Importar en SICOVEN usando la interfaz 3.1B, revisar la previsualización y aprobar documentalmente solo tras validación humana.
+6. Mantener pendientes las series o períodos sin respaldo primario suficiente.
+
+**No se declara 3.1C completado.** No se cargaron cifras reales en SQLite en esta etapa y no se habilita el motor REME. El siguiente trabajo puede continuar en la preparación de la matriz de clasificación 3.2 sin asumir que los índices faltantes están disponibles.
