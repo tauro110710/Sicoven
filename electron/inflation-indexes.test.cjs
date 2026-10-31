@@ -57,7 +57,7 @@ test('CSV parser rejects duplicate months, invalid dates and non-positive index 
 test('monthly percentage series accepts negative changes only above -100 percent', () => {
   const parsed = parseInflationIndexCsv('period,value\n2025-01,-0.5\n2025-02,2.25', 'MONTHLY_VARIATION_PCT');
   assert.deepEqual(parsed.observations.map(item => item.value), ['-0.5', '2.25']);
-  assert.throws(() => parseInflationIndexCsv('period,value\n2025-01,-100', 'MONTHLY_VARIATION_PCT'), /> -100%/);
+  assert.throws(() => parseInflationIndexCsv('period,value\n2025-01,-100', 'MONTHLY_VARIATION_PCT'), /mayor que -100%/);
 });
 
 test('index import stores source evidence, observations and audit event in one transaction', () => {
@@ -71,7 +71,11 @@ test('index import stores source evidence, observations and audit event in one t
     assert.equal(catalog.length, 1);
     assert.equal(catalog[0].sourceSha256, result.sourceSha256);
     assert.equal(catalog[0].approvalStatus, 'PENDING_REVIEW');
+    assert.equal(catalog[0].seriesVersion, 1);
+    assert.deepEqual(catalog[0].missingMonths, ['2025-02']);
     assert.equal(catalog[0].observations.length, 2);
+    const secondVersion = importInflationIndexSeries(db, importerInput({ sourceTitle: 'Serie oficial INPC revisada' }), admin);
+    assert.equal(secondVersion.seriesVersion, 2);
     assert.equal(db.prepare('SELECT source_text FROM inflation_index_sources').get().source_text, importerInput().sourceText);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE event_type='inflation_index_series_imported'").get().n, 1);
   } finally { db.close(); }
