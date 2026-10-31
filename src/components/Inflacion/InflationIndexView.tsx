@@ -128,6 +128,7 @@ export const InflationIndexView: React.FC<{ token: string }> = ({ token }) => {
     setError('');
     setPreview(null);
     if (!file) return;
+    setForm(previous => ({ ...previous, fileName: '', sourceText: '' }));
     if (file.size > 5 * 1024 * 1024) {
       setError('El archivo supera el límite de 5 MB.');
       return;
@@ -302,6 +303,7 @@ export const InflationIndexView: React.FC<{ token: string }> = ({ token }) => {
               <div><p className="text-xs text-emerald-800">Tamaño</p><p className="font-semibold text-slate-900">{formatBytes(preview.sourceBytes)}</p></div>
             </div>
             <p className="mt-3 break-all text-xs text-slate-600">SHA-256: {preview.sourceSha256}</p>
+            {Object.entries(preview.statusCounts).length > 0 && <p className="mt-2 text-xs text-slate-700">Naturaleza de observaciones: {Object.entries(preview.statusCounts).map(([status, count]) => `${status}: ${count}`).join(' · ')}</p>}
             {preview.missingMonths.length > 0
               ? <p className="mt-2 text-sm text-amber-800">Meses faltantes ({preview.missingMonths.length}): {preview.missingMonths.join(', ')}</p>
               : <p className="mt-2 text-sm text-emerald-800">No se detectaron meses faltantes dentro del rango.</p>}
@@ -332,6 +334,8 @@ export const InflationIndexView: React.FC<{ token: string }> = ({ token }) => {
                     <p className="mt-1 text-xs text-slate-500">Documento: {item.fileName} · Publicado: {item.sourcePublishedAt} · Importado: {new Date(item.importedAt).toLocaleString('es-VE')}</p>
                     <p className="mt-1 break-all text-[11px] text-slate-400">SHA-256: {item.sourceSha256}</p>
                     {item.missingMonths?.length > 0 && <p className="mt-2 text-xs text-amber-800">Meses faltantes: {item.missingMonths.join(', ')}</p>}
+                    {item.sourceUrl && <p className="mt-1 text-xs"><a href={item.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-800 underline">Abrir referencia documental</a></p>}
+                    {(() => { const counts = item.observations.reduce<Record<string, number>>((all, row) => { all[row.observationStatus] = (all[row.observationStatus] || 0) + 1; return all; }, {}); return <p className="mt-1 text-xs text-slate-500">Naturaleza: {Object.entries(counts).map(([status, count]) => `${status}: ${count}`).join(' · ')}</p>; })()}
                     {item.approvalReason && <p className="mt-2 text-xs text-slate-600">Revisión: {item.approvalReason}</p>}
                   </div>
                   {item.approvalStatus === 'PENDING_REVIEW' && (
