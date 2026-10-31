@@ -313,3 +313,21 @@ SICOVEN se considerará listo para una actualización profesional integral cuand
 - PR #40 fusionado mediante squash en `main`; commit de integración: `18bba4834566227dacbad8ac39cca2beffc76ccf`.
 
 **Límite:** este subbloque refuerza la validación de entradas del anexo cuantitativo. No certifica el cumplimiento VEN-NIF ni sustituye la validación normativa integral, suficiencia de revelaciones y conciliación profesional del Bloque 2.
+
+
+### Bloque 3.0 — Base normativa y gobierno de índices — integrado
+
+- **PR #42:** documenta la base normativa preparatoria del ajuste por inflación, con referencia al BA VEN-NIF N.º 2, versión 4, y su aplicación diferenciada: NIC 29 para grandes entidades y Sección 31 de la NIIF para las PYMES para entidades PYME.
+- Define el criterio de reconocimiento del párrafo 15: inflación acumulada del ejercicio superior a un dígito; cuando sea de un dígito, la gerencia debe evaluar materialidad, comparabilidad y revelación suficiente.
+- Documenta el tratamiento de índices del párrafo 16: IPC del Área Metropolitana de Caracas con base diciembre de 2007 para orígenes históricos anteriores al 31-12-2007 e INPC desde enero de 2008; para transacciones posteriores a diciembre de 2007, únicamente INPC mensual emitido por el BCV.
+- Prohíbe sustituir el índice general por índices desagregados, promedios de los tres últimos índices, interpolaciones o proyecciones automáticas sin fundamento normativo.
+- Define la jerarquía ante meses sin INPC: estimación de experto conforme al párrafo 17; estudios públicos indicados por FCCPV conforme al párrafo 18; y estimación propia excepcional del párrafo 19 únicamente si concurren sus condiciones restrictivas.
+- Documenta revelaciones, sensibilidad, cambios prospectivos de estimación, evaluación de deterioro de activos no monetarios y trazabilidad completa de cada dato de índice.
+- Define metadatos para conservar en SQLite local la fuente, período, valor original, publicación, fecha de consulta, evidencia/huella del documento, tipo de dato, aprobador y versiones históricas.
+- Archivo añadido: `docs/bloque-3-marco-normativo-inpc.md`.
+- PR #42 fusionado mediante squash en `main`; commit de integración: `5b3d7314adda953240b78958ba70921ca310684a`.
+- Validación: revisión documental y contraste con el BA VEN-NIF 2 versión 4, registro de la Biblioteca Virtual FCCPV y guía de aplicación FCCPV disponible públicamente. Al ser un cambio exclusivamente documental, no modifica código funcional ni requiere reconstruir el instalador. Los estados/checks de Vercel quedan fuera de los criterios del proyecto.
+
+**Límite:** el PR #42 es una especificación normativa preparatoria. No implementa el motor de reexpresión, no importa una serie de índices, no clasifica partidas, no calcula resultado monetario/REME y no genera asientos. No cierra el Bloque 3 ni certifica cumplimiento VEN-NIF.
+
+**Siguiente paso del Bloque 3:** iniciar el subbloque 3.1 de verificación y carga controlada de series históricas y actuales (IPC-AMC / INPC), con fuente auténtica, períodos identificados, detección explícita de meses ausentes, versión de serie y conservación local en SQLite. No introducir cifras de ejemplo ni estimaciones no aprobadas. Antes de habilitar cálculos, confirmar la vigencia normativa aplicable al ejercicio y documentar qué publicaciones/estimaciones reconoce FCCPV para cada intervalo sin INPC.
