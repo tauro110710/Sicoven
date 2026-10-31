@@ -1,6 +1,6 @@
 const SERIES_BY_PERIOD = [
-  { code: 'IPC_AMC', from: '1900-01', to: '2007-11' },
-  { code: 'INPC_BCV', from: '2007-12', to: '2200-12' }
+  { code: 'IPC_AMC', from: '1900-01', to: '2007-12' },
+  { code: 'INPC_BCV', from: '2008-01', to: '2200-12' }
 ];
 
 function validMonth(value) {
