@@ -1,6 +1,6 @@
 # Bloque 3.2B — Persistencia SQLite de clasificaciones
 
-**Estado:** implementación inicial en revisión; pendiente CI y revisión del diff.
+**Estado:** implementación validada; CI de escritorio e instalador Windows aprobados en el commit de código revisado. La interfaz de usuario y los casos profesionales permanecen en los subbloques 3.2C y 3.2D.
 
 ## Alcance
 - Decisiones de clasificación por empresa, ejercicio, cuenta imputable y componente.
