@@ -70,7 +70,7 @@ function parseInflationIndexCsv(sourceText, metricType) {
     sourceSha256: crypto.createHash('sha256').update(sourceText, 'utf8').digest('hex'), sourceBytes: bytes };
 }
 function initializeInflationIndexSchema(db) {
-  db.exec(\`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS inflation_index_sources (
       id TEXT PRIMARY KEY, file_name TEXT NOT NULL, source_title TEXT NOT NULL, issuer TEXT NOT NULL,
       source_reference TEXT NOT NULL, source_url TEXT, source_published_at TEXT,
@@ -112,7 +112,7 @@ function initializeInflationIndexSchema(db) {
       BEGIN SELECT RAISE(ABORT, 'inflation_index_approvals is append-only'); END;
     CREATE TRIGGER IF NOT EXISTS inflation_approvals_no_delete BEFORE DELETE ON inflation_index_approvals
       BEGIN SELECT RAISE(ABORT, 'inflation_index_approvals is append-only'); END;
-  \`);
+  `);
 }
 function validateImportInput(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Solicitud de importación inválida.');
@@ -130,9 +130,9 @@ function validateImportInput(input) {
   if (metricType === 'INDEX_LEVEL' && !validMonth(basePeriod)) throw new Error('Una serie de niveles de índice requiere período base YYYY-MM.');
   if (basePeriod && !validMonth(basePeriod)) throw new Error('Período base inválido.');
   const sourceUrl = input.sourceUrl ? String(input.sourceUrl).trim() : null;
-  if (sourceUrl && !/^https?:\\/\\/\\S+$/i.test(sourceUrl)) throw new Error('La referencia web debe ser una URL HTTP/HTTPS válida.');
+  if (sourceUrl && !/^https?:\/\/\S+$/i.test(sourceUrl)) throw new Error('La referencia web debe ser una URL HTTP/HTTPS válida.');
   const sourcePublishedAt = input.sourcePublishedAt ? String(input.sourcePublishedAt) : null;
-  if (sourcePublishedAt && !/^\\d{4}-\\d{2}-\\d{2}$/.test(sourcePublishedAt)) throw new Error('La fecha de publicación debe usar YYYY-MM-DD.');
+  if (sourcePublishedAt && !/^\d{4}-\d{2}-\d{2}$/.test(sourcePublishedAt)) throw new Error('La fecha de publicación debe usar YYYY-MM-DD.');
   return { ...parsed, seriesCode, metricType, sourceText: input.sourceText, sourceTitle, issuer, sourceReference, fileName, basePeriod, sourceUrl, sourcePublishedAt };
 }
 function importInflationIndexSeries(db, input, actor) {
@@ -141,16 +141,16 @@ function importInflationIndexSeries(db, input, actor) {
   const data = validateImportInput(input); const sourceId = crypto.randomUUID(); const seriesId = crypto.randomUUID();
   const now = new Date().toISOString();
   const save = db.transaction(() => {
-    db.prepare(\`INSERT INTO inflation_index_sources
+    db.prepare(`INSERT INTO inflation_index_sources
       (id,file_name,source_title,issuer,source_reference,source_url,source_published_at,imported_at,source_sha256,source_bytes,source_text)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?)\`).run(sourceId, data.fileName, data.sourceTitle, data.issuer, data.sourceReference,
+      VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(sourceId, data.fileName, data.sourceTitle, data.issuer, data.sourceReference,
       data.sourceUrl, data.sourcePublishedAt, now, data.sourceSha256, data.sourceBytes, data.sourceText);
-    db.prepare(\`INSERT INTO inflation_index_series
+    db.prepare(`INSERT INTO inflation_index_series
       (id,series_code,metric_type,base_period,source_id,first_period,last_period,observation_count,imported_by,created_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?)\`).run(seriesId, data.seriesCode, data.metricType, data.basePeriod, sourceId,
+      VALUES(?,?,?,?,?,?,?,?,?,?)`).run(seriesId, data.seriesCode, data.metricType, data.basePeriod, sourceId,
       data.firstPeriod, data.lastPeriod, data.observationCount, actor.username, now);
-    const insert = db.prepare(\`INSERT INTO inflation_index_observations
-      (id,series_id,period,source_value,normalized_value,created_at) VALUES(?,?,?,?,?,?)\`);
+    const insert = db.prepare(`INSERT INTO inflation_index_observations
+      (id,series_id,period,source_value,normalized_value,created_at) VALUES(?,?,?,?,?,?)`);
     for (const row of data.observations) insert.run(crypto.randomUUID(), seriesId, row.period, row.sourceValue, row.value, now);
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('inflation_index_series_imported', JSON.stringify({
       seriesId, sourceId, seriesCode: data.seriesCode, metricType: data.metricType,
@@ -182,7 +182,7 @@ function approveInflationIndexSeries(db, seriesId, decision, reason, actor) {
   return { ok: true, approvalId, seriesId: id, decision: choice };
 }
 function getInflationIndexCatalog(db) {
-  const rows = db.prepare(\`
+  const rows = db.prepare(`
     SELECT s.id,s.series_code AS seriesCode,s.metric_type AS metricType,s.base_period AS basePeriod,
       s.first_period AS firstPeriod,s.last_period AS lastPeriod,s.observation_count AS observationCount,
       s.imported_by AS importedBy,s.created_at AS createdAt,src.file_name AS fileName,
@@ -193,7 +193,7 @@ function getInflationIndexCatalog(db) {
       (SELECT reason FROM inflation_index_approvals a WHERE a.series_id=s.id ORDER BY a.created_at DESC,a.rowid DESC LIMIT 1) AS approvalReason
     FROM inflation_index_series s JOIN inflation_index_sources src ON src.id=s.source_id
     ORDER BY s.created_at DESC,s.rowid DESC
-  \`).all();
+  `).all();
   return rows.map(item => ({ ...item, approvalStatus: item.approvalStatus || 'PENDING_REVIEW',
     observations: db.prepare('SELECT period,source_value AS sourceValue,normalized_value AS value FROM inflation_index_observations WHERE series_id=? ORDER BY period').all(item.id) }));
 }
