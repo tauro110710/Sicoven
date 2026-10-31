@@ -27,6 +27,7 @@ const { registerAccountingPersistenceHandler } = require('./accounting-persisten
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
 const { registerInflationIndexIpc } = require('./inflation-indexes.cjs');
 const { registerInflationClassificationIpc } = require('./inflation-classifications.cjs');
+const { registerInflationRemeReadinessIpc } = require('./inflation-reme-readiness.cjs');
 
 let db;
 function openDatabase() {
@@ -518,6 +519,7 @@ app.whenReady().then(async () => {
   registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession });
   registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession });
   registerInflationClassificationIpc({ ipcMain, db, licenseView, getActiveSession });
+  registerInflationRemeReadinessIpc({ ipcMain, db, licenseView, getActiveSession });
 
 
   await revalidateLicense();
