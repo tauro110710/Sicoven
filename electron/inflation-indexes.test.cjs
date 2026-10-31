@@ -116,7 +116,7 @@ test('source, series, observations and review decisions are append-only', () => 
     assert.throws(() => db.prepare('DELETE FROM inflation_index_sources').run(), /append-only/);
     const approved = approveInflationIndexSeries(db, result.seriesId, 'APPROVED', 'Fuente revisada contra el documento oficial.', admin);
     assert.equal(approved.decision, 'APPROVED');
-    assert.throws(() => approveInflationIndexSeries(db, result.seriesId, 'REJECTED', 'Cambio posterior no permitido.', admin), /ya fue aprobada/);
+    assert.throws(() => approveInflationIndexSeries(db, result.seriesId, 'REJECTED', 'Cambio posterior no permitido.', admin), /ya fue revisada/);
     assert.equal(getInflationIndexCatalog(db)[0].approvalStatus, 'APPROVED');
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM inflation_index_approvals').get().n, 1);
   } finally { db.close(); }
