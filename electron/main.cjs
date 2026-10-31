@@ -25,6 +25,7 @@ const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
+const { registerInflationIndexIpc } = require('./inflation-indexes.cjs');
 
 let db;
 function openDatabase() {
@@ -514,6 +515,7 @@ app.whenReady().then(async () => {
   });
 
   registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession });
+  registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession });
 
 
   await revalidateLicense();
