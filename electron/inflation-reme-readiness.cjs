@@ -4,7 +4,7 @@ const SERIES_BY_PERIOD = [
 ];
 
 function validMonth(value) {
-  if (typeof value !== 'string' || !/^\\d{4}-(0[1-9]|1[0-2])$/.test(value)) return false;
+  if (typeof value !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return false;
   const [year, month] = value.split('-').map(Number);
   return year >= 1900 && year <= 2200 && month >= 1 && month <= 12;
 }
