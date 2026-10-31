@@ -90,3 +90,58 @@ Antes de codificar el motor de cálculo se debe:
 6. preparar casos de referencia con resultados esperados revisados por profesional.
 
 Hasta entonces, la funcionalidad permanece en diseño normativo y no se generarán cálculos contables.
+
+
+## 8. Subbloque 3.1A — almacenamiento local y protocolo de importación
+
+Se incorporó una primera capa técnica para recibir series documentales sin convertirlas automáticamente en índices aprobados ni en datos utilizables por el motor contable.
+
+### Arquitectura integrada
+
+- Persistencia directa en la base local `sicoven.sqlite`, mediante `better-sqlite3`.
+- Tablas separadas para fuentes documentales, series, observaciones mensuales y decisiones de revisión.
+- Conservación del texto CSV original y su huella SHA-256.
+- Versionado incremental por código de serie y tipo de medición.
+- Conservación de los períodos faltantes detectados entre la primera y última observación.
+- Valores decimales almacenados como texto normalizado, sin conversión a coma flotante para conservar la precisión publicada.
+- Tablas y decisiones append-only: no se permite modificar ni borrar la evidencia importada.
+- Auditoría de importaciones y revisiones.
+- Acceso mediante IPC de Electron, protegido por sesión válida; importación y aprobación restringidas al administrador.
+- La serie se registra inicialmente como `PENDING_REVIEW`; solo una decisión administrativa documentada puede aprobarla o rechazarla.
+- Una serie aprobada no se sobrescribe. Una corrección requiere importar una nueva versión.
+
+### Formato de importación de esta fase
+
+CSV UTF-8 con encabezados de período y valor, por ejemplo:
+
+```csv
+period;value
+AAAA-MM;valor
+```
+
+El ejemplo anterior es únicamente una plantilla estructural; no constituye una serie real ni debe importarse como dato contable.
+
+Se admiten dos magnitudes separadas:
+- `INDEX_LEVEL`: nivel de índice, positivo, con período base obligatorio.
+- `MONTHLY_VARIATION_PCT`: variación porcentual mensual, expresada en puntos porcentuales; no puede ser igual o inferior a -100%.
+
+Se validan fechas, duplicados, valores, columnas, tamaño máximo de 5 MB y hasta 600 observaciones por archivo. Las lagunas se reportan; el sistema no interpola, proyecta ni completa meses ausentes.
+
+### Límites deliberados
+
+- Esta fase no contiene cifras históricas oficiales ni estimadas.
+- No se descargan datos automáticamente ni se consulta un servicio remoto durante la operación.
+- La plataforma Federación Virtual puede requerir credenciales gremiales para consultar determinados índices; no se elude ese control ni se incorporan datos de terceros sin autorización.
+- Una huella SHA-256 acredita la identidad del archivo importado, no la autenticidad de su emisor. La aprobación exige revisión documental humana.
+- La aprobación de una serie no habilita todavía cálculos de factores, reexpresión o REME.
+- La interfaz de administración de índices y la importación asistida desde archivos se completarán en el siguiente subbloque de interfaz.
+
+### Archivos técnicos
+
+- `electron/inflation-indexes.cjs`
+- `electron/inflation-indexes.test.cjs`
+- `electron/main.cjs`
+- `electron/preload.cjs`
+- `src/electron.d.ts`
+
+**Estado 3.1A:** capa SQLite, validación CSV, IPC, control de acceso, versionado, auditoría y pruebas automatizadas preparadas. Pendiente de validación CI del PR y posterior interfaz 3.1B. No se han cargado índices reales.
