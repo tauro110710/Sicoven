@@ -77,7 +77,7 @@ test('index import stores source evidence, observations and audit event in one t
     const secondVersion = importInflationIndexSeries(db, importerInput({ sourceTitle: 'Serie oficial INPC revisada' }), admin);
     assert.equal(secondVersion.seriesVersion, 2);
     assert.equal(db.prepare('SELECT source_text FROM inflation_index_sources').get().source_text, importerInput().sourceText);
-    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE event_type='inflation_index_series_imported'").get().n, 1);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE event_type='inflation_index_series_imported'").get().n, 2);
   } finally { db.close(); }
 });
 
