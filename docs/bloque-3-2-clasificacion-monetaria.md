@@ -70,7 +70,7 @@ Validaciones:
 - Importe histórico y moneda declarada; DUAL requiere importes Bs. y USD.
 - Referencia contractual para partidas indexadas.
 - Revisor y fecha para aprobar; justificación para rechazar.
-- Prevención de duplicidad de decisiones activas por empresa, ejercicio, cuenta y componente.
+- Cadena de versiones: la primera decisión inicia en versión 1; toda corrección crea una nueva versión y enlaza explícitamente la decisión anterior, sin sobrescribir el historial.
 
 Pruebas: `src/types/inflationClassification.test.ts`.
 
@@ -89,7 +89,7 @@ Esta fase no:
 
 3.2B — Persistencia SQLite:
 - tabla append-only de decisiones por empresa/ejercicio/cuenta/componente;
-- versiones y correcciones sin sobrescribir decisiones usadas;
+- versiones y correcciones enlazadas mediante `supersedesDecisionId`, sin sobrescribir decisiones usadas;
 - auditoría de creación, aprobación y rechazo;
 - migración aditiva y pruebas de integridad;
 - IPC autenticado y autorización.
