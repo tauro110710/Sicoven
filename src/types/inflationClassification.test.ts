@@ -175,6 +175,6 @@ describe('inflation classification rules', () => {
     assert.equal(getInflationRestatementTreatment('NON_MONETARY', 'FAIR_VALUE', '2026-10-31', '2026-10-31'), 'NOT_RESTATE_CURRENT_MEASURE');
     assert.equal(getInflationRestatementTreatment('NON_MONETARY', 'FAIR_VALUE', '2026-06-30', '2026-10-31'), 'RESTATE_FROM_MEASUREMENT_DATE');
     assert.equal(getInflationRestatementTreatment('NON_MONETARY', 'REVALUED', '2025-12-31', '2026-10-31'), 'RESTATE_FROM_MEASUREMENT_DATE');
-    assert.throws(() => getInflationRestatementTreatment('NON_MONETARY', 'FAIR_VALUE'), /fecha válida/);
+    assert.throws(() => getInflationRestatementTreatment('NON_MONETARY', 'FAIR_VALUE'), /fecha de medición/);
   });
 });
