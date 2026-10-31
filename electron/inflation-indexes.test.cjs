@@ -60,6 +60,23 @@ test('monthly percentage series accepts negative changes only above -100 percent
   assert.throws(() => parseInflationIndexCsv('period,value\n2025-01,-100', 'MONTHLY_VARIATION_PCT'), /mayor que -100%/);
 });
 
+
+test('FCCPV study series must distinguish estimated months from projections', () => {
+  assert.throws(() => parseInflationIndexCsv('period;value\\n2026-03;4.2', 'MONTHLY_VARIATION_PCT', 'ESTUDIO_FCCPV'), /identificar cada mes/);
+  const parsed = parseInflationIndexCsv(
+    'period;value;status\\n2026-03;4.2;ESTIMATED\\n2026-04;4.8;PROJECTED',
+    'MONTHLY_VARIATION_PCT',
+    'ESTUDIO_FCCPV'
+  );
+  assert.deepEqual(parsed.statusCounts, { ESTIMATED: 1, PROJECTED: 1 });
+  assert.equal(parsed.observations[1].observationStatus, 'PROJECTED');
+  assert.throws(() => parseInflationIndexCsv(
+    'period;value;status\\n2026-03;4.2;OBSERVED',
+    'MONTHLY_VARIATION_PCT',
+    'ESTUDIO_FCCPV'
+  ), /Estado de observación no permitido/);
+});
+
 test('index import stores source evidence, observations and audit event in one transaction', () => {
   const db = database();
   try {
@@ -74,6 +91,7 @@ test('index import stores source evidence, observations and audit event in one t
     assert.equal(catalog[0].seriesVersion, 1);
     assert.deepEqual(catalog[0].missingMonths, ['2025-02']);
     assert.equal(catalog[0].observations.length, 2);
+    assert.equal(catalog[0].observations[0].observationStatus, 'OBSERVED');
     const secondVersion = importInflationIndexSeries(db, importerInput({ sourceTitle: 'Serie oficial INPC revisada' }), admin);
     assert.equal(secondVersion.seriesVersion, 2);
     assert.equal(db.prepare('SELECT source_text FROM inflation_index_sources').get().source_text, importerInput().sourceText);
