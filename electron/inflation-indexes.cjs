@@ -168,8 +168,8 @@ function importInflationIndexSeries(db, input, actor) {
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(seriesId, data.seriesCode, data.metricType, data.basePeriod, seriesVersion, sourceId,
       data.firstPeriod, data.lastPeriod, data.observationCount, JSON.stringify(data.missingMonths), actor.username, now);
     const insert = db.prepare(`INSERT INTO inflation_index_observations
-      (id,series_id,period,source_value,normalized_value,created_at) VALUES(?,?,?,?,?,?)`);
-    for (const row of data.observations) insert.run(crypto.randomUUID(), seriesId, row.period, row.sourceValue, row.value, now);
+      (id,series_id,period,source_value,normalized_value,observation_status,created_at) VALUES(?,?,?,?,?,?,?)`);
+    for (const row of data.observations) insert.run(crypto.randomUUID(), seriesId, row.period, row.sourceValue, row.value, row.observationStatus, now);
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('inflation_index_series_imported', JSON.stringify({
       seriesId, sourceId, seriesCode: data.seriesCode, metricType: data.metricType,
       firstPeriod: data.firstPeriod, lastPeriod: data.lastPeriod, observationCount: data.observationCount,
