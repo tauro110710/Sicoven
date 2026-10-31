@@ -45,6 +45,7 @@
 | 2.3. Estado de Cambios en el Patrimonio con trazabilidad | [#32](https://github.com/fenixlife1978/Sicoven/pull/32) | `2415abcd2a9645e44931343f0464c604190d9a60` | CI escritorio `41238252145` y Windows `41238252132` SUCCESS sobre SHA `f9a5f21dbd34334fe448b2428122cc1457a3839c`; NSIS y upgrade 1.0.6→1.0.7 conservaron SQLite |
 | 2.4. Estado de Flujos de Efectivo — método directo | [#33](https://github.com/fenixlife1978/Sicoven/pull/33) | `69887137207e17689a6522e0da0bc490b8e33bf4` | CI escritorio `41240097710` y Windows `41240097834` SUCCESS sobre SHA exacto; NSIS, upgrade 1.0.6→1.0.7, conservación SQLite y artefacto cargado |
 | 2.5. Estado de Flujos de Efectivo — método indirecto | [#36](https://github.com/fenixlife1978/Sicoven/pull/36) | `8780894d427b4405bd8ab29c07042664ca23bb7b` | Desktop run `41242571620` SUCCESS; Windows run `41242571654` SUCCESS: NSIS, instalador verificado, upgrade 1.0.6→1.0.7 conservó SQLite y artefacto CI cargado (sin publicar release) |
+| 2.6.1. Validación estricta de importes del anexo cuantitativo | [#40](https://github.com/fenixlife1978/Sicoven/pull/40) | `18bba4834566227dacbad8ac39cca2beffc76ccf` | Desktop `41245847791` SUCCESS; Windows `41245847806` SUCCESS: 386 pruebas, TypeScript, build, auditoría de recursos, NSIS y actualización 1.0.6→1.0.7 con conservación SQLite |
 
 El PR #20 se fusionó mediante *squash* solo después de comprobar que ambos trabajos CI terminaron en `success`, que el SHA de la rama coincidía con `c6d515af1608cbe7d3efa0c8d8ff792d018d7c98` y que GitHub reportaba el PR abierto y fusionable. No se publicó instalador ni release.
 
@@ -300,3 +301,15 @@ SICOVEN se considerará listo para una actualización profesional integral cuand
 - Commit de integración squash en `main`: `8fd31a5c7b805db6ffab0e85a6fa3884d625fece`.
 
 **Límite:** la herramienta permite documentar notas y anexar movimientos trazables, pero no certifica por sí sola el cumplimiento VEN-NIF ni genera automáticamente todas las revelaciones exigibles para cada tipo de entidad. La validación normativa integral, suficiencia de notas y conciliación profesional de los cuatro estados siguen pendientes; por tanto, el Bloque 2 no se declara globalmente terminado.
+
+
+### Bloque 2.6.1 — Validación estricta del anexo cuantitativo — integrado
+
+- **PR #40:** corrige `buildDisclosureAccountMovements` para rechazar importes no finitos (NaN e ±Infinity), negativos, referencias de cuenta inexistentes, empresa vacía y ejercicios inválidos, en lugar de convertir silenciosamente ciertos valores inválidos a cero.
+- Conserva el cálculo de movimientos por empresa y ejercicio, la separación de Bs. y USD, la exclusión de asientos `CIERRE` y la trazabilidad a los asientos de origen. No modifica asientos, históricos, SQLite, autenticación ni el administrador semilla.
+- La prueba de naturaleza acreedora de ingresos fue ajustada para esperar saldo positivo (crédito menos débito), consistente con la convención de la función.
+- CI sobre SHA `74af5496d006d8dc77469ba85d6178c9548530c9`: Desktop run `41245847791` SUCCESS; Windows run `41245847806` SUCCESS.
+- Windows completó las pruebas automatizadas (386 pruebas), TypeScript, build del renderer, auditoría de recursos, compilación NSIS, verificación del instalador y actualización real 1.0.6→1.0.7 conservando SQLite. Artefacto cargado en CI, sin publicar release ni instalador.
+- PR #40 fusionado mediante squash en `main`; commit de integración: `18bba4834566227dacbad8ac39cca2beffc76ccf`.
+
+**Límite:** este subbloque refuerza la validación de entradas del anexo cuantitativo. No certifica el cumplimiento VEN-NIF ni sustituye la validación normativa integral, suficiencia de revelaciones y conciliación profesional del Bloque 2.
