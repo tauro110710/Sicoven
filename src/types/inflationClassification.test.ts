@@ -20,6 +20,7 @@ const accounts: Account[] = [
 
 const decision = (overrides: Partial<InflationClassificationDecision> = {}): InflationClassificationDecision => ({
   id: 'classification-1',
+  version: 1,
   companyId: 'company-1',
   fiscalYear: 2026,
   accountCode: '1.1.1.01',
@@ -125,6 +126,9 @@ describe('inflation classification rules', () => {
     assert.throws(() => validateInflationClassificationDecision(decision({
       status: 'APPROVED'
     }), accounts), /revisor y fecha/);
+    assert.doesNotThrow(() => validateInflationClassificationDecision(decision({
+      status: 'APPROVED', reviewer: 'contador', reviewedAt: '2026-10-31'
+    }), accounts));
     assert.throws(() => validateInflationClassificationDecision(decision({
       status: 'REJECTED',
       rejectionReason: 'No'
@@ -133,8 +137,11 @@ describe('inflation classification rules', () => {
 
   it('prevents duplicate active decisions for the same company, year, account and scope', () => {
     const current = decision();
-    assert.throws(() => assertNoDuplicateInflationClassification(current, [current]), /Ya existe una clasificación vigente/);
+    assert.throws(() => assertNoDuplicateInflationClassification(current, [{ ...current, id: 'older', version: 1 }]), /siguiente versión/);
     assert.doesNotThrow(() => assertNoDuplicateInflationClassification(current, []));
+    const next = { ...current, id: 'classification-2', version: 2, supersedesDecisionId: 'classification-1' };
+    assert.doesNotThrow(() => assertNoDuplicateInflationClassification(next, [current]));
+    assert.throws(() => assertNoDuplicateInflationClassification({ ...next, supersedesDecisionId: 'wrong' }, [current]), /enlazar explícitamente/);
   });
 
   it('does not restate monetary items, restates historical non-monetary items from origin, and excludes current measures', () => {
