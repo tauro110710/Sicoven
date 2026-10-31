@@ -95,7 +95,7 @@ describe('inflation classification rules', () => {
       measurementDate: '2026-11-01', reportingDate: '2026-10-31',
       carryingAmountBs: 7000, currency: 'BS'
     });
-    assert.throws(() => validateInflationClassificationDecision(base, accounts), /no puede ser posterior/);
+    assert.throws(() => validateInflationClassificationDecision(base, accounts), /no posterior/);
     assert.throws(() => validateInflationClassificationDecision({
       ...base, measurementDate: '2026-02-30'
     }, accounts), /fecha de medición/);
