@@ -1,5 +1,17 @@
 export {};
-interface InflationIndexImportInput {\n  seriesCode: 'IPC_AMC' | 'INPC_BCV' | 'ESTIMACION_EXPERTO' | 'ESTUDIO_FCCPV' | 'ESTIMACION_PROPIA_EXCEPCIONAL';\n  metricType: 'INDEX_LEVEL' | 'MONTHLY_VARIATION_PCT';\n  basePeriod?: string;\n  fileName: string;\n  sourceTitle: string;\n  issuer: string;\n  sourceReference: string;\n  sourceUrl?: string;\n  sourcePublishedAt?: string;\n  sourceText: string;\n}\ndeclare global {
+interface InflationIndexImportInput {
+  seriesCode: 'IPC_AMC' | 'INPC_BCV' | 'ESTIMACION_EXPERTO' | 'ESTUDIO_FCCPV' | 'ESTIMACION_PROPIA_EXCEPCIONAL';
+  metricType: 'INDEX_LEVEL' | 'MONTHLY_VARIATION_PCT';
+  basePeriod?: string;
+  fileName: string;
+  sourceTitle: string;
+  issuer: string;
+  sourceReference: string;
+  sourceUrl?: string;
+  sourcePublishedAt?: string;
+  sourceText: string;
+}
+declare global {
   interface Window {
     sicovenStore?: {
       getLicenseStatus: () => Promise<{ authorized: boolean; needsActivation: boolean; status: string; customer?: string; product?: string; offlineUntil?: string | null; lastCheckedAt?: string | null; message?: string }>;
