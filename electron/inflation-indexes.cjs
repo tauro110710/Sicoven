@@ -52,7 +52,9 @@ function parseInflationIndexCsv(sourceText, metricType) {
   if (periodIndex < 0 || valueIndex < 0 || periodIndex === valueIndex) throw new Error('El CSV debe contener columnas de período (YYYY-MM) y valor.');
   const observations = []; const seen = new Set();
   for (let index = 1; index < lines.length; index += 1) {
-    const cells = splitCsvLine(lines[index], delimiter); const period = cells[periodIndex];
+    const cells = splitCsvLine(lines[index], delimiter);
+    if (cells.length !== headers.length) throw new Error('La cantidad de columnas no coincide en la línea ' + (index + 1) + '.');
+    const period = cells[periodIndex];
     if (!validMonth(period)) throw new Error('Período inválido en la línea ' + (index + 1) + ': use YYYY-MM.');
     if (seen.has(period)) throw new Error('El período ' + period + ' está duplicado en el archivo.');
     if (valueIndex >= cells.length || !cells[valueIndex]) throw new Error('Falta el valor del período ' + period + '.');
@@ -203,6 +205,7 @@ function getInflationIndexCatalog(db) {
     ORDER BY s.created_at DESC,s.rowid DESC
   `).all();
   return rows.map(item => ({ ...item, approvalStatus: item.approvalStatus || 'PENDING_REVIEW',
+    missingMonths: JSON.parse(item.missingMonthsJson || '[]'),
     observations: db.prepare('SELECT period,source_value AS sourceValue,normalized_value AS value FROM inflation_index_observations WHERE series_id=? ORDER BY period').all(item.id) }));
 }
 function registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession }) {
