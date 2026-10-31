@@ -121,7 +121,7 @@ AAAA-MM;valor
 
 El ejemplo anterior es únicamente una plantilla estructural; no constituye una serie real ni debe importarse como dato contable.
 
-Se admiten dos magnitudes separadas:
+Las observaciones conservan además su naturaleza: los índices BCV/IPC-AMC se marcan OBSERVED; las estimaciones de expertos o propias, ESTIMATED; y las series de estudios FCCPV exigen una columna status explícita para separar ESTIMATED de PROJECTED. Una proyección nunca se confunde con un dato observado.\n\nSe admiten dos magnitudes separadas:
 - `INDEX_LEVEL`: nivel de índice, positivo, con período base obligatorio.
 - `MONTHLY_VARIATION_PCT`: variación porcentual mensual, expresada en puntos porcentuales; no puede ser igual o inferior a -100%.
 
