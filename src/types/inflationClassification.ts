@@ -17,6 +17,7 @@ export type InflationRestatementTreatment =
   | 'NOT_RESTATE_MONETARY'
   | 'ADJUST_PER_CONTRACT'
   | 'RESTATE_FROM_ORIGIN'
+  | 'RESTATE_FROM_MEASUREMENT_DATE'
   | 'NOT_RESTATE_CURRENT_MEASURE'
   | 'REQUIRES_COMPONENT_SPLIT'
   | 'NOT_APPLICABLE';
@@ -38,6 +39,7 @@ export interface InflationClassificationDecision {
   status: InflationClassificationStatus;
   originDate?: string;
   measurementDate?: string;
+  reportingDate?: string;
   carryingAmountBs?: number;
   carryingAmountUsd?: number;
   currency?: 'BS' | 'USD' | 'DUAL';
@@ -61,7 +63,9 @@ const validAmount = (value: unknown): value is number =>
 
 export function getInflationRestatementTreatment(
   classification: InflationItemClassification,
-  basis: InflationMeasurementBasis
+  basis: InflationMeasurementBasis,
+  measurementDate?: string,
+  reportingDate?: string
 ): InflationRestatementTreatment {
   if (classification === 'MONETARY') {
     if (basis === 'INDEX_LINKED') return 'ADJUST_PER_CONTRACT';
@@ -70,8 +74,12 @@ export function getInflationRestatementTreatment(
   }
   if (classification === 'NON_MONETARY') {
     if (basis === 'HISTORICAL_COST' || basis === 'GOODS_OR_SERVICES') return 'RESTATE_FROM_ORIGIN';
-    if (basis === 'FAIR_VALUE' || basis === 'NET_REALIZABLE_VALUE') return 'NOT_RESTATE_CURRENT_MEASURE';
-    if (basis === 'REVALUED') return 'RESTATE_FROM_ORIGIN';
+    if (basis === 'FAIR_VALUE' || basis === 'NET_REALIZABLE_VALUE' || basis === 'REVALUED') {
+      if (!validIsoDate(measurementDate) || !validIsoDate(reportingDate) || measurementDate > reportingDate) {
+        throw new Error('La medición a valor corriente/revaluado requiere fecha válida no posterior a la fecha de reporte.');
+      }
+      return measurementDate === reportingDate ? 'NOT_RESTATE_CURRENT_MEASURE' : 'RESTATE_FROM_MEASUREMENT_DATE';
+    }
     throw new Error('La base de medición no corresponde a una partida no monetaria.');
   }
   if (classification === 'MIXED') {
@@ -122,7 +130,8 @@ export function validateInflationClassificationDecision(
     throw new Error('El tipo de cuenta no está contemplado en la matriz de clasificación.');
   }
 
-  const treatment = getInflationRestatementTreatment(input.classification, input.measurementBasis);
+  const treatment = getInflationRestatementTreatment(input.classification, input.measurementBasis,
+    input.measurementDate, input.reportingDate);
   const rationale = String(input.rationale || '').trim();
   const normativeReference = String(input.normativeReference || '').trim();
   if (rationale.length < 10 || rationale.length > 2000) {
@@ -148,16 +157,17 @@ export function validateInflationClassificationDecision(
       throw new Error('Una partida indexada requiere referencia al contrato y su cláusula de indexación.');
     }
     if (input.classification === 'NON_MONETARY' &&
-        (input.measurementBasis === 'HISTORICAL_COST' || input.measurementBasis === 'GOODS_OR_SERVICES' || input.measurementBasis === 'REVALUED')) {
+        (input.measurementBasis === 'HISTORICAL_COST' || input.measurementBasis === 'GOODS_OR_SERVICES')) {
       if (!validIsoDate(input.originDate)) {
         throw new Error('La partida no monetaria requiere fecha de origen verificable para determinar el período de reexpresión.');
       }
     }
-    if ((input.measurementBasis === 'FAIR_VALUE' || input.measurementBasis === 'NET_REALIZABLE_VALUE') &&
-        !validIsoDate(input.measurementDate)) {
-      throw new Error('La medición a valor corriente requiere fecha de medición verificable.');
+    if (input.measurementBasis === 'FAIR_VALUE' || input.measurementBasis === 'NET_REALIZABLE_VALUE' || input.measurementBasis === 'REVALUED') {
+      if (!validIsoDate(input.measurementDate) || !validIsoDate(input.reportingDate) || input.measurementDate > input.reportingDate) {
+        throw new Error('La medición a valor corriente/revaluado requiere fecha de medición y fecha de reporte verificables; la medición no puede ser posterior al reporte.');
+      }
     }
-  } else if (input.componentRef || input.originDate || input.measurementDate ||
+  } else if (input.componentRef || input.originDate || input.measurementDate || input.reportingDate ||
       input.carryingAmountBs !== undefined || input.carryingAmountUsd !== undefined || input.contractReference) {
     throw new Error('La clasificación general de cuenta no debe almacenar importes ni fechas de un componente específico.');
   }
