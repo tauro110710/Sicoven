@@ -6,14 +6,14 @@ Introducir una barrera técnica previa al futuro motor REME. Este subbloque **no
 
 ## Reglas de selección
 
-- Para períodos hasta noviembre de 2007 se exige la serie IPC del Área Metropolitana de Caracas (IPC_AMC).
-- Desde diciembre de 2007 se exige la serie INPC del BCV.
+- Para períodos hasta diciembre de 2007 se exige la serie IPC del Área Metropolitana de Caracas (IPC_AMC).
+- Desde enero de 2008 se exige la serie INPC del BCV.
 - Solo se consideran series de niveles de índice (`INDEX_LEVEL`), no variaciones porcentuales.
 - Se utiliza la última versión importada de cada serie; si esa versión no está aprobada, no se retrocede silenciosamente a una versión anterior.
 - Se exige revisión aprobatoria, emisor identificado como Banco Central de Venezuela, URL HTTPS del dominio exacto `www.bcv.org.ve`, huella SHA-256 y metadatos de publicación.
 - Cada mes del tramo solicitado debe existir y estar marcado `OBSERVED`.
 - Los meses faltantes, estimados o proyectados bloquean el tramo. No se interpola ni se completa automáticamente.
-- Si el período cruza noviembre/diciembre de 2007, se separa entre IPC_AMC e INPC_BCV.
+- Si el período cruza diciembre de 2007/enero de 2008, se separa entre IPC_AMC e INPC_BCV.
 
 ## Seguridad y persistencia
 
