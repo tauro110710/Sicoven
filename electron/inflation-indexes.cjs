@@ -5,7 +5,7 @@ const MAX_OBSERVATIONS = 600;
 const SERIES_CODES = new Set(['IPC_AMC','INPC_BCV','ESTIMACION_EXPERTO','ESTUDIO_FCCPV','ESTIMACION_PROPIA_EXCEPCIONAL']);
 const METRIC_TYPES = new Set(['INDEX_LEVEL', 'MONTHLY_VARIATION_PCT']);
 
-function validMonth(value) {
+function validDate(value) {\n  if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;\n  const parsed = new Date(value + 'T00:00:00.000Z');\n  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;\n}\nfunction validMonth(value) {
   if (typeof value !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return false;
   const [year, month] = value.split('-').map(Number);
   return year >= 1900 && year <= 2200 && month >= 1 && month <= 12;
@@ -42,8 +42,8 @@ function parseInflationIndexCsv(sourceText, metricType) {
   if (lines.length < 2) throw new Error('El CSV debe incluir encabezado y al menos una observación.');
   const headerLine = lines[0]; const delimiter = headerLine.includes(';') ? ';' : headerLine.includes('\t') ? '\t' : ',';
   const headers = splitCsvLine(headerLine, delimiter).map(item => item.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9_]/g, ''));
-  const periodIndex = headers.findIndex(item => ['period','periodo','mes','yyyymm'].includes(item));
-  const valueIndex = headers.findIndex(item => ['value','valor','indice','variacion','variacionmensual','inflacionmensual'].includes(item));
+  const periodIndex = headers.findIndex(item => ['period','periodo','mes'].includes(item));
+  const valueIndex = headers.findIndex(item => ['value','valor','indice','variacion','variacionmensual','variacion_mensual','inflacionmensual','inflacion_mensual'].includes(item));
   if (periodIndex < 0 || valueIndex < 0 || periodIndex === valueIndex) throw new Error('El CSV debe contener columnas de período (YYYY-MM) y valor.');
   const observations = []; const seen = new Set();
   for (let index = 1; index < lines.length; index += 1) {
@@ -184,7 +184,7 @@ function approveInflationIndexSeries(db, seriesId, decision, reason, actor) {
 function getInflationIndexCatalog(db) {
   const rows = db.prepare(`
     SELECT s.id,s.series_code AS seriesCode,s.metric_type AS metricType,s.base_period AS basePeriod,
-      s.first_period AS firstPeriod,s.last_period AS lastPeriod,s.observation_count AS observationCount,
+      s.first_period AS firstPeriod,s.last_period AS lastPeriod,s.observation_count AS observationCount,\n      s.series_version AS seriesVersion,s.missing_months_json AS missingMonthsJson,
       s.imported_by AS importedBy,s.created_at AS createdAt,src.file_name AS fileName,
       src.source_title AS sourceTitle,src.issuer,src.source_reference AS sourceReference,
       src.source_url AS sourceUrl,src.source_published_at AS sourcePublishedAt,src.imported_at AS importedAt,
