@@ -68,11 +68,15 @@ test('rejects a non-BCV issuer or a non-official source URL', () => {
     assert.ok(result.blockers.some(item => item.code === 'SOURCE_URL_NOT_OFFICIAL'));
   } finally { db.close(); }
 });
-test('requires IPC AMC before 2008 and INPC BCV from January 2008', () => {
+test('requires IPC AMC through December 2007 and INPC BCV from January 2008', () => {
   const db = database();
   try {
-    const result = assessInflationIndexReadiness(db, [{ from: '2007-10', to: '2008-02' }]);
-    assert.deepEqual(result.blockers.filter(item => item.code === 'SERIES_MISSING').map(item => item.seriesCode), ['IPC_AMC', 'INPC_BCV']);
+    const result = assessInflationIndexReadiness(db, [{ from: '2007-11', to: '2008-02' }]);
+    const missing = result.blockers.filter(item => item.code === 'SERIES_MISSING');
+    assert.deepEqual(missing.map(item => [item.seriesCode, item.from, item.to]), [
+      ['IPC_AMC', '2007-11', '2007-12'],
+      ['INPC_BCV', '2008-01', '2008-02']
+    ]);
   } finally { db.close(); }
 });
 test('IPC requires a valid licensed session and never enables calculations', () => {
