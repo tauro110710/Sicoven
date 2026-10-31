@@ -122,12 +122,14 @@ test('source, series, observations and review decisions are append-only', () => 
   } finally { db.close(); }
 });
 
-test('rejected series can receive a later append-only review decision', () => {
+test('a rejected series cannot be re-approved without importing a new evidence version', () => {
   const db = database();
   try {
-    const result = importInflationIndexSeries(db, importerInput(), admin);
-    approveInflationIndexSeries(db, result.seriesId, 'REJECTED', 'Documento sin evidencia de publicación.', admin);
-    approveInflationIndexSeries(db, result.seriesId, 'APPROVED', 'Se aportó evidencia oficial adicional.', admin);
+    const rejected = importInflationIndexSeries(db, importerInput(), admin);
+    approveInflationIndexSeries(db, rejected.seriesId, 'REJECTED', 'Documento sin evidencia de publicación.', admin);
+    assert.throws(() => approveInflationIndexSeries(db, rejected.seriesId, 'APPROVED', 'Se aportó evidencia oficial adicional.', admin), /importe una nueva versión/);
+    const replacement = importInflationIndexSeries(db, importerInput({ sourceTitle: 'Serie oficial con evidencia adicional' }), admin);
+    approveInflationIndexSeries(db, replacement.seriesId, 'APPROVED', 'Se verificó la nueva evidencia oficial.', admin);
     assert.equal(getInflationIndexCatalog(db)[0].approvalStatus, 'APPROVED');
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM inflation_index_approvals').get().n, 2);
   } finally { db.close(); }
