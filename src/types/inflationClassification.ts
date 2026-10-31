@@ -23,6 +23,8 @@ export type InflationRestatementTreatment =
 
 export interface InflationClassificationDecision {
   id: string;
+  version: number;
+  supersedesDecisionId?: string;
   companyId: string;
   fiscalYear: number;
   accountCode: string;
@@ -93,6 +95,7 @@ export function validateInflationClassificationDecision(
 ): InflationClassificationDecision {
   if (!input || typeof input !== 'object') throw new Error('La decisión de clasificación no es válida.');
   if (!String(input.id || '').trim()) throw new Error('La decisión requiere un identificador único.');
+  if (!Number.isInteger(input.version) || input.version < 1) throw new Error('La versión de la decisión debe ser un entero positivo.');
   const companyId = String(input.companyId || '').trim();
   if (!companyId) throw new Error('La clasificación debe estar vinculada a una empresa.');
   if (!Number.isInteger(input.fiscalYear) || input.fiscalYear < 1900 || input.fiscalYear > 2200) {
@@ -163,7 +166,7 @@ export function validateInflationClassificationDecision(
     throw new Error('La clasificación MIXED solo puede definir la cuenta como mixta; cada componente debe clasificarse individualmente.');
   }
   if (input.status === 'APPROVED') {
-    if (!String(input.reviewer || '').trim() || !validIsoDate(String(input.reviewedAt || '').slice(0, 10))) {
+    if (!String(input.reviewer || '').trim() || !validIsoDate(input.reviewedAt)) {
       throw new Error('Una clasificación aprobada requiere revisor y fecha de aprobación.');
     }
   }
@@ -181,16 +184,22 @@ export function assertNoDuplicateInflationClassification(
   decision: InflationClassificationDecision,
   existing: InflationClassificationDecision[]
 ): void {
-  const duplicate = existing.some(item =>
-    item.id !== decision.id &&
+  const sameKey = existing.filter(item =>
     item.companyId === decision.companyId &&
     item.fiscalYear === decision.fiscalYear &&
     item.accountCode === decision.accountCode &&
     item.scope === decision.scope &&
     String(item.componentRef || '') === String(decision.componentRef || '') &&
-    item.status !== 'REJECTED'
+    item.id !== decision.id
   );
-  if (duplicate) {
-    throw new Error('Ya existe una clasificación vigente para esta empresa, ejercicio, cuenta y componente. Registre una nueva versión mediante el flujo de corrección auditable.');
+  const latest = sameKey.sort((a, b) => b.version - a.version)[0];
+  if (!latest) {
+    if (decision.version !== 1 || decision.supersedesDecisionId) {
+      throw new Error('La primera clasificación debe iniciar en versión 1 y no puede sustituir una decisión inexistente.');
+    }
+    return;
+  }
+  if (decision.supersedesDecisionId !== latest.id || decision.version !== latest.version + 1) {
+    throw new Error('La nueva clasificación debe crear la siguiente versión y enlazar explícitamente la última decisión del mismo componente; el historial anterior no se sobrescribe.');
   }
 }
