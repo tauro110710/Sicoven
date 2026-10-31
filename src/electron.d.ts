@@ -32,8 +32,8 @@ declare global {
       reopenAccountingPeriod: (token: string, input: { companyId: string; reopenedThroughDate: string | null; reason: string }) => Promise<{ ok: boolean; reopeningId: string; company?: { id: string; name: string; closedThroughDate?: string } }>;
       resetAccounting: (token: string) => Promise<{ ok: boolean; cleared: boolean; verified: boolean }>;
       listInflationIndexSeries: (token: string) => Promise<Array<Record<string, unknown>>>;
-      previewInflationIndexImport: (token: string, input: InflationIndexImportInput) => Promise<{ ok: boolean; seriesCode: string; metricType: string; firstPeriod: string; lastPeriod: string; observationCount: number; missingMonths: string[]; sourceSha256: string; sourceBytes: number }>;
-      importInflationIndexSeries: (token: string, input: InflationIndexImportInput) => Promise<{ ok: boolean; seriesId: string; sourceId: string; firstPeriod: string; lastPeriod: string; observationCount: number; missingMonths: string[]; sourceSha256: string; approvalStatus: string }>;
+      previewInflationIndexImport: (token: string, input: InflationIndexImportInput) => Promise<{ ok: boolean; seriesCode: string; metricType: string; firstPeriod: string; lastPeriod: string; observationCount: number; missingMonths: string[]; statusCounts: Record<string, number>; sourceSha256: string; sourceBytes: number }>;
+      importInflationIndexSeries: (token: string, input: InflationIndexImportInput) => Promise<{ ok: boolean; seriesId: string; sourceId: string; firstPeriod: string; lastPeriod: string; observationCount: number; missingMonths: string[]; statusCounts: Record<string, number>; sourceSha256: string; approvalStatus: string }>;
       reviewInflationIndexSeries: (token: string, input: { seriesId: string; decision: 'APPROVED' | 'REJECTED'; reason: string }) => Promise<{ ok: boolean; approvalId: string; seriesId: string; decision: string }>;
       getDemoUsage: () => Record<string, number>;
       consumeDemoAction: (moduleKey: string) => {
