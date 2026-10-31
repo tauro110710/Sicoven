@@ -37,7 +37,7 @@ function normalizeDecimal(raw, metricType) {
   if (metricType === 'MONTHLY_VARIATION_PCT' && numeric <= -100) throw new Error('La variación porcentual mensual debe ser mayor que -100%.');
   return normalized;
 }
-function parseInflationIndexCsv(sourceText, metricType) {
+function parseInflationIndexCsv(sourceText, metricType, seriesCode = 'INPC_BCV') {
   if (typeof sourceText !== 'string' || !sourceText.trim()) throw new Error('El archivo de índices está vacío.');
   const bytes = Buffer.byteLength(sourceText, 'utf8');
   if (bytes > MAX_SOURCE_BYTES) throw new Error('El archivo supera el límite de 5 MB.');
@@ -49,6 +49,8 @@ function parseInflationIndexCsv(sourceText, metricType) {
   const headers = splitCsvLine(headerLine, delimiter).map(item => item.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9_]/g, ''));
   const periodIndex = headers.findIndex(item => ['period','periodo','mes'].includes(item));
   const valueIndex = headers.findIndex(item => ['value','valor','indice','variacion','variacionmensual','variacion_mensual','inflacionmensual','inflacion_mensual'].includes(item));
+  const statusIndex = headers.findIndex(item => ['status','estado','tipoobservacion','tipo_observacion'].includes(item));
+  if (seriesCode === 'ESTUDIO_FCCPV' && statusIndex < 0) throw new Error('Las series FCCPV deben identificar cada mes como ESTIMATED o PROJECTED.');
   if (periodIndex < 0 || valueIndex < 0 || periodIndex === valueIndex) throw new Error('El CSV debe contener columnas de período (YYYY-MM) y valor.');
   const observations = []; const seen = new Set();
   for (let index = 1; index < lines.length; index += 1) {
@@ -58,7 +60,11 @@ function parseInflationIndexCsv(sourceText, metricType) {
     if (!validMonth(period)) throw new Error('Período inválido en la línea ' + (index + 1) + ': use YYYY-MM.');
     if (seen.has(period)) throw new Error('El período ' + period + ' está duplicado en el archivo.');
     if (valueIndex >= cells.length || !cells[valueIndex]) throw new Error('Falta el valor del período ' + period + '.');
-    observations.push({ period, sourceValue: cells[valueIndex], value: normalizeDecimal(cells[valueIndex], metricType) });
+    const defaultStatus = ['IPC_AMC','INPC_BCV'].includes(seriesCode) ? 'OBSERVED' : 'ESTIMATED';
+    const observationStatus = statusIndex >= 0 ? String(cells[statusIndex] || '').trim().toUpperCase() : defaultStatus;
+    const allowedStatuses = seriesCode === 'ESTUDIO_FCCPV' ? ['ESTIMATED','PROJECTED'] : [defaultStatus];
+    if (!allowedStatuses.includes(observationStatus)) throw new Error('Estado de observación no permitido para la serie ' + seriesCode + ' en ' + period + '.');
+    observations.push({ period, sourceValue: cells[valueIndex], value: normalizeDecimal(cells[valueIndex], metricType), observationStatus });
     seen.add(period);
     if (observations.length > MAX_OBSERVATIONS) throw new Error('El archivo supera el máximo de 600 observaciones.');
   }
@@ -72,7 +78,8 @@ function parseInflationIndexCsv(sourceText, metricType) {
     const period = String(year).padStart(4, '0') + '-' + String(month).padStart(2, '0');
     if (!seen.has(period)) missingMonths.push(period);
   }
-  return { observations, firstPeriod: first, lastPeriod: last, missingMonths,
+  const statusCounts = observations.reduce((counts, row) => { counts[row.observationStatus] = (counts[row.observationStatus] || 0) + 1; return counts; }, {});
+  return { observations, firstPeriod: first, lastPeriod: last, missingMonths, statusCounts,
     observationCount: observations.length,
     sourceSha256: crypto.createHash('sha256').update(sourceText, 'utf8').digest('hex'), sourceBytes: bytes };
 }
@@ -95,6 +102,7 @@ function initializeInflationIndexSchema(db) {
     CREATE TABLE IF NOT EXISTS inflation_index_observations (
       id TEXT PRIMARY KEY, series_id TEXT NOT NULL REFERENCES inflation_index_series(id),
       period TEXT NOT NULL, source_value TEXT NOT NULL, normalized_value TEXT NOT NULL,
+      observation_status TEXT NOT NULL CHECK(observation_status IN ('OBSERVED','ESTIMATED','PROJECTED')),
       created_at TEXT NOT NULL, UNIQUE(series_id, period)
     );
     CREATE TABLE IF NOT EXISTS inflation_index_approvals (
@@ -127,7 +135,7 @@ function validateImportInput(input) {
   const seriesCode = String(input.seriesCode || ''); const metricType = String(input.metricType || '');
   if (!SERIES_CODES.has(seriesCode)) throw new Error('Fuente o tipo de serie no permitido.');
   if (!METRIC_TYPES.has(metricType)) throw new Error('Tipo de medición no permitido.');
-  const parsed = parseInflationIndexCsv(input.sourceText, metricType);
+  const parsed = parseInflationIndexCsv(input.sourceText, metricType, seriesCode);
   const sourceTitle = String(input.sourceTitle || '').trim(); const issuer = String(input.issuer || '').trim();
   const sourceReference = String(input.sourceReference || '').trim(); const fileName = String(input.fileName || 'indices.csv').trim();
   const basePeriod = input.basePeriod ? String(input.basePeriod) : null;
@@ -140,7 +148,7 @@ function validateImportInput(input) {
   const sourceUrl = input.sourceUrl ? String(input.sourceUrl).trim() : null;
   if (sourceUrl && !/^https?:\/\/\S+$/i.test(sourceUrl)) throw new Error('La referencia web debe ser una URL HTTP/HTTPS válida.');
   const sourcePublishedAt = input.sourcePublishedAt ? String(input.sourcePublishedAt) : null;
-  if (sourcePublishedAt && !validDate(sourcePublishedAt)) throw new Error('La fecha de publicación debe usar YYYY-MM-DD.');
+  if (!sourcePublishedAt || !validDate(sourcePublishedAt)) throw new Error('La fecha de publicación válida es obligatoria (YYYY-MM-DD).');
   return { ...parsed, seriesCode, metricType, sourceText: input.sourceText, sourceTitle, issuer, sourceReference, fileName, basePeriod, sourceUrl, sourcePublishedAt };
 }
 function importInflationIndexSeries(db, input, actor) {
@@ -165,13 +173,13 @@ function importInflationIndexSeries(db, input, actor) {
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('inflation_index_series_imported', JSON.stringify({
       seriesId, sourceId, seriesCode: data.seriesCode, metricType: data.metricType,
       firstPeriod: data.firstPeriod, lastPeriod: data.lastPeriod, observationCount: data.observationCount,
-      missingMonths: data.missingMonths, sourceSha256: data.sourceSha256, importedBy: actor.username
+      missingMonths: data.missingMonths, statusCounts: data.statusCounts, sourceSha256: data.sourceSha256, importedBy: actor.username
     }));
   });
   save();
   return { ok: true, seriesId, sourceId, seriesCode: data.seriesCode, seriesVersion, metricType: data.metricType,
     firstPeriod: data.firstPeriod, lastPeriod: data.lastPeriod, observationCount: data.observationCount,
-    missingMonths: data.missingMonths, sourceSha256: data.sourceSha256, approvalStatus: 'PENDING_REVIEW' };
+    missingMonths: data.missingMonths, statusCounts: data.statusCounts, sourceSha256: data.sourceSha256, approvalStatus: 'PENDING_REVIEW' };
 }
 function approveInflationIndexSeries(db, seriesId, decision, reason, actor) {
   if (!actor || actor.role !== 'admin' || !actor.username) throw new Error('Solo un administrador puede revisar una serie de índices.');
@@ -207,7 +215,7 @@ function getInflationIndexCatalog(db) {
   `).all();
   return rows.map(item => ({ ...item, approvalStatus: item.approvalStatus || 'PENDING_REVIEW',
     missingMonths: JSON.parse(item.missingMonthsJson || '[]'),
-    observations: db.prepare('SELECT period,source_value AS sourceValue,normalized_value AS value FROM inflation_index_observations WHERE series_id=? ORDER BY period').all(item.id) }));
+    observations: db.prepare('SELECT period,source_value AS sourceValue,normalized_value AS value,observation_status AS observationStatus FROM inflation_index_observations WHERE series_id=? ORDER BY period').all(item.id) }));
 }
 function registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession }) {
   initializeInflationIndexSchema(db);
@@ -223,7 +231,7 @@ function registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession 
     authenticate(token); const data = validateImportInput(input);
     return { ok: true, seriesCode: data.seriesCode, metricType: data.metricType, basePeriod: data.basePeriod,
       firstPeriod: data.firstPeriod, lastPeriod: data.lastPeriod, observationCount: data.observationCount,
-      missingMonths: data.missingMonths, sourceSha256: data.sourceSha256, sourceBytes: data.sourceBytes };
+      missingMonths: data.missingMonths, statusCounts: data.statusCounts, sourceSha256: data.sourceSha256, sourceBytes: data.sourceBytes };
   });
   ipcMain.handle('sicoven:inflation-index-import', (_event, token, input) => {
     const actor = authenticate(token); return importInflationIndexSeries(db, input, actor);
