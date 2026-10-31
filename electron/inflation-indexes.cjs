@@ -89,7 +89,8 @@ function initializeInflationIndexSchema(db) {
       metric_type TEXT NOT NULL CHECK(metric_type IN ('INDEX_LEVEL','MONTHLY_VARIATION_PCT')),
       base_period TEXT, series_version INTEGER NOT NULL, source_id TEXT NOT NULL REFERENCES inflation_index_sources(id),
       first_period TEXT NOT NULL, last_period TEXT NOT NULL, observation_count INTEGER NOT NULL, missing_months_json TEXT NOT NULL,
-      imported_by TEXT NOT NULL, created_at TEXT NOT NULL
+      imported_by TEXT NOT NULL, created_at TEXT NOT NULL,
+      UNIQUE(series_code, metric_type, series_version)
     );
     CREATE TABLE IF NOT EXISTS inflation_index_observations (
       id TEXT PRIMARY KEY, series_id TEXT NOT NULL REFERENCES inflation_index_series(id),
