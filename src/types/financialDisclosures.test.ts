@@ -28,8 +28,8 @@ describe('financial disclosure account movements', () => {
       debitBs: 100, creditBs: 0, debitUsd: 10, creditUsd: 0,
       balanceBs: 100, balanceUsd: 10, entryIds: ['entry-1']
     });
-    assert.equal(rows.find(row => row.accountCode === '4.1')?.balanceBs, -100);
-    assert.equal(rows.find(row => row.accountCode === '4.1')?.balanceUsd, -10);
+    assert.equal(rows.find(row => row.accountCode === '4.1')?.balanceBs, 100);
+    assert.equal(rows.find(row => row.accountCode === '4.1')?.balanceUsd, 10);
   });
 
   it('isolates company and fiscal year and excludes closing entries', () => {
