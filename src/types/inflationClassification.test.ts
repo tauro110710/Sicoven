@@ -88,6 +88,19 @@ describe('inflation classification rules', () => {
     assert.equal(validateInflationClassificationDecision({ ...base, measurementDate: '2026-10-31' }, accounts).treatment, 'NOT_RESTATE_CURRENT_MEASURE');
   });
 
+  it('rejects invalid or post-report valuation dates instead of silently treating the balance as current', () => {
+    const base = decision({
+      accountCode: '1.1.4.01', scope: 'BALANCE_COMPONENT', componentRef: 'PPE-FAIR-002',
+      classification: 'NON_MONETARY', measurementBasis: 'FAIR_VALUE',
+      measurementDate: '2026-11-01', reportingDate: '2026-10-31',
+      carryingAmountBs: 7000, currency: 'BS'
+    });
+    assert.throws(() => validateInflationClassificationDecision(base, accounts), /no puede ser posterior/);
+    assert.throws(() => validateInflationClassificationDecision({
+      ...base, measurementDate: '2026-02-30'
+    }, accounts), /fecha de medición/);
+  });
+
   it('requires both historical currency amounts when the component is dual currency', () => {
     const base = decision({
       scope: 'BALANCE_COMPONENT',
