@@ -53,6 +53,7 @@ describe('inflation classification rules', () => {
       componentRef: 'INV-LOT-001',
       classification: 'NON_MONETARY',
       measurementBasis: 'HISTORICAL_COST',
+      reportingDate: '2026-12-31',
       carryingAmountBs: 100,
       currency: 'BS'
     });
@@ -74,6 +75,17 @@ describe('inflation classification rules', () => {
     assert.throws(() => validateInflationClassificationDecision({
       ...base, contractReference: ''
     }, accounts), /cláusula de indexación/);
+  });
+
+  it('uses the fair-value measurement date when it predates the reporting date', () => {
+    const base = decision({
+      accountCode: '1.1.4.01', scope: 'BALANCE_COMPONENT', componentRef: 'PPE-FAIR-001',
+      classification: 'NON_MONETARY', measurementBasis: 'FAIR_VALUE',
+      measurementDate: '2026-06-30', reportingDate: '2026-10-31',
+      carryingAmountBs: 5000, currency: 'BS'
+    });
+    assert.equal(validateInflationClassificationDecision(base, accounts).treatment, 'RESTATE_FROM_MEASUREMENT_DATE');
+    assert.equal(validateInflationClassificationDecision({ ...base, measurementDate: '2026-10-31' }, accounts).treatment, 'NOT_RESTATE_CURRENT_MEASURE');
   });
 
   it('requires both historical currency amounts when the component is dual currency', () => {
@@ -144,9 +156,12 @@ describe('inflation classification rules', () => {
     assert.throws(() => assertNoDuplicateInflationClassification({ ...next, supersedesDecisionId: 'wrong' }, [current]), /enlazar explícitamente/);
   });
 
-  it('does not restate monetary items, restates historical non-monetary items from origin, and excludes current measures', () => {
+  it('does not restate monetary items and re-expresses non-monetary items from their actual origin or measurement date', () => {
     assert.equal(getInflationRestatementTreatment('MONETARY', 'CASH_OR_FIXED_CURRENCY'), 'NOT_RESTATE_MONETARY');
     assert.equal(getInflationRestatementTreatment('NON_MONETARY', 'HISTORICAL_COST'), 'RESTATE_FROM_ORIGIN');
-    assert.equal(getInflationRestatementTreatment('NON_MONETARY', 'FAIR_VALUE'), 'NOT_RESTATE_CURRENT_MEASURE');
+    assert.equal(getInflationRestatementTreatment('NON_MONETARY', 'FAIR_VALUE', '2026-10-31', '2026-10-31'), 'NOT_RESTATE_CURRENT_MEASURE');
+    assert.equal(getInflationRestatementTreatment('NON_MONETARY', 'FAIR_VALUE', '2026-06-30', '2026-10-31'), 'RESTATE_FROM_MEASUREMENT_DATE');
+    assert.equal(getInflationRestatementTreatment('NON_MONETARY', 'REVALUED', '2025-12-31', '2026-10-31'), 'RESTATE_FROM_MEASUREMENT_DATE');
+    assert.throws(() => getInflationRestatementTreatment('NON_MONETARY', 'FAIR_VALUE'), /fecha válida/);
   });
 });
