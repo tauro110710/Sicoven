@@ -62,16 +62,16 @@ test('monthly percentage series accepts negative changes only above -100 percent
 
 
 test('FCCPV study series must distinguish estimated months from projections', () => {
-  assert.throws(() => parseInflationIndexCsv('period;value\\n2026-03;4.2', 'MONTHLY_VARIATION_PCT', 'ESTUDIO_FCCPV'), /identificar cada mes/);
+  assert.throws(() => parseInflationIndexCsv('period;value\n2026-03;4.2', 'MONTHLY_VARIATION_PCT', 'ESTUDIO_FCCPV'), /identificar cada mes/);
   const parsed = parseInflationIndexCsv(
-    'period;value;status\\n2026-03;4.2;ESTIMATED\\n2026-04;4.8;PROJECTED',
+    'period;value;status\n2026-03;4.2;ESTIMATED\n2026-04;4.8;PROJECTED',
     'MONTHLY_VARIATION_PCT',
     'ESTUDIO_FCCPV'
   );
   assert.deepEqual(parsed.statusCounts, { ESTIMATED: 1, PROJECTED: 1 });
   assert.equal(parsed.observations[1].observationStatus, 'PROJECTED');
   assert.throws(() => parseInflationIndexCsv(
-    'period;value;status\\n2026-03;4.2;OBSERVED',
+    'period;value;status\n2026-03;4.2;OBSERVED',
     'MONTHLY_VARIATION_PCT',
     'ESTUDIO_FCCPV'
   ), /Estado de observación no permitido/);
