@@ -87,6 +87,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'ret-islr', label: 'Retenciones ISLR & XML', icon: FileText },
     { id: 'catalogo', label: 'Plan de Cuentas', icon: FileSpreadsheet },
     { id: 'reversiones', label: 'Reversiones y cierres', icon: Undo2 },
+    { id: 'inflacion', label: 'Inflación y REME', icon: TrendingUp },
     { id: 'config', label: 'Configuración', icon: Settings },
   ];
 
