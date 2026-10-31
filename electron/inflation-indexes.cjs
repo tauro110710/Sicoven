@@ -189,7 +189,7 @@ function approveInflationIndexSeries(db, seriesId, decision, reason, actor) {
   if (note.length < 10 || note.length > 1000) throw new Error('La justificación debe tener entre 10 y 1000 caracteres.');
   if (!db.prepare('SELECT id FROM inflation_index_series WHERE id=?').get(id)) throw new Error('La serie de índices no existe.');
   const current = db.prepare('SELECT decision FROM inflation_index_approvals WHERE series_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1').get(id);
-  if (current?.decision === 'APPROVED') throw new Error('La serie ya fue aprobada; importe una nueva versión para corregirla.');
+  if (current) throw new Error('La serie ya fue revisada; importe una nueva versión para aportar nueva evidencia.');
   const approvalId = crypto.randomUUID(); const now = new Date().toISOString();
   db.transaction(() => {
     db.prepare('INSERT INTO inflation_index_approvals (id,series_id,decision,reason,actor_username,created_at) VALUES(?,?,?,?,?,?)')
