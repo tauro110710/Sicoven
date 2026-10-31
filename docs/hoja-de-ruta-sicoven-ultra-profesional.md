@@ -331,3 +331,59 @@ SICOVEN se considerará listo para una actualización profesional integral cuand
 **Límite:** el PR #42 es una especificación normativa preparatoria. No implementa el motor de reexpresión, no importa una serie de índices, no clasifica partidas, no calcula resultado monetario/REME y no genera asientos. No cierra el Bloque 3 ni certifica cumplimiento VEN-NIF.
 
 **Siguiente paso del Bloque 3:** iniciar el subbloque 3.1 de verificación y carga controlada de series históricas y actuales (IPC-AMC / INPC), con fuente auténtica, períodos identificados, detección explícita de meses ausentes, versión de serie y conservación local en SQLite. No introducir cifras de ejemplo ni estimaciones no aprobadas. Antes de habilitar cálculos, confirmar la vigencia normativa aplicable al ejercicio y documentar qué publicaciones/estimaciones reconoce FCCPV para cada intervalo sin INPC.
+
+
+
+# ACTUALIZACIÓN DE CONTINUIDAD — 31/10/2026
+## Estado real posterior a PR #51
+
+Esta actualización prevalece sobre cualquier estado anterior de los bloques 3.1, 3.2 y 3.3 que figure más arriba en este documento.
+
+### Bloque 3.1 — Datos y evidencia de índices
+- **3.1A — almacenamiento e importación:** integrado mediante PR #44.
+- **3.1B — interfaz de administración:** integrado mediante PR #45.
+- **3.1C — adquisición y verificación de fuentes auténticas:** investigación realizada; sigue bloqueado el cierre por falta del archivo primario auténtico verificable. No se han cargado índices reales.
+- **3.1D — incorporación de series reales verificadas:** pendiente. No importar datos secundarios, proyecciones ni fixtures como índices oficiales.
+
+### Bloque 3.2 — Clasificación monetaria/no monetaria
+- **3.2A — modelo de clasificación:** integrado.
+- **3.2B — persistencia SQLite e historial inmutable:** integrado.
+- **3.2C — interfaz:** integrado mediante PR #49, commit de integración `554de310bb7b410461540f65e114b04cfb1e4544`.
+- **3.2D — matriz de casos profesionales y pruebas:** integrado mediante PR #50, commit de integración `657589bdfcb75eb0d3af5bf64b41bc76a5ac2f33`.
+- Pendiente: aprobación profesional con casos reales y validación del marco aplicable a cada entidad/ejercicio.
+
+### Bloque 3.3A — control técnico de preparación de índices
+- **PR #51 — INTEGRADO.**
+- Commit de integración en `main`: `b90b01597214148f1cc52f2b7bbce2ddc01fed78`.
+- El límite de series quedó fijado: IPC-AMC hasta diciembre de 2007 inclusive e INPC-BCV desde enero de 2008.
+- Requiere versión más reciente aprobada, emisor/URL BCV, SHA-256, metadatos, cobertura mensual completa y observaciones observadas positivas.
+- Rechaza meses faltantes, estimados y proyectados; no interpola ni retrocede silenciosamente a una versión anterior.
+- Es un control preliminar de evidencia; `calculationEnabled` permanece siempre en `false`.
+- CI pre-fusión y post-fusión de escritorio y Windows completados con éxito. La prueba Windows posterior a la fusión ejecutó la actualización real 1.0.6→1.0.7, preservó SQLite y cargó el artefacto de CI. No se publicó release ni instalador.
+
+### Bloque 3.3B — gobierno de fuentes alternativas y estimaciones
+- **Diseño técnico documental iniciado en rama `docs/bloque-3-3b-gobierno-fuentes-reme`.**
+- Documento propuesto: `docs/bloque-3-3b-gobierno-fuentes-alternativas-reme.md`.
+- Distingue INPC BCV, IPC-AMC histórico, estudio de experto (párrafo 17), estudio público indicado por FCCPV (párrafo 18) y estimación propia excepcional de la entidad (párrafo 19).
+- Define evidencia, alcance de aprobación, estados, separación de estimaciones/proyecciones y pruebas negativas.
+- **No está integrado ni implementado:** requiere revisión normativa/documental y PR independiente.
+- El gate alternativo, si se implementa, deberá ser independiente del gate oficial de PR #51. Ninguna aprobación alternativa podrá etiquetar datos como oficiales BCV ni habilitar cálculos automáticamente.
+
+### Bloque 3.3 — motor REME
+**PENDIENTE; NO HABILITADO.** Solo se diseñará e implementará después de:
+1. verificar la normativa vigente y su aplicación por entidad/ejercicio;
+2. contar con series y/o estimaciones admisibles con evidencia original y alcance aprobado;
+3. aprobar profesionalmente la clasificación de partidas;
+4. fijar fórmulas, fechas, factores, redondeo y tratamiento de cada marco;
+5. construir casos de referencia con resultados esperados revisados por contador público;
+6. implementar papeles de trabajo, conciliaciones y asientos propuestos con aprobación expresa.
+
+### Próxima secuencia de trabajo
+1. Revisar y validar el diseño documental 3.3B contra el texto normativo vigente y aclaratorias FCCPV.
+2. Convertirlo en un modelo SQLite aditivo, importación, expediente, revisión y gate alternativo, sin tocar el gate oficial.
+3. Probar que cada supuesto restrictivo bloquea cuando falta evidencia y que los historiales son inmutables.
+4. Solo después diseñar el motor matemático REME, inicialmente en modo de simulación aislada, sin contabilizar ni modificar saldos.
+5. Mantener bloqueados cálculos de producción hasta revisión profesional y evidencia de índices.
+
+### Estado global
+Los bloques 1 y 2 tienen implementación funcional amplia, pero conservan validaciones profesionales pendientes. El bloque 3 está parcialmente implementado y no está cerrado. Los bloques 4 a 13 permanecen según el estado descrito en esta hoja de ruta; no se consideran terminados por la sola existencia de componentes previos. SICOVEN continúa siendo una aplicación de escritorio con SQLite local. La distribución final requiere autorización expresa del usuario.
