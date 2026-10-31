@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 type SeriesCode = 'IPC_AMC' | 'INPC_BCV' | 'ESTIMACION_EXPERTO' | 'ESTUDIO_FCCPV' | 'ESTIMACION_PROPIA_EXCEPCIONAL';
 type MetricType = 'INDEX_LEVEL' | 'MONTHLY_VARIATION_PCT';
@@ -95,7 +95,7 @@ export const InflationIndexView: React.FC<{ token: string }> = ({ token }) => {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  const pendingCount = useMemo(() => series.filter(item => item.approvalStatus === 'PENDING_REVIEW').length, [series]);
+  const pendingCount = series.filter(item => item.approvalStatus === 'PENDING_REVIEW').length;
 
   const refreshSeries = async () => {
     if (!window.sicovenStore) throw new Error('Esta función requiere SICOVEN de escritorio con SQLite local.');
