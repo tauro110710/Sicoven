@@ -39,6 +39,7 @@ export interface InflationClassificationDecision {
   carryingAmountBs?: number;
   carryingAmountUsd?: number;
   currency?: 'BS' | 'USD' | 'DUAL';
+  contractReference?: string;
   reviewer?: string;
   reviewedAt?: string;
   rejectionReason?: string;
@@ -91,6 +92,7 @@ export function validateInflationClassificationDecision(
   accounts: Account[]
 ): InflationClassificationDecision {
   if (!input || typeof input !== 'object') throw new Error('La decisión de clasificación no es válida.');
+  if (!String(input.id || '').trim()) throw new Error('La decisión requiere un identificador único.');
   const companyId = String(input.companyId || '').trim();
   if (!companyId) throw new Error('La clasificación debe estar vinculada a una empresa.');
   if (!Number.isInteger(input.fiscalYear) || input.fiscalYear < 1900 || input.fiscalYear > 2200) {
@@ -134,6 +136,14 @@ export function validateInflationClassificationDecision(
     if (!input.currency || !['BS', 'USD', 'DUAL'].includes(input.currency)) {
       throw new Error('Indique la moneda en que se conserva el importe histórico.');
     }
+    if ((input.currency === 'BS' && !validAmount(input.carryingAmountBs)) ||
+        (input.currency === 'USD' && !validAmount(input.carryingAmountUsd)) ||
+        (input.currency === 'DUAL' && (!validAmount(input.carryingAmountBs) || !validAmount(input.carryingAmountUsd)))) {
+      throw new Error('Los importes históricos deben corresponder con la moneda declarada; DUAL exige Bs. y USD.');
+    }
+    if (input.measurementBasis === 'INDEX_LINKED' && !String(input.contractReference || '').trim()) {
+      throw new Error('Una partida indexada requiere referencia al contrato y su cláusula de indexación.');
+    }
     if (input.classification === 'NON_MONETARY' &&
         (input.measurementBasis === 'HISTORICAL_COST' || input.measurementBasis === 'GOODS_OR_SERVICES' || input.measurementBasis === 'REVALUED')) {
       if (!validIsoDate(input.originDate)) {
@@ -145,7 +155,7 @@ export function validateInflationClassificationDecision(
       throw new Error('La medición a valor corriente requiere fecha de medición verificable.');
     }
   } else if (input.componentRef || input.originDate || input.measurementDate ||
-      input.carryingAmountBs !== undefined || input.carryingAmountUsd !== undefined) {
+      input.carryingAmountBs !== undefined || input.carryingAmountUsd !== undefined || input.contractReference) {
     throw new Error('La clasificación general de cuenta no debe almacenar importes ni fechas de un componente específico.');
   }
 
