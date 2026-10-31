@@ -56,7 +56,8 @@ Tratamientos derivados de la clasificación explícita:
 - Monetaria ordinaria: no reexpresar por índice general.
 - Monetaria indexada: ajustar según contrato.
 - No monetaria histórica: reexpresar desde fecha de origen.
-- No monetaria a valor corriente (valor razonable/VNR): no volver a reexpresar por el índice general.
+- No monetaria medida a valor razonable/VNR o revaluada en la fecha de reporte: no volver a reexpresar por el índice general.
+- Si la medición a valor razonable/VNR o revaluación ocurrió antes de la fecha de reporte, reexpresar desde esa fecha de medición/revaluación.
 - Cuenta mixta: exige desglose de componentes.
 - Flujos de resultados: fuera de la clasificación de saldos; se tratarán según fecha de reconocimiento.
 
@@ -66,7 +67,7 @@ Validaciones:
 - Coherencia entre tipo de cuenta y clasificación.
 - Justificación y referencia normativa/documental.
 - Fecha de origen para componente no monetario a costo histórico, bienes/servicios o revaluado.
-- Fecha de medición para valor razonable o VNR.
+- Fecha de medición/revaluación y fecha de reporte para valor razonable, VNR o revaluación; si la medición fue anterior al reporte, el tratamiento parte de esa fecha.
 - Importe histórico y moneda declarada; DUAL requiere importes Bs. y USD.
 - Referencia contractual para partidas indexadas.
 - Revisor y fecha para aprobar; justificación para rechazar.
