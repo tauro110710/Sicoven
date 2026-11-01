@@ -331,6 +331,20 @@ function validateVatDeclarationLedger(previousState, nextState) {
         throw new Error('SQLite bloqueó la declaración: existen comprobantes históricos del mes sin fecha fiscal confirmada.');
       }
     }
+    if (!priorDeclarationIds.has(id)) {
+      const expectedVoucherIds = asArray(nextState.vatVouchers)
+        .filter(voucher => String(voucher.companyId) === String(declaration.companyId))
+        .filter(voucher => {
+          const assigned = assignmentByVoucher.get(String(voucher.id));
+          const fiscalDate = voucher.fiscalDate || assigned?.confirmedFiscalDate;
+          return Boolean(fiscalDate) && fiscalDate >= declaration.startDate && fiscalDate <= declaration.endDate;
+        })
+        .map(voucher => String(voucher.id)).sort();
+      const actualVoucherIds = ids.slice().sort();
+      if (JSON.stringify(expectedVoucherIds) !== JSON.stringify(actualVoucherIds)) {
+        throw new Error('SQLite rechazó la declaración: el snapshot no incluye exactamente todos los comprobantes de la empresa y quincena.');
+      }
+    }
     let base = 0, vat = 0, withheld = 0;
     for (const snapshot of snapshots) {
       const voucherId = String(snapshot.voucherId || '');
