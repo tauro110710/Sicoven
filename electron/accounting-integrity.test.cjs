@@ -1705,6 +1705,34 @@ test('SQLite blocks review of VAT declarations with pending fiscal corrections o
   }), /sin fecha fiscal confirmada/);
 });
 
+test('SQLite rejects conflicting legacy fiscal-date assignments between the two half-month declarations', () => {
+  const first = vatDeclarationFixture();
+  first.vatVouchers[0].fiscalDate = undefined;
+  first.vatVouchers[0].date = '2026-10-03';
+  first.vatWithholdingDeclarations[0].legacyDateAssignments = [{
+    voucherId: 'vat-1', confirmedFiscalDate: '2026-10-03',
+    note: 'Se verificó el soporte bancario del pago efectivo.'
+  }];
+  first.vatWithholdingDeclarations[0].voucherSnapshots[0].dateBasis = 'MANUALLY_VERIFIED_LEGACY_DATE';
+  first.vatWithholdingDeclarations[0].voucherSnapshots[0].dateVerificationNote =
+    'Se verificó el soporte bancario del pago efectivo.';
+  const contradictory = {
+    id: 'vat-decl-second-half', companyId: 'company-1', period: '202610',
+    window: 'SECOND_HALF', startDate: '2026-10-16', endDate: '2026-10-31',
+    zeroOperations: true, voucherIds: [], voucherSnapshots: [],
+    legacyDateAssignments: [{
+      voucherId: 'vat-1', confirmedFiscalDate: '2026-10-20',
+      note: 'Se verificó un soporte distinto para asignar la misma retención.'
+    }],
+    totalTaxableBaseBs: 0, totalVatAmountBs: 0, totalWithheldBs: 0,
+    createdAt: '2026-11-01T10:00:00.000Z'
+  };
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...first,
+    vatWithholdingDeclarations: [...first.vatWithholdingDeclarations, contradictory]
+  }), /fechas fiscales legacy contradictorias/);
+});
+
 test('SQLite requires a SENIAT official source for recorded declaration due dates', () => {
   const state = vatDeclarationFixture();
   assert.throws(() => validateAccountingSnapshot(emptyState(), {
