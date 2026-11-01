@@ -812,12 +812,12 @@ Se verificaron en `main`:
 - Libro de Compras conserva la ND y advierte que se excluye provisionalmente de totales fiscales SENIAT mientras no se valide su tratamiento con especificación oficial vigente.
 - CxP incluye ND como obligación independiente; pagos y aplicaciones de anticipos se dirigen a la cuenta CxP y al documento ND específicos.
 - La integridad SQLite valida vínculo, empresa, proveedor, unicidad, fechas, período, importes, tasa, cuentas, balance dual, revisión profesional y ausencia de movimientos de inventario o retenciones no autorizadas.
-- La ND no puede anularse todavía: se bloquea su reversión hasta implementar contra-asiento y regularización fiscal especializados.
+- La reversión controlada de ND quedó implementada en PR #80 mediante contra-asiento/AIA y controles SQLite. La regularización fiscal continúa separada y no se presume homologada.
 - Las causas `ADDITIONAL_GOODS_RECEIVED` e `INVENTORY_COST_ADJUSTMENT` siguen bloqueadas en la interfaz y SQLite hasta disponer de recepción, líneas, cantidades, costos y Kardex verificables.
 - No se calculan ni generan retenciones IVA/ISLR, IGTF, declaraciones, rectificaciones, compensaciones ni cambios en comprobantes históricos. El registro exige confirmación profesional de no aplicabilidad de retenciones e IGTF; si alguna aplica, debe diferirse el registro hasta implementar y validar su tratamiento.
 - CI pre-merge Desktop Validation run `41324233221`: SUCCESS.
 - CI pre-merge Windows Installer run `41324233222`: SUCCESS; incluyó pruebas automatizadas, TypeScript, renderer, auditoría de activos, NSIS, verificación del instalador y actualización real 1.0.6 → 1.0.7 preservando SQLite.
-- CI post-merge sobre SHA integrado: Desktop Validation run `41325429966` y Windows Installer run `41325429881` estaban en ejecución al registrar esta bitácora. No se declaran todavía SUCCESS.
+- CI post-merge sobre SHA integrado: Desktop Validation run `41325429966` y Windows Installer run `41325429881`: SUCCESS en ambos.
 - No se publicó instalador ni release.
 - Administrador semilla no modificado.
 
@@ -834,3 +834,69 @@ Se verificaron en `main`:
 7. Mantener bloqueado el alta genérica tipo 02, el administrador semilla intacto y la publicación de instaladores/releases sin autorización.
 
 **Regla permanente:** SQLite local es la única fuente de verdad. No declarar homologación SENIAT, certificación fiscal ni finalización del Bloque 4 hasta completar los pendientes y sus pruebas reales.
+
+
+## BITÁCORA DE CONTINUIDAD — ENDURECIMIENTO Y CIERRE DEL DESBLOQUEO ND TIPO 02 — 01/11/2026
+
+### PR #78 — aislamiento de guardia SQLite de movimientos
+- PR: https://github.com/fenixlife1978/Sicoven/pull/78
+- Fusionado por squash: `c4ecc3407235c21f2d195d31d7e6ddac39192bad`.
+- Corrige la detección de movimientos de ND para que solo se evalúen movimientos relacionados con el número del documento en curso; una ND no debe ser rechazada por un movimiento histórico no relacionado.
+- Añade regresión automatizada.
+- CI post-merge Desktop run `41326092076`: SUCCESS.
+- CI post-merge Windows run `41326092010`: CANCELLED por ejecución posterior; no se considera fallo ni se declara éxito. La compilación de instalador completa quedó validada de nuevo en PR #79 y #80.
+
+### PR #79 — Libro de Compras PDF
+- PR: https://github.com/fenixlife1978/Sicoven/pull/79
+- Fusionado por squash: `6855bb3c8ebcc6e7d692adaf34ab33b873718af1`.
+- Las ND tipo 02 se mantienen visibles y trazables en el PDF, pero se excluyen de los totales fiscales mientras no exista validación normativa primaria vigente de su tratamiento.
+- Los totales identifican expresamente la exclusión; no se alteran asientos ni CxP.
+- CI post-merge Desktop run `41326304693`: SUCCESS.
+- CI post-merge Windows Installer run `41326304675`: SUCCESS; incluye NSIS y actualización 1.0.6 → 1.0.7 preservando SQLite.
+
+### PR #80 — anulación controlada de ND tipo 02
+- PR: https://github.com/fenixlife1978/Sicoven/pull/80
+- Fusionado por squash: `3b957b0b717e92ad99a380578e8cf25cdf2baf81`.
+- Reutiliza el motor general de contra-asientos para revertir ND de forma controlada.
+- SQLite exige vínculo al asiento AJUSTE original, contra-asiento enlazado, reversión exacta en Bs./USD o AIA cuando el período está cerrado, motivo y papel de trabajo.
+- Bloquea anulación cuando existan pagos, aplicaciones de anticipos o movimientos de inventario activos.
+- Añade pruebas positivas y negativas; no borra ni reescribe el documento histórico.
+- CI post-merge Desktop run `41327119839`: SUCCESS.
+- CI post-merge Windows Installer run `41327119811`: SUCCESS; incluye compilación NSIS, verificación del instalador y actualización 1.0.6 → 1.0.7 preservando SQLite.
+
+### Estado consolidado del desbloqueo ND tipo 02
+**DESBLOQUEADO PARA EL SUBCONJUNTO CONTABLE CONTROLADO**, con las siguientes capacidades integradas en `main`:
+1. Alta dedicada desde factura original tipo 01; la alta genérica de compras continúa bloqueada para tipo 02.
+2. Documento independiente con vínculo a factura, proveedor y empresa, número/control, fechas y causa económica.
+3. Asiento AJUSTE y saldo CxP propios, en Bs. y USD, con cuentas seleccionadas y validadas contra el plan contable.
+4. Consulta en Libro de Compras y CxP; pagos y aplicaciones de anticipos dirigidos al documento ND, sin reescribir pagos de la factura original.
+5. Integridad SQLite para vínculo, duplicidad, fechas/períodos, importes, tasa, cuentas, balance dual, revisión profesional y ausencia de movimientos no autorizados.
+6. Anulación mediante contra-asiento/AIA sujeto a conciliación y bloqueo si hay liquidaciones o movimientos activos.
+7. ND visible y trazable en Libro de Compras PDF, excluida de totales fiscales hasta validar la regla con fuente primaria vigente.
+
+**No equivale a soporte universal ni a homologación fiscal.** Permanecen fuera:
+- ND con mercancía adicional o ajuste de costo de inventario: requieren recepción real, líneas, productos, cantidades, costos y Kardex conciliado; continúan bloqueadas.
+- Cálculo/aplicación de retenciones IVA/ISLR e IGTF: el registro actual exige confirmación profesional de no aplicabilidad. Si corresponde alguna retención o impuesto, diferir el registro hasta implementar y validar el tratamiento.
+- Inclusión de ND en totales, TXT, declaración o rectificación fiscal: requiere especificación oficial primaria vigente y validación profesional.
+- Rectificaciones, compensaciones y cambios de comprobantes/declaraciones históricas: no se automatizan.
+- Prueba manual E2E con datos de empresa real: no se afirma ejecutada. CI automatizado valida dominio, integridad SQLite, TypeScript, build, instalador y actualización con preservación de datos; no sustituye aceptación funcional por el usuario.
+
+### PR #81 — rama redundante cerrada sin merge
+- PR: https://github.com/fenixlife1978/Sicoven/pull/81
+- Cerrada sin merge el 01/11/2026: la rama estaba basada en un estado anterior y duplicaba el flujo ya integrado por #76 y endurecido por #78–#80. No se forzó una integración divergente ni se sobrescribieron cambios posteriores de `main`.
+- Sus dos CI pre-merge habían concluido SUCCESS, pero no se usa esa rama como fuente de producción ni como prueba adicional del estado integrado.
+
+### Validación post-merge vigente de `main`
+- Commit actual: `3b957b0b717e92ad99a380578e8cf25cdf2baf81`.
+- Desktop Validation run `41327119839`: SUCCESS.
+- Windows Installer run `41327119811`: SUCCESS.
+- La prueba de actualización 1.0.6 → 1.0.7 con preservación de SQLite concluyó SUCCESS.
+- No se publicó instalador ni release.
+- Administrador semilla no modificado.
+
+### Próximos trabajos del bloque ND
+1. Añadir pruebas funcionales E2E de UI → dominio → SQLite → reinicio/lectura → Libro de Compras → CxP → pago/anticipo → anulación.
+2. Verificar en escenarios controlados factura original impaga, parcialmente pagada y pagada, anticipos y saldo a favor, evitando duplicidad y alteración de históricos.
+3. Diseñar recepción de mercancía adicional y ajuste de costo con evidencia y movimientos reales de inventario; no desbloquear por mera clasificación.
+4. Validar fiscalidad, retenciones e IGTF solo con fuente primaria vigente y revisión profesional.
+5. Mantener SQLite local como única fuente de verdad, el administrador semilla intocable y sin publicar instaladores/releases sin autorización.
