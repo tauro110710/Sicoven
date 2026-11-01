@@ -29,7 +29,9 @@ function makeSeries(db, code = 'ESTIMACION_EXPERTO') {
     sourceTitle: 'Estudio sintético de prueba', issuer: 'Profesional de prueba',
     sourceReference: 'Fixture sintético; no representa índice real',
     sourcePublishedAt: '2025-02-01', fileName: 'fixture.csv',
-    sourceText: 'period;value;status\n2025-01;100;ESTIMATED\n2025-02;101;ESTIMATED'
+    sourceText: 'period;value;status
+2025-01;100;ESTIMATED
+2025-02;101;ESTIMATED'
   };
   return importInflationIndexSeries(db, input, admin);
 }
@@ -77,7 +79,9 @@ test('expert dossier cannot be created without all paragraph-17 evidence and pro
   try {
     const series = makeSeries(db);
     const input = dossierInput(series.seriesId, { evidence: [evidence('SIGNED_STUDY')] });
-    const incomplete = createInflationSourceDossier(db, input, admin);\n    assert.equal(incomplete.eligibleForReview, false);\n    assert.ok(incomplete.missingEvidence.includes('EXPERT_CREDENTIALS'));
+    const incomplete = createInflationSourceDossier(db, input, admin);
+    assert.equal(incomplete.eligibleForReview, false);
+    assert.ok(incomplete.missingEvidence.includes('EXPERT_CREDENTIALS'));
     const valid = dossierInput(series.seriesId, { professional: { name: 'Experto', role: 'Investigador',
       credential: 'Registro acreditado', credentialEvidence: 'Documento de credencial verificado' },
       evidence: [evidence('SIGNED_STUDY')] });
@@ -142,7 +146,9 @@ test('projected observations cannot receive documented-use approval', () => {
     const series = importInflationIndexSeries(db, {
       seriesCode: 'ESTUDIO_FCCPV', metricType: 'INDEX_LEVEL', basePeriod: '2025-01',
       sourceTitle: 'Estudio sintético', issuer: 'Organismo de prueba', sourceReference: 'Fixture',
-      sourcePublishedAt: '2025-02-01', sourceText: 'period;value;status\\n2025-01;100;ESTIMATED\\n2025-02;101;PROJECTED'
+      sourcePublishedAt: '2025-02-01', sourceText: 'period;value;status\
+2025-01;100;ESTIMATED\
+2025-02;101;PROJECTED'
     }, admin);
     const codes = ['FCCPV_INDICATION','SIGNED_STUDY','METHODOLOGY','COVERAGE'];
     const created = createInflationSourceDossier(db, dossierInput(series.seriesId, {
