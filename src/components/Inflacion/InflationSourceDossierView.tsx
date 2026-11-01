@@ -138,6 +138,29 @@ export const InflationSourceDossierView: React.FC<{ token: string; userRole: str
     } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo guardar el expediente.'); }
     finally { setBusy(false); }
   };
+  const missingFor = (item: Dossier) => {
+    const requirements = REQUIREMENTS[item.source_code as SourceCode] || [];
+    const present = new Set((item.evidenceManifest || []).map((entry: any) => entry.evidenceType));
+    return requirements.filter(entry => !present.has(entry.code));
+  };
+  const downloadEvidence = async (evidenceId: string) => {
+    try {
+      if (!window.sicovenStore) throw new Error('SICOVEN Desktop no está disponible.');
+      const file = await window.sicovenStore.getInflationSourceDossierEvidence(token, evidenceId);
+      if (!file.contentBase64) {
+        if (file.sourceUrl) { window.open(file.sourceUrl, '_blank', 'noopener,noreferrer'); return; }
+        throw new Error('El expediente no conserva bytes descargables para esta referencia.');
+      }
+      const binary = atob(file.contentBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+      const url = URL.createObjectURL(new Blob([bytes], { type: file.mimeType || 'application/octet-stream' }));
+      const anchor = document.createElement('a');
+      anchor.href = url; anchor.download = file.fileName || 'evidencia';
+      document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
+      setNotice('Documento descargado. El acceso quedó registrado en la auditoría de SICOVEN.');
+    } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo recuperar el documento.'); }
+  };
   const submitReview = async (event: React.FormEvent) => {
     event.preventDefault(); if (!reviewing) return; setBusy(true); setError(''); setNotice('');
     try {
@@ -222,8 +245,8 @@ export const InflationSourceDossierView: React.FC<{ token: string; userRole: str
         <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold text-slate-900">{LABELS[item.source_code] || item.source_code} · expediente v{item.dossier_version}</h3><p className="mt-1 text-xs text-slate-600">{companyLabel(item.company_id)} · {item.fiscal_year} · {item.period_from} a {item.period_to} · {item.accounting_framework}</p><p className="mt-1 text-xs text-slate-500">Serie {item.series_id} · SHA-256 fuente {item.sourceSha256}</p></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{LABELS[item.status] || item.status}</span></div>
         <p className="mt-2 text-sm text-slate-700">{item.normative_rationale}</p>
         <div className="mt-3 grid gap-2 text-xs text-slate-600 md:grid-cols-2"><p>Responsable: {item.professional_name} · {item.professional_credential}</p><p>Metodología: {item.methodology_version} · {item.periodicity}</p><p>Revisión: {item.reviewerUsername || 'Pendiente'}</p><p>Documentos: {item.evidence?.length || 0} · {item.evidence_bytes} bytes</p></div>
-        <details className="mt-3"><summary className="cursor-pointer text-xs font-semibold text-blue-800">Ver evidencias y huellas SHA-256</summary><div className="mt-2 space-y-2">{(item.evidence || []).map((doc: any) => <div key={doc.id} className="rounded bg-slate-50 p-2 text-xs"><strong>{doc.evidenceType}</strong> — {doc.title}<p>{doc.description}</p><p>{doc.fileName} · SHA-256: {doc.sha256}</p></div>)}</div></details>
-        {item.status === 'DRAFT' && item.missingEvidence?.length > 0 && <p className="mt-2 text-xs text-amber-800">Evidencia faltante: {item.missingEvidence.join(', ')}</p>}
+        <details className="mt-3"><summary className="cursor-pointer text-xs font-semibold text-blue-800">Ver evidencias y huellas SHA-256</summary><div className="mt-2 space-y-2">{(item.evidence || []).map((doc: any) => <div key={doc.id} className="rounded bg-slate-50 p-2 text-xs"><strong>{doc.evidenceType}</strong> — {doc.title}<p>{doc.description}</p><p>{doc.fileName} · SHA-256: {doc.sha256}</p><button type="button" onClick={() => void downloadEvidence(doc.id)} className="mt-1 text-xs font-semibold text-blue-700 underline">{doc.sourceUrl && !doc.bytes ? 'Abrir referencia HTTPS' : 'Descargar y revisar documento'}</button></div>)}</div></details>
+        {item.status === 'DRAFT' && missingFor(item).length > 0 && <p className="mt-2 text-xs text-amber-800">Evidencia faltante: {missingFor(item).map(entry => entry.label).join(', ')}</p>}
         {!item.decision && <button type="button" onClick={() => { setReviewing(item); setReviewReason(''); setDecision('NEEDS_EVIDENCE'); }} className="mt-3 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">Abrir revisión profesional</button>}
         {item.decision && <p className="mt-3 border-t border-slate-100 pt-2 text-xs text-slate-600">Decisión: {item.decision} · {item.reviewReason}</p>}
       </article>)}</div>}
