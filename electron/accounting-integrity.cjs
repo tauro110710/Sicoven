@@ -533,10 +533,52 @@ function validateAccountingSnapshot(previousState, nextState) {
   }
   assertAppendOnlyCollection(priorState, nextState, 'purchases',
     ['journalEntryId', 'isCancelled', 'cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote'], ['journalEntryId', 'isCancelled']);
-  for (const previousPurchase of asArray(priorState.purchases).filter(item => item.documentType === '02')) {
+  for (const previousPurchase of asArray(priorState.purchases).filter(item => item.documentType === '02' && !item.isCancelled)) {
     const currentPurchase = asArray(nextState.purchases).find(item => item.id === previousPurchase.id);
-    if (currentPurchase && !previousPurchase.isCancelled && currentPurchase.isCancelled) {
-      throw new Error('SQLite bloqueó la reversión de una ND tipo 02: el flujo especializado de contra-asiento y regularización fiscal aún no está habilitado.');
+    if (!currentPurchase || !currentPurchase.isCancelled) continue;
+    const source = previousPurchase.journalEntryId
+      ? asArray(priorState.journalEntries).find(entry => String(entry.id) === String(previousPurchase.journalEntryId))
+      : undefined;
+    const reversal = currentPurchase.cancelledByJournalEntryId
+      ? asArray(nextState.journalEntries).find(entry => String(entry.id) === String(currentPurchase.cancelledByJournalEntryId))
+      : undefined;
+    const company = asArray(nextState.companies).find(item => item.id === previousPurchase.companyId);
+    const debitNoteNumber = String(previousPurchase.debitNoteNumber || previousPurchase.invoiceNumber || '').trim();
+    const normalizeNdReference = value => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+    const activePayments = asArray(nextState.creditSettlements).filter(item =>
+      item.companyId === previousPurchase.companyId && item.documentId === previousPurchase.id &&
+      item.kind === 'PURCHASE_PAYMENT' && !item.isReversed);
+    const activeAdvanceApplications = asArray(nextState.supplierAdvanceSettlements).filter(item =>
+      item.companyId === previousPurchase.companyId && item.targetPurchaseId === previousPurchase.id &&
+      item.kind === 'APPLIED_TO_PURCHASE' && !item.isReversed);
+    const linkedMovements = asArray(nextState.movements).filter(item =>
+      item.companyId === previousPurchase.companyId &&
+      (item.journalEntryId === previousPurchase.journalEntryId ||
+        String(item.documentRef || '') === 'ND-PROV-' + debitNoteNumber));
+    const nextSource = source ? asArray(nextState.journalEntries).find(entry => String(entry.id) === String(source.id)) : undefined;
+    const sourceItems = asArray(source?.items);
+    const reversalItems = asArray(reversal?.items);
+    const exactReversal = sourceItems.length > 0 && sourceItems.length === reversalItems.length &&
+      sourceItems.every(item => reversalItems.some(reverse =>
+        reverse.accountCode === item.accountCode &&
+        Math.abs(Number(reverse.debitBs || 0) - Number(item.creditBs || 0)) <= 0.000001 &&
+        Math.abs(Number(reverse.creditBs || 0) - Number(item.debitBs || 0)) <= 0.000001 &&
+        Math.abs(Number(reverse.debitUsd || 0) - Number(item.creditUsd || 0)) <= 0.000001 &&
+        Math.abs(Number(reverse.creditUsd || 0) - Number(item.debitUsd || 0)) <= 0.000001));
+    const priorPeriodAdjustmentValid = Boolean(reversal?.priorPeriodAdjustment === true &&
+      company?.closedThroughDate && source?.date <= company.closedThroughDate &&
+      reversal?.date > company.closedThroughDate);
+    if (!source || source.companyId !== previousPurchase.companyId || source.type !== 'AJUSTE' ||
+        normalizeNdReference(source.referenceDoc) !== normalizeNdReference('ND-PROV-' + debitNoteNumber) ||
+        !reversal || reversal.companyId !== previousPurchase.companyId || reversal.type !== 'AJUSTE' ||
+        reversal.reversalOfEntryId !== source.id || nextSource?.reversedByEntryId !== reversal.id ||
+        !isValidIsoDate(reversal.date) || reversal.date < source.date ||
+        (!priorPeriodAdjustmentValid && (reversal.priorPeriodAdjustment === true || !exactReversal)) ||
+        String(currentPurchase.cancelledByJournalEntryId || '') !== String(reversal.id) ||
+        String(currentPurchase.cancellationReason || '').trim().length < 10 ||
+        String(currentPurchase.cancellationNote || '').trim().length < 10 ||
+        activePayments.length > 0 || activeAdvanceApplications.length > 0 || linkedMovements.length > 0) {
+      throw new Error('SQLite rechazó la anulación de ND tipo 02: requiere contra-asiento enlazado, reversión exacta, motivo y papel de trabajo; no admite pagos, anticipos ni inventario vigentes.');
     }
   }
   assertAppendOnlyCollection(priorState, nextState, 'sales',

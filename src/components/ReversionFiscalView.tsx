@@ -7,7 +7,7 @@ import { buildReversalItems, assessJournalReversal, validateBankStatementReversa
 export const ReversionFiscalView: React.FC = () => {
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, addMovement, addPurchaseCreditNote,
-    bankAccounts, bankStatementMovements, creditSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod
+    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -58,7 +58,7 @@ export const ReversionFiscalView: React.FC = () => {
     try {
       return assessJournalReversal({
         companyId: currentCompany.id, source, accounts, sales, purchases, movements, products,
-        journalEntries, bankAccounts, bankStatementMovements, creditSettlements,
+        journalEntries, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements,
         priorPeriodAdjustment: Boolean(currentCompany.closedThroughDate && source.date <= currentCompany.closedThroughDate),
         retainedEarningsAccountCode: retainedEarningsCode
       });
@@ -66,7 +66,7 @@ export const ReversionFiscalView: React.FC = () => {
       return null;
     }
   }, [source, currentCompany.id, accounts, sales, purchases, movements, products,
-      journalEntries, bankAccounts, bankStatementMovements, creditSettlements]);
+      journalEntries, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements]);
   const isPriorPeriod = Boolean(source && currentCompany.closedThroughDate && source.date <= currentCompany.closedThroughDate);
   const retainedEarningsAccounts = accounts.filter(account => account.type === 'PATRIMONIO' && account.isMovement);
   const accountMap = useMemo(() => new Map(accounts.map(account => [account.code, account])), [accounts]);
@@ -347,7 +347,7 @@ export const ReversionFiscalView: React.FC = () => {
                 <div><span className="text-slate-500">Asiento:</span> <strong>#{source.entryNumber}</strong> · {formatDate(source.date)}</div>
                 <div><span className="text-slate-500">Tipo / referencia:</span> {source.type} · {source.referenceDoc || 'Sin referencia'}</div>
                 <div><span className="text-slate-500">Descripción:</span> {source.description}</div>
-                {(linkedSale || linkedPurchase) && <div className="font-semibold text-amber-800">Documento vinculado: {linkedSale ? 'Venta '+linkedSale.invoiceNumber+' · '+linkedSale.customerName : 'Compra '+linkedPurchase!.invoiceNumber+' · '+linkedPurchase!.supplierName}</div>}
+                {(linkedSale || linkedPurchase) && <div className="font-semibold text-amber-800">Documento vinculado: {linkedSale ? 'Venta '+linkedSale.invoiceNumber+' · '+linkedSale.customerName : linkedPurchase!.documentType === '02' ? 'ND proveedor '+linkedPurchase!.invoiceNumber+' · '+linkedPurchase!.supplierName : 'Compra '+linkedPurchase!.invoiceNumber+' · '+linkedPurchase!.supplierName}</div>}
                 {reversalAssessment && <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-slate-900">Evaluación integral de reversión</strong><span className={reversalAssessment.ready?'rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-800':'rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-900'}>{reversalAssessment.ready?'PREVALIDACIÓN CONTABLE OK':'BLOQUEOS DETECTADOS'}</span></div>
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
