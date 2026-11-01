@@ -107,9 +107,11 @@ test('paragraph-19 exceptional estimate requires both disproportionate-cost and 
     const codes = ['DISPROPORTIONATE_COST_ANALYSIS','FCCPV_ABSENCE_SEARCH','EXTERNAL_MACRO_SOURCES',
       'METHODOLOGY','CALCULATION_WORKPAPERS','PROFESSIONAL_APPROVAL'];
     const input = dossierInput(series.seriesId, { evidence: codes.map(code => evidence(code,
-      code === 'DISPROPORTIONATE_COST_ANALYSIS' || code === 'FCCPV_ABSENCE_SEARCH'
+      code === 'DISPROPORTIONATE_COST_ANALYSIS'
         ? 'El análisis cuantifica 120 horas y USD 250 de costo estimado, con procedimientos, circunstancias y soporte de cálculo.'
-        : 'El 2025-02-03 se consultaron y revisaron las publicaciones oficiales disponibles; resultado: no se halló estudio indicado aplicable.')) });
+        : code === 'FCCPV_ABSENCE_SEARCH'
+          ? 'El 2025-02-03 se consultaron y revisaron las publicaciones oficiales disponibles; resultado: no se halló estudio indicado aplicable.'
+          : 'Documento sintético de soporte metodológico y técnico.')) });
     const result = createInflationSourceDossier(db, input, admin);
     assert.equal(result.eligibleForReview, true);
   } finally { db.close(); }
@@ -144,9 +146,7 @@ test('projected observations cannot receive documented-use approval', () => {
     const series = importInflationIndexSeries(db, {
       seriesCode: 'ESTUDIO_FCCPV', metricType: 'INDEX_LEVEL', basePeriod: '2025-01',
       sourceTitle: 'Estudio sintético', issuer: 'Organismo de prueba', sourceReference: 'Fixture',
-      sourcePublishedAt: '2025-02-01', sourceText: 'period;value;status\
-2025-01;100;ESTIMATED\
-2025-02;101;PROJECTED'
+      sourcePublishedAt: '2025-02-01', sourceText: 'period;value;status\\n2025-01;100;ESTIMATED\\n2025-02;101;PROJECTED'
     }, admin);
     const codes = ['FCCPV_INDICATION','SIGNED_STUDY','METHODOLOGY','COVERAGE'];
     const created = createInflationSourceDossier(db, dossierInput(series.seriesId, {
