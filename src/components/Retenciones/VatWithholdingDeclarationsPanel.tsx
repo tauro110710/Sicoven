@@ -184,7 +184,7 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
     ? vatWithholdingDeclarationEvents.filter(item => item.declarationId === incidentDeclaration.id) : [];
   const incidentPaymentEvents = incidentDeclarationEvents.filter(item => item.eventType === 'PAYMENT' && incidentEventIds.includes(item.id));
   const incidentMovementOptions = incidentPaymentEvents.flatMap(event =>
-    (event.bankStatementMovementIds || []).map(id => bankStatementMovements.find(movement => movement.id === id)).filter(Boolean));
+    (event.bankStatementMovementIds || []).map(id => bankStatementMovements.find(movement => movement.id === id)).filter((movement): movement is NonNullable<typeof movement> => Boolean(movement)));
   const saveIncident = async () => {
     setIncidentBusy(true); setIncidentMessage('');
     try {
