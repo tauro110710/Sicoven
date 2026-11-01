@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import type { VatWithholdingDeclaration, VatWithholdingDeclarationEvent } from '../../types/accounting';
 import { getVatDeclarationStatus } from '../../types/vatWithholdingDeclaration';
@@ -45,6 +45,11 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
   const [sourceTitle, setSourceTitle] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [sourceReference, setSourceReference] = useState('');
+
+  useEffect(() => {
+    setSelectedBankMovementIds([]);
+    setPaymentReference('');
+  }, [selectedId]);
 
   const ordered = useMemo(() => vatWithholdingDeclarations
     .filter(item => item.companyId === currentCompany.id)
@@ -336,7 +341,6 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
                           <input type="checkbox" checked={selectedBankMovementIds.includes(movement.id)} onChange={e => {
                             const next = e.target.checked ? [...selectedBankMovementIds, movement.id] : selectedBankMovementIds.filter(id => id !== movement.id);
                             setSelectedBankMovementIds(next);
-                            const total = next.reduce((sum, id) => sum + Number(availablePaymentMovements.find(item => item.id === id)?.amountBs || 0), 0);
                           }} />
                           <span className="min-w-0 flex-1">{account?.bankName || 'Banco'} · {formatDate(movement.date)} · Ref. {movement.reference}<br /><span className="font-mono font-bold">{formatBs(movement.amountBs)}</span> · {movement.description}</span>
                         </label>;
