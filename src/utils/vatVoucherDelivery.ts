@@ -7,12 +7,11 @@
  * definitivo sin validar el calendario oficial aplicable.
  */
 export function getVatVoucherDeliveryWindow(period: string): { firstDay: string; secondDay: string } | null {
-  if (!/^\\d{6}$/.test(period)) return null;
+  if (!/^\d{6}$/.test(period)) return null;
   const year = Number(period.slice(0, 4));
   const month = Number(period.slice(4, 6));
   if (month < 1 || month > 12 || year < 1900 || year > 9999) return null;
 
-  const nextPeriodStart = new Date(Date.UTC(year, month, 1));
   const businessDays: string[] = [];
   for (let offset = 0; offset < 10 && businessDays.length < 2; offset += 1) {
     const date = new Date(Date.UTC(year, month, 1 + offset));
