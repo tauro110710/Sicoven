@@ -163,3 +163,9 @@ test('la clasificación no autoriza movimiento de inventario ni tratamiento fisc
   assert.equal(result.fiscalAutomationAllowed, false);
   assert.equal(result.postingAllowed, false);
 });
+
+test('normaliza espacios en la referencia de la factura afectada', () => {
+  assert.doesNotThrow(() => validateSupplierDebitNotePreflight(draft({
+    affectedInvoiceNumber: ' FAC - 100 '
+  })));
+});
