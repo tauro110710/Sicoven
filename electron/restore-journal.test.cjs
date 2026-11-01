@@ -26,7 +26,7 @@ function fixture() {
 test('journal persists prepared state and can be read after reopening', () => {
   const h = fixture();
   try {
-    const created = createJournal({ journalPath: h.journalPath, sourceDatabaseSha256: HASH_A, stagedDatabaseSha256: HASH_B, sourceManifestSha256: HASH_A, stagedManifestSha256: HASH_B, sourceManifestSha256: HASH_A, stagedManifestSha256: HASH_B });
+    const created = createJournal({ journalPath: h.journalPath, sourceDatabaseSha256: HASH_A, stagedDatabaseSha256: HASH_B, sourceManifestSha256: HASH_A, stagedManifestSha256: HASH_B });
     const reopened = readJournal(h.journalPath);
     assert.equal(reopened.operationId, created.operationId);
     assert.equal(reopened.state, 'prepared');
