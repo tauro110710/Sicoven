@@ -103,7 +103,7 @@ export function buildVatBankReconciliationSummary(
       return movement.type === 'DEBIT' && account?.currency === 'BS' &&
         !hasOtherReconciliation &&
         Number.isFinite(Number(movement.amountBs)) && Number(movement.amountBs) > 0 &&
-        /^\\d{4}-\\d{2}-\\d{2}$/.test(movement.date);
+        isValidIsoDate(movement.date);
     });
     const linkedTotalCents = validMovements.reduce((sum, movement) => sum + cents(Number(movement.amountBs)), 0);
     const complete = ids.length > 0 && movements.length === ids.length &&
