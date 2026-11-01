@@ -36,7 +36,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
   const [saving, setSaving] = useState(false);
   const sqliteAvailable = typeof window !== 'undefined' && Boolean(window.sicovenStore?.save);
   const balance = supplierRif ? getSupplierAdvanceBalance(supplierRif) : null;
-  const eligiblePurchases = purchases.filter(p => p.documentType === '01' && !p.isCancelled &&
+  const eligiblePurchases = purchases.filter(p => ['01', '02'].includes(p.documentType) && !p.isCancelled &&
     p.paymentTerm === 'CREDITO' && String(p.supplierRif).trim().toUpperCase() === supplierRif &&
     p.companyId === currentCompany.id);
   const accounts = bankAccounts.filter(a => a.companyId === currentCompany.id && a.currency === 'BS');
@@ -100,7 +100,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
   return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 p-3">
     <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
       <header className="flex items-center justify-between bg-slate-900 px-5 py-4 text-white">
-        <div><h2 className="text-base font-bold">Anticipos y saldos a favor de proveedores</h2><p className="mt-1 text-xs text-slate-300">Reembolso recibido o aplicación a una factura pendiente</p></div>
+        <div><h2 className="text-base font-bold">Anticipos y saldos a favor de proveedores</h2><p className="mt-1 text-xs text-slate-300">Reembolso recibido o aplicación a una factura/ND pendiente</p></div>
         <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-slate-800" aria-label="Cerrar"><X className="h-5 w-5"/></button>
       </header>
       <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto p-5">
@@ -117,12 +117,12 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
           </div>}
           <label className="block text-xs font-semibold text-slate-700">Tipo de operación
             <select value={kind} onChange={e => setKind(e.target.value as typeof kind)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              <option value="REFUND_RECEIVED">Reembolso recibido en caja / banco</option><option value="APPLIED_TO_PURCHASE">Aplicar a factura de compra pendiente</option>
+              <option value="REFUND_RECEIVED">Reembolso recibido en caja / banco</option><option value="APPLIED_TO_PURCHASE">Aplicar a factura o ND pendiente</option>
             </select>
           </label>
           {kind === 'APPLIED_TO_PURCHASE' && <label className="block text-xs font-semibold text-slate-700">Factura destino
             <select required value={targetPurchaseId} onChange={e => setTargetPurchaseId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              <option value="">Seleccione factura</option>{eligiblePurchases.map(p => <option key={p.id} value={p.id}>{p.invoiceNumber} · {p.supplierName} · {p.totalAmountUsd.toFixed(2)} USD</option>)}
+              <option value="">Seleccione factura o ND</option>{eligiblePurchases.map(p => <option key={p.id} value={p.id}>{p.documentType === '02' ? 'ND ' : 'Factura '}{p.invoiceNumber} · {p.supplierName} · {p.totalAmountUsd.toFixed(2)} USD</option>)}
             </select>
           </label>}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
