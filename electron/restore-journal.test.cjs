@@ -67,3 +67,30 @@ test('journal rejects a symlink and corrupt JSON without modifying it', () => {
     assert.equal(fs.readFileSync(h.journalPath, 'utf8'), '{broken');
   } finally { h.close(); }
 });
+
+test('journal atomically replaces the existing file across the complete commit path', () => {
+  const h = fixture();
+  try {
+    createJournal({ journalPath: h.journalPath, sourceDatabaseSha256: HASH_A, stagedDatabaseSha256: HASH_B });
+    const states = [
+      ['prepared', 'rollback_ready', 'rollback_snapshot_verified', HASH_C],
+      ['rollback_ready', 'installing', 'database_swap_started'],
+      ['installing', 'installed', 'database_and_documents_verified'],
+      ['installed', 'committed', 'restore_committed']
+    ];
+    for (const [expectedState, nextState, lastStep, rollbackDatabaseSha256] of states) {
+      transitionJournal({
+        journalPath: h.journalPath,
+        expectedState,
+        nextState,
+        lastStep,
+        ...(rollbackDatabaseSha256 ? { rollbackDatabaseSha256 } : {})
+      });
+      const persisted = readJournal(h.journalPath);
+      assert.equal(persisted.state, nextState);
+      assert.equal(persisted.lastStep, lastStep);
+    }
+    assert.equal(readJournal(h.journalPath).hashes.rollbackDatabase, HASH_C);
+    assert.equal(fs.readdirSync(h.directory).filter(name => name.startsWith('journal.json.tmp-')).length, 0);
+  } finally { h.close(); }
+});
