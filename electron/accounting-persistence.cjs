@@ -244,6 +244,8 @@ function persistAccountingSnapshot(db, state, actor = null) {
         auditInsert.run('vat_retention_voucher_issued', JSON.stringify({
           voucherId: voucher.id, voucherNumber: voucher.voucherNumber || null,
           companyId: voucher.companyId, purchaseRecordId: voucher.purchaseRecordId || null,
+          agentName: voucher.agentNameSnapshot || null, agentRif: voucher.agentRifSnapshot || null,
+          agentAddress: voucher.agentAddressSnapshot || null,
           supplierRif: voucher.supplierRif || null, supplierName: voucher.supplierName || null,
           issueDate: voucher.date || null, fiscalDate: voucher.fiscalDate || null,
           period: voucher.period || null, taxableBaseBs: voucher.taxableBaseBs ?? null,

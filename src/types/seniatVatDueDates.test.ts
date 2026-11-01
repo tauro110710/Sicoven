@@ -18,5 +18,6 @@ test('SENIAT calendar does not infer dates for Article 2-only agents, unconfirme
   assert.equal(getSeniatVatWithholdingDueDate('J-12345678-9', '202701', 'FIRST_HALF', 'ARTICLE_1_SPECIAL_DESIGNATED'), null);
   assert.equal(getSeniatVatWithholdingDueDate('J-12345678-9', '202612', 'SECOND_HALF', 'ARTICLE_1_SPECIAL_DESIGNATED'), null);
   assert.equal(getSeniatVatWithholdingDueDate('V-12345678-9', '202610', 'FIRST_HALF', 'ARTICLE_1_SPECIAL_DESIGNATED'), null);
+  assert.equal(getSeniatVatWithholdingDueDate('ABC-9', '202610', 'FIRST_HALF', 'ARTICLE_1_SPECIAL_DESIGNATED'), null);
   assert.equal(getSeniatVatWithholdingDueDate('V-12345678-9', '202610', 'FIRST_HALF', 'ARTICLE_1_SPECIAL_DESIGNATED', true)?.dueDate, '2026-10-19');
 });

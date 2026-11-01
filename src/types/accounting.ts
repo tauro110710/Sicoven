@@ -331,6 +331,10 @@ export interface VatRetentionVoucher {
   fiscalDate?: string;
   /** Referencia del pago cuando el disparador fue PAYMENT. */
   paymentReference?: string;
+  /** Identidad del agente al emitir el comprobante; evita que una reimpresión cambie con el perfil actual. */
+  agentNameSnapshot?: string;
+  agentRifSnapshot?: string;
+  agentAddressSnapshot?: string;
   supplierRif: string;
   supplierName: string;
   supplierAddress: string;

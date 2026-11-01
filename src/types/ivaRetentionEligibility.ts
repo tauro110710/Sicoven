@@ -16,7 +16,7 @@ export function resolveIvaBuyerAgentStatus(input: {
   if (input.agentBasis === 'NOT_AGENT') return 'NOT_AGENT';
   if (input.agentBasis !== 'ARTICLE_1_SPECIAL_DESIGNATED' || input.taxpayerType !== 'ESPECIAL') return 'UNKNOWN';
   const normalizedRif = String(input.rif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
-  if (!normalizedRif) return 'UNKNOWN';
+  if (!/^[VJGEP]\d{8,9}$/.test(normalizedRif)) return 'UNKNOWN';
   const isNaturalPerson = /^[VE]/.test(normalizedRif);
   return isNaturalPerson && input.isPersonalFirm !== true ? 'UNKNOWN' : 'SPECIAL_DESIGNATED';
 }

@@ -52,6 +52,7 @@ export function getSeniatVatWithholdingDueDate(
   if (agentBasis !== 'ARTICLE_1_SPECIAL_DESIGNATED') return null;
   if (!/^2026(?:0[1-9]|1[0-2])$/.test(period)) return null;
   const normalizedRif = String(rif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+  if (!/^[VJGEP]\d{8,9}$/.test(normalizedRif)) return null;
   const digits = normalizedRif.replace(/[^0-9]/g, '');
   const lastDigit = digits.slice(-1);
   if (!/^[0-9]$/.test(lastDigit)) return null;

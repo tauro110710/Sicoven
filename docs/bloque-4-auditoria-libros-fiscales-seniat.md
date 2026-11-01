@@ -41,25 +41,25 @@ El tipo `TaxpayerType` solo distingue `ESPECIAL` y `ORDINARIO`; no modela expres
 
 **Corrección requerida:** modelar condición/soporte de agente y condición fiscal del proveedor; implementar reglas por vigencia y supuestos de retención/exclusión desde una fuente normativa versionada. La UI no debe permitir elegir libremente un porcentaje sin justificación; la capa de dominio/SQLite debe rechazar combinaciones no elegibles. No inferir automáticamente que todo contribuyente especial es firma personal ni que toda compra está sujeta a retención.
 
-### 1.4 Inconsistencia entre tipos de documento ofrecidos y aceptados
+### 1.4 Tipos de documento y circuito de notas
 
-`NewPurchaseModal.tsx` ofrece `01`, `02` y `03` (factura, nota de débito y nota de crédito). Sin embargo, `AccountingContext.tsx` rechaza en la capa de dominio cualquier compra cuyo tipo no sea `01`, indicando que el flujo de notas aún no está habilitado.
+**Estado corregido en la interfaz:** `NewPurchaseModal.tsx` deja habilitada únicamente la factura `01`; nota de débito `02` y nota de crédito `03` aparecen deshabilitadas con explicación. La capa de dominio también rechaza esos tipos en el alta ordinaria.
 
-**Riesgo:** la interfaz permite iniciar un registro que el dominio siempre rechazará.
+Las notas de crédito de proveedor se registran mediante un flujo separado que enlaza factura original, líneas devueltas, movimientos de Kardex, asiento correctivo, reducción de CxP/anticipo y comprobantes IVA/ISLR afectados. El comprobante original queda marcado para corrección y la declaración quincenal se bloquea hasta resolverla.
 
-**Corrección requerida:** mientras no exista el circuito completo, ocultar/deshabilitar los tipos no admitidos y explicar el alcance. La futura habilitación exige enlazar documento afectado, reversión/ajuste fiscal, asiento correctivo y conservación del original; nunca registrar una nota como factura positiva.
+**Pendiente:** el flujo no equivale a una rectificación fiscal completa. Falta separar el tratamiento del importe retenido no enterado (devolución al proveedor) del ya enterado (derecho del proveedor a descontar o solicitar recuperación, según artículos 11 y 12); las notas de débito siguen deshabilitadas. No se permite presentar la nota como una factura positiva.
 
 ### 1.5 Período presentado por defecto
 
 Libro de Compras y Libro de Ventas muestran `fiscalYear-10` como período cuando no hay mes seleccionado. Esto puede presentar octubre como si fuera el período fiscal actual sin que el usuario lo haya elegido.
 
-**Corrección requerida:** usar un período explícito elegido por el usuario o mostrar “Todos los períodos”; no inferir octubre ni construir una etiqueta fiscal no seleccionada.
+**Estado: CORREGIDO.** Cuando no se selecciona un mes, el libro muestra “Todos los períodos” y conserva el filtro global. La exportación TXT IVA exige un mes específico y no toma un período implícito.
 
 ### 1.6 Cobertura de pruebas del generador IVA
 
 `src/utils/seniatGenerators.test.ts` cubre exportaciones ISLR XML/TXT y casos de eventos, pero no contiene pruebas para `generateSeniatIvaTxt`.
 
-**Pruebas requeridas:** aislamiento por empresa/período; facturas y notas admitidas; campos vacíos; RIF y fechas inválidos; importes no finitos/negativos; caracteres tabulador/CR/LF; retención mayor al IVA; período discordante; comprobantes rectificados y duplicados.
+**Estado: AMPLIADO.** Existen pruebas para las 16 columnas, identificadores reales, campos vacíos, RIF del agente/proveedor, aislamiento por empresa, fechas y períodos inválidos, importes y porcentajes inconsistentes, retención superior al IVA y rechazo de exportación vacía. Pendiente: pruebas de referencia derivadas de la especificación técnica vigente y aceptación autorizada en Portal Fiscal.
 
 ### 1.7 Parámetros históricos de UT en ISLR
 
@@ -131,7 +131,9 @@ El artículo 16 establece entrega a más tardar dentro de los primeros dos días
 
 **Estado: CORREGIDO PARCIALMENTE EN EL TRABAJO 4.4.** El comprobante conserva fecha de emisión separada de la fecha fiscal del evento. La entrega al proveedor se registra una sola vez, con fecha real y medio físico o electrónico; la entrega electrónica exige confirmar acuerdo previo. El dato queda protegido como marca histórica en SQLite y se muestra en el comprobante. No se exigen adjuntos.
 
-El vencimiento de 2026 se calcula automáticamente para agentes designados del artículo 1 mediante el calendario de la Providencia SNAT/2025/000091, según el último dígito del RIF y la quincena, guardando la referencia a la Gaceta Oficial N.º 43.273. Para agentes exclusivamente del artículo 2 y períodos fuera del calendario publicado, SICOVEN no inventa fechas y conserva la captura de una fecha verificada. Pendiente: validar calendarios posteriores y la presentación profesional de la fecha de entrega dentro del formato definitivo del comprobante.
+El vencimiento de 2026 se calcula automáticamente para agentes designados del artículo 1 mediante el calendario de la Providencia SNAT/2025/000091, según el último dígito del RIF y la quincena, guardando la referencia a la Gaceta Oficial N.º 43.273. La tabla se contrastó con la copia íntegra de la Gaceta: los vencimientos de primera quincena y segunda quincena se encuentran en sus cuadros separados. Para agentes exclusivamente del artículo 2, RIF inválidos y períodos fuera del calendario publicado, SICOVEN no inventa fechas y conserva la captura de una fecha verificada.
+
+El comprobante conserva ahora una instantánea del nombre, RIF y domicilio del agente al momento de emisión; la reimpresión no cambia si luego se edita el perfil de la empresa. Se imprime la referencia correcta a la Providencia SNAT/2025/000054, artículo 16. La entrega física indica original para el proveedor y duplicado para el agente; el diálogo de impresión debe configurarse con dos copias. Pendiente: validación de plazo hábil de entrega con calendario oficial de feriados y validación profesional del diseño final.
 
 ### 6.4 Consecuencia normativa para las reglas de elegibilidad
 
@@ -155,7 +157,7 @@ Se localizó una copia de la “Guía Fácil — Elaboración de un Archivo TXT 
 
 **Limitación:** no se ha acreditado que estas copias sean la última versión técnica vigente en el Portal Fiscal en 2026. La estructura sirve como referencia histórica verificable, no como garantía de aceptación actual.
 
-**Estado del código:** la exportación con operaciones valida los campos obligatorios, el correlativo de 14 caracteres, importes y porcentajes; genera exactamente 16 campos tabulados y rechaza mezclar períodos fiscales en un mismo archivo. La vista aísla empresa y período antes de exportar. Estas pruebas verifican la estructura implementada, no su aceptación actual por SENIAT.
+**Estado del código:** la exportación con operaciones valida los campos obligatorios, el correlativo de 14 caracteres, RIF válidos, pertenencia a la empresa activa, importes y porcentajes; genera exactamente 16 campos tabulados y rechaza mezclar períodos fiscales en un mismo archivo. No emite TXT sin operaciones sin disponer de una plantilla vigente acreditada. La vista aísla empresa y período antes de exportar. Estas pruebas verifican la estructura implementada, no su aceptación actual por SENIAT.
 
 **Pendiente:** verificar la versión técnica vigente directamente en el Portal Fiscal y contrastar los 16 campos con esa versión. La salida para declaración sin operaciones permanece deshabilitada hasta disponer de su modelo vigente; no se improvisará una fila de ceros a partir de capturas antiguas.
 
@@ -225,10 +227,20 @@ Límites:
 
 - Validación profesional independiente de elegibilidad y clasificación fiscal del agente/proveedor implementadas en 4.4A–4.4C.
 - Comprobante de retención IVA: confirmar con revisión profesional todos los elementos de contenido del artículo 16 y su formato definitivo; emisión y registro de entrega ya están implementados parcialmente.
-- Especificación técnica vigente del archivo TXT, incluida declaración sin operaciones, sigue pendiente de fuente primaria verificable y prueba autorizada.
-- Flujo fiscal completo de notas de débito/crédito y rectificaciones de declaraciones presentadas.
+- Especificación técnica vigente del archivo TXT, incluida declaración sin operaciones, sigue pendiente de fuente primaria verificable y prueba autorizada. El generador se niega a emitir una línea vacía o una fila de ceros no acreditada.
+- Flujo fiscal completo de notas de débito/crédito y rectificaciones de declaraciones presentadas. Las notas de crédito operativas ya generan asiento, Kardex y bloqueo de los comprobantes afectados, pero no automatizan devolución de retenciones no enteradas ni el tratamiento del proveedor cuando ya fueron enteradas (artículos 11 y 12).
 - Parámetros históricos y catálogo normativo versionado.
 - Conciliación profesional integral libro ↔ compra ↔ comprobante ↔ declaración ↔ enteramiento ↔ asiento.
 - Validación profesional fiscal independiente y confirmación de aceptación de archivos en Portal Fiscal.
 
 **Conclusión:** #57, #58 y #59 están integradas en `main`. El trabajo 4.4 implementa la configuración del agente, clasificación fiscal reutilizable, motor de elegibilidad, trazabilidad compra→evento→comprobante→declaración→enteramiento, registro de entrega y centro de revisión. El Bloque 4 sigue abierto por validación profesional, confirmación de la especificación TXT vigente, flujo completo de notas de débito/crédito y rectificaciones posteriores a la presentación, calendario de vencimientos posteriores a 2026 y verificación de plazos hábiles del artículo 16. Ninguna implementación demuestra por sí sola aceptación del Portal Fiscal ni cumplimiento certificado.
+
+
+## 8. Controles adicionales integrados en la continuación del Bloque 4
+
+- SQLite registra automáticamente la decisión de elegibilidad de IVA asociada a cada compra, con fundamento, condición de agente/proveedor, exclusiones, parámetros de UT y usuario que registró la operación.
+- SQLite registra la emisión del comprobante de retención IVA y su posterior entrega, incluyendo fecha, medio, acuerdo electrónico y usuario. Los eventos no requieren captura documental adicional.
+- La vista central muestra compras que requieren revisión fiscal y pendientes de entrega de comprobantes.
+- El RIF se valida estructuralmente antes de calcular fechas del calendario 2026 o resolver elegibilidad del agente; un identificador mal formado deja el caso sin fecha/condición automática.
+- Los libros de compras y ventas muestran “Todos los períodos” cuando no existe selección mensual; no presentan octubre como período predeterminado.
+- El TXT IVA rechaza datos de otra empresa, RIF inválidos y colecciones vacías; no sustituye datos faltantes por valores ficticios.

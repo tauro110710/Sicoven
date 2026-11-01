@@ -539,7 +539,8 @@ test('SQLite audit records the VAT retention decision and the later voucher deli
     const voucher = {
       id: 'vat-iva-audit', companyId: 'company-1', purchaseRecordId: purchase.id,
       voucherNumber: '20261000000001', date: '2026-10-03', period: '202610',
-      fiscalDate: '2026-10-03', supplierRif: purchase.supplierRif,
+      fiscalDate: '2026-10-03', agentNameSnapshot: 'Empresa al emitir',
+      agentRifSnapshot: 'J-12345678-9', agentAddressSnapshot: 'Caracas', supplierRif: purchase.supplierRif,
       supplierName: purchase.supplierName, taxableBaseBs: 1000,
       vatAmountBs: 160, vatWithheldBs: 120, requiresFiscalCorrection: false
     };
@@ -553,6 +554,8 @@ test('SQLite audit records the VAT retention decision and the later voucher deli
     const issuedDetails = JSON.parse(issued.details_json);
     assert.equal(issuedDetails.purchaseRecordId, purchase.id);
     assert.equal(issuedDetails.voucherNumber, voucher.voucherNumber);
+    assert.equal(issuedDetails.agentName, 'Empresa al emitir');
+    assert.equal(issuedDetails.agentRif, 'J-12345678-9');
     const decision = harness.db.prepare("SELECT details_json FROM audit_events WHERE event_type='purchase_iva_retention_decision_recorded'").get();
     assert.ok(decision);
     const decisionDetails = JSON.parse(decision.details_json);

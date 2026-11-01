@@ -152,7 +152,7 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
               </div>
               <div>
                 <span className="font-bold">NORMA APLICABLE: </span>
-                <span>Providencia SNAT / Art. 11 Ley de IVA</span>
+                <span>Providencia Administrativa SNAT/2025/000054, artículo 16</span>
               </div>
               <div className="text-[10px] text-slate-600">
                 Original para el proveedor y duplicado para el agente de retención. Si la entrega es física, configura 2 copias en el diálogo de impresión.
@@ -168,16 +168,16 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
               <div className="sm:col-span-2">
                 <span className="font-bold">NOMBRE O RAZÓN SOCIAL: </span>
-                <span className="font-semibold">{company.name}</span>
+                <span className="font-semibold">{voucher.agentNameSnapshot || company.name}</span>
               </div>
               <div>
                 <span className="font-bold">NÚMERO DE RIF: </span>
-                <span className="font-mono font-bold">{company.rif}</span>
+                <span className="font-mono font-bold">{voucher.agentRifSnapshot || company.rif}</span>
               </div>
             </div>
             <div>
               <span className="font-bold">DIRECCIÓN FISCAL: </span>
-              <span>{company.address}</span>
+              <span>{voucher.agentAddressSnapshot || company.address}</span>
             </div>
           </div>
 
@@ -298,7 +298,7 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
           <div className="grid grid-cols-2 gap-8 pt-8">
             <div className="text-center space-y-1">
               <div className="border-t border-black w-64 mx-auto pt-1"></div>
-              <p className="font-bold uppercase text-[11px]">{company.name}</p>
+              <p className="font-bold uppercase text-[11px]">{voucher.agentNameSnapshot || company.name}</p>
               <p className="text-[10px] text-slate-600">FIRMA Y SELLO DEL AGENTE DE RETENCIÓN</p>
             </div>
             <div className="text-center space-y-1">
