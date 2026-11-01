@@ -95,6 +95,8 @@ export function buildVatBankReconciliationSummary(
       const account = bankAccounts.find(item =>
         item.id === movement.bankAccountId && item.companyId === declaration.companyId);
       return movement.type === 'DEBIT' && account?.currency === 'BS' &&
+        !movement.isReconciled && !movement.reconciledWithJournalEntryId &&
+        (movement.reconciledJournalEntryIds || []).length === 0 &&
         Number.isFinite(Number(movement.amountBs)) && Number(movement.amountBs) > 0 &&
         /^\\d{4}-\\d{2}-\\d{2}$/.test(movement.date);
     });
