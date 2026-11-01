@@ -302,7 +302,7 @@ test('SQLite rejects supplier debit notes imported directly without an authorize
   assert.throws(() => validateAccountingSnapshot(
     emptyState(),
     { ...emptyState(), purchases: [note] }
-  ), /SQLite bloqueó una nota de débito\/crédito sin flujo contable autorizado/);
+  ),/ND tipo 02/
 });
 
 test('SQLite rejects a purchase whose declared inventory lines are missing from Kardex', () => {
