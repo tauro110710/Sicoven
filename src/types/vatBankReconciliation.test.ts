@@ -29,11 +29,16 @@ const draft = (ids: string[], amountBs: number) => ({
   eventType: 'PAYMENT', occurredAt: '2026-10-19', amountBs,
   paymentReference: 'PAGO-1', bankStatementMovementIds: ids
 });
-const validate = (ids: string[], amountBs: number, movements = [movement('m-1', 60), movement('m-2', 40)], events = [filed]) =>
-  validateVatPaymentBankLinks({
-    companyId: 'company-1', declaration, draft: draft(ids, amountBs), events,
-    bankAccounts: [account], bankMovements: movements
-  });
+const validate = (
+  ids: string[],
+  amountBs: number,
+  movements = [movement('m-1', 60), movement('m-2', 40)],
+  events = [filed],
+  bankAccounts: BankAccount[] = [account]
+) => validateVatPaymentBankLinks({
+  companyId: 'company-1', declaration, draft: draft(ids, amountBs), events,
+  bankAccounts, bankMovements: movements
+});
 
 test('accepts one bank debit that exactly supports a partial withholding payment', () => {
   assert.doesNotThrow(() => validate(['m-1'], 60));
