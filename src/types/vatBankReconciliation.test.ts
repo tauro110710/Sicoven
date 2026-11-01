@@ -55,7 +55,7 @@ test('rejects credits, missing movements and duplicate movement IDs', () => {
 
 test('rejects movements from another company or a USD bank account', () => {
   assert.throws(() => validate(['m-1'], 60, [movement('m-1', 60, { companyId: 'company-2' })]), /empresa activa/);
-  assert.throws(() => validate(['m-1'], 60, [movement('m-1', 60)], [filed]), /bolívares/);
+  assert.throws(() => validate(['m-1'], 60, [movement('m-1', 60)], [filed], [{ ...account, currency: 'USD' }]), /bolívares/);
 });
 
 test('rejects a movement already used by a different payment event', () => {
