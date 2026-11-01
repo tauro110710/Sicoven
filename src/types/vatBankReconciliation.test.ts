@@ -150,6 +150,32 @@ test('recognizes the bank movement reconciled by its own IVA payment journal ent
   assert.equal(summary.pendingCount, 0);
 });
 
+test('rejects impossible calendar dates in payment bank movements', () => {
+  assert.throws(() => validate(['m-1'], 60, [movement('m-1', 60, { date: '2026-02-30' })]), /fecha inválidos/);
+  const payment: VatWithholdingDeclarationEvent = {
+    id: 'payment-invalid-date', declarationId: declaration.id, eventType: 'PAYMENT',
+    occurredAt: '2026-10-19', recordedAt: '2026-10-19T10:00:00.000Z',
+    amountBs: 60, paymentReference: 'PAGO-1', bankStatementMovementIds: ['m-1'],
+    journalEntryId: 'entry-iva-invalid-date'
+  };
+  const summary = buildVatBankReconciliationSummary(declaration, [filed, payment], [
+    movement('m-1', 60, {
+      date: '2026-10-18', isReconciled: true,
+      reconciledWithJournalEntryId: 'entry-iva-invalid-date',
+      reconciledJournalEntryIds: ['entry-iva-invalid-date']
+    })
+  ], [account]);
+  assert.equal(summary.reconciledCount, 1);
+  const invalidSummary = buildVatBankReconciliationSummary(declaration, [filed, payment], [
+    movement('m-1', 60, {
+      date: '2026-02-30', isReconciled: true,
+      reconciledWithJournalEntryId: 'entry-iva-invalid-date',
+      reconciledJournalEntryIds: ['entry-iva-invalid-date']
+    })
+  ], [account]);
+  assert.equal(invalidSummary.pendingCount, 1);
+});
+
 test('does not mark linked credits or USD-account movements reconciled', () => {
   const payment: VatWithholdingDeclarationEvent = {
     id: 'payment-1', declarationId: declaration.id, eventType: 'PAYMENT',
