@@ -524,7 +524,7 @@ test('SQLite audit records the VAT retention decision and the later voucher deli
   try {
     const actor = { id: 1, username: 'auditor', role: 'admin' };
     const purchase = {
-      id: 'purchase-iva-audit', companyId: 'company-1', documentType: '01',
+      id: 'purchase-iva-audit', companyId: 'company-1', documentType: '01', journalEntryId: 'purchase-journal',
       invoiceNumber: 'FAC-IVA-1', supplierRif: 'J-12345678-9', supplierName: 'Proveedor Uno',
       invoiceDate: '2026-10-03', taxableBaseBs: 1000, vatAmountBs: 160, totalAmountBs: 1160,
       ivaRetentionDecision: {
@@ -544,9 +544,18 @@ test('SQLite audit records the VAT retention decision and the later voucher deli
       supplierName: purchase.supplierName, taxableBaseBs: 1000,
       vatAmountBs: 160, vatWithheldBs: 120, requiresFiscalCorrection: false
     };
+    const originalJournal = {
+      id: 'purchase-journal', companyId: 'company-1', entryNumber: 1,
+      date: '2026-10-03', description: 'Compra original', type: 'COMPRA',
+      bcvRate: 1, referenceDoc: 'FAC-FAC-IVA-1',
+      items: [
+        { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 1160, creditBs: 0, debitUsd: 1160, creditUsd: 0 },
+        { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 0, creditBs: 1160, debitUsd: 0, creditUsd: 1160 }
+      ], createdAt: '2026-10-03T10:00:00.000Z'
+    };
     const initial = {
       ...emptyState(), companies: [{ id: 'company-1', name: 'Empresa Uno' }],
-      purchases: [purchase], vatVouchers: [voucher]
+      journalEntries: [originalJournal], purchases: [purchase], vatVouchers: [voucher]
     };
     persistAccountingSnapshot(harness.db, initial, actor);
     const issued = harness.db.prepare("SELECT details_json FROM audit_events WHERE event_type='vat_retention_voucher_issued'").get();
@@ -578,10 +587,27 @@ test('SQLite audit records the VAT retention decision and the later voucher deli
     assert.deepEqual(deliveryDetails.actor, { userId: 1, username: 'auditor' });
     assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='vat_retention_voucher_delivered'").get().count, 1);
 
+    const reversal = {
+      id: 'journal-credit-note-1', companyId: 'company-1', entryNumber: 2,
+      date: '2026-10-04', description: 'Contra-asiento por corrección fiscal',
+      type: 'AJUSTE', bcvRate: 1, referenceDoc: 'REV-1',
+      reversalOfEntryId: 'purchase-journal',
+      reversalReason: 'Factura original anulada por error documentado.',
+      workpaperNote: 'Se revisó la factura y el soporte de la reversión.',
+      items: [
+        { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 1160, creditBs: 0, debitUsd: 1160, creditUsd: 0 },
+        { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 0, creditBs: 1160, debitUsd: 0, creditUsd: 1160 }
+      ], createdAt: '2026-10-04T10:00:00.000Z'
+    };
     const corrected = {
       ...delivered,
+      journalEntries: [{ ...originalJournal, reversedByEntryId: reversal.id, isAdjusted: true }, reversal],
+      purchases: [{ ...purchase, isCancelled: true, cancelledByJournalEntryId: reversal.id,
+        cancellationReason: 'Factura original anulada por error documentado.',
+        cancellationNote: 'Se verificó el documento y se emitió el contra-asiento.' }],
       vatVouchers: [{ ...delivered.vatVouchers[0], requiresFiscalCorrection: true,
-        correctionEntryIds: ['journal-credit-note-1'], correctionNote: 'Nota de crédito requiere conciliación fiscal.' }]
+        correctionEntryIds: [reversal.id], correctionEntryId: reversal.id,
+        correctionNote: 'Reversión de factura requiere conciliación fiscal.' }]
     };
     persistAccountingSnapshot(harness.db, corrected, actor);
     const correction = harness.db.prepare("SELECT details_json FROM audit_events WHERE event_type='vat_retention_voucher_correction_required'").get();
@@ -589,7 +615,7 @@ test('SQLite audit records the VAT retention decision and the later voucher deli
     const correctionDetails = JSON.parse(correction.details_json);
     assert.equal(correctionDetails.voucherId, voucher.id);
     assert.deepEqual(correctionDetails.correctionEntryIds, ['journal-credit-note-1']);
-    assert.equal(correctionDetails.correctionNote, 'Nota de crédito requiere conciliación fiscal.');
+    assert.equal(correctionDetails.correctionNote, 'Reversión de factura requiere conciliación fiscal.');
     assert.deepEqual(correctionDetails.actor, { userId: 1, username: 'auditor' });
   } finally {
     harness.db.close();
