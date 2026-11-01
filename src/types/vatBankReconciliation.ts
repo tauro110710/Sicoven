@@ -129,3 +129,19 @@ export function buildVatBankReconciliationSummary(
     pendingCount: lines.filter(line => line.status === 'PENDIENTE').length
   };
 }
+
+/**
+ * A payment journal linked to a fiscal declaration cannot be reversed through
+ * the generic journal workflow until a dedicated fiscal correction event exists.
+ * Keeping the original event and bank links is safer than silently orphaning them.
+ */
+export function getVatPaymentJournalReversalBlocker(
+  events: VatWithholdingDeclarationEvent[],
+  journalEntryId: string
+): string | null {
+  const linkedPayment = events.some(event =>
+    event.eventType === 'PAYMENT' && event.journalEntryId === journalEntryId);
+  return linkedPayment
+    ? 'El asiento corresponde a un enteramiento de IVA vinculado a una declaración fiscal. La reversión requiere primero un procedimiento de corrección fiscal específico; no se puede usar la reversión contable genérica ni liberar sus movimientos bancarios.'
+    : null;
+}
