@@ -188,7 +188,7 @@ export function validateVatDeclarationEventDraft(
     const amount = Number(draft.amountBs);
     const paid = related.filter(event => event.eventType === 'PAYMENT')
       .reduce((sum, event) => sum + Number(event.amountBs || 0), 0);
-    if (!Number.isFinite(amount) || amount <= 0 || money(paid + amount) > declaration.totalWithheldBs + 0.01) {
+    if (!Number.isFinite(amount) || amount <= 0 || Math.abs(amount - money(amount)) > 0.000001 || money(paid + amount) > declaration.totalWithheldBs + 0.0001) {
       throw new Error('El pago debe ser positivo y no puede superar el total retenido de la declaración.');
     }
     if (!String(draft.paymentReference || '').trim() || !String(draft.evidenceReference || '').trim()) {
