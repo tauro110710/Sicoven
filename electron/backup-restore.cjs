@@ -132,10 +132,10 @@ function validateManifest(manifest) {
   }
 }
 
-async function createBackup({ db, userDataDir, destination }) {
+async function createBackup({ db, userDataDir, destination, allowInternalDestination = false }) {
   if (!db?.open) throw new Error('La base de datos no está disponible para respaldar.');
   const root = path.resolve(userDataDir), target = path.resolve(destination);
-  if (target === root || target.startsWith(root + path.sep)) throw new Error('El destino del respaldo no puede estar dentro de los datos activos de SICOVEN.');
+  if (!allowInternalDestination && (target === root || target.startsWith(root + path.sep))) throw new Error('El destino del respaldo no puede estar dentro de los datos activos de SICOVEN.');
   if (lstatIfExists(target)) throw new Error('El destino del respaldo ya existe; no se sobrescribirá.');
   const parent = path.dirname(target);
   fs.mkdirSync(parent, { recursive: true });
