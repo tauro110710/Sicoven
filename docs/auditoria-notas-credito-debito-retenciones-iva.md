@@ -92,3 +92,28 @@ El expediente no debe recalcular el comprobante, cambiar declaraciones presentad
 - El administrador semilla permanece intacto.
 
 **Conclusión:** existe base parcial para NC de proveedor, pero no un circuito fiscal completo de NC/ND y rectificaciones IVA. El siguiente desarrollo seguro es primero el expediente trazable de incidencia, no una fórmula fiscal supuesta.
+
+## Seguimiento posterior — expediente de incidencias IVA integrado — 01/11/2026
+
+El diseño recomendado en esta auditoría fue implementado parcialmente como infraestructura de trazabilidad mediante el PR #66, integrado en `main` en el commit `3a06a744240017c63f8c6b4da1862373dd4dd08a`.
+
+Quedó incorporado:
+- Expediente SQLite append-only para facturas, NC y ND.
+- Referencias validadas por empresa hacia comprobante IVA, declaración, eventos FILED/PAYMENT, movimientos bancarios y asiento correctivo.
+- Eventos inmutables de incidencia, revisión y actuación.
+- Prevención de duplicidad y reutilización de referencias entre expedientes.
+- Vista de expedientes en el panel de Retenciones IVA.
+
+Esto **no cierra las brechas funcionales y fiscales identificadas en esta auditoría**. El expediente registra trazabilidad y decisiones documentadas, pero no calcula el efecto fiscal, no rectifica declaraciones ni determina aceptación por SENIAT.
+
+### Pendientes que continúan abiertos
+
+1. **Notas de débito:** implementar y probar un flujo especializado que garantice el vínculo con factura afectada y el tratamiento coherente de CxP, libro de compras, IVA, retenciones, asiento y Kardex cuando aplique.
+2. **Notas de crédito de contado:** resolver el bloqueo de UI solo después de diseñar y probar devolución efectiva de fondos o saldo a favor, conciliación de caja/banco y asiento. No habilitar por mera compatibilidad del cálculo.
+3. **Escenarios después de declarar:** probar incidencia en período no presentado, presentado sin enteramiento, parcialmente enterado y totalmente enterado, sin inferir automáticamente el tratamiento tributario.
+4. **Rectificación, sustitución, reintegro y compensación:** siguen pendientes de fuente primaria vigente y validación profesional independiente.
+5. **TXT SENIAT:** tipos documentales 02/03 y los campos asociados permanecen sin homologación hasta obtener especificación oficial vigente.
+
+### Criterio de cierre
+
+La existencia del expediente no equivale a resolución fiscal. No cerrar los pendientes hasta contar con reglas oficiales verificables, pruebas de integridad contable y revisión profesional. El administrador semilla y los snapshots históricos permanecen protegidos.
