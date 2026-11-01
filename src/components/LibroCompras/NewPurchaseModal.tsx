@@ -109,7 +109,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   let islrSubtrahendBs = 0;
   let islrRate = 0;
 
-  if (applyIslr && selectedConcept && taxableBaseBs > 0) {
+  if (applyIslr && selectedConcept && effectiveTaxableBaseBs > 0) {
     const supplierKey = String(supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
     const monthKey = String(accountCreditDate || '').slice(0, 7);
     const priorOperations = purchases.filter(item =>
@@ -125,7 +125,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       subtrahendBs: item.islrSubtrahendBs
     }));
     if (islrUnitTaxValueBs != null) {
-      const calc = calculateMonthlyIslrRetention(taxableBaseBs, priorOperations, selectedConcept, islrUnitTaxValueBs);
+      const calc = calculateMonthlyIslrRetention(effectiveTaxableBaseBs, priorOperations, selectedConcept, islrUnitTaxValueBs);
       islrRate = calc.rate;
       islrSubtrahendBs = calc.subtrahendBs;
       islrWithheldBs = calc.withheldAmountBs;
@@ -137,7 +137,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
 
   // USD conversions
   const totalAmountUsd = bcvRate > 0 ? totalAmountBs / bcvRate : 0;
-  const taxableBaseUsd = bcvRate > 0 ? taxableBaseBs / bcvRate : 0;
+  const taxableBaseUsd = bcvRate > 0 ? effectiveTaxableBaseBs / bcvRate : 0;
   const vatAmountUsd = bcvRate > 0 ? vatAmountBs / bcvRate : 0;
   const vatWithheldUsd = bcvRate > 0 ? vatWithheldBs / bcvRate : 0;
   const islrWithheldUsd = bcvRate > 0 ? islrWithheldBs / bcvRate : 0;
@@ -148,7 +148,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
     inventoryLines.every(line => products.some(p => p.id === line.productId && p.companyId === currentCompany.id) &&
       Number.isFinite(Number(line.quantity)) && Number(line.quantity) > 0 &&
       Number.isFinite(Number(line.unitCostBs)) && Number(line.unitCostBs) > 0) &&
-    Math.abs(inventoryLineTotal - (taxableBaseBs + exemptAmountBs)) <= 0.02 &&
+    Math.abs(inventoryLineTotal - (effectiveTaxableBaseBs + exemptAmountBs)) <= 0.02 &&
     new Set(inventoryLines.map(line=>line.productId)).size === inventoryLines.length
   );
 
@@ -182,7 +182,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       window.alert('El total de la factura debe ser un importe válido mayor que cero.');
       return;
     }
-    if (![taxableBaseBs, exemptAmountBs, vatAmountBs, igtfAmountBs, vatWithheldBs, islrWithheldBs].every(value => Number.isFinite(value) && value >= 0)) {
+    if (![effectiveTaxableBaseBs, exemptAmountBs, vatAmountBs, igtfAmountBs, vatWithheldBs, islrWithheldBs].every(value => Number.isFinite(value) && value >= 0)) {
       window.alert('Hay importes fiscales inválidos. Revisa base imponible, exento, IVA, IGTF y retenciones.');
       return;
     }
@@ -232,7 +232,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       igtfAmountBs,
       igtfAmountUsd: bcvRate > 0 ? igtfAmountBs / bcvRate : 0,
       exemptAmountBs,
-      taxableBaseBs,
+      taxableBaseBs: effectiveTaxableBaseBs,
       taxRate,
       vatAmountBs,
       retentionRate,
@@ -580,7 +580,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
             <span className="font-bold text-slate-800 uppercase tracking-wider block">Vista previa del asiento contable</span>
             <div className="grid grid-cols-3 gap-2 font-semibold text-slate-600 border-b border-sky-200 pb-1"><span>Cuenta / concepto</span><span className="text-right">Debe (Bs.)</span><span className="text-right">Haber (Bs.)</span></div>
             {[
-              {name: taxableBaseBs > 0 ? 'Inventario / compra' : 'Gasto / operación', debit: taxableBaseBs, credit: 0},
+              {name: effectiveTaxableBaseBs > 0 ? 'Inventario / compra' : 'Gasto / operación', debit: effectiveTaxableBaseBs, credit: 0},
               ...(exemptAmountBs > 0 ? [{name:'Monto exento', debit:exemptAmountBs, credit:0}] : []),
               ...(vatAmountBs > 0 ? [{name:'Crédito fiscal IVA', debit:vatAmountBs, credit:0}] : []),
               ...(igtfAmountBs > 0 ? [{name:'Gasto por IGTF', debit:igtfAmountBs, credit:0}] : []),
@@ -588,7 +588,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               ...(islrWithheldBs > 0 ? [{name:'Retención ISLR por enterar', debit:0, credit:islrWithheldBs}] : []),
               {name: paymentTerm === 'CONTADO' ? (paymentAccounts.find(account => account.code === paymentAccountCode)?.name || 'Cuenta de Caja/Banco') : 'Cuenta por pagar proveedor', debit:0, credit:Math.max(0,totalAmountBs-vatWithheldBs-islrWithheldBs)}
             ].map((line, index) => <div key={index} className="grid grid-cols-3 gap-2 text-slate-700"><span>{line.name}</span><span className="text-right font-mono">{formatBs(line.debit)}</span><span className="text-right font-mono">{formatBs(line.credit)}</span></div>)}
-            <div className="grid grid-cols-3 gap-2 border-t border-sky-200 pt-2 font-bold"><span>Totales</span><span className="text-right font-mono">{formatBs(taxableBaseBs+exemptAmountBs+vatAmountBs+igtfAmountBs)}</span><span className="text-right font-mono">{formatBs(vatWithheldBs+islrWithheldBs+Math.max(0,totalAmountBs-vatWithheldBs-islrWithheldBs))}</span></div>
+            <div className="grid grid-cols-3 gap-2 border-t border-sky-200 pt-2 font-bold"><span>Totales</span><span className="text-right font-mono">{formatBs(effectiveTaxableBaseBs+exemptAmountBs+vatAmountBs+igtfAmountBs)}</span><span className="text-right font-mono">{formatBs(vatWithheldBs+islrWithheldBs+Math.max(0,totalAmountBs-vatWithheldBs-islrWithheldBs))}</span></div>
             <p className="text-[11px] text-slate-600">Vista previa estimada; la validación definitiva se ejecuta al guardar.</p>
           </div>
 
@@ -624,8 +624,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                 <div className="sm:col-span-1"><button type="button" disabled={inventoryLines.length===1} onClick={()=>setInventoryLines(prev=>prev.filter((_,i)=>i!==index))} className="w-full rounded border border-red-200 px-2 py-2 text-red-700 disabled:opacity-30" aria-label="Eliminar línea">×</button></div>
               </div>)}
               <button type="button" onClick={()=>setInventoryLines(prev=>[...prev,{productId:'',quantity:'1',unitCostBs:''}])} className="rounded-lg border border-indigo-300 bg-white px-3 py-2 font-semibold text-indigo-800">+ Añadir artículo</button>
-              <div className={Math.abs(inventoryLineTotal-(taxableBaseBs+exemptAmountBs))<=0.02 && inventoryLinesValid?'text-emerald-700':'text-rose-700'}>
-                <strong>Total líneas:</strong> {formatBs(inventoryLineTotal)} · <strong>Base + exento:</strong> {formatBs(taxableBaseBs+exemptAmountBs)}
+              <div className={Math.abs(inventoryLineTotal-(effectiveTaxableBaseBs+exemptAmountBs))<=0.02 && inventoryLinesValid?'text-emerald-700':'text-rose-700'}>
+                <strong>Total líneas:</strong> {formatBs(inventoryLineTotal)} · <strong>Base + exento:</strong> {formatBs(effectiveTaxableBaseBs+exemptAmountBs)}
               </div>
               {!inventoryLinesValid && <p className="text-rose-700 font-semibold">Las líneas no concilian; no se permitirá guardar.</p>}
             </>}

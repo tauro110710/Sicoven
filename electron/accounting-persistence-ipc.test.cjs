@@ -493,7 +493,7 @@ test('SQLite appends an audit event when a VAT declaration is prepared and when 
     };
     persistAccountingSnapshot(harness.db, initial, { id: 1, username: 'auditor' });
     let types = harness.db.prepare("SELECT event_type FROM audit_events ORDER BY id").all().map(row => row.event_type);
-    assert.deepEqual(types, ['vat_withholding_declaration_prepared', 'state_saved']);
+    assert.deepEqual(types, ['vat_retention_voucher_issued', 'vat_withholding_declaration_prepared', 'state_saved']);
 
     const reviewed = {
       id: 'vat-event-audit-1', declarationId: declaration.id, eventType: 'REVIEWED',
@@ -505,7 +505,7 @@ test('SQLite appends an audit event when a VAT declaration is prepared and when 
     }, { id: 1, username: 'auditor' });
     types = harness.db.prepare("SELECT event_type FROM audit_events ORDER BY id").all().map(row => row.event_type);
     assert.deepEqual(types, [
-      'vat_withholding_declaration_prepared', 'state_saved',
+      'vat_retention_voucher_issued', 'vat_withholding_declaration_prepared', 'state_saved',
       'vat_withholding_declaration_event', 'state_saved'
     ]);
     const eventAudit = harness.db.prepare("SELECT details_json FROM audit_events WHERE event_type='vat_withholding_declaration_event'").get();

@@ -60,7 +60,7 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white transition cursor-pointer shadow"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span className="hidden xs:inline">Imprimir original y duplicado</span>
+              <span className="hidden xs:inline">Imprimir (2 copias)</span>
             </button>
             <button
               onClick={onClose}
@@ -155,7 +155,7 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
                 <span>Providencia SNAT / Art. 11 Ley de IVA</span>
               </div>
               <div className="text-[10px] text-slate-600">
-                Original para el proveedor y duplicado para el agente de retención. Si la entrega es física, imprimir dos ejemplares.
+                Original para el proveedor y duplicado para el agente de retención. Si la entrega es física, configura 2 copias en el diálogo de impresión.
               </div>
             </div>
           </div>
