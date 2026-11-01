@@ -1980,6 +1980,12 @@ test('SQLite accepts a supplier debit note only as an independent, balanced, lin
       type: 'ENTRADA', quantity: 1
     }]
   }), /ND tipo 02/);
+  assert.throws(() => validateAccountingSnapshot(next, {
+    ...next, purchases: [original, {
+      ...note, isCancelled: true, cancelledByJournalEntryId: 'missing-reversal',
+      cancellationReason: 'REVERSAL', cancellationNote: 'Intento de anulación sin contra-asiento.'
+    }]
+  }), /reversión de una ND tipo 02/);
 });
 
 
