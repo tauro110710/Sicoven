@@ -219,6 +219,7 @@ function persistAccountingSnapshot(db, state, actor = null) {
         zeroOperations: Boolean(declaration.zeroOperations),
         voucherIds: Array.isArray(declaration.voucherIds) ? declaration.voucherIds : [],
         legacyDateAssignments: Array.isArray(declaration.legacyDateAssignments) ? declaration.legacyDateAssignments : [],
+        voucherSnapshots: Array.isArray(declaration.voucherSnapshots) ? declaration.voucherSnapshots : [],
         totalTaxableBaseBs: declaration.totalTaxableBaseBs,
         totalVatAmountBs: declaration.totalVatAmountBs,
         totalWithheldBs: declaration.totalWithheldBs,
@@ -233,6 +234,8 @@ function persistAccountingSnapshot(db, state, actor = null) {
       auditInsert.run('vat_withholding_declaration_event', JSON.stringify({
         eventId: event.id, declarationId: event.declarationId,
         eventType: event.eventType, occurredAt: event.occurredAt,
+        note: event.note || null,
+        acknowledgedLegacyDates: Boolean(event.acknowledgedLegacyDates),
         declarationNumber: event.declarationNumber || null,
         receiptReference: event.receiptReference || null,
         amountBs: event.amountBs ?? null,
