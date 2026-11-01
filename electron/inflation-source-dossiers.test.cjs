@@ -105,8 +105,8 @@ test('paragraph-19 exceptional estimate requires both disproportionate-cost and 
       'METHODOLOGY','CALCULATION_WORKPAPERS','PROFESSIONAL_APPROVAL'];
     const input = dossierInput(series.seriesId, { evidence: codes.map(code => evidence(code,
       code === 'DISPROPORTIONATE_COST_ANALYSIS' || code === 'FCCPV_ABSENCE_SEARCH'
-        ? 'Se documentan los procedimientos, circunstancias, cuantificación, fechas y resultados de la evaluación efectuada.'
-        : 'Documento de respaldo sintético para la prueba.')) });
+        ? 'El análisis cuantifica 120 horas y USD 250 de costo estimado, con procedimientos, circunstancias y soporte de cálculo.'
+        : 'El 2025-02-03 se consultaron y revisaron las publicaciones oficiales disponibles; resultado: no se halló estudio indicado aplicable.')) });
     const result = createInflationSourceDossier(db, input, admin);
     assert.equal(result.eligibleForReview, true);
   } finally { db.close(); }
