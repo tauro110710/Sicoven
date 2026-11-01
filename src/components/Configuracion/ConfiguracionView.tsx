@@ -34,6 +34,7 @@ export const ConfiguracionView: React.FC = () => {
     resetFactoryData,
     exportBackupJson,
     restoreBackupJson,
+    createPhysicalBackup,
     restorePhysicalBackup,
     closeAccountingPeriod,
     reopenAccountingPeriod,
@@ -260,6 +261,21 @@ export const ConfiguracionView: React.FC = () => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const handlePhysicalBackup = async () => {
+    setBackupRestoreBusy(true);
+    try {
+      const result = await createPhysicalBackup();
+      if (result.canceled) return;
+      if (!result.ok) throw new Error('SICOVEN no confirmó la creación del respaldo físico.');
+      alert('Respaldo físico completo creado y verificado.\\n\\nArchivos documentales: ' + result.documentCount + '\\nSHA-256 SQLite: ' + result.databaseSha256 + '\\n\\nUbicación: ' + result.destination);
+    } catch (error) {
+      console.error('Falló la creación del respaldo físico de SICOVEN:', error);
+      alert(error instanceof Error ? error.message : 'No se pudo crear el respaldo físico verificado.');
+    } finally {
+      setBackupRestoreBusy(false);
+    }
   };
 
   const handlePhysicalRestore = async () => {
@@ -849,6 +865,16 @@ export const ConfiguracionView: React.FC = () => {
           </p>
 
           <div className="space-y-2.5 pt-1">
+            {window.sicovenStore && (
+              <button
+                onClick={handlePhysicalBackup}
+                disabled={backupRestoreBusy || !isStorageReady}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow transition cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                {backupRestoreBusy ? 'Creando respaldo físico…' : 'Crear respaldo físico completo y verificado'}
+              </button>
+            )}
             {window.sicovenStore && (
               <button
                 onClick={handlePhysicalRestore}
