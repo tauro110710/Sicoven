@@ -26,7 +26,7 @@ function makeSeries(db, code = 'ESTIMACION_EXPERTO') {
     sourceTitle: 'Estudio sintético de prueba', issuer: 'Profesional de prueba',
     sourceReference: 'Fixture sintético; no representa índice real',
     sourcePublishedAt: '2025-02-01', fileName: 'fixture.csv',
-    sourceText: 'period;value\\n2025-01;100\\n2025-02;101'
+    sourceText: code === 'ESTUDIO_FCCPV' ? 'period;value;status\\n2025-01;100;ESTIMATED\\n2025-02;101;ESTIMATED' : 'period;value\\n2025-01;100\\n2025-02;101'
   };
   return importInflationIndexSeries(db, input, admin);
 }
@@ -74,7 +74,7 @@ test('expert dossier cannot be created without all paragraph-17 evidence and pro
   try {
     const series = makeSeries(db);
     const input = dossierInput(series.seriesId, { evidence: [evidence('SIGNED_STUDY')] });
-    assert.throws(() => createInflationSourceDossier(db, input, admin), /calificación profesional|obligatorio/);
+    const incomplete = createInflationSourceDossier(db, input, admin);\n    assert.equal(incomplete.eligibleForReview, false);\n    assert.ok(incomplete.missingEvidence.includes('EXPERT_CREDENTIALS'));
     const valid = dossierInput(series.seriesId, { professional: { name: 'Experto', role: 'Investigador',
       credential: 'Registro acreditado', credentialEvidence: 'Documento de credencial verificado' },
       evidence: [evidence('SIGNED_STUDY')] });
