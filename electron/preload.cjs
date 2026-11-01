@@ -28,5 +28,9 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   getInflationSourceDossierEvidence: (token, evidenceId) => ipcRenderer.invoke('sicoven:inflation-source-dossier-evidence', token, evidenceId),
   listInflationSourceDossiers: (token, filters) => ipcRenderer.invoke('sicoven:inflation-source-dossier-list', token, filters),
   createInflationSourceDossier: (token, input) => ipcRenderer.invoke('sicoven:inflation-source-dossier-create', token, input),
-  reviewInflationSourceDossier: (token, input) => ipcRenderer.invoke('sicoven:inflation-source-dossier-review', token, input)
+  reviewInflationSourceDossier: (token, input) => ipcRenderer.invoke('sicoven:inflation-source-dossier-review', token, input),
+  attachSupportingDocument: (token, input) => ipcRenderer.invoke('sicoven:document-attach', token, input),
+  listSupportingDocuments: (token, filters) => ipcRenderer.invoke('sicoven:document-list', token, filters),
+  reviewSupportingDocument: (token, input) => ipcRenderer.invoke('sicoven:document-review', token, input),
+  openSupportingDocument: (token, documentId) => ipcRenderer.invoke('sicoven:document-open', token, documentId)
 }));
