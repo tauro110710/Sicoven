@@ -666,3 +666,33 @@ Alcance incorporado:
 5. Mantener sin cambios el generador TXT hasta contar con especificación oficial vigente y validación profesional independiente.
 
 **Regla de continuidad:** no automatizar el tratamiento tributario de NC/ND ni habilitar rectificaciones fiscales por inferencia. La decisión del contador debe quedar documentada; SICOVEN registra trazabilidad y controles, no sustituye el criterio profesional ni la actuación ante el SENIAT.
+
+## BITÁCORA DE CONTINUIDAD — AUDITORÍA NC/ND Y NOTAS DE CONTADO — 01/11/2026
+
+### Documentación integrada
+- PR #64 fusionado: actualiza la hoja de ruta con el subbloque 4.5.
+- PR #65 fusionado en commit `d5b5539bd53ab191e923628d54a64998481d6e9a`: incorpora la auditoría especializada de NC/ND y deja explícitos los pendientes posteriores a la implementación del expediente fiscal IVA.
+- La auditoría confirma que el flujo de ND continúa bloqueado intencionalmente: el selector genérico mantiene deshabilitado el tipo 02 y la integridad SQLite rechaza nuevas notas de débito sin flujo contable autorizado.
+
+### Hallazgo y corrección en curso — NC de compras pagadas de contado
+- El cálculo puro de NC ya admite compras de contado y crédito.
+- El modal ya admite ambas modalidades y requiere factura vigente, líneas de inventario conciliables y SQLite disponible.
+- `AccountingContext.addPurchaseCreditNote` distribuye el crédito: reduce CxP solo cuando existe una obligación pendiente; si la factura fue pagada de contado, registra el importe como anticipo/saldo a favor del proveedor.
+- Las pruebas de `electron/accounting-integrity.test.cjs` validan el caso de contado sin CxP ficticia y rechazan asientos que intenten crearla.
+- Se detectó que la vista del Libro de Compras todavía bloqueaba el botón para `CONTADO`, contradiciendo el modal, el contexto y las pruebas SQLite.
+
+**PR #68 — corrección de interfaz en revisión:** habilita la acción de NC de contado únicamente cuando se mantienen las salvaguardas existentes de SQLite, almacenamiento y líneas de inventario. La etiqueta indica “NC · saldo a favor” y aclara que no realiza reembolso automático de efectivo. No modifica el motor contable ni los cálculos fiscales.
+
+### Estado de validación documental
+- PR #65: CI de escritorio SUCCESS y CI de instalador Windows SUCCESS, incluida la actualización 1.0.6 → 1.0.7 con preservación de SQLite.
+- PR #68: CI de escritorio e instalador Windows en ejecución al registrar esta bitácora. No fusionar hasta que ambos concluyan SUCCESS.
+- No se publica instalador ni release.
+
+### Próximas tareas después de PR #68
+1. Diseñar el flujo especializado de nota de débito de proveedor: factura afectada, proveedor, CxP, base, IVA, retenciones, asiento y trazabilidad en Libro de Compras; Kardex solo cuando el hecho documentado implique mercancía.
+2. Añadir pruebas de integridad SQLite que cubran ND, aislamiento por empresa, duplicidad documental, vínculo a factura original, períodos cerrados y balance de asiento.
+3. No habilitar el tipo 02 en el formulario genérico hasta que ese flujo esté implementado y validado de extremo a extremo.
+4. Probar los escenarios de NC después de declaración: no presentada, presentada sin enteramiento, enteramiento parcial y total; el expediente registra trazabilidad, no infiere tratamiento fiscal.
+5. Mantener pendiente la fuente primaria vigente del TXT SENIAT y la revisión profesional independiente de las reglas tributarias.
+
+**Regla de contabilización:** una NC de contado se reconoce como saldo a favor/anticipo del proveedor, no como devolución de efectivo. Cualquier reembolso real deberá tener un flujo separado, con recepción bancaria/caja y asiento conciliados. No confundir ambas operaciones.
