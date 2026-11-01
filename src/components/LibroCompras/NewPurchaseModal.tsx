@@ -491,6 +491,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                 <div className="text-right text-[11px] text-emerald-800 font-mono">{formatUsd(vatWithheldUsd)}</div>
               </div>
             </div>
+          </div>
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
             <span className="font-bold text-slate-800 uppercase tracking-wider block">3. Método de pago e IGTF</span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
