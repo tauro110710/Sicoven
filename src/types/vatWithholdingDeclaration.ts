@@ -124,7 +124,7 @@ export function getVatDeclarationStatus(
   if (related.some(event => event.eventType === 'PAYMENT')) {
     const paid = money(related.filter(event => event.eventType === 'PAYMENT')
       .reduce((sum, event) => sum + Number(event.amountBs || 0), 0));
-    if (paid >= declaration.totalWithheldBs - 0.01) return 'PAID';
+    if (paid >= declaration.totalWithheldBs - 0.0001) return 'PAID';
     return 'PARTIALLY_PAID';
   }
   if (related.some(event => event.eventType === 'FILED')) return 'FILED';
