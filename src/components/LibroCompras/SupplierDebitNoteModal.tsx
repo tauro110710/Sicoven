@@ -176,7 +176,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
           {economicCause === 'OTHER' && <label className="block text-xs font-semibold text-slate-700">Clasificación de la causa<textarea required minLength={10} value={classificationNote} onChange={e=>setClassificationNote(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>}
           <div>
             <h3 className="mb-2 text-sm font-bold text-slate-900">Desglose manual del documento</h3><p className="mb-2 text-xs text-slate-500">Este flujo admite una sola alícuota de IVA por ND. Si el documento contiene alícuotas mixtas, no lo registre aquí.</p>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <label className="text-xs font-semibold text-slate-700">Base imponible Bs.<input required type="number" min="0" step="0.01" value={taxableBase} onChange={e=>setTaxableBase(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
               <label className="text-xs font-semibold text-slate-700">Exento Bs.<input required type="number" min="0" step="0.01" value={exemptAmount} onChange={e=>setExemptAmount(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
               <label className="text-xs font-semibold text-slate-700">Alícuota única IVA %<input required type="number" min="0" max="100" step="0.01" value={taxRate} onChange={e=>setTaxRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
