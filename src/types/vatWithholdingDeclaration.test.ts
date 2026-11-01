@@ -63,24 +63,33 @@ test('zero-operation declaration is explicit and rejected if any voucher exists'
   assert.equal(result.totalWithheldBs, 0);
 });
 
-test('legacy vouchers are marked for manual date review and fiscal corrections remain visible', () => {
-  const result = buildVatWithholdingDeclaration({
-    id: 'decl-legacy', companyId: 'company-1', year: 2026, month: 10, window: 'FIRST_HALF',
-    vouchers: [voucher({ fiscalDate: undefined, date: '2026-10-03' })],
-    existingDeclarations: [], createdAt: '2026-10-16T10:00:00.000Z'
+test('legacy voucher dates must be verified from source evidence before either half-month can be declared', () => {
+  const legacy = voucher({ fiscalDate: undefined, date: '2026-10-03' });
+  assert.throws(() => buildVatWithholdingDeclaration({
+    id: 'decl-unverified', companyId: 'company-1', year: 2026, month: 10, window: 'FIRST_HALF',
+    vouchers: [legacy], existingDeclarations: [], createdAt: '2026-10-16T10:00:00.000Z'
+  }), /fecha fiscal confirmada/);
+
+  const firstHalf = buildVatWithholdingDeclaration({
+    id: 'decl-first', companyId: 'company-1', year: 2026, month: 10, window: 'FIRST_HALF',
+    vouchers: [legacy], existingDeclarations: [], createdAt: '2026-10-16T10:00:00.000Z',
+    zeroOperations: true,
+    legacyFiscalDates: { [legacy.id]: {
+      fiscalDate: '2026-10-20',
+      note: 'Se verificó el comprobante bancario del pago y su fecha efectiva.'
+    } }
   });
-  assert.equal(result.voucherSnapshots[0].dateBasis, 'LEGACY_DOCUMENT_DATE');
-  assert.throws(() => validateVatDeclarationEventDraft(result, [], {
-    eventType: 'REVIEWED', occurredAt: '2026-10-16', acknowledgedLegacyDates: false
-  }), /históricos/);
-  const corrected = buildVatWithholdingDeclaration({
-    id: 'decl-corrected', companyId: 'company-1', year: 2026, month: 10, window: 'FIRST_HALF',
-    vouchers: [voucher({ requiresFiscalCorrection: true })], existingDeclarations: [],
-    createdAt: '2026-10-16T10:00:00.000Z'
+  assert.equal(firstHalf.voucherSnapshots.length, 0);
+  assert.equal(firstHalf.legacyDateAssignments[0].confirmedFiscalDate, '2026-10-20');
+
+  const secondHalf = buildVatWithholdingDeclaration({
+    id: 'decl-second', companyId: 'company-1', year: 2026, month: 10, window: 'SECOND_HALF',
+    vouchers: [legacy], existingDeclarations: [firstHalf],
+    createdAt: '2026-11-01T10:00:00.000Z'
   });
-  assert.throws(() => validateVatDeclarationEventDraft(
-    corrected, [], { eventType: 'REVIEWED', occurredAt: '2026-10-16' }
-  ), /corrección fiscal pendiente/);
+  assert.deepEqual(secondHalf.voucherIds, [legacy.id]);
+  assert.equal(secondHalf.voucherSnapshots[0].dateBasis, 'MANUALLY_VERIFIED_LEGACY_DATE');
+  assert.match(secondHalf.voucherSnapshots[0].dateVerificationNote || '', /comprobante bancario/);
 });
 
 test('declaration workflow requires review, filing receipt, then supported payments', () => {
