@@ -561,7 +561,7 @@ app.whenReady().then(async () => {
     getWindow: () => BrowserWindow.getFocusedWindow() });
   registerRestoreIpc({ ipcMain, app, dialog, licenseView, getActiveSession,
     getDb: () => db,
-    closeDatabase: async () => { if (db?.open) { db.pragma('wal_checkpoint(TRUNCATE)'); db.close(); db = null; } },
+    closeDatabase: async () => { if (db?.open) { const checkpoint = db.pragma('wal_checkpoint(TRUNCATE)')[0]; if (Number(checkpoint?.busy || 0) !== 0) throw new Error('SQLite mantiene operaciones WAL activas; se cancela la restauración sin reemplazar archivos.'); db.close(); db = null; } },
     reopenDatabase: async () => openDatabase(),
     getWindow: () => BrowserWindow.getFocusedWindow() });
   registerDocumentVaultIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession, dialog, shell, app,
