@@ -1925,6 +1925,14 @@ test('SQLite accepts a supplier debit note only as an independent, balanced, lin
     bcvRate: 100, totalAmountUsd: 0.29, taxableBaseUsd: 0.25,
     vatAmountUsd: 0.04, vatWithheldUsd: 0,
     paymentTerm: 'CREDITO', journalEntryId: 'nd-entry',
+    supplierDebitNoteReview: {
+      economicCause: 'ADDITIONAL_EXPENSE',
+      reason: 'Gasto adicional documentado por proveedor.',
+      debitAccountCode: '6.1.1.01', payableAccountCode: '2.1.1.01',
+      vatAccountCode: '1.1.3.01', vatBreakdownReviewed: true,
+      withholdingNotApplicableConfirmed: true, igtfNotApplicableConfirmed: true,
+      fiscalReviewNote: 'Revisión profesional documentada.'
+    },
     notes: 'Gasto adicional documentado · Revisión fiscal manual: desglose confirmado · Sin retenciones ni IGTF: confirmado.'
   };
   const noteJournal = {
@@ -1956,6 +1964,9 @@ test('SQLite accepts a supplier debit note only as an independent, balanced, lin
   }), /ND tipo 02/);
   assert.throws(() => validateAccountingSnapshot(previous, {
     ...next, purchases: [original, { ...note, vatWithheldBs: 2 }]
+  }), /ND tipo 02/);
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next, purchases: [original, { ...note, supplierDebitNoteReview: undefined }]
   }), /ND tipo 02/);
   assert.throws(() => validateAccountingSnapshot(previous, {
     ...next, journalEntries: [originalJournal, { ...noteJournal, items: [
