@@ -108,17 +108,25 @@ test('declaration workflow requires review, filing receipt, then supported payme
   validateVatDeclarationEventDraft(declaration, [reviewed], {
     eventType: 'FILED', occurredAt: '2026-10-17', declarationNumber: 'D-1', receiptReference: 'ACK-1'
   });
-  const payment = { id: 'event-3', declarationId: declaration.id, eventType: 'PAYMENT' as const,
+  const partial = { id: 'event-3', declarationId: declaration.id, eventType: 'PAYMENT' as const,
     occurredAt: '2026-10-18', recordedAt: '2026-10-18T10:00:00.000Z',
-    amountBs: 120, paymentReference: 'TRX-1', evidenceReference: 'REC-1' };
+    amountBs: 50, paymentReference: 'TRX-1', evidenceReference: 'REC-1' };
   validateVatDeclarationEventDraft(declaration, [reviewed, filed], {
-    eventType: 'PAYMENT', occurredAt: '2026-10-18', amountBs: 120,
+    eventType: 'PAYMENT', occurredAt: '2026-10-18', amountBs: 50,
     paymentReference: 'TRX-1', evidenceReference: 'REC-1'
   });
-  assert.equal(getVatDeclarationStatus(declaration, [reviewed, filed, payment]), 'PAID');
-  assert.throws(() => validateVatDeclarationEventDraft(declaration, [reviewed, filed], {
-    eventType: 'PAYMENT', occurredAt: '2026-10-18', amountBs: 121,
+  assert.equal(getVatDeclarationStatus(declaration, [reviewed, filed, partial]), 'PARTIALLY_PAID');
+  const finalPayment = { id: 'event-4', declarationId: declaration.id, eventType: 'PAYMENT' as const,
+    occurredAt: '2026-10-19', recordedAt: '2026-10-19T10:00:00.000Z',
+    amountBs: 70, paymentReference: 'TRX-2', evidenceReference: 'REC-2' };
+  validateVatDeclarationEventDraft(declaration, [reviewed, filed, partial], {
+    eventType: 'PAYMENT', occurredAt: '2026-10-19', amountBs: 70,
     paymentReference: 'TRX-2', evidenceReference: 'REC-2'
+  });
+  assert.equal(getVatDeclarationStatus(declaration, [reviewed, filed, partial, finalPayment]), 'PAID');
+  assert.throws(() => validateVatDeclarationEventDraft(declaration, [reviewed, filed, partial], {
+    eventType: 'PAYMENT', occurredAt: '2026-10-19', amountBs: 71,
+    paymentReference: 'TRX-3', evidenceReference: 'REC-3'
   }), /no puede superar/);
 });
 
