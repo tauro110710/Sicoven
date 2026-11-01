@@ -10,10 +10,10 @@ const {
 const actor = { id: 7, username: 'admin', role: 'admin' };
 function fixture() {
   const db = new Database(':memory:');
-  db.exec(\`
+  db.exec(`
     CREATE TABLE app_state(state_key TEXT PRIMARY KEY,state_json TEXT NOT NULL);
     CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-  \`);
+  `);
   const state = {
     companies: [{ id: 'co-1' }, { id: 'co-2' }],
     purchases: [
