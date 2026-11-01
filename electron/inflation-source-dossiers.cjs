@@ -96,8 +96,8 @@ function validateDossierInput(input, series) {
   if (series.series_code === 'ESTIMACION_PROPIA_EXCEPCIONAL') {
     const cost = evidence.find(item => item.evidenceType === 'DISPROPORTIONATE_COST_ANALYSIS');
     const absence = evidence.find(item => item.evidenceType === 'FCCPV_ABSENCE_SEARCH');
-    if (cost && cost.description.length < 40) throw new Error('El análisis de costo/esfuerzo desproporcionado debe explicar circunstancias y cuantificación.');
-    if (absence && absence.description.length < 40) throw new Error('La búsqueda de ausencia de publicación FCCPV debe detallar fuentes consultadas, fechas y resultados.');
+    if (cost && (cost.description.length < 80 || !/\\d/.test(cost.description))) throw new Error('El análisis de costo/esfuerzo desproporcionado debe explicar circunstancias y aportar una cuantificación verificable.');
+    if (absence && (absence.description.length < 80 || !/\\d{4}-\\d{2}-\\d{2}/.test(absence.description) || !/consult|revis/i.test(absence.description) || !/result|hallaz/i.test(absence.description))) throw new Error('La búsqueda FCCPV debe documentar fuentes consultadas, fecha, procedimiento y resultados.');
   }
   const professional = input.professional || {};
   const professionalName = requiredText(professional.name, 'Nombre del profesional revisor', 180);
