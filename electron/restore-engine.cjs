@@ -16,6 +16,14 @@ function exists(p) { try { fs.lstatSync(p); return true; } catch (e) { if (e.cod
 function realDir(p, label) { const s=fs.lstatSync(p); if(!s.isDirectory()||s.isSymbolicLink()) throw new Error(label+' no es un directorio real.'); }
 function realFile(p, label) { const s=fs.lstatSync(p); if(!s.isFile()||s.isSymbolicLink()) throw new Error(label+' no es un archivo regular.'); }
 function hashFile(file) { const h=crypto.createHash('sha256'); h.update(fs.readFileSync(file)); return h.digest('hex'); }
+function clearSqliteSidecars(userDataDir) {
+  for (const suffix of ['-wal','-shm']) {
+    const file=path.join(userDataDir,DB+suffix);
+    if(!exists(file)) continue;
+    realFile(file,'Archivo auxiliar SQLite');
+    fs.rmSync(file);
+  }
+}
 function copyFileVerified(from,to) { realFile(from,'Origen de copia'); fs.copyFileSync(from,to,fs.constants.COPYFILE_EXCL); if(hashFile(from)!==hashFile(to)) throw new Error('La copia de la base de datos no coincide.'); }
 function copyTree(source,destination) {
   realDir(source,'Carpeta documental de respaldo'); fs.mkdirSync(destination,{recursive:false});
@@ -54,6 +62,7 @@ function replaceFromBackup(backupDir,userDataDir,operationDir) {
   }
 }
 function restoreRollback(rollbackDir,userDataDir,operationDir) {
+  clearSqliteSidecars(userDataDir);
   const verified=verifyBackupDirectory(rollbackDir);
   const dbPath=path.join(userDataDir,DB), docsPath=path.join(userDataDir,DOCS);
   const tmpDb=path.join(operationDir,'rollback.sqlite');
@@ -148,6 +157,7 @@ async function executeRestoreUnlocked({backupDirectory,userDataDir,db,closeDatab
     const rollbackInfo=verifyBackupDirectory(rollbackDir);
     transitionJournal({journalPath,expectedState:'prepared',nextState:'rollback_ready',lastStep:'rollback_snapshot_verified',rollbackDatabaseSha256:rollbackInfo.databaseSha256,rollbackManifestSha256:hashFile(path.join(rollbackDir,'manifest.json'))});
     await closeDatabase();
+    clearSqliteSidecars(root);
     transitionJournal({journalPath,expectedState:'rollback_ready',nextState:'installing',lastStep:'physical_swap_started'});
     replaceFromBackup(stagedBackup,root,operationDir);
     transitionJournal({journalPath,expectedState:'installing',nextState:'installed',lastStep:'database_and_documents_verified'});
@@ -160,7 +170,7 @@ async function executeRestoreUnlocked({backupDirectory,userDataDir,db,closeDatab
     try {
       const current=readJournal(journalPath);
       if(current && current.state!=='prepared' && current.state!=='committed') {
-        if(db?.open) await closeDatabase();
+        await closeDatabase();
         recoverPendingRestore({userDataDir:root});
         await reopenDatabase();
       } else if(current?.state==='prepared') cleanupOperation(root,operationId);
