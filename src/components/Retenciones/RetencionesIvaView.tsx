@@ -375,7 +375,6 @@ export const RetencionesIvaView: React.FC = () => {
       {/* Modal for official printable voucher */}
       <VatVoucherModal
         voucher={selectedVoucher}
-        company={currentCompany}
         onClose={() => setSelectedVoucher(null)}
         onRecordDelivery={async draft => {
           if (!selectedVoucher) throw new Error('Seleccione un comprobante.');

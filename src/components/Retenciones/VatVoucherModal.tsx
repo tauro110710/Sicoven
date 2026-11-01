@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
-import { Company, VatRetentionVoucher } from '../../types/accounting';
+import { VatRetentionVoucher } from '../../types/accounting';
 import { X, Printer, ShieldCheck } from 'lucide-react';
 import { formatBs, formatUsd, formatDate, formatNumberVe } from '../../utils/formatters';
 
 interface VatVoucherModalProps {
   voucher: VatRetentionVoucher | null;
-  company: Company;
   onClose: () => void;
   onRecordDelivery: (draft: { deliveryDate: string; deliveryMethod: 'PHYSICAL' | 'ELECTRONIC'; electronicDeliveryAgreed?: boolean }) => Promise<VatRetentionVoucher>;
 }
 
-export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, company, onClose, onRecordDelivery }) => {
+export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, onClose, onRecordDelivery }) => {
   const localToday = () => {
     const now = new Date();
     return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -168,16 +167,16 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
               <div className="sm:col-span-2">
                 <span className="font-bold">NOMBRE O RAZÓN SOCIAL: </span>
-                <span className="font-semibold">{voucher.agentNameSnapshot || company.name}</span>
+                <span className="font-semibold">{voucher.agentNameSnapshot || 'No conservado en emisión'}</span>
               </div>
               <div>
                 <span className="font-bold">NÚMERO DE RIF: </span>
-                <span className="font-mono font-bold">{voucher.agentRifSnapshot || company.rif}</span>
+                <span className="font-mono font-bold">{voucher.agentRifSnapshot || 'No conservado en emisión'}</span>
               </div>
             </div>
             <div>
               <span className="font-bold">DIRECCIÓN FISCAL: </span>
-              <span>{voucher.agentAddressSnapshot || company.address}</span>
+              <span>{voucher.agentAddressSnapshot || 'No conservado en emisión'}</span>
             </div>
           </div>
 
@@ -198,7 +197,7 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
             </div>
             <div>
               <span className="font-bold">DIRECCIÓN FISCAL: </span>
-              <span>{voucher.supplierAddress || 'Venezuela'}</span>
+              <span>{voucher.supplierAddress || 'No registrada'}</span>
             </div>
           </div>
 
@@ -298,7 +297,7 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
           <div className="grid grid-cols-2 gap-8 pt-8">
             <div className="text-center space-y-1">
               <div className="border-t border-black w-64 mx-auto pt-1"></div>
-              <p className="font-bold uppercase text-[11px]">{voucher.agentNameSnapshot || company.name}</p>
+              <p className="font-bold uppercase text-[11px]">{voucher.agentNameSnapshot || 'No conservado en emisión'}</p>
               <p className="text-[10px] text-slate-600">FIRMA Y SELLO DEL AGENTE DE RETENCIÓN</p>
             </div>
             <div className="text-center space-y-1">
