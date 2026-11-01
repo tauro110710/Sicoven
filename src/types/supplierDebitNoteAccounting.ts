@@ -23,6 +23,9 @@ export interface SupplierDebitNoteAccountingDraft {
   bcvRate: number;
   /** Explicit professional confirmation of the manually captured document tax breakdown. */
   fiscalBreakdownReviewed: boolean;
+  withholdingNotApplicableConfirmed: boolean;
+  igtfNotApplicableConfirmed: boolean;
+  fiscalReviewNote: string;
   closedThroughDate?: string;
 }
 
@@ -69,7 +72,10 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
     throw new Error('La factura original no existe en la empresa activa, no es tipo 01 o está reversada.');
   }
   if (!sourceJournalEntry || sourceJournalEntry.id !== source.journalEntryId ||
-      sourceJournalEntry.companyId !== companyId || sourceJournalEntry.type !== 'COMPRA') {
+      sourceJournalEntry.companyId !== companyId || sourceJournalEntry.type !== 'COMPRA' ||
+      sourceJournalEntry.date !== String(source.accountCreditDate || source.invoiceDate) ||
+      normalizeDocument(sourceJournalEntry.referenceDoc) !== normalizeDocument('FAC-' + source.invoiceNumber) ||
+      Math.abs(Number(sourceJournalEntry.bcvRate) - Number(source.bcvRate)) > 0.000001) {
     throw new Error('La factura original no tiene un asiento de compra verificable en la empresa activa.');
   }
 
@@ -120,9 +126,7 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
     }
   } else {
     const selected = accounts.find(item => item.code === draft.debitAccountCode);
-    const allowedDebitTypes = draft.economicCause === 'ADDITIONAL_EXPENSE'
-      ? ['COSTOS', 'GASTOS']
-      : ['ACTIVO', 'COSTOS', 'GASTOS'];
+    const allowedDebitTypes = ['COSTOS', 'GASTOS'];
     if (!selected || !selected.isMovement || !allowedDebitTypes.includes(selected.type)) {
       throw new Error('La cuenta de débito no es una cuenta de movimiento compatible con la causa económica seleccionada.');
     }
@@ -143,6 +147,10 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
   }
   if (vatAmountBs > 0 && !draft.fiscalBreakdownReviewed) {
     throw new Error('El IVA informado en la ND requiere revisión y confirmación profesional antes de preparar el asiento.');
+  }
+  if (!draft.withholdingNotApplicableConfirmed || !draft.igtfNotApplicableConfirmed ||
+      String(draft.fiscalReviewNote || '').trim().length < 10) {
+    throw new Error('La ND requiere confirmación profesional expresa de que no aplican retenciones ni IGTF, o debe esperar el módulo fiscal especializado; documente la revisión.');
   }
 
   const sourcePayableCodes = [...new Set(sourceJournalEntry.items
@@ -216,7 +224,7 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
     vatAmountBs, retentionRate: 0, vatWithheldBs: 0,
     bcvRate: rate, totalAmountUsd,
     taxableBaseUsd: toUsd(taxableBaseBs), vatAmountUsd: toUsd(vatAmountBs), vatWithheldUsd: 0,
-    paymentTerm: 'CREDITO', notes: reason + (classificationNote ? ' · Clasificación: ' + classificationNote : '')
+    paymentTerm: 'CREDITO', notes: [reason, classificationNote ? 'Clasificación: ' + classificationNote : '', 'Revisión fiscal manual: ' + draft.fiscalReviewNote.trim(), 'Sin retenciones ni IGTF: confirmado por el profesional responsable.'].filter(Boolean).join(' · ')
   };
 
   return {
