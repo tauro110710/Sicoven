@@ -768,9 +768,13 @@ function validateAccountingSnapshot(previousState, nextState) {
       (String(movement.documentRef || '') === 'ND-PROV-' + debitNoteNumber ||
         String(movement.documentType || '').toLowerCase().includes('nota de débito')));
     if (!company || !original || original.isCancelled || !isValidIsoDate(original.invoiceDate) || !sourceEntry || sourceEntry.companyId !== note.companyId ||
-        sourceEntry.type !== 'COMPRA' || sourceEntry.referenceDoc !== 'FAC-' + original.invoiceNumber ||
+        sourceEntry.type !== 'COMPRA' ||
+        normalizeDocument(sourceEntry.referenceDoc) !== normalizeDocument('FAC-' + original.invoiceNumber) ||
+        sourceEntry.date !== String(original.accountCreditDate || original.invoiceDate) ||
+        Math.abs(Number(sourceEntry.bcvRate) - Number(original.bcvRate)) > 0.000001 ||
         !journal || journal.companyId !== note.companyId || journal.type !== 'AJUSTE' ||
         journal.date !== String(note.accountCreditDate || note.invoiceDate) ||
+        Math.abs(Number(journal.bcvRate) - rate) > 0.000001 ||
         normalizeDocument(journal.referenceDoc) !== normalizeDocument('ND-PROV-' + debitNoteNumber) ||
         !debitNoteNumber || !String(note.controlNumber || '').trim() ||
         normalizeDocument(note.affectedInvoiceNumber) !== normalizeDocument(original.invoiceNumber) ||
