@@ -1586,10 +1586,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         throw new Error('El importe usado para validar la exclusión de 20 UT no coincide con los importes reales de la compra.');
       }
       const has20UtExclusion = snapshot.article3Exclusions.some(item => item === 'REIMBURSABLE_UP_TO_20_UT' || item === 'PETTY_CASH_UP_TO_20_UT');
-      if (has20UtExclusion && expectedUnitTaxValueBs != null && snapshot.unitTaxValueBs == null) {
-        throw new Error('La compra debe conservar el valor de UT utilizado para evaluar el límite de 20 UT.');
-      }
-      const has20UtExclusion = snapshot.article3Exclusions.some(item => item === 'REIMBURSABLE_UP_TO_20_UT' || item === 'PETTY_CASH_UP_TO_20_UT');
       if (has20UtExclusion && snapshot.operationAmountBs == null) {
         throw new Error('La compra debe conservar el importe de la operación utilizado para evaluar el límite de 20 UT.');
       }
