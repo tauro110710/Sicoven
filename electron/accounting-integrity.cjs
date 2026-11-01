@@ -371,6 +371,7 @@ function validateVatDeclarationLedger(previousState, nextState) {
   }
 
   const timeline = new Map();
+  const declarationNumberKeys = new Set();
   for (const event of events) {
     const declaration = declarationsById.get(String(event.declarationId));
     if (!declaration || !validVatDeclarationDate(String(event.occurredAt || '').slice(0, 10)) ||
@@ -380,13 +381,9 @@ function validateVatDeclarationLedger(previousState, nextState) {
     const history = timeline.get(declaration.id) || [];
     if (history.length > 0) {
       const priorEvent = history[history.length - 1];
-      if (String(event.occurredAt) < String(priorEvent.occurredAt) ||
-          String(event.recordedAt) < String(priorEvent.recordedAt)) {
-        throw new Error('SQLite rechazó un evento de declaración IVA con cronología anterior al evento ya registrado.');
+      if (String(event.recordedAt) < String(priorEvent.recordedAt)) {
+        throw new Error('SQLite rechazó un evento de declaración IVA registrado antes de un evento histórico.');
       }
-    }
-    if (String(event.occurredAt) < String(declaration.createdAt).slice(0, 10)) {
-      throw new Error('SQLite rechazó un evento fiscal anterior a la preparación de la declaración.');
     }
     const status = history.reduce((current, item) => {
       if (item.eventType === 'REVIEWED') return 'REVIEWED';
@@ -406,20 +403,31 @@ function validateVatDeclarationLedger(previousState, nextState) {
       const hasCorrection = asArray(declaration.voucherIds).some(id => vouchers.get(String(id))?.requiresFiscalCorrection);
       const hasLegacy = asArray(declaration.voucherSnapshots).some(item => item.dateBasis === 'LEGACY_DOCUMENT_DATE');
       if (status !== 'PREPARED' || hasCorrection ||
+          String(event.occurredAt) < String(declaration.createdAt).slice(0, 10) ||
           (hasLegacy && (!event.acknowledgedLegacyDates || String(event.note || '').trim().length < 10))) {
         throw new Error('SQLite bloqueó la revisión: existen correcciones pendientes, fechas históricas no verificadas o una transición inválida.');
       }
     } else if (event.eventType === 'FILED') {
+      const reviewedEvent = history.find(item => item.eventType === 'REVIEWED');
+      const numberKey = String(declaration.companyId) + ':' + String(event.declarationNumber || '').trim();
       if (status !== 'REVIEWED' || !String(event.declarationNumber || '').trim() ||
-          !String(event.receiptReference || '').trim()) {
-        throw new Error('SQLite bloqueó la presentación: requiere revisión previa, número y acuse.');
+          !String(event.receiptReference || '').trim() ||
+          !reviewedEvent || String(event.occurredAt) < String(reviewedEvent.occurredAt) ||
+          declarationNumberKeys.has(numberKey)) {
+        throw new Error('SQLite bloqueó la presentación: requiere revisión previa, fecha válida, número único y acuse.');
       }
+      declarationNumberKeys.add(numberKey);
     } else if (event.eventType === 'PAYMENT') {
-      const paid = history.filter(item => item.eventType === 'PAYMENT')
-        .reduce((sum, item) => sum + Number(item.amountBs || 0), 0);
+      const paidEvents = history.filter(item => item.eventType === 'PAYMENT');
+      const paid = paidEvents.reduce((sum, item) => sum + Number(item.amountBs || 0), 0);
+      const filedEvent = history.find(item => item.eventType === 'FILED');
+      const lastPayment = paidEvents[paidEvents.length - 1];
       const amount = Number(event.amountBs);
-      if ((status !== 'FILED' && status !== 'PAID') || !Number.isFinite(amount) || amount <= 0 ||
-          roundMoney(paid + amount) > Number(declaration.totalWithheldBs) + 0.01 ||
+      if ((status !== 'FILED' && status !== 'PAID') || !filedEvent ||
+          String(event.occurredAt) < String(filedEvent.occurredAt) ||
+          (lastPayment && String(event.occurredAt) < String(lastPayment.occurredAt)) ||
+          !Number.isFinite(amount) || amount <= 0 || Math.abs(amount - roundMoney(amount)) > 0.000001 ||
+          roundMoney(paid + amount) > Number(declaration.totalWithheldBs) + 0.0001 ||
           !String(event.paymentReference || '').trim() || !String(event.evidenceReference || '').trim()) {
         throw new Error('SQLite bloqueó el enteramiento: requiere presentación previa, importe válido y soporte bancario/documental.');
       }
