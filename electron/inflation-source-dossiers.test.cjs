@@ -15,7 +15,7 @@ const reviewer = { username: 'reviewer-b', role: 'admin' };
 function database() {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
-  db.exec('CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime(\\'now\\')))');
+  db.exec('CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime(\'now\')))');
   initializeInflationIndexSchema(db);
   initializeInflationSourceDossierSchema(db);
   return db;
