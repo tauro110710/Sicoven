@@ -322,7 +322,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
             <span className="font-bold text-slate-800 uppercase tracking-wider block">
               1. Datos del Proveedor y Factura
             </span>
-            <label className="flex items-center gap-2 text-slate-700 font-medium"><input type="checkbox" checked={vatNotDiscriminated} onChange={e => { const checked = e.target.checked; setVatNotDiscriminated(checked); if (checked) setTaxableGrossBs(Math.round((taxableBaseBs + vatAmountBs) * 100) / 100); }} /> La factura no discrimina el IVA (art. 5.1)</label>
+            <label className="flex items-center gap-2 text-slate-700 font-medium"><input type="checkbox" checked={vatNotDiscriminated} disabled={taxRate <= 0} onChange={e => { const checked = e.target.checked; setVatNotDiscriminated(checked); if (checked) setTaxableGrossBs(Math.round((taxableBaseBs + vatAmountBs) * 100) / 100); }} /> La factura no discrimina el IVA (art. 5.1)</label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">RIF Proveedor *</label>
@@ -472,7 +472,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                 <label className="block font-semibold text-slate-700 mb-1">Alícuota IVA</label>
                 <select
                   value={taxRate}
-                  onChange={e => setTaxRate(Number(e.target.value))}
+                  onChange={e => { const rate = Number(e.target.value); setTaxRate(rate); if (rate === 0 && vatNotDiscriminated) { setTaxableBaseBs(taxableGrossBs); setTaxableGrossBs(0); setVatNotDiscriminated(false); } }}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-semibold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 >
                   <option value={16}>16% (Alícuota General SENIAT)</option>
