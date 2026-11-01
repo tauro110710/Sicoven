@@ -327,7 +327,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                   required
                   placeholder="J-12345678-9"
                   value={supplierRif}
-                  onChange={e => setSupplierRif(e.target.value)}
+                  onChange={e => { setSupplierRif(e.target.value); setSupplierTaxStatus("AUTO"); setArticle3Exclusion(""); setArticle2Transaction(false); setInvoiceFormalDefect(false); setPortalRetentionRate(""); }}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg uppercase font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
@@ -360,7 +360,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               </div>
               {currentCompany.ivaRetentionAgentBasis === "ARTICLE_2_METALS" && <label className="flex items-center gap-2 text-slate-700"><input type="checkbox" checked={article2Transaction} onChange={e => setArticle2Transaction(e.target.checked)} /> Esta compra corresponde a metales o piedras preciosas de la actividad del artículo 2</label>}
               <label className="flex items-center gap-2 text-slate-700"><input type="checkbox" checked={invoiceFormalDefect} onChange={e => setInvoiceFormalDefect(e.target.checked)} /> La factura incumple requisitos o formalidades fiscales (artículo 5.2)</label>
-              {resolvedSupplierTaxStatus === "NON_REGISTERED" && <div><label className="block font-semibold text-slate-700 mb-1">Resultado de consulta Portal Fiscal</label><select value={portalRetentionRate} onChange={e => setPortalRetentionRate(e.target.value as "" | "75" | "100")} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="">Pendiente de consulta</option><option value="100">Portal confirma retención 100% / no inscrito</option><option value="75">Portal confirma tasa general 75%</option></select></div>}
+              {resolvedSupplierTaxStatus === "NON_REGISTERED" && <div><label className="block font-semibold text-slate-700 mb-1">Resultado de consulta Portal Fiscal</label><select value={portalRetentionRate} onChange={e => setPortalRetentionRate(e.target.value as "" | "75" | "100")} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="">Pendiente de consulta</option><option value="100">Portal confirma retención 100% / no inscrito</option></select></div>}
               <div className="rounded-lg border p-3"><div className="flex justify-between gap-2 items-center"><strong className="text-slate-800">Evaluación automática de retención IVA</strong><strong>{ivaEligibility.status === "WITHHOLD" ? retentionRate + "%" : ivaEligibility.status === "REVIEW" ? "Revisión" : "Sin retención"}</strong></div>
                 <p className="mt-1 text-slate-700">{ivaEligibility.reason}</p>{ivaEligibility.legalBasis && <p className="text-[10px] text-slate-500 mt-1">{ivaEligibility.legalBasis}</p>}<p className="font-semibold mt-1">IVA retenido estimado: {formatBs(vatWithheldBs)}</p></div>
               <p className="text-[10px] text-slate-600">La clasificación se reutiliza por RIF en compras posteriores. Las consultas del Portal Fiscal no se simulan: si faltan, la operación queda en revisión.</p>
