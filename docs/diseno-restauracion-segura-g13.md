@@ -1,6 +1,6 @@
 # G13 — Diseño de restauración segura diferida de SQLite
 
-Estado: DISEÑO TÉCNICO — NO IMPLEMENTADO. Este documento no habilita restauraciones en la aplicación.
+Estado: IMPLEMENTACIÓN PARCIAL — journal durable aislado implementado en `electron/restore-journal.cjs` con pruebas en `electron/restore-journal.test.cjs`. El motor de staging/swap/recovery todavía NO está implementado ni integrado al arranque. Este documento no habilita restauraciones en la aplicación.
 
 ## 1. Decisión de arquitectura
 
@@ -100,3 +100,13 @@ No habilitar el botón de restauración hasta que:
 7. La matriz G13 y la evidencia correspondan al mismo SHA candidato.
 
 Hasta entonces G13 permanece PARCIAL y SICOVEN NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN CONTABLE BÁSICA.
+
+
+## 9. Evidencia de implementación parcial del journal
+
+- El módulo aislado valida el formato y la versión del journal, UUID de operación, fechas, estados y huellas SHA-256.
+- La escritura se realiza mediante archivo temporal exclusivo, `fsync` del archivo y renombrado; se intenta sincronizar el directorio contenedor.
+- Las transiciones requieren estado esperado y respetan la máquina de estados; `rollback_ready` exige la huella SHA-256 verificada de la base de retorno.
+- La lectura rechaza enlaces simbólicos, elementos especiales y journals que superen 64 KiB. Ante JSON corrupto, falla sin sobrescribirlo.
+- Pruebas añadidas: persistencia tras reapertura, transición no permitida, ausencia de huella de rollback, estado esperado obsoleto, operación duplicada, symlink y JSON corrupto.
+- Limitación explícita: el journal aún no copia ni sustituye SQLite/documentos, no crea rollback físico y no participa en `app.whenReady()`/`openDatabase()`. G13 permanece PARCIAL.
