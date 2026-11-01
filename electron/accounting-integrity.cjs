@@ -731,6 +731,77 @@ function validateAccountingSnapshot(previousState, nextState) {
     }
   }
 
+  const newSupplierDebitNotes = asArray(nextState.purchases).filter(purchase =>
+    !priorPurchaseIdsForIntegrity.has(String(purchase.id)) && purchase.documentType === '02');
+  for (const note of newSupplierDebitNotes) {
+    const original = asArray(nextState.purchases).find(item =>
+      item.id === note.originalPurchaseId && item.companyId === note.companyId && item.documentType === '01');
+    const company = asArray(nextState.companies).find(item => item.id === note.companyId);
+    const sourceEntry = original?.journalEntryId ? nextById.get(String(original.journalEntryId)) : undefined;
+    const journal = note.journalEntryId ? nextById.get(String(note.journalEntryId)) : undefined;
+    const duplicate = asArray(nextState.purchases).some(item =>
+      item.id !== note.id && item.companyId === note.companyId && item.documentType === '02' &&
+      normalizeRif(item.supplierRif) === normalizeRif(note.supplierRif) &&
+      normalizeDocument(item.debitNoteNumber || item.invoiceNumber) === normalizeDocument(note.debitNoteNumber || note.invoiceNumber));
+    const debitNoteNumber = String(note.debitNoteNumber || note.invoiceNumber || '').trim();
+    const notes = String(note.notes || '');
+    const baseBs = Number(note.taxableBaseBs || 0);
+    const exemptBs = Number(note.exemptAmountBs || 0);
+    const vatBs = Number(note.vatAmountBs || 0);
+    const totalBs = Number(note.totalAmountBs || 0);
+    const rate = Number(note.bcvRate || 0);
+    const totalUsd = Number(note.totalAmountUsd || 0);
+    const debitLines = asArray(journal?.items).filter(line => Number(line.debitBs || 0) > 0);
+    const payableLines = asArray(journal?.items).filter(line =>
+      String(line.accountCode || '').startsWith('2.1.1.') && Number(line.creditBs || 0) > 0);
+    const debitTotalBs = asArray(journal?.items).reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
+    const creditTotalBs = asArray(journal?.items).reduce((sum, line) => sum + Number(line.creditBs || 0), 0);
+    const debitTotalUsd = asArray(journal?.items).reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
+    const creditTotalUsd = asArray(journal?.items).reduce((sum, line) => sum + Number(line.creditUsd || 0), 0);
+    const accountByCode = new Map(asArray(nextState.accounts).map(account => [String(account.code), account]));
+    const debitAccountsValid = debitLines.every(line => {
+      const account = accountByCode.get(String(line.accountCode));
+      return Boolean(account && account.isMovement && ['ACTIVO', 'COSTOS', 'GASTOS'].includes(account.type));
+    });
+    const noteMovements = asArray(nextState.movements).filter(movement =>
+      movement.companyId === note.companyId &&
+      (String(movement.documentRef || '') === 'ND-PROV-' + debitNoteNumber ||
+        String(movement.documentType || '').toLowerCase().includes('nota de débito')));
+    if (!original || original.isCancelled || !sourceEntry || sourceEntry.companyId !== note.companyId ||
+        sourceEntry.type !== 'COMPRA' || sourceEntry.referenceDoc !== 'FAC-' + original.invoiceNumber ||
+        !journal || journal.companyId !== note.companyId || journal.type !== 'AJUSTE' ||
+        journal.date !== String(note.accountCreditDate || note.invoiceDate) ||
+        normalizeDocument(journal.referenceDoc) !== normalizeDocument('ND-PROV-' + debitNoteNumber) ||
+        !debitNoteNumber || !String(note.controlNumber || '').trim() ||
+        normalizeDocument(note.affectedInvoiceNumber) !== normalizeDocument(original.invoiceNumber) ||
+        normalizeRif(note.supplierRif) !== normalizeRif(original.supplierRif) ||
+        !isValidIsoDate(note.invoiceDate) || !isValidIsoDate(note.accountCreditDate || note.invoiceDate) ||
+        note.invoiceDate < original.invoiceDate || note.accountCreditDate < note.invoiceDate ||
+        (company?.closedThroughDate && note.accountCreditDate <= company.closedThroughDate) ||
+        duplicate || note.paymentTerm !== 'CREDITO' ||
+        !Number.isFinite(rate) || rate <= 0 ||
+        ![baseBs, exemptBs, vatBs, totalBs, totalUsd].every(Number.isFinite) ||
+        baseBs < 0 || exemptBs < 0 || vatBs < 0 || totalBs <= 0 || totalUsd <= 0 ||
+        Math.abs(totalBs - (baseBs + exemptBs + vatBs)) > 0.02 ||
+        Math.abs(totalUsd - totalBs / rate) > 0.0001 ||
+        Math.abs(Number(note.vatWithheldBs || 0)) > 0.01 ||
+        Math.abs(Number(note.islrWithheldBs || 0)) > 0.01 ||
+        Math.abs(Number(note.igtfAmountBs || 0)) > 0.01 ||
+        Number(note.vatWithheldUsd || 0) > 0.0001 ||
+        Number(note.islrWithheldUsd || 0) > 0.0001 ||
+        Number(note.igtfAmountUsd || 0) > 0.0001 ||
+        note.inventoryLines?.length || note.creditNoteLines?.length ||
+        noteMovements.length > 0 || debitLines.length === 0 || payableLines.length !== 1 ||
+        !debitAccountsValid ||
+        Math.abs(debitTotalBs - creditTotalBs) > 0.02 ||
+        Math.abs(debitTotalUsd - creditTotalUsd) > 0.0001 ||
+        Math.abs(Number(payableLines[0]?.creditBs || 0) - totalBs) > 0.02 ||
+        Math.abs(Number(payableLines[0]?.creditUsd || 0) - totalUsd) > 0.0001 ||
+        notes.trim().length < 10 || !notes.includes('Revisión fiscal manual:')) {
+      throw new Error('SQLite rechazó la ND tipo 02: factura original, proveedor, fechas, importes, cuenta CxP, asiento, revisión fiscal o ausencia de efectos no autorizados no concilian.');
+    }
+  }
+
   for (const collectionName of ['purchases', 'sales']) {
     const expectedEntryType = collectionName === 'sales' ? 'VENTA' : 'COMPRA';
     for (const document of asArray(nextState[collectionName])) {
