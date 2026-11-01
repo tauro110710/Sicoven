@@ -23,6 +23,7 @@ export interface SupplierDebitNoteAccountingDraft {
   bcvRate: number;
   /** Explicit professional confirmation of the manually captured document tax breakdown. */
   fiscalBreakdownReviewed: boolean;
+  closedThroughDate?: string;
 }
 
 export interface SupplierDebitNoteAccountingPlan {
@@ -35,7 +36,7 @@ export interface SupplierDebitNoteAccountingPlan {
   totalAmountUsd: number;
   fiscalAutomationAllowed: false;
   inventoryPostingAllowed: false;
-  requiresFiscalReview: false;
+  fiscalBreakdownReviewed: true;
 }
 
 const moneyBs = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
@@ -200,6 +201,10 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
     throw new Error('El asiento preliminar de la ND no cuadra en Bs. y USD.');
   }
 
+  const calculatedTaxRate = taxableBaseBs > 0 ? moneyBs(vatAmountBs / taxableBaseBs * 100) : 0;
+  if (calculatedTaxRate > 100 || (vatAmountBs > 0 && taxableBaseBs <= 0)) {
+    throw new Error('El IVA manual no puede superar el 100% ni existir sin base imponible.');
+  }
   const totalAmountUsd = toUsd(totalAmountBs);
   const document: Omit<PurchaseRecord, 'id' | 'opNumber' | 'journalEntryId'> = {
     companyId, originalPurchaseId: source.id,
@@ -207,8 +212,7 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
     supplierRif: source.supplierRif, supplierName: source.supplierName,
     invoiceNumber: debitNoteNumber, debitNoteNumber, controlNumber,
     affectedInvoiceNumber: source.invoiceNumber, documentType: '02',
-    totalAmountBs, taxableBaseBs, exemptAmountBs, taxRate: taxableBaseBs > 0
-      ? moneyBs(vatAmountBs / taxableBaseBs * 100) : 0,
+    totalAmountBs, taxableBaseBs, exemptAmountBs, taxRate: calculatedTaxRate,
     vatAmountBs, retentionRate: 0, vatWithheldBs: 0,
     bcvRate: rate, totalAmountUsd,
     taxableBaseUsd: toUsd(taxableBaseBs), vatAmountUsd: toUsd(vatAmountBs), vatWithheldUsd: 0,
@@ -219,6 +223,6 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
     document, sourcePurchaseId: source.id, debitAccountCode: debitAccount.code,
     payableAccountCode, items, totalAmountBs, totalAmountUsd,
     fiscalAutomationAllowed: false, inventoryPostingAllowed: false,
-    requiresFiscalReview: false
+    fiscalBreakdownReviewed: true
   };
 }
