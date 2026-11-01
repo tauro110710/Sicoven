@@ -57,6 +57,7 @@ import { calculateOutstandingSupplierAdvance, type SupplierAdvanceBalance } from
 import { calculateSupplierAdvanceFxSettlement } from '../types/supplierAdvanceFx';
 import { allocateDirectSupplierAdvance, validateSupplierDirectAdvanceDraft, type SupplierDirectAdvance, type SupplierDirectAdvanceDraft } from '../types/supplierDirectAdvance';
 import { allocateSupplierAdvanceCreditNotes, validateSupplierAdvanceCreditNoteAllocations, validateSupplierAdvanceSettlementDraft, type SupplierAdvanceSettlement, type SupplierAdvanceSettlementDraft } from '../types/supplierAdvanceSettlement';
+import type { VatFiscalIncident, VatFiscalIncidentCreateInput, VatFiscalIncidentEventInput } from '../types/vatFiscalIncidents';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -75,6 +76,9 @@ interface AccountingContextType {
   attachSupportingDocument: (input: SupportingDocumentDraft) => Promise<{ ok: boolean; canceled?: boolean; document?: Pick<SupportingDocument, 'id' | 'companyId' | 'entityType' | 'entityId' | 'documentType' | 'title' | 'fileName' | 'mimeType' | 'sha256' | 'byteSize' | 'status' | 'createdAt'> }>;
   reviewSupportingDocument: (input: { documentId: string; decision: 'VERIFIED' | 'OBSERVATION_REQUIRED'; reason: string }) => Promise<{ ok: boolean; documentId: string; status: string }>;
   openSupportingDocument: (documentId: string) => Promise<{ ok: boolean }>;
+  listVatFiscalIncidents: () => Promise<VatFiscalIncident[]>;
+  createVatFiscalIncident: (input: VatFiscalIncidentCreateInput) => Promise<VatFiscalIncident>;
+  recordVatFiscalIncidentEvent: (input: VatFiscalIncidentEventInput) => Promise<VatFiscalIncident>;
   waitForPersistence: () => Promise<void>;
   companies: Company[];
   isStorageReady: boolean;
@@ -423,6 +427,26 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const store = window.sicovenStore;
     if (!store?.openSupportingDocument) throw new Error('La apertura documental requiere la edición de escritorio con SQLite local.');
     return store.openSupportingDocument(token, documentId);
+  }, [token]);
+
+  const listVatFiscalIncidents = useCallback(async (): Promise<VatFiscalIncident[]> => {
+    if (!currentCompany.id) throw new Error('Seleccione una empresa para consultar incidencias fiscales.');
+    const store = window.sicovenStore;
+    if (!store?.listVatFiscalIncidents) throw new Error('El expediente fiscal requiere la edición de escritorio con SQLite local.');
+    return store.listVatFiscalIncidents(token, { companyId: currentCompany.id });
+  }, [token, currentCompany.id]);
+
+  const createVatFiscalIncident = useCallback(async (input: VatFiscalIncidentCreateInput): Promise<VatFiscalIncident> => {
+    if (!currentCompany.id) throw new Error('Seleccione una empresa antes de registrar la incidencia.');
+    const store = window.sicovenStore;
+    if (!store?.createVatFiscalIncident) throw new Error('El expediente fiscal requiere la edición de escritorio con SQLite local.');
+    return store.createVatFiscalIncident(token, { ...input, companyId: currentCompany.id });
+  }, [token, currentCompany.id]);
+
+  const recordVatFiscalIncidentEvent = useCallback(async (input: VatFiscalIncidentEventInput): Promise<VatFiscalIncident> => {
+    const store = window.sicovenStore;
+    if (!store?.recordVatFiscalIncidentEvent) throw new Error('El expediente fiscal requiere la edición de escritorio con SQLite local.');
+    return store.recordVatFiscalIncidentEvent(token, input);
   }, [token]);
 
   const createAccountingYearOpening = async (input: {
@@ -4289,6 +4313,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         attachSupportingDocument,
         reviewSupportingDocument,
         openSupportingDocument,
+        listVatFiscalIncidents,
+        createVatFiscalIncident,
+        recordVatFiscalIncidentEvent,
         waitForPersistence,
         isStorageReady: storageReady,
         storageError,
