@@ -261,6 +261,7 @@ function validateVatDeclarationLedger(previousState, nextState) {
   const declarationsById = new Map();
   const usedVoucherIds = new Set();
   const windowKeys = new Set();
+  const globalLegacyAssignments = new Map();
   const roundMoney = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 
   for (const declaration of declarations) {
@@ -311,6 +312,13 @@ function validateVatDeclarationLedger(previousState, nextState) {
           assignmentByVoucher.has(voucherId)) {
         throw new Error('SQLite rechazó una asignación manual de fecha fiscal histórica sin soporte válido.');
       }
+      const assignmentKey = String(declaration.companyId) + ':' + period + ':' + voucherId;
+      const priorAssignment = globalLegacyAssignments.get(assignmentKey);
+      if (priorAssignment && (priorAssignment.confirmedFiscalDate !== assignment.confirmedFiscalDate ||
+          priorAssignment.note !== assignment.note)) {
+        throw new Error('SQLite rechazó fechas fiscales legacy contradictorias entre declaraciones del mismo mes.');
+      }
+      globalLegacyAssignments.set(assignmentKey, assignment);
       assignmentByVoucher.set(voucherId, assignment);
     }
     const priorDeclarationIds = new Set(asArray(previousState.vatWithholdingDeclarations).map(item => String(item.id)));
