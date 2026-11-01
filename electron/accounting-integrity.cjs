@@ -246,6 +246,145 @@ function validateNoNewTransactionsInClosedPeriods(previousState, nextState) {
   }
 }
 
+
+function validVatDeclarationDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(value + 'T00:00:00.000Z');
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function validateVatDeclarationLedger(previousState, nextState) {
+  const declarations = asArray(nextState.vatWithholdingDeclarations);
+  const events = asArray(nextState.vatWithholdingDeclarationEvents);
+  const companies = new Map(asArray(nextState.companies).map(item => [String(item.id), item]));
+  const vouchers = new Map(asArray(nextState.vatVouchers).map(item => [String(item.id), item]));
+  const declarationsById = new Map();
+  const usedVoucherIds = new Set();
+  const windowKeys = new Set();
+  const roundMoney = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+
+  for (const declaration of declarations) {
+    const id = String(declaration.id || '');
+    if (!id || declarationsById.has(id) || !companies.has(String(declaration.companyId))) {
+      throw new Error('SQLite rechazó una declaración IVA con identificador duplicado o empresa inexistente.');
+    }
+    declarationsById.set(id, declaration);
+    const period = String(declaration.period || '');
+    const year = Number(period.slice(0, 4));
+    const month = Number(period.slice(4, 6));
+    if (!/^\d{6}$/.test(period) || !Number.isInteger(year) || year < 2000 ||
+        !Number.isInteger(month) || month < 1 || month > 12 ||
+        !['FIRST_HALF', 'SECOND_HALF'].includes(declaration.window)) {
+      throw new Error('SQLite rechazó una declaración IVA con período o quincena inválidos.');
+    }
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const expectedStart = period.slice(0, 4) + '-' + period.slice(4, 6) +
+      (declaration.window === 'FIRST_HALF' ? '-01' : '-16');
+    const expectedEnd = period.slice(0, 4) + '-' + period.slice(4, 6) + '-' +
+      String(declaration.window === 'FIRST_HALF' ? 15 : lastDay).padStart(2, '0');
+    if (declaration.startDate !== expectedStart || declaration.endDate !== expectedEnd ||
+        !validVatDeclarationDate(declaration.createdAt.slice(0, 10))) {
+      throw new Error('SQLite rechazó una declaración IVA cuya ventana no coincide con el período o tiene fecha inválida.');
+    }
+    const windowKey = String(declaration.companyId) + ':' + period + ':' + declaration.window;
+    if (windowKeys.has(windowKey)) throw new Error('Ya existe una declaración para la misma empresa y quincena.');
+    windowKeys.add(windowKey);
+    const ids = asArray(declaration.voucherIds).map(String);
+    const snapshots = asArray(declaration.voucherSnapshots);
+    if (new Set(ids).size !== ids.length || ids.length !== snapshots.length ||
+        ids.some((voucherId, index) => voucherId !== String(snapshots[index]?.voucherId))) {
+      throw new Error('SQLite rechazó una declaración con comprobantes duplicados o snapshot inconsistente.');
+    }
+    if (Boolean(declaration.zeroOperations) !== (snapshots.length === 0)) {
+      throw new Error('La declaración sin operaciones debe estar identificada explícitamente y no puede contener comprobantes.');
+    }
+    let base = 0, vat = 0, withheld = 0;
+    for (const snapshot of snapshots) {
+      const voucherId = String(snapshot.voucherId || '');
+      const voucher = vouchers.get(voucherId);
+      if (!voucher || String(voucher.companyId) !== String(declaration.companyId) ||
+          usedVoucherIds.has(String(declaration.companyId) + ':' + voucherId) ||
+          !validVatDeclarationDate(snapshot.fiscalDate) ||
+          snapshot.fiscalDate < declaration.startDate || snapshot.fiscalDate > declaration.endDate ||
+          !['FISCAL_EVENT', 'LEGACY_DOCUMENT_DATE'].includes(snapshot.dateBasis)) {
+        throw new Error('SQLite rechazó un comprobante ausente, duplicado o fuera de la quincena en la declaración IVA.');
+      }
+      const expectedDateBasis = voucher.fiscalDate ? 'FISCAL_EVENT' : 'LEGACY_DOCUMENT_DATE';
+      if (snapshot.dateBasis !== expectedDateBasis ||
+          snapshot.fiscalDate !== String(voucher.fiscalDate || voucher.date) ||
+          String(snapshot.voucherNumber) !== String(voucher.voucherNumber) ||
+          String(snapshot.supplierRif) !== String(voucher.supplierRif) ||
+          String(snapshot.supplierName) !== String(voucher.supplierName) ||
+          Math.abs(Number(snapshot.taxableBaseBs) - Number(voucher.taxableBaseBs)) > 0.01 ||
+          Math.abs(Number(snapshot.vatAmountBs) - Number(voucher.vatAmountBs)) > 0.01 ||
+          Math.abs(Number(snapshot.vatWithheldBs) - Number(voucher.vatWithheldBs)) > 0.01) {
+        throw new Error('SQLite rechazó un snapshot fiscal que no coincide con el comprobante de origen.');
+      }
+      const amounts = [snapshot.taxableBaseBs, snapshot.vatAmountBs, snapshot.vatWithheldBs].map(Number);
+      if (!amounts.every(value => Number.isFinite(value) && value >= 0)) {
+        throw new Error('SQLite rechazó importes inválidos en el snapshot de la declaración IVA.');
+      }
+      usedVoucherIds.add(String(declaration.companyId) + ':' + voucherId);
+      base += amounts[0]; vat += amounts[1]; withheld += amounts[2];
+    }
+    if (Math.abs(roundMoney(base) - Number(declaration.totalTaxableBaseBs)) > 0.01 ||
+        Math.abs(roundMoney(vat) - Number(declaration.totalVatAmountBs)) > 0.01 ||
+        Math.abs(roundMoney(withheld) - Number(declaration.totalWithheldBs)) > 0.01) {
+      throw new Error('SQLite rechazó los totales de la declaración IVA porque no concilian con sus comprobantes.');
+    }
+  }
+
+  const timeline = new Map();
+  for (const event of events) {
+    const declaration = declarationsById.get(String(event.declarationId));
+    if (!declaration || !validVatDeclarationDate(String(event.occurredAt || '').slice(0, 10)) ||
+        !validVatDeclarationDate(String(event.recordedAt || '').slice(0, 10))) {
+      throw new Error('SQLite rechazó un evento de declaración IVA sin declaración vinculada o fecha válida.');
+    }
+    const history = timeline.get(declaration.id) || [];
+    const status = history.reduce((current, item) => {
+      if (item.eventType === 'REVIEWED') return 'REVIEWED';
+      if (item.eventType === 'FILED') return 'FILED';
+      if (item.eventType === 'PAYMENT') return 'PAID';
+      return current;
+    }, 'PREPARED');
+    if (event.eventType === 'DUE_DATE_SET') {
+      if (!validVatDeclarationDate(String(event.dueDate || '')) ||
+          !String(event.officialSourceTitle || '').trim() ||
+          !String(event.officialReference || '').trim() ||
+          !/^https:\/\/(www\.)?seniat\.gob\.ve\//i.test(String(event.officialSourceUrl || '')) ||
+          history.some(item => item.eventType === 'DUE_DATE_SET')) {
+        throw new Error('SQLite rechazó un vencimiento sin respaldo oficial SENIAT verificable o duplicado.');
+      }
+    } else if (event.eventType === 'REVIEWED') {
+      const hasCorrection = asArray(declaration.voucherIds).some(id => vouchers.get(String(id))?.requiresFiscalCorrection);
+      const hasLegacy = asArray(declaration.voucherSnapshots).some(item => item.dateBasis === 'LEGACY_DOCUMENT_DATE');
+      if (status !== 'PREPARED' || hasCorrection ||
+          (hasLegacy && (!event.acknowledgedLegacyDates || String(event.note || '').trim().length < 10))) {
+        throw new Error('SQLite bloqueó la revisión: existen correcciones pendientes, fechas históricas no verificadas o una transición inválida.');
+      }
+    } else if (event.eventType === 'FILED') {
+      if (status !== 'REVIEWED' || !String(event.declarationNumber || '').trim() ||
+          !String(event.receiptReference || '').trim()) {
+        throw new Error('SQLite bloqueó la presentación: requiere revisión previa, número y acuse.');
+      }
+    } else if (event.eventType === 'PAYMENT') {
+      const paid = history.filter(item => item.eventType === 'PAYMENT')
+        .reduce((sum, item) => sum + Number(item.amountBs || 0), 0);
+      const amount = Number(event.amountBs);
+      if ((status !== 'FILED' && status !== 'PAID') || !Number.isFinite(amount) || amount <= 0 ||
+          roundMoney(paid + amount) > Number(declaration.totalWithheldBs) + 0.01 ||
+          !String(event.paymentReference || '').trim() || !String(event.evidenceReference || '').trim()) {
+        throw new Error('SQLite bloqueó el enteramiento: requiere presentación previa, importe válido y soporte bancario/documental.');
+      }
+    } else {
+      throw new Error('SQLite rechazó un tipo de evento de declaración IVA no reconocido.');
+    }
+    history.push(event);
+    timeline.set(declaration.id, history);
+  }
+}
+
 function validateAccountingSnapshot(previousState, nextState) {
   if (!nextState || typeof nextState !== 'object' || Array.isArray(nextState)) {
     throw new Error('Estado contable inválido.');
@@ -268,6 +407,9 @@ function validateAccountingSnapshot(previousState, nextState) {
     ['isReversed', 'reversedByJournalEntryId'], ['reversedByJournalEntryId']);
   assertAppendOnlyCollection(priorState, nextState, 'bankStatementMovements',
     ['isReconciled', 'reconciledWithJournalEntryId', 'reconciledJournalEntryIds', 'matchedBy', 'reconciledAt']);
+  assertAppendOnlyCollection(priorState, nextState, 'vatWithholdingDeclarations');
+  assertAppendOnlyCollection(priorState, nextState, 'vatWithholdingDeclarationEvents');
+  validateVatDeclarationLedger(priorState, nextState);
   assertAppendOnlyCollection(priorState, nextState, 'vatVouchers',
     ['requiresFiscalCorrection', 'correctionEntryId', 'correctionEntryIds', 'correctionNote'], ['requiresFiscalCorrection']);
   assertAppendOnlyCollection(priorState, nextState, 'islrVouchers',
