@@ -458,3 +458,62 @@ test('SQLite does not duplicate an opening that predates the exercise-link migra
     assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_exercise_opening_linked'").get().count, 0);
   } finally { harness.db.close(); }
 });
+
+
+test('SQLite appends an audit event when a VAT declaration is prepared and when its lifecycle advances', () => {
+  const harness = createHarness();
+  try {
+    const voucher = {
+      id: 'vat-audit-1', companyId: 'company-1', voucherNumber: '20261000000001',
+      date: '2026-10-03', period: '202610', fiscalDate: '2026-10-03',
+      supplierRif: 'J-12345678-9', supplierName: 'Proveedor Uno',
+      taxableBaseBs: 1000, vatAmountBs: 160, vatWithheldBs: 120,
+      requiresFiscalCorrection: false
+    };
+    const declaration = {
+      id: 'vat-decl-audit-1', companyId: 'company-1', period: '202610',
+      window: 'FIRST_HALF', startDate: '2026-10-01', endDate: '2026-10-15',
+      zeroOperations: false, voucherIds: [voucher.id],
+      voucherSnapshots: [{
+        voucherId: voucher.id, voucherNumber: voucher.voucherNumber,
+        supplierRif: voucher.supplierRif, supplierName: voucher.supplierName,
+        fiscalDate: voucher.fiscalDate, dateBasis: 'FISCAL_EVENT',
+        taxableBaseBs: 1000, vatAmountBs: 160, vatWithheldBs: 120,
+        requiresFiscalCorrection: false
+      }],
+      totalTaxableBaseBs: 1000, totalVatAmountBs: 160, totalWithheldBs: 120,
+      createdAt: '2026-10-16T10:00:00.000Z'
+    };
+    const initial = {
+      ...emptyState(),
+      companies: [{ id: 'company-1', name: 'Empresa Uno' }],
+      vatVouchers: [voucher],
+      vatWithholdingDeclarations: [declaration],
+      vatWithholdingDeclarationEvents: []
+    };
+    persistAccountingSnapshot(harness.db, initial, { id: 1, username: 'auditor' });
+    let types = harness.db.prepare("SELECT event_type FROM audit_events ORDER BY id").all().map(row => row.event_type);
+    assert.deepEqual(types, ['vat_withholding_declaration_prepared', 'state_saved']);
+
+    const reviewed = {
+      id: 'vat-event-audit-1', declarationId: declaration.id, eventType: 'REVIEWED',
+      occurredAt: '2026-10-16', recordedAt: '2026-10-16T11:00:00.000Z',
+      actor: 'auditor'
+    };
+    persistAccountingSnapshot(harness.db, {
+      ...initial, vatWithholdingDeclarationEvents: [reviewed]
+    }, { id: 1, username: 'auditor' });
+    types = harness.db.prepare("SELECT event_type FROM audit_events ORDER BY id").all().map(row => row.event_type);
+    assert.deepEqual(types, [
+      'vat_withholding_declaration_prepared', 'state_saved',
+      'vat_withholding_declaration_event', 'state_saved'
+    ]);
+    const eventAudit = harness.db.prepare("SELECT details_json FROM audit_events WHERE event_type='vat_withholding_declaration_event'").get();
+    const details = JSON.parse(eventAudit.details_json);
+    assert.equal(details.declarationId, declaration.id);
+    assert.equal(details.eventType, 'REVIEWED');
+    assert.deepEqual(details.actor, { userId: 1, username: 'auditor' });
+  } finally {
+    harness.db.close();
+  }
+});
