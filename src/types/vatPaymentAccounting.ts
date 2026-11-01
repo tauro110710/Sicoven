@@ -28,6 +28,7 @@ export function buildVatPaymentAccountingPlan(input: {
   if (!liability) throw new Error('No está disponible la cuenta de movimiento 2.1.2.03 para retenciones de IVA por enterar.');
   const grouped = new Map<string, { account: BankAccount; amountBs: number; amountUsd: number }>();
   for (const movement of input.movements) {
+    if (movement.type !== 'DEBIT') throw new Error('Solo los débitos bancarios pueden respaldar el enteramiento de IVA.');
     const bank = input.bankAccounts.find(account =>
       account.id === movement.bankAccountId && account.companyId === movement.companyId);
     if (!bank || bank.currency !== 'BS') throw new Error('La contrapartida bancaria del enteramiento debe ser una cuenta en bolívares.');
