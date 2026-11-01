@@ -149,12 +149,3 @@ export function selectHistoricalReportEntries<T extends {
 
   return validCompanyEntries.filter(entry => !latestOpeningDate || entry.date >= latestOpeningDate);
 }
-
-
-/** Returns only journal entries belonging to the selected company. */
-export function selectCompanyJournalEntries<T extends { companyId: string }>(
-  entries: T[],
-  companyId: string
-): T[] {
-  return entries.filter(entry => entry.companyId === companyId);
-}
