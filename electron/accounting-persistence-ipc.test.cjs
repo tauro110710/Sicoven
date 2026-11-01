@@ -577,6 +577,20 @@ test('SQLite audit records the VAT retention decision and the later voucher deli
     assert.equal(deliveryDetails.deliveryMethod, 'PHYSICAL');
     assert.deepEqual(deliveryDetails.actor, { userId: 1, username: 'auditor' });
     assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='vat_retention_voucher_delivered'").get().count, 1);
+
+    const corrected = {
+      ...delivered,
+      vatVouchers: [{ ...delivered.vatVouchers[0], requiresFiscalCorrection: true,
+        correctionEntryIds: ['journal-credit-note-1'], correctionNote: 'Nota de crédito requiere conciliación fiscal.' }]
+    };
+    persistAccountingSnapshot(harness.db, corrected, actor);
+    const correction = harness.db.prepare("SELECT details_json FROM audit_events WHERE event_type='vat_retention_voucher_correction_required'").get();
+    assert.ok(correction);
+    const correctionDetails = JSON.parse(correction.details_json);
+    assert.equal(correctionDetails.voucherId, voucher.id);
+    assert.deepEqual(correctionDetails.correctionEntryIds, ['journal-credit-note-1']);
+    assert.equal(correctionDetails.correctionNote, 'Nota de crédito requiere conciliación fiscal.');
+    assert.deepEqual(correctionDetails.actor, { userId: 1, username: 'auditor' });
   } finally {
     harness.db.close();
   }

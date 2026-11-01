@@ -254,6 +254,18 @@ function persistAccountingSnapshot(db, state, actor = null) {
           actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null
         }));
       }
+      const oldCorrectionIds = new Set(oldVoucher?.correctionEntryIds || (oldVoucher?.correctionEntryId ? [oldVoucher.correctionEntryId] : []));
+      const newCorrectionIds = (voucher.correctionEntryIds || (voucher.correctionEntryId ? [voucher.correctionEntryId] : []))
+        .filter(id => !oldCorrectionIds.has(id));
+      if (voucher.requiresFiscalCorrection && (!oldVoucher?.requiresFiscalCorrection || newCorrectionIds.length > 0)) {
+        auditInsert.run('vat_retention_voucher_correction_required', JSON.stringify({
+          voucherId: voucher.id, voucherNumber: voucher.voucherNumber || null,
+          companyId: voucher.companyId, purchaseRecordId: voucher.purchaseRecordId || null,
+          correctionEntryIds: newCorrectionIds,
+          correctionNote: voucher.correctionNote || null,
+          actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null
+        }));
+      }
       if ((!oldVoucher || !oldVoucher.deliveryDate) && voucher.deliveryDate) {
         auditInsert.run('vat_retention_voucher_delivered', JSON.stringify({
           voucherId: voucher.id, voucherNumber: voucher.voucherNumber || null,

@@ -243,6 +243,7 @@ Límites:
 
 - SQLite registra automáticamente la decisión de elegibilidad de IVA asociada a cada compra, con fundamento, condición de agente/proveedor, exclusiones, parámetros de UT y usuario que registró la operación.
 - SQLite registra la emisión del comprobante de retención IVA y su posterior entrega, incluyendo fecha, medio, acuerdo electrónico y usuario. Los eventos no requieren captura documental adicional.
+- Cuando una nota de crédito o reversión marca un comprobante para corrección, SQLite registra también un evento de auditoría inmutable con el comprobante afectado, los asientos correctivos relacionados, la razón y el usuario. El registro no elimina ni da por resuelta la obligación de rectificación fiscal.
 - La vista central muestra compras que requieren revisión fiscal y pendientes de entrega de comprobantes.
 - El RIF se valida estructuralmente antes de calcular fechas del calendario 2026 o resolver elegibilidad del agente; un identificador mal formado deja el caso sin fecha/condición automática.
 - Los libros de compras y ventas muestran “Todos los períodos” cuando no existe selección mensual; no presentan octubre como período predeterminado.
