@@ -2003,9 +2003,9 @@ test('SQLite accepts a supplier debit note only as an independent, balanced, lin
     workpaperNote: 'Papel de trabajo conserva comparación y soporte.',
     priorPeriodAdjustment: false,
     items: [
-      { accountCode: '2.1.1.01', debitBs: 29, creditBs: 0, debitUsd: 0.29, creditUsd: 0 },
       { accountCode: '6.1.1.01', debitBs: 0, creditBs: 25, debitUsd: 0, creditUsd: 0.25 },
-      { accountCode: '1.1.3.01', debitBs: 0, creditBs: 4, debitUsd: 0, creditUsd: 0.04 }
+      { accountCode: '1.1.3.01', debitBs: 0, creditBs: 4, debitUsd: 0, creditUsd: 0.04 },
+      { accountCode: '2.1.1.01', debitBs: 29, creditBs: 0, debitUsd: 0.29, creditUsd: 0 }
     ],
     createdAt: '2026-10-11T10:00:00.000Z'
   };
