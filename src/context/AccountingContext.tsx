@@ -37,6 +37,7 @@ import {
   INITIAL_STATEMENT_MOVEMENTS
 } from '../data/initialData';
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
+import { evaluateIvaRetentionEligibility } from '../types/ivaRetentionEligibility';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { FinancialDisclosure, validateFinancialDisclosure } from '../types/financialDisclosures';
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
@@ -1569,6 +1570,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const expectedVat = Math.round(purchaseData.taxableBaseBs * purchaseData.taxRate) / 100;
     if (Math.abs(expectedVat - purchaseData.vatAmountBs) > 0.01) {
       throw new Error('El IVA no coincide con la base imponible y la alícuota declarada.');
+    }
+    if (purchaseData.ivaRetentionDecision) {
+      const snapshot = purchaseData.ivaRetentionDecision;
+      const evaluated = evaluateIvaRetentionEligibility({ buyerAgentStatus: snapshot.buyerAgentStatus, supplierTaxStatus: snapshot.supplierTaxStatus, article2Transaction: snapshot.article2Transaction, article3Exclusions: snapshot.article3Exclusions as any, vatAmount: purchaseData.vatAmountBs, taxRate: purchaseData.taxRate, invoiceFormalDefect: snapshot.invoiceFormalDefect, portalRetentionRate: snapshot.portalRetentionRate ?? null });
+      if (evaluated.status !== snapshot.decisionStatus || evaluated.retentionRate !== purchaseData.retentionRate || Math.abs(evaluated.withheldAmount - purchaseData.vatWithheldBs) > 0.01 || evaluated.reason !== snapshot.decisionReason || purchaseData.supplierTaxStatus !== snapshot.supplierTaxStatus) throw new Error('La evaluación fiscal de retención IVA no coincide con los datos de la compra. Revise la clasificación y vuelva a calcular.');
     }
     if (purchaseData.vatWithheldBs > purchaseData.vatAmountBs + 0.01) {
       throw new Error('La retención de IVA no puede superar el IVA causado en la factura.');

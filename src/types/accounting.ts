@@ -109,6 +109,8 @@ export interface PurchaseCreditNoteLine {
   inventoryCostBs: number;
 }
 
+export interface PurchaseIvaRetentionSnapshot { buyerAgentStatus: 'SPECIAL_DESIGNATED' | 'ARTICLE_2_BUYER' | 'NOT_AGENT' | 'UNKNOWN'; supplierTaxStatus: 'ORDINARY' | 'FORMAL' | 'SPECIAL' | 'NON_REGISTERED' | 'UNKNOWN'; article2Transaction: boolean; article3Exclusions: string[]; invoiceFormalDefect: boolean; portalRetentionRate?: 0 | 75 | 100; decisionStatus: 'NOT_APPLICABLE' | 'EXCLUDED' | 'REVIEW' | 'NO_VAT' | 'WITHHOLD'; decisionReason: string; legalBasis?: string; evaluatedAt: string; }
+
 export interface PurchaseRecord {
   /** Líneas de mercancía vinculadas al Kardex; ausente en facturas históricas sin detalle. */
   inventoryLines?: PurchaseInventoryLine[];
@@ -129,6 +131,8 @@ export interface PurchaseRecord {
   supplierRif: string; // e.g. "J-12345678-9"
   supplierName: string;
   supplierAddress?: string;
+  supplierTaxStatus?: 'ORDINARY' | 'FORMAL' | 'SPECIAL' | 'NON_REGISTERED' | 'UNKNOWN';
+  ivaRetentionDecision?: PurchaseIvaRetentionSnapshot;
   invoiceNumber: string;
   controlNumber: string;
   debitNoteNumber?: string;

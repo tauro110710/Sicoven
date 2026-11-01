@@ -4,7 +4,8 @@ import { ShoppingCart, X, Check, Calculator, ShieldCheck } from 'lucide-react';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../../data/islrConcepts';
 import { formatBs, formatUsd, cleanRif, formatRif } from '../../utils/formatters';
 import { calculatePurchaseIgtf, type PurchasePaymentMethod } from '../../types/purchaseTaxes';
-import { getPurchaseAccountCreditDate } from '../../types/accounting';
+import { getPurchaseAccountCreditDate, type PurchaseIvaRetentionSnapshot } from '../../types/accounting';
+import { evaluateIvaRetentionEligibility, type IvaArticle3Exclusion, type IvaSupplierTaxStatus } from '../../types/ivaRetentionEligibility';
 import { isPurchasePaymentAccount } from '../../types/purchaseSettlement';
 
 interface NewPurchaseModalProps {
@@ -20,6 +21,11 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [supplierRif, setSupplierRif] = useState<string>('J-');
   const [supplierName, setSupplierName] = useState<string>('');
   const [supplierAddress, setSupplierAddress] = useState<string>('');
+  const [supplierTaxStatus, setSupplierTaxStatus] = useState<'AUTO' | IvaSupplierTaxStatus>('AUTO');
+  const [article3Exclusion, setArticle3Exclusion] = useState<IvaArticle3Exclusion | ''>('');
+  const [article2Transaction, setArticle2Transaction] = useState(false);
+  const [invoiceFormalDefect, setInvoiceFormalDefect] = useState(false);
+  const [portalRetentionRate, setPortalRetentionRate] = useState<'' | '75' | '100'>('');
   const [invoiceNumber, setInvoiceNumber] = useState<string>('');
   const [controlNumber, setControlNumber] = useState<string>('');
   const [documentType, setDocumentType] = useState<'01' | '02' | '03'>('01');
@@ -30,9 +36,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [exemptAmountBs, setExemptAmountBs] = useState<number>(0);
   const [taxRate, setTaxRate] = useState<number>(16);
 
-  // IVA Withholding
-  const isSpecial = currentCompany.taxpayerType === 'ESPECIAL';
-  const [retentionRate, setRetentionRate] = useState<number>(isSpecial ? currentCompany.defaultIvaRetentionRate : 0);
+  // IVA Withholding: tasa determinada por Providencia 000054.
 
   // ISLR Withholding
   const [applyIslr, setApplyIslr] = useState<boolean>(false);
@@ -58,12 +62,18 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
 
   // Real-time calculations
   const vatAmountBs = Math.round(taxableBaseBs * (taxRate / 100) * 100) / 100;
+  const supplierRifKeyForProfile = String(supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+  const supplierProfilePurchase = purchases.filter(item => item.companyId === currentCompany.id && String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierRifKeyForProfile && item.supplierTaxStatus).sort((a, b) => b.opNumber - a.opNumber)[0];
+  const resolvedSupplierTaxStatus: IvaSupplierTaxStatus = supplierTaxStatus === 'AUTO' ? (supplierProfilePurchase?.supplierTaxStatus || 'UNKNOWN') : supplierTaxStatus;
+  const buyerAgentStatus = currentCompany.ivaRetentionAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED' ? 'SPECIAL_DESIGNATED' : currentCompany.ivaRetentionAgentBasis === 'ARTICLE_2_METALS' ? 'ARTICLE_2_BUYER' : currentCompany.ivaRetentionAgentBasis === 'NOT_AGENT' ? 'NOT_AGENT' : 'UNKNOWN';
+  const ivaEligibility = evaluateIvaRetentionEligibility({ buyerAgentStatus, supplierTaxStatus: resolvedSupplierTaxStatus, article2Transaction, article3Exclusions: article3Exclusion ? [article3Exclusion] : [], vatAmount: vatAmountBs, taxRate, invoiceFormalDefect, portalRetentionRate: portalRetentionRate === '' ? null : Number(portalRetentionRate) as 75 | 100 });
+  const retentionRate = ivaEligibility.retentionRate;
   const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs) * 100) / 100;
   const igtfCalculation = calculatePurchaseIgtf(invoiceSubtotalBs, paymentMethod, applyIgtf, 3, paymentTerm);
   const igtfApplicable = igtfCalculation.applicable;
   const igtfAmountBs = igtfCalculation.amountBs;
   const totalAmountBs = Math.round((invoiceSubtotalBs + igtfAmountBs) * 100) / 100;
-  const vatWithheldBs = Math.round(vatAmountBs * (retentionRate / 100) * 100) / 100;
+  const vatWithheldBs = ivaEligibility.withheldAmount;
 
   // ISLR calculation
   const selectedConcept = ISLR_CONCEPTS.find(c => c.code === islrConceptCode);
@@ -221,6 +231,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       vatAmountBs,
       retentionRate,
       vatWithheldBs,
+      supplierTaxStatus: resolvedSupplierTaxStatus,
+      ivaRetentionDecision: { buyerAgentStatus, supplierTaxStatus: resolvedSupplierTaxStatus, article2Transaction, article3Exclusions: article3Exclusion ? [article3Exclusion] : [], invoiceFormalDefect, ...(portalRetentionRate !== '' ? { portalRetentionRate: Number(portalRetentionRate) as 75 | 100 } : {}), decisionStatus: ivaEligibility.status, decisionReason: ivaEligibility.reason, legalBasis: ivaEligibility.legalBasis, evaluatedAt: new Date().toISOString() },
       islrConceptCode: applyIslr ? selectedConcept?.code : undefined,
       islrConceptName: applyIslr ? selectedConcept?.description : undefined,
       islrRate: applyIslr ? islrRate : 0,
@@ -332,6 +344,27 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               </div>
             </div>
 
+            <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div><label className="block font-semibold text-slate-700 mb-1">Condición fiscal del proveedor</label>
+                  <select value={supplierTaxStatus} onChange={e => setSupplierTaxStatus(e.target.value as "AUTO" | IvaSupplierTaxStatus)} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
+                    <option value="AUTO">Reutilizar última clasificación / revisar si no existe</option><option value="ORDINARY">Contribuyente ordinario</option><option value="FORMAL">Contribuyente formal</option><option value="SPECIAL">Contribuyente especial</option><option value="NON_REGISTERED">No inscrito en el RIF</option><option value="UNKNOWN">No conozco la condición</option>
+                  </select>
+                  {supplierTaxStatus === "AUTO" && supplierProfilePurchase && <p className="text-[10px] text-slate-600 mt-1">Se reutiliza la clasificación de la compra #{supplierProfilePurchase.opNumber} de este proveedor.</p>}
+                </div>
+                <div><label className="block font-semibold text-slate-700 mb-1">Excepción del artículo 3 (si aplica)</label>
+                  <select value={article3Exclusion} onChange={e => setArticle3Exclusion(e.target.value as IvaArticle3Exclusion | "")} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
+                    <option value="">Ninguna identificada</option><option value="NOT_SUBJECT_EXEMPT_EXONERATED">Operación no sujeta, exenta o exonerada</option><option value="FORMAL_SUPPLIER">Proveedor contribuyente formal</option><option value="PERCEPTION_AGENT_SPECIFIC_GOODS">Proveedor agente de percepción (bienes específicos)</option><option value="IMPORT_PERCEPTION_CREDIT">IVA percibido anticipadamente en importación</option><option value="EMPLOYEE_TRAVEL_EXPENSE">Pago por empleado con viáticos</option><option value="REIMBURSABLE_UP_TO_20_UT">Gasto reembolsable hasta 20 UT</option><option value="PETTY_CASH_UP_TO_20_UT">Caja chica hasta 20 UT</option><option value="DOMICILIARY_UTILITIES">Servicios domiciliados de electricidad/agua/aseo/telefonía</option><option value="EXPORTER_RECOVERY_REGISTER">Exportador incluido en registro de recuperación de créditos fiscales</option><option value="SUPPLIER_EXEMPT_SALES_OVER_50">Proveedor con ventas exentas/exoneradas superiores al 50%</option><option value="SPECIAL_PUBLIC_PURCHASER">Compra por órgano público especial</option><option value="SPECIAL_NONBUSINESS_PUBLIC_ENTITY">Compra por ente público no empresarial especial</option><option value="COT_ARTICLE_146">Operación pagada según artículo 146 COT</option>
+                  </select>
+                </div>
+              </div>
+              {currentCompany.ivaRetentionAgentBasis === "ARTICLE_2_METALS" && <label className="flex items-center gap-2 text-slate-700"><input type="checkbox" checked={article2Transaction} onChange={e => setArticle2Transaction(e.target.checked)} /> Esta compra corresponde a metales o piedras preciosas de la actividad del artículo 2</label>}
+              <label className="flex items-center gap-2 text-slate-700"><input type="checkbox" checked={invoiceFormalDefect} onChange={e => setInvoiceFormalDefect(e.target.checked)} /> La factura incumple requisitos o formalidades fiscales (artículo 5.2)</label>
+              {resolvedSupplierTaxStatus === "NON_REGISTERED" && <div><label className="block font-semibold text-slate-700 mb-1">Resultado de consulta Portal Fiscal</label><select value={portalRetentionRate} onChange={e => setPortalRetentionRate(e.target.value as "" | "75" | "100")} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="">Pendiente de consulta</option><option value="100">Portal confirma retención 100% / no inscrito</option><option value="75">Portal confirma tasa general 75%</option></select></div>}
+              <div className="rounded-lg border p-3"><div className="flex justify-between gap-2 items-center"><strong className="text-slate-800">Evaluación automática de retención IVA</strong><strong>{ivaEligibility.status === "WITHHOLD" ? retentionRate + "%" : ivaEligibility.status === "REVIEW" ? "Revisión" : "Sin retención"}</strong></div>
+                <p className="mt-1 text-slate-700">{ivaEligibility.reason}</p>{ivaEligibility.legalBasis && <p className="text-[10px] text-slate-500 mt-1">{ivaEligibility.legalBasis}</p>}<p className="font-semibold mt-1">IVA retenido estimado: {formatBs(vatWithheldBs)}</p></div>
+              <p className="text-[10px] text-slate-600">La clasificación se reutiliza por RIF en compras posteriores. Las consultas del Portal Fiscal no se simulan: si faltan, la operación queda en revisión.</p>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Tipo de Documento</label>
