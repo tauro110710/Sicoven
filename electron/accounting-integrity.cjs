@@ -1530,7 +1530,7 @@ function validateAccountingSnapshot(previousState, nextState) {
   }
   // Cash payments, credit notes and supplier advances must share one AP ceiling.
   for (const purchase of asArray(nextState.purchases).filter(item =>
-    item.documentType === '01' && item.paymentTerm === 'CREDITO' && !item.isCancelled)) {
+    ['01', '02'].includes(item.documentType) && item.paymentTerm === 'CREDITO' && !item.isCancelled)) {
     const paidUsd = asArray(nextState.creditSettlements).filter(item =>
       item.companyId === purchase.companyId && item.documentId === purchase.id &&
       item.kind === 'PURCHASE_PAYMENT' && !item.isReversed)
@@ -1546,7 +1546,7 @@ function validateAccountingSnapshot(previousState, nextState) {
     const netUsd = Number(purchase.totalAmountUsd) -
       Number(purchase.vatWithheldUsd || 0) - Number(purchase.islrWithheldUsd || 0);
     if (paidUsd + creditedUsd + appliedUsd > netUsd + 0.00001) {
-      throw new Error('SQLite rechazó pagos, notas de crédito y anticipos aplicados que superan el principal neto de una factura por pagar.');
+      throw new Error('SQLite rechazó pagos, notas de crédito y anticipos aplicados que superan el principal neto de una factura o ND por pagar.');
     }
   }
 
