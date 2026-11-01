@@ -89,7 +89,7 @@ function recoverPendingRestore({userDataDir}) {
   realDir(path.dirname(operationDir),'Operaciones de restauración');
   realDir(operationDir,'Operación de restauración');
   const rollbackDir=path.join(operationDir,'rollback');
-  if(journal.state==='committed') {
+  if(journal.state==='committed' || journal.state==='rolled_back') {
     cleanupOperation(root,journal.operationId);
     return {ok:true,recovered:true,action:'kept_committed_restore'};
   }
