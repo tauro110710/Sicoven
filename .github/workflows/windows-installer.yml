@@ -1,4 +1,5 @@
 name: SICOVEN Windows installer
+# Builds, validates, stores the installer, and attaches it to the private repository release.
 
 on:
   push:
