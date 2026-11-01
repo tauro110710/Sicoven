@@ -40,7 +40,8 @@ const draft = (overrides: Partial<SupplierDebitNoteAccountingDraft> = {}): Suppl
   reason: 'Gasto adicional documentado por proveedor.',
   debitAccountCode: '6.1.1.01', taxableBaseBs: 25, exemptAmountBs: 0,
   vatAmountBs: 4, totalAmountBs: 29, bcvRate: 100,
-  fiscalBreakdownReviewed: true, ...overrides
+  fiscalBreakdownReviewed: true, withholdingNotApplicableConfirmed: true,
+  igtfNotApplicableConfirmed: true, fiscalReviewNote: 'Revisión documental y fiscal realizada por el responsable.', ...overrides
 });
 const build = (value = draft(), purchase = source, entry = sourceEntry, accountList = accounts, allPurchases: PurchaseRecord[] = [purchase]) =>
   buildSupplierDebitNoteAccountingPlan({ draft: value, purchases: allPurchases, accounts: accountList, sourceJournalEntry: entry });
@@ -112,7 +113,7 @@ test('requires professional review of manually entered VAT and a valid VAT contr
   assert.throws(() => build(draft(), source, sourceEntry, accounts.filter(item => item.code !== '1.1.3.01')), /cuenta de movimiento de IVA/);
 });
 
-test('rejects non-liability or non-movement payable accounts', () => {
+test('requires explicit professional confirmation when withholding and IGTF are not applicable', () => {\n  assert.throws(() => build(draft({ withholdingNotApplicableConfirmed: false })), /confirmación profesional expresa/);\n  assert.throws(() => build(draft({ igtfNotApplicableConfirmed: false })), /confirmación profesional expresa/);\n  assert.throws(() => build(draft({ fiscalReviewNote: 'No' })), /confirmación profesional expresa/);\n});\n\ntest('rejects non-liability or non-movement payable accounts', () => {
   const wrong = accounts.map(item => item.code === '2.1.1.01' ? { ...item, type: 'GASTOS' as const } : item);
   assert.throws(() => build(draft({ payableAccountCode: '6.1.1.01' }), { ...source, paymentTerm: 'CONTADO' }, { ...sourceEntry, items: sourceEntry.items.filter(item => item.accountCode !== '2.1.1.01') }, wrong), /cuenta auxiliar de CxP/);
 });
