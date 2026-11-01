@@ -200,7 +200,7 @@ test('blocks generic reversal of a journal linked to an IVA payment event', () =
     occurredAt: '2026-10-19', recordedAt: '2026-10-19T10:00:00.000Z',
     amountBs: 60, journalEntryId: 'entry-iva-1'
   };
-  assert.match(getVatPaymentJournalReversalBlocker([linkedPayment], 'entry-iva-1') || '', /corrección fiscal específica/);
+  assert.match(getVatPaymentJournalReversalBlocker([linkedPayment], 'entry-iva-1') || '', /corrección fiscal específico/);
   assert.equal(getVatPaymentJournalReversalBlocker([linkedPayment], 'entry-other'), null);
   assert.equal(getVatPaymentJournalReversalBlocker([filed], 'entry-iva-1'), null);
 });
