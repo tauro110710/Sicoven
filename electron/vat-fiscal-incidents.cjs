@@ -84,7 +84,7 @@ function validateReferences(state, input, companyId, expectedDeclarationId = nul
   return { voucherId, declarationId, declarationEventIds, bankMovementIds, journalEntryId };
 }
 function initializeVatFiscalIncidentSchema(db) {
-  db.exec(\`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS vat_fiscal_incidents (
       id TEXT PRIMARY KEY, company_id TEXT NOT NULL, purchase_id TEXT NOT NULL,
       original_purchase_id TEXT NOT NULL, document_type TEXT NOT NULL CHECK(document_type IN ('01','02','03')),
@@ -121,7 +121,7 @@ function initializeVatFiscalIncidentSchema(db) {
       BEGIN SELECT RAISE(ABORT, 'vat_fiscal_incident_events is append-only'); END;
     CREATE TRIGGER IF NOT EXISTS vat_fiscal_incident_events_no_delete BEFORE DELETE ON vat_fiscal_incident_events
       BEGIN SELECT RAISE(ABORT, 'vat_fiscal_incident_events is append-only'); END;
-  \`);
+  `);
 }
 function requireAdmin(actor) {
   if (!actor?.username || actor.role !== 'admin') throw new Error('Solo un administrador autenticado puede gestionar incidencias fiscales.');
@@ -175,19 +175,19 @@ function createVatFiscalIncident(db, input, actor) {
   const id = crypto.randomUUID(), now = new Date().toISOString();
   const initialText = 'Incidencia fiscal registrada. No implica rectificación, aceptación del SENIAT ni resolución tributaria.';
   const save = db.transaction(() => {
-    db.prepare(\`INSERT INTO vat_fiscal_incidents
+    db.prepare(`INSERT INTO vat_fiscal_incidents
       (id,company_id,purchase_id,original_purchase_id,document_type,document_number,affected_invoice_number,
        vat_voucher_id,declaration_id,declaration_event_ids_json,bank_movement_ids_json,reason,detected_at,
-       created_by_user_id,created_by_username,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)\`)
+       created_by_user_id,created_by_username,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(id, companyId, purchaseId, String(original.id), String(purchase.documentType),
         String(purchase.creditNoteNumber || purchase.debitNoteNumber || purchase.invoiceNumber || ''),
         purchase.affectedInvoiceNumber || null, references.voucherId, references.declarationId,
         JSON.stringify(references.declarationEventIds), JSON.stringify(references.bankMovementIds),
         reason, detectedAt, actor.id ?? null, actor.username, now);
-    db.prepare(\`INSERT INTO vat_fiscal_incident_events
+    db.prepare(`INSERT INTO vat_fiscal_incident_events
       (id,incident_id,event_type,decision_text,external_reference,journal_entry_id,
        declaration_event_ids_json,bank_movement_ids_json,actor_user_id,actor_username,created_at)
-      VALUES(?,?,'INCIDENT_RECORDED',?,NULL,NULL,'[]','[]',?,?,?)\`)
+      VALUES(?,?,'INCIDENT_RECORDED',?,NULL,NULL,'[]','[]',?,?,?)`)
       .run(crypto.randomUUID(), id, initialText, actor.id ?? null, actor.username, now);
     const insertReference = db.prepare('INSERT INTO vat_fiscal_incident_references(company_id,reference_type,reference_id,incident_id) VALUES(?,?,?,?)');
     if (references.voucherId) insertReference.run(companyId, 'VAT_VOUCHER', references.voucherId, id);
@@ -218,10 +218,10 @@ function recordVatFiscalIncidentEvent(db, input, actor) {
   const externalReference = input.externalReference ? requiredText(input.externalReference, 'Referencia externa', 500) : null;
   const id = crypto.randomUUID(), now = new Date().toISOString();
   const save = db.transaction(() => {
-    db.prepare(\`INSERT INTO vat_fiscal_incident_events
+    db.prepare(`INSERT INTO vat_fiscal_incident_events
       (id,incident_id,event_type,decision_text,external_reference,journal_entry_id,
        declaration_event_ids_json,bank_movement_ids_json,actor_user_id,actor_username,created_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?)\`)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
       .run(id, incidentId, eventType, decisionText, externalReference, references.journalEntryId,
         JSON.stringify(references.declarationEventIds), JSON.stringify(references.bankMovementIds),
         actor.id ?? null, actor.username, now);
