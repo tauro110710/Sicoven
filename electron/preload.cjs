@@ -24,5 +24,8 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   listInflationClassifications: (token, filters) => ipcRenderer.invoke('sicoven:inflation-classification-list', token, filters),
   saveInflationClassification: (token, input) => ipcRenderer.invoke('sicoven:inflation-classification-save', token, input),
   reviewInflationClassification: (token, input) => ipcRenderer.invoke('sicoven:inflation-classification-review', token, input),
-  assessInflationRemeReadiness: (token, ranges) => ipcRenderer.invoke('sicoven:inflation-reme-readiness', token, ranges)
+  assessInflationRemeReadiness: (token, ranges) => ipcRenderer.invoke('sicoven:inflation-reme-readiness', token, ranges),
+  listInflationSourceDossiers: (token, filters) => ipcRenderer.invoke('sicoven:inflation-source-dossier-list', token, filters),
+  createInflationSourceDossier: (token, input) => ipcRenderer.invoke('sicoven:inflation-source-dossier-create', token, input),
+  reviewInflationSourceDossier: (token, input) => ipcRenderer.invoke('sicoven:inflation-source-dossier-review', token, input)
 }));
