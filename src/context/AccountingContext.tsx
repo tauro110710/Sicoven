@@ -4052,6 +4052,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!window.sicovenStore?.createAccountingBackup) {
       throw new Error('La creación de respaldos físicos verificados solo está disponible en SICOVEN Desktop.');
     }
+    await waitForPersistence();
     return window.sicovenStore.createAccountingBackup(token);
   };
 
@@ -4059,6 +4060,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!window.sicovenStore?.restoreAccountingBackup) {
       throw new Error('La restauración física verificada solo está disponible en SICOVEN Desktop.');
     }
+    await waitForPersistence();
     return window.sicovenStore.restoreAccountingBackup(token);
   };
 
