@@ -900,3 +900,21 @@ Se verificaron en `main`:
 3. Diseñar recepción de mercancía adicional y ajuste de costo con evidencia y movimientos reales de inventario; no desbloquear por mera clasificación.
 4. Validar fiscalidad, retenciones e IGTF solo con fuente primaria vigente y revisión profesional.
 5. Mantener SQLite local como única fuente de verdad, el administrador semilla intocable y sin publicar instaladores/releases sin autorización.
+
+## Bloque independiente — Certificación operativa de contabilidad básica 1.0.8
+
+**Estado al 01/11/2026: EN EJECUCIÓN — NO CERTIFICADO.**
+
+Por instrucción expresa del usuario, se prioriza exclusivamente esta certificación para determinar si SICOVEN puede distribuirse como software de contabilidad básica empresarial. El resto de la hoja de ruta queda en pausa y no forma parte de esta fase.
+
+- Especificación y matriz de gates: `docs/certificacion-operativa-contabilidad-basica-1.0.8.md`.
+- Rama de trabajo: `certificacion/contabilidad-basica-1.0.8`, creada desde el commit `3676dbef4513d7c6920cd1ec6b708a5ad84025d9`.
+- Versión objetivo: 1.0.8; la prueba de actualización debe ser 1.0.7 → 1.0.8 y preservar SQLite.
+- Se exige evidencia reproducible de plan de cuentas, Diario, Mayor, Balance de Comprobación, apertura/cierre, compras/ventas, CxC/CxP, inventario soportado, tesorería, doble moneda, estados financieros, aislamiento multiempresa, persistencia, respaldo/restauración y aceptación funcional E2E.
+- Las pruebas unitarias y CI históricos son evidencia de componentes; no equivalen por sí solos a certificación E2E ni aceptación de distribución.
+- No se considera homologación SENIAT, cumplimiento fiscal integral, REME, nómina ni facturación electrónica dentro de esta certificación.
+- SQLite local continúa como única fuente de verdad. El administrador semilla permanece fuera de alcance y no se modifica.
+- No se modifica `main` directamente. Las correcciones se harán en la rama de certificación y mediante PR.
+- El instalador Windows x64 se generará como artefacto de CI únicamente después de aprobar todos los gates sobre el mismo SHA. No se publica release ni distribución externa sin autorización expresa.
+
+**Regla de salida:** si cualquier gate obligatorio está pendiente, fallido o sin evidencia, SICOVEN se mantiene **NO APTO PARA DISTRIBUCIÓN CONTABLE BÁSICA** y continúa la certificación. No se declarará aptitud por inferencia ni por porcentaje global de pruebas.
