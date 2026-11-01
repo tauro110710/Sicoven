@@ -86,14 +86,20 @@ export const LibroComprasView: React.FC = () => {
   const totalIvaRetenidoUsd = filteredPurchases.reduce((s, p) => s + signed(p, p.vatWithheldUsd || 0), 0);
 
   const handleDownloadTxt = () => {
-    const periodVouchers = vatVouchers.filter(v => v.companyId === currentCompany.id);
+    if (!/^\d{4}-\d{2}$/.test(monthFilter)) {
+      alert('Seleccione un período mensual específico antes de exportar las retenciones de IVA.');
+      return;
+    }
+    const period = monthFilter.replace('-', '');
+    const periodVouchers = vatVouchers.filter(v =>
+      v.companyId === currentCompany.id && v.period === period
+    );
     if (periodVouchers.length === 0) {
-      alert('No hay retenciones de IVA registradas para generar el archivo TXT.');
+      alert('No hay retenciones de IVA registradas para la empresa y período seleccionados.');
       return;
     }
     const txtContent = generateSeniatIvaTxt(currentCompany, periodVouchers);
     const cleanR = currentCompany.rif.replace(/[^A-Za-z0-9]/g, '');
-    const period = periodVouchers[0]?.period || `${currentCompany.fiscalYear}10`;
     downloadFile(txtContent, `RetencionesIVA_${cleanR}_${period}.txt`);
   };
 

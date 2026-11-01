@@ -11,20 +11,40 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
   const agentRif = cleanRif(company.rif);
   const lines: string[] = [];
 
+  if (!Array.isArray(vouchers)) throw new Error('La exportación IVA requiere una colección válida de comprobantes.');
+  if (!agentRif) throw new Error('El RIF del agente de retención está vacío.');
+
   for (const v of vouchers) {
     const supplierRif = cleanRif(v.supplierRif);
-    const invoiceDate = v.invoiceDate; // YYYY-MM-DD
-    const period = v.period; // YYYYMM
-    const docType = '01'; // 01=Factura
-    const invoiceNum = v.invoiceNumber.trim() || '00000001';
-    const controlNum = v.controlNumber.trim() || '00-000001';
-    const totalAmount = v.totalAmountBs.toFixed(2);
-    const baseAmount = v.taxableBaseBs.toFixed(2);
-    const withheldAmount = v.vatWithheldBs.toFixed(2);
+    const invoiceDate = String(v.invoiceDate || '');
+    const period = String(v.period || '');
+    const invoiceNum = String(v.invoiceNumber || '').trim();
+    const controlNum = String(v.controlNumber || '').trim();
+    const voucherNum = String(v.voucherNumber || '').trim();
+    const date = new Date(invoiceDate + 'T00:00:00.000Z');
+    const validDate = /^\d{4}-\d{2}-\d{2}$/.test(invoiceDate) &&
+      Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === invoiceDate;
+    const amounts = [v.totalAmountBs, v.exemptAmountBs ?? 0, v.taxableBaseBs, v.vatAmountBs, v.vatWithheldBs, v.taxRate, v.retentionRate];
+    const validPeriod = /^\d{4}(0[1-9]|1[0-2])$/.test(period);
+    const validRetentionRate = Number(v.retentionRate) === 75 || Number(v.retentionRate) === 100;
+    const expectedVat = Math.round(Number(v.taxableBaseBs) * Number(v.taxRate)) / 100;
+    const expectedWithheld = Math.round(expectedVat * Number(v.retentionRate)) / 100;
+    if (!validPeriod || !validDate || !/^\d{14}$/.test(voucherNum) || voucherNum.slice(0, 6) !== period ||
+        !supplierRif || !invoiceNum || !controlNum ||
+        [invoiceNum, controlNum, voucherNum].some(value => /[\t\r\n]/.test(value)) ||
+        amounts.some(value => !Number.isFinite(Number(value)) || Number(value) < 0) ||
+        Number(v.taxRate) > 100 || !validRetentionRate ||
+        Math.abs(Number(v.vatAmountBs) - expectedVat) > 0.01 ||
+        Math.abs(Number(v.vatWithheldBs) - expectedWithheld) > 0.01) {
+      throw new Error('Comprobante de retención IVA incompleto o inválido. Revise período, fecha, RIF, numeración, alícuota e importes; no se generan valores sustitutos.');
+    }
+    const docType = '01'; // El modelo actual solo admite facturas de compra retenidas.
+    const totalAmount = Number(v.totalAmountBs).toFixed(2);
+    const baseAmount = Number(v.taxableBaseBs).toFixed(2);
+    const withheldAmount = Number(v.vatWithheldBs).toFixed(2);
     const affectedDoc = '0';
-    const voucherNum = v.voucherNumber; // 14 dígitos
-    const exemptAmount = (v.exemptAmountBs || 0).toFixed(2);
-    const rate = v.taxRate.toFixed(2);
+    const exemptAmount = Number(v.exemptAmountBs || 0).toFixed(2);
+    const rate = Number(v.taxRate).toFixed(2);
     const expeditionNum = '0';
 
     // Fila estándar SENIAT

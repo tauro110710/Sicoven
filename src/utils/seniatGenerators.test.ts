@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generateSeniatIslrOperationsXml, generateSeniatIslrOperationsTxt } from './seniatGenerators';
-import type { Company, PurchaseRecord, IslrRetentionVoucher } from '../types/accounting';
+import { generateSeniatIvaTxt, generateSeniatIslrOperationsXml, generateSeniatIslrOperationsTxt } from './seniatGenerators';
+import type { Company, PurchaseRecord, IslrRetentionVoucher, VatRetentionVoucher } from '../types/accounting';
 import type { IslrFiscalEvent } from '../types/islrFiscalEvent';
 
 const company = { id: 'c1', rif: 'J-12345678-9', name: 'Empresa', address: '', phone: '', email: '', taxpayerType: 'ORDINARIO', defaultIvaRetentionRate: 75, fiscalYear: 2026, bcvRate: 1 } as Company;
@@ -123,4 +123,37 @@ test('SENIAT legacy purchase without account-credit date falls back to invoice d
   const historical = purchase({ invoiceDate: '2026-10-05', accountCreditDate: undefined });
   const xml = generateSeniatIslrOperationsXml(company, [historical], [], '202610');
   assert.ok(xml.includes('<FechaOperacion>05/10/2026</FechaOperacion>'));
+});
+
+
+const ivaVoucher = (overrides: Partial<VatRetentionVoucher> = {}) => ({
+  id: 'iva-v1', companyId: 'c1', voucherNumber: '20261000000001',
+  date: '2026-10-05', period: '202610', supplierRif: 'J-98765432-1',
+  supplierName: 'Proveedor', supplierAddress: 'Caracas', purchaseRecordId: 'p1',
+  invoiceDate: '2026-10-05', invoiceNumber: 'F-001', controlNumber: '00-123',
+  totalAmountBs: 1160, exemptAmountBs: 0, taxableBaseBs: 1000,
+  taxRate: 16, vatAmountBs: 160, retentionRate: 75, vatWithheldBs: 120,
+  bcvRate: 1, totalAmountUsd: 1160, vatWithheldUsd: 120,
+  ...overrides
+} as VatRetentionVoucher);
+
+test('IVA TXT exports only real voucher identifiers and the supplied amounts', () => {
+  const txt = generateSeniatIvaTxt(company, [ivaVoucher()]);
+  assert.match(txt, /^J123456789\t202610\t2026-10-05\tC\t01\tJ987654321\tF-001\t00-123\t1160\.00\t1000\.00\t120\.00/);
+  assert.match(txt, /20261000000001/);
+});
+
+test('IVA TXT rejects missing invoice/control identifiers instead of inventing replacements', () => {
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ invoiceNumber: '' })]), /incompleto o inválido/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ controlNumber: '' })]), /incompleto o inválido/);
+});
+
+test('IVA TXT rejects invalid period, sequence, date and inconsistent retention amounts', () => {
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ period: '202699' })]), /incompleto o inválido/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ voucherNumber: '1' })]), /incompleto o inválido/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ voucherNumber: '20260900000001' })]), /incompleto o inválido/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ invoiceDate: '2026-02-30' })]), /incompleto o inválido/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ vatWithheldBs: 161 })]), /incompleto o inválido/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ vatAmountBs: 159 })]), /incompleto o inválido/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ retentionRate: 50 })]), /incompleto o inválido/);
 });
