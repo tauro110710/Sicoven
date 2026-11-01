@@ -21,9 +21,16 @@ const TRANSITIONS = {
 };
 
 function assertSafeDirectory(directory) {
-  const stat = fs.lstatSync(directory);
-  if (!stat.isDirectory() || stat.isSymbolicLink()) {
-    throw new Error('El directorio del journal debe ser real y no puede ser un enlace.');
+  const resolved = path.resolve(directory);
+  const parsed = path.parse(resolved);
+  const segments = resolved.slice(parsed.root.length).split(path.sep).filter(Boolean);
+  let current = parsed.root;
+  for (const segment of segments) {
+    current = path.join(current, segment);
+    const stat = fs.lstatSync(current);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new Error('La ruta del journal contiene un directorio no real o un enlace.');
+    }
   }
 }
 
@@ -31,7 +38,7 @@ function validateJournal(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
       value.format !== JOURNAL_FORMAT || value.version !== 1 ||
       typeof value.operationId !== 'string' ||
-      !/^[a-f0-9-]{36}$/i.test(value.operationId) ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.operationId) ||
       !STATES.has(value.state) ||
       typeof value.createdAt !== 'string' || !Number.isFinite(Date.parse(value.createdAt)) ||
       typeof value.updatedAt !== 'string' || !Number.isFinite(Date.parse(value.updatedAt)) ||
@@ -46,6 +53,10 @@ function validateJournal(value) {
   if (value.hashes.rollbackDatabase !== null &&
       (typeof value.hashes.rollbackDatabase !== 'string' || !/^[a-f0-9]{64}$/.test(value.hashes.rollbackDatabase))) {
     throw new Error('El journal contiene una huella de retorno inválida.');
+  }
+  const rollbackRequired = ['rollback_ready', 'installing', 'installed', 'committed', 'rolling_back', 'rolled_back'].includes(value.state);
+  if (rollbackRequired && value.hashes.rollbackDatabase === null) {
+    throw new Error('El estado del journal exige una huella de retorno verificada.');
   }
   if (typeof value.lastStep !== 'string' || value.lastStep.length > 80) {
     throw new Error('El journal contiene un paso inválido.');
