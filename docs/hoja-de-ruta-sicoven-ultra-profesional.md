@@ -362,12 +362,17 @@ Esta actualización prevalece sobre cualquier estado anterior de los bloques 3.1
 - CI pre-fusión y post-fusión de escritorio y Windows completados con éxito. La prueba Windows posterior a la fusión ejecutó la actualización real 1.0.6→1.0.7, preservó SQLite y cargó el artefacto de CI. No se publicó release ni instalador.
 
 ### Bloque 3.3B — gobierno de fuentes alternativas y estimaciones
-- **Diseño técnico documental iniciado en rama `docs/bloque-3-3b-gobierno-fuentes-reme`.**
+- **Diseño documental integrado mediante PR #52**; expedientes estructurados SQLite e interfaz integrados mediante PR #53. Commit de integración #53: `e5f8d4a5554a53a83cefbd1438f002025bc89de4`.
+- Implementa expedientes diferenciados para párrafos 17, 18 y 19; evidencia, metodología versionada, cobertura mensual, identidad profesional, revisión independiente, aprobación acotada a empresa/ejercicio/período/marco/finalidad, adjuntos con SHA-256 y auditoría append-only.
 - Documento propuesto: `docs/bloque-3-3b-gobierno-fuentes-alternativas-reme.md`.
 - Distingue INPC BCV, IPC-AMC histórico, estudio de experto (párrafo 17), estudio público indicado por FCCPV (párrafo 18) y estimación propia excepcional de la entidad (párrafo 19).
 - Define evidencia, alcance de aprobación, estados, separación de estimaciones/proyecciones y pruebas negativas.
-- **No está integrado ni implementado:** requiere revisión normativa/documental y PR independiente.
-- El gate alternativo, si se implementa, deberá ser independiente del gate oficial de PR #51. Ninguna aprobación alternativa podrá etiquetar datos como oficiales BCV ni habilitar cálculos automáticamente.
+- **Salvaguarda:** no modifica el gate oficial de PR #51 ni habilita cálculos REME. La revisión profesional de vigencia normativa sigue pendiente.
+
+### Bloque 3.3C — auditoría y diseño seguro del motor REME
+- Diseño integrado mediante PR #54; commit `753b01839e1cd0362df8232a04868b8ccc348de7`.
+- Auditoría identifica bloqueos: fuentes primarias y cobertura auténtica 3.1C/3.1D; resolvedor mensual de observaciones alternativas aprobadas/versionadas; clasificación conectada a componentes conciliados; casos profesionales y precisión/redondeo aprobados.
+- No implementa fórmulas ni factores, mantiene `calculationEnabled=false`, no genera asientos ni modifica saldos.
 
 ### Bloque 3.3 — motor REME
 **PENDIENTE; NO HABILITADO.** Solo se diseñará e implementará después de:
@@ -446,3 +451,51 @@ Pruebas automatizadas añadidas:
 **Validación de PR #62:** commit revisado `94a31931d6e6f80cab8216b3486419c9901526ea`; Desktop run `41308856297` SUCCESS y Windows installer run `41308856350` SUCCESS. El trabajo Windows completó la compilación NSIS, verificación del instalador y actualización real 1.0.6→1.0.7 con conservación de SQLite. PR #62 fusionada mediante squash el 01/11/2026; commit de integración `bc629d763a6b840306d8a9fdbfa9cfa3ef821aed`.
 
 **Límites pendientes de RT-01:** la integración visual actual cubre Compras, Ventas y Libro Diario; no se debe afirmar que ya existe integración en todos los módulos transversales enumerados. La revisión profesional de expedientes y la ampliación a otras entidades/documentos siguen siendo evolución posterior. No se publicó instalador ni release.
+
+
+# ACTUALIZACIÓN DE CONTINUIDAD — 01/11/2026 (PR #52–#62)
+
+Esta sección prevalece sobre estados anteriores que indiquen como pendientes funciones ya fusionadas. Se verificaron las PR y sus commits de integración en `main`.
+
+## Bloque 3.3B — expedientes estructurados de fuentes alternativas REME — integrado
+- PR #52 documentó el gobierno de fuentes alternativas; commit `4339fbb856848683b45dcff0739f4496932fd4f6`.
+- PR #53 implementó expedientes SQLite e interfaz; commit `e5f8d4a5554a53a83cefbd1438f002025bc89de4`.
+- Requisitos diferenciados para estimaciones de experto (párrafo 17), estudios indicados por FCCPV (párrafo 18) y estimación propia excepcional (párrafo 19).
+- Expediente vinculado a empresa real, ejercicio, período, marco y finalidad; identidad y responsabilidad profesional; metodología versionada; cobertura mensual; evidencia adjunta con SHA-256 y referencias HTTPS con huella.
+- Revisión independiente: importador no revisa y autor no aprueba su propio trabajo. Aprobación limitada al alcance exacto del expediente. Estados, decisiones y evidencias append-only.
+- No modifica el gate oficial BCV de PR #51, no incorpora índices reales/ficticios, no habilita cálculos ni genera asientos. Revisión profesional de vigencia normativa pendiente.
+
+## Bloque 3.3C — auditoría y diseño seguro del motor REME — integrado como diseño
+- PR #54; commit `753b01839e1cd0362df8232a04868b8ccc348de7`.
+- Auditoría documentó los contratos y bloqueos previos al motor: falta verificación de fuentes primarias/cobertura auténtica 3.1C/3.1D; falta resolvedor mensual de observaciones alternativas aprobadas y versionadas; clasificaciones aún no conectadas a componentes conciliados consumibles; faltan casos profesionales y precisión/redondeo aprobados.
+- No implementa fórmulas ni factores. `calculationEnabled=false`; sin asientos ni cambios de saldos, cierres o históricos.
+
+## Bloque 4 — auditoría y subbloques de retenciones IVA
+- PR #55 auditoría integrada; commit `f13cadac3a747fd5d12e3972ab27898fb44a22de`. Su matriz identifica pendientes normativos y de circuito completo; no certifica cumplimiento SENIAT ni aceptación de archivos.
+- PR #57 / Bloque 4.1, commit `160f3e421f8e6502c7241e219d498951bf58eb2f`: exportación TXT IVA aislada por empresa/período, período mensual obligatorio, sin números ficticios de factura/control, validación de RIF, fecha, comprobante, correlativo e importes.
+- PR #58 / Bloque 4.2, commit `6f39ad8e7a629d15d65057044ee04ceb13d3b6a2`: evento fiscal IVA separado de fecha de factura; contado usa fecha efectiva de pago y crédito fecha de reconocimiento del pasivo, preservando invoiceDate.
+- PR #59 / Bloque 4.3, commit `594845121f2f600f886b50652195412c9d65f9fa`: auxiliar quincenal 1–15 y 16–fin, snapshots inmutables, conciliación, declaración sin operaciones, eventos append-only, acuses, pagos parciales y vencimientos documentados manualmente.
+- **Pendientes Bloque 4:** verificación de especificación TXT SENIAT vigente (incluidas columnas y declaración en cero), calendario oficial de vencimientos, elegibilidad de agente/proveedor y porcentajes/exclusiones, notas de crédito/débito, múltiples pagos parciales, comprobantes/plazos del artículo 16, rectificaciones, UT/parámetros históricos y conciliación integral libro→comprobante→declaración→enteramiento→asiento. No se afirma homologación ni presentación automática ante SENIAT.
+
+## RT-01 — respaldo documental opcional — integrado en primera entrega
+- PR #60 formalizó independencia entre contabilización y adjuntos; commit `75a0fffe6b28264211822c8843ab5bc86ab9e953`.
+- PR #61 implementó motor documental local SQLite e IPC; commit `6fd3be9364d7b294e05bb8a7cdec093ec4c1c22a`.
+- PR #62 integró interfaz en Compras, Ventas y Libro Diario; commit `bc629d763a6b840306d8a9fdbfa9cfa3ef821aed`.
+- PR #62: Desktop run `41308856297` SUCCESS; Windows run `41308856350` SUCCESS, incluyendo NSIS y upgrade real 1.0.6→1.0.7 con conservación SQLite.
+- Adjuntos opcionales; PDF/JPG/JPEG/PNG/WEBP hasta 20 MB, firma binaria y SHA-256 verificados, almacenamiento privado, estados, sustitución preservando historial y eventos append-only. Interfaz permite adjuntar, listar, abrir, verificar, observar y sustituir.
+- Cobertura UI actual: Compras, Ventas y Libro Diario. Ampliación a otras entidades y revisión profesional documental quedan como evolución. No se publicó instalador ni release.
+
+## Secuencia de trabajo vigente
+1. **REME 3.1C/3.1D:** conseguir y verificar archivo primario auténtico de índices y cobertura mensual; no sustituirlo por datos secundarios, proyecciones ni fixtures.
+2. Completar resolvedor mensual para expedientes alternativos 3.3B, con selección estricta de observaciones aprobadas/versionadas y alcance exacto.
+3. Conectar clasificación monetaria/no monetaria a componentes conciliados y consumibles, sin habilitar cálculos.
+4. Obtener casos de referencia, fórmulas, fechas, factores, precisión y redondeo revisados por profesional competente.
+5. Solo después implementar motor REME aislado en simulación, manteniendo deshabilitada la contabilización automática hasta autorización profesional expresa.
+6. En paralelo, continuar pendientes del Bloque 4 conforme a la matriz anterior, empezando por especificación oficial TXT/calendario y elegibilidad normativa. No declarar cumplimiento SENIAT sin evidencia vigente.
+
+## Estado global actualizado
+- RT-01: primera entrega integrada; expansión pendiente.
+- Bloque 3: gobierno de fuentes y diseño de seguridad integrados; REME sigue bloqueado por falta de series auténticas, resolvedor completo, conciliación y validación profesional.
+- Bloque 4: subbloques 4.1–4.3 integrados; pendientes normativos y de circuito integral explícitos.
+- Los bloques 1 y 2 mantienen la validación profesional integral pendiente. Los bloques 5–13 conservan el estado previamente documentado.
+- SQLite local continúa como única fuente de verdad. No tocar el administrador semilla. No publicar instaladores/releases sin autorización expresa.
