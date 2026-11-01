@@ -1882,3 +1882,91 @@ test('SQLite accepts a dated SENIAT calendar source preserved as a Gaceta Oficia
     }]
   }));
 });
+
+
+test('SQLite accepts a supplier debit note only as an independent, balanced, linked type-02 payable', () => {
+  const accounts = [
+    { code: '2.1.1.01', name: 'Cuentas por pagar proveedores', type: 'PASIVO', isMovement: true },
+    { code: '6.1.1.01', name: 'Gastos operativos', type: 'GASTOS', isMovement: true },
+    { code: '1.1.3.01', name: 'IVA crédito fiscal', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.4.01', name: 'Inventario', type: 'ACTIVO', isMovement: true }
+  ];
+  const company = { id: 'company-1', name: 'Empresa de prueba', closedThroughDate: null };
+  const original = {
+    id: 'purchase-1', companyId: 'company-1', opNumber: 1,
+    invoiceDate: '2026-10-01', accountCreditDate: '2026-10-01',
+    supplierRif: 'J-12345678-9', supplierName: 'Proveedor Original C.A.',
+    invoiceNumber: 'FAC-100', controlNumber: 'CTRL-100', documentType: '01',
+    totalAmountBs: 1160, taxableBaseBs: 1000, exemptAmountBs: 0, taxRate: 16,
+    vatAmountBs: 160, retentionRate: 0, vatWithheldBs: 0,
+    bcvRate: 100, totalAmountUsd: 11.6, taxableBaseUsd: 10, vatAmountUsd: 1.6,
+    vatWithheldUsd: 0, paymentTerm: 'CREDITO', journalEntryId: 'source-entry'
+  };
+  const originalJournal = {
+    id: 'source-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-01', description: 'Factura de compra FAC-100',
+    type: 'COMPRA', bcvRate: 100, referenceDoc: 'FAC-FAC-100',
+    items: [
+      { accountCode: '1.1.4.01', debitBs: 1000, creditBs: 0, debitUsd: 10, creditUsd: 0 },
+      { accountCode: '1.1.3.01', debitBs: 160, creditBs: 0, debitUsd: 1.6, creditUsd: 0 },
+      { accountCode: '2.1.1.01', debitBs: 0, creditBs: 1160, debitUsd: 0, creditUsd: 11.6 }
+    ],
+    createdAt: '2026-10-01T10:00:00.000Z'
+  };
+  const note = {
+    id: 'debit-note-1', companyId: 'company-1', opNumber: 2,
+    invoiceDate: '2026-10-10', accountCreditDate: '2026-10-10',
+    supplierRif: original.supplierRif, supplierName: original.supplierName,
+    invoiceNumber: 'ND-001', debitNoteNumber: 'ND-001', controlNumber: 'CTRL-ND-001',
+    affectedInvoiceNumber: original.invoiceNumber, documentType: '02',
+    originalPurchaseId: original.id,
+    totalAmountBs: 29, taxableBaseBs: 25, exemptAmountBs: 0, taxRate: 16,
+    vatAmountBs: 4, retentionRate: 0, vatWithheldBs: 0,
+    bcvRate: 100, totalAmountUsd: 0.29, taxableBaseUsd: 0.25,
+    vatAmountUsd: 0.04, vatWithheldUsd: 0,
+    paymentTerm: 'CREDITO', journalEntryId: 'nd-entry',
+    notes: 'Gasto adicional documentado · Revisión fiscal manual: desglose confirmado · Sin retenciones ni IGTF: confirmado.'
+  };
+  const noteJournal = {
+    id: 'nd-entry', companyId: 'company-1', entryNumber: 2,
+    date: '2026-10-10', description: 'Nota de débito proveedor ND-001',
+    type: 'AJUSTE', bcvRate: 100, referenceDoc: 'ND-PROV-ND-001',
+    items: [
+      { accountCode: '6.1.1.01', debitBs: 25, creditBs: 0, debitUsd: 0.25, creditUsd: 0 },
+      { accountCode: '1.1.3.01', debitBs: 4, creditBs: 0, debitUsd: 0.04, creditUsd: 0 },
+      { accountCode: '2.1.1.01', debitBs: 0, creditBs: 29, debitUsd: 0, creditUsd: 0.29 }
+    ],
+    createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const previous = {
+    ...emptyState([originalJournal]),
+    purchases: [original], accounts, companies: [company]
+  };
+  const next = {
+    ...emptyState([originalJournal, noteJournal]),
+    purchases: [original, note], accounts, companies: [company]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
+
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next, purchases: [original, { ...note, journalEntryId: undefined }]
+  }), /ND tipo 02/);
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next, purchases: [original, { ...note, affectedInvoiceNumber: 'FAC-999' }]
+  }), /ND tipo 02/);
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next, purchases: [original, { ...note, vatWithheldBs: 2 }]
+  }), /ND tipo 02/);
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next, journalEntries: [originalJournal, { ...noteJournal, items: [
+      ...noteJournal.items.slice(0, 2),
+      { ...noteJournal.items[2], creditBs: 28 }
+    ] }]
+  }), /ND tipo 02/);
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next, movements: [{
+      id: 'fake-nd-movement', companyId: 'company-1', documentRef: 'ND-PROV-ND-001',
+      type: 'ENTRADA', quantity: 1
+    }]
+  }), /ND tipo 02/);
+});
