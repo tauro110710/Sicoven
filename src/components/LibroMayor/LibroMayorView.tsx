@@ -13,7 +13,7 @@ import {
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportMayorPdf } from '../../utils/pdfGenerator';
-import { getAccountBalanceNature } from '../../types/accountingReportIntegrity';
+import { getAccountBalanceNature, selectCompanyJournalEntries } from '../../types/accountingReportIntegrity';
 
 interface LedgerMovement {
   entryId: string;
@@ -76,9 +76,7 @@ export const LibroMayorView: React.FC = () => {
         creditUsd: number;
       }[] = [];
 
-      for (const entry of journalEntries) {
-        // The general ledger is always scoped to the active company.
-        if (entry.companyId !== currentCompany.id) continue;
+      for (const entry of selectCompanyJournalEntries(journalEntries, currentCompany.id)) {
         for (const it of entry.items) {
           if (it.accountCode === acc.code) {
             allMovements.push({
