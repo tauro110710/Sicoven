@@ -2,8 +2,8 @@
 
 **Estado:** auditoría técnica en actualización continua; no certifica cumplimiento fiscal ni modifica operaciones.
 
-**Contraste de integración:** PR #57 (Bloque 4.1) y PR #58 (Bloque 4.2) ya están fusionadas en `main`. Sus defectos corregidos se marcan como resueltos; los límites y pendientes normativos permanecen abiertos.  
-**Base inspeccionada:** `main`, posterior a PR #54.  
+**Contraste de integración:** PR #57 (Bloque 4.1), PR #58 (Bloque 4.2) y PR #59 (Bloque 4.3) están fusionadas en `main`. Los defectos corregidos se marcan como resueltos; los límites y pendientes normativos permanecen abiertos.  
+**Base inspeccionada:** `main`, posterior a PR #59 (merge `594845121f2f600f886b50652195412c9d65f9fa`).  
 **Alcance:** Libro de Compras, Libro de Ventas, retenciones IVA/ISLR, generadores TXT/XML y controles SQLite relacionados.  
 **Regla:** no alterar datos históricos, asientos ni comprobantes; no modificar el administrador semilla.
 
@@ -119,11 +119,11 @@ El artículo 13 establece que la retención se practica cuando ocurra primero el
 
 ### 6.2 Falta de control de períodos de enteramiento quincenal
 
-Los artículos 14 y 15 distinguen retenciones practicadas del día 1 al 15 y del 16 al último día del mes, y exigen declarar compras sujetas a retención conforme a las especificaciones técnicas del Portal Fiscal; incluso se presenta declaración cuando no hubo operaciones sujetas a retención. El modelo actual de comprobante IVA conserva `period: YYYYMM`, sin un período de enteramiento/ventana quincenal explícito ni estado de declaración/enteramiento.
+Los artículos 14 y 15 distinguen retenciones practicadas del día 1 al 15 y del 16 al último día del mes, y exigen declarar conforme a las especificaciones técnicas del Portal Fiscal, incluso cuando no hubo operaciones sujetas a retención.
 
-**Riesgo:** el libro mensual puede sumar comprobantes sin soportar la conciliación y control de las dos ventanas de enteramiento, y el sistema no puede demostrar por sí solo que se cumplió la declaración sin operaciones.
+**Estado: IMPLEMENTADO PARCIALMENTE EN PR #59, FUSIONADA.** Se incorporó un auxiliar de declaraciones por empresa, período y ventana quincenal, con snapshot inmutable, comprobantes incluidos, totales conciliados, declaración sin operaciones, estados de revisión/presentación, acuse y enteramientos parciales documentados. La persistencia se valida en SQLite y genera auditoría.
 
-**Corrección requerida:** añadir un auxiliar de eventos/declaraciones por ventana 1–15 y 16-fin de mes, con totales, comprobantes incluidos, fecha límite según calendario vigente, estado de declaración, referencia/acuse y pago/enteramiento. El calendario no se codificará como fecha fija sin fuente oficial versionada.
+**Límites pendientes:** no se calcula automáticamente el vencimiento; se documenta manualmente con publicación, referencia y URL HTTPS SENIAT, cuya página no se consulta automáticamente. No se genera todavía un TXT quincenal certificado, no se presenta automáticamente en el Portal Fiscal y no se rectifica una declaración ya presentada. La especificación técnica vigente y el calendario oficial siguen pendientes de verificación externa.
 
 ### 6.3 Plazo y contenido del comprobante de retención IVA
 
@@ -186,25 +186,36 @@ Limitaciones:
 
 ### 7.3 Bloque 4.3 — auxiliar quincenal (PR #59)
 
-Estado: en desarrollo, PR abierta como borrador y CI pendiente.
+**Estado: FUSIONADO EN MAIN.**
+- PR #59: https://github.com/fenixlife1978/Sicoven/pull/59
+- HEAD validado: `ef4393ce027691a75593d1eacb67eea3055573fc`.
+- Merge commit: `594845121f2f600f886b50652195412c9d65f9fa`.
+- Desktop Validation run `41261535195`: SUCCESS.
+- Windows Installer run `41261535220`: SUCCESS.
+- Pruebas automatizadas, TypeScript, build, auditoría de recursos, NSIS, verificación de instalador, actualización 1.0.6→1.0.7 y preservación SQLite: SUCCESS.
 
-Alcance de la implementación en revisión:
-- Ventanas 1–15 y 16–fin de mes.
-- Snapshot inmutable de comprobantes por empresa y quincena.
-- Declaración sin operaciones explícita.
-- Eventos append-only de revisión, presentación, acuse y pagos/enteramientos.
-- Pagos parciales con referencias y soportes.
-- Vencimientos manuales únicamente con fuente oficial SENIAT documentada.
-- Asignación manual de fecha fiscal efectiva a comprobantes históricos que no guardan el evento de pago/abono; la asignación se conserva para el mes y evita ubicar un comprobante en una quincena por la fecha de factura.
-- Validaciones SQLite y auditoría.
+Capacidades integradas:
+- Ventanas exactas 1–15 y 16–fin de mes, incluido febrero bisiesto.
+- Snapshot inmutable por empresa/período/quincena.
+- Comprobación de que el snapshot inicial incluya exactamente todos los comprobantes de la ventana.
+- Conciliación de base imponible, IVA causado e IVA retenido.
+- Declaración sin operaciones explícita, rechazada si existen comprobantes en la ventana.
+- Asignación manual, individual y documentada de fecha fiscal para comprobantes históricos sin evento de pago/abono.
+- Consistencia de la asignación histórica entre ambas quincenas.
+- Estados append-only de preparación, revisión, presentación y enteramiento.
+- Número de declaración, acuse, pagos parciales, referencias y soportes.
+- Persistencia SQLite, validación de integridad, auditoría y respaldo JSON.
+- Bloqueo de revisión y presentación cuando aparecen comprobantes posteriores no incluidos en el snapshot o fechas históricas pendientes.
 
 Límites:
-- No genera todavía un TXT quincenal certificado por la especificación vigente.
-- No presenta declaraciones automáticamente.
-- No calcula vencimientos ni calendarios hábiles sin fuente oficial.
-- No contabiliza automáticamente el pago ni concilia movimientos bancarios.
-- No resuelve rectificaciones de declaraciones presentadas.
-- No certifica cumplimiento fiscal.
+- No calcula vencimientos legales; el usuario documenta la fecha y la fuente. La aplicación valida el formato de URL y dominio, pero no consulta su contenido.
+- No genera un TXT quincenal certificado por la especificación vigente.
+- No presenta declaraciones automáticamente ante SENIAT.
+- No modifica comprobantes, compras, asientos, tesorería ni cierres históricos.
+- No rectifica declaraciones presentadas.
+- No resuelve aún el circuito normativo completo de múltiples pagos parciales posteriores de una factura ni los comprobantes adicionales que correspondan.
+- No acredita aceptación del Portal Fiscal ni cumplimiento fiscal certificado.
+
 
 ### 7.4 Pendientes que permanecen abiertos
 
@@ -216,4 +227,4 @@ Límites:
 - Conciliación integral libro ↔ comprobante ↔ declaración ↔ enteramiento ↔ asiento.
 - Auditoría y validación profesional fiscal independiente.
 
-**Conclusión:** #57 y #58 corrigen defectos concretos, pero no cierran por sí solas el Bloque 4 ni demuestran aceptación SENIAT. #59 permanece en desarrollo hasta superar revisión y CI.
+**Conclusión:** #57, #58 y #59 están integradas en `main` y corrigen defectos concretos. El Bloque 4 sigue abierto: persisten pendientes normativos, especificación vigente del Portal Fiscal, elegibilidad de agentes/proveedores, contenido/plazos del comprobante, rectificaciones y conciliación fiscal integral. La fusión de #59 no demuestra aceptación SENIAT ni cumplimiento certificado.
