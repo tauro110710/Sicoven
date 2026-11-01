@@ -1970,3 +1970,91 @@ test('SQLite accepts a supplier debit note only as an independent, balanced, lin
     }]
   }), /ND tipo 02/);
 });
+
+
+test('SQLite accepts applying a supplier direct advance to a separate type-02 debit-note payable', () => {
+  const { prior: basePrior } = supplierCreditFixture();
+  const original = basePrior.purchases[0];
+  const originalEntry = basePrior.journalEntries.find(entry => entry.id === original.journalEntryId);
+  const accounts = [
+    { code: '1.1.2.03', name: 'Anticipos a proveedores', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.1.01', name: 'Caja principal', type: 'ACTIVO', isMovement: true },
+    { code: '2.1.1.01', name: 'Proveedores', type: 'PASIVO', isMovement: true },
+    { code: '6.1.1.01', name: 'Gastos', type: 'GASTOS', isMovement: true }
+  ];
+  const debitNote = {
+    id: 'debit-note-advance-target', companyId: 'company-1', opNumber: 2,
+    invoiceDate: '2026-10-10', accountCreditDate: '2026-10-10',
+    supplierRif: original.supplierRif, supplierName: original.supplierName,
+    invoiceNumber: 'ND-ADV-1', debitNoteNumber: 'ND-ADV-1', controlNumber: 'CTRL-ND-ADV-1',
+    affectedInvoiceNumber: original.invoiceNumber, documentType: '02',
+    originalPurchaseId: original.id,
+    totalAmountBs: 100, taxableBaseBs: 100, exemptAmountBs: 0, taxRate: 0,
+    vatAmountBs: 0, retentionRate: 0, vatWithheldBs: 0,
+    bcvRate: 100, totalAmountUsd: 1, taxableBaseUsd: 1, vatAmountUsd: 0, vatWithheldUsd: 0,
+    paymentTerm: 'CREDITO', journalEntryId: 'nd-advance-target-journal',
+    notes: 'Diferencia de precio documentada · Revisión fiscal manual: verificada · Sin retenciones ni IGTF: confirmado.'
+  };
+  const debitNoteJournal = {
+    id: 'nd-advance-target-journal', companyId: 'company-1', entryNumber: 2,
+    date: '2026-10-10', description: 'ND proveedor ND-ADV-1',
+    type: 'AJUSTE', bcvRate: 100, referenceDoc: 'ND-PROV-ND-ADV-1',
+    items: [
+      { accountCode: '6.1.1.01', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '2.1.1.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+    ],
+    createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const directJournal = {
+    id: 'nd-target-direct-advance-journal', companyId: 'company-1', entryNumber: 3,
+    date: '2026-10-10', description: 'Anticipo directo', type: 'ANTICIPO_PROVEEDOR',
+    bcvRate: 100, referenceDoc: 'DIRECT-ND-1',
+    items: [
+      { accountCode: '1.1.2.03', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+    ], createdAt: '2026-10-10T11:00:00.000Z'
+  };
+  const applicationJournal = {
+    id: 'nd-target-advance-application-journal', companyId: 'company-1', entryNumber: 4,
+    date: '2026-10-11', description: 'Aplicación anticipo a ND proveedor',
+    type: 'ANTICIPO_PROVEEDOR', bcvRate: 100, referenceDoc: debitNote.invoiceNumber,
+    items: [
+      { accountCode: '2.1.1.01', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+    ], createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const directAdvance = {
+    id: 'nd-target-direct-advance', companyId: 'company-1',
+    supplierRif: original.supplierRif, supplierName: original.supplierName,
+    date: '2026-10-10', amountUsd: 1, bookValueBs: 100, bcvRate: 100,
+    treasuryAccountCode: '1.1.1.01', paymentCurrency: 'BS', paidAmount: 100,
+    reference: 'DIRECT-ND-1', support: 'REC-DIRECT-ND-1',
+    journalEntryId: directJournal.id, createdAt: '2026-10-10T11:00:00.000Z'
+  };
+  const settlement = {
+    id: 'nd-target-advance-application', companyId: 'company-1',
+    supplierRif: original.supplierRif, supplierName: original.supplierName,
+    sourceCreditNoteIds: [], sourceCreditNoteAllocations: [],
+    sourceDirectAdvanceIds: [directAdvance.id],
+    sourceDirectAdvanceAllocations: [{ directAdvanceId: directAdvance.id, amountUsd: 1, bookValueBs: 100 }],
+    kind: 'APPLIED_TO_PURCHASE', date: '2026-10-11',
+    amountUsd: 1, amountBs: 100, advanceBookValueBs: 100, bcvRate: 100,
+    targetPurchaseId: debitNote.id, journalEntryId: applicationJournal.id,
+    reference: 'APPLY-ND-1', createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const previous = {
+    ...basePrior,
+    purchases: [...basePrior.purchases, debitNote],
+    journalEntries: [...basePrior.journalEntries, debitNoteJournal],
+    accounts,
+    supplierDirectAdvances: [],
+    supplierAdvanceSettlements: []
+  };
+  const next = {
+    ...previous,
+    journalEntries: [...previous.journalEntries, directJournal, applicationJournal],
+    supplierDirectAdvances: [directAdvance],
+    supplierAdvanceSettlements: [settlement]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
+});
