@@ -25,6 +25,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [article3Exclusion, setArticle3Exclusion] = useState<IvaArticle3Exclusion | ''>('');
   const [article2Transaction, setArticle2Transaction] = useState(false);
   const [invoiceFormalDefect, setInvoiceFormalDefect] = useState(false);
+  const [vatNotDiscriminated, setVatNotDiscriminated] = useState(false);
+  const [taxableGrossBs, setTaxableGrossBs] = useState<number>(0);
   const [portalRetentionRate, setPortalRetentionRate] = useState<'' | '75' | '100'>('');
   const [invoiceNumber, setInvoiceNumber] = useState<string>('');
   const [controlNumber, setControlNumber] = useState<string>('');
@@ -61,12 +63,13 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   if (!isOpen) return null;
 
   // Real-time calculations
-  const vatAmountBs = Math.round(taxableBaseBs * (taxRate / 100) * 100) / 100;
+  const effectiveTaxableBaseBs = vatNotDiscriminated && taxRate > 0 ? Math.round((taxableGrossBs / (1 + taxRate / 100) + Number.EPSILON) * 100) / 100 : taxableBaseBs;
+  const vatAmountBs = Math.round(effectiveTaxableBaseBs * (taxRate / 100) * 100) / 100;
   const supplierRifKeyForProfile = String(supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
   const supplierProfilePurchase = purchases.filter(item => item.companyId === currentCompany.id && String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierRifKeyForProfile && item.supplierTaxStatus).sort((a, b) => b.opNumber - a.opNumber)[0];
   const resolvedSupplierTaxStatus: IvaSupplierTaxStatus = supplierTaxStatus === 'AUTO' ? (supplierProfilePurchase?.supplierTaxStatus || 'UNKNOWN') : supplierTaxStatus;
   const buyerAgentStatus = currentCompany.ivaRetentionAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED' ? 'SPECIAL_DESIGNATED' : currentCompany.ivaRetentionAgentBasis === 'ARTICLE_2_METALS' ? 'ARTICLE_2_BUYER' : currentCompany.ivaRetentionAgentBasis === 'NOT_AGENT' ? 'NOT_AGENT' : 'UNKNOWN';
-  const ivaEligibility = evaluateIvaRetentionEligibility({ buyerAgentStatus, supplierTaxStatus: resolvedSupplierTaxStatus, article2Transaction, article3Exclusions: article3Exclusion ? [article3Exclusion] : [], vatAmount: vatAmountBs, taxRate, invoiceFormalDefect, portalRetentionRate: portalRetentionRate === '' ? null : Number(portalRetentionRate) as 75 | 100 });
+  const ivaEligibility = evaluateIvaRetentionEligibility({ buyerAgentStatus, supplierTaxStatus: resolvedSupplierTaxStatus, article2Transaction, article3Exclusions: article3Exclusion ? [article3Exclusion] : [], vatAmount: vatAmountBs, ...(vatNotDiscriminated ? { vatNotDiscriminated: true, taxableAmountIncludingVat: taxableGrossBs } : {}), taxRate, invoiceFormalDefect, portalRetentionRate: portalRetentionRate === '' ? null : Number(portalRetentionRate) as 75 | 100 });
   const retentionRate = ivaEligibility.retentionRate;
   const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs) * 100) / 100;
   const igtfCalculation = calculatePurchaseIgtf(invoiceSubtotalBs, paymentMethod, applyIgtf, 3, paymentTerm);
@@ -232,7 +235,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       retentionRate,
       vatWithheldBs,
       supplierTaxStatus: resolvedSupplierTaxStatus,
-      ivaRetentionDecision: { buyerAgentStatus, supplierTaxStatus: resolvedSupplierTaxStatus, article2Transaction, article3Exclusions: article3Exclusion ? [article3Exclusion] : [], invoiceFormalDefect, ...(portalRetentionRate !== '' ? { portalRetentionRate: Number(portalRetentionRate) as 75 | 100 } : {}), decisionStatus: ivaEligibility.status, decisionReason: ivaEligibility.reason, legalBasis: ivaEligibility.legalBasis, evaluatedAt: new Date().toISOString() },
+      ivaRetentionDecision: { buyerAgentStatus, supplierTaxStatus: resolvedSupplierTaxStatus, article2Transaction, article3Exclusions: article3Exclusion ? [article3Exclusion] : [], vatNotDiscriminated, taxableAmountIncludingVatBs: vatNotDiscriminated ? taxableGrossBs : undefined, invoiceFormalDefect, ...(portalRetentionRate !== '' ? { portalRetentionRate: Number(portalRetentionRate) as 75 | 100 } : {}), decisionStatus: ivaEligibility.status, decisionReason: ivaEligibility.reason, legalBasis: ivaEligibility.legalBasis, evaluatedAt: new Date().toISOString() },
       islrConceptCode: applyIslr ? selectedConcept?.code : undefined,
       islrConceptName: applyIslr ? selectedConcept?.description : undefined,
       islrRate: applyIslr ? islrRate : 0,
@@ -319,6 +322,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
             <span className="font-bold text-slate-800 uppercase tracking-wider block">
               1. Datos del Proveedor y Factura
             </span>
+            <label className="flex items-center gap-2 text-slate-700 font-medium"><input type="checkbox" checked={vatNotDiscriminated} onChange={e => { const checked = e.target.checked; setVatNotDiscriminated(checked); if (checked) setTaxableGrossBs(Math.round((taxableBaseBs + vatAmountBs) * 100) / 100); }} /> La factura no discrimina el IVA (art. 5.1)</label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">RIF Proveedor *</label>
@@ -437,15 +441,15 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Base Imponible (Bs.) *</label>
+                <label className="block font-semibold text-slate-700 mb-1">{vatNotDiscriminated ? 'Precio gravado con IVA incluido (Bs.) *' : 'Base Imponible (Bs.) *'}</label>
                 <input
                   type="number"
                   step="0.01"
                   min="0"
                   required
                   placeholder="0.00"
-                  value={taxableBaseBs || ''}
-                  onChange={e => setTaxableBaseBs(parseFloat(e.target.value) || 0)}
+                  value={(vatNotDiscriminated ? taxableGrossBs : taxableBaseBs) || ''}
+                  onChange={e => { const value = parseFloat(e.target.value) || 0; if (vatNotDiscriminated) { setTaxableGrossBs(value); setTaxableBaseBs(taxRate > 0 ? Math.round((value / (1 + taxRate / 100) + Number.EPSILON) * 100) / 100 : 0); } else setTaxableBaseBs(value); }}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
                 <span className="text-[11px] text-slate-500 font-mono">
