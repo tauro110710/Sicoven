@@ -36,6 +36,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
   const [taxableBase, setTaxableBase] = useState('');
   const [exemptAmount, setExemptAmount] = useState('');
   const [vatAmount, setVatAmount] = useState('');
+  const [taxRate, setTaxRate] = useState('');
   const [bcvRate, setBcvRate] = useState(String(currentCompany.bcvRate || purchase.bcvRate || ''));
   const [fiscalBreakdownReviewed, setFiscalBreakdownReviewed] = useState(false);
   const [withholdingNotApplicableConfirmed, setWithholdingNotApplicableConfirmed] = useState(false);
@@ -68,6 +69,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
   const taxableBaseBs = Number(taxableBase || 0);
   const exemptAmountBs = Number(exemptAmount || 0);
   const vatAmountBs = Number(vatAmount || 0);
+  const taxRateValue = Number(taxRate);
   const totalAmountBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs + Number.EPSILON) * 100) / 100;
   const isInventoryCause = economicCause === 'ADDITIONAL_GOODS_RECEIVED' || economicCause === 'INVENTORY_COST_ADJUSTMENT';
 
@@ -96,7 +98,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
       setError('Seleccione las cuentas contables y una tasa BCV válida.');
       return;
     }
-    if ([taxableBaseBs, exemptAmountBs, vatAmountBs].some(value => !Number.isFinite(value) || value < 0) || totalAmountBs <= 0) {
+    if ([taxableBaseBs, exemptAmountBs, vatAmountBs, taxRateValue].some(value => !Number.isFinite(value) || value < 0) || taxRateValue > 100 || !taxRate.trim() || totalAmountBs <= 0) {
       setError('Los importes deben ser positivos o cero y el total de la ND debe ser mayor que cero.');
       return;
     }
@@ -124,7 +126,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
         classificationNote: classificationNote.trim() || undefined,
         debitAccountCode, payableAccountCode: payableAccountCode || suggestedPayableCode,
         vatAccountCode: vatAccountCode || undefined,
-        taxableBaseBs, exemptAmountBs, vatAmountBs, totalAmountBs,
+        taxableBaseBs, exemptAmountBs, vatAmountBs, totalAmountBs, taxRate: taxRateValue,
         bcvRate: Number(bcvRate), fiscalBreakdownReviewed,
         withholdingNotApplicableConfirmed, igtfNotApplicableConfirmed,
         fiscalReviewNote: fiscalReviewNote.trim()
@@ -173,11 +175,11 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
           <label className="block text-xs font-semibold text-slate-700">Justificación económica<textarea required minLength={10} value={reason} onChange={e=>setReason(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Explique el origen económico del cargo." /></label>
           {economicCause === 'OTHER' && <label className="block text-xs font-semibold text-slate-700">Clasificación de la causa<textarea required minLength={10} value={classificationNote} onChange={e=>setClassificationNote(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>}
           <div>
-            <h3 className="mb-2 text-sm font-bold text-slate-900">Desglose manual del documento</h3>
+            <h3 className="mb-2 text-sm font-bold text-slate-900">Desglose manual del documento</h3><p className="mb-2 text-xs text-slate-500">Este flujo admite una sola alícuota de IVA por ND. Si el documento contiene alícuotas mixtas, no lo registre aquí.</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <label className="text-xs font-semibold text-slate-700">Base imponible Bs.<input required type="number" min="0" step="0.01" value={taxableBase} onChange={e=>setTaxableBase(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
               <label className="text-xs font-semibold text-slate-700">Exento Bs.<input required type="number" min="0" step="0.01" value={exemptAmount} onChange={e=>setExemptAmount(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-              <label className="text-xs font-semibold text-slate-700">IVA del documento Bs.<input required type="number" min="0" step="0.01" value={vatAmount} onChange={e=>setVatAmount(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+              <label className="text-xs font-semibold text-slate-700">Alícuota única IVA %<input required type="number" min="0" max="100" step="0.01" value={taxRate} onChange={e=>setTaxRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>\n              <label className="text-xs font-semibold text-slate-700">IVA del documento Bs.<input required type="number" min="0" step="0.01" value={vatAmount} onChange={e=>setVatAmount(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
               <div className="rounded-lg border bg-slate-50 p-3"><p className="text-xs text-slate-500">Total calculado Bs.</p><p className="mt-1 text-lg font-bold text-slate-900">{money(totalAmountBs)}</p></div>
             </div>
             {vatAmountBs > 0 && <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
