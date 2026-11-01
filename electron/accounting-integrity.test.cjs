@@ -1575,3 +1575,141 @@ test('SQLite permits closing an existing historical period without treating prio
   const next = { ...prior, companies: [{ id: 'company-1', name: 'Empresa', closedThroughDate: '2026-10-01' }] };
   assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
 });
+
+
+function vatDeclarationFixture(overrides = {}) {
+  const voucher = {
+    id: 'vat-1', companyId: 'company-1', voucherNumber: '20261000000001',
+    date: '2026-10-03', period: '202610', fiscalDate: '2026-10-03',
+    supplierRif: 'J-12345678-9', supplierName: 'Proveedor Uno',
+    taxableBaseBs: 1000, vatAmountBs: 160, vatWithheldBs: 120,
+    requiresFiscalCorrection: false
+  };
+  const declaration = {
+    id: 'vat-decl-1', companyId: 'company-1', period: '202610',
+    window: 'FIRST_HALF', startDate: '2026-10-01', endDate: '2026-10-15',
+    zeroOperations: false, voucherIds: ['vat-1'],
+    voucherSnapshots: [{
+      voucherId: 'vat-1', voucherNumber: voucher.voucherNumber,
+      supplierRif: voucher.supplierRif, supplierName: voucher.supplierName,
+      fiscalDate: voucher.fiscalDate, dateBasis: 'FISCAL_EVENT',
+      taxableBaseBs: 1000, vatAmountBs: 160, vatWithheldBs: 120,
+      requiresFiscalCorrection: false
+    }],
+    totalTaxableBaseBs: 1000, totalVatAmountBs: 160, totalWithheldBs: 120,
+    createdAt: '2026-10-16T10:00:00.000Z'
+  };
+  return {
+    ...emptyState(),
+    companies: [{ id: 'company-1', name: 'Empresa Uno' }],
+    vatVouchers: [voucher],
+    vatWithholdingDeclarations: [declaration],
+    vatWithholdingDeclarationEvents: [],
+    ...overrides
+  };
+}
+
+test('SQLite accepts an immutable VAT withholding declaration snapshot with exact voucher totals', () => {
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), vatDeclarationFixture()));
+});
+
+test('SQLite rejects a VAT declaration with a duplicate period window or duplicate voucher allocation', () => {
+  const state = vatDeclarationFixture();
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...state,
+    vatWithholdingDeclarations: [
+      ...state.vatWithholdingDeclarations,
+      { ...state.vatWithholdingDeclarations[0], id: 'vat-decl-2' }
+    ]
+  }), /misma empresa y quincena/);
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...state,
+    vatWithholdingDeclarations: [
+      state.vatWithholdingDeclarations[0],
+      { ...state.vatWithholdingDeclarations[0], id: 'vat-decl-2', window: 'SECOND_HALF',
+        startDate: '2026-10-16', endDate: '2026-10-31' }
+    ]
+  }), /fuera de la quincena|snapshot fiscal/);
+});
+
+test('SQLite rejects VAT declaration snapshots whose voucher, period or totals do not reconcile', () => {
+  const state = vatDeclarationFixture();
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...state,
+    vatWithholdingDeclarations: [{ ...state.vatWithholdingDeclarations[0], totalWithheldBs: 999 }]
+  }), /no concilian/);
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...state,
+    vatWithholdingDeclarations: [{ ...state.vatWithholdingDeclarations[0],
+      voucherSnapshots: [{ ...state.vatWithholdingDeclarations[0].voucherSnapshots[0], fiscalDate: '2026-10-20' }]
+    }]
+  }), /fuera de la quincena/);
+});
+
+test('SQLite enforces review, filing receipt and supported payment event order for VAT declarations', () => {
+  const state = vatDeclarationFixture();
+  const declaration = state.vatWithholdingDeclarations[0];
+  const reviewed = { id: 'vat-event-1', declarationId: declaration.id, eventType: 'REVIEWED',
+    occurredAt: '2026-10-16', recordedAt: '2026-10-16T11:00:00.000Z' };
+  const filed = { id: 'vat-event-2', declarationId: declaration.id, eventType: 'FILED',
+    occurredAt: '2026-10-17', recordedAt: '2026-10-17T11:00:00.000Z',
+    declarationNumber: 'DECL-001', receiptReference: 'ACUSE-001' };
+  const payment = { id: 'vat-event-3', declarationId: declaration.id, eventType: 'PAYMENT',
+    occurredAt: '2026-10-18', recordedAt: '2026-10-18T11:00:00.000Z',
+    amountBs: 120, paymentReference: 'TRX-001', evidenceReference: 'REC-001' };
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...state, vatWithholdingDeclarationEvents: [filed]
+  }), /presentación/);
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...state, vatWithholdingDeclarationEvents: [reviewed, payment]
+  }), /enteramiento/);
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), {
+    ...state, vatWithholdingDeclarationEvents: [reviewed, filed, payment]
+  }));
+});
+
+test('SQLite blocks review of VAT declarations with pending fiscal corrections or unacknowledged legacy dates', () => {
+  const corrected = vatDeclarationFixture();
+  corrected.vatVouchers[0].requiresFiscalCorrection = true;
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...corrected,
+    vatWithholdingDeclarationEvents: [{
+      id: 'vat-review', declarationId: 'vat-decl-1', eventType: 'REVIEWED',
+      occurredAt: '2026-10-16', recordedAt: '2026-10-16T10:00:00.000Z'
+    }]
+  }), /correcciones pendientes/);
+
+  const legacy = vatDeclarationFixture();
+  legacy.vatVouchers[0].fiscalDate = undefined;
+  legacy.vatVouchers[0].date = '2026-10-03';
+  legacy.vatWithholdingDeclarations[0].voucherSnapshots[0].dateBasis = 'LEGACY_DOCUMENT_DATE';
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...legacy,
+    vatWithholdingDeclarationEvents: [{
+      id: 'vat-review', declarationId: 'vat-decl-1', eventType: 'REVIEWED',
+      occurredAt: '2026-10-16', recordedAt: '2026-10-16T10:00:00.000Z'
+    }]
+  }), /fechas históricas no verificadas/);
+});
+
+test('SQLite requires a SENIAT official source for recorded declaration due dates', () => {
+  const state = vatDeclarationFixture();
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...state,
+    vatWithholdingDeclarationEvents: [{
+      id: 'vat-due', declarationId: 'vat-decl-1', eventType: 'DUE_DATE_SET',
+      occurredAt: '2026-10-16', recordedAt: '2026-10-16T10:00:00.000Z',
+      dueDate: '2026-10-20', officialSourceTitle: 'Calendario',
+      officialReference: 'Publicación', officialSourceUrl: 'https://example.com/calendar'
+    }]
+  }), /vencimiento sin respaldo oficial/);
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), {
+    ...state,
+    vatWithholdingDeclarationEvents: [{
+      id: 'vat-due', declarationId: 'vat-decl-1', eventType: 'DUE_DATE_SET',
+      occurredAt: '2026-10-16', recordedAt: '2026-10-16T10:00:00.000Z',
+      dueDate: '2026-10-20', officialSourceTitle: 'Calendario oficial SENIAT',
+      officialReference: 'Publicación oficial', officialSourceUrl: 'https://www.seniat.gob.ve/calendario'
+    }]
+  }));
+});
