@@ -87,18 +87,27 @@ function writeAtomic(file, value) {
   }
 }
 
+function lstatIfExists(file) {
+  try {
+    return fs.lstatSync(file);
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
 function readJournal(file) {
   const directory = path.dirname(file);
   assertSafeDirectory(directory);
-  if (!fs.existsSync(file)) return null;
-  const stat = fs.lstatSync(file);
+  const stat = lstatIfExists(file);
+  if (!stat) return null;
   if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('El journal no puede ser un enlace ni un elemento especial.');
   if (stat.size > MAX_JOURNAL_BYTES) throw new Error('El journal excede el tamaño máximo permitido.');
   return validateJournal(JSON.parse(fs.readFileSync(file, 'utf8')));
 }
 
 function createJournal({ journalPath, sourceDatabaseSha256, stagedDatabaseSha256 }) {
-  if (fs.existsSync(journalPath)) throw new Error('Ya existe una operación de restauración pendiente.');
+  if (lstatIfExists(journalPath)) throw new Error('Ya existe una operación de restauración pendiente.');
   const now = new Date().toISOString();
   const journal = {
     format: JOURNAL_FORMAT,
