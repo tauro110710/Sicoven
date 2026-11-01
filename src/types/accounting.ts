@@ -353,11 +353,18 @@ export interface VatDeclarationVoucherSnapshot {
   supplierRif: string;
   supplierName: string;
   fiscalDate: string;
-  dateBasis: 'FISCAL_EVENT' | 'LEGACY_DOCUMENT_DATE';
+  dateBasis: 'FISCAL_EVENT' | 'MANUALLY_VERIFIED_LEGACY_DATE' | 'LEGACY_DOCUMENT_DATE';
+  dateVerificationNote?: string;
   taxableBaseBs: number;
   vatAmountBs: number;
   vatWithheldBs: number;
   requiresFiscalCorrection: boolean;
+}
+
+export interface VatLegacyFiscalDateAssignment {
+  voucherId: string;
+  confirmedFiscalDate: string;
+  note: string;
 }
 
 export interface VatWithholdingDeclaration {
@@ -370,6 +377,7 @@ export interface VatWithholdingDeclaration {
   zeroOperations: boolean;
   voucherIds: string[];
   voucherSnapshots: VatDeclarationVoucherSnapshot[];
+  legacyDateAssignments: VatLegacyFiscalDateAssignment[];
   totalTaxableBaseBs: number;
   totalVatAmountBs: number;
   totalWithheldBs: number;
