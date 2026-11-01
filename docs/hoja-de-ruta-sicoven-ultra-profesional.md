@@ -410,3 +410,35 @@ Los bloques 1 y 2 tienen implementación funcional amplia, pero conservan valida
 **Estado:** criterio arquitectónico documentado y auditoría inicial completada. La interfaz de carga opcional, almacenamiento local, metadatos, estados documentales, informes y pruebas de seguridad siguen pendientes de implementación. No se declara implementada una gestión documental que todavía no existe.
 
 **Aplicación transversal:** módulos 1, 4, 5, 6, 7, 8, 9 y 10, según el tipo de operación. La ausencia de archivo nunca será por sí sola un motivo para impedir un asiento válido.
+
+
+## RT-01 — SEGUNDA FASE: MOTOR DOCUMENTAL LOCAL
+
+**Estado:** motor local e IPC implementados en rama de trabajo; validación automatizada y revisión de CI pendientes; interfaz de usuario pendiente.
+
+Implementación añadida:
+- Tablas SQLite `supporting_documents` y `supporting_document_events`.
+- Metadatos asociados a empresa y operación contable existente.
+- Almacenamiento físico bajo el directorio privado de datos de SICOVEN.
+- Selector nativo de archivos; el renderer no proporciona rutas arbitrarias.
+- Formatos permitidos: PDF, JPG/JPEG, PNG y WEBP.
+- Límite por archivo: 20 MB.
+- Verificación de firma real del archivo frente a su extensión.
+- SHA-256 calculado por SICOVEN y verificado al abrir.
+- Registros documentales y eventos append-only.
+- Estados: adjunto sin revisar, verificado, observado y sustituido.
+- Sustitución mediante un nuevo documento, conservando el anterior.
+- Registro de incorporación, revisión y acceso en auditoría.
+- Autenticación y licencia requeridas en cada operación IPC.
+
+Pruebas automatizadas añadidas:
+- Adjuntar soporte después de que la compra ya exista.
+- Rechazo de extensión/contenido no coincidente.
+- Rechazo de empresa u operación inexistente.
+- Verificación SHA-256.
+- Conservación del estado de revisión al abrir.
+- Sustitución sin borrar historial.
+- Protección append-only.
+- Rechazo de revisión de documentos sustituidos.
+
+**Límite de esta fase:** todavía no se ha integrado un panel visual en Compras, Ventas, Libro Diario y consultas históricas. No se declara terminada la experiencia de gestión documental ni la validación de CI hasta que las pruebas se ejecuten y aprueben.
