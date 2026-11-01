@@ -35,8 +35,11 @@ export const RetencionesIvaView: React.FC = () => {
     setSearchTerm('');
   }, [currentCompany.id]);
   const effectivePeriod = availablePeriods.includes(selectedPeriod) ? selectedPeriod : (availablePeriods[0] || selectedPeriod);
-  const filteredVouchers = companyVouchers
+  // La búsqueda solo filtra la tabla; nunca debe alterar la población fiscal exportada.
+  const periodVouchers = companyVouchers
     .filter(v => v.period === effectivePeriod)
+    .sort((a, b) => b.voucherNumber.localeCompare(a.voucherNumber));
+  const filteredVouchers = periodVouchers
     .filter(v => {
       if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase();
@@ -51,7 +54,7 @@ export const RetencionesIvaView: React.FC = () => {
     })
     .sort((a, b) => b.voucherNumber.localeCompare(a.voucherNumber));
 
-  const hasPendingFiscalCorrection = filteredVouchers.some(voucher => voucher.requiresFiscalCorrection);
+  const hasPendingFiscalCorrection = periodVouchers.some(voucher => voucher.requiresFiscalCorrection);
   const totalRetenidoBs = filteredVouchers.reduce((s, v) => s + v.vatWithheldBs, 0);
   const totalRetenidoUsd = filteredVouchers.reduce((s, v) => s + v.vatWithheldUsd, 0);
   const totalBaseBs = filteredVouchers.reduce((s, v) => s + v.taxableBaseBs, 0);
@@ -100,18 +103,18 @@ export const RetencionesIvaView: React.FC = () => {
         ? 'No agente de retención'
         : 'Condición de agente por confirmar';
 
-  const generatedTxt = generateSeniatIvaTxt(currentCompany, filteredVouchers);
+  const generatedTxt = generateSeniatIvaTxt(currentCompany, periodVouchers);
 
   const handleDownloadTxt = () => {
     if (hasPendingFiscalCorrection) {
       alert('Exportación bloqueada: hay comprobantes afectados por notas de crédito o reversiones. Registre y concilie la rectificación fiscal antes de generar el archivo SENIAT.');
       return;
     }
-    if (filteredVouchers.length === 0) {
+    if (periodVouchers.length === 0) {
       alert('No hay comprobantes de retención para exportar.');
       return;
     }
-    if (filteredVouchers.some(voucher => voucher.period !== effectivePeriod)) {
+    if (periodVouchers.some(voucher => voucher.period !== effectivePeriod)) {
       alert('La exportación debe contener un solo período fiscal. Seleccione el período que desea generar.');
       return;
     }
@@ -212,7 +215,7 @@ export const RetencionesIvaView: React.FC = () => {
             </button>
             <button
               onClick={handleDownloadTxt}
-              disabled={filteredVouchers.length === 0 || hasPendingFiscalCorrection}
+              disabled={periodVouchers.length === 0 || hasPendingFiscalCorrection}
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-40 rounded-xl transition shadow cursor-pointer"
             >
               <Download className="w-4 h-4" />
