@@ -12,7 +12,7 @@ const STATES = new Set([
 ]);
 const TRANSITIONS = {
   prepared: new Set(['rollback_ready', 'rolled_back']),
-  rollback_ready: new Set(['installing', 'rolled_back']),
+  rollback_ready: new Set(['installing', 'rolling_back', 'rolled_back']),
   installing: new Set(['installed', 'rolling_back']),
   installed: new Set(['committed', 'rolling_back']),
   committed: new Set(),
