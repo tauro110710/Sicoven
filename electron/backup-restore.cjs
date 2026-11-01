@@ -47,7 +47,9 @@ function validateRelativeDocumentPath(value) {
     throw new Error('El manifiesto contiene una ruta documental no válida.');
   }
   const parts = value.split('/');
-  if (parts.some(part => !part || part === '.' || part === '..') ||
+  const reserved = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\\..*)?$/i;
+  if (parts.some(part => !part || part === '.' || part === '..' ||
+      /[<>:"|?*\\x00-\\x1f]/.test(part) || /[. ]$/.test(part) || reserved.test(part)) ||
       path.posix.normalize(value) !== value) {
     throw new Error('El manifiesto contiene una ruta documental no segura.');
   }
@@ -56,6 +58,7 @@ function validateRelativeDocumentPath(value) {
 
 function collectFiles(root, relative = '') {
   if (!fs.existsSync(root)) return [];
+  assertDirectory(root, 'La carpeta documental');
   return fs.readdirSync(root, { withFileTypes: true })
     .sort((a, b) => a.name.localeCompare(b.name))
     .flatMap(entry => {
@@ -71,6 +74,7 @@ function collectFiles(root, relative = '') {
 
 function collectDirectories(root, relative = '') {
   if (!fs.existsSync(root)) return [];
+  assertDirectory(root, 'La carpeta documental');
   return fs.readdirSync(root, { withFileTypes: true })
     .sort((a, b) => a.name.localeCompare(b.name))
     .flatMap(entry => {
@@ -209,7 +213,16 @@ function registerBackupIpc({ ipcMain, db, licenseView, getActiveSession, dialog,
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const destination = path.join(selection.filePaths[0], 'SICOVEN-backup-' + stamp);
     const result = await createBackup({ db, userDataDir: app.getPath('userData'), destination });
-    db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('accounting_backup_created', JSON.stringify({ actor: actor.username, destination: path.basename(destination), databaseSha256: result.databaseSha256, documentCount: result.documentCount, createdAt: result.createdAt }));
+    try {
+      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('accounting_backup_created', JSON.stringify({ actor: actor.username, destination: path.basename(destination), databaseSha256: result.databaseSha256, documentCount: result.documentCount, createdAt: result.createdAt }));
+    } catch (auditError) {
+      try {
+        fs.rmSync(destination, { recursive: true, force: true });
+      } catch (cleanupError) {
+        throw new Error('Falló la auditoría y no se pudo retirar el paquete no auditado. Conserva la carpeta para revisión: ' + cleanupError.message);
+      }
+      throw new Error('No se pudo registrar la auditoría; el paquete no auditado fue retirado.');
+    }
     return result;
   });
 }
