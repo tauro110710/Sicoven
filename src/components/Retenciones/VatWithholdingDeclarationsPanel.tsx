@@ -27,7 +27,7 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
   const [windowKey, setWindowKey] = useState<'FIRST_HALF' | 'SECOND_HALF'>('FIRST_HALF');
   const [zeroOperations, setZeroOperations] = useState(false);
   const [legacyFiscalDates, setLegacyFiscalDates] = useState<Record<string, string>>({});
-  const [legacyDateNote, setLegacyDateNote] = useState('');
+  const [legacyFiscalNotes, setLegacyFiscalNotes] = useState<Record<string, string>>({});
   const [selectedId, setSelectedId] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -78,7 +78,7 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
         year: Number(yearText), month: Number(monthText),
         window: windowKey, zeroOperations,
         legacyFiscalDates: Object.fromEntries(unresolvedLegacyVouchers.map(voucher => [voucher.id, {
-          fiscalDate: legacyFiscalDates[voucher.id] || '', note: legacyDateNote
+          fiscalDate: legacyFiscalDates[voucher.id] || '', note: legacyFiscalNotes[voucher.id] || ''
         }]))
       });
       setSelectedId(declaration.id);
@@ -143,20 +143,24 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {unresolvedLegacyVouchers.map(voucher => (
-                <label key={voucher.id} className="text-xs font-semibold text-amber-950">
-                  {voucher.voucherNumber} · {voucher.supplierName}
-                  <input type="date" value={legacyFiscalDates[voucher.id] || ''}
-                    onChange={e => setLegacyFiscalDates(prev => ({ ...prev, [voucher.id]: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs" />
-                </label>
+                <div key={voucher.id} className="rounded-lg border border-amber-200 bg-white p-3">
+                  <p className="text-xs font-bold text-amber-950">{voucher.voucherNumber} · {voucher.supplierName}</p>
+                  <label className="mt-2 block text-xs font-semibold text-amber-950">
+                    Fecha efectiva de pago/abono
+                    <input type="date" value={legacyFiscalDates[voucher.id] || ''}
+                      onChange={e => setLegacyFiscalDates(prev => ({ ...prev, [voucher.id]: e.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs" />
+                  </label>
+                  <label className="mt-2 block text-xs font-semibold text-amber-950">
+                    Soporte original específico
+                    <textarea value={legacyFiscalNotes[voucher.id] || ''}
+                      onChange={e => setLegacyFiscalNotes(prev => ({ ...prev, [voucher.id]: e.target.value }))}
+                      rows={2} placeholder="Referencia bancaria, recibo o documento que acredita la fecha efectiva."
+                      className="mt-1 w-full rounded-lg border border-amber-300 bg-white p-2 text-xs font-normal" />
+                  </label>
+                </div>
               ))}
             </div>
-            <label className="block text-xs font-semibold text-amber-950">
-              Soporte / nota de verificación común
-              <textarea value={legacyDateNote} onChange={e => setLegacyDateNote(e.target.value)} rows={2}
-                placeholder="Indica qué soporte original se verificó para confirmar las fechas de pago o abono en cuenta."
-                className="mt-1 w-full rounded-lg border border-amber-300 bg-white p-2 text-xs font-normal" />
-            </label>
           </div>
         )}
         <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
