@@ -2317,25 +2317,28 @@ test('Basic accounting certification: persists independent company journals and 
 
 
 test('Basic accounting certification: validates hierarchical chart accounts and rejects invalid parents or classifications', () => {
-  const roots = [
+  let prior = [
     { code: '1', name: 'ACTIVO', type: 'ACTIVO', level: 1, isMovement: false },
     { code: '3', name: 'PATRIMONIO', type: 'PATRIMONIO', level: 1, isMovement: false }
   ];
-  const valid = [
-    ...roots,
+  const additions = [
     { code: '1.1', name: 'Activo corriente', type: 'ACTIVO', level: 2, isMovement: false, parentCode: '1' },
     { code: '1.1.1', name: 'Efectivo', type: 'ACTIVO', level: 3, isMovement: false, parentCode: '1.1' },
     { code: '1.1.1.01', name: 'Banco', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.1' },
     { code: '3.1', name: 'Capital', type: 'PATRIMONIO', level: 2, isMovement: false, parentCode: '3' },
     { code: '3.1.1', name: 'Capital social', type: 'PATRIMONIO', level: 3, isMovement: true, parentCode: '3.1' }
   ];
-  assert.doesNotThrow(() => validateNewAccountCatalogEntries(roots, valid));
-  assert.throws(() => validateNewAccountCatalogEntries(roots, [
-    ...valid,
+  for (const account of additions) {
+    const next = [...prior, account];
+    assert.doesNotThrow(() => validateNewAccountCatalogEntries(prior, next));
+    prior = next;
+  }
+  assert.throws(() => validateNewAccountCatalogEntries(prior, [
+    ...prior,
     { code: '1.1.1.02', name: 'Banco sin padre', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1' }
   ]), /cuenta nueva: debe tener una cuenta padre/);
-  assert.throws(() => validateNewAccountCatalogEntries(roots, [
-    ...valid,
+  assert.throws(() => validateNewAccountCatalogEntries(prior, [
+    ...prior,
     { code: '1.1.1.03', name: 'Cuenta mal clasificada', type: 'PASIVO', level: 4, isMovement: true, parentCode: '1.1.1' }
   ]), /clasificación no coincide con el código|cuenta nueva: debe tener/);
 });
