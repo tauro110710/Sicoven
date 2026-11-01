@@ -73,21 +73,24 @@ export const LibroComprasView: React.FC = () => {
     })
     .sort((a, b) => a.opNumber - b.opNumber);
 
-  // Totals for SENIAT Forma 30
+  // Los totales fiscales y la Forma 30 excluyen ND tipo 02 hasta validar su
+  // tratamiento tributario con fuente oficial vigente. Las ND siguen visibles
+  // en el Libro de Compras y en el auxiliar CxP como obligaciones independientes.
+  const fiscalPurchases = filteredPurchases.filter(p => p.documentType !== '02');
   const sign = (purchase: PurchaseRecord) => purchase.documentType === '03' ? -1 : 1;
   const signed = (purchase: PurchaseRecord, amount: number) => sign(purchase) * Number(amount || 0);
-  const totalComprasConIvaBs = filteredPurchases.reduce((s, p) => s + signed(p, p.totalAmountBs), 0);
-  const totalIgtfBs = filteredPurchases.reduce((s, p) => s + signed(p, p.igtfAmountBs || 0), 0);
-  const totalExentoBs = filteredPurchases.reduce((s, p) => s + signed(p, p.exemptAmountBs || 0), 0);
-  const totalBaseBs = filteredPurchases.reduce((s, p) => s + signed(p, p.taxableBaseBs), 0);
-  const totalIvaCreditoBs = filteredPurchases.reduce((s, p) => s + signed(p, p.vatAmountBs), 0);
-  const totalIvaRetenidoBs = filteredPurchases.reduce((s, p) => s + signed(p, p.vatWithheldBs || 0), 0);
-  const totalIslrRetenidoBs = filteredPurchases.reduce((s, p) => s + signed(p, p.islrWithheldBs || 0), 0);
+  const totalComprasConIvaBs = fiscalPurchases.reduce((s, p) => s + signed(p, p.totalAmountBs), 0);
+  const totalIgtfBs = fiscalPurchases.reduce((s, p) => s + signed(p, p.igtfAmountBs || 0), 0);
+  const totalExentoBs = fiscalPurchases.reduce((s, p) => s + signed(p, p.exemptAmountBs || 0), 0);
+  const totalBaseBs = fiscalPurchases.reduce((s, p) => s + signed(p, p.taxableBaseBs), 0);
+  const totalIvaCreditoBs = fiscalPurchases.reduce((s, p) => s + signed(p, p.vatAmountBs), 0);
+  const totalIvaRetenidoBs = fiscalPurchases.reduce((s, p) => s + signed(p, p.vatWithheldBs || 0), 0);
+  const totalIslrRetenidoBs = fiscalPurchases.reduce((s, p) => s + signed(p, p.islrWithheldBs || 0), 0);
 
-  const totalComprasConIvaUsd = filteredPurchases.reduce((s, p) => s + signed(p, p.totalAmountUsd), 0);
-  const totalBaseUsd = filteredPurchases.reduce((s, p) => s + signed(p, p.taxableBaseUsd), 0);
-  const totalIvaCreditoUsd = filteredPurchases.reduce((s, p) => s + signed(p, p.vatAmountUsd), 0);
-  const totalIvaRetenidoUsd = filteredPurchases.reduce((s, p) => s + signed(p, p.vatWithheldUsd || 0), 0);
+  const totalComprasConIvaUsd = fiscalPurchases.reduce((s, p) => s + signed(p, p.totalAmountUsd), 0);
+  const totalBaseUsd = fiscalPurchases.reduce((s, p) => s + signed(p, p.taxableBaseUsd), 0);
+  const totalIvaCreditoUsd = fiscalPurchases.reduce((s, p) => s + signed(p, p.vatAmountUsd), 0);
+  const totalIvaRetenidoUsd = fiscalPurchases.reduce((s, p) => s + signed(p, p.vatWithheldUsd || 0), 0);
 
   const handleDownloadTxt = () => {
     if (!/^\d{4}-\d{2}$/.test(monthFilter)) {
@@ -126,6 +129,7 @@ export const LibroComprasView: React.FC = () => {
             <span className="text-indigo-700 font-medium">Libro Fiscal Reglamentario</span>
           </div>
 
+          {filteredPurchases.some(p => p.documentType === '02') && <p className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Las ND tipo 02 se conservan en el libro y CxP, pero se excluyen provisionalmente de los totales fiscales SENIAT hasta validar su tratamiento con especificaciones oficiales vigentes.</p>}
           <div className="flex items-center gap-2.5">
             <button
               onClick={handleExportPdf}
