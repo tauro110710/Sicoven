@@ -29,9 +29,7 @@ function makeSeries(db, code = 'ESTIMACION_EXPERTO') {
     sourceTitle: 'Estudio sintético de prueba', issuer: 'Profesional de prueba',
     sourceReference: 'Fixture sintético; no representa índice real',
     sourcePublishedAt: '2025-02-01', fileName: 'fixture.csv',
-    sourceText: 'period;value;status
-2025-01;100;ESTIMATED
-2025-02;101;ESTIMATED'
+    sourceText: 'period;value;status\n2025-01;100;ESTIMATED\n2025-02;101;ESTIMATED'
   };
   return importInflationIndexSeries(db, input, admin);
 }
