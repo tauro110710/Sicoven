@@ -43,6 +43,10 @@ function resolveOriginalPurchase(state, purchase) {
   if (!linked || linked.documentType !== '01' || String(linked.companyId) !== String(purchase.companyId)) {
     throw new Error('La nota debe enlazarse con su factura original de la misma empresa antes de abrir la incidencia.');
   }
+  if (purchase.affectedInvoiceNumber &&
+      String(purchase.affectedInvoiceNumber).trim().toUpperCase() !== String(linked.invoiceNumber || '').trim().toUpperCase()) {
+    throw new Error('La factura enlazada no coincide con el número de documento afectado por la nota.');
+  }
   return linked;
 }
 function validateReferences(state, input, companyId, expectedDeclarationId = null) {
