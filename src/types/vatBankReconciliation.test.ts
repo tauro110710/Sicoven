@@ -111,6 +111,28 @@ test('does not mark a historical link reconciled when the linked debit amount no
   assert.equal(summary.pendingAmountBs, 60);
 });
 
+test('keeps historical payment links pending when the bank debit was later reconciled to a journal entry', () => {
+  const payment: VatWithholdingDeclarationEvent = {
+    id: 'payment-1', declarationId: declaration.id, eventType: 'PAYMENT',
+    occurredAt: '2026-10-19', recordedAt: '2026-10-19T10:00:00.000Z',
+    amountBs: 60, paymentReference: 'PAGO-1', bankStatementMovementIds: ['m-1']
+  };
+  const manuallyReconciled = buildVatBankReconciliationSummary(
+    declaration, [filed, payment],
+    [movement('m-1', 60, { isReconciled: true, reconciledWithJournalEntryId: 'entry-1' })],
+    [account]
+  );
+  assert.equal(manuallyReconciled.reconciledCount, 0);
+  assert.equal(manuallyReconciled.pendingCount, 1);
+  const historicallyLinked = buildVatBankReconciliationSummary(
+    declaration, [filed, payment],
+    [movement('m-1', 60, { reconciledJournalEntryIds: ['entry-1'] })],
+    [account]
+  );
+  assert.equal(historicallyLinked.reconciledCount, 0);
+  assert.equal(historicallyLinked.pendingCount, 1);
+});
+
 test('does not mark linked credits or USD-account movements reconciled', () => {
   const payment: VatWithholdingDeclarationEvent = {
     id: 'payment-1', declarationId: declaration.id, eventType: 'PAYMENT',
