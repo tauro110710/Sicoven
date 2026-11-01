@@ -39,7 +39,7 @@ const draft = (overrides: Partial<SupplierDebitNoteAccountingDraft> = {}): Suppl
   recognitionDate: '2026-10-10', economicCause: 'ADDITIONAL_EXPENSE',
   reason: 'Gasto adicional documentado por proveedor.',
   debitAccountCode: '6.1.1.01', vatAccountCode: '1.1.3.01', taxableBaseBs: 25, exemptAmountBs: 0,
-  vatAmountBs: 4, totalAmountBs: 29, bcvRate: 100,
+  vatAmountBs: 4, totalAmountBs: 29, taxRate: 16, bcvRate: 100,
   fiscalBreakdownReviewed: true, withholdingNotApplicableConfirmed: true,
   igtfNotApplicableConfirmed: true, fiscalReviewNote: 'Revisión documental y fiscal realizada por el responsable.', ...overrides
 });
@@ -126,5 +126,6 @@ test('rejects non-liability or non-movement payable accounts', () => {
 
 test('rejects nonconciliating totals and invalid rates', () => {
   assert.throws(() => build(draft({ totalAmountBs: 30 })), /no concilia/);
+  assert.throws(() => build(draft({ taxRate: 15 })), /una única alícuota explícita/);
   assert.throws(() => build(draft({ bcvRate: 0 })), /tasa o importes no válidos/);
 });

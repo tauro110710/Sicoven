@@ -58,6 +58,7 @@ import { calculateSupplierAdvanceFxSettlement } from '../types/supplierAdvanceFx
 import { allocateDirectSupplierAdvance, validateSupplierDirectAdvanceDraft, type SupplierDirectAdvance, type SupplierDirectAdvanceDraft } from '../types/supplierDirectAdvance';
 import { allocateSupplierAdvanceCreditNotes, validateSupplierAdvanceCreditNoteAllocations, validateSupplierAdvanceSettlementDraft, type SupplierAdvanceSettlement, type SupplierAdvanceSettlementDraft } from '../types/supplierAdvanceSettlement';
 import type { VatFiscalIncident, VatFiscalIncidentCreateInput, VatFiscalIncidentEventInput } from '../types/vatFiscalIncidents';
+import { buildSupplierDebitNoteAccountingPlan, type SupplierDebitNoteAccountingDraft } from '../types/supplierDebitNoteAccounting';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -118,6 +119,7 @@ interface AccountingContextType {
   purchases: PurchaseRecord[];
   addPurchase: (purchase: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>) => PurchaseRecord;
   addPurchaseCreditNote: (request: PurchaseCreditNoteRequest) => Promise<PurchaseRecord>;
+  addSupplierDebitNote: (draft: Omit<SupplierDebitNoteAccountingDraft, 'companyId' | 'closedThroughDate'>) => Promise<PurchaseRecord>;
   deletePurchase: (id: string) => void;
 
   // Ventas
@@ -1188,9 +1190,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       !item.isReversed && String(item.supplierRif || '').trim().toUpperCase() === rif)
       .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
     const target = draft.kind === 'APPLIED_TO_PURCHASE'
-      ? purchases.find(item => item.id === draft.targetPurchaseId && item.companyId === currentCompany.id && item.documentType === '01' && item.paymentTerm === 'CREDITO' && !item.isCancelled)
+      ? purchases.find(item => item.id === draft.targetPurchaseId && item.companyId === currentCompany.id && ['01', '02'].includes(item.documentType) && item.paymentTerm === 'CREDITO' && !item.isCancelled)
       : undefined;
-    if (draft.kind === 'APPLIED_TO_PURCHASE' && !target) throw new Error('La factura destino no existe, no es una factura original o está reversada.');
+    if (draft.kind === 'APPLIED_TO_PURCHASE' && !target) throw new Error('El documento destino no existe, no es una factura/ND de crédito o está reversado.');
     if (currentCompany.closedThroughDate && draft.date <= currentCompany.closedThroughDate) {
       throw new Error('El período está cerrado hasta ' + currentCompany.closedThroughDate + '. La liquidación no se registró.');
     }
@@ -1218,8 +1220,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const originalPurchaseEntry = target?.journalEntryId
         ? journalEntries.find(item => item.id === target.journalEntryId && item.companyId === currentCompany.id)
         : undefined;
-      if (!originalPurchaseEntry || originalPurchaseEntry.type !== 'COMPRA') {
-        throw new Error('La factura destino no tiene un asiento original de compra verificable; no se aplicó el anticipo.');
+      if (!originalPurchaseEntry || originalPurchaseEntry.type !== (target?.documentType === '02' ? 'AJUSTE' : 'COMPRA')) {
+        throw new Error('El documento destino no tiene un asiento verificable de factura o ND; no se aplicó el anticipo.');
       }
       const payableCandidates = originalPurchaseEntry.items.filter(line => {
         const account = accounts.find(item => item.code === line.accountCode && item.isMovement);
@@ -1473,8 +1475,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     settlementInFlightRef.current.add(operationKey);
     const cashCode = settlementBank?.accountCode || (draft.method === 'CASH_USD' ? '1.1.1.02' : '1.1.1.01');
     const cashAccount = accounts.find(account => account.code === cashCode && account.isMovement);
-    const controlCode = kind === 'SALE_COLLECTION' ? '1.1.2.01' : '2.1.1.01';
-    const controlAccount = accounts.find(account => account.code === controlCode && account.isMovement);
+    let controlCode = '1.1.2.01';
+    if (kind === 'PURCHASE_PAYMENT') {
+      const purchaseDocument = document as PurchaseRecord;
+      const sourceEntry = purchaseDocument.journalEntryId
+        ? journalEntries.find(entry => entry.id === purchaseDocument.journalEntryId && entry.companyId === currentCompany.id)
+        : undefined;
+      const expectedType = purchaseDocument.documentType === '02' ? 'AJUSTE' : 'COMPRA';
+      const payableCodes = [...new Set((sourceEntry?.items || [])
+        .filter(item => String(item.accountCode || '').startsWith('2.1.1.') && Number(item.creditBs || 0) > 0)
+        .map(item => String(item.accountCode)))];
+      if (!sourceEntry || sourceEntry.type !== expectedType || payableCodes.length !== 1) {
+        settlementInFlightRef.current.delete(operationKey);
+        throw new Error('El documento no conserva un asiento verificable con una única cuenta auxiliar de CxP. No se registró el pago.');
+      }
+      controlCode = payableCodes[0];
+    }
+    const controlAccount = accounts.find(account => account.code === controlCode &&
+      account.isMovement && (kind === 'SALE_COLLECTION' ? account.type === 'ACTIVO' : account.type === 'PASIVO'));
     if (!cashAccount || !controlAccount) {
       settlementInFlightRef.current.delete(operationKey);
       throw new Error('No se encontraron las cuentas contables necesarias para liquidar la factura.');
@@ -2046,6 +2064,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const purchaseCreditNoteInFlightRef = useRef(false);
+  const supplierDebitNoteInFlightRef = useRef<Set<string>>(new Set());
   const addPurchaseCreditNote = async (request: PurchaseCreditNoteRequest): Promise<PurchaseRecord> => {
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
       throw new Error('La persistencia SQLite no está disponible o falló. Reinicie SICOVEN antes de registrar una devolución.');
@@ -2397,6 +2416,72 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
     } finally {
       purchaseCreditNoteInFlightRef.current = false;
+    }
+  };
+
+  const addSupplierDebitNote = async (
+    draft: Omit<SupplierDebitNoteAccountingDraft, 'companyId' | 'closedThroughDate'>
+  ): Promise<PurchaseRecord> => {
+    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
+      throw new Error('SQLite local no está disponible o todavía no está lista. No se registró la ND.');
+    }
+    if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la ND.');
+    const operationKey = [
+      currentCompany.id, draft.sourcePurchaseId, String(draft.debitNoteNumber || '').trim().toUpperCase()
+    ].join('|');
+    if (supplierDebitNoteInFlightRef.current.has(operationKey)) {
+      throw new Error('Esta ND ya se está registrando. Espera la confirmación de SQLite antes de reintentar.');
+    }
+    supplierDebitNoteInFlightRef.current.add(operationKey);
+    try {
+      return await runAtomicInvoiceImport(async () => {
+        const source = purchases.find(item =>
+          item.id === draft.sourcePurchaseId && item.companyId === currentCompany.id
+        );
+        if (!source) throw new Error('No se encontró la factura original en la empresa activa.');
+        const sourceJournalEntry = source.journalEntryId
+          ? journalEntries.find(entry => entry.id === source.journalEntryId && entry.companyId === currentCompany.id)
+          : undefined;
+        const plan = buildSupplierDebitNoteAccountingPlan({
+          draft: { ...draft, companyId: currentCompany.id, closedThroughDate: currentCompany.closedThroughDate || undefined },
+          purchases, accounts, sourceJournalEntry
+        });
+        if (!window.sicovenStore?.save) {
+          throw new Error('No se puede confirmar la ND: SQLite local no está disponible. No se modificó el estado contable.');
+        }
+        const stamp = Date.now();
+        const nextPurchaseOp = Math.max(
+          purchases.filter(item => item.companyId === currentCompany.id)
+            .reduce((max, item) => Math.max(max, item.opNumber || 0), 0),
+          purchaseSequenceRef.current[currentCompany.id] || 0
+        ) + 1;
+        const journal = addJournalEntry({
+          entryNumber: 0,
+          date: plan.document.accountCreditDate || plan.document.invoiceDate,
+          description: 'Nota de débito proveedor ' + draft.debitNoteNumber.trim() +
+            ' afecta factura ' + source.invoiceNumber,
+          type: 'AJUSTE',
+          bcvRate: plan.document.bcvRate,
+          referenceDoc: 'ND-PROV-' + draft.debitNoteNumber.trim(),
+          items: plan.items
+        });
+        const note: PurchaseRecord = {
+          ...plan.document,
+          id: 'pur-debit-' + currentCompany.id + '-' + stamp + '-' + Math.floor(Math.random() * 100000),
+          companyId: currentCompany.id,
+          opNumber: nextPurchaseOp,
+          journalEntryId: journal.id
+        };
+        purchaseSequenceRef.current[currentCompany.id] = nextPurchaseOp;
+        const persistenceConfirmation = new Promise<void>((resolve, reject) => {
+          persistenceWaitersRef.current.push({ resolve, reject });
+        });
+        setPurchases(prev => [...prev, note]);
+        await persistenceConfirmation;
+        return note;
+      });
+    } finally {
+      supplierDebitNoteInFlightRef.current.delete(operationKey);
     }
   };
 
@@ -4346,6 +4431,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         purchases: purchases.filter(p => p.companyId === currentCompany.id),
         addPurchase,
         addPurchaseCreditNote,
+        addSupplierDebitNote,
         deletePurchase,
         sales: sales.filter(s => s.companyId === currentCompany.id),
         addSale,
