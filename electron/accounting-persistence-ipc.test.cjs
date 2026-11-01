@@ -517,3 +517,64 @@ test('SQLite appends an audit event when a VAT declaration is prepared and when 
     harness.db.close();
   }
 });
+
+
+test('SQLite audit records the VAT retention decision and the later voucher delivery automatically', () => {
+  const harness = createHarness();
+  try {
+    const actor = { id: 1, username: 'auditor', role: 'admin' };
+    const purchase = {
+      id: 'purchase-iva-audit', companyId: 'company-1', documentType: '01',
+      invoiceNumber: 'FAC-IVA-1', supplierRif: 'J-12345678-9', supplierName: 'Proveedor Uno',
+      invoiceDate: '2026-10-03', taxableBaseBs: 1000, vatAmountBs: 160, totalAmountBs: 1160,
+      ivaRetentionDecision: {
+        buyerAgentStatus: 'SPECIAL_DESIGNATED', supplierTaxStatus: 'ORDINARY',
+        article2Transaction: false, article3Exclusions: [],
+        decisionStatus: 'WITHHOLD', decisionReason: 'Regla general del 75%.',
+        legalBasis: 'Providencia SNAT/2025/000054, artículo 4',
+        operationAmountBs: 1160, unitTaxValueBs: 43,
+        evaluatedAt: '2026-10-03T10:00:00.000Z'
+      }
+    };
+    const voucher = {
+      id: 'vat-iva-audit', companyId: 'company-1', purchaseRecordId: purchase.id,
+      voucherNumber: '20261000000001', date: '2026-10-03', period: '202610',
+      fiscalDate: '2026-10-03', supplierRif: purchase.supplierRif,
+      supplierName: purchase.supplierName, taxableBaseBs: 1000,
+      vatAmountBs: 160, vatWithheldBs: 120, requiresFiscalCorrection: false
+    };
+    const initial = {
+      ...emptyState(), companies: [{ id: 'company-1', name: 'Empresa Uno' }],
+      purchases: [purchase], vatVouchers: [voucher]
+    };
+    persistAccountingSnapshot(harness.db, initial, actor);
+    const issued = harness.db.prepare("SELECT details_json FROM audit_events WHERE event_type='vat_retention_voucher_issued'").get();
+    assert.ok(issued);
+    const issuedDetails = JSON.parse(issued.details_json);
+    assert.equal(issuedDetails.purchaseRecordId, purchase.id);
+    assert.equal(issuedDetails.voucherNumber, voucher.voucherNumber);
+    const decision = harness.db.prepare("SELECT details_json FROM audit_events WHERE event_type='purchase_iva_retention_decision_recorded'").get();
+    assert.ok(decision);
+    const decisionDetails = JSON.parse(decision.details_json);
+    assert.equal(decisionDetails.purchaseId, purchase.id);
+    assert.equal(decisionDetails.decisionStatus, 'WITHHOLD');
+    assert.equal(decisionDetails.unitTaxValueBs, 43);
+    assert.deepEqual(decisionDetails.actor, { userId: 1, username: 'auditor' });
+
+    const delivered = {
+      ...initial,
+      vatVouchers: [{ ...voucher, deliveryDate: '2026-10-04', deliveryMethod: 'PHYSICAL' }]
+    };
+    persistAccountingSnapshot(harness.db, delivered, actor);
+    const delivery = harness.db.prepare("SELECT details_json FROM audit_events WHERE event_type='vat_retention_voucher_delivered'").get();
+    assert.ok(delivery);
+    const deliveryDetails = JSON.parse(delivery.details_json);
+    assert.equal(deliveryDetails.voucherId, voucher.id);
+    assert.equal(deliveryDetails.deliveryDate, '2026-10-04');
+    assert.equal(deliveryDetails.deliveryMethod, 'PHYSICAL');
+    assert.deepEqual(deliveryDetails.actor, { userId: 1, username: 'auditor' });
+    assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='vat_retention_voucher_delivered'").get().count, 1);
+  } finally {
+    harness.db.close();
+  }
+});

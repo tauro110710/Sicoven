@@ -60,7 +60,7 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white transition cursor-pointer shadow"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span className="hidden xs:inline">Imprimir</span>
+              <span className="hidden xs:inline">Imprimir original y duplicado</span>
             </button>
             <button
               onClick={onClose}
@@ -75,7 +75,7 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
           <div className="no-print border-b border-slate-200 bg-slate-50 px-4 sm:px-6 py-4 space-y-3">
             <div>
               <h3 className="text-xs font-bold text-slate-900">Registrar entrega al proveedor</h3>
-              <p className="mt-1 text-[11px] text-slate-600">Registra la fecha real de entrega. No se exige adjuntar archivos. La entrega electrónica requiere acuerdo previo del proveedor.</p>
+              <p className="mt-1 text-[11px] text-slate-600">Registra la fecha real de entrega. No se exige adjuntar archivos. La entrega electrónica requiere acuerdo previo del proveedor. La norma exige entregar el comprobante dentro de los primeros dos días hábiles del período siguiente; SICOVEN registra la fecha efectiva y no inventa un vencimiento sin calendario oficial de feriados validado.</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <label className="text-xs font-semibold text-slate-700">Fecha efectiva de entrega
@@ -155,7 +155,7 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
                 <span>Providencia SNAT / Art. 11 Ley de IVA</span>
               </div>
               <div className="text-[10px] text-slate-600">
-                Original: Sujeto Retenido (Proveedor) • Copia: Agente de Retención
+                Original para el proveedor y duplicado para el agente de retención. Si la entrega es física, imprimir dos ejemplares.
               </div>
             </div>
           </div>

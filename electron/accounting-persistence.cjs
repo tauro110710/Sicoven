@@ -116,6 +116,30 @@ function persistAccountingSnapshot(db, state, actor = null) {
         creditNoteLines: Array.isArray(note.creditNoteLines) ? note.creditNoteLines : []
       }));
     }
+    for (const purchase of (Array.isArray(state.purchases) ? state.purchases : [])) {
+      if (!oldPurchaseIds.has(String(purchase.id)) && purchase.ivaRetentionDecision) {
+        const decision = purchase.ivaRetentionDecision;
+        auditInsert.run('purchase_iva_retention_decision_recorded', JSON.stringify({
+          purchaseId: purchase.id, companyId: purchase.companyId,
+          invoiceNumber: purchase.invoiceNumber || null,
+          supplierRif: purchase.supplierRif || null,
+          supplierName: purchase.supplierName || null,
+          decisionStatus: decision.decisionStatus || null,
+          decisionReason: decision.decisionReason || null,
+          legalBasis: decision.legalBasis || null,
+          buyerAgentStatus: decision.buyerAgentStatus || null,
+          supplierTaxStatus: decision.supplierTaxStatus || null,
+          article2Transaction: Boolean(decision.article2Transaction),
+          article3Exclusions: Array.isArray(decision.article3Exclusions) ? decision.article3Exclusions : [],
+          portalArticle3ExclusionConfirmed: Boolean(decision.portalArticle3ExclusionConfirmed),
+          supplierImportPerceptionConfirmed: Boolean(decision.supplierImportPerceptionConfirmed),
+          operationAmountBs: decision.operationAmountBs ?? null,
+          unitTaxValueBs: decision.unitTaxValueBs ?? null,
+          evaluatedAt: decision.evaluatedAt || null,
+          actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null
+        }));
+      }
+    }
     const oldInventoryMovements = new Map((Array.isArray(priorState.movements) ? priorState.movements : [])
       .map(item => [String(item.id), item]));
     for (const movement of (Array.isArray(state.movements) ? state.movements : [])) {
@@ -208,6 +232,33 @@ function persistAccountingSnapshot(db, state, actor = null) {
       }
     }
 
+    const oldVatVouchers = new Map((Array.isArray(priorState.vatVouchers) ? priorState.vatVouchers : [])
+      .map(item => [String(item.id), item]));
+    for (const voucher of (Array.isArray(state.vatVouchers) ? state.vatVouchers : [])) {
+      const oldVoucher = oldVatVouchers.get(String(voucher.id));
+      if (!oldVoucher) {
+        auditInsert.run('vat_retention_voucher_issued', JSON.stringify({
+          voucherId: voucher.id, voucherNumber: voucher.voucherNumber || null,
+          companyId: voucher.companyId, purchaseRecordId: voucher.purchaseRecordId || null,
+          supplierRif: voucher.supplierRif || null, supplierName: voucher.supplierName || null,
+          issueDate: voucher.date || null, fiscalDate: voucher.fiscalDate || null,
+          period: voucher.period || null, taxableBaseBs: voucher.taxableBaseBs ?? null,
+          vatAmountBs: voucher.vatAmountBs ?? null, vatWithheldBs: voucher.vatWithheldBs ?? null,
+          retentionRate: voucher.retentionRate ?? null,
+          actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null
+        }));
+      }
+      if ((!oldVoucher || !oldVoucher.deliveryDate) && voucher.deliveryDate) {
+        auditInsert.run('vat_retention_voucher_delivered', JSON.stringify({
+          voucherId: voucher.id, voucherNumber: voucher.voucherNumber || null,
+          companyId: voucher.companyId, purchaseRecordId: voucher.purchaseRecordId || null,
+          supplierRif: voucher.supplierRif || null, supplierName: voucher.supplierName || null,
+          deliveryDate: voucher.deliveryDate, deliveryMethod: voucher.deliveryMethod,
+          electronicDeliveryAgreed: Boolean(voucher.electronicDeliveryAgreed),
+          actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null
+        }));
+      }
+    }
     const oldVatDeclarationIds = new Set((Array.isArray(priorState.vatWithholdingDeclarations) ? priorState.vatWithholdingDeclarations : [])
       .map(item => String(item.id)));
     for (const declaration of (Array.isArray(state.vatWithholdingDeclarations) ? state.vatWithholdingDeclarations : [])) {

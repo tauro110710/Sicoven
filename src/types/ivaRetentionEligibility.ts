@@ -110,7 +110,7 @@ export function evaluateIvaRetentionEligibility(input: IvaRetentionEligibilityIn
     }
     if (amount > roundMoney(unitTax * 20)) {
       thresholdExceeded = true;
-      exclusions = exclusions.filter(item => !thresholdExclusions.includes(item));
+      exclusions = exclusions.filter(item => item !== 'REIMBURSABLE_UP_TO_20_UT' && item !== 'PETTY_CASH_UP_TO_20_UT');
     }
   }
   const portalDependentExclusions: IvaArticle3Exclusion[] = ['PERCEPTION_AGENT_SPECIFIC_GOODS', 'EXPORTER_RECOVERY_REGISTER', 'SUPPLIER_EXEMPT_SALES_OVER_50'];
