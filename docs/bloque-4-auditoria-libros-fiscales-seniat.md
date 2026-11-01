@@ -246,4 +246,5 @@ Límites:
 - La vista central muestra compras que requieren revisión fiscal y pendientes de entrega de comprobantes.
 - El RIF se valida estructuralmente antes de calcular fechas del calendario 2026 o resolver elegibilidad del agente; un identificador mal formado deja el caso sin fecha/condición automática.
 - Los libros de compras y ventas muestran “Todos los períodos” cuando no existe selección mensual; no presentan octubre como período predeterminado.
-- El TXT IVA rechaza datos de otra empresa, RIF inválidos y colecciones vacías; no sustituye datos faltantes por valores ficticios.
+- El TXT IVA rechaza datos de otra empresa, RIF inválidos, colecciones vacías, comprobantes duplicados y comprobantes con corrección fiscal pendiente; la protección también está dentro del generador, no solo en la interfaz.
+- El indicador de condición de firma personal usa el mismo criterio de RIF que el motor de elegibilidad y el calendario; no presenta como confirmado un RIF de persona natural/pasaporte sin la confirmación correspondiente.

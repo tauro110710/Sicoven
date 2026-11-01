@@ -188,3 +188,10 @@ test('IVA TXT refuses to mix fiscal periods in one export file', () => {
     ivaVoucher({ id: 'iva-v2', voucherNumber: '20261100000002', period: '202611', date: '2026-11-05', invoiceDate: '2026-11-05' })
   ]), /un único período fiscal/);
 });
+
+
+test('IVA TXT rejects duplicated voucher IDs or numbers and fiscal corrections still pending', () => {
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher(), ivaVoucher({ id: 'voucher-2' })]), /comprobantes duplicados/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher(), ivaVoucher({ voucherNumber: '20261000000001', id: 'voucher-2' })]), /comprobantes duplicados/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ requiresFiscalCorrection: true })]), /corrección fiscal pendiente/);
+});

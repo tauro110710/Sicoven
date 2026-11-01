@@ -17,6 +17,13 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
   if (new Set(vouchers.map(voucher => String(voucher.period || ''))).size > 1) {
     throw new Error('La exportación TXT de retenciones IVA debe contener un único período fiscal.');
   }
+  if (new Set(vouchers.map(voucher => String(voucher.id || ''))).size !== vouchers.length ||
+      new Set(vouchers.map(voucher => String(voucher.voucherNumber || ''))).size !== vouchers.length) {
+    throw new Error('La exportación contiene comprobantes duplicados; revise los identificadores y correlativos antes de continuar.');
+  }
+  if (vouchers.some(voucher => voucher.requiresFiscalCorrection)) {
+    throw new Error('La exportación está bloqueada: existen comprobantes con corrección fiscal pendiente.');
+  }
 
   for (const v of vouchers) {
     const supplierRif = cleanRif(v.supplierRif);

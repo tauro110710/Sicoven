@@ -65,7 +65,7 @@ export const RetencionesIvaView: React.FC = () => {
     return status === 'PREPARED' || status === 'REVIEWED' || status === 'FILED' || status === 'PARTIALLY_PAID';
   }).length;
   const normalizedCompanyRif = String(currentCompany.rif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
-  const article1FirmConfirmed = currentCompany.taxpayerType === 'ESPECIAL' && (!/^[VE]/.test(normalizedCompanyRif) || currentCompany.isPersonalFirm === true);
+  const article1FirmConfirmed = currentCompany.taxpayerType === 'ESPECIAL' && (!/^[VEP]/.test(normalizedCompanyRif) || currentCompany.isPersonalFirm === true);
   const agentBasisLabel = currentCompany.ivaRetentionAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED'
     ? (article1FirmConfirmed ? 'Agente designado · Art. 1' : 'Firma personal por confirmar')
     : currentCompany.ivaRetentionAgentBasis === 'ARTICLE_2_METALS'
