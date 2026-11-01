@@ -1190,9 +1190,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       !item.isReversed && String(item.supplierRif || '').trim().toUpperCase() === rif)
       .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
     const target = draft.kind === 'APPLIED_TO_PURCHASE'
-      ? purchases.find(item => item.id === draft.targetPurchaseId && item.companyId === currentCompany.id && item.documentType === '01' && item.paymentTerm === 'CREDITO' && !item.isCancelled)
+      ? purchases.find(item => item.id === draft.targetPurchaseId && item.companyId === currentCompany.id && ['01', '02'].includes(item.documentType) && item.paymentTerm === 'CREDITO' && !item.isCancelled)
       : undefined;
-    if (draft.kind === 'APPLIED_TO_PURCHASE' && !target) throw new Error('La factura destino no existe, no es una factura original o está reversada.');
+    if (draft.kind === 'APPLIED_TO_PURCHASE' && !target) throw new Error('El documento destino no existe, no es una factura/ND de crédito o está reversado.');
     if (currentCompany.closedThroughDate && draft.date <= currentCompany.closedThroughDate) {
       throw new Error('El período está cerrado hasta ' + currentCompany.closedThroughDate + '. La liquidación no se registró.');
     }
@@ -1220,8 +1220,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const originalPurchaseEntry = target?.journalEntryId
         ? journalEntries.find(item => item.id === target.journalEntryId && item.companyId === currentCompany.id)
         : undefined;
-      if (!originalPurchaseEntry || originalPurchaseEntry.type !== 'COMPRA') {
-        throw new Error('La factura destino no tiene un asiento original de compra verificable; no se aplicó el anticipo.');
+      if (!originalPurchaseEntry || originalPurchaseEntry.type !== (target?.documentType === '02' ? 'AJUSTE' : 'COMPRA')) {
+        throw new Error('El documento destino no tiene un asiento verificable de factura o ND; no se aplicó el anticipo.');
       }
       const payableCandidates = originalPurchaseEntry.items.filter(line => {
         const account = accounts.find(item => item.code === line.accountCode && item.isMovement);
