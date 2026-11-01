@@ -386,7 +386,9 @@ function validateVatDeclarationLedger(previousState, nextState) {
 
   const timeline = new Map();
   const declarationNumberKeys = new Set();
+  const priorEventIds = new Set(asArray(previousState.vatWithholdingDeclarationEvents).map(item => String(item.id)));
   for (const event of events) {
+    const isNewEvent = !priorEventIds.has(String(event.id));
     const declaration = declarationsById.get(String(event.declarationId));
     if (!declaration || !validVatDeclarationDate(String(event.occurredAt || '').slice(0, 10)) ||
         !validVatDeclarationDate(String(event.recordedAt || '').slice(0, 10))) {
@@ -429,7 +431,7 @@ function validateVatDeclarationLedger(previousState, nextState) {
         return Boolean(fiscalDate) && fiscalDate >= declaration.startDate &&
           fiscalDate <= declaration.endDate && !declaredIds.has(String(voucher.id));
       });
-      if (status !== 'PREPARED' || hasCorrection || unresolvedLegacy || lateVouchers ||
+      if (status !== 'PREPARED' || (isNewEvent && (hasCorrection || unresolvedLegacy || lateVouchers)) ||
           String(event.occurredAt) < String(declaration.createdAt).slice(0, 10) ||
           (hasLegacy && (!event.acknowledgedLegacyDates || String(event.note || '').trim().length < 10))) {
         throw new Error('SQLite bloqueó la revisión: existen correcciones pendientes, fechas históricas no verificadas o una transición inválida.');
@@ -450,7 +452,8 @@ function validateVatDeclarationLedger(previousState, nextState) {
           fiscalDate <= declaration.endDate && !declaredIds.has(String(voucher.id));
       });
       const numberKey = String(declaration.companyId) + ':' + String(event.declarationNumber || '').trim();
-      if (status !== 'REVIEWED' || unresolvedLegacy || lateVouchers ||
+      const hasCorrection = asArray(declaration.voucherIds).some(id => vouchers.get(String(id))?.requiresFiscalCorrection);
+      if (status !== 'REVIEWED' || (isNewEvent && (hasCorrection || unresolvedLegacy || lateVouchers)) ||
           !String(event.declarationNumber || '').trim() ||
           !String(event.receiptReference || '').trim() ||
           !reviewedEvent || String(event.occurredAt) < String(reviewedEvent.occurredAt) ||
