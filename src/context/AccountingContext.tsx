@@ -2473,10 +2473,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           journalEntryId: journal.id
         };
         purchaseSequenceRef.current[currentCompany.id] = nextPurchaseOp;
-        let resolvePersistence!: () => void;
-        const persistenceConfirmation = new Promise<void>(resolve => {
-          resolvePersistence = resolve;
-          persistenceWaitersRef.current.push({ resolve: resolvePersistence, reject: () => undefined });
+        const persistenceConfirmation = new Promise<void>((resolve, reject) => {
+          persistenceWaitersRef.current.push({ resolve, reject });
         });
         setPurchases(prev => [...prev, note]);
         await persistenceConfirmation;
