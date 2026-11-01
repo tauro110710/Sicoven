@@ -207,6 +207,47 @@ function persistAccountingSnapshot(db, state, actor = null) {
         }));
       }
     }
+
+    const oldVatDeclarationIds = new Set((Array.isArray(priorState.vatWithholdingDeclarations) ? priorState.vatWithholdingDeclarations : [])
+      .map(item => String(item.id)));
+    for (const declaration of (Array.isArray(state.vatWithholdingDeclarations) ? state.vatWithholdingDeclarations : [])) {
+      if (oldVatDeclarationIds.has(String(declaration.id))) continue;
+      auditInsert.run('vat_withholding_declaration_prepared', JSON.stringify({
+        declarationId: declaration.id, companyId: declaration.companyId,
+        period: declaration.period, window: declaration.window,
+        startDate: declaration.startDate, endDate: declaration.endDate,
+        zeroOperations: Boolean(declaration.zeroOperations),
+        voucherIds: Array.isArray(declaration.voucherIds) ? declaration.voucherIds : [],
+        legacyDateAssignments: Array.isArray(declaration.legacyDateAssignments) ? declaration.legacyDateAssignments : [],
+        voucherSnapshots: Array.isArray(declaration.voucherSnapshots) ? declaration.voucherSnapshots : [],
+        totalTaxableBaseBs: declaration.totalTaxableBaseBs,
+        totalVatAmountBs: declaration.totalVatAmountBs,
+        totalWithheldBs: declaration.totalWithheldBs,
+        createdAt: declaration.createdAt,
+        actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null
+      }));
+    }
+    const oldVatDeclarationEventIds = new Set((Array.isArray(priorState.vatWithholdingDeclarationEvents) ? priorState.vatWithholdingDeclarationEvents : [])
+      .map(item => String(item.id)));
+    for (const event of (Array.isArray(state.vatWithholdingDeclarationEvents) ? state.vatWithholdingDeclarationEvents : [])) {
+      if (oldVatDeclarationEventIds.has(String(event.id))) continue;
+      auditInsert.run('vat_withholding_declaration_event', JSON.stringify({
+        eventId: event.id, declarationId: event.declarationId,
+        eventType: event.eventType, occurredAt: event.occurredAt,
+        note: event.note || null,
+        acknowledgedLegacyDates: Boolean(event.acknowledgedLegacyDates),
+        declarationNumber: event.declarationNumber || null,
+        receiptReference: event.receiptReference || null,
+        amountBs: event.amountBs ?? null,
+        paymentReference: event.paymentReference || null,
+        evidenceReference: event.evidenceReference || null,
+        dueDate: event.dueDate || null,
+        officialSourceTitle: event.officialSourceTitle || null,
+        officialSourceUrl: event.officialSourceUrl || null,
+        officialReference: event.officialReference || null,
+        actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null
+      }));
+    }
     const oldCompanies = new Map((Array.isArray(priorState.companies) ? priorState.companies : []).map(company => [String(company.id), company]));
     for (const company of (Array.isArray(state.companies) ? state.companies : [])) {
       const oldCompany = oldCompanies.get(String(company.id));

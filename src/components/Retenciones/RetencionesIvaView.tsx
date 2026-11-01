@@ -16,6 +16,7 @@ import { formatBs, formatUsd, formatDate, cleanRif } from '../../utils/formatter
 import { VatRetentionVoucher } from '../../types/accounting';
 import { VatVoucherModal } from './VatVoucherModal';
 import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators';
+import { VatWithholdingDeclarationsPanel } from './VatWithholdingDeclarationsPanel';
 
 export const RetencionesIvaView: React.FC = () => {
   const { currentCompany, vatVouchers, deleteVatVoucher, displayCurrency } = useAccounting();
@@ -23,6 +24,7 @@ export const RetencionesIvaView: React.FC = () => {
   const [selectedVoucher, setSelectedVoucher] = useState<VatRetentionVoucher | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showTxtPreview, setShowTxtPreview] = useState(false);
+  const [activeSection, setActiveSection] = useState<'vouchers' | 'declarations'>('vouchers');
 
   const filteredVouchers = vatVouchers
     .filter(v => {
@@ -62,6 +64,18 @@ export const RetencionesIvaView: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => setActiveSection('vouchers')}
+          className={`rounded-lg px-4 py-2 text-xs font-bold border ${activeSection === 'vouchers' ? 'bg-purple-700 text-white border-purple-700' : 'bg-white text-slate-700 border-slate-300'}`}>
+          Comprobantes de retención
+        </button>
+        <button type="button" onClick={() => setActiveSection('declarations')}
+          className={`rounded-lg px-4 py-2 text-xs font-bold border ${activeSection === 'declarations' ? 'bg-purple-700 text-white border-purple-700' : 'bg-white text-slate-700 border-slate-300'}`}>
+          Declaraciones quincenales
+        </button>
+      </div>
+      {activeSection === 'vouchers' ? (
+      <>
       {/* Header */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
@@ -293,6 +307,8 @@ export const RetencionesIvaView: React.FC = () => {
         company={currentCompany}
         onClose={() => setSelectedVoucher(null)}
       />
+      </>
+      ) : <VatWithholdingDeclarationsPanel />}
     </div>
   );
 };
