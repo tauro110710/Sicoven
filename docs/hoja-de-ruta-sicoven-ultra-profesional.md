@@ -735,3 +735,31 @@ Hallazgos confirmados:
 7. CI escritorio e instalador Windows SUCCESS antes de integrar.
 
 **Estado del Bloque 4:** continúa ABIERTO. PR #68 resuelve el bloqueo de interfaz para NC de contado, pero no habilita reembolsos de efectivo ni rectificaciones fiscales automáticas. El tipo 02 sigue deliberadamente deshabilitado. No se declara homologación SENIAT ni certificación fiscal.
+
+## BITÁCORA DE CONTINUIDAD — PR #71: GUARDIA DE REGRESIÓN PARA ND — 01/11/2026
+
+### PR #71 — protección SQLite para notas de débito de proveedor
+- PR: https://github.com/fenixlife1978/Sicoven/pull/71
+- Rama: `test/block-unimplemented-supplier-debit-notes`.
+- Commit integrado por squash en `main`: `272ec21008b956775a123f45c0789d8fbbb2f861`.
+- Añade una prueba de regresión específica para rechazar una Nota de Débito de proveedor (tipo 02) cuando se intenta incorporar directamente como registro operativo sin flujo contable autorizado.
+- La prueba complementa, no sustituye, las guardas existentes en `AccountingContext.addPurchase` y `electron/accounting-integrity.cjs`.
+- No habilita el selector del tipo 02, no modifica el alta de facturas ni NC, no crea asientos, CxP, movimientos de Kardex o comprobantes fiscales.
+- CI pre-merge: Desktop Validation SUCCESS e instalador Windows SUCCESS. En Windows pasaron pruebas automatizadas, TypeScript, build renderer, auditoría de assets, compilación NSIS, verificación del instalador y actualización real 1.0.6 → 1.0.7 preservando SQLite.
+- CI post-merge sobre el SHA integrado: Desktop Validation run 41319605748: SUCCESS; Windows Installer run 41319605733: SUCCESS. Pasaron pruebas automatizadas, TypeScript, build, auditoría de recursos/assets, compilación NSIS, verificación del instalador y actualización real 1.0.6 → 1.0.7 preservando SQLite.
+- El artefacto de Actions no equivale a publicación; no se publicó instalador ni release.
+
+### Estado del desarrollo ND
+La ND continúa bloqueada de forma deliberada. La implementación debe ser un flujo especializado, separado del alta genérica de facturas, con:
+1. Vínculo inmutable y validado a la factura original, misma empresa y proveedor.
+2. Clasificación económica obligatoria de la causa, sin inferir inventario, costo, IVA, retención o IGTF por el mero tipo documental.
+3. Tratamiento explícito de CxP pendiente, factura pagada y anticipos/saldos a favor, sin pagos ni obligaciones ficticias.
+4. Asiento balanceado en ambas monedas según las reglas contables existentes, con período cerrado, idempotencia y rollback transaccional.
+5. Kardex únicamente cuando la causa documentada implique mercancía o ajuste de costo reproducible; nunca cantidades ficticias.
+6. Separación de consecuencias fiscales: comprobantes y declaraciones históricas no se reescriben; automatización fiscal solo con fuente primaria vigente y regla validada.
+7. Validación duplicada en UI, dominio y SQLite, aislamiento multiempresa, auditoría append-only y pruebas de aceptación/negativas.
+8. CI de escritorio e instalador SUCCESS y actualización real preservando SQLite antes de integrar.
+
+**Próxima tarea:** diseñar e implementar por separado el motor económico de ND y sus validaciones de persistencia, comenzando por el vínculo documental y los escenarios de saldo de proveedor. Mantener bloqueada cualquier contabilización genérica mientras no esté completa la matriz de causas y su tratamiento autorizado.
+
+**Regla permanente:** no cambiar el administrador semilla, no publicar instaladores/releases sin autorización y no declarar homologación SENIAT ni cumplimiento fiscal certificado.
