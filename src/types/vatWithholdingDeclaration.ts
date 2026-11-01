@@ -179,16 +179,24 @@ export function validateVatDeclarationEventDraft(
       throw new Error('La quincena contiene comprobantes históricos sin fecha fiscal explícita. Documente la verificación de fechas antes de revisar.');
     }
   } else if (draft.eventType === 'FILED') {
-    if (status !== 'REVIEWED') throw new Error('La declaración debe estar revisada antes de registrar su presentación.');
+    const reviewedEvent = related.find(event => event.eventType === 'REVIEWED');
+    if (status !== 'REVIEWED' || !reviewedEvent || draft.occurredAt < reviewedEvent.occurredAt) {
+      throw new Error('La declaración debe estar revisada antes de registrar su presentación y la fecha no puede ser anterior a la revisión.');
+    }
     if (!String(draft.declarationNumber || '').trim() || !String(draft.receiptReference || '').trim()) {
       throw new Error('La presentación requiere número de declaración y referencia/acuse.');
     }
   } else if (draft.eventType === 'PAYMENT') {
     if (status !== 'FILED' && status !== 'PARTIALLY_PAID') throw new Error('Solo se puede registrar un enteramiento después de presentar la declaración.');
+    const filedEvent = related.find(event => event.eventType === 'FILED');
+    const priorPayments = related.filter(event => event.eventType === 'PAYMENT');
+    const lastPayment = priorPayments[priorPayments.length - 1];
     const amount = Number(draft.amountBs);
-    const paid = related.filter(event => event.eventType === 'PAYMENT')
-      .reduce((sum, event) => sum + Number(event.amountBs || 0), 0);
-    if (!Number.isFinite(amount) || amount <= 0 || Math.abs(amount - money(amount)) > 0.000001 || money(paid + amount) > declaration.totalWithheldBs + 0.0001) {
+    const paid = priorPayments.reduce((sum, event) => sum + Number(event.amountBs || 0), 0);
+    if (!filedEvent || draft.occurredAt < filedEvent.occurredAt ||
+        (lastPayment && draft.occurredAt < lastPayment.occurredAt) ||
+        !Number.isFinite(amount) || amount <= 0 || Math.abs(amount - money(amount)) > 0.000001 ||
+        money(paid + amount) > declaration.totalWithheldBs + 0.0001) {
       throw new Error('El pago debe ser positivo y no puede superar el total retenido de la declaración.');
     }
     if (!String(draft.paymentReference || '').trim() || !String(draft.evidenceReference || '').trim()) {
