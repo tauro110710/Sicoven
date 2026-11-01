@@ -1,4 +1,5 @@
 import type { Account, BankAccount, BankStatementMovement, JournalEntryItem } from './accounting';
+import { isValidIsoDate } from './migrationParsing';
 
 export interface VatPaymentAccountingPlan {
   date: string;
