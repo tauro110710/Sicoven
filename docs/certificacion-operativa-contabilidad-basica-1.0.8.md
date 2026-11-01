@@ -165,7 +165,7 @@ La aprobación técnica habilita la generación del artefacto de CI. La publicac
 - G11: EVIDENCIA PARCIAL — pruebas de aislamiento y correlativos multiempresa en SQLite y en informes; falta E2E de todas las operaciones.
 - G12: EVIDENCIA PARCIAL — persistencia tras cierre/reapertura SQLite y hash del snapshot durante upgrade; falta reinicio integral y verificación amplia de la aplicación.
 - G14: EVIDENCIA PARCIAL — upgrade real 1.0.7 → 1.0.8 y conservación del snapshot aprobados; falta evidencia separada de instalación limpia 1.0.8 y firma del instalador.
-- G1–G9, G13 y G15: PENDIENTES de evidencia de aceptación específica según la matriz. La prueba integral añadida no reemplaza el dataset completo ni el recorrido E2E.
+- G1–G9, G10–G12 y G14: estados parciales detallados en la matriz vigente; G13 y G15 siguen pendientes. La prueba integral añadida no reemplaza el dataset completo ni el recorrido E2E.
 
 **Decisión:** el artefacto de CI existe y los workflows propios están verdes, pero SICOVEN continúa **NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN CONTABLE BÁSICA** hasta cerrar todos los gates G0–G15. No publicar ni distribuir este artefacto como versión aprobada.
 
@@ -192,8 +192,16 @@ La aprobación técnica habilita la generación del artefacto de CI. La publicac
 - CI técnico del SHA candidato: APROBADO (Desktop y Windows Installer, 554/554 cada uno).
 - G1–G3: evidencia parcial según la matriz; no se eleva a E2E.
 - G14: EVIDENCIA PARCIAL (upgrade preserva snapshot; instalación limpia y firma pendientes).
-- G4–G9, G10–G13 y G15: continúan pendientes/parciales conforme a la matriz.
+- G4–G12 y G14: evidencia parcial conforme a la matriz vigente; G13 y G15 continúan pendientes.
 - **Decisión: NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN CONTABLE BÁSICA.**
+
+### Revisión adicional de G12–G13 y arranque seguro
+
+- `electron/main.cjs` abre `sicoven.sqlite` dentro del directorio `userData` de Electron y ejecuta `assertSqliteIntegrity(db)` antes de continuar con el arranque.
+- `assertSqliteIntegrity` ejecuta `PRAGMA quick_check` y `PRAGMA foreign_key_check`; ante resultado inválido o relaciones inconsistentes, lanza error y bloquea el inicio, sin borrar ni reemplazar la base.
+- Hay tres pruebas dedicadas: base sana, violación de clave foránea sin alterar filas y fallo de quick_check.
+- En el árbol de código revisado no se identificó una implementación verificable de backup/restauración de la base SQLite ni un workflow de ida y vuelta. G13 se mantiene PENDIENTE: no asumir que exportación de inventario equivale a respaldo contable íntegro.
+- G12 sube a evidencia parcial por integridad comprobada al arranque y pruebas de reapertura/rollback, pero no se ha probado un reinicio integral de Electron con conciliación de todos los módulos.
 
 ## 11. Bitácora
 
