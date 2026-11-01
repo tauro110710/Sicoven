@@ -96,3 +96,23 @@ Por tanto, no se encontró una restricción de archivo adjunto que actualmente b
 7. Fusionar por etapas después de validar TypeScript, pruebas automatizadas, auditoría de recursos y compilación.
 
 **Límite de esta entrega:** se formaliza el requisito y se audita que los tres formularios principales no exigen archivos adjuntos. No se afirma que exista ya un repositorio documental digital ni una interfaz de carga de archivos; esa implementación queda expresamente pendiente.
+
+
+## 9. Motor local de documentos — segunda fase
+
+Se añadió el módulo `electron/supporting-documents.cjs` con:
+- Metadatos SQLite y eventos documentales append-only.
+- Almacenamiento local privado fuera de la base de datos.
+- Selector nativo de archivos; nunca se acepta una ruta de archivo enviada por el renderer.
+- Validación de PDF/JPG/PNG/WEBP mediante extensión y firma binaria.
+- Límite de 20 MB por archivo.
+- Hash SHA-256 y comprobación de integridad al abrir.
+- Asociación obligatoria a una empresa y operación que ya exista en SQLite.
+- Revisión, observación, sustitución y acceso auditados.
+- IPC protegido por licencia y sesión.
+
+La API quedó expuesta por Electron preload y tipada en `src/electron.d.ts`.
+
+## 10. Límites actuales
+
+El motor y sus pruebas automatizadas están añadidos en la rama de implementación, pero aún requieren CI aprobada y fusión. La interfaz visual para adjuntar, consultar, revisar y sustituir documentos todavía no está integrada en las pantallas contables. La ausencia de documento sigue sin bloquear ninguna operación.
