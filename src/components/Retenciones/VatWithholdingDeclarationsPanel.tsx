@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import type { VatWithholdingDeclaration, VatWithholdingDeclarationEvent } from '../../types/accounting';
 import { getVatDeclarationStatus } from '../../types/vatWithholdingDeclaration';
+import { buildVatBankReconciliationSummary } from '../../types/vatBankReconciliation';
 import { getSeniatVatWithholdingDueDate } from '../../types/seniatVatDueDates';
 import { formatBs, formatDate } from '../../utils/formatters';
 
@@ -21,6 +22,7 @@ const statusLabels: Record<string, string> = {
 export const VatWithholdingDeclarationsPanel: React.FC = () => {
   const {
     currentCompany, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents,
+    bankAccounts, bankStatementMovements,
     createVatWithholdingDeclaration, recordVatWithholdingDeclarationEvent
   } = useAccounting();
   const now = new Date();
@@ -39,6 +41,7 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
   const [receiptReference, setReceiptReference] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
+  const [selectedBankMovementIds, setSelectedBankMovementIds] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState('');
   const [sourceTitle, setSourceTitle] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
@@ -58,6 +61,16 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
     ? vatWithholdingDeclarationEvents.filter(item => item.declarationId === selected.id)
     : [];
   const selectedStatus = selected ? getVatDeclarationStatus(selected, selectedEvents) : null;
+  const selectedFiledEvent = selectedEvents.find(item => item.eventType === 'FILED');
+  const usedBankMovementIds = new Set(vatWithholdingDeclarationEvents.flatMap(item => item.bankStatementMovementIds || []));
+  const availablePaymentMovements = selectedFiledEvent ? bankStatementMovements.filter(movement => {
+    const account = bankAccounts.find(item => item.id === movement.bankAccountId && item.companyId === currentCompany.id);
+    return movement.companyId === currentCompany.id && movement.type === 'DEBIT' && account?.currency === 'BS' &&
+      !usedBankMovementIds.has(movement.id) && movement.date >= selectedFiledEvent.occurredAt.slice(0, 10) && movement.date <= eventDate;
+  }) : [];
+  const selectedPaymentMovements = selectedBankMovementIds.map(id => availablePaymentMovements.find(item => item.id === id)).filter(Boolean);
+  const selectedPaymentTotalBs = selectedPaymentMovements.reduce((sum, item) => sum + Number(item?.amountBs || 0), 0);
+  const bankReconciliation = selected ? buildVatBankReconciliationSummary(selected, selectedEvents, bankStatementMovements) : null;
 
   const run = async (operation: () => Promise<unknown>) => {
     setBusy(true);
@@ -307,19 +320,40 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
                 <span className="font-semibold text-slate-700">Saldo pendiente de enterar</span>
                 <strong className="font-mono text-base text-slate-900">{formatBs(Math.max(0, selected.totalWithheldBs - selectedEvents.filter(item => item.eventType === 'PAYMENT').reduce((sum, item) => sum + Number(item.amountBs || 0), 0)))}</strong>
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-              <label className="text-xs font-semibold text-slate-700">Importe enterado (Bs.)
-                <input type="number" min="0.01" step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
-              </label>
-              <label className="text-xs font-semibold text-slate-700">Referencia bancaria
-                <input value={paymentReference} onChange={e => setPaymentReference(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
-              </label>
-              <label className="text-xs font-semibold text-slate-700">Fecha de pago
-                <input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
-              </label>
-              <button type="button" disabled={busy || !paymentAmount || !paymentReference.trim()}
-                onClick={() => addEvent({ eventType: 'PAYMENT', occurredAt: eventDate, amountBs: Number(paymentAmount), paymentReference })}
-                className="rounded-lg bg-purple-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-40 sm:col-span-4">Registrar enteramiento</button>
+              <div className="space-y-3">
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <p className="mb-2 text-xs font-bold text-slate-800">Débitos bancarios disponibles en Bs.</p>
+                  {availablePaymentMovements.length === 0 ? <p className="text-xs text-slate-500">No hay débitos bancarios elegibles sin utilizar entre la presentación y la fecha de pago.</p> : (
+                    <div className="max-h-48 space-y-2 overflow-y-auto">
+                      {availablePaymentMovements.map(movement => {
+                        const account = bankAccounts.find(item => item.id === movement.bankAccountId);
+                        return <label key={movement.id} className="flex items-start gap-2 rounded-md border border-slate-100 p-2 text-xs">
+                          <input type="checkbox" checked={selectedBankMovementIds.includes(movement.id)} onChange={e => {
+                            const next = e.target.checked ? [...selectedBankMovementIds, movement.id] : selectedBankMovementIds.filter(id => id !== movement.id);
+                            setSelectedBankMovementIds(next);
+                            const total = next.reduce((sum, id) => sum + Number(availablePaymentMovements.find(item => item.id === id)?.amountBs || 0), 0);
+                            setPaymentAmount(total.toFixed(2));
+                          }} />
+                          <span className="min-w-0 flex-1">{account?.bankName || 'Banco'} · {formatDate(movement.date)} · Ref. {movement.reference}<br /><span className="font-mono font-bold">{formatBs(movement.amountBs)}</span> · {movement.description}</span>
+                        </label>;
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <label className="text-xs font-semibold text-slate-700">Importe respaldado (Bs.)
+                    <input readOnly value={selectedPaymentTotalBs.toFixed(2)} className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-100 p-2" />
+                  </label>
+                  <label className="text-xs font-semibold text-slate-700">Referencia / comprobante de pago
+                    <input value={paymentReference} onChange={e => setPaymentReference(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
+                  </label>
+                  <label className="text-xs font-semibold text-slate-700">Fecha de pago
+                    <input type="date" value={eventDate} onChange={e => { setEventDate(e.target.value); setSelectedBankMovementIds([]); setPaymentAmount(''); }} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
+                  </label>
+                  <button type="button" disabled={busy || selectedBankMovementIds.length === 0 || !paymentReference.trim()}
+                    onClick={() => addEvent({ eventType: 'PAYMENT', occurredAt: eventDate, amountBs: selectedPaymentTotalBs, paymentReference, bankStatementMovementIds: selectedBankMovementIds })}
+                    className="rounded-lg bg-purple-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-40 sm:col-span-3">Registrar enteramiento conciliado</button>
+                </div>
               </div>
             </div>
           )}
@@ -399,11 +433,29 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
                   {event.receiptReference && <span> · Acuse {event.receiptReference}</span>}
                   {event.amountBs !== undefined && <span> · {formatBs(event.amountBs)}</span>}
                   {event.paymentReference && <span> · Ref. {event.paymentReference}</span>}
+                  {event.bankStatementMovementIds?.length ? <span> · Movimientos bancarios: {event.bankStatementMovementIds.join(', ')}</span> : event.eventType === 'PAYMENT' ? <span className="font-bold text-amber-700"> · Pendiente de conciliación bancaria histórica</span> : null}
                   {event.dueDate && <span> · Vence {formatDate(event.dueDate)}</span>}
                 </li>)}
               </ul>
             )}
           </div>
+          {bankReconciliation && (
+            <div className="rounded-xl border border-slate-200 p-4">
+              <h4 className="mb-2 text-xs font-bold text-slate-800">Informe de conciliación fiscal-bancaria</h4>
+              <div className="mb-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                <div className="rounded-lg bg-emerald-50 p-2">Conciliados: <strong>{bankReconciliation.reconciledCount}</strong><br />{formatBs(bankReconciliation.reconciledAmountBs)}</div>
+                <div className="rounded-lg bg-amber-50 p-2">Pendientes: <strong>{bankReconciliation.pendingCount}</strong><br />{formatBs(bankReconciliation.pendingAmountBs)}</div>
+              </div>
+              {bankReconciliation.lines.length === 0 ? <p className="text-xs text-slate-500">Todavía no hay enteramientos registrados.</p> : (
+                <div className="space-y-2">
+                  {bankReconciliation.lines.map(line => <div key={line.eventId} className="rounded-lg border border-slate-100 p-3 text-xs">
+                    <div className="flex flex-wrap justify-between gap-2"><strong>{formatBs(line.amountBs)} · {line.reference || 'Sin referencia'}</strong><span className={line.status === 'RECONCILIADO' ? 'font-bold text-emerald-700' : 'font-bold text-amber-700'}>{line.status}</span></div>
+                    {line.movements.length ? line.movements.map(movement => <p key={movement.id} className="mt-1 text-slate-600">{formatDate(movement.date)} · {movement.reference} · {formatBs(movement.amountBs)} · {movement.description}</p>) : <p className="mt-1 text-amber-700">Pago histórico sin movimiento bancario vinculado.</p>}
+                  </div>)}
+                </div>
+              )}
+            </div>
+          )}
         </section>
       )}
     </div>

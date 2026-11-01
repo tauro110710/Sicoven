@@ -263,6 +263,9 @@ function validateVatDeclarationLedger(previousState, nextState) {
   const windowKeys = new Set();
   const globalLegacyAssignments = new Map();
   const roundMoney = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+  const bankMovementsById = new Map(asArray(nextState.bankStatementMovements).map(item => [String(item.id), item]));
+  const bankAccountsById = new Map(asArray(nextState.bankAccounts).map(item => [String(item.id), item]));
+  const usedFiscalMovementIds = new Set();
 
   for (const declaration of declarations) {
     const id = String(declaration.id || '');
@@ -480,6 +483,36 @@ function validateVatDeclarationLedger(previousState, nextState) {
           roundMoney(paid + amount) > Number(declaration.totalWithheldBs) + 0.0001 ||
           !String(event.paymentReference || '').trim()) {
         throw new Error('SQLite bloqueó el enteramiento: requiere presentación previa, importe válido y referencia bancaria.');
+      }
+      const movementIds = event.bankStatementMovementIds;
+      if (isNewEvent && (!Array.isArray(movementIds) || movementIds.length === 0)) {
+        throw new Error('SQLite bloqueó el enteramiento nuevo: debe vincular al menos un débito bancario real.');
+      }
+      if (Array.isArray(movementIds) && movementIds.length > 0) {
+        if (new Set(movementIds).size !== movementIds.length) {
+          throw new Error('SQLite rechazó movimientos bancarios duplicados dentro del mismo enteramiento.');
+        }
+        let bankTotalCents = 0;
+        for (const movementId of movementIds) {
+          if (usedFiscalMovementIds.has(String(movementId))) {
+            throw new Error('SQLite rechazó la reutilización de un movimiento bancario en más de un enteramiento.');
+          }
+          const movement = bankMovementsById.get(String(movementId));
+          const account = movement ? bankAccountsById.get(String(movement.bankAccountId)) : null;
+          if (!movement || movement.companyId !== declaration.companyId || movement.type !== 'DEBIT' ||
+              !account || account.companyId !== declaration.companyId || account.currency !== 'BS' ||
+              !Number.isFinite(Number(movement.amountBs)) || Number(movement.amountBs) <= 0 ||
+              !validVatDeclarationDate(String(movement.date || '')) ||
+              String(movement.date) < String(filedEvent.occurredAt).slice(0, 10) ||
+              String(movement.date) > String(event.occurredAt).slice(0, 10)) {
+            throw new Error('SQLite rechazó un soporte bancario inexistente, de otra empresa, no débito, en moneda incorrecta o fuera de fecha.');
+          }
+          bankTotalCents += Math.round(Number(movement.amountBs) * 100);
+          usedFiscalMovementIds.add(String(movementId));
+        }
+        if (bankTotalCents !== Math.round(amount * 100)) {
+          throw new Error('SQLite rechazó el enteramiento: la suma de débitos bancarios no coincide exactamente con el importe fiscal.');
+        }
       }
     } else {
       throw new Error('SQLite rechazó un tipo de evento de declaración IVA no reconocido.');
