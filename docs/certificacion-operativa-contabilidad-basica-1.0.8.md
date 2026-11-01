@@ -267,3 +267,15 @@ Esta sección sustituye la política provisional de distribución privada contro
 - Desktop Validation run `41344453808`: SUCCESS. Checkout, instalación de dependencias bloqueadas, guards de autenticación/sesión, pruebas automatizadas, TypeScript, auditoría de recursos, build y auditoría de assets completados.
 - Windows Installer run `41344453841`: SUCCESS. Checkout, descarga del instalador 1.0.7, instalación de dependencias, guards, pruebas automatizadas, TypeScript, build, auditoría de assets, NSIS, verificación del instalador, actualización 1.0.7 → 1.0.8 conservando SQLite y clean install en perfil Windows aislado completados.
 - Ambos workflows corresponden exactamente al mismo SHA candidato. Esta evidencia no completa G13 ni G15 y no sustituye los recorridos E2E contables desde la interfaz.
+
+
+## 14. Evidencia CI del SHA dc673e258cbd6bf0820eb432db9c8d9892706209
+
+- Desktop Validation run [41345276710](https://github.com/fenixlife1978/Sicoven/actions/runs/41345276710): SUCCESS.
+- Windows Installer run [41345276716](https://github.com/fenixlife1978/Sicoven/actions/runs/41345276716): SUCCESS. El job `build-windows` completó todas las etapas, incluida actualización 1.0.7→1.0.8 conservando SQLite y clean install 1.0.8 en perfil Windows aislado.
+- Ambos workflows corresponden exactamente al SHA indicado. La suite, TypeScript, build renderer, auditoría de assets y NSIS completaron correctamente.
+- G14 mantiene evidencia CI de instalación limpia y upgrade aprobados para este SHA; sigue parcial por falta de validación operativa manual en el equipo objetivo. Authenticode continúa aplazado y no bloquea la certificación técnica según el alcance acordado.
+- G13 continúa PARCIAL. La revisión de journal/staging detectó que el journal aún no registra huellas del conjunto documental ni estados físicos suficientes para recuperar un swap DB+documentos. El motor de instalación, rollback físico, recovery previo a SQLite y reconciliación contable no están implementados.
+- G1–G12 conservan sus estados parciales y G15 sigue pendiente. CI verde no equivale a certificación.
+
+**Decisión:** NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN CONTABLE BÁSICA. PR #83 permanece abierto en borrador; no merge, Release ni publicación.

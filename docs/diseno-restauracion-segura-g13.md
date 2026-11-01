@@ -146,3 +146,29 @@ Hasta entonces G13 permanece PARCIAL y SICOVEN NO CERTIFICADO / NO APTO PARA DIS
 - El cambio de backup sustituye comprobaciones `existsSync` por `lstat` en rutas críticas para no tratar junctions/enlaces colgantes como inexistentes. Se añadieron regresiones para junction colgante en documentos de origen, documentos del respaldo y destino de backup.
 - El staging impide colisiones con UUID preexistente y limpia únicamente el directorio que la propia operación creó; sus pruebas cubren enlaces colgantes y directorios preexistentes con centinelas.
 - Alcance probado: validación y preparación aislada. No se ha probado ni implementado todavía el reemplazo físico de SQLite/documentos, rollback, recuperación tras interrupción ni reconciliación contable. G13 continúa PARCIAL.
+
+
+## 14. Auditoría de invariantes antes del motor físico (SHA dc673e258cbd6bf0820eb432db9c8d9892706209)
+
+La revisión directa de `electron/restore-journal.cjs`, `electron/restore-staging.cjs`, `electron/backup-restore.cjs` y `electron/main.cjs` identifica brechas que deben cerrarse antes de implementar el swap:
+
+1. **Cobertura incompleta del journal:** el esquema actual conserva SHA-256 de DB origen, DB staged y DB rollback, pero no contiene hashes/manifiestos de documentos de origen, staging y rollback. No permite decidir de forma segura si el árbol documental activo está completo tras una interrupción.
+2. **Estado físico no descrito:** `lastStep` es texto libre acotado; no existe un inventario validado de ubicaciones relativas ni una tabla de operaciones físicas esperadas. El recovery no puede inferir éxito por la mera existencia de archivos.
+3. **Arranque vulnerable a inicialización accidental:** `openDatabase()` ejecuta `new Database(path)` sin `fileMustExist`. Esto es correcto para una instalación nueva, pero peligroso si una restauración incompleta deja ausente el archivo activo. El guard debe distinguir explícitamente primer inicio legítimo de perfil existente con DB desaparecida o journal pendiente.
+4. **SQLite en WAL:** antes de snapshot/swap se debe cerrar la conexión, completar checkpoint controlado y tratar `sicoven.sqlite-wal` y `sicoven.sqlite-shm`. No se debe reemplazar la DB mientras haya handles abiertos ni copiar solo el archivo principal desde un perfil activo.
+5. **Paridad DB/documentos:** `committed` no puede depender solo de `quick_check` y `foreign_key_check`. Debe verificarse la DB restaurada, la estructura documental exacta y las huellas de cada archivo contra un manifiesto de generación.
+6. **Durabilidad Windows:** el journal tiene una prueba de transición completa y reemplazo del archivo existente, y el workflow Windows ejecutó la suite; sin embargo, aún faltan fault-injection de cada movimiento físico, terminación forzada del proceso y recuperación idempotente sobre NTFS.
+7. **Auditoría y actor:** la solicitud debe quedar auditada antes de programar el reinicio. El resultado final/rollback debe registrarse al volver a abrir SQLite, sin incluir rutas externas completas ni secretos.
+
+### Protocolo mínimo exigido para el siguiente cambio de código
+
+- Journal versionado con hashes y conteos de DB y documentos para source, staged y rollback; rutas internas derivadas del UUID, nunca rutas renderer arbitrarias.
+- Cada paso físico debe tener precondición, postcondición verificable y transición durable antes/después del movimiento. Ante estado ambiguo, preservar todas las copias y bloquear el arranque.
+- Preparar rollback completo de DB + documentos antes de tocar activos. Los movimientos deben permanecer en el mismo volumen y no depender de reemplazo no probado.
+- Cerrar SQLite y comprobar que no quedan handles antes del swap; considerar WAL/SHM expresamente.
+- Integrar recovery después de adquirir single-instance lock y antes de `openDatabase()`, IPC, migraciones o cualquier creación de usuario semilla. La lógica del administrador semilla no se modifica.
+- Introducir un guard de perfil: si existe evidencia de instalación previa, DB ausente o journal inconsistente significa detenerse; jamás crear una DB vacía como recuperación implícita.
+- Solo marcar `committed` después de abrir y validar la DB restaurada, comprobar documentos y completar la inicialización esencial. Si algo falla, rollback completo; si rollback falla, detener aplicación y preservar artefactos.
+- Fault injection tras cada transición y cada rename, reinicio forzado en Windows, repetición de recovery, fallos de permisos/espacio/fsync y reconciliación de saldos/auxiliares/documentos antes y después.
+
+**Decisión de auditoría:** no implementar todavía el swap ni conectar el journal al arranque. El staging actual solo prepara y verifica una copia; no instala. El motor G13 permanece PARCIAL hasta que el protocolo anterior esté codificado y probado sobre un mismo SHA. El administrador semilla queda expresamente fuera de alcance.
