@@ -8,7 +8,8 @@ const Database=require('better-sqlite3');
 const {createBackup,verifyBackupDirectory}=require('./backup-restore.cjs');
 const {executeRestore,recoverPendingRestore}=require('./restore-engine.cjs');
 const {createJournal,transitionJournal}=require('./restore-journal.cjs');
-const {sha256File}=require('./sqlite-integrity.cjs');
+const crypto=require('node:crypto');
+const sha256File=(file)=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
 function fixture(){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'sicoven-restore-engine-'));
@@ -53,11 +54,11 @@ test('physical restore replaces SQLite and supporting documents after verified r
 test('startup recovery rolls back an interrupted physical swap before database open',async()=>{
  const h=fixture();
  try{
-  const rollback=path.join(h.userDataDir,'rollback-test');
-  await createBackup({db:h.db,userDataDir:h.userDataDir,destination:rollback,allowInternalDestination:true});
   const operationId='123e4567-e89b-42d3-a456-426614174000';
   const opRoot=path.join(h.userDataDir,'restore-operations');fs.mkdirSync(opRoot);
   const op=path.join(opRoot,operationId);fs.mkdirSync(op);
+  const rollback=path.join(op,'rollback');
+  await createBackup({db:h.db,userDataDir:h.userDataDir,destination:rollback,allowInternalDestination:true});
   const journalPath=path.join(h.userDataDir,'restore-journal.json');
   const hash=sha256File(path.join(h.userDataDir,'sicoven.sqlite'));
   const j=createJournal({journalPath,sourceDatabaseSha256:hash,stagedDatabaseSha256:'b'.repeat(64)});
