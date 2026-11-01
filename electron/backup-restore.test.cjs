@@ -176,3 +176,37 @@ test('verification rejects Windows-invalid names and reserved device names', asy
     }
   } finally { h.close(); }
 });
+
+
+test('backup rejects a dangling junction at the supporting-documents source root', async () => {
+  const h = fixture();
+  try {
+    const docs = path.join(h.userDataDir, 'supporting-documents');
+    fs.rmSync(docs, { recursive: true, force: true });
+    fs.symlinkSync(path.join(h.root, 'missing-documents'), docs, 'junction');
+    await assert.rejects(createBackup({ db: h.db, userDataDir: h.userDataDir, destination: path.join(h.root, 'backup') }), /directorio real sin enlaces/);
+    assert.equal(fs.existsSync(path.join(h.root, 'backup')), false);
+  } finally { h.close(); }
+});
+
+test('verification rejects a dangling junction at the backup documents root', async () => {
+  const h = fixture();
+  try {
+    const destination = path.join(h.root, 'backup');
+    await createBackup({ db: h.db, userDataDir: h.userDataDir, destination });
+    const docs = path.join(destination, 'supporting-documents');
+    fs.rmSync(docs, { recursive: true, force: true });
+    fs.symlinkSync(path.join(h.root, 'missing-documents'), docs, 'junction');
+    assert.throws(() => verifyBackupDirectory(destination), /directorio real sin enlaces/);
+  } finally { h.close(); }
+});
+
+test('backup does not treat a dangling destination symlink as an unused path', async () => {
+  const h = fixture();
+  try {
+    const destination = path.join(h.root, 'backup');
+    fs.symlinkSync(path.join(h.root, 'missing-backup'), destination, 'junction');
+    await assert.rejects(createBackup({ db: h.db, userDataDir: h.userDataDir, destination }), /ya existe/);
+    assert.equal(fs.lstatSync(destination).isSymbolicLink(), true);
+  } finally { h.close(); }
+});

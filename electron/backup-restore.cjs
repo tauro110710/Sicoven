@@ -13,6 +13,11 @@ const MAX_RELATIVE_PATH = 1024;
 const HASH_CHUNK_SIZE = 1024 * 1024;
 const MAX_MANIFEST_BYTES = 8 * 1024 * 1024;
 
+function lstatIfExists(target) {
+  try { return fs.lstatSync(target); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+}
+
 function assertRegularFile(file, label) {
   const stat = fs.lstatSync(file);
   if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(label + ' debe ser un archivo regular sin enlaces.');
@@ -57,7 +62,7 @@ function validateRelativeDocumentPath(value) {
 }
 
 function collectFiles(root, relative = '') {
-  if (!fs.existsSync(root)) return [];
+  if (!lstatIfExists(root)) return [];
   assertDirectory(root, 'La carpeta documental');
   return fs.readdirSync(root, { withFileTypes: true })
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -73,7 +78,7 @@ function collectFiles(root, relative = '') {
 }
 
 function collectDirectories(root, relative = '') {
-  if (!fs.existsSync(root)) return [];
+  if (!lstatIfExists(root)) return [];
   assertDirectory(root, 'La carpeta documental');
   return fs.readdirSync(root, { withFileTypes: true })
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -131,7 +136,7 @@ async function createBackup({ db, userDataDir, destination }) {
   if (!db?.open) throw new Error('La base de datos no está disponible para respaldar.');
   const root = path.resolve(userDataDir), target = path.resolve(destination);
   if (target === root || target.startsWith(root + path.sep)) throw new Error('El destino del respaldo no puede estar dentro de los datos activos de SICOVEN.');
-  if (fs.existsSync(target)) throw new Error('El destino del respaldo ya existe; no se sobrescribirá.');
+  if (lstatIfExists(target)) throw new Error('El destino del respaldo ya existe; no se sobrescribirá.');
   const parent = path.dirname(target);
   fs.mkdirSync(parent, { recursive: true });
   const staging = target + '.tmp-' + crypto.randomUUID();
@@ -140,7 +145,8 @@ async function createBackup({ db, userDataDir, destination }) {
     await db.backup(path.join(staging, DB_FILE));
     verifyDatabase(path.join(staging, DB_FILE));
     const sourceDocs = path.join(root, DOCS_DIR), targetDocs = path.join(staging, DOCS_DIR);
-    if (fs.existsSync(sourceDocs)) {
+    if (lstatIfExists(sourceDocs)) {
+      assertDirectory(sourceDocs, 'La carpeta documental de origen');
       const files = collectFiles(sourceDocs);
       fs.mkdirSync(targetDocs, { recursive: true });
       for (const item of files) {
@@ -171,20 +177,20 @@ function verifyBackupDirectory(directory) {
   const root = path.resolve(directory);
   assertDirectory(root, 'La raíz del respaldo');
   const manifestPath = path.join(root, 'manifest.json');
-  if (!fs.existsSync(manifestPath)) throw new Error('El manifiesto del respaldo no existe.');
+  if (!lstatIfExists(manifestPath)) throw new Error('El manifiesto del respaldo no existe.');
   const manifestStat = assertRegularFile(manifestPath, 'El manifiesto');
   if (manifestStat.size > MAX_MANIFEST_BYTES) throw new Error('El manifiesto excede el tamaño máximo permitido.');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   validateManifest(manifest);
   const dbPath = path.join(root, DB_FILE);
-  if (!fs.existsSync(dbPath) ||
+  if (!lstatIfExists(dbPath) ||
       assertRegularFile(dbPath, 'La base de datos').size !== manifest.database.size ||
       sha256File(dbPath) !== manifest.database.sha256) {
     throw new Error('La huella o el tamaño de la base respaldada no coincide.');
   }
   const integrity = verifyDatabase(dbPath);
   const docsRoot = path.join(root, DOCS_DIR);
-  if (fs.existsSync(docsRoot)) assertDirectory(docsRoot, 'La carpeta de documentos respaldados');
+  if (lstatIfExists(docsRoot)) assertDirectory(docsRoot, 'La carpeta de documentos respaldados');
   const actual = collectFiles(docsRoot);
   if (JSON.stringify(actual) !== JSON.stringify(manifest.documents)) throw new Error('Los documentos respaldados no coinciden con el manifiesto.');
   const expectedDirectories = [...new Set(manifest.documents.flatMap(item => {
