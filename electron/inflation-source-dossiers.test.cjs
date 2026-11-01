@@ -16,7 +16,7 @@ const reviewer = { username: 'reviewer-b', role: 'admin' };
 function database() {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
-  db.exec('CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime(\'now\')))');
+  db.exec("CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime('now')))");
   db.exec("CREATE TABLE app_state(state_key TEXT PRIMARY KEY,state_json TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT (datetime('now')))");
   db.prepare('INSERT INTO app_state(state_key,state_json) VALUES(?,?)').run('accounting', JSON.stringify({ companies: [{ id: 'company-001', name: 'Empresa de prueba' }] }));
   initializeInflationIndexSchema(db);
@@ -29,7 +29,7 @@ function makeSeries(db, code = 'ESTIMACION_EXPERTO') {
     sourceTitle: 'Estudio sintético de prueba', issuer: 'Profesional de prueba',
     sourceReference: 'Fixture sintético; no representa índice real',
     sourcePublishedAt: '2025-02-01', fileName: 'fixture.csv',
-    sourceText: code === 'ESTUDIO_FCCPV' ? 'period;value;status\\n2025-01;100;ESTIMATED\\n2025-02;101;ESTIMATED' : 'period;value\\n2025-01;100\\n2025-02;101'
+    sourceText: code === 'ESTUDIO_FCCPV' ? 'period;value;status\n2025-01;100;ESTIMATED\n2025-02;101;ESTIMATED' : 'period;value\n2025-01;100\n2025-02;101'
   };
   return importInflationIndexSeries(db, input, admin);
 }
