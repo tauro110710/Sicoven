@@ -76,6 +76,15 @@ test('requires a declaration to contain the selected voucher and payment event t
   db.close();
 });
 
+test('rejects a note whose linked original invoice does not match its affected invoice number', () => {
+  const { db, state } = fixture();
+  const altered = { ...state, purchases: state.purchases.map(item =>
+    item.id === 'credit-1' ? { ...item, affectedInvoiceNumber: 'FAC-999' } : item) };
+  db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'").run(JSON.stringify(altered));
+  assert.throws(() => createVatFiscalIncident(db, createInput(), actor), /no coincide con el número/);
+  db.close();
+});
+
 test('prevents duplicate incident cases for the same company and source document', () => {
   const { db } = fixture();
   createVatFiscalIncident(db, createInput(), actor);
