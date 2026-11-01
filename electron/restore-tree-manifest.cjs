@@ -8,16 +8,21 @@ const FORMAT = 'SICOVEN_TREE_MANIFEST_V1';
 const MAX_ENTRIES = 100000;
 const MAX_TOTAL_BYTES = 20 * 1024 * 1024 * 1024;
 const MAX_PATH_LENGTH = 1024;
-const RESERVED_WINDOWS_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
+const RESERVED_WINDOWS_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\\..*)?$/i;
+
+function comparePath(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
 
 function normalizeRelativePath(value) {
   if (typeof value !== 'string' || !value || value.length > MAX_PATH_LENGTH ||
-      value.includes('\\') || value.startsWith('/') || /^[a-z]:/i.test(value)) {
-    throw new Error('El manifiesto contiene una ruta relativa inválida.');
+      value.includes('\\\\') || value.startsWith('/') || /^[a-z]:/i.test(value) ||
+      value.normalize('NFC') !== value) {
+    throw new Error('El manifiesto contiene una ruta relativa inválida o no normalizada.');
   }
   const segments = value.split('/');
   if (segments.some(part => !part || part === '.' || part === '..' ||
-      /[<>:"|?*\x00-\x1f]/.test(part) || /[. ]$/.test(part) ||
+      /[<>:"|?*\\x00-\\x1f]/.test(part) || /[. ]$/.test(part) ||
       RESERVED_WINDOWS_NAME.test(part))) {
     throw new Error('El manifiesto contiene un segmento de ruta no portable.');
   }
@@ -40,11 +45,17 @@ async function createTreeManifest(rootDirectory) {
   }
   const entries = [];
   let totalBytes = 0;
+  const portableNames = new Set();
 
   async function walk(directory, prefix) {
-    const names = fs.readdirSync(directory).sort((a, b) => a.localeCompare(b, 'en'));
+    const names = fs.readdirSync(directory).sort(comparePath);
     for (const name of names) {
       const relative = normalizeRelativePath(prefix ? prefix + '/' + name : name);
+      const portableKey = relative.toLocaleLowerCase('en-US');
+      if (portableNames.has(portableKey)) {
+        throw new Error('El árbol documental contiene rutas que colisionan en Windows.');
+      }
+      portableNames.add(portableKey);
       const absolute = path.join(directory, name);
       const stat = fs.lstatSync(absolute);
       if (stat.isSymbolicLink()) throw new Error('El árbol documental no admite enlaces simbólicos ni junctions.');
@@ -66,7 +77,7 @@ async function createTreeManifest(rootDirectory) {
   }
 
   await walk(root, '');
-  entries.sort((a, b) => a.path.localeCompare(b.path, 'en'));
+  entries.sort((a, b) => comparePath(a.path, b.path));
   return {
     format: FORMAT,
     entryCount: entries.length,
@@ -90,12 +101,17 @@ function validateManifest(manifest) {
   let bytes = 0;
   let previous = '';
   const seen = new Set();
+  const portableNames = new Set();
+  const types = new Map();
   for (const entry of manifest.entries) {
     const normalized = normalizeRelativePath(entry?.path);
-    if (normalized !== entry.path || seen.has(normalized) || (previous && previous.localeCompare(normalized, 'en') >= 0)) {
-      throw new Error('El manifiesto contiene rutas duplicadas o desordenadas.');
+    const portableKey = normalized.toLocaleLowerCase('en-US');
+    if (normalized !== entry.path || seen.has(normalized) ||
+        portableNames.has(portableKey) || (previous && comparePath(previous, normalized) >= 0)) {
+      throw new Error('El manifiesto contiene rutas duplicadas, no portables o desordenadas.');
     }
     seen.add(normalized);
+    portableNames.add(portableKey);
     previous = normalized;
     if (entry.type === 'directory') {
       if (Object.keys(entry).some(key => !['path', 'type'].includes(key))) throw new Error('Entrada de directorio inválida.');
@@ -107,6 +123,16 @@ function validateManifest(manifest) {
       bytes += entry.size;
     } else {
       throw new Error('Tipo de entrada documental desconocido.');
+    }
+    types.set(normalized, entry.type);
+  }
+  for (const entry of manifest.entries) {
+    const slash = entry.path.lastIndexOf('/');
+    if (slash !== -1) {
+      const parent = entry.path.slice(0, slash);
+      if (types.get(parent) !== 'directory') {
+        throw new Error('El manifiesto contiene una ruta cuyo directorio padre no está declarado.');
+      }
     }
   }
   if (files !== manifest.fileCount || bytes !== manifest.totalBytes) {

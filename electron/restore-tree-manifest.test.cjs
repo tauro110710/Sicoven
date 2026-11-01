@@ -59,6 +59,25 @@ test('rejects malformed manifests, duplicate paths, and inconsistent totals', ()
   const validShape = { format: 'SICOVEN_TREE_MANIFEST_V1', entryCount: 1, fileCount: 0, totalBytes: 0,
     entries: [{ path: 'folder', type: 'directory' }] };
   assert.equal(validateManifest(validShape), validShape);
-  assert.throws(() => validateManifest({ ...validShape, entries: [...validShape.entries, ...validShape.entries], entryCount: 2 }), /duplicadas/);
+  assert.throws(() => validateManifest({ ...validShape, entries: [...validShape.entries, ...validShape.entries], entryCount: 2 }), /rutas duplicadas/);
   assert.throws(() => validateManifest({ ...validShape, totalBytes: 1 }), /totales/);
+});
+
+test('rejects case-insensitive collisions and non-NFC paths', () => {
+  const base = { format: 'SICOVEN_TREE_MANIFEST_V1', entryCount: 2, fileCount: 0, totalBytes: 0,
+    entries: [{ path: 'Docs', type: 'directory' }, { path: 'docs', type: 'directory' }] };
+  assert.throws(() => validateManifest(base), /duplicadas, no portables/);
+  const decomposed = 'cafe\u0301';
+  assert.throws(() => validateManifest({ ...base, entryCount: 1, entries: [{ path: decomposed, type: 'directory' }] }), /ruta relativa inválida/);
+});
+
+test('requires declared directory parents and forbids file parents', () => {
+  const make = entries => ({ format: 'SICOVEN_TREE_MANIFEST_V1', entryCount: entries.length,
+    fileCount: entries.filter(entry => entry.type === 'file').length,
+    totalBytes: entries.reduce((sum, entry) => sum + (entry.size || 0), 0), entries });
+  assert.throws(() => validateManifest(make([{ path: 'folder/file.txt', type: 'file', size: 0, sha256: 'a'.repeat(64) }])), /directorio padre/);
+  assert.throws(() => validateManifest(make([
+    { path: 'folder', type: 'file', size: 0, sha256: 'a'.repeat(64) },
+    { path: 'folder/child', type: 'directory' }
+  ])), /directorio padre/);
 });
