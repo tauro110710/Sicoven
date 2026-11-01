@@ -119,3 +119,17 @@ test('Article 1 agent status requires special designation and a personal-firm co
   assert.equal(resolveIvaBuyerAgentStatus({ agentBasis: 'ARTICLE_2_METALS', taxpayerType: 'ORDINARIO', rif: 'V-12345678-9' }), 'ARTICLE_2_BUYER');
   assert.equal(resolveIvaBuyerAgentStatus({ agentBasis: 'ARTICLE_1_SPECIAL_DESIGNATED', taxpayerType: 'ESPECIAL', rif: 'V-ABC-9', isPersonalFirm: true }), 'UNKNOWN');
 });
+
+
+test('a buyer qualified under both articles 1 and 2 applies the correct rate by transaction', () => {
+  const buyerAgentStatus = resolveIvaBuyerAgentStatus({
+    agentBasis: 'ARTICLE_1_AND_2', taxpayerType: 'ESPECIAL', rif: 'J-12345678-9'
+  });
+  assert.equal(buyerAgentStatus, 'SPECIAL_DESIGNATED_AND_ARTICLE_2');
+  const ordinarySupplier = { buyerAgentStatus, supplierTaxStatus: 'ORDINARY' as const, vatAmount: 160 };
+  assert.equal(evaluateIvaRetentionEligibility({ ...ordinarySupplier, article2Transaction: false }).retentionRate, 75);
+  assert.equal(evaluateIvaRetentionEligibility({ ...ordinarySupplier, article2Transaction: true }).retentionRate, 100);
+  assert.equal(evaluateIvaRetentionEligibility({ buyerAgentStatus, supplierTaxStatus: 'SPECIAL', article2Transaction: false, vatAmount: 160 }).status, 'NOT_APPLICABLE');
+  assert.equal(evaluateIvaRetentionEligibility({ buyerAgentStatus, supplierTaxStatus: 'SPECIAL', article2Transaction: true, vatAmount: 160 }).retentionRate, 100);
+  assert.equal(resolveIvaBuyerAgentStatus({ agentBasis: 'ARTICLE_1_AND_2', taxpayerType: 'ESPECIAL', rif: 'V-12345678-9' }), 'UNKNOWN');
+});

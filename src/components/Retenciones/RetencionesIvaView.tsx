@@ -68,7 +68,9 @@ export const RetencionesIvaView: React.FC = () => {
   const article1FirmConfirmed = currentCompany.taxpayerType === 'ESPECIAL' && (!/^[VEP]/.test(normalizedCompanyRif) || currentCompany.isPersonalFirm === true);
   const agentBasisLabel = currentCompany.ivaRetentionAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED'
     ? (article1FirmConfirmed ? 'Agente designado · Art. 1' : 'Firma personal por confirmar')
-    : currentCompany.ivaRetentionAgentBasis === 'ARTICLE_2_METALS'
+    : currentCompany.ivaRetentionAgentBasis === 'ARTICLE_1_AND_2'
+      ? (article1FirmConfirmed ? 'Agente designado · Arts. 1 y 2' : 'Firma personal por confirmar · Arts. 1 y 2')
+      : currentCompany.ivaRetentionAgentBasis === 'ARTICLE_2_METALS'
       ? 'Agente por actividad · Art. 2'
       : currentCompany.ivaRetentionAgentBasis === 'NOT_AGENT'
         ? 'No agente de retención'

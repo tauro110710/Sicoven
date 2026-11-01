@@ -227,7 +227,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
                     setTaxpayerType('ORDINARIO');
                     setDefaultIvaRetentionRate(0);
                     setIsPersonalFirm(false);
-                    if (ivaRetentionAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED') setIvaRetentionAgentBasis('UNCONFIRMED');
+                    if (ivaRetentionAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED' || ivaRetentionAgentBasis === 'ARTICLE_1_AND_2') setIvaRetentionAgentBasis('UNCONFIRMED');
                   }}
                   className="mt-0.5 text-sky-600 focus:ring-sky-500"
                 />
@@ -261,10 +261,11 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
               <option value="UNCONFIRMED">Pendiente de confirmar</option>
               <option value="ARTICLE_1_SPECIAL_DESIGNATED" disabled={taxpayerType !== 'ESPECIAL'}>Artículo 1 — Sujeto especial calificado y notificado</option>
               <option value="ARTICLE_2_METALS">Artículo 2 — Comprador habitual de metales o piedras preciosas</option>
+              <option value="ARTICLE_1_AND_2" disabled={taxpayerType !== 'ESPECIAL'}>Artículos 1 y 2 — Sujeto especial y comprador habitual de metales o piedras preciosas</option>
               <option value="NOT_AGENT">No es agente de retención bajo esta Providencia</option>
             </select>
             <p className="text-[11px] text-slate-600">No se presume la designación por seleccionar “Contribuyente Especial”. Si queda pendiente, SICOVEN no calculará retenciones automáticamente.</p>
-            {ivaRetentionAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED' && /^[VE]/.test(rif.replace(/[^A-Z0-9]/gi, '')) && (
+            {['ARTICLE_1_SPECIAL_DESIGNATED', 'ARTICLE_1_AND_2'].includes(ivaRetentionAgentBasis) && /^[VEP]/.test(rif.replace(/[^A-Z0-9]/gi, '')) && (
               <label className="flex items-start gap-2 text-xs text-slate-800">
                 <input type="checkbox" checked={isPersonalFirm} onChange={e => setIsPersonalFirm(e.target.checked)} className="mt-0.5" />
                 <span><strong>La persona natural está constituida como firma personal</strong><span className="block text-[11px] text-slate-600 mt-1">La Providencia incluye a personas naturales especiales únicamente cuando actúan como firma personal.</span></span>

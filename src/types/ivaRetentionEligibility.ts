@@ -3,7 +3,7 @@
  * No consulta servicios externos ni persiste datos. Las verificaciones del Portal
  * Fiscal se reciben como resultado explícito; nunca se presumen.
  */
-export type IvaBuyerAgentStatus = 'SPECIAL_DESIGNATED' | 'ARTICLE_2_BUYER' | 'NOT_AGENT' | 'UNKNOWN';
+export type IvaBuyerAgentStatus = 'SPECIAL_DESIGNATED' | 'ARTICLE_2_BUYER' | 'SPECIAL_DESIGNATED_AND_ARTICLE_2' | 'NOT_AGENT' | 'UNKNOWN';
 export type IvaSupplierTaxStatus = 'ORDINARY' | 'FORMAL' | 'SPECIAL' | 'NON_REGISTERED' | 'UNKNOWN';
 
 export function resolveIvaBuyerAgentStatus(input: {
@@ -14,11 +14,12 @@ export function resolveIvaBuyerAgentStatus(input: {
 }): IvaBuyerAgentStatus {
   if (input.agentBasis === 'ARTICLE_2_METALS') return 'ARTICLE_2_BUYER';
   if (input.agentBasis === 'NOT_AGENT') return 'NOT_AGENT';
-  if (input.agentBasis !== 'ARTICLE_1_SPECIAL_DESIGNATED' || input.taxpayerType !== 'ESPECIAL') return 'UNKNOWN';
+  if (!['ARTICLE_1_SPECIAL_DESIGNATED', 'ARTICLE_1_AND_2'].includes(String(input.agentBasis)) || input.taxpayerType !== 'ESPECIAL') return 'UNKNOWN';
   const normalizedRif = String(input.rif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
   if (!/^[VJGEP]\d{8,9}$/.test(normalizedRif)) return 'UNKNOWN';
   const isNaturalPerson = /^[VEP]/.test(normalizedRif);
-  return isNaturalPerson && input.isPersonalFirm !== true ? 'UNKNOWN' : 'SPECIAL_DESIGNATED';
+  if (isNaturalPerson && input.isPersonalFirm !== true) return 'UNKNOWN';
+  return input.agentBasis === 'ARTICLE_1_AND_2' ? 'SPECIAL_DESIGNATED_AND_ARTICLE_2' : 'SPECIAL_DESIGNATED';
 }
 export type IvaArticle3Exclusion =
   | 'NOT_SUBJECT_EXEMPT_EXONERATED' | 'FORMAL_SUPPLIER'
@@ -92,9 +93,9 @@ function resolveVat(input: IvaRetentionEligibilityInput): number | null {
 export function evaluateIvaRetentionEligibility(input: IvaRetentionEligibilityInput): IvaRetentionEligibilityResult {
   if (input.buyerAgentStatus === 'UNKNOWN') return decision('REVIEW', 0, null, 'Confirma la condición del comprador como agente de retención.');
   if (input.buyerAgentStatus === 'NOT_AGENT') return decision('NOT_APPLICABLE', 0, null, 'El comprador no está identificado como agente de retención para este régimen.');
-  const article2Applies = input.buyerAgentStatus === 'ARTICLE_2_BUYER' && input.article2Transaction === true;
+  const article2Applies = (input.buyerAgentStatus === 'ARTICLE_2_BUYER' || input.buyerAgentStatus === 'SPECIAL_DESIGNATED_AND_ARTICLE_2') && input.article2Transaction === true;
   if (input.buyerAgentStatus === 'ARTICLE_2_BUYER' && !article2Applies) return decision('NOT_APPLICABLE', 0, null, 'La operación no corresponde a la actividad de adquisición prevista en el artículo 2.');
-  if (input.buyerAgentStatus === 'SPECIAL_DESIGNATED' && input.supplierTaxStatus === 'SPECIAL') return decision('NOT_APPLICABLE', 0, null, 'El artículo 1 contempla retenciones a proveedores contribuyentes ordinarios.');
+  if ((input.buyerAgentStatus === 'SPECIAL_DESIGNATED' || input.buyerAgentStatus === 'SPECIAL_DESIGNATED_AND_ARTICLE_2') && !article2Applies && input.supplierTaxStatus === 'SPECIAL') return decision('NOT_APPLICABLE', 0, null, 'El artículo 1 contempla retenciones a proveedores contribuyentes ordinarios.');
   if (input.supplierTaxStatus === 'FORMAL') return decision('EXCLUDED', 0, null, 'El proveedor está clasificado como contribuyente formal.', 'Providencia SNAT/2025/000054, artículo 3, numeral 2');
   let exclusions = input.article3Exclusions || [];
   let thresholdExceeded = false;

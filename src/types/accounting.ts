@@ -1,5 +1,5 @@
 export type TaxpayerType = 'ESPECIAL' | 'ORDINARIO';
-export type IvaRetentionAgentBasis = 'ARTICLE_1_SPECIAL_DESIGNATED' | 'ARTICLE_2_METALS' | 'NOT_AGENT' | 'UNCONFIRMED';
+export type IvaRetentionAgentBasis = 'ARTICLE_1_SPECIAL_DESIGNATED' | 'ARTICLE_2_METALS' | 'ARTICLE_1_AND_2' | 'NOT_AGENT' | 'UNCONFIRMED';
 
 export interface Company {
   id: string;
@@ -111,7 +111,7 @@ export interface PurchaseCreditNoteLine {
   inventoryCostBs: number;
 }
 
-export interface PurchaseIvaRetentionSnapshot { portalArticle3ExclusionConfirmed?: boolean; supplierImportPerceptionConfirmed?: boolean; operationAmountBs?: number; unitTaxValueBs?: number; vatNotDiscriminated?: boolean; taxableAmountIncludingVatBs?: number; buyerAgentStatus: 'SPECIAL_DESIGNATED' | 'ARTICLE_2_BUYER' | 'NOT_AGENT' | 'UNKNOWN'; supplierTaxStatus: 'ORDINARY' | 'FORMAL' | 'SPECIAL' | 'NON_REGISTERED' | 'UNKNOWN'; article2Transaction: boolean; article3Exclusions: string[]; invoiceFormalDefect: boolean; portalRetentionRate?: 0 | 75 | 100; decisionStatus: 'NOT_APPLICABLE' | 'EXCLUDED' | 'REVIEW' | 'NO_VAT' | 'WITHHOLD'; decisionReason: string; legalBasis?: string; evaluatedAt: string; }
+export interface PurchaseIvaRetentionSnapshot { portalArticle3ExclusionConfirmed?: boolean; supplierImportPerceptionConfirmed?: boolean; operationAmountBs?: number; unitTaxValueBs?: number; vatNotDiscriminated?: boolean; taxableAmountIncludingVatBs?: number; buyerAgentStatus: 'SPECIAL_DESIGNATED' | 'ARTICLE_2_BUYER' | 'SPECIAL_DESIGNATED_AND_ARTICLE_2' | 'NOT_AGENT' | 'UNKNOWN'; supplierTaxStatus: 'ORDINARY' | 'FORMAL' | 'SPECIAL' | 'NON_REGISTERED' | 'UNKNOWN'; article2Transaction: boolean; article3Exclusions: string[]; invoiceFormalDefect: boolean; portalRetentionRate?: 0 | 75 | 100; decisionStatus: 'NOT_APPLICABLE' | 'EXCLUDED' | 'REVIEW' | 'NO_VAT' | 'WITHHOLD'; decisionReason: string; legalBasis?: string; evaluatedAt: string; }
 
 export interface PurchaseRecord {
   /** Líneas de mercancía vinculadas al Kardex; ausente en facturas históricas sin detalle. */
