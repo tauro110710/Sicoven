@@ -31,7 +31,7 @@ const { registerInflationRemeReadinessIpc } = require('./inflation-reme-readines
 const { registerInflationSourceDossierIpc } = require('./inflation-source-dossiers.cjs');
 const { registerDocumentVaultIpc } = require('./supporting-documents.cjs');
 const { registerBackupIpc } = require('./backup-restore.cjs');
-const { recoverPendingRestore } = require('./restore-engine.cjs');
+const { recoverPendingRestore, registerRestoreIpc } = require('./restore-engine.cjs');
 const { registerVatFiscalIncidentIpc } = require('./vat-fiscal-incidents.cjs');
 const { acquireSingleInstance } = require('./single-instance.cjs');
 
@@ -543,6 +543,11 @@ app.whenReady().then(async () => {
   registerInflationRemeReadinessIpc({ ipcMain, db, licenseView, getActiveSession });
   registerInflationSourceDossierIpc({ ipcMain, db, licenseView, getActiveSession });
   registerBackupIpc({ ipcMain, db, licenseView, getActiveSession, dialog, app,
+    getWindow: () => BrowserWindow.getFocusedWindow() });
+  registerRestoreIpc({ ipcMain, app, dialog, licenseView, getActiveSession,
+    getDb: () => db,
+    closeDatabase: async () => { if (db?.open) { db.pragma('wal_checkpoint(TRUNCATE)'); db.close(); db = null; } },
+    reopenDatabase: async () => openDatabase(),
     getWindow: () => BrowserWindow.getFocusedWindow() });
   registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, dialog, shell, app,
     getWindow: () => BrowserWindow.getFocusedWindow() });
