@@ -63,6 +63,15 @@ test('rejects movements from another company or a USD bank account', () => {
   assert.throws(() => validate(['m-1'], 60, [movement('m-1', 60)], [filed], [{ ...account, currency: 'USD' }]), /bolívares/);
 });
 
+test('rejects a debit already reconciled with an accounting journal entry', () => {
+  assert.throws(() => validate(['m-1'], 60, [
+    movement('m-1', 60, { isReconciled: true, reconciledWithJournalEntryId: 'entry-1' })
+  ]), /ya fue conciliado/);
+  assert.throws(() => validate(['m-1'], 60, [
+    movement('m-1', 60, { reconciledJournalEntryIds: ['entry-1'] })
+  ]), /ya fue conciliado/);
+});
+
 test('rejects a movement already used by a different payment event', () => {
   const priorPayment: VatWithholdingDeclarationEvent = {
     id: 'payment-old', declarationId: 'another-declaration', eventType: 'PAYMENT',
