@@ -486,18 +486,21 @@ Esta sección prevalece sobre estados anteriores que indiquen como pendientes fu
 - Cobertura UI actual: Compras, Ventas y Libro Diario. Ampliación a otras entidades y revisión profesional documental quedan como evolución. No se publicó instalador ni release.
 
 ## Secuencia de trabajo vigente
-1. **REME 3.1C/3.1D:** conseguir y verificar archivo primario auténtico de índices y cobertura mensual; no sustituirlo por datos secundarios, proyecciones ni fixtures.
-2. Completar resolvedor mensual para expedientes alternativos 3.3B, con selección estricta de observaciones aprobadas/versionadas y alcance exacto.
-3. Conectar clasificación monetaria/no monetaria a componentes conciliados y consumibles, sin habilitar cálculos.
-4. Obtener casos de referencia, fórmulas, fechas, factores, precisión y redondeo revisados por profesional competente.
-5. Solo después implementar motor REME aislado en simulación, manteniendo deshabilitada la contabilización automática hasta autorización profesional expresa.
-6. En paralelo, continuar pendientes del Bloque 4 conforme a la matriz anterior, empezando por especificación oficial TXT/calendario y elegibilidad normativa. No declarar cumplimiento SENIAT sin evidencia vigente.
 
-## Estado global actualizado
-- RT-01: primera entrega integrada; expansión pendiente.
-- Bloque 3: gobierno de fuentes y diseño de seguridad integrados; REME sigue bloqueado por falta de series auténticas, resolvedor completo, conciliación y validación profesional.
-- Bloque 4: subbloques 4.1–4.3 integrados; pendientes normativos y de circuito integral explícitos.
-- Los bloques 1 y 2 mantienen la validación profesional integral pendiente. Los bloques 5–13 conservan el estado previamente documentado.
+1. **Bloque 4 — retenciones IVA/SENIAT:** mantener separados los controles técnicos ya integrados y los requisitos normativos todavía no acreditados.
+2. Mantener como pendientes la especificación oficial vigente del TXT IVA, los tipos documentales admitidos, el formato de declaración sin operaciones y las reglas/calendarios fiscales que requieran fuente primaria.
+3. Continuar la cobertura funcional de NC/ND de proveedor y sus efectos contables/fiscales solo con reglas documentadas; el expediente de incidencias no sustituye el flujo contable especializado de notas.
+4. Completar la conciliación integral operación/evento → comprobante → auxiliar quincenal → declaración → acuse → enteramiento → asiento y auditoría, sin afirmar aceptación por SENIAT.
+5. Mantener pendientes de validación profesional integral de los Bloques 1 y 2. No confundir esa validación con el trabajo técnico integrado.
+6. REME permanece excluido del alcance activo y no se retomará sin solicitud expresa.
+
+## Estado global actualizado — 01/11/2026
+
+- RT-01: primera entrega integrada; expansión documental pendiente.
+- Bloque 3: componentes históricos conservados, pero REME está excluido del alcance funcional activo.
+- Bloque 4: PR #57, #58 y #59 integrados; PR #63 cierra la conciliación bancaria de enteramientos IVA; PR #66 incorpora el expediente append-only de incidencias fiscales y su panel.
+- El Bloque 4 sigue abierto por la homologación documental del TXT, las reglas oficiales pendientes y la cobertura contable completa de notas de crédito/débito.
+- Los bloques 1 y 2 mantienen pendiente la validación profesional integral. Los bloques 5–13 conservan el estado previamente documentado.
 - SQLite local continúa como única fuente de verdad. No tocar el administrador semilla. No publicar instaladores/releases sin autorización expresa.
 
 
@@ -514,16 +517,22 @@ Esta decisión prevalece sobre todas las secciones anteriores de esta hoja de ru
 - Si en el futuro se requiere reabrir esta decisión, deberá existir una solicitud expresa, acceso legítimo a fuentes originales y participación/revisión de un profesional competente. No forma parte del plan actual.
 
 ## Secuencia activa después de excluir REME
-1. **Bloque 4 — retenciones IVA/SENIAT:** continuar desde los subbloques ya fusionados 4.1–4.3. Próximo trabajo: verificación documental de la especificación técnica vigente de importación TXT, casos de declaración sin operaciones, reglas de comprobantes y calendario de enteramiento, distinguiendo claramente norma primaria, guía técnica y material secundario.
-2. No declarar homologación, presentación automática, aceptación por el Portal Fiscal ni cumplimiento integral hasta disponer de especificación oficial vigente y pruebas verificables.
-3. Completar la conciliación de extremo a extremo: operación y evento de retención → comprobante → auxiliar quincenal → declaración → enteramiento/pago → asiento contable y auditoría.
-4. Mantener los soportes documentales opcionales de RT-01; su ausencia no bloqueará operaciones válidas.
-5. Mantener pendientes de validación profesional integral de los Bloques 1 y 2, sin confundir esa validación con el desarrollo técnico ya integrado.
 
-## Estado de continuidad
-- Última entrega documental anterior: RT-01, PR #60–#62, fusionadas en `main`; PR #62 commit `bc629d763a6b840306d8a9fdbfa9cfa3ef821aed`.
-- Última hoja leída antes de esta decisión: blob `d93faebabe133ab3f812190e99d14daaa2b12584` (502 líneas).
-- Próximo bloque activo: Bloque 4, continuación normativa/técnica de retenciones IVA. REME no se retoma.
+1. **Homologación documental del TXT IVA:** localizar especificación primaria vigente del SENIAT o evidencia oficial equivalente; no usar guías antiguas de terceros como contrato actual.
+2. Verificar tipos documentales, columnas, formato de declaración sin operaciones, documento afectado, expediente, importes y calendario antes de habilitar cualquier exportación como homologada.
+3. **Notas de crédito/débito de proveedor:** completar el flujo contable especializado y sus efectos sobre retenciones únicamente con reglas verificadas. El expediente 4.5 documenta incidencias, pero no calcula ni rectifica.
+4. Completar la trazabilidad fiscal de extremo a extremo y mantener los controles que impiden duplicar comprobantes, pagos o movimientos.
+5. Mantener los soportes documentales opcionales de RT-01; su ausencia no bloqueará operaciones válidas.
+6. Mantener pendientes de validación profesional integral de los Bloques 1 y 2.
+
+## Estado de continuidad — 01/11/2026
+
+- **PR #63:** integrado en main, commit e1bce1ebc379f95204a49561b4daf099f58edde7; conciliación de enteramientos IVA contra movimientos bancarios importados, con CI post-merge de escritorio y Windows SUCCESS.
+- **PR #66:** integrado en main, commit 3a06a744240017c63f8c6b4da1862373dd4dd08a; expediente de incidencias fiscales IVA y panel de Retenciones.
+- PR #66: CI pre-merge de escritorio run 41316332738 SUCCESS (518 pruebas, TypeScript, auditoría y build); Windows run 41316332707 SUCCESS (NSIS, instalación, upgrade real 1.0.6→1.0.7 y conservación SQLite). La verificación post-merge de esos workflows queda pendiente de confirmación independiente.
+- **PR #64:** sigue abierto; su actualización documental queda superada por esta revisión de hoja de ruta.
+- **PR #65:** auditoría documental de NC/ND y rectificaciones IVA sigue abierta; sus hallazgos deben conservarse como matriz de pendientes, no como prueba de que el flujo completo de notas ya exista.
+- Próximo frente activo: homologación documental TXT y cobertura especializada de NC/ND; REME no se retoma.
 - Arquitectura inalterada: aplicación de escritorio; SQLite local como única base de datos y fuente de verdad; no tocar el administrador semilla; no publicar instaladores/releases sin autorización expresa.
 
 
@@ -548,14 +557,43 @@ Esta decisión prevalece sobre todas las secciones anteriores de esta hoja de ru
 - No fabricar una línea de ceros hasta verificar el formato vigente de declaración sin operaciones.
 - El generador actual queda descrito como exportación preliminar sometida a validación documental; sus validaciones internas no demuestran aceptación por SENIAT.
 
-### Próximo subbloque activo — 4.4: cobertura documental y conciliación de retenciones IVA
-1. Obtener una especificación primaria vigente del SENIAT para TXT IVA o evidencia oficial equivalente.
-2. Verificar con ella el esquema de columnas, formatos, tipos documentales, documento afectado, expediente, declaración sin operaciones y reglas de importes.
-3. Auditar el modelo de notas de crédito/débito y pagos parciales para asegurar que cada evento se refleje una sola vez y sin duplicar retenciones.
-4. Añadir pruebas de contrato basadas exclusivamente en la especificación verificada; hasta entonces, mantener los casos no confirmados explícitamente bloqueados.
-5. Conciliar operación/evento → comprobante → quincena → declaración → acuse → enteramiento → asiento y auditoría.
+### Subbloque 4.4 — Conciliación bancaria de enteramientos IVA — PR #63 integrado
 
-**Estado:** investigación documental parcial; especificación primaria vigente no localizada. No se declara cerrado 4.4 ni homologado el TXT.
+- PR #63 fusionado en main con commit e1bce1ebc379f95204a49561b4daf099f58edde7.
+- Los eventos PAYMENT nuevos deben vincular uno o más movimientos bancarios DEBIT importados, de la misma empresa, en cuentas bancarias en Bs. y dentro del intervalo entre presentación y pago.
+- La suma de movimientos debe coincidir exactamente al céntimo con el importe del enteramiento; se bloquean IDs duplicados y movimientos ya reutilizados.
+- Los pagos históricos sin asociación bancaria permanecen como pendientes; no se reescribe el historial.
+- La validación se realiza en contexto y backend SQLite. La auditoría conserva los IDs bancarios.
+- No crea asientos ni altera la conciliación bancaria contable existente.
+- CI post-merge de escritorio run 41313171085 y Windows run 41313171184: SUCCESS. La actualización 1.0.6→1.0.7 conservó SQLite.
+- **Límite:** vincula movimientos importados; no autentica extractos con el banco ni confirma recepción por SENIAT.
+
+**Estado:** 4.4 integrado y validado técnicamente. No equivale a homologación del TXT ni a confirmación externa del enteramiento.
+
+### Subbloque 4.5 — Expediente append-only de incidencias y rectificaciones IVA — PR #66 integrado
+
+- PR #66 fusionado en main mediante squash; commit 3a06a744240017c63f8c6b4da1862373dd4dd08a.
+- Añade expedientes para facturas, notas de crédito y notas de débito de compras, vinculando la nota con su factura original de la misma empresa y verificando la coincidencia del número de factura afectada.
+- Persistencia en tablas SQLite dedicadas: vat_fiscal_incidents, vat_fiscal_incident_events y vat_fiscal_incident_references.
+- Triggers SQLite bloquean UPDATE y DELETE de expedientes, eventos y referencias. El historial registra incidencia, revisión documentada y actuación documentada.
+- Valida empresa, documento fuente, comprobante IVA, declaración, eventos FILED/PAYMENT, movimientos bancarios y asiento asociado contra el estado contable local.
+- Impide reutilizar el mismo comprobante IVA, evento de declaración/pago o movimiento bancario en expedientes diferentes.
+- La interfaz se incorpora al panel de Retenciones IVA; permite registrar la incidencia, seleccionar referencias fiscales existentes y documentar revisiones/actuaciones.
+- **No exige adjuntar un archivo por transacción.** No altera comprobantes, snapshots, pagos, movimientos bancarios ni asientos. No recalcula retenciones, no determina el tratamiento fiscal de NC/ND, no declara aceptación del SENIAT y no marca el expediente como resuelto automáticamente.
+- CI pre-merge: Desktop run 41316332738 SUCCESS con 518 pruebas, TypeScript, auditoría de recursos y build. Windows run 41316332707 SUCCESS con pruebas, TypeScript, build renderer, auditoría, NSIS, arranque, upgrade 1.0.6→1.0.7 y conservación de SQLite.
+- **Validación pendiente:** confirmar CI post-merge independiente. El artefacto de instalador quedó en CI; no se publicó instalador ni release.
+
+**Límites funcionales:** el expediente documenta incidencias y decisiones del responsable; no implementa un procedimiento de rectificación ante SENIAT, no sustituye el flujo especializado de notas de débito ni habilita automáticamente notas de crédito de contado.
+
+### Próximo frente pendiente — homologación TXT y cobertura contable de NC/ND
+
+1. Obtener especificación primaria vigente del SENIAT para TXT IVA o evidencia oficial equivalente.
+2. Verificar columnas, formatos, tipos documentales, documento afectado, expediente, declaración sin operaciones y reglas de importes.
+3. Completar el flujo especializado de notas de débito y revisar los casos de notas de crédito de contado, con conciliación de caja/bancos o saldo a favor.
+4. Definir tratamiento fiscal solo con fuente primaria vigente y revisión profesional competente.
+5. Mantener bloqueada cualquier afirmación de homologación, presentación automática o aceptación garantizada por el Portal Fiscal.
+
+**Estado:** investigación documental parcial; especificación primaria vigente no localizada. El Bloque 4 permanece abierto.
 
 
 ### Auditoría de integridad del auxiliar quincenal — PR #59 — 01/11/2026
