@@ -277,7 +277,7 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
               <label className="text-xs font-semibold text-slate-700">Fecha de presentación
                 <input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
               </label>
-              <button type="button" disabled={busy || !declarationNumber.trim() || !receiptReference.trim()}
+              <button type="button" disabled={busy || hasUncoveredVouchers || !declarationNumber.trim() || !receiptReference.trim()}
                 onClick={() => addEvent({ eventType: 'FILED', occurredAt: eventDate, declarationNumber, receiptReference })}
                 className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-40 sm:col-span-3">Registrar presentación</button>
             </div>
