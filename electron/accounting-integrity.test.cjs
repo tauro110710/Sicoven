@@ -1987,12 +1987,53 @@ test('SQLite accepts a supplier debit note only as an independent, balanced, lin
       type: 'ENTRADA', quantity: 1
     }]
   }), /ND tipo 02/);
+  const cancelledNote = {
+    ...note, isCancelled: true, cancelledByJournalEntryId: 'nd-reversal-entry',
+    cancellationReason: 'Se comprobó un error documental.',
+    cancellationNote: 'Papel de trabajo conserva comparación y soporte.'
+  };
+  const reversedSourceJournal = {
+    ...noteJournal, reversedByEntryId: 'nd-reversal-entry', isAdjusted: true
+  };
+  const reversalJournal = {
+    id: 'nd-reversal-entry', companyId: 'company-1', entryNumber: 3,
+    date: '2026-10-11', description: 'Reversión ND-001',
+    type: 'AJUSTE', bcvRate: 100, referenceDoc: 'REV-2',
+    reversalOfEntryId: 'nd-entry', reversalReason: 'Se comprobó un error documental.',
+    workpaperNote: 'Papel de trabajo conserva comparación y soporte.',
+    priorPeriodAdjustment: false,
+    items: [
+      { accountCode: '2.1.1.01', debitBs: 29, creditBs: 0, debitUsd: 0.29, creditUsd: 0 },
+      { accountCode: '6.1.1.01', debitBs: 0, creditBs: 25, debitUsd: 0, creditUsd: 0.25 },
+      { accountCode: '1.1.3.01', debitBs: 0, creditBs: 4, debitUsd: 0, creditUsd: 0.04 }
+    ],
+    createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const cancellation = {
+    ...next,
+    purchases: [original, cancelledNote],
+    journalEntries: [originalJournal, reversedSourceJournal, reversalJournal]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(next, cancellation));
   assert.throws(() => validateAccountingSnapshot(next, {
-    ...next, purchases: [original, {
-      ...note, isCancelled: true, cancelledByJournalEntryId: 'missing-reversal',
-      cancellationReason: 'REVERSAL', cancellationNote: 'Intento de anulación sin contra-asiento.'
+    ...cancellation,
+    creditSettlements: [{
+      id: 'active-payment', companyId: 'company-1', documentId: note.id,
+      kind: 'PURCHASE_PAYMENT', isReversed: false
     }]
-  }), /reversión de una ND tipo 02/);
+  }), /anulación de ND tipo 02/);
+  assert.throws(() => validateAccountingSnapshot(next, {
+    ...cancellation,
+    journalEntries: [originalJournal, reversedSourceJournal, {
+      ...reversalJournal,
+      items: reversalJournal.items.map(item => item.accountCode === '2.1.1.01'
+        ? { ...item, debitBs: 28 } : item)
+    }]
+  }), /anulación de ND tipo 02|no cuadra simultáneamente/);
+  assert.throws(() => validateAccountingSnapshot(next, {
+    ...cancellation,
+    purchases: [original, { ...cancelledNote, cancellationNote: '' }]
+  }), /anulación de ND tipo 02|papel de trabajo/);
 });
 
 
