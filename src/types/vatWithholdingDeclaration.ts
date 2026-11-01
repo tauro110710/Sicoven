@@ -207,7 +207,7 @@ export function validateVatDeclarationEventDraft(
         !String(draft.officialSourceTitle || '').trim() ||
         !String(draft.officialReference || '').trim() ||
         !/^https:\/\/(www\.)?seniat\.gob\.ve\//i.test(String(draft.officialSourceUrl || ''))) {
-      throw new Error('El vencimiento requiere fecha y fuente oficial SENIAT verificable (título, referencia y URL HTTPS).');
+      throw new Error('El vencimiento requiere fecha, título, referencia y una URL HTTPS bajo el dominio oficial SENIAT. El sistema valida el dominio declarado, no consulta el contenido de la página.');
     }
     if (related.some(event => event.eventType === 'DUE_DATE_SET')) {
       throw new Error('Ya existe un vencimiento documentado para esta declaración; no se sobrescribe.');
