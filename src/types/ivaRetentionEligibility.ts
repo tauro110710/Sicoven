@@ -27,6 +27,8 @@ export interface IvaRetentionEligibilityInput {
   invoiceFormalDefect?: boolean;
   /** Resultado expreso de consulta del Portal Fiscal. */
   portalRetentionRate?: 0 | 75 | 100 | null;
+  /** Confirmación expresa de exclusiones de los numerales 3, 9 y 10 del artículo 3 consultadas en el Portal Fiscal. */
+  portalArticle3ExclusionConfirmed?: boolean;
 }
 export type IvaRetentionDecisionStatus = 'NOT_APPLICABLE' | 'EXCLUDED' | 'REVIEW' | 'NO_VAT' | 'WITHHOLD';
 export interface IvaRetentionEligibilityResult {
@@ -57,7 +59,13 @@ export function evaluateIvaRetentionEligibility(input: IvaRetentionEligibilityIn
   const article2Applies = input.buyerAgentStatus === 'ARTICLE_2_BUYER' && input.article2Transaction === true;
   if (input.buyerAgentStatus === 'ARTICLE_2_BUYER' && !article2Applies) return decision('NOT_APPLICABLE', 0, null, 'La operación no corresponde a la actividad de adquisición prevista en el artículo 2.');
   if (input.buyerAgentStatus === 'SPECIAL_DESIGNATED' && input.supplierTaxStatus === 'SPECIAL') return decision('NOT_APPLICABLE', 0, null, 'El artículo 1 contempla retenciones a proveedores contribuyentes ordinarios.');
-  if ((input.article3Exclusions || []).length > 0 || input.supplierTaxStatus === 'FORMAL') {
+  const exclusions = input.article3Exclusions || [];
+  const portalDependentExclusions: IvaArticle3Exclusion[] = ['PERCEPTION_AGENT_SPECIFIC_GOODS', 'EXPORTER_RECOVERY_REGISTER', 'SUPPLIER_EXEMPT_SALES_OVER_50'];
+  const selectedPortalExclusion = exclusions.some(item => portalDependentExclusions.includes(item));
+  if (selectedPortalExclusion && input.portalArticle3ExclusionConfirmed !== true) {
+    return decision('REVIEW', 0, null, 'Confirma en el Portal Fiscal la exclusión seleccionada antes de aplicarla.', 'Providencia SNAT/2025/000054, artículo 3, numerales 3, 9 y 10');
+  }
+  if (exclusions.length > 0 || input.supplierTaxStatus === 'FORMAL') {
     return decision('EXCLUDED', 0, null, input.supplierTaxStatus === 'FORMAL' ? 'El proveedor está clasificado como contribuyente formal.' : 'La operación está comprendida en una exclusión del artículo 3.', 'Providencia SNAT/2025/000054, artículo 3');
   }
   if (!article2Applies && input.supplierTaxStatus === 'UNKNOWN') return decision('REVIEW', 0, null, 'Confirma la clasificación fiscal del proveedor para determinar si corresponde retener.');

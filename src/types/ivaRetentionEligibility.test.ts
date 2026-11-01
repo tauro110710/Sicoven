@@ -47,3 +47,19 @@ test('does not invent a tax amount when the input is incomplete and handles zero
   assert.equal(evaluateIvaRetentionEligibility({ buyerAgentStatus: 'SPECIAL_DESIGNATED', supplierTaxStatus: 'ORDINARY' }).status, 'REVIEW');
   assert.equal(evaluateIvaRetentionEligibility({ ...ordinary, vatAmount: 0 }).status, 'NO_VAT');
 });
+
+
+test('requires explicit Portal Fiscal confirmation for Article 3 numerals 3, 9 and 10', () => {
+  const portalCases = ['PERCEPTION_AGENT_SPECIFIC_GOODS', 'EXPORTER_RECOVERY_REGISTER', 'SUPPLIER_EXEMPT_SALES_OVER_50'] as const;
+  for (const exclusion of portalCases) {
+    const pending = evaluateIvaRetentionEligibility({ ...ordinary, article3Exclusions: [exclusion] });
+    assert.equal(pending.status, 'REVIEW');
+    const confirmed = evaluateIvaRetentionEligibility({ ...ordinary, article3Exclusions: [exclusion], portalArticle3ExclusionConfirmed: true });
+    assert.equal(confirmed.status, 'EXCLUDED');
+  }
+});
+
+test('does not require Portal Fiscal confirmation for directly identifiable Article 3 exclusions', () => {
+  const r = evaluateIvaRetentionEligibility({ ...ordinary, article3Exclusions: ['PETTY_CASH_UP_TO_20_UT'] });
+  assert.equal(r.status, 'EXCLUDED');
+});
