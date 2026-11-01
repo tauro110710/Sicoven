@@ -144,7 +144,7 @@ La revisión del texto íntegro de la Gaceta confirma que la elegibilidad no se 
 - Artículos 14 y 15 fijan enteramiento/declaración por quincena.
 - Artículo 16 regula emisión, plazo y contenido del comprobante.
 
-La aplicación automática de estas reglas exige conservar la evidencia consultada (por ejemplo, clasificación del proveedor, consulta del Portal Fiscal y condición de exclusión) y la versión normativa usada en cada operación. Si falta evidencia necesaria, el sistema debe dejar el caso pendiente de revisión y no asumir el 75% ni el 100%.
+La aplicación automática conserva en cada compra la decisión, fundamento legal, fecha de evaluación, clasificación reutilizada del proveedor y confirmaciones estrictamente necesarias. No exige adjuntar expedientes. Los numerales 3, 9 y 10 del artículo 3 requieren confirmación de consulta al Portal Fiscal; el numeral 4 requiere confirmar que el proveedor acreditó la percepción soportada; los numerales 6 y 7 se verifican contra 20 UT usando el valor versionado vigente al inicio del período. Si falta información, el caso queda en revisión. Para el artículo 1, la condición de agente exige sujeto especial y, cuando el RIF identifica persona natural, confirmación de firma personal.
 
 
 ### 6.5 Estructura TXT de 16 columnas y declaración sin operaciones
@@ -229,4 +229,4 @@ Límites:
 - Conciliación profesional integral libro ↔ compra ↔ comprobante ↔ declaración ↔ enteramiento ↔ asiento.
 - Validación profesional fiscal independiente y confirmación de aceptación de archivos en Portal Fiscal.
 
-**Conclusión:** #57, #58 y #59 están integradas en `main` y corrigen defectos concretos. El Bloque 4 sigue abierto: persisten pendientes normativos, especificación vigente del Portal Fiscal, elegibilidad de agentes/proveedores, contenido/plazos del comprobante, rectificaciones y conciliación fiscal integral. La fusión de #59 no demuestra aceptación SENIAT ni cumplimiento certificado.
+**Conclusión:** #57, #58 y #59 están integradas en `main`. El trabajo 4.4 implementa la configuración del agente, clasificación fiscal reutilizable, motor de elegibilidad, trazabilidad compra→evento→comprobante→declaración→enteramiento, registro de entrega y centro de revisión. El Bloque 4 sigue abierto por validación profesional, confirmación de la especificación TXT vigente, flujo completo de notas de débito/crédito y rectificaciones posteriores a la presentación, calendario de vencimientos posteriores a 2026 y verificación de plazos hábiles del artículo 16. Ninguna implementación demuestra por sí sola aceptación del Portal Fiscal ni cumplimiento certificado.

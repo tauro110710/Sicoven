@@ -1780,7 +1780,7 @@ test('SQLite rejects conflicting legacy fiscal-date assignments between the two 
   }), /fechas fiscales legacy contradictorias/);
 });
 
-test('SQLite requires a SENIAT official source for recorded declaration due dates', () => {
+test('SQLite requires a verifiable fiscal source for recorded declaration due dates', () => {
   const state = vatDeclarationFixture();
   assert.throws(() => validateAccountingSnapshot(emptyState(), {
     ...state,
@@ -1790,7 +1790,7 @@ test('SQLite requires a SENIAT official source for recorded declaration due date
       dueDate: '2026-10-20', officialSourceTitle: 'Calendario',
       officialReference: 'Publicación', officialSourceUrl: 'https://example.com/calendar'
     }]
-  }), /vencimiento sin respaldo oficial/);
+  }), /fuente fiscal identificada/);
   assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), {
     ...state,
     vatWithholdingDeclarationEvents: [{

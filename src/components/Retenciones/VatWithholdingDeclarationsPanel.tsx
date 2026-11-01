@@ -81,9 +81,9 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
           fiscalDate: legacyFiscalDates[voucher.id] || '', note: legacyFiscalNotes[voucher.id] || ''
         }]))
       });
-      const scheduledDueDate = getSeniatVatWithholdingDueDate(
-        currentCompany.rif, declaration.period, declaration.window, currentCompany.ivaRetentionAgentBasis || ''
-      );
+      const scheduledDueDate = currentCompany.taxpayerType === 'ESPECIAL'
+        ? getSeniatVatWithholdingDueDate(currentCompany.rif, declaration.period, declaration.window, currentCompany.ivaRetentionAgentBasis || '', currentCompany.isPersonalFirm === true)
+        : null;
       if (scheduledDueDate) {
         await recordVatWithholdingDeclarationEvent(declaration.id, {
           eventType: 'DUE_DATE_SET',
@@ -322,16 +322,16 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
 
           {!hasDueDate && (
             <details className="rounded-xl border border-slate-200 p-4">
-              <summary className="cursor-pointer text-xs font-bold text-slate-800">Documentar vencimiento con fuente oficial aportada</summary>
+              <summary className="cursor-pointer text-xs font-bold text-slate-800">Registrar vencimiento de calendario fiscal verificado</summary>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="text-xs font-semibold text-slate-700">Fecha límite publicada
                   <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
                 </label>
-                <label className="text-xs font-semibold text-slate-700">Título de la fuente oficial
+                <label className="text-xs font-semibold text-slate-700">Título de la fuente normativa
                   <input value={sourceTitle} onChange={e => setSourceTitle(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
                 </label>
-                <label className="text-xs font-semibold text-slate-700">URL oficial SENIAT
-                  <input value={sourceUrl} onChange={e => setSourceUrl(e.target.value)} placeholder="https://www.seniat.gob.ve/..." className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
+                <label className="text-xs font-semibold text-slate-700">URL de la fuente normativa
+                  <input value={sourceUrl} onChange={e => setSourceUrl(e.target.value)} placeholder="https://www.seniat.gob.ve/... o copia de Gaceta Oficial" className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
                 </label>
                 <label className="text-xs font-semibold text-slate-700">Referencia / publicación
                   <input value={sourceReference} onChange={e => setSourceReference(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />

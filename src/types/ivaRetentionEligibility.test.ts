@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateIvaRetentionEligibility } from './ivaRetentionEligibility';
+import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus } from './ivaRetentionEligibility';
 const ordinary = { buyerAgentStatus: 'SPECIAL_DESIGNATED' as const, supplierTaxStatus: 'ORDINARY' as const, vatAmount: 160 };
 
 test('applies general 75 percent rate', () => {
@@ -17,6 +17,7 @@ test('requires review for unknown buyer or supplier status', () => {
 });
 test('excludes formal suppliers and Article 3 operations', () => {
   assert.equal(evaluateIvaRetentionEligibility({ ...ordinary, supplierTaxStatus: 'FORMAL' }).status, 'EXCLUDED');
+  assert.equal(evaluateIvaRetentionEligibility({ ...ordinary, supplierTaxStatus: 'FORMAL', article3Exclusions: ['IMPORT_PERCEPTION_CREDIT'] }).status, 'EXCLUDED');
   assert.equal(evaluateIvaRetentionEligibility({ ...ordinary, article3Exclusions: ['PETTY_CASH_UP_TO_20_UT'] }).status, 'EXCLUDED');
 });
 test('does not apply Article 1 retention to a special supplier', () => {
@@ -62,4 +63,56 @@ test('requires explicit Portal Fiscal confirmation for Article 3 numerals 3, 9 a
 test('does not require Portal Fiscal confirmation for directly identifiable Article 3 exclusions', () => {
   const r = evaluateIvaRetentionEligibility({ ...ordinary, article3Exclusions: ['PETTY_CASH_UP_TO_20_UT'] });
   assert.equal(r.status, 'EXCLUDED');
+});
+
+
+test('Article 3 exclusions are individually recognized without making Portal Fiscal assumptions', () => {
+  const exclusions = [
+    'NOT_SUBJECT_EXEMPT_EXONERATED', 'FORMAL_SUPPLIER', 'EMPLOYEE_TRAVEL_EXPENSE',
+    'DOMICILIARY_UTILITIES', 'SPECIAL_PUBLIC_PURCHASER',
+    'SPECIAL_NONBUSINESS_PUBLIC_ENTITY', 'COT_ARTICLE_146'
+  ] as const;
+  for (const exclusion of exclusions) {
+    assert.equal(evaluateIvaRetentionEligibility({ ...ordinary, article3Exclusions: [exclusion] }).status, 'EXCLUDED', exclusion);
+  }
+});
+
+test('Article 3 numeral 4 requires confirmation that import perception was actually supported', () => {
+  assert.equal(evaluateIvaRetentionEligibility({
+    ...ordinary, article3Exclusions: ['IMPORT_PERCEPTION_CREDIT']
+  }).status, 'REVIEW');
+  const confirmed = evaluateIvaRetentionEligibility({
+    ...ordinary, article3Exclusions: ['IMPORT_PERCEPTION_CREDIT'],
+    supplierImportPerceptionConfirmed: true
+  });
+  assert.equal(confirmed.status, 'EXCLUDED');
+  assert.match(confirmed.legalBasis || '', /numeral\(es\) 4/);
+});
+
+test('Article 3 numerals 6 and 7 apply only when the operation does not exceed 20 verified UT', () => {
+  for (const exclusion of ['REIMBURSABLE_UP_TO_20_UT', 'PETTY_CASH_UP_TO_20_UT'] as const) {
+    const withinLimit = evaluateIvaRetentionEligibility({
+      ...ordinary, article3Exclusions: [exclusion], operationAmountBs: 860, unitTaxValueBs: 43
+    });
+    assert.equal(withinLimit.status, 'EXCLUDED');
+    assert.match(withinLimit.legalBasis || '', exclusion === 'REIMBURSABLE_UP_TO_20_UT' ? /numeral\(es\) 6/ : /numeral\(es\) 7/);
+    const aboveLimit = evaluateIvaRetentionEligibility({
+      ...ordinary, article3Exclusions: [exclusion], operationAmountBs: 860.01, unitTaxValueBs: 43
+    });
+    assert.equal(aboveLimit.status, 'WITHHOLD');
+    assert.equal(aboveLimit.retentionRate, 75);
+    assert.match(aboveLimit.reason, /supera el límite de 20 UT/);
+    assert.equal(evaluateIvaRetentionEligibility({
+      ...ordinary, article3Exclusions: [exclusion], operationAmountBs: 500
+    }).status, 'REVIEW');
+  }
+});
+
+
+test('Article 1 agent status requires special designation and a personal-firm condition for natural persons', () => {
+  assert.equal(resolveIvaBuyerAgentStatus({ agentBasis: 'ARTICLE_1_SPECIAL_DESIGNATED', taxpayerType: 'ESPECIAL', rif: 'J-12345678-9' }), 'SPECIAL_DESIGNATED');
+  assert.equal(resolveIvaBuyerAgentStatus({ agentBasis: 'ARTICLE_1_SPECIAL_DESIGNATED', taxpayerType: 'ESPECIAL', rif: 'V-12345678-9' }), 'UNKNOWN');
+  assert.equal(resolveIvaBuyerAgentStatus({ agentBasis: 'ARTICLE_1_SPECIAL_DESIGNATED', taxpayerType: 'ESPECIAL', rif: 'V-12345678-9', isPersonalFirm: true }), 'SPECIAL_DESIGNATED');
+  assert.equal(resolveIvaBuyerAgentStatus({ agentBasis: 'ARTICLE_1_SPECIAL_DESIGNATED', taxpayerType: 'ORDINARIO', rif: 'J-12345678-9' }), 'UNKNOWN');
+  assert.equal(resolveIvaBuyerAgentStatus({ agentBasis: 'ARTICLE_2_METALS', taxpayerType: 'ORDINARIO', rif: 'V-12345678-9' }), 'ARTICLE_2_BUYER');
 });

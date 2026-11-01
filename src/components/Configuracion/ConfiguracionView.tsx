@@ -85,6 +85,7 @@ export const ConfiguracionView: React.FC = () => {
     currentCompany.defaultIvaRetentionRate
   );
   const [ivaRetentionAgentBasis, setIvaRetentionAgentBasis] = useState<IvaRetentionAgentBasis>(currentCompany.ivaRetentionAgentBasis || 'UNCONFIRMED');
+  const [isPersonalFirm, setIsPersonalFirm] = useState<boolean>(currentCompany.isPersonalFirm === true);
   const [isIgtfPerceptionAgent, setIsIgtfPerceptionAgent] = useState<boolean>(currentCompany.isIgtfPerceptionAgent === true);
   const [address, setAddress] = useState(currentCompany.address);
   const [phone, setPhone] = useState(currentCompany.phone);
@@ -101,6 +102,7 @@ export const ConfiguracionView: React.FC = () => {
     setTaxpayerType(currentCompany.taxpayerType);
     setDefaultIvaRetentionRate(currentCompany.defaultIvaRetentionRate);
     setIvaRetentionAgentBasis(currentCompany.ivaRetentionAgentBasis || 'UNCONFIRMED');
+    setIsPersonalFirm(currentCompany.isPersonalFirm === true);
     setIsIgtfPerceptionAgent(currentCompany.isIgtfPerceptionAgent === true);
     setAddress(currentCompany.address);
     setPhone(currentCompany.phone);
@@ -203,6 +205,7 @@ export const ConfiguracionView: React.FC = () => {
   const handleRifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.toUpperCase();
     setRif(val);
+    setIsPersonalFirm(false);
     if (rifError) {
       const res = validateVenezuelanRif(val);
       setRifError(res.error);
@@ -233,6 +236,7 @@ export const ConfiguracionView: React.FC = () => {
       taxpayerType,
       defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
       ivaRetentionAgentBasis,
+      isPersonalFirm,
       isIgtfPerceptionAgent,
       address: address.trim(),
       phone: phone.trim(),
@@ -494,7 +498,7 @@ export const ConfiguracionView: React.FC = () => {
                 onChange={e => {
                   const val = e.target.value as TaxpayerType;
                   setTaxpayerType(val);
-                  if (val === 'ORDINARIO') setDefaultIvaRetentionRate(0);
+                  if (val === 'ORDINARIO') { setDefaultIvaRetentionRate(0); setIsPersonalFirm(false); if (ivaRetentionAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED') setIvaRetentionAgentBasis('UNCONFIRMED'); }
                   else if (defaultIvaRetentionRate === 0) setDefaultIvaRetentionRate(75);
                 }}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-semibold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
@@ -520,11 +524,17 @@ export const ConfiguracionView: React.FC = () => {
               <label className="block font-semibold text-slate-800">Condición como agente de retención de IVA — Providencia SNAT/2025/000054</label>
               <select value={ivaRetentionAgentBasis} onChange={e => setIvaRetentionAgentBasis(e.target.value as IvaRetentionAgentBasis)} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-semibold">
                 <option value="UNCONFIRMED">Pendiente de confirmar</option>
-                <option value="ARTICLE_1_SPECIAL_DESIGNATED">Artículo 1 — Sujeto especial calificado y notificado</option>
+                <option value="ARTICLE_1_SPECIAL_DESIGNATED" disabled={taxpayerType !== 'ESPECIAL'}>Artículo 1 — Sujeto especial calificado y notificado</option>
                 <option value="ARTICLE_2_METALS">Artículo 2 — Comprador habitual de metales o piedras preciosas</option>
                 <option value="NOT_AGENT">No es agente de retención bajo esta Providencia</option>
               </select>
               <p className="text-[11px] text-slate-600">La calificación de contribuyente especial por sí sola no sustituye la confirmación de la designación. Si queda pendiente, SICOVEN dejará la retención en revisión.</p>
+              {ivaRetentionAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED' && /^[VE]/.test(rif.replace(/[^A-Z0-9]/g, '')) && (
+                <label className="flex items-start gap-2 text-xs text-slate-800">
+                  <input type="checkbox" checked={isPersonalFirm} onChange={e => setIsPersonalFirm(e.target.checked)} className="mt-0.5" />
+                  <span><strong>La persona natural está constituida como firma personal</strong><span className="block text-[11px] text-slate-600 mt-1">La Providencia incluye a personas naturales especiales únicamente cuando actúan como firma personal.</span></span>
+                </label>
+              )}
             </div>
             <div className="sm:col-span-2 rounded-lg border border-sky-200 bg-sky-50 p-3">
               <label className="flex items-start gap-2 text-sm text-slate-800 cursor-pointer">

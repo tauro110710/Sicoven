@@ -37,7 +37,7 @@ import {
   INITIAL_STATEMENT_MOVEMENTS
 } from '../data/initialData';
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
-import { evaluateIvaRetentionEligibility } from '../types/ivaRetentionEligibility';
+import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus } from '../types/ivaRetentionEligibility';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { FinancialDisclosure, validateFinancialDisclosure } from '../types/financialDisclosures';
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
@@ -1577,9 +1577,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     if (purchaseData.ivaRetentionDecision) {
       const snapshot = purchaseData.ivaRetentionDecision;
-      const expectedBuyerAgentStatus = currentCompany.ivaRetentionAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED' ? 'SPECIAL_DESIGNATED' : currentCompany.ivaRetentionAgentBasis === 'ARTICLE_2_METALS' ? 'ARTICLE_2_BUYER' : currentCompany.ivaRetentionAgentBasis === 'NOT_AGENT' ? 'NOT_AGENT' : 'UNKNOWN';
+      const expectedBuyerAgentStatus = resolveIvaBuyerAgentStatus({ agentBasis: currentCompany.ivaRetentionAgentBasis, taxpayerType: currentCompany.taxpayerType, rif: currentCompany.rif, isPersonalFirm: currentCompany.isPersonalFirm });
       if (snapshot.buyerAgentStatus !== expectedBuyerAgentStatus) throw new Error('La condición de agente de retención de la empresa cambió o no coincide. Actualice la evaluación antes de registrar.');
-      const evaluated = evaluateIvaRetentionEligibility({ buyerAgentStatus: snapshot.buyerAgentStatus, supplierTaxStatus: snapshot.supplierTaxStatus, article2Transaction: snapshot.article2Transaction, article3Exclusions: snapshot.article3Exclusions as any, portalArticle3ExclusionConfirmed: snapshot.portalArticle3ExclusionConfirmed, vatAmount: purchaseData.vatAmountBs, ...(snapshot.vatNotDiscriminated ? { vatNotDiscriminated: true, taxableAmountIncludingVat: snapshot.taxableAmountIncludingVatBs } : {}), taxRate: purchaseData.taxRate, invoiceFormalDefect: snapshot.invoiceFormalDefect, portalRetentionRate: snapshot.portalRetentionRate ?? null });
+      const evaluated = evaluateIvaRetentionEligibility({ buyerAgentStatus: snapshot.buyerAgentStatus, supplierTaxStatus: snapshot.supplierTaxStatus, article2Transaction: snapshot.article2Transaction, article3Exclusions: snapshot.article3Exclusions as any, portalArticle3ExclusionConfirmed: snapshot.portalArticle3ExclusionConfirmed, supplierImportPerceptionConfirmed: snapshot.supplierImportPerceptionConfirmed, operationAmountBs: snapshot.operationAmountBs, unitTaxValueBs: snapshot.unitTaxValueBs, vatAmount: purchaseData.vatAmountBs, ...(snapshot.vatNotDiscriminated ? { vatNotDiscriminated: true, taxableAmountIncludingVat: snapshot.taxableAmountIncludingVatBs } : {}), taxRate: purchaseData.taxRate, invoiceFormalDefect: snapshot.invoiceFormalDefect, portalRetentionRate: snapshot.portalRetentionRate ?? null });
       if (evaluated.status !== snapshot.decisionStatus || evaluated.retentionRate !== purchaseData.retentionRate || Math.abs(evaluated.withheldAmount - purchaseData.vatWithheldBs) > 0.01 || evaluated.reason !== snapshot.decisionReason || purchaseData.supplierTaxStatus !== snapshot.supplierTaxStatus) throw new Error('La evaluación fiscal de retención IVA no coincide con los datos de la compra. Revise la clasificación y vuelva a calcular.');
     }
     if (purchaseData.vatWithheldBs > purchaseData.vatAmountBs + 0.01) {

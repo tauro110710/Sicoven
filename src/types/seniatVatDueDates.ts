@@ -34,7 +34,7 @@ const SECOND_HALF_DAYS: number[][] = [
 ];
 
 const SOURCE_TITLE = 'Gaceta Oficial N.º 43.273 — Providencia SNAT/2025/000091';
-const SOURCE_REFERENCE = 'Calendario 2026 de sujetos pasivos especiales y agentes de retención, artículos 1 y 8';
+const SOURCE_REFERENCE = 'Calendario 2026 de sujetos pasivos especiales y agentes de retención, artículo 1';
 const SOURCE_URL = 'https://iusdata.com/wp-content/uploads/2025/12/1-SENIAT-GO-43.273-2025-DIC-09.pdf';
 
 /**
@@ -46,13 +46,16 @@ export function getSeniatVatWithholdingDueDate(
   rif: string,
   period: string,
   window: SeniatVatCalendarWindow,
-  agentBasis: string
+  agentBasis: string,
+  isPersonalFirm = false
 ): SeniatVatDueDate | null {
   if (agentBasis !== 'ARTICLE_1_SPECIAL_DESIGNATED') return null;
   if (!/^2026(?:0[1-9]|1[0-2])$/.test(period)) return null;
-  const digits = String(rif || '').replace(/[^0-9]/g, '');
+  const normalizedRif = String(rif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+  const digits = normalizedRif.replace(/[^0-9]/g, '');
   const lastDigit = digits.slice(-1);
   if (!/^[0-9]$/.test(lastDigit)) return null;
+  if (/^[VE]/.test(normalizedRif) && !isPersonalFirm) return null;
 
   const periodMonth = Number(period.slice(4, 6));
   const dueMonth = window === 'FIRST_HALF' ? periodMonth : periodMonth + 1;
