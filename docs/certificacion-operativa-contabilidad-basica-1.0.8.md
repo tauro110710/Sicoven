@@ -144,7 +144,32 @@ Si un gate falla o carece de evidencia, la decisión será **NO APTO — CONTINU
 
 La aprobación técnica habilita la generación del artefacto de CI. La publicación de release y su distribución pública requieren autorización expresa posterior.
 
-## 10. Bitácora
+## 10. Evidencia ejecutada del candidato 1.0.8
+
+**SHA candidato:** `98120a90fa1fbe06d9e5dbbee0211c5e8f9df753`  
+**Fecha CI:** 01/11/2026.
+
+- Desktop Validation run `41329804409`: SUCCESS. Instalación de dependencias, guards de autenticación/sesión, pruebas, TypeScript, auditoría de recursos, build y auditoría de assets completados.
+- Windows Installer run `41329804419`: SUCCESS. Las 15 etapas completadas, incluida compilación NSIS, instalación/arranque previo, actualización 1.0.7 → 1.0.8 y verificación SQLite.
+- Suite automatizada en el job Windows: **550 pruebas, 550 aprobadas, 0 fallidas**. La suite de escritorio también finalizó satisfactoriamente.
+- Instalador producido: `SICOVEN-Setup-1.0.8-x64.exe`, tamaño **136,698,054 bytes**.
+- Prueba de actualización: snapshot sintético de la empresa `cert-upgrade-company`, asiento `cert-upgrade-opening-0001`; SHA-256 antes y después idéntico: `f4bde4773b6b8d655c873176779a5fd57ef984429499e17bfc55940c573a2b8c`. El proceso confirmó instalación anterior, arranque, actualización y conservación.
+- Artefacto CI: `SICOVEN-Windows-5d975aacd833572e589393d1d8ee912bd76dd65e`, ID `13093165226`; SHA-256 del ZIP: `027f12b9dfc680ab5ee390c7b61c933e864795c18c4d1c9492a4a472927aa751`. Disponible como artefacto temporal de GitHub Actions; no es release público.
+- El estado combinado reportó un check Vercel fallido por límite de compilación del plan. SICOVEN es una aplicación Electron/SQLite; los dos workflows propios de validación y empaquetado terminaron correctamente. No se interpreta el check Vercel como validación del instalador.
+- El empaquetado informa que no hay certificado de firma de código configurado; el ejecutable queda **sin firma digital**. Esto debe resolverse o advertirse expresamente antes de distribución general.
+
+### Estado de gates después de esta ejecución
+
+- G0: APROBADO.
+- G10: EVIDENCIA PARCIAL — conciliación de componentes e integración contable sintética; falta recorrido E2E de interfaz a SQLite.
+- G11: EVIDENCIA PARCIAL — pruebas de aislamiento y correlativos multiempresa en SQLite y en informes; falta E2E de todas las operaciones.
+- G12: EVIDENCIA PARCIAL — persistencia tras cierre/reapertura SQLite y hash del snapshot durante upgrade; falta reinicio integral y verificación amplia de la aplicación.
+- G14: EVIDENCIA PARCIAL — upgrade real 1.0.7 → 1.0.8 y conservación del snapshot aprobados; falta evidencia separada de instalación limpia 1.0.8 y firma del instalador.
+- G1–G9, G13 y G15: PENDIENTES de evidencia de aceptación específica según la matriz. La prueba integral añadida no reemplaza el dataset completo ni el recorrido E2E.
+
+**Decisión:** el artefacto de CI existe y los workflows propios están verdes, pero SICOVEN continúa **NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN CONTABLE BÁSICA** hasta cerrar todos los gates G0–G15. No publicar ni distribuir este artefacto como versión aprobada.
+
+## 11. Bitácora
 
 | Fecha | Cambio | Resultado |
 |---|---|---|
