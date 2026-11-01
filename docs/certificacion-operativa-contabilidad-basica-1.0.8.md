@@ -149,3 +149,4 @@ La aprobación técnica habilita la generación del artefacto de CI. La publicac
 | Fecha | Cambio | Resultado |
 |---|---|---|
 | 2026-11-01 | Se define el alcance independiente de certificación 1.0.8 sobre main 3676dbef4513d7c6920cd1ec6b708a5ad84025d9 | Certificación iniciada; ningún gate declarado aprobado por anticipado |
+| 2026-11-01 | G0: CI base 1.0.7 validado (546/546 pruebas; desktop y Windows SUCCESS). Se agrega prueba SQLite multiempresa; primera corrida detectó expectativa incorrecta del test sobre el evento state_saved (no defecto de persistencia), se corrige de 2 a 3 eventos totales y se relanza CI | Corrección incorporada; CI de la revisión corregida en ejecución; G12 sigue pendiente |
