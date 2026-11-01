@@ -54,6 +54,36 @@ test('journal rejects stale expected states and duplicate operations', () => {
   } finally { h.close(); }
 });
 
+test('journal validates canonical UUID v4 and rollback invariants', () => {
+  const h = fixture();
+  try {
+    const created = createJournal({ journalPath: h.journalPath, sourceDatabaseSha256: HASH_A, stagedDatabaseSha256: HASH_B });
+    assert.throws(() => {
+      const invalid = { ...created, operationId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' };
+      require('./restore-journal.cjs').validateJournal(invalid);
+    }, /corrupto/);
+    assert.throws(() => {
+      const invalid = {
+        ...created,
+        state: 'installed',
+        hashes: { ...created.hashes, rollbackDatabase: null }
+      };
+      require('./restore-journal.cjs').validateJournal(invalid);
+    }, /huella de retorno verificada/);
+  } finally { h.close(); }
+});
+
+test('journal rejects a symlink in any parent directory', () => {
+  const h = fixture();
+  try {
+    const real = path.join(h.root, 'real');
+    const linked = path.join(h.root, 'linked');
+    fs.mkdirSync(real);
+    fs.symlinkSync(real, linked, 'junction');
+    assert.throws(() => readJournal(path.join(linked, 'journal.json')), /directorio no real o un enlace/);
+  } finally { h.close(); }
+});
+
 test('journal rejects a symlink and corrupt JSON without modifying it', () => {
   const h = fixture();
   try {
