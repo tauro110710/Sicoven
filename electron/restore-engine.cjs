@@ -75,6 +75,8 @@ function cleanupOperation(userDataDir,operationId) {
   const root=path.join(userDataDir,OP_ROOT);
   const dir=path.join(root,operationId);
   if(exists(dir)) { realDir(dir,'Directorio de operación'); fs.rmSync(dir,{recursive:true,force:true}); }
+  const staging=path.join(userDataDir,'restore-staging',operationId);
+  if(exists(staging)) { realDir(staging,'Staging de restauración'); fs.rmSync(staging,{recursive:true,force:true}); }
   const journal=path.join(userDataDir,JOURNAL);
   if(exists(journal)) fs.rmSync(journal);
 }
