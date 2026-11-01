@@ -750,15 +750,20 @@ export async function exportComprasPdf(
   let totalIslrRetenido = 0;
   let totalIgtf = 0;
 
+  const hasSupplierDebitNotes = purchases.some(p => p.documentType === '02');
   const tableBody: any[] = purchases.map(p => {
     const sign = p.documentType === '03' ? -1 : 1;
-    totalMonto += sign * (p.totalAmountBs || 0);
-    totalExento += sign * (p.exemptAmountBs || 0);
-    totalBase += sign * (p.taxableBaseBs || 0);
-    totalIva += sign * (p.vatAmountBs || 0);
-    totalRetenido += sign * (p.vatWithheldBs || 0);
-    totalIslrRetenido += sign * (p.islrWithheldBs || 0);
-    totalIgtf += sign * Number(p.igtfAmountBs || 0);
+    // ND remain visible for traceability but are excluded from fiscal totals
+    // until their treatment is confirmed against current primary SENIAT guidance.
+    if (p.documentType !== '02') {
+      totalMonto += sign * (p.totalAmountBs || 0);
+      totalExento += sign * (p.exemptAmountBs || 0);
+      totalBase += sign * (p.taxableBaseBs || 0);
+      totalIva += sign * (p.vatAmountBs || 0);
+      totalRetenido += sign * (p.vatWithheldBs || 0);
+      totalIslrRetenido += sign * (p.islrWithheldBs || 0);
+      totalIgtf += sign * Number(p.igtfAmountBs || 0);
+    }
 
     return [
       p.opNumber,
@@ -781,7 +786,7 @@ export async function exportComprasPdf(
 
   // Totals row
   tableBody.push([
-    { content: 'TOTALES DEL PERÍODO:', colSpan: 6, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+    { content: hasSupplierDebitNotes ? 'TOTALES FISCALES (ND TIPO 02 EXCLUIDAS):' : 'TOTALES DEL PERÍODO:', colSpan: 6, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: formatNumberVe(totalMonto), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: formatNumberVe(totalIgtf), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [251, 191, 36] } },
     { content: formatNumberVe(totalExento), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
