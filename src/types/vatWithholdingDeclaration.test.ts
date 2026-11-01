@@ -115,6 +115,10 @@ test('declaration workflow requires review, filing receipt, then supported payme
     eventType: 'PAYMENT', occurredAt: '2026-10-18', amountBs: 50,
     paymentReference: 'TRX-1', evidenceReference: 'REC-1'
   });
+  assert.doesNotThrow(() => validateVatDeclarationEventDraft(declaration, [reviewed, filed], {
+    eventType: 'PAYMENT', occurredAt: '2026-10-18', amountBs: 50,
+    paymentReference: 'TRX-ALT'
+  }));
   assert.equal(getVatDeclarationStatus(declaration, [reviewed, filed, partial]), 'PARTIALLY_PAID');
   const finalPayment = { id: 'event-4', declarationId: declaration.id, eventType: 'PAYMENT' as const,
     occurredAt: '2026-10-19', recordedAt: '2026-10-19T10:00:00.000Z',
@@ -130,15 +134,20 @@ test('declaration workflow requires review, filing receipt, then supported payme
   }), /no puede superar/);
 });
 
-test('due date requires an official SENIAT HTTPS source and is never calculated automatically', () => {
+test('due date requires a verifiable tax-source URL and supports the published Gazette calendar', () => {
   const declaration = draft();
   assert.throws(() => validateVatDeclarationEventDraft(declaration, [], {
     eventType: 'DUE_DATE_SET', occurredAt: '2026-10-16', dueDate: '2026-10-20',
     officialSourceTitle: 'Calendario', officialReference: 'Gaceta', officialSourceUrl: 'https://example.com/calendar'
-  }), /dominio oficial SENIAT/);
+  }), /fuente fiscal identificada/);
   assert.doesNotThrow(() => validateVatDeclarationEventDraft(declaration, [], {
     eventType: 'DUE_DATE_SET', occurredAt: '2026-10-16', dueDate: '2026-10-20',
     officialSourceTitle: 'Calendario oficial SENIAT', officialReference: 'Publicación oficial',
     officialSourceUrl: 'https://www.seniat.gob.ve/calendario'
+  }));
+  assert.doesNotThrow(() => validateVatDeclarationEventDraft(declaration, [], {
+    eventType: 'DUE_DATE_SET', occurredAt: '2026-10-16', dueDate: '2026-11-10',
+    officialSourceTitle: 'Gaceta Oficial N.º 43.273', officialReference: 'Providencia SNAT/2025/000091',
+    officialSourceUrl: 'https://iusdata.com/wp-content/uploads/2025/12/1-SENIAT-GO-43.273-2025-DIC-09.pdf'
   }));
 });

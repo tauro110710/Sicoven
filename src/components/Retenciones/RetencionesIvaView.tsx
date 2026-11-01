@@ -19,7 +19,7 @@ import { VatWithholdingDeclarationsPanel } from './VatWithholdingDeclarationsPan
 import { getVatDeclarationStatus } from '../../types/vatWithholdingDeclaration';
 
 export const RetencionesIvaView: React.FC = () => {
-  const { currentCompany, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, displayCurrency } = useAccounting();
+  const { currentCompany, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, recordVatVoucherDelivery, displayCurrency } = useAccounting();
 
   const [selectedVoucher, setSelectedVoucher] = useState<VatRetentionVoucher | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -48,6 +48,7 @@ export const RetencionesIvaView: React.FC = () => {
   const declaredVoucherIds = new Set(vatWithholdingDeclarations.flatMap(item => item.voucherIds));
   const pendingDeclarationCount = vatVouchers.filter(voucher => !declaredVoucherIds.has(voucher.id)).length;
   const correctionCount = vatVouchers.filter(voucher => voucher.requiresFiscalCorrection).length;
+  const pendingDeliveryCount = vatVouchers.filter(voucher => !voucher.deliveryDate).length;
   const pendingDeclarationStatuses = vatWithholdingDeclarations.filter(item => {
     const status = getVatDeclarationStatus(item, vatWithholdingDeclarationEvents);
     return status === 'PREPARED' || status === 'REVIEWED' || status === 'FILED' || status === 'PARTIALLY_PAID';
@@ -90,7 +91,7 @@ export const RetencionesIvaView: React.FC = () => {
       </div>
       {activeSection === 'vouchers' ? (
       <>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Comprobantes por declarar</span>
           <strong className="mt-1 block text-2xl font-bold text-slate-900">{pendingDeclarationCount}</strong>
@@ -105,6 +106,11 @@ export const RetencionesIvaView: React.FC = () => {
           <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Comprobantes por corregir</span>
           <strong className="mt-1 block text-2xl font-bold text-slate-900">{correctionCount}</strong>
           <span className="text-[11px] text-slate-500">Se conservan hasta completar su regularización</span>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Entregas pendientes</span>
+          <strong className="mt-1 block text-2xl font-bold text-slate-900">{pendingDeliveryCount}</strong>
+          <span className="text-[11px] text-slate-500">Fecha y medio de entrega aún no registrados</span>
         </div>
       </div>
 
@@ -268,7 +274,7 @@ export const RetencionesIvaView: React.FC = () => {
                 filteredVouchers.map(v => (
                   <tr key={v.id} className="hover:bg-slate-50 transition">
                     <td className="py-2.5 px-4 font-mono font-bold text-purple-900 bg-purple-50/30 whitespace-nowrap">
-                      {v.voucherNumber}{v.requiresFiscalCorrection && <span title={v.correctionNote || 'Revisar regularización fiscal'} className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-800">REVISAR</span>}
+                      {v.voucherNumber}{!v.deliveryDate && <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-800">PEND. ENTREGA</span>}{v.deliveryDate && <span className="ml-1 rounded bg-emerald-100 px-1 py-0.5 text-[9px] font-bold text-emerald-800">ENTREGADO</span>}{v.requiresFiscalCorrection && <span title={v.correctionNote || 'Revisar regularización fiscal'} className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-800">REVISAR</span>}
                     </td>
                     <td className="py-2.5 px-4 font-mono text-slate-600 whitespace-nowrap">
                       {formatDate(v.date)}
@@ -325,6 +331,12 @@ export const RetencionesIvaView: React.FC = () => {
         voucher={selectedVoucher}
         company={currentCompany}
         onClose={() => setSelectedVoucher(null)}
+        onRecordDelivery={async draft => {
+          if (!selectedVoucher) throw new Error('Seleccione un comprobante.');
+          const updated = await recordVatVoucherDelivery(selectedVoucher.id, draft);
+          setSelectedVoucher(updated);
+          return updated;
+        }}
       />
       </>
       ) : <VatWithholdingDeclarationsPanel />}

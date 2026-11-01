@@ -220,7 +220,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       supplierName: supplierName.trim().toUpperCase(),
       supplierAddress: supplierAddress.trim() || undefined,
       invoiceNumber: invoiceNumber.trim(),
-      controlNumber: controlNumber.trim() || `00-${invoiceNumber.trim()}`,
+      controlNumber: controlNumber.trim(),
       documentType,
       affectedInvoiceNumber: affectedInvoiceNumber.trim() || undefined,
       totalAmountBs,

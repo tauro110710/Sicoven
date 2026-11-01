@@ -199,15 +199,15 @@ export function validateVatDeclarationEventDraft(
         money(paid + amount) > declaration.totalWithheldBs + 0.0001) {
       throw new Error('El pago debe ser positivo y no puede superar el total retenido de la declaración.');
     }
-    if (!String(draft.paymentReference || '').trim() || !String(draft.evidenceReference || '').trim()) {
-      throw new Error('El enteramiento requiere referencia bancaria y soporte documental.');
+    if (!String(draft.paymentReference || '').trim()) {
+      throw new Error('El enteramiento requiere la referencia bancaria del pago.');
     }
   } else if (draft.eventType === 'DUE_DATE_SET') {
     if (!validDate(String(draft.dueDate || '')) ||
         !String(draft.officialSourceTitle || '').trim() ||
         !String(draft.officialReference || '').trim() ||
-        !/^https:\/\/(www\.)?seniat\.gob\.ve\//i.test(String(draft.officialSourceUrl || ''))) {
-      throw new Error('El vencimiento requiere fecha, título, referencia y una URL HTTPS bajo el dominio oficial SENIAT. El sistema valida el dominio declarado, no consulta el contenido de la página.');
+        !/^https:\/\/(?:www\.)?seniat\.gob\.ve\//i.test(String(draft.officialSourceUrl || '')) && !/^https:\/\/iusdata\.com\//i.test(String(draft.officialSourceUrl || ''))) {
+      throw new Error('El vencimiento requiere fecha, título, referencia y una URL HTTPS de una fuente fiscal identificada. El sistema valida el dominio declarado, no consulta el contenido de la página.');
     }
     if (related.some(event => event.eventType === 'DUE_DATE_SET')) {
       throw new Error('Ya existe un vencimiento documentado para esta declaración; no se sobrescribe.');

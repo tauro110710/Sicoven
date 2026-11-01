@@ -318,7 +318,10 @@ export interface VatRetentionVoucher {
   id: string;
   companyId: string;
   voucherNumber: string; // 14 dígitos: YYYYMM + 8 dígitos correlativo
-  date: string;
+  date: string; // Fecha de emisión del comprobante
+  deliveryDate?: string; // Fecha efectiva de entrega al proveedor
+  deliveryMethod?: 'PHYSICAL' | 'ELECTRONIC';
+  electronicDeliveryAgreed?: boolean;
   period: string; // YYYYMM del evento fiscal de retención
   /** Disparador fiscal inmutable: pago efectivo o abono en cuenta. Ausente en comprobantes históricos. */
   fiscalTrigger?: 'PAYMENT' | 'ACCOUNT_CREDIT';

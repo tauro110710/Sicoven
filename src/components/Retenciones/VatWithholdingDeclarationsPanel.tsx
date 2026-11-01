@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import type { VatWithholdingDeclaration, VatWithholdingDeclarationEvent } from '../../types/accounting';
 import { getVatDeclarationStatus } from '../../types/vatWithholdingDeclaration';
+import { getSeniatVatWithholdingDueDate } from '../../types/seniatVatDueDates';
 import { formatBs, formatDate } from '../../utils/formatters';
 
 const today = () => {
@@ -19,7 +20,7 @@ const statusLabels: Record<string, string> = {
 
 export const VatWithholdingDeclarationsPanel: React.FC = () => {
   const {
-    vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents,
+    currentCompany, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents,
     createVatWithholdingDeclaration, recordVatWithholdingDeclarationEvent
   } = useAccounting();
   const now = new Date();
@@ -38,7 +39,6 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
   const [receiptReference, setReceiptReference] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
-  const [evidenceReference, setEvidenceReference] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [sourceTitle, setSourceTitle] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
@@ -81,6 +81,19 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
           fiscalDate: legacyFiscalDates[voucher.id] || '', note: legacyFiscalNotes[voucher.id] || ''
         }]))
       });
+      const scheduledDueDate = getSeniatVatWithholdingDueDate(
+        currentCompany.rif, declaration.period, declaration.window, currentCompany.ivaRetentionAgentBasis || ''
+      );
+      if (scheduledDueDate) {
+        await recordVatWithholdingDeclarationEvent(declaration.id, {
+          eventType: 'DUE_DATE_SET',
+          occurredAt: today(),
+          dueDate: scheduledDueDate.dueDate,
+          officialSourceTitle: scheduledDueDate.sourceTitle,
+          officialReference: scheduledDueDate.sourceReference,
+          officialSourceUrl: scheduledDueDate.sourceUrl
+        });
+      }
       setSelectedId(declaration.id);
     });
   };
@@ -297,14 +310,11 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
               <label className="text-xs font-semibold text-slate-700">Referencia bancaria
                 <input value={paymentReference} onChange={e => setPaymentReference(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
               </label>
-              <label className="text-xs font-semibold text-slate-700">Soporte documental
-                <input value={evidenceReference} onChange={e => setEvidenceReference(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
-              </label>
               <label className="text-xs font-semibold text-slate-700">Fecha de pago
                 <input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
               </label>
-              <button type="button" disabled={busy || !paymentAmount || !paymentReference.trim() || !evidenceReference.trim()}
-                onClick={() => addEvent({ eventType: 'PAYMENT', occurredAt: eventDate, amountBs: Number(paymentAmount), paymentReference, evidenceReference })}
+              <button type="button" disabled={busy || !paymentAmount || !paymentReference.trim()}
+                onClick={() => addEvent({ eventType: 'PAYMENT', occurredAt: eventDate, amountBs: Number(paymentAmount), paymentReference })}
                 className="rounded-lg bg-purple-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-40 sm:col-span-4">Registrar enteramiento</button>
               </div>
             </div>

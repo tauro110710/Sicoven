@@ -129,7 +129,9 @@ Los artículos 14 y 15 distinguen retenciones practicadas del día 1 al 15 y del
 
 El artículo 16 establece entrega a más tardar dentro de los primeros dos días hábiles del período de imposición siguiente y exige, entre otros, numeración consecutiva de 14 caracteres (AAAAMM + secuencial de ocho dígitos), agente, proveedor, RIF, fecha de emisión/entrega, documento, base, impuesto causado e importe retenido. El modelo conserva campos parciales, y no se encontró en la revisión inicial un control explícito del plazo de emisión/entrega ni el snapshot completo de agente/fecha de entrega/impresor.
 
-**Corrección requerida:** completar la trazabilidad documental conforme al artículo 16, conservar la fecha de entrega y validar la secuencia de 14 caracteres. El control de vencimiento debe advertir/bloquear según el flujo definido, sin inventar fechas hábiles ni calendarios.
+**Estado: CORREGIDO PARCIALMENTE EN EL TRABAJO 4.4.** El comprobante conserva fecha de emisión separada de la fecha fiscal del evento. La entrega al proveedor se registra una sola vez, con fecha real y medio físico o electrónico; la entrega electrónica exige confirmar acuerdo previo. El dato queda protegido como marca histórica en SQLite y se muestra en el comprobante. No se exigen adjuntos.
+
+El vencimiento de 2026 se calcula automáticamente para agentes designados del artículo 1 mediante el calendario de la Providencia SNAT/2025/000091, según el último dígito del RIF y la quincena, guardando la referencia a la Gaceta Oficial N.º 43.273. Para agentes exclusivamente del artículo 2 y períodos fuera del calendario publicado, SICOVEN no inventa fechas y conserva la captura de una fecha verificada. Pendiente: validar calendarios posteriores y la presentación profesional de la fecha de entrega dentro del formato definitivo del comprobante.
 
 ### 6.4 Consecuencia normativa para las reglas de elegibilidad
 
@@ -219,12 +221,12 @@ Límites:
 
 ### 7.4 Pendientes que permanecen abiertos
 
-- Elegibilidad normativa y evidencia del agente/proveedor (6.4).
-- Comprobante de retención IVA: contenido completo, emisión/entrega y plazo del artículo 16 (6.3).
-- Especificación oficial vigente de archivo TXT, incluida declaración sin operaciones (6.5).
-- Flujo de notas de crédito/débito y rectificaciones.
+- Validación profesional independiente de elegibilidad y clasificación fiscal del agente/proveedor implementadas en 4.4A–4.4C.
+- Comprobante de retención IVA: confirmar con revisión profesional todos los elementos de contenido del artículo 16 y su formato definitivo; emisión y registro de entrega ya están implementados parcialmente.
+- Especificación técnica vigente del archivo TXT, incluida declaración sin operaciones, sigue pendiente de fuente primaria verificable y prueba autorizada.
+- Flujo fiscal completo de notas de débito/crédito y rectificaciones de declaraciones presentadas.
 - Parámetros históricos y catálogo normativo versionado.
-- Conciliación integral libro ↔ comprobante ↔ declaración ↔ enteramiento ↔ asiento.
-- Auditoría y validación profesional fiscal independiente.
+- Conciliación profesional integral libro ↔ compra ↔ comprobante ↔ declaración ↔ enteramiento ↔ asiento.
+- Validación profesional fiscal independiente y confirmación de aceptación de archivos en Portal Fiscal.
 
 **Conclusión:** #57, #58 y #59 están integradas en `main` y corrigen defectos concretos. El Bloque 4 sigue abierto: persisten pendientes normativos, especificación vigente del Portal Fiscal, elegibilidad de agentes/proveedores, contenido/plazos del comprobante, rectificaciones y conciliación fiscal integral. La fusión de #59 no demuestra aceptación SENIAT ni cumplimiento certificado.

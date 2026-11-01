@@ -411,15 +411,18 @@ function validateVatDeclarationLedger(previousState, nextState) {
       if (!validVatDeclarationDate(String(event.dueDate || '')) ||
           !String(event.officialSourceTitle || '').trim() ||
           !String(event.officialReference || '').trim() ||
-          !/^https:\/\/(www\.)?seniat\.gob\.ve\//i.test(String(event.officialSourceUrl || '')) ||
+          !/^https:\/\/(?:www\.)?seniat\.gob\.ve\//i.test(String(event.officialSourceUrl || '')) && !/^https:\/\/iusdata\.com\//i.test(String(event.officialSourceUrl || '')) ||
           history.some(item => item.eventType === 'DUE_DATE_SET')) {
-        throw new Error('SQLite rechazó un vencimiento sin respaldo oficial SENIAT verificable o duplicado.');
+        throw new Error('SQLite rechazó un vencimiento sin fuente fiscal identificada y URL HTTPS verificable o duplicado.');
       }
     } else if (event.eventType === 'REVIEWED') {
       const hasCorrection = asArray(declaration.voucherIds).some(id => vouchers.get(String(id))?.requiresFiscalCorrection);
       const hasLegacy = asArray(declaration.voucherSnapshots).some(item => item.dateBasis === 'LEGACY_DOCUMENT_DATE');
       const declaredIds = new Set(asArray(declaration.voucherIds).map(String));
-      const assignments = new Map(asArray(declaration.legacyDateAssignments).map(item => [String(item.voucherId), item]));
+      const assignments = new Map(asArray(nextState.vatWithholdingDeclarations)
+        .filter(item => String(item.companyId) === String(declaration.companyId) && String(item.period) === String(declaration.period))
+        .flatMap(item => asArray(item.legacyDateAssignments))
+        .map(item => [String(item.voucherId), item]));
       const unresolvedLegacy = asArray(nextState.vatVouchers).some(voucher =>
         String(voucher.companyId) === String(declaration.companyId) &&
         String(voucher.period || '') === String(declaration.period) &&
@@ -439,7 +442,10 @@ function validateVatDeclarationLedger(previousState, nextState) {
     } else if (event.eventType === 'FILED') {
       const reviewedEvent = history.find(item => item.eventType === 'REVIEWED');
       const declaredIds = new Set(asArray(declaration.voucherIds).map(String));
-      const assignments = new Map(asArray(declaration.legacyDateAssignments).map(item => [String(item.voucherId), item]));
+      const assignments = new Map(asArray(nextState.vatWithholdingDeclarations)
+        .filter(item => String(item.companyId) === String(declaration.companyId) && String(item.period) === String(declaration.period))
+        .flatMap(item => asArray(item.legacyDateAssignments))
+        .map(item => [String(item.voucherId), item]));
       const unresolvedLegacy = asArray(nextState.vatVouchers).some(voucher =>
         String(voucher.companyId) === String(declaration.companyId) &&
         String(voucher.period || '') === String(declaration.period) &&
@@ -472,8 +478,8 @@ function validateVatDeclarationLedger(previousState, nextState) {
           (lastPayment && String(event.occurredAt) < String(lastPayment.occurredAt)) ||
           !Number.isFinite(amount) || amount <= 0 || Math.abs(amount - roundMoney(amount)) > 0.000001 ||
           roundMoney(paid + amount) > Number(declaration.totalWithheldBs) + 0.0001 ||
-          !String(event.paymentReference || '').trim() || !String(event.evidenceReference || '').trim()) {
-        throw new Error('SQLite bloqueó el enteramiento: requiere presentación previa, importe válido y soporte bancario/documental.');
+          !String(event.paymentReference || '').trim()) {
+        throw new Error('SQLite bloqueó el enteramiento: requiere presentación previa, importe válido y referencia bancaria.');
       }
     } else {
       throw new Error('SQLite rechazó un tipo de evento de declaración IVA no reconocido.');
@@ -509,7 +515,19 @@ function validateAccountingSnapshot(previousState, nextState) {
   assertAppendOnlyCollection(priorState, nextState, 'vatWithholdingDeclarationEvents');
   validateVatDeclarationLedger(priorState, nextState);
   assertAppendOnlyCollection(priorState, nextState, 'vatVouchers',
-    ['requiresFiscalCorrection', 'correctionEntryId', 'correctionEntryIds', 'correctionNote'], ['requiresFiscalCorrection']);
+    ['requiresFiscalCorrection', 'correctionEntryId', 'correctionEntryIds', 'correctionNote',
+      'deliveryDate', 'deliveryMethod', 'electronicDeliveryAgreed'],
+    ['requiresFiscalCorrection', 'deliveryDate', 'deliveryMethod', 'electronicDeliveryAgreed']);
+  for (const voucher of asArray(nextState.vatVouchers)) {
+    const hasDelivery = Boolean(voucher.deliveryDate || voucher.deliveryMethod || voucher.electronicDeliveryAgreed);
+    if (hasDelivery && (!isValidIsoDate(voucher.deliveryDate) ||
+        !isValidIsoDate(voucher.date) || voucher.deliveryDate < voucher.date ||
+        !['PHYSICAL', 'ELECTRONIC'].includes(voucher.deliveryMethod) ||
+        (voucher.deliveryMethod === 'ELECTRONIC' && voucher.electronicDeliveryAgreed !== true) ||
+        (voucher.deliveryMethod === 'PHYSICAL' && voucher.electronicDeliveryAgreed === true))) {
+      throw new Error('SQLite rechazó la entrega del comprobante IVA: fecha, medio o acuerdo electrónico inválido.');
+    }
+  }
   assertAppendOnlyCollection(priorState, nextState, 'islrVouchers',
     ['requiresFiscalCorrection', 'correctionEntryId', 'correctionEntryIds', 'correctionNote'], ['requiresFiscalCorrection']);
   // Los eventos fiscales ISLR son un libro auxiliar inmutable; las correcciones se registran como reversión.

@@ -136,6 +136,7 @@ interface AccountingContextType {
   islrVouchers: IslrRetentionVoucher[];
   islrFiscalEvents: IslrFiscalEvent[];
   deleteVatVoucher: (id: string) => void;
+  recordVatVoucherDelivery: (id: string, draft: { deliveryDate: string; deliveryMethod: 'PHYSICAL' | 'ELECTRONIC'; electronicDeliveryAgreed?: boolean }) => Promise<VatRetentionVoucher>;
   deleteIslrVoucher: (id: string) => void;
 
   // Conciliación Bancaria
@@ -1865,7 +1866,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         id: `vouch-iva-${purchaseId}`,
         companyId: currentCompany.id,
         voucherNumber: voucherNum,
-        date: vatFiscalEvent!.fiscalDate,
+        date: new Date().toISOString().slice(0, 10),
         period: vatFiscalEvent!.period,
         fiscalTrigger: vatFiscalEvent!.trigger,
         fiscalDate: vatFiscalEvent!.fiscalDate,
@@ -3282,6 +3283,39 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return event;
   };
 
+  const recordVatVoucherDelivery = async (
+    id: string,
+    draft: { deliveryDate: string; deliveryMethod: 'PHYSICAL' | 'ELECTRONIC'; electronicDeliveryAgreed?: boolean }
+  ): Promise<VatRetentionVoucher> => {
+    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
+      throw new Error('SQLite no está disponible o todavía no está lista. No se registró la entrega.');
+    }
+    const voucher = vatVouchers.find(item => item.id === id && item.companyId === currentCompany.id);
+    if (!voucher) throw new Error('No se encontró el comprobante de la empresa activa.');
+    if (voucher.deliveryDate || voucher.deliveryMethod) {
+      throw new Error('La entrega de este comprobante ya fue registrada y no puede sobrescribirse.');
+    }
+    if (!isValidIsoDate(draft.deliveryDate) || draft.deliveryDate < voucher.date) {
+      throw new Error('La fecha de entrega debe ser válida y no puede ser anterior a la emisión del comprobante.');
+    }
+    if (draft.deliveryMethod !== 'PHYSICAL' && draft.deliveryMethod !== 'ELECTRONIC') {
+      throw new Error('Seleccione un medio de entrega válido.');
+    }
+    if (draft.deliveryMethod === 'ELECTRONIC' && draft.electronicDeliveryAgreed !== true) {
+      throw new Error('La entrega electrónica requiere acuerdo previo con el proveedor.');
+    }
+    const updated: VatRetentionVoucher = {
+      ...voucher,
+      deliveryDate: draft.deliveryDate,
+      deliveryMethod: draft.deliveryMethod,
+      ...(draft.deliveryMethod === 'ELECTRONIC' ? { electronicDeliveryAgreed: true } : {})
+    };
+    const confirmation = waitForPersistence();
+    setVatVouchers(prev => prev.map(item => item.id === id ? updated : item));
+    await confirmation;
+    return updated;
+  };
+
   const deleteVatVoucher = (id: string) => {
     const voucher = vatVouchers.find(item => item.id === id && item.companyId === currentCompany.id);
     if (!voucher) return;
@@ -4250,6 +4284,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         financialDisclosures: financialDisclosures.filter(item => item.companyId === currentCompany.id),
         saveFinancialDisclosure,
         deleteVatVoucher,
+        recordVatVoucherDelivery,
         deleteIslrVoucher,
         bankAccounts: bankAccounts.filter(b => b.companyId === currentCompany.id),
         bankStatementMovements: bankStatementMovements.filter(m => m.companyId === currentCompany.id),

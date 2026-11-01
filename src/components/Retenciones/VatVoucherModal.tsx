@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Company, VatRetentionVoucher } from '../../types/accounting';
 import { X, Printer, ShieldCheck } from 'lucide-react';
 import { formatBs, formatUsd, formatDate, formatNumberVe } from '../../utils/formatters';
@@ -7,10 +7,37 @@ interface VatVoucherModalProps {
   voucher: VatRetentionVoucher | null;
   company: Company;
   onClose: () => void;
+  onRecordDelivery: (draft: { deliveryDate: string; deliveryMethod: 'PHYSICAL' | 'ELECTRONIC'; electronicDeliveryAgreed?: boolean }) => Promise<VatRetentionVoucher>;
 }
 
-export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, company, onClose }) => {
+export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, company, onClose, onRecordDelivery }) => {
+  const localToday = () => {
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  };
+  const [deliveryDate, setDeliveryDate] = useState(localToday);
+  const [deliveryMethod, setDeliveryMethod] = useState<'PHYSICAL' | 'ELECTRONIC'>('PHYSICAL');
+  const [electronicAgreed, setElectronicAgreed] = useState(false);
+  const [deliveryBusy, setDeliveryBusy] = useState(false);
+  const [deliveryMessage, setDeliveryMessage] = useState('');
   if (!voucher) return null;
+
+  const handleRecordDelivery = async () => {
+    setDeliveryBusy(true);
+    setDeliveryMessage('');
+    try {
+      await onRecordDelivery({
+        deliveryDate,
+        deliveryMethod,
+        ...(deliveryMethod === 'ELECTRONIC' ? { electronicDeliveryAgreed: electronicAgreed } : {})
+      });
+      setDeliveryMessage('Entrega registrada y guardada.');
+    } catch (error) {
+      setDeliveryMessage(error instanceof Error ? error.message : 'No se pudo registrar la entrega.');
+    } finally {
+      setDeliveryBusy(false);
+    }
+  };
 
   const handlePrint = () => {
     window.print();
@@ -24,7 +51,7 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
           <div className="flex items-center gap-2 min-w-0">
             <ShieldCheck className="w-5 h-5 text-emerald-400 flex-shrink-0" />
             <span className="font-semibold text-xs sm:text-sm truncate">
-              Comprobante de Retención de IVA (SNAT/2015/0049)
+              Comprobante de Retención de IVA (SNAT/2025/000054)
             </span>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -44,6 +71,40 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
           </div>
         </div>
 
+        {!voucher.deliveryDate ? (
+          <div className="no-print border-b border-slate-200 bg-slate-50 px-4 sm:px-6 py-4 space-y-3">
+            <div>
+              <h3 className="text-xs font-bold text-slate-900">Registrar entrega al proveedor</h3>
+              <p className="mt-1 text-[11px] text-slate-600">Registra la fecha real de entrega. No se exige adjuntar archivos. La entrega electrónica requiere acuerdo previo del proveedor.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <label className="text-xs font-semibold text-slate-700">Fecha efectiva de entrega
+                <input type="date" min={voucher.date} value={deliveryDate} onChange={event => setDeliveryDate(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />
+              </label>
+              <label className="text-xs font-semibold text-slate-700">Medio de entrega
+                <select value={deliveryMethod} onChange={event => setDeliveryMethod(event.target.value as 'PHYSICAL' | 'ELECTRONIC')} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                  <option value="PHYSICAL">Físico</option>
+                  <option value="ELECTRONIC">Electrónico</option>
+                </select>
+              </label>
+              {deliveryMethod === 'ELECTRONIC' && <label className="flex items-center gap-2 text-xs text-slate-700 sm:pt-6">
+                <input type="checkbox" checked={electronicAgreed} onChange={event => setElectronicAgreed(event.target.checked)} />
+                Existe acuerdo con el proveedor
+              </label>}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" disabled={deliveryBusy || !deliveryDate || (deliveryMethod === 'ELECTRONIC' && !electronicAgreed)} onClick={() => void handleRecordDelivery()} className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">
+                {deliveryBusy ? 'Guardando…' : 'Registrar entrega'}
+              </button>
+              {deliveryMessage && <p role="status" className="text-xs text-slate-700">{deliveryMessage}</p>}
+            </div>
+          </div>
+        ) : (
+          <div className="no-print border-b border-emerald-200 bg-emerald-50 px-4 sm:px-6 py-3 text-xs text-emerald-900">
+            Entregado el {formatDate(voucher.deliveryDate)} por medio {voucher.deliveryMethod === 'ELECTRONIC' ? 'electrónico (acuerdo confirmado)' : 'físico'}.
+          </div>
+        )}
+
         {/* Printable Official Voucher Document */}
         <div className="p-3 sm:p-8 text-black bg-white space-y-3 sm:space-y-4 print:p-0 print:space-y-3 font-sans text-xs">
           {/* Header Title */}
@@ -55,7 +116,7 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
               COMPROBANTE DE RETENCIÓN DEL IMPUESTO AL VALOR AGREGADO (IVA)
             </h2>
             <p className="text-[9px] sm:text-[10px] text-slate-700 italic">
-              (Ley que Establece el Impuesto al Valor Agregado - Art. 11 y Providencia Administrativa SNAT/2015/0049)
+              (Ley que Establece el Impuesto al Valor Agregado - Art. 11 y Providencia Administrativa SNAT/2025/000054)
             </p>
           </div>
 
@@ -72,6 +133,10 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
               <div>
                 <span className="font-bold">FECHA DE EMISIÓN: </span>
                 <span className="font-mono">{formatDate(voucher.date)}</span>
+              </div>
+              <div>
+                <span className="font-bold">FECHA DE ENTREGA: </span>
+                <span className="font-mono">{voucher.deliveryDate ? formatDate(voucher.deliveryDate) : 'Pendiente de registrar'}</span>
               </div>
               <div>
                 <span className="font-bold">PERÍODO FISCAL: </span>

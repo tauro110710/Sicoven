@@ -1703,7 +1703,7 @@ test('SQLite enforces review, filing receipt and supported payment event order f
     declarationNumber: 'DECL-001', receiptReference: 'ACUSE-001' };
   const payment = { id: 'vat-event-3', declarationId: declaration.id, eventType: 'PAYMENT',
     occurredAt: '2026-10-18', recordedAt: '2026-10-18T11:00:00.000Z',
-    amountBs: 120, paymentReference: 'TRX-001', evidenceReference: 'REC-001' };
+    amountBs: 120, paymentReference: 'TRX-001' };
   assert.throws(() => validateAccountingSnapshot(emptyState(), {
     ...state, vatWithholdingDeclarationEvents: [filed]
   }), /presentación/);
@@ -1798,6 +1798,69 @@ test('SQLite requires a SENIAT official source for recorded declaration due date
       occurredAt: '2026-10-16', recordedAt: '2026-10-16T10:00:00.000Z',
       dueDate: '2026-10-20', officialSourceTitle: 'Calendario oficial SENIAT',
       officialReference: 'Publicación oficial', officialSourceUrl: 'https://www.seniat.gob.ve/calendario'
+    }]
+  }));
+});
+
+
+test('SQLite validates one-time VAT voucher delivery date and electronic consent', () => {
+  const base = vatDeclarationFixture();
+  const physical = {
+    ...base.vatVouchers[0],
+    deliveryDate: '2026-10-04',
+    deliveryMethod: 'PHYSICAL'
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), {
+    ...base, vatVouchers: [physical]
+  }));
+
+  const electronicWithoutConsent = {
+    ...base.vatVouchers[0],
+    deliveryDate: '2026-10-04',
+    deliveryMethod: 'ELECTRONIC'
+  };
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...base, vatVouchers: [electronicWithoutConsent]
+  }), /entrega del comprobante IVA/);
+
+  const electronicWithConsent = {
+    ...base.vatVouchers[0],
+    deliveryDate: '2026-10-04',
+    deliveryMethod: 'ELECTRONIC',
+    electronicDeliveryAgreed: true
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), {
+    ...base, vatVouchers: [electronicWithConsent]
+  }));
+
+  const beforeIssue = {
+    ...base.vatVouchers[0],
+    deliveryDate: '2026-10-02',
+    deliveryMethod: 'PHYSICAL'
+  };
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...base, vatVouchers: [beforeIssue]
+  }), /entrega del comprobante IVA/);
+
+  const deliveredState = { ...base, vatVouchers: [physical] };
+  const changedDelivery = { ...physical, deliveryDate: '2026-10-05' };
+  assert.throws(() => validateAccountingSnapshot(deliveredState, {
+    ...base, vatVouchers: [changedDelivery]
+  }), /marca histórica deliveryDate/);
+});
+
+
+test('SQLite accepts a dated SENIAT calendar source preserved as a Gaceta Oficial copy', () => {
+  const state = vatDeclarationFixture();
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), {
+    ...state,
+    vatWithholdingDeclarationEvents: [{
+      id: 'vat-due-gazette', declarationId: 'vat-decl-1', eventType: 'DUE_DATE_SET',
+      occurredAt: '2026-10-16', recordedAt: '2026-10-16T10:00:00.000Z',
+      dueDate: '2026-11-10',
+      officialSourceTitle: 'Gaceta Oficial N.º 43.273',
+      officialReference: 'Providencia SNAT/2025/000091',
+      officialSourceUrl: 'https://iusdata.com/wp-content/uploads/2025/12/1-SENIAT-GO-43.273-2025-DIC-09.pdf'
     }]
   }));
 });
