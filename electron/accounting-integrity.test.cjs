@@ -2214,21 +2214,34 @@ test('Basic accounting certification: persists independent company journals and 
     { id: 'cert-company-a', name: 'Empresa Certificación A' },
     { id: 'cert-company-b', name: 'Empresa Certificación B' }
   ];
+  const openingItems = [
+    { accountCode: '1.1.1.01', accountName: 'Banco', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+    { accountCode: '3.1.1.01', accountName: 'Capital', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+  ];
   const entryA = {
     ...sourceEntry(),
     id: 'cert-entry-a-1',
     companyId: 'cert-company-a',
     entryNumber: 1,
-    description: 'Apertura operativa empresa A'
+    description: 'Apertura operativa empresa A',
+    items: openingItems
   };
   const entryB = {
     ...sourceEntry(),
     id: 'cert-entry-b-1',
     companyId: 'cert-company-b',
     entryNumber: 1,
-    description: 'Apertura operativa empresa B'
+    description: 'Apertura operativa empresa B',
+    items: openingItems
   };
-  const prior = { ...emptyState(), companies };
+  const prior = {
+    ...emptyState(),
+    companies,
+    accounts: [
+      { code: '1.1.1.01', name: 'Banco', type: 'ACTIVO', level: 4, isMovement: true },
+      { code: '3.1.1.01', name: 'Capital', type: 'PATRIMONIO', level: 4, isMovement: true }
+    ]
+  };
   const next = { ...prior, journalEntries: [entryA, entryB] };
   let db;
   try {
