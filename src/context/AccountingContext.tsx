@@ -69,7 +69,11 @@ type SupportingDocument = { id: string; companyId: string; entityType: string; e
 type SupportingDocumentDraft = { entityType: SupportingDocumentEntityType; entityId: string; documentType: string; title: string; description?: string; replacesDocumentId?: string };
 
 interface AccountingContextType {
-  getAuditEvents: (limit?: number) => Promise<AccountingAuditEvent[]>;\n  listSupportingDocuments: (filters: { entityType?: SupportingDocumentEntityType; entityId?: string }) => Promise<SupportingDocument[]>;\n  attachSupportingDocument: (input: SupportingDocumentDraft) => Promise<{ ok: boolean; canceled?: boolean; document?: SupportingDocument }>;\n  reviewSupportingDocument: (input: { documentId: string; decision: 'VERIFIED' | 'OBSERVATION_REQUIRED'; reason: string }) => Promise<{ ok: boolean; documentId: string; status: string }>;\n  openSupportingDocument: (documentId: string) => Promise<{ ok: boolean }>;
+  getAuditEvents: (limit?: number) => Promise<AccountingAuditEvent[]>;
+  listSupportingDocuments: (filters: { entityType?: SupportingDocumentEntityType; entityId?: string }) => Promise<SupportingDocument[]>;
+  attachSupportingDocument: (input: SupportingDocumentDraft) => Promise<{ ok: boolean; canceled?: boolean; document?: SupportingDocument }>;
+  reviewSupportingDocument: (input: { documentId: string; decision: 'VERIFIED' | 'OBSERVATION_REQUIRED'; reason: string }) => Promise<{ ok: boolean; documentId: string; status: string }>;
+  openSupportingDocument: (documentId: string) => Promise<{ ok: boolean }>;
   waitForPersistence: () => Promise<void>;
   companies: Company[];
   isStorageReady: boolean;
@@ -4278,7 +4282,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     <AccountingContext.Provider
       value={{
         companies,
-        getAuditEvents,\n        listSupportingDocuments,\n        attachSupportingDocument,\n        reviewSupportingDocument,\n        openSupportingDocument,
+        getAuditEvents,
+        listSupportingDocuments,
+        attachSupportingDocument,
+        reviewSupportingDocument,
+        openSupportingDocument,
         waitForPersistence,
         isStorageReady: storageReady,
         storageError,
