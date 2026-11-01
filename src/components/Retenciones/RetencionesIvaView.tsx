@@ -5,7 +5,6 @@ import {
   Download,
   Printer,
   Eye,
-  Trash2,
   FileText,
   CheckCircle2,
   ShieldCheck,
@@ -17,9 +16,10 @@ import { VatRetentionVoucher } from '../../types/accounting';
 import { VatVoucherModal } from './VatVoucherModal';
 import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators';
 import { VatWithholdingDeclarationsPanel } from './VatWithholdingDeclarationsPanel';
+import { getVatDeclarationStatus } from '../../types/vatWithholdingDeclaration';
 
 export const RetencionesIvaView: React.FC = () => {
-  const { currentCompany, vatVouchers, deleteVatVoucher, displayCurrency } = useAccounting();
+  const { currentCompany, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, displayCurrency } = useAccounting();
 
   const [selectedVoucher, setSelectedVoucher] = useState<VatRetentionVoucher | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -45,6 +45,20 @@ export const RetencionesIvaView: React.FC = () => {
   const totalRetenidoBs = filteredVouchers.reduce((s, v) => s + v.vatWithheldBs, 0);
   const totalRetenidoUsd = filteredVouchers.reduce((s, v) => s + v.vatWithheldUsd, 0);
   const totalBaseBs = filteredVouchers.reduce((s, v) => s + v.taxableBaseBs, 0);
+  const declaredVoucherIds = new Set(vatWithholdingDeclarations.flatMap(item => item.voucherIds));
+  const pendingDeclarationCount = vatVouchers.filter(voucher => !declaredVoucherIds.has(voucher.id)).length;
+  const correctionCount = vatVouchers.filter(voucher => voucher.requiresFiscalCorrection).length;
+  const pendingDeclarationStatuses = vatWithholdingDeclarations.filter(item => {
+    const status = getVatDeclarationStatus(item, vatWithholdingDeclarationEvents);
+    return status === 'PREPARED' || status === 'REVIEWED' || status === 'FILED' || status === 'PARTIALLY_PAID';
+  }).length;
+  const agentBasisLabel = currentCompany.ivaRetentionAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED'
+    ? 'Agente designado · Art. 1'
+    : currentCompany.ivaRetentionAgentBasis === 'ARTICLE_2_METALS'
+      ? 'Agente por actividad · Art. 2'
+      : currentCompany.ivaRetentionAgentBasis === 'NOT_AGENT'
+        ? 'No agente de retención'
+        : 'Condición de agente por confirmar';
 
   const generatedTxt = generateSeniatIvaTxt(currentCompany, filteredVouchers);
 
@@ -76,13 +90,31 @@ export const RetencionesIvaView: React.FC = () => {
       </div>
       {activeSection === 'vouchers' ? (
       <>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Comprobantes por declarar</span>
+          <strong className="mt-1 block text-2xl font-bold text-slate-900">{pendingDeclarationCount}</strong>
+          <span className="text-[11px] text-slate-500">Detectados automáticamente por sus vínculos</span>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Declaraciones con gestión pendiente</span>
+          <strong className="mt-1 block text-2xl font-bold text-slate-900">{pendingDeclarationStatuses}</strong>
+          <span className="text-[11px] text-slate-500">Preparadas, revisadas o con enteramiento pendiente</span>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Comprobantes por corregir</span>
+          <strong className="mt-1 block text-2xl font-bold text-slate-900">{correctionCount}</strong>
+          <span className="text-[11px] text-slate-500">Se conservan hasta completar su regularización</span>
+        </div>
+      </div>
+
       {/* Header */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
-                {currentCompany.taxpayerType === 'ESPECIAL' ? 'Agente de Retención Designado' : 'Contribuyente Ordinario'}
+                {agentBasisLabel}
               </span>
               <span className="text-xs text-slate-400">•</span>
               <span className="text-xs font-semibold text-slate-600">
@@ -93,7 +125,7 @@ export const RetencionesIvaView: React.FC = () => {
               Comprobantes de Retención de IVA & Generador TXT
             </h1>
             <p className="text-xs text-slate-500 max-w-2xl mt-0.5">
-              Cumple con la Providencia SNAT/2015/0049 para emisión de comprobantes oficiales y carga masiva en el portal fiscal SENIAT.
+              Comprobantes y control de retenciones conforme a la Providencia Administrativa SNAT/2025/000054.
             </p>
           </div>
 
@@ -152,7 +184,7 @@ export const RetencionesIvaView: React.FC = () => {
               {formatBs(totalBaseBs)}
             </div>
             <div className="text-xs text-slate-500">
-              Alícuota general 16%
+              Alícuota aplicada según cada comprobante
             </div>
           </div>
         </div>
@@ -221,13 +253,13 @@ export const RetencionesIvaView: React.FC = () => {
                 <th className="py-2.5 px-4 text-right w-32">Base Imponible</th>
                 <th className="py-2.5 px-2 text-center w-16">% Ret.</th>
                 <th className="py-2.5 px-4 text-right w-36 text-purple-800">IVA Retenido</th>
-                <th className="py-2.5 px-4 text-center w-28">Acciones</th>
+                <th className="py-2.5 px-4 text-center w-24">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredVouchers.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-slate-400">
+                  <td colSpan={10} className="py-12 text-center text-slate-400">
                     <Receipt className="w-8 h-8 mx-auto mb-2 opacity-40" />
                     No hay comprobantes de retención de IVA emitidos.
                   </td>
@@ -271,27 +303,14 @@ export const RetencionesIvaView: React.FC = () => {
                       )}
                     </td>
                     <td className="py-2.5 px-4 text-center whitespace-nowrap">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          onClick={() => setSelectedVoucher(v)}
-                          className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-700 bg-purple-100 hover:bg-purple-200 rounded-lg transition cursor-pointer"
-                          title="Ver e Imprimir Comprobante Oficial"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          Ver
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm(`¿Eliminar comprobante N° ${v.voucherNumber}?`)) {
-                              deleteVatVoucher(v.id);
-                            }
-                          }}
-                          className="p-1 text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                          title="Eliminar comprobante"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => setSelectedVoucher(v)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-700 bg-purple-100 hover:bg-purple-200 rounded-lg transition cursor-pointer"
+                        title="Ver e imprimir comprobante"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        Ver
+                      </button>
                     </td>
                   </tr>
                 ))

@@ -1571,6 +1571,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (Math.abs(expectedVat - purchaseData.vatAmountBs) > 0.01) {
       throw new Error('El IVA no coincide con la base imponible y la alícuota declarada.');
     }
+    if (purchaseData.vatWithheldBs > 0 && !purchaseData.ivaRetentionDecision) {
+      throw new Error('No se puede emitir un comprobante de retención sin una decisión fiscal calculada y conservada por SICOVEN.');
+    }
     if (purchaseData.ivaRetentionDecision) {
       const snapshot = purchaseData.ivaRetentionDecision;
       const expectedBuyerAgentStatus = currentCompany.ivaRetentionAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED' ? 'SPECIAL_DESIGNATED' : currentCompany.ivaRetentionAgentBasis === 'ARTICLE_2_METALS' ? 'ARTICLE_2_BUYER' : currentCompany.ivaRetentionAgentBasis === 'NOT_AGENT' ? 'NOT_AGENT' : 'UNKNOWN';

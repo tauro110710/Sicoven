@@ -94,7 +94,9 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
   const hasCorrections = Boolean(selected && selected.voucherIds.some(id =>
     selected.voucherSnapshots.some(snapshot => snapshot.voucherId === id && snapshot.requiresFiscalCorrection) ||
     vatVouchers.some(voucher => voucher.id === id && voucher.requiresFiscalCorrection)));
-  const selectedAssignments = new Map((selected?.legacyDateAssignments || []).map(item => [item.voucherId, item] as const));
+  const selectedAssignments = new Map(ordered
+    .flatMap(declaration => declaration.legacyDateAssignments || [])
+    .map(item => [item.voucherId, item] as const));
   const selectedLateVouchers = selected ? vatVouchers.filter(voucher => {
     if (voucher.companyId !== selected.companyId || selected.voucherIds.includes(voucher.id)) return false;
     const fiscalDate = voucher.fiscalDate || selectedAssignments.get(voucher.id)?.confirmedFiscalDate;
@@ -243,11 +245,10 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
           </div>
 
           {hasUncoveredVouchers && <div role="alert" className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-xs text-rose-900">
-            Hay comprobantes nuevos dentro de esta quincena o comprobantes históricos del mes sin fecha fiscal asignada.
-            La fotografía de la declaración no se modifica automáticamente. La diferencia requiere rectificación separada; mientras ese flujo no esté implementado, la declaración no puede revisarse ni considerarse conciliada.
+            Hay comprobantes de esta quincena que todavía no forman parte de esta fotografía, o fechas históricas que requieren asignación. La fotografía se conserva sin sobrescritura. Incluya las operaciones pendientes en una nueva declaración o gestione la rectificación que corresponda antes de revisar.
           </div>}
           {hasCorrections && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">Esta fotografía contiene comprobantes con corrección fiscal pendiente. No puede revisarse hasta regularizarse.</div>}
-          {hasLegacy && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Incluye comprobantes históricos que no guardaban fecha del evento fiscal. La fecha documental se usa solo como referencia provisional y requiere verificación documentada.</div>}
+          {hasLegacy && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Incluye comprobantes históricos cuya fecha efectiva fue asignada manualmente y debe verificarse contra el soporte disponible.</div>}
 
           {selectedStatus === 'PREPARED' && (
             <div className="grid grid-cols-1 gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2">
@@ -284,7 +285,12 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
           )}
 
           {(selectedStatus === 'FILED' || selectedStatus === 'PARTIALLY_PAID') && selected.totalWithheldBs > 0 && (
-            <div className="grid grid-cols-1 gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-4">
+            <div className="space-y-3 rounded-xl bg-slate-50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="font-semibold text-slate-700">Saldo pendiente de enterar</span>
+                <strong className="font-mono text-base text-slate-900">{formatBs(Math.max(0, selected.totalWithheldBs - selectedEvents.filter(item => item.eventType === 'PAYMENT').reduce((sum, item) => sum + Number(item.amountBs || 0), 0)))}</strong>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
               <label className="text-xs font-semibold text-slate-700">Importe enterado (Bs.)
                 <input type="number" min="0.01" step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
               </label>
@@ -300,6 +306,7 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
               <button type="button" disabled={busy || !paymentAmount || !paymentReference.trim() || !evidenceReference.trim()}
                 onClick={() => addEvent({ eventType: 'PAYMENT', occurredAt: eventDate, amountBs: Number(paymentAmount), paymentReference, evidenceReference })}
                 className="rounded-lg bg-purple-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-40 sm:col-span-4">Registrar enteramiento</button>
+              </div>
             </div>
           )}
 
