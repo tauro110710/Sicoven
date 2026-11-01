@@ -119,3 +119,12 @@ Hasta entonces G13 permanece PARCIAL y SICOVEN NO CERTIFICADO / NO APTO PARA DIS
 - La instancia propietaria escucha el evento `second-instance`; si la ventana principal existe, la restaura cuando está minimizada, la muestra si está oculta y le da foco.
 - La adquisición y el rechazo del bloqueo, así como el evento de segunda instancia, están cubiertos por pruebas del helper aislado.
 - La exclusión mutua reduce el riesgo de dos procesos SICOVEN usando el mismo perfil. No sustituye el motor transaccional G13, las pruebas Windows de lanzamiento concurrente ni la recuperación física.
+
+
+## 11. Preparación aislada del staging (sin instalación)
+
+- `electron/restore-staging.cjs` valida primero el paquete completo con el verificador de respaldos existente.
+- Copia el paquete validado a `userData/restore-staging/<UUID-v4>` sin sobrescribir archivos, rechaza enlaces y elementos especiales, sincroniza cada archivo copiado y vuelve a verificar el manifiesto, SQLite y documentos en destino.
+- Si falla la copia o la verificación, intenta retirar únicamente el directorio creado para esa operación; si la limpieza falla, informa la ruta de intervención sin tocar los datos activos.
+- Las pruebas cubren staging válido, operación duplicada sin sobrescritura, paquete de origen alterado y padre de staging enlazado.
+- Este módulo todavía no se invoca desde IPC ni desde el arranque. No instala ni sustituye `sicoven.sqlite` o `supporting-documents`; G13 permanece parcial.
