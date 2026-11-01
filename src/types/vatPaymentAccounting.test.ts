@@ -55,3 +55,15 @@ test('rejects missing historical USD equivalent and a missing liability account'
     bankAccounts: banks, accounts: accounts.filter(item => item.code !== '2.1.2.03')
   }), /2.1.2.03/);
 });
+
+test('rejects invalid calendar dates and non-debit bank movements', () => {
+  assert.throws(() => buildVatPaymentAccountingPlan({
+    occurredAt: '2026-02-31', movements: [movement('m1', 'b1', 100, 1)],
+    bankAccounts: banks, accounts
+  }), /fecha del enteramiento/);
+  assert.throws(() => buildVatPaymentAccountingPlan({
+    occurredAt: '2026-10-20',
+    movements: [{ ...movement('m1', 'b1', 100, 1), type: 'CREDIT' }],
+    bankAccounts: banks, accounts
+  }), /Solo los débitos/);
+});
