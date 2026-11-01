@@ -617,3 +617,52 @@ Se realizó una nueva búsqueda dirigida a localizar en el dominio oficial del S
 - **Pendientes transversales:** notas de crédito/débito y rectificaciones fiscales después de presentar; tratamiento de retenciones ya enteradas/no enteradas; validación profesional independiente de elegibilidad y comprobantes; conciliación integral libro → compra → evento → comprobante → declaración → acuse → enteramiento → asiento; fuente primaria vigente para TXT y declaración sin operaciones; calendario y feriados oficiales versionados para plazos.
 
 **Conclusión:** el subbloque funcional 4.4 queda cerrado en su alcance de conciliación fiscal-bancaria. El Bloque 4 completo permanece ABIERTO por los pendientes documentales, normativos y de circuito fiscal indicados. No se afirma homologación SENIAT ni cumplimiento fiscal certificado.
+
+## ACTUALIZACIÓN DE CONTINUIDAD — EXPEDIENTES DE INCIDENCIAS IVA — 01/11/2026
+
+### Bloque 4.5 — expediente trazable de incidencias y rectificaciones IVA
+
+**Estado funcional:** integrado en `main` mediante PR #66, commit `3a06a744240017c63f8c6b4da1862373dd4dd08a`.
+
+Alcance incorporado:
+- Expedientes asociados a facturas, notas de crédito y notas de débito de compras.
+- Persistencia en tablas SQLite locales independientes.
+- Expediente, eventos y referencias con protección append-only mediante triggers.
+- Aislamiento por empresa y validación de factura original, comprobante IVA, declaración, eventos fiscales, movimientos bancarios y asiento correctivo.
+- Historial de incidencia, revisión y actuación documentada desde el panel de Retenciones IVA.
+- Prevención de reutilización de comprobantes, eventos de pago y movimientos bancarios entre expedientes.
+- Verificación de que la nota esté vinculada a la factura cuyo número declara como afectado.
+
+**Salvaguardas y límites:**
+- No se recalculan comprobantes ni se alteran snapshots, declaraciones presentadas, eventos originales, pagos, movimientos bancarios o asientos.
+- Un asiento correctivo no resuelve por sí solo una incidencia.
+- El estado operativo del expediente no acredita rectificación, aceptación ni recepción por SENIAT.
+- No se codifica tratamiento fiscal automático de NC/ND, compensaciones, reintegros ni retenciones adicionales.
+- No se exige adjuntar un archivo por cada operación.
+- El administrador semilla permanece intacto.
+
+**Validación técnica registrada antes de la integración:**
+- CI de escritorio SUCCESS: 510 pruebas automatizadas, TypeScript, compilación de renderer y auditoría de activos.
+- CI del instalador Windows SUCCESS: pruebas automatizadas, TypeScript, compilación NSIS y verificación del instalador.
+- Prueba real de actualización 1.0.6 → 1.0.7 SUCCESS, preservando los datos SQLite.
+- La ejecución posterior al merge no quedó disponible como verificación independiente en el registro consultado; por tanto, no se afirma CI post-merge adicional.
+- No se publicó instalador ni release.
+
+### Estado consolidado actualizado del Bloque 4
+
+- **4.1 — TXT IVA preliminar:** integrado; no homologado. Pendiente especificación primaria vigente y prueba autorizada.
+- **4.2 — evento fiscal IVA:** integrado. Persisten pendientes de validación profesional y circuitos de pagos posteriores.
+- **4.3 — auxiliar quincenal:** integrado; snapshots y eventos append-only. No rectifica declaraciones presentadas ni certifica presentación en Portal Fiscal.
+- **4.4 — conciliación bancaria de enteramientos:** integrado y validado técnicamente mediante PR #63.
+- **4.5 — expediente de incidencias fiscales IVA:** integrado mediante PR #66. Documenta trazabilidad, no decide el tratamiento tributario.
+- **Bloque 4 completo:** ABIERTO. La integración de 4.4 y 4.5 no equivale a homologación SENIAT ni a certificación fiscal.
+
+### Próximo subbloque de trabajo
+
+1. Completar la auditoría especializada del flujo de notas de débito de proveedor: documento fuente, factura afectada, CxP, base/IVA, retenciones, asiento, Kardex cuando corresponda y consistencia del libro.
+2. Auditar el circuito de notas de crédito de contado: devolución real de fondos o reconocimiento de saldo a favor, conciliación de caja/banco y asiento; mantener bloqueada la acción mientras no se garantice esa trazabilidad.
+3. Añadir pruebas integrales de escenarios de incidencia: factura no declarada, declaración presentada sin enteramiento, enteramiento parcial y enteramiento total. Las pruebas deben verificar que el expediente no infiere por sí mismo una solución fiscal.
+4. Evaluar vínculos desde el comprobante y la declaración para facilitar consulta, sin permitir editar los registros históricos.
+5. Mantener sin cambios el generador TXT hasta contar con especificación oficial vigente y validación profesional independiente.
+
+**Regla de continuidad:** no automatizar el tratamiento tributario de NC/ND ni habilitar rectificaciones fiscales por inferencia. La decisión del contador debe quedar documentada; SICOVEN registra trazabilidad y controles, no sustituye el criterio profesional ni la actuación ante el SENIAT.
