@@ -71,6 +71,18 @@ function restoreRollback(rollbackDir,userDataDir,operationDir) {
   if(hashFile(dbPath)!==verified.databaseSha256) throw new Error('Rollback: la base restaurada no coincide.');
   return verified;
 }
+function archiveCommittedRollback(userDataDir,operationId) {
+  const operationDir=path.join(userDataDir,OP_ROOT,operationId);
+  const rollbackDir=path.join(operationDir,'rollback');
+  if(!exists(rollbackDir)) throw new Error('No existe el snapshot de retorno de la restauración confirmada.');
+  realDir(rollbackDir,'Snapshot de retorno');
+  const historyRoot=path.join(userDataDir,'restore-history');
+  if(!exists(historyRoot)) fs.mkdirSync(historyRoot);
+  realDir(historyRoot,'Historial de restauraciones');
+  const destination=path.join(historyRoot,operationId);
+  if(exists(destination)) throw new Error('Ya existe el snapshot histórico de esta restauración.');
+  fs.renameSync(rollbackDir,destination);
+}
 function cleanupOperation(userDataDir,operationId) {
   const root=path.join(userDataDir,OP_ROOT);
   const dir=path.join(root,operationId);
@@ -89,7 +101,12 @@ function recoverPendingRestore({userDataDir}) {
   realDir(path.dirname(operationDir),'Operaciones de restauración');
   realDir(operationDir,'Operación de restauración');
   const rollbackDir=path.join(operationDir,'rollback');
-  if(journal.state==='committed' || journal.state==='rolled_back') {
+  if(journal.state==='committed') {
+    archiveCommittedRollback(root,journal.operationId);
+    cleanupOperation(root,journal.operationId);
+    return {ok:true,recovered:true,action:'kept_committed_restore'};
+  }
+  if(journal.state==='rolled_back') {
     cleanupOperation(root,journal.operationId);
     return {ok:true,recovered:true,action:'kept_committed_restore'};
   }
@@ -132,6 +149,7 @@ async function executeRestore({backupDirectory,userDataDir,db,closeDatabase,reop
     transitionJournal({journalPath,expectedState:'installing',nextState:'installed',lastStep:'database_and_documents_verified'});
     await reopenDatabase();
     transitionJournal({journalPath,expectedState:'installed',nextState:'committed',lastStep:'restore_committed'});
+    archiveCommittedRollback(root,operationId);
     cleanupOperation(root,operationId);
     return {ok:true,operationId,databaseSha256:sourceInfo.databaseSha256,documentCount:sourceInfo.documentCount};
   } catch(error) {
