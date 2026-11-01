@@ -1646,7 +1646,7 @@ test('SQLite rejects a VAT declaration with a duplicate period window or duplica
       { ...state.vatWithholdingDeclarations[0], id: 'vat-decl-2', window: 'SECOND_HALF',
         startDate: '2026-10-16', endDate: '2026-10-31' }
     ]
-  }), /fuera de la quincena|snapshot fiscal/);
+  }), /fuera de la quincena|snapshot fiscal|snapshot no incluye exactamente/);
 });
 
 test('SQLite rejects VAT declaration snapshots whose voucher, period or totals do not reconcile', () => {
