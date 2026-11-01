@@ -155,7 +155,9 @@ Se localizó una copia de la “Guía Fácil — Elaboración de un Archivo TXT 
 
 **Limitación:** no se ha acreditado que estas copias sean la última versión técnica vigente en el Portal Fiscal en 2026. La estructura sirve como referencia histórica verificable, no como garantía de aceptación actual.
 
-**Corrección requerida:** mantener la exportación con operaciones en 16 columnas y validar que el archivo tenga exactamente 16 campos por línea, sin campos desplazados. Añadir pruebas de la igualdad del monto retenido con la base, alícuota y porcentaje registrado. Diseñar una salida independiente para declaración sin operaciones únicamente después de verificar el modelo vigente en el Portal Fiscal; no improvisar una fila de ceros a partir de capturas antiguas.
+**Estado del código:** la exportación con operaciones valida los campos obligatorios, el correlativo de 14 caracteres, importes y porcentajes; genera exactamente 16 campos tabulados y rechaza mezclar períodos fiscales en un mismo archivo. La vista aísla empresa y período antes de exportar. Estas pruebas verifican la estructura implementada, no su aceptación actual por SENIAT.
+
+**Pendiente:** verificar la versión técnica vigente directamente en el Portal Fiscal y contrastar los 16 campos con esa versión. La salida para declaración sin operaciones permanece deshabilitada hasta disponer de su modelo vigente; no se improvisará una fila de ceros a partir de capturas antiguas.
 
 
 ## 7. Contraste de correcciones fusionadas y estado actual

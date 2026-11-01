@@ -264,7 +264,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
               <option value="NOT_AGENT">No es agente de retención bajo esta Providencia</option>
             </select>
             <p className="text-[11px] text-slate-600">No se presume la designación por seleccionar “Contribuyente Especial”. Si queda pendiente, SICOVEN no calculará retenciones automáticamente.</p>
-            {ivaRetentionAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED' && /^[VE]/.test(rif.replace(/[^A-Z0-9]/g, '')) && (
+            {ivaRetentionAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED' && /^[VE]/.test(rif.replace(/[^A-Z0-9]/gi, '')) && (
               <label className="flex items-start gap-2 text-xs text-slate-800">
                 <input type="checkbox" checked={isPersonalFirm} onChange={e => setIsPersonalFirm(e.target.checked)} className="mt-0.5" />
                 <span><strong>La persona natural está constituida como firma personal</strong><span className="block text-[11px] text-slate-600 mt-1">La Providencia incluye a personas naturales especiales únicamente cuando actúan como firma personal.</span></span>

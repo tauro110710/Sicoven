@@ -13,6 +13,9 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
 
   if (!Array.isArray(vouchers)) throw new Error('La exportación IVA requiere una colección válida de comprobantes.');
   if (!agentRif) throw new Error('El RIF del agente de retención está vacío.');
+  if (new Set(vouchers.map(voucher => String(voucher.period || ''))).size > 1) {
+    throw new Error('La exportación TXT de retenciones IVA debe contener un único período fiscal.');
+  }
 
   for (const v of vouchers) {
     const supplierRif = cleanRif(v.supplierRif);

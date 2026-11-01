@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import {
   Receipt,
@@ -23,10 +23,19 @@ export const RetencionesIvaView: React.FC = () => {
 
   const [selectedVoucher, setSelectedVoucher] = useState<VatRetentionVoucher | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedPeriod, setSelectedPeriod] = useState(() => `${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}`);
   const [showTxtPreview, setShowTxtPreview] = useState(false);
   const [activeSection, setActiveSection] = useState<'vouchers' | 'declarations'>('vouchers');
 
-  const filteredVouchers = vatVouchers
+  const companyVouchers = vatVouchers.filter(voucher => voucher.companyId === currentCompany.id);
+  const availablePeriods = [...new Set(companyVouchers.map(voucher => voucher.period))].sort((a, b) => b.localeCompare(a));
+  useEffect(() => {
+    setSelectedVoucher(null);
+    setSearchTerm('');
+  }, [currentCompany.id]);
+  const effectivePeriod = availablePeriods.includes(selectedPeriod) ? selectedPeriod : (availablePeriods[0] || selectedPeriod);
+  const filteredVouchers = companyVouchers
+    .filter(v => v.period === effectivePeriod)
     .filter(v => {
       if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase();
@@ -45,11 +54,12 @@ export const RetencionesIvaView: React.FC = () => {
   const totalRetenidoBs = filteredVouchers.reduce((s, v) => s + v.vatWithheldBs, 0);
   const totalRetenidoUsd = filteredVouchers.reduce((s, v) => s + v.vatWithheldUsd, 0);
   const totalBaseBs = filteredVouchers.reduce((s, v) => s + v.taxableBaseBs, 0);
-  const declaredVoucherIds = new Set(vatWithholdingDeclarations.flatMap(item => item.voucherIds));
-  const pendingDeclarationCount = vatVouchers.filter(voucher => !declaredVoucherIds.has(voucher.id)).length;
-  const correctionCount = vatVouchers.filter(voucher => voucher.requiresFiscalCorrection).length;
-  const pendingDeliveryCount = vatVouchers.filter(voucher => !voucher.deliveryDate).length;
-  const pendingDeclarationStatuses = vatWithholdingDeclarations.filter(item => {
+  const companyDeclarations = vatWithholdingDeclarations.filter(item => item.companyId === currentCompany.id);
+  const declaredVoucherIds = new Set(companyDeclarations.flatMap(item => item.voucherIds));
+  const pendingDeclarationCount = companyVouchers.filter(voucher => !declaredVoucherIds.has(voucher.id)).length;
+  const correctionCount = companyVouchers.filter(voucher => voucher.requiresFiscalCorrection).length;
+  const pendingDeliveryCount = companyVouchers.filter(voucher => !voucher.deliveryDate).length;
+  const pendingDeclarationStatuses = companyDeclarations.filter(item => {
     const status = getVatDeclarationStatus(item, vatWithholdingDeclarationEvents);
     return status === 'PREPARED' || status === 'REVIEWED' || status === 'FILED' || status === 'PARTIALLY_PAID';
   }).length;
@@ -74,9 +84,12 @@ export const RetencionesIvaView: React.FC = () => {
       alert('No hay comprobantes de retención para exportar.');
       return;
     }
+    if (filteredVouchers.some(voucher => voucher.period !== effectivePeriod)) {
+      alert('La exportación debe contener un solo período fiscal. Seleccione el período que desea generar.');
+      return;
+    }
     const cleanR = cleanRif(currentCompany.rif);
-    const period = filteredVouchers[0]?.period || `${currentCompany.fiscalYear}10`;
-    downloadFile(generatedTxt, `RetencionesIVA_${cleanR}_${period}.txt`);
+    downloadFile(generatedTxt, `RetencionesIVA_${cleanR}_${effectivePeriod}.txt`);
   };
 
   return (
@@ -231,8 +244,13 @@ export const RetencionesIvaView: React.FC = () => {
         )}
 
         {/* Search */}
-        <div className="pt-6 border-t border-slate-200 mt-6">
-          <div className="relative max-w-md">
+        <div className="pt-6 border-t border-slate-200 mt-6 flex flex-col sm:flex-row gap-3">
+          <label className="text-xs font-semibold text-slate-700 sm:w-44">Período fiscal
+            <select value={effectivePeriod} onChange={e => setSelectedPeriod(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+              {(availablePeriods.length ? availablePeriods : [selectedPeriod]).map(period => <option key={period} value={period}>{period.slice(0, 4)}-{period.slice(4, 6)}</option>)}
+            </select>
+          </label>
+          <div className="relative max-w-md flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"

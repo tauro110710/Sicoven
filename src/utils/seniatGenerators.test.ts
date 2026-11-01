@@ -142,6 +142,7 @@ test('IVA TXT exports only real voucher identifiers and the supplied amounts', (
   const txt = generateSeniatIvaTxt(company, [ivaVoucher()]);
   assert.match(txt, /^J123456789\t202610\t2026-10-05\tC\t01\tJ987654321\tF-001\t00-123\t1160\.00\t1000\.00\t120\.00/);
   assert.match(txt, /20261000000001/);
+  assert.equal(txt.split('\t').length, 16);
 });
 
 test('IVA TXT rejects missing invoice/control identifiers instead of inventing replacements', () => {
@@ -174,4 +175,12 @@ test('IVA fiscal event rejects missing payment mode and impossible effective dat
   assert.throws(() => resolvePurchaseVatFiscalEvent(undefined, '2026-11-02'), /modalidad de pago/);
   assert.throws(() => resolvePurchaseVatFiscalEvent('CONTADO', '2026-02-30'), /no existe en el calendario/);
   assert.throws(() => resolvePurchaseVatFiscalEvent('CREDITO', ''), /fecha efectiva/);
+});
+
+
+test('IVA TXT refuses to mix fiscal periods in one export file', () => {
+  assert.throws(() => generateSeniatIvaTxt(company, [
+    ivaVoucher(),
+    ivaVoucher({ id: 'iva-v2', voucherNumber: '20261100000002', period: '202611', date: '2026-11-05', invoiceDate: '2026-11-05' })
+  ]), /un único período fiscal/);
 });

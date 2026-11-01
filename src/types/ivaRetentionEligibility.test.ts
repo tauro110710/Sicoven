@@ -61,7 +61,7 @@ test('requires explicit Portal Fiscal confirmation for Article 3 numerals 3, 9 a
 });
 
 test('does not require Portal Fiscal confirmation for directly identifiable Article 3 exclusions', () => {
-  const r = evaluateIvaRetentionEligibility({ ...ordinary, article3Exclusions: ['PETTY_CASH_UP_TO_20_UT'] });
+  const r = evaluateIvaRetentionEligibility({ ...ordinary, article3Exclusions: ['PETTY_CASH_UP_TO_20_UT'], operationAmountBs: 500, unitTaxValueBs: 43 });
   assert.equal(r.status, 'EXCLUDED');
 });
 
