@@ -3440,8 +3440,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     validateVatDeclarationEventDraft(declaration, history, draft);
     validateVatPaymentBankLinks({ companyId: currentCompany.id, declaration, draft, events: vatWithholdingDeclarationEvents, bankAccounts, bankMovements: bankStatementMovements });
+    let resolvePersistence!: () => void;
+    let rejectPersistence!: (error: Error) => void;
+    const confirmation = new Promise<void>((resolve, reject) => {
+      resolvePersistence = resolve;
+      rejectPersistence = reject;
+    });
+    const persistenceWaiter = { resolve: resolvePersistence, reject: rejectPersistence };
+    persistenceWaitersRef.current.push(persistenceWaiter);
     let journalEntry: JournalEntry | undefined;
     let paymentMovements: BankStatementMovement[] = [];
+    try {
     if (draft.eventType === 'PAYMENT') {
       paymentMovements = (draft.bankStatementMovementIds || []).map(id =>
         bankStatementMovements.find(item => item.id === id)!).filter(Boolean);
@@ -3472,9 +3481,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       declarationId,
       recordedAt: new Date().toISOString()
     };
-    // One persistence barrier covers the journal, fiscal event and bank movement links.
-    // A SQLite failure fails the provider closed; no UI success is reported before confirmation.
-    const confirmation = waitForPersistence();
+    // One SQLite snapshot persists the journal, fiscal event and bank movement links together.
     setVatWithholdingDeclarationEvents(prev => [...prev, event]);
     if (journalEntry) {
       const linkedIds = new Set(paymentMovements.map(item => item.id));
@@ -3493,6 +3500,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     await confirmation;
     return event;
+    } catch (error) {
+      persistenceWaitersRef.current = persistenceWaitersRef.current.filter(waiter => waiter !== persistenceWaiter);
+      throw error;
+    }
   };
 
   const recordVatVoucherDelivery = async (
