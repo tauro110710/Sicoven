@@ -97,7 +97,7 @@ jobs:
           $upgrade.Refresh()
           if ($upgrade.ExitCode -ne 0) { throw "La actualización a 1.0.8 terminó con código $($upgrade.ExitCode)." }
           python -c "import os,sqlite3,sys; c=sqlite3.connect(os.environ['SICOVEN_DB_PATH']); r=c.execute('SELECT probe_value FROM _sicoven_upgrade_probe WHERE probe_key=?', ('upgrade',)).fetchone(); c.close(); sys.exit(0 if r and r[0]=='preserve-me' else 1)"
-          if ($LASTEXITCODE -ne 0) { throw "La actualización 1.0.8 a 1.0.8 eliminó o alteró datos SQLite." }
+          if ($LASTEXITCODE -ne 0) { throw "La actualización 1.0.7 a 1.0.8 eliminó o alteró datos SQLite." }
           $application = Start-Process -FilePath $app -ArgumentList @("--disable-gpu") -PassThru
           Start-Sleep -Seconds 12
           $application.Refresh()
