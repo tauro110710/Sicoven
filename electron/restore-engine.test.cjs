@@ -68,7 +68,8 @@ test('startup recovery rolls back an interrupted physical swap before database o
   const op=path.join(opRoot,j.operationId);fs.mkdirSync(op);
   const rollback=path.join(op,'rollback');
   await createBackup({db:h.db,userDataDir:h.userDataDir,destination:rollback,allowInternalDestination:true});
-  transitionJournal({journalPath,expectedState:'prepared',nextState:'rollback_ready',lastStep:'rollback_ready',rollbackDatabaseSha256:hash,rollbackManifestSha256:sha256File(path.join(rollback,'manifest.json'))});
+  const rollbackVerified=verifyBackupDirectory(rollback);
+  transitionJournal({journalPath,expectedState:'prepared',nextState:'rollback_ready',lastStep:'rollback_ready',rollbackDatabaseSha256:rollbackVerified.databaseSha256,rollbackManifestSha256:sha256File(path.join(rollback,'manifest.json'))});
   transitionJournal({journalPath,expectedState:'rollback_ready',nextState:'installing',lastStep:'swap_started'});
   h.closeDb();
   fs.writeFileSync(path.join(h.userDataDir,'sicoven.sqlite'),'corrupt partial replacement');
