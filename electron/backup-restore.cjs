@@ -11,6 +11,19 @@ const HASH_RE = /^[a-f0-9]{64}$/;
 const MAX_DOCUMENTS = 10000;
 const MAX_RELATIVE_PATH = 1024;
 const HASH_CHUNK_SIZE = 1024 * 1024;
+const MAX_MANIFEST_BYTES = 8 * 1024 * 1024;
+
+function assertRegularFile(file, label) {
+  const stat = fs.lstatSync(file);
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(label + ' debe ser un archivo regular sin enlaces.');
+  return stat;
+}
+
+function assertDirectory(directory, label) {
+  const stat = fs.lstatSync(directory);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(label + ' debe ser un directorio real sin enlaces.');
+  return stat;
+}
 
 function sha256File(file) {
   const hash = crypto.createHash('sha256');
@@ -152,18 +165,22 @@ async function createBackup({ db, userDataDir, destination }) {
 
 function verifyBackupDirectory(directory) {
   const root = path.resolve(directory);
+  assertDirectory(root, 'La raíz del respaldo');
   const manifestPath = path.join(root, 'manifest.json');
-  if (!fs.existsSync(manifestPath) || !fs.statSync(manifestPath).isFile()) throw new Error('El manifiesto del respaldo no existe.');
+  if (!fs.existsSync(manifestPath)) throw new Error('El manifiesto del respaldo no existe.');
+  const manifestStat = assertRegularFile(manifestPath, 'El manifiesto');
+  if (manifestStat.size > MAX_MANIFEST_BYTES) throw new Error('El manifiesto excede el tamaño máximo permitido.');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   validateManifest(manifest);
   const dbPath = path.join(root, DB_FILE);
-  if (!fs.existsSync(dbPath) || !fs.statSync(dbPath).isFile() ||
-      fs.statSync(dbPath).size !== manifest.database.size ||
+  if (!fs.existsSync(dbPath) ||
+      assertRegularFile(dbPath, 'La base de datos').size !== manifest.database.size ||
       sha256File(dbPath) !== manifest.database.sha256) {
     throw new Error('La huella o el tamaño de la base respaldada no coincide.');
   }
   const integrity = verifyDatabase(dbPath);
   const docsRoot = path.join(root, DOCS_DIR);
+  if (fs.existsSync(docsRoot)) assertDirectory(docsRoot, 'La carpeta de documentos respaldados');
   const actual = collectFiles(docsRoot);
   if (JSON.stringify(actual) !== JSON.stringify(manifest.documents)) throw new Error('Los documentos respaldados no coinciden con el manifiesto.');
   const expectedDirectories = [...new Set(manifest.documents.flatMap(item => {
