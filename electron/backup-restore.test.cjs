@@ -124,3 +124,39 @@ test('verification rejects a replaced SQLite database even if the file remains r
     assert.throws(() => verifyBackupDirectory(destination), /huella o el tamaño/);
   } finally { h.close(); }
 });
+
+test('verification rejects a symbolic link used as the manifest', async () => {
+  const h = fixture();
+  try {
+    const destination = path.join(h.root, 'backup');
+    await createBackup({ db: h.db, userDataDir: h.userDataDir, destination });
+    const manifestPath = path.join(destination, 'manifest.json');
+    const saved = path.join(h.root, 'manifest-copy.json');
+    fs.renameSync(manifestPath, saved);
+    fs.symlinkSync(saved, manifestPath);
+    assert.throws(() => verifyBackupDirectory(destination), /archivo regular sin enlaces/);
+  } finally { h.close(); }
+});
+
+test('verification rejects a symbolic link used as the SQLite backup', async () => {
+  const h = fixture();
+  try {
+    const destination = path.join(h.root, 'backup');
+    await createBackup({ db: h.db, userDataDir: h.userDataDir, destination });
+    const databasePath = path.join(destination, 'sicoven.sqlite');
+    const saved = path.join(h.root, 'database-copy.sqlite');
+    fs.renameSync(databasePath, saved);
+    fs.symlinkSync(saved, databasePath);
+    assert.throws(() => verifyBackupDirectory(destination), /archivo regular sin enlaces/);
+  } finally { h.close(); }
+});
+
+test('verification rejects an oversized manifest before parsing it', async () => {
+  const h = fixture();
+  try {
+    const destination = path.join(h.root, 'backup');
+    await createBackup({ db: h.db, userDataDir: h.userDataDir, destination });
+    fs.writeFileSync(path.join(destination, 'manifest.json'), ' '.repeat(8 * 1024 * 1024 + 1));
+    assert.throws(() => verifyBackupDirectory(destination), /tamaño máximo/);
+  } finally { h.close(); }
+});
