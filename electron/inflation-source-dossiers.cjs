@@ -316,6 +316,17 @@ function listInflationSourceDossiers(db, filters = {}) {
     FROM inflation_source_dossier_evidence WHERE dossier_id=? ORDER BY created_at,rowid\`).all(row.id),
     status: row.decision || 'DRAFT', evidenceManifest: JSON.parse(row.evidence_manifest_json || '[]') }));
 }
+function getInflationSourceDossierEvidence(db, evidenceId, actor) {
+  if (!actor?.username || actor.role !== 'admin') throw new Error('Solo un administrador autenticado puede consultar evidencia de expedientes.');
+  const id = requiredText(evidenceId, 'Evidencia', 80);
+  const row = db.prepare(`SELECT e.id,e.dossier_id AS dossierId,e.title,e.file_name AS fileName,e.mime_type AS mimeType,
+    e.source_url AS sourceUrl,e.sha256,e.bytes,e.content_base64 AS contentBase64
+    FROM inflation_source_dossier_evidence e WHERE e.id=?`).get(id);
+  if (!row) throw new Error('La evidencia solicitada no existe.');
+  db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('inflation_source_dossier_evidence_accessed',
+    JSON.stringify({ evidenceId: id, dossierId: row.dossierId, actor: actor.username }));
+  return row;
+}
 function nextMonth(value) {
   const [year, month] = value.split('-').map(Number);
   return month === 12 ? String(year + 1).padStart(4, '0') + '-01' : String(year).padStart(4, '0') + '-' + String(month + 1).padStart(2, '0');
@@ -329,7 +340,7 @@ function registerInflationSourceDossierIpc({ ipcMain, db, licenseView, getActive
     if (!actor) throw new Error('Sesión no válida.');
     return actor;
   };
-  ipcMain.handle('sicoven:inflation-source-dossier-list', (_event, token, filters) => {
+  ipcMain.handle('sicoven:inflation-source-dossier-evidence', (_event, token, evidenceId) => {\n    const actor = authenticate(token); return getInflationSourceDossierEvidence(db, evidenceId, actor);\n  });\n  ipcMain.handle('sicoven:inflation-source-dossier-list', (_event, token, filters) => {
     authenticate(token); return listInflationSourceDossiers(db, filters || {});
   });
   ipcMain.handle('sicoven:inflation-source-dossier-create', (_event, token, input) => {
@@ -340,4 +351,4 @@ function registerInflationSourceDossierIpc({ ipcMain, db, licenseView, getActive
   });
 }
 module.exports = { SOURCE_REQUIREMENTS, validateDossierInput, initializeInflationSourceDossierSchema,
-  createInflationSourceDossier, reviewInflationSourceDossier, listInflationSourceDossiers, registerInflationSourceDossierIpc };
+  createInflationSourceDossier, reviewInflationSourceDossier, listInflationSourceDossiers, getInflationSourceDossierEvidence, registerInflationSourceDossierIpc };
