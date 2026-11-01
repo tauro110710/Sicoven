@@ -49,7 +49,7 @@ export function getSeniatVatWithholdingDueDate(
   agentBasis: string,
   isPersonalFirm = false
 ): SeniatVatDueDate | null {
-  if (agentBasis !== 'ARTICLE_1_SPECIAL_DESIGNATED') return null;
+  if (!['ARTICLE_1_SPECIAL_DESIGNATED', 'ARTICLE_1_AND_2'].includes(agentBasis)) return null;
   if (!/^2026(?:0[1-9]|1[0-2])$/.test(period)) return null;
   const normalizedRif = String(rif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
   if (!/^[VJGEP]\d{8,9}$/.test(normalizedRif)) return null;
