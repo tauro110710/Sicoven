@@ -72,6 +72,8 @@ test('startup recovery rolls back an interrupted physical swap before database o
   transitionJournal({journalPath,expectedState:'prepared',nextState:'rollback_ready',lastStep:'rollback_ready',rollbackDatabaseSha256:rollbackVerified.databaseSha256,rollbackManifestSha256:sha256File(path.join(rollback,'manifest.json'))});
   transitionJournal({journalPath,expectedState:'rollback_ready',nextState:'installing',lastStep:'swap_started'});
   h.closeDb();
+  fs.writeFileSync(path.join(h.userDataDir,'sicoven.sqlite-wal'),'stale WAL sidecar');
+  fs.writeFileSync(path.join(h.userDataDir,'sicoven.sqlite-shm'),'stale SHM sidecar');
   fs.writeFileSync(path.join(h.userDataDir,'sicoven.sqlite'),'corrupt partial replacement');
   fs.rmSync(path.join(h.userDataDir,'supporting-documents'),{recursive:true,force:true});
   const result=recoverPendingRestore({userDataDir:h.userDataDir});
@@ -80,6 +82,8 @@ test('startup recovery rolls back an interrupted physical swap before database o
   assert.equal(h.db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json.includes('original'),true);
   assert.equal(fs.readFileSync(path.join(h.userDataDir,'supporting-documents','source.pdf'),'utf8'),'original document');
   assert.equal(fs.existsSync(journalPath),false);
+  assert.equal(fs.existsSync(path.join(h.userDataDir,'sicoven.sqlite-wal')),false);
+  assert.equal(fs.existsSync(path.join(h.userDataDir,'sicoven.sqlite-shm')),false);
  }finally{h.close();}
 });
 
