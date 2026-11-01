@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateAccountingSnapshot } = require('./accounting-integrity.cjs');
+const { validateAccountingSnapshot, validateNewAccountCatalogEntries } = require('./accounting-integrity.cjs');
 const Database = require('better-sqlite3');
 
 const line = (debitBs, creditBs, debitUsd, creditUsd) => ({
@@ -2313,4 +2313,68 @@ test('Basic accounting certification: persists independent company journals and 
     if (db?.open) db.close();
     fs.rmSync(directory, { recursive: true, force: true });
   }
+});
+
+
+test('Basic accounting certification: validates hierarchical chart accounts and rejects invalid parents or classifications', () => {
+  const roots = [
+    { code: '1', name: 'ACTIVO', type: 'ACTIVO', level: 1, isMovement: false },
+    { code: '3', name: 'PATRIMONIO', type: 'PATRIMONIO', level: 1, isMovement: false }
+  ];
+  const valid = [
+    ...roots,
+    { code: '1.1', name: 'Activo corriente', type: 'ACTIVO', level: 2, isMovement: false, parentCode: '1' },
+    { code: '1.1.1', name: 'Efectivo', type: 'ACTIVO', level: 3, isMovement: false, parentCode: '1.1' },
+    { code: '1.1.1.01', name: 'Banco', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.1' },
+    { code: '3.1', name: 'Capital', type: 'PATRIMONIO', level: 2, isMovement: false, parentCode: '3' },
+    { code: '3.1.1', name: 'Capital social', type: 'PATRIMONIO', level: 3, isMovement: true, parentCode: '3.1' }
+  ];
+  assert.doesNotThrow(() => validateNewAccountCatalogEntries(roots, valid));
+  assert.throws(() => validateNewAccountCatalogEntries(roots, [
+    ...valid,
+    { code: '1.1.1.02', name: 'Banco sin padre', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1' }
+  ]), /cuenta nueva: debe tener una cuenta padre/);
+  assert.throws(() => validateNewAccountCatalogEntries(roots, [
+    ...valid,
+    { code: '1.1.1.03', name: 'Cuenta mal clasificada', type: 'PASIVO', level: 4, isMovement: true, parentCode: '1.1.1' }
+  ]), /clasificación no coincide con el código|cuenta nueva: debe tener/);
+});
+
+test('Basic accounting certification: SQLite accepts balanced dual-currency journal entries and rejects unbalanced entries', () => {
+  const company = {
+    id: 'company-basic-a', name: 'Empresa básica A', rif: 'J-12345678-9',
+    address: 'Dirección de prueba', phone: '', email: '',
+    taxpayerType: 'ORDINARIO', defaultIvaRetentionRate: 75, fiscalYear: 2026, bcvRate: 100
+  };
+  const accounts = [
+    { code: '1.1.1.01', name: 'Banco', type: 'ACTIVO', level: 4, isMovement: true },
+    { code: '3.1.1.01', name: 'Capital social', type: 'PATRIMONIO', level: 4, isMovement: true }
+  ];
+  const entry = {
+    ...sourceEntry(),
+    id: 'basic-entry-a-1',
+    companyId: company.id,
+    entryNumber: 1,
+    items: [
+      { accountCode: '1.1.1.01', accountName: 'Banco', debitBs: 10000, creditBs: 0, debitUsd: 100, creditUsd: 0 },
+      { accountCode: '3.1.1.01', accountName: 'Capital social', debitBs: 0, creditBs: 10000, debitUsd: 0, creditUsd: 100 }
+    ]
+  };
+  const prior = { ...emptyState(), companies: [company], accounts };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, {
+    ...prior, journalEntries: [entry]
+  }));
+  const unbalanced = {
+    ...entry,
+    id: 'basic-entry-unbalanced',
+    items: entry.items.map((item, index) => index === 1 ? { ...item, creditBs: 9999 } : item)
+  };
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...prior, journalEntries: [unbalanced]
+  }), /no cuadra simultáneamente en Bs. y USD/);
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...prior,
+    journalEntries: [{ ...entry, id: 'basic-entry-invalid-side',
+      items: [{ ...entry.items[0], debitBs: -1 }, entry.items[1]] }]
+  }), /importes o lados contables inválidos/);
 });
