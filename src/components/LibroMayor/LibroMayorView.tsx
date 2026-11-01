@@ -13,7 +13,7 @@ import {
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportMayorPdf } from '../../utils/pdfGenerator';
-import { getAccountBalanceNature, selectCompanyJournalEntries } from '../../types/accountingReportIntegrity';
+import { filterEntriesByCompany, getAccountBalanceNature } from '../../types/accountingReportIntegrity';
 
 interface LedgerMovement {
   entryId: string;
@@ -76,7 +76,7 @@ export const LibroMayorView: React.FC = () => {
         creditUsd: number;
       }[] = [];
 
-      for (const entry of selectCompanyJournalEntries(journalEntries, currentCompany.id)) {
+      for (const entry of filterEntriesByCompany(journalEntries, currentCompany.id)) {
         for (const it of entry.items) {
           if (it.accountCode === acc.code) {
             allMovements.push({
