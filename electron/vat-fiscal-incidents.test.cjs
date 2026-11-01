@@ -19,6 +19,7 @@ function fixture() {
     purchases: [
       { id: 'invoice-1', companyId: 'co-1', documentType: '01', invoiceNumber: 'FAC-100' },
       { id: 'credit-1', companyId: 'co-1', documentType: '03', creditNoteNumber: 'NC-9', affectedInvoiceNumber: 'FAC-100', originalPurchaseId: 'invoice-1' },
+      { id: 'debit-1', companyId: 'co-1', documentType: '02', debitNoteNumber: 'ND-10', affectedInvoiceNumber: 'FAC-100', originalPurchaseId: 'invoice-1' },
       { id: 'debit-2', companyId: 'co-2', documentType: '02', debitNoteNumber: 'ND-2', affectedInvoiceNumber: 'FAC-200', originalPurchaseId: 'invoice-2' },
       { id: 'invoice-2', companyId: 'co-2', documentType: '01', invoiceNumber: 'FAC-200' }
     ],
@@ -26,7 +27,8 @@ function fixture() {
     vatWithholdingDeclarations: [{ id: 'declaration-1', companyId: 'co-1', voucherIds: ['voucher-1'] }],
     vatWithholdingDeclarationEvents: [
       { id: 'filed-1', declarationId: 'declaration-1', eventType: 'FILED' },
-      { id: 'payment-1', declarationId: 'declaration-1', eventType: 'PAYMENT', bankStatementMovementIds: ['bank-1'] }
+      { id: 'payment-1', declarationId: 'declaration-1', eventType: 'PAYMENT', bankStatementMovementIds: ['bank-1'] },
+      { id: 'payment-2', declarationId: 'declaration-1', eventType: 'PAYMENT', bankStatementMovementIds: ['bank-1'] }
     ],
     bankStatementMovements: [{ id: 'bank-1', companyId: 'co-1' }, { id: 'bank-2', companyId: 'co-2' }],
     journalEntries: [{ id: 'journal-1', companyId: 'co-1' }]
@@ -79,6 +81,34 @@ test('prevents duplicate incident cases for the same company and source document
   createVatFiscalIncident(db, createInput(), actor);
   assert.throws(() => createVatFiscalIncident(db, createInput(), actor), /UNIQUE constraint failed/);
   db.close();
+});
+
+test('prevents reusing the same voucher, declaration payment event or bank movement across incident dossiers', () => {
+  {
+    const { db } = fixture();
+    createVatFiscalIncident(db, createInput({ declarationEventIds: [], bankMovementIds: [] }), actor);
+    assert.throws(() => createVatFiscalIncident(db, createInput({
+      purchaseId: 'debit-1', vatVoucherId: 'voucher-1', declarationId: null,
+      declarationEventIds: [], bankMovementIds: []
+    }), actor), /UNIQUE constraint failed/);
+    db.close();
+  }
+  {
+    const { db } = fixture();
+    createVatFiscalIncident(db, createInput({ vatVoucherId: undefined, declarationEventIds: ['payment-1'], bankMovementIds: [] }), actor);
+    assert.throws(() => createVatFiscalIncident(db, createInput({
+      purchaseId: 'debit-1', vatVoucherId: undefined, declarationEventIds: ['payment-1'], bankMovementIds: []
+    }), actor), /UNIQUE constraint failed/);
+    db.close();
+  }
+  {
+    const { db } = fixture();
+    createVatFiscalIncident(db, createInput({ vatVoucherId: undefined, declarationEventIds: ['payment-1'], bankMovementIds: ['bank-1'] }), actor);
+    assert.throws(() => createVatFiscalIncident(db, createInput({
+      purchaseId: 'debit-1', vatVoucherId: undefined, declarationEventIds: ['payment-2'], bankMovementIds: ['bank-1']
+    }), actor), /UNIQUE constraint failed/);
+    db.close();
+  }
 });
 
 test('records append-only review and action events without marking the incident resolved', () => {
