@@ -499,3 +499,29 @@ Esta sección prevalece sobre estados anteriores que indiquen como pendientes fu
 - Bloque 4: subbloques 4.1–4.3 integrados; pendientes normativos y de circuito integral explícitos.
 - Los bloques 1 y 2 mantienen la validación profesional integral pendiente. Los bloques 5–13 conservan el estado previamente documentado.
 - SQLite local continúa como única fuente de verdad. No tocar el administrador semilla. No publicar instaladores/releases sin autorización expresa.
+
+
+# DECISIÓN DE ALCANCE — EXCLUSIÓN DEFINITIVA DE REME — 01/11/2026
+
+Esta decisión prevalece sobre todas las secciones anteriores de esta hoja de ruta que describan REME como pendiente, bloqueado, planificado o próximo paso.
+
+## REME queda fuera del producto
+- SICOVEN **no implementará el módulo REME**, su motor de reexpresión, sus cálculos, factores, ajustes ni generación de asientos.
+- Motivo de alcance: el responsable del proyecto no dispone de los archivos originales de índices ni de credenciales profesionales para acceder a recursos restringidos de la Federación; tampoco corresponde sustituir esa evidencia con series secundarias, proyecciones, reconstrucciones o cifras inventadas.
+- Los PR #42, #44, #45, #49, #50, #51, #52, #53 y #54, y sus componentes/documentos asociados, se conservan en el historial técnico como trabajo ya fusionado. Su existencia no significa que SICOVEN ofrezca REME ni que sus cálculos estén disponibles.
+- Los componentes REME existentes no se ampliarán, no se conectarán a contabilización y no se presentarán como funciones activas. No se cargarán índices ni se habilitarán cálculos.
+- Los apartados 3.1, 3.2 y 3.3 quedan **retirados del alcance funcional activo**. No son bloqueos para declarar avance de SICOVEN en sus demás módulos.
+- Si en el futuro se requiere reabrir esta decisión, deberá existir una solicitud expresa, acceso legítimo a fuentes originales y participación/revisión de un profesional competente. No forma parte del plan actual.
+
+## Secuencia activa después de excluir REME
+1. **Bloque 4 — retenciones IVA/SENIAT:** continuar desde los subbloques ya fusionados 4.1–4.3. Próximo trabajo: verificación documental de la especificación técnica vigente de importación TXT, casos de declaración sin operaciones, reglas de comprobantes y calendario de enteramiento, distinguiendo claramente norma primaria, guía técnica y material secundario.
+2. No declarar homologación, presentación automática, aceptación por el Portal Fiscal ni cumplimiento integral hasta disponer de especificación oficial vigente y pruebas verificables.
+3. Completar la conciliación de extremo a extremo: operación y evento de retención → comprobante → auxiliar quincenal → declaración → enteramiento/pago → asiento contable y auditoría.
+4. Mantener los soportes documentales opcionales de RT-01; su ausencia no bloqueará operaciones válidas.
+5. Mantener pendientes de validación profesional integral de los Bloques 1 y 2, sin confundir esa validación con el desarrollo técnico ya integrado.
+
+## Estado de continuidad
+- Última entrega documental anterior: RT-01, PR #60–#62, fusionadas en `main`; PR #62 commit `bc629d763a6b840306d8a9fdbfa9cfa3ef821aed`.
+- Última hoja leída antes de esta decisión: blob `d93faebabe133ab3f812190e99d14daaa2b12584` (502 líneas).
+- Próximo bloque activo: Bloque 4, continuación normativa/técnica de retenciones IVA. REME no se retoma.
+- Arquitectura inalterada: aplicación de escritorio; SQLite local como única base de datos y fuente de verdad; no tocar el administrador semilla; no publicar instaladores/releases sin autorización expresa.
