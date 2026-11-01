@@ -308,10 +308,15 @@ function listInflationSourceDossiers(db, filters = {}) {
   if (filters.fiscalYear) { clauses.push('d.fiscal_year=?'); values.push(Number(filters.fiscalYear)); }
   if (filters.seriesId) { clauses.push('d.series_id=?'); values.push(String(filters.seriesId)); }
   const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') : '';
-  const rows = db.prepare(\`SELECT d.*,s.series_version AS seriesVersion,src.source_sha256 AS sourceSha256,src.source_title AS sourceTitle,\n    src.issuer AS sourceIssuer,src.source_reference AS sourceReference,src.source_url AS sourceUrl,\n    src.source_published_at AS sourcePublishedAt,src.file_name AS sourceFileName,
+  const rows = db.prepare(\`SELECT d.*,s.series_version AS seriesVersion,src.source_sha256 AS sourceSha256,src.source_title AS sourceTitle,
+    src.issuer AS sourceIssuer,src.source_reference AS sourceReference,src.source_url AS sourceUrl,
+    src.source_published_at AS sourcePublishedAt,src.file_name AS sourceFileName,
     (SELECT r.decision FROM inflation_source_dossier_reviews r WHERE r.dossier_id=d.id ORDER BY r.created_at DESC,r.rowid DESC LIMIT 1) AS decision,
     (SELECT r.reason FROM inflation_source_dossier_reviews r WHERE r.dossier_id=d.id ORDER BY r.created_at DESC,r.rowid DESC LIMIT 1) AS reviewReason,
-    (SELECT r.reviewer_username FROM inflation_source_dossier_reviews r WHERE r.dossier_id=d.id ORDER BY r.created_at DESC,r.rowid DESC LIMIT 1) AS reviewerUsername,\n    (SELECT r.reviewer_professional_name FROM inflation_source_dossier_reviews r WHERE r.dossier_id=d.id ORDER BY r.created_at DESC,r.rowid DESC LIMIT 1) AS reviewerProfessionalName,\n    (SELECT r.reviewer_credential FROM inflation_source_dossier_reviews r WHERE r.dossier_id=d.id ORDER BY r.created_at DESC,r.rowid DESC LIMIT 1) AS reviewerCredential,\n    (SELECT r.created_at FROM inflation_source_dossier_reviews r WHERE r.dossier_id=d.id ORDER BY r.created_at DESC,r.rowid DESC LIMIT 1) AS reviewedAt
+    (SELECT r.reviewer_username FROM inflation_source_dossier_reviews r WHERE r.dossier_id=d.id ORDER BY r.created_at DESC,r.rowid DESC LIMIT 1) AS reviewerUsername,
+    (SELECT r.reviewer_professional_name FROM inflation_source_dossier_reviews r WHERE r.dossier_id=d.id ORDER BY r.created_at DESC,r.rowid DESC LIMIT 1) AS reviewerProfessionalName,
+    (SELECT r.reviewer_credential FROM inflation_source_dossier_reviews r WHERE r.dossier_id=d.id ORDER BY r.created_at DESC,r.rowid DESC LIMIT 1) AS reviewerCredential,
+    (SELECT r.created_at FROM inflation_source_dossier_reviews r WHERE r.dossier_id=d.id ORDER BY r.created_at DESC,r.rowid DESC LIMIT 1) AS reviewedAt
     FROM inflation_source_dossiers d JOIN inflation_index_series s ON s.id=d.series_id
     JOIN inflation_index_sources src ON src.id=s.source_id \${where}
     ORDER BY d.created_at DESC,d.rowid DESC\`).all(...values);
