@@ -23,7 +23,7 @@
 - El flujo de inicio del administrador semilla queda expresamente fuera del alcance y no debe modificarse.
 - No reabrir los siete frentes funcionales ya aprobados salvo defecto concreto demostrado.
 
-## Estado de ejecución verificado — 31/10/2026
+## Estado de ejecución verificado — 01/11/2026
 
 ### Bloques cerrados y fusionados en `main`
 
@@ -407,14 +407,14 @@ Los bloques 1 y 2 tienen implementación funcional amplia, pero conservan valida
 
 **Documento técnico:** `docs/rt-01-independencia-contabilizacion-respaldo-documental.md`.
 
-**Estado:** criterio arquitectónico documentado y auditoría inicial completada. La interfaz de carga opcional, almacenamiento local, metadatos, estados documentales, informes y pruebas de seguridad siguen pendientes de implementación. No se declara implementada una gestión documental que todavía no existe.
+**Estado actualizado al 01/11/2026:** RT-01 ya está implementado e integrado en `main` mediante PR #61 (motor local) y PR #62 (interfaz). Los soportes son opcionales y no condicionan el registro ni la contabilización. La cobertura actual incorpora Compras, Ventas y Libro Diario. La ampliación a otros tipos de entidad y consultas históricas queda como evolución posterior, no como requisito para considerar integrada esta primera entrega.
 
 **Aplicación transversal:** módulos 1, 4, 5, 6, 7, 8, 9 y 10, según el tipo de operación. La ausencia de archivo nunca será por sí sola un motivo para impedir un asiento válido.
 
 
 ## RT-01 — SEGUNDA FASE: MOTOR DOCUMENTAL LOCAL
 
-**Estado:** motor local e IPC implementados en rama de trabajo; validación automatizada y revisión de CI pendientes; interfaz de usuario pendiente.
+**Estado:** integrado en `main` mediante PR #61. Motor documental, almacenamiento local e IPC implementados; pruebas automatizadas y CI aprobadas. La interfaz correspondiente se integró posteriormente mediante PR #62.
 
 Implementación añadida:
 - Tablas SQLite `supporting_documents` y `supporting_document_events`.
@@ -441,4 +441,8 @@ Pruebas automatizadas añadidas:
 - Protección append-only.
 - Rechazo de revisión de documentos sustituidos.
 
-**Límite de esta fase:** todavía no se ha integrado un panel visual en Compras, Ventas, Libro Diario y consultas históricas. No se declara terminada la experiencia de gestión documental ni la validación de CI hasta que las pruebas se ejecuten y aprueben.
+**Interfaz integrada — PR #62:** `SupportingDocumentsPanel.tsx` permite listar, adjuntar, abrir, sustituir, verificar y observar documentos. `AccountingContext` expone las operaciones documentales usando el token de sesión y la empresa activa. El panel está conectado a las operaciones de Compras, Ventas y Libro Diario. La interfaz informa expresamente que los adjuntos son opcionales y no afectan el registro contable.
+
+**Validación de PR #62:** commit revisado `94a31931d6e6f80cab8216b3486419c9901526ea`; Desktop run `41308856297` SUCCESS y Windows installer run `41308856350` SUCCESS. El trabajo Windows completó la compilación NSIS, verificación del instalador y actualización real 1.0.6→1.0.7 con conservación de SQLite. PR #62 fusionada mediante squash el 01/11/2026; commit de integración `bc629d763a6b840306d8a9fdbfa9cfa3ef821aed`.
+
+**Límites pendientes de RT-01:** la integración visual actual cubre Compras, Ventas y Libro Diario; no se debe afirmar que ya existe integración en todos los módulos transversales enumerados. La revisión profesional de expedientes y la ampliación a otras entidades/documentos siguen siendo evolución posterior. No se publicó instalador ni release.
