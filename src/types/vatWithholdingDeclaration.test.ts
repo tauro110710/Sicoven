@@ -135,7 +135,7 @@ test('due date requires an official SENIAT HTTPS source and is never calculated 
   assert.throws(() => validateVatDeclarationEventDraft(declaration, [], {
     eventType: 'DUE_DATE_SET', occurredAt: '2026-10-16', dueDate: '2026-10-20',
     officialSourceTitle: 'Calendario', officialReference: 'Gaceta', officialSourceUrl: 'https://example.com/calendar'
-  }), /fuente oficial SENIAT/);
+  }), /dominio oficial SENIAT/);
   assert.doesNotThrow(() => validateVatDeclarationEventDraft(declaration, [], {
     eventType: 'DUE_DATE_SET', occurredAt: '2026-10-16', dueDate: '2026-10-20',
     officialSourceTitle: 'Calendario oficial SENIAT', officialReference: 'Publicación oficial',
