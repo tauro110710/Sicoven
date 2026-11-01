@@ -45,15 +45,15 @@ Estas limitaciones deberán comunicarse claramente en la ficha de versión y doc
 | Gate | Criterio de aprobación | Evidencia requerida | Estado |
 |---|---|---|---|
 | G0 — Línea base | Identificar SHA, versión, inventario de pruebas y workflows activos | CI base y revisión de commits/workflows | APROBADO (base 1.0.7) |
-| G1 — Plan de cuentas | Jerarquía, padres, niveles, cuentas imputables y aislamiento por empresa | Pruebas positivas/negativas | PENDIENTE |
-| G2 — Diario y partida doble | Asientos balanceados en Bs. y USD, correlativos, cuentas válidas, inmutabilidad y reversión | Pruebas de dominio y SQLite | PENDIENTE |
-| G3 — Diario/Mayor/Balance | Saldos iniciales, movimientos, saldos finales y cuadre reproducible por empresa/período | Conciliación independiente | PENDIENTE |
+| G1 — Plan de cuentas | Jerarquía, padres, niveles, cuentas imputables y aislamiento por empresa | Pruebas positivas/negativas ejecutadas en SQLite | APROBADO (dominio/SQLite; falta E2E UI) |
+| G2 — Diario y partida doble | Asientos balanceados en Bs. y USD, correlativos, cuentas válidas, inmutabilidad y reversión | Partida doble y validación dual en SQLite; correlativos multiempresa y rechazo de duplicados | APROBADO PARCIAL (faltan E2E y cobertura completa de reversión) |
+| G3 — Diario/Mayor/Balance | Saldos iniciales, movimientos, saldos finales y cuadre reproducible por empresa/período | Conciliación sintética de balance de comprobación; falta lectura E2E desde Mayor/Diario UI | EVIDENCIA PARCIAL |
 | G4 — Apertura y períodos | Apertura, cierre, bloqueo retroactivo, reapertura autorizada y ejercicios enlazados | Pruebas temporales y persistencia | PENDIENTE |
 | G5 — Compras y CxP | Contado/crédito, pagos parciales, anticipos, notas de crédito y ND solo en alcance controlado | UI → dominio → SQLite → auxiliares | PENDIENTE |
 | G6 — Ventas y CxC | Contado/crédito, cobros parciales, saldos y asientos sin duplicidad | UI → dominio → SQLite → auxiliares | PENDIENTE |
 | G7 — Inventario/costo | Entradas, salidas, devoluciones y costo solo en operaciones soportadas; Kardex y contabilidad conciliados | Casos con cantidades y costos esperados | PENDIENTE |
 | G8 — Caja y bancos | Entradas, salidas, transferencias, conciliación y correspondencia con Diario | Casos de tesorería y conciliación | PENDIENTE |
-| G9 — Doble moneda | Tasas históricas, precisión, importes originales/equivalentes y no conversión cruzada indebida | Matriz Bs./USD y cálculos independientes | PENDIENTE |
+| G9 — Doble moneda | Tasas históricas, precisión, importes originales/equivalentes y no conversión cruzada indebida | Partida doble y estados sintéticos equilibrados en Bs./USD; falta matriz completa de tasas históricas y transacciones | EVIDENCIA PARCIAL |
 | G10 — Estados financieros | Ecuación contable, resultados, patrimonio y flujo reconciliados con Mayor | Casos patrón y conciliación | PENDIENTE |
 | G11 — Multiempresa | Cero filtraciones de lectura/escritura entre empresas | Pruebas cruzadas en dominio y SQLite | PENDIENTE |
 | G12 — Persistencia | Reinicio de proceso, reapertura de SQLite, integridad y consistencia de snapshots | Pruebas de persistencia reales | PENDIENTE |
