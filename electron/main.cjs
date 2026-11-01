@@ -36,6 +36,20 @@ const { registerVatFiscalIncidentIpc } = require('./vat-fiscal-incidents.cjs');
 const { acquireSingleInstance } = require('./single-instance.cjs');
 
 let db;
+// Los módulos IPC conservan este proxy estable: tras una restauración física,
+// los métodos se reenvían a la conexión SQLite recién abierta, nunca a la cerrada.
+const dbHandle = new Proxy(Object.create(null), {
+  get(_target, property) {
+    if (!db) throw new Error('La base SQLite no está disponible.');
+    const value = db[property];
+    return typeof value === 'function' ? value.bind(db) : value;
+  },
+  set(_target, property, value) {
+    if (!db) throw new Error('La base SQLite no está disponible.');
+    db[property] = value;
+    return true;
+  }
+});
 function openDatabase() {
   const dataDir = app.getPath('userData');
   fs.mkdirSync(dataDir, { recursive: true });
@@ -538,21 +552,21 @@ app.whenReady().then(async () => {
     return { ok: true, cleared: true, verified: true };
   });
 
-  registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession });
-  registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession });
-  registerInflationClassificationIpc({ ipcMain, db, licenseView, getActiveSession });
-  registerInflationRemeReadinessIpc({ ipcMain, db, licenseView, getActiveSession });
-  registerInflationSourceDossierIpc({ ipcMain, db, licenseView, getActiveSession });
-  registerBackupIpc({ ipcMain, db, licenseView, getActiveSession, dialog, app,
+  registerAccountingPersistenceHandler({ ipcMain, db: dbHandle, licenseView, getActiveSession });
+  registerInflationIndexIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession });
+  registerInflationClassificationIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession });
+  registerInflationRemeReadinessIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession });
+  registerInflationSourceDossierIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession });
+  registerBackupIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession, dialog, app,
     getWindow: () => BrowserWindow.getFocusedWindow() });
   registerRestoreIpc({ ipcMain, app, dialog, licenseView, getActiveSession,
     getDb: () => db,
     closeDatabase: async () => { if (db?.open) { db.pragma('wal_checkpoint(TRUNCATE)'); db.close(); db = null; } },
     reopenDatabase: async () => openDatabase(),
     getWindow: () => BrowserWindow.getFocusedWindow() });
-  registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, dialog, shell, app,
+  registerDocumentVaultIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession, dialog, shell, app,
     getWindow: () => BrowserWindow.getFocusedWindow() });
-  registerVatFiscalIncidentIpc({ ipcMain, db, licenseView, getActiveSession });
+  registerVatFiscalIncidentIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession });
 
 
   await revalidateLicense();
