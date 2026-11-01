@@ -104,7 +104,12 @@ function attachDocument(db, { storageDir, input, buffer, actor }) {
 }
 function listDocuments(db, filters = {}) {
   const clauses = [], values = [];
-  if (filters.companyId) { clauses.push('d.company_id=?'); values.push(String(filters.companyId)); }
+  const companyId = requiredText(filters.companyId, 'Empresa', 120);
+  const state = parseAccountingState(db);
+  if (!(Array.isArray(state.companies) ? state.companies : []).some(company => String(company.id) === companyId)) {
+    throw new Error('La empresa seleccionada no existe en SQLite.');
+  }
+  clauses.push('d.company_id=?'); values.push(companyId);
   if (filters.entityType) { clauses.push('d.entity_type=?'); values.push(String(filters.entityType).toUpperCase()); }
   if (filters.entityId) { clauses.push('d.entity_id=?'); values.push(String(filters.entityId)); }
   const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') : '';
