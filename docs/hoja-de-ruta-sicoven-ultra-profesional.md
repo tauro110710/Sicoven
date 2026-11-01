@@ -763,3 +763,39 @@ La ND continúa bloqueada de forma deliberada. La implementación debe ser un fl
 **Próxima tarea:** diseñar e implementar por separado el motor económico de ND y sus validaciones de persistencia, comenzando por el vínculo documental y los escenarios de saldo de proveedor. Mantener bloqueada cualquier contabilización genérica mientras no esté completa la matriz de causas y su tratamiento autorizado.
 
 **Regla permanente:** no cambiar el administrador semilla, no publicar instaladores/releases sin autorización y no declarar homologación SENIAT ni cumplimiento fiscal certificado.
+
+
+## BITÁCORA DE CONTINUIDAD — PR #73 Y PREPARACIÓN DEL MOTOR ND TIPO 02 — 01/11/2026
+
+### PR #73 — prevalidación segura de ND de proveedor
+- PR: https://github.com/fenixlife1978/Sicoven/pull/73
+- Fusionado por squash a `main`: `37492f074493eff755bbf42b99f4db4a9cc4bbe5`.
+- Añade un contrato de prevalidación aislado: factura original tipo 01 vigente, misma empresa, proveedor y número afectado; número/control de ND; duplicidad por proveedor/empresa; fechas y período abierto; importe y tasa positivos; causa económica y justificación.
+- El resultado mantiene explícitamente `postingAllowed=false`, `inventoryPostingAllowed=false` y `fiscalAutomationAllowed=false`.
+- CI pre-merge Desktop Validation run `41320760072`: SUCCESS.
+- CI pre-merge Windows Installer run `41320760082`: SUCCESS; incluyó pruebas, TypeScript, build renderer, auditoría de activos, NSIS, verificación del instalador y actualización real 1.0.6 → 1.0.7 preservando SQLite.
+- No se obtuvo una ejecución CI post-merge independiente para el SHA integrado; no se afirma una.
+- No se publicó instalador ni release.
+
+### Auditoría técnica posterior a PR #73 — estado del motor
+Se verificaron en `main`:
+- `src/types/accounting.ts`: `PurchaseRecord` ya contempla `documentType: '01' | '02' | '03'`, `debitNoteNumber`, `affectedInvoiceNumber`, `journalEntryId`, importes Bs/USD y datos de pago; sin embargo, el tipo de dato no implementa el flujo.
+- `src/context/AccountingContext.tsx`: `addPurchase` rechaza expresamente todo documento distinto de tipo 01. El alta genérica de factura no debe reutilizarse para ND.
+- `src/components/LibroCompras/NewPurchaseModal.tsx`: el selector 02 sigue deshabilitado. El modal contiene estados genéricos de factura, IVA, retenciones y pago que no deben asumirse válidos para una ND.
+- `src/types/purchaseCreditNote.ts` y `AccountingContext.addPurchaseCreditNote`: NC es un flujo especializado, con su propia valoración, vínculo a movimientos originales, conciliación de inventario, saldo CxP/anticipo y asiento. No es plantilla directa para ND porque la dirección económica es opuesta.
+- `electron/accounting-persistence.cjs`: el estado contable se persiste como snapshot JSON dentro de una transacción SQLite; la validación de integridad y los eventos de auditoría se ejecutan dentro de esa transacción.
+- `electron/accounting-integrity.cjs`: la validación de documentos y asientos debe ampliarse con reglas explícitas para ND, sin debilitar la protección actual de facturas y NC.
+- `PurchaseRecord` puede conservar la factura original, pero no hay todavía semántica especializada para el nuevo pasivo por ND ni para liquidaciones dirigidas a una ND.
+
+### Decisiones de diseño obligatorias para desbloquear ND
+1. La ND será un documento independiente, vinculado inmutablemente a la factura 01 afectada; no reescribe ni aumenta silenciosamente la factura original.
+2. La ND crea su propio saldo por pagar al proveedor cuando el documento reconoce una obligación. Si la factura original está impaga, parcialmente pagada o pagada, el saldo de la ND se mantiene identificable y liquidable por separado; no se simula un pago ni se reduce una liquidación histórica.
+3. El importe de la ND debe conciliar en Bs. y USD con la tasa histórica guardada. Los componentes de base, exento e IVA deben capturarse explícitamente y cuadrar con el total; el sistema no inventará alícuotas ni retenciones.
+4. Una causa económica no decide por sí sola la cuenta contable. La cuenta de débito debe ser seleccionada/validada contra el plan de cuentas de la empresa y su naturaleza; la asignación debe quedar auditada.
+5. Mercancía adicional solo incrementa inventario con líneas, cantidades, costos, fecha de recepción y productos reales conciliados. Gastos, intereses, diferencias de precio y ajustes no generan cantidades ficticias.
+6. No se automatizan retenciones IVA/ISLR, IGTF, rectificaciones, compensaciones ni cambios en declaraciones históricas sin fuente primaria vigente y validación profesional independiente.
+7. La implementación debe extender la integridad SQLite para validar vínculo original, proveedor, empresa, unicidad, tipo de asiento, balance dual, cuenta de débito, CxP de ND, período cerrado, idempotencia y no reutilización de liquidaciones.
+8. El circuito de liquidación de crédito debe permitir seleccionar y pagar una ND como documento propio sin confundirla con la factura original; los saldos y pagos históricos deben permanecer inmutables.
+9. El tipo 02 solo se habilitará cuando el flujo completo de alta, Libro de Compras, CxP, liquidación, asiento, auditoría y pruebas SQLite esté integrado.
+
+**Estado actual:** la prevalidación está integrada, pero ND tipo 02 sigue BLOQUEADA para contabilización. La siguiente entrega técnica debe implementar el documento ND independiente y su saldo CxP; no se retirará la guarda genérica hasta que la validación integral esté completa.
