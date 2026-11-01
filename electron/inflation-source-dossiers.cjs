@@ -182,6 +182,10 @@ function initializeInflationSourceDossierSchema(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_inflation_dossiers_company_period ON inflation_source_dossiers(company_id,fiscal_year,period_from,period_to);
     CREATE INDEX IF NOT EXISTS idx_inflation_dossier_reviews ON inflation_source_dossier_reviews(dossier_id,created_at);
+    CREATE TRIGGER IF NOT EXISTS inflation_dossier_reviews_no_update BEFORE UPDATE ON inflation_source_dossier_reviews
+      BEGIN SELECT RAISE(ABORT, 'inflation_source_dossier_reviews is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS inflation_dossier_reviews_no_delete BEFORE DELETE ON inflation_source_dossier_reviews
+      BEGIN SELECT RAISE(ABORT, 'inflation_source_dossier_reviews is append-only'); END;
     CREATE TRIGGER IF NOT EXISTS inflation_dossiers_no_update BEFORE UPDATE ON inflation_source_dossiers
       BEGIN SELECT RAISE(ABORT, 'inflation_source_dossiers is append-only'); END;
     CREATE TRIGGER IF NOT EXISTS inflation_dossiers_no_delete BEFORE DELETE ON inflation_source_dossiers
