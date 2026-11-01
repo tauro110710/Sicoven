@@ -94,9 +94,13 @@ export function buildVatBankReconciliationSummary(
     const validMovements = movements.filter(movement => {
       const account = bankAccounts.find(item =>
         item.id === movement.bankAccountId && item.companyId === declaration.companyId);
+      const linkedToThisPayment = Boolean(event.journalEntryId) &&
+        movement.reconciledWithJournalEntryId === event.journalEntryId &&
+        (movement.reconciledJournalEntryIds || []).includes(event.journalEntryId as string);
+      const hasOtherReconciliation = Boolean(movement.isReconciled || movement.reconciledWithJournalEntryId ||
+        (movement.reconciledJournalEntryIds || []).length > 0) && !linkedToThisPayment;
       return movement.type === 'DEBIT' && account?.currency === 'BS' &&
-        !movement.isReconciled && !movement.reconciledWithJournalEntryId &&
-        (movement.reconciledJournalEntryIds || []).length === 0 &&
+        !hasOtherReconciliation &&
         Number.isFinite(Number(movement.amountBs)) && Number(movement.amountBs) > 0 &&
         /^\\d{4}-\\d{2}-\\d{2}$/.test(movement.date);
     });
