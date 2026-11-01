@@ -577,3 +577,43 @@ Esta decisión prevalece sobre todas las secciones anteriores de esta hoja de ru
 - La revisión fue estática; no sustituye la ejecución de pruebas ni una revisión profesional de los casos fiscales.
 
 **Resultado:** no se ordena una modificación funcional inmediata sobre la base de esta inspección. Los controles de unicidad, snapshot, totales y secuencia están presentes. La verificación primaria de vencimientos y la conciliación contra banco se mantienen como pendientes explícitos del subbloque 4.4. No se declara homologación SENIAT.
+
+
+---
+
+## ACTUALIZACIÓN DE ESTADO — 01/11/2026 — PR #63 Y VERIFICACIÓN POST-MERGE
+
+Esta sección prevalece sobre las menciones anteriores que describían la conciliación bancaria de enteramientos IVA como pendiente dentro del subbloque 4.4.
+
+### Bloque 4.4 — conciliación bancaria de enteramientos IVA — INTEGRADO Y VALIDADO
+
+- PR #63: https://github.com/fenixlife1978/Sicoven/pull/63
+- Rama: `feature/bloque-4-4-conciliacion-bancaria-retenciones`.
+- Commit integrado en `main`: `e1bce1ebc379f95204a49561b4daf099f58edde7`.
+- CI posterior al merge sobre ese SHA:
+  - Desktop Validation, run 41313171085: SUCCESS. Pasaron instalación de dependencias, guardas de seguridad, pruebas automatizadas, TypeScript, auditoría de recursos, build y auditoría de assets.
+  - Windows Installer, run 41313171184: SUCCESS. Pasaron pruebas automatizadas, TypeScript, build renderer, auditoría, compilación NSIS, verificación del instalador y actualización real 1.0.6 → 1.0.7 conservando datos SQLite.
+- Los artefactos generados permanecen en Actions; no se publicó instalador ni release.
+
+**Capacidades integradas:** cada nuevo evento PAYMENT exige uno o más movimientos bancarios DEBIT importados, de la misma empresa y de cuentas en Bs.; la suma debe coincidir al céntimo con el enteramiento; las fechas deben quedar entre presentación y pago; los movimientos no pueden reutilizarse. La validación existe en el contexto y en la capa de integridad SQLite. Los pagos históricos sin vínculos se mantienen como pendientes, sin asociaciones inventadas. La auditoría conserva los IDs bancarios. No se crean asientos ni se altera la conciliación bancaria contable existente.
+
+**Límite:** la conciliación vincula datos importados; no autentica extractos con el banco ni demuestra por sí sola la recepción del pago por SENIAT.
+
+### Investigación documental posterior — especificación TXT IVA
+
+Se realizó una nueva búsqueda dirigida a localizar en el dominio oficial del SENIAT una especificación descargable vigente que confirme el formato del TXT de retenciones IVA. No se localizó una fuente primaria oficial pública que permita confirmar que el instructivo RI_DRIVA2020-IT01V3_0_0 (septiembre de 2020) siga vigente en 2026.
+
+- El instructivo versión 3.0.0 de septiembre de 2020 sigue localizable en copias alojadas por terceros; sirve como antecedente técnico, no como prueba de vigencia actual.
+- La Providencia SNAT/2025/000054 y publicaciones informativas secundarias reiteran que el Portal Fiscal aplica especificaciones técnicas del SENIAT; no sustituyen la publicación de esa especificación.
+- No se autoriza declarar homologado el TXT, activar tipos documentales no verificados ni emitir un modelo de declaración sin operaciones basado en una plantilla antigua.
+- La validación definitiva requiere una fuente primaria vigente y, cuando exista acceso autorizado, una prueba de carga en el ambiente oficial de validación. SICOVEN no necesita ni solicitará credenciales profesionales para mantener esta limitación documentada.
+
+### Estado consolidado del Bloque 4
+
+- **4.1 — TXT IVA preliminar:** integrado; no homologado. La especificación técnica vigente y la prueba autorizada siguen pendientes.
+- **4.2 — evento fiscal IVA:** integrado para el disparador fiscal y separación de fecha documental; circuito de múltiples pagos parciales posteriores por factura aún requiere completar análisis y validación.
+- **4.3 — auxiliar quincenal:** integrado; snapshots y eventos append-only. No rectifica declaraciones presentadas ni certifica presentación en el Portal Fiscal.
+- **4.4 — conciliación bancaria de enteramientos:** integrado y validado técnicamente mediante PR #63 y CI post-merge SUCCESS.
+- **Pendientes transversales:** notas de crédito/débito y rectificaciones fiscales después de presentar; tratamiento de retenciones ya enteradas/no enteradas; validación profesional independiente de elegibilidad y comprobantes; conciliación integral libro → compra → evento → comprobante → declaración → acuse → enteramiento → asiento; fuente primaria vigente para TXT y declaración sin operaciones; calendario y feriados oficiales versionados para plazos.
+
+**Conclusión:** el subbloque funcional 4.4 queda cerrado en su alcance de conciliación fiscal-bancaria. El Bloque 4 completo permanece ABIERTO por los pendientes documentales, normativos y de circuito fiscal indicados. No se afirma homologación SENIAT ni cumplimiento fiscal certificado.
