@@ -18,7 +18,7 @@ export function resolvePurchaseVatFiscalEvent(
   if (paymentTerm !== 'CONTADO' && paymentTerm !== 'CREDITO') {
     throw new Error('La retención IVA requiere una modalidad de pago identificable.');
   }
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(effectiveDate || ''))) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(effectiveDate || ''))) {
     throw new Error('La retención IVA requiere una fecha efectiva de pago o abono en cuenta válida.');
   }
   const parsed = new Date(effectiveDate + 'T00:00:00.000Z');
