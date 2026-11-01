@@ -136,6 +136,7 @@ jobs:
           Get-Item $cleanDatabase.FullName | Select-Object FullName, Length, LastWriteTime
       - name: Publish downloadable Windows installer artifact
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: SICOVEN-1.0.8-Windows-x64
           path: release/SICOVEN-Setup-1.0.8-x64.exe
