@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   createInflationSourceDossier: (token, input) => ipcRenderer.invoke('sicoven:inflation-source-dossier-create', token, input),
   reviewInflationSourceDossier: (token, input) => ipcRenderer.invoke('sicoven:inflation-source-dossier-review', token, input),
   createAccountingBackup: (token) => ipcRenderer.invoke('sicoven:backup-create', token),
+  restoreAccountingBackup: (token) => ipcRenderer.invoke('sicoven:restore-execute', token),
   attachSupportingDocument: (token, input) => ipcRenderer.invoke('sicoven:document-attach', token, input),
   listSupportingDocuments: (token, filters) => ipcRenderer.invoke('sicoven:document-list', token, filters),
   reviewSupportingDocument: (token, input) => ipcRenderer.invoke('sicoven:document-review', token, input),
