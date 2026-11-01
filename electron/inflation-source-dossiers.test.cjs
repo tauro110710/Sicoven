@@ -6,7 +6,8 @@ const {
   initializeInflationSourceDossierSchema,
   createInflationSourceDossier,
   reviewInflationSourceDossier,
-  listInflationSourceDossiers
+  listInflationSourceDossiers,
+  getInflationSourceDossierEvidence
 } = require('./inflation-source-dossiers.cjs');
 const { initializeInflationIndexSchema, importInflationIndexSeries } = require('./inflation-indexes.cjs');
 
@@ -155,6 +156,31 @@ test('evidence hash must match the preserved attachment bytes', () => {
     const input = dossierInput(series.seriesId);
     input.evidence[0].sha256 = '0'.repeat(64);
     assert.throws(() => createInflationSourceDossier(db, input, admin), /SHA-256 declarado no coincide/);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM inflation_source_dossiers').get().n, 0);
+  } finally { db.close(); }
+});
+
+test('reviewer can retrieve original evidence only through audited administrator access', () => {
+  const db = database();
+  try {
+    const series = makeSeries(db);
+    const created = createInflationSourceDossier(db, dossierInput(series.seriesId), admin);
+    const dossier = listInflationSourceDossiers(db, { companyId: 'company-001' })[0];
+    const item = getInflationSourceDossierEvidence(db, dossier.evidence[0].id, reviewer);
+    assert.equal(item.dossierId, created.dossierId);
+    assert.ok(item.contentBase64);
+    assert.equal(item.sha256, dossier.evidence[0].sha256);
+    const audit = db.prepare("SELECT event_type,details_json FROM audit_events WHERE event_type='inflation_source_dossier_evidence_accessed'").get();
+    assert.equal(audit.event_type, 'inflation_source_dossier_evidence_accessed');
+    assert.equal(JSON.parse(audit.details_json).actor, reviewer.username);
+    assert.throws(() => getInflationSourceDossierEvidence(db, item.id, { username: 'viewer', role: 'user' }), /Solo un administrador/);
+  } finally { db.close(); }
+});
+test('dossier cannot be bound to a company absent from local SQLite accounting state', () => {
+  const db = database();
+  try {
+    const series = makeSeries(db);
+    assert.throws(() => createInflationSourceDossier(db, dossierInput(series.seriesId, { companyId: 'nonexistent-company' }), admin), /empresa.*existir/i);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM inflation_source_dossiers').get().n, 0);
   } finally { db.close(); }
 });
