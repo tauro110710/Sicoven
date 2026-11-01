@@ -291,3 +291,44 @@ Esta sección sustituye la política provisional de distribución privada contro
 - G1–G12 conservan los límites E2E descritos en la matriz y G15 sigue pendiente. Los dos workflows verdes no constituyen certificación contable.
 
 **Decisión de este SHA:** CI propio de Desktop y Windows APROBADO; certificación SICOVEN 1.0.8 NO EMITIDA. PR #83 permanece abierto y en borrador. No merge, Release ni distribución.
+
+
+## 16. Evidencia actualizada — motor G13 y validación Windows — SHA aa9254a1cdf83df5a4b4d1dbd0477f3807036bf3
+
+Fecha: 2026-11-01. Esta adenda prevalece sobre las declaraciones históricas anteriores cuando describan como no implementado el motor físico de restauración.
+
+### Evidencia CI del mismo SHA
+
+- Desktop Validation run [41350710895](https://github.com/fenixlife1978/Sicoven/actions/runs/41350710895): SUCCESS.
+- Windows Installer run [41350710800](https://github.com/fenixlife1978/Sicoven/actions/runs/41350710800): SUCCESS.
+- Ambos workflows corresponden exactamente al SHA `aa9254a1cdf83df5a4b4d1dbd0477f3807036bf3`.
+- Windows completó guards de autenticación/sesión, suite automatizada, TypeScript, build renderer, auditoría de assets, generación NSIS, verificación del instalador, upgrade real 1.0.7→1.0.8 conservando el snapshot SQLite sintético e instalación limpia 1.0.8 en perfil Windows aislado.
+- La firma Authenticode permanece aplazada por decisión del titular y no bloquea esta certificación técnica, conforme a la política de distribución vigente.
+
+### G13 — motor físico implementado y probado por escenarios técnicos
+
+Se incorporó `electron/restore-engine.cjs`, integrado al arranque Electron antes de abrir SQLite:
+
+1. Verifica el paquete de respaldo y prepara staging aislado; comprueba SQLite, manifiesto y documentos.
+2. Genera snapshot de retorno antes de cerrar la conexión activa.
+3. Persiste journal de operación con estados y hashes SHA-256 de base/manifiestos de staging y retorno.
+4. Cierra SQLite después de checkpoint WAL; retira sidecars WAL/SHM antes del swap físico.
+5. Instala base y carpeta documental mediante renames dentro de `userData`, verificando la base instalada y el conjunto documental.
+6. Ante fallo, ejecuta rollback; ante interrupción, `recoverPendingRestore` corre antes de `openDatabase()` y bloquea el arranque si no puede verificar/recuperar.
+7. Mantiene un proxy SQLite estable para que los handlers IPC existentes usen la conexión reabierta tras restaurar.
+8. La operación está protegida por licencia autorizada, sesión admin y confirmación explícita; el resultado se registra en auditoría.
+
+Pruebas dedicadas del motor:
+- Restauración física de SQLite y documentos con snapshot de retorno.
+- Recuperación al arranque de un swap físico interrumpido, antes de abrir SQLite.
+- Fallo de reapertura tras instalar el respaldo y recuperación de base/documentos originales.
+
+### Estado de gates y límites de evidencia
+
+- G13 deja de tener como pendiente la implementación del motor físico: **MOTOR IMPLEMENTADO; PRUEBAS TÉCNICAS CI APROBADAS**.
+- G13 permanece **PARCIAL** hasta ejecutar aceptación contable con dataset representativo: capturar saldos y conteos por empresa/cuentas/documentos antes del backup, restaurar en perfil limpio, volver a leer desde SQLite y demostrar igualdad de saldos, auxiliares y documentos; incluir además un recorrido de restauración iniciado desde la UI Electron y reinicio posterior.
+- G12 permanece PARCIAL: el recovery se prueba antes de abrir SQLite, pero falta reinicio integral de Electron y reconciliación amplia de módulos.
+- G14: CI de upgrade y clean install APROBADA en este SHA; la validación manual en el equipo objetivo queda como evidencia operativa adicional, no como fallo del workflow.
+- G15 sigue PENDIENTE: recorrido funcional de aceptación contable de extremo a extremo.
+
+**Decisión:** la validación técnica de Desktop y Windows está APROBADA en el SHA indicado y el motor G13 ya está implementado. SICOVEN 1.0.8 continúa **NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN CONTABLE BÁSICA** hasta cerrar la reconciliación de saldos G13, G12 y los gates funcionales G0–G15. PR #83 permanece abierto en borrador; no merge, Release ni distribución.
