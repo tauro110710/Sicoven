@@ -84,4 +84,21 @@ function verifyBackupDirectory(directory) {
   if (JSON.stringify(actual) !== JSON.stringify(manifest.documents)) throw new Error('Los documentos respaldados no coinciden con el manifiesto.');
   return { ok: true, integrity: integrity.integrity, documentCount: actual.length, databaseSha256: manifest.database.sha256, createdAt: manifest.createdAt };
 }
-module.exports = { FORMAT, createBackup, verifyBackupDirectory };
+function registerBackupIpc({ ipcMain, db, licenseView, getActiveSession, dialog, app, getWindow }) {
+  ipcMain.handle('sicoven:backup-create', async (_event, token) => {
+    const licensing = licenseView();
+    if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
+    const actor = getActiveSession(token);
+    if (!actor || String(actor.role || '').toLowerCase() !== 'admin') throw new Error('Solo un administrador autenticado puede crear respaldos.');
+    const parentWindow = getWindow?.();
+    const options = { title: 'Seleccionar carpeta para el respaldo completo de SICOVEN', properties: ['openDirectory', 'createDirectory'] };
+    const selection = parentWindow ? await dialog.showOpenDialog(parentWindow, options) : await dialog.showOpenDialog(options);
+    if (selection.canceled || !selection.filePaths?.[0]) return { ok: false, canceled: true };
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const destination = path.join(selection.filePaths[0], 'SICOVEN-backup-' + stamp);
+    const result = await createBackup({ db, userDataDir: app.getPath('userData'), destination });
+    db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('accounting_backup_created', JSON.stringify({ actor: actor.username, destination: path.basename(destination), databaseSha256: result.databaseSha256, documentCount: result.documentCount, createdAt: result.createdAt }));
+    return result;
+  });
+}
+module.exports = { FORMAT, createBackup, verifyBackupDirectory, registerBackupIpc };
