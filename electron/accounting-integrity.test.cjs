@@ -294,6 +294,17 @@ test('SQLite rejects supplier debit/credit notes imported as new purchase record
   ), /falta factura original, proveedor, soporte/);
 });
 
+test('SQLite rejects supplier debit notes imported directly without an authorized accounting flow', () => {
+  const note = {
+    id: 'purchase-note-1', companyId: 'company-1', invoiceNumber: 'ND-100',
+    supplierRif: 'J-12345678-9', documentType: '02', totalAmountBs: 100
+  };
+  assert.throws(() => validateAccountingSnapshot(
+    emptyState(),
+    { ...emptyState(), purchases: [note] }
+  ), /SQLite bloqueó una nota de débito\/crédito sin flujo contable autorizado/);
+});
+
 test('SQLite rejects a purchase whose declared inventory lines are missing from Kardex', () => {
   const purchase = {
     id: 'purchase-new', companyId: 'company-1', invoiceDate: '2026-10-10',
