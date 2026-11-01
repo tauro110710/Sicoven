@@ -51,7 +51,7 @@ export interface SupplierDebitNotePreflightResult {
 }
 
 const normalizeDocument = (value: unknown) =>
-  String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
+  String(value || '').trim().toUpperCase().replace(/\s+/g, '');
 const normalizeRif = (value: unknown) =>
   String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 
