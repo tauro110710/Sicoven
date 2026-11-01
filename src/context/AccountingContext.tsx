@@ -64,8 +64,12 @@ export interface AccountingAuditEvent {
   createdAt: string;
 }
 
+type SupportingDocumentEntityType = 'PURCHASE' | 'SALE' | 'JOURNAL_ENTRY' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'INVENTORY_MOVEMENT' | 'BANK_STATEMENT_MOVEMENT';
+type SupportingDocument = { id: string; companyId: string; entityType: string; entityId: string; documentType: string; title: string; description?: string | null; fileName: string; mimeType: string; sha256: string; byteSize: number; uploadedBy: string; createdAt: string; status: 'ATTACHED_UNREVIEWED' | 'VERIFIED' | 'OBSERVATION_REQUIRED' | 'REPLACED' };
+type SupportingDocumentDraft = { entityType: SupportingDocumentEntityType; entityId: string; documentType: string; title: string; description?: string; replacesDocumentId?: string };
+
 interface AccountingContextType {
-  getAuditEvents: (limit?: number) => Promise<AccountingAuditEvent[]>;
+  getAuditEvents: (limit?: number) => Promise<AccountingAuditEvent[]>;\n  listSupportingDocuments: (filters: { entityType?: SupportingDocumentEntityType; entityId?: string }) => Promise<SupportingDocument[]>;\n  attachSupportingDocument: (input: SupportingDocumentDraft) => Promise<{ ok: boolean; canceled?: boolean; document?: SupportingDocument }>;\n  reviewSupportingDocument: (input: { documentId: string; decision: 'VERIFIED' | 'OBSERVATION_REQUIRED'; reason: string }) => Promise<{ ok: boolean; documentId: string; status: string }>;\n  openSupportingDocument: (documentId: string) => Promise<{ ok: boolean }>;
   waitForPersistence: () => Promise<void>;
   companies: Company[];
   isStorageReady: boolean;
@@ -388,6 +392,32 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const result = await localStore.listAuditEvents(token, limit);
     if (!result.ok) throw new Error(result.message || 'No se pudo consultar el historial de auditoría local.');
     return result.events || [];
+  }, [token]);
+
+  const listSupportingDocuments = useCallback(async (filters: { entityType?: SupportingDocumentEntityType; entityId?: string }): Promise<SupportingDocument[]> => {
+    if (!currentCompany.id) throw new Error('Seleccione una empresa para consultar sus soportes.');
+    const store = window.sicovenStore;
+    if (!store?.listSupportingDocuments) throw new Error('El archivo documental requiere la edición de escritorio con SQLite local.');
+    return store.listSupportingDocuments(token, { companyId: currentCompany.id, ...filters });
+  }, [token, currentCompany.id]);
+
+  const attachSupportingDocument = useCallback(async (input: SupportingDocumentDraft) => {
+    if (!currentCompany.id) throw new Error('Seleccione una empresa antes de adjuntar un soporte.');
+    const store = window.sicovenStore;
+    if (!store?.attachSupportingDocument) throw new Error('El archivo documental requiere la edición de escritorio con SQLite local.');
+    return store.attachSupportingDocument(token, { ...input, companyId: currentCompany.id });
+  }, [token, currentCompany.id]);
+
+  const reviewSupportingDocument = useCallback(async (input: { documentId: string; decision: 'VERIFIED' | 'OBSERVATION_REQUIRED'; reason: string }) => {
+    const store = window.sicovenStore;
+    if (!store?.reviewSupportingDocument) throw new Error('La revisión documental requiere la edición de escritorio con SQLite local.');
+    return store.reviewSupportingDocument(token, input);
+  }, [token]);
+
+  const openSupportingDocument = useCallback(async (documentId: string) => {
+    const store = window.sicovenStore;
+    if (!store?.openSupportingDocument) throw new Error('La apertura documental requiere la edición de escritorio con SQLite local.');
+    return store.openSupportingDocument(token, documentId);
   }, [token]);
 
   const createAccountingYearOpening = async (input: {
@@ -4248,7 +4278,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     <AccountingContext.Provider
       value={{
         companies,
-        getAuditEvents,
+        getAuditEvents,\n        listSupportingDocuments,\n        attachSupportingDocument,\n        reviewSupportingDocument,\n        openSupportingDocument,
         waitForPersistence,
         isStorageReady: storageReady,
         storageError,
