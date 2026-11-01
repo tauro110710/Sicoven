@@ -52,7 +52,7 @@ export function validateVatPaymentBankLinks(input: {
     }
     const amount = Number(movement.amountBs);
     if (!Number.isFinite(amount) || amount <= 0 ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(movement.date) ||
+        !isValidIsoDate(movement.date) ||
         movement.date < filed.occurredAt.slice(0, 10) ||
         movement.date > input.draft.occurredAt.slice(0, 10)) {
       throw new Error('El débito bancario tiene importe o fecha inválidos, o está fuera del intervalo entre presentación y enteramiento.');
