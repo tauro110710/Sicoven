@@ -1663,6 +1663,24 @@ test('SQLite rejects VAT declaration snapshots whose voucher, period or totals d
   }), /fuera de la quincena/);
 });
 
+test('SQLite blocks review if new vouchers appear in the declaration half-month after its snapshot was prepared', () => {
+  const prior = vatDeclarationFixture();
+  const lateVoucher = {
+    ...prior.vatVouchers[0],
+    id: 'vat-late-2', voucherNumber: '20261000000002',
+    date: '2026-10-10', fiscalDate: '2026-10-10',
+    taxableBaseBs: 500, vatAmountBs: 80, vatWithheldBs: 60
+  };
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...prior,
+    vatVouchers: [...prior.vatVouchers, lateVoucher],
+    vatWithholdingDeclarationEvents: [{
+      id: 'vat-review-late', declarationId: 'vat-decl-1', eventType: 'REVIEWED',
+      occurredAt: '2026-10-16', recordedAt: '2026-10-16T10:00:00.000Z'
+    }]
+  }), /correcciones pendientes, fechas históricas no verificadas o una transición inválida/);
+});
+
 test('SQLite enforces review, filing receipt and supported payment event order for VAT declarations', () => {
   const state = vatDeclarationFixture();
   const declaration = state.vatWithholdingDeclarations[0];
