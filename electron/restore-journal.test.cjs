@@ -26,7 +26,7 @@ function fixture() {
 test('journal persists prepared state and can be read after reopening', () => {
   const h = fixture();
   try {
-    const created = createJournal({ journalPath: h.journalPath, sourceDatabaseSha256: HASH_A, stagedDatabaseSha256: HASH_B });
+    const created = createJournal({ journalPath: h.journalPath, sourceDatabaseSha256: HASH_A, stagedDatabaseSha256: HASH_B, sourceManifestSha256: HASH_A, stagedManifestSha256: HASH_B });
     const reopened = readJournal(h.journalPath);
     assert.equal(reopened.operationId, created.operationId);
     assert.equal(reopened.state, 'prepared');
@@ -39,8 +39,8 @@ test('journal enforces ordered transitions and requires a verified rollback hash
   try {
     createJournal({ journalPath: h.journalPath, sourceDatabaseSha256: HASH_A, stagedDatabaseSha256: HASH_B });
     assert.throws(() => transitionJournal({ journalPath: h.journalPath, expectedState: 'prepared', nextState: 'installing', lastStep: 'swap' }), /no permitida/);
-    assert.throws(() => transitionJournal({ journalPath: h.journalPath, expectedState: 'prepared', nextState: 'rollback_ready', lastStep: 'snapshot' }), /huella verificada/);
-    transitionJournal({ journalPath: h.journalPath, expectedState: 'prepared', nextState: 'rollback_ready', lastStep: 'snapshot_verified', rollbackDatabaseSha256: HASH_C });
+    assert.throws(() => transitionJournal({ journalPath: h.journalPath, expectedState: 'prepared', nextState: 'rollback_ready', lastStep: 'snapshot' }), /huellas verificadas/);
+    transitionJournal({ journalPath: h.journalPath, expectedState: 'prepared', nextState: 'rollback_ready', lastStep: 'snapshot_verified', rollbackDatabaseSha256: HASH_C, rollbackManifestSha256: HASH_C });
     assert.equal(readJournal(h.journalPath).hashes.rollbackDatabase, HASH_C);
   } finally { h.close(); }
 });
@@ -69,7 +69,7 @@ test('journal validates canonical UUID v4 and rollback invariants', () => {
         hashes: { ...created.hashes, rollbackDatabase: null }
       };
       require('./restore-journal.cjs').validateJournal(invalid);
-    }, /huella de retorno verificada/);
+    }, /huellas verificadas de base y documentos de retorno/);
   } finally { h.close(); }
 });
 
