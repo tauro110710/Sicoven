@@ -41,6 +41,7 @@ import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
+import { resolvePurchaseVatFiscalEvent } from '../types/vatFiscalEvent';
 import { hasConsistentFiscalDocumentAmounts } from '../types/fiscalDocumentAmounts';
 import { calculatePurchaseCreditNote, type PurchaseCreditNoteRequest } from '../types/purchaseCreditNote';
 import { validatePurchaseSettlementMode, validatePurchasePaymentDate } from '../types/purchaseSettlement';
@@ -1644,18 +1645,27 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     purchaseSequenceRef.current[companyKey] = nextOp;
     const purchaseId = `pur-${companyKey}-${nextOp}-${Date.now()}`;
 
-    // Generar correlativo comprobante IVA si retiene
+    // El comprobante IVA se asigna al primer disparador fiscal: pago efectivo
+    // para contado o abono en cuenta para crédito. invoiceDate sigue siendo
+    // exclusivamente la fecha documental de la factura.
+    const vatFiscalEvent = purchaseData.vatWithheldBs > 0
+      ? resolvePurchaseVatFiscalEvent(purchaseData.paymentTerm, purchaseData.accountCreditDate!)
+      : undefined;
     let voucherNum = purchaseData.voucherNumber;
-    const vatPeriod = purchaseData.invoiceDate.slice(0, 7).replace('-', '');
+    const vatPeriod = vatFiscalEvent?.period || '';
     const islrPeriod = purchaseData.accountCreditDate!.slice(0, 7).replace('-', '');
-    if (purchaseData.vatWithheldBs > 0 && !voucherNum) {
-      const year = parseInt(purchaseData.invoiceDate.slice(0, 4), 10);
-      const month = parseInt(purchaseData.invoiceDate.slice(5, 7), 10);
+    if (purchaseData.vatWithheldBs > 0 && !voucherNum && vatFiscalEvent) {
+      const year = Number(vatFiscalEvent.fiscalDate.slice(0, 4));
+      const month = Number(vatFiscalEvent.fiscalDate.slice(5, 7));
       const voucherKey = `${companyKey}:${vatPeriod}`;
       const companyVouchersCount = vatVouchers.filter(v => v.companyId === currentCompany.id && v.period === vatPeriod).length;
       const voucherSequence = Math.max(companyVouchersCount, vatVoucherSequenceRef.current[voucherKey] || 0) + 1;
       vatVoucherSequenceRef.current[voucherKey] = voucherSequence;
       voucherNum = formatVoucherNumber(year, month, voucherSequence);
+    }
+    if (purchaseData.vatWithheldBs > 0 && voucherNum &&
+        (!/^\\d{14}$/.test(voucherNum) || voucherNum.slice(0, 6) !== vatPeriod)) {
+      throw new Error('El comprobante IVA debe corresponder al período del primer pago o abono en cuenta (AAAAMM + correlativo de ocho dígitos).');
     }
 
     // 1. Generar Asiento Contable Automático en Libro Diario
@@ -1815,8 +1825,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         id: `vouch-iva-${purchaseId}`,
         companyId: currentCompany.id,
         voucherNumber: voucherNum,
-        date: purchaseData.invoiceDate,
-        period: vatPeriod,
+        date: vatFiscalEvent!.fiscalDate,
+        period: vatFiscalEvent!.period,
+        fiscalTrigger: vatFiscalEvent!.trigger,
+        fiscalDate: vatFiscalEvent!.fiscalDate,
+        paymentReference: vatFiscalEvent!.trigger === 'PAYMENT' ? purchaseData.paymentReference : undefined,
         supplierRif: purchaseData.supplierRif,
         supplierName: purchaseData.supplierName,
         supplierAddress: purchaseData.supplierAddress || 'Venezuela',
