@@ -19,7 +19,7 @@ import { VatWithholdingDeclarationsPanel } from './VatWithholdingDeclarationsPan
 import { getVatDeclarationStatus } from '../../types/vatWithholdingDeclaration';
 
 export const RetencionesIvaView: React.FC = () => {
-  const { currentCompany, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, recordVatVoucherDelivery, displayCurrency } = useAccounting();
+  const { currentCompany, purchases, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, recordVatVoucherDelivery, displayCurrency } = useAccounting();
 
   const [selectedVoucher, setSelectedVoucher] = useState<VatRetentionVoucher | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -59,6 +59,7 @@ export const RetencionesIvaView: React.FC = () => {
   const pendingDeclarationCount = companyVouchers.filter(voucher => !declaredVoucherIds.has(voucher.id)).length;
   const correctionCount = companyVouchers.filter(voucher => voucher.requiresFiscalCorrection).length;
   const pendingDeliveryCount = companyVouchers.filter(voucher => !voucher.deliveryDate).length;
+  const reviewPurchases = purchases.filter(purchase => purchase.companyId === currentCompany.id && purchase.ivaRetentionDecision?.decisionStatus === 'REVIEW');
   const pendingDeclarationStatuses = companyDeclarations.filter(item => {
     const status = getVatDeclarationStatus(item, vatWithholdingDeclarationEvents);
     return status === 'PREPARED' || status === 'REVIEWED' || status === 'FILED' || status === 'PARTIALLY_PAID';
@@ -106,7 +107,7 @@ export const RetencionesIvaView: React.FC = () => {
       </div>
       {activeSection === 'vouchers' ? (
       <>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Comprobantes por declarar</span>
           <strong className="mt-1 block text-2xl font-bold text-slate-900">{pendingDeclarationCount}</strong>
@@ -127,7 +128,30 @@ export const RetencionesIvaView: React.FC = () => {
           <strong className="mt-1 block text-2xl font-bold text-slate-900">{pendingDeliveryCount}</strong>
           <span className="text-[11px] text-slate-500">Fecha y medio de entrega aún no registrados</span>
         </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Compras por revisar</span>
+          <strong className="mt-1 block text-2xl font-bold text-slate-900">{reviewPurchases.length}</strong>
+          <span className="text-[11px] text-slate-500">Decisión fiscal pendiente de confirmar</span>
+        </div>
       </div>
+
+      {reviewPurchases.length > 0 && (
+        <details className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <summary className="cursor-pointer text-xs font-bold text-amber-900">Compras que requieren revisión fiscal ({reviewPurchases.length})</summary>
+          <div className="mt-3 divide-y divide-amber-200">
+            {reviewPurchases.map(purchase => (
+              <div key={purchase.id} className="py-2 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <strong className="text-slate-900">{purchase.supplierName} · {purchase.invoiceNumber}</strong>
+                  <span className="font-mono text-slate-600">{formatDate(purchase.invoiceDate)}</span>
+                </div>
+                <p className="mt-1 text-amber-900">{purchase.ivaRetentionDecision?.decisionReason || 'La operación requiere validación fiscal.'}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-[10px] text-amber-800">Completa la clasificación o confirmación pendiente desde el Libro de Compras. No se emite retención mientras el caso permanezca en revisión.</p>
+        </details>
+      )}
 
       {/* Header */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">

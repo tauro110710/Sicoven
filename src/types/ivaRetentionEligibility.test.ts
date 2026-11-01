@@ -18,7 +18,7 @@ test('requires review for unknown buyer or supplier status', () => {
 test('excludes formal suppliers and Article 3 operations', () => {
   assert.equal(evaluateIvaRetentionEligibility({ ...ordinary, supplierTaxStatus: 'FORMAL' }).status, 'EXCLUDED');
   assert.equal(evaluateIvaRetentionEligibility({ ...ordinary, supplierTaxStatus: 'FORMAL', article3Exclusions: ['IMPORT_PERCEPTION_CREDIT'] }).status, 'EXCLUDED');
-  assert.equal(evaluateIvaRetentionEligibility({ ...ordinary, article3Exclusions: ['PETTY_CASH_UP_TO_20_UT'] }).status, 'EXCLUDED');
+  assert.equal(evaluateIvaRetentionEligibility({ ...ordinary, article3Exclusions: ['PETTY_CASH_UP_TO_20_UT'], operationAmountBs: 500, unitTaxValueBs: 43 }).status, 'EXCLUDED');
 });
 test('does not apply Article 1 retention to a special supplier', () => {
   assert.equal(evaluateIvaRetentionEligibility({ ...ordinary, supplierTaxStatus: 'SPECIAL' }).status, 'NOT_APPLICABLE');

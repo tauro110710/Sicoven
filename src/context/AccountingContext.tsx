@@ -1579,7 +1579,23 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const snapshot = purchaseData.ivaRetentionDecision;
       const expectedBuyerAgentStatus = resolveIvaBuyerAgentStatus({ agentBasis: currentCompany.ivaRetentionAgentBasis, taxpayerType: currentCompany.taxpayerType, rif: currentCompany.rif, isPersonalFirm: currentCompany.isPersonalFirm });
       if (snapshot.buyerAgentStatus !== expectedBuyerAgentStatus) throw new Error('La condición de agente de retención de la empresa cambió o no coincide. Actualice la evaluación antes de registrar.');
-      const evaluated = evaluateIvaRetentionEligibility({ buyerAgentStatus: snapshot.buyerAgentStatus, supplierTaxStatus: snapshot.supplierTaxStatus, article2Transaction: snapshot.article2Transaction, article3Exclusions: snapshot.article3Exclusions as any, portalArticle3ExclusionConfirmed: snapshot.portalArticle3ExclusionConfirmed, supplierImportPerceptionConfirmed: snapshot.supplierImportPerceptionConfirmed, operationAmountBs: snapshot.operationAmountBs, unitTaxValueBs: snapshot.unitTaxValueBs, vatAmount: purchaseData.vatAmountBs, ...(snapshot.vatNotDiscriminated ? { vatNotDiscriminated: true, taxableAmountIncludingVat: snapshot.taxableAmountIncludingVatBs } : {}), taxRate: purchaseData.taxRate, invoiceFormalDefect: snapshot.invoiceFormalDefect, portalRetentionRate: snapshot.portalRetentionRate ?? null });
+      const expectedOperationAmountBs = Math.round((Number(purchaseData.taxableBaseBs) + Number(purchaseData.exemptAmountBs) + Number(purchaseData.vatAmountBs) + Number.EPSILON) * 100) / 100;
+      const fiscalPeriodStart = getPurchaseAccountCreditDate(purchaseData).slice(0, 7);
+      const expectedUnitTaxValueBs = getIslrUnitTaxValueForPeriod(fiscalPeriodStart) ?? undefined;
+      if (snapshot.operationAmountBs != null && Math.abs(snapshot.operationAmountBs - expectedOperationAmountBs) > 0.01) {
+        throw new Error('El importe usado para validar la exclusión de 20 UT no coincide con los importes reales de la compra.');
+      }
+      const has20UtExclusion = snapshot.article3Exclusions.some(item => item === 'REIMBURSABLE_UP_TO_20_UT' || item === 'PETTY_CASH_UP_TO_20_UT');
+      if (has20UtExclusion && snapshot.operationAmountBs == null) {
+        throw new Error('La compra debe conservar el importe de la operación utilizado para evaluar el límite de 20 UT.');
+      }
+      if (has20UtExclusion && expectedUnitTaxValueBs != null && snapshot.unitTaxValueBs == null) {
+        throw new Error('La compra debe conservar el valor de UT utilizado para evaluar el límite de 20 UT.');
+      }
+      if (snapshot.unitTaxValueBs != null && (expectedUnitTaxValueBs == null || Math.abs(snapshot.unitTaxValueBs - expectedUnitTaxValueBs) > 0.01)) {
+        throw new Error('La UT usada para evaluar la exclusión fiscal no coincide con el parámetro vigente para la fecha de la operación.');
+      }
+      const evaluated = evaluateIvaRetentionEligibility({ buyerAgentStatus: snapshot.buyerAgentStatus, supplierTaxStatus: snapshot.supplierTaxStatus, article2Transaction: snapshot.article2Transaction, article3Exclusions: snapshot.article3Exclusions as any, portalArticle3ExclusionConfirmed: snapshot.portalArticle3ExclusionConfirmed, supplierImportPerceptionConfirmed: snapshot.supplierImportPerceptionConfirmed, operationAmountBs: expectedOperationAmountBs, unitTaxValueBs: expectedUnitTaxValueBs, vatAmount: purchaseData.vatAmountBs, ...(snapshot.vatNotDiscriminated ? { vatNotDiscriminated: true, taxableAmountIncludingVat: snapshot.taxableAmountIncludingVatBs } : {}), taxRate: purchaseData.taxRate, invoiceFormalDefect: snapshot.invoiceFormalDefect, portalRetentionRate: snapshot.portalRetentionRate ?? null });
       if (evaluated.status !== snapshot.decisionStatus || evaluated.retentionRate !== purchaseData.retentionRate || Math.abs(evaluated.withheldAmount - purchaseData.vatWithheldBs) > 0.01 || evaluated.reason !== snapshot.decisionReason || purchaseData.supplierTaxStatus !== snapshot.supplierTaxStatus) throw new Error('La evaluación fiscal de retención IVA no coincide con los datos de la compra. Revise la clasificación y vuelva a calcular.');
     }
     if (purchaseData.vatWithheldBs > purchaseData.vatAmountBs + 0.01) {

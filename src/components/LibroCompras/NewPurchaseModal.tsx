@@ -67,6 +67,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   // Real-time calculations
   const effectiveTaxableBaseBs = vatNotDiscriminated && taxRate > 0 ? Math.round((taxableGrossBs / (1 + taxRate / 100) + Number.EPSILON) * 100) / 100 : taxableBaseBs;
   const vatAmountBs = Math.round(effectiveTaxableBaseBs * (taxRate / 100) * 100) / 100;
+  const selectedMonthKey = String(accountCreditDate || invoiceDate || '').slice(0, 7);
+  const islrUnitTaxValueBs = getIslrUnitTaxValueForPeriod(selectedMonthKey);
   const operationAmountBs = Math.round((effectiveTaxableBaseBs + exemptAmountBs + vatAmountBs + Number.EPSILON) * 100) / 100;
   const supplierRifKeyForProfile = String(supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
   const supplierProfilePurchase = purchases.filter(item => item.companyId === currentCompany.id && String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierRifKeyForProfile && item.supplierTaxStatus).sort((a, b) => b.opNumber - a.opNumber)[0];
@@ -84,8 +86,6 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   // ISLR calculation
   const selectedConcept = ISLR_CONCEPTS.find(c => c.code === islrConceptCode);
   const normalizedSupplierRif = String(supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
-  const selectedMonthKey = String(accountCreditDate || '').slice(0, 7);
-  const islrUnitTaxValueBs = getIslrUnitTaxValueForPeriod(selectedMonthKey);
   const hasCancelledPriorIslrOperation = Boolean(selectedConcept) && purchases.some(item =>
     item.companyId === currentCompany.id &&
     item.documentType === '01' &&

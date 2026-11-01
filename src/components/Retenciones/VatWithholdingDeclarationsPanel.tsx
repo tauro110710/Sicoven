@@ -44,15 +44,16 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
   const [sourceUrl, setSourceUrl] = useState('');
   const [sourceReference, setSourceReference] = useState('');
 
-  const ordered = useMemo(() => [...vatWithholdingDeclarations]
-    .sort((a, b) => b.period.localeCompare(a.period) || b.startDate.localeCompare(a.startDate)), [vatWithholdingDeclarations]);
+  const ordered = useMemo(() => vatWithholdingDeclarations
+    .filter(item => item.companyId === currentCompany.id)
+    .sort((a, b) => b.period.localeCompare(a.period) || b.startDate.localeCompare(a.startDate)), [vatWithholdingDeclarations, currentCompany.id]);
   const selected = ordered.find(item => item.id === selectedId) || null;
   const periodKey = period.replace('-', '');
   const assignedLegacyIds = new Set(ordered
     .filter(item => item.period === periodKey)
     .flatMap(item => (item.legacyDateAssignments || []).map(assignment => assignment.voucherId)));
   const unresolvedLegacyVouchers = vatVouchers.filter(voucher =>
-    voucher.period === periodKey && !voucher.fiscalDate && !assignedLegacyIds.has(voucher.id));
+    voucher.companyId === currentCompany.id && voucher.period === periodKey && !voucher.fiscalDate && !assignedLegacyIds.has(voucher.id));
   const selectedEvents = selected
     ? vatWithholdingDeclarationEvents.filter(item => item.declarationId === selected.id)
     : [];
@@ -120,6 +121,9 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
     !voucher.fiscalDate && !selectedAssignments.has(voucher.id)) : [];
   const hasUncoveredVouchers = selectedLateVouchers.length > 0 || selectedUnresolvedLegacy.length > 0;
   const hasDueDate = selectedEvents.some(item => item.eventType === 'DUE_DATE_SET');
+  const selectedScheduledDueDate = selected && currentCompany.taxpayerType === 'ESPECIAL'
+    ? getSeniatVatWithholdingDueDate(currentCompany.rif, selected.period, selected.window, currentCompany.ivaRetentionAgentBasis || '', currentCompany.isPersonalFirm === true)
+    : null;
 
   return (
     <div className="space-y-5">
@@ -323,7 +327,16 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
           {!hasDueDate && (
             <details className="rounded-xl border border-slate-200 p-4">
               <summary className="cursor-pointer text-xs font-bold text-slate-800">Registrar vencimiento de calendario fiscal verificado</summary>
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="mt-3 space-y-3">
+                {selectedScheduledDueDate && <button type="button" disabled={busy} onClick={() => addEvent({
+                  eventType: 'DUE_DATE_SET', occurredAt: today(), dueDate: selectedScheduledDueDate.dueDate,
+                  officialSourceTitle: selectedScheduledDueDate.sourceTitle,
+                  officialReference: selectedScheduledDueDate.sourceReference,
+                  officialSourceUrl: selectedScheduledDueDate.sourceUrl
+                })} className="rounded-lg bg-purple-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">
+                  Aplicar calendario 2026: {formatDate(selectedScheduledDueDate.dueDate)}
+                </button>}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="text-xs font-semibold text-slate-700">Fecha límite publicada
                   <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
                 </label>
@@ -339,6 +352,7 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
                 <button type="button" disabled={busy || !dueDate || !sourceTitle.trim() || !sourceUrl.trim() || !sourceReference.trim()}
                   onClick={() => addEvent({ eventType: 'DUE_DATE_SET', occurredAt: today(), dueDate, officialSourceTitle: sourceTitle, officialSourceUrl: sourceUrl, officialReference: sourceReference })}
                   className="rounded-lg bg-slate-800 px-4 py-2 text-xs font-bold text-white disabled:opacity-40 sm:col-span-2">Guardar vencimiento documentado</button>
+                </div>
               </div>
             </details>
           )}
