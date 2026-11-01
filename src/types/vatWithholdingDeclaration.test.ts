@@ -73,8 +73,13 @@ test('legacy vouchers are marked for manual date review and fiscal corrections r
   assert.throws(() => validateVatDeclarationEventDraft(result, [], {
     eventType: 'REVIEWED', occurredAt: '2026-10-16', acknowledgedLegacyDates: false
   }), /históricos/);
+  const corrected = buildVatWithholdingDeclaration({
+    id: 'decl-corrected', companyId: 'company-1', year: 2026, month: 10, window: 'FIRST_HALF',
+    vouchers: [voucher({ requiresFiscalCorrection: true })], existingDeclarations: [],
+    createdAt: '2026-10-16T10:00:00.000Z'
+  });
   assert.throws(() => validateVatDeclarationEventDraft(
-    draft({ vouchers: undefined } as never), [], { eventType: 'REVIEWED', occurredAt: '2026-10-16' }
+    corrected, [], { eventType: 'REVIEWED', occurredAt: '2026-10-16' }
   ), /corrección fiscal pendiente/);
 });
 
