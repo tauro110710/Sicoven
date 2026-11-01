@@ -227,7 +227,20 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
     vatAmountBs, retentionRate: 0, vatWithheldBs: 0,
     bcvRate: rate, totalAmountUsd,
     taxableBaseUsd: toUsd(taxableBaseBs), vatAmountUsd: toUsd(vatAmountBs), vatWithheldUsd: 0,
-    paymentTerm: 'CREDITO', notes: [reason, classificationNote ? 'Clasificación: ' + classificationNote : '', 'Revisión fiscal manual: ' + draft.fiscalReviewNote.trim(), 'Sin retenciones ni IGTF: confirmado por el profesional responsable.'].filter(Boolean).join(' · ')
+    paymentTerm: 'CREDITO',
+    supplierDebitNoteReview: {
+      economicCause: draft.economicCause,
+      reason,
+      classificationNote,
+      debitAccountCode: debitAccount.code,
+      payableAccountCode,
+      vatAccountCode: vatAccount?.code,
+      vatBreakdownReviewed: vatAmountBs <= 0 || draft.fiscalBreakdownReviewed === true,
+      withholdingNotApplicableConfirmed: draft.withholdingNotApplicableConfirmed === true,
+      igtfNotApplicableConfirmed: draft.igtfNotApplicableConfirmed === true,
+      fiscalReviewNote: String(draft.fiscalReviewNote || '').trim()
+    },
+    notes: [reason, classificationNote ? 'Clasificación: ' + classificationNote : '', 'Revisión fiscal manual: ' + draft.fiscalReviewNote.trim(), 'Sin retenciones ni IGTF: confirmado por el profesional responsable.'].filter(Boolean).join(' · ')
   };
 
   return {
