@@ -94,6 +94,16 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
   const hasCorrections = Boolean(selected && selected.voucherIds.some(id =>
     selected.voucherSnapshots.some(snapshot => snapshot.voucherId === id && snapshot.requiresFiscalCorrection) ||
     vatVouchers.some(voucher => voucher.id === id && voucher.requiresFiscalCorrection)));
+  const selectedAssignments = new Map((selected?.legacyDateAssignments || []).map(item => [item.voucherId, item]));
+  const selectedLateVouchers = selected ? vatVouchers.filter(voucher => {
+    if (voucher.companyId !== selected.companyId || selected.voucherIds.includes(voucher.id)) return false;
+    const fiscalDate = voucher.fiscalDate || selectedAssignments.get(voucher.id)?.confirmedFiscalDate;
+    return Boolean(fiscalDate) && fiscalDate! >= selected.startDate && fiscalDate! <= selected.endDate;
+  }) : [];
+  const selectedUnresolvedLegacy = selected ? vatVouchers.filter(voucher =>
+    voucher.companyId === selected.companyId && voucher.period === selected.period &&
+    !voucher.fiscalDate && !selectedAssignments.has(voucher.id)) : [];
+  const hasUncoveredVouchers = selectedLateVouchers.length > 0 || selectedUnresolvedLegacy.length > 0;
   const hasDueDate = selectedEvents.some(item => item.eventType === 'DUE_DATE_SET');
 
   return (
@@ -232,6 +242,10 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
             <div className="rounded-lg bg-purple-50 p-3"><span className="block text-[10px] font-semibold uppercase text-purple-700">IVA retenido</span><strong className="font-mono text-sm text-purple-900">{formatBs(selected.totalWithheldBs)}</strong></div>
           </div>
 
+          {hasUncoveredVouchers && <div role="alert" className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-xs text-rose-900">
+            Hay comprobantes nuevos dentro de esta quincena o comprobantes históricos del mes sin fecha fiscal asignada.
+            La fotografía de la declaración no se modifica automáticamente. La revisión queda bloqueada hasta resolver la diferencia mediante el procedimiento de rectificación correspondiente.
+          </div>}
           {hasCorrections && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">Esta fotografía contiene comprobantes con corrección fiscal pendiente. No puede revisarse hasta regularizarse.</div>}
           {hasLegacy && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Incluye comprobantes históricos que no guardaban fecha del evento fiscal. La fecha documental se usa solo como referencia provisional y requiere verificación documentada.</div>}
 
@@ -246,7 +260,7 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
                 <input type="checkbox" checked={ackLegacy} onChange={e => setAckLegacy(e.target.checked)} />
                 Confirmo que verifiqué las fechas fiscales de los comprobantes históricos y documento el soporte en la nota.
               </label>}
-              <button type="button" disabled={busy || hasCorrections || (hasLegacy && (!ackLegacy || reviewNote.trim().length < 10))}
+              <button type="button" disabled={busy || hasCorrections || hasUncoveredVouchers || (hasLegacy && (!ackLegacy || reviewNote.trim().length < 10))}
                 onClick={() => addEvent({ eventType: 'REVIEWED', occurredAt: eventDate, note: reviewNote, acknowledgedLegacyDates: ackLegacy })}
                 className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">Marcar revisada</button>
             </div>
