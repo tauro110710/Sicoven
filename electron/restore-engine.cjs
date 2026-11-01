@@ -74,13 +74,14 @@ function restoreRollback(rollbackDir,userDataDir,operationDir) {
 function archiveCommittedRollback(userDataDir,operationId) {
   const operationDir=path.join(userDataDir,OP_ROOT,operationId);
   const rollbackDir=path.join(operationDir,'rollback');
-  if(!exists(rollbackDir)) throw new Error('No existe el snapshot de retorno de la restauración confirmada.');
-  realDir(rollbackDir,'Snapshot de retorno');
   const historyRoot=path.join(userDataDir,'restore-history');
   if(!exists(historyRoot)) fs.mkdirSync(historyRoot);
   realDir(historyRoot,'Historial de restauraciones');
   const destination=path.join(historyRoot,operationId);
-  if(exists(destination)) throw new Error('Ya existe el snapshot histórico de esta restauración.');
+  if(exists(destination)) { verifyBackupDirectory(destination); return; }
+  if(!exists(rollbackDir)) throw new Error('No existe el snapshot de retorno de la restauración confirmada.');
+  realDir(rollbackDir,'Snapshot de retorno');
+  verifyBackupDirectory(rollbackDir);
   fs.renameSync(rollbackDir,destination);
 }
 function cleanupOperation(userDataDir,operationId) {
