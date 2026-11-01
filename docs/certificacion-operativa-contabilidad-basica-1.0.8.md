@@ -238,24 +238,24 @@ Esta sección prevalece sobre los estados de CI anteriores cuando exista contrad
 **Decisión vigente:** NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN CONTABLE BÁSICA. No se autoriza merge, Release ni distribución. La firma digital, la restauración segura y los recorridos E2E pendientes impiden cerrar la certificación.
 
 
-## 13. Política de propiedad, privacidad y distribución comercial controlada
+## 13. Política vigente de propiedad y distribución de SICOVEN
 
-Esta política reemplaza cualquier redacción anterior que pudiera interpretarse como obligación de publicar SICOVEN o distribuirlo públicamente.
+Esta sección sustituye la política provisional de distribución privada controlada descrita en la versión anterior.
 
-- SICOVEN es un producto privado de su titular, destinado a explotación comercial y distribución controlada a clientes autorizados.
-- No se publicará un GitHub Release público, no se publicarán instaladores en una página de descargas abierta y no se habilitará distribución pública automática.
-- Los artefactos temporales de GitHub Actions son únicamente evidencia técnica de CI; no constituyen canal de entrega comercial.
-- La entrega comercial, cuando se autorice, será por canal privado y con control de destinatarios, versión, hash SHA-256, licencia y registro de entrega.
-- El repositorio GitHub debe tener visibilidad **Private**. La consulta de metadatos del repositorio durante esta revisión lo devolvió como `public`; por tanto, la privacidad del código todavía no está satisfecha y debe cambiarse en la configuración de GitHub antes de considerar protegido el código fuente. La propiedad privada del producto no queda garantizada por el campo `"private": true` de `package.json`.
-- La distribución Windows comercial exige firma Authenticode válida del ejecutable principal, instalador NSIS y desinstalador cuando corresponda, más sello de tiempo RFC 3161. El pipeline deberá verificar la firma con `Get-AuthenticodeSignature` y rechazar artefactos sin firma válida o con editor distinto del titular autorizado.
-- La clave privada/certificado PFX y su contraseña nunca se guardarán en el repositorio, archivos de configuración, artefactos, logs ni código. Se custodiarán en un almacén de secretos protegido (por ejemplo, GitHub Actions Secrets/Environment con aprobación restringida) o dispositivo/token del proveedor. No se registrarán ni enviarán por chat.
-- La configuración de firma se activará solo cuando el titular disponga de un certificado de firma de código emitido a su nombre/entidad comercial y haya cargado sus secretos de forma segura. El pipeline no debe degradar silenciosamente a unsigned: si falta certificado en el job de distribución, debe fallar.
-- Los builds de CI de validación podrán seguir siendo unsigned para probar compilación e instalación; se identificarán expresamente como artefactos internos no distribuibles. El job de entrega comercial será separado, protegido por aprobación manual y solo se ejecutará sobre un SHA aprobado.
-- La firma digital autentica el editor y detecta modificaciones del binario; no sustituye la licencia comercial, la protección del repositorio, la certificación contable ni la revisión de seguridad.
+- El repositorio y el código fuente de SICOVEN permanecen **privados**. La consulta actual de GitHub confirma `private: true`.
+- El instalador de SICOVEN será de **descarga pública y abierta** una vez finalizada y aprobada la certificación y el titular autorice la publicación.
+- Cualquier persona podrá descargar e instalar SICOVEN desde la futura página web oficial de EFASfreelancer - Soluciones Digitales. No se exigirá autorización previa para descargar.
+- La experiencia comercial prevista incluye una prueba gratuita de 24 horas, seguida de la posibilidad de adquirir una licencia. La lógica de prueba/licenciamiento debe superar sus propias pruebas de seguridad, persistencia y aceptación antes de comercializarse.
+- El canal web tendrá una página de producto, requisitos, versión, notas de versión, botón de descarga Windows y hash SHA-256 del instalador. No se usará GitHub como repositorio público ni se publicará el código fuente.
+- La publicación en Microsoft Store queda como posibilidad futura y no es requisito para completar la certificación contable 1.0.8.
+- La firma digital Authenticode queda **aplazada por decisión del titular**. No será un bloqueo para continuar la certificación técnica/contable ni para completar las pruebas internas de instalador. Antes de distribuir públicamente un instalador Windows sin firma, se deberá informar claramente al usuario de las advertencias de Windows y evaluar el riesgo; la firma podrá incorporarse en una etapa posterior.
+- Los artefactos de CI continúan siendo evidencia técnica interna y no autorizan por sí solos una publicación.
+- No se publicará ningún instalador ni se habilitará el portal de descarga antes de completar los gates de certificación y recibir autorización expresa del titular.
 
-### Estado de privacidad y firma
+### Estado vigente
 
-- Privacidad del repositorio: **PENDIENTE DE CAMBIO** (GitHub lo reportó como público en la consulta).
-- Firma Authenticode del instalador: **PENDIENTE** (no hay certificado/secretos configurados).
-- Distribución comercial privada: **NO HABILITADA** hasta completar privacidad, gates G0–G15, firma verificable y autorización expresa del titular.
-- Releases públicos: **NO CONTEMPLADOS** en el plan de distribución.
+- Privacidad del repositorio: **VERIFICADA** (GitHub devuelve `private: true`).
+- Firma Authenticode: **APLAZADA**, fuera del alcance inmediato de certificación.
+- Página web pública y botón de descarga: **FASE POSTERIOR A LA CERTIFICACIÓN**.
+- Prueba gratuita de 24 horas y activación comercial: deben quedar verificadas antes de abrir la distribución.
+- SICOVEN continúa **NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN** hasta aprobar los gates y pruebas de aceptación.
