@@ -11,6 +11,9 @@ import {
   InventoryProduct,
   InventoryMovement,
   VatRetentionVoucher,
+  VatWithholdingDeclaration,
+  VatWithholdingDeclarationEvent,
+  VatDeclarationWindow,
   IslrRetentionVoucher,
   JournalEntryItem,
   BankAccount,
@@ -36,6 +39,7 @@ import {
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { FinancialDisclosure, validateFinancialDisclosure } from '../types/financialDisclosures';
+import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
@@ -124,6 +128,10 @@ interface AccountingContextType {
 
   // Retenciones
   vatVouchers: VatRetentionVoucher[];
+  vatWithholdingDeclarations: VatWithholdingDeclaration[];
+  vatWithholdingDeclarationEvents: VatWithholdingDeclarationEvent[];
+  createVatWithholdingDeclaration: (input: { year: number; month: number; window: VatDeclarationWindow; zeroOperations?: boolean }) => Promise<VatWithholdingDeclaration>;
+  recordVatWithholdingDeclarationEvent: (declarationId: string, draft: Omit<VatWithholdingDeclarationEvent, 'id' | 'declarationId' | 'recordedAt'>) => Promise<VatWithholdingDeclarationEvent>;
   islrVouchers: IslrRetentionVoucher[];
   islrFiscalEvents: IslrFiscalEvent[];
   deleteVatVoucher: (id: string) => void;
@@ -251,6 +259,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       return [];
     }
   });
+
+  const [vatWithholdingDeclarations, setVatWithholdingDeclarations] = useState<VatWithholdingDeclaration[]>([]);
+  const [vatWithholdingDeclarationEvents, setVatWithholdingDeclarationEvents] = useState<VatWithholdingDeclarationEvent[]>([]);
 
   const [islrVouchers, setIslrVouchers] = useState<IslrRetentionVoucher[]>(() => {
     try {
@@ -672,7 +683,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const persistenceWaitersRef = useRef<Array<{ resolve: () => void; reject: (error: Error) => void }>>([]);
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
-    vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency
+    vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency
   };
 
   useEffect(() => {
@@ -700,6 +711,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             if (Array.isArray(saved.products)) setProducts(saved.products as InventoryProduct[]);
             if (Array.isArray(saved.movements)) setMovements(saved.movements as InventoryMovement[]);
             if (Array.isArray(saved.vatVouchers)) setVatVouchers(saved.vatVouchers as VatRetentionVoucher[]);
+            if (Array.isArray(saved.vatWithholdingDeclarations)) setVatWithholdingDeclarations(saved.vatWithholdingDeclarations as VatWithholdingDeclaration[]);
+            if (Array.isArray(saved.vatWithholdingDeclarationEvents)) setVatWithholdingDeclarationEvents(saved.vatWithholdingDeclarationEvents as VatWithholdingDeclarationEvent[]);
             if (Array.isArray(saved.islrVouchers)) setIslrVouchers(saved.islrVouchers as IslrRetentionVoucher[]);
             if (Array.isArray(saved.bankAccounts)) setBankAccounts(saved.bankAccounts as BankAccount[]);
             if (Array.isArray(saved.bankStatementMovements)) setBankStatementMovements(saved.bankStatementMovements as BankStatementMovement[]);
@@ -720,6 +733,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             setProducts([]);
             setMovements([]);
             setVatVouchers([]);
+            setVatWithholdingDeclarations([]);
+            setVatWithholdingDeclarationEvents([]);
             setIslrVouchers([]);
             setBankAccounts([]);
             setBankStatementMovements([]);
@@ -740,6 +755,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               products: [],
               movements: [],
               vatVouchers: [],
+              vatWithholdingDeclarations: [],
+              vatWithholdingDeclarationEvents: [],
               islrVouchers: [],
               bankAccounts: [],
               bankStatementMovements: [],
@@ -808,6 +825,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       localStorage.setItem(`${STORAGE_KEY}_products`, JSON.stringify(products));
       localStorage.setItem(`${STORAGE_KEY}_movements`, JSON.stringify(movements));
       localStorage.setItem(`${STORAGE_KEY}_vatVouchers`, JSON.stringify(vatVouchers));
+      localStorage.setItem(`${STORAGE_KEY}_vatWithholdingDeclarations`, JSON.stringify(vatWithholdingDeclarations));
+      localStorage.setItem(`${STORAGE_KEY}_vatWithholdingDeclarationEvents`, JSON.stringify(vatWithholdingDeclarationEvents));
       localStorage.setItem(`${STORAGE_KEY}_islrVouchers`, JSON.stringify(islrVouchers));
       localStorage.setItem(`${STORAGE_KEY}_bankAccounts`, JSON.stringify(bankAccounts));
       localStorage.setItem(`${STORAGE_KEY}_statementMovements`, JSON.stringify(bankStatementMovements));
@@ -817,7 +836,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       console.error('Error guardando datos locales de desarrollo:', normalized);
       waitersForSnapshot.forEach(waiter => waiter.reject(normalized));
     }
-  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, displayCurrency]);
+  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, displayCurrency]);
 
   const addCompany = (comp: Omit<Company, 'id'>): Company => {
     const newComp: Company = {
@@ -3185,6 +3204,52 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
+  const createVatWithholdingDeclaration = async (input: {
+    year: number; month: number; window: VatDeclarationWindow; zeroOperations?: boolean;
+  }): Promise<VatWithholdingDeclaration> => {
+    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
+      throw new Error('SQLite no está disponible o todavía no está lista. No se creó la declaración.');
+    }
+    if (!currentCompany.id) throw new Error('Seleccione una empresa antes de preparar la declaración.');
+    const declaration = buildVatWithholdingDeclaration({
+      id: 'vat-decl-' + Date.now() + '-' + Math.floor(Math.random() * 1000000),
+      companyId: currentCompany.id,
+      year: input.year, month: input.month, window: input.window,
+      vouchers: vatVouchers.filter(item => item.companyId === currentCompany.id),
+      existingDeclarations: vatWithholdingDeclarations,
+      createdAt: new Date().toISOString(),
+      zeroOperations: input.zeroOperations
+    });
+    const confirmation = waitForPersistence();
+    setVatWithholdingDeclarations(prev => [...prev, declaration]);
+    await confirmation;
+    return declaration;
+  };
+
+  const recordVatWithholdingDeclarationEvent = async (
+    declarationId: string,
+    draft: Omit<VatWithholdingDeclarationEvent, 'id' | 'declarationId' | 'recordedAt'>
+  ): Promise<VatWithholdingDeclarationEvent> => {
+    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
+      throw new Error('SQLite no está disponible o todavía no está lista. No se registró el evento fiscal.');
+    }
+    const declaration = vatWithholdingDeclarations.find(item =>
+      item.id === declarationId && item.companyId === currentCompany.id);
+    if (!declaration) throw new Error('No se encontró la declaración de la empresa activa.');
+    const history = vatWithholdingDeclarationEvents.filter(item => item.declarationId === declarationId);
+    validateVatDeclarationEventDraft(declaration, history, draft);
+    const event: VatWithholdingDeclarationEvent = {
+      ...draft,
+      id: 'vat-decl-event-' + Date.now() + '-' + Math.floor(Math.random() * 1000000),
+      declarationId,
+      recordedAt: new Date().toISOString()
+    };
+    const confirmation = waitForPersistence();
+    setVatWithholdingDeclarationEvents(prev => [...prev, event]);
+    await confirmation;
+    return event;
+  };
+
   const deleteVatVoucher = (id: string) => {
     const voucher = vatVouchers.find(item => item.id === id && item.companyId === currentCompany.id);
     if (!voucher) return;
@@ -3737,6 +3802,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       products,
       movements,
       vatVouchers,
+      vatWithholdingDeclarations,
+      vatWithholdingDeclarationEvents,
       islrVouchers,
       bankAccounts,
       bankStatementMovements,
@@ -3805,6 +3872,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         companyIds.add(c.id);
         return false;
       })) throw new Error('El respaldo contiene empresas inválidas o IDs de empresa duplicados.');
+      const vatWithholdingDeclarations: VatWithholdingDeclaration[] = data?.vatWithholdingDeclarations === undefined ? [] : data.vatWithholdingDeclarations;
+      const vatWithholdingDeclarationEvents: VatWithholdingDeclarationEvent[] = data?.vatWithholdingDeclarationEvents === undefined ? [] : data.vatWithholdingDeclarationEvents;
+      if (!Array.isArray(vatWithholdingDeclarations) || !Array.isArray(vatWithholdingDeclarationEvents)) {
+        throw new Error('El respaldo contiene declaraciones quincenales IVA o eventos fiscales inválidos.');
+      }
       const financialDisclosures: FinancialDisclosure[] = data?.financialDisclosures === undefined ? [] : data.financialDisclosures;
       if (!Array.isArray(financialDisclosures) || financialDisclosures.some(item => validateFinancialDisclosure(item, companyIds) !== null)) {
         throw new Error('El respaldo contiene notas o revelaciones financieras inválidas o vinculadas a otra empresa.');
@@ -4069,6 +4141,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setProducts(data.products);
       setMovements(data.movements);
       setVatVouchers(data.vatVouchers);
+      setVatWithholdingDeclarations(vatWithholdingDeclarations);
+      setVatWithholdingDeclarationEvents(vatWithholdingDeclarationEvents);
       setIslrVouchers(data.islrVouchers);
       setBankAccounts(data.bankAccounts);
       setBankStatementMovements(data.bankStatementMovements);
@@ -4134,6 +4208,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         movements: movements.filter(m => m.companyId === currentCompany.id),
         addMovement,
         vatVouchers: vatVouchers.filter(v => v.companyId === currentCompany.id),
+        vatWithholdingDeclarations: vatWithholdingDeclarations.filter(item => item.companyId === currentCompany.id),
+        vatWithholdingDeclarationEvents: vatWithholdingDeclarationEvents.filter(event =>
+          vatWithholdingDeclarations.some(item => item.id === event.declarationId && item.companyId === currentCompany.id)),
+        createVatWithholdingDeclaration,
+        recordVatWithholdingDeclarationEvent,
         islrVouchers: islrVouchers.filter(v => v.companyId === currentCompany.id),
         islrFiscalEvents: islrFiscalEvents.filter(event => event.companyId === currentCompany.id),
         financialDisclosures: financialDisclosures.filter(item => item.companyId === currentCompany.id),
