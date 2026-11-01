@@ -1,12 +1,12 @@
 # RT-01 — Independencia entre contabilización y respaldo documental
 
-**Estado:** criterio arquitectónico aprobado; auditoría inicial completada; implementación de gestión de adjuntos pendiente de diseño e integración.  
+**Estado:** política funcional aprobada e integrada parcialmente. Los adjuntos son voluntarios; la contabilización no depende de ellos.  
 **Alcance:** transversal a los módulos que registran operaciones, comprobantes y movimientos contables.  
 **Persistencia:** SQLite local, sin servicios remotos obligatorios.
 
 ## 1. Regla principal
 
-La existencia de un archivo adjunto nunca será una condición universal para registrar, guardar o contabilizar una operación válida. El respaldo documental digital es opcional y complementario. La ausencia de un archivo se registra como una condición documental pendiente, no como un error contable ni como evidencia de que la operación sea inválida.
+La existencia de un archivo adjunto nunca será condición para registrar, guardar, contabilizar, procesar, conciliar, pagar, cobrar o cerrar una operación válida. El respaldo digital es voluntario y complementario. La ausencia de un archivo no crea un estado pendiente, una alerta, una calificación negativa, una advertencia de incumplimiento ni un bloqueo.
 
 Esta regla no elimina las obligaciones legales de emisión, conservación, exhibición o custodia que correspondan al contribuyente. SICOVEN facilita el control del contador, pero no sustituye la responsabilidad legal del contribuyente.
 
@@ -81,7 +81,7 @@ Por tanto, no se encontró una restricción de archivo adjunto que actualmente b
 - Un archivo puede incorporarse después sin recrear ni duplicar la operación.
 - Incorporar un archivo no modifica importes ni asientos.
 - Sustituir un archivo conserva la versión anterior y su auditoría.
-- El estado documental pendiente aparece en consultas e informes.
+- No se generan listados de faltantes, alertas ni calificaciones por ausencia de adjuntos.
 - Un archivo inválido, demasiado grande o con ruta manipulada es rechazado sin afectar la operación contable.
 - Los adjuntos y su auditoría sobreviven al cierre y reapertura de SICOVEN y a la actualización de la aplicación.
 
@@ -91,7 +91,7 @@ Por tanto, no se encontró una restricción de archivo adjunto que actualmente b
 2. Diseñar tabla SQLite dedicada a documentos y eventos, evitando almacenar binarios dentro del JSON general de estado contable.
 3. Implementar IPC Electron validado para incorporar, consultar, abrir y sustituir archivos en almacenamiento local.
 4. Añadir interfaz opcional en compras, ventas, asientos y demás módulos según su pertinencia.
-5. Añadir estados documentales e informes de pendientes.
+5. Mantener la interfaz de adjuntos como una herramienta opcional de organización, sin bandejas de faltantes ni tareas obligatorias.
 6. Incorporar pruebas automatizadas de persistencia, seguridad, auditoría y actualización.
 7. Fusionar por etapas después de validar TypeScript, pruebas automatizadas, auditoría de recursos y compilación.
 
@@ -116,3 +116,28 @@ La API quedó expuesta por Electron preload y tipada en `src/electron.d.ts`.
 ## 10. Límites actuales
 
 El motor y sus pruebas automatizadas están añadidos en la rama de implementación, pero aún requieren CI aprobada y fusión. La interfaz visual para adjuntar, consultar, revisar y sustituir documentos todavía no está integrada en las pantallas contables. La ausencia de documento sigue sin bloquear ninguna operación.
+
+
+## 11. Política funcional definitiva — 01/11/2026
+
+Esta política prevalece sobre cualquier texto anterior de este documento que pueda interpretarse como obligación de adjuntar soportes:
+
+- Adjuntar documentos es completamente opcional.
+- Ningún registro, asiento, factura, pago, cobro, conciliación, ajuste o cierre podrá bloquearse por no tener un archivo adjunto.
+- El usuario podrá registrar y procesar sus operaciones normalmente.
+- Cuando exista un soporte, SICOVEN ofrecerá la posibilidad de adjuntarlo voluntariamente.
+- Los documentos adjuntos sirven para organizar y centralizar información de la empresa y facilitar consultas posteriores.
+- El usuario podrá consultar, descargar, sustituir o eliminar adjuntos conforme a sus permisos y a las reglas de conservación que correspondan.
+- La ausencia de adjuntos no generará alertas de incumplimiento, sanciones, bloqueos ni calificaciones negativas.
+- La conservación documental y la justificación ante las autoridades corresponden a la empresa y al profesional contable.
+
+**Texto de interfaz:** “Documentos adjuntos (opcional). Puedes adjuntar facturas, comprobantes o recibos para mantener la información organizada en un solo lugar. Es totalmente voluntario y no afecta el registro ni el procesamiento de esta operación.”
+
+SICOVEN es una herramienta de apoyo contable, no un órgano policial, fiscalizador o investigador. Las pruebas técnicas y fixtures sintéticos son responsabilidad interna del desarrollo y nunca se trasladan al contador como carga documental.
+
+### Estado de implementación observado en esta rama
+
+- Compras, ventas y asientos principales no contienen controles de archivo obligatorio según la auditoría de sus formularios y el contexto contable.
+- El panel de documentos se simplificó para ofrecer adjuntar, abrir y sustituir voluntariamente, sin estados de revisión, observaciones ni lenguaje de expediente.
+- La API de almacenamiento documental mantiene validaciones de seguridad sobre los archivos que el usuario decida adjuntar. Estas validaciones solo se ejecutan al adjuntar y no intervienen en la contabilización.
+- La eliminación lógica de adjuntos y su política de retención deben quedar alineadas con permisos; no se afirmará que esa acción está implementada hasta verificarla en el código.
