@@ -556,3 +556,24 @@ Esta decisión prevalece sobre todas las secciones anteriores de esta hoja de ru
 5. Conciliar operación/evento → comprobante → quincena → declaración → acuse → enteramiento → asiento y auditoría.
 
 **Estado:** investigación documental parcial; especificación primaria vigente no localizada. No se declara cerrado 4.4 ni homologado el TXT.
+
+
+### Auditoría de integridad del auxiliar quincenal — PR #59 — 01/11/2026
+
+**Alcance de revisión:** inspección estática de `src/types/vatWithholdingDeclaration.ts`, `electron/accounting-integrity.cjs`, `electron/accounting-persistence.cjs`, `src/components/Retenciones/VatWithholdingDeclarationsPanel.tsx` y pruebas asociadas. No se ejecutó una nueva suite en esta revisión.
+
+**Controles confirmados en el código:**
+- Una sola declaración por empresa, período y quincena.
+- Un comprobante no puede aparecer en más de una declaración de la misma empresa; el snapshot debe coincidir con el comprobante fuente.
+- La declaración debe contener exactamente todos los comprobantes de la empresa dentro de la quincena, con asignaciones explícitas para fechas históricas que no estaban guardadas.
+- Los totales de base, IVA y retención se recalculan y concilian contra el snapshot.
+- Declaración sin operaciones explícita, incompatible con comprobantes dentro de la ventana.
+- Las colecciones de declaraciones y eventos son append-only; las transiciones de revisión, presentación y pago tienen controles de secuencia.
+- Los pagos parciales deben ser positivos, con referencia bancaria, en orden cronológico y su suma no puede superar el total retenido.
+
+**Límites encontrados:**
+- El evento de vencimiento valida estructura, referencia y patrón de dominio de la URL, pero no descarga ni verifica el contenido de la publicación enlazada. La fecha debe considerarse documentada por el usuario, no verificada automáticamente por SICOVEN.
+- El formulario de pago parcial recoge importe, fecha y referencia bancaria; no incorpora una validación automatizada contra un movimiento bancario importado. La conciliación bancaria real queda pendiente.
+- La revisión fue estática; no sustituye la ejecución de pruebas ni una revisión profesional de los casos fiscales.
+
+**Resultado:** no se ordena una modificación funcional inmediata sobre la base de esta inspección. Los controles de unicidad, snapshot, totales y secuencia están presentes. La verificación primaria de vencimientos y la conciliación contra banco se mantienen como pendientes explícitos del subbloque 4.4. No se declara homologación SENIAT.
