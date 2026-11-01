@@ -32,6 +32,7 @@ const { registerInflationSourceDossierIpc } = require('./inflation-source-dossie
 const { registerDocumentVaultIpc } = require('./supporting-documents.cjs');
 const { registerBackupIpc } = require('./backup-restore.cjs');
 const { registerVatFiscalIncidentIpc } = require('./vat-fiscal-incidents.cjs');
+const { acquireSingleInstance } = require('./single-instance.cjs');
 
 let db;
 function openDatabase() {
@@ -280,8 +281,20 @@ function createWindow() {
     if (url.startsWith('https://')) shell.openExternal(url);
     return { action: 'deny' };
   });
+  return win;
 }
 
+const hasSingleInstanceLock = acquireSingleInstance(app, () => {
+  const existingWindow = BrowserWindow.getAllWindows().find(win => !win.isDestroyed());
+  if (!existingWindow) return;
+  if (existingWindow.isMinimized()) existingWindow.restore();
+  if (!existingWindow.isVisible()) existingWindow.show();
+  existingWindow.focus();
+});
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
 app.whenReady().then(async () => {
   try {
     openDatabase();
@@ -559,6 +572,7 @@ app.whenReady().then(async () => {
 
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
+}
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', () => {

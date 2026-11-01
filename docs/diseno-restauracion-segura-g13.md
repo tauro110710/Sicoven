@@ -110,3 +110,12 @@ Hasta entonces G13 permanece PARCIAL y SICOVEN NO CERTIFICADO / NO APTO PARA DIS
 - La lectura rechaza enlaces simbólicos, elementos especiales y journals que superen 64 KiB. Ante JSON corrupto, falla sin sobrescribirlo.
 - Pruebas añadidas: persistencia tras reapertura, transición no permitida, ausencia de huella de rollback, estado esperado obsoleto, operación duplicada, symlink y JSON corrupto.
 - Limitación explícita: el journal aún no copia ni sustituye SQLite/documentos, no crea rollback físico y no participa en `app.whenReady()`/`openDatabase()`. G13 permanece PARCIAL.
+
+
+## 10. Exclusión mutua del perfil SQLite
+
+- Antes de registrar el callback de `app.whenReady()` y, por tanto, antes de `openDatabase()`, el proceso principal adquiere `app.requestSingleInstanceLock()`.
+- Si no obtiene el bloqueo, solicita salir inmediatamente y no inicializa SQLite, no ejecuta migraciones ni registra IPC.
+- La instancia propietaria escucha el evento `second-instance`; si la ventana principal existe, la restaura cuando está minimizada, la muestra si está oculta y le da foco.
+- La adquisición y el rechazo del bloqueo, así como el evento de segunda instancia, están cubiertos por pruebas del helper aislado.
+- La exclusión mutua reduce el riesgo de dos procesos SICOVEN usando el mismo perfil. No sustituye el motor transaccional G13, las pruebas Windows de lanzamiento concurrente ni la recuperación física.
