@@ -74,25 +74,23 @@ export function buildVatWithholdingDeclaration(input: {
   }
   const legacyVouchers = input.vouchers.filter(voucher =>
     voucher.companyId === input.companyId && voucher.period === range.period && !voucher.fiscalDate);
-  const newLegacyAssignments: VatLegacyFiscalDateAssignment[] = [];
   for (const voucher of legacyVouchers) {
     if (knownLegacyAssignments.has(voucher.id)) continue;
     const supplied = input.legacyFiscalDates?.[voucher.id];
     if (!supplied || !validDate(supplied.fiscalDate) ||
-        supplied.fiscalDate.slice(0, 6).replace('-', '') !== range.period ||
+        supplied.fiscalDate.slice(0, 7).replace('-', '') !== range.period ||
         String(supplied.note || '').trim().length < 10) {
       throw new Error('El comprobante histórico ' + voucher.voucherNumber +
         ' no conserva la fecha efectiva de pago/abono. Confirme su fecha fiscal con el soporte antes de preparar cualquiera de las dos quincenas.');
     }
     const assignment = { voucherId: voucher.id, confirmedFiscalDate: supplied.fiscalDate, note: String(supplied.note).trim() };
     knownLegacyAssignments.set(voucher.id, assignment);
-    newLegacyAssignments.push(assignment);
   }
   const candidates = input.vouchers.filter(voucher => {
     if (voucher.companyId !== input.companyId) return false;
     const assigned = knownLegacyAssignments.get(voucher.id);
-    const fiscalDate = voucher.fiscalDate || assigned?.confirmedFiscalDate || voucher.date;
-    return fiscalDate >= range.startDate && fiscalDate <= range.endDate;
+    const fiscalDate = voucher.fiscalDate || assigned?.confirmedFiscalDate;
+    return Boolean(fiscalDate) && fiscalDate! >= range.startDate && fiscalDate! <= range.endDate;
   });
   if (input.zeroOperations) {
     if (candidates.length > 0) {
