@@ -2,14 +2,14 @@ name: SICOVEN Windows installer
 
 on:
   push:
-    branches: [main]
+    branches: [main, certificacion/contabilidad-basica-1.0.8]
   pull_request:
     branches: [main]
   workflow_dispatch:
 
 permissions:
   actions: read
-  contents: read
+  contents: write
 
 concurrency:
   group: sicoven-windows-${{ github.ref }}
@@ -140,3 +140,16 @@ jobs:
           path: release/SICOVEN-Setup-1.0.8-x64.exe
           if-no-files-found: error
           retention-days: 14
+      - name: Publish Windows installer GitHub Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/certificacion/contabilidad-basica-1.0.8'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tag = "v1.0.8"
+          $existing = gh release view $tag --json url 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag "release/SICOVEN-Setup-1.0.8-x64.exe" --clobber
+          } else {
+            gh release create $tag "release/SICOVEN-Setup-1.0.8-x64.exe" --title "SICOVEN 1.0.8 para Windows" --notes "Instalador Windows x64 generado y validado por el flujo de compilación de SICOVEN. Incluye el motor de respaldo y restauración recuperable." --prerelease
+          }
