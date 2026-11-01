@@ -68,6 +68,20 @@ test('journal rejects a symlink and corrupt JSON without modifying it', () => {
   } finally { h.close(); }
 });
 
+test('journal rejects dangling symlinks instead of treating them as absent', () => {
+  const h = fixture();
+  try {
+    fs.symlinkSync(path.join(h.root, 'missing-target.json'), h.journalPath);
+    assert.throws(() => readJournal(h.journalPath), /no puede ser un enlace/);
+    assert.throws(() => createJournal({
+      journalPath: h.journalPath,
+      sourceDatabaseSha256: HASH_A,
+      stagedDatabaseSha256: HASH_B
+    }), /Ya existe/);
+    assert.equal(fs.lstatSync(h.journalPath).isSymbolicLink(), true);
+  } finally { h.close(); }
+});
+
 test('journal atomically replaces the existing file across the complete commit path', () => {
   const h = fixture();
   try {
