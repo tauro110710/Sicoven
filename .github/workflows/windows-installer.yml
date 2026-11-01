@@ -105,6 +105,32 @@ jobs:
           & taskkill.exe /PID $application.Id /T /F | Out-Null
           Write-Host "Actualización real 1.0.7 -> 1.0.8, arranque y conservación del marcador y del snapshot contable SQLite verificados."
           Get-Item $installer.FullName | Select-Object Name, Length
+      - name: Clean install 1.0.8 in isolated Windows profile
+        shell: pwsh
+        run: |
+          $cleanInstallDir = Join-Path $env:RUNNER_TEMP "SICOVEN-Clean-Install"
+          $cleanAppData = Join-Path $env:RUNNER_TEMP "SICOVEN-Clean-AppData"
+          if (Test-Path $cleanInstallDir) { Remove-Item -Path $cleanInstallDir -Recurse -Force }
+          if (Test-Path $cleanAppData) { Remove-Item -Path $cleanAppData -Recurse -Force }
+          New-Item -ItemType Directory -Path $cleanAppData -Force | Out-Null
+          $env:APPDATA = $cleanAppData
+          $cleanSetup = Start-Process -FilePath $installer.FullName -ArgumentList @("/S", "/D=$cleanInstallDir") -PassThru
+          if (-not $cleanSetup.WaitForExit(120000)) { throw "La instalación limpia 1.0.8 excedió el tiempo permitido." }
+          $cleanSetup.Refresh()
+          if ($cleanSetup.ExitCode -ne 0) { throw "La instalación limpia 1.0.8 terminó con código $($cleanSetup.ExitCode)." }
+          $cleanApp = Join-Path $cleanInstallDir "SICOVEN.exe"
+          foreach ($required in @($cleanApp, (Join-Path $cleanInstallDir "resources\app.asar"), (Join-Path $cleanInstallDir "resources\app.asar.unpacked\node_modules\better-sqlite3\build\Release\better_sqlite3.node"))) {
+            if (-not (Test-Path $required -PathType Leaf)) { throw "La instalación limpia no contiene un archivo esencial: $required" }
+          }
+          $cleanProcess = Start-Process -FilePath $cleanApp -ArgumentList @("--disable-gpu") -PassThru
+          Start-Sleep -Seconds 12
+          $cleanProcess.Refresh()
+          if ($cleanProcess.HasExited) { throw "SICOVEN 1.0.8 no arrancó en perfil limpio. Código: $($cleanProcess.ExitCode)" }
+          & taskkill.exe /PID $cleanProcess.Id /T /F | Out-Null
+          $cleanDatabase = Get-ChildItem -Path $cleanAppData -Filter "sicoven.sqlite" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $cleanDatabase) { throw "La instalación limpia no creó sicoven.sqlite en el perfil aislado." }
+          Write-Host "Instalación limpia 1.0.8, arranque y creación de SQLite verificados en perfil aislado."
+          Get-Item $cleanDatabase.FullName | Select-Object FullName, Length, LastWriteTime
       - name: Upload Windows installer artifact
         uses: actions/upload-artifact@v4
         with:
