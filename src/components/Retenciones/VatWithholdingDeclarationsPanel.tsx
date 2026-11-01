@@ -19,7 +19,7 @@ const statusLabels: Record<string, string> = {
 
 export const VatWithholdingDeclarationsPanel: React.FC = () => {
   const {
-    vatWithholdingDeclarations, vatWithholdingDeclarationEvents,
+    vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents,
     createVatWithholdingDeclaration, recordVatWithholdingDeclarationEvent
   } = useAccounting();
   const now = new Date();
@@ -80,7 +80,9 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
   };
 
   const hasLegacy = Boolean(selected?.voucherSnapshots.some(item => item.dateBasis === 'LEGACY_DOCUMENT_DATE'));
-  const hasCorrections = Boolean(selected?.voucherSnapshots.some(item => item.requiresFiscalCorrection));
+  const hasCorrections = Boolean(selected && selected.voucherIds.some(id =>
+    selected.voucherSnapshots.some(snapshot => snapshot.voucherId === id && snapshot.requiresFiscalCorrection) ||
+    vatVouchers.some(voucher => voucher.id === id && voucher.requiresFiscalCorrection)));
   const hasDueDate = selectedEvents.some(item => item.eventType === 'DUE_DATE_SET');
 
   return (
