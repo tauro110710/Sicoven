@@ -63,7 +63,7 @@ Libro de Compras y Libro de Ventas muestran `fiscalYear-10` como período cuando
 
 ### 1.7 Parámetros históricos de UT en ISLR
 
-`electron/islr-fiscal-integrity.cjs` mantiene una tabla temporal codificada en `getVerifiedUt` (0,02; 0,40; 9; 43 Bs. por rangos de períodos). La transición a Bs. 43 desde junio de 2025 se corresponde con la Providencia SNAT/2025/000048: para tributos de períodos distintos del anual se usa la UT vigente al inicio del período. El valor no debe extenderse a otros cálculos ni confundirse con unidades laborales, tasas o contribuciones.
+`electron/islr-fiscal-integrity.cjs` mantiene una tabla temporal codificada en `getVerifiedUt` (0,02; 0,40; 9; 43 Bs. por rangos de períodos). La Providencia SNAT/2025/000048 se publicó el 02-06-2025 y elevó la UT a Bs. 43; como para períodos mensuales se usa la UT vigente al inicio del período, junio 2025 conserva Bs. 9 y julio 2025 inicia con Bs. 43. El valor no debe extenderse a otros cálculos ni confundirse con unidades laborales, tasas o contribuciones.
 
 **Corrección requerida:** conservar el origen normativo, publicación, fecha de vigencia, intervalo de aplicación y versión de cada parámetro en un catálogo fiscal local versionado; mantener pruebas de límites de vigencia. No cambiar los valores existentes sin contrastar todos los períodos históricos.
 
@@ -73,6 +73,9 @@ Libro de Compras y Libro de Ventas muestran `fiscalYear-10` como período cuando
 2. Alerta legal Baker McKenzie sobre la Providencia SNAT/2025/000054, vigencia 01-08-2025 y derogación de la providencia 2015: https://insightplus.bakermckenzie.com/bm/tax/attachment_dw.action?attdocparam=phBAgdAhmdguYVoIkaYHMSJB%2FJSRAnDR%2BPMwjWwOPXdrOIGc9l39jfWfmUQFvzQp1C8VJ6YhsfvdAN0%3D&attkey=yj7OosfRb2hM2s1TxlT0R62iavTwUhWDZgdP49JoiGe5ahlOnoaIcm2gKCLvWrBaTeOj%2BBpGL7uJ2EwyqqzGs9ATVk4w4E8%3D&fromContentView=1&nav=h0D4lt8kmyzixB0RLU%2BtCNr0ZOKERj%2B%2BLnmxBIj7zcz3vf9KYRXuLj366QqrJARbRDqYv5Ipmmg%3D
 3. Providencia Administrativa SNAT/2025/000048, Gaceta Oficial N.º 43.140 del 02-06-2025, reajuste de UT a Bs. 43 y regla de vigencia por período: https://www.pwc.com/ve/es/assets/documentos/stl/NAC-Reajuste-Valor-UT-Junio2025-v3-2.pdf
 4. Copia de Gaceta Oficial N.º 43.140: https://inseroca.com/wp-content/uploads/2025/06/Unidad-tributaria-GO-43140-02-06-2025-Aumento-_250604_115749.pdf
+5. Histórico de UT y referencias a las providencias SNAT/2021/000023 (G.O. 42.100), SNAT/2022/000023 (G.O. 42.359), SNAT/2023/000031 (G.O. 42.623) y SNAT/2025/000048 (G.O. 43.140): https://tributos.ivecofi.net/informacion/indicadores/unidad-tributaria
+6. Copia de Gaceta Oficial N.º 42.359 (UT Bs. 0,40): https://www.moore-venezuela.com/MediaLibsAndFiles/media/venezuelaweb.moorestephens.com2020/Images/GO-42-359-UT-2022_1.pdf
+7. Providencia SNAT/2023/000031, Gaceta Oficial N.º 42.623 (UT Bs. 9): https://accesoalajusticia.org/reajuste-del-valor-de-la-u-t-a-bs-900/
 
 **Limitación documental:** los archivos anteriores permiten identificar reglas y vigencias citadas, pero antes de cerrar el bloque se debe fijar en el repositorio el documento primario oficial o copia íntegra autenticable de cada Gaceta y obtener la especificación oficial vigente del TXT/XML de carga SENIAT. La existencia de un generador o su etiqueta “oficial” no demuestra aceptación por el portal.
 
@@ -231,7 +234,7 @@ Límites:
 - Flujo fiscal completo de notas de débito/crédito y rectificaciones de declaraciones presentadas. Las notas de crédito operativas ya generan asiento, Kardex y bloqueo de los comprobantes afectados, pero no automatizan devolución de retenciones no enteradas ni el tratamiento del proveedor cuando ya fueron enteradas (artículos 11 y 12).
 - Parámetros históricos y catálogo normativo versionado.
 - Conciliación profesional integral libro ↔ compra ↔ comprobante ↔ declaración ↔ enteramiento ↔ asiento.
-- Validación profesional fiscal independiente y confirmación de aceptación de archivos en Portal Fiscal.
+- Validación profesional fiscal independiente y confirmación de aceptación de archivos en Portal Fiscal. El acceso a Federación Virtual no se automatiza ni se solicitan credenciales profesionales: queda identificado como función en desarrollo para una actualización futura.
 
 **Conclusión:** #57, #58 y #59 están integradas en `main`. El trabajo 4.4 implementa la configuración del agente, clasificación fiscal reutilizable, motor de elegibilidad, trazabilidad compra→evento→comprobante→declaración→enteramiento, registro de entrega y centro de revisión. El Bloque 4 sigue abierto por validación profesional, confirmación de la especificación TXT vigente, flujo completo de notas de débito/crédito y rectificaciones posteriores a la presentación, calendario de vencimientos posteriores a 2026 y verificación de plazos hábiles del artículo 16. Ninguna implementación demuestra por sí sola aceptación del Portal Fiscal ni cumplimiento certificado.
 

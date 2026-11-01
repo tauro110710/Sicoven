@@ -6,6 +6,13 @@ function isValidDate(value) {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
+// UT tributaria nacional: vigencia por inicio del período mensual (COT, art. 3,
+// parágrafo tercero). Valores contrastados con las providencias y Gacetas:
+// SNAT/2021/000023 — G.O. 42.100 (Bs. 0,02; desde 2021-10 tras reconversión);
+// SNAT/2022/000023 — G.O. 42.359 (Bs. 0,40; desde 2022-05);
+// SNAT/2023/000031 — G.O. 42.623 (Bs. 9,00; desde 2023-06);
+// SNAT/2025/000048 — G.O. 43.140 (Bs. 43,00; publicada 2025-06-02,
+// por lo que junio conserva Bs. 9 y los períodos iniciados en julio usan Bs. 43).
 function getVerifiedUt(period) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(period || ''))) return null;
   if (period >= '2025-07') return 43;
@@ -223,4 +230,4 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
   }
 }
 
-module.exports = { validateIslrFiscalEventLedger };
+module.exports = { validateIslrFiscalEventLedger, getVerifiedUt };

@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateIslrFiscalEventLedger } = require('./islr-fiscal-integrity.cjs');
+const { validateIslrFiscalEventLedger, getVerifiedUt } = require('./islr-fiscal-integrity.cjs');
 
 test('rejects duplicate ISLR sequence against historical events', () => {
   const purchase = id => ({ id, companyId: 'c1', supplierRif: 'J-12345678-9', documentType: '01', taxableBaseBs: 100, exemptAmountBs: 0, isCancelled: false });
@@ -266,4 +266,18 @@ test('reconciles cash-purchase ISLR PAYMENT event against the cash purchase, vou
   assert.throws(() => validateIslrFiscalEventLedger(previous, {
     ...next, islrFiscalEvents: [{ ...fiscalEvent, kind: 'ACCOUNT_CREDIT' }]
   }), /ACCOUNT_CREDIT para una compra de contado/);
+});
+
+
+test('ISLR fiscal integrity uses verified UT values at period boundaries', () => {
+  assert.equal(getVerifiedUt('2021-09'), null);
+  assert.equal(getVerifiedUt('2021-10'), 0.02);
+  assert.equal(getVerifiedUt('2022-04'), 0.02);
+  assert.equal(getVerifiedUt('2022-05'), 0.4);
+  assert.equal(getVerifiedUt('2023-05'), 0.4);
+  assert.equal(getVerifiedUt('2023-06'), 9);
+  assert.equal(getVerifiedUt('2025-06'), 9);
+  assert.equal(getVerifiedUt('2025-07'), 43);
+  assert.equal(getVerifiedUt('2026-11'), 43);
+  assert.equal(getVerifiedUt('2026-13'), null);
 });

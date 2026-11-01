@@ -113,6 +113,8 @@ test('Article 1 agent status requires special designation and a personal-firm co
   assert.equal(resolveIvaBuyerAgentStatus({ agentBasis: 'ARTICLE_1_SPECIAL_DESIGNATED', taxpayerType: 'ESPECIAL', rif: 'J-12345678-9' }), 'SPECIAL_DESIGNATED');
   assert.equal(resolveIvaBuyerAgentStatus({ agentBasis: 'ARTICLE_1_SPECIAL_DESIGNATED', taxpayerType: 'ESPECIAL', rif: 'V-12345678-9' }), 'UNKNOWN');
   assert.equal(resolveIvaBuyerAgentStatus({ agentBasis: 'ARTICLE_1_SPECIAL_DESIGNATED', taxpayerType: 'ESPECIAL', rif: 'V-12345678-9', isPersonalFirm: true }), 'SPECIAL_DESIGNATED');
+  assert.equal(resolveIvaBuyerAgentStatus({ agentBasis: 'ARTICLE_1_SPECIAL_DESIGNATED', taxpayerType: 'ESPECIAL', rif: 'P-12345678-9' }), 'UNKNOWN');
+  assert.equal(resolveIvaBuyerAgentStatus({ agentBasis: 'ARTICLE_1_SPECIAL_DESIGNATED', taxpayerType: 'ESPECIAL', rif: 'P-12345678-9', isPersonalFirm: true }), 'SPECIAL_DESIGNATED');
   assert.equal(resolveIvaBuyerAgentStatus({ agentBasis: 'ARTICLE_1_SPECIAL_DESIGNATED', taxpayerType: 'ORDINARIO', rif: 'J-12345678-9' }), 'UNKNOWN');
   assert.equal(resolveIvaBuyerAgentStatus({ agentBasis: 'ARTICLE_2_METALS', taxpayerType: 'ORDINARIO', rif: 'V-12345678-9' }), 'ARTICLE_2_BUYER');
   assert.equal(resolveIvaBuyerAgentStatus({ agentBasis: 'ARTICLE_1_SPECIAL_DESIGNATED', taxpayerType: 'ESPECIAL', rif: 'V-ABC-9', isPersonalFirm: true }), 'UNKNOWN');

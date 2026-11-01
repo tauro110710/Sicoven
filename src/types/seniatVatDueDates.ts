@@ -56,7 +56,7 @@ export function getSeniatVatWithholdingDueDate(
   const digits = normalizedRif.replace(/[^0-9]/g, '');
   const lastDigit = digits.slice(-1);
   if (!/^[0-9]$/.test(lastDigit)) return null;
-  if (/^[VE]/.test(normalizedRif) && !isPersonalFirm) return null;
+  if (/^[VEP]/.test(normalizedRif) && !isPersonalFirm) return null;
 
   const periodMonth = Number(period.slice(4, 6));
   const dueMonth = window === 'FIRST_HALF' ? periodMonth : periodMonth + 1;
