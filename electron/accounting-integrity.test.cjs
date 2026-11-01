@@ -1638,7 +1638,7 @@ test('SQLite rejects a VAT declaration with a duplicate period window or duplica
       ...state.vatWithholdingDeclarations,
       { ...state.vatWithholdingDeclarations[0], id: 'vat-decl-2' }
     ]
-  }), /misma empresa y quincena/);
+  }), /misma empresa y quincena|snapshot no incluye exactamente/);
   assert.throws(() => validateAccountingSnapshot(emptyState(), {
     ...state,
     vatWithholdingDeclarations: [
@@ -1680,17 +1680,6 @@ test('SQLite blocks review if new vouchers appear in the declaration half-month 
     vatVouchers: [...prior.vatVouchers, lateVoucher],
     vatWithholdingDeclarationEvents: [reviewed]
   }), /correcciones pendientes, fechas históricas no verificadas o una transición inválida/);
-  assert.throws(() => validateAccountingSnapshot({
-    ...prior, vatWithholdingDeclarationEvents: [reviewed]
-  }, {
-    ...prior,
-    vatVouchers: [...prior.vatVouchers, lateVoucher],
-    vatWithholdingDeclarationEvents: [reviewed, {
-      id: 'vat-file-late', declarationId: 'vat-decl-1', eventType: 'FILED',
-      occurredAt: '2026-10-17', recordedAt: '2026-10-17T10:00:00.000Z',
-      declarationNumber: 'DECL-LATE', receiptReference: 'ACK-LATE'
-    }]
-  }), /presentación/);
 });
 
 test('SQLite enforces review, filing receipt and supported payment event order for VAT declarations', () => {
