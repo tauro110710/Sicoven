@@ -218,6 +218,7 @@ function persistAccountingSnapshot(db, state, actor = null) {
         startDate: declaration.startDate, endDate: declaration.endDate,
         zeroOperations: Boolean(declaration.zeroOperations),
         voucherIds: Array.isArray(declaration.voucherIds) ? declaration.voucherIds : [],
+        legacyDateAssignments: Array.isArray(declaration.legacyDateAssignments) ? declaration.legacyDateAssignments : [],
         totalTaxableBaseBs: declaration.totalTaxableBaseBs,
         totalVatAmountBs: declaration.totalVatAmountBs,
         totalWithheldBs: declaration.totalWithheldBs,
