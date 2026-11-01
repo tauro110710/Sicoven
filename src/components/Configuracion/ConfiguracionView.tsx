@@ -34,6 +34,7 @@ export const ConfiguracionView: React.FC = () => {
     resetFactoryData,
     exportBackupJson,
     restoreBackupJson,
+    restorePhysicalBackup,
     closeAccountingPeriod,
     reopenAccountingPeriod,
     createAccountingYearOpening,
@@ -259,6 +260,30 @@ export const ConfiguracionView: React.FC = () => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const handlePhysicalRestore = async () => {
+    if (!window.sicovenStore) {
+      alert('La restauración física recuperable está disponible únicamente en SICOVEN Desktop.');
+      return;
+    }
+    const confirmed = window.confirm(
+      'RESTAURACIÓN FÍSICA VERIFICADA SICOVEN\\n\\nSeleccione un paquete de respaldo completo previamente creado por SICOVEN. Se reemplazarán SQLite y los documentos adjuntos. Antes del cambio se creará y verificará un snapshot de retorno; si la operación se interrumpe, SICOVEN intentará recuperar el estado anterior antes de abrir la base de datos.\\n\\n¿Desea continuar?'
+    );
+    if (!confirmed) return;
+    setBackupRestoreBusy(true);
+    try {
+      const result = await restorePhysicalBackup();
+      if (result.canceled) return;
+      if (!result.ok) throw new Error('La restauración física no fue confirmada.');
+      alert('Restauración física completada y verificada. SICOVEN se recargará para volver a leer SQLite.');
+      window.location.reload();
+    } catch (error) {
+      console.error('Falló la restauración física de SICOVEN:', error);
+      alert(error instanceof Error ? error.message : 'La restauración física no pudo completarse. No continúe trabajando hasta revisar el estado de SICOVEN.');
+    } finally {
+      setBackupRestoreBusy(false);
+    }
   };
 
   const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -820,10 +845,21 @@ export const ConfiguracionView: React.FC = () => {
             Respaldo y Seguridad de Datos
           </div>
           <p className="text-xs text-slate-500">
-            Exporta o restaura toda la contabilidad (asientos, compras, ventas, inventarios, retenciones) en formato JSON estructurado.
+            Respaldo JSON para intercambio de datos y restauración física verificada de SQLite con documentos, snapshot de retorno y recuperación ante interrupciones.
           </p>
 
           <div className="space-y-2.5 pt-1">
+            {window.sicovenStore && (
+              <button
+                onClick={handlePhysicalRestore}
+                disabled={backupRestoreBusy || !isStorageReady}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow transition cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                {backupRestoreBusy ? 'Verificando y restaurando SQLite…' : 'Restaurar respaldo físico verificado'}
+              </button>
+            )}
+
             <button
               onClick={handleExportBackup}
               className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow transition cursor-pointer"
