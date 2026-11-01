@@ -73,5 +73,36 @@ test('startup recovery rolls back an interrupted physical swap before database o
   assert.equal(h.db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json.includes('original'),true);
   assert.equal(fs.readFileSync(path.join(h.userDataDir,'supporting-documents','source.pdf'),'utf8'),'original document');
   assert.equal(fs.existsSync(journalPath),false);
+  assert.equal(fs.existsSync(path.join(h.userDataDir,'restore-history',result.operationId)),true);
+  assert.equal(fs.existsSync(path.join(h.userDataDir,'restore-staging',result.operationId)),false);
+ }finally{h.close();}
+});
+
+test('failed reopen after physical install restores the pre-operation database and documents',async()=>{
+ const h=fixture();
+ let reopenCalls=0;
+ try{
+  await h.makeBackup();
+  const target=path.join(h.root,'target-failure');
+  const other=new Database(target);
+  other.exec('CREATE TABLE app_state(state_key TEXT PRIMARY KEY,state_json TEXT NOT NULL)');
+  other.prepare("INSERT INTO app_state VALUES('accounting',?)").run(JSON.stringify({companies:[{id:'replacement'}],journalEntries:[]}));
+  other.close();
+  const replacement=path.join(h.root,'replacement-failure');fs.mkdirSync(replacement);
+  fs.copyFileSync(target,path.join(replacement,'sicoven.sqlite'));
+  fs.mkdirSync(path.join(replacement,'supporting-documents'));
+  fs.writeFileSync(path.join(replacement,'supporting-documents','replacement.pdf'),'replacement document');
+  const db2=new Database(path.join(replacement,'sicoven.sqlite'));
+  const source=path.join(h.root,'restore-source-failure');
+  await createBackup({db:db2,userDataDir:replacement,destination:source});db2.close();
+  await assert.rejects(executeRestore({
+   backupDirectory:source,userDataDir:h.userDataDir,db:h.db,
+   closeDatabase:async()=>h.closeDb(),
+   reopenDatabase:async()=>{reopenCalls++;if(reopenCalls===1)throw new Error('simulated reopen failure');h.reopen();}
+  }),/simulated reopen failure/);
+  assert.equal(reopenCalls,2);
+  assert.equal(h.db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json.includes('original'),true);
+  assert.equal(fs.readFileSync(path.join(h.userDataDir,'supporting-documents','source.pdf'),'utf8'),'original document');
+  assert.equal(fs.existsSync(path.join(h.userDataDir,'restore-journal.json')),false);
  }finally{h.close();}
 });
