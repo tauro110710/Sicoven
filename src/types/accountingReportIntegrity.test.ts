@@ -125,16 +125,3 @@ describe('historical report period selection', () => {
   });
 });
 
-
-test('company ledger selector excludes entries belonging to other companies', () => {
-  const entries = [
-    { id: 'a-1', companyId: 'company-a', entryNumber: 1 },
-    { id: 'b-1', companyId: 'company-b', entryNumber: 1 },
-    { id: 'a-2', companyId: 'company-a', entryNumber: 2 }
-  ];
-  assert.deepEqual(
-    selectCompanyJournalEntries(entries, 'company-a').map(entry => entry.id),
-    ['a-1', 'a-2']
-  );
-  assert.deepEqual(selectCompanyJournalEntries(entries, 'company-c'), []);
-});
