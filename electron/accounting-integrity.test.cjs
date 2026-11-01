@@ -1682,14 +1682,27 @@ test('SQLite blocks review of VAT declarations with pending fiscal corrections o
   const legacy = vatDeclarationFixture();
   legacy.vatVouchers[0].fiscalDate = undefined;
   legacy.vatVouchers[0].date = '2026-10-03';
-  legacy.vatWithholdingDeclarations[0].voucherSnapshots[0].dateBasis = 'LEGACY_DOCUMENT_DATE';
-  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+  legacy.vatWithholdingDeclarations[0].legacyDateAssignments = [{
+    voucherId: 'vat-1', confirmedFiscalDate: '2026-10-03',
+    note: 'Se verificó el soporte bancario del pago efectivo.'
+  }];
+  legacy.vatWithholdingDeclarations[0].voucherSnapshots[0].dateBasis = 'MANUALLY_VERIFIED_LEGACY_DATE';
+  legacy.vatWithholdingDeclarations[0].voucherSnapshots[0].dateVerificationNote =
+    'Se verificó el soporte bancario del pago efectivo.';
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), legacy));
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), {
     ...legacy,
     vatWithholdingDeclarationEvents: [{
       id: 'vat-review', declarationId: 'vat-decl-1', eventType: 'REVIEWED',
       occurredAt: '2026-10-16', recordedAt: '2026-10-16T10:00:00.000Z'
     }]
-  }), /fechas históricas no verificadas/);
+  }));
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...legacy,
+    vatWithholdingDeclarations: [{
+      ...legacy.vatWithholdingDeclarations[0], legacyDateAssignments: []
+    }]
+  }), /sin fecha fiscal confirmada/);
 });
 
 test('SQLite requires a SENIAT official source for recorded declaration due dates', () => {
