@@ -1,4 +1,5 @@
 export type TaxpayerType = 'ESPECIAL' | 'ORDINARIO';
+export type IvaRetentionAgentBasis = 'ARTICLE_1_SPECIAL_DESIGNATED' | 'ARTICLE_2_METALS' | 'NOT_AGENT' | 'UNCONFIRMED';
 
 export interface Company {
   id: string;
@@ -10,6 +11,8 @@ export interface Company {
   email: string;
   taxpayerType: TaxpayerType;
   defaultIvaRetentionRate: number; // 75 or 100
+  /** Supuesto expreso de designación como agente bajo Providencia SNAT/2025/000054. Ausente = pendiente de confirmar. */
+  ivaRetentionAgentBasis?: IvaRetentionAgentBasis;
   /** Configuración expresa de designación como agente de percepción IGTF. */
   isIgtfPerceptionAgent?: boolean;
   fiscalYear: number; // e.g. 2026

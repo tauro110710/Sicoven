@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAccounting } from '../context/AccountingContext';
 import { Building2, X, ShieldAlert, Check, AlertCircle } from 'lucide-react';
-import { TaxpayerType } from '../types/accounting';
+import { TaxpayerType, IvaRetentionAgentBasis } from '../types/accounting';
 import { validateVenezuelanRif } from '../utils/formatters';
 
 interface CompanyModalProps {
@@ -22,6 +22,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
   const [email, setEmail] = useState('');
   const [taxpayerType, setTaxpayerType] = useState<TaxpayerType>('ESPECIAL');
   const [defaultIvaRetentionRate, setDefaultIvaRetentionRate] = useState<number>(75);
+  const [ivaRetentionAgentBasis, setIvaRetentionAgentBasis] = useState<IvaRetentionAgentBasis>('UNCONFIRMED');
   const [isIgtfPerceptionAgent, setIsIgtfPerceptionAgent] = useState(false);
   const [bcvRate, setBcvRate] = useState<string>('');
   const [fiscalYear, setFiscalYear] = useState<string>(String(new Date().getFullYear()));
@@ -65,6 +66,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       email: email.trim() || 'contacto@empresa.com.ve',
       taxpayerType,
       defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
+      ivaRetentionAgentBasis,
       isIgtfPerceptionAgent,
       fiscalYear: Number(fiscalYear) || new Date().getFullYear(),
       bcvRate: Number(bcvRate) || 0,
@@ -248,6 +250,16 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
             )}
           </div>
 
+          <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 space-y-2">
+            <label className="block text-xs font-bold text-slate-800">Condición como agente de retención de IVA (Providencia 000054)</label>
+            <select value={ivaRetentionAgentBasis} onChange={e => setIvaRetentionAgentBasis(e.target.value as IvaRetentionAgentBasis)} className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white">
+              <option value="UNCONFIRMED">Pendiente de confirmar</option>
+              <option value="ARTICLE_1_SPECIAL_DESIGNATED">Artículo 1 — Sujeto especial calificado y notificado</option>
+              <option value="ARTICLE_2_METALS">Artículo 2 — Comprador habitual de metales o piedras preciosas</option>
+              <option value="NOT_AGENT">No es agente de retención bajo esta Providencia</option>
+            </select>
+            <p className="text-[11px] text-slate-600">No se presume la designación por seleccionar “Contribuyente Especial”. Si queda pendiente, SICOVEN no calculará retenciones automáticamente.</p>
+          </div>
           <div className="rounded-lg border border-sky-200 bg-sky-50 p-3">
             <label className="flex items-start gap-2 text-xs text-slate-800 cursor-pointer">
               <input type="checkbox" checked={isIgtfPerceptionAgent} onChange={e => setIsIgtfPerceptionAgent(e.target.checked)} className="mt-0.5" />
