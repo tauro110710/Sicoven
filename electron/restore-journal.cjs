@@ -117,13 +117,13 @@ function readJournal(file) {
   return validateJournal(JSON.parse(fs.readFileSync(file, 'utf8')));
 }
 
-function createJournal({ journalPath, sourceDatabaseSha256, stagedDatabaseSha256 }) {
+function createJournal({ journalPath, sourceDatabaseSha256, stagedDatabaseSha256, operationId = crypto.randomUUID() }) {
   if (lstatIfExists(journalPath)) throw new Error('Ya existe una operación de restauración pendiente.');
   const now = new Date().toISOString();
   const journal = {
     format: JOURNAL_FORMAT,
     version: 1,
-    operationId: crypto.randomUUID(),
+    operationId,
     state: 'prepared',
     createdAt: now,
     updatedAt: now,
