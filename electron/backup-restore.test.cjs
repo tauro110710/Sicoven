@@ -17,6 +17,7 @@ function fixture() {
   fs.writeFileSync(path.join(userDataDir, 'supporting-documents', 'sample.pdf'), '%PDF-1.7\\nbackup test\\n');
   return { root, userDataDir, db, close() { db.close(); fs.rmSync(root, { recursive: true, force: true }); } };
 }
+
 test('backup captures a consistent SQLite database and all supporting documents with verifiable hashes', async () => {
   const h = fixture();
   try {
@@ -27,6 +28,7 @@ test('backup captures a consistent SQLite database and all supporting documents 
     assert.equal(verifyBackupDirectory(destination).ok, true);
   } finally { h.close(); }
 });
+
 test('backup rejects an existing destination and never overwrites it', async () => {
   const h = fixture();
   try {
@@ -37,6 +39,7 @@ test('backup rejects an existing destination and never overwrites it', async () 
     assert.equal(fs.readFileSync(path.join(destination, 'keep.txt'), 'utf8'), 'keep');
   } finally { h.close(); }
 });
+
 test('backup verification rejects a modified document or database', async () => {
   const h = fixture();
   try {
@@ -46,6 +49,7 @@ test('backup verification rejects a modified document or database', async () => 
     assert.throws(() => verifyBackupDirectory(destination), /documentos respaldados/);
   } finally { h.close(); }
 });
+
 test('backup refuses symbolic links in the document vault', async () => {
   const h = fixture();
   try {
@@ -53,5 +57,31 @@ test('backup refuses symbolic links in the document vault', async () => {
     fs.writeFileSync(outside, '%PDF-1.7');
     fs.symlinkSync(outside, path.join(h.userDataDir, 'supporting-documents', 'linked.pdf'));
     await assert.rejects(createBackup({ db: h.db, userDataDir: h.userDataDir, destination: path.join(h.root, 'backup') }), /enlaces simbólicos/);
+  } finally { h.close(); }
+});
+
+test('verification rejects traversal paths in a modified manifest', async () => {
+  const h = fixture();
+  try {
+    const destination = path.join(h.root, 'backup');
+    await createBackup({ db: h.db, userDataDir: h.userDataDir, destination });
+    const manifestPath = path.join(destination, 'manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    manifest.documents[0].path = '../outside.pdf';
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+    assert.throws(() => verifyBackupDirectory(destination), /ruta documental/);
+  } finally { h.close(); }
+});
+
+test('verification rejects unexpected files and empty directories in the backup root', async () => {
+  const h = fixture();
+  try {
+    const destination = path.join(h.root, 'backup');
+    await createBackup({ db: h.db, userDataDir: h.userDataDir, destination });
+    fs.writeFileSync(path.join(destination, 'unexpected.bin'), 'unexpected');
+    assert.throws(() => verifyBackupDirectory(destination), /elementos inesperados/);
+    fs.rmSync(path.join(destination, 'unexpected.bin'));
+    fs.mkdirSync(path.join(destination, 'supporting-documents', 'unexpected-empty'));
+    assert.throws(() => verifyBackupDirectory(destination), /estructura de directorios/);
   } finally { h.close(); }
 });
