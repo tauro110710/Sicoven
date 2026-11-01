@@ -754,6 +754,9 @@ function validateAccountingSnapshot(previousState, nextState) {
     const totalBs = Number(note.totalAmountBs || 0);
     const rate = Number(note.bcvRate || 0);
     const totalUsd = Number(note.totalAmountUsd || 0);
+    const baseUsd = Number(note.taxableBaseUsd || 0);
+    const vatUsd = Number(note.vatAmountUsd || 0);
+    const taxRate = Number(note.taxRate || 0);
     const debitLines = asArray(journal?.items).filter(line => Number(line.debitBs || 0) > 0);
     const payableLines = asArray(journal?.items).filter(line =>
       String(line.accountCode || '').startsWith('2.1.1.') && Number(line.creditBs || 0) > 0);
@@ -768,6 +771,7 @@ function validateAccountingSnapshot(previousState, nextState) {
     });
     const reviewValid = Boolean(review &&
       allowedDebitNoteCauses.includes(review.economicCause) &&
+      !['ADDITIONAL_GOODS_RECEIVED', 'INVENTORY_COST_ADJUSTMENT'].includes(review.economicCause) &&
       String(review.reason || '').trim().length >= 10 &&
       (review.economicCause !== 'OTHER' || String(review.classificationNote || '').trim().length >= 10) &&
       String(review.debitAccountCode || '').trim() &&
@@ -800,12 +804,16 @@ function validateAccountingSnapshot(previousState, nextState) {
         (company?.closedThroughDate && note.accountCreditDate <= company.closedThroughDate) ||
         duplicate || note.paymentTerm !== 'CREDITO' ||
         !Number.isFinite(rate) || rate <= 0 ||
-        ![baseBs, exemptBs, vatBs, totalBs, totalUsd,
+        ![baseBs, exemptBs, vatBs, totalBs, totalUsd, baseUsd, vatUsd, taxRate,
           Number(note.vatWithheldBs || 0), Number(note.islrWithheldBs || 0), Number(note.igtfAmountBs || 0),
           Number(note.vatWithheldUsd || 0), Number(note.islrWithheldUsd || 0), Number(note.igtfAmountUsd || 0)].every(Number.isFinite) ||
         baseBs < 0 || exemptBs < 0 || vatBs < 0 || totalBs <= 0 || totalUsd <= 0 ||
         Math.abs(totalBs - (baseBs + exemptBs + vatBs)) > 0.02 ||
         Math.abs(totalUsd - totalBs / rate) > 0.0001 ||
+        Math.abs(baseUsd - baseBs / rate) > 0.0001 ||
+        Math.abs(vatUsd - vatBs / rate) > 0.0001 ||
+        Math.abs(taxRate - (baseBs > 0 ? vatBs / baseBs * 100 : 0)) > 0.05 ||
+        Number(note.retentionRate || 0) > 0.0001 ||
         Math.abs(Number(note.vatWithheldBs || 0)) > 0.01 ||
         Math.abs(Number(note.islrWithheldBs || 0)) > 0.01 ||
         Math.abs(Number(note.igtfAmountBs || 0)) > 0.01 ||
@@ -1311,6 +1319,9 @@ function validateAccountingSnapshot(previousState, nextState) {
       : undefined;
     const cashCode = bank?.accountCode || (settlement.method === 'CASH_USD' ? '1.1.1.02' : '1.1.1.01');
     const cashAccount = asArray(nextState.accounts).find(account => account.code === cashCode);
+    const bankTransfer = settlement.method === 'BANK_TRANSFER_BS' || settlement.method === 'BANK_TRANSFER_USD';
+    const expectedBankCurrency = settlement.method === 'BANK_TRANSFER_USD' ? 'USD' : 'BS';
+    const bankValid = bankTransfer ? Boolean(bank && bank.currency === expectedBankCurrency) : !settlement.bankAccountId;
     const payableDebit = asArray(journal?.items).filter(line => line.accountCode === payableCode)
       .reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
     const payableCredit = asArray(journal?.items).filter(line => line.accountCode === payableCode)
@@ -1348,7 +1359,7 @@ function validateAccountingSnapshot(previousState, nextState) {
         Math.abs(amountBs - expectedCashBs) >= 0.01 ||
         !sourceJournal || payableCodes.length !== 1 ||
         !payableAccount || payableAccount.type !== 'PASIVO' || payableAccount.isMovement !== true ||
-        !cashAccount || cashAccount.type !== 'ACTIVO' || cashAccount.isMovement !== true ||
+        !cashAccount || cashAccount.type !== 'ACTIVO' || cashAccount.isMovement !== true || !bankValid ||
         !journal || journal.companyId !== target.companyId || journal.type !== 'AJUSTE' ||
         journal.date !== settlement.settlementDate || journal.referenceDoc !== target.invoiceNumber ||
         Math.abs(payableDebit - expectedPayableBs) > 0.02 ||
