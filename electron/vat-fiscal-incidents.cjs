@@ -100,6 +100,17 @@ function initializeVatFiscalIncidentSchema(db) {
       declaration_event_ids_json TEXT NOT NULL, bank_movement_ids_json TEXT NOT NULL,
       actor_user_id INTEGER, actor_username TEXT NOT NULL, created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS vat_fiscal_incident_references (
+      company_id TEXT NOT NULL,
+      reference_type TEXT NOT NULL CHECK(reference_type IN ('VAT_VOUCHER','DECLARATION_EVENT','BANK_MOVEMENT')),
+      reference_id TEXT NOT NULL,
+      incident_id TEXT NOT NULL REFERENCES vat_fiscal_incidents(id),
+      PRIMARY KEY(company_id,reference_type,reference_id)
+    );
+    CREATE TRIGGER IF NOT EXISTS vat_fiscal_incident_references_no_update BEFORE UPDATE ON vat_fiscal_incident_references
+      BEGIN SELECT RAISE(ABORT, 'vat_fiscal_incident_references is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS vat_fiscal_incident_references_no_delete BEFORE DELETE ON vat_fiscal_incident_references
+      BEGIN SELECT RAISE(ABORT, 'vat_fiscal_incident_references is append-only'); END;
     CREATE INDEX IF NOT EXISTS idx_vat_fiscal_incidents_company_date ON vat_fiscal_incidents(company_id,detected_at,created_at);
     CREATE INDEX IF NOT EXISTS idx_vat_fiscal_incident_events_incident ON vat_fiscal_incident_events(incident_id,created_at);
     CREATE TRIGGER IF NOT EXISTS vat_fiscal_incidents_no_update BEFORE UPDATE ON vat_fiscal_incidents
@@ -178,6 +189,10 @@ function createVatFiscalIncident(db, input, actor) {
        declaration_event_ids_json,bank_movement_ids_json,actor_user_id,actor_username,created_at)
       VALUES(?,?,'INCIDENT_RECORDED',?,NULL,NULL,'[]','[]',?,?,?)\`)
       .run(crypto.randomUUID(), id, initialText, actor.id ?? null, actor.username, now);
+    const insertReference = db.prepare('INSERT INTO vat_fiscal_incident_references(company_id,reference_type,reference_id,incident_id) VALUES(?,?,?,?)');
+    if (references.voucherId) insertReference.run(companyId, 'VAT_VOUCHER', references.voucherId, id);
+    for (const referenceId of references.declarationEventIds) insertReference.run(companyId, 'DECLARATION_EVENT', referenceId, id);
+    for (const referenceId of references.bankMovementIds) insertReference.run(companyId, 'BANK_MOVEMENT', referenceId, id);
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
       .run('vat_fiscal_incident_created', JSON.stringify({ incidentId: id, companyId, purchaseId, originalPurchaseId: original.id, actor: actor.username }));
   });
