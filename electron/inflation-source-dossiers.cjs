@@ -119,7 +119,7 @@ function validateDossierInput(input, series) {
   };
 }
 function initializeInflationSourceDossierSchema(db) {
-  db.exec(\`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS inflation_source_dossiers (
       id TEXT PRIMARY KEY,
       series_id TEXT NOT NULL REFERENCES inflation_index_series(id),
@@ -198,13 +198,13 @@ function initializeInflationSourceDossierSchema(db) {
       BEGIN SELECT RAISE(ABORT, 'inflation_source_dossier_reviews is append-only'); END;
     CREATE TRIGGER IF NOT EXISTS inflation_dossier_reviews_no_delete BEFORE DELETE ON inflation_source_dossier_reviews
       BEGIN SELECT RAISE(ABORT, 'inflation_source_dossier_reviews is append-only'); END;
-  \`);
+  `);
 }
 function createInflationSourceDossier(db, input, actor) {
   if (!actor?.username || actor.role !== 'admin') throw new Error('Solo un administrador autenticado puede registrar expedientes.');
   const seriesId = requiredText(input?.seriesId, 'Serie vinculada', 80);
-  const series = db.prepare(\`SELECT s.id,s.series_code,s.first_period,s.last_period,s.imported_by,
-    src.source_sha256 FROM inflation_index_series s JOIN inflation_index_sources src ON src.id=s.source_id WHERE s.id=?\`).get(seriesId);
+  const series = db.prepare(`SELECT s.id,s.series_code,s.first_period,s.last_period,s.imported_by,
+    src.source_sha256 FROM inflation_index_series s JOIN inflation_index_sources src ON src.id=s.source_id WHERE s.id=?`).get(seriesId);
   if (!series) throw new Error('La serie vinculada no existe.');
   const stateRow = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
   let accountingState = null;
@@ -218,20 +218,20 @@ function createInflationSourceDossier(db, input, actor) {
   const now = new Date().toISOString();
   const manifest = data.evidence.map(({ contentBase64, ...item }) => item);
   const save = db.transaction(() => {
-    db.prepare(\`INSERT INTO inflation_source_dossiers
+    db.prepare(`INSERT INTO inflation_source_dossiers
       (id,series_id,source_code,dossier_version,company_id,fiscal_year,period_from,period_to,accounting_framework,
        accounting_framework_detail,purpose,normative_rationale,professional_name,professional_role,professional_credential,
        professional_credential_evidence,methodology_version,methodology_description,coverage_description,periodicity,
        limitations,bias_declaration,evidence_manifest_json,evidence_bytes,imported_by,created_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)\`).run(
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
       id, seriesId, series.series_code, version, data.companyId, data.fiscalYear, data.periodFrom, data.periodTo,
       data.framework, data.frameworkDetail, data.purpose, data.rationale, data.professionalName, data.professionalRole,
       data.professionalCredential, data.professionalCredentialEvidence, data.methodologyVersion, data.methodologyDescription,
       data.coverageDescription, data.periodicity, data.limitations, data.biasDeclaration, JSON.stringify(manifest),
       data.evidence.reduce((sum, item) => sum + item.bytes, 0), actor.username, now);
-    const insertEvidence = db.prepare(\`INSERT INTO inflation_source_dossier_evidence
+    const insertEvidence = db.prepare(`INSERT INTO inflation_source_dossier_evidence
       (id,dossier_id,evidence_type,title,description,file_name,mime_type,obtained_at,source_url,content_base64,sha256,bytes,created_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)\`);
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`);
     for (const item of data.evidence) insertEvidence.run(crypto.randomUUID(), id, item.evidenceType, item.title,
       item.description, item.fileName, item.mimeType, item.obtainedAt, item.sourceUrl, item.contentBase64, item.sha256, item.bytes, now);
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('inflation_source_dossier_created',
@@ -268,8 +268,8 @@ function reviewInflationSourceDossier(db, input, actor) {
     if (!dossier.professional_name || !dossier.professional_credential || !dossier.professional_credential_evidence) {
       throw new Error('No está acreditada la identidad y calificación del profesional responsable de la fuente.');
     }
-    const observations = db.prepare(\`SELECT period,observation_status FROM inflation_index_observations
-      WHERE series_id=? AND period BETWEEN ? AND ? ORDER BY period\`).all(dossier.series_id, dossier.period_from, dossier.period_to);
+    const observations = db.prepare(`SELECT period,observation_status FROM inflation_index_observations
+      WHERE series_id=? AND period BETWEEN ? AND ? ORDER BY period`).all(dossier.series_id, dossier.period_from, dossier.period_to);
     const byPeriod = new Map(observations.map(row => [row.period, row]));
     for (let cursor = dossier.period_from; cursor <= dossier.period_to; cursor = nextMonth(cursor)) {
       const row = byPeriod.get(cursor);
@@ -287,10 +287,10 @@ function reviewInflationSourceDossier(db, input, actor) {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   db.transaction(() => {
-    db.prepare(\`INSERT INTO inflation_source_dossier_reviews
+    db.prepare(`INSERT INTO inflation_source_dossier_reviews
       (id,dossier_id,decision,reason,reviewer_username,reviewer_professional_name,reviewer_credential,
        approved_company_id,approved_fiscal_year,approved_period_from,approved_period_to,approved_framework,approved_purpose,created_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)\`).run(id, dossierId, decision, reason, actor.username, reviewerName,
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, dossierId, decision, reason, actor.username, reviewerName,
       reviewerCredential, decision === 'APPROVED_FOR_DOCUMENTED_USE' ? dossier.company_id : null,
       decision === 'APPROVED_FOR_DOCUMENTED_USE' ? dossier.fiscal_year : null,
       decision === 'APPROVED_FOR_DOCUMENTED_USE' ? dossier.period_from : null,
@@ -308,7 +308,7 @@ function listInflationSourceDossiers(db, filters = {}) {
   if (filters.fiscalYear) { clauses.push('d.fiscal_year=?'); values.push(Number(filters.fiscalYear)); }
   if (filters.seriesId) { clauses.push('d.series_id=?'); values.push(String(filters.seriesId)); }
   const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') : '';
-  const rows = db.prepare(\`SELECT d.*,s.series_version AS seriesVersion,src.source_sha256 AS sourceSha256,src.source_title AS sourceTitle,
+  const rows = db.prepare(`SELECT d.*,s.series_version AS seriesVersion,src.source_sha256 AS sourceSha256,src.source_title AS sourceTitle,
     src.issuer AS sourceIssuer,src.source_reference AS sourceReference,src.source_url AS sourceUrl,
     src.source_published_at AS sourcePublishedAt,src.file_name AS sourceFileName,
     (SELECT r.decision FROM inflation_source_dossier_reviews r WHERE r.dossier_id=d.id ORDER BY r.created_at DESC,r.rowid DESC LIMIT 1) AS decision,
@@ -318,11 +318,11 @@ function listInflationSourceDossiers(db, filters = {}) {
     (SELECT r.reviewer_credential FROM inflation_source_dossier_reviews r WHERE r.dossier_id=d.id ORDER BY r.created_at DESC,r.rowid DESC LIMIT 1) AS reviewerCredential,
     (SELECT r.created_at FROM inflation_source_dossier_reviews r WHERE r.dossier_id=d.id ORDER BY r.created_at DESC,r.rowid DESC LIMIT 1) AS reviewedAt
     FROM inflation_source_dossiers d JOIN inflation_index_series s ON s.id=d.series_id
-    JOIN inflation_index_sources src ON src.id=s.source_id \${where}
-    ORDER BY d.created_at DESC,d.rowid DESC\`).all(...values);
-  return rows.map(row => ({ ...row, evidence: db.prepare(\`SELECT id,evidence_type AS evidenceType,title,description,file_name AS fileName,
+    JOIN inflation_index_sources src ON src.id=s.source_id ${where}
+    ORDER BY d.created_at DESC,d.rowid DESC`).all(...values);
+  return rows.map(row => ({ ...row, evidence: db.prepare(`SELECT id,evidence_type AS evidenceType,title,description,file_name AS fileName,
     mime_type AS mimeType,obtained_at AS obtainedAt,source_url AS sourceUrl,sha256,bytes
-    FROM inflation_source_dossier_evidence WHERE dossier_id=? ORDER BY created_at,rowid\`).all(row.id),
+    FROM inflation_source_dossier_evidence WHERE dossier_id=? ORDER BY created_at,rowid`).all(row.id),
     status: row.decision || 'DRAFT', evidenceManifest: JSON.parse(row.evidence_manifest_json || '[]') }));
 }
 function getInflationSourceDossierEvidence(db, evidenceId, actor) {
