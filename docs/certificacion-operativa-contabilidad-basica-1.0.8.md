@@ -219,3 +219,20 @@ La aprobación técnica habilita la generación del artefacto de CI. La publicac
 - El manifiesto identifica formato, aplicación, fecha, tamaño/hash de SQLite y lista/hash de documentos.
 - La creación queda disponible solo para una sesión admin autenticada con licencia autorizada y registra evento de auditoría.
 - Pendiente: restauración en staging, validación integral del paquete, swap atómico, rollback probado ante interrupción, recuperación de soportes y comparación de saldos/documentos tras restaurar. Hasta cerrar esos puntos, G13 no está aprobado y SICOVEN no está certificado.
+
+
+## 12. Adenda de evidencia — SHA 89bc7cb61b62c7b72aeacc91f281640c772f3cb4
+
+Esta sección prevalece sobre los estados de CI anteriores cuando exista contradicción. La evidencia corresponde exclusivamente al SHA indicado.
+
+- PR #83 permanece abierto, en borrador y sin fusionar. Rama: `certificacion/contabilidad-basica-1.0.8`. `main` no fue modificada.
+- Desktop Validation run `41332302325`: SUCCESS.
+- Windows Installer run `41332302333`: SUCCESS. El job `build-windows` completó todas sus etapas.
+- La actualización real de SICOVEN 1.0.7 a 1.0.8 terminó correctamente y conservó el snapshot SQLite sintético comprobado por el workflow.
+- La instalación limpia de 1.0.8 en un perfil Windows aislado terminó correctamente.
+- Se generó el artefacto temporal `SICOVEN-Windows-df96e0dc8d222f7f2fc56026dea3c0fd2a5eff6c`, ID `13093942986`, tamaño ZIP `136772944` bytes, SHA-256 `7b1f460852941caaf4c33ce0cd5f3854dd31d7bf849f4f835122c72b41f8850d`. No es un Release ni una autorización de distribución.
+- G14 queda actualizado: instalación limpia y actualización 1.0.7→1.0.8 aprobadas en CI para este SHA; firma digital del instalador pendiente. Por tanto, G14 continúa PARCIAL.
+- G13 sigue PARCIAL: el respaldo está implementado, pero la restauración diferida, rollback y reconciliación posterior aún no están implementados ni probados. El documento de diseño `docs/diseno-restauracion-segura-g13.md` es especificación, no evidencia de restauración funcional.
+- G1–G12 mantienen sus estados parciales descritos en la matriz; G15 continúa PENDIENTE. El CI técnico verde no sustituye la aceptación contable E2E.
+
+**Decisión vigente:** NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN CONTABLE BÁSICA. No se autoriza merge, Release ni distribución. La firma digital, la restauración segura y los recorridos E2E pendientes impiden cerrar la certificación.
