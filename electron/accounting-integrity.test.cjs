@@ -1613,6 +1613,23 @@ test('SQLite accepts an immutable VAT withholding declaration snapshot with exac
   assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), vatDeclarationFixture()));
 });
 
+test('SQLite blocks a zero-operation declaration when a withholding voucher exists in the selected window', () => {
+  const state = vatDeclarationFixture();
+  const zeroDeclaration = {
+    ...state.vatWithholdingDeclarations[0],
+    id: 'vat-decl-zero',
+    zeroOperations: true,
+    voucherIds: [],
+    voucherSnapshots: [],
+    totalTaxableBaseBs: 0,
+    totalVatAmountBs: 0,
+    totalWithheldBs: 0
+  };
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...state, vatWithholdingDeclarations: [zeroDeclaration]
+  }), /no incluye exactamente todos los comprobantes/);
+});
+
 test('SQLite rejects a VAT declaration with a duplicate period window or duplicate voucher allocation', () => {
   const state = vatDeclarationFixture();
   assert.throws(() => validateAccountingSnapshot(emptyState(), {
