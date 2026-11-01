@@ -1671,14 +1671,26 @@ test('SQLite blocks review if new vouchers appear in the declaration half-month 
     date: '2026-10-10', fiscalDate: '2026-10-10',
     taxableBaseBs: 500, vatAmountBs: 80, vatWithheldBs: 60
   };
+  const reviewed = {
+    id: 'vat-review-late', declarationId: 'vat-decl-1', eventType: 'REVIEWED',
+    occurredAt: '2026-10-16', recordedAt: '2026-10-16T10:00:00.000Z'
+  };
   assert.throws(() => validateAccountingSnapshot(prior, {
     ...prior,
     vatVouchers: [...prior.vatVouchers, lateVoucher],
-    vatWithholdingDeclarationEvents: [{
-      id: 'vat-review-late', declarationId: 'vat-decl-1', eventType: 'REVIEWED',
-      occurredAt: '2026-10-16', recordedAt: '2026-10-16T10:00:00.000Z'
-    }]
+    vatWithholdingDeclarationEvents: [reviewed]
   }), /correcciones pendientes, fechas históricas no verificadas o una transición inválida/);
+  assert.throws(() => validateAccountingSnapshot({
+    ...prior, vatWithholdingDeclarationEvents: [reviewed]
+  }, {
+    ...prior,
+    vatVouchers: [...prior.vatVouchers, lateVoucher],
+    vatWithholdingDeclarationEvents: [reviewed, {
+      id: 'vat-file-late', declarationId: 'vat-decl-1', eventType: 'FILED',
+      occurredAt: '2026-10-17', recordedAt: '2026-10-17T10:00:00.000Z',
+      declarationNumber: 'DECL-LATE', receiptReference: 'ACK-LATE'
+    }]
+  }), /presentación/);
 });
 
 test('SQLite enforces review, filing receipt and supported payment event order for VAT declarations', () => {
