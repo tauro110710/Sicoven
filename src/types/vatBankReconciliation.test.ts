@@ -84,8 +84,32 @@ test('reports legacy unlinked payments as pending without changing their history
     occurredAt: '2026-10-18', recordedAt: '2026-10-18T10:00:00.000Z',
     amountBs: 25, paymentReference: 'REF-LEGACY'
   };
-  const summary = buildVatBankReconciliationSummary(declaration, [filed, legacy], []);
+  const summary = buildVatBankReconciliationSummary(declaration, [filed, legacy], [], [account]);
   assert.equal(summary.pendingCount, 1);
   assert.equal(summary.pendingAmountBs, 25);
   assert.equal(summary.reconciledCount, 0);
+});
+
+test('does not mark a historical link reconciled when the linked debit amount no longer matches', () => {
+  const payment: VatWithholdingDeclarationEvent = {
+    id: 'payment-1', declarationId: declaration.id, eventType: 'PAYMENT',
+    occurredAt: '2026-10-19', recordedAt: '2026-10-19T10:00:00.000Z',
+    amountBs: 60, paymentReference: 'PAGO-1', bankStatementMovementIds: ['m-1']
+  };
+  const summary = buildVatBankReconciliationSummary(declaration, [filed, payment], [movement('m-1', 59)], [account]);
+  assert.equal(summary.reconciledCount, 0);
+  assert.equal(summary.pendingCount, 1);
+  assert.equal(summary.pendingAmountBs, 60);
+});
+
+test('does not mark linked credits or USD-account movements reconciled', () => {
+  const payment: VatWithholdingDeclarationEvent = {
+    id: 'payment-1', declarationId: declaration.id, eventType: 'PAYMENT',
+    occurredAt: '2026-10-19', recordedAt: '2026-10-19T10:00:00.000Z',
+    amountBs: 60, paymentReference: 'PAGO-1', bankStatementMovementIds: ['m-1']
+  };
+  const credit = buildVatBankReconciliationSummary(declaration, [filed, payment], [movement('m-1', 60, { type: 'CREDIT' })], [account]);
+  assert.equal(credit.pendingCount, 1);
+  const usd = buildVatBankReconciliationSummary(declaration, [filed, payment], [movement('m-1', 60)], [{ ...account, currency: 'USD' }]);
+  assert.equal(usd.pendingCount, 1);
 });
