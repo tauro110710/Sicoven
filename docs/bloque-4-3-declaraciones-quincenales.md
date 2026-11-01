@@ -49,13 +49,13 @@ Una declaración sin operaciones debe prepararse expresamente y no puede contene
 
 No se generan vencimientos automáticos ni se codifican fechas hábiles estimadas.
 
-El auxiliar permite registrar un vencimiento únicamente si se aporta:
+El auxiliar permite documentar un vencimiento únicamente si el usuario aporta:
 - Fecha límite publicada.
 - Título de la fuente.
 - Referencia/publicación.
 - URL HTTPS bajo el dominio oficial SENIAT.
 
-El registro del vencimiento es inmutable. Si la autoridad publica una corrección, deberá diseñarse un evento de sustitución con trazabilidad, no sobrescribir la evidencia anterior.
+La aplicación comprueba el formato de fecha y que la URL use HTTPS bajo el dominio oficial SENIAT; no consulta la página ni verifica automáticamente su contenido o disponibilidad. El usuario debe cotejar la publicación original. El registro del vencimiento es inmutable. Si la autoridad publica una corrección, deberá diseñarse un evento de sustitución con trazabilidad, no sobrescribir la evidencia anterior.
 
 ## 5. Persistencia y seguridad
 
