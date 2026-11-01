@@ -28,7 +28,7 @@ Un comprobante no puede incluirse dos veces en declaraciones de la misma empresa
 
 Los comprobantes históricos anteriores al Bloque 4.2 que no tienen `fiscalDate` deben recibir una asignación manual de fecha fiscal, respaldada por el comprobante de pago o evidencia del abono en cuenta. La asignación se conserva para todo el mes, incluso si el comprobante pertenece a la quincena opuesta a la declaración que se prepara primero. No se usa la fecha de factura como sustituto. Mientras falte la confirmación de cualquier comprobante histórico del mes, no se permite preparar ninguna de las dos quincenas.
 
-Si un comprobante incluido recibe después una marca de corrección fiscal pendiente, la revisión de la declaración queda bloqueada hasta que se regularice el soporte.
+Si un comprobante incluido recibe después una marca de corrección fiscal pendiente, la revisión de la declaración queda bloqueada hasta que se regularice el soporte. Si aparecen comprobantes nuevos dentro de la ventana después de preparar el snapshot, o comprobantes legacy del mes sin fecha asignada, la revisión también se bloquea. El snapshot no se amplía silenciosamente; se requiere un procedimiento de rectificación, que permanece pendiente.
 
 ## 3. Ciclo de estados
 
@@ -85,6 +85,7 @@ La especificación técnica vigente del Portal Fiscal debe obtenerse y validarse
 - Aislamiento por empresa y ventana.
 - Declaración con operaciones y sin operaciones.
 - Rechazo de comprobantes duplicados o ya declarados.
+- Bloqueo de revisión si aparecen comprobantes posteriores no incluidos en el snapshot.
 - Conciliación de totales con snapshots.
 - Bloqueo de revisión con correcciones fiscales pendientes.
 - Asignación manual y documentada de fechas legacy para ambas quincenas.
