@@ -799,3 +799,38 @@ Se verificaron en `main`:
 9. El tipo 02 solo se habilitará cuando el flujo completo de alta, Libro de Compras, CxP, liquidación, asiento, auditoría y pruebas SQLite esté integrado.
 
 **Estado actual:** la prevalidación está integrada, pero ND tipo 02 sigue BLOQUEADA para contabilización. La siguiente entrega técnica debe implementar el documento ND independiente y su saldo CxP; no se retirará la guarda genérica hasta que la validación integral esté completa.
+
+
+## BITÁCORA DE CONTINUIDAD — PR #76: DESBLOQUEO CONTABLE CONTROLADO DE ND TIPO 02 — 01/11/2026
+
+### PR #76 — flujo independiente de nota de débito de proveedor
+- PR: https://github.com/fenixlife1978/Sicoven/pull/76
+- Fusionado por squash a `main`: `aafaf327f5d45580dda99c2493ca2c182b764823`.
+- Integra formulario dedicado desde la factura original tipo 01; no reutiliza el alta genérica de compras.
+- Cada ND se registra como documento tipo 02 independiente, con vínculo a factura original, proveedor y empresa, número de ND/control, fechas, causa económica, justificación y revisión profesional estructurada.
+- El motor prepara asiento AJUSTE balanceado en Bs. y USD, con cuenta de débito seleccionada en el plan contable y cuenta CxP propia; la factura original y sus liquidaciones no se reescriben.
+- Libro de Compras conserva la ND y advierte que se excluye provisionalmente de totales fiscales SENIAT mientras no se valide su tratamiento con especificación oficial vigente.
+- CxP incluye ND como obligación independiente; pagos y aplicaciones de anticipos se dirigen a la cuenta CxP y al documento ND específicos.
+- La integridad SQLite valida vínculo, empresa, proveedor, unicidad, fechas, período, importes, tasa, cuentas, balance dual, revisión profesional y ausencia de movimientos de inventario o retenciones no autorizadas.
+- La ND no puede anularse todavía: se bloquea su reversión hasta implementar contra-asiento y regularización fiscal especializados.
+- Las causas `ADDITIONAL_GOODS_RECEIVED` e `INVENTORY_COST_ADJUSTMENT` siguen bloqueadas en la interfaz y SQLite hasta disponer de recepción, líneas, cantidades, costos y Kardex verificables.
+- No se calculan ni generan retenciones IVA/ISLR, IGTF, declaraciones, rectificaciones, compensaciones ni cambios en comprobantes históricos. El registro exige confirmación profesional de no aplicabilidad de retenciones e IGTF; si alguna aplica, debe diferirse el registro hasta implementar y validar su tratamiento.
+- CI pre-merge Desktop Validation run `41324233221`: SUCCESS.
+- CI pre-merge Windows Installer run `41324233222`: SUCCESS; incluyó pruebas automatizadas, TypeScript, renderer, auditoría de activos, NSIS, verificación del instalador y actualización real 1.0.6 → 1.0.7 preservando SQLite.
+- CI post-merge sobre SHA integrado: Desktop Validation run `41325429966` y Windows Installer run `41325429881` estaban en ejecución al registrar esta bitácora. No se declaran todavía SUCCESS.
+- No se publicó instalador ni release.
+- Administrador semilla no modificado.
+
+### Estado actualizado del tipo 02
+**DESBLOQUEADO PARA EL SUBCONJUNTO CONTABLE CONTROLADO**: diferencias de precio, gastos adicionales, cargos financieros y otras causas justificadas, con asiento y CxP independiente, bajo las restricciones anteriores. No equivale a soporte universal de todas las ND ni a homologación tributaria.
+
+### Próxima fase obligatoria
+1. Confirmar CI post-merge de #76 y registrar sus resultados reales.
+2. Añadir pruebas de extremo a extremo del flujo UI → dominio → SQLite → Libro de Compras → CxP → pago/anticipo, incluyendo reinicio y lectura desde SQLite.
+3. Implementar flujo especializado de anulación/contra-asiento de ND, sin borrar históricos ni permitir reversión directa.
+4. Diseñar recepción real de mercancía adicional y ajuste de costo con líneas, productos, cantidades, costos, fecha y Kardex conciliado; mantenerlo bloqueado hasta pruebas.
+5. Resolver el tratamiento de retenciones, IGTF y libro fiscal solo con fuente primaria vigente y validación profesional independiente.
+6. Probar escenarios de factura original impaga, parcialmente pagada y totalmente pagada, y anticipos/saldos a favor, asegurando que el saldo ND sea independiente y no duplique ni altere pagos históricos.
+7. Mantener bloqueado el alta genérica tipo 02, el administrador semilla intacto y la publicación de instaladores/releases sin autorización.
+
+**Regla permanente:** SQLite local es la única fuente de verdad. No declarar homologación SENIAT, certificación fiscal ni finalización del Bloque 4 hasta completar los pendientes y sus pruebas reales.
