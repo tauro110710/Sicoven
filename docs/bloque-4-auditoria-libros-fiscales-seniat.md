@@ -1,6 +1,8 @@
 # Bloque 4 — Auditoría inicial de libros fiscales SENIAT
 
-**Estado:** auditoría técnica inicial; no certifica cumplimiento fiscal ni modifica operaciones.  
+**Estado:** auditoría técnica en actualización continua; no certifica cumplimiento fiscal ni modifica operaciones.
+
+**Contraste de integración:** PR #57 (Bloque 4.1) y PR #58 (Bloque 4.2) ya están fusionadas en `main`. Sus defectos corregidos se marcan como resueltos; los límites y pendientes normativos permanecen abiertos.  
 **Base inspeccionada:** `main`, posterior a PR #54.  
 **Alcance:** Libro de Compras, Libro de Ventas, retenciones IVA/ISLR, generadores TXT/XML y controles SQLite relacionados.  
 **Regla:** no alterar datos históricos, asientos ni comprobantes; no modificar el administrador semilla.
@@ -13,7 +15,7 @@ En `src/components/LibroCompras/LibroComprasView.tsx`, `handleDownloadTxt` filtr
 
 **Riesgo:** un archivo destinado a un período puede contener comprobantes de varios meses y llevar un nombre que representa solo el primer período.
 
-**Corrección requerida:** hacer obligatorio el período fiscal de exportación; seleccionar exclusivamente comprobantes de la empresa y período exactos; impedir exportación cuando no exista período inequívoco; validar que cada fila corresponda al mismo período. Añadir pruebas multiempresa y multiperíodo.
+**Estado:** CORREGIDO EN PR #57, fusionada. La exportación exige período `YYYY-MM`, filtra por empresa y período exactos y usa el mismo período en el nombre del archivo. Se añadieron pruebas de período. La aceptación en Portal Fiscal sigue pendiente de validación externa.
 
 ### 1.2 Generador TXT de retenciones IVA — validaciones insuficientes
 
@@ -27,7 +29,7 @@ El modelo `VatRetentionVoucher` no conserva tipo de documento fuente ni referenc
 
 **Riesgo:** un archivo fiscal puede contener datos fabricados por fallback, campos desplazados o una representación incompleta del documento de origen.
 
-**Corrección requerida:** eliminar fallbacks ficticios; bloquear y reportar registros incompletos; validar campos y caracteres de control; ampliar el snapshot del comprobante solo si la normativa/formato oficial exige esos campos. Antes de cambiar la estructura de salida, obtener y fijar una especificación oficial vigente del archivo SENIAT.
+**Estado:** CORREGIDO PARCIALMENTE EN PR #57, fusionada. Se eliminaron los fallbacks ficticios y se añadieron validaciones de RIF, período, fecha, correlativo, importes, porcentaje, consistencia de retención y caracteres de control. El tipo de documento y la especificación técnica vigente del TXT siguen sujetos a validación oficial; no se afirma aceptación SENIAT.
 
 ### 1.3 Condición de agente de retención IVA no está impuesta en la capa de dominio
 
@@ -113,7 +115,7 @@ El artículo 13 establece que la retención se practica cuando ocurra primero el
 
 **Riesgo:** cuando la fecha de pago/abono en cuenta difiera de la emisión de la factura, el comprobante y el período IVA pueden quedar asignados a un mes que no corresponde al momento fiscal de retención.
 
-**Corrección requerida:** representar el evento de retención IVA de forma explícita e inmutable, con fecha de pago/abono que ocurrió primero, documento fuente, importe/base, secuencia y período. La fecha de factura debe permanecer como dato documental distinto. No modificar retroactivamente comprobantes existentes.
+**Estado:** CORREGIDO EN PR #58, fusionada. Se incorporó `PurchaseVatFiscalEvent` con disparador `PAYMENT` o `ACCOUNT_CREDIT`, fecha efectiva y período; el comprobante conserva la fecha documental por separado. El flujo actual representa una fecha efectiva por compra y no resuelve todavía la secuencia completa de pagos parciales posteriores ni sus comprobantes adicionales. No se modificaron registros históricos.
 
 ### 6.2 Falta de control de períodos de enteramiento quincenal
 
@@ -152,3 +154,66 @@ Se localizó una copia de la “Guía Fácil — Elaboración de un Archivo TXT 
 **Limitación:** no se ha acreditado que estas copias sean la última versión técnica vigente en el Portal Fiscal en 2026. La estructura sirve como referencia histórica verificable, no como garantía de aceptación actual.
 
 **Corrección requerida:** mantener la exportación con operaciones en 16 columnas y validar que el archivo tenga exactamente 16 campos por línea, sin campos desplazados. Añadir pruebas de la igualdad del monto retenido con la base, alícuota y porcentaje registrado. Diseñar una salida independiente para declaración sin operaciones únicamente después de verificar el modelo vigente en el Portal Fiscal; no improvisar una fila de ceros a partir de capturas antiguas.
+
+
+## 7. Contraste de correcciones fusionadas y estado actual
+
+### 7.1 Bloque 4.1 — exportación TXT IVA (PR #57)
+
+Los hallazgos 1.1 y 1.2 se consideran corregidos en el código integrado:
+- Período mensual explícito y filtro por empresa/período.
+- Eliminación de valores ficticios de factura/control.
+- Validación de RIF, período, fecha, correlativo, importes, porcentaje y consistencia de la retención.
+- Pruebas automatizadas de campos incompletos e inconsistentes.
+
+Pendiente:
+- Obtener la especificación técnica vigente del Portal Fiscal.
+- Verificar estructura y aceptación con una prueba autorizada en el entorno oficial.
+- No afirmar cumplimiento ni aceptación hasta disponer de evidencia.
+
+### 7.2 Bloque 4.2 — evento fiscal IVA (PR #58)
+
+El hallazgo 6.1 se considera corregido para el flujo actual:
+- Contado: evento de pago efectivo.
+- Crédito: evento de abono/reconocimiento en cuenta.
+- Fecha de factura separada de fecha fiscal.
+- Período y correlativo ligados al evento.
+
+Limitaciones:
+- No existe todavía un subledger de múltiples pagos parciales por factura que genere todos los eventos/comprobantes que pudieran corresponder.
+- No se modifica el historial anterior a la incorporación del evento.
+- No se ha certificado el circuito completo ante SENIAT.
+
+### 7.3 Bloque 4.3 — auxiliar quincenal (PR #59)
+
+Estado: en desarrollo, PR abierta como borrador y CI pendiente.
+
+Alcance de la implementación en revisión:
+- Ventanas 1–15 y 16–fin de mes.
+- Snapshot inmutable de comprobantes por empresa y quincena.
+- Declaración sin operaciones explícita.
+- Eventos append-only de revisión, presentación, acuse y pagos/enteramientos.
+- Pagos parciales con referencias y soportes.
+- Vencimientos manuales únicamente con fuente oficial SENIAT documentada.
+- Asignación manual de fecha fiscal efectiva a comprobantes históricos que no guardan el evento de pago/abono; la asignación se conserva para el mes y evita ubicar un comprobante en una quincena por la fecha de factura.
+- Validaciones SQLite y auditoría.
+
+Límites:
+- No genera todavía un TXT quincenal certificado por la especificación vigente.
+- No presenta declaraciones automáticamente.
+- No calcula vencimientos ni calendarios hábiles sin fuente oficial.
+- No contabiliza automáticamente el pago ni concilia movimientos bancarios.
+- No resuelve rectificaciones de declaraciones presentadas.
+- No certifica cumplimiento fiscal.
+
+### 7.4 Pendientes que permanecen abiertos
+
+- Elegibilidad normativa y evidencia del agente/proveedor (6.4).
+- Comprobante de retención IVA: contenido completo, emisión/entrega y plazo del artículo 16 (6.3).
+- Especificación oficial vigente de archivo TXT, incluida declaración sin operaciones (6.5).
+- Flujo de notas de crédito/débito y rectificaciones.
+- Parámetros históricos y catálogo normativo versionado.
+- Conciliación integral libro ↔ comprobante ↔ declaración ↔ enteramiento ↔ asiento.
+- Auditoría y validación profesional fiscal independiente.
+
+**Conclusión:** #57 y #58 corrigen defectos concretos, pero no cierran por sí solas el Bloque 4 ni demuestran aceptación SENIAT. #59 permanece en desarrollo hasta superar revisión y CI.
