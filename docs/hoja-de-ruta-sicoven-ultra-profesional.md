@@ -746,7 +746,7 @@ Hallazgos confirmados:
 - La prueba complementa, no sustituye, las guardas existentes en `AccountingContext.addPurchase` y `electron/accounting-integrity.cjs`.
 - No habilita el selector del tipo 02, no modifica el alta de facturas ni NC, no crea asientos, CxP, movimientos de Kardex o comprobantes fiscales.
 - CI pre-merge: Desktop Validation SUCCESS e instalador Windows SUCCESS. En Windows pasaron pruebas automatizadas, TypeScript, build renderer, auditoría de assets, compilación NSIS, verificación del instalador y actualización real 1.0.6 → 1.0.7 preservando SQLite.
-- CI post-merge sobre el SHA integrado: runs 41319605733 (Windows Installer) y el segundo workflow asociado al mismo commit; al redactar esta entrada se encuentran en ejecución. No declarar CI post-merge SUCCESS hasta consultar sus conclusiones.
+- CI post-merge sobre el SHA integrado: Desktop Validation run 41319605748: SUCCESS; Windows Installer run 41319605733: SUCCESS. Pasaron pruebas automatizadas, TypeScript, build, auditoría de recursos/assets, compilación NSIS, verificación del instalador y actualización real 1.0.6 → 1.0.7 preservando SQLite.
 - El artefacto de Actions no equivale a publicación; no se publicó instalador ni release.
 
 ### Estado del desarrollo ND
