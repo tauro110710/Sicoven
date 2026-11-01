@@ -300,6 +300,7 @@ app.whenReady().then(async () => {
   try {
     // Recuperar/retroceder cualquier restauración interrumpida antes de abrir SQLite.
     // Si el journal o el snapshot de retorno no son verificables, se bloquea el arranque.
+    fs.mkdirSync(app.getPath('userData'), { recursive: true });
     recoverPendingRestore({ userDataDir: app.getPath('userData') });
     openDatabase();
   } catch (error) {
