@@ -298,6 +298,31 @@ function validateVatDeclarationLedger(previousState, nextState) {
     if (Boolean(declaration.zeroOperations) !== (snapshots.length === 0)) {
       throw new Error('La declaración sin operaciones debe estar identificada explícitamente y no puede contener comprobantes.');
     }
+    const assignments = asArray(declaration.legacyDateAssignments);
+    const assignmentByVoucher = new Map();
+    for (const assignment of assignments) {
+      const voucherId = String(assignment.voucherId || '');
+      const voucher = vouchers.get(voucherId);
+      if (!voucher || String(voucher.companyId) !== String(declaration.companyId) ||
+          voucher.fiscalDate || String(voucher.period || '') !== period ||
+          !validVatDeclarationDate(assignment.confirmedFiscalDate) ||
+          !String(assignment.confirmedFiscalDate).startsWith(period.slice(0, 4) + '-' + period.slice(4, 6)) ||
+          String(assignment.note || '').trim().length < 10 ||
+          assignmentByVoucher.has(voucherId)) {
+        throw new Error('SQLite rechazó una asignación manual de fecha fiscal histórica sin soporte válido.');
+      }
+      assignmentByVoucher.set(voucherId, assignment);
+    }
+    const priorDeclarationIds = new Set(asArray(previousState.vatWithholdingDeclarations).map(item => String(item.id)));
+    if (!priorDeclarationIds.has(id)) {
+      const unresolvedLegacy = asArray(nextState.vatVouchers).filter(voucher =>
+        String(voucher.companyId) === String(declaration.companyId) &&
+        String(voucher.period || '') === period && !voucher.fiscalDate &&
+        !assignmentByVoucher.has(String(voucher.id)));
+      if (unresolvedLegacy.length > 0) {
+        throw new Error('SQLite bloqueó la declaración: existen comprobantes históricos del mes sin fecha fiscal confirmada.');
+      }
+    }
     let base = 0, vat = 0, withheld = 0;
     for (const snapshot of snapshots) {
       const voucherId = String(snapshot.voucherId || '');
@@ -306,12 +331,15 @@ function validateVatDeclarationLedger(previousState, nextState) {
           usedVoucherIds.has(String(declaration.companyId) + ':' + voucherId) ||
           !validVatDeclarationDate(snapshot.fiscalDate) ||
           snapshot.fiscalDate < declaration.startDate || snapshot.fiscalDate > declaration.endDate ||
-          !['FISCAL_EVENT', 'LEGACY_DOCUMENT_DATE'].includes(snapshot.dateBasis)) {
+          !['FISCAL_EVENT', 'MANUALLY_VERIFIED_LEGACY_DATE', 'LEGACY_DOCUMENT_DATE'].includes(snapshot.dateBasis)) {
         throw new Error('SQLite rechazó un comprobante ausente, duplicado o fuera de la quincena en la declaración IVA.');
       }
-      const expectedDateBasis = voucher.fiscalDate ? 'FISCAL_EVENT' : 'LEGACY_DOCUMENT_DATE';
+      const assignment = assignmentByVoucher.get(voucherId);
+      const expectedDateBasis = voucher.fiscalDate ? 'FISCAL_EVENT' : assignment ? 'MANUALLY_VERIFIED_LEGACY_DATE' : 'LEGACY_DOCUMENT_DATE';
+      const expectedFiscalDate = voucher.fiscalDate || assignment?.confirmedFiscalDate || voucher.date;
       if (snapshot.dateBasis !== expectedDateBasis ||
-          snapshot.fiscalDate !== String(voucher.fiscalDate || voucher.date) ||
+          snapshot.fiscalDate !== String(expectedFiscalDate) ||
+          (assignment && String(snapshot.dateVerificationNote || '') !== String(assignment.note)) ||
           String(snapshot.voucherNumber) !== String(voucher.voucherNumber) ||
           String(snapshot.supplierRif) !== String(voucher.supplierRif) ||
           String(snapshot.supplierName) !== String(voucher.supplierName) ||
