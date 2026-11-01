@@ -544,7 +544,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       : undefined;
     const company = asArray(nextState.companies).find(item => item.id === previousPurchase.companyId);
     const debitNoteNumber = String(previousPurchase.debitNoteNumber || previousPurchase.invoiceNumber || '').trim();
-    const normalizeNdReference = value => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
+    const normalizeNdReference = value => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
     const activePayments = asArray(nextState.creditSettlements).filter(item =>
       item.companyId === previousPurchase.companyId && item.documentId === previousPurchase.id &&
       item.kind === 'PURCHASE_PAYMENT' && !item.isReversed);
