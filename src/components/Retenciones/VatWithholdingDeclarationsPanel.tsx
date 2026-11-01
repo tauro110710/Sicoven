@@ -63,7 +63,7 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
     setMessage('');
     try {
       await operation();
-      setMessage('Evento guardado y confirmado por la persistencia contable.');
+      setMessage('Operación guardada y confirmada por la persistencia contable.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo completar la operación.');
     } finally {
@@ -224,6 +224,12 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
               <p className="text-xs text-slate-500">{selected.voucherIds.length} comprobantes · IVA retenido: {formatBs(selected.totalWithheldBs)}</p>
             </div>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{statusLabels[selectedStatus || 'PREPARED']}</span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-lg bg-slate-50 p-3"><span className="block text-[10px] font-semibold uppercase text-slate-500">Base imponible</span><strong className="font-mono text-sm text-slate-900">{formatBs(selected.totalTaxableBaseBs)}</strong></div>
+            <div className="rounded-lg bg-slate-50 p-3"><span className="block text-[10px] font-semibold uppercase text-slate-500">IVA causado</span><strong className="font-mono text-sm text-slate-900">{formatBs(selected.totalVatAmountBs)}</strong></div>
+            <div className="rounded-lg bg-purple-50 p-3"><span className="block text-[10px] font-semibold uppercase text-purple-700">IVA retenido</span><strong className="font-mono text-sm text-purple-900">{formatBs(selected.totalWithheldBs)}</strong></div>
           </div>
 
           {hasCorrections && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">Esta fotografía contiene comprobantes con corrección fiscal pendiente. No puede revisarse hasta regularizarse.</div>}
