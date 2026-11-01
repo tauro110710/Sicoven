@@ -245,6 +245,7 @@ Límites:
 - SQLite registra la emisión del comprobante de retención IVA y su posterior entrega, incluyendo fecha, medio, acuerdo electrónico y usuario. Los eventos no requieren captura documental adicional.
 - Cuando una nota de crédito o reversión marca un comprobante para corrección, SQLite registra también un evento de auditoría inmutable con el comprobante afectado, los asientos correctivos relacionados, la razón y el usuario. El registro no elimina ni da por resuelta la obligación de rectificación fiscal.
 - La vista central muestra compras que requieren revisión fiscal y pendientes de entrega de comprobantes.
+- Al abrir un comprobante marcado para corrección, SICOVEN muestra automáticamente si ya fue incluido en una declaración, su quincena/estado, número de declaración y cuánto se enteró o queda pendiente. Es información de consulta; no modifica snapshots ni decide por sí sola el tratamiento fiscal de la rectificación.
 - El RIF se valida estructuralmente antes de calcular fechas del calendario 2026 o resolver elegibilidad del agente; un identificador mal formado deja el caso sin fecha/condición automática.
 - La reimpresión de comprobantes antiguos no sustituye datos históricos faltantes por el perfil actual de la empresa ni por una dirección genérica: si no se conservó la identidad/dirección del agente al emitir o la dirección del proveedor, el comprobante lo indica expresamente.
 - Los libros de compras y ventas muestran “Todos los períodos” cuando no existe selección mensual; no presentan octubre como período predeterminado.

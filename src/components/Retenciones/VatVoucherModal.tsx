@@ -5,11 +5,15 @@ import { formatBs, formatUsd, formatDate, formatNumberVe } from '../../utils/for
 
 interface VatVoucherModalProps {
   voucher: VatRetentionVoucher | null;
+  correctionContext?: {
+    period: string; window: 'FIRST_HALF' | 'SECOND_HALF'; status: string;
+    declarationNumber?: string; totalWithheldBs: number; paidBs: number; pendingBs: number;
+  };
   onClose: () => void;
   onRecordDelivery: (draft: { deliveryDate: string; deliveryMethod: 'PHYSICAL' | 'ELECTRONIC'; electronicDeliveryAgreed?: boolean }) => Promise<VatRetentionVoucher>;
 }
 
-export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, onClose, onRecordDelivery }) => {
+export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, correctionContext, onClose, onRecordDelivery }) => {
   const localToday = () => {
     const now = new Date();
     return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -70,6 +74,19 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, onClo
           </div>
         </div>
 
+        {voucher.requiresFiscalCorrection && (
+          <div className="no-print border-b border-amber-300 bg-amber-50 px-4 sm:px-6 py-3 text-xs text-amber-950 space-y-1">
+            <strong>Corrección fiscal pendiente</strong>
+            {correctionContext ? (
+              <>
+                <p>Declaración original: {correctionContext.period} · {correctionContext.window === 'FIRST_HALF' ? '1.ª quincena' : '2.ª quincena'} · Estado: {correctionContext.status}{correctionContext.declarationNumber ? ' · N.º ' + correctionContext.declarationNumber : ''}.</p>
+                <p>Retención incluida: {formatBs(correctionContext.totalWithheldBs)} · Enterado: {formatBs(correctionContext.paidBs)} · Saldo pendiente: {formatBs(correctionContext.pendingBs)}.</p>
+              </>
+            ) : <p>Este comprobante aún no figura en una declaración quincenal registrada.</p>}
+            {voucher.correctionNote && <p>Motivo registrado: {voucher.correctionNote}</p>}
+            <p>El comprobante y su declaración histórica no se modifican automáticamente. La rectificación y el tratamiento de importes ya enterados requieren revisión fiscal.</p>
+          </div>
+        )}
         {!voucher.deliveryDate ? (
           <div className="no-print border-b border-slate-200 bg-slate-50 px-4 sm:px-6 py-4 space-y-3">
             <div>

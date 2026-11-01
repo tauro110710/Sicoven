@@ -35,7 +35,7 @@ const SECOND_HALF_DAYS: number[][] = [
 
 const SOURCE_TITLE = 'Gaceta Oficial N.º 43.273 — Providencia SNAT/2025/000091';
 const SOURCE_REFERENCE = 'Calendario 2026 de sujetos pasivos especiales y agentes de retención, artículo 1';
-const SOURCE_URL = 'https://iusdata.com/wp-content/uploads/2025/12/1-SENIAT-GO-43.273-2025-DIC-09.pdf';
+const SOURCE_URL = 'https://declaraciones.seniat.gob.ve/portal/page/portal/MANEJADOR_CONTENIDO_SENIAT/05MENU_HORIZONTAL/5.3ANUNCIOS_CARTELES/5.3.2CARTELES_NOTIFICACION/CARTELES/GO_43.273.pdf';
 
 /**
  * Resolves the 2026 due date only for an Article 1 designated special agent.

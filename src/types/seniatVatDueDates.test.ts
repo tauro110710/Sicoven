@@ -6,6 +6,7 @@ test('SENIAT 2026 calendar resolves the first-half due date by the final RIF dig
   const due = getSeniatVatWithholdingDueDate('J-12345678-9', '202610', 'FIRST_HALF', 'ARTICLE_1_SPECIAL_DESIGNATED');
   assert.equal(due?.dueDate, '2026-10-19');
   assert.match(due?.sourceTitle || '', /SNAT\/2025\/000091/);
+  assert.match(due?.sourceUrl || '', /^https:\/\/declaraciones\.seniat\.gob\.ve\//);
 });
 
 test('SENIAT 2026 calendar resolves the second-half due date in the following month', () => {

@@ -58,6 +58,28 @@ export const RetencionesIvaView: React.FC = () => {
   const declaredVoucherIds = new Set(companyDeclarations.flatMap(item => item.voucherIds));
   const pendingDeclarationCount = companyVouchers.filter(voucher => !declaredVoucherIds.has(voucher.id)).length;
   const correctionCount = companyVouchers.filter(voucher => voucher.requiresFiscalCorrection).length;
+  const selectedVoucherDeclaration = selectedVoucher
+    ? companyDeclarations.find(item => item.voucherIds.includes(selectedVoucher.id))
+    : undefined;
+  const selectedVoucherDeclarationEvents = selectedVoucherDeclaration
+    ? vatWithholdingDeclarationEvents.filter(event => event.declarationId === selectedVoucherDeclaration.id)
+    : [];
+  const selectedVoucherPaymentsBs = selectedVoucherDeclarationEvents
+    .filter(event => event.eventType === 'PAYMENT')
+    .reduce((sum, event) => sum + Number(event.amountBs || 0), 0);
+  const selectedVoucherFiledEvent = selectedVoucherDeclarationEvents.find(event => event.eventType === 'FILED');
+  const correctionContext = selectedVoucher?.requiresFiscalCorrection && selectedVoucherDeclaration
+    ? {
+        period: selectedVoucherDeclaration.period,
+        window: selectedVoucherDeclaration.window,
+        status: getVatDeclarationStatus(selectedVoucherDeclaration, selectedVoucherDeclarationEvents),
+        declarationNumber: selectedVoucherFiledEvent?.declarationNumber,
+        totalWithheldBs: selectedVoucherDeclaration.totalWithheldBs,
+        paidBs: selectedVoucherPaymentsBs,
+        pendingBs: Math.max(0, selectedVoucherDeclaration.totalWithheldBs - selectedVoucherPaymentsBs)
+      }
+    : undefined;
+
   const pendingDeliveryCount = companyVouchers.filter(voucher => !voucher.deliveryDate).length;
   const reviewPurchases = purchases.filter(purchase => purchase.companyId === currentCompany.id && purchase.ivaRetentionDecision?.decisionStatus === 'REVIEW');
   const pendingDeclarationStatuses = companyDeclarations.filter(item => {
@@ -375,6 +397,7 @@ export const RetencionesIvaView: React.FC = () => {
       {/* Modal for official printable voucher */}
       <VatVoucherModal
         voucher={selectedVoucher}
+        correctionContext={correctionContext}
         onClose={() => setSelectedVoucher(null)}
         onRecordDelivery={async draft => {
           if (!selectedVoucher) throw new Error('Seleccione un comprobante.');
