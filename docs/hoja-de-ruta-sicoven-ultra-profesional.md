@@ -696,3 +696,42 @@ Alcance incorporado:
 5. Mantener pendiente la fuente primaria vigente del TXT SENIAT y la revisión profesional independiente de las reglas tributarias.
 
 **Regla de contabilización:** una NC de contado se reconoce como saldo a favor/anticipo del proveedor, no como devolución de efectivo. Cualquier reembolso real deberá tener un flujo separado, con recepción bancaria/caja y asiento conciliados. No confundir ambas operaciones.
+
+
+## BITÁCORA DE CONTINUIDAD — MERGES NC CONTADO Y AUDITORÍA DE ND — 01/11/2026
+
+### PR #68 — corrección de nota de crédito de contado
+- Fusionado por squash a `main` en commit `0b471f8056fb6231cbfbe041cce753c00a04aa21`.
+- Habilita el botón de NC para facturas de compra pagadas de contado, manteniendo las validaciones existentes.
+- La etiqueta identifica el resultado como saldo a favor del proveedor; no ejecuta reembolso de efectivo.
+- CI pre-merge SUCCESS: escritorio (pruebas, TypeScript, build y auditoría de activos) e instalador Windows (pruebas, TypeScript, renderer, NSIS, verificación del instalador y actualización 1.0.6 → 1.0.7 preservando SQLite).
+- No se publicó instalador ni release.
+
+### PR #69 — actualización de hoja de ruta
+- Fusionado por squash a `main` en commit `0fb7a80562948d0b9a572c5a9be12b26123b30c8`.
+- Registró el estado de PR #68 como pendiente al momento de su redacción; esta bitácora posterior deja constancia de su integración efectiva.
+- CI pre-merge SUCCESS: escritorio e instalador Windows, incluida actualización 1.0.6 → 1.0.7 preservando SQLite.
+- No se publicó instalador ni release.
+
+### Auditoría especializada del tipo 02 — Nota de débito de proveedor
+Se revisaron `NewPurchaseModal.tsx`, `PurchaseRecord`, `AccountingContext.addPurchase`, `LibroComprasView.tsx`, `accounting-integrity.cjs` y pruebas SQLite.
+
+Hallazgos confirmados:
+- El tipo 02 existe en el tipo TypeScript, pero el selector está deshabilitado.
+- El dominio `addPurchase` rechaza todo documento distinto de tipo 01.
+- La integridad SQLite rechaza altas nuevas de documentos distintos de factura 01 y NC 03.
+- No existe un flujo de ND que vincule factura original, proveedor, saldo CxP, asiento, Kardex condicional y consecuencias fiscales.
+- La vista puede representar un prefijo ND si ya existiera un registro, pero eso no constituye soporte de creación ni contabilización.
+
+**Decisión:** mantener bloqueado el tipo 02. No retirar defensas ni reutilizar el alta genérica de factura. La auditoría y el contrato propuesto quedan documentados en `docs/auditoria-diseno-nota-debito-proveedor.md`.
+
+### Requisitos previos a implementar ND
+1. Flujo especializado con vínculo inmutable a factura 01 y validación de empresa/proveedor/número documental.
+2. Clasificación económica explícita; no asumir que todo cargo incrementa inventario o IVA.
+3. Asiento balanceado en Bs. y USD y conciliación real de CxP/anticipos, sin pago ficticio.
+4. Kardex solo cuando exista mercancía recibida o ajuste de costo técnicamente reproducible; ninguna cantidad ficticia.
+5. Retenciones y comprobantes sin recalcular ni alterar históricos por inferencia; regla primaria vigente y decisión profesional para automatización.
+6. Validaciones de dominio y SQLite, idempotencia, append-only y pruebas negativas multiempresa/períodos cerrados.
+7. CI escritorio e instalador Windows SUCCESS antes de integrar.
+
+**Estado del Bloque 4:** continúa ABIERTO. PR #68 resuelve el bloqueo de interfaz para NC de contado, pero no habilita reembolsos de efectivo ni rectificaciones fiscales automáticas. El tipo 02 sigue deliberadamente deshabilitado. No se declara homologación SENIAT ni certificación fiscal.
