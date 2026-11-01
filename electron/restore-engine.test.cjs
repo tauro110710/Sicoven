@@ -49,6 +49,8 @@ test('physical restore replaces SQLite and supporting documents after verified r
   assert.equal(h.db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json.includes('restored'),true);
   assert.equal(fs.readFileSync(path.join(h.userDataDir,'supporting-documents','new.pdf'),'utf8'),'new document');
   assert.equal(fs.existsSync(path.join(h.userDataDir,'restore-journal.json')),false);
+  assert.equal(fs.existsSync(path.join(h.userDataDir,'restore-history',result.operationId)),true);
+  assert.equal(fs.existsSync(path.join(h.userDataDir,'restore-staging',result.operationId)),false);
  }finally{h.close();}
 });
 test('startup recovery rolls back an interrupted physical swap before database open',async()=>{
@@ -73,8 +75,6 @@ test('startup recovery rolls back an interrupted physical swap before database o
   assert.equal(h.db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json.includes('original'),true);
   assert.equal(fs.readFileSync(path.join(h.userDataDir,'supporting-documents','source.pdf'),'utf8'),'original document');
   assert.equal(fs.existsSync(journalPath),false);
-  assert.equal(fs.existsSync(path.join(h.userDataDir,'restore-history',result.operationId)),true);
-  assert.equal(fs.existsSync(path.join(h.userDataDir,'restore-staging',result.operationId)),false);
  }finally{h.close();}
 });
 
