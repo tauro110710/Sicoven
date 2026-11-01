@@ -72,7 +72,8 @@ export interface VatBankReconciliationLine {
 export function buildVatBankReconciliationSummary(
   declaration: VatWithholdingDeclaration,
   events: VatWithholdingDeclarationEvent[],
-  bankMovements: BankStatementMovement[]
+  bankMovements: BankStatementMovement[],
+  bankAccounts: BankAccount[]
 ): {
   lines: VatBankReconciliationLine[];
   reconciledAmountBs: number;
@@ -86,7 +87,16 @@ export function buildVatBankReconciliationSummary(
     const ids = event.bankStatementMovementIds || [];
     const movements = ids.map(id => bankMovements.find(item =>
       item.id === id && item.companyId === declaration.companyId)).filter(Boolean) as BankStatementMovement[];
-    const complete = ids.length > 0 && movements.length === ids.length;
+    const validMovements = movements.filter(movement => {
+      const account = bankAccounts.find(item =>
+        item.id === movement.bankAccountId && item.companyId === declaration.companyId);
+      return movement.type === 'DEBIT' && account?.currency === 'BS' &&
+        Number.isFinite(Number(movement.amountBs)) && Number(movement.amountBs) > 0 &&
+        /^\\d{4}-\\d{2}-\\d{2}$/.test(movement.date);
+    });
+    const linkedTotalCents = validMovements.reduce((sum, movement) => sum + cents(Number(movement.amountBs)), 0);
+    const complete = ids.length > 0 && movements.length === ids.length &&
+      validMovements.length === ids.length && linkedTotalCents === cents(Number(event.amountBs || 0));
     return {
       eventId: event.id,
       occurredAt: event.occurredAt,
