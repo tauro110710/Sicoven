@@ -68,7 +68,7 @@ test('legacy voucher dates must be verified from source evidence before either h
   assert.throws(() => buildVatWithholdingDeclaration({
     id: 'decl-unverified', companyId: 'company-1', year: 2026, month: 10, window: 'FIRST_HALF',
     vouchers: [legacy], existingDeclarations: [], createdAt: '2026-10-16T10:00:00.000Z'
-  }), /fecha fiscal confirmada/);
+  }), /fecha efectiva de pago\/abono/);
 
   const firstHalf = buildVatWithholdingDeclaration({
     id: 'decl-first', companyId: 'company-1', year: 2026, month: 10, window: 'FIRST_HALF',
