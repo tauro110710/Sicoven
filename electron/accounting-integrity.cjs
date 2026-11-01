@@ -767,7 +767,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       movement.companyId === note.companyId &&
       (String(movement.documentRef || '') === 'ND-PROV-' + debitNoteNumber ||
         String(movement.documentType || '').toLowerCase().includes('nota de débito')));
-    if (!original || original.isCancelled || !sourceEntry || sourceEntry.companyId !== note.companyId ||
+    if (!company || !original || original.isCancelled || !isValidIsoDate(original.invoiceDate) || !sourceEntry || sourceEntry.companyId !== note.companyId ||
         sourceEntry.type !== 'COMPRA' || sourceEntry.referenceDoc !== 'FAC-' + original.invoiceNumber ||
         !journal || journal.companyId !== note.companyId || journal.type !== 'AJUSTE' ||
         journal.date !== String(note.accountCreditDate || note.invoiceDate) ||
@@ -780,7 +780,9 @@ function validateAccountingSnapshot(previousState, nextState) {
         (company?.closedThroughDate && note.accountCreditDate <= company.closedThroughDate) ||
         duplicate || note.paymentTerm !== 'CREDITO' ||
         !Number.isFinite(rate) || rate <= 0 ||
-        ![baseBs, exemptBs, vatBs, totalBs, totalUsd].every(Number.isFinite) ||
+        ![baseBs, exemptBs, vatBs, totalBs, totalUsd,
+          Number(note.vatWithheldBs || 0), Number(note.islrWithheldBs || 0), Number(note.igtfAmountBs || 0),
+          Number(note.vatWithheldUsd || 0), Number(note.islrWithheldUsd || 0), Number(note.igtfAmountUsd || 0)].every(Number.isFinite) ||
         baseBs < 0 || exemptBs < 0 || vatBs < 0 || totalBs <= 0 || totalUsd <= 0 ||
         Math.abs(totalBs - (baseBs + exemptBs + vatBs)) > 0.02 ||
         Math.abs(totalUsd - totalBs / rate) > 0.0001 ||
@@ -789,7 +791,7 @@ function validateAccountingSnapshot(previousState, nextState) {
         Math.abs(Number(note.igtfAmountBs || 0)) > 0.01 ||
         Number(note.vatWithheldUsd || 0) > 0.0001 ||
         Number(note.islrWithheldUsd || 0) > 0.0001 ||
-        Number(note.igtfAmountUsd || 0) > 0.0001 ||
+        Number(note.igtfAmountUsd || 0) > 0.0001 || note.igtfApplicable === true ||
         note.inventoryLines?.length || note.creditNoteLines?.length ||
         noteMovements.length > 0 || debitLines.length === 0 || payableLines.length !== 1 ||
         !debitAccountsValid ||
@@ -944,7 +946,7 @@ function validateAccountingSnapshot(previousState, nextState) {
   const newCreditNotes = asArray(nextState.purchases).filter(purchase =>
     !priorPurchaseIdSet.has(String(purchase.id)) && purchase.documentType === '03');
   for (const purchase of asArray(nextState.purchases)) {
-    if (!priorPurchaseIdSet.has(String(purchase.id)) && !['01', '03'].includes(purchase.documentType)) {
+    if (!priorPurchaseIdSet.has(String(purchase.id)) && !['01', '02', '03'].includes(purchase.documentType)) {
       throw new Error('SQLite bloqueó una nota de débito/crédito sin flujo contable autorizado.');
     }
   }
