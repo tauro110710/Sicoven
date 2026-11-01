@@ -45,18 +45,20 @@ function validateJournal(value) {
       !value.hashes || typeof value.hashes !== 'object' || Array.isArray(value.hashes)) {
     throw new Error('El journal de restauración está corrupto o no es compatible.');
   }
-  for (const key of ['sourceDatabase', 'stagedDatabase']) {
+  for (const key of ['sourceDatabase', 'stagedDatabase', 'sourceManifest', 'stagedManifest']) {
     if (typeof value.hashes[key] !== 'string' || !/^[a-f0-9]{64}$/.test(value.hashes[key])) {
       throw new Error('El journal contiene huellas de base de datos inválidas.');
     }
   }
-  if (value.hashes.rollbackDatabase !== null &&
-      (typeof value.hashes.rollbackDatabase !== 'string' || !/^[a-f0-9]{64}$/.test(value.hashes.rollbackDatabase))) {
-    throw new Error('El journal contiene una huella de retorno inválida.');
+  for (const key of ['rollbackDatabase', 'rollbackManifest']) {
+    if (value.hashes[key] !== null &&
+        (typeof value.hashes[key] !== 'string' || !/^[a-f0-9]{64}$/.test(value.hashes[key]))) {
+      throw new Error('El journal contiene una huella de retorno inválida.');
+    }
   }
   const rollbackRequired = ['rollback_ready', 'installing', 'installed', 'committed', 'rolling_back', 'rolled_back'].includes(value.state);
-  if (rollbackRequired && value.hashes.rollbackDatabase === null) {
-    throw new Error('El estado del journal exige una huella de retorno verificada.');
+  if (rollbackRequired && (value.hashes.rollbackDatabase === null || value.hashes.rollbackManifest === null)) {
+    throw new Error('El estado del journal exige huellas verificadas de base y documentos de retorno.');
   }
   if (typeof value.lastStep !== 'string' || value.lastStep.length > 80) {
     throw new Error('El journal contiene un paso inválido.');
@@ -117,7 +119,7 @@ function readJournal(file) {
   return validateJournal(JSON.parse(fs.readFileSync(file, 'utf8')));
 }
 
-function createJournal({ journalPath, sourceDatabaseSha256, stagedDatabaseSha256, operationId = crypto.randomUUID() }) {
+function createJournal({ journalPath, sourceDatabaseSha256, stagedDatabaseSha256, sourceManifestSha256, stagedManifestSha256, operationId = crypto.randomUUID() }) {
   if (lstatIfExists(journalPath)) throw new Error('Ya existe una operación de restauración pendiente.');
   const now = new Date().toISOString();
   const journal = {
@@ -130,7 +132,10 @@ function createJournal({ journalPath, sourceDatabaseSha256, stagedDatabaseSha256
     hashes: {
       sourceDatabase: sourceDatabaseSha256,
       stagedDatabase: stagedDatabaseSha256,
-      rollbackDatabase: null
+      sourceManifest: sourceManifestSha256,
+      stagedManifest: stagedManifestSha256,
+      rollbackDatabase: null,
+      rollbackManifest: null
     },
     lastStep: 'staging_verified'
   };
@@ -139,7 +144,7 @@ function createJournal({ journalPath, sourceDatabaseSha256, stagedDatabaseSha256
   return journal;
 }
 
-function transitionJournal({ journalPath, expectedState, nextState, lastStep, rollbackDatabaseSha256 = undefined }) {
+function transitionJournal({ journalPath, expectedState, nextState, lastStep, rollbackDatabaseSha256 = undefined, rollbackManifestSha256 = undefined }) {
   if (!STATES.has(nextState) || typeof lastStep !== 'string' || lastStep.length > 80) {
     throw new Error('La transición solicitada no es válida.');
   }
@@ -150,10 +155,12 @@ function transitionJournal({ journalPath, expectedState, nextState, lastStep, ro
     throw new Error('Transición de restauración no permitida: ' + journal.state + ' → ' + nextState);
   }
   if (nextState === 'rollback_ready') {
-    if (typeof rollbackDatabaseSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(rollbackDatabaseSha256)) {
-      throw new Error('Se requiere la huella verificada de la base de retorno.');
+    if (typeof rollbackDatabaseSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(rollbackDatabaseSha256) ||
+        typeof rollbackManifestSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(rollbackManifestSha256)) {
+      throw new Error('Se requieren las huellas verificadas de la base y documentos de retorno.');
     }
     journal.hashes.rollbackDatabase = rollbackDatabaseSha256;
+    journal.hashes.rollbackManifest = rollbackManifestSha256;
   }
   journal.state = nextState;
   journal.lastStep = lastStep;
