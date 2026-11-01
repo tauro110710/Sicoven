@@ -127,6 +127,8 @@ test('approval requires independent reviewer, complete evidence, and exact appro
     assert.equal(result.decision, 'APPROVED_FOR_DOCUMENTED_USE');
     assert.throws(() => reviewInflationSourceDossier(db, base, reviewer), /ya tiene una decisión/);
     assert.equal(listInflationSourceDossiers(db)[0].status, 'APPROVED_FOR_DOCUMENTED_USE');
+    assert.throws(() => db.prepare('UPDATE inflation_source_dossier_reviews SET reason=?').run('alterado'), /append-only/);
+    assert.throws(() => db.prepare('DELETE FROM inflation_source_dossier_reviews').run(), /append-only/);
   } finally { db.close(); }
 });
 test('projected observations cannot receive documented-use approval', () => {
