@@ -141,7 +141,7 @@ test('rejects event attempts to attach another company journal or unlinked bank 
   assert.throws(() => recordVatFiscalIncidentEvent(db, {
     incidentId: created.id, eventType: 'ACTION_RECORDED',
     decisionText: 'Se intenta vincular un asiento que no pertenece a la empresa del expediente.',
-    journalEntryId: 'missing-journal'
+    declarationId: 'declaration-1', journalEntryId: 'missing-journal'
   }, actor), /asiento correctivo/);
   assert.throws(() => recordVatFiscalIncidentEvent(db, {
     incidentId: created.id, eventType: 'ACTION_RECORDED',
