@@ -244,7 +244,7 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
 
           {hasUncoveredVouchers && <div role="alert" className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-xs text-rose-900">
             Hay comprobantes nuevos dentro de esta quincena o comprobantes históricos del mes sin fecha fiscal asignada.
-            La fotografía de la declaración no se modifica automáticamente. La revisión queda bloqueada hasta resolver la diferencia mediante el procedimiento de rectificación correspondiente.
+            La fotografía de la declaración no se modifica automáticamente. La diferencia requiere rectificación separada; mientras ese flujo no esté implementado, la declaración no puede revisarse ni considerarse conciliada.
           </div>}
           {hasCorrections && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">Esta fotografía contiene comprobantes con corrección fiscal pendiente. No puede revisarse hasta regularizarse.</div>}
           {hasLegacy && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Incluye comprobantes históricos que no guardaban fecha del evento fiscal. La fecha documental se usa solo como referencia provisional y requiere verificación documentada.</div>}
