@@ -116,7 +116,10 @@ function recoverPendingRestore({userDataDir}) {
     return {ok:true,recovered:true,action:'discarded_unstarted_restore'};
   }
   const verified=verifyBackupDirectory(rollbackDir);
-  if(verified.databaseSha256!==journal.hashes.rollbackDatabase) throw new Error('El respaldo de retorno no coincide con el journal. SICOVEN se mantiene bloqueado.');
+  if(verified.databaseSha256!==journal.hashes.rollbackDatabase || hashFile(path.join(rollbackDir,'manifest.json'))!==journal.hashes.rollbackManifest) throw new Error('El respaldo de retorno no coincide con el journal. SICOVEN se mantiene bloqueado.');
+  const stagedDir=path.join(root,'restore-staging',journal.operationId);
+  const stagedVerified=verifyBackupDirectory(stagedDir);
+  if(stagedVerified.databaseSha256!==journal.hashes.stagedDatabase || hashFile(path.join(stagedDir,'manifest.json'))!==journal.hashes.stagedManifest) throw new Error('El staging no coincide con el journal. SICOVEN se mantiene bloqueado.');
   if(journal.state!=='rolling_back') transitionJournal({journalPath,expectedState:journal.state,nextState:'rolling_back',lastStep:'startup_recovery_rollback'});
   restoreRollback(rollbackDir,root,operationDir);
   transitionJournal({journalPath,expectedState:'rolling_back',nextState:'rolled_back',lastStep:'startup_rollback_verified'});
@@ -140,10 +143,10 @@ async function executeRestoreUnlocked({backupDirectory,userDataDir,db,closeDatab
   try {
     const staged=createRestoreStaging({backupDirectory:source,userDataDir:root,operationId});
     const stagedBackup=staged.stagingDirectory;
-    createJournal({journalPath,sourceDatabaseSha256:hashFile(path.join(root,DB)),stagedDatabaseSha256:staged.databaseSha256,operationId});
+    createJournal({journalPath,sourceDatabaseSha256:hashFile(path.join(root,DB)),stagedDatabaseSha256:staged.databaseSha256,sourceManifestSha256:hashFile(path.join(source,'manifest.json')),stagedManifestSha256:hashFile(path.join(stagedBackup,'manifest.json')),operationId});
     await createBackup({db,userDataDir:root,destination:rollbackDir,allowInternalDestination:true});
     const rollbackInfo=verifyBackupDirectory(rollbackDir);
-    transitionJournal({journalPath,expectedState:'prepared',nextState:'rollback_ready',lastStep:'rollback_snapshot_verified',rollbackDatabaseSha256:rollbackInfo.databaseSha256});
+    transitionJournal({journalPath,expectedState:'prepared',nextState:'rollback_ready',lastStep:'rollback_snapshot_verified',rollbackDatabaseSha256:rollbackInfo.databaseSha256,rollbackManifestSha256:hashFile(path.join(rollbackDir,'manifest.json'))});
     await closeDatabase();
     transitionJournal({journalPath,expectedState:'rollback_ready',nextState:'installing',lastStep:'physical_swap_started'});
     replaceFromBackup(stagedBackup,root,operationDir);
