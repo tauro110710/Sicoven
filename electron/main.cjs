@@ -31,6 +31,7 @@ const { registerInflationRemeReadinessIpc } = require('./inflation-reme-readines
 const { registerInflationSourceDossierIpc } = require('./inflation-source-dossiers.cjs');
 const { registerDocumentVaultIpc } = require('./supporting-documents.cjs');
 const { registerBackupIpc } = require('./backup-restore.cjs');
+const { recoverPendingRestore } = require('./restore-engine.cjs');
 const { registerVatFiscalIncidentIpc } = require('./vat-fiscal-incidents.cjs');
 const { acquireSingleInstance } = require('./single-instance.cjs');
 
@@ -297,6 +298,9 @@ if (!hasSingleInstanceLock) {
 } else {
 app.whenReady().then(async () => {
   try {
+    // Recuperar/retroceder cualquier restauración interrumpida antes de abrir SQLite.
+    // Si el journal o el snapshot de retorno no son verificables, se bloquea el arranque.
+    recoverPendingRestore({ userDataDir: app.getPath('userData') });
     openDatabase();
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
