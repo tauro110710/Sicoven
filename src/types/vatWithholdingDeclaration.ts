@@ -1,6 +1,7 @@
 import type {
   VatDeclarationWindow,
   VatDeclarationVoucherSnapshot,
+  VatLegacyFiscalDateAssignment,
   VatRetentionVoucher,
   VatWithholdingDeclaration,
   VatWithholdingDeclarationEvent
@@ -50,6 +51,7 @@ export function buildVatWithholdingDeclaration(input: {
   createdAt: string;
   createdBy?: string;
   zeroOperations?: boolean;
+  legacyFiscalDates?: Record<string, { fiscalDate: string; note: string }>;
 }): VatWithholdingDeclaration {
   const range = getVatDeclarationWindowRange(input.year, input.month, input.window);
   if (!input.id.trim() || !input.companyId.trim() || !validDate(input.createdAt.slice(0, 10))) {
@@ -59,12 +61,38 @@ export function buildVatWithholdingDeclaration(input: {
     item.companyId === input.companyId && item.period === range.period && item.window === range.window)) {
     throw new Error('Ya existe una declaración registrada para esta empresa y quincena.');
   }
+  const companyDeclarations = input.existingDeclarations
+    .filter(item => item.companyId === input.companyId && item.period === range.period);
   const alreadyDeclared = new Set(input.existingDeclarations
     .filter(item => item.companyId === input.companyId)
     .flatMap(item => item.voucherIds));
+  const knownLegacyAssignments = new Map<string, VatLegacyFiscalDateAssignment>();
+  for (const declaration of companyDeclarations) {
+    for (const assignment of declaration.legacyDateAssignments || []) {
+      knownLegacyAssignments.set(assignment.voucherId, assignment);
+    }
+  }
+  const legacyVouchers = input.vouchers.filter(voucher =>
+    voucher.companyId === input.companyId && voucher.period === range.period && !voucher.fiscalDate);
+  const newLegacyAssignments: VatLegacyFiscalDateAssignment[] = [];
+  for (const voucher of legacyVouchers) {
+    if (knownLegacyAssignments.has(voucher.id)) continue;
+    const supplied = input.legacyFiscalDates?.[voucher.id];
+    if (!supplied || !validDate(supplied.fiscalDate) ||
+        supplied.fiscalDate.slice(0, 6).replace('-', '') !== range.period ||
+        String(supplied.note || '').trim().length < 10) {
+      throw new Error('El comprobante histórico ' + voucher.voucherNumber +
+        ' no conserva la fecha efectiva de pago/abono. Confirme su fecha fiscal con el soporte antes de preparar cualquiera de las dos quincenas.');
+    }
+    const assignment = { voucherId: voucher.id, confirmedFiscalDate: supplied.fiscalDate, note: String(supplied.note).trim() };
+    knownLegacyAssignments.set(voucher.id, assignment);
+    newLegacyAssignments.push(assignment);
+  }
   const candidates = input.vouchers.filter(voucher => {
-    const fiscalDate = voucher.fiscalDate || voucher.date;
-    return voucher.companyId === input.companyId && fiscalDate >= range.startDate && fiscalDate <= range.endDate;
+    if (voucher.companyId !== input.companyId) return false;
+    const assigned = knownLegacyAssignments.get(voucher.id);
+    const fiscalDate = voucher.fiscalDate || assigned?.confirmedFiscalDate || voucher.date;
+    return fiscalDate >= range.startDate && fiscalDate <= range.endDate;
   });
   if (input.zeroOperations) {
     if (candidates.length > 0) {
@@ -79,7 +107,8 @@ export function buildVatWithholdingDeclaration(input: {
     }
   }
   const snapshots: VatDeclarationVoucherSnapshot[] = candidates.map(voucher => {
-    const fiscalDate = voucher.fiscalDate || voucher.date;
+    const assignment = knownLegacyAssignments.get(voucher.id);
+    const fiscalDate = voucher.fiscalDate || assignment?.confirmedFiscalDate || voucher.date;
     const values = [voucher.taxableBaseBs, voucher.vatAmountBs, voucher.vatWithheldBs].map(Number);
     if (!validDate(fiscalDate) || !values.every(value => Number.isFinite(value) && value >= 0)) {
       throw new Error('El comprobante ' + voucher.voucherNumber + ' contiene fecha o importes inválidos.');
@@ -90,7 +119,8 @@ export function buildVatWithholdingDeclaration(input: {
       supplierRif: voucher.supplierRif,
       supplierName: voucher.supplierName,
       fiscalDate,
-      dateBasis: voucher.fiscalDate ? 'FISCAL_EVENT' : 'LEGACY_DOCUMENT_DATE',
+      dateBasis: voucher.fiscalDate ? 'FISCAL_EVENT' : assignment ? 'MANUALLY_VERIFIED_LEGACY_DATE' : 'LEGACY_DOCUMENT_DATE',
+      ...(assignment ? { dateVerificationNote: assignment.note } : {}),
       taxableBaseBs: money(values[0]),
       vatAmountBs: money(values[1]),
       vatWithheldBs: money(values[2]),
@@ -106,6 +136,7 @@ export function buildVatWithholdingDeclaration(input: {
     zeroOperations: Boolean(input.zeroOperations),
     voucherIds: snapshots.map(item => item.voucherId),
     voucherSnapshots: snapshots,
+    legacyDateAssignments: [...knownLegacyAssignments.values()],
     totalTaxableBaseBs: sum('taxableBaseBs'),
     totalVatAmountBs: sum('vatAmountBs'),
     totalWithheldBs: sum('vatWithheldBs'),
