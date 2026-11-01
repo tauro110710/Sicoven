@@ -533,6 +533,12 @@ function validateAccountingSnapshot(previousState, nextState) {
   }
   assertAppendOnlyCollection(priorState, nextState, 'purchases',
     ['journalEntryId', 'isCancelled', 'cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote'], ['journalEntryId', 'isCancelled']);
+  for (const previousPurchase of asArray(priorState.purchases).filter(item => item.documentType === '02')) {
+    const currentPurchase = asArray(nextState.purchases).find(item => item.id === previousPurchase.id);
+    if (currentPurchase && !previousPurchase.isCancelled && currentPurchase.isCancelled) {
+      throw new Error('SQLite bloqueó la reversión de una ND tipo 02: el flujo especializado de contra-asiento y regularización fiscal aún no está habilitado.');
+    }
+  }
   assertAppendOnlyCollection(priorState, nextState, 'sales',
     ['journalEntryId', 'isCancelled', 'cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote'], ['isCancelled']);
   assertAppendOnlyCollection(priorState, nextState, 'movements');
