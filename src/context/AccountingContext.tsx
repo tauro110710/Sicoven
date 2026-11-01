@@ -130,7 +130,7 @@ interface AccountingContextType {
   vatVouchers: VatRetentionVoucher[];
   vatWithholdingDeclarations: VatWithholdingDeclaration[];
   vatWithholdingDeclarationEvents: VatWithholdingDeclarationEvent[];
-  createVatWithholdingDeclaration: (input: { year: number; month: number; window: VatDeclarationWindow; zeroOperations?: boolean }) => Promise<VatWithholdingDeclaration>;
+  createVatWithholdingDeclaration: (input: { year: number; month: number; window: VatDeclarationWindow; zeroOperations?: boolean; legacyFiscalDates?: Record<string, { fiscalDate: string; note: string }> }) => Promise<VatWithholdingDeclaration>;
   recordVatWithholdingDeclarationEvent: (declarationId: string, draft: Omit<VatWithholdingDeclarationEvent, 'id' | 'declarationId' | 'recordedAt'>) => Promise<VatWithholdingDeclarationEvent>;
   islrVouchers: IslrRetentionVoucher[];
   islrFiscalEvents: IslrFiscalEvent[];
@@ -3206,6 +3206,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const createVatWithholdingDeclaration = async (input: {
     year: number; month: number; window: VatDeclarationWindow; zeroOperations?: boolean;
+    legacyFiscalDates?: Record<string, { fiscalDate: string; note: string }>;
   }): Promise<VatWithholdingDeclaration> => {
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
       throw new Error('SQLite no está disponible o todavía no está lista. No se creó la declaración.');
@@ -3218,7 +3219,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       vouchers: vatVouchers.filter(item => item.companyId === currentCompany.id),
       existingDeclarations: vatWithholdingDeclarations,
       createdAt: new Date().toISOString(),
-      zeroOperations: input.zeroOperations
+      zeroOperations: input.zeroOperations,
+      legacyFiscalDates: input.legacyFiscalDates
     });
     const confirmation = waitForPersistence();
     setVatWithholdingDeclarations(prev => [...prev, declaration]);
