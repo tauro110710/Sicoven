@@ -10,6 +10,6 @@ export const InflationWorkspace:React.FC<{token:string;userRole:string}>=({token
    <button type="button" onClick={()=>setSection('classifications')} className={section==='classifications'?'rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white':'rounded-lg px-4 py-2 text-sm text-slate-700 hover:bg-slate-100'}>Clasificación monetaria</button>
    <button type="button" onClick={()=>setSection('dossiers')} className={section==='dossiers'?'rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white':'rounded-lg px-4 py-2 text-sm text-slate-700 hover:bg-slate-100'}>Expedientes de fuentes</button>
   </div>
-  {section==='indexes'?<InflationIndexView token={token}/>:section==='classifications'?<InflationClassificationView token={token} userRole={userRole}/>:<InflationSourceDossierView token={token} userRole={userRole}/ >}
+  {section==='indexes'?<InflationIndexView token={token}/>:section==='classifications'?<InflationClassificationView token={token} userRole={userRole}/>:<InflationSourceDossierView token={token} userRole={userRole}/>}
  </div>;
 };
