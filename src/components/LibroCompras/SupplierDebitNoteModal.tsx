@@ -122,7 +122,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
         affectedInvoiceNumber: purchase.invoiceNumber,
         issueDate, recognitionDate, economicCause, reason: reason.trim(),
         classificationNote: classificationNote.trim() || undefined,
-        debitAccountCode, payableAccountCode,
+        debitAccountCode, payableAccountCode: payableAccountCode || suggestedPayableCode,
         vatAccountCode: vatAccountCode || undefined,
         taxableBaseBs, exemptAmountBs, vatAmountBs, totalAmountBs,
         bcvRate: Number(bcvRate), fiscalBreakdownReviewed,
@@ -191,7 +191,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
             <label className="text-xs font-semibold text-slate-700">Cuenta auxiliar CxP de la ND<select required value={payableAccountCode || suggestedPayableCode} onChange={e=>setPayableAccountCode(e.target.value)} disabled={purchase.paymentTerm === 'CREDITO' && sourcePayableCodes.length === 1} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100">
               <option value="">Seleccione auxiliar CxP</option>{payableAccounts.map(account=><option key={account.code} value={account.code}>{account.code} · {account.name}</option>)}
             </select><span className="mt-1 block text-[11px] font-normal text-slate-500">{purchase.paymentTerm === 'CREDITO' ? 'Se conserva el auxiliar CxP de la factura original.' : 'La factura original fue de contado; esta ND genera una obligación nueva e independiente.'}</span></label>
-            <label className="text-xs font-semibold text-slate-700">Revisión profesional de retenciones / IGTF<textarea required minLength={10} value={fiscalReviewNote} onChange={e=>setFiscalReviewNote(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Documente por qué no se aplican o por qué se difiere el registro." /></label>
+            <label className="text-xs font-semibold text-slate-700">Revisión profesional de retenciones / IGTF<textarea required minLength={10} value={fiscalReviewNote} onChange={e=>setFiscalReviewNote(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Documente por qué no resultan aplicables las retenciones ni el IGTF." /></label>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label className="flex items-start gap-2 rounded-lg border p-3 text-xs text-slate-700"><input type="checkbox" checked={withholdingNotApplicableConfirmed} onChange={e=>setWithholdingNotApplicableConfirmed(e.target.checked)} className="mt-0.5" />Confirmo que, tras la revisión profesional, no corresponde registrar retención de IVA ni ISLR en esta ND.</label>
