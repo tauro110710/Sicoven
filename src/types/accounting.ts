@@ -312,7 +312,13 @@ export interface VatRetentionVoucher {
   companyId: string;
   voucherNumber: string; // 14 dígitos: YYYYMM + 8 dígitos correlativo
   date: string;
-  period: string; // YYYYMM
+  period: string; // YYYYMM del evento fiscal de retención
+  /** Disparador fiscal inmutable: pago efectivo o abono en cuenta. Ausente en comprobantes históricos. */
+  fiscalTrigger?: 'PAYMENT' | 'ACCOUNT_CREDIT';
+  /** Fecha efectiva del evento fiscal; ausente en comprobantes históricos legacy. */
+  fiscalDate?: string;
+  /** Referencia del pago cuando el disparador fue PAYMENT. */
+  paymentReference?: string;
   supplierRif: string;
   supplierName: string;
   supplierAddress: string;
