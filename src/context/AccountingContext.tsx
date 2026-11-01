@@ -3237,6 +3237,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       item.id === declarationId && item.companyId === currentCompany.id);
     if (!declaration) throw new Error('No se encontró la declaración de la empresa activa.');
     const history = vatWithholdingDeclarationEvents.filter(item => item.declarationId === declarationId);
+    if (draft.eventType === 'REVIEWED' && declaration.voucherIds.some(id =>
+      vatVouchers.some(voucher => voucher.id === id && voucher.requiresFiscalCorrection))) {
+      throw new Error('No se puede revisar: uno o más comprobantes incluidos tienen una corrección fiscal pendiente.');
+    }
     validateVatDeclarationEventDraft(declaration, history, draft);
     const event: VatWithholdingDeclarationEvent = {
       ...draft,
