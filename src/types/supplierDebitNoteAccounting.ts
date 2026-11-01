@@ -20,6 +20,7 @@ export interface SupplierDebitNoteAccountingDraft {
   payableAccountCode?: string;
   taxableBaseBs: number;
   exemptAmountBs: number;
+  taxRate: number;
   vatAmountBs: number;
   totalAmountBs: number;
   bcvRate: number;
@@ -147,6 +148,12 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
   if (Math.abs(totalAmountBs - moneyBs(taxableBaseBs + exemptAmountBs + vatAmountBs)) > 0.02) {
     throw new Error('El total de la ND no concilia con base imponible, exento e IVA discriminado.');
   }
+  const taxRate = Number(draft.taxRate);
+  if (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100 ||
+      Math.abs(moneyBs(taxableBaseBs * taxRate / 100) - vatAmountBs) > 0.01 ||
+      (taxableBaseBs === 0 && taxRate !== 0)) {
+    throw new Error('El IVA de la ND debe conciliar con una única alícuota explícita; las alícuotas mixtas requieren un desglose especializado.');
+  }
   if (vatAmountBs > 0 && !draft.fiscalBreakdownReviewed) {
     throw new Error('El IVA informado en la ND requiere revisión y confirmación profesional antes de preparar el asiento.');
   }
@@ -212,10 +219,6 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
     throw new Error('El asiento preliminar de la ND no cuadra en Bs. y USD.');
   }
 
-  const calculatedTaxRate = taxableBaseBs > 0 ? moneyBs(vatAmountBs / taxableBaseBs * 100) : 0;
-  if (calculatedTaxRate > 100 || (vatAmountBs > 0 && taxableBaseBs <= 0)) {
-    throw new Error('El IVA manual no puede superar el 100% ni existir sin base imponible.');
-  }
   const totalAmountUsd = toUsd(totalAmountBs);
   const document: Omit<PurchaseRecord, 'id' | 'opNumber' | 'journalEntryId'> = {
     companyId, originalPurchaseId: source.id,
@@ -223,7 +226,7 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
     supplierRif: source.supplierRif, supplierName: source.supplierName,
     invoiceNumber: debitNoteNumber, debitNoteNumber, controlNumber,
     affectedInvoiceNumber: source.invoiceNumber, documentType: '02',
-    totalAmountBs, taxableBaseBs, exemptAmountBs, taxRate: calculatedTaxRate,
+    totalAmountBs, taxableBaseBs, exemptAmountBs, taxRate,
     vatAmountBs, retentionRate: 0, vatWithheldBs: 0,
     bcvRate: rate, totalAmountUsd,
     taxableBaseUsd: toUsd(taxableBaseBs), vatAmountUsd: toUsd(vatAmountBs), vatWithheldUsd: 0,
