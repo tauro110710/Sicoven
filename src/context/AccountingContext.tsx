@@ -1664,7 +1664,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       voucherNum = formatVoucherNumber(year, month, voucherSequence);
     }
     if (purchaseData.vatWithheldBs > 0 && voucherNum &&
-        (!/^\\d{14}$/.test(voucherNum) || voucherNum.slice(0, 6) !== vatPeriod)) {
+        (!/^\d{14}$/.test(voucherNum) || voucherNum.slice(0, 6) !== vatPeriod)) {
       throw new Error('El comprobante IVA debe corresponder al período del primer pago o abono en cuenta (AAAAMM + correlativo de ocho dígitos).');
     }
 
