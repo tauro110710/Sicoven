@@ -140,7 +140,7 @@ async function executeRestoreUnlocked({backupDirectory,userDataDir,db,closeDatab
   try {
     const staged=createRestoreStaging({backupDirectory:source,userDataDir:root,operationId});
     const stagedBackup=staged.stagingDirectory;
-    createJournal({journalPath,sourceDatabaseSha256:hashFile(path.join(root,DB)),stagedDatabaseSha256:staged.databaseSha256});
+    createJournal({journalPath,sourceDatabaseSha256:hashFile(path.join(root,DB)),stagedDatabaseSha256:staged.databaseSha256,operationId});
     await createBackup({db,userDataDir:root,destination:rollbackDir,allowInternalDestination:true});
     const rollbackInfo=verifyBackupDirectory(rollbackDir);
     transitionJournal({journalPath,expectedState:'prepared',nextState:'rollback_ready',lastStep:'rollback_snapshot_verified',rollbackDatabaseSha256:rollbackInfo.databaseSha256});
