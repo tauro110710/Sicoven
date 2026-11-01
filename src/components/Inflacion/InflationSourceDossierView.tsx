@@ -90,7 +90,7 @@ export const InflationSourceDossierView: React.FC<{ token: string; userRole: str
   const activeSeries = series.find(item => item.id === selectedSeries);
   const requiredEvidence = activeSeries ? REQUIREMENTS[activeSeries.seriesCode] : [];
   const companyLabel = (id: string) => companies.find(item => item.id === id)?.name || id;
-  const missing = useMemo(() => requiredEvidence.filter(item => !evidence.some(entry => entry.evidenceType === item.code && entry.file && entry.description.trim())), [requiredEvidence, evidence]);
+  const missing = useMemo(() => requiredEvidence.filter(item => !evidence.some(entry => entry.evidenceType === item.code && entry.file && entry.title.trim() && entry.description.trim())), [requiredEvidence, evidence]);
   const refresh = async () => {
     if (!window.sicovenStore) throw new Error('Los expedientes requieren SICOVEN Desktop y SQLite local.');
     const [catalog, records] = await Promise.all([
@@ -194,7 +194,7 @@ export const InflationSourceDossierView: React.FC<{ token: string; userRole: str
         <div className="grid gap-4 md:grid-cols-2">
           <label className={label}>Serie y categoría normativa<select className={field} value={selectedSeries} onChange={e => { setSelectedSeries(e.target.value); setEvidence([emptyEvidence()]); }} required><option value="">Seleccione serie alternativa</option>{series.map(item => <option key={item.id} value={item.id}>{LABELS[item.seriesCode]} · v{item.seriesVersion} · {item.firstPeriod} a {item.lastPeriod} · {item.sourceTitle}</option>)}</select></label>
           <label className={label}>Empresa<select className={field} value={companyId} onChange={e => setCompanyId(e.target.value)} required><option value="">Seleccione empresa</option>{companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label>
-          <label className={label}>Ejercicio contable<input className={field} type="number" min="1900" max="2200" value={fiscalYear} onChange={e => setFiscalYear(e.target.value)} required /></label>
+          <label className={label}>Ejercicio contable<input className={field} type="number" min="1900" max="2200" value={fiscalYear} onChange={e => { setFiscalYear(e.target.value); setPeriodFrom(''); setPeriodTo(''); }} required /></label>
           <label className={label}>Marco contable<select className={field} value={framework} onChange={e => setFramework(e.target.value)}><option value="VEN_NIF_FULL">VEN-NIF General</option><option value="VEN_NIF_PYMES">VEN-NIF PYMES</option><option value="OTHER_DOCUMENTED">Otro marco documentado</option></select></label>
           {framework === 'OTHER_DOCUMENTED' && <label className={label}>Identificación del marco<input className={field} value={frameworkDetail} onChange={e => setFrameworkDetail(e.target.value)} required /></label>}
           <label className={label}>Desde (YYYY-MM)<input className={field} type="month" value={periodFrom} onChange={e => setPeriodFrom(e.target.value)} required /></label>
