@@ -43,6 +43,14 @@ test('an optional supporting document can be attached after the accounting recor
     assert.equal(h.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='supporting_document_attached'").get().count, 1);
   } finally { h.close(); }
 });
+test('document listing requires a valid company scope', () => {
+  const h = fixture();
+  try {
+    assert.throws(() => listDocuments(h.db), /Empresa es obligatorio/);
+    assert.throws(() => listDocuments(h.db, { companyId: 'missing' }), /no existe en SQLite/);
+    assert.deepEqual(listDocuments(h.db, { companyId: 'co-1' }), []);
+  } finally { h.close(); }
+});
 test('attachment validation rejects mismatched files, unknown entities and cross-company links without writing rows', () => {
   const h = fixture();
   try {
@@ -58,7 +66,7 @@ test('document access verifies SHA-256 and does not downgrade a reviewed status'
   try {
     const result = upload(h);
     reviewDocument(h.db, { documentId: result.document.id, decision: 'VERIFIED', reason: 'Factura cotejada contra el soporte recibido.' }, actor);
-    assert.equal(listDocuments(h.db)[0].status, 'VERIFIED');
+    assert.equal(listDocuments(h.db, { companyId: 'co-1' })[0].status, 'VERIFIED');
     const opened = getDocument(h.db, { storageDir: h.storageDir, documentId: result.document.id, actor });
     assert.equal(fs.existsSync(opened.path), true);
     assert.equal(listDocuments(h.db)[0].status, 'VERIFIED');
@@ -71,7 +79,7 @@ test('replacement preserves both document records and immutable history', () => 
   try {
     const first = upload(h);
     const second = upload(h, { title: 'Factura corregida', replacesDocumentId: first.document.id });
-    const rows = listDocuments(h.db);
+    const rows = listDocuments(h.db, { companyId: 'co-1' });
     assert.equal(rows.length, 2);
     assert.equal(rows.find(row => row.id === first.document.id).status, 'REPLACED');
     assert.equal(rows.find(row => row.id === second.document.id).status, 'ATTACHED_UNREVIEWED');
@@ -97,6 +105,6 @@ test('document review records an explicit reason and refuses a substituted docum
     assert.throws(() => reviewDocument(h.db, { documentId: first.document.id, decision: 'VERIFIED', reason: 'Revisión' }, actor), /sustituido/);
     const reviewed = reviewDocument(h.db, { documentId: second.document.id, decision: 'OBSERVATION_REQUIRED', reason: 'El número de control no es legible.' }, actor);
     assert.equal(reviewed.status, 'OBSERVATION_REQUIRED');
-    assert.equal(listDocuments(h.db).find(row => row.id === second.document.id).status, 'OBSERVATION_REQUIRED');
+    assert.equal(listDocuments(h.db, { companyId: 'co-1' }).find(row => row.id === second.document.id).status, 'OBSERVATION_REQUIRED');
   } finally { h.close(); }
 });
