@@ -150,8 +150,12 @@ test('IVA TXT rejects missing invoice/control identifiers instead of inventing r
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ controlNumber: '' })]), /incompleto o inválido/);
 });
 
-test('IVA TXT rejects invalid period, sequence, date and inconsistent retention amounts', () => {
+test('IVA TXT rejects invalid period, sequence, date, RIF and inconsistent retention amounts', () => {
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ period: '202699' })]), /incompleto o inválido/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ supplierRif: 'ABC' })]), /incompleto o inválido/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ companyId: 'other-company' })]), /incompleto o inválido/);
+  assert.throws(() => generateSeniatIvaTxt({ ...company, rif: 'ABC' }, [ivaVoucher()]), /RIF del agente/);
+  assert.throws(() => generateSeniatIvaTxt(company, []), /TXT vacío/);
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ voucherNumber: '1' })]), /incompleto o inválido/);
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ voucherNumber: '20260900000001' })]), /incompleto o inválido/);
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ invoiceDate: '2026-02-30' })]), /incompleto o inválido/);

@@ -1,6 +1,6 @@
 import { Company, VatRetentionVoucher, IslrRetentionVoucher, PurchaseRecord } from '../types/accounting';
 import type { IslrFiscalEvent } from '../types/islrFiscalEvent';
-import { cleanRif } from './formatters';
+import { cleanRif, validateVenezuelanRif } from './formatters';
 import { getPurchaseAccountCreditDate } from '../types/accounting';
 
 /**
@@ -12,7 +12,8 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
   const lines: string[] = [];
 
   if (!Array.isArray(vouchers)) throw new Error('La exportación IVA requiere una colección válida de comprobantes.');
-  if (!agentRif) throw new Error('El RIF del agente de retención está vacío.');
+  if (!validateVenezuelanRif(company.rif).isValid) throw new Error('El RIF del agente de retención no cumple la estructura venezolana válida.');
+  if (vouchers.length === 0) throw new Error('No se genera un TXT vacío: la declaración sin operaciones requiere el formato oficial vigente del SENIAT.');
   if (new Set(vouchers.map(voucher => String(voucher.period || ''))).size > 1) {
     throw new Error('La exportación TXT de retenciones IVA debe contener un único período fiscal.');
   }
@@ -32,7 +33,7 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     const validRetentionRate = Number(v.retentionRate) === 75 || Number(v.retentionRate) === 100;
     const expectedVat = Math.round(Number(v.taxableBaseBs) * Number(v.taxRate)) / 100;
     const expectedWithheld = Math.round(expectedVat * Number(v.retentionRate)) / 100;
-    if (!validPeriod || !validDate || !/^\d{14}$/.test(voucherNum) || voucherNum.slice(0, 6) !== period ||
+    if (v.companyId !== company.id || !validateVenezuelanRif(v.supplierRif).isValid || !validPeriod || !validDate || !/^\d{14}$/.test(voucherNum) || voucherNum.slice(0, 6) !== period ||
         !supplierRif || !invoiceNum || !controlNum ||
         [invoiceNum, controlNum, voucherNum].some(value => /[\t\r\n]/.test(value)) ||
         amounts.some(value => !Number.isFinite(Number(value)) || Number(value) < 0) ||

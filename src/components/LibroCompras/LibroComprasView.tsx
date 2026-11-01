@@ -111,7 +111,7 @@ export const LibroComprasView: React.FC = () => {
           company={currentCompany}
           reportTitle="Libro de Compras (SENIAT)"
           subtitle="Conforme al Art. 75 del Reglamento de la Ley de Impuesto al Valor Agregado"
-          periodText={`Período Impositivo: ${monthFilter || `${currentCompany.fiscalYear}-10`}`}
+          periodText={`Período Impositivo: ${monthFilter || 'Todos los períodos'}`}
         />
 
         {/* Action buttons (hidden on print) */}
