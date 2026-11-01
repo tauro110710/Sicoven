@@ -1946,13 +1946,20 @@ test('SQLite accepts a supplier debit note only as an independent, balanced, lin
     ],
     createdAt: '2026-10-10T10:00:00.000Z'
   };
+  const unrelatedDebitNoteMovement = {
+    id: 'unrelated-nd-movement', companyId: 'company-1',
+    documentRef: 'ND-PROV-ND-OTHER', documentType: 'Nota de débito',
+    type: 'ENTRADA', quantity: 1
+  };
   const previous = {
     ...emptyState([originalJournal]),
-    purchases: [original], accounts, companies: [company]
+    purchases: [original], accounts, companies: [company],
+    movements: [unrelatedDebitNoteMovement]
   };
   const next = {
     ...emptyState([originalJournal, noteJournal]),
-    purchases: [original, note], accounts, companies: [company]
+    purchases: [original, note], accounts, companies: [company],
+    movements: [unrelatedDebitNoteMovement]
   };
   assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
 
