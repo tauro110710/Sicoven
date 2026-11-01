@@ -77,6 +77,8 @@ export const LibroMayorView: React.FC = () => {
       }[] = [];
 
       for (const entry of journalEntries) {
+        // The general ledger is always scoped to the active company.
+        if (entry.companyId !== currentCompany.id) continue;
         for (const it of entry.items) {
           if (it.accountCode === acc.code) {
             allMovements.push({
