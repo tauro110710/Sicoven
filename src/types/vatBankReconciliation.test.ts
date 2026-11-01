@@ -87,6 +87,15 @@ test('rejects a bank debit outside the filing-to-payment date interval', () => {
   assert.throws(() => validate(['m-1'], 60, [movement('m-1', 60, { date: '2026-10-16' })]), /intervalo/);
 });
 
+test('rejects impossible calendar dates when registering IVA payment support', () => {
+  assert.throws(() => validate(['m-1'], 60, [
+    movement('m-1', 60, { date: '2026-02-30' })
+  ]), /fecha inválidos/);
+  assert.throws(() => validate(['m-1'], 60, [
+    movement('m-1', 60, { date: '2026-10-18' })
+  ]));
+});
+
 test('reports legacy unlinked payments as pending without changing their history', () => {
   const legacy: VatWithholdingDeclarationEvent = {
     id: 'legacy-payment', declarationId: declaration.id, eventType: 'PAYMENT',
