@@ -2201,3 +2201,103 @@ test('SQLite accepts and constrains a cash payment against the ND own payable an
     }]
   }), /pago de una ND/);
 });
+
+
+test('Basic accounting certification: persists independent company journals and preserves them after SQLite reopen', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { persistAccountingSnapshot } = require('./accounting-persistence.cjs');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-basic-cert-'));
+  const filename = path.join(directory, 'sicoven.sqlite');
+  const companies = [
+    { id: 'cert-company-a', name: 'Empresa Certificación A' },
+    { id: 'cert-company-b', name: 'Empresa Certificación B' }
+  ];
+  const entryA = {
+    ...sourceEntry(),
+    id: 'cert-entry-a-1',
+    companyId: 'cert-company-a',
+    entryNumber: 1,
+    description: 'Apertura operativa empresa A'
+  };
+  const entryB = {
+    ...sourceEntry(),
+    id: 'cert-entry-b-1',
+    companyId: 'cert-company-b',
+    entryNumber: 1,
+    description: 'Apertura operativa empresa B'
+  };
+  const prior = { ...emptyState(), companies };
+  const next = { ...prior, journalEntries: [entryA, entryB] };
+  let db;
+  try {
+    db = new Database(filename);
+    db.pragma('journal_mode = WAL');
+    db.pragma('synchronous = FULL');
+    db.exec(`
+      CREATE TABLE app_state (
+        state_key TEXT PRIMARY KEY,
+        state_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE audit_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_type TEXT NOT NULL,
+        details_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TRIGGER audit_events_no_update BEFORE UPDATE ON audit_events
+        BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END;
+      CREATE TRIGGER audit_events_no_delete BEFORE DELETE ON audit_events
+        BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END;
+    `);
+    db.prepare('INSERT INTO app_state(state_key,state_json) VALUES(?,?)')
+      .run('accounting', JSON.stringify(prior));
+
+    const saved = persistAccountingSnapshot(db, next);
+    assert.equal(saved.ok, true);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 2);
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    db.close();
+    db = null;
+
+    db = new Database(filename);
+    const reopened = JSON.parse(
+      db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json
+    );
+    assert.deepEqual(reopened.companies.map(company => company.id).sort(), [
+      'cert-company-a', 'cert-company-b'
+    ]);
+    assert.deepEqual(
+      reopened.journalEntries.map(entry => [entry.companyId, entry.entryNumber, entry.id]).sort(),
+      [
+        ['cert-company-a', 1, 'cert-entry-a-1'],
+        ['cert-company-b', 1, 'cert-entry-b-1']
+      ]
+    );
+    assert.equal(
+      db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='journal_entry_posted'").get().count,
+      2
+    );
+
+    const duplicateWithinA = {
+      ...entryA,
+      id: 'cert-entry-a-duplicate',
+      description: 'Duplicado inválido'
+    };
+    assert.throws(() => persistAccountingSnapshot(db, {
+      ...reopened,
+      journalEntries: [...reopened.journalEntries, duplicateWithinA]
+    }), /correlativo de asiento no creciente|número de asiento duplicado/);
+    assert.equal(
+      JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json)
+        .journalEntries.length,
+      2,
+      'un intento duplicado debe dejar intacto el estado confirmado'
+    );
+  } finally {
+    if (db?.open) db.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
