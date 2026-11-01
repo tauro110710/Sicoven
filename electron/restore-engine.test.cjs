@@ -55,13 +55,13 @@ test('startup recovery rolls back an interrupted physical swap before database o
  const h=fixture();
  try{
   const operationId='123e4567-e89b-42d3-a456-426614174000';
-  const opRoot=path.join(h.userDataDir,'restore-operations');fs.mkdirSync(opRoot);
-  const op=path.join(opRoot,operationId);fs.mkdirSync(op);
-  const rollback=path.join(op,'rollback');
-  await createBackup({db:h.db,userDataDir:h.userDataDir,destination:rollback,allowInternalDestination:true});
   const journalPath=path.join(h.userDataDir,'restore-journal.json');
   const hash=sha256File(path.join(h.userDataDir,'sicoven.sqlite'));
-  const j=createJournal({journalPath,sourceDatabaseSha256:hash,stagedDatabaseSha256:'b'.repeat(64)});
+  const j=createJournal({journalPath,sourceDatabaseSha256:hash,stagedDatabaseSha256:'b'.repeat(64),operationId});
+  const opRoot=path.join(h.userDataDir,'restore-operations');fs.mkdirSync(opRoot);
+  const op=path.join(opRoot,j.operationId);fs.mkdirSync(op);
+  const rollback=path.join(op,'rollback');
+  await createBackup({db:h.db,userDataDir:h.userDataDir,destination:rollback,allowInternalDestination:true});
   transitionJournal({journalPath,expectedState:'prepared',nextState:'rollback_ready',lastStep:'rollback_ready',rollbackDatabaseSha256:hash});
   transitionJournal({journalPath,expectedState:'rollback_ready',nextState:'installing',lastStep:'swap_started'});
   h.closeDb();
