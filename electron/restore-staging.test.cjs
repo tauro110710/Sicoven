@@ -71,3 +71,39 @@ test('rejects a symlinked staging parent', async () => {
     assert.throws(() => createRestoreStaging({ backupDirectory: h.backupDirectory, userDataDir: h.userDataDir, operationId: OPERATION_ID }), /directorio real sin enlaces/);
   } finally { h.close(); }
 });
+
+
+test('does not follow or delete a dangling operation symlink', async () => {
+  const h = fixture();
+  try {
+    await h.makeBackup();
+    const outside = path.join(h.root, 'outside-target');
+    const operationPath = path.join(h.userDataDir, 'restore-staging', OPERATION_ID);
+    fs.mkdirSync(path.dirname(operationPath), { recursive: true });
+    fs.symlinkSync(outside, operationPath, 'junction');
+    assert.throws(
+      () => createRestoreStaging({ backupDirectory: h.backupDirectory, userDataDir: h.userDataDir, operationId: OPERATION_ID }),
+      /Ya existe/
+    );
+    assert.equal(fs.lstatSync(operationPath).isSymbolicLink(), true);
+    assert.equal(fs.existsSync(outside), false);
+  } finally { h.close(); }
+});
+
+test('does not delete a pre-existing operation directory after a staging failure', async () => {
+  const h = fixture();
+  try {
+    await h.makeBackup();
+    const parent = path.join(h.userDataDir, 'restore-staging');
+    fs.mkdirSync(parent);
+    const operationPath = path.join(parent, OPERATION_ID);
+    fs.mkdirSync(operationPath);
+    const sentinel = path.join(operationPath, 'keep.txt');
+    fs.writeFileSync(sentinel, 'preserve');
+    assert.throws(
+      () => createRestoreStaging({ backupDirectory: h.backupDirectory, userDataDir: h.userDataDir, operationId: OPERATION_ID }),
+      /Ya existe/
+    );
+    assert.equal(fs.readFileSync(sentinel, 'utf8'), 'preserve');
+  } finally { h.close(); }
+});

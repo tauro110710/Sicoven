@@ -128,3 +128,11 @@ Hasta entonces G13 permanece PARCIAL y SICOVEN NO CERTIFICADO / NO APTO PARA DIS
 - Si falla la copia o la verificación, intenta retirar únicamente el directorio creado para esa operación; si la limpieza falla, informa la ruta de intervención sin tocar los datos activos.
 - Las pruebas cubren staging válido, operación duplicada sin sobrescritura, paquete de origen alterado y padre de staging enlazado.
 - Este módulo todavía no se invoca desde IPC ni desde el arranque. No instala ni sustituye `sicoven.sqlite` o `supporting-documents`; G13 permanece parcial.
+
+
+## 12. Endurecimiento del staging ante rutas preexistentes
+
+- La detección de rutas existentes usa `lstat`, no `existsSync`, para detectar también enlaces simbólicos/junctions colgantes.
+- La carpeta UUID de operación se crea mediante `mkdir` exclusivo. La limpieza de error solo puede retirar el directorio que esa invocación creó; nunca una ruta preexistente que coincida con el UUID.
+- Se agregan pruebas para enlaces de operación colgantes y directorios de operación preexistentes con archivos centinela.
+- Este endurecimiento reduce el riesgo de borrar rutas ajenas ante colisiones. No elimina por sí solo todas las carreras TOCTOU ni sustituye el motor físico G13.

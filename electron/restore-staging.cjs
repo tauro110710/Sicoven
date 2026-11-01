@@ -5,6 +5,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { verifyBackupDirectory } = require('./backup-restore.cjs');
 
+function lstatIfExists(target) {
+  try { return fs.lstatSync(target); }
+  catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
 function assertRealDirectory(directory, label) {
   const stat = fs.lstatSync(directory);
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
@@ -12,9 +20,9 @@ function assertRealDirectory(directory, label) {
   }
 }
 
-function copyRegularTree(source, destination) {
+function copyRegularTree(source, destination, destinationAlreadyCreated = false) {
   assertRealDirectory(source, 'El paquete de respaldo');
-  fs.mkdirSync(destination, { recursive: false });
+  if (!destinationAlreadyCreated) fs.mkdirSync(destination, { recursive: false });
   for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
     const from = path.join(source, entry.name);
     const to = path.join(destination, entry.name);
@@ -40,12 +48,25 @@ function createRestoreStaging({ backupDirectory, userDataDir, operationId = cryp
   assertRealDirectory(userDataRoot, 'La carpeta de datos de SICOVEN');
   const verifiedSource = verifyBackupDirectory(backupRoot);
   const stagingParent = path.join(userDataRoot, 'restore-staging');
-  if (!fs.existsSync(stagingParent)) fs.mkdirSync(stagingParent, { recursive: false });
+  if (!lstatIfExists(stagingParent)) {
+    try { fs.mkdirSync(stagingParent, { recursive: false }); }
+    catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+    }
+  }
   assertRealDirectory(stagingParent, 'La carpeta de staging');
   const operationDirectory = path.join(stagingParent, operationId);
-  if (fs.existsSync(operationDirectory)) throw new Error('Ya existe el staging para esta operación.');
+  if (lstatIfExists(operationDirectory)) {
+    throw new Error('Ya existe el staging para esta operación.');
+  }
+
+  let operationDirectoryCreated = false;
   try {
-    copyRegularTree(backupRoot, operationDirectory);
+    // mkdir exclusivo: una ruta preexistente, incluso un symlink colgante,
+    // nunca se considera propiedad de esta operación ni se limpia al fallar.
+    fs.mkdirSync(operationDirectory, { recursive: false });
+    operationDirectoryCreated = true;
+    copyRegularTree(backupRoot, operationDirectory, true);
     const verifiedCopy = verifyBackupDirectory(operationDirectory);
     if (verifiedCopy.databaseSha256 !== verifiedSource.databaseSha256 ||
         verifiedCopy.documentCount !== verifiedSource.documentCount) {
@@ -59,10 +80,12 @@ function createRestoreStaging({ backupDirectory, userDataDir, operationId = cryp
       documentCount: verifiedCopy.documentCount
     };
   } catch (error) {
-    try {
-      fs.rmSync(operationDirectory, { recursive: true, force: true });
-    } catch (cleanupError) {
-      throw new Error('Falló la preparación del staging y no se pudo limpiar: ' + cleanupError.message);
+    if (operationDirectoryCreated) {
+      try {
+        fs.rmSync(operationDirectory, { recursive: true, force: true });
+      } catch (cleanupError) {
+        throw new Error('Falló la preparación del staging y no se pudo limpiar: ' + cleanupError.message);
+      }
     }
     throw error;
   }
