@@ -57,7 +57,7 @@ Estas limitaciones deberán comunicarse claramente en la ficha de versión y doc
 | G10 — Estados financieros | Ecuación contable, resultados, patrimonio y flujo reconciliados con Mayor | Tests de balance en Bs/USD, resultados históricos, patrimonio, flujo de efectivo, notas cuantitativas y una integración sintética que concilia balance de comprobación, situación, resultados, patrimonio, flujo y apertura siguiente | EVIDENCIA PARCIAL (falta recorrido E2E UI→SQLite→reportes) |
 | G11 — Multiempresa | Cero filtraciones de lectura/escritura entre empresas | Tests de filtrado de informes, historial por empresa, correlativos independientes, compras/devoluciones y liquidaciones aisladas; filtro defensivo adicional en Libro Mayor | EVIDENCIA PARCIAL (falta E2E de cambio de empresa y operaciones cruzadas completas) |
 | G12 — Persistencia | Reinicio de proceso, reapertura de SQLite, integridad y consistencia de snapshots | Tests de transacción SQLite, rollback ante fallo de auditoría, persistencia y reapertura de DB; PRAGMA quick_check y foreign_key_check bloquean DB dañada; snapshot de upgrade con hash idéntico | EVIDENCIA PARCIAL (falta reinicio integral de Electron y reconciliación amplia de datos tras reinicio) |
-| G13 — Respaldo/restauración | Backup íntegro, restauración en instalación limpia y comprobación de saldos | No se encontró evidencia suficiente en la revisión de código/CI de un ciclo verificable de backup→restauración en instalación independiente con saldos comparados | PENDIENTE |
+| G13 — Respaldo/restauración | Backup íntegro, restauración en instalación limpia y comprobación de saldos | Implementado backup consistente con `better-sqlite3`, documentos externos, manifiesto SHA-256 y verificación de integridad; IPC solo para administrador autenticado. Pruebas automatizadas y CI en ejecución. Restauración atómica, rollback y comparación de saldos aún no implementados/verificados | PARCIAL |
 | G14 — Instalador/actualización | Instalación limpia Windows x64 y upgrade 1.0.7 → 1.0.8 preservando base SQLite de prueba | CI Windows y NSIS verdes; upgrade 1.0.7→1.0.8 conserva snapshot sintético con SHA-256 idéntico; instalador x64 generado | EVIDENCIA PARCIAL (falta instalación limpia independiente y firma digital) |
 | G15 — Aceptación funcional | Recorrido de extremo a extremo de una empresa de certificación, con resultados esperados | Acta de pruebas y evidencias | PENDIENTE |
 
@@ -165,7 +165,7 @@ La aprobación técnica habilita la generación del artefacto de CI. La publicac
 - G11: EVIDENCIA PARCIAL — pruebas de aislamiento y correlativos multiempresa en SQLite y en informes; falta E2E de todas las operaciones.
 - G12: EVIDENCIA PARCIAL — persistencia tras cierre/reapertura SQLite y hash del snapshot durante upgrade; falta reinicio integral y verificación amplia de la aplicación.
 - G14: EVIDENCIA PARCIAL — upgrade real 1.0.7 → 1.0.8 y conservación del snapshot aprobados; falta evidencia separada de instalación limpia 1.0.8 y firma del instalador.
-- G1–G9, G10–G12 y G14: estados parciales detallados en la matriz vigente; G13 y G15 siguen pendientes. La prueba integral añadida no reemplaza el dataset completo ni el recorrido E2E.
+- G1–G9, G10–G12, G13 y G14: estados parciales detallados en la matriz vigente; G15 sigue pendiente. La prueba integral añadida no reemplaza el dataset completo ni el recorrido E2E.
 
 **Decisión:** el artefacto de CI existe y los workflows propios están verdes, pero SICOVEN continúa **NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN CONTABLE BÁSICA** hasta cerrar todos los gates G0–G15. No publicar ni distribuir este artefacto como versión aprobada.
 
@@ -192,7 +192,7 @@ La aprobación técnica habilita la generación del artefacto de CI. La publicac
 - CI técnico del SHA candidato: APROBADO (Desktop y Windows Installer, 554/554 cada uno).
 - G1–G3: evidencia parcial según la matriz; no se eleva a E2E.
 - G14: EVIDENCIA PARCIAL (upgrade preserva snapshot; instalación limpia y firma pendientes).
-- G4–G12 y G14: evidencia parcial conforme a la matriz vigente; G13 y G15 continúan pendientes.
+- G4–G14: evidencia parcial conforme a la matriz vigente; G15 continúa pendiente.
 - **Decisión: NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN CONTABLE BÁSICA.**
 
 ### Revisión adicional de G12–G13 y arranque seguro
@@ -200,7 +200,7 @@ La aprobación técnica habilita la generación del artefacto de CI. La publicac
 - `electron/main.cjs` abre `sicoven.sqlite` dentro del directorio `userData` de Electron y ejecuta `assertSqliteIntegrity(db)` antes de continuar con el arranque.
 - `assertSqliteIntegrity` ejecuta `PRAGMA quick_check` y `PRAGMA foreign_key_check`; ante resultado inválido o relaciones inconsistentes, lanza error y bloquea el inicio, sin borrar ni reemplazar la base.
 - Hay tres pruebas dedicadas: base sana, violación de clave foránea sin alterar filas y fallo de quick_check.
-- En el árbol de código revisado no se identificó una implementación verificable de backup/restauración de la base SQLite ni un workflow de ida y vuelta. G13 se mantiene PENDIENTE: no asumir que exportación de inventario equivale a respaldo contable íntegro.
+- Se incorporó `electron/backup-restore.cjs`: respaldo consistente mediante `db.backup()`, copia de `supporting-documents`, manifiesto de tamaño/huellas SHA-256, validación `quick_check`/`foreign_key_check` y comprobación de integridad documental. La acción IPC exige licencia autorizada y sesión de administrador; `preload` expone solo la operación tipada. Se añadieron pruebas de backup completo, destino existente, manipulación de documentos y enlaces simbólicos. G13 pasa a PARCIAL: falta restauración segura con staging, rollback, recuperación de documentos y conciliación de saldos antes/después.
 - G12 sube a evidencia parcial por integridad comprobada al arranque y pruebas de reapertura/rollback, pero no se ha probado un reinicio integral de Electron con conciliación de todos los módulos.
 
 ## 11. Bitácora
@@ -209,3 +209,13 @@ La aprobación técnica habilita la generación del artefacto de CI. La publicac
 |---|---|---|
 | 2026-11-01 | Se define el alcance independiente de certificación 1.0.8 sobre main 3676dbef4513d7c6920cd1ec6b708a5ad84025d9 | Certificación iniciada; ningún gate declarado aprobado por anticipado |
 | 2026-11-01 | G0: CI base 1.0.7 validado (546/546 pruebas; desktop y Windows SUCCESS). Se agrega prueba SQLite multiempresa; primera corrida detectó expectativa incorrecta del test sobre el evento state_saved (no defecto de persistencia), se corrige de 2 a 3 eventos totales y se relanza CI | Corrección incorporada; CI de la revisión corregida en ejecución; G12 sigue pendiente |
+
+
+### Actualización G13 — respaldo completo implementado parcialmente
+
+- El respaldo se genera como directorio independiente `SICOVEN-backup-*`, sin sobrescribir destinos existentes ni escribir dentro del `userData` activo.
+- SQLite se copia con la API de backup de `better-sqlite3`; se valida la base resultante antes de finalizar.
+- Se incluyen todos los archivos regulares de `supporting-documents`; se rechazan enlaces simbólicos y se comprueba el hash SHA-256 de cada documento copiado.
+- El manifiesto identifica formato, aplicación, fecha, tamaño/hash de SQLite y lista/hash de documentos.
+- La creación queda disponible solo para una sesión admin autenticada con licencia autorizada y registra evento de auditoría.
+- Pendiente: restauración en staging, validación integral del paquete, swap atómico, rollback probado ante interrupción, recuperación de soportes y comparación de saldos/documentos tras restaurar. Hasta cerrar esos puntos, G13 no está aprobado y SICOVEN no está certificado.
