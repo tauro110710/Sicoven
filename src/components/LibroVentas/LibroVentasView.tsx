@@ -16,6 +16,7 @@ import { NewSaleModal } from './NewSaleModal';
 import { CreditSettlementModal } from '../shared/CreditSettlementModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportVentasPdf } from '../../utils/pdfGenerator';
+import { SupportingDocumentsPanel } from '../shared/SupportingDocumentsPanel';
 
 export const LibroVentasView: React.FC = () => {
   const {
@@ -25,6 +26,7 @@ export const LibroVentasView: React.FC = () => {
   } = useAccounting();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [documentTarget, setDocumentTarget] = useState<{ id: string; title: string } | null>(null);
   const [settlementTarget, setSettlementTarget] = useState<{id:string; number:string; party:string} | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
@@ -254,6 +256,7 @@ export const LibroVentasView: React.FC = () => {
                       {(s.igtfAmountBs || 0) > 0 ? formatBs(s.igtfAmountBs || 0) : '-'}
                     </td>
                     <td className="py-2 px-2 text-center no-print">
+                      <button onClick={() => setDocumentTarget({ id: s.id, title: 'Factura de venta ' + s.invoiceNumber })} className="mr-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes</button>
                       {s.paymentTerm === 'CREDITO' && <button onClick={() => setSettlementTarget({id:s.id, number:s.invoiceNumber, party:s.customerName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar cobro parcial o total">Cobrar</button>}
                       <button
                         onClick={() => window.alert('Esta factura ya está contabilizada y no se puede eliminar físicamente. Para corregirla debe habilitarse el flujo de anulación con asiento reverso y ajuste de los libros fiscales.')}
@@ -356,6 +359,13 @@ export const LibroVentasView: React.FC = () => {
       </div>
 
       <NewSaleModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      {documentTarget && <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-label="Expediente documental">
+        <div className="mx-auto mt-10 max-w-3xl rounded-2xl bg-white p-4 shadow-2xl">
+          <div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-bold text-slate-800">{documentTarget.title}</h3><button type="button" onClick={() => setDocumentTarget(null)} className="rounded-lg px-3 py-1 text-xs text-slate-600 hover:bg-slate-100">Cerrar</button></div>
+          <SupportingDocumentsPanel entityType="SALE" entityId={documentTarget.id} documentType="FACTURA_VENTA" title={documentTarget.title} />
+        </div>
+      </div>}
+
       {settlementTarget && <CreditSettlementModal documentId={settlementTarget.id} documentNumber={settlementTarget.number} partyName={settlementTarget.party} kind="SALE_COLLECTION" onClose={() => setSettlementTarget(null)} />}
     </div>
   );
