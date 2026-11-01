@@ -177,6 +177,7 @@ interface AccountingContextType {
   exportBackupJson: () => string;
   importBackupJson: (jsonData: string) => boolean;
   restoreBackupJson: (jsonData: string) => Promise<boolean>;
+  restorePhysicalBackup: () => Promise<{ ok: boolean; canceled?: boolean; operationId?: string; databaseSha256?: string; documentCount?: number }>;
 }
 
 const AccountingContext = createContext<AccountingContextType | undefined>(undefined);
@@ -4046,6 +4047,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return JSON.stringify(backup, null, 2);
   };
 
+  const restorePhysicalBackup = async (): Promise<{ ok: boolean; canceled?: boolean; operationId?: string; databaseSha256?: string; documentCount?: number }> => {
+    if (!window.sicovenStore?.restoreAccountingBackup) {
+      throw new Error('La restauración física verificada solo está disponible en SICOVEN Desktop.');
+    }
+    return window.sicovenStore.restoreAccountingBackup(token);
+  };
+
   const restoreBackupJson = async (jsonData: string): Promise<boolean> => {
     // Captura el estado completo antes de aplicar un respaldo. Si SQLite rechaza
     // la escritura, restaura también la memoria de React y vuelve a intentar
@@ -4475,7 +4483,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         resetFactoryData,
         exportBackupJson,
         importBackupJson,
-        restoreBackupJson
+        restoreBackupJson,
+        restorePhysicalBackup
       }}
     >
       {children}
