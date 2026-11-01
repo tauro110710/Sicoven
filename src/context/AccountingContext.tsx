@@ -41,7 +41,7 @@ import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus } from '../
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { FinancialDisclosure, validateFinancialDisclosure } from '../types/financialDisclosures';
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
-import { validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
+import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
@@ -601,6 +601,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (window.sicovenStore && !storageReady) throw new Error('SQLite todavía no está lista. No se registró la reversión.');
     const source = journalEntries.find(entry => entry.id === id && entry.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró el asiento original en la empresa activa.');
+    const vatPaymentReversalBlocker = getVatPaymentJournalReversalBlocker(
+      vatWithholdingDeclarationEvents, source.id
+    );
+    if (vatPaymentReversalBlocker) throw new Error(vatPaymentReversalBlocker);
     const directAdvanceSource = supplierDirectAdvances.find(item =>
       item.companyId === currentCompany.id && item.journalEntryId === source.id);
     if (directAdvanceSource && supplierAdvanceSettlements.some(item =>
