@@ -20,11 +20,13 @@ import { EntryType } from '../../types/accounting';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportDiarioPdf } from '../../utils/pdfGenerator';
 import { Download } from 'lucide-react';
+import { SupportingDocumentsPanel } from '../shared/SupportingDocumentsPanel';
 
 export const LibroDiarioView: React.FC = () => {
   const { currentCompany, journalEntries, displayCurrency } = useAccounting();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [documentTarget, setDocumentTarget] = useState<{ id: string; title: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
   const [startDate, setStartDate] = useState('');
@@ -282,6 +284,7 @@ export const LibroDiarioView: React.FC = () => {
                 className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print-break-inside-avoid"
               >
                 {/* Entry Header */}
+                <div className="flex justify-end border-b border-slate-100 px-4 py-2 no-print"><button onClick={() => setDocumentTarget({ id: entry.id, title: 'Asiento contable N° ' + entry.entryNumber })} className="rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes</button></div>
                 <div className="bg-slate-50/80 px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5 flex-wrap">
                     <span className="font-mono font-bold text-xs bg-slate-900 text-white px-2 py-0.5 rounded">
@@ -478,6 +481,13 @@ export const LibroDiarioView: React.FC = () => {
 
       {/* New Entry Modal */}
       <NewEntryModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      {documentTarget && <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-label="Expediente documental">
+        <div className="mx-auto mt-10 max-w-3xl rounded-2xl bg-white p-4 shadow-2xl">
+          <div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-bold text-slate-800">{documentTarget.title}</h3><button type="button" onClick={() => setDocumentTarget(null)} className="rounded-lg px-3 py-1 text-xs text-slate-600 hover:bg-slate-100">Cerrar</button></div>
+          <SupportingDocumentsPanel entityType="JOURNAL_ENTRY" entityId={documentTarget.id} documentType="ASIENTO_CONTABLE" title={documentTarget.title} />
+        </div>
+      </div>}
+
     </div>
   );
 };
