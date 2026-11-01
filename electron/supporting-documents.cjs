@@ -155,7 +155,9 @@ function registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, 
   };
   ipcMain.handle('sicoven:document-attach', async (_event, token, input) => {
     const actor = authenticate(token);
-    const selection = await dialog.showOpenDialog(getWindow?.() || undefined, { title: 'Adjuntar soporte documental a SICOVEN', properties: ['openFile'], filters: [{ name: 'Documentos admitidos', extensions: ['pdf','jpg','jpeg','png','webp'] }] });
+    const options = { title: 'Adjuntar soporte documental a SICOVEN', properties: ['openFile'], filters: [{ name: 'Documentos admitidos', extensions: ['pdf','jpg','jpeg','png','webp'] }] };
+    const parentWindow = getWindow?.();
+    const selection = parentWindow ? await dialog.showOpenDialog(parentWindow, options) : await dialog.showOpenDialog(options);
     if (selection.canceled || !selection.filePaths?.[0]) return { ok: false, canceled: true };
     const source = selection.filePaths[0], stat = fs.statSync(source);
     if (!stat.isFile() || stat.size < 1 || stat.size > MAX_DOCUMENT_BYTES) throw new Error('El archivo debe tener entre 1 byte y 20 MB.');
