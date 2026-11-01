@@ -42,8 +42,8 @@ const draft = (overrides: Partial<SupplierDebitNoteAccountingDraft> = {}): Suppl
   vatAmountBs: 4, totalAmountBs: 29, bcvRate: 100,
   fiscalBreakdownReviewed: true, ...overrides
 });
-const build = (value = draft(), purchase = source, entry = sourceEntry, accountList = accounts) =>
-  buildSupplierDebitNoteAccountingPlan({ draft: value, purchases: [purchase], accounts: accountList, sourceJournalEntry: entry });
+const build = (value = draft(), purchase = source, entry = sourceEntry, accountList = accounts, allPurchases: PurchaseRecord[] = [purchase]) =>
+  buildSupplierDebitNoteAccountingPlan({ draft: value, purchases: allPurchases, accounts: accountList, sourceJournalEntry: entry });
 
 test('builds a separate payable document and balanced dual-currency journal without changing the source invoice', () => {
   const plan = build();
@@ -84,11 +84,10 @@ test('rejects missing or cross-company original documents and invalid links', ()
 });
 
 test('rejects duplicate supplier note numbers within the company', () => {
-  const existing = { ...source, id: 'existing-note', documentType: '02' as const, debitNoteNumber: 'ND-001' };
-  assert.throws(() => build(draft(), source, sourceEntry, [...accounts] as Account[]) );
-  const plan = build(draft(), source, sourceEntry, accounts);
-  assert.equal(plan.document.debitNoteNumber, 'ND-001');
-  assert.throws(() => build(draft(), source, sourceEntry, accounts), /no/);
+  const existing: PurchaseRecord = { ...source, id: 'existing-note', documentType: '02', debitNoteNumber: 'ND-001', invoiceNumber: 'ND-001' };
+  assert.throws(() => build(draft(), source, sourceEntry, accounts, [source, existing]), /número de nota de débito ya existe/);
+  const otherSupplier = { ...existing, id: 'other-supplier-note', supplierRif: 'J-99999999-9' };
+  assert.doesNotThrow(() => build(draft(), source, sourceEntry, accounts, [source, otherSupplier]));
 });
 
 test('rejects nonmatching affected invoice, invalid chronology, closed period and missing justification', () => {
