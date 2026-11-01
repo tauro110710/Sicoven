@@ -525,3 +525,34 @@ Esta decisión prevalece sobre todas las secciones anteriores de esta hoja de ru
 - Última hoja leída antes de esta decisión: blob `d93faebabe133ab3f812190e99d14daaa2b12584` (502 líneas).
 - Próximo bloque activo: Bloque 4, continuación normativa/técnica de retenciones IVA. REME no se retoma.
 - Arquitectura inalterada: aplicación de escritorio; SQLite local como única base de datos y fuente de verdad; no tocar el administrador semilla; no publicar instaladores/releases sin autorización expresa.
+
+
+## BITÁCORA DE AUDITORÍA — BLOQUE 4 / TXT IVA — 01/11/2026
+
+### Hallazgos verificados en el código fusionado
+- PR #57 incorpora `generateSeniatIvaTxt` con 16 campos separados por tabuladores y validaciones de RIF, período, fecha, correlativo, alícuota e importes.
+- La exportación actual solo asigna tipo documental `01` (factura); el modelo no exporta notas de débito `02` ni notas de crédito `03` por este generador.
+- El generador rechaza una colección vacía y remite el tratamiento de declaración sin operaciones a un formato que aún no está implementado.
+- El campo de documento afectado y número de expediente se emiten como `0` por defecto. No se debe asumir que esos valores son aceptables para todos los tipos de documento.
+- PR #58 separa fecha de factura y evento fiscal; PR #59 agrega snapshots quincenales, declaración sin operaciones, acuses y pagos parciales documentados.
+
+### Contraste documental disponible — no equivale a validación vigente
+- Se localizó una copia de una “Guía Fácil — Elaboración de un archivo TXT de Retención de IVA” atribuida al SENIAT, alojada en un repositorio documental de terceros y fechada/capturada con referencias de 2007–2008.
+- Esa guía describe 16 columnas A–P, archivo delimitado por tabulaciones, fecha AAAA-MM-DD, tipos 01/02/03 y un ejemplo separado para declaración sin operaciones con columnas adicionales. Por su antigüedad y alojamiento no oficial, **no se acepta como especificación vigente**.
+- La búsqueda en el dominio oficial SENIAT no permitió localizar una especificación técnica actual descargable que confirme el esquema actual, las columnas, la declaración en cero o la aceptación de los casos de notas de crédito/débito.
+- La Providencia SNAT/2025/000054 disponible en repositorios jurídicos secundarios regula la obligación de presentar la declaración incluso sin operaciones y remite a las especificaciones técnicas del SENIAT; el calendario aplicable debe contrastarse con la providencia anual vigente. No se debe codificar un calendario fijo a partir de publicaciones de terceros.
+
+### Decisión técnica
+- Mantener bloqueada cualquier afirmación de “TXT oficial vigente”, homologación o aceptación garantizada por el Portal Fiscal.
+- No inventar campos, valores sustitutos, tipos documentales ni reglas para notas de crédito/débito.
+- No fabricar una línea de ceros hasta verificar el formato vigente de declaración sin operaciones.
+- El generador actual queda descrito como exportación preliminar sometida a validación documental; sus validaciones internas no demuestran aceptación por SENIAT.
+
+### Próximo subbloque activo — 4.4: cobertura documental y conciliación de retenciones IVA
+1. Obtener una especificación primaria vigente del SENIAT para TXT IVA o evidencia oficial equivalente.
+2. Verificar con ella el esquema de columnas, formatos, tipos documentales, documento afectado, expediente, declaración sin operaciones y reglas de importes.
+3. Auditar el modelo de notas de crédito/débito y pagos parciales para asegurar que cada evento se refleje una sola vez y sin duplicar retenciones.
+4. Añadir pruebas de contrato basadas exclusivamente en la especificación verificada; hasta entonces, mantener los casos no confirmados explícitamente bloqueados.
+5. Conciliar operación/evento → comprobante → quincena → declaración → acuse → enteramiento → asiento y auditoría.
+
+**Estado:** investigación documental parcial; especificación primaria vigente no localizada. No se declara cerrado 4.4 ni homologado el TXT.
