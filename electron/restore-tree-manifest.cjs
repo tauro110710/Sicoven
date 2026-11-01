@@ -8,7 +8,7 @@ const FORMAT = 'SICOVEN_TREE_MANIFEST_V1';
 const MAX_ENTRIES = 100000;
 const MAX_TOTAL_BYTES = 20 * 1024 * 1024 * 1024;
 const MAX_PATH_LENGTH = 1024;
-const RESERVED_WINDOWS_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\\..*)?$/i;
+const RESERVED_WINDOWS_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 
 function comparePath(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -16,13 +16,13 @@ function comparePath(a, b) {
 
 function normalizeRelativePath(value) {
   if (typeof value !== 'string' || !value || value.length > MAX_PATH_LENGTH ||
-      value.includes('\\\\') || value.startsWith('/') || /^[a-z]:/i.test(value) ||
+      value.includes('\\') || value.startsWith('/') || /^[a-z]:/i.test(value) ||
       value.normalize('NFC') !== value) {
     throw new Error('El manifiesto contiene una ruta relativa inválida o no normalizada.');
   }
   const segments = value.split('/');
   if (segments.some(part => !part || part === '.' || part === '..' ||
-      /[<>:"|?*\\x00-\\x1f]/.test(part) || /[. ]$/.test(part) ||
+      /[<>:"|?*\x00-\x1f]/.test(part) || /[. ]$/.test(part) ||
       RESERVED_WINDOWS_NAME.test(part))) {
     throw new Error('El manifiesto contiene un segmento de ruta no portable.');
   }
@@ -51,7 +51,7 @@ async function createTreeManifest(rootDirectory) {
     const names = fs.readdirSync(directory).sort(comparePath);
     for (const name of names) {
       const relative = normalizeRelativePath(prefix ? prefix + '/' + name : name);
-      const portableKey = relative.toLocaleLowerCase('en-US');
+      const portableKey = relative.toLowerCase();
       if (portableNames.has(portableKey)) {
         throw new Error('El árbol documental contiene rutas que colisionan en Windows.');
       }
@@ -105,7 +105,7 @@ function validateManifest(manifest) {
   const types = new Map();
   for (const entry of manifest.entries) {
     const normalized = normalizeRelativePath(entry?.path);
-    const portableKey = normalized.toLocaleLowerCase('en-US');
+    const portableKey = normalized.toLowerCase();
     if (normalized !== entry.path || seen.has(normalized) ||
         portableNames.has(portableKey) || (previous && comparePath(previous, normalized) >= 0)) {
       throw new Error('El manifiesto contiene rutas duplicadas, no portables o desordenadas.');
