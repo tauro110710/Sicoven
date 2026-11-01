@@ -387,3 +387,26 @@ Esta actualización prevalece sobre cualquier estado anterior de los bloques 3.1
 
 ### Estado global
 Los bloques 1 y 2 tienen implementación funcional amplia, pero conservan validaciones profesionales pendientes. El bloque 3 está parcialmente implementado y no está cerrado. Los bloques 4 a 13 permanecen según el estado descrito en esta hoja de ruta; no se consideran terminados por la sola existencia de componentes previos. SICOVEN continúa siendo una aplicación de escritorio con SQLite local. La distribución final requiere autorización expresa del usuario.
+
+
+---
+
+# ACTUALIZACIÓN TRANSVERSAL — RT-01: RESPALDO DOCUMENTAL OPCIONAL
+
+**Criterio aprobado:** la ausencia de un archivo digital adjunto no puede bloquear el registro ni la contabilización de una operación que cumpla sus validaciones fiscales y contables.
+
+- Auditoría inicial realizada sobre el HEAD `ea7fd869fc5d9afc8e6264b5df5ad997dc41613d`.
+- Los formularios `NewPurchaseModal.tsx`, `NewSaleModal.tsx` y `NewEntryModal.tsx` no contienen un requisito universal de archivo adjunto.
+- Compras y ventas mantienen la obligatoriedad de los datos estructurados que correspondan: identificación fiscal, número de documento, importes y validaciones específicas.
+- El número o referencia de pago requerido en ciertos escenarios es un dato de la operación, no un archivo adjunto.
+- No se deben relajar validaciones fiscales, de integridad, período ni partida doble.
+- La gestión documental futura distinguirá pendiente de soporte, adjunto sin revisar, verificado, observado y sustituido.
+- La carga posterior no podrá modificar silenciosamente el asiento ni los datos fiscales originales.
+- Los adjuntos se diseñarán para almacenamiento local seguro y metadatos/auditoría en SQLite; no se almacenarán binarios dentro del JSON general de estado.
+- La responsabilidad legal de conservación del soporte sigue correspondiendo al contribuyente, con control profesional del contador.
+
+**Documento técnico:** `docs/rt-01-independencia-contabilizacion-respaldo-documental.md`.
+
+**Estado:** criterio arquitectónico documentado y auditoría inicial completada. La interfaz de carga opcional, almacenamiento local, metadatos, estados documentales, informes y pruebas de seguridad siguen pendientes de implementación. No se declara implementada una gestión documental que todavía no existe.
+
+**Aplicación transversal:** módulos 1, 4, 5, 6, 7, 8, 9 y 10, según el tipo de operación. La ausencia de archivo nunca será por sí sola un motivo para impedir un asiento válido.
