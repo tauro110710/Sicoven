@@ -20,7 +20,7 @@ export function buildVatPaymentAccountingPlan(input: {
   accounts: Account[];
 }): VatPaymentAccountingPlan {
   const date = String(input.occurredAt || '').slice(0, 10);
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || !Number.isFinite(Date.parse(date + 'T00:00:00Z'))) {
+  if (!isValidIsoDate(date)) {
     throw new Error('La fecha del enteramiento no es válida para el asiento contable.');
   }
   if (!input.movements.length) throw new Error('El enteramiento requiere débitos bancarios vinculados.');
