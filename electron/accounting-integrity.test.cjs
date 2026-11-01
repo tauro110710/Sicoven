@@ -2012,7 +2012,7 @@ test('SQLite accepts applying a supplier direct advance to a separate type-02 de
     type: 'AJUSTE', bcvRate: 100, referenceDoc: 'ND-PROV-ND-ADV-1',
     items: [
       { accountCode: '6.1.1.01', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
-      { accountCode: '2.1.1.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+      { accountCode: '2.1.1.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1, description: 'Nueva obligación por ND proveedor ND-ADV-1' }
     ],
     createdAt: '2026-10-10T10:00:00.000Z'
   };
