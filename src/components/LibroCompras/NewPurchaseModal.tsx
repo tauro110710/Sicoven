@@ -479,35 +479,18 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               </div>
             </div>
 
-            {/* Retention IVA Option */}
+            {/* Resultado calculado; la tasa no se selecciona manualmente */}
             <div className="pt-2 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Porcentaje de Retención de IVA
-                </label>
-                <select
-                  value={retentionRate}
-                  onChange={e => setRetentionRate(Number(e.target.value))}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-                >
-                  <option value={0}>0% (Sin Retención - Contribuyente Ordinario)</option>
-                  <option value={75}>75% (General para Contribuyentes Especiales)</option>
-                  <option value={100}>100% (Retención Total SENIAT)</option>
-                </select>
+                <span className="block font-semibold text-slate-700 mb-1">Retención IVA determinada por Providencia 000054</span>
+                <span className="font-bold text-purple-800">{ivaEligibility.status === 'WITHHOLD' ? retentionRate + '% del IVA causado' : ivaEligibility.status === 'REVIEW' ? 'Pendiente de revisión' : 'No aplica'}</span>
+                <p className="text-[10px] text-slate-500 mt-1">{ivaEligibility.reason}</p>
               </div>
-
               <div className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 flex items-center justify-between">
-                <div>
-                  <span className="text-[11px] text-emerald-800 block font-medium">IVA Retenido (Bs.):</span>
-                  <span className="font-mono font-bold text-emerald-700 text-sm">{formatBs(vatWithheldBs)}</span>
-                </div>
-                <div className="text-right text-[11px] text-emerald-800 font-mono">
-                  {formatUsd(vatWithheldUsd)}
-                </div>
+                <div><span className="text-[11px] text-emerald-800 block font-medium">IVA Retenido (Bs.):</span><span className="font-mono font-bold text-emerald-700 text-sm">{formatBs(vatWithheldBs)}</span></div>
+                <div className="text-right text-[11px] text-emerald-800 font-mono">{formatUsd(vatWithheldUsd)}</div>
               </div>
             </div>
-          </div>
-
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
             <span className="font-bold text-slate-800 uppercase tracking-wider block">3. Método de pago e IGTF</span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
