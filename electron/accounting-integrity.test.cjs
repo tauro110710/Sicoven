@@ -1703,7 +1703,14 @@ test('SQLite enforces review, filing receipt and supported payment event order f
     declarationNumber: 'DECL-001', receiptReference: 'ACUSE-001' };
   const payment = { id: 'vat-event-3', declarationId: declaration.id, eventType: 'PAYMENT',
     occurredAt: '2026-10-18', recordedAt: '2026-10-18T11:00:00.000Z',
-    amountBs: 120, paymentReference: 'TRX-001' };
+    amountBs: 120, paymentReference: 'TRX-001', bankStatementMovementIds: ['vat-bank-1'] };
+  const paymentBankSupport = {
+    bankAccounts: [{ id: 'vat-bank-account', companyId: declaration.companyId, currency: 'BS' }],
+    bankStatementMovements: [{
+      id: 'vat-bank-1', companyId: declaration.companyId, bankAccountId: 'vat-bank-account',
+      date: '2026-10-18', type: 'DEBIT', amountBs: 120
+    }]
+  };
   assert.throws(() => validateAccountingSnapshot(emptyState(), {
     ...state, vatWithholdingDeclarationEvents: [filed]
   }), /presentación/);
@@ -1711,7 +1718,7 @@ test('SQLite enforces review, filing receipt and supported payment event order f
     ...state, vatWithholdingDeclarationEvents: [reviewed, payment]
   }), /enteramiento/);
   assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), {
-    ...state, vatWithholdingDeclarationEvents: [reviewed, filed, payment]
+    ...state, ...paymentBankSupport, vatWithholdingDeclarationEvents: [reviewed, filed, payment]
   }));
 });
 

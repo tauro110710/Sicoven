@@ -41,6 +41,7 @@ import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus } from '../
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { FinancialDisclosure, validateFinancialDisclosure } from '../types/financialDisclosures';
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
+import { validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
@@ -3324,6 +3325,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('Ese número de declaración ya fue registrado para la empresa activa.');
     }
     validateVatDeclarationEventDraft(declaration, history, draft);
+    validateVatPaymentBankLinks({ companyId: currentCompany.id, declaration, draft, events: vatWithholdingDeclarationEvents, bankAccounts, bankMovements: bankStatementMovements });
     const event: VatWithholdingDeclarationEvent = {
       ...draft,
       id: 'vat-decl-event-' + Date.now() + '-' + Math.floor(Math.random() * 1000000),

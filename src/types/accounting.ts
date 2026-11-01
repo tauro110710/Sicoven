@@ -416,6 +416,8 @@ export interface VatWithholdingDeclarationEvent {
   receiptReference?: string;
   amountBs?: number;
   paymentReference?: string;
+  /** Movimientos bancarios reales que respaldan este enteramiento; ausente en pagos históricos. */
+  bankStatementMovementIds?: string[];
   evidenceReference?: string;
   dueDate?: string;
   officialSourceTitle?: string;
