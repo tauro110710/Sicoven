@@ -65,6 +65,8 @@ test('rejects a movement already used by a different payment event', () => {
     amountBs: 60, paymentReference: 'REF', bankStatementMovementIds: ['m-1']
   };
   assert.throws(() => validate(['m-1'], 60, [movement('m-1', 60)], [filed, priorPayment]), /no puede reutilizarse/);
+  const sameDeclarationPayment: VatWithholdingDeclarationEvent = { ...priorPayment, id: 'payment-same', declarationId: declaration.id };
+  assert.throws(() => validate(['m-1'], 60, [movement('m-1', 60)], [filed, sameDeclarationPayment]), /no puede reutilizarse/);
 });
 
 test('rejects a bank debit outside the filing-to-payment date interval', () => {

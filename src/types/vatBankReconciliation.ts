@@ -32,7 +32,7 @@ export function validateVatPaymentBankLinks(input: {
     event.declarationId === input.declaration.id && event.eventType === 'FILED');
   if (!filed) throw new Error('No existe una presentación previa que permita conciliar el enteramiento.');
   const usedIds = new Set(input.events
-    .filter(event => event.eventType === 'PAYMENT' && event.declarationId !== input.declaration.id)
+    .filter(event => event.eventType === 'PAYMENT')
     .flatMap(event => event.bankStatementMovementIds || []));
   const movements = ids.map(id => {
     if (usedIds.has(id)) throw new Error('Un movimiento bancario ya está vinculado a otro enteramiento y no puede reutilizarse.');

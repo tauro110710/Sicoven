@@ -39,7 +39,6 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
   const [ackLegacy, setAckLegacy] = useState(false);
   const [declarationNumber, setDeclarationNumber] = useState('');
   const [receiptReference, setReceiptReference] = useState('');
-  const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
   const [selectedBankMovementIds, setSelectedBankMovementIds] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState('');
@@ -114,7 +113,13 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
 
   const addEvent = (draft: Omit<VatWithholdingDeclarationEvent, 'id' | 'declarationId' | 'recordedAt'>) => {
     if (!selected) return;
-    void run(() => recordVatWithholdingDeclarationEvent(selected.id, draft));
+    void run(async () => {
+      await recordVatWithholdingDeclarationEvent(selected.id, draft);
+      if (draft.eventType === 'PAYMENT') {
+        setSelectedBankMovementIds([]);
+        setPaymentReference('');
+      }
+    });
   };
 
   const hasLegacy = Boolean(selected?.voucherSnapshots.some(item => item.dateBasis === 'LEGACY_DOCUMENT_DATE'));
@@ -332,7 +337,6 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
                             const next = e.target.checked ? [...selectedBankMovementIds, movement.id] : selectedBankMovementIds.filter(id => id !== movement.id);
                             setSelectedBankMovementIds(next);
                             const total = next.reduce((sum, id) => sum + Number(availablePaymentMovements.find(item => item.id === id)?.amountBs || 0), 0);
-                            setPaymentAmount(total.toFixed(2));
                           }} />
                           <span className="min-w-0 flex-1">{account?.bankName || 'Banco'} · {formatDate(movement.date)} · Ref. {movement.reference}<br /><span className="font-mono font-bold">{formatBs(movement.amountBs)}</span> · {movement.description}</span>
                         </label>;
@@ -348,9 +352,9 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
                     <input value={paymentReference} onChange={e => setPaymentReference(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
                   </label>
                   <label className="text-xs font-semibold text-slate-700">Fecha de pago
-                    <input type="date" value={eventDate} onChange={e => { setEventDate(e.target.value); setSelectedBankMovementIds([]); setPaymentAmount(''); }} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
+                    <input type="date" value={eventDate} onChange={e => { setEventDate(e.target.value); setSelectedBankMovementIds([]); }} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
                   </label>
-                  <button type="button" disabled={busy || selectedBankMovementIds.length === 0 || !paymentReference.trim()}
+                  <button type="button" disabled={busy || selectedBankMovementIds.length === 0 || selectedPaymentMovements.length !== selectedBankMovementIds.length || !paymentReference.trim()}
                     onClick={() => addEvent({ eventType: 'PAYMENT', occurredAt: eventDate, amountBs: selectedPaymentTotalBs, paymentReference, bankStatementMovementIds: selectedBankMovementIds })}
                     className="rounded-lg bg-purple-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-40 sm:col-span-3">Registrar enteramiento conciliado</button>
                 </div>
@@ -449,7 +453,7 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
               {bankReconciliation.lines.length === 0 ? <p className="text-xs text-slate-500">Todavía no hay enteramientos registrados.</p> : (
                 <div className="space-y-2">
                   {bankReconciliation.lines.map(line => <div key={line.eventId} className="rounded-lg border border-slate-100 p-3 text-xs">
-                    <div className="flex flex-wrap justify-between gap-2"><strong>{formatBs(line.amountBs)} · {line.reference || 'Sin referencia'}</strong><span className={line.status === 'RECONCILIADO' ? 'font-bold text-emerald-700' : 'font-bold text-amber-700'}>{line.status}</span></div>
+                    <div className="flex flex-wrap justify-between gap-2"><strong>{formatBs(line.amountBs)} · {line.paymentReference || 'Sin referencia'}</strong><span className={line.status === 'RECONCILIADO' ? 'font-bold text-emerald-700' : 'font-bold text-amber-700'}>{line.status}</span></div>
                     {line.movements.length ? line.movements.map(movement => <p key={movement.id} className="mt-1 text-slate-600">{formatDate(movement.date)} · {movement.reference} · {formatBs(movement.amountBs)} · {movement.description}</p>) : <p className="mt-1 text-amber-700">Pago histórico sin movimiento bancario vinculado.</p>}
                   </div>)}
                 </div>
