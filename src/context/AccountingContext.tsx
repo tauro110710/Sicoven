@@ -2458,9 +2458,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         };
         purchaseSequenceRef.current[currentCompany.id] = nextPurchaseOp;
         let resolvePersistence!: () => void;
-        const persistenceConfirmation = new Promise<void>((resolve, reject) => {
+        const persistenceConfirmation = new Promise<void>(resolve => {
           resolvePersistence = resolve;
-          persistenceWaitersRef.current.push({ resolve: resolvePersistence, reject });
+          persistenceWaitersRef.current.push({ resolve: resolvePersistence, reject: () => undefined });
         });
         setPurchases(prev => [...prev, note]);
         await persistenceConfirmation;
@@ -4417,6 +4417,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         purchases: purchases.filter(p => p.companyId === currentCompany.id),
         addPurchase,
         addPurchaseCreditNote,
+        addSupplierDebitNote,
         deletePurchase,
         sales: sales.filter(s => s.companyId === currentCompany.id),
         addSale,
