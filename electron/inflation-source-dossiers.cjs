@@ -340,7 +340,10 @@ function registerInflationSourceDossierIpc({ ipcMain, db, licenseView, getActive
     if (!actor) throw new Error('Sesión no válida.');
     return actor;
   };
-  ipcMain.handle('sicoven:inflation-source-dossier-evidence', (_event, token, evidenceId) => {\n    const actor = authenticate(token); return getInflationSourceDossierEvidence(db, evidenceId, actor);\n  });\n  ipcMain.handle('sicoven:inflation-source-dossier-list', (_event, token, filters) => {
+  ipcMain.handle('sicoven:inflation-source-dossier-evidence', (_event, token, evidenceId) => {
+    const actor = authenticate(token); return getInflationSourceDossierEvidence(db, evidenceId, actor);
+  });
+  ipcMain.handle('sicoven:inflation-source-dossier-list', (_event, token, filters) => {
     authenticate(token); return listInflationSourceDossiers(db, filters || {});
   });
   ipcMain.handle('sicoven:inflation-source-dossier-create', (_event, token, input) => {
