@@ -2,6 +2,7 @@
 
 **Estado:** EN EJECUCIÓN — NO CERTIFICADO  
 **Rama de trabajo:** certificacion/contabilidad-basica-1.0.8  
+**SHA candidato verificado:** 2302d533dbeacdfcdd9537cea06d258667228e8f
 **Base de código:** 3676dbef4513d7c6920cd1ec6b708a5ad84025d9  
 **Versión objetivo:** 1.0.8  
 **Base de datos:** SQLite local, única fuente de verdad.
@@ -57,8 +58,8 @@ Estas limitaciones deberán comunicarse claramente en la ficha de versión y doc
 | G10 — Estados financieros | Ecuación contable, resultados, patrimonio y flujo reconciliados con Mayor | Tests de balance en Bs/USD, resultados históricos, patrimonio, flujo de efectivo, notas cuantitativas y una integración sintética que concilia balance de comprobación, situación, resultados, patrimonio, flujo y apertura siguiente | EVIDENCIA PARCIAL (falta recorrido E2E UI→SQLite→reportes) |
 | G11 — Multiempresa | Cero filtraciones de lectura/escritura entre empresas | Tests de filtrado de informes, historial por empresa, correlativos independientes, compras/devoluciones y liquidaciones aisladas; filtro defensivo adicional en Libro Mayor | EVIDENCIA PARCIAL (falta E2E de cambio de empresa y operaciones cruzadas completas) |
 | G12 — Persistencia | Reinicio de proceso, reapertura de SQLite, integridad y consistencia de snapshots | Tests de transacción SQLite, rollback ante fallo de auditoría, persistencia y reapertura de DB; PRAGMA quick_check y foreign_key_check bloquean DB dañada; snapshot de upgrade con hash idéntico | EVIDENCIA PARCIAL (falta reinicio integral de Electron y reconciliación amplia de datos tras reinicio) |
-| G13 — Respaldo/restauración | Backup íntegro, restauración en instalación limpia y comprobación de saldos | Implementado backup consistente con `better-sqlite3`, documentos externos, manifiesto SHA-256 y verificación de integridad; IPC solo para administrador autenticado. Pruebas automatizadas y CI en ejecución. Restauración atómica, rollback y comparación de saldos aún no implementados/verificados | PARCIAL |
-| G14 — Instalador/actualización | Instalación limpia Windows x64 y upgrade 1.0.7 → 1.0.8 preservando base SQLite de prueba | CI Windows y NSIS verdes; upgrade 1.0.7→1.0.8 conserva snapshot sintético con SHA-256 idéntico; instalador x64 generado | EVIDENCIA PARCIAL (falta instalación limpia independiente y firma digital) |
+| G13 — Respaldo/restauración | Backup íntegro, restauración en instalación limpia y comprobación de saldos | Implementado backup consistente con `better-sqlite3`, documentos externos, manifiesto SHA-256 y verificación de integridad; IPC solo para administrador autenticado. Pruebas automatizadas y CI verdes en SHA `2302d533dbeacdfcdd9537cea06d258667228e8f`; backup consistente, verificación de manifiesto/SQLite/documentos y staging aislado verificado. Motor de instalación, rollback físico, recovery al arranque y comparación de saldos aún no implementados/verificados | PARCIAL |
+| G14 — Instalador/actualización | Instalación limpia Windows x64 y upgrade 1.0.7 → 1.0.8 preservando base SQLite de prueba | CI Windows y NSIS verdes en SHA `2302d533dbeacdfcdd9537cea06d258667228e8f`; upgrade 1.0.7→1.0.8 conserva snapshot SQLite sintético y clean install en perfil Windows aislado | EVIDENCIA PARCIAL (falta validación operativa manual en equipo objetivo; Authenticode aplazado y no bloqueante para esta certificación técnica) |
 | G15 — Aceptación funcional | Recorrido de extremo a extremo de una empresa de certificación, con resultados esperados | Acta de pruebas y evidencias | PENDIENTE |
 
 Un gate no se marca aprobado por la mera existencia de componentes o pruebas unitarias. Debe existir evidencia ejecutada sobre el SHA candidato y los casos de aceptación que correspondan.
@@ -259,3 +260,10 @@ Esta sección sustituye la política provisional de distribución privada contro
 - Página web pública y botón de descarga: **FASE POSTERIOR A LA CERTIFICACIÓN**.
 - Prueba gratuita de 24 horas y activación comercial: deben quedar verificadas antes de abrir la distribución.
 - SICOVEN continúa **NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN** hasta aprobar los gates y pruebas de aceptación.
+
+
+### Evidencia CI del SHA candidato `2302d533dbeacdfcdd9537cea06d258667228e8f`
+
+- Desktop Validation run `41344453808`: SUCCESS. Checkout, instalación de dependencias bloqueadas, guards de autenticación/sesión, pruebas automatizadas, TypeScript, auditoría de recursos, build y auditoría de assets completados.
+- Windows Installer run `41344453841`: SUCCESS. Checkout, descarga del instalador 1.0.7, instalación de dependencias, guards, pruebas automatizadas, TypeScript, build, auditoría de assets, NSIS, verificación del instalador, actualización 1.0.7 → 1.0.8 conservando SQLite y clean install en perfil Windows aislado completados.
+- Ambos workflows corresponden exactamente al mismo SHA candidato. Esta evidencia no completa G13 ni G15 y no sustituye los recorridos E2E contables desde la interfaz.

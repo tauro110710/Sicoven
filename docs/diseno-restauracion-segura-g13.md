@@ -136,3 +136,13 @@ Hasta entonces G13 permanece PARCIAL y SICOVEN NO CERTIFICADO / NO APTO PARA DIS
 - La carpeta UUID de operación se crea mediante `mkdir` exclusivo. La limpieza de error solo puede retirar el directorio que esa invocación creó; nunca una ruta preexistente que coincida con el UUID.
 - Se agregan pruebas para enlaces de operación colgantes y directorios de operación preexistentes con archivos centinela.
 - Este endurecimiento reduce el riesgo de borrar rutas ajenas ante colisiones. No elimina por sí solo todas las carreras TOCTOU ni sustituye el motor físico G13.
+
+
+## 13. Evidencia CI del endurecimiento de backup/staging
+
+- Commit verificado: `2302d533dbeacdfcdd9537cea06d258667228e8f` (`fix(backup): reject dangling filesystem links`).
+- Desktop Validation run `41344453808`: SUCCESS; el job completó pruebas automatizadas, TypeScript, auditoría de recursos y build.
+- Windows Installer run `41344453841`: SUCCESS; completó pruebas automatizadas, build NSIS, upgrade 1.0.7 → 1.0.8 conservando SQLite y clean install en perfil Windows aislado.
+- El cambio de backup sustituye comprobaciones `existsSync` por `lstat` en rutas críticas para no tratar junctions/enlaces colgantes como inexistentes. Se añadieron regresiones para junction colgante en documentos de origen, documentos del respaldo y destino de backup.
+- El staging impide colisiones con UUID preexistente y limpia únicamente el directorio que la propia operación creó; sus pruebas cubren enlaces colgantes y directorios preexistentes con centinelas.
+- Alcance probado: validación y preparación aislada. No se ha probado ni implementado todavía el reemplazo físico de SQLite/documentos, rollback, recuperación tras interrupción ni reconciliación contable. G13 continúa PARCIAL.
