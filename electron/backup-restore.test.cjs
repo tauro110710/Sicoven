@@ -85,3 +85,42 @@ test('verification rejects unexpected files and empty directories in the backup 
     assert.throws(() => verifyBackupDirectory(destination), /estructura de directorios/);
   } finally { h.close(); }
 });
+
+test('verification rejects absolute and Windows drive paths in the manifest', async () => {
+  const h = fixture();
+  try {
+    const destination = path.join(h.root, 'backup');
+    await createBackup({ db: h.db, userDataDir: h.userDataDir, destination });
+    const manifestPath = path.join(destination, 'manifest.json');
+    const original = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    for (const unsafePath of ['/etc/passwd', 'C:/Windows/system.ini', 'folder/../../escape']) {
+      const manifest = structuredClone(original);
+      manifest.documents[0].path = unsafePath;
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+      assert.throws(() => verifyBackupDirectory(destination), /ruta documental/);
+    }
+  } finally { h.close(); }
+});
+
+test('verification rejects duplicate document paths in the manifest', async () => {
+  const h = fixture();
+  try {
+    const destination = path.join(h.root, 'backup');
+    await createBackup({ db: h.db, userDataDir: h.userDataDir, destination });
+    const manifestPath = path.join(destination, 'manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    manifest.documents.push({ ...manifest.documents[0] });
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+    assert.throws(() => verifyBackupDirectory(destination), /duplicadas/);
+  } finally { h.close(); }
+});
+
+test('verification rejects a replaced SQLite database even if the file remains readable', async () => {
+  const h = fixture();
+  try {
+    const destination = path.join(h.root, 'backup');
+    await createBackup({ db: h.db, userDataDir: h.userDataDir, destination });
+    fs.appendFileSync(path.join(destination, 'sicoven.sqlite'), Buffer.from([0]));
+    assert.throws(() => verifyBackupDirectory(destination), /huella o el tamaño/);
+  } finally { h.close(); }
+});
