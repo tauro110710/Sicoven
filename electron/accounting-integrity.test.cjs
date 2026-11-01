@@ -2270,7 +2270,7 @@ test('Basic accounting certification: persists independent company journals and 
 
     const saved = persistAccountingSnapshot(db, next);
     assert.equal(saved.ok, true);
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 2);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 3, 'dos eventos de asiento y un evento state_saved deben quedar en la misma transacción');
     db.pragma('wal_checkpoint(TRUNCATE)');
     db.close();
     db = null;
