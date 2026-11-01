@@ -133,6 +133,23 @@ test('keeps historical payment links pending when the bank debit was later recon
   assert.equal(historicallyLinked.pendingCount, 1);
 });
 
+test('recognizes the bank movement reconciled by its own IVA payment journal entry', () => {
+  const payment: VatWithholdingDeclarationEvent = {
+    id: 'payment-journal', declarationId: declaration.id, eventType: 'PAYMENT',
+    occurredAt: '2026-10-19', recordedAt: '2026-10-19T10:00:00.000Z',
+    amountBs: 60, paymentReference: 'PAGO-1', bankStatementMovementIds: ['m-1'],
+    journalEntryId: 'entry-iva-1'
+  };
+  const summary = buildVatBankReconciliationSummary(declaration, [filed, payment], [
+    movement('m-1', 60, {
+      isReconciled: true, reconciledWithJournalEntryId: 'entry-iva-1',
+      reconciledJournalEntryIds: ['entry-iva-1']
+    })
+  ], [account]);
+  assert.equal(summary.reconciledCount, 1);
+  assert.equal(summary.pendingCount, 0);
+});
+
 test('does not mark linked credits or USD-account movements reconciled', () => {
   const payment: VatWithholdingDeclarationEvent = {
     id: 'payment-1', declarationId: declaration.id, eventType: 'PAYMENT',
