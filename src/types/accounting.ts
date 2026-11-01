@@ -113,9 +113,24 @@ export interface PurchaseCreditNoteLine {
 
 export interface PurchaseIvaRetentionSnapshot { portalArticle3ExclusionConfirmed?: boolean; supplierImportPerceptionConfirmed?: boolean; operationAmountBs?: number; unitTaxValueBs?: number; vatNotDiscriminated?: boolean; taxableAmountIncludingVatBs?: number; buyerAgentStatus: 'SPECIAL_DESIGNATED' | 'ARTICLE_2_BUYER' | 'SPECIAL_DESIGNATED_AND_ARTICLE_2' | 'NOT_AGENT' | 'UNKNOWN'; supplierTaxStatus: 'ORDINARY' | 'FORMAL' | 'SPECIAL' | 'NON_REGISTERED' | 'UNKNOWN'; article2Transaction: boolean; article3Exclusions: string[]; invoiceFormalDefect: boolean; portalRetentionRate?: 0 | 75 | 100; decisionStatus: 'NOT_APPLICABLE' | 'EXCLUDED' | 'REVIEW' | 'NO_VAT' | 'WITHHOLD'; decisionReason: string; legalBasis?: string; evaluatedAt: string; }
 
+export interface SupplierDebitNoteReview {
+  economicCause: 'PRICE_DIFFERENCE' | 'ADDITIONAL_EXPENSE' | 'FINANCING_CHARGE' | 'ADDITIONAL_GOODS_RECEIVED' | 'INVENTORY_COST_ADJUSTMENT' | 'OTHER';
+  reason: string;
+  classificationNote?: string;
+  debitAccountCode: string;
+  payableAccountCode: string;
+  vatAccountCode?: string;
+  vatBreakdownReviewed: boolean;
+  withholdingNotApplicableConfirmed: boolean;
+  igtfNotApplicableConfirmed: boolean;
+  fiscalReviewNote: string;
+}
+
 export interface PurchaseRecord {
   /** Líneas de mercancía vinculadas al Kardex; ausente en facturas históricas sin detalle. */
   inventoryLines?: PurchaseInventoryLine[];
+  /** Revisión profesional inmutable y trazable que autoriza el plan contable preliminar de una ND. */
+  supplierDebitNoteReview?: SupplierDebitNoteReview;
   /** Enlace inmutable de una nota de crédito de proveedor a su factura y movimientos físicos. */
   originalPurchaseId?: string;
   creditNoteLines?: PurchaseCreditNoteLine[];
