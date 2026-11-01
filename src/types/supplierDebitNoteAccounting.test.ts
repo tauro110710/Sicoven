@@ -38,7 +38,7 @@ const draft = (overrides: Partial<SupplierDebitNoteAccountingDraft> = {}): Suppl
   affectedInvoiceNumber: 'FAC-100', issueDate: '2026-10-10',
   recognitionDate: '2026-10-10', economicCause: 'ADDITIONAL_EXPENSE',
   reason: 'Gasto adicional documentado por proveedor.',
-  debitAccountCode: '6.1.1.01', taxableBaseBs: 25, exemptAmountBs: 0,
+  debitAccountCode: '6.1.1.01', vatAccountCode: '1.1.3.01', taxableBaseBs: 25, exemptAmountBs: 0,
   vatAmountBs: 4, totalAmountBs: 29, bcvRate: 100,
   fiscalBreakdownReviewed: true, withholdingNotApplicableConfirmed: true,
   igtfNotApplicableConfirmed: true, fiscalReviewNote: 'Revisión documental y fiscal realizada por el responsable.', ...overrides
@@ -110,7 +110,7 @@ test('blocks inventory-related causes until item-level receipt and costing contr
 
 test('requires professional review of manually entered VAT and a valid VAT control account', () => {
   assert.throws(() => build(draft({ fiscalBreakdownReviewed: false })), /revisión y confirmación profesional/);
-  assert.throws(() => build(draft(), source, sourceEntry, accounts.filter(item => item.code !== '1.1.3.01')), /cuenta de movimiento de IVA/);
+  assert.throws(() => build(draft({ vatAccountCode: undefined })), /cuenta de destino elegida y validada/);
 });
 
 test('requires explicit professional confirmation when withholding and IGTF are not applicable', () => {
