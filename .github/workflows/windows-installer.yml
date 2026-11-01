@@ -133,13 +133,5 @@ jobs:
           if (-not $cleanDatabase) { throw "La instalación limpia no creó sicoven.sqlite en el perfil aislado." }
           Write-Host "Instalación limpia 1.0.8, arranque y creación de SQLite verificados en perfil aislado."
           Get-Item $cleanDatabase.FullName | Select-Object FullName, Length, LastWriteTime
-      - name: Upload Windows installer artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: SICOVEN-Windows-${{ github.sha }}
-          path: |
-            release/SICOVEN-Setup-*-x64.exe
-            release/*.blockmap
-            release/latest.yml
-          if-no-files-found: error
-          retention-days: 30
+      # El instalador se compila y se prueba en el runner, pero no se almacena como artefacto.
+      # La cuota de almacenamiento de Actions está agotada; la publicación se hará en la fase web posterior a la certificación.
