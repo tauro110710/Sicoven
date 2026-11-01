@@ -26,7 +26,7 @@ Cada declaración conserva:
 
 Un comprobante no puede incluirse dos veces en declaraciones de la misma empresa. No se modifica la fotografía cuando cambian los registros operativos.
 
-Los comprobantes históricos anteriores al Bloque 4.2 que no tienen `fiscalDate` se identifican como `LEGACY_DOCUMENT_DATE`. Se usa su fecha documental solo para ubicarlos provisionalmente; la revisión exige confirmación expresa y nota documentada. No se presume que esa fecha sea la fecha fiscal efectiva.
+Los comprobantes históricos anteriores al Bloque 4.2 que no tienen `fiscalDate` deben recibir una asignación manual de fecha fiscal, respaldada por el comprobante de pago o evidencia del abono en cuenta. La asignación se conserva para todo el mes, incluso si el comprobante pertenece a la quincena opuesta a la declaración que se prepara primero. No se usa la fecha de factura como sustituto. Mientras falte la confirmación de cualquier comprobante histórico del mes, no se permite preparar ninguna de las dos quincenas.
 
 Si un comprobante incluido recibe después una marca de corrección fiscal pendiente, la revisión de la declaración queda bloqueada hasta que se regularice el soporte.
 
@@ -64,7 +64,7 @@ El registro del vencimiento es inmutable. Si la autoridad publica una correcció
 - Declaraciones y eventos son append-only.
 - La base valida empresa, período, ventana, unicidad, comprobantes, totales y transiciones.
 - La preparación y cada evento generan registros en `audit_events` dentro de la misma transacción de guardado.
-- Los respaldos JSON incluyen ambas colecciones; respaldos anteriores se aceptan con colecciones vacías.
+- Los respaldos JSON incluyen ambas colecciones; un respaldo anterior sin estas colecciones puede importarse como vacío solo cuando no se intenta eliminar historial quincenal ya existente en SQLite.
 - No se reescriben comprobantes, compras, asientos ni cierres históricos.
 
 ## 6. Límites pendientes
@@ -87,7 +87,7 @@ La especificación técnica vigente del Portal Fiscal debe obtenerse y validarse
 - Rechazo de comprobantes duplicados o ya declarados.
 - Conciliación de totales con snapshots.
 - Bloqueo de revisión con correcciones fiscales pendientes.
-- Confirmación documentada de fechas legacy.
+- Asignación manual y documentada de fechas legacy para ambas quincenas.
 - Orden revisión → presentación → enteramiento.
 - Pagos parciales y bloqueo de sobrepago.
 - Fuente oficial obligatoria para vencimientos.
