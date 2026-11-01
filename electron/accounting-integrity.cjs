@@ -544,6 +544,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       : undefined;
     const company = asArray(nextState.companies).find(item => item.id === previousPurchase.companyId);
     const debitNoteNumber = String(previousPurchase.debitNoteNumber || previousPurchase.invoiceNumber || '').trim();
+    const normalizeNdReference = value => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
     const activePayments = asArray(nextState.creditSettlements).filter(item =>
       item.companyId === previousPurchase.companyId && item.documentId === previousPurchase.id &&
       item.kind === 'PURCHASE_PAYMENT' && !item.isReversed);
@@ -568,7 +569,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       company?.closedThroughDate && source?.date <= company.closedThroughDate &&
       reversal?.date > company.closedThroughDate);
     if (!source || source.companyId !== previousPurchase.companyId || source.type !== 'AJUSTE' ||
-        normalizeDocument(source.referenceDoc) !== normalizeDocument('ND-PROV-' + debitNoteNumber) ||
+        normalizeNdReference(source.referenceDoc) !== normalizeNdReference('ND-PROV-' + debitNoteNumber) ||
         !reversal || reversal.companyId !== previousPurchase.companyId || reversal.type !== 'AJUSTE' ||
         reversal.reversalOfEntryId !== source.id || nextSource?.reversedByEntryId !== reversal.id ||
         !isValidIsoDate(reversal.date) || reversal.date < source.date ||
