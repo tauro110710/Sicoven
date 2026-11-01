@@ -360,3 +360,15 @@ Puedes adjuntar facturas, comprobantes, recibos u otros documentos relacionados 
 SICOVEN es una herramienta de gestión y apoyo contable, no un órgano policial, fiscalizador o investigador. La conservación de soportes y la justificación de las operaciones ante el SENIAT u otras autoridades son responsabilidad de la empresa y del profesional contable, conforme a las obligaciones que les correspondan. El sistema debe facilitar su trabajo, no imponerles requisitos documentales adicionales.
 
 **Estado de esta política: APROBADA COMO REQUISITO FUNCIONAL DEL PRODUCTO.** Cualquier implementación que convierta la ausencia de adjuntos en un bloqueo o incumplimiento contradice esta hoja de ruta y debe corregirse antes de dar por terminado el módulo afectado.
+
+
+### Aplicación de la política de adjuntos — revisión 2026-11-01
+
+- Se revisaron el panel documental y los flujos principales de compras, ventas y asientos en la rama de certificación.
+- La revisión del código no encontró que compras, ventas o asientos principales exijan un archivo adjunto para registrar la operación.
+- Se simplificó `src/components/shared/SupportingDocumentsPanel.tsx`: ahora presenta los documentos como opcionales, explica que sirven para organizar información y permite adjuntar, abrir y sustituir voluntariamente. Se retiraron de esa pantalla las acciones de verificación y observación que podían transmitir una carga de revisión documental.
+- Se actualizó `docs/rt-01-independencia-contabilizacion-respaldo-documental.md` para eliminar el estado pendiente por falta de adjunto y prohibir alertas, bandejas de faltantes o calificaciones negativas.
+- Commits: `c2533e9847567ade907839e69d262c19f3fb9ac1` (interfaz) y `b8c0b14d3f513af8a5ff67d84f7b290c879cf1d0` (criterio documental).
+- CI iniciado para el HEAD `b8c0b14d3f513af8a5ff67d84f7b290c879cf1d0`: Desktop Validation run `41356874811` y Windows Installer run `41356874752`. Al momento de esta actualización ambos estaban pendientes/en ejecución; no se anticipa su resultado.
+- **Límite identificado:** el motor documental conserva eventos append-only y en esta revisión no se verificó una función de eliminación lógica disponible en la interfaz. No se afirmará que eliminar adjuntos está terminado hasta implementar/verificar permisos y retirada lógica. Esto no bloquea contabilización ni uso sin adjuntos.
+- Esta revisión no modifica los requisitos contables sustantivos ni sustituye la comprobación interna de cálculos, persistencia y funcionamiento. No exige al contador ni a la empresa cargar documentos para demostrar que el software funciona.
