@@ -123,7 +123,7 @@ function recoverPendingRestore({userDataDir}) {
   cleanupOperation(root,journal.operationId);
   return {ok:true,recovered:true,action:'rolled_back_incomplete_restore'};
 }
-async function executeRestore({backupDirectory,userDataDir,db,closeDatabase,reopenDatabase}) {
+async function executeRestoreUnlocked({backupDirectory,userDataDir,db,closeDatabase,reopenDatabase}) {
   if(!db?.open) throw new Error('La base de datos debe estar abierta para preparar la restauración.');
   const root=path.resolve(userDataDir), source=path.resolve(backupDirectory);
   realDir(root,'Datos de SICOVEN');
@@ -166,6 +166,14 @@ async function executeRestore({backupDirectory,userDataDir,db,closeDatabase,reop
     }
     throw error;
   }
+}
+
+let restoreInProgress = false;
+async function executeRestore(args) {
+  if (restoreInProgress) throw new Error('Ya existe una restauración en curso. Espere a que termine antes de iniciar otra.');
+  restoreInProgress = true;
+  try { return await executeRestoreUnlocked(args); }
+  finally { restoreInProgress = false; }
 }
 
 function registerRestoreIpc({ipcMain,app,dialog,licenseView,getActiveSession,getDb,closeDatabase,reopenDatabase,getWindow}) {
