@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { BankAccount, BankStatementMovement, VatWithholdingDeclaration, VatWithholdingDeclarationEvent } from './accounting';
-import { buildVatBankReconciliationSummary, validateVatPaymentBankLinks } from './vatBankReconciliation';
+import { buildVatBankReconciliationSummary, getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from './vatBankReconciliation';
 
 const declaration: VatWithholdingDeclaration = {
   id: 'decl-1', companyId: 'company-1', period: '202610', window: 'FIRST_HALF',
@@ -186,4 +186,15 @@ test('does not mark linked credits or USD-account movements reconciled', () => {
   assert.equal(credit.pendingCount, 1);
   const usd = buildVatBankReconciliationSummary(declaration, [filed, payment], [movement('m-1', 60)], [{ ...account, currency: 'USD' }]);
   assert.equal(usd.pendingCount, 1);
+});
+
+test('blocks generic reversal of a journal linked to an IVA payment event', () => {
+  const linkedPayment: VatWithholdingDeclarationEvent = {
+    id: 'payment-linked', declarationId: declaration.id, eventType: 'PAYMENT',
+    occurredAt: '2026-10-19', recordedAt: '2026-10-19T10:00:00.000Z',
+    amountBs: 60, journalEntryId: 'entry-iva-1'
+  };
+  assert.match(getVatPaymentJournalReversalBlocker([linkedPayment], 'entry-iva-1') || '', /corrección fiscal específica/);
+  assert.equal(getVatPaymentJournalReversalBlocker([linkedPayment], 'entry-other'), null);
+  assert.equal(getVatPaymentJournalReversalBlocker([filed], 'entry-iva-1'), null);
 });
