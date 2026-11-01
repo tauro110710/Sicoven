@@ -108,6 +108,8 @@ jobs:
       - name: Clean install 1.0.8 in isolated Windows profile
         shell: pwsh
         run: |
+          $installer = Get-ChildItem -Path release -Filter "SICOVEN-Setup-1.0.8-x64.exe" -File | Select-Object -First 1
+          if (-not $installer) { throw "No se generó el instalador 1.0.8 para la instalación limpia." }
           $cleanInstallDir = Join-Path $env:RUNNER_TEMP "SICOVEN-Clean-Install"
           $cleanAppData = Join-Path $env:RUNNER_TEMP "SICOVEN-Clean-AppData"
           if (Test-Path $cleanInstallDir) { Remove-Item -Path $cleanInstallDir -Recurse -Force }
