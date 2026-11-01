@@ -5,6 +5,7 @@ import { getVatDeclarationStatus } from '../../types/vatWithholdingDeclaration';
 import { buildVatBankReconciliationSummary } from '../../types/vatBankReconciliation';
 import { getSeniatVatWithholdingDueDate } from '../../types/seniatVatDueDates';
 import { formatBs, formatDate } from '../../utils/formatters';
+import type { VatFiscalIncident } from '../../types/vatFiscalIncidents';
 
 const today = () => {
   const now = new Date();
@@ -21,9 +22,10 @@ const statusLabels: Record<string, string> = {
 
 export const VatWithholdingDeclarationsPanel: React.FC = () => {
   const {
-    currentCompany, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents,
+    currentCompany, purchases, journalEntries, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents,
     bankAccounts, bankStatementMovements,
-    createVatWithholdingDeclaration, recordVatWithholdingDeclarationEvent
+    createVatWithholdingDeclaration, recordVatWithholdingDeclarationEvent,
+    listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent
   } = useAccounting();
   const now = new Date();
   const [period, setPeriod] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
@@ -45,11 +47,33 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
   const [sourceTitle, setSourceTitle] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [sourceReference, setSourceReference] = useState('');
+  const [fiscalIncidents, setFiscalIncidents] = useState<VatFiscalIncident[]>([]);
+  const [incidentPurchaseId, setIncidentPurchaseId] = useState('');
+  const [incidentVoucherId, setIncidentVoucherId] = useState('');
+  const [incidentDeclarationId, setIncidentDeclarationId] = useState('');
+  const [incidentEventIds, setIncidentEventIds] = useState<string[]>([]);
+  const [incidentMovementIds, setIncidentMovementIds] = useState<string[]>([]);
+  const [incidentReason, setIncidentReason] = useState('');
+  const [incidentDetectedAt, setIncidentDetectedAt] = useState(today());
+  const [incidentBusy, setIncidentBusy] = useState(false);
+  const [incidentMessage, setIncidentMessage] = useState('');
+  const [eventIncidentId, setEventIncidentId] = useState('');
+  const [incidentEventType, setIncidentEventType] = useState<'REVIEW_RECORDED' | 'ACTION_RECORDED'>('REVIEW_RECORDED');
+  const [incidentDecisionText, setIncidentDecisionText] = useState('');
+  const [incidentExternalReference, setIncidentExternalReference] = useState('');
+  const [incidentJournalEntryId, setIncidentJournalEntryId] = useState('');
 
   useEffect(() => {
     setSelectedBankMovementIds([]);
     setPaymentReference('');
   }, [selectedId]);
+
+  useEffect(() => {
+    let active = true;
+    listVatFiscalIncidents().then(items => { if (active) setFiscalIncidents(items); })
+      .catch(error => { if (active) setIncidentMessage(error instanceof Error ? error.message : 'No se pudieron consultar las incidencias fiscales.'); });
+    return () => { active = false; };
+  }, [listVatFiscalIncidents]);
 
   const ordered = useMemo(() => vatWithholdingDeclarations
     .filter(item => item.companyId === currentCompany.id)
@@ -144,6 +168,55 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
     !voucher.fiscalDate && !selectedAssignments.has(voucher.id)) : [];
   const hasUncoveredVouchers = selectedLateVouchers.length > 0 || selectedUnresolvedLegacy.length > 0;
   const hasDueDate = selectedEvents.some(item => item.eventType === 'DUE_DATE_SET');
+
+  const incidentPurchase = purchases.find(item => item.id === incidentPurchaseId) || null;
+  const incidentOriginalPurchase = incidentPurchase
+    ? incidentPurchase.documentType === '01' ? incidentPurchase
+      : purchases.find(item => item.id === incidentPurchase.originalPurchaseId) ||
+        purchases.find(item => item.documentType === '01' && item.invoiceNumber === incidentPurchase.affectedInvoiceNumber) || null
+    : null;
+  const incidentVoucherOptions = incidentOriginalPurchase
+    ? vatVouchers.filter(item => item.purchaseRecordId === incidentOriginalPurchase.id) : [];
+  const incidentDeclarationOptions = incidentVoucherId
+    ? vatWithholdingDeclarations.filter(item => item.voucherIds.includes(incidentVoucherId)) : [];
+  const incidentDeclaration = vatWithholdingDeclarations.find(item => item.id === incidentDeclarationId) || null;
+  const incidentDeclarationEvents = incidentDeclaration
+    ? vatWithholdingDeclarationEvents.filter(item => item.declarationId === incidentDeclaration.id) : [];
+  const incidentPaymentEvents = incidentDeclarationEvents.filter(item => item.eventType === 'PAYMENT' && incidentEventIds.includes(item.id));
+  const incidentMovementOptions = incidentPaymentEvents.flatMap(event =>
+    (event.bankStatementMovementIds || []).map(id => bankStatementMovements.find(movement => movement.id === id)).filter((movement): movement is NonNullable<typeof movement> => Boolean(movement)));
+  const saveIncident = async () => {
+    setIncidentBusy(true); setIncidentMessage('');
+    try {
+      const incident = await createVatFiscalIncident({
+        purchaseId: incidentPurchaseId, vatVoucherId: incidentVoucherId || undefined,
+        declarationId: incidentDeclarationId || undefined, declarationEventIds: incidentEventIds,
+        bankMovementIds: incidentMovementIds, reason: incidentReason, detectedAt: incidentDetectedAt
+      });
+      setFiscalIncidents(current => [incident, ...current.filter(item => item.id !== incident.id)]);
+      setIncidentPurchaseId(''); setIncidentVoucherId(''); setIncidentDeclarationId('');
+      setIncidentEventIds([]); setIncidentMovementIds([]); setIncidentReason('');
+      setIncidentMessage('Incidencia registrada en SQLite. El expediente permanece pendiente de revisión.');
+    } catch (error) {
+      setIncidentMessage(error instanceof Error ? error.message : 'No se pudo registrar la incidencia.');
+    } finally { setIncidentBusy(false); }
+  };
+  const saveIncidentEvent = async (incident: VatFiscalIncident) => {
+    setIncidentBusy(true); setIncidentMessage('');
+    try {
+      const updated = await recordVatFiscalIncidentEvent({
+        incidentId: incident.id, eventType: incidentEventType, decisionText: incidentDecisionText,
+        externalReference: incidentExternalReference || undefined,
+        declarationId: incident.declarationId || undefined, journalEntryId: incidentJournalEntryId || undefined
+      });
+      setFiscalIncidents(current => current.map(item => item.id === updated.id ? updated : item));
+      setEventIncidentId(''); setIncidentDecisionText(''); setIncidentExternalReference(''); setIncidentJournalEntryId('');
+      setIncidentMessage('Evento agregado al historial inmutable. El expediente no se marca como resuelto.');
+    } catch (error) {
+      setIncidentMessage(error instanceof Error ? error.message : 'No se pudo registrar el evento.');
+    } finally { setIncidentBusy(false); }
+  };
+
   const selectedScheduledDueDate = selected && currentCompany.taxpayerType === 'ESPECIAL'
     ? getSeniatVatWithholdingDueDate(currentCompany.rif, selected.period, selected.window, currentCompany.ivaRetentionAgentBasis || '', currentCompany.isPersonalFirm === true)
     : null;
@@ -466,6 +539,126 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
           )}
         </section>
       )}
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
+        <div className="border-b border-slate-200 pb-4">
+          <h2 className="text-lg font-bold text-slate-900">Expedientes de incidencias y rectificaciones IVA</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-600">
+            Registra la incidencia y su trazabilidad sin recalcular comprobantes ni modificar declaraciones, pagos o asientos históricos.
+            La actuación documentada no equivale a una rectificación aceptada ni cierra automáticamente el caso.
+          </p>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <label className="text-xs font-semibold text-slate-700">Documento fuente (factura, NC o ND)
+            <select value={incidentPurchaseId} onChange={e => {
+              setIncidentPurchaseId(e.target.value); setIncidentVoucherId(''); setIncidentDeclarationId('');
+              setIncidentEventIds([]); setIncidentMovementIds([]);
+            }} className="mt-1 w-full rounded-lg border border-slate-300 p-2">
+              <option value="">Seleccione documento</option>
+              {purchases.filter(item => ['01','02','03'].includes(item.documentType)).map(item =>
+                <option key={item.id} value={item.id}>{item.documentType === '01' ? 'Factura' : item.documentType === '02' ? 'Nota débito' : 'Nota crédito'} · {item.creditNoteNumber || item.debitNoteNumber || item.invoiceNumber}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-slate-700">Comprobante IVA de la factura original (opcional)
+            <select value={incidentVoucherId} onChange={e => {
+              setIncidentVoucherId(e.target.value); setIncidentDeclarationId(''); setIncidentEventIds([]); setIncidentMovementIds([]);
+            }} className="mt-1 w-full rounded-lg border border-slate-300 p-2">
+              <option value="">Sin comprobante asociado</option>
+              {incidentVoucherOptions.map(item => <option key={item.id} value={item.id}>{item.voucherNumber} · {item.supplierName}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-slate-700">Declaración IVA afectada (opcional)
+            <select value={incidentDeclarationId} onChange={e => {
+              setIncidentDeclarationId(e.target.value); setIncidentEventIds([]); setIncidentMovementIds([]);
+            }} className="mt-1 w-full rounded-lg border border-slate-300 p-2">
+              <option value="">Sin declaración vinculada</option>
+              {incidentDeclarationOptions.map(item => <option key={item.id} value={item.id}>{item.period} · {item.window === 'FIRST_HALF' ? '1.ª quincena' : '2.ª quincena'}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-slate-700">Fecha de detección
+            <input type="date" value={incidentDetectedAt} onChange={e => setIncidentDetectedAt(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
+          </label>
+        </div>
+        {incidentDeclaration && (
+          <div className="mt-3 rounded-xl border border-slate-200 p-3">
+            <p className="mb-2 text-xs font-bold text-slate-800">Eventos de la declaración relacionados</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {incidentDeclarationEvents.map(event => <label key={event.id} className="flex items-start gap-2 text-xs text-slate-700">
+                <input type="checkbox" checked={incidentEventIds.includes(event.id)} onChange={e => {
+                  setIncidentEventIds(current => e.target.checked ? [...current, event.id] : current.filter(id => id !== event.id));
+                  if (!e.target.checked) setIncidentMovementIds([]);
+                }} />
+                <span>{event.eventType} · {formatDate(event.occurredAt)} {event.paymentReference ? '· ' + event.paymentReference : ''}</span>
+              </label>)}
+            </div>
+            {incidentMovementOptions.length > 0 && <div className="mt-3 border-t border-slate-100 pt-3">
+              <p className="mb-2 text-xs font-bold text-slate-800">Movimientos bancarios ya asociados a esos pagos</p>
+              {incidentMovementOptions.map(movement => <label key={movement.id} className="flex items-center gap-2 py-1 text-xs text-slate-700">
+                <input type="checkbox" checked={incidentMovementIds.includes(movement.id)} onChange={e =>
+                  setIncidentMovementIds(current => e.target.checked ? [...current, movement.id] : current.filter(id => id !== movement.id))} />
+                {formatDate(movement.date)} · {movement.reference} · {formatBs(movement.amountBs)}
+              </label>)}
+            </div>}
+          </div>
+        )}
+        <label className="mt-3 block text-xs font-semibold text-slate-700">Motivo y descripción de la incidencia
+          <textarea value={incidentReason} onChange={e => setIncidentReason(e.target.value)} rows={3}
+            placeholder="Describa qué documento o evento requiere revisión y por qué..."
+            className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
+        </label>
+        <button type="button" disabled={incidentBusy || incidentPurchaseId === '' || incidentReason.trim().length < 15 || !incidentDetectedAt}
+          onClick={() => void saveIncident()} className="mt-3 rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">
+          Registrar incidencia en SQLite
+        </button>
+        {incidentMessage && <p className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-700">{incidentMessage}</p>}
+        <div className="mt-5 space-y-3">
+          <h3 className="text-sm font-bold text-slate-900">Historial de expedientes</h3>
+          {fiscalIncidents.length === 0 ? <p className="text-xs text-slate-500">No hay incidencias registradas para esta empresa.</p> :
+            fiscalIncidents.map(incident => <article key={incident.id} className="rounded-xl border border-slate-200 p-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs font-bold text-slate-900">{incident.documentType === '01' ? 'Factura' : incident.documentType === '02' ? 'Nota de débito' : 'Nota de crédito'} · {incident.documentNumber}</p>
+                  <p className="mt-1 text-xs text-slate-600">Detectada {formatDate(incident.detectedAt)} · {incident.reason}</p>
+                </div>
+                <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-800">{incident.status === 'PENDING_REVIEW' ? 'Pendiente revisión' : incident.status === 'REVIEW_DOCUMENTED' ? 'Revisión documentada' : 'Actuación documentada'}</span>
+              </div>
+              <ol className="mt-3 space-y-2 border-l-2 border-slate-200 pl-3">
+                {incident.events.map(event => <li key={event.id} className="text-xs text-slate-700">
+                  <strong>{event.eventType === 'INCIDENT_RECORDED' ? 'Incidencia' : event.eventType === 'REVIEW_RECORDED' ? 'Revisión' : 'Actuación'}</strong>
+                  {' · '}{formatDate(event.createdAt.slice(0, 10))} · {event.decisionText}
+                  {event.externalReference && <span> · Ref. {event.externalReference}</span>}
+                  {event.journalEntryId && <span> · Asiento {event.journalEntryId}</span>}
+                </li>)}
+              </ol>
+              {eventIncidentId === incident.id ? (
+                <div className="mt-3 space-y-2 rounded-lg bg-slate-50 p-3">
+                  <label className="block text-xs font-semibold text-slate-700">Tipo de evento
+                    <select value={incidentEventType} onChange={e => setIncidentEventType(e.target.value as 'REVIEW_RECORDED' | 'ACTION_RECORDED')} className="mt-1 w-full rounded-lg border border-slate-300 p-2">
+                      <option value="REVIEW_RECORDED">Revisión documentada</option>
+                      <option value="ACTION_RECORDED">Actuación documentada</option>
+                    </select>
+                  </label>
+                  <label className="block text-xs font-semibold text-slate-700">Decisión o actuación del responsable
+                    <textarea value={incidentDecisionText} onChange={e => setIncidentDecisionText(e.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
+                  </label>
+                  <label className="block text-xs font-semibold text-slate-700">Referencia externa / acuse (opcional)
+                    <input value={incidentExternalReference} onChange={e => setIncidentExternalReference(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
+                  </label>
+                  <label className="block text-xs font-semibold text-slate-700">Asiento correctivo vinculado (opcional)
+                    <select value={incidentJournalEntryId} onChange={e => setIncidentJournalEntryId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2">
+                      <option value="">Sin asiento vinculado</option>
+                      {journalEntries.map(entry => <option key={entry.id} value={entry.id}>{entry.entryNumber} · {entry.date} · {entry.description}</option>)}
+                    </select>
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" disabled={incidentBusy || incidentDecisionText.trim().length < 20} onClick={() => void saveIncidentEvent(incident)} className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">Guardar evento</button>
+                    <button type="button" disabled={incidentBusy} onClick={() => setEventIncidentId('')} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700">Cancelar</button>
+                  </div>
+                </div>
+              ) : <button type="button" disabled={incidentBusy} onClick={() => setEventIncidentId(incident.id)} className="mt-3 rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700">Añadir revisión o actuación</button>}
+              <p className="mt-2 text-[10px] text-amber-700">No resuelto automáticamente · No altera snapshots ni confirma aceptación del SENIAT.</p>
+            </article>)}
+        </div>
+      </section>
     </div>
   );
 };
