@@ -291,7 +291,7 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
 
           {!hasDueDate && (
             <details className="rounded-xl border border-slate-200 p-4">
-              <summary className="cursor-pointer text-xs font-bold text-slate-800">Registrar vencimiento con fuente oficial verificada</summary>
+              <summary className="cursor-pointer text-xs font-bold text-slate-800">Documentar vencimiento con fuente oficial aportada</summary>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="text-xs font-semibold text-slate-700">Fecha límite publicada
                   <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
@@ -307,7 +307,7 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
                 </label>
                 <button type="button" disabled={busy || !dueDate || !sourceTitle.trim() || !sourceUrl.trim() || !sourceReference.trim()}
                   onClick={() => addEvent({ eventType: 'DUE_DATE_SET', occurredAt: today(), dueDate, officialSourceTitle: sourceTitle, officialSourceUrl: sourceUrl, officialReference: sourceReference })}
-                  className="rounded-lg bg-slate-800 px-4 py-2 text-xs font-bold text-white disabled:opacity-40 sm:col-span-2">Guardar vencimiento verificado</button>
+                  className="rounded-lg bg-slate-800 px-4 py-2 text-xs font-bold text-white disabled:opacity-40 sm:col-span-2">Guardar vencimiento documentado</button>
               </div>
             </details>
           )}
