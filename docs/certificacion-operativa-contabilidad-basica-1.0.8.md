@@ -236,3 +236,26 @@ Esta sección prevalece sobre los estados de CI anteriores cuando exista contrad
 - G1–G12 mantienen sus estados parciales descritos en la matriz; G15 continúa PENDIENTE. El CI técnico verde no sustituye la aceptación contable E2E.
 
 **Decisión vigente:** NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN CONTABLE BÁSICA. No se autoriza merge, Release ni distribución. La firma digital, la restauración segura y los recorridos E2E pendientes impiden cerrar la certificación.
+
+
+## 13. Política de propiedad, privacidad y distribución comercial controlada
+
+Esta política reemplaza cualquier redacción anterior que pudiera interpretarse como obligación de publicar SICOVEN o distribuirlo públicamente.
+
+- SICOVEN es un producto privado de su titular, destinado a explotación comercial y distribución controlada a clientes autorizados.
+- No se publicará un GitHub Release público, no se publicarán instaladores en una página de descargas abierta y no se habilitará distribución pública automática.
+- Los artefactos temporales de GitHub Actions son únicamente evidencia técnica de CI; no constituyen canal de entrega comercial.
+- La entrega comercial, cuando se autorice, será por canal privado y con control de destinatarios, versión, hash SHA-256, licencia y registro de entrega.
+- El repositorio GitHub debe tener visibilidad **Private**. La consulta de metadatos del repositorio durante esta revisión lo devolvió como `public`; por tanto, la privacidad del código todavía no está satisfecha y debe cambiarse en la configuración de GitHub antes de considerar protegido el código fuente. La propiedad privada del producto no queda garantizada por el campo `"private": true` de `package.json`.
+- La distribución Windows comercial exige firma Authenticode válida del ejecutable principal, instalador NSIS y desinstalador cuando corresponda, más sello de tiempo RFC 3161. El pipeline deberá verificar la firma con `Get-AuthenticodeSignature` y rechazar artefactos sin firma válida o con editor distinto del titular autorizado.
+- La clave privada/certificado PFX y su contraseña nunca se guardarán en el repositorio, archivos de configuración, artefactos, logs ni código. Se custodiarán en un almacén de secretos protegido (por ejemplo, GitHub Actions Secrets/Environment con aprobación restringida) o dispositivo/token del proveedor. No se registrarán ni enviarán por chat.
+- La configuración de firma se activará solo cuando el titular disponga de un certificado de firma de código emitido a su nombre/entidad comercial y haya cargado sus secretos de forma segura. El pipeline no debe degradar silenciosamente a unsigned: si falta certificado en el job de distribución, debe fallar.
+- Los builds de CI de validación podrán seguir siendo unsigned para probar compilación e instalación; se identificarán expresamente como artefactos internos no distribuibles. El job de entrega comercial será separado, protegido por aprobación manual y solo se ejecutará sobre un SHA aprobado.
+- La firma digital autentica el editor y detecta modificaciones del binario; no sustituye la licencia comercial, la protección del repositorio, la certificación contable ni la revisión de seguridad.
+
+### Estado de privacidad y firma
+
+- Privacidad del repositorio: **PENDIENTE DE CAMBIO** (GitHub lo reportó como público en la consulta).
+- Firma Authenticode del instalador: **PENDIENTE** (no hay certificado/secretos configurados).
+- Distribución comercial privada: **NO HABILITADA** hasta completar privacidad, gates G0–G15, firma verificable y autorización expresa del titular.
+- Releases públicos: **NO CONTEMPLADOS** en el plan de distribución.
