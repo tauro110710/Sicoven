@@ -14,6 +14,8 @@ export interface SupplierDebitNoteAccountingDraft {
   reason: string;
   classificationNote?: string;
   debitAccountCode: string;
+  /** Explicit destination account for manually reviewed VAT; never inferred. */
+  vatAccountCode?: string;
   /** Used only when the source invoice was paid in cash and therefore has no payable line. */
   payableAccountCode?: string;
   taxableBaseBs: number;
@@ -181,10 +183,11 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
   }
   const debitAccount = accounts.find(item => item.code === draft.debitAccountCode)!;
   const vatAccount = vatAmountBs > 0 ? accounts.find(item =>
-    item.code === '1.1.3.01' && item.type === 'ACTIVO' && item.isMovement
+    item.code === draft.vatAccountCode && item.isMovement &&
+    ['ACTIVO', 'COSTOS', 'GASTOS'].includes(item.type)
   ) : undefined;
   if (vatAmountBs > 0 && !vatAccount) {
-    throw new Error('Falta la cuenta de movimiento de IVA crédito fiscal; no se puede preparar el asiento.');
+    throw new Error('El IVA de la ND requiere una cuenta de destino elegida y validada por el profesional; SICOVEN no infiere que sea crédito fiscal recuperable.');
   }
 
   const toUsd = (value: number) => moneyUsd(value / rate);
