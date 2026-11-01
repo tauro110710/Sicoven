@@ -69,7 +69,7 @@ test('document access verifies SHA-256 and does not downgrade a reviewed status'
     assert.equal(listDocuments(h.db, { companyId: 'co-1' })[0].status, 'VERIFIED');
     const opened = getDocument(h.db, { storageDir: h.storageDir, documentId: result.document.id, actor });
     assert.equal(fs.existsSync(opened.path), true);
-    assert.equal(listDocuments(h.db)[0].status, 'VERIFIED');
+    assert.equal(listDocuments(h.db, { companyId: 'co-1' })[0].status, 'VERIFIED');
     fs.writeFileSync(opened.path, Buffer.from('%PDF-1.7\nALTERADO\n'));
     assert.throws(() => getDocument(h.db, { storageDir: h.storageDir, documentId: result.document.id, actor }), /SHA-256/);
   } finally { h.close(); }
