@@ -77,6 +77,7 @@ function validateDossierInput(input, series) {
   const periodFrom = String(input.periodFrom || '');
   const periodTo = String(input.periodTo || '');
   if (!validMonth(periodFrom) || !validMonth(periodTo) || periodFrom > periodTo) throw new Error('El alcance mensual debe ser válido y ordenado (YYYY-MM).');
+  if (Number(periodFrom.slice(0, 4)) !== fiscalYear || Number(periodTo.slice(0, 4)) !== fiscalYear) throw new Error('Los períodos aprobables deben pertenecer al ejercicio contable indicado.');
   if (periodFrom < series.first_period || periodTo > series.last_period) throw new Error('El alcance solicitado excede la cobertura de la serie importada.');
   const framework = String(input.accountingFramework || '');
   if (!FRAMEWORKS.has(framework)) throw new Error('Seleccione el marco contable aplicable.');
@@ -107,6 +108,7 @@ function validateDossierInput(input, series) {
   const methodologyDescription = requiredText(input.methodologyDescription, 'Descripción metodológica', 3000);
   const coverageDescription = requiredText(input.coverageDescription, 'Cobertura geográfica y de bienes/servicios', 2000);
   const periodicity = requiredText(input.periodicity, 'Periodicidad', 120);
+  if (!/mensual/i.test(periodicity)) throw new Error('La serie alternativa debe documentar periodicidad mensual.');
   const limitations = requiredText(input.limitations, 'Limitaciones conocidas', 2000);
   const biasDeclaration = requiredText(input.biasDeclaration, 'Declaración sobre sesgo y limitaciones', 2000);
   return {
@@ -200,6 +202,12 @@ function createInflationSourceDossier(db, input, actor) {
   const series = db.prepare(\`SELECT s.id,s.series_code,s.first_period,s.last_period,s.imported_by,
     src.source_sha256 FROM inflation_index_series s JOIN inflation_index_sources src ON src.id=s.source_id WHERE s.id=?\`).get(seriesId);
   if (!series) throw new Error('La serie vinculada no existe.');
+  const stateRow = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+  let accountingState = null;
+  try { accountingState = stateRow ? JSON.parse(stateRow.state_json) : null; } catch { accountingState = null; }
+  if (!Array.isArray(accountingState?.companies) || !accountingState.companies.some(company => String(company?.id || '') === String(input.companyId || ''))) {
+    throw new Error('La empresa del expediente debe existir en la contabilidad local de SICOVEN.');
+  }
   const data = validateDossierInput(input, series);
   const version = Number(db.prepare('SELECT COALESCE(MAX(dossier_version),0)+1 AS n FROM inflation_source_dossiers WHERE series_id=?').get(seriesId).n);
   const id = crypto.randomUUID();
@@ -245,6 +253,9 @@ function reviewInflationSourceDossier(db, input, actor) {
   if (reason.length < 30) throw new Error('La justificación profesional debe contener al menos 30 caracteres.');
   const reviewerName = requiredText(input?.reviewerProfessionalName, 'Identidad del profesional revisor', 180);
   const reviewerCredential = requiredText(input?.reviewerCredential, 'Credencial del profesional revisor', 240);
+  if (reviewerName.toLocaleLowerCase() === String(dossier.professional_name).toLocaleLowerCase()) {
+    throw new Error('El profesional responsable del estudio no puede aprobar su propio trabajo.');
+  }
   if (decision === 'APPROVED_FOR_DOCUMENTED_USE') {
     const manifest = JSON.parse(dossier.evidence_manifest_json || '[]');
     const present = new Set(manifest.map(item => item.evidenceType));
