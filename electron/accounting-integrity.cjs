@@ -791,8 +791,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       String(review.fiscalReviewNote || '').trim().length >= 10);
     const noteMovements = asArray(nextState.movements).filter(movement =>
       movement.companyId === note.companyId &&
-      (String(movement.documentRef || '') === 'ND-PROV-' + debitNoteNumber ||
-        String(movement.documentType || '').toLowerCase().includes('nota de débito')));
+      String(movement.documentRef || '') === 'ND-PROV-' + debitNoteNumber);
     if (!company || !original || original.isCancelled || !isValidIsoDate(original.invoiceDate) || !sourceEntry || sourceEntry.companyId !== note.companyId ||
         sourceEntry.type !== 'COMPRA' ||
         normalizeDocument(sourceEntry.referenceDoc) !== normalizeDocument('FAC-' + original.invoiceNumber) ||
