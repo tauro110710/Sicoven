@@ -40,6 +40,10 @@ export function validateVatPaymentBankLinks(input: {
     if (!movement || movement.companyId !== input.companyId || movement.type !== 'DEBIT') {
       throw new Error('Cada soporte debe ser un débito bancario existente de la empresa activa.');
     }
+    if (movement.isReconciled || movement.reconciledWithJournalEntryId ||
+        (movement.reconciledJournalEntryIds || []).length > 0) {
+      throw new Error('El débito bancario ya fue conciliado con un asiento y no puede respaldar un nuevo enteramiento IVA.');
+    }
     const account = input.bankAccounts.find(item =>
       item.id === movement.bankAccountId && item.companyId === input.companyId);
     if (!account || account.currency !== 'BS') {
