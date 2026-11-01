@@ -416,7 +416,20 @@ function validateVatDeclarationLedger(previousState, nextState) {
     } else if (event.eventType === 'REVIEWED') {
       const hasCorrection = asArray(declaration.voucherIds).some(id => vouchers.get(String(id))?.requiresFiscalCorrection);
       const hasLegacy = asArray(declaration.voucherSnapshots).some(item => item.dateBasis === 'LEGACY_DOCUMENT_DATE');
-      if (status !== 'PREPARED' || hasCorrection ||
+      const declaredIds = new Set(asArray(declaration.voucherIds).map(String));
+      const assignments = new Map(asArray(declaration.legacyDateAssignments).map(item => [String(item.voucherId), item]));
+      const unresolvedLegacy = asArray(nextState.vatVouchers).some(voucher =>
+        String(voucher.companyId) === String(declaration.companyId) &&
+        String(voucher.period || '') === String(declaration.period) &&
+        !voucher.fiscalDate && !assignments.has(String(voucher.id)));
+      const lateVouchers = asArray(nextState.vatVouchers).some(voucher => {
+        if (String(voucher.companyId) !== String(declaration.companyId)) return false;
+        const assignment = assignments.get(String(voucher.id));
+        const fiscalDate = voucher.fiscalDate || assignment?.confirmedFiscalDate;
+        return Boolean(fiscalDate) && fiscalDate >= declaration.startDate &&
+          fiscalDate <= declaration.endDate && !declaredIds.has(String(voucher.id));
+      });
+      if (status !== 'PREPARED' || hasCorrection || unresolvedLegacy || lateVouchers ||
           String(event.occurredAt) < String(declaration.createdAt).slice(0, 10) ||
           (hasLegacy && (!event.acknowledgedLegacyDates || String(event.note || '').trim().length < 10))) {
         throw new Error('SQLite bloqueó la revisión: existen correcciones pendientes, fechas históricas no verificadas o una transición inválida.');
