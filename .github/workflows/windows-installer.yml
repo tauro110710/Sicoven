@@ -124,7 +124,7 @@ jobs:
           foreach ($required in @($cleanApp, (Join-Path $cleanInstallDir "resources\app.asar"), (Join-Path $cleanInstallDir "resources\app.asar.unpacked\node_modules\better-sqlite3\build\Release\better_sqlite3.node"))) {
             if (-not (Test-Path $required -PathType Leaf)) { throw "La instalación limpia no contiene un archivo esencial: $required" }
           }
-          $cleanProcess = Start-Process -FilePath $cleanApp -ArgumentList @("--disable-gpu") -PassThru
+          $cleanProcess = Start-Process -FilePath $cleanApp -ArgumentList @("--disable-gpu", "--user-data-dir=$cleanAppData") -PassThru
           Start-Sleep -Seconds 12
           $cleanProcess.Refresh()
           if ($cleanProcess.HasExited) { throw "SICOVEN 1.0.8 no arrancó en perfil limpio. Código: $($cleanProcess.ExitCode)" }
