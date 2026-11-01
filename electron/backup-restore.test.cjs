@@ -160,3 +160,19 @@ test('verification rejects an oversized manifest before parsing it', async () =>
     assert.throws(() => verifyBackupDirectory(destination), /tamaño máximo/);
   } finally { h.close(); }
 });
+
+test('verification rejects Windows-invalid names and reserved device names', async () => {
+  const h = fixture();
+  try {
+    const destination = path.join(h.root, 'backup');
+    await createBackup({ db: h.db, userDataDir: h.userDataDir, destination });
+    const manifestPath = path.join(destination, 'manifest.json');
+    const original = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    for (const unsafePath of ['folder/name?.pdf', 'folder/CON.txt', 'folder/trailing.']) {
+      const manifest = structuredClone(original);
+      manifest.documents[0].path = unsafePath;
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+      assert.throws(() => verifyBackupDirectory(destination), /ruta documental/);
+    }
+  } finally { h.close(); }
+});
