@@ -44,7 +44,7 @@ Estas limitaciones deberán comunicarse claramente en la ficha de versión y doc
 
 | Gate | Criterio de aprobación | Evidencia requerida | Estado |
 |---|---|---|---|
-| G0 — Línea base | Identificar SHA, versión, inventario de pruebas y workflows activos | Informe reproducible | PENDIENTE |
+| G0 — Línea base | Identificar SHA, versión, inventario de pruebas y workflows activos | CI base y revisión de commits/workflows | APROBADO (base 1.0.7) |
 | G1 — Plan de cuentas | Jerarquía, padres, niveles, cuentas imputables y aislamiento por empresa | Pruebas positivas/negativas | PENDIENTE |
 | G2 — Diario y partida doble | Asientos balanceados en Bs. y USD, correlativos, cuentas válidas, inmutabilidad y reversión | Pruebas de dominio y SQLite | PENDIENTE |
 | G3 — Diario/Mayor/Balance | Saldos iniciales, movimientos, saldos finales y cuadre reproducible por empresa/período | Conciliación independiente | PENDIENTE |
@@ -62,6 +62,17 @@ Estas limitaciones deberán comunicarse claramente en la ficha de versión y doc
 | G15 — Aceptación funcional | Recorrido de extremo a extremo de una empresa de certificación, con resultados esperados | Acta de pruebas y evidencias | PENDIENTE |
 
 Un gate no se marca aprobado por la mera existencia de componentes o pruebas unitarias. Debe existir evidencia ejecutada sobre el SHA candidato y los casos de aceptación que correspondan.
+
+
+### Evidencia de línea base (G0)
+
+- El commit `3676dbef4513d7c6920cd1ec6b708a5ad84025d9` modifica únicamente documentación respecto del código funcional validado en `3b957b0b717e92ad99a380578e8cf25cdf2baf81`; por tanto, las ejecuciones CI del segundo SHA representan la misma base funcional.
+- Desktop Validation run `41327119839`: SUCCESS. Job `validate` completó instalación, hardening de autenticación, pruebas, TypeScript, auditoría de recursos, build y auditoría de assets.
+- El log del job reporta **546 pruebas, 546 aprobadas, 0 fallidas, 0 omitidas**, en 15 suites.
+- Windows Installer run `41327119811`: SUCCESS. Completó NSIS, verificación del instalador y prueba de actualización 1.0.6 → 1.0.7 conservando SQLite.
+- Artefacto de CI 1.0.7: `SICOVEN-Windows-3b957b0b717e92ad99a380578e8cf25cdf2baf81`, ID `13091762381`, SHA-256 `868b46cbab835a7809d4afdce4ab7867fc09a27c43fbf72fa172e9f10bc8d93b`.
+- Advertencia no bloqueante observada: Vite genera un chunk JavaScript principal de aproximadamente 2.7 MB y muestra aviso por superar 500 kB. Debe evaluarse como mejora de rendimiento, sin convertirla en requisito fiscal ni ocultar el aviso.
+- **Límite:** G0 valida la línea base 1.0.7. No aprueba ningún gate funcional de aceptación 1.0.8 ni sustituye la futura actualización 1.0.7 → 1.0.8.
 
 ## 5. Dataset patrón de certificación
 
