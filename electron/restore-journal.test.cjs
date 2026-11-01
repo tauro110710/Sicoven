@@ -138,3 +138,13 @@ test('journal atomically replaces the existing file across the complete commit p
     assert.equal(fs.readdirSync(h.directory).filter(name => name.startsWith('journal.json.tmp-')).length, 0);
   } finally { h.close(); }
 });
+
+test('journal permits rollback when startup finds the swap not yet completed', () => {
+  const h = fixture();
+  try {
+    createJournal({ journalPath: h.journalPath, sourceDatabaseSha256: HASH_A, stagedDatabaseSha256: HASH_B });
+    transitionJournal({ journalPath: h.journalPath, expectedState: 'prepared', nextState: 'rollback_ready', lastStep: 'rollback_snapshot_verified', rollbackDatabaseSha256: HASH_C });
+    transitionJournal({ journalPath: h.journalPath, expectedState: 'rollback_ready', nextState: 'rolling_back', lastStep: 'startup_recovery_rollback' });
+    assert.equal(readJournal(h.journalPath).state, 'rolling_back');
+  } finally { h.close(); }
+});
