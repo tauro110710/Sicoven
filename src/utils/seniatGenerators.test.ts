@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { generateSeniatIvaTxt, generateSeniatIslrOperationsXml, generateSeniatIslrOperationsTxt } from './seniatGenerators';
 import type { Company, PurchaseRecord, IslrRetentionVoucher, VatRetentionVoucher } from '../types/accounting';
 import type { IslrFiscalEvent } from '../types/islrFiscalEvent';
+import { resolvePurchaseVatFiscalEvent } from '../types/vatFiscalEvent';
 
 const company = { id: 'c1', rif: 'J-12345678-9', name: 'Empresa', address: '', phone: '', email: '', taxpayerType: 'ORDINARIO', defaultIvaRetentionRate: 75, fiscalYear: 2026, bcvRate: 1 } as Company;
 const purchase = (overrides: Partial<PurchaseRecord> = {}) => ({
@@ -156,4 +157,21 @@ test('IVA TXT rejects invalid period, sequence, date and inconsistent retention 
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ vatWithheldBs: 161 })]), /incompleto o inválido/);
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ vatAmountBs: 159 })]), /incompleto o inválido/);
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ retentionRate: 50 })]), /incompleto o inválido/);
+});
+
+
+test('IVA fiscal event uses effective payment date for cash purchases, not invoice issue date', () => {
+  const event = resolvePurchaseVatFiscalEvent('CONTADO', '2026-11-02');
+  assert.deepEqual(event, { trigger: 'PAYMENT', fiscalDate: '2026-11-02', period: '202611' });
+});
+
+test('IVA fiscal event uses account-credit date for credit purchases, not invoice issue date', () => {
+  const event = resolvePurchaseVatFiscalEvent('CREDITO', '2026-11-02');
+  assert.deepEqual(event, { trigger: 'ACCOUNT_CREDIT', fiscalDate: '2026-11-02', period: '202611' });
+});
+
+test('IVA fiscal event rejects missing payment mode and impossible effective dates', () => {
+  assert.throws(() => resolvePurchaseVatFiscalEvent(undefined, '2026-11-02'), /modalidad de pago/);
+  assert.throws(() => resolvePurchaseVatFiscalEvent('CONTADO', '2026-02-30'), /no existe en el calendario/);
+  assert.throws(() => resolvePurchaseVatFiscalEvent('CREDITO', ''), /fecha efectiva/);
 });
