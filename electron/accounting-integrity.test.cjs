@@ -2024,6 +2024,13 @@ test('SQLite accepts a supplier debit note only as an independent, balanced, lin
   }), /anulación de ND tipo 02/);
   assert.throws(() => validateAccountingSnapshot(next, {
     ...cancellation,
+    supplierAdvanceSettlements: [{
+      id: 'active-advance-application', companyId: 'company-1',
+      targetPurchaseId: note.id, kind: 'APPLIED_TO_PURCHASE', isReversed: false
+    }]
+  }), /anulación de ND tipo 02/);
+  assert.throws(() => validateAccountingSnapshot(next, {
+    ...cancellation,
     journalEntries: [originalJournal, reversedSourceJournal, {
       ...reversalJournal,
       items: reversalJournal.items.map(item => item.accountCode === '2.1.1.01'
