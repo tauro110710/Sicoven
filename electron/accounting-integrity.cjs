@@ -436,8 +436,22 @@ function validateVatDeclarationLedger(previousState, nextState) {
       }
     } else if (event.eventType === 'FILED') {
       const reviewedEvent = history.find(item => item.eventType === 'REVIEWED');
+      const declaredIds = new Set(asArray(declaration.voucherIds).map(String));
+      const assignments = new Map(asArray(declaration.legacyDateAssignments).map(item => [String(item.voucherId), item]));
+      const unresolvedLegacy = asArray(nextState.vatVouchers).some(voucher =>
+        String(voucher.companyId) === String(declaration.companyId) &&
+        String(voucher.period || '') === String(declaration.period) &&
+        !voucher.fiscalDate && !assignments.has(String(voucher.id)));
+      const lateVouchers = asArray(nextState.vatVouchers).some(voucher => {
+        if (String(voucher.companyId) !== String(declaration.companyId)) return false;
+        const assignment = assignments.get(String(voucher.id));
+        const fiscalDate = voucher.fiscalDate || assignment?.confirmedFiscalDate;
+        return Boolean(fiscalDate) && fiscalDate >= declaration.startDate &&
+          fiscalDate <= declaration.endDate && !declaredIds.has(String(voucher.id));
+      });
       const numberKey = String(declaration.companyId) + ':' + String(event.declarationNumber || '').trim();
-      if (status !== 'REVIEWED' || !String(event.declarationNumber || '').trim() ||
+      if (status !== 'REVIEWED' || unresolvedLegacy || lateVouchers ||
+          !String(event.declarationNumber || '').trim() ||
           !String(event.receiptReference || '').trim() ||
           !reviewedEvent || String(event.occurredAt) < String(reviewedEvent.occurredAt) ||
           declarationNumberKeys.has(numberKey)) {
