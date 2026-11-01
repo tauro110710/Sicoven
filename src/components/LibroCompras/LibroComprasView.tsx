@@ -320,10 +320,10 @@ export const LibroComprasView: React.FC = () => {
                       {p.documentType === '01' && p.paymentTerm === 'CREDITO' && <button onClick={() => setSettlementTarget({id:p.id, number:p.invoiceNumber, party:p.supplierName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar pago parcial o total">Pagar</button>}
                       {p.documentType === '01' && !p.isCancelled && <button
                         onClick={() => setCreditNoteTarget(p)}
-                        disabled={!sqliteAvailable || !isStorageReady || p.paymentTerm !== 'CREDITO' || !p.inventoryLines?.length}
+                        disabled={!sqliteAvailable || !isStorageReady || !p.inventoryLines?.length}
                         className="mr-1 inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-40"
-                        title={p.paymentTerm !== 'CREDITO' ? 'Compras de contado requieren conciliación de caja/bancos' : !p.inventoryLines?.length ? 'Factura sin líneas de inventario conciliables' : 'Registrar nota de crédito y devolución física'}
-                      ><RotateCcw className="h-3 w-3" />Devolver</button>}
+                        title={!p.inventoryLines?.length ? 'Factura sin líneas de inventario conciliables' : p.paymentTerm === 'CONTADO' ? 'Registrar nota de crédito, salida física y saldo a favor del proveedor; no realiza reembolso automático de efectivo' : 'Registrar nota de crédito y devolución física'}
+                      ><RotateCcw className="h-3 w-3" />{p.paymentTerm === 'CONTADO' ? 'NC · saldo a favor' : 'Devolver'}</button>}
                       {p.documentType === '01' && <button
                         onClick={() => window.alert('Esta factura ya está contabilizada y no se puede eliminar físicamente. Para corregirla debe habilitarse el flujo de anulación con asiento reverso y ajuste de los libros fiscales.')}
                         className="p-1 text-slate-400 hover:text-amber-600 transition cursor-pointer"
