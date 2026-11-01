@@ -344,6 +344,61 @@ export interface VatRetentionVoucher {
   correctionNote?: string;
 }
 
+
+export type VatDeclarationWindow = 'FIRST_HALF' | 'SECOND_HALF';
+
+export interface VatDeclarationVoucherSnapshot {
+  voucherId: string;
+  voucherNumber: string;
+  supplierRif: string;
+  supplierName: string;
+  fiscalDate: string;
+  dateBasis: 'FISCAL_EVENT' | 'LEGACY_DOCUMENT_DATE';
+  taxableBaseBs: number;
+  vatAmountBs: number;
+  vatWithheldBs: number;
+  requiresFiscalCorrection: boolean;
+}
+
+export interface VatWithholdingDeclaration {
+  id: string;
+  companyId: string;
+  period: string; // YYYYMM
+  window: VatDeclarationWindow;
+  startDate: string;
+  endDate: string;
+  zeroOperations: boolean;
+  voucherIds: string[];
+  voucherSnapshots: VatDeclarationVoucherSnapshot[];
+  totalTaxableBaseBs: number;
+  totalVatAmountBs: number;
+  totalWithheldBs: number;
+  createdAt: string;
+  createdBy?: string;
+}
+
+export type VatWithholdingDeclarationEventType = 'REVIEWED' | 'FILED' | 'PAYMENT' | 'DUE_DATE_SET';
+
+export interface VatWithholdingDeclarationEvent {
+  id: string;
+  declarationId: string;
+  eventType: VatWithholdingDeclarationEventType;
+  occurredAt: string;
+  recordedAt: string;
+  actor?: string;
+  note?: string;
+  acknowledgedLegacyDates?: boolean;
+  declarationNumber?: string;
+  receiptReference?: string;
+  amountBs?: number;
+  paymentReference?: string;
+  evidenceReference?: string;
+  dueDate?: string;
+  officialSourceTitle?: string;
+  officialSourceUrl?: string;
+  officialReference?: string;
+}
+
 export interface IslrConcept {
   code: string; // e.g. "001", "002"
   description: string;
