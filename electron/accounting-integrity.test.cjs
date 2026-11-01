@@ -1982,7 +1982,7 @@ test('SQLite accepts a supplier debit note only as an independent, balanced, lin
     ] }]
   }), /ND tipo 02|no cuadra simultáneamente/);
   assert.throws(() => validateAccountingSnapshot(previous, {
-    ...next, movements: [{
+    ...next, movements: [unrelatedDebitNoteMovement, {
       id: 'fake-nd-movement', companyId: 'company-1', documentRef: 'ND-PROV-ND-001',
       type: 'ENTRADA', quantity: 1
     }]
