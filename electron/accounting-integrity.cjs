@@ -796,7 +796,9 @@ function validateAccountingSnapshot(previousState, nextState) {
         journal.date !== String(note.accountCreditDate || note.invoiceDate) ||
         Math.abs(Number(journal.bcvRate) - rate) > 0.000001 ||
         normalizeDocument(journal.referenceDoc) !== normalizeDocument('ND-PROV-' + debitNoteNumber) ||
-        !debitNoteNumber || !String(note.controlNumber || '').trim() ||
+        !debitNoteNumber || note.isCancelled === true ||
+        normalizeDocument(note.invoiceNumber) !== normalizeDocument(debitNoteNumber) ||
+        !String(note.controlNumber || '').trim() ||
         normalizeDocument(note.affectedInvoiceNumber) !== normalizeDocument(original.invoiceNumber) ||
         normalizeRif(note.supplierRif) !== normalizeRif(original.supplierRif) ||
         !isValidIsoDate(note.invoiceDate) || !isValidIsoDate(note.accountCreditDate || note.invoiceDate) ||
