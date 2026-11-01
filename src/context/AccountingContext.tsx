@@ -1475,8 +1475,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     settlementInFlightRef.current.add(operationKey);
     const cashCode = settlementBank?.accountCode || (draft.method === 'CASH_USD' ? '1.1.1.02' : '1.1.1.01');
     const cashAccount = accounts.find(account => account.code === cashCode && account.isMovement);
-    const controlCode = kind === 'SALE_COLLECTION' ? '1.1.2.01' : '2.1.1.01';
-    const controlAccount = accounts.find(account => account.code === controlCode && account.isMovement);
+    let controlCode = '1.1.2.01';
+    if (kind === 'PURCHASE_PAYMENT') {
+      const purchaseDocument = document as PurchaseRecord;
+      const sourceEntry = purchaseDocument.journalEntryId
+        ? journalEntries.find(entry => entry.id === purchaseDocument.journalEntryId && entry.companyId === currentCompany.id)
+        : undefined;
+      const expectedType = purchaseDocument.documentType === '02' ? 'AJUSTE' : 'COMPRA';
+      const payableCodes = [...new Set((sourceEntry?.items || [])
+        .filter(item => String(item.accountCode || '').startsWith('2.1.1.') && Number(item.creditBs || 0) > 0)
+        .map(item => String(item.accountCode)))];
+      if (!sourceEntry || sourceEntry.type !== expectedType || payableCodes.length !== 1) {
+        settlementInFlightRef.current.delete(operationKey);
+        throw new Error('El documento no conserva un asiento verificable con una única cuenta auxiliar de CxP. No se registró el pago.');
+      }
+      controlCode = payableCodes[0];
+    }
+    const controlAccount = accounts.find(account => account.code === controlCode &&
+      account.isMovement && (kind === 'SALE_COLLECTION' ? account.type === 'ACTIVO' : account.type === 'PASIVO'));
     if (!cashAccount || !controlAccount) {
       settlementInFlightRef.current.delete(operationKey);
       throw new Error('No se encontraron las cuentas contables necesarias para liquidar la factura.');
