@@ -260,8 +260,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   });
 
-  const [vatWithholdingDeclarations, setVatWithholdingDeclarations] = useState<VatWithholdingDeclaration[]>([]);
-  const [vatWithholdingDeclarationEvents, setVatWithholdingDeclarationEvents] = useState<VatWithholdingDeclarationEvent[]>([]);
+  const [vatWithholdingDeclarations, setVatWithholdingDeclarations] = useState<VatWithholdingDeclaration[]>(() => {
+    try {
+      const saved = readBrowserStorage(`${STORAGE_KEY}_vatWithholdingDeclarations`);
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+  const [vatWithholdingDeclarationEvents, setVatWithholdingDeclarationEvents] = useState<VatWithholdingDeclarationEvent[]>(() => {
+    try {
+      const saved = readBrowserStorage(`${STORAGE_KEY}_vatWithholdingDeclarationEvents`);
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
 
   const [islrVouchers, setIslrVouchers] = useState<IslrRetentionVoucher[]>(() => {
     try {
