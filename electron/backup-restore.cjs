@@ -47,9 +47,9 @@ function validateRelativeDocumentPath(value) {
     throw new Error('El manifiesto contiene una ruta documental no válida.');
   }
   const parts = value.split('/');
-  const reserved = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\\..*)?$/i;
+  const reserved = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
   if (parts.some(part => !part || part === '.' || part === '..' ||
-      /[<>:"|?*\\x00-\\x1f]/.test(part) || /[. ]$/.test(part) || reserved.test(part)) ||
+      /[<>:"|?*\x00-\x1f]/.test(part) || /[. ]$/.test(part) || reserved.test(part)) ||
       path.posix.normalize(value) !== value) {
     throw new Error('El manifiesto contiene una ruta documental no segura.');
   }
