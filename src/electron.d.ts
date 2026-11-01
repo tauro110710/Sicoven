@@ -55,6 +55,9 @@ declare global {
       listSupportingDocuments: (token: string, filters: { companyId: string; entityType?: string; entityId?: string }) => Promise<Array<{ id: string; companyId: string; entityType: string; entityId: string; documentType: string; title: string; description?: string | null; fileName: string; mimeType: string; sha256: string; byteSize: number; uploadedBy: string; createdAt: string; status: 'ATTACHED_UNREVIEWED' | 'VERIFIED' | 'OBSERVATION_REQUIRED' | 'REPLACED' }>>;
       reviewSupportingDocument: (token: string, input: { documentId: string; decision: 'VERIFIED' | 'OBSERVATION_REQUIRED'; reason: string }) => Promise<{ ok: boolean; documentId: string; status: string }>;
       openSupportingDocument: (token: string, documentId: string) => Promise<{ ok: boolean }>;
+      createVatFiscalIncident: (token: string, input: { companyId: string; purchaseId: string; vatVoucherId?: string; declarationId?: string; declarationEventIds?: string[]; bankMovementIds?: string[]; reason: string; detectedAt: string }) => Promise<import('./types/vatFiscalIncidents').VatFiscalIncident>;
+      listVatFiscalIncidents: (token: string, filters: { companyId: string }) => Promise<import('./types/vatFiscalIncidents').VatFiscalIncident[]>;
+      recordVatFiscalIncidentEvent: (token: string, input: import('./types/vatFiscalIncidents').VatFiscalIncidentEventInput) => Promise<import('./types/vatFiscalIncidents').VatFiscalIncident>;
       getDemoUsage: () => Record<string, number>;
       consumeDemoAction: (moduleKey: string) => {
         ok: boolean;
