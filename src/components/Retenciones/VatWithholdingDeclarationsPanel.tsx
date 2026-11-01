@@ -94,7 +94,7 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
   const hasCorrections = Boolean(selected && selected.voucherIds.some(id =>
     selected.voucherSnapshots.some(snapshot => snapshot.voucherId === id && snapshot.requiresFiscalCorrection) ||
     vatVouchers.some(voucher => voucher.id === id && voucher.requiresFiscalCorrection)));
-  const selectedAssignments = new Map((selected?.legacyDateAssignments || []).map(item => [item.voucherId, item]));
+  const selectedAssignments = new Map((selected?.legacyDateAssignments || []).map(item => [item.voucherId, item] as const));
   const selectedLateVouchers = selected ? vatVouchers.filter(voucher => {
     if (voucher.companyId !== selected.companyId || selected.voucherIds.includes(voucher.id)) return false;
     const fiscalDate = voucher.fiscalDate || selectedAssignments.get(voucher.id)?.confirmedFiscalDate;
