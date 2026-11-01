@@ -85,13 +85,13 @@ function archiveCommittedRollback(userDataDir,operationId) {
   fs.renameSync(rollbackDir,destination);
 }
 function cleanupOperation(userDataDir,operationId) {
+  const journal=path.join(userDataDir,JOURNAL);
+  if(exists(journal)) fs.rmSync(journal);
   const root=path.join(userDataDir,OP_ROOT);
   const dir=path.join(root,operationId);
   if(exists(dir)) { realDir(dir,'Directorio de operación'); fs.rmSync(dir,{recursive:true,force:true}); }
   const staging=path.join(userDataDir,'restore-staging',operationId);
   if(exists(staging)) { realDir(staging,'Staging de restauración'); fs.rmSync(staging,{recursive:true,force:true}); }
-  const journal=path.join(userDataDir,JOURNAL);
-  if(exists(journal)) fs.rmSync(journal);
 }
 function recoverPendingRestore({userDataDir}) {
   const root=path.resolve(userDataDir); realDir(root,'Datos de SICOVEN');
@@ -109,7 +109,7 @@ function recoverPendingRestore({userDataDir}) {
   }
   if(journal.state==='rolled_back') {
     cleanupOperation(root,journal.operationId);
-    return {ok:true,recovered:true,action:'kept_committed_restore'};
+    return {ok:true,recovered:true,action:'finalized_rollback_cleanup'};
   }
   if(journal.state==='prepared') {
     cleanupOperation(root,journal.operationId);
