@@ -17,6 +17,7 @@ import { VatVoucherModal } from './VatVoucherModal';
 import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators';
 import { VatWithholdingDeclarationsPanel } from './VatWithholdingDeclarationsPanel';
 import { getVatDeclarationStatus } from '../../types/vatWithholdingDeclaration';
+import { getVatVoucherDeliveryControl } from '../../utils/vatVoucherDelivery';
 
 export const RetencionesIvaView: React.FC = () => {
   const { currentCompany, purchases, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, recordVatVoucherDelivery, displayCurrency } = useAccounting();
@@ -81,6 +82,7 @@ export const RetencionesIvaView: React.FC = () => {
     : undefined;
 
   const pendingDeliveryCount = companyVouchers.filter(voucher => !voucher.deliveryDate).length;
+  const localToday = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const reviewPurchases = purchases.filter(purchase => purchase.companyId === currentCompany.id && purchase.ivaRetentionDecision?.decisionStatus === 'REVIEW');
   const pendingDeclarationStatuses = companyDeclarations.filter(item => {
     const status = getVatDeclarationStatus(item, vatWithholdingDeclarationEvents);
@@ -342,7 +344,7 @@ export const RetencionesIvaView: React.FC = () => {
                 filteredVouchers.map(v => (
                   <tr key={v.id} className="hover:bg-slate-50 transition">
                     <td className="py-2.5 px-4 font-mono font-bold text-purple-900 bg-purple-50/30 whitespace-nowrap">
-                      {v.voucherNumber}{!v.deliveryDate && <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-800">PEND. ENTREGA</span>}{v.deliveryDate && <span className="ml-1 rounded bg-emerald-100 px-1 py-0.5 text-[9px] font-bold text-emerald-800">ENTREGADO</span>}{v.requiresFiscalCorrection && <span title={v.correctionNote || 'Revisar regularización fiscal'} className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-800">REVISAR</span>}
+                      {v.voucherNumber}{!v.deliveryDate && <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-800">PEND. ENTREGA</span>}{!v.deliveryDate && getVatVoucherDeliveryControl(v.period, localToday).status === 'REVIEW' && <span title="La estimación de días hábiles ya transcurrió; verificar feriados oficiales y fecha efectiva de entrega." className="ml-1 rounded bg-rose-100 px-1 py-0.5 text-[9px] font-bold text-rose-800">REVISAR PLAZO</span>}{v.deliveryDate && <span className="ml-1 rounded bg-emerald-100 px-1 py-0.5 text-[9px] font-bold text-emerald-800">ENTREGADO</span>}{v.deliveryDate && getVatVoucherDeliveryControl(v.period, localToday, v.deliveryDate).needsCalendarReview && <span title="La fecha registrada supera la estimación de días hábiles; revisar feriados oficiales antes de concluir incumplimiento." className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-800">VERIFICAR FECHA</span>}{v.requiresFiscalCorrection && <span title={v.correctionNote || 'Revisar regularización fiscal'} className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-800">REVISAR</span>}
                     </td>
                     <td className="py-2.5 px-4 font-mono text-slate-600 whitespace-nowrap">
                       {formatDate(v.date)}
