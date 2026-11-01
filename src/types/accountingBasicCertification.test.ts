@@ -109,9 +109,10 @@ test('Basic accounting acceptance: one ledger reconciles trial balance, financia
     const creditBs = movements.reduce((value, item) => value + item.creditBs, 0);
     const debitUsd = movements.reduce((value, item) => value + item.debitUsd, 0);
     const creditUsd = movements.reduce((value, item) => value + item.creditUsd, 0);
-    const debitNature = ['ACTIVO', 'COSTOS', 'GASTOS'].includes(account.type);
-    const netBs = debitNature ? debitBs - creditBs : creditBs - debitBs;
-    const netUsd = debitNature ? debitUsd - creditUsd : creditUsd - debitUsd;
+    // Trial-balance debit/credit columns always follow raw debit minus credit,
+    // independently of the account's normal balance nature.
+    const netBs = debitBs - creditBs;
+    const netUsd = debitUsd - creditUsd;
     if (netBs > 0) sum.debitBalancesBs += netBs;
     else sum.creditBalancesBs += Math.abs(netBs);
     if (netUsd > 0) sum.debitBalancesUsd += netUsd;
