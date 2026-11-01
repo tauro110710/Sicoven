@@ -169,6 +169,32 @@ La aprobación técnica habilita la generación del artefacto de CI. La publicac
 
 **Decisión:** el artefacto de CI existe y los workflows propios están verdes, pero SICOVEN continúa **NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN CONTABLE BÁSICA** hasta cerrar todos los gates G0–G15. No publicar ni distribuir este artefacto como versión aprobada.
 
+## 11. Verificación CI del SHA actual de certificación
+
+**SHA verificado:** `9f063b046d5223fe7869a617e71859a5b22e0bee`  (01/11/2026).
+
+- Desktop Validation run `41330411836`: SUCCESS. Job `validate` completado; suite: **554 pruebas, 554 aprobadas, 0 fallidas, 16 suites**. TypeScript, auditoría de recursos, build y auditoría de assets también finalizaron correctamente.
+- Windows Installer run `41330411824`: SUCCESS. Suite: **554 pruebas, 554 aprobadas, 0 fallidas, 16 suites**; TypeScript y build renderer correctos; NSIS generó `SICOVEN-Setup-1.0.8-x64.exe` de **136,697,761 bytes**.
+- La prueba de actualización 1.0.7 → 1.0.8 sembró el snapshot sintético `cert-upgrade-company` / `cert-upgrade-opening-0001` y confirmó el mismo SHA-256 antes/después: `f4bde4773b6b8d655c873176779a5fd57ef984429499e17bfc55940c573a2b8c`.
+- Artefacto de CI: `SICOVEN-Windows-2beb2e9dcbfd2affa4dce06136f078fb0fc79782`, ID `13092654997`, tamaño ZIP **136,770,879 bytes**, SHA-256 `d661baa9094b8c0018b55d3d63a36c43f291a26026d3b75fb12a7c617bf5b5af`. URL de artefacto: https://github.com/fenixlife1978/Sicoven/actions/runs/41330411824/artifacts/13092654997. Es temporal de Actions, no un release.
+- El log confirma que no hay certificado de firma de código configurado; la firma fue omitida. La instalación limpia en un perfil/equipo independiente sigue sin evidencia.
+- Advertencias no bloqueantes observadas: chunk de Vite superior al umbral configurado; dependencias Node con avisos deprecados; acciones de GitHub que todavía apuntan a Node.js 20. Registrar para mantenimiento, sin confundirlas con fallos de las pruebas.
+
+### Revisión de aislamiento de lectura
+
+- `AccountingProvider` expone `journalEntries` filtrados por `currentCompany.id`; por tanto, el Libro Diario recibe asientos de la empresa activa desde el contexto.
+- El Libro Mayor aplica además `filterEntriesByCompany(journalEntries, currentCompany.id)` al recorrer movimientos. El filtro redundante es defensivo y las pruebas unitarias de `filterEntriesByCompany` cubren dos empresas.
+- La revisión de código no equivale a una prueba E2E de cambio de empresa desde la interfaz ni a una auditoría completa de cada informe.
+
+### Estado actualizado tras CI del SHA actual
+
+- G0: APROBADO (línea base 1.0.7).
+- CI técnico del SHA candidato: APROBADO (Desktop y Windows Installer, 554/554 cada uno).
+- G1–G3: evidencia parcial según la matriz; no se eleva a E2E.
+- G14: EVIDENCIA PARCIAL (upgrade preserva snapshot; instalación limpia y firma pendientes).
+- G4–G9, G10–G13 y G15: continúan pendientes/parciales conforme a la matriz.
+- **Decisión: NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN CONTABLE BÁSICA.**
+
 ## 11. Bitácora
 
 | Fecha | Cambio | Resultado |
