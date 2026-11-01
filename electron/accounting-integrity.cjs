@@ -745,6 +745,9 @@ function validateAccountingSnapshot(previousState, nextState) {
       normalizeDocument(item.debitNoteNumber || item.invoiceNumber) === normalizeDocument(note.debitNoteNumber || note.invoiceNumber));
     const debitNoteNumber = String(note.debitNoteNumber || note.invoiceNumber || '').trim();
     const notes = String(note.notes || '');
+    const review = note.supplierDebitNoteReview;
+    const allowedDebitNoteCauses = ['PRICE_DIFFERENCE', 'ADDITIONAL_EXPENSE', 'FINANCING_CHARGE',
+      'ADDITIONAL_GOODS_RECEIVED', 'INVENTORY_COST_ADJUSTMENT', 'OTHER'];
     const baseBs = Number(note.taxableBaseBs || 0);
     const exemptBs = Number(note.exemptAmountBs || 0);
     const vatBs = Number(note.vatAmountBs || 0);
@@ -763,6 +766,19 @@ function validateAccountingSnapshot(previousState, nextState) {
       const account = accountByCode.get(String(line.accountCode));
       return Boolean(account && account.isMovement && ['ACTIVO', 'COSTOS', 'GASTOS'].includes(account.type));
     });
+    const reviewValid = Boolean(review &&
+      allowedDebitNoteCauses.includes(review.economicCause) &&
+      String(review.reason || '').trim().length >= 10 &&
+      (review.economicCause !== 'OTHER' || String(review.classificationNote || '').trim().length >= 10) &&
+      String(review.debitAccountCode || '').trim() &&
+      String(review.payableAccountCode || '').trim() &&
+      payableLines[0]?.accountCode === review.payableAccountCode &&
+      debitLines.some(line => line.accountCode === review.debitAccountCode) &&
+      (vatBs <= 0 || (review.vatBreakdownReviewed === true && Boolean(review.vatAccountCode) &&
+        asArray(journal?.items).some(line => line.accountCode === review.vatAccountCode && Number(line.debitBs || 0) > 0))) &&
+      review.withholdingNotApplicableConfirmed === true &&
+      review.igtfNotApplicableConfirmed === true &&
+      String(review.fiscalReviewNote || '').trim().length >= 10);
     const noteMovements = asArray(nextState.movements).filter(movement =>
       movement.companyId === note.companyId &&
       (String(movement.documentRef || '') === 'ND-PROV-' + debitNoteNumber ||
@@ -798,7 +814,7 @@ function validateAccountingSnapshot(previousState, nextState) {
         Number(note.igtfAmountUsd || 0) > 0.0001 || note.igtfApplicable === true ||
         note.inventoryLines?.length || note.creditNoteLines?.length ||
         noteMovements.length > 0 || debitLines.length === 0 || payableLines.length !== 1 ||
-        !debitAccountsValid ||
+        !debitAccountsValid || !reviewValid ||
         Math.abs(debitTotalBs - creditTotalBs) > 0.02 ||
         Math.abs(debitTotalUsd - creditTotalUsd) > 0.0001 ||
         Math.abs(Number(payableLines[0]?.creditBs || 0) - totalBs) > 0.02 ||
