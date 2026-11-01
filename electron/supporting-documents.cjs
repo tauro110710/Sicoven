@@ -65,7 +65,7 @@ function normalizeDocument(input, buffer) {
   };
 }
 function currentDocumentStatus(db, documentId) {
-  const row = db.prepare('SELECT event_type FROM supporting_document_events WHERE document_id=? AND event_type<>'ACCESSED' ORDER BY id DESC LIMIT 1').get(documentId);
+  const row = db.prepare("SELECT event_type FROM supporting_document_events WHERE document_id=? AND event_type<>'ACCESSED' ORDER BY id DESC LIMIT 1").get(documentId);
   if (!row) return 'ATTACHED_UNREVIEWED';
   return row.event_type === 'REVIEWED' ? 'VERIFIED' : row.event_type === 'OBSERVATION_RECORDED' ? 'OBSERVATION_REQUIRED' : row.event_type === 'REPLACED' ? 'REPLACED' : 'ATTACHED_UNREVIEWED';
 }
@@ -108,7 +108,7 @@ function listDocuments(db, filters = {}) {
   if (filters.entityType) { clauses.push('d.entity_type=?'); values.push(String(filters.entityType).toUpperCase()); }
   if (filters.entityId) { clauses.push('d.entity_id=?'); values.push(String(filters.entityId)); }
   const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') : '';
-  return db.prepare('SELECT d.id,d.company_id AS companyId,d.entity_type AS entityType,d.entity_id AS entityId,d.document_type AS documentType,d.title,d.description,d.original_file_name AS fileName,d.mime_type AS mimeType,d.sha256,d.byte_size AS byteSize,d.uploaded_by_username AS uploadedBy,d.created_at AS createdAt,(SELECT e.event_type FROM supporting_document_events e WHERE e.document_id=d.id AND e.event_type<>'ACCESSED' ORDER BY e.id DESC LIMIT 1) AS lastEvent FROM supporting_documents d ' + where + ' ORDER BY d.created_at DESC,d.rowid DESC').all(...values).map(row => ({
+  return db.prepare("SELECT d.id,d.company_id AS companyId,d.entity_type AS entityType,d.entity_id AS entityId,d.document_type AS documentType,d.title,d.description,d.original_file_name AS fileName,d.mime_type AS mimeType,d.sha256,d.byte_size AS byteSize,d.uploaded_by_username AS uploadedBy,d.created_at AS createdAt,(SELECT e.event_type FROM supporting_document_events e WHERE e.document_id=d.id AND e.event_type<>'ACCESSED' ORDER BY e.id DESC LIMIT 1) AS lastEvent FROM supporting_documents d " + where + " ORDER BY d.created_at DESC,d.rowid DESC").all(...values).map(row => ({
     ...row, status: row.lastEvent === 'REPLACED' ? 'REPLACED' : row.lastEvent === 'REVIEWED' ? 'VERIFIED' : row.lastEvent === 'OBSERVATION_RECORDED' ? 'OBSERVATION_REQUIRED' : 'ATTACHED_UNREVIEWED',
     lastEvent: undefined
   }));
