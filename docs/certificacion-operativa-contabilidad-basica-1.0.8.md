@@ -64,7 +64,6 @@ Estas limitaciones deberán comunicarse claramente en la ficha de versión y doc
 
 Un gate no se marca aprobado por la mera existencia de componentes o pruebas unitarias. Debe existir evidencia ejecutada sobre el SHA candidato y los casos de aceptación que correspondan.
 
-
 ### Evidencia de línea base (G0)
 
 - El commit `3676dbef4513d7c6920cd1ec6b708a5ad84025d9` modifica únicamente documentación respecto del código funcional validado en `3b957b0b717e92ad99a380578e8cf25cdf2baf81`; por tanto, las ejecuciones CI del segundo SHA representan la misma base funcional.
@@ -211,7 +210,6 @@ La aprobación técnica habilita la generación del artefacto de CI. La publicac
 | 2026-11-01 | Se define el alcance independiente de certificación 1.0.8 sobre main 3676dbef4513d7c6920cd1ec6b708a5ad84025d9 | Certificación iniciada; ningún gate declarado aprobado por anticipado |
 | 2026-11-01 | G0: CI base 1.0.7 validado (546/546 pruebas; desktop y Windows SUCCESS). Se agrega prueba SQLite multiempresa; primera corrida detectó expectativa incorrecta del test sobre el evento state_saved (no defecto de persistencia), se corrige de 2 a 3 eventos totales y se relanza CI | Corrección incorporada; CI de la revisión corregida en ejecución; G12 sigue pendiente |
 
-
 ### Actualización G13 — respaldo completo implementado parcialmente
 
 - El respaldo se genera como directorio independiente `SICOVEN-backup-*`, sin sobrescribir destinos existentes ni escribir dentro del `userData` activo.
@@ -220,7 +218,6 @@ La aprobación técnica habilita la generación del artefacto de CI. La publicac
 - El manifiesto identifica formato, aplicación, fecha, tamaño/hash de SQLite y lista/hash de documentos.
 - La creación queda disponible solo para una sesión admin autenticada con licencia autorizada y registra evento de auditoría.
 - Pendiente: restauración en staging, validación integral del paquete, swap atómico, rollback probado ante interrupción, recuperación de soportes y comparación de saldos/documentos tras restaurar. Hasta cerrar esos puntos, G13 no está aprobado y SICOVEN no está certificado.
-
 
 ## 12. Adenda de evidencia — SHA 89bc7cb61b62c7b72aeacc91f281640c772f3cb4
 
@@ -237,7 +234,6 @@ Esta sección prevalece sobre los estados de CI anteriores cuando exista contrad
 - G1–G12 mantienen sus estados parciales descritos en la matriz; G15 continúa PENDIENTE. El CI técnico verde no sustituye la aceptación contable E2E.
 
 **Decisión vigente:** NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN CONTABLE BÁSICA. No se autoriza merge, Release ni distribución. La firma digital, la restauración segura y los recorridos E2E pendientes impiden cerrar la certificación.
-
 
 ## 13. Política vigente de propiedad y distribución de SICOVEN
 
@@ -261,13 +257,11 @@ Esta sección sustituye la política provisional de distribución privada contro
 - Prueba gratuita de 24 horas y activación comercial: deben quedar verificadas antes de abrir la distribución.
 - SICOVEN continúa **NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN** hasta aprobar los gates y pruebas de aceptación.
 
-
 ### Evidencia CI del SHA candidato `2302d533dbeacdfcdd9537cea06d258667228e8f`
 
 - Desktop Validation run `41344453808`: SUCCESS. Checkout, instalación de dependencias bloqueadas, guards de autenticación/sesión, pruebas automatizadas, TypeScript, auditoría de recursos, build y auditoría de assets completados.
 - Windows Installer run `41344453841`: SUCCESS. Checkout, descarga del instalador 1.0.7, instalación de dependencias, guards, pruebas automatizadas, TypeScript, build, auditoría de assets, NSIS, verificación del instalador, actualización 1.0.7 → 1.0.8 conservando SQLite y clean install en perfil Windows aislado completados.
 - Ambos workflows corresponden exactamente al mismo SHA candidato. Esta evidencia no completa G13 ni G15 y no sustituye los recorridos E2E contables desde la interfaz.
-
 
 ## 14. Evidencia CI del SHA dc673e258cbd6bf0820eb432db9c8d9892706209
 
@@ -280,7 +274,6 @@ Esta sección sustituye la política provisional de distribución privada contro
 
 **Decisión:** NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN CONTABLE BÁSICA. PR #83 permanece abierto en borrador; no merge, Release ni publicación.
 
-
 ## 15. Evidencia CI del SHA candidato 9015f04e8a328f7900b95715c7ab4c7f4ac7cde4
 
 - Desktop Validation run [41347639020](https://github.com/fenixlife1978/Sicoven/actions/runs/41347639020): SUCCESS.
@@ -291,7 +284,6 @@ Esta sección sustituye la política provisional de distribución privada contro
 - G1–G12 conservan los límites E2E descritos en la matriz y G15 sigue pendiente. Los dos workflows verdes no constituyen certificación contable.
 
 **Decisión de este SHA:** CI propio de Desktop y Windows APROBADO; certificación SICOVEN 1.0.8 NO EMITIDA. PR #83 permanece abierto y en borrador. No merge, Release ni distribución.
-
 
 ## 16. Evidencia actualizada — motor G13 y validación Windows — SHA aa9254a1cdf83df5a4b4d1dbd0477f3807036bf3
 
@@ -332,3 +324,39 @@ Pruebas dedicadas del motor:
 - G15 sigue PENDIENTE: recorrido funcional de aceptación contable de extremo a extremo.
 
 **Decisión:** la validación técnica de Desktop y Windows está APROBADA en el SHA indicado y el motor G13 ya está implementado. SICOVEN 1.0.8 continúa **NO CERTIFICADO / NO APTO PARA DISTRIBUCIÓN CONTABLE BÁSICA** hasta cerrar la reconciliación de saldos G13, G12 y los gates funcionales G0–G15. PR #83 permanece abierto en borrador; no merge, Release ni distribución.
+
+## 17. Política de documentos y adjuntos de SICOVEN
+
+**Regla transversal y obligatoria para todos los módulos presentes y futuros.** Esta política prevalece sobre cualquier texto anterior de esta hoja de ruta que pueda interpretarse como una exigencia de adjuntar soportes para registrar, guardar, contabilizar, procesar, conciliar o cerrar operaciones.
+
+1. Adjuntar documentos es completamente opcional.
+2. Ningún registro, asiento, factura, pago, cobro, conciliación, ajuste o cierre podrá bloquearse por no tener un archivo adjunto.
+3. El usuario podrá registrar y procesar sus operaciones normalmente, exista o no un documento adjunto.
+4. Cuando exista un soporte, SICOVEN ofrecerá la posibilidad de adjuntarlo voluntariamente.
+5. Los documentos adjuntos servirán para organizar y centralizar la información de la empresa en un solo lugar, facilitando consultas posteriores.
+6. El usuario podrá consultar, descargar, sustituir o eliminar adjuntos conforme a sus permisos.
+7. La ausencia de adjuntos no generará alertas de incumplimiento, sanciones, bloqueos ni calificaciones negativas.
+8. Las obligaciones de conservación documental y justificación ante las autoridades corresponden a la empresa y al profesional contable.
+
+### Criterio de interfaz recomendado
+
+**Documentos de soporte (opcional)**
+
+Puedes adjuntar facturas, comprobantes, recibos u otros documentos relacionados con esta operación para mantener toda la información organizada y centralizada en SICOVEN. Adjuntar archivos es voluntario y no es necesario para guardar o procesar el registro.
+
+### Criterios de implementación y aceptación
+
+- Los controles de adjuntos serán opcionales; no se marcarán como obligatorios en formularios, validadores, reglas de negocio ni endpoints.
+- La ausencia de adjuntos no impedirá guardar, contabilizar, confirmar, conciliar, pagar, cobrar ni cerrar.
+- No se mostrarán advertencias de incumplimiento ni estados de operación incompleta por falta de soportes.
+- Los permisos de consulta, descarga, sustitución y eliminación se aplicarán únicamente cuando el usuario decida adjuntar archivos.
+- Las pruebas automatizadas verificarán que las operaciones representativas se completan correctamente con la colección de adjuntos vacía.
+- Los documentos adjuntos no sustituyen ni constituyen una certificación, dictamen, validación fiscal o garantía de cumplimiento ante el SENIAT.
+- Las pruebas internas del software podrán utilizar fixtures y datos sintéticos para comprobar cálculos, persistencia y recuperación. Eso es trabajo interno de desarrollo y nunca una obligación documental que se traslade al contador o a la empresa usuaria.
+- Esta política no obliga a crear expedientes digitales, actas, paquetes de evidencias ni cargas documentales para el uso cotidiano de SICOVEN.
+
+### Responsabilidad documental
+
+SICOVEN es una herramienta de gestión y apoyo contable, no un órgano policial, fiscalizador o investigador. La conservación de soportes y la justificación de las operaciones ante el SENIAT u otras autoridades son responsabilidad de la empresa y del profesional contable, conforme a las obligaciones que les correspondan. El sistema debe facilitar su trabajo, no imponerles requisitos documentales adicionales.
+
+**Estado de esta política: APROBADA COMO REQUISITO FUNCIONAL DEL PRODUCTO.** Cualquier implementación que convierta la ausencia de adjuntos en un bloqueo o incumplimiento contradice esta hoja de ruta y debe corregirse antes de dar por terminado el módulo afectado.
