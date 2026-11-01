@@ -42,6 +42,7 @@ import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCredit
 import { FinancialDisclosure, validateFinancialDisclosure } from '../types/financialDisclosures';
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
+import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
@@ -3435,14 +3436,57 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     validateVatDeclarationEventDraft(declaration, history, draft);
     validateVatPaymentBankLinks({ companyId: currentCompany.id, declaration, draft, events: vatWithholdingDeclarationEvents, bankAccounts, bankMovements: bankStatementMovements });
+    let journalEntry: JournalEntry | undefined;
+    let paymentMovements: BankStatementMovement[] = [];
+    if (draft.eventType === 'PAYMENT') {
+      paymentMovements = (draft.bankStatementMovementIds || []).map(id =>
+        bankStatementMovements.find(item => item.id === id)!).filter(Boolean);
+      const plan = buildVatPaymentAccountingPlan({
+        occurredAt: draft.occurredAt,
+        movements: paymentMovements,
+        bankAccounts: bankAccounts.filter(item => item.companyId === currentCompany.id),
+        accounts
+      });
+      const referenceDoc = 'IVA-ENTERAMIENTO:' + declaration.id + ':' + String(draft.paymentReference || '').trim();
+      if (journalEntries.some(entry => entry.companyId === currentCompany.id && entry.referenceDoc === referenceDoc)) {
+        throw new Error('Ya existe un asiento contable para esta referencia de enteramiento IVA.');
+      }
+      journalEntry = addJournalEntry({
+        entryNumber: 0,
+        date: plan.date,
+        description: 'Enteramiento de retenciones de IVA · Declaración ' + declaration.period,
+        type: 'RETENCION_IVA',
+        bcvRate: plan.bcvRate,
+        referenceDoc,
+        items: plan.items
+      });
+    }
     const event: VatWithholdingDeclarationEvent = {
       ...draft,
+      ...(journalEntry ? { journalEntryId: journalEntry.id } : {}),
       id: 'vat-decl-event-' + Date.now() + '-' + Math.floor(Math.random() * 1000000),
       declarationId,
       recordedAt: new Date().toISOString()
     };
+    // One persistence barrier covers the journal, fiscal event and bank movement links.
+    // A SQLite failure fails the provider closed; no UI success is reported before confirmation.
     const confirmation = waitForPersistence();
     setVatWithholdingDeclarationEvents(prev => [...prev, event]);
+    if (journalEntry) {
+      const linkedIds = new Set(paymentMovements.map(item => item.id));
+      setBankStatementMovements(prev => prev.map(movement =>
+        linkedIds.has(movement.id) && movement.companyId === currentCompany.id
+          ? {
+              ...movement,
+              isReconciled: true,
+              matchedBy: 'MANUAL',
+              reconciledWithJournalEntryId: journalEntry!.id,
+              reconciledJournalEntryIds: [...new Set([...(movement.reconciledJournalEntryIds || []), journalEntry!.id])],
+              reconciledAt: new Date().toISOString()
+            }
+          : movement
+      ));
+    }
     await confirmation;
     return event;
   };
