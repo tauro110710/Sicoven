@@ -47,6 +47,10 @@ declare global {
       listInflationClassifications: (token: string, filters?: { companyId?: string; fiscalYear?: number }) => Promise<Array<InflationClassificationInput & { createdAt: string; status: string; reviewDecision: string | null; reviewer?: string | null; reviewedAt?: string | null }>>;
       saveInflationClassification: (token: string, input: InflationClassificationInput) => Promise<{ ok: boolean; decisionId: string; version: number; status: string; treatment: string }>;
       reviewInflationClassification: (token: string, input: { decisionId: string; decision: 'APPROVED' | 'REJECTED'; reason: string }) => Promise<{ ok: boolean; reviewId: string; decisionId: string; decision: string }>; 
+      getInflationSourceDossierEvidence: (token: string, evidenceId: string) => Promise<{ id: string; dossierId: string; title: string; fileName: string; mimeType: string; sourceUrl?: string | null; sha256: string; bytes: number; contentBase64?: string | null }>;
+      listInflationSourceDossiers: (token: string, filters?: { companyId?: string; fiscalYear?: number; seriesId?: string }) => Promise<Array<Record<string, unknown>>>;
+      createInflationSourceDossier: (token: string, input: Record<string, unknown>) => Promise<{ ok: boolean; dossierId: string; dossierVersion: number; sourceCode: string; missingEvidence: string[]; status: string; eligibleForReview: boolean }>;
+      reviewInflationSourceDossier: (token: string, input: Record<string, unknown>) => Promise<{ ok: boolean; reviewId: string; dossierId: string; decision: string }>;
       getDemoUsage: () => Record<string, number>;
       consumeDemoAction: (moduleKey: string) => {
         ok: boolean;

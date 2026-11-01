@@ -28,6 +28,7 @@ const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
 const { registerInflationIndexIpc } = require('./inflation-indexes.cjs');
 const { registerInflationClassificationIpc } = require('./inflation-classifications.cjs');
 const { registerInflationRemeReadinessIpc } = require('./inflation-reme-readiness.cjs');
+const { registerInflationSourceDossierIpc } = require('./inflation-source-dossiers.cjs');
 
 let db;
 function openDatabase() {
@@ -520,6 +521,7 @@ app.whenReady().then(async () => {
   registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession });
   registerInflationClassificationIpc({ ipcMain, db, licenseView, getActiveSession });
   registerInflationRemeReadinessIpc({ ipcMain, db, licenseView, getActiveSession });
+  registerInflationSourceDossierIpc({ ipcMain, db, licenseView, getActiveSession });
 
 
   await revalidateLicense();
