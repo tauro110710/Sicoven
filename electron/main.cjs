@@ -30,6 +30,7 @@ const { registerInflationClassificationIpc } = require('./inflation-classificati
 const { registerInflationRemeReadinessIpc } = require('./inflation-reme-readiness.cjs');
 const { registerInflationSourceDossierIpc } = require('./inflation-source-dossiers.cjs');
 const { registerDocumentVaultIpc } = require('./supporting-documents.cjs');
+const { registerBackupIpc } = require('./backup-restore.cjs');
 const { registerVatFiscalIncidentIpc } = require('./vat-fiscal-incidents.cjs');
 
 let db;
@@ -524,6 +525,8 @@ app.whenReady().then(async () => {
   registerInflationClassificationIpc({ ipcMain, db, licenseView, getActiveSession });
   registerInflationRemeReadinessIpc({ ipcMain, db, licenseView, getActiveSession });
   registerInflationSourceDossierIpc({ ipcMain, db, licenseView, getActiveSession });
+  registerBackupIpc({ ipcMain, db, licenseView, getActiveSession, dialog, app,
+    getWindow: () => BrowserWindow.getFocusedWindow() });
   registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, dialog, shell, app,
     getWindow: () => BrowserWindow.getFocusedWindow() });
   registerVatFiscalIncidentIpc({ ipcMain, db, licenseView, getActiveSession });
