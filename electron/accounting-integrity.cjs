@@ -537,10 +537,10 @@ function validateAccountingSnapshot(previousState, nextState) {
     const currentPurchase = asArray(nextState.purchases).find(item => item.id === previousPurchase.id);
     if (!currentPurchase || !currentPurchase.isCancelled) continue;
     const source = previousPurchase.journalEntryId
-      ? priorById.get(String(previousPurchase.journalEntryId))
+      ? asArray(priorState.journalEntries).find(entry => String(entry.id) === String(previousPurchase.journalEntryId))
       : undefined;
     const reversal = currentPurchase.cancelledByJournalEntryId
-      ? nextById.get(String(currentPurchase.cancelledByJournalEntryId))
+      ? asArray(nextState.journalEntries).find(entry => String(entry.id) === String(currentPurchase.cancelledByJournalEntryId))
       : undefined;
     const company = asArray(nextState.companies).find(item => item.id === previousPurchase.companyId);
     const debitNoteNumber = String(previousPurchase.debitNoteNumber || previousPurchase.invoiceNumber || '').trim();
@@ -554,7 +554,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       item.companyId === previousPurchase.companyId &&
       (item.journalEntryId === previousPurchase.journalEntryId ||
         String(item.documentRef || '') === 'ND-PROV-' + debitNoteNumber));
-    const nextSource = source ? nextById.get(String(source.id)) : undefined;
+    const nextSource = source ? asArray(nextState.journalEntries).find(entry => String(entry.id) === String(source.id)) : undefined;
     const sourceItems = asArray(source?.items);
     const reversalItems = asArray(reversal?.items);
     const exactReversal = sourceItems.length > 0 && sourceItems.length === reversalItems.length &&
