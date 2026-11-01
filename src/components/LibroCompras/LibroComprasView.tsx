@@ -20,6 +20,7 @@ import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportComprasPdf } from '../../utils/pdfGenerator';
 import { PurchaseCreditNoteModal } from './PurchaseCreditNoteModal';
+import { SupplierDebitNoteModal } from './SupplierDebitNoteModal';
 import { SupplierAdvanceSettlementModal } from './SupplierAdvanceSettlementModal';
 import { getPurchaseAccountCreditDate, type PurchaseRecord } from '../../types/accounting';
 import { SupportingDocumentsPanel } from '../shared/SupportingDocumentsPanel';
@@ -37,6 +38,7 @@ export const LibroComprasView: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [documentTarget, setDocumentTarget] = useState<{ id: string; title: string } | null>(null);
   const [creditNoteTarget, setCreditNoteTarget] = useState<PurchaseRecord | null>(null);
+  const [debitNoteTarget, setDebitNoteTarget] = useState<PurchaseRecord | null>(null);
   const [showSupplierAdvances, setShowSupplierAdvances] = useState(false);
   const [settlementTarget, setSettlementTarget] = useState<{id:string; number:string; party:string} | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -319,6 +321,11 @@ export const LibroComprasView: React.FC = () => {
                       <button onClick={() => setDocumentTarget({ id: p.id, title: 'Factura de compra ' + p.invoiceNumber })} className="mr-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes</button>
                       {p.documentType === '01' && p.paymentTerm === 'CREDITO' && <button onClick={() => setSettlementTarget({id:p.id, number:p.invoiceNumber, party:p.supplierName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar pago parcial o total">Pagar</button>}
                       {p.documentType === '01' && !p.isCancelled && <button
+                        onClick={() => setDebitNoteTarget(p)}
+                        disabled={!sqliteAvailable || !isStorageReady}
+                        className="mr-1 rounded bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        title="Emitir ND tipo 02 vinculada a esta factura">ND</button>}
+                      {p.documentType === '01' && !p.isCancelled && <button
                         onClick={() => setCreditNoteTarget(p)}
                         disabled={!sqliteAvailable || !isStorageReady || !p.inventoryLines?.length}
                         className="mr-1 inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-40"
@@ -436,6 +443,7 @@ export const LibroComprasView: React.FC = () => {
       </div>}
 
       {creditNoteTarget && <PurchaseCreditNoteModal purchase={creditNoteTarget} onClose={() => setCreditNoteTarget(null)} />}
+      {debitNoteTarget && <SupplierDebitNoteModal purchase={debitNoteTarget} onClose={() => setDebitNoteTarget(null)} />}
       {showSupplierAdvances && <SupplierAdvanceSettlementModal onClose={() => setShowSupplierAdvances(false)} />}
       {settlementTarget && <CreditSettlementModal documentId={settlementTarget.id} documentNumber={settlementTarget.number} partyName={settlementTarget.party} kind="PURCHASE_PAYMENT" onClose={() => setSettlementTarget(null)} />}
     </div>
