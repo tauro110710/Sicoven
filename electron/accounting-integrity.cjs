@@ -283,7 +283,7 @@ function validateVatDeclarationLedger(previousState, nextState) {
     const expectedEnd = period.slice(0, 4) + '-' + period.slice(4, 6) + '-' +
       String(declaration.window === 'FIRST_HALF' ? 15 : lastDay).padStart(2, '0');
     if (declaration.startDate !== expectedStart || declaration.endDate !== expectedEnd ||
-        !validVatDeclarationDate(declaration.createdAt.slice(0, 10))) {
+        !validVatDeclarationDate(String(declaration.createdAt || '').slice(0, 10))) {
       throw new Error('SQLite rechazó una declaración IVA cuya ventana no coincide con el período o tiene fecha inválida.');
     }
     const windowKey = String(declaration.companyId) + ':' + period + ':' + declaration.window;
@@ -342,6 +342,16 @@ function validateVatDeclarationLedger(previousState, nextState) {
       throw new Error('SQLite rechazó un evento de declaración IVA sin declaración vinculada o fecha válida.');
     }
     const history = timeline.get(declaration.id) || [];
+    if (history.length > 0) {
+      const priorEvent = history[history.length - 1];
+      if (String(event.occurredAt) < String(priorEvent.occurredAt) ||
+          String(event.recordedAt) < String(priorEvent.recordedAt)) {
+        throw new Error('SQLite rechazó un evento de declaración IVA con cronología anterior al evento ya registrado.');
+      }
+    }
+    if (String(event.occurredAt) < String(declaration.createdAt).slice(0, 10)) {
+      throw new Error('SQLite rechazó un evento fiscal anterior a la preparación de la declaración.');
+    }
     const status = history.reduce((current, item) => {
       if (item.eventType === 'REVIEWED') return 'REVIEWED';
       if (item.eventType === 'FILED') return 'FILED';
