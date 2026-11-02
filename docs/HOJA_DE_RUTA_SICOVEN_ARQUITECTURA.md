@@ -199,3 +199,27 @@ La validación del producto se realiza mediante:
 - La consulta de artefactos del run no devolvió artefactos descargables en la lista de GitHub Actions, aunque el paso de carga reportó SUCCESS. No se afirma que haya un ZIP disponible para descarga.
 - PR #88 permanece abierta, sin fusionar; `main` continúa intacta.
 - Este resultado no demuestra vigencia normativa del layout ni aceptación del TXT por el Portal Fiscal. Continúan pendientes la confirmación técnica primaria vigente, la validación oficial de declaración cero y la prueba real de carga/aceptación SENIAT. No declarar certificación ni homologación.
+
+
+## Revalidación del HEAD documental y hallazgo de granularidad fiscal — 2026-11-02
+
+- HEAD de PR #88: `b445ddbbd32e05045ddeb5cfd19ac180ff7840d4`.
+- SICOVEN CI #99 (run `41485277638`): SUCCESS.
+- Desktop Validation #1310 (run `41485277410`): SUCCESS.
+- Windows installer #1427 (run `41485277451`): SUCCESS; instalador NSIS construido, prueba de actualización 1.0.6 → 1.0.7 aprobada con conservación de SQLite y paso de carga de artefacto SUCCESS.
+- Los tres workflows finalizaron sobre el mismo SHA documental.
+
+### Hallazgo pendiente: documentos con múltiples alícuotas
+
+- El modelo fiscal actual `PurchaseRecord` / `VatRetentionVoucher` conserva una única `taxRate`, `taxableBaseBs`, `vatAmountBs` y `exemptAmountBs` por documento/comprobante.
+- El generador emite una fila de 16 campos y una sola alícuota por comprobante. Por tanto, no puede representar con fidelidad una factura que contenga simultáneamente bases gravadas a distintas alícuotas (por ejemplo, reducida y general) sin una estructura fiscal desglosada por tasa.
+- La búsqueda técnica encontró que la Providencia SNAT/2025/000054 obliga a presentar las compras sujetas a retención siguiendo las especificaciones técnicas del SENIAT y regula comprobantes, retención y períodos; no define por sí misma cómo dividir líneas del TXT por tasa. Una guía técnica histórica de declaración describe el campo de alícuota y el campo de IVA retenido, pero no se ha confirmado en fuente primaria vigente cómo debe serializarse una factura mixta.
+- La Providencia SNAT/2026/000093, publicada en octubre de 2026 según fuentes secundarias consultadas, exige en la factura discriminación de bases e IVA por alícuota. Esto refuerza la necesidad de conservar el desglose en SICOVEN, pero no constituye por sí sola la especificación del TXT de retenciones.
+- No se modificó el generador ni se inventaron filas duplicadas. Antes de implementar, se requiere confirmar en especificación primaria/portal si el TXT espera una fila por documento, por alícuota o por comprobante, y cómo se distribuye el número de comprobante y el monto retenido.
+- Acción técnica pendiente: diseñar un desglose fiscal por tasa en la compra/comprobante, con conciliación de sumas contra total, base, IVA causado, exento y retención; luego adaptar serialización y pruebas de factura mixta conforme a la respuesta oficial.
+- Este hallazgo impide considerar cerrado el bloque de cobertura fiscal completa, aunque la batería automatizada y el instalador estén verdes.
+
+### Estado oficial
+- La Providencia SNAT/2025/000054 (art. 15) respalda la obligación de declarar incluso sin operaciones y remite a especificaciones técnicas del SENIAT; no acredita el layout actual del TXT.
+- La guía RI_DRIVA2020-IT01V3_0_0 sigue siendo referencia histórica, no prueba suficiente de vigencia en noviembre de 2026.
+- La fila TXT cero y la serialización de facturas con múltiples alícuotas permanecen no homologadas.
