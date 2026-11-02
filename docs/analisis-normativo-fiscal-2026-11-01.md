@@ -114,3 +114,25 @@ El motor también conserva snapshots de UT por evento y valida que coincidan con
 ## 6. Criterio de salida de este análisis
 
 Este documento actualiza la línea base normativa para el Bloque 1. No declara completado el bloque ni certifica cumplimiento tributario. La implementación funcional se ejecutará en subbloques verificables, con pruebas automatizadas y preservación de la operación histórica.
+
+
+## 4.3 Contraste primario localizado: Providencia SNAT/2025/000054
+
+Se localizó una reproducción íntegra de la Providencia SNAT/2025/000054 publicada en la Gaceta Oficial N.º 43.171 del 16-07-2025, alojada como PDF por Marambio-HLB. El documento permite confirmar directamente los artículos relevantes para el diseño del Bloque 1:
+
+- **Artículo 15, numeral 1:** el agente debe presentar en el Portal Fiscal la declaración de compras sujetas a retención del período conforme a las especificaciones técnicas del SENIAT; también debe presentarla cuando no se hayan efectuado operaciones sujetas a retención. Por tanto, una quincena sin operaciones no puede omitirse por considerarse vacía. El registro interno de SICOVEN no sustituye la presentación.
+- **Artículo 15, numerales 2 y 3:** después de presentar la declaración, el agente puede enterar electrónicamente o imprimir la planilla 99035 para pagar mediante entidad bancaria autorizada/taquilla de contribuyentes especiales.
+- **Artículo 16:** el comprobante de retención debe emitirse y entregarse a más tardar dentro de los primeros dos días hábiles del período IVA siguiente. La numeración consecutiva debe tener 14 caracteres con estructura AAAAMMSSSSSSSS. El comprobante debe incluir datos del agente y proveedor, fecha de emisión/entrega, número y control de factura/nota de débito, monto total, base imponible, impuesto causado y monto retenido. La entrega electrónica requiere acuerdo del proveedor.
+- **Artículo 14:** el enteramiento se rige por el calendario de declaraciones y pagos de sujetos pasivos especiales, separado por retenciones practicadas del 1 al 15 y del 16 al último día del mes.
+
+### Consecuencias de producto
+
+1. El flujo de declaración quincenal debe admitir explícitamente cero operaciones y mantener el estado interno separado de la presentación oficial y su acuse.
+2. No debe generarse un TXT vacío por inferencia ni marcarse la obligación como cumplida solo por guardar el período en SQLite.
+3. El control de comprobantes debe verificar la estructura de 14 caracteres al emitir nuevos comprobantes, sin renumerar ni alterar comprobantes históricos.
+4. La ventana de entrega de dos días hábiles sigue siendo orientativa mientras no se incorpore un calendario oficial de feriados; no debe declarar incumplimiento automáticamente.
+5. La conciliación de pago debe distinguir declaración presentada, planilla 99035/enteramiento, débito bancario y asiento contable.
+
+**Fuente primaria reproducida en PDF:** https://www.marambio-hlb.com/wp-content/uploads/2025/07/PROVIDENCIA-000054-Ret.-IVA.-G.O.-43.171-16-07-2025.pdf
+
+**Límite de evidencia:** esta fuente permite leer el texto publicado de la Providencia, pero no es una especificación técnica del TXT/XML ni evidencia de aceptación del Portal Fiscal. La conformidad del archivo exportado sigue pendiente de instructivo técnico oficial y prueba controlada.
