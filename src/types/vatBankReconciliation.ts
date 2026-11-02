@@ -201,15 +201,19 @@ export function buildVatBankReconciliationSummary(
       (item.occurredAt === event.occurredAt && item.recordedAt < event.recordedAt)
     )).reduce((total, item) => total + Number(item.amountBs || 0), 0);
     const cumulativePaidBs = cents(priorPaidBs + paymentAmount);
+    // cumulativePaidBs está expresado en céntimos para evitar errores de suma.
+    // Convertirlo de nuevo a bolívares antes de prorratear el pasivo histórico en USD.
+    const cumulativePaidAmountBs = cumulativePaidBs / 100;
+    const priorPaidAmountBs = cents(priorPaidBs) / 100;
     const expectedCumulativeUsd = Number.isFinite(Number(declaration.totalWithheldUsd)) &&
       Number(declaration.totalWithheldUsd) > 0 && Number(declaration.totalWithheldBs) > 0
-      ? Math.abs(cumulativePaidBs - cents(Number(declaration.totalWithheldBs))) < 0.0001
+      ? cumulativePaidBs === cents(Number(declaration.totalWithheldBs))
         ? Number(declaration.totalWithheldUsd)
-        : Number(declaration.totalWithheldUsd) * cumulativePaidBs / Number(declaration.totalWithheldBs)
+        : Number(declaration.totalWithheldUsd) * cumulativePaidAmountBs / Number(declaration.totalWithheldBs)
       : Number.NaN;
     const expectedPriorUsd = Number.isFinite(Number(declaration.totalWithheldUsd)) &&
-      Number(declaration.totalWithheldBs) > 0
-      ? Number(declaration.totalWithheldUsd) * priorPaidBs / Number(declaration.totalWithheldBs)
+      Number(declaration.totalWithheldUsd) > 0 && Number(declaration.totalWithheldBs) > 0
+      ? Number(declaration.totalWithheldUsd) * priorPaidAmountBs / Number(declaration.totalWithheldBs)
       : Number.NaN;
     const expectedLiabilityUsd = Math.round((expectedCumulativeUsd - expectedPriorUsd) * 1e6) / 1e6;
     const validJournal = Boolean(linkedJournal) && validPaymentAmount &&
