@@ -1,7 +1,6 @@
 import { Company, VatRetentionVoucher, IslrRetentionVoucher, PurchaseRecord } from '../types/accounting';
 import type { IslrFiscalEvent } from '../types/islrFiscalEvent';
 import { cleanRif, validateVenezuelanRif } from './formatters';
-import { getPurchaseAccountCreditDate } from '../types/accounting';
 
 /**
  * Prepara un TXT de relación de retenciones IVA con estructura histórica de 16 columnas.
@@ -79,7 +78,11 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
           !companyPurchases.some(source => source.documentType === '01' && !source.isCancelled &&
             cleanRif(source.supplierRif) === supplierRif &&
             source.invoiceNumber === affectedDocument &&
-            (documentType !== '03' || getPurchaseAccountCreditDate(source).slice(0, 7).replace('-', '') === period) &&
+            (documentType !== '03' || vouchers.some(candidate =>
+              candidate.companyId === company.id &&
+              candidate.period === period &&
+              candidate.purchaseRecordId === source.id &&
+              !candidate.requiresFiscalCorrection)) &&
             (!linkedPurchase.originalPurchaseId || source.id === linkedPurchase.originalPurchaseId)))) ||
         [invoiceNum, controlNum, voucherNum].some(value => /[\t\r\n]/.test(value)) ||
         amounts.some(value => !Number.isFinite(Number(value)) || Number(value) < 0) || Number(v.totalAmountBs) <= 0 ||
