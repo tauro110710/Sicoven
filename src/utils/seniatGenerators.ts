@@ -8,7 +8,7 @@ import { getPurchaseAccountCreditDate } from '../types/accounting';
  * Su conformidad con las especificaciones técnicas vigentes del SENIAT debe validarse
  * antes de presentarlo en el Portal Fiscal; esta función no acredita aceptación oficial.
  */
-export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVoucher[], purchases: PurchaseRecord[] = []): string {
+export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVoucher[], purchases?: PurchaseRecord[]): string {
   const agentRif = cleanRif(company.rif);
   const lines: string[] = [];
 
@@ -26,11 +26,12 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     throw new Error('La exportación está bloqueada: existen comprobantes con corrección fiscal pendiente.');
   }
 
-  const purchasesById = new Map(purchases.filter(purchase => purchase.companyId === company.id).map(purchase => [purchase.id, purchase]));
+  const enforcePurchaseLink = Array.isArray(purchases);
+  const purchasesById = new Map((purchases || []).filter(purchase => purchase.companyId === company.id).map(purchase => [purchase.id, purchase]));
 
   for (const v of vouchers) {
-    const linkedPurchase = purchases.length > 0 ? purchasesById.get(v.purchaseRecordId) : undefined;
-    if (purchases.length > 0 && !linkedPurchase) {
+    const linkedPurchase = enforcePurchaseLink ? purchasesById.get(v.purchaseRecordId) : undefined;
+    if (enforcePurchaseLink && !linkedPurchase) {
       throw new Error(`El comprobante ${v.voucherNumber} no tiene una compra fuente válida vinculada; no se puede clasificar el documento.`);
     }
     const supplierRif = cleanRif(v.supplierRif);
