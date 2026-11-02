@@ -76,12 +76,13 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
         !['01', '02', '03'].includes(documentType) ||
         (cleanRif(linkedPurchase.supplierRif) !== supplierRif || linkedPurchase.invoiceDate !== v.invoiceDate || String(linkedPurchase.controlNumber || '').trim() !== controlNum || documentNumber.trim() !== invoiceNum) ||
         (documentType !== '01' && (!documentNumber || !affectedDocument ||
-          !companyPurchases.some(source => source.documentType === '01' &&
+          !companyPurchases.some(source => source.documentType === '01' && !source.isCancelled &&
             cleanRif(source.supplierRif) === supplierRif &&
             source.invoiceNumber === affectedDocument &&
             (!linkedPurchase.originalPurchaseId || source.id === linkedPurchase.originalPurchaseId)))) ||
         [invoiceNum, controlNum, voucherNum].some(value => /[\t\r\n]/.test(value)) ||
-        amounts.some(value => !Number.isFinite(Number(value)) || Number(value) < 0) ||
+        amounts.some(value => !Number.isFinite(Number(value)) || Number(value) < 0) || Number(v.totalAmountBs) <= 0 ||
+        linkedPurchase.isCancelled ||
         Number(v.taxRate) > 100 || !validRetentionRate ||
         Math.abs(Number(v.vatAmountBs) - expectedVat) > 0.01 ||
         Math.abs(Number(v.vatWithheldBs) - expectedWithheld) > 0.01 ||
