@@ -1,16 +1,16 @@
 name: SICOVEN Windows installer
-# Builds, validates, and publishes the corrected Windows installer directly to a GitHub Release.
+# Builds and validates the Windows installer. Publication is a separate, explicitly authorized action.
 
 on:
   push:
-    branches: [main, certificacion/contabilidad-basica-1.0.8]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
 
 permissions:
   actions: read
-  contents: write
+  contents: read
 
 concurrency:
   group: sicoven-windows-${{ github.ref }}
@@ -134,25 +134,3 @@ jobs:
           if (-not $cleanDatabase) { throw "La instalación limpia no creó sicoven.sqlite en el perfil aislado." }
           Write-Host "Instalación limpia 1.0.8, arranque y creación de SQLite verificados en perfil aislado."
           Get-Item $cleanDatabase.FullName | Select-Object FullName, Length, LastWriteTime
-      - name: Publish corrected installer as GitHub Release
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/certificacion/contabilidad-basica-1.0.8'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v1.0.8-corrected
-          name: SICOVEN 1.0.8 — instalador corregido
-          target_commitish: ${{ github.sha }}
-          body: |
-            Instalador corregido de SICOVEN 1.0.8.
-            
-            Generado desde el commit ${{ github.sha }} después de superar:
-            - Pruebas automatizadas y validación de tipos.
-            - Compilación del instalador Windows x64.
-            - Actualización directa desde SICOVEN 1.0.6 con conservación de SQLite y datos históricos.
-            - Instalación limpia y arranque en perfil aislado.
-            
-            Esta versión corregida se publica separada de la Release original v1.0.8.
-          files: release/SICOVEN-Setup-1.0.8-x64.exe
-          fail_on_unmatched_files: true
-          draft: false
-          prerelease: true
-          overwrite_files: true
