@@ -325,11 +325,12 @@ test('IVA TXT genera una línea CRLF por comprobante y exactamente 16 campos por
     ivaVoucher(),
     ivaVoucher({
       id: 'iva-v2',
+      purchaseRecordId: 'p2',
       voucherNumber: '20261000000002',
       invoiceNumber: 'F-002',
       controlNumber: '00-124'
     })
-  ]);
+  ], [purchase(), purchase({ id: 'p2', invoiceNumber: 'F-002', controlNumber: '00-124' })]);
   const rows = txt.split('\r\n');
   assert.equal(rows.length, 2);
   for (const row of rows) {
