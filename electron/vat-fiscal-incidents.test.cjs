@@ -184,7 +184,7 @@ test('rejects a same-company journal entry that is not linked to the original VA
     decisionText: 'Se adjunta el asiento correctivo previamente vinculado al comprobante IVA original.',
     declarationId: 'declaration-1', journalEntryId: 'journal-1'
   }, actor);
-  assert.equal(valid.events.at(-1).journalEntryId, 'journal-1');
+  assert.equal(valid.events.find(event => event.eventType === 'ACTION_RECORDED' && event.decisionText.startsWith('Se adjunta el asiento correctivo')).journalEntryId, 'journal-1');
   db.close();
 });
 
