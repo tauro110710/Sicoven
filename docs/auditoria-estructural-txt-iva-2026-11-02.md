@@ -51,6 +51,8 @@ El expediente de importación permanece en cero y no se incorporan tipos 04/05/0
 ## Pruebas añadidas
 
 - Correspondencia exacta de los 16 campos para una factura ordinaria.
+- Escenarios de alícuota reducida (8 %) con retención 75 %, alícuota general (16 %) con retención 100 % y documento exento con base/IVA/retención en cero.
+- Conciliación de enteramientos: el resumen solo reconoce pagos cuyo asiento real cuadra en Bs/USD, debita el pasivo IVA y acredita las cuentas bancarias por los importes exactos de los movimientos enlazados; se rechazan partidas malformadas o cuentas/valores discordantes.
 - Dos comprobantes generan dos filas CRLF, cada una con 16 campos.
 - Clasificación de ND y NC desde la compra vinculada y salida del documento afectado.
 - Rechazo de compra fuente ausente (incluida colección vacía), documento afectado ausente, proveedor/fecha/control/número documental discordantes y fecha documental posterior al período.
@@ -58,16 +60,14 @@ El expediente de importación permanece en cero y no se incorporan tipos 04/05/0
 
 ## Próxima ejecución técnica
 
-1. Revisar y corregir cualquier fallo de pruebas, tipado o build que reporte el workflow recién añadido.
-2. Completar las reglas de campos opcionales y longitudes con validaciones configurables, evitando introducir excepciones históricas sin datos de origen.
-3. Cerrar el tratamiento interno de rectificaciones IVA para que el bloqueo por corrección fiscal se resuelva con trazabilidad y sin reescribir comprobantes históricos.
-4. Completar la matriz de escenarios: factura ordinaria, exenta, alícuota reducida, alícuota general, retención 75/100, reversión parcial/total, período sin operaciones y documentos vinculados.
-5. Verificar que la previsualización y descarga produzcan bytes idénticos y mantengan tabuladores/CRLF, incluyendo caracteres acentuados y codificación del archivo.
-6. Mantener fuera del alcance de este cierre técnico cualquier declaración de aceptación externa que no esté respaldada por evidencia disponible.
+1. Revisar y corregir cualquier fallo de pruebas, tipado o build que reporte el workflow del SHA final.
+2. Cerrar la matriz automatizada restante de documentos vinculados y pagos parciales/totales sin modificar documentos ni comprobantes históricos.
+3. Verificar que la previsualización y descarga consuman exactamente la misma cadena generada y mantengan tabuladores/CRLF y codificación UTF-8.
+4. Mantener fuera del alcance de este cierre técnico cualquier declaración de aceptación externa que no esté respaldada por evidencia disponible.
 
 ## Fuentes de referencia
 
 - Instructivo SENIAT `RI_DRIVA2020-IT01V3_0_0`, versión 3.0.0, septiembre de 2020 (reproducción de terceros): https://es.readkong.com/page/instructivo-declaracion-de-retenciones-de-iva-seniat-4300855
 - Providencia SNAT/2025/000054 (reproducción consultada para artículos 13–17): https://tributos.ivecofi.net/informacion/legislacion/providencias/pa-2025-54
 
-**Estado:** generador enlazado a compras fuente y estructura reforzada en rama de trabajo. Ejecución CI pendiente de resultado; aceptación externa no forma parte del bloqueo para continuar el desarrollo técnico.
+**Estado:** generador enlazado a compras fuente; matriz de factura, ND/NC, alícuotas y exención ampliada; conciliación de asientos de enteramiento reforzada. Validación CI del SHA final pendiente; aceptación externa no forma parte del bloqueo para continuar el desarrollo técnico.
