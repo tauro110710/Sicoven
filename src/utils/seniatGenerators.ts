@@ -72,7 +72,7 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
         (cleanRif(linkedPurchase.supplierRif) !== supplierRif || linkedPurchase.invoiceDate !== v.invoiceDate || String(linkedPurchase.controlNumber || '').trim() !== controlNum || documentNumber.trim() !== invoiceNum) ||
         (documentType !== '01' && (!documentNumber || !affectedDocument ||
           !companyPurchases.some(source => source.documentType === '01' &&
-            source.supplierRif === linkedPurchase.supplierRif &&
+            cleanRif(source.supplierRif) === supplierRif &&
             source.invoiceNumber === affectedDocument &&
             (!linkedPurchase.originalPurchaseId || source.id === linkedPurchase.originalPurchaseId)))) ||
         [invoiceNum, controlNum, voucherNum].some(value => /[\t\r\n]/.test(value)) ||
