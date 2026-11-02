@@ -91,13 +91,18 @@ function hasValidVatPaymentJournal(
   if (Math.abs(cents(sum('debitBs')) - cents(sum('creditBs'))) > 0 ||
       Math.abs(Math.round(sum('debitUsd') * 1e6) - Math.round(sum('creditUsd') * 1e6)) > 0) return false;
 
-  const expectedBanks = new Map<string, number>();
+  const expectedBanks = new Map<string, { bs: number; usd: number }>();
   for (const movement of movements) {
     const account = bankAccounts.find(item =>
       item.id === movement.bankAccountId && item.companyId === entry.companyId);
     if (!account || account.currency !== 'BS' || !account.accountCode) return false;
-    expectedBanks.set(account.accountCode,
-      cents((expectedBanks.get(account.accountCode) || 0) + Number(movement.amountBs)));
+    const current = expectedBanks.get(account.accountCode) || { bs: 0, usd: 0 };
+    const movementUsd = Number(movement.amountUsd);
+    if (!Number.isFinite(movementUsd) || movementUsd <= 0) return false;
+    expectedBanks.set(account.accountCode, {
+      bs: cents(current.bs + Number(movement.amountBs)),
+      usd: Math.round((current.usd + movementUsd) * 1e6) / 1e6
+    });
   }
   const liabilityLines = entry.items.filter(item => item.accountCode === '2.1.2.03');
   if (liabilityLines.length !== 1) return false;
@@ -107,11 +112,11 @@ function hasValidVatPaymentJournal(
       Number(liability.debitUsd) <= 0 || Number(liability.creditUsd) !== 0) return false;
 
   const bankCodes = new Set(expectedBanks.keys());
-  for (const [code, expectedBs] of expectedBanks) {
+  for (const [code, expected] of expectedBanks) {
     const lines = entry.items.filter(item => item.accountCode === code);
-    if (lines.length !== 1 || cents(Number(lines[0].creditBs)) !== expectedBs ||
+    if (lines.length !== 1 || cents(Number(lines[0].creditBs)) !== expected.bs ||
         cents(Number(lines[0].debitBs)) !== 0 || Number(lines[0].debitUsd) !== 0 ||
-        Number(lines[0].creditUsd) <= 0) return false;
+        Math.round(Number(lines[0].creditUsd) * 1e6) !== Math.round(expected.usd * 1e6)) return false;
   }
 
   // In bolívares solo se admite débito al pasivo y créditos a los bancos enlazados.
