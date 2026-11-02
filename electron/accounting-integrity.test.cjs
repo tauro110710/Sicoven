@@ -2401,6 +2401,10 @@ test('SQLite upgrade preserves unchanged legacy invoice links without accepting 
     priorCrossCompany,
     { ...priorCrossCompany, purchases: [{ ...legacyPurchase }] }
   ), 'una relación preexistente de 1.0.6 debe poder leerse y conservarse sin reescritura');
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    priorCrossCompany,
+    { ...priorCrossCompany, purchases: [{ ...legacyPurchase, notes: 'Observación administrativa agregada' }] }
+  ), 'un cambio ajeno a la identidad fiscal no debe bloquear la conservación del vínculo histórico');
 
   const wrongTypeEntry = {
     ...sourceEntry(), id: 'legacy-entry-type', companyId: 'company-1', type: 'VENTA',
