@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateAccountingSnapshot } = require('./accounting-integrity.cjs');
+const { validateAccountingSnapshot, validateNewAccountCatalogEntries } = require('./accounting-integrity.cjs');
 const Database = require('better-sqlite3');
 
 const line = (debitBs, creditBs, debitUsd, creditUsd) => ({
@@ -2200,4 +2200,273 @@ test('SQLite accepts and constrains a cash payment against the ND own payable an
         ? { ...line, accountCode: '2.1.1.99' } : line)
     }]
   }), /pago de una ND/);
+});
+
+
+test('Basic accounting certification: persists independent company journals and preserves them after SQLite reopen', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { persistAccountingSnapshot } = require('./accounting-persistence.cjs');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-basic-cert-'));
+  const filename = path.join(directory, 'sicoven.sqlite');
+  const companies = [
+    { id: 'cert-company-a', name: 'Empresa Certificación A' },
+    { id: 'cert-company-b', name: 'Empresa Certificación B' }
+  ];
+  const openingItems = [
+    { accountCode: '1.1.1.01', accountName: 'Banco', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+    { accountCode: '3.1.1.01', accountName: 'Capital', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+  ];
+  const entryA = {
+    ...sourceEntry(),
+    id: 'cert-entry-a-1',
+    companyId: 'cert-company-a',
+    entryNumber: 1,
+    description: 'Apertura operativa empresa A',
+    items: openingItems
+  };
+  const entryB = {
+    ...sourceEntry(),
+    id: 'cert-entry-b-1',
+    companyId: 'cert-company-b',
+    entryNumber: 1,
+    description: 'Asiento histórico de tipo COMPRA de empresa B',
+    type: 'COMPRA',
+    referenceDoc: 'FAC-LEGACY-CROSS-001',
+    items: openingItems
+  };
+  const legacyPurchase = {
+    id: 'cert-legacy-purchase-a',
+    companyId: 'cert-company-a',
+    invoiceNumber: 'LEGACY-CROSS-001',
+    supplierRif: 'J-12345678-9',
+    documentType: '01',
+    journalEntryId: entryB.id
+  };
+  const prior = {
+    ...emptyState(),
+    companies,
+    journalEntries: [entryB],
+    purchases: [legacyPurchase],
+    accounts: [
+      { code: '1.1.1.01', name: 'Banco', type: 'ACTIVO', level: 4, isMovement: true },
+      { code: '3.1.1.01', name: 'Capital', type: 'PATRIMONIO', level: 4, isMovement: true }
+    ]
+  };
+  const next = { ...prior, journalEntries: [entryA, entryB] };
+  let db;
+  try {
+    db = new Database(filename);
+    db.pragma('journal_mode = WAL');
+    db.pragma('synchronous = FULL');
+    db.exec(`
+      CREATE TABLE app_state (
+        state_key TEXT PRIMARY KEY,
+        state_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE audit_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_type TEXT NOT NULL,
+        details_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TRIGGER audit_events_no_update BEFORE UPDATE ON audit_events
+        BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END;
+      CREATE TRIGGER audit_events_no_delete BEFORE DELETE ON audit_events
+        BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END;
+    `);
+    db.prepare('INSERT INTO app_state(state_key,state_json) VALUES(?,?)')
+      .run('accounting', JSON.stringify(prior));
+
+    const saved = persistAccountingSnapshot(db, next);
+    assert.equal(saved.ok, true);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 2, 'el asiento nuevo y state_saved deben quedar en la misma transacción; el vínculo heredado no se reescribe');
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    db.close();
+    db = null;
+
+    db = new Database(filename);
+    const reopened = JSON.parse(
+      db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json
+    );
+    assert.deepEqual(reopened.companies.map(company => company.id).sort(), [
+      'cert-company-a', 'cert-company-b'
+    ]);
+    assert.deepEqual(
+      reopened.journalEntries.map(entry => [entry.companyId, entry.entryNumber, entry.id]).sort(),
+      [
+        ['cert-company-a', 1, 'cert-entry-a-1'],
+        ['cert-company-b', 1, 'cert-entry-b-1']
+      ]
+    );
+    assert.equal(reopened.purchases[0].journalEntryId, 'cert-entry-b-1');
+    assert.equal(reopened.purchases[0].companyId, 'cert-company-a');
+    assert.equal(
+      db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='journal_entry_posted'").get().count,
+      1
+    );
+
+    const changedLegacyInvoice = {
+      ...reopened,
+      purchases: [{ ...reopened.purchases[0], invoiceNumber: 'ALTERED-LEGACY-001' }]
+    };
+    assert.throws(() => persistAccountingSnapshot(db, changedLegacyInvoice),
+      /modificación de un registro histórico en purchases/);
+    const stillOriginal = JSON.parse(
+      db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json
+    );
+    assert.equal(stillOriginal.purchases[0].invoiceNumber, 'LEGACY-CROSS-001',
+      'la transacción debe conservar intacta la factura si se intenta alterar su identidad');
+
+    const duplicateWithinA = {
+      ...entryA,
+      id: 'cert-entry-a-duplicate',
+      description: 'Duplicado inválido'
+    };
+    assert.throws(() => persistAccountingSnapshot(db, {
+      ...reopened,
+      journalEntries: [...reopened.journalEntries, duplicateWithinA]
+    }), /correlativo de asiento no creciente|número de asiento duplicado/);
+    assert.equal(
+      JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json)
+        .journalEntries.length,
+      2,
+      'un intento duplicado debe dejar intacto el estado confirmado'
+    );
+  } finally {
+    if (db?.open) db.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+
+test('Basic accounting certification: validates hierarchical chart accounts and rejects invalid parents or classifications', () => {
+  let prior = [
+    { code: '1', name: 'ACTIVO', type: 'ACTIVO', level: 1, isMovement: false },
+    { code: '3', name: 'PATRIMONIO', type: 'PATRIMONIO', level: 1, isMovement: false }
+  ];
+  const additions = [
+    { code: '1.1', name: 'Activo corriente', type: 'ACTIVO', level: 2, isMovement: false, parentCode: '1' },
+    { code: '1.1.1', name: 'Efectivo', type: 'ACTIVO', level: 3, isMovement: false, parentCode: '1.1' },
+    { code: '1.1.1.01', name: 'Banco', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.1' },
+    { code: '3.1', name: 'Capital', type: 'PATRIMONIO', level: 2, isMovement: false, parentCode: '3' },
+    { code: '3.1.1', name: 'Capital social', type: 'PATRIMONIO', level: 3, isMovement: true, parentCode: '3.1' }
+  ];
+  for (const account of additions) {
+    const next = [...prior, account];
+    assert.doesNotThrow(() => validateNewAccountCatalogEntries(prior, next));
+    prior = next;
+  }
+  assert.throws(() => validateNewAccountCatalogEntries(prior, [
+    ...prior,
+    { code: '1.1.1.02', name: 'Banco sin padre', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1' }
+  ]), /cuenta nueva: debe tener una cuenta padre/);
+  assert.throws(() => validateNewAccountCatalogEntries(prior, [
+    ...prior,
+    { code: '1.1.1.03', name: 'Cuenta mal clasificada', type: 'PASIVO', level: 4, isMovement: true, parentCode: '1.1.1' }
+  ]), /clasificación no coincide con el código|cuenta nueva: debe tener/);
+});
+
+test('Basic accounting certification: SQLite accepts balanced dual-currency journal entries and rejects unbalanced entries', () => {
+  const company = {
+    id: 'company-basic-a', name: 'Empresa básica A', rif: 'J-12345678-9',
+    address: 'Dirección de prueba', phone: '', email: '',
+    taxpayerType: 'ORDINARIO', defaultIvaRetentionRate: 75, fiscalYear: 2026, bcvRate: 100
+  };
+  const accounts = [
+    { code: '1.1.1.01', name: 'Banco', type: 'ACTIVO', level: 4, isMovement: true },
+    { code: '3.1.1.01', name: 'Capital social', type: 'PATRIMONIO', level: 4, isMovement: true }
+  ];
+  const entry = {
+    ...sourceEntry(),
+    id: 'basic-entry-a-1',
+    companyId: company.id,
+    entryNumber: 1,
+    items: [
+      { accountCode: '1.1.1.01', accountName: 'Banco', debitBs: 10000, creditBs: 0, debitUsd: 100, creditUsd: 0 },
+      { accountCode: '3.1.1.01', accountName: 'Capital social', debitBs: 0, creditBs: 10000, debitUsd: 0, creditUsd: 100 }
+    ]
+  };
+  const prior = { ...emptyState(), companies: [company], accounts };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, {
+    ...prior, journalEntries: [entry]
+  }));
+  const unbalanced = {
+    ...entry,
+    id: 'basic-entry-unbalanced',
+    items: entry.items.map((item, index) => index === 1 ? { ...item, creditBs: 9999 } : item)
+  };
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...prior, journalEntries: [unbalanced]
+  }), /no cuadra simultáneamente en Bs. y USD/);
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...prior,
+    journalEntries: [{ ...entry, id: 'basic-entry-invalid-side',
+      items: [{ ...entry.items[0], debitBs: -1 }, entry.items[1]] }]
+  }), /importes o lados contables inválidos/);
+});
+
+
+test('SQLite upgrade preserves unchanged legacy invoice links without accepting new cross-company or wrong-type links', () => {
+  const legacyPurchase = {
+    id: 'legacy-purchase-1', companyId: 'company-1', invoiceNumber: 'LEG-100',
+    documentType: '01', journalEntryId: 'legacy-entry'
+  };
+  const wrongCompanyEntry = {
+    ...sourceEntry(), id: 'legacy-entry', companyId: 'company-2', type: 'COMPRA',
+    referenceDoc: 'FAC-LEG-100'
+  };
+  const priorCrossCompany = {
+    ...emptyState([wrongCompanyEntry]),
+    companies: [{ id: 'company-1' }, { id: 'company-2' }],
+    purchases: [legacyPurchase]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    priorCrossCompany,
+    { ...priorCrossCompany, purchases: [{ ...legacyPurchase }] }
+  ), 'una relación preexistente de 1.0.6 debe poder leerse y conservarse sin reescritura');
+  const wrongTypeEntry = {
+    ...sourceEntry(), id: 'legacy-entry-type', companyId: 'company-1', type: 'VENTA',
+    referenceDoc: 'FAC-LEG-100'
+  };
+  const priorWrongType = {
+    ...emptyState([wrongTypeEntry]),
+    companies: [{ id: 'company-1' }],
+    purchases: [{ ...legacyPurchase, journalEntryId: wrongTypeEntry.id }]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    priorWrongType,
+    { ...priorWrongType, purchases: [{ ...priorWrongType.purchases[0] }] }
+  ), 'un vínculo histórico de tipo anterior debe preservarse sin bloquear el arranque');
+
+  const purchaseWithoutLegacyLink = { ...legacyPurchase, journalEntryId: undefined };
+  const priorWithoutLink = {
+    ...emptyState([wrongCompanyEntry]),
+    companies: [{ id: 'company-1' }, { id: 'company-2' }],
+    purchases: [purchaseWithoutLegacyLink]
+  };
+  const newlyLinkedCrossCompany = {
+    ...priorWithoutLink,
+    purchases: [{ ...legacyPurchase }]
+  };
+  assert.throws(() => validateAccountingSnapshot(priorWithoutLink, newlyLinkedCrossCompany),
+    /vínculo de factura con un asiento de otra empresa/);
+
+  // Un vínculo inválido heredado solo puede conservarse con la identidad
+  // original; no se puede reasignar cambiando empresa, número o proveedor.
+  const changedIdentityCases = [
+    { record: { ...legacyPurchase, companyId: 'company-2' }, expected: /SQLite bloqueó la modificación de un registro histórico en purchases/ },
+    { record: { ...legacyPurchase, invoiceNumber: 'LEG-101' }, expected: /SQLite bloqueó la modificación de un registro histórico en purchases/ },
+    { record: { ...legacyPurchase, supplierRif: 'J-999' }, expected: /SQLite bloqueó la modificación de un registro histórico en purchases/ },
+    { record: { ...legacyPurchase, documentType: '02' }, expected: /SQLite bloqueó la modificación de un registro histórico en purchases/ },
+    { record: { ...legacyPurchase, journalEntryId: undefined }, expected: /No se puede retirar ni modificar la marca histórica journalEntryId/ }
+  ];
+  for (const { record, expected } of changedIdentityCases) {
+    assert.throws(() => validateAccountingSnapshot(
+      priorCrossCompany,
+      { ...priorCrossCompany, purchases: [record] }
+    ), expected);
+  }
 });

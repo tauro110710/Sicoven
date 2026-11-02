@@ -883,11 +883,36 @@ function validateAccountingSnapshot(previousState, nextState) {
 
   for (const collectionName of ['purchases', 'sales']) {
     const expectedEntryType = collectionName === 'sales' ? 'VENTA' : 'COMPRA';
+    const priorDocumentsById = new Map(asArray(priorState[collectionName])
+      .map(document => [String(document.id), document]));
     for (const document of asArray(nextState[collectionName])) {
+      const priorDocument = priorDocumentsById.get(String(document.id));
+      const priorLinkedEntry = priorDocument?.journalEntryId
+        ? priorById.get(String(priorDocument.journalEntryId))
+        : undefined;
+      const priorLinkWasInvalid = Boolean(priorDocument?.journalEntryId) &&
+        (!priorLinkedEntry ||
+          String(priorLinkedEntry.companyId) !== String(priorDocument.companyId) ||
+          priorLinkedEntry.type !== expectedEntryType);
+      const sameLegacyIdentity = priorDocument &&
+        String(priorDocument.journalEntryId || '') === String(document.journalEntryId || '') &&
+        String(priorDocument.companyId || '') === String(document.companyId || '') &&
+        String(priorDocument.documentType || '') === String(document.documentType || '') &&
+        normalizeDocument(priorDocument.invoiceNumber) === normalizeDocument(document.invoiceNumber) &&
+        normalizeRif(priorDocument.supplierRif) === normalizeRif(document.supplierRif);
+      // Si una relación histórica ya era inconsistente, solo se tolera mientras
+      // permanezca intacta toda la identidad fiscal y empresarial del documento.
+      // No se permite "sanearla" cambiando empresa, tipo, número o proveedor.
+      if (priorLinkWasInvalid && !sameLegacyIdentity) {
+        throw new Error('SQLite rechazó un vínculo de factura con un asiento de otra empresa, tipo o documento.');
+      }
       if (!document.journalEntryId || (document.documentType && document.documentType !== '01')) continue;
       const linkedEntry = nextById.get(String(document.journalEntryId));
-      if (!linkedEntry || linkedEntry.companyId !== document.companyId ||
+      if (!linkedEntry || String(linkedEntry.companyId) !== String(document.companyId) ||
           linkedEntry.type !== expectedEntryType) {
+        // Compatibilidad no destructiva: se conserva sin reescritura el vínculo
+        // histórico inválido de 1.0.6, sin relajar los vínculos nuevos o alterados.
+        if (sameLegacyIdentity) continue;
         throw new Error('SQLite rechazó un vínculo de factura con un asiento de otra empresa, tipo o documento.');
       }
     }

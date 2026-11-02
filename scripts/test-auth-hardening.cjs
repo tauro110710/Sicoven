@@ -35,7 +35,7 @@ assert.match(main, /DELETE FROM auth_sessions WHERE token_hash=\?/);
 assert.match(main, /actor\.role !== 'admin'/);
 assert.match(main, /sicoven:load-state', \(_event, token\)/);
 const persistence = read('electron/accounting-persistence.cjs');
-assert.match(main, /registerAccountingPersistenceHandler\(\{ ipcMain, db, licenseView, getActiveSession \}\)/);
+assert.match(main, /registerAccountingPersistenceHandler\(\{ ipcMain, db: dbHandle, licenseView, getActiveSession \}\)/);
 assert.match(persistence, /ipcMain\.handle\('sicoven:save-state', \(_event, token, state\)/);
 assert.match(persistence, /if \(!licensing\.authorized\)/);
 assert.match(persistence, /const actor = getActiveSession\(token\)/);

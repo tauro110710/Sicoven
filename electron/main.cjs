@@ -30,9 +30,26 @@ const { registerInflationClassificationIpc } = require('./inflation-classificati
 const { registerInflationRemeReadinessIpc } = require('./inflation-reme-readiness.cjs');
 const { registerInflationSourceDossierIpc } = require('./inflation-source-dossiers.cjs');
 const { registerDocumentVaultIpc } = require('./supporting-documents.cjs');
+const { registerBackupIpc } = require('./backup-restore.cjs');
+const { recoverPendingRestore, registerRestoreIpc } = require('./restore-engine.cjs');
 const { registerVatFiscalIncidentIpc } = require('./vat-fiscal-incidents.cjs');
+const { acquireSingleInstance } = require('./single-instance.cjs');
 
 let db;
+// Los módulos IPC conservan este proxy estable: tras una restauración física,
+// los métodos se reenvían a la conexión SQLite recién abierta, nunca a la cerrada.
+const dbHandle = new Proxy(Object.create(null), {
+  get(_target, property) {
+    if (!db) throw new Error('La base SQLite no está disponible.');
+    const value = db[property];
+    return typeof value === 'function' ? value.bind(db) : value;
+  },
+  set(_target, property, value) {
+    if (!db) throw new Error('La base SQLite no está disponible.');
+    db[property] = value;
+    return true;
+  }
+});
 function openDatabase() {
   const dataDir = app.getPath('userData');
   fs.mkdirSync(dataDir, { recursive: true });
@@ -279,10 +296,26 @@ function createWindow() {
     if (url.startsWith('https://')) shell.openExternal(url);
     return { action: 'deny' };
   });
+  return win;
 }
 
+const hasSingleInstanceLock = acquireSingleInstance(app, () => {
+  const existingWindow = BrowserWindow.getAllWindows().find(win => !win.isDestroyed());
+  if (!existingWindow) return;
+  if (existingWindow.isMinimized()) existingWindow.restore();
+  if (!existingWindow.isVisible()) existingWindow.show();
+  existingWindow.focus();
+});
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
 app.whenReady().then(async () => {
   try {
+    // Recuperar/retroceder cualquier restauración interrumpida antes de abrir SQLite.
+    // Si el journal o el snapshot de retorno no son verificables, se bloquea el arranque.
+    fs.mkdirSync(app.getPath('userData'), { recursive: true });
+    recoverPendingRestore({ userDataDir: app.getPath('userData') });
     openDatabase();
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -519,14 +552,21 @@ app.whenReady().then(async () => {
     return { ok: true, cleared: true, verified: true };
   });
 
-  registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession });
-  registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession });
-  registerInflationClassificationIpc({ ipcMain, db, licenseView, getActiveSession });
-  registerInflationRemeReadinessIpc({ ipcMain, db, licenseView, getActiveSession });
-  registerInflationSourceDossierIpc({ ipcMain, db, licenseView, getActiveSession });
-  registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, dialog, shell, app,
+  registerAccountingPersistenceHandler({ ipcMain, db: dbHandle, licenseView, getActiveSession });
+  registerInflationIndexIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession });
+  registerInflationClassificationIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession });
+  registerInflationRemeReadinessIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession });
+  registerInflationSourceDossierIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession });
+  registerBackupIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession, dialog, app,
     getWindow: () => BrowserWindow.getFocusedWindow() });
-  registerVatFiscalIncidentIpc({ ipcMain, db, licenseView, getActiveSession });
+  registerRestoreIpc({ ipcMain, app, dialog, licenseView, getActiveSession,
+    getDb: () => db,
+    closeDatabase: async () => { if (db?.open) { const checkpoint = db.pragma('wal_checkpoint(TRUNCATE)')[0]; if (Number(checkpoint?.busy || 0) !== 0) throw new Error('SQLite mantiene operaciones WAL activas; se cancela la restauración sin reemplazar archivos.'); db.close(); db = null; } },
+    reopenDatabase: async () => openDatabase(),
+    getWindow: () => BrowserWindow.getFocusedWindow() });
+  registerDocumentVaultIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession, dialog, shell, app,
+    getWindow: () => BrowserWindow.getFocusedWindow() });
+  registerVatFiscalIncidentIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession });
 
 
   await revalidateLicense();
@@ -556,6 +596,7 @@ app.whenReady().then(async () => {
 
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
+}
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', () => {

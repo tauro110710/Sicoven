@@ -124,3 +124,4 @@ describe('historical report period selection', () => {
     assert.deepEqual(selectHistoricalReportEntries(entries, 'co-1', 0, 'SITUACION'), []);
   });
 });
+

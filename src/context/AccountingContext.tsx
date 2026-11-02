@@ -177,6 +177,8 @@ interface AccountingContextType {
   exportBackupJson: () => string;
   importBackupJson: (jsonData: string) => boolean;
   restoreBackupJson: (jsonData: string) => Promise<boolean>;
+  createPhysicalBackup: () => Promise<{ ok: boolean; canceled?: boolean; destination?: string; databaseSha256?: string; documentCount?: number; createdAt?: string }>;
+  restorePhysicalBackup: () => Promise<{ ok: boolean; canceled?: boolean; operationId?: string; databaseSha256?: string; documentCount?: number }>;
 }
 
 const AccountingContext = createContext<AccountingContextType | undefined>(undefined);
@@ -4046,6 +4048,22 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return JSON.stringify(backup, null, 2);
   };
 
+  const createPhysicalBackup = async (): Promise<{ ok: boolean; canceled?: boolean; destination?: string; databaseSha256?: string; documentCount?: number; createdAt?: string }> => {
+    if (!window.sicovenStore?.createAccountingBackup) {
+      throw new Error('La creación de respaldos físicos verificados solo está disponible en SICOVEN Desktop.');
+    }
+    await waitForPersistence();
+    return window.sicovenStore.createAccountingBackup(token);
+  };
+
+  const restorePhysicalBackup = async (): Promise<{ ok: boolean; canceled?: boolean; operationId?: string; databaseSha256?: string; documentCount?: number }> => {
+    if (!window.sicovenStore?.restoreAccountingBackup) {
+      throw new Error('La restauración física verificada solo está disponible en SICOVEN Desktop.');
+    }
+    await waitForPersistence();
+    return window.sicovenStore.restoreAccountingBackup(token);
+  };
+
   const restoreBackupJson = async (jsonData: string): Promise<boolean> => {
     // Captura el estado completo antes de aplicar un respaldo. Si SQLite rechaza
     // la escritura, restaura también la memoria de React y vuelve a intentar
@@ -4475,7 +4493,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         resetFactoryData,
         exportBackupJson,
         importBackupJson,
-        restoreBackupJson
+        restoreBackupJson,
+        createPhysicalBackup,
+        restorePhysicalBackup
       }}
     >
       {children}
