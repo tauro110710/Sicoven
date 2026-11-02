@@ -1,6 +1,21 @@
-import test from 'node:test';
+imp
+const generateSeniatIvaTxt = (
+  companyArg: Company,
+  vouchers: VatRetentionVoucher[],
+  sourcePurchases?: PurchaseRecord[]
+) => generateSeniatIvaTxtRaw(
+  companyArg,
+  vouchers,
+  sourcePurchases ?? vouchers.map(v => purchase({
+    id: v.purchaseRecordId,
+    invoiceDate: v.invoiceDate,
+    invoiceNumber: v.invoiceNumber,
+    controlNumber: v.controlNumber,
+    supplierRif: v.supplierRif
+  }))
+);ort test from 'node:test';
 import assert from 'node:assert/strict';
-import { generateSeniatIvaTxt, generateSeniatIslrOperationsXml, generateSeniatIslrOperationsTxt } from './seniatGenerators';
+import { generateSeniatIvaTxt as generateSeniatIvaTxtRaw, generateSeniatIslrOperationsXml, generateSeniatIslrOperationsTxt } from './seniatGenerators';
 import type { Company, PurchaseRecord, IslrRetentionVoucher, VatRetentionVoucher } from '../types/accounting';
 import type { IslrFiscalEvent } from '../types/islrFiscalEvent';
 import { resolvePurchaseVatFiscalEvent } from '../types/vatFiscalEvent';
