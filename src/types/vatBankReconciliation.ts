@@ -196,8 +196,10 @@ export function buildVatBankReconciliationSummary(
         movement.date <= event.occurredAt.slice(0, 10);
     });
     const linkedTotalCents = validMovements.reduce((sum, movement) => sum + cents(Number(movement.amountBs)), 0);
-    const priorPaidBs = payments.filter(item => item.id !== event.id)
-      .reduce((total, item) => total + Number(item.amountBs || 0), 0);
+    const priorPaidBs = payments.filter(item => item.id !== event.id && (
+      item.occurredAt < event.occurredAt ||
+      (item.occurredAt === event.occurredAt && item.recordedAt < event.recordedAt)
+    )).reduce((total, item) => total + Number(item.amountBs || 0), 0);
     const cumulativePaidBs = cents(priorPaidBs + paymentAmount);
     const expectedCumulativeUsd = Number.isFinite(Number(declaration.totalWithheldUsd)) &&
       Number(declaration.totalWithheldUsd) > 0 && Number(declaration.totalWithheldBs) > 0
