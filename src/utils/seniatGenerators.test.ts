@@ -195,6 +195,10 @@ test('IVA TXT rejects an empty supplied purchase collection instead of silently 
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], []), /compra fuente/);
 });
 
+test('IVA TXT refuses to borrow the voucher invoice number when the source purchase has none', () => {
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ invoiceNumber: '' })]), /incompleto o inválido/);
+});
+
 test('IVA TXT rejects linked purchase identifiers that disagree with the retention voucher', () => {
   const source = purchase({ invoiceNumber: 'OTHER-INVOICE' });
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [source]), /incompleto o inválido/);
