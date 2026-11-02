@@ -2381,3 +2381,46 @@ test('Basic accounting certification: SQLite accepts balanced dual-currency jour
       items: [{ ...entry.items[0], debitBs: -1 }, entry.items[1]] }]
   }), /importes o lados contables inválidos/);
 });
+
+
+test('SQLite upgrade preserves unchanged legacy invoice links without accepting new cross-company or wrong-type links', () => {
+  const legacyPurchase = {
+    id: 'legacy-purchase-1', companyId: 'company-1', invoiceNumber: 'LEG-100',
+    documentType: '01', journalEntryId: 'legacy-entry'
+  };
+  const wrongCompanyEntry = {
+    ...sourceEntry(), id: 'legacy-entry', companyId: 'company-2', type: 'COMPRA',
+    referenceDoc: 'FAC-LEG-100'
+  };
+  const priorCrossCompany = {
+    ...emptyState([wrongCompanyEntry]),
+    companies: [{ id: 'company-1' }, { id: 'company-2' }],
+    purchases: [legacyPurchase]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    priorCrossCompany,
+    { ...priorCrossCompany, purchases: [{ ...legacyPurchase }] }
+  ), 'una relación preexistente de 1.0.6 debe poder leerse y conservarse sin reescritura');
+
+  const wrongTypeEntry = {
+    ...sourceEntry(), id: 'legacy-entry-type', companyId: 'company-1', type: 'VENTA',
+    referenceDoc: 'FAC-LEG-100'
+  };
+  const priorWrongType = {
+    ...emptyState([wrongTypeEntry]),
+    companies: [{ id: 'company-1' }],
+    purchases: [{ ...legacyPurchase, journalEntryId: wrongTypeEntry.id }]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    priorWrongType,
+    { ...priorWrongType, purchases: [{ ...priorWrongType.purchases[0] }] }
+  ), 'un vínculo histórico de tipo anterior debe preservarse sin bloquear el arranque');
+
+  const newCrossCompany = {
+    ...emptyState([wrongCompanyEntry]),
+    companies: [{ id: 'company-1' }, { id: 'company-2' }],
+    purchases: [{ ...legacyPurchase }]
+  };
+  assert.throws(() => validateAccountingSnapshot(emptyState(), newCrossCompany),
+    /vínculo de factura con un asiento de otra empresa/);
+});
