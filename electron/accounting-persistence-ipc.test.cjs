@@ -513,6 +513,24 @@ test('SQLite appends an audit event when a VAT declaration is prepared and when 
     assert.equal(details.declarationId, declaration.id);
     assert.equal(details.eventType, 'REVIEWED');
     assert.deepEqual(details.actor, { userId: 1, username: 'auditor' });
+
+    const payment = {
+      id: 'vat-event-audit-payment', declarationId: declaration.id, eventType: 'PAYMENT',
+      occurredAt: '2026-10-18', recordedAt: '2026-10-18T12:00:00.000Z',
+      amountBs: 120, amountUsd: 1.2, paymentReference: 'SENIAT-REF-1',
+      bankStatementMovementIds: ['bank-debit-1'], journalEntryId: 'vat-payment-journal-1'
+    };
+    persistAccountingSnapshot(harness.db, {
+      ...initial, vatWithholdingDeclarationEvents: [reviewed, payment]
+    }, { id: 1, username: 'auditor' });
+    const paymentAudit = harness.db.prepare(
+      "SELECT details_json FROM audit_events WHERE event_type='vat_withholding_declaration_event' ORDER BY id DESC LIMIT 1"
+    ).get();
+    const paymentDetails = JSON.parse(paymentAudit.details_json);
+    assert.equal(paymentDetails.journalEntryId, 'vat-payment-journal-1');
+    assert.equal(paymentDetails.amountBs, 120);
+    assert.equal(paymentDetails.amountUsd, 1.2);
+    assert.deepEqual(paymentDetails.bankStatementMovementIds, ['bank-debit-1']);
   } finally {
     harness.db.close();
   }
