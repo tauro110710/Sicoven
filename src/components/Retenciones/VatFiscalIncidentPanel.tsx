@@ -24,7 +24,7 @@ export const VatFiscalIncidentPanel: React.FC = () => {
 
   useEffect(() => { void refresh(); }, [refresh, currentCompany.id]);
 
-  const eligiblePurchases = purchases.filter(p => p.companyId === currentCompany.id && ['02', '03'].includes(String(p.documentType || '')));
+  const eligiblePurchases = purchases.filter(p => p.companyId === currentCompany.id && ['02', '03'].includes(String(p.documentType || '')));\n  const getNoteNumber = (purchase: typeof purchases[number]) => purchase.documentType === '02'\n    ? purchase.debitNoteNumber || purchase.invoiceNumber || purchase.id\n    : purchase.creditNoteNumber || purchase.invoiceNumber || purchase.id;
   const registerIncident = async () => {
     if (!selectedPurchaseId || reason.trim().length < 15) {
       setError('Seleccione una nota de débito/crédito y explique el motivo con al menos 15 caracteres.');
@@ -44,7 +44,7 @@ export const VatFiscalIncidentPanel: React.FC = () => {
       });
       setIncidents(previous => [created, ...previous.filter(item => item.id !== created.id)]);
       setSelectedPurchaseId(''); setReason('');
-      setNotice('Incidencia registrada en SQLite. El comprobante original permanece bloqueado para exportación.');
+      setNotice(voucher\n        ? 'Incidencia registrada en SQLite y vinculada al comprobante IVA original; permanece bloqueado para exportación.'\n        : 'Incidencia registrada en SQLite. No se encontró un comprobante IVA original vinculado; el expediente queda abierto para revisión.');
     } catch (e) { setError(e instanceof Error ? e.message : 'No fue posible registrar la incidencia.'); }
     finally { setSaving(false); }
   };
@@ -80,7 +80,7 @@ export const VatFiscalIncidentPanel: React.FC = () => {
     <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]">
       <select value={selectedPurchaseId} onChange={e => setSelectedPurchaseId(e.target.value)} className="min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs">
         <option value="">Seleccione nota ND/NC…</option>
-        {eligiblePurchases.map(p => <option key={p.id} value={p.id}>{p.documentType === '02' ? 'ND' : 'NC'} · {p.creditNoteNumber || p.debitNoteNumber || p.invoiceNumber || p.id} · {p.supplierName}</option>)}
+        {eligiblePurchases.map(p => <option key={p.id} value={p.id}>{p.documentType === '02' ? 'ND' : 'NC'} · {getNoteNumber(p)} · {p.supplierName}</option>)}
       </select>
       <input value={reason} onChange={e => setReason(e.target.value)} placeholder="Motivo de la incidencia (mínimo 15 caracteres)" className="min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs" />
       <button type="button" onClick={() => void registerIncident()} disabled={saving || !selectedPurchaseId || reason.trim().length < 15} className="rounded-lg bg-amber-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Registrar incidencia</button>
