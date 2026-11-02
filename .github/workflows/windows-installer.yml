@@ -106,6 +106,7 @@ jobs:
           Write-Host "Actualización real 1.0.6 -> 1.0.7, arranque y conservación de datos SQLite verificados."
           Get-Item $installer.FullName | Select-Object Name, Length
       - name: Upload Windows installer artifact
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: SICOVEN-Windows-${{ github.sha }}

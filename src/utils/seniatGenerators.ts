@@ -4,8 +4,9 @@ import { cleanRif, validateVenezuelanRif } from './formatters';
 import { getPurchaseAccountCreditDate } from '../types/accounting';
 
 /**
- * Genera el archivo TXT oficial de Retenciones de IVA para el portal SENIAT
- * Formato estándar: Delimitado por tabulaciones (\t)
+ * Prepara un TXT de relación de retenciones IVA con estructura histórica de 16 columnas.
+ * Su conformidad con las especificaciones técnicas vigentes del SENIAT debe validarse
+ * antes de presentarlo en el Portal Fiscal; esta función no acredita aceptación oficial.
  */
 export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVoucher[]): string {
   const agentRif = cleanRif(company.rif);
@@ -13,7 +14,7 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
 
   if (!Array.isArray(vouchers)) throw new Error('La exportación IVA requiere una colección válida de comprobantes.');
   if (!validateVenezuelanRif(company.rif).isValid) throw new Error('El RIF del agente de retención no cumple la estructura venezolana válida.');
-  if (vouchers.length === 0) throw new Error('No se genera un TXT vacío: la declaración sin operaciones requiere el formato oficial vigente del SENIAT.');
+  if (vouchers.length === 0) throw new Error('No se genera un TXT vacío: registre la declaración sin operaciones mediante el flujo correspondiente y valide el procedimiento vigente del SENIAT.');
   if (new Set(vouchers.map(voucher => String(voucher.period || ''))).size > 1) {
     throw new Error('La exportación TXT de retenciones IVA debe contener un único período fiscal.');
   }
