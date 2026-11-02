@@ -514,14 +514,48 @@ test('SQLite appends an audit event when a VAT declaration is prepared and when 
     assert.equal(details.eventType, 'REVIEWED');
     assert.deepEqual(details.actor, { userId: 1, username: 'auditor' });
 
+    const filed = {
+      id: 'vat-event-audit-filed', declarationId: declaration.id, eventType: 'FILED',
+      occurredAt: '2026-10-17', recordedAt: '2026-10-17T11:00:00.000Z',
+      declarationNumber: 'DECL-IVA-1', receiptReference: 'ACK-IVA-1'
+    };
     const payment = {
       id: 'vat-event-audit-payment', declarationId: declaration.id, eventType: 'PAYMENT',
       occurredAt: '2026-10-18', recordedAt: '2026-10-18T12:00:00.000Z',
       amountBs: 120, amountUsd: 1.2, paymentReference: 'SENIAT-REF-1',
       bankStatementMovementIds: ['bank-debit-1'], journalEntryId: 'vat-payment-journal-1'
     };
+    const paymentJournal = {
+      id: 'vat-payment-journal-1', companyId: 'company-1', entryNumber: 2,
+      date: '2026-10-18', description: 'Enteramiento IVA', type: 'RETENCION_IVA',
+      bcvRate: 100, referenceDoc: 'IVA-ENTERAMIENTO:' + declaration.id + ':SENIAT-REF-1',
+      items: [
+        { accountCode: '2.1.2.03', accountName: 'Retenciones IVA por enterar', debitBs: 120, creditBs: 0, debitUsd: 1.2, creditUsd: 0 },
+        { accountCode: '1.1.1.03', accountName: 'Banco Bs.', debitBs: 0, creditBs: 120, debitUsd: 0, creditUsd: 1.2 }
+      ], createdAt: '2026-10-18T12:00:00.000Z'
+    };
+    const bankAccount = {
+      id: 'bank-account-1', companyId: 'company-1', accountCode: '1.1.1.03',
+      bankName: 'Banco Uno', accountNumber: '001', currency: 'BS',
+      initialBalanceBs: 0, initialBalanceUsd: 0
+    };
+    const bankMovement = {
+      id: 'bank-debit-1', companyId: 'company-1', bankAccountId: bankAccount.id,
+      date: '2026-10-18', reference: 'SENIAT-REF-1', description: 'Enteramiento IVA',
+      type: 'DEBIT', amountBs: 120, amountUsd: 1.2, isReconciled: true,
+      reconciledWithJournalEntryId: paymentJournal.id,
+      reconciledJournalEntryIds: [paymentJournal.id]
+    };
     persistAccountingSnapshot(harness.db, {
-      ...initial, vatWithholdingDeclarationEvents: [reviewed, payment]
+      ...initial,
+      accounts: [
+        { code: '2.1.2.03', name: 'Retenciones IVA por enterar', type: 'PASIVO', level: 4, isMovement: true },
+        { code: '1.1.1.03', name: 'Banco Bs.', type: 'ACTIVO', level: 4, isMovement: true }
+      ],
+      journalEntries: [paymentJournal],
+      bankAccounts: [bankAccount],
+      bankStatementMovements: [bankMovement],
+      vatWithholdingDeclarationEvents: [reviewed, filed, payment]
     }, { id: 1, username: 'auditor' });
     const paymentAudit = harness.db.prepare(
       "SELECT details_json FROM audit_events WHERE event_type='vat_withholding_declaration_event' ORDER BY id DESC LIMIT 1"
