@@ -391,7 +391,7 @@ test('IVA TXT covers reduced rate with 75% retention and general rate with 100% 
     retentionRate: 75, vatWithheldBs: 75, totalAmountBs: 1350
   })], [purchase({ id: 'p-reduced', invoiceNumber: 'F-001' })]).split('\t');
   assert.equal(reduced[9], '1250.00');
-  assert.equal(reduced[10], '75.00');
+  assert.equal(reduced[10], '100.00'); // Monto IVA total, no el 75% retenido.
   assert.equal(reduced[14], '8.00');
 
   const full = generateSeniatIvaTxt(company, [ivaVoucher({
@@ -401,6 +401,15 @@ test('IVA TXT covers reduced rate with 75% retention and general rate with 100% 
   })], [purchase({ id: 'p-full', invoiceNumber: 'F-001' })]).split('\t');
   assert.equal(full[10], '80.00');
   assert.equal(full[14], '16.00');
+});
+
+test('IVA TXT column 11 exports total VAT, not the withheld percentage amount', () => {
+  const fields = generateSeniatIvaTxt(company, [ivaVoucher({
+    taxableBaseBs: 1000, taxRate: 16, vatAmountBs: 160,
+    retentionRate: 75, vatWithheldBs: 120, totalAmountBs: 1160
+  })], [purchase()]).split('\t');
+  assert.equal(fields[10], '160.00');
+  assert.notEqual(fields[10], '120.00');
 });
 
 test('IVA TXT permits an exempt document with zero taxable base and zero withholding', () => {
