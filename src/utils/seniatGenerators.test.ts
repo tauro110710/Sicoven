@@ -183,7 +183,7 @@ test('IVA TXT refuses to infer document type when source purchases are omitted',
 
 test('IVA TXT rejects missing or unsupported source document types instead of defaulting to invoice', () => {
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ documentType: undefined })]), /incompleto o inválido/);
-  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ documentType: '04' })]), /incompleto o inválido/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ documentType: '04' as unknown as PurchaseRecord['documentType'] })]), /incompleto o inválido/);
 });
 
 test('IVA TXT rejects tab and newline injection in source document identifiers', () => {
