@@ -71,3 +71,12 @@ El expediente de importación permanece en cero y no se incorporan tipos 04/05/0
 - Providencia SNAT/2025/000054 (reproducción consultada para artículos 13–17): https://tributos.ivecofi.net/informacion/legislacion/providencias/pa-2025-54
 
 **Estado:** generador enlazado a compras fuente; matriz de factura, ND/NC, alícuotas y exención ampliada; conciliación de asientos de enteramiento reforzada. Validación CI del SHA final pendiente; aceptación externa no forma parte del bloqueo para continuar el desarrollo técnico.
+
+
+## Aclaración de vigencia operativa y alcance — 02-11-2026
+
+La revisión web de 02/11/2026 localizó el instructivo RI_DRIVA2020-IT01V3_0_0, versión 3.0.0 de septiembre de 2020, en reproducciones coincidentes (Readkong, Scribd y Studocu); no se encontró una versión posterior que lo sustituya. Se adopta por tanto como especificación técnica de trabajo para el TXT de retenciones IVA: 16 columnas y reglas descritas en el documento. La fecha de publicación de una reproducción reciente no equivale a una nueva revisión del instructivo.
+
+El documento distingue expresamente el nombre Monto_IVA del significado para agentes de retención: el campo corresponde al monto retenido por el comprador. Por ello, la columna 11 debe recibir vatWithheldBs; la columna 15 contiene la alícuota aplicada. El generador actual sigue ese mapeo.
+
+El instructivo explica que el archivo puede probarse en el Portal Fiscal, opción Retención IVA (prueba carga de archivo). Esa aceptación no se ha ejecutado desde esta auditoría. La única ambigüedad técnica abierta aquí es la representación de una factura con varias alícuotas: el formato define un campo de alícuota por fila, pero no explica expresamente si se repite el documento en filas separadas ni cómo distribuir el comprobante y la retención. No se debe cambiar el layout de 16 campos por esa incertidumbre.
