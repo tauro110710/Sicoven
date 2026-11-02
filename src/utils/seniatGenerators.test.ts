@@ -147,7 +147,7 @@ test('IVA TXT exports only real voucher identifiers and the supplied amounts', (
 
 test('IVA TXT classifies a linked supplier debit note and includes its affected invoice', () => {
   const source = purchase({ documentType: '02', debitNoteNumber: 'ND-001', affectedInvoiceNumber: 'F-001' });
-  const fields = generateSeniatIvaTxt(company, [ivaVoucher({ invoiceNumber: 'ND-001' })], [source]).split('\\t');
+  const fields = generateSeniatIvaTxt(company, [ivaVoucher({ invoiceNumber: 'ND-001' })], [source]).split('\t');
   assert.equal(fields[4], '02');
   assert.equal(fields[6], 'ND-001');
   assert.equal(fields[11], 'F-001');
@@ -155,14 +155,14 @@ test('IVA TXT classifies a linked supplier debit note and includes its affected 
 
 test('IVA TXT classifies a linked supplier credit note and includes its affected invoice', () => {
   const source = purchase({ documentType: '03', creditNoteNumber: 'NC-001', affectedInvoiceNumber: 'F-001' });
-  const fields = generateSeniatIvaTxt(company, [ivaVoucher({ invoiceNumber: 'NC-001' })], [source]).split('\\t');
+  const fields = generateSeniatIvaTxt(company, [ivaVoucher({ invoiceNumber: 'NC-001' })], [source]).split('\t');
   assert.equal(fields[4], '03');
   assert.equal(fields[6], 'NC-001');
   assert.equal(fields[11], 'F-001');
 });
 
 test('IVA TXT refuses an unlinked voucher or a note without its affected invoice', () => {
-  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], []), /comprobantes duplicados|incompleto o inválido|compra fuente/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ id: 'unrelated-purchase' })]), /compra fuente/);
   const note = purchase({ documentType: '02', debitNoteNumber: 'ND-002', affectedInvoiceNumber: undefined });
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ invoiceNumber: 'ND-002' })], [note]), /incompleto o inválido/);
 });
