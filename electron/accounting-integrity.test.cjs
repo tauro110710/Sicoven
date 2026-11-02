@@ -2416,11 +2416,16 @@ test('SQLite upgrade preserves unchanged legacy invoice links without accepting 
     { ...priorWrongType, purchases: [{ ...priorWrongType.purchases[0] }] }
   ), 'un vínculo histórico de tipo anterior debe preservarse sin bloquear el arranque');
 
-  const newCrossCompany = {
+  const purchaseWithoutLegacyLink = { ...legacyPurchase, journalEntryId: undefined };
+  const priorWithoutLink = {
     ...emptyState([wrongCompanyEntry]),
     companies: [{ id: 'company-1' }, { id: 'company-2' }],
+    purchases: [purchaseWithoutLegacyLink]
+  };
+  const newlyLinkedCrossCompany = {
+    ...priorWithoutLink,
     purchases: [{ ...legacyPurchase }]
   };
-  assert.throws(() => validateAccountingSnapshot(emptyState(), newCrossCompany),
+  assert.throws(() => validateAccountingSnapshot(priorWithoutLink, newlyLinkedCrossCompany),
     /vínculo de factura con un asiento de otra empresa/);
 });
