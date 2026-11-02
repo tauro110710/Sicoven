@@ -38,7 +38,7 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     throw new Error('La compra fuente contiene identificadores duplicados; revise la integridad de los documentos antes de exportar.');
   }
 
-  for (const v of vouchers) {
+  for (const v of [...vouchers].sort((a, b) => a.voucherNumber.localeCompare(b.voucherNumber))) {
     const linkedPurchase = purchasesById.get(v.purchaseRecordId);
     if (!linkedPurchase) {
       throw new Error(`El comprobante ${v.voucherNumber} no tiene una compra fuente válida vinculada; no se puede clasificar el documento.`);
@@ -114,7 +114,7 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     const maxLengths = [10, 6, 10, 1, 2, 10, 20, 20, 15, 15, 15, 20, 14, 15, 5, 15];
     if (fields.length !== 16 ||
         fields.some((value, index) => /[\t\r\n]/.test(value) || value.length > maxLengths[index]) ||
-        [invoiceNum, controlNum].some(value => /\s/.test(value))) {
+        [invoiceNum, controlNum, affectedDocument].some(value => /\s/.test(value))) {
       throw new Error('El comprobante contiene campos incompatibles con el formato TXT de 16 columnas (longitud, espacios o separadores); se bloqueó la exportación para evitar desplazar datos.');
     }
     lines.push(fields.join('\t'));
