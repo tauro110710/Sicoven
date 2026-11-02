@@ -88,8 +88,16 @@ export function buildVatBankReconciliationSummary(
 } {
   const payments = events.filter(event =>
     event.declarationId === declaration.id && event.eventType === 'PAYMENT');
+  const filed = events.find(event =>
+    event.declarationId === declaration.id && event.eventType === 'FILED');
   const lines = payments.map(event => {
     const ids = event.bankStatementMovementIds || [];
+    const paymentAmount = Number(event.amountBs);
+    const validPaymentAmount = Number.isFinite(paymentAmount) && paymentAmount > 0 &&
+      Number.isInteger(cents(paymentAmount));
+    const validPaymentDate = Boolean(filed) &&
+      isValidIsoDate(event.occurredAt.slice(0, 10)) &&
+      event.occurredAt >= filed!.occurredAt;
     const movements = ids.map(id => bankMovements.find(item =>
       item.id === id && item.companyId === declaration.companyId)).filter(Boolean) as BankStatementMovement[];
     const validMovements = movements.filter(movement => {
@@ -100,14 +108,18 @@ export function buildVatBankReconciliationSummary(
         (movement.reconciledJournalEntryIds || []).includes(event.journalEntryId as string);
       const hasOtherReconciliation = Boolean(movement.isReconciled || movement.reconciledWithJournalEntryId ||
         (movement.reconciledJournalEntryIds || []).length > 0) && !linkedToThisPayment;
-      return movement.type === 'DEBIT' && account?.currency === 'BS' &&
+      return movement.companyId === declaration.companyId &&
+        movement.type === 'DEBIT' && account?.currency === 'BS' &&
         !hasOtherReconciliation &&
         Number.isFinite(Number(movement.amountBs)) && Number(movement.amountBs) > 0 &&
-        isValidIsoDate(movement.date);
+        isValidIsoDate(movement.date) && validPaymentDate &&
+        movement.date >= filed!.occurredAt.slice(0, 10) &&
+        movement.date <= event.occurredAt.slice(0, 10);
     });
     const linkedTotalCents = validMovements.reduce((sum, movement) => sum + cents(Number(movement.amountBs)), 0);
-    const complete = ids.length > 0 && movements.length === ids.length &&
-      validMovements.length === ids.length && linkedTotalCents === cents(Number(event.amountBs || 0));
+    const complete = validPaymentAmount && validPaymentDate && ids.length > 0 &&
+      movements.length === ids.length && validMovements.length === ids.length &&
+      linkedTotalCents === cents(paymentAmount);
     return {
       eventId: event.id,
       occurredAt: event.occurredAt,
