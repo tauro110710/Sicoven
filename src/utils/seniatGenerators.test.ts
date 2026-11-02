@@ -172,10 +172,10 @@ test('IVA TXT serialization is UTF-8 without BOM, uses CRLF between rows and has
   ]);
   const bytes = new TextEncoder().encode(two);
   assert.notDeepEqual(Array.from(bytes.slice(0, 3)), [0xef, 0xbb, 0xbf]);
-  assert.equal(two.split('\\r\\n').length, 2);
-  assert.equal(two.endsWith('\\r') || two.endsWith('\\n'), false);
-  assert.equal(one.includes('\\r') || one.includes('\\n'), false);
-  assert.equal(two.split('\\r\\n').every(row => row.split('\\t').length === 16), true);
+  assert.equal(two.split('\r\n').length, 2);
+  assert.equal(two.endsWith('\r') || two.endsWith('\n'), false);
+  assert.equal(one.includes('\r') || one.includes('\n'), false);
+  assert.equal(two.split('\r\n').every(row => row.split('\t').length === 16), true);
 });
 
 test('IVA TXT classifies a linked supplier debit note and includes its affected invoice', () => {
