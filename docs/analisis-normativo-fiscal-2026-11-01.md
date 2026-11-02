@@ -80,6 +80,26 @@ La función también bloquea el archivo vacío y exige que la declaración sin o
 
 **Fuente auxiliar no vigente/no concluyente:** https://docs.erpya.com/assets/img/docs/lve/procedures/consigment-management/consignment-sales/withholding-declaration-cxp/Formato_TXT_IVA.pdf
 
+## 4.2 Auditoría de parámetros históricos ISLR y Unidad Tributaria
+
+La revisión del catálogo `src/data/islrConcepts.ts` y del validador `src/types/islrFiscalEvent.ts` confirma que el motor no habilita todos los conceptos del Decreto 1.808. El catálogo actual expone un subconjunto de conceptos 002, 003, 004 y 010–013; no deben habilitarse otros códigos hasta incorporar sus bases, mínimos, sustraendos, residencia/domicilio y reglas acumulativas completas.
+
+La función `getIslrUnitTaxValueForPeriod` conserva esta serie mensual:
+- Desde 2021-10: Bs. 0,02.
+- Desde 2022-05: Bs. 0,40.
+- Desde 2023-06: Bs. 9,00.
+- Desde 2025-07: Bs. 43,00.
+
+El salto de Bs. 9 a Bs. 43 se publicó el 02-06-2025. El artículo 3 de la Providencia SNAT/2025/000048 establece que, para tributos liquidados por períodos distintos del anual, se aplica la UT vigente al inicio del período. Por eso junio de 2025 conserva Bs. 9 y julio inicia con Bs. 43; el criterio mensual codificado es coherente con ese artículo, sujeto a validación profesional de cómo se determina el período fiscal de cada retención concreta.
+
+El motor también conserva snapshots de UT por evento y valida que coincidan con la serie histórica; la tarifa progresiva T-2 está implementada como cálculo separado y el propio código no habilita el concepto 005 automáticamente.
+
+**Pendientes de cierre:** cotejar cada concepto habilitado contra el texto íntegro y vigente del Decreto 1.808 y sus modificaciones; confirmar el período de liquidación aplicable a cada tipo de retención; probar límites mínimos, redondeo, pagos parciales y reversos con casos de referencia; revisar los conceptos no implementados y mantenerlos deshabilitados. No se debe extrapolar una tarifa de un concepto a otro ni reconstruir eventos históricos con la UT actual.
+
+**Fuentes de contraste:**  
+- Providencia SNAT/2025/000048, G.O. 43.140, 02-06-2025: https://docs.cachicamo.app/fiscal/providencia-000048-unidad-tributaria  
+- Decreto 1.808, G.O. 36.203, 12-05-1997: https://www.cidtct.uc.edu.ve/wp-content/uploads/2025/05/Decreto-1808-ISLR.pdf
+
 ## 5. Límites de implementación
 
 - No cambiar ni borrar datos fiscales históricos.
