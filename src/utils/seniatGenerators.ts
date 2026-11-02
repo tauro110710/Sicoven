@@ -36,7 +36,7 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
 
   for (const v of vouchers) {
     const linkedPurchase = purchasesById.get(v.purchaseRecordId);
-    if (enforcePurchaseLink && !linkedPurchase) {
+    if (!linkedPurchase) {
       throw new Error(`El comprobante ${v.voucherNumber} no tiene una compra fuente válida vinculada; no se puede clasificar el documento.`);
     }
     const supplierRif = cleanRif(v.supplierRif);
