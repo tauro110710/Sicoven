@@ -1,6 +1,7 @@
 import { Company, VatRetentionVoucher, IslrRetentionVoucher, PurchaseRecord } from '../types/accounting';
 import type { IslrFiscalEvent } from '../types/islrFiscalEvent';
 import { cleanRif, validateVenezuelanRif } from './formatters';
+import { getPurchaseAccountCreditDate } from '../types/accounting';
 
 /**
  * Prepara un TXT de relación de retenciones IVA con estructura histórica de 16 columnas.
