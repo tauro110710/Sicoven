@@ -132,3 +132,9 @@ La validación del producto se realiza mediante:
 - Se añadió prueba que distingue expresamente IVA total de IVA retenido (por ejemplo, IVA causado 160.00 y retención 120.00 al 75%).
 - Esta corrección cambia el SHA y requiere una nueva tanda completa de CI, Desktop Validation y Windows installer; los resultados verdes del SHA anterior no se trasladan a este cambio.
 - Referencia técnica consultada: copia del instructivo RI_DRIVA2020-IT01V3_0_0 que identifica columna 11 como Monto IVA y columna 10 como Base Imponible. Pendiente conseguir/confirmar la copia primaria vigente del SENIAT.
+### Diagnóstico y corrección de regresión de prueba — 2026-11-02
+
+- La ejecución CI #82 / Desktop Validation #1293 / Windows installer #1410 ejecutó 599 pruebas y encontró una sola expectativa obsoleta: la prueba de mapeo de 16 campos aún esperaba 120.00 (IVA retenido) en la columna 11.
+- El valor real del generador fue 160.00 (IVA total causado), conforme al mapeo corregido. Se actualizó la expectativa y su comentario; no se revirtió el cambio fiscal.
+- Commit de corrección de prueba: 7b5b7d53afa28a3edcafee548ce3785c88709071. Requiere nueva ejecución completa; no se trasladan los fallos ni los éxitos previos a este SHA.
+- En la ejecución anterior, 598 de 599 pruebas pasaron; la única falla fue la expectativa antigua descrita arriba. El instalador también se detuvo al fallar esa suite antes de completar la prueba de actualización SQLite.
