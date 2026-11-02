@@ -8,7 +8,7 @@ import { getPurchaseAccountCreditDate } from '../types/accounting';
  * Su conformidad con las especificaciones técnicas vigentes del SENIAT debe validarse
  * antes de presentarlo en el Portal Fiscal; esta función no acredita aceptación oficial.
  */
-export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVoucher[]): string {
+export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVoucher[], purchases: PurchaseRecord[] = []): string {
   const agentRif = cleanRif(company.rif);
   const lines: string[] = [];
 
@@ -26,7 +26,13 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     throw new Error('La exportación está bloqueada: existen comprobantes con corrección fiscal pendiente.');
   }
 
+  const purchasesById = new Map(purchases.filter(purchase => purchase.companyId === company.id).map(purchase => [purchase.id, purchase]));
+
   for (const v of vouchers) {
+    const linkedPurchase = purchases.length > 0 ? purchasesById.get(v.purchaseRecordId) : undefined;
+    if (purchases.length > 0 && !linkedPurchase) {
+      throw new Error(`El comprobante ${v.voucherNumber} no tiene una compra fuente válida vinculada; no se puede clasificar el documento.`);
+    }
     const supplierRif = cleanRif(v.supplierRif);
     const invoiceDate = String(v.invoiceDate || '');
     const period = String(v.period || '');
@@ -39,10 +45,22 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     const amounts = [v.totalAmountBs, v.exemptAmountBs ?? 0, v.taxableBaseBs, v.vatAmountBs, v.vatWithheldBs, v.taxRate, v.retentionRate];
     const validPeriod = /^\d{4}(0[1-9]|1[0-2])$/.test(period);
     const validRetentionRate = Number(v.retentionRate) === 75 || Number(v.retentionRate) === 100;
+    const documentPeriod = invoiceDate.slice(0, 7).replace('-', '');
+    const documentType = linkedPurchase?.documentType || '01';
+    const documentNumber = documentType === '02'
+      ? String(linkedPurchase?.debitNoteNumber || '')
+      : documentType === '03'
+        ? String(linkedPurchase?.creditNoteNumber || '')
+        : String(linkedPurchase?.invoiceNumber || v.invoiceNumber || '');
+    const affectedDocument = documentType === '01' ? '0' : String(linkedPurchase?.affectedInvoiceNumber || '').trim();
     const expectedVat = Math.round(Number(v.taxableBaseBs) * Number(v.taxRate)) / 100;
     const expectedWithheld = Math.round(expectedVat * Number(v.retentionRate)) / 100;
     if (v.companyId !== company.id || !validateVenezuelanRif(v.supplierRif).isValid || !validPeriod || !validDate || !/^\d{14}$/.test(voucherNum) || voucherNum.slice(0, 6) !== period ||
         !supplierRif || !invoiceNum || !controlNum ||
+        (documentPeriod && documentPeriod > period) ||
+        !['01', '02', '03'].includes(documentType) ||
+        (linkedPurchase && (linkedPurchase.supplierRif !== v.supplierRif || linkedPurchase.invoiceDate !== v.invoiceDate)) ||
+        (documentType !== '01' && (!documentNumber || !affectedDocument)) ||
         [invoiceNum, controlNum, voucherNum].some(value => /[\t\r\n]/.test(value)) ||
         amounts.some(value => !Number.isFinite(Number(value)) || Number(value) < 0) ||
         Number(v.taxRate) > 100 || !validRetentionRate ||
@@ -50,11 +68,11 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
         Math.abs(Number(v.vatWithheldBs) - expectedWithheld) > 0.01) {
       throw new Error('Comprobante de retención IVA incompleto o inválido. Revise período, fecha, RIF, numeración, alícuota e importes; no se generan valores sustitutos.');
     }
-    const docType = '01'; // El modelo actual solo admite facturas de compra retenidas.
+    const docType = documentType;
     const totalAmount = Number(v.totalAmountBs).toFixed(2);
     const baseAmount = Number(v.taxableBaseBs).toFixed(2);
     const withheldAmount = Number(v.vatWithheldBs).toFixed(2);
-    const affectedDoc = '0';
+    const affectedDoc = documentType === '01' ? '0' : affectedDocument;
     const exemptAmount = Number(v.exemptAmountBs || 0).toFixed(2);
     const rate = Number(v.taxRate).toFixed(2);
     const expeditionNum = '0';
@@ -67,7 +85,7 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
       'C', // Operación: Compras
       docType,
       supplierRif,
-      invoiceNum,
+      documentType === '01' ? invoiceNum : documentNumber,
       controlNum,
       totalAmount,
       baseAmount,
