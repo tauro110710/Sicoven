@@ -2466,6 +2466,6 @@ test('SQLite upgrade preserves unchanged legacy invoice links without accepting 
     assert.throws(() => validateAccountingSnapshot(
       priorCrossCompany,
       { ...priorCrossCompany, purchases: [changedIdentity] }
-    ), /modificación de un registro histórico en purchases/);
+    ), /No se puede retirar ni modificar la marca histórica journalEntryId/);
   }
 });
