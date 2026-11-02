@@ -1,68 +1,73 @@
-# Auditoría estructural del TXT de retenciones IVA — 02-11-2026
+# Auditoría estructural y evolución del TXT de retenciones IVA — 02-11-2026
 
 ## Alcance
 
-Revisión estática de `src/utils/seniatGenerators.ts`, `src/utils/seniatGenerators.test.ts`, `src/components/Retenciones/RetencionesIvaView.tsx` y los tipos fiscales actuales. No modifica el generador, comprobantes, asientos, históricos ni SQLite.
+Auditoría estática y ampliación técnica de `src/utils/seniatGenerators.ts`, `src/utils/seniatGenerators.test.ts`, `src/components/Retenciones/RetencionesIvaView.tsx` y los tipos fiscales. El trabajo se realiza en la rama `feature/txt-iva-structural-audit`; no modifica `main`, el administrador semilla ni el modelo de persistencia SQLite.
 
-La referencia técnica disponible es el instructivo `RI_DRIVA2020-IT01V3_0_0`, versión 3.0.0, septiembre de 2020, consultado en una reproducción documental de terceros. No se ha localizado una publicación primaria actualizada del SENIAT que confirme que esa especificación siga vigente en noviembre de 2026. Por tanto, los hallazgos siguientes describen conformidad frente a la referencia histórica, no homologación actual.
+La referencia de 16 campos disponible es el instructivo `RI_DRIVA2020-IT01V3_0_0`, versión 3.0.0, septiembre de 2020, consultado en una reproducción documental de terceros. Se conserva como referencia histórica de estructura, no como afirmación de vigencia normativa actual ni como homologación.
 
-## Correspondencia de los 16 campos
+## Contrato de salida estructural
 
-| # | Campo histórico | Salida actual | Resultado |
-|---:|---|---|---|
-| 1 | RIF contribuyente/agente | `cleanRif(company.rif)` | Coincide en estructura; validar excepciones admitidas |
-| 2 | Período impositivo AAAAMM | `voucher.period` | Coincide; debe representar período fiscal correcto |
-| 3 | Fecha documento AAAA-MM-DD | `voucher.invoiceDate` | Coincide en forma; falta validar relación temporal con período |
-| 4 | Tipo operación | Constante `C` | Correcto para compra según instructivo histórico |
-| 5 | Tipo documento | Constante `01` | Solo factura; no representa tipos 02/03/04/05/06 |
-| 6 | RIF comprador/vendedor | RIF proveedor normalizado | Caso ordinario; no admite el caso histórico de RIF cero para proveedor sin RIF |
-| 7 | Número documento | `voucher.invoiceNumber` | Falta validar longitud máxima de 20 y restricciones de espacios |
-| 8 | Número control | `voucher.controlNumber` | Falta permitir cero cuando no aplique y validar longitud máxima de 20 |
-| 9 | Monto documento | `totalAmountBs.toFixed(2)` | Formato decimal correcto; falta validar ancho máximo y monto mayor que cero |
-| 10 | Base imponible | `taxableBaseBs.toFixed(2)` | Formato decimal correcto; falta validar ancho máximo |
-| 11 | Monto IVA (para agente: IVA retenido) | `vatWithheldBs.toFixed(2)` | Semántica coincide con la descripción histórica del agente de retención |
-| 12 | Documento afectado | Constante `0` | Correcto para factura; insuficiente para notas de débito/crédito |
-| 13 | Número comprobante AAAAMMSSSSSSSS | `voucherNumber` | Longitud y período comprobados |
-| 14 | Monto exento IVA | `exemptAmountBs.toFixed(2)` | Formato decimal correcto; falta validar ancho y regla de coherencia con monto/base |
-| 15 | Alícuota | `taxRate.toFixed(2)` | Formato decimal correcto; falta validar catálogo/reglas vigentes por documento |
-| 16 | Expediente importación | Constante `0` | Correcto cuando no es importación; no soporta documento/expediente de importación |
+| # | Campo histórico | Valor / origen |
+|---:|---|---|
+| 1 | RIF agente | `cleanRif(company.rif)` |
+| 2 | Período AAAAMM | `voucher.period` |
+| 3 | Fecha documento | `voucher.invoiceDate` |
+| 4 | Operación | `C` para compra |
+| 5 | Tipo documento | Compra fuente: `01`, `02` o `03` |
+| 6 | RIF contraparte | RIF proveedor normalizado |
+| 7 | Número documento | Factura/ND/NC tomado de la compra vinculada |
+| 8 | Número control | Comprobante y compra fuente conciliados |
+| 9 | Monto documento | `totalAmountBs`, dos decimales |
+| 10 | Base imponible | `taxableBaseBs`, dos decimales |
+| 11 | IVA retenido | `vatWithheldBs`, dos decimales |
+| 12 | Documento afectado | `0` para factura; `affectedInvoiceNumber` para ND/NC |
+| 13 | Número comprobante | `voucherNumber` de 14 dígitos y período coincidente |
+| 14 | Monto exento | `exemptAmountBs`, dos decimales |
+| 15 | Alícuota | `taxRate`, dos decimales |
+| 16 | Expediente importación | `0` en operaciones no importadas |
 
-## Brechas demostrables en el código actual
+Las filas conservan 16 campos separados por tabulador y se unen mediante CRLF.
 
-1. **Tipos documentales:** el generador fija `01` y `0` en documento afectado. El modelo `PurchaseRecord` contempla `01`, `02` y `03`, además de `affectedInvoiceNumber`, pero `generateSeniatIvaTxt` recibe solo comprobantes y no recibe/consulta las compras enlazadas. Por ello no puede construir con fiabilidad filas de notas de débito/crédito.
-2. **Proveedor sin RIF:** el instructivo histórico describe un caso con RIF cero sujeto a retención del 100%; el generador exige que el RIF del proveedor pase `validateVenezuelanRif`. No se debe abrir esa excepción hasta confirmar que sigue vigente y modelar el caso de forma explícita.
-3. **Control documental:** el generador exige número de factura y control no vacíos, aunque la guía histórica admite cero cuando el número de control no aplique. También falta limitar ambos campos a 20 caracteres y validar espacios internos conforme al instructivo.
-4. **Fecha frente al período:** se valida que la fecha exista y que el período sea AAAAMM, pero no se comprueba que la fecha del documento sea menor o igual al período declarado, exigencia de la guía histórica.
-5. **Montos y anchos:** se comprueba que los importes sean finitos/no negativos y se reconcilian IVA y retención; no se valida el máximo de caracteres de los campos numéricos ni que el monto total sea estrictamente mayor que cero.
-6. **Casos no factura:** el expediente de importación siempre sale como cero; la función no admite datos para importaciones/exportaciones ni certificaciones.
+## Controles de integridad implementados
 
-## Integración y controles ya existentes
+- RIF del agente y proveedor, fecha calendario, período AAAAMM y correlativo de comprobante.
+- Un solo período por archivo, identificadores y correlativos no duplicados.
+- Bloqueo de comprobantes con corrección fiscal pendiente.
+- Importes finitos/no negativos y conciliación matemática del IVA y de la retención.
+- La fecha del documento no puede ser posterior al período declarado.
+- Cuando la vista entrega el conjunto de compras, cada comprobante debe resolver su `purchaseRecordId` dentro de la empresa.
+- RIF, fecha, número documental y control del comprobante deben conciliar con la compra fuente.
+- Las ND/NC requieren número propio y factura afectada; no se sustituye ningún dato faltante por valores inventados.
+- La vista exporta el conjunto completo del período, sin dejar que el filtro de búsqueda altere la población fiscal.
+- Una declaración sin operaciones sigue siendo una entidad distinta; no se transforma en un TXT vacío automáticamente.
 
-- La vista de retenciones exporta `periodVouchers` del período completo, no la tabla filtrada por búsqueda.
-- El exportador rechaza períodos mezclados, comprobantes duplicados y comprobantes con corrección fiscal pendiente.
-- El archivo se construye con 16 valores separados por tabuladores y líneas CRLF.
-- Una declaración sin operaciones se mantiene separada de la exportación de comprobantes; no se genera un TXT vacío por inferencia.
-- La función no acredita que una declaración haya sido presentada ni aceptada por el Portal Fiscal.
+## Límites del flujo fiscal actual
 
-## Pruebas añadidas en esta rama
+El modelo de compras incluye ND y NC y existen flujos específicos para registrarlas. Sin embargo, el alta genérica de compras rechaza esos tipos. Además, la nota de crédito existente marca el comprobante de retención original como pendiente de corrección fiscal y bloquea la exportación de ese período hasta resolver el ajuste. Esta rama prepara el mapeo documental en el generador, pero no afirma que las notas ya produzcan comprobantes autónomos de retención IVA.
 
-- Correspondencia exacta del orden y valor de los 16 campos para una factura de compra ordinaria.
-- Dos comprobantes producen dos líneas CRLF, cada una con 16 campos.
-- Las pruebas fijan la referencia histórica y no se interpretan como prueba de vigencia o aceptación oficial.
+El expediente de importación permanece en cero y no se incorporan tipos 04/05/06 porque el modelo de comprobantes y la fuente documental actual no contienen datos suficientes para construirlos con seguridad.
 
-## Secuencia de cierre pendiente
+## Pruebas añadidas
 
-1. Obtener del SENIAT el instructivo/plantilla técnica vigente o respuesta oficial que confirme la especificación actualmente aceptada.
-2. Resolver con esa fuente si siguen vigentes las excepciones y códigos históricos (RIF cero, tipos 02/03, control cero, importación/exportación, límites de longitud y reglas temporales).
-3. Extender el contrato del generador para recibir los documentos fuente enlazados y mapear tipo/afectado/expediente sin inferencias.
-4. Implementar validaciones por tipo documental y pruebas de registros válidos e inválidos, incluidos NC/ND, proveedor sin RIF cuando proceda, importación y declaraciones sin operaciones.
-5. Ejecutar pruebas automatizadas y CI sobre el SHA final.
-6. Probar el archivo en la opción de prueba de carga del Portal Fiscal y conservar captura/acuse/mensaje verificable.
-7. Solo después de evidencia externa, actualizar el estado a aceptación verificada; nunca antes.
+- Correspondencia exacta de los 16 campos para una factura ordinaria.
+- Dos comprobantes generan dos filas CRLF, cada una con 16 campos.
+- Clasificación de ND y NC desde la compra vinculada y salida del documento afectado.
+- Rechazo de compra fuente ausente, documento afectado ausente e identificadores discordantes.
+- Se añadió un workflow de GitHub Actions que ejecuta `npm test`, `npm run check:types` y `npm run build` en las PR contra `main`.
 
-## Fuentes
+## Próxima ejecución técnica
 
-- Instructivo SENIAT, `RI_DRIVA2020-IT01V3_0_0`, versión 3.0.0, septiembre de 2020 (reproducción de terceros): https://es.readkong.com/page/instructivo-declaracion-de-retenciones-de-iva-seniat-4300855
-- Providencia SNAT/2025/000054, reproducción consultada para los artículos 13–17: https://tributos.ivecofi.net/informacion/legislacion/providencias/pa-2025-54
+1. Revisar y corregir cualquier fallo de pruebas, tipado o build que reporte el workflow recién añadido.
+2. Completar las reglas de campos opcionales y longitudes con validaciones configurables, evitando introducir excepciones históricas sin datos de origen.
+3. Cerrar el tratamiento interno de rectificaciones IVA para que el bloqueo por corrección fiscal se resuelva con trazabilidad y sin reescribir comprobantes históricos.
+4. Completar la matriz de escenarios: factura ordinaria, exenta, alícuota reducida, alícuota general, retención 75/100, reversión parcial/total, período sin operaciones y documentos vinculados.
+5. Verificar que la previsualización y descarga produzcan bytes idénticos y mantengan tabuladores/CRLF, incluyendo caracteres acentuados y codificación del archivo.
+6. Mantener fuera del alcance de este cierre técnico cualquier declaración de aceptación externa que no esté respaldada por evidencia disponible.
 
-**Estado:** auditoría estructural histórica y pruebas internas reforzadas. Vigencia técnica y aceptación SENIAT no verificadas. No declarar TXT homologado.
+## Fuentes de referencia
+
+- Instructivo SENIAT `RI_DRIVA2020-IT01V3_0_0`, versión 3.0.0, septiembre de 2020 (reproducción de terceros): https://es.readkong.com/page/instructivo-declaracion-de-retenciones-de-iva-seniat-4300855
+- Providencia SNAT/2025/000054 (reproducción consultada para artículos 13–17): https://tributos.ivecofi.net/informacion/legislacion/providencias/pa-2025-54
+
+**Estado:** generador enlazado a compras fuente y estructura reforzada en rama de trabajo. Ejecución CI pendiente de resultado; aceptación externa no forma parte del bloqueo para continuar el desarrollo técnico.
