@@ -3442,11 +3442,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     validateVatDeclarationEventDraft(declaration, history, draft);
     validateVatPaymentBankLinks({ companyId: currentCompany.id, declaration, draft, events: vatWithholdingDeclarationEvents, bankAccounts, bankMovements: bankStatementMovements });
-    const paymentLockKey = draft.eventType === 'PAYMENT' ? declarationId : null;
-    if (paymentLockKey && vatPaymentInFlightRef.current.has(paymentLockKey)) {
-      throw new Error('Ya hay un enteramiento de esta declaración en proceso. Espere la confirmación de SQLite antes de registrar otro pago.');
+    // Bloquea tanto la declaración como cada débito bancario: un mismo movimiento
+    // no puede respaldar pagos simultáneos de declaraciones diferentes.
+    const paymentLockKeys = draft.eventType === 'PAYMENT'
+      ? [
+          'declaration:' + declarationId,
+          ...(draft.bankStatementMovementIds || []).map(id => 'bank-movement:' + id)
+        ]
+      : [];
+    if (paymentLockKeys.some(key => vatPaymentInFlightRef.current.has(key))) {
+      throw new Error('Ya hay un enteramiento IVA en proceso para esta declaración o uno de los débitos bancarios seleccionados. Espere la confirmación de SQLite.');
     }
-    if (paymentLockKey) vatPaymentInFlightRef.current.add(paymentLockKey);
+    paymentLockKeys.forEach(key => vatPaymentInFlightRef.current.add(key));
     let resolvePersistence!: () => void;
     let rejectPersistence!: (error: Error) => void;
     const confirmation = new Promise<void>((resolve, reject) => {
@@ -3516,7 +3523,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       persistenceWaitersRef.current = persistenceWaitersRef.current.filter(waiter => waiter !== persistenceWaiter);
       throw error;
     } finally {
-      if (paymentLockKey) vatPaymentInFlightRef.current.delete(paymentLockKey);
+      paymentLockKeys.forEach(key => vatPaymentInFlightRef.current.delete(key));
     }
   };
 
