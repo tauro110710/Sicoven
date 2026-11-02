@@ -59,6 +59,8 @@ No habilitar todavía un estado de resolución automática. El modelo actual no 
 - prevención de incidencias duplicadas y reutilización de referencias;
 - registro append-only de revisión y actuación sin marcar la incidencia resuelta;
 - rechazo de asientos y movimientos bancarios ajenos;
+- rechazo de asientos correctivos de la misma empresa que no estén previamente enlazados al comprobante IVA original mediante `correctionEntryId`/`correctionEntryIds`;
+- inmutabilidad de la declaración asociada al expediente: no se permite incorporar ni sustituir retroactivamente una declaración durante una revisión o actuación;
 - exigencia de decisión documentada y administrador autorizado.
 
 ## Cierre de esta ronda
