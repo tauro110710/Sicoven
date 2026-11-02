@@ -68,6 +68,18 @@ Estos componentes no deben duplicarse. La adaptación pendiente consiste en comp
 6. Revisar pagos parciales sucesivos y rectificaciones fiscales, preservando los registros originales.
 7. Revisar los parámetros históricos de UT y otros conceptos ISLR con sus fuentes, fechas de vigencia y reglas por período.
 
+## 4.1 Hallazgo técnico: exportación TXT IVA y declaración sin operaciones
+
+La auditoría del generador existente en `main` (`src/utils/seniatGenerators.ts`) encontró que `generateSeniatIvaTxt` emite 16 columnas separadas por tabuladores, en este orden: RIF agente, período, fecha factura, tipo operación, tipo documento, RIF proveedor, número documento, número control, monto total, base imponible, IVA retenido, documento afectado, comprobante, monto exento, alícuota y expediente.
+
+La secuencia coincide con una guía de elaboración de TXT de IVA localizada en una copia documental fechada aproximadamente en 2017. Esa coincidencia no demuestra que el formato continúe vigente ni que el Portal Fiscal lo acepte actualmente. En esta revisión no se obtuvo una especificación técnica primaria vigente del SENIAT ni evidencia de una carga aceptada en el Portal Fiscal.
+
+La función también bloquea el archivo vacío y exige que la declaración sin operaciones se gestione como un flujo separado. El modelo de declaración sí permite registrar explícitamente una quincena sin operaciones, pero ese registro interno no equivale a un archivo oficial ni demuestra que la obligación haya sido presentada.
+
+**Acción requerida antes de certificar:** obtener y archivar la versión vigente del instructivo/plantilla técnica desde el SENIAT o una respuesta oficial; contrastar cantidad, orden, longitud, codificación, separadores, campos obligatorios, tipos de documento y tratamiento de cero operaciones; ejecutar pruebas de conformidad con ejemplos oficiales y, cuando sea posible, una presentación controlada con acuse. Hasta entonces, la exportación debe rotularse como archivo preparado para revisión, no como formato homologado.
+
+**Fuente auxiliar no vigente/no concluyente:** https://docs.erpya.com/assets/img/docs/lve/procedures/consigment-management/consignment-sales/withholding-declaration-cxp/Formato_TXT_IVA.pdf
+
 ## 5. Límites de implementación
 
 - No cambiar ni borrar datos fiscales históricos.
