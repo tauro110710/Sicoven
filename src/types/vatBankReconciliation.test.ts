@@ -219,6 +219,33 @@ test('does not mark linked credits or USD-account movements reconciled', () => {
   assert.equal(usd.pendingCount, 1);
 });
 
+test('accepts a balanced historical-liability payment with a realized FX gain', () => {
+  const payment: VatWithholdingDeclarationEvent = {
+    id: 'payment-fx', declarationId: declaration.id, eventType: 'PAYMENT',
+    occurredAt: '2026-10-19', recordedAt: '2026-10-19T10:00:00.000Z',
+    amountBs: 60, paymentReference: 'PAGO-1', bankStatementMovementIds: ['m-fx'],
+    journalEntryId: 'entry-iva-1'
+  };
+  const linkedMovement = movement('m-fx', 60, {
+    amountUsd: 0.5, isReconciled: true,
+    reconciledWithJournalEntryId: 'entry-iva-1',
+    reconciledJournalEntryIds: ['entry-iva-1']
+  });
+  const journal = {
+    ...paymentJournal,
+    items: [
+      { ...paymentJournal.items[0], debitUsd: 0.6 },
+      { ...paymentJournal.items[1], creditUsd: 0.5 },
+      { accountCode: '4.2.1.01', accountName: 'Ganancia cambiaria', debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0.1 }
+    ]
+  };
+  const summary = buildVatBankReconciliationSummary(
+    declaration, [filed, payment], [linkedMovement], [account], [journal]
+  );
+  assert.equal(summary.reconciledCount, 1);
+  assert.equal(summary.pendingCount, 0);
+});
+
 test('blocks generic reversal of a journal linked to an IVA payment event', () => {
   const linkedPayment: VatWithholdingDeclarationEvent = {
     id: 'payment-linked', declarationId: declaration.id, eventType: 'PAYMENT',
