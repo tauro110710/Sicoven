@@ -106,7 +106,7 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     const maxLengths = [10, 6, 10, 1, 2, 10, 20, 20, 15, 15, 15, 20, 14, 15, 5, 15];
     if (fields.length !== 16 ||
         fields.some((value, index) => /[\t\r\n]/.test(value) || value.length > maxLengths[index]) ||
-        [invoiceNum, controlNum].some(value => /\\s/.test(value))) {
+        [invoiceNum, controlNum].some(value => /\s/.test(value))) {
       throw new Error('El comprobante contiene campos incompatibles con el formato TXT de 16 columnas (longitud, espacios o separadores); se bloqueó la exportación para evitar desplazar datos.');
     }
     lines.push(fields.join('\t'));
