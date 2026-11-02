@@ -3,7 +3,8 @@ import type {
   BankAccount,
   BankStatementMovement,
   VatWithholdingDeclaration,
-  VatWithholdingDeclarationEvent
+  VatWithholdingDeclarationEvent,
+  JournalEntry
 } from './accounting';
 
 export interface VatPaymentBankLinkDraft {
@@ -78,7 +79,8 @@ export function buildVatBankReconciliationSummary(
   declaration: VatWithholdingDeclaration,
   events: VatWithholdingDeclarationEvent[],
   bankMovements: BankStatementMovement[],
-  bankAccounts: BankAccount[]
+  bankAccounts: BankAccount[],
+  journalEntries: JournalEntry[] = []
 ): {
   lines: VatBankReconciliationLine[];
   reconciledAmountBs: number;
@@ -98,12 +100,17 @@ export function buildVatBankReconciliationSummary(
     const validPaymentDate = Boolean(filed) &&
       isValidIsoDate(event.occurredAt.slice(0, 10)) &&
       event.occurredAt >= filed!.occurredAt;
+    const linkedJournal = event.journalEntryId
+      ? journalEntries.find(entry => entry.id === event.journalEntryId &&
+          entry.companyId === declaration.companyId && entry.type === 'RETENCION_IVA' &&
+          entry.referenceDoc === 'IVA-ENTERAMIENTO:' + declaration.id + ':' + event.paymentReference)
+      : undefined;
     const movements = ids.map(id => bankMovements.find(item =>
       item.id === id && item.companyId === declaration.companyId)).filter(Boolean) as BankStatementMovement[];
     const validMovements = movements.filter(movement => {
       const account = bankAccounts.find(item =>
         item.id === movement.bankAccountId && item.companyId === declaration.companyId);
-      const linkedToThisPayment = Boolean(event.journalEntryId) &&
+      const linkedToThisPayment = Boolean(linkedJournal && event.journalEntryId) &&
         movement.reconciledWithJournalEntryId === event.journalEntryId &&
         (movement.reconciledJournalEntryIds || []).includes(event.journalEntryId as string);
       const hasOtherReconciliation = Boolean(movement.isReconciled || movement.reconciledWithJournalEntryId ||
@@ -117,7 +124,7 @@ export function buildVatBankReconciliationSummary(
         movement.date <= event.occurredAt.slice(0, 10);
     });
     const linkedTotalCents = validMovements.reduce((sum, movement) => sum + cents(Number(movement.amountBs)), 0);
-    const complete = validPaymentAmount && validPaymentDate && ids.length > 0 &&
+    const complete = validPaymentAmount && validPaymentDate && Boolean(linkedJournal) && ids.length > 0 &&
       movements.length === ids.length && validMovements.length === ids.length &&
       linkedTotalCents === cents(paymentAmount);
     return {
