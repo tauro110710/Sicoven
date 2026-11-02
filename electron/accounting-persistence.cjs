@@ -309,6 +309,8 @@ function persistAccountingSnapshot(db, state, actor = null) {
         receiptReference: event.receiptReference || null,
         amountBs: event.amountBs ?? null,
         paymentReference: event.paymentReference || null,
+        journalEntryId: event.journalEntryId || null,
+        amountUsd: event.amountUsd ?? null,
         bankStatementMovementIds: Array.isArray(event.bankStatementMovementIds) ? event.bankStatementMovementIds : [],
         evidenceReference: event.evidenceReference || null,
         dueDate: event.dueDate || null,
