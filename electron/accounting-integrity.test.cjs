@@ -2428,4 +2428,17 @@ test('SQLite upgrade preserves unchanged legacy invoice links without accepting 
   };
   assert.throws(() => validateAccountingSnapshot(priorWithoutLink, newlyLinkedCrossCompany),
     /vínculo de factura con un asiento de otra empresa/);
+
+  // Un vínculo inválido heredado solo puede conservarse con la identidad
+  // original; no se puede reasignar cambiando empresa, número o proveedor.
+  for (const changedIdentity of [
+    { ...legacyPurchase, companyId: 'company-2' },
+    { ...legacyPurchase, invoiceNumber: 'LEG-101' },
+    { ...legacyPurchase, supplierRif: 'J-999' }
+  ]) {
+    assert.throws(() => validateAccountingSnapshot(
+      priorCrossCompany,
+      { ...priorCrossCompany, purchases: [changedIdentity] }
+    ), /vínculo de factura con un asiento de otra empresa/);
+  }
 });
