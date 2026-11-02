@@ -195,3 +195,47 @@ test('IVA TXT rejects duplicated voucher IDs or numbers and fiscal corrections s
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher(), ivaVoucher({ voucherNumber: '20261000000001', id: 'voucher-2' })]), /comprobantes duplicados/);
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ requiresFiscalCorrection: true })]), /corrección fiscal pendiente/);
 });
+
+
+// Estas pruebas fijan el mapeo técnico histórico de 16 campos (instructivo SENIAT
+// RI_DRIVA2020-IT01V3_0_0). No equivalen a homologación ni sustituyen el contraste
+// con la especificación primaria vigente y una prueba de carga del Portal Fiscal.
+test('IVA TXT conserva el orden y significado de los 16 campos del instructivo histórico', () => {
+  const fields = generateSeniatIvaTxt(company, [ivaVoucher()]).split('\\t');
+  assert.deepEqual(fields, [
+    'J123456789',       // 1 RIF agente
+    '202610',           // 2 período de imposición
+    '2026-10-05',       // 3 fecha del documento
+    'C',                // 4 compra
+    '01',               // 5 factura
+    'J987654321',       // 6 RIF proveedor
+    'F-001',            // 7 número de documento
+    '00-123',           // 8 número de control
+    '1160.00',          // 9 monto del documento
+    '1000.00',          // 10 base imponible
+    '120.00',           // 11 IVA retenido para agente de retención
+    '0',                // 12 documento afectado: no aplica a factura
+    '20261000000001',   // 13 número de comprobante
+    '0.00',             // 14 monto exento
+    '16.00',            // 15 alícuota
+    '0'                 // 16 expediente de importación: no aplica
+  ]);
+});
+
+test('IVA TXT genera una línea CRLF por comprobante y exactamente 16 campos por línea', () => {
+  const txt = generateSeniatIvaTxt(company, [
+    ivaVoucher(),
+    ivaVoucher({
+      id: 'iva-v2',
+      voucherNumber: '20261000000002',
+      invoiceNumber: 'F-002',
+      controlNumber: '00-124'
+    })
+  ]);
+  const rows = txt.split('\\r\\n');
+  assert.equal(rows.length, 2);
+  for (const row of rows) {
+    assert.equal(row.split('\\t').length, 16);
+  }
+  assert.equal(rows[1].split('\\t')[12], '20261000000002');
+});
