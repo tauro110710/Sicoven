@@ -10,7 +10,7 @@ on:
 
 permissions:
   actions: read
-  contents: write
+  contents: read
 
 concurrency:
   group: sicoven-windows-${{ github.ref }}
@@ -29,12 +29,12 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
-      - name: Download previous 1.0.7 installer for real upgrade test
+      - name: Download previous 1.0.6 installer for direct upgrade regression test
         uses: actions/download-artifact@v4
         with:
-          name: SICOVEN-Windows-3b957b0b717e92ad99a380578e8cf25cdf2baf81
+          name: SICOVEN-Windows-34a826a9efb02194da61a0dbe0ce53fd50bd73d2
           path: ${{ runner.temp }}/SICOVEN-Previous
-          run-id: 41327119811
+          run-id: 41106140337
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Python for SQLite upgrade verification
         uses: actions/setup-python@v5
@@ -64,11 +64,11 @@ jobs:
             throw "No se generó el instalador Windows x64 de SICOVEN."
           }
           $installer | Select-Object Name, Length, LastWriteTime | Format-Table
-      - name: Upgrade 1.0.7 to 1.0.8 and preserve SQLite data
+      - name: Upgrade 1.0.6 directly to 1.0.8 and preserve legacy SQLite data
         shell: pwsh
         run: |
           $previousInstaller = Get-ChildItem -Path (Join-Path $env:RUNNER_TEMP "SICOVEN-Previous") -Filter "SICOVEN-Setup-*-x64.exe" -File | Select-Object -First 1
-          if (-not $previousInstaller) { throw "No se descargó el instalador anterior 1.0.7." }
+          if (-not $previousInstaller) { throw "No se descargó el instalador anterior 1.0.6." }
           $installer = Get-ChildItem -Path release -Filter "SICOVEN-Setup-1.0.8-x64.exe" -File | Select-Object -First 1
           if (-not $installer) { throw "No se generó el instalador 1.0.8." }
           $installDir = Join-Path $env:RUNNER_TEMP "SICOVEN-Smoke"
@@ -81,20 +81,20 @@ jobs:
           $asar = Join-Path $installDir "resources\app.asar"
           $sqliteNative = Join-Path $installDir "resources\app.asar.unpacked\node_modules\better-sqlite3\build\Release\better_sqlite3.node"
           foreach ($required in @($app, $asar, $sqliteNative)) {
-            if (-not (Test-Path $required -PathType Leaf)) { throw "Falta un archivo esencial de SICOVEN 1.0.7: $required" }
+            if (-not (Test-Path $required -PathType Leaf)) { throw "Falta un archivo esencial de SICOVEN 1.0.6: $required" }
           }
           $application = Start-Process -FilePath $app -ArgumentList @("--disable-gpu") -PassThru
           Start-Sleep -Seconds 12
           $application.Refresh()
-          if ($application.HasExited) { throw "SICOVEN 1.0.8 se cerró durante el arranque. Código: $($application.ExitCode)" }
+          if ($application.HasExited) { throw "SICOVEN 1.0.6 se cerró durante el arranque. Código: $($application.ExitCode)" }
           & taskkill.exe /PID $application.Id /T /F | Out-Null
           $database = Get-ChildItem -Path $env:APPDATA -Filter "sicoven.sqlite" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $database) { throw "SICOVEN 1.0.7 no creó la base SQLite en userData." }
+          if (-not $database) { throw "SICOVEN 1.0.6 no creó la base SQLite en userData." }
           $env:SICOVEN_DB_PATH = $database.FullName
           python scripts/verify-sqlite-upgrade.py seed
-          if ($LASTEXITCODE -ne 0) { throw "No se pudo preparar el marcador SQLite en 1.0.7." }
+          if ($LASTEXITCODE -ne 0) { throw "No se pudo preparar el snapshot histórico y marcador SQLite en 1.0.6." }
           $upgrade = Start-Process -FilePath $installer.FullName -ArgumentList @("/S", "/D=$installDir") -PassThru
-          if (-not $upgrade.WaitForExit(120000)) { throw "La actualización 1.0.7 a 1.0.8 no terminó dentro del tiempo permitido." }
+          if (-not $upgrade.WaitForExit(120000)) { throw "La actualización directa 1.0.6 a 1.0.8 no terminó dentro del tiempo permitido." }
           $upgrade.Refresh()
           if ($upgrade.ExitCode -ne 0) { throw "La actualización a 1.0.8 terminó con código $($upgrade.ExitCode)." }
           python scripts/verify-sqlite-upgrade.py verify
@@ -104,7 +104,7 @@ jobs:
           $application.Refresh()
           if ($application.HasExited) { throw "SICOVEN 1.0.8 se cerró después de la actualización. Código: $($application.ExitCode)" }
           & taskkill.exe /PID $application.Id /T /F | Out-Null
-          Write-Host "Actualización real 1.0.7 -> 1.0.8, arranque y conservación del marcador y del snapshot contable SQLite verificados."
+          Write-Host "Actualización directa 1.0.6 -> 1.0.8, arranque y conservación del snapshot contable y vínculo histórico de factura verificados."
           Get-Item $installer.FullName | Select-Object Name, Length
       - name: Clean install 1.0.8 in isolated Windows profile
         shell: pwsh
@@ -142,16 +142,3 @@ jobs:
           path: release/SICOVEN-Setup-1.0.8-x64.exe
           if-no-files-found: error
           retention-days: 14
-      - name: Publish Windows installer GitHub Release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/certificacion/contabilidad-basica-1.0.8'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: pwsh
-        run: |
-          $tag = "v1.0.8"
-          $existing = gh release view $tag --json url 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag "release/SICOVEN-Setup-1.0.8-x64.exe" --clobber
-          } else {
-            gh release create $tag "release/SICOVEN-Setup-1.0.8-x64.exe" --title "SICOVEN 1.0.8 para Windows" --notes "Instalador Windows x64 generado y validado por el flujo de compilación de SICOVEN. Incluye el motor de respaldo y restauración recuperable." --prerelease
-          }
