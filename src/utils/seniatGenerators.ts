@@ -110,7 +110,7 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
       controlNum,
       totalAmount,
       baseAmount,
-      withheldAmount,
+      Number(v.vatAmountBs).toFixed(2),
       affectedDoc,
       voucherNum,
       exemptAmount,
