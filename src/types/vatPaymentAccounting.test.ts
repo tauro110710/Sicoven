@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { Account, BankAccount, BankStatementMovement } from './accounting';
+import type { Account, BankAccount, BankStatementMovement, VatWithholdingDeclaration } from './accounting';
 import { buildVatPaymentAccountingPlan } from './vatPaymentAccounting';
 
 const accounts: Account[] = [
