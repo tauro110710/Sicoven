@@ -3454,8 +3454,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (draft.eventType === 'PAYMENT') {
       paymentMovements = (draft.bankStatementMovementIds || []).map(id =>
         bankStatementMovements.find(item => item.id === id)!).filter(Boolean);
+      const priorPayments = history.filter(event => event.eventType === 'PAYMENT');
+      const priorPaidBs = priorPayments.reduce((sum, event) => sum + Number(event.amountBs || 0), 0);
       const plan = buildVatPaymentAccountingPlan({
         occurredAt: draft.occurredAt,
+        amountBs: Number(draft.amountBs),
+        priorPaidBs,
+        declaration,
         movements: paymentMovements,
         bankAccounts: bankAccounts.filter(item => item.companyId === currentCompany.id),
         accounts
