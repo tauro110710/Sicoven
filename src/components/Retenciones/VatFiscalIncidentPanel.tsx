@@ -24,7 +24,10 @@ export const VatFiscalIncidentPanel: React.FC = () => {
 
   useEffect(() => { void refresh(); }, [refresh, currentCompany.id]);
 
-  const eligiblePurchases = purchases.filter(p => p.companyId === currentCompany.id && ['02', '03'].includes(String(p.documentType || '')));\n  const getNoteNumber = (purchase: typeof purchases[number]) => purchase.documentType === '02'\n    ? purchase.debitNoteNumber || purchase.invoiceNumber || purchase.id\n    : purchase.creditNoteNumber || purchase.invoiceNumber || purchase.id;
+  const eligiblePurchases = purchases.filter(p => p.companyId === currentCompany.id && ['02', '03'].includes(String(p.documentType || '')));
+  const getNoteNumber = (purchase: typeof purchases[number]) => purchase.documentType === '02'
+    ? purchase.debitNoteNumber || purchase.invoiceNumber || purchase.id
+    : purchase.creditNoteNumber || purchase.invoiceNumber || purchase.id;
   const registerIncident = async () => {
     if (!selectedPurchaseId || reason.trim().length < 15) {
       setError('Seleccione una nota de débito/crédito y explique el motivo con al menos 15 caracteres.');
@@ -32,8 +35,13 @@ export const VatFiscalIncidentPanel: React.FC = () => {
     }
     const purchase = purchases.find(p => p.id === selectedPurchaseId);
     if (!purchase) return;
-    const originalId = purchase.documentType === '01' ? purchase.id : purchase.originalPurchaseId;
-    const voucher = vatVouchers.find(v => v.companyId === currentCompany.id && v.purchaseRecordId === originalId);
+    const originalPurchase = purchase.originalPurchaseId
+      ? purchases.find(p => p.id === purchase.originalPurchaseId && p.companyId === currentCompany.id)
+      : purchases.find(p => p.companyId === currentCompany.id && p.documentType === '01' &&
+          String(p.invoiceNumber || '').trim().toUpperCase() === String(purchase.affectedInvoiceNumber || '').trim().toUpperCase());
+    const voucher = originalPurchase
+      ? vatVouchers.find(v => v.companyId === currentCompany.id && v.purchaseRecordId === originalPurchase.id)
+      : undefined;
     setSaving(true); setError(''); setNotice('');
     try {
       const created = await createVatFiscalIncident({
@@ -44,7 +52,9 @@ export const VatFiscalIncidentPanel: React.FC = () => {
       });
       setIncidents(previous => [created, ...previous.filter(item => item.id !== created.id)]);
       setSelectedPurchaseId(''); setReason('');
-      setNotice(voucher\n        ? 'Incidencia registrada en SQLite y vinculada al comprobante IVA original; permanece bloqueado para exportación.'\n        : 'Incidencia registrada en SQLite. No se encontró un comprobante IVA original vinculado; el expediente queda abierto para revisión.');
+      setNotice(voucher
+        ? 'Incidencia registrada en SQLite y vinculada al comprobante IVA original; permanece bloqueado para exportación.'
+        : 'Incidencia registrada en SQLite. No se encontró un comprobante IVA original vinculado; el expediente queda abierto para revisión.');
     } catch (e) { setError(e instanceof Error ? e.message : 'No fue posible registrar la incidencia.'); }
     finally { setSaving(false); }
   };
