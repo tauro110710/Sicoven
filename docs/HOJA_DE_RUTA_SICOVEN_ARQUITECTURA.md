@@ -167,3 +167,5 @@ La validación del producto se realiza mediante:
 - La especificación consultada es de 2020 y la aceptación del formato actual por SENIAT continúa pendiente. La Providencia SNAT/2025/000054 regula la obligación de declarar, enterar y emitir comprobantes, pero no sustituye por sí sola las especificaciones técnicas del archivo de carga.
 
 - Se corrigió además una expectativa heredada en otra prueba de exportación (test “IVA TXT exports only real voucher identifiers and the supplied amounts”), que todavía esperaba 160.00 en columna 11. Ahora espera 120.00 para el caso de IVA causado 160.00 con retención 75%. Commit de esa corrección: `c4b653bd4d69ea4e15e399602a8c81610d1bf887`.
+
+- CI #89 detectó una tercera expectativa obsoleta en la prueba estructural de 16 columnas (línea 335), que todavía describía y esperaba IVA causado 160.00. Se actualizó a IVA retenido 120.00 para el escenario de retención 75%. Commit: `78fa2797299c9a95ed6bfa1799d665c0e50d122b`. La falla no era del generador: era un test contradictorio con el nuevo mapeo. Repetir la batería completa en el HEAD actualizado.
