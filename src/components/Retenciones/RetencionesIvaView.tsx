@@ -17,6 +17,7 @@ import { VatVoucherModal } from './VatVoucherModal';
 import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators';
 import { VatWithholdingDeclarationsPanel } from './VatWithholdingDeclarationsPanel';
 import { getVatDeclarationStatus } from '../../types/vatWithholdingDeclaration';
+import { getVatVoucherDeliveryControl } from '../../utils/vatVoucherDelivery';
 
 export const RetencionesIvaView: React.FC = () => {
   const { currentCompany, purchases, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, recordVatVoucherDelivery, displayCurrency } = useAccounting();
@@ -34,8 +35,11 @@ export const RetencionesIvaView: React.FC = () => {
     setSearchTerm('');
   }, [currentCompany.id]);
   const effectivePeriod = availablePeriods.includes(selectedPeriod) ? selectedPeriod : (availablePeriods[0] || selectedPeriod);
-  const filteredVouchers = companyVouchers
+  // La búsqueda solo filtra la tabla; nunca debe alterar la población fiscal exportada.
+  const periodVouchers = companyVouchers
     .filter(v => v.period === effectivePeriod)
+    .sort((a, b) => b.voucherNumber.localeCompare(a.voucherNumber));
+  const filteredVouchers = periodVouchers
     .filter(v => {
       if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase();
@@ -50,7 +54,7 @@ export const RetencionesIvaView: React.FC = () => {
     })
     .sort((a, b) => b.voucherNumber.localeCompare(a.voucherNumber));
 
-  const hasPendingFiscalCorrection = filteredVouchers.some(voucher => voucher.requiresFiscalCorrection);
+  const hasPendingFiscalCorrection = periodVouchers.some(voucher => voucher.requiresFiscalCorrection);
   const totalRetenidoBs = filteredVouchers.reduce((s, v) => s + v.vatWithheldBs, 0);
   const totalRetenidoUsd = filteredVouchers.reduce((s, v) => s + v.vatWithheldUsd, 0);
   const totalBaseBs = filteredVouchers.reduce((s, v) => s + v.taxableBaseBs, 0);
@@ -81,6 +85,7 @@ export const RetencionesIvaView: React.FC = () => {
     : undefined;
 
   const pendingDeliveryCount = companyVouchers.filter(voucher => !voucher.deliveryDate).length;
+  const localToday = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const reviewPurchases = purchases.filter(purchase => purchase.companyId === currentCompany.id && purchase.ivaRetentionDecision?.decisionStatus === 'REVIEW');
   const pendingDeclarationStatuses = companyDeclarations.filter(item => {
     const status = getVatDeclarationStatus(item, vatWithholdingDeclarationEvents);
@@ -98,18 +103,18 @@ export const RetencionesIvaView: React.FC = () => {
         ? 'No agente de retención'
         : 'Condición de agente por confirmar';
 
-  const generatedTxt = generateSeniatIvaTxt(currentCompany, filteredVouchers);
+  const generatedTxt = generateSeniatIvaTxt(currentCompany, periodVouchers);
 
   const handleDownloadTxt = () => {
     if (hasPendingFiscalCorrection) {
       alert('Exportación bloqueada: hay comprobantes afectados por notas de crédito o reversiones. Registre y concilie la rectificación fiscal antes de generar el archivo SENIAT.');
       return;
     }
-    if (filteredVouchers.length === 0) {
+    if (periodVouchers.length === 0) {
       alert('No hay comprobantes de retención para exportar.');
       return;
     }
-    if (filteredVouchers.some(voucher => voucher.period !== effectivePeriod)) {
+    if (periodVouchers.some(voucher => voucher.period !== effectivePeriod)) {
       alert('La exportación debe contener un solo período fiscal. Seleccione el período que desea generar.');
       return;
     }
@@ -210,7 +215,7 @@ export const RetencionesIvaView: React.FC = () => {
             </button>
             <button
               onClick={handleDownloadTxt}
-              disabled={filteredVouchers.length === 0 || hasPendingFiscalCorrection}
+              disabled={periodVouchers.length === 0 || hasPendingFiscalCorrection}
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-40 rounded-xl transition shadow cursor-pointer"
             >
               <Download className="w-4 h-4" />
@@ -342,7 +347,7 @@ export const RetencionesIvaView: React.FC = () => {
                 filteredVouchers.map(v => (
                   <tr key={v.id} className="hover:bg-slate-50 transition">
                     <td className="py-2.5 px-4 font-mono font-bold text-purple-900 bg-purple-50/30 whitespace-nowrap">
-                      {v.voucherNumber}{!v.deliveryDate && <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-800">PEND. ENTREGA</span>}{v.deliveryDate && <span className="ml-1 rounded bg-emerald-100 px-1 py-0.5 text-[9px] font-bold text-emerald-800">ENTREGADO</span>}{v.requiresFiscalCorrection && <span title={v.correctionNote || 'Revisar regularización fiscal'} className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-800">REVISAR</span>}
+                      {v.voucherNumber}{!v.deliveryDate && <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-800">PEND. ENTREGA</span>}{!v.deliveryDate && getVatVoucherDeliveryControl(v.period, localToday).status === 'REVIEW' && <span title="La estimación de días hábiles ya transcurrió; verificar feriados oficiales y fecha efectiva de entrega." className="ml-1 rounded bg-rose-100 px-1 py-0.5 text-[9px] font-bold text-rose-800">REVISAR PLAZO</span>}{v.deliveryDate && <span className="ml-1 rounded bg-emerald-100 px-1 py-0.5 text-[9px] font-bold text-emerald-800">ENTREGADO</span>}{v.deliveryDate && getVatVoucherDeliveryControl(v.period, localToday, v.deliveryDate).needsCalendarReview && <span title="La fecha registrada supera la estimación de días hábiles; revisar feriados oficiales antes de concluir incumplimiento." className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-800">VERIFICAR FECHA</span>}{v.requiresFiscalCorrection && <span title={v.correctionNote || 'Revisar regularización fiscal'} className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-800">REVISAR</span>}
                     </td>
                     <td className="py-2.5 px-4 font-mono text-slate-600 whitespace-nowrap">
                       {formatDate(v.date)}

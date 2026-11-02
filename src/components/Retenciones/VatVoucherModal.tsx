@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { VatRetentionVoucher } from '../../types/accounting';
+import { getVatVoucherDeliveryWindow } from '../../utils/vatVoucherDelivery';
 import { X, Printer, ShieldCheck } from 'lucide-react';
 import { formatBs, formatUsd, formatDate, formatNumberVe } from '../../utils/formatters';
 
@@ -24,6 +25,7 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, corre
   const [deliveryBusy, setDeliveryBusy] = useState(false);
   const [deliveryMessage, setDeliveryMessage] = useState('');
   if (!voucher) return null;
+  const estimatedDeliveryWindow = getVatVoucherDeliveryWindow(voucher.period);
 
   const handleRecordDelivery = async () => {
     setDeliveryBusy(true);
@@ -91,7 +93,7 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, corre
           <div className="no-print border-b border-slate-200 bg-slate-50 px-4 sm:px-6 py-4 space-y-3">
             <div>
               <h3 className="text-xs font-bold text-slate-900">Registrar entrega al proveedor</h3>
-              <p className="mt-1 text-[11px] text-slate-600">Registra la fecha real de entrega. No se exige adjuntar archivos. La entrega electrónica requiere acuerdo previo del proveedor. La norma exige entregar el comprobante dentro de los primeros dos días hábiles del período siguiente; SICOVEN registra la fecha efectiva y no inventa un vencimiento sin calendario oficial de feriados validado.</p>
+              <p className="mt-1 text-[11px] text-slate-600">Registra la fecha real de entrega. No se exige adjuntar archivos. La entrega electrónica requiere acuerdo previo del proveedor. La norma exige entregar el comprobante dentro de los primeros dos días hábiles del período siguiente. {estimatedDeliveryWindow ? `Como orientación (sin descontar feriados), los dos primeros días de lunes a viernes serían ${formatDate(estimatedDeliveryWindow.firstDay)} y ${formatDate(estimatedDeliveryWindow.secondDay)}.` : 'No se pudo calcular una referencia de días hábiles para este período.'} Verifica los feriados oficiales aplicables: esta referencia no es un vencimiento legal definitivo. SICOVEN registra la fecha efectiva y no bloquea operaciones por falta de entrega.</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <label className="text-xs font-semibold text-slate-700">Fecha efectiva de entrega

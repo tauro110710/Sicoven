@@ -1,6 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { persistAccountingSnapshot, registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
 
 const emptyState = () => ({
@@ -10,8 +13,8 @@ const emptyState = () => ({
   creditSettlements: [], displayCurrency: 'DUAL'
 });
 
-function createHarness({ authorized = true, validSession = true } = {}) {
-  const db = new Database(':memory:');
+function createHarness({ authorized = true, validSession = true, dbPath = ':memory:' } = {}) {
+  const db = new Database(dbPath);
   db.exec(`
     CREATE TABLE app_state (
       state_key TEXT PRIMARY KEY,
@@ -460,8 +463,10 @@ test('SQLite does not duplicate an opening that predates the exercise-link migra
 });
 
 
-test('SQLite appends an audit event when a VAT declaration is prepared and when its lifecycle advances', () => {
-  const harness = createHarness();
+test('SQLite restores a paid IVA declaration, journal and reconciled bank evidence after database restart', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-iva-restart-'));
+  const dbPath = path.join(tempDir, 'sicoven.sqlite');
+  const harness = createHarness({ dbPath });
   try {
     const voucher = {
       id: 'vat-audit-1', companyId: 'company-1', voucherNumber: '20261000000001',
@@ -513,8 +518,85 @@ test('SQLite appends an audit event when a VAT declaration is prepared and when 
     assert.equal(details.declarationId, declaration.id);
     assert.equal(details.eventType, 'REVIEWED');
     assert.deepEqual(details.actor, { userId: 1, username: 'auditor' });
-  } finally {
+
+    const filed = {
+      id: 'vat-event-audit-filed', declarationId: declaration.id, eventType: 'FILED',
+      occurredAt: '2026-10-17', recordedAt: '2026-10-17T11:00:00.000Z',
+      declarationNumber: 'DECL-IVA-1', receiptReference: 'ACK-IVA-1'
+    };
+    const payment = {
+      id: 'vat-event-audit-payment', declarationId: declaration.id, eventType: 'PAYMENT',
+      occurredAt: '2026-10-18', recordedAt: '2026-10-18T12:00:00.000Z',
+      amountBs: 120, amountUsd: 1.2, paymentReference: 'SENIAT-REF-1',
+      bankStatementMovementIds: ['bank-debit-1'], journalEntryId: 'vat-payment-journal-1'
+    };
+    const paymentJournal = {
+      id: 'vat-payment-journal-1', companyId: 'company-1', entryNumber: 2,
+      date: '2026-10-18', description: 'Enteramiento IVA', type: 'RETENCION_IVA',
+      bcvRate: 100, referenceDoc: 'IVA-ENTERAMIENTO:' + declaration.id + ':SENIAT-REF-1',
+      items: [
+        { accountCode: '2.1.2.03', accountName: 'Retenciones IVA por enterar', debitBs: 120, creditBs: 0, debitUsd: 1.2, creditUsd: 0 },
+        { accountCode: '1.1.1.03', accountName: 'Banco Bs.', debitBs: 0, creditBs: 120, debitUsd: 0, creditUsd: 1.2 }
+      ], createdAt: '2026-10-18T12:00:00.000Z'
+    };
+    const bankAccount = {
+      id: 'bank-account-1', companyId: 'company-1', accountCode: '1.1.1.03',
+      bankName: 'Banco Uno', accountNumber: '001', currency: 'BS',
+      initialBalanceBs: 0, initialBalanceUsd: 0
+    };
+    const bankMovement = {
+      id: 'bank-debit-1', companyId: 'company-1', bankAccountId: bankAccount.id,
+      date: '2026-10-18', reference: 'SENIAT-REF-1', description: 'Enteramiento IVA',
+      type: 'DEBIT', amountBs: 120, amountUsd: 1.2, isReconciled: true,
+      reconciledWithJournalEntryId: paymentJournal.id,
+      reconciledJournalEntryIds: [paymentJournal.id]
+    };
+    persistAccountingSnapshot(harness.db, {
+      ...initial,
+      accounts: [
+        { code: '2.1.2.03', name: 'Retenciones IVA por enterar', type: 'PASIVO', level: 4, isMovement: true },
+        { code: '1.1.1.03', name: 'Banco Bs.', type: 'ACTIVO', level: 4, isMovement: true }
+      ],
+      journalEntries: [paymentJournal],
+      bankAccounts: [bankAccount],
+      bankStatementMovements: [bankMovement],
+      vatWithholdingDeclarationEvents: [reviewed, filed, payment]
+    }, { id: 1, username: 'auditor' });
+    const paymentAudit = harness.db.prepare(
+      "SELECT details_json FROM audit_events WHERE event_type='vat_withholding_declaration_event' ORDER BY id DESC LIMIT 1"
+    ).get();
+    const paymentDetails = JSON.parse(paymentAudit.details_json);
+    assert.equal(paymentDetails.journalEntryId, 'vat-payment-journal-1');
+    assert.equal(paymentDetails.amountBs, 120);
+    assert.equal(paymentDetails.amountUsd, 1.2);
+    assert.deepEqual(paymentDetails.bankStatementMovementIds, ['bank-debit-1']);
+
+    // Simulate closing SICOVEN and opening the same on-disk SQLite database again.
     harness.db.close();
+    const reopenedDb = new Database(dbPath);
+    try {
+      const restored = JSON.parse(reopenedDb.prepare(
+        "SELECT state_json FROM app_state WHERE state_key='accounting'"
+      ).get().state_json);
+      assert.equal(restored.vatWithholdingDeclarationEvents.find(event => event.id === payment.id).journalEntryId, paymentJournal.id);
+      assert.equal(restored.journalEntries.find(entry => entry.id === paymentJournal.id).type, 'RETENCION_IVA');
+      const restoredMovement = restored.bankStatementMovements.find(item => item.id === 'bank-debit-1');
+      assert.equal(restoredMovement.isReconciled, true);
+      assert.equal(restoredMovement.reconciledWithJournalEntryId, paymentJournal.id);
+      assert.deepEqual(restoredMovement.reconciledJournalEntryIds, [paymentJournal.id]);
+      const restoredAudit = reopenedDb.prepare(
+        "SELECT details_json FROM audit_events WHERE event_type='vat_withholding_declaration_event' ORDER BY id DESC LIMIT 1"
+      ).get();
+      const restoredDetails = JSON.parse(restoredAudit.details_json);
+      assert.equal(restoredDetails.journalEntryId, paymentJournal.id);
+      assert.equal(restoredDetails.amountUsd, 1.2);
+      assert.deepEqual(restoredDetails.bankStatementMovementIds, ['bank-debit-1']);
+    } finally {
+      reopenedDb.close();
+    }
+  } finally {
+    try { harness.db.close(); } catch {}
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
@@ -617,6 +699,49 @@ test('SQLite audit records the VAT retention decision and the later voucher deli
     assert.deepEqual(correctionDetails.correctionEntryIds, ['journal-credit-note-1']);
     assert.equal(correctionDetails.correctionNote, 'Reversión de factura requiere conciliación fiscal.');
     assert.deepEqual(correctionDetails.actor, { userId: 1, username: 'auditor' });
+  } finally {
+    harness.db.close();
+  }
+});
+
+test('SQLite rolls back all audit and state writes when an IVA event fails integrity validation', () => {
+  const harness = createHarness();
+  try {
+    const baseline = emptyState();
+    persistAccountingSnapshot(harness.db, baseline, { id: 1, username: 'auditor' });
+    const beforeState = harness.db.prepare(
+      "SELECT state_json FROM app_state WHERE state_key='accounting'"
+    ).get().state_json;
+    const beforeAudit = harness.db.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count;
+
+    const invalidSnapshot = {
+      ...baseline,
+      vatVouchers: [{
+        id: 'voucher-atomicity-invalid', companyId: 'company-1',
+        voucherNumber: '20261100000001', date: '2026-11-02',
+        period: '202611', fiscalDate: '2026-11-02',
+        supplierRif: 'J-12345678-9', supplierName: 'Proveedor de prueba',
+        taxableBaseBs: 1000, vatAmountBs: 160, vatWithheldBs: 120
+      }],
+      vatWithholdingDeclarationEvents: [{
+        id: 'orphan-review-event', declarationId: 'declaration-does-not-exist',
+        eventType: 'REVIEWED', occurredAt: '2026-11-02',
+        recordedAt: '2026-11-02T12:00:00.000Z'
+      }]
+    };
+
+    assert.throws(
+      () => persistAccountingSnapshot(harness.db, invalidSnapshot, { id: 1, username: 'auditor' }),
+      /declaración|declaracion|SQLite rechazó/i
+    );
+    const afterState = harness.db.prepare(
+      "SELECT state_json FROM app_state WHERE state_key='accounting'"
+    ).get().state_json;
+    const afterAudit = harness.db.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count;
+    assert.equal(afterState, beforeState, 'SQLite debe conservar íntegro el último estado válido.');
+    assert.equal(afterAudit, beforeAudit, 'No debe quedar ningún evento de auditoría parcial.');
+    const persisted = JSON.parse(afterState);
+    assert.equal((persisted.vatVouchers || []).some(item => item.id === 'voucher-atomicity-invalid'), false);
   } finally {
     harness.db.close();
   }

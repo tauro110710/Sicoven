@@ -1,3 +1,4 @@
+import { isValidIsoDate } from './migrationParsing';
 import type {
   BankAccount,
   BankStatementMovement,
@@ -40,6 +41,10 @@ export function validateVatPaymentBankLinks(input: {
     if (!movement || movement.companyId !== input.companyId || movement.type !== 'DEBIT') {
       throw new Error('Cada soporte debe ser un débito bancario existente de la empresa activa.');
     }
+    if (movement.isReconciled || movement.reconciledWithJournalEntryId ||
+        (movement.reconciledJournalEntryIds || []).length > 0) {
+      throw new Error('El débito bancario ya fue conciliado con un asiento y no puede respaldar un nuevo enteramiento IVA.');
+    }
     const account = input.bankAccounts.find(item =>
       item.id === movement.bankAccountId && item.companyId === input.companyId);
     if (!account || account.currency !== 'BS') {
@@ -47,7 +52,7 @@ export function validateVatPaymentBankLinks(input: {
     }
     const amount = Number(movement.amountBs);
     if (!Number.isFinite(amount) || amount <= 0 ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(movement.date) ||
+        !isValidIsoDate(movement.date) ||
         movement.date < filed.occurredAt.slice(0, 10) ||
         movement.date > input.draft.occurredAt.slice(0, 10)) {
       throw new Error('El débito bancario tiene importe o fecha inválidos, o está fuera del intervalo entre presentación y enteramiento.');
@@ -72,7 +77,8 @@ export interface VatBankReconciliationLine {
 export function buildVatBankReconciliationSummary(
   declaration: VatWithholdingDeclaration,
   events: VatWithholdingDeclarationEvent[],
-  bankMovements: BankStatementMovement[]
+  bankMovements: BankStatementMovement[],
+  bankAccounts: BankAccount[]
 ): {
   lines: VatBankReconciliationLine[];
   reconciledAmountBs: number;
@@ -86,7 +92,22 @@ export function buildVatBankReconciliationSummary(
     const ids = event.bankStatementMovementIds || [];
     const movements = ids.map(id => bankMovements.find(item =>
       item.id === id && item.companyId === declaration.companyId)).filter(Boolean) as BankStatementMovement[];
-    const complete = ids.length > 0 && movements.length === ids.length;
+    const validMovements = movements.filter(movement => {
+      const account = bankAccounts.find(item =>
+        item.id === movement.bankAccountId && item.companyId === declaration.companyId);
+      const linkedToThisPayment = Boolean(event.journalEntryId) &&
+        movement.reconciledWithJournalEntryId === event.journalEntryId &&
+        (movement.reconciledJournalEntryIds || []).includes(event.journalEntryId as string);
+      const hasOtherReconciliation = Boolean(movement.isReconciled || movement.reconciledWithJournalEntryId ||
+        (movement.reconciledJournalEntryIds || []).length > 0) && !linkedToThisPayment;
+      return movement.type === 'DEBIT' && account?.currency === 'BS' &&
+        !hasOtherReconciliation &&
+        Number.isFinite(Number(movement.amountBs)) && Number(movement.amountBs) > 0 &&
+        isValidIsoDate(movement.date);
+    });
+    const linkedTotalCents = validMovements.reduce((sum, movement) => sum + cents(Number(movement.amountBs)), 0);
+    const complete = ids.length > 0 && movements.length === ids.length &&
+      validMovements.length === ids.length && linkedTotalCents === cents(Number(event.amountBs || 0));
     return {
       eventId: event.id,
       occurredAt: event.occurredAt,
@@ -107,4 +128,20 @@ export function buildVatBankReconciliationSummary(
     reconciledCount: lines.filter(line => line.status === 'RECONCILIADO').length,
     pendingCount: lines.filter(line => line.status === 'PENDIENTE').length
   };
+}
+
+/**
+ * A payment journal linked to a fiscal declaration cannot be reversed through
+ * the generic journal workflow until a dedicated fiscal correction event exists.
+ * Keeping the original event and bank links is safer than silently orphaning them.
+ */
+export function getVatPaymentJournalReversalBlocker(
+  events: VatWithholdingDeclarationEvent[],
+  journalEntryId: string
+): string | null {
+  const linkedPayment = events.some(event =>
+    event.eventType === 'PAYMENT' && event.journalEntryId === journalEntryId);
+  return linkedPayment
+    ? 'El asiento corresponde a un enteramiento de IVA vinculado a una declaración fiscal. La reversión requiere primero un procedimiento de corrección fiscal específico; no se puede usar la reversión contable genérica ni liberar sus movimientos bancarios.'
+    : null;
 }

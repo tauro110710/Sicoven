@@ -389,6 +389,10 @@ export interface VatDeclarationVoucherSnapshot {
   taxableBaseBs: number;
   vatAmountBs: number;
   vatWithheldBs: number;
+  /** Equivalente USD histórico del pasivo retenido al emitir el comprobante. */
+  vatWithheldUsd?: number;
+  /** Tasa BCV histórica del comprobante. */
+  bcvRate?: number;
   requiresFiscalCorrection: boolean;
 }
 
@@ -412,6 +416,8 @@ export interface VatWithholdingDeclaration {
   totalTaxableBaseBs: number;
   totalVatAmountBs: number;
   totalWithheldBs: number;
+  /** Base USD histórica; ausente en declaraciones antiguas no reconstruibles. */
+  totalWithheldUsd?: number;
   createdAt: string;
   createdBy?: string;
 }
@@ -433,6 +439,8 @@ export interface VatWithholdingDeclarationEvent {
   paymentReference?: string;
   /** Movimientos bancarios reales que respaldan este enteramiento; ausente en pagos históricos. */
   bankStatementMovementIds?: string[];
+  /** Asiento que cancela este pago fiscal; ausente en pagos históricos. */
+  journalEntryId?: string;
   evidenceReference?: string;
   dueDate?: string;
   officialSourceTitle?: string;

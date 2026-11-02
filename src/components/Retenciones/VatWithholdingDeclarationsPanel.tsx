@@ -98,7 +98,7 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
   }) : [];
   const selectedPaymentMovements = selectedBankMovementIds.map(id => availablePaymentMovements.find(item => item.id === id)).filter(Boolean);
   const selectedPaymentTotalBs = selectedPaymentMovements.reduce((sum, item) => sum + Number(item?.amountBs || 0), 0);
-  const bankReconciliation = selected ? buildVatBankReconciliationSummary(selected, selectedEvents, bankStatementMovements) : null;
+  const bankReconciliation = selected ? buildVatBankReconciliationSummary(selected, selectedEvents, bankStatementMovements, bankAccounts) : null;
 
   const run = async (operation: () => Promise<unknown>) => {
     setBusy(true);

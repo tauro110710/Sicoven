@@ -98,12 +98,15 @@ jobs:
           if ($upgrade.ExitCode -ne 0) { throw "La actualización a 1.0.7 terminó con código $($upgrade.ExitCode)." }
           python -c "import os,sqlite3,sys; c=sqlite3.connect(os.environ['SICOVEN_DB_PATH']); r=c.execute('SELECT probe_value FROM _sicoven_upgrade_probe WHERE probe_key=?', ('upgrade',)).fetchone(); c.close(); sys.exit(0 if r and r[0]=='preserve-me' else 1)"
           if ($LASTEXITCODE -ne 0) { throw "La actualización 1.0.6 a 1.0.7 eliminó o alteró datos SQLite." }
+          # Relanzar la aplicación instalada y verificar la misma base después del arranque real.
           $application = Start-Process -FilePath $app -ArgumentList @("--disable-gpu") -PassThru
           Start-Sleep -Seconds 12
           $application.Refresh()
-          if ($application.HasExited) { throw "SICOVEN 1.0.7 se cerró después de la actualización. Código: $($application.ExitCode)" }
+          if ($application.HasExited) { throw "SICOVEN 1.0.7 se cerró después del relanzamiento. Código: $($application.ExitCode)" }
           & taskkill.exe /PID $application.Id /T /F | Out-Null
-          Write-Host "Actualización real 1.0.6 -> 1.0.7, arranque y conservación de datos SQLite verificados."
+          python -c "import os,sqlite3,sys; c=sqlite3.connect(os.environ['SICOVEN_DB_PATH']); r=c.execute('SELECT probe_value FROM _sicoven_upgrade_probe WHERE probe_key=?', ('upgrade',)).fetchone(); c.close(); sys.exit(0 if r and r[0]=='preserve-me' else 1)"
+          if ($LASTEXITCODE -ne 0) { throw "El arranque real de SICOVEN 1.0.7 no conservó los datos SQLite del equipo." }
+          Write-Host "SICOVEN 1.0.6 -> 1.0.7: instalación, arranque, actualización, relanzamiento y persistencia SQLite verificados."
           Get-Item $installer.FullName | Select-Object Name, Length
       - name: Upload Windows installer artifact
         continue-on-error: true

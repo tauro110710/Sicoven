@@ -514,6 +514,25 @@ function validateVatDeclarationLedger(previousState, nextState) {
           throw new Error('SQLite rechazó el enteramiento: la suma de débitos bancarios no coincide exactamente con el importe fiscal.');
         }
       }
+      if (isNewEvent) {
+        const journalEntryId = String(event.journalEntryId || '');
+        const journal = asArray(nextState.journalEntries).find(item =>
+          String(item.id) === journalEntryId && String(item.companyId) === String(declaration.companyId));
+        const expectedReference = 'IVA-ENTERAMIENTO:' + declaration.id + ':' + String(event.paymentReference || '').trim();
+        if (!journalEntryId || !journal || journal.type !== 'RETENCION_IVA' ||
+            String(journal.date) !== String(event.occurredAt).slice(0, 10) ||
+            String(journal.referenceDoc || '') !== expectedReference) {
+          throw new Error('SQLite rechazó el enteramiento: falta el asiento contable IVA correspondiente o su referencia, empresa y fecha no coinciden.');
+        }
+        for (const movementId of movementIds) {
+          const movement = bankMovementsById.get(String(movementId));
+          if (!movement || movement.isReconciled !== true ||
+              String(movement.reconciledWithJournalEntryId || '') !== journalEntryId ||
+              !asArray(movement.reconciledJournalEntryIds).map(String).includes(journalEntryId)) {
+            throw new Error('SQLite rechazó el enteramiento: cada débito bancario debe quedar conciliado con el mismo asiento de pago IVA.');
+          }
+        }
+      }
     } else {
       throw new Error('SQLite rechazó un tipo de evento de declaración IVA no reconocido.');
     }
