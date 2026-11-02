@@ -70,7 +70,7 @@ El expediente de importación permanece en cero y no se incorporan tipos 04/05/0
 - Instructivo SENIAT `RI_DRIVA2020-IT01V3_0_0`, versión 3.0.0, septiembre de 2020 (reproducción de terceros): https://es.readkong.com/page/instructivo-declaracion-de-retenciones-de-iva-seniat-4300855
 - Providencia SNAT/2025/000054 (reproducción consultada para artículos 13–17): https://tributos.ivecofi.net/informacion/legislacion/providencias/pa-2025-54
 
-**Estado:** generador enlazado a compras fuente; matriz de factura, ND/NC, alícuotas y exención ampliada; conciliación de asientos de enteramiento reforzada. Validación CI del SHA final pendiente; aceptación externa no forma parte del bloqueo para continuar el desarrollo técnico.
+**Estado:** generador enlazado a compras fuente; matriz de factura, ND/NC, alícuotas y exención ampliada; conciliación de asientos de enteramiento reforzada. En el HEAD `68b596458b8dfdbf70b0696f304e9ab74c29dda7`, SICOVEN CI #110, Desktop Validation #1321 e instalador Windows #1438 finalizaron SUCCESS. La aceptación externa del Portal Fiscal sigue sin ejecutarse.
 
 
 ## Aclaración de vigencia operativa y alcance — 02-11-2026
@@ -88,3 +88,27 @@ El instructivo explica que el archivo puede probarse en el Portal Fiscal, opció
 - El instructivo RI_DRIVA2020-IT01V3_0_0 define el archivo TXT de operaciones con 16 columnas, pero no prescribe una fila sintética de 16 ceros para declarar un período sin operaciones.
 - Se retiró de SICOVEN la descarga de esa fila no especificada y su generador/pruebas asociadas. La declaración sin operaciones permanece como registro explícito en SQLite y se presenta mediante el procedimiento habilitado en el Portal Fiscal; la constancia se registra en el evento FILED.
 - No se modifica la estructura de los TXT de operaciones reales.
+
+
+## Revisión final de facturas con varias alícuotas — 02-11-2026
+
+Se revisó el flujo completo de compra, cálculo de retención, comprobante IVA y exportación:
+
+- `PurchaseRecord` conserva `taxableBaseBs`, `taxRate` y `vatAmountBs` como valores escalares.
+- `VatRetentionVoucher` conserva la misma estructura escalar para base, alícuota, IVA causado e IVA retenido.
+- La captura `NewPurchaseModal` solo permite seleccionar una alícuota para toda la factura.
+- La exportación coloca una alícuota en la columna 15 de cada fila y un importe de retención en la columna 11.
+
+La consulta del instructivo RI_DRIVA2020-IT01V3_0_0 confirma que la columna 15 representa la alícuota aplicada y que la columna 11 representa, para el agente de retención, el importe efectivamente retenido. No define expresamente la cardinalidad de filas para una sola factura que contenga bases gravadas a distintas alícuotas, ni el tratamiento de la base, monto de documento, monto exento y comprobante al repetir el documento. La investigación adicional tampoco encontró una regla oficial inequívoca que autorice duplicar filas o distribuir la retención entre alícuotas.
+
+**Decisión de integridad:** no se implementa una serialización especulativa. Duplicar el comprobante, repetir el total de factura o prorratear la retención sin una regla SENIAT confirmada podría alterar la declaración. El desglose multialícuota queda bloqueado únicamente por esta definición externa. La implementación requiere confirmar el comportamiento en «Retención IVA (prueba carga de archivo)» del Portal Fiscal con un caso de factura mixta y conservar el resultado/acuse como evidencia. Hasta entonces, SICOVEN no debe presentar una factura mixta como si su exportación estuviera homologada.
+
+## Estado de ejecución automatizada — HEAD 68b5964
+
+| Control | Run | Resultado |
+|---|---:|---|
+| SICOVEN CI | #110 | SUCCESS |
+| Desktop Validation | #1321 | SUCCESS |
+| Windows installer | #1438 | SUCCESS |
+
+Estos resultados acreditan las pruebas automatizadas del commit indicado; no equivalen a aceptación del archivo por SENIAT ni a certificación oficial.
