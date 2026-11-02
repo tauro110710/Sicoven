@@ -32,7 +32,11 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
   if (!Array.isArray(purchases)) {
     throw new Error('La exportación TXT IVA requiere las compras fuente para validar el tipo documental; no se permite clasificar documentos por defecto.');
   }
-  const purchasesById = new Map(purchases.filter(purchase => purchase.companyId === company.id).map(purchase => [purchase.id, purchase]));
+  const companyPurchases = purchases.filter(purchase => purchase.companyId === company.id);
+  const purchasesById = new Map(companyPurchases.map(purchase => [purchase.id, purchase]));
+  if (purchasesById.size !== companyPurchases.length) {
+    throw new Error('La compra fuente contiene identificadores duplicados; revise la integridad de los documentos antes de exportar.');
+  }
 
   for (const v of vouchers) {
     const linkedPurchase = purchasesById.get(v.purchaseRecordId);
@@ -65,8 +69,12 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
         !supplierRif || !invoiceNum || !controlNum ||
         (documentPeriod && documentPeriod > period) ||
         !['01', '02', '03'].includes(documentType) ||
-        (linkedPurchase && (cleanRif(linkedPurchase.supplierRif) !== supplierRif || linkedPurchase.invoiceDate !== v.invoiceDate || String(linkedPurchase.controlNumber || '').trim() !== controlNum || documentNumber.trim() !== invoiceNum)) ||
-        (documentType !== '01' && (!documentNumber || !affectedDocument)) ||
+        (cleanRif(linkedPurchase.supplierRif) !== supplierRif || linkedPurchase.invoiceDate !== v.invoiceDate || String(linkedPurchase.controlNumber || '').trim() !== controlNum || documentNumber.trim() !== invoiceNum) ||
+        (documentType !== '01' && (!documentNumber || !affectedDocument ||
+          !companyPurchases.some(source => source.documentType === '01' &&
+            source.supplierRif === linkedPurchase.supplierRif &&
+            source.invoiceNumber === affectedDocument &&
+            (!linkedPurchase.originalPurchaseId || source.id === linkedPurchase.originalPurchaseId)))) ||
         [invoiceNum, controlNum, voucherNum].some(value => /[\t\r\n]/.test(value)) ||
         amounts.some(value => !Number.isFinite(Number(value)) || Number(value) < 0) ||
         Number(v.taxRate) > 100 || !validRetentionRate ||
