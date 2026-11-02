@@ -57,11 +57,26 @@ def seed():
         ],
         "createdAt": "2026-10-01T10:00:00.000Z",
     }
+    legacy_invoice_entry = {
+        **journal,
+        "id": "legacy-invoice-link-106",
+        "type": "VENTA",
+        "referenceDoc": "FAC-LEGACY-106-001",
+        "description": "Vínculo histórico de factura de compra con tipo de asiento heredado",
+    }
+    legacy_purchase = {
+        "id": "legacy-purchase-106-001",
+        "companyId": COMPANY_ID,
+        "invoiceNumber": "LEGACY-106-001",
+        "supplierRif": "J-12345678-9",
+        "documentType": "01",
+        "journalEntryId": "legacy-invoice-link-106",
+    }
     collections = {
         "companies": [company],
         "accounts": accounts,
-        "journalEntries": [journal],
-        "purchases": [],
+        "journalEntries": [journal, legacy_invoice_entry],
+        "purchases": [legacy_purchase],
         "sales": [],
         "products": [],
         "movements": [],
@@ -115,11 +130,15 @@ def verify():
     state = json.loads(row[0])
     company_ids = {item.get("id") for item in state.get("companies", [])}
     entries = state.get("journalEntries", [])
+    legacy_purchase = next((item for item in state.get("purchases", [])
+                            if item.get("id") == "legacy-purchase-106-001"), None)
     if COMPANY_ID not in company_ids or not any(
         item.get("id") == ENTRY_ID and item.get("companyId") == COMPANY_ID and item.get("entryNumber") == 1
         for item in entries
     ):
         raise SystemExit("No se conservó la empresa o el asiento de apertura del dataset de certificación.")
+    if not legacy_purchase or legacy_purchase.get("journalEntryId") != "legacy-invoice-link-106":
+        raise SystemExit("No se conservó el vínculo histórico de factura de la instalación 1.0.6.")
     print(f"Snapshot contable conservado: empresa={COMPANY_ID}, asiento={ENTRY_ID}, SHA-256={actual}")
 
 
