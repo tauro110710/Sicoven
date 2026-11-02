@@ -195,6 +195,15 @@ test('IVA TXT rejects an empty supplied purchase collection instead of silently 
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], []), /compra fuente/);
 });
 
+test('IVA TXT rejects cancelled source documents, cancelled affected invoices and zero-value documents', () => {
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ isCancelled: true })]), /incompleto o inválido/);
+  const note = purchase({ id: 'p-note', documentType: '03', creditNoteNumber: 'NC-004', affectedInvoiceNumber: 'F-001', originalPurchaseId: 'p-original' });
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ purchaseRecordId: 'p-note', invoiceNumber: 'NC-004' })], [
+    purchase({ id: 'p-original', isCancelled: true }), note
+  ]), /incompleto o inválido/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ totalAmountBs: 0, taxableBaseBs: 0, vatAmountBs: 0, vatWithheldBs: 0 })]), /incompleto o inválido/);
+});
+
 test('IVA TXT refuses to borrow the voucher invoice number when the source purchase has none', () => {
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ invoiceNumber: '' })]), /incompleto o inválido/);
 });
