@@ -57,12 +57,18 @@ def seed():
         ],
         "createdAt": "2026-10-01T10:00:00.000Z",
     }
+    other_company = {
+        **company,
+        "id": "cert-upgrade-other-company",
+        "name": "Segunda empresa de certificación",
+    }
     legacy_invoice_entry = {
         **journal,
         "id": "legacy-invoice-link-106",
-        "type": "VENTA",
+        "companyId": other_company["id"],
+        "type": "COMPRA",
         "referenceDoc": "FAC-LEGACY-106-001",
-        "description": "Vínculo histórico de factura de compra con tipo de asiento heredado",
+        "description": "Asiento de otra empresa vinculado históricamente a la factura",
     }
     legacy_purchase = {
         "id": "legacy-purchase-106-001",
@@ -73,7 +79,7 @@ def seed():
         "journalEntryId": "legacy-invoice-link-106",
     }
     collections = {
-        "companies": [company],
+        "companies": [company, other_company],
         "accounts": accounts,
         "journalEntries": [journal, legacy_invoice_entry],
         "purchases": [legacy_purchase],
@@ -137,8 +143,10 @@ def verify():
         for item in entries
     ):
         raise SystemExit("No se conservó la empresa o el asiento de apertura del dataset de certificación.")
-    if not legacy_purchase or legacy_purchase.get("journalEntryId") != "legacy-invoice-link-106":
-        raise SystemExit("No se conservó el vínculo histórico de factura de la instalación 1.0.6.")
+    legacy_entry = next((item for item in entries if item.get("id") == "legacy-invoice-link-106"), None)
+    if (not legacy_purchase or legacy_purchase.get("journalEntryId") != "legacy-invoice-link-106" or
+            not legacy_entry or legacy_entry.get("companyId") != "cert-upgrade-other-company"):
+        raise SystemExit("No se conservó intacto el vínculo histórico interempresa de factura de la instalación 1.0.6.")
     print(f"Snapshot contable conservado: empresa={COMPANY_ID}, asiento={ENTRY_ID}, SHA-256={actual}")
 
 
