@@ -386,7 +386,7 @@ test('IVA TXT accepts a supplier without RIF only when withholding is 100 percen
 
 test('IVA TXT covers reduced rate with 75% retention and general rate with 100% retention', () => {
   const reduced = generateSeniatIvaTxt(company, [ivaVoucher({
-    id: 'iva-reduced', voucherNumber: '20261000000011',
+    id: 'iva-reduced', purchaseRecordId: 'p-reduced', voucherNumber: '20261000000011',
     taxableBaseBs: 1250, taxRate: 8, vatAmountBs: 100,
     retentionRate: 75, vatWithheldBs: 75, totalAmountBs: 1350
   })], [purchase({ id: 'p-reduced', invoiceNumber: 'F-001' })]).split('\t');
@@ -395,7 +395,7 @@ test('IVA TXT covers reduced rate with 75% retention and general rate with 100% 
   assert.equal(reduced[14], '8.00');
 
   const full = generateSeniatIvaTxt(company, [ivaVoucher({
-    id: 'iva-full', voucherNumber: '20261000000012',
+    id: 'iva-full', purchaseRecordId: 'p-full', voucherNumber: '20261000000012',
     taxableBaseBs: 500, taxRate: 16, vatAmountBs: 80,
     retentionRate: 100, vatWithheldBs: 80, totalAmountBs: 580
   })], [purchase({ id: 'p-full', invoiceNumber: 'F-001' })]).split('\t');
@@ -405,7 +405,7 @@ test('IVA TXT covers reduced rate with 75% retention and general rate with 100% 
 
 test('IVA TXT permits an exempt document with zero taxable base and zero withholding', () => {
   const fields = generateSeniatIvaTxt(company, [ivaVoucher({
-    id: 'iva-exempt', voucherNumber: '20261000000013',
+    id: 'iva-exempt', purchaseRecordId: 'p-exempt', voucherNumber: '20261000000013',
     totalAmountBs: 450, exemptAmountBs: 450, taxableBaseBs: 0,
     taxRate: 0, vatAmountBs: 0, retentionRate: 75, vatWithheldBs: 0
   })], [purchase({ id: 'p-exempt', invoiceNumber: 'F-001' })]).split('\t');
