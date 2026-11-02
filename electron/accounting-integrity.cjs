@@ -897,9 +897,13 @@ function validateAccountingSnapshot(previousState, nextState) {
         // permanezca exactamente igual. Todo vínculo nuevo o modificado sigue
         // sujeto a la validación estricta de empresa y tipo.
         const priorDocument = priorDocumentsById.get(String(document.id));
-        const sameLegacyLink = priorDocument &&
-          String(priorDocument.journalEntryId || '') === String(document.journalEntryId || '');
-        if (sameLegacyLink) continue;
+        const sameLegacyIdentity = priorDocument &&
+          String(priorDocument.journalEntryId || '') === String(document.journalEntryId || '') &&
+          String(priorDocument.companyId || '') === String(document.companyId || '') &&
+          String(priorDocument.documentType || '') === String(document.documentType || '') &&
+          normalizeDocument(priorDocument.invoiceNumber) === normalizeDocument(document.invoiceNumber) &&
+          normalizeRif(priorDocument.supplierRif) === normalizeRif(document.supplierRif);
+        if (sameLegacyIdentity) continue;
         throw new Error('SQLite rechazó un vínculo de factura con un asiento de otra empresa, tipo o documento.');
       }
     }
