@@ -36,7 +36,7 @@ Las filas conservan 16 campos separados por tabulador y se unen mediante CRLF.
 - Bloqueo de comprobantes con corrección fiscal pendiente.
 - Importes finitos/no negativos y conciliación matemática del IVA y de la retención.
 - La fecha del documento no puede ser posterior al período declarado.
-- Cuando la vista entrega el conjunto de compras, cada comprobante debe resolver su `purchaseRecordId` dentro de la empresa.
+- Cuando la vista entrega el conjunto de compras, cada comprobante debe resolver su `purchaseRecordId` dentro de la empresa; incluso una colección vacía se considera fuente autoritativa y bloquea comprobantes huérfanos (solo llamadas legacy que omiten el argumento conservan el modo de compatibilidad).
 - RIF, fecha, número documental y control del comprobante deben conciliar con la compra fuente.
 - Las ND/NC requieren número propio y factura afectada; no se sustituye ningún dato faltante por valores inventados.
 - La vista exporta el conjunto completo del período, sin dejar que el filtro de búsqueda altere la población fiscal.
@@ -53,7 +53,7 @@ El expediente de importación permanece en cero y no se incorporan tipos 04/05/0
 - Correspondencia exacta de los 16 campos para una factura ordinaria.
 - Dos comprobantes generan dos filas CRLF, cada una con 16 campos.
 - Clasificación de ND y NC desde la compra vinculada y salida del documento afectado.
-- Rechazo de compra fuente ausente, documento afectado ausente e identificadores discordantes.
+- Rechazo de compra fuente ausente (incluida colección vacía), documento afectado ausente, proveedor/fecha/control/número documental discordantes y fecha documental posterior al período.
 - Se añadió un workflow de GitHub Actions que ejecuta `npm test`, `npm run check:types` y `npm run build` en las PR contra `main`.
 
 ## Próxima ejecución técnica
