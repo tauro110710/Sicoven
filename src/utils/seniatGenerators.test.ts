@@ -161,6 +161,23 @@ test('IVA TXT exports only real voucher identifiers and the supplied amounts', (
   assert.equal(txt.split('\t').length, 16);
 });
 
+test('IVA TXT serialization is UTF-8 without BOM, uses CRLF between rows and has no trailing newline', () => {
+  const one = generateSeniatIvaTxt(company, [ivaVoucher()], [purchase()]);
+  const two = generateSeniatIvaTxt(company, [
+    ivaVoucher({ id: 'iva-2', voucherNumber: '20261000000002', invoiceNumber: 'F-002' }),
+    ivaVoucher()
+  ], [
+    purchase(),
+    purchase({ id: 'p2', invoiceNumber: 'F-002' })
+  ]);
+  const bytes = new TextEncoder().encode(two);
+  assert.notDeepEqual(Array.from(bytes.slice(0, 3)), [0xef, 0xbb, 0xbf]);
+  assert.equal(two.split('\\r\\n').length, 2);
+  assert.equal(two.endsWith('\\r') || two.endsWith('\\n'), false);
+  assert.equal(one.includes('\\r') || one.includes('\\n'), false);
+  assert.equal(two.split('\\r\\n').every(row => row.split('\\t').length === 16), true);
+});
+
 test('IVA TXT classifies a linked supplier debit note and includes its affected invoice', () => {
   const source = purchase({ id: 'p-note', originalPurchaseId: 'p-original', documentType: '02', debitNoteNumber: 'ND-001', affectedInvoiceNumber: 'F-001' });
   const fields = generateSeniatIvaTxt(company, [ivaVoucher({ purchaseRecordId: 'p-note', invoiceNumber: 'ND-001' })], [purchase({ id: 'p-original' }), source]).split('\t');
