@@ -85,6 +85,17 @@ test('rejects a note whose linked original invoice does not match its affected i
   db.close();
 });
 
+test('recovers the original invoice by affected number when the stored originalPurchaseId is stale', () => {
+  const { db, state } = fixture();
+  const altered = { ...state, purchases: state.purchases.map(item =>
+    item.id === 'credit-1' ? { ...item, originalPurchaseId: 'deleted-invoice-id' } : item) };
+  db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'").run(JSON.stringify(altered));
+  const incident = createVatFiscalIncident(db, createInput(), actor);
+  assert.equal(incident.originalPurchaseId, 'invoice-1');
+  assert.equal(incident.vatVoucherId, 'voucher-1');
+  db.close();
+});
+
 test('prevents duplicate incident cases for the same company and source document', () => {
   const { db } = fixture();
   createVatFiscalIncident(db, createInput(), actor);
