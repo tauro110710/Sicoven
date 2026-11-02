@@ -703,3 +703,46 @@ test('SQLite audit records the VAT retention decision and the later voucher deli
     harness.db.close();
   }
 });
+
+test('SQLite rolls back all audit and state writes when an IVA event fails integrity validation', () => {
+  const harness = createHarness();
+  try {
+    const baseline = emptyState();
+    persistAccountingSnapshot(harness.db, baseline, { id: 1, username: 'auditor' });
+    const beforeState = harness.db.prepare(
+      "SELECT state_json FROM app_state WHERE state_key='accounting'"
+    ).get().state_json;
+    const beforeAudit = harness.db.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count;
+
+    const invalidSnapshot = {
+      ...baseline,
+      vatVouchers: [{
+        id: 'voucher-atomicity-invalid', companyId: 'company-1',
+        voucherNumber: '20261100000001', date: '2026-11-02',
+        period: '202611', fiscalDate: '2026-11-02',
+        supplierRif: 'J-12345678-9', supplierName: 'Proveedor de prueba',
+        taxableBaseBs: 1000, vatAmountBs: 160, vatWithheldBs: 120
+      }],
+      vatWithholdingDeclarationEvents: [{
+        id: 'orphan-review-event', declarationId: 'declaration-does-not-exist',
+        eventType: 'REVIEWED', occurredAt: '2026-11-02',
+        recordedAt: '2026-11-02T12:00:00.000Z'
+      }]
+    };
+
+    assert.throws(
+      () => persistAccountingSnapshot(harness.db, invalidSnapshot, { id: 1, username: 'auditor' }),
+      /declaración|declaracion|SQLite rechazó/i
+    );
+    const afterState = harness.db.prepare(
+      "SELECT state_json FROM app_state WHERE state_key='accounting'"
+    ).get().state_json;
+    const afterAudit = harness.db.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count;
+    assert.equal(afterState, beforeState, 'SQLite debe conservar íntegro el último estado válido.');
+    assert.equal(afterAudit, beforeAudit, 'No debe quedar ningún evento de auditoría parcial.');
+    const persisted = JSON.parse(afterState);
+    assert.equal((persisted.vatVouchers || []).some(item => item.id === 'voucher-atomicity-invalid'), false);
+  } finally {
+    harness.db.close();
+  }
+});
