@@ -34,8 +34,12 @@ function byId(items, id) {
 }
 function resolveOriginalPurchase(state, purchase) {
   if (purchase.documentType === '01') return purchase;
-  const linked = purchase.originalPurchaseId
+  const linkedById = purchase.originalPurchaseId
     ? byId(state.purchases, purchase.originalPurchaseId)
+    : null;
+  const linked = linkedById && linkedById.documentType === '01' &&
+    String(linkedById.companyId) === String(purchase.companyId)
+    ? linkedById
     : (Array.isArray(state.purchases) ? state.purchases.find(item =>
       String(item.companyId) === String(purchase.companyId) && item.documentType === '01' &&
       String(item.invoiceNumber || '').trim().toUpperCase() ===
