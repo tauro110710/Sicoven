@@ -348,6 +348,18 @@ test('IVA TXT genera una línea CRLF por comprobante y exactamente 16 campos por
 });
 
 
+test('IVA TXT output is deterministic by voucher sequence, UTF-8 text without BOM or trailing newline', () => {
+  const first = ivaVoucher({ id: 'iva-a', voucherNumber: '20261000000001', invoiceNumber: 'F-001' });
+  const second = ivaVoucher({ id: 'iva-b', voucherNumber: '20261000000002', invoiceNumber: 'F-002', purchaseRecordId: 'p2' });
+  const source = [purchase(), purchase({ id: 'p2', invoiceNumber: 'F-002' })];
+  const forward = generateSeniatIvaTxt(company, [second, first], source);
+  const reverse = generateSeniatIvaTxt(company, [first, second], source);
+  assert.equal(forward, reverse);
+  assert.equal(forward.split('\\r\\n')[0].split('\\t')[12], '20261000000001');
+  assert.equal(forward.charCodeAt(0), 'J'.charCodeAt(0));
+  assert.ok(!forward.endsWith('\\r') && !forward.endsWith('\\n'));
+});
+
 test('IVA TXT covers reduced rate with 75% retention and general rate with 100% retention', () => {
   const reduced = generateSeniatIvaTxt(company, [ivaVoucher({
     id: 'iva-reduced', voucherNumber: '20261000000011',
