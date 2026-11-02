@@ -66,3 +66,54 @@ La validación del producto se realiza mediante:
 - La compra fuente debe aportar su propio número de factura; no se permite completar el dato faltante usando el número que venga en el comprobante de retención.
 - Se añadieron pruebas de regresión para RIF cero/retención total, compra anulada, factura afectada anulada, documento cero y número de factura fuente ausente.
 - La última tanda de CI/validación/instalador se encuentra en ejecución sobre los cambios finales; no declarar verde hasta que concluyan los tres flujos sobre el mismo SHA.
+
+## Estado consolidado del bloque TXT de retenciones IVA — 2026-11-02
+
+### Implementado en la rama de trabajo
+
+1. **Generación con fuente fiscal verificable**
+   - La exportación con operaciones exige el arreglo de compras fuente; no se asigna automáticamente el tipo documental cuando falta el dato.
+   - Cada comprobante se enlaza con su compra fuente y valida empresa, proveedor, fecha, número, control y tipo documental.
+   - La compra fuente debe aportar el número del documento; el generador no lo completa tomando el número del comprobante de retención.
+2. **Clasificación documental**
+   - Tipos documentales implementados: 01 factura, 02 nota de débito y 03 nota de crédito.
+   - ND/NC requieren factura afectada de la misma empresa y proveedor; se comprueba el vínculo de origen cuando existe.
+   - Se rechazan notas sin factura original válida y facturas originales anuladas.
+3. **Validaciones y seguridad del archivo**
+   - Validación de los 16 campos, longitudes máximas y caracteres delimitadores/inyección TAB, CR y LF.
+   - Validación de RIF, período, correlativos/identificadores, importes, retención, tipo documental y consistencia con el documento fuente.
+   - Se bloquean documentos fuente anulados, documentos de monto total cero y exportaciones con corrección fiscal pendiente.
+   - RIF proveedor igual a 0 permitido únicamente en el supuesto de retención del 100% documentado en la regla técnica revisada.
+   - Orden determinista por correlativo; serialización TAB, CRLF entre registros, UTF-8 sin BOM y sin salto de línea final.
+4. **Declaración sin operaciones**
+   - Auxiliar para registrar explícitamente la declaración quincenal sin operaciones en SQLite.
+   - Descarga de fila TXT de 16 campos implementada como adaptación técnica provisional; no está homologada. El orden de campos del instructivo histórico de cero operaciones no coincide con el layout de agente de retención de 2020.
+5. **Rectificaciones**
+   - Expediente de rectificación IVA con trazabilidad append-only y auditoría de revisión/actuación.
+   - La exportación queda bloqueada mientras haya una corrección fiscal pendiente.
+   - El flujo del administrador semilla no se modificó.
+
+### Evidencia automatizada más reciente
+
+- SHA validado: 7226bf0b005b921dae81182d3d1e92db0a4ab715.
+- SICOVEN CI #76: SUCCESS.
+- Desktop Validation #1287: SUCCESS.
+- Windows installer #1404: IN_PROGRESS al momento de esta actualización; no se declara terminado hasta que finalice correctamente y se inspeccione su resultado.
+- La ejecución anterior encontró dos fixtures de prueba con IDs de compra fuente desalineados; se corrigieron antes del SHA actual.
+- Estos resultados acreditan las comprobaciones automatizadas ejecutadas en ese commit, no homologación SENIAT ni aceptación tributaria oficial.
+
+### Pendientes para cierre real del bloque
+
+1. Confirmar resultado final de Windows installer #1404 y revisar el artefacto/actualización de escritorio, incluida conservación de SQLite.
+2. Auditar nuevamente todos los casos de factura, ND, NC, exento, alícuotas, retención 75/100, RIF proveedor 0, anulaciones, correcciones y período.
+3. Confirmar con especificación técnica primaria del SENIAT que el layout de 16 campos de RI_DRIVA2020-IT01V3_0_0 continúa vigente a la fecha; no asumir vigencia solo por el instructivo de 2020.
+4. Resolver la estructura correcta del TXT para declaración sin operaciones contrastando el instructivo específico de cero operaciones con la regla vigente de declaración quincenal. Mantenerla identificada como provisional hasta esa confirmación.
+5. Ejecutar pruebas de aceptación con archivos representativos en el entorno oficial SENIAT, cuando se disponga del acceso y procedimiento de prueba.
+6. Actualizar esta hoja y la PR #88 con el SHA final y evidencias verificables.
+
+### Estado de control del repositorio
+
+- Trabajo limitado a fenixlife1978/Sicoven, rama feature/txt-iva-structural-audit, PR #88.
+- main permanece intacta; PR no fusionada.
+- SQLite local sigue siendo la única fuente de verdad.
+- No declarar bloque TXT cerrado, homologado ni certificado SENIAT hasta completar los pendientes anteriores.
