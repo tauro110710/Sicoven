@@ -883,11 +883,23 @@ function validateAccountingSnapshot(previousState, nextState) {
 
   for (const collectionName of ['purchases', 'sales']) {
     const expectedEntryType = collectionName === 'sales' ? 'VENTA' : 'COMPRA';
+    const priorDocumentsById = new Map(asArray(priorState[collectionName])
+      .map(document => [String(document.id), document]));
     for (const document of asArray(nextState[collectionName])) {
       if (!document.journalEntryId || (document.documentType && document.documentType !== '01')) continue;
       const linkedEntry = nextById.get(String(document.journalEntryId));
-      if (!linkedEntry || linkedEntry.companyId !== document.companyId ||
+      if (!linkedEntry || String(linkedEntry.companyId) !== String(document.companyId) ||
           linkedEntry.type !== expectedEntryType) {
+        // Compatibilidad no destructiva: una factura que ya estaba guardada en
+        // SQLite antes de esta versión puede conservar un vínculo histórico
+        // incompleto o inconsistente. No se corrige ni se borra automáticamente;
+        // se permite guardar otros cambios mientras el identificador del vínculo
+        // permanezca exactamente igual. Todo vínculo nuevo o modificado sigue
+        // sujeto a la validación estricta de empresa y tipo.
+        const priorDocument = priorDocumentsById.get(String(document.id));
+        const sameLegacyLink = priorDocument &&
+          String(priorDocument.journalEntryId || '') === String(document.journalEntryId || '');
+        if (sameLegacyLink) continue;
         throw new Error('SQLite rechazó un vínculo de factura con un asiento de otra empresa, tipo o documento.');
       }
     }
