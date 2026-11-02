@@ -2438,7 +2438,9 @@ test('SQLite upgrade preserves unchanged legacy invoice links without accepting 
   for (const changedIdentity of [
     { ...legacyPurchase, companyId: 'company-2' },
     { ...legacyPurchase, invoiceNumber: 'LEG-101' },
-    { ...legacyPurchase, supplierRif: 'J-999' }
+    { ...legacyPurchase, supplierRif: 'J-999' },
+    { ...legacyPurchase, documentType: '02' },
+    { ...legacyPurchase, journalEntryId: undefined }
   ]) {
     assert.throws(() => validateAccountingSnapshot(
       priorCrossCompany,
