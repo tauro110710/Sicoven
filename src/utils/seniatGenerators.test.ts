@@ -164,7 +164,7 @@ test('IVA TXT exports only real voucher identifiers and the supplied amounts', (
 test('IVA TXT serialization is UTF-8 without BOM, uses CRLF between rows and has no trailing newline', () => {
   const one = generateSeniatIvaTxt(company, [ivaVoucher()], [purchase()]);
   const two = generateSeniatIvaTxt(company, [
-    ivaVoucher({ id: 'iva-2', voucherNumber: '20261000000002', invoiceNumber: 'F-002' }),
+    ivaVoucher({ id: 'iva-2', purchaseRecordId: 'p2', voucherNumber: '20261000000002', invoiceNumber: 'F-002' }),
     ivaVoucher()
   ], [
     purchase(),
