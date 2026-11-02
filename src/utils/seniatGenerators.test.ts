@@ -285,3 +285,36 @@ test('IVA TXT genera una línea CRLF por comprobante y exactamente 16 campos por
   }
   assert.equal(rows[1].split('\t')[12], '20261000000002');
 });
+
+
+test('IVA TXT covers reduced rate with 75% retention and general rate with 100% retention', () => {
+  const reduced = generateSeniatIvaTxt(company, [ivaVoucher({
+    id: 'iva-reduced', voucherNumber: '20261000000011',
+    taxableBaseBs: 1250, taxRate: 8, vatAmountBs: 100,
+    retentionRate: 75, vatWithheldBs: 75, totalAmountBs: 1350
+  })]).split('\t');
+  assert.equal(reduced[9], '1250.00');
+  assert.equal(reduced[10], '75.00');
+  assert.equal(reduced[14], '8.00');
+
+  const full = generateSeniatIvaTxt(company, [ivaVoucher({
+    id: 'iva-full', voucherNumber: '20261000000012',
+    taxableBaseBs: 500, taxRate: 16, vatAmountBs: 80,
+    retentionRate: 100, vatWithheldBs: 80, totalAmountBs: 580
+  })]).split('\t');
+  assert.equal(full[10], '80.00');
+  assert.equal(full[14], '16.00');
+});
+
+test('IVA TXT permits an exempt document with zero taxable base and zero withholding', () => {
+  const fields = generateSeniatIvaTxt(company, [ivaVoucher({
+    id: 'iva-exempt', voucherNumber: '20261000000013',
+    totalAmountBs: 450, exemptAmountBs: 450, taxableBaseBs: 0,
+    taxRate: 0, vatAmountBs: 0, retentionRate: 75, vatWithheldBs: 0
+  })]).split('\t');
+  assert.equal(fields[8], '450.00');
+  assert.equal(fields[9], '0.00');
+  assert.equal(fields[10], '0.00');
+  assert.equal(fields[13], '450.00');
+  assert.equal(fields[14], '0.00');
+});
