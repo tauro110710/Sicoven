@@ -187,8 +187,8 @@ test('IVA TXT rejects missing or unsupported source document types instead of de
 });
 
 test('IVA TXT rejects tab and newline injection in source document identifiers', () => {
-  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ invoiceNumber: 'F-001\\tINJECT' })]), /incompleto o inválido|16 columnas/);
-  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ controlNumber: '00-123\\r\\nINJECT' })]), /incompleto o inválido|16 columnas/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ invoiceNumber: 'F-001\tINJECT' })]), /incompleto o inválido|16 columnas/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ controlNumber: '00-123\r\nINJECT' })]), /incompleto o inválido|16 columnas/);
 });
 
 test('IVA TXT rejects an empty supplied purchase collection instead of silently downgrading to legacy mode', () => {
