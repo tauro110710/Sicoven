@@ -163,7 +163,7 @@ test('IVA TXT exports only real voucher identifiers and the supplied amounts', (
 
 test('IVA TXT classifies a linked supplier debit note and includes its affected invoice', () => {
   const source = purchase({ id: 'p-note', originalPurchaseId: 'p-original', documentType: '02', debitNoteNumber: 'ND-001', affectedInvoiceNumber: 'F-001' });
-  const fields = generateSeniatIvaTxt(company, [ivaVoucher({ invoiceNumber: 'ND-001' })], [purchase({ id: 'p-original' }), source]).split('\t');
+  const fields = generateSeniatIvaTxt(company, [ivaVoucher({ purchaseRecordId: 'p-note', invoiceNumber: 'ND-001' })], [purchase({ id: 'p-original' }), source]).split('\t');
   assert.equal(fields[4], '02');
   assert.equal(fields[6], 'ND-001');
   assert.equal(fields[11], 'F-001');
@@ -171,7 +171,7 @@ test('IVA TXT classifies a linked supplier debit note and includes its affected 
 
 test('IVA TXT classifies a linked supplier credit note and includes its affected invoice', () => {
   const source = purchase({ id: 'p-note', originalPurchaseId: 'p-original', documentType: '03', creditNoteNumber: 'NC-001', affectedInvoiceNumber: 'F-001' });
-  const fields = generateSeniatIvaTxt(company, [ivaVoucher({ invoiceNumber: 'NC-001' })], [purchase({ id: 'p-original' }), source]).split('\t');
+  const fields = generateSeniatIvaTxt(company, [ivaVoucher({ purchaseRecordId: 'p-note', invoiceNumber: 'NC-001' })], [purchase({ id: 'p-original' }), source]).split('\t');
   assert.equal(fields[4], '03');
   assert.equal(fields[6], 'NC-001');
   assert.equal(fields[11], 'F-001');
@@ -208,7 +208,7 @@ test('IVA TXT refuses an unlinked voucher or a note without its affected invoice
 
 test('IVA TXT rejects debit or credit notes whose affected invoice is not a source invoice of the same supplier', () => {
   const note = purchase({ id: 'p-note', originalPurchaseId: 'p-original', documentType: '03', creditNoteNumber: 'NC-003', affectedInvoiceNumber: 'MISSING' });
-  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ invoiceNumber: 'NC-003' })], [purchase({ id: 'p-original' }), note]), /incompleto o inválido/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ purchaseRecordId: 'p-note', invoiceNumber: 'NC-003' })], [purchase({ id: 'p-original' }), note]), /incompleto o inválido/);
   const otherSupplierInvoice = purchase({ id: 'p-original', supplierRif: 'J-11111111-1', invoiceNumber: 'F-OTHER' });
   const linkedNote = purchase({ documentType: '02', debitNoteNumber: 'ND-003', affectedInvoiceNumber: 'F-OTHER', originalPurchaseId: 'p-original' });
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ invoiceNumber: 'ND-003' })], [otherSupplierInvoice, linkedNote]), /incompleto o inválido/);
