@@ -26,6 +26,7 @@ const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
 const { reconcileRestoreAudit } = require('./restore-audit-ledger.cjs');
+const { recoverPendingRestore } = require('./restore-engine.cjs');
 const { registerInflationIndexIpc } = require('./inflation-indexes.cjs');
 const { registerInflationClassificationIpc } = require('./inflation-classifications.cjs');
 const { registerInflationRemeReadinessIpc } = require('./inflation-reme-readiness.cjs');
@@ -286,6 +287,11 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   try {
+    const dataDir = app.getPath('userData');
+    fs.mkdirSync(dataDir, { recursive: true });
+    // Resolver cualquier journal pendiente antes de abrir o crear sicoven.sqlite.
+    // Si la recuperación no puede demostrar un estado íntegro, el arranque se bloquea.
+    recoverPendingRestore({ userDataDir: dataDir });
     openDatabase();
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
