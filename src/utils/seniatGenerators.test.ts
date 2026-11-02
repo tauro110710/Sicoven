@@ -201,7 +201,7 @@ test('IVA TXT rejects duplicated voucher IDs or numbers and fiscal corrections s
 // RI_DRIVA2020-IT01V3_0_0). No equivalen a homologación ni sustituyen el contraste
 // con la especificación primaria vigente y una prueba de carga del Portal Fiscal.
 test('IVA TXT conserva el orden y significado de los 16 campos del instructivo histórico', () => {
-  const fields = generateSeniatIvaTxt(company, [ivaVoucher()]).split('\\t');
+  const fields = generateSeniatIvaTxt(company, [ivaVoucher()]).split('\t');
   assert.deepEqual(fields, [
     'J123456789',       // 1 RIF agente
     '202610',           // 2 período de imposición
@@ -232,10 +232,10 @@ test('IVA TXT genera una línea CRLF por comprobante y exactamente 16 campos por
       controlNumber: '00-124'
     })
   ]);
-  const rows = txt.split('\\r\\n');
+  const rows = txt.split('\r\n');
   assert.equal(rows.length, 2);
   for (const row of rows) {
-    assert.equal(row.split('\\t').length, 16);
+    assert.equal(row.split('\t').length, 16);
   }
-  assert.equal(rows[1].split('\\t')[12], '20261000000002');
+  assert.equal(rows[1].split('\t')[12], '20261000000002');
 });
