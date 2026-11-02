@@ -50,5 +50,5 @@ export function buildVatPaymentAccountingPlan(input: {
   const db=cents(items.reduce((s,x)=>s+x.debitBs,0)), cb=cents(items.reduce((s,x)=>s+x.creditBs,0));
   const du=micros(items.reduce((s,x)=>s+x.debitUsd,0)), cu=micros(items.reduce((s,x)=>s+x.creditUsd,0));
   if(Math.abs(db-cb)>=0.01||Math.abs(du-cu)>=0.000001)throw new Error('El asiento de enteramiento no cuadra en ambas monedas después de reconocer el diferencial cambiario.');
-  return {date,amountBs,amountUsd,liabilityUsd,fxDifferenceUsd:diff,bcvRate:amountBs/liabilityUsd,items};
+  return {date,amountBs,amountUsd,liabilityUsd,fxDifferenceUsd:diff,bcvRate:amountBs/amountUsd,items};
 }
