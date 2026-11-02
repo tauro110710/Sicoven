@@ -2231,12 +2231,24 @@ test('Basic accounting certification: persists independent company journals and 
     id: 'cert-entry-b-1',
     companyId: 'cert-company-b',
     entryNumber: 1,
-    description: 'Apertura operativa empresa B',
+    description: 'Asiento histórico de tipo COMPRA de empresa B',
+    type: 'COMPRA',
+    referenceDoc: 'FAC-LEGACY-CROSS-001',
     items: openingItems
+  };
+  const legacyPurchase = {
+    id: 'cert-legacy-purchase-a',
+    companyId: 'cert-company-a',
+    invoiceNumber: 'LEGACY-CROSS-001',
+    supplierRif: 'J-12345678-9',
+    documentType: '01',
+    journalEntryId: entryB.id
   };
   const prior = {
     ...emptyState(),
     companies,
+    journalEntries: [entryB],
+    purchases: [legacyPurchase],
     accounts: [
       { code: '1.1.1.01', name: 'Banco', type: 'ACTIVO', level: 4, isMovement: true },
       { code: '3.1.1.01', name: 'Capital', type: 'PATRIMONIO', level: 4, isMovement: true }
@@ -2270,7 +2282,7 @@ test('Basic accounting certification: persists independent company journals and 
 
     const saved = persistAccountingSnapshot(db, next);
     assert.equal(saved.ok, true);
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 3, 'dos eventos de asiento y un evento state_saved deben quedar en la misma transacción');
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 2, 'el asiento nuevo y state_saved deben quedar en la misma transacción; el vínculo heredado no se reescribe');
     db.pragma('wal_checkpoint(TRUNCATE)');
     db.close();
     db = null;
@@ -2289,10 +2301,24 @@ test('Basic accounting certification: persists independent company journals and 
         ['cert-company-b', 1, 'cert-entry-b-1']
       ]
     );
+    assert.equal(reopened.purchases[0].journalEntryId, 'cert-entry-b-1');
+    assert.equal(reopened.purchases[0].companyId, 'cert-company-a');
     assert.equal(
       db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='journal_entry_posted'").get().count,
-      2
+      1
     );
+
+    const changedLegacyInvoice = {
+      ...reopened,
+      purchases: [{ ...reopened.purchases[0], invoiceNumber: 'ALTERED-LEGACY-001' }]
+    };
+    assert.throws(() => persistAccountingSnapshot(db, changedLegacyInvoice),
+      /vínculo de factura con un asiento de otra empresa/);
+    const stillOriginal = JSON.parse(
+      db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json
+    );
+    assert.equal(stillOriginal.purchases[0].invoiceNumber, 'LEGACY-CROSS-001',
+      'la transacción debe conservar intacta la factura si se intenta alterar su identidad');
 
     const duplicateWithinA = {
       ...entryA,
