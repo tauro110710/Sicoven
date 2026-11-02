@@ -4,7 +4,8 @@ import type { VatWithholdingDeclaration, VatWithholdingDeclarationEvent } from '
 import { getVatDeclarationStatus } from '../../types/vatWithholdingDeclaration';
 import { buildVatBankReconciliationSummary } from '../../types/vatBankReconciliation';
 import { getSeniatVatWithholdingDueDate } from '../../types/seniatVatDueDates';
-import { formatBs, formatDate } from '../../utils/formatters';
+import { formatBs, formatDate, cleanRif } from '../../utils/formatters';
+import { downloadFile } from '../../utils/seniatGenerators';
 import type { VatFiscalIncident } from '../../types/vatFiscalIncidents';
 
 const today = () => {
@@ -98,7 +99,7 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
   }) : [];
   const selectedPaymentMovements = selectedBankMovementIds.map(id => availablePaymentMovements.find(item => item.id === id)).filter(Boolean);
   const selectedPaymentTotalBs = selectedPaymentMovements.reduce((sum, item) => sum + Number(item?.amountBs || 0), 0);
-  const bankReconciliation = selected ? buildVatBankReconciliationSummary(selected, selectedEvents, bankStatementMovements, bankAccounts) : null;
+  const bankReconciliation = selected ? buildVatBankReconciliationSummary(selected, selectedEvents, bankStatementMovements, bankAccounts, journalEntries) : null;
 
   const run = async (operation: () => Promise<unknown>) => {
     setBusy(true);
@@ -347,8 +348,11 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
             <div>
               <h3 className="font-bold text-slate-900">Gestión · {selected.period} · {selected.window === 'FIRST_HALF' ? 'Primera quincena' : 'Segunda quincena'}</h3>
               <p className="text-xs text-slate-500">{selected.voucherIds.length} comprobantes · IVA retenido: {formatBs(selected.totalWithheldBs)}</p>
+              {selected.zeroOperations && <p className="mt-2 max-w-2xl rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">Declaración sin operaciones: el artículo 15 de la Providencia SNAT/2025/000054 exige presentarla en el Portal Fiscal. SICOVEN no genera una fila TXT artificial de 16 ceros porque el instructivo técnico consultado no define ese registro. Después de presentarla, registre aquí el número de declaración y el acuse oficial.</p>}
             </div>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{statusLabels[selectedStatus || 'PREPARED']}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{statusLabels[selectedStatus || 'PREPARED']}</span>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

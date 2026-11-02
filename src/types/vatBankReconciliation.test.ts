@@ -7,7 +7,7 @@ const declaration: VatWithholdingDeclaration = {
   id: 'decl-1', companyId: 'company-1', period: '202610', window: 'FIRST_HALF',
   startDate: '2026-10-01', endDate: '2026-10-15', zeroOperations: false,
   voucherIds: [], voucherSnapshots: [], legacyDateAssignments: [],
-  totalTaxableBaseBs: 1000, totalVatAmountBs: 160, totalWithheldBs: 120,
+  totalTaxableBaseBs: 1000, totalVatAmountBs: 160, totalWithheldBs: 120, totalWithheldUsd: 1.2,
   createdAt: '2026-10-16T10:00:00.000Z'
 };
 const account: BankAccount = {
@@ -20,6 +20,16 @@ const movement = (id: string, amountBs: number, overrides: Partial<BankStatement
   reference: 'REF-' + id, description: 'Pago SENIAT', type: 'DEBIT',
   amountBs, amountUsd: amountBs / 100, isReconciled: false, ...overrides
 });
+const paymentJournal = {
+  id: 'entry-iva-1', companyId: declaration.companyId, entryNumber: 1,
+  date: '2026-10-19', description: 'Enteramiento de retenciones de IVA',
+  type: 'RETENCION_IVA' as const, bcvRate: 1,
+  referenceDoc: 'IVA-ENTERAMIENTO:' + declaration.id + ':PAGO-1',
+  items: [
+    { accountCode: '2.1.2.03', accountName: 'IVA por enterar', debitBs: 60, creditBs: 0, debitUsd: 0.6, creditUsd: 0 },
+    { accountCode: '1.1.1.02', accountName: 'Banco', debitBs: 0, creditBs: 60, debitUsd: 0, creditUsd: 0.6 }
+  ], createdAt: '2026-10-19T10:00:00.000Z'
+};
 const filed: VatWithholdingDeclarationEvent = {
   id: 'filed-1', declarationId: declaration.id, eventType: 'FILED',
   occurredAt: '2026-10-17', recordedAt: '2026-10-17T10:00:00.000Z',
@@ -151,9 +161,21 @@ test('recognizes the bank movement reconciled by its own IVA payment journal ent
       isReconciled: true, reconciledWithJournalEntryId: 'entry-iva-1',
       reconciledJournalEntryIds: ['entry-iva-1']
     })
-  ], [account]);
+  ], [account], [paymentJournal]);
   assert.equal(summary.reconciledCount, 1);
   assert.equal(summary.pendingCount, 0);
+
+  const beforeFiling = buildVatBankReconciliationSummary(declaration, [filed, {
+    ...payment, occurredAt: '2026-10-16'
+  }], [
+    movement('m-1', 60, {
+      date: '2026-10-16', isReconciled: true,
+      reconciledWithJournalEntryId: 'entry-iva-1',
+      reconciledJournalEntryIds: ['entry-iva-1']
+    })
+  ], [account], [paymentJournal]);
+  assert.equal(beforeFiling.reconciledCount, 0);
+  assert.equal(beforeFiling.pendingCount, 1);
 });
 
 test('rejects impossible calendar dates in payment bank movements', () => {
@@ -171,14 +193,17 @@ test('rejects impossible calendar dates in payment bank movements', () => {
       reconciledJournalEntryIds: ['entry-iva-invalid-date']
     })
   ], [account]);
-  assert.equal(summary.reconciledCount, 1);
+  // A bank link alone is insufficient: reconciliation requires the real,
+  // matching IVA journal entry to be present in the supplied accounting ledger.
+  assert.equal(summary.reconciledCount, 0);
+  assert.equal(summary.pendingCount, 1);
   const invalidSummary = buildVatBankReconciliationSummary(declaration, [filed, payment], [
     movement('m-1', 60, {
       date: '2026-02-30', isReconciled: true,
       reconciledWithJournalEntryId: 'entry-iva-invalid-date',
       reconciledJournalEntryIds: ['entry-iva-invalid-date']
     })
-  ], [account]);
+  ], [account], [paymentJournal]);
   assert.equal(invalidSummary.pendingCount, 1);
 });
 
@@ -194,6 +219,33 @@ test('does not mark linked credits or USD-account movements reconciled', () => {
   assert.equal(usd.pendingCount, 1);
 });
 
+test('accepts a balanced historical-liability payment with a realized FX gain', () => {
+  const payment: VatWithholdingDeclarationEvent = {
+    id: 'payment-fx', declarationId: declaration.id, eventType: 'PAYMENT',
+    occurredAt: '2026-10-19', recordedAt: '2026-10-19T10:00:00.000Z',
+    amountBs: 60, paymentReference: 'PAGO-1', bankStatementMovementIds: ['m-fx'],
+    journalEntryId: 'entry-iva-1'
+  };
+  const linkedMovement = movement('m-fx', 60, {
+    amountUsd: 0.5, isReconciled: true,
+    reconciledWithJournalEntryId: 'entry-iva-1',
+    reconciledJournalEntryIds: ['entry-iva-1']
+  });
+  const journal = {
+    ...paymentJournal,
+    items: [
+      { ...paymentJournal.items[0], debitUsd: 0.6 },
+      { ...paymentJournal.items[1], creditUsd: 0.5 },
+      { accountCode: '4.2.1.01', accountName: 'Ganancia cambiaria', debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0.1 }
+    ]
+  };
+  const summary = buildVatBankReconciliationSummary(
+    declaration, [filed, payment], [linkedMovement], [account], [journal]
+  );
+  assert.equal(summary.reconciledCount, 1);
+  assert.equal(summary.pendingCount, 0);
+});
+
 test('blocks generic reversal of a journal linked to an IVA payment event', () => {
   const linkedPayment: VatWithholdingDeclarationEvent = {
     id: 'payment-linked', declarationId: declaration.id, eventType: 'PAYMENT',
@@ -203,4 +255,82 @@ test('blocks generic reversal of a journal linked to an IVA payment event', () =
   assert.match(getVatPaymentJournalReversalBlocker([linkedPayment], 'entry-iva-1') || '', /corrección fiscal específico/);
   assert.equal(getVatPaymentJournalReversalBlocker([linkedPayment], 'entry-other'), null);
   assert.equal(getVatPaymentJournalReversalBlocker([filed], 'entry-iva-1'), null);
+});
+
+test('keeps a payment pending when its linked journal is missing or does not match the declaration', () => {
+  const payment: VatWithholdingDeclarationEvent = {
+    id: 'payment-journal', declarationId: declaration.id, eventType: 'PAYMENT',
+    occurredAt: '2026-10-19', recordedAt: '2026-10-19T10:00:00.000Z',
+    amountBs: 60, paymentReference: 'PAGO-1', bankStatementMovementIds: ['m-1'],
+    journalEntryId: 'entry-iva-1'
+  };
+  const linkedMovement = movement('m-1', 60, {
+    isReconciled: true, reconciledWithJournalEntryId: 'entry-iva-1',
+    reconciledJournalEntryIds: ['entry-iva-1']
+  });
+  const missing = buildVatBankReconciliationSummary(declaration, [filed, payment], [linkedMovement], [account]);
+  assert.equal(missing.pendingCount, 1);
+  const wrongReference = buildVatBankReconciliationSummary(declaration, [filed, payment], [linkedMovement], [account], [
+    { ...paymentJournal, referenceDoc: 'IVA-ENTERAMIENTO:otra-declaracion:PAGO-1' }
+  ]);
+  assert.equal(wrongReference.pendingCount, 1);
+  const wrongType = buildVatBankReconciliationSummary(declaration, [filed, payment], [linkedMovement], [account], [
+    { ...paymentJournal, type: 'MANUAL' as const }
+  ]);
+  assert.equal(wrongType.pendingCount, 1);
+  const wrongCompany = buildVatBankReconciliationSummary(declaration, [filed, payment], [linkedMovement], [account], [
+    { ...paymentJournal, companyId: 'company-2' }
+  ]);
+  assert.equal(wrongCompany.pendingCount, 1);
+});
+
+
+test('requires real balanced journal lines matching the IVA liability and linked bank account', () => {
+  const payment: VatWithholdingDeclarationEvent = {
+    id: 'payment-journal', declarationId: declaration.id, eventType: 'PAYMENT',
+    occurredAt: '2026-10-19', recordedAt: '2026-10-19T10:00:00.000Z',
+    amountBs: 60, paymentReference: 'PAGO-1', bankStatementMovementIds: ['m-1'],
+    journalEntryId: 'entry-iva-1'
+  };
+  const linkedMovement = movement('m-1', 60, {
+    isReconciled: true, reconciledWithJournalEntryId: 'entry-iva-1',
+    reconciledJournalEntryIds: ['entry-iva-1']
+  });
+  const summaryFor = (items: typeof paymentJournal.items) => buildVatBankReconciliationSummary(
+    declaration, [filed, payment], [linkedMovement], [account], [{ ...paymentJournal, items }]
+  );
+  assert.equal(summaryFor(paymentJournal.items).reconciledCount, 1);
+  assert.equal(summaryFor([
+    { ...paymentJournal.items[0], debitBs: 59 },
+    paymentJournal.items[1]
+  ]).pendingCount, 1);
+  assert.equal(summaryFor([
+    { ...paymentJournal.items[0], accountCode: '2.1.2.99' },
+    paymentJournal.items[1]
+  ]).pendingCount, 1);
+  assert.equal(summaryFor([
+    paymentJournal.items[0],
+    { ...paymentJournal.items[1], accountCode: '1.1.1.99' }
+  ]).pendingCount, 1);
+  assert.equal(summaryFor([
+    paymentJournal.items[0],
+    { ...paymentJournal.items[1], creditBs: 59 }
+  ]).pendingCount, 1);
+  assert.equal(summaryFor([
+    paymentJournal.items[0],
+    { ...paymentJournal.items[1], creditUsd: 0.5 }
+  ]).pendingCount, 1);
+  assert.equal(summaryFor([
+    { ...paymentJournal.items[0], debitUsd: 0.5 },
+    paymentJournal.items[1],
+    { accountCode: '4.2.1.01', accountName: 'Ganancia cambiaria', debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0.1 }
+  ]).pendingCount, 1);
+  assert.equal(summaryFor([
+    { ...paymentJournal.items[0], debitBs: Number.NaN },
+    paymentJournal.items[1]
+  ]).pendingCount, 1);
+  assert.equal(summaryFor([
+    paymentJournal.items[0],
+    { ...paymentJournal.items[1], debitBs: 1 }
+  ]).pendingCount, 1);
 });

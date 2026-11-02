@@ -8,7 +8,7 @@ import { getPurchaseAccountCreditDate } from '../types/accounting';
  * Su conformidad con las especificaciones técnicas vigentes del SENIAT debe validarse
  * antes de presentarlo en el Portal Fiscal; esta función no acredita aceptación oficial.
  */
-export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVoucher[]): string {
+export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVoucher[], purchases?: PurchaseRecord[]): string {
   const agentRif = cleanRif(company.rif);
   const lines: string[] = [];
 
@@ -26,7 +26,23 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     throw new Error('La exportación está bloqueada: existen comprobantes con corrección fiscal pendiente.');
   }
 
-  for (const v of vouchers) {
+  // La clasificación fiscal no puede inferirse desde el número de factura ni
+  // degradarse silenciosamente a factura 01. Se exige la compra fuente para
+  // distinguir factura, nota de débito y nota de crédito con trazabilidad.
+  if (!Array.isArray(purchases)) {
+    throw new Error('La exportación TXT IVA requiere las compras fuente para validar el tipo documental; no se permite clasificar documentos por defecto.');
+  }
+  const companyPurchases = purchases.filter(purchase => purchase.companyId === company.id);
+  const purchasesById = new Map(companyPurchases.map(purchase => [purchase.id, purchase]));
+  if (purchasesById.size !== companyPurchases.length) {
+    throw new Error('La compra fuente contiene identificadores duplicados; revise la integridad de los documentos antes de exportar.');
+  }
+
+  for (const v of [...vouchers].sort((a, b) => a.voucherNumber.localeCompare(b.voucherNumber))) {
+    const linkedPurchase = purchasesById.get(v.purchaseRecordId);
+    if (!linkedPurchase) {
+      throw new Error(`El comprobante ${v.voucherNumber} no tiene una compra fuente válida vinculada; no se puede clasificar el documento.`);
+    }
     const supplierRif = cleanRif(v.supplierRif);
     const invoiceDate = String(v.invoiceDate || '');
     const period = String(v.period || '');
@@ -39,35 +55,63 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     const amounts = [v.totalAmountBs, v.exemptAmountBs ?? 0, v.taxableBaseBs, v.vatAmountBs, v.vatWithheldBs, v.taxRate, v.retentionRate];
     const validPeriod = /^\d{4}(0[1-9]|1[0-2])$/.test(period);
     const validRetentionRate = Number(v.retentionRate) === 75 || Number(v.retentionRate) === 100;
+    // El instructivo SENIAT 2020 admite RIF proveedor = 0 cuando no posee RIF,
+    // condicionado a retención del 100%; la Providencia 2025 mantiene el supuesto.
+    const validSupplierRif = supplierRif === '0'
+      ? Number(v.retentionRate) === 100
+      : validateVenezuelanRif(v.supplierRif).isValid;
+    const documentPeriod = invoiceDate.slice(0, 7).replace('-', '');
+    const documentType = linkedPurchase?.documentType || '';
+    const documentNumber = documentType === '02'
+      ? String(linkedPurchase.debitNoteNumber || '')
+      : documentType === '03'
+        ? String(linkedPurchase.creditNoteNumber || '')
+        : String(linkedPurchase.invoiceNumber || '');
+    const affectedDocument = documentType === '01' ? '0' : String(linkedPurchase?.affectedInvoiceNumber || '').trim();
     const expectedVat = Math.round(Number(v.taxableBaseBs) * Number(v.taxRate)) / 100;
     const expectedWithheld = Math.round(expectedVat * Number(v.retentionRate)) / 100;
-    if (v.companyId !== company.id || !validateVenezuelanRif(v.supplierRif).isValid || !validPeriod || !validDate || !/^\d{14}$/.test(voucherNum) || voucherNum.slice(0, 6) !== period ||
+    if (v.companyId !== company.id || !validSupplierRif || !validPeriod || !validDate || !/^\d{14}$/.test(voucherNum) || voucherNum.slice(0, 6) !== period ||
         !supplierRif || !invoiceNum || !controlNum ||
+        (documentPeriod && documentPeriod > period) ||
+        !['01', '02', '03'].includes(documentType) ||
+        (cleanRif(linkedPurchase.supplierRif) !== supplierRif || linkedPurchase.invoiceDate !== v.invoiceDate || String(linkedPurchase.controlNumber || '').trim() !== controlNum || documentNumber.trim() !== invoiceNum) ||
+        (documentType !== '01' && (!documentNumber || !affectedDocument ||
+          !companyPurchases.some(source => source.documentType === '01' && !source.isCancelled &&
+            cleanRif(source.supplierRif) === supplierRif &&
+            source.invoiceNumber === affectedDocument &&
+            (documentType !== '03' || vouchers.some(candidate =>
+              candidate.companyId === company.id &&
+              candidate.period === period &&
+              candidate.purchaseRecordId === source.id &&
+              !candidate.requiresFiscalCorrection)) &&
+            (!linkedPurchase.originalPurchaseId || source.id === linkedPurchase.originalPurchaseId)))) ||
         [invoiceNum, controlNum, voucherNum].some(value => /[\t\r\n]/.test(value)) ||
-        amounts.some(value => !Number.isFinite(Number(value)) || Number(value) < 0) ||
+        amounts.some(value => !Number.isFinite(Number(value)) || Number(value) < 0) || Number(v.totalAmountBs) <= 0 ||
+        linkedPurchase.isCancelled ||
         Number(v.taxRate) > 100 || !validRetentionRate ||
         Math.abs(Number(v.vatAmountBs) - expectedVat) > 0.01 ||
-        Math.abs(Number(v.vatWithheldBs) - expectedWithheld) > 0.01) {
+        Math.abs(Number(v.vatWithheldBs) - expectedWithheld) > 0.01 ||
+        Math.abs(Number(v.totalAmountBs) - (Number(v.exemptAmountBs || 0) + Number(v.taxableBaseBs) + Number(v.vatAmountBs))) > 0.01) {
       throw new Error('Comprobante de retención IVA incompleto o inválido. Revise período, fecha, RIF, numeración, alícuota e importes; no se generan valores sustitutos.');
     }
-    const docType = '01'; // El modelo actual solo admite facturas de compra retenidas.
+    const docType = documentType;
     const totalAmount = Number(v.totalAmountBs).toFixed(2);
     const baseAmount = Number(v.taxableBaseBs).toFixed(2);
     const withheldAmount = Number(v.vatWithheldBs).toFixed(2);
-    const affectedDoc = '0';
+    const affectedDoc = documentType === '01' ? '0' : affectedDocument;
     const exemptAmount = Number(v.exemptAmountBs || 0).toFixed(2);
     const rate = Number(v.taxRate).toFixed(2);
     const expeditionNum = '0';
 
-    // Fila estándar SENIAT
-    const line = [
+    // Fila de agente de retención: la columna 11 es el IVA efectivamente retenido.
+    const fields = [
       agentRif,
       period,
       invoiceDate,
       'C', // Operación: Compras
       docType,
       supplierRif,
-      invoiceNum,
+      documentType === '01' ? invoiceNum : documentNumber,
       controlNum,
       totalAmount,
       baseAmount,
@@ -77,13 +121,25 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
       exemptAmount,
       rate,
       expeditionNum
-    ].join('\t');
-
-    lines.push(line);
+    ];
+    const maxLengths = [10, 6, 10, 1, 2, 10, 20, 20, 15, 15, 15, 20, 14, 15, 5, 15];
+    if (fields.length !== 16 ||
+        fields.some((value, index) => /[\t\r\n]/.test(value) || value.length > maxLengths[index]) ||
+        [invoiceNum, controlNum, affectedDocument].some(value => /\s/.test(value))) {
+      throw new Error('El comprobante contiene campos incompatibles con el formato TXT de 16 columnas (longitud, espacios o separadores); se bloqueó la exportación para evitar desplazar datos.');
+    }
+    lines.push(fields.join('\t'));
   }
 
   return lines.join('\r\n');
 }
+
+/** 
+ * Las declaraciones sin operaciones se registran como evento fiscal y se presentan
+ * en el Portal Fiscal conforme al procedimiento habilitado por el SENIAT.
+ * No se fabrica una fila TXT de 16 campos: el instructivo técnico consultado no
+ * define una fila sintética para representar una declaración sin operaciones.
+ */
 
 /**
  * Genera el archivo XML oficial de Retenciones de ISLR para el portal SENIAT

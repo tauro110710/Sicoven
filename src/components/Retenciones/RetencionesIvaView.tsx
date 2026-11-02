@@ -18,6 +18,7 @@ import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators
 import { VatWithholdingDeclarationsPanel } from './VatWithholdingDeclarationsPanel';
 import { getVatDeclarationStatus } from '../../types/vatWithholdingDeclaration';
 import { getVatVoucherDeliveryControl } from '../../utils/vatVoucherDelivery';
+import { VatFiscalIncidentPanel } from './VatFiscalIncidentPanel';
 
 export const RetencionesIvaView: React.FC = () => {
   const { currentCompany, purchases, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, recordVatVoucherDelivery, displayCurrency } = useAccounting();
@@ -26,7 +27,7 @@ export const RetencionesIvaView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState(() => `${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}`);
   const [showTxtPreview, setShowTxtPreview] = useState(false);
-  const [activeSection, setActiveSection] = useState<'vouchers' | 'declarations'>('vouchers');
+  const [activeSection, setActiveSection] = useState<'vouchers' | 'declarations' | 'incidents'>('vouchers');
 
   const companyVouchers = vatVouchers.filter(voucher => voucher.companyId === currentCompany.id);
   const availablePeriods = [...new Set(companyVouchers.map(voucher => voucher.period))].sort((a, b) => b.localeCompare(a));
@@ -103,11 +104,29 @@ export const RetencionesIvaView: React.FC = () => {
         ? 'No agente de retención'
         : 'Condición de agente por confirmar';
 
-  const generatedTxt = generateSeniatIvaTxt(currentCompany, periodVouchers);
+  // El generador rechaza correctamente un archivo vacío; ese rechazo no debe tumbar
+  // el render de la pantalla cuando el período aún no tiene comprobantes.
+  let generatedTxt = '';
+  let txtGenerationError = '';
+  if (periodVouchers.length > 0) {
+    try {
+      generatedTxt = generateSeniatIvaTxt(
+        currentCompany,
+        periodVouchers,
+        purchases.filter(purchase => purchase.companyId === currentCompany.id)
+      );
+    } catch (error) {
+      txtGenerationError = error instanceof Error ? error.message : 'No fue posible validar el TXT de retenciones IVA.';
+    }
+  }
 
   const handleDownloadTxt = () => {
     if (hasPendingFiscalCorrection) {
       alert('Exportación bloqueada: hay comprobantes afectados por notas de crédito o reversiones. Registre y concilie la rectificación fiscal antes de generar el archivo SENIAT.');
+      return;
+    }
+    if (txtGenerationError) {
+      alert('Exportación bloqueada: ' + txtGenerationError);
       return;
     }
     if (periodVouchers.length === 0) {
@@ -133,8 +152,12 @@ export const RetencionesIvaView: React.FC = () => {
           className={`rounded-lg px-4 py-2 text-xs font-bold border ${activeSection === 'declarations' ? 'bg-purple-700 text-white border-purple-700' : 'bg-white text-slate-700 border-slate-300'}`}>
           Declaraciones quincenales
         </button>
+        <button type="button" onClick={() => setActiveSection('incidents')}
+          className={`rounded-lg px-4 py-2 text-xs font-bold border ${activeSection === 'incidents' ? 'bg-purple-700 text-white border-purple-700' : 'bg-white text-slate-700 border-slate-300'}`}>
+          Rectificaciones IVA
+        </button>
       </div>
-      {activeSection === 'vouchers' ? (
+      {activeSection === 'incidents' ? <VatFiscalIncidentPanel /> : activeSection === 'vouchers' ? (
       <>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
         <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -276,7 +299,7 @@ export const RetencionesIvaView: React.FC = () => {
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-purple-400" />
                 <span className="text-xs font-bold text-purple-300">
-                  Estructura Oficial del Archivo TXT para el Portal SENIAT (Separador: Tabulador)
+                  Vista previa del TXT de retenciones IVA · 16 campos separados por tabulador
                 </span>
               </div>
               <button
@@ -288,10 +311,14 @@ export const RetencionesIvaView: React.FC = () => {
               </button>
             </div>
             <pre className="p-3 bg-black/60 rounded-lg text-[11px] font-mono text-emerald-400 overflow-x-auto whitespace-pre max-h-48 border border-slate-800">
-              {generatedTxt || '// No hay registros de retención de IVA para este período'}
+              {txtGenerationError
+                ? '// EXPORTACIÓN BLOQUEADA: ' + txtGenerationError
+                : periodVouchers.length === 0
+                  ? '// No hay registros de retención de IVA para este período'
+                  : generatedTxt}
             </pre>
             <p className="text-[10px] text-slate-400 italic">
-              Columnas: RIF Agente • Período • Fecha • Operación (C) • Tipo Doc (01) • RIF Proveedor • Factura • Control • Total • Base • IVA Retenido • Afectado • Comprobante (14 dígitos) • Exento • Alícuota • Expediente
+              Campos: RIF agente • Período • Fecha • Operación • Tipo de documento • RIF proveedor • Número de documento • Control • Total • Base imponible • IVA retenido • Documento afectado • Comprobante • Exento • Alícuota • Expediente
             </p>
           </div>
         )}

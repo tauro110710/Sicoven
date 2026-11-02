@@ -23,7 +23,7 @@ function fixture() {
       { id: 'debit-2', companyId: 'co-2', documentType: '02', debitNoteNumber: 'ND-2', affectedInvoiceNumber: 'FAC-200', originalPurchaseId: 'invoice-2' },
       { id: 'invoice-2', companyId: 'co-2', documentType: '01', invoiceNumber: 'FAC-200' }
     ],
-    vatVouchers: [{ id: 'voucher-1', companyId: 'co-1', purchaseRecordId: 'invoice-1' }],
+    vatVouchers: [{ id: 'voucher-1', companyId: 'co-1', purchaseRecordId: 'invoice-1', correctionEntryIds: ['journal-1'] }],
     vatWithholdingDeclarations: [{ id: 'declaration-1', companyId: 'co-1', voucherIds: ['voucher-1'] }],
     vatWithholdingDeclarationEvents: [
       { id: 'filed-1', declarationId: 'declaration-1', eventType: 'FILED' },
@@ -31,7 +31,7 @@ function fixture() {
       { id: 'payment-2', declarationId: 'declaration-1', eventType: 'PAYMENT', bankStatementMovementIds: ['bank-1'] }
     ],
     bankStatementMovements: [{ id: 'bank-1', companyId: 'co-1' }, { id: 'bank-2', companyId: 'co-2' }],
-    journalEntries: [{ id: 'journal-1', companyId: 'co-1' }]
+    journalEntries: [{ id: 'journal-1', companyId: 'co-1' }, { id: 'journal-unrelated', companyId: 'co-1' }]
   };
   db.prepare('INSERT INTO app_state(state_key,state_json) VALUES(?,?)').run('accounting', JSON.stringify(state));
   initializeVatFiscalIncidentSchema(db);
@@ -82,6 +82,17 @@ test('rejects a note whose linked original invoice does not match its affected i
     item.id === 'credit-1' ? { ...item, affectedInvoiceNumber: 'FAC-999' } : item) };
   db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'").run(JSON.stringify(altered));
   assert.throws(() => createVatFiscalIncident(db, createInput(), actor), /no coincide con el número/);
+  db.close();
+});
+
+test('recovers the original invoice by affected number when the stored originalPurchaseId is stale', () => {
+  const { db, state } = fixture();
+  const altered = { ...state, purchases: state.purchases.map(item =>
+    item.id === 'credit-1' ? { ...item, originalPurchaseId: 'deleted-invoice-id' } : item) };
+  db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'").run(JSON.stringify(altered));
+  const incident = createVatFiscalIncident(db, createInput(), actor);
+  assert.equal(incident.originalPurchaseId, 'invoice-1');
+  assert.equal(incident.vatVoucherId, 'voucher-1');
   db.close();
 });
 
@@ -157,6 +168,39 @@ test('rejects event attempts to attach another company journal or unlinked bank 
     decisionText: 'Se intenta vincular un movimiento bancario no incluido en el pago del expediente.',
     declarationId: 'declaration-1', declarationEventIds: ['filed-1'], bankMovementIds: ['bank-1']
   }, actor), /solo pueden vincularse/);
+  db.close();
+});
+
+test('rejects a same-company journal entry that is not linked to the original VAT voucher correction trail', () => {
+  const { db } = fixture();
+  const created = createVatFiscalIncident(db, createInput(), actor);
+  assert.throws(() => recordVatFiscalIncidentEvent(db, {
+    incidentId: created.id, eventType: 'ACTION_RECORDED',
+    decisionText: 'Se intenta adjuntar un asiento de la empresa sin vínculo con el comprobante IVA original.',
+    declarationId: 'declaration-1', journalEntryId: 'journal-unrelated'
+  }, actor), /enlazado previamente al comprobante IVA original/);
+  const valid = recordVatFiscalIncidentEvent(db, {
+    incidentId: created.id, eventType: 'ACTION_RECORDED',
+    decisionText: 'Se adjunta el asiento correctivo previamente vinculado al comprobante IVA original.',
+    declarationId: 'declaration-1', journalEntryId: 'journal-1'
+  }, actor);
+  assert.equal(valid.events.find(event => event.eventType === 'ACTION_RECORDED' && event.decisionText.startsWith('Se adjunta el asiento correctivo')).journalEntryId, 'journal-1');
+  db.close();
+});
+
+test('does not allow adding a declaration to an incident created without one', () => {
+  const { db } = fixture();
+  const created = createVatFiscalIncident(db, createInput({
+    vatVoucherId: undefined, declarationId: undefined,
+    declarationEventIds: [], bankMovementIds: []
+  }), actor);
+  assert.equal(created.declarationId, null);
+  assert.throws(() => recordVatFiscalIncidentEvent(db, {
+    incidentId: created.id, eventType: 'REVIEW_RECORDED',
+    decisionText: 'Se intenta incorporar después una declaración que no fue vinculada al abrir el expediente.',
+    declarationId: 'declaration-1'
+  }, actor), /declaración del expediente es inmutable/);
+  assert.equal(getVatFiscalIncident(db, created.id).events.length, 1);
   db.close();
 });
 
