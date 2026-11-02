@@ -125,3 +125,10 @@ La validación del producto se realiza mediante:
 - Windows installer #1404: el instalador se construyó y verificó su existencia, pero el paso de actualización real 1.0.6 → 1.0.7 fue cancelado por el runner durante la ejecución; no se considera aprobado.
 - Se solicitó reejecutar únicamente el job de Windows installer para completar la prueba de actualización y persistencia SQLite. Pendiente de resultado.
 - Búsqueda adicional de fuentes técnicas oficiales SENIAT para RI_DRIVA2020-IT01V3_0_0 y SNAT/2025/000054 no devolvió resultados oficiales verificables en esta consulta. Se mantiene pendiente la confirmación primaria y no se eleva el estado de homologación.
+### Corrección adicional crítica del mapeo de columnas — 2026-11-02
+
+- La revisión directa de la tabla de columnas del instructivo RI_DRIVA2020-IT01V3_0_0 detectó que la columna 11 se denomina Monto IVA, no monto de IVA retenido.
+- Se corrigió el generador para exportar el IVA total causado (vatAmountBs) en la columna 11; el importe retenido se sigue usando para validar el cálculo de retención, pero no se coloca en esa columna.
+- Se añadió prueba que distingue expresamente IVA total de IVA retenido (por ejemplo, IVA causado 160.00 y retención 120.00 al 75%).
+- Esta corrección cambia el SHA y requiere una nueva tanda completa de CI, Desktop Validation y Windows installer; los resultados verdes del SHA anterior no se trasladan a este cambio.
+- Referencia técnica consultada: copia del instructivo RI_DRIVA2020-IT01V3_0_0 que identifica columna 11 como Monto IVA y columna 10 como Base Imponible. Pendiente conseguir/confirmar la copia primaria vigente del SENIAT.
