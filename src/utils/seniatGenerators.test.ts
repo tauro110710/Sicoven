@@ -219,6 +219,20 @@ test('IVA TXT refuses an unlinked voucher or a note without its affected invoice
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ invoiceNumber: 'ND-002' })], [note]), /incompleto o inválido/);
 });
 
+test('IVA TXT rejects a credit note whose original invoice was not registered in the declared period', () => {
+  const original = purchase({ id: 'p-original', invoiceDate: '2026-09-28', accountCreditDate: '2026-09-28' });
+  const note = purchase({
+    id: 'p-note', invoiceDate: '2026-10-05', documentType: '03',
+    creditNoteNumber: 'NC-005', affectedInvoiceNumber: 'F-001',
+    originalPurchaseId: 'p-original'
+  });
+  assert.throws(() => generateSeniatIvaTxt(
+    company,
+    [ivaVoucher({ purchaseRecordId: 'p-note', invoiceNumber: 'NC-005' })],
+    [original, note]
+  ), /incompleto o inválido/);
+});
+
 test('IVA TXT rejects debit or credit notes whose affected invoice is not a source invoice of the same supplier', () => {
   const note = purchase({ id: 'p-note', originalPurchaseId: 'p-original', documentType: '03', creditNoteNumber: 'NC-003', affectedInvoiceNumber: 'MISSING' });
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ purchaseRecordId: 'p-note', invoiceNumber: 'NC-003' })], [purchase({ id: 'p-original' }), note]), /incompleto o inválido/);
