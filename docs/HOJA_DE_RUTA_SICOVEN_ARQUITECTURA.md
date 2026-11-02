@@ -138,3 +138,20 @@ La validación del producto se realiza mediante:
 - El valor real del generador fue 160.00 (IVA total causado), conforme al mapeo corregido. Se actualizó la expectativa y su comentario; no se revirtió el cambio fiscal.
 - Commit de corrección de prueba: 7b5b7d53afa28a3edcafee548ce3785c88709071. Requiere nueva ejecución completa; no se trasladan los fallos ni los éxitos previos a este SHA.
 - En la ejecución anterior, 598 de 599 pruebas pasaron; la única falla fue la expectativa antigua descrita arriba. El instalador también se detuvo al fallar esa suite antes de completar la prueba de actualización SQLite.
+
+## Cierre de validación automatizada del TXT IVA — 2026-11-02
+
+- SHA de HEAD de PR #88: 54a41b6d78e5433a17bc997349493ff87577852a.
+- SICOVEN CI #84: SUCCESS.
+- Desktop Validation #1295: SUCCESS.
+- Windows installer #1412: SUCCESS. El instalador NSIS se construyó y se verificó su existencia; además, la prueba de actualización real 1.0.6 → 1.0.7 terminó correctamente y confirmó la conservación de los datos SQLite. La carga del artefacto también terminó correctamente.
+- Estas tres ejecuciones corresponden al mismo HEAD de PR y cierran la validación automatizada de esta tanda. No equivalen a homologación ni aceptación del TXT por SENIAT.
+- PR #88 permanece abierta y sin fusionar; main permanece intacta.
+
+### Pendientes normativos y funcionales antes de declarar homologación
+
+1. Contrastar el mapeo completo de las 16 columnas con una especificación técnica primaria y vigente publicada/confirmada por SENIAT. El código actual coloca IVA total causado en columna 11, según el instructivo histórico RI_DRIVA2020-IT01V3_0_0; la vigencia actual del layout no está confirmada.
+2. La fila de declaración sin operaciones sigue siendo provisional. No presentarla como archivo oficialmente aceptado: debe determinarse el formato específico vigente para declaración en cero.
+3. Ejecutar aceptación con archivos de factura, ND, NC, exentos, distintas alícuotas y retenciones 75/100 en el entorno oficial SENIAT.
+4. Revisar los campos restantes contra la tabla técnica vigente, en particular identificador de comprobante, documento afectado, número de factura/control, montos y códigos de operación.
+5. No declarar certificación, homologación ni cierre fiscal hasta completar evidencia oficial.
