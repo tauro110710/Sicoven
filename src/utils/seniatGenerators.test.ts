@@ -332,7 +332,7 @@ test('IVA TXT conserva el orden y significado de los 16 campos del instructivo h
     '00-123',           // 8 número de control
     '1160.00',          // 9 monto del documento
     '1000.00',          // 10 base imponible
-    '120.00',           // 11 IVA retenido para agente de retención
+    '160.00',           // 11 Monto IVA total causado
     '0',                // 12 documento afectado: no aplica a factura
     '20261000000001',   // 13 número de comprobante
     '0.00',             // 14 monto exento
