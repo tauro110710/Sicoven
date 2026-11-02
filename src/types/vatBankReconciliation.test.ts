@@ -25,7 +25,10 @@ const paymentJournal = {
   date: '2026-10-19', description: 'Enteramiento de retenciones de IVA',
   type: 'RETENCION_IVA' as const, bcvRate: 1,
   referenceDoc: 'IVA-ENTERAMIENTO:' + declaration.id + ':PAGO-1',
-  items: [], createdAt: '2026-10-19T10:00:00.000Z'
+  items: [
+    { accountCode: '2.1.2.03', accountName: 'IVA por enterar', debitBs: 60, creditBs: 0, debitUsd: 0.6, creditUsd: 0 },
+    { accountCode: '1.1.1.02', accountName: 'Banco', debitBs: 0, creditBs: 60, debitUsd: 0, creditUsd: 0.6 }
+  ], createdAt: '2026-10-19T10:00:00.000Z'
 };
 const filed: VatWithholdingDeclarationEvent = {
   id: 'filed-1', declarationId: declaration.id, eventType: 'FILED',
@@ -252,4 +255,50 @@ test('keeps a payment pending when its linked journal is missing or does not mat
     { ...paymentJournal, companyId: 'company-2' }
   ]);
   assert.equal(wrongCompany.pendingCount, 1);
+});
+
+
+test('requires real balanced journal lines matching the IVA liability and linked bank account', () => {
+  const payment: VatWithholdingDeclarationEvent = {
+    id: 'payment-journal', declarationId: declaration.id, eventType: 'PAYMENT',
+    occurredAt: '2026-10-19', recordedAt: '2026-10-19T10:00:00.000Z',
+    amountBs: 60, paymentReference: 'PAGO-1', bankStatementMovementIds: ['m-1'],
+    journalEntryId: 'entry-iva-1'
+  };
+  const linkedMovement = movement('m-1', 60, {
+    isReconciled: true, reconciledWithJournalEntryId: 'entry-iva-1',
+    reconciledJournalEntryIds: ['entry-iva-1']
+  });
+  const summaryFor = (items: typeof paymentJournal.items) => buildVatBankReconciliationSummary(
+    declaration, [filed, payment], [linkedMovement], [account], [{ ...paymentJournal, items }]
+  );
+  assert.equal(summaryFor(paymentJournal.items).reconciledCount, 1);
+  assert.equal(summaryFor([
+    { ...paymentJournal.items[0], debitBs: 59 },
+    paymentJournal.items[1]
+  ]).pendingCount, 1);
+  assert.equal(summaryFor([
+    { ...paymentJournal.items[0], accountCode: '2.1.2.99' },
+    paymentJournal.items[1]
+  ]).pendingCount, 1);
+  assert.equal(summaryFor([
+    paymentJournal.items[0],
+    { ...paymentJournal.items[1], accountCode: '1.1.1.99' }
+  ]).pendingCount, 1);
+  assert.equal(summaryFor([
+    paymentJournal.items[0],
+    { ...paymentJournal.items[1], creditBs: 59 }
+  ]).pendingCount, 1);
+  assert.equal(summaryFor([
+    paymentJournal.items[0],
+    { ...paymentJournal.items[1], creditUsd: 0.5 }
+  ]).pendingCount, 1);
+  assert.equal(summaryFor([
+    { ...paymentJournal.items[0], debitBs: Number.NaN },
+    paymentJournal.items[1]
+  ]).pendingCount, 1);
+  assert.equal(summaryFor([
+    paymentJournal.items[0],
+    { ...paymentJournal.items[1], debitBs: 1 }
+  ]).pendingCount, 1);
 });
