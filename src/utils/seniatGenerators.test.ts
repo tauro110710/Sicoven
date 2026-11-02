@@ -1,19 +1,4 @@
-imp
-const generateSeniatIvaTxt = (
-  companyArg: Company,
-  vouchers: VatRetentionVoucher[],
-  sourcePurchases?: PurchaseRecord[]
-) => generateSeniatIvaTxtRaw(
-  companyArg,
-  vouchers,
-  sourcePurchases ?? vouchers.map(v => purchase({
-    id: v.purchaseRecordId,
-    invoiceDate: v.invoiceDate,
-    invoiceNumber: v.invoiceNumber,
-    controlNumber: v.controlNumber,
-    supplierRif: v.supplierRif
-  }))
-);ort test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateSeniatIvaTxt as generateSeniatIvaTxtRaw, generateSeniatIslrOperationsXml, generateSeniatIslrOperationsTxt } from './seniatGenerators';
 import type { Company, PurchaseRecord, IslrRetentionVoucher, VatRetentionVoucher } from '../types/accounting';
@@ -152,6 +137,22 @@ const ivaVoucher = (overrides: Partial<VatRetentionVoucher> = {}) => ({
   bcvRate: 1, totalAmountUsd: 1160, vatWithheldUsd: 120,
   ...overrides
 } as VatRetentionVoucher);
+
+const generateSeniatIvaTxt = (
+  companyArg: Company,
+  vouchers: VatRetentionVoucher[],
+  sourcePurchases?: PurchaseRecord[]
+) => generateSeniatIvaTxtRaw(
+  companyArg,
+  vouchers,
+  sourcePurchases ?? vouchers.map(v => purchase({
+    id: v.purchaseRecordId,
+    invoiceDate: v.invoiceDate,
+    invoiceNumber: v.invoiceNumber,
+    controlNumber: v.controlNumber,
+    supplierRif: v.supplierRif
+  }))
+);
 
 test('IVA TXT exports only real voucher identifiers and the supplied amounts', () => {
   const txt = generateSeniatIvaTxt(company, [ivaVoucher()]);
