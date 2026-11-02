@@ -4,7 +4,8 @@ import type { VatWithholdingDeclaration, VatWithholdingDeclarationEvent } from '
 import { getVatDeclarationStatus } from '../../types/vatWithholdingDeclaration';
 import { buildVatBankReconciliationSummary } from '../../types/vatBankReconciliation';
 import { getSeniatVatWithholdingDueDate } from '../../types/seniatVatDueDates';
-import { formatBs, formatDate } from '../../utils/formatters';
+import { formatBs, formatDate, cleanRif } from '../../utils/formatters';
+import { downloadFile, generateSeniatIvaZeroOperationsTxt } from '../../utils/seniatGenerators';
 import type { VatFiscalIncident } from '../../types/vatFiscalIncidents';
 
 const today = () => {
@@ -138,6 +139,17 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
       }
       setSelectedId(declaration.id);
     });
+  };
+
+  const downloadZeroOperationsTxt = () => {
+    if (!selected?.zeroOperations) return;
+    try {
+      const txt = generateSeniatIvaZeroOperationsTxt(currentCompany, selected.period);
+      downloadFile(txt, `RetencionesIVA_SinOperaciones_${cleanRif(currentCompany.rif)}_${selected.period}_${selected.window}.txt`);
+      setMessage('TXT sin operaciones generado. Valide el archivo en el ambiente oficial del SENIAT antes de transmitirlo.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo generar el TXT sin operaciones.');
+    }
   };
 
   const addEvent = (draft: Omit<VatWithholdingDeclarationEvent, 'id' | 'declarationId' | 'recordedAt'>) => {
@@ -348,7 +360,13 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
               <h3 className="font-bold text-slate-900">Gestión · {selected.period} · {selected.window === 'FIRST_HALF' ? 'Primera quincena' : 'Segunda quincena'}</h3>
               <p className="text-xs text-slate-500">{selected.voucherIds.length} comprobantes · IVA retenido: {formatBs(selected.totalWithheldBs)}</p>
             </div>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{statusLabels[selectedStatus || 'PREPARED']}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              {selected.zeroOperations && <button type="button" onClick={downloadZeroOperationsTxt}
+                className="rounded-lg border border-purple-300 px-3 py-2 text-xs font-bold text-purple-800 hover:bg-purple-50">
+                Descargar TXT sin operaciones
+              </button>}
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{statusLabels[selectedStatus || 'PREPARED']}</span>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
