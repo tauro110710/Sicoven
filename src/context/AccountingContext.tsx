@@ -326,6 +326,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const settlementInFlightRef = useRef<Set<string>>(new Set());
   const supplierAdvanceSettlementInFlightRef = useRef<Set<string>>(new Set());
   const supplierDirectAdvanceInFlightRef = useRef<Set<string>>(new Set());
+  // Evita dos enteramientos simultáneos sobre la misma declaración usando el mismo snapshot React.
+  const vatPaymentInFlightRef = useRef<Set<string>>(new Set());
   // Los importadores pueden registrar varias facturas en el mismo ciclo de React;
   // estos contadores evitan reutilizar correlativos e identificadores por estado obsoleto.
   const runAtomicInvoiceImport = <T,>(operation: () => T): T => {
@@ -3440,6 +3442,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     validateVatDeclarationEventDraft(declaration, history, draft);
     validateVatPaymentBankLinks({ companyId: currentCompany.id, declaration, draft, events: vatWithholdingDeclarationEvents, bankAccounts, bankMovements: bankStatementMovements });
+    const paymentLockKey = draft.eventType === 'PAYMENT' ? declarationId : null;
+    if (paymentLockKey && vatPaymentInFlightRef.current.has(paymentLockKey)) {
+      throw new Error('Ya hay un enteramiento de esta declaración en proceso. Espere la confirmación de SQLite antes de registrar otro pago.');
+    }
+    if (paymentLockKey) vatPaymentInFlightRef.current.add(paymentLockKey);
     let resolvePersistence!: () => void;
     let rejectPersistence!: (error: Error) => void;
     const confirmation = new Promise<void>((resolve, reject) => {
@@ -3508,6 +3515,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     } catch (error) {
       persistenceWaitersRef.current = persistenceWaitersRef.current.filter(waiter => waiter !== persistenceWaiter);
       throw error;
+    } finally {
+      if (paymentLockKey) vatPaymentInFlightRef.current.delete(paymentLockKey);
     }
   };
 
