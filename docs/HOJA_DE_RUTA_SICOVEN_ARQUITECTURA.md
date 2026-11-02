@@ -155,3 +155,13 @@ La validación del producto se realiza mediante:
 3. Ejecutar aceptación con archivos de factura, ND, NC, exentos, distintas alícuotas y retenciones 75/100 en el entorno oficial SENIAT.
 4. Revisar los campos restantes contra la tabla técnica vigente, en particular identificador de comprobante, documento afectado, número de factura/control, montos y códigos de operación.
 5. No declarar certificación, homologación ni cierre fiscal hasta completar evidencia oficial.
+
+
+## Rectificación del mapeo de la columna 11 — 2026-11-02 (prioridad crítica)
+
+- La revisión del texto íntegro del instructivo RI_DRIVA2020-IT01V3_0_0 (septiembre 2020), secciones 2.2 y 2.3, páginas 9 y 12, confirma expresamente que el campo Monto_IVA para un Agente de Retención representa el IVA retenido por el comprador al proveedor. El mismo campo representa el IVA calculado por alícuota para el contribuyente exportador; no se debe aplicar esa segunda definición al agente de retención.
+- En consecuencia, se corrigió el generador para exportar `vatWithheldBs` en la columna 11, no `vatAmountBs`. Se ajustaron las pruebas de mapeo y de retenciones 75%/100%; el caso diferencial de IVA causado 160.00 y retención 120.00 debe exportar 120.00.
+- La corrección está en los commits: generador `c335278feecbad7995fae649ac0f715a2cc50d28`; pruebas `adbbd170dee476a7804492d7a1ac89f1f94a24b2`. El HEAD de la rama quedó en el commit de pruebas.
+- Los workflows CI #85 y Desktop #1296 habían validado el SHA documental anterior, no esta rectificación. El instalador #1413 también corresponde al SHA anterior y no sirve como evidencia para estos cambios. Ejecutar nuevamente CI, Desktop Validation e instalador sobre el HEAD actualizado.
+- Esta rectificación prevalece sobre las notas previas de esta hoja que describían la columna 11 como IVA total causado; aquellas anotaciones históricas quedan superadas y no deben usarse como criterio fiscal.
+- La especificación consultada es de 2020 y la aceptación del formato actual por SENIAT continúa pendiente. La Providencia SNAT/2025/000054 regula la obligación de declarar, enterar y emitir comprobantes, pero no sustituye por sí sola las especificaciones técnicas del archivo de carga.
