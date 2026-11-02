@@ -187,3 +187,15 @@ La validación del producto se realiza mediante:
 - La fila cero tiene respaldo en la regla general del instructivo histórico (completar RIF, agente y período; demás columnas en cero), pero continúa pendiente la verificación en el portal actual; no se declara homologada.
 - Cambios recientes de esta revisión: `0b0ae9eb5007193be357626351576af3c7f5e8be` (regla NC) y `1882b2988969b14cf9cfb67ec959719fd2ffef93` (prueba NC).
 - Las anotaciones anteriores de esta hoja que dejaban el campo 9 como semánticamente irresuelto quedan superadas por esta comprobación directa del texto de la guía. La vigencia actual del instructivo de 2020 y la aceptación efectiva del TXT siguen pendientes de evidencia oficial del Portal Fiscal.
+
+
+## Verificación automatizada final de la revisión TXT IVA — 2026-11-02
+
+- HEAD validado: `341b5c39f39e4202613a7e9494e73e41677ef82a`.
+- SICOVEN CI #98 (run `41484170393`): SUCCESS.
+- Desktop Validation #1309 (run `41484170160`): SUCCESS.
+- Windows installer #1426 (run `41484170304`): SUCCESS. El instalador NSIS 1.0.7 se construyó y se verificó su existencia; la actualización real desde 1.0.6 terminó correctamente y el test confirmó la preservación de los datos SQLite. El paso de carga del artefacto también terminó SUCCESS.
+- Los tres workflows corresponden al mismo SHA `341b5c39f39e4202613a7e9494e73e41677ef82a`; queda cerrada la validación automatizada de esta tanda.
+- La consulta de artefactos del run no devolvió artefactos descargables en la lista de GitHub Actions, aunque el paso de carga reportó SUCCESS. No se afirma que haya un ZIP disponible para descarga.
+- PR #88 permanece abierta, sin fusionar; `main` continúa intacta.
+- Este resultado no demuestra vigencia normativa del layout ni aceptación del TXT por el Portal Fiscal. Continúan pendientes la confirmación técnica primaria vigente, la validación oficial de declaración cero y la prueba real de carga/aceptación SENIAT. No declarar certificación ni homologación.
