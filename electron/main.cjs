@@ -26,6 +26,8 @@ const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
 const { reconcileRestoreAudit } = require('./restore-audit-ledger.cjs');
+const { registerBackupIpc } = require('./backup-restore.cjs');
+const { registerRestoreIpc } = require('./restore-engine.cjs');
 const { recoverPendingRestore } = require('./restore-engine.cjs');
 const { registerInflationIndexIpc } = require('./inflation-indexes.cjs');
 const { registerInflationClassificationIpc } = require('./inflation-classifications.cjs');
@@ -527,6 +529,32 @@ app.whenReady().then(async () => {
     }
     return { ok: true, cleared: true, verified: true };
   });
+
+  // Proxy dinámico: los handlers de respaldo siempre usan la conexión SQLite vigente
+  // después de que una restauración cierre y vuelva a abrir la base.
+  const dbHandle = new Proxy({}, {
+    get(_target, property) {
+      const current = db;
+      const value = current?.[property];
+      return typeof value === 'function' ? value.bind(current) : value;
+    }
+  });
+  const closeDatabase = async () => {
+    if (db?.open) {
+      db.pragma('wal_checkpoint(TRUNCATE)');
+      db.close();
+      db = null;
+    }
+  };
+  const reopenDatabase = async () => {
+    if (db?.open) throw new Error('SQLite ya está abierta; no se permite abrir una segunda conexión.');
+    openDatabase();
+  };
+  registerBackupIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession, dialog, app,
+    getWindow: () => BrowserWindow.getFocusedWindow() });
+  registerRestoreIpc({ ipcMain, app, dialog, licenseView, getActiveSession,
+    getDb: () => db, closeDatabase, reopenDatabase,
+    getWindow: () => BrowserWindow.getFocusedWindow() });
 
   registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession });
   registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession });
