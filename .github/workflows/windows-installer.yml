@@ -1,5 +1,5 @@
 name: SICOVEN Windows installer
-# Builds, validates, stores the installer, and attaches it to the private repository release.
+# Builds and validates the Windows installer; stores only a CI artifact, without publishing a release.
 
 on:
   push:
