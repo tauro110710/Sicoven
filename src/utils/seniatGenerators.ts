@@ -126,10 +126,10 @@ export function generateSeniatIvaZeroOperationsTxt(company: Company, period: str
   if (!validateVenezuelanRif(company.rif).isValid) {
     throw new Error('El RIF del agente de retención no cumple la estructura venezolana válida.');
   }
-  if (!/^\\d{4}(0[1-9]|1[0-2])$/.test(period)) {
+  if (!/^\d{4}(0[1-9]|1[0-2])$/.test(period)) {
     throw new Error('Seleccione un período fiscal válido para la declaración sin operaciones.');
   }
-  return [agentRif, period, ...Array(14).fill('0')].join('\\t');
+  return [agentRif, period, ...Array(14).fill('0')].join('\t');
 }
 
 /**
