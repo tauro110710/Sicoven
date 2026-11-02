@@ -78,6 +78,7 @@ export interface VatBankReconciliationLine {
 function hasValidVatPaymentJournal(
   entry: JournalEntry,
   amountBs: number,
+  expectedLiabilityUsd: number,
   movements: BankStatementMovement[],
   bankAccounts: BankAccount[]
 ): boolean {
@@ -109,7 +110,8 @@ function hasValidVatPaymentJournal(
   const liability = liabilityLines[0];
   if (cents(Number(liability.debitBs)) !== cents(amountBs) ||
       cents(Number(liability.creditBs)) !== 0 ||
-      Number(liability.debitUsd) <= 0 || Number(liability.creditUsd) !== 0) return false;
+      Math.round(Number(liability.debitUsd) * 1e6) !== Math.round(expectedLiabilityUsd * 1e6) ||
+      Number(liability.creditUsd) !== 0) return false;
 
   const bankCodes = new Set(expectedBanks.keys());
   for (const [code, expected] of expectedBanks) {
@@ -194,9 +196,24 @@ export function buildVatBankReconciliationSummary(
         movement.date <= event.occurredAt.slice(0, 10);
     });
     const linkedTotalCents = validMovements.reduce((sum, movement) => sum + cents(Number(movement.amountBs)), 0);
+    const priorPaidBs = payments.filter(item => item.id !== event.id)
+      .reduce((total, item) => total + Number(item.amountBs || 0), 0);
+    const cumulativePaidBs = cents(priorPaidBs + paymentAmount);
+    const expectedCumulativeUsd = Number.isFinite(Number(declaration.totalWithheldUsd)) &&
+      Number(declaration.totalWithheldUsd) > 0 && Number(declaration.totalWithheldBs) > 0
+      ? Math.abs(cumulativePaidBs - cents(Number(declaration.totalWithheldBs))) < 0.0001
+        ? Number(declaration.totalWithheldUsd)
+        : Number(declaration.totalWithheldUsd) * cumulativePaidBs / Number(declaration.totalWithheldBs)
+      : Number.NaN;
+    const expectedPriorUsd = Number.isFinite(Number(declaration.totalWithheldUsd)) &&
+      Number(declaration.totalWithheldBs) > 0
+      ? Number(declaration.totalWithheldUsd) * priorPaidBs / Number(declaration.totalWithheldBs)
+      : Number.NaN;
+    const expectedLiabilityUsd = Math.round((expectedCumulativeUsd - expectedPriorUsd) * 1e6) / 1e6;
     const validJournal = Boolean(linkedJournal) && validPaymentAmount &&
+      Number.isFinite(expectedLiabilityUsd) && expectedLiabilityUsd > 0 &&
       movements.length === ids.length && validMovements.length === ids.length &&
-      hasValidVatPaymentJournal(linkedJournal as JournalEntry, paymentAmount, validMovements, bankAccounts);
+      hasValidVatPaymentJournal(linkedJournal as JournalEntry, paymentAmount, expectedLiabilityUsd, validMovements, bankAccounts);
     const complete = validPaymentAmount && validPaymentDate && validJournal && ids.length > 0 &&
       movements.length === ids.length && validMovements.length === ids.length &&
       linkedTotalCents === cents(paymentAmount);
