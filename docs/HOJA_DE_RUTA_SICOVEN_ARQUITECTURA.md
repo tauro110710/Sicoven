@@ -223,3 +223,16 @@ La validación del producto se realiza mediante:
 - La Providencia SNAT/2025/000054 (art. 15) respalda la obligación de declarar incluso sin operaciones y remite a especificaciones técnicas del SENIAT; no acredita el layout actual del TXT.
 - La guía RI_DRIVA2020-IT01V3_0_0 sigue siendo referencia histórica, no prueba suficiente de vigencia en noviembre de 2026.
 - La fila TXT cero y la serialización de facturas con múltiples alícuotas permanecen no homologadas.
+
+
+### Revalidación automatizada del HEAD aa6dfc9 — 2026-11-02
+
+- HEAD validado: aa6dfc9579470a8d41d89d5c97ef3f0f52c53e12.
+- SICOVEN CI #100 (run 41487650926): SUCCESS; pruebas automatizadas, TypeScript y build.
+- Desktop Validation #1311 (run 41487651056): SUCCESS; validaciones, auditoría de recursos y build.
+- Windows installer #1428 (run 41487650975): SUCCESS; pruebas, TypeScript, build, auditoría de assets, instalador NSIS 1.0.7 y actualización real 1.0.6 → 1.0.7 con preservación de SQLite. El paso de upload de artefacto terminó SUCCESS; esto no garantiza que GitHub exponga un ZIP descargable.
+- Los tres workflows concluyeron correctamente sobre el mismo HEAD aa6dfc9. Se confirma validación automatizada de ese commit, no aceptación del TXT por SENIAT.
+- La revisión directa del modelo confirma que PurchaseRecord y VatRetentionVoucher solo conservan una taxRate, taxableBaseBs, vatAmountBs y exemptAmountBs por documento/comprobante. La exportación actual no puede representar desglose multialícuota sin ampliar el modelo y definir la serialización.
+- No se amplía el modelo ni se generan filas sintéticas mientras no exista especificación primaria SENIAT que determine cardinalidad de filas y tratamiento del comprobante/retención para documentos mixtos. Esta limitación permanece como bloqueo funcional explícito.
+- La declaración cero continúa provisional hasta verificar su formato en guía oficial vigente y en la prueba de carga del Portal Fiscal.
+- PR #88 sigue abierta y sin fusionar; main permanece intacta. SQLite local continúa como única fuente de verdad.
