@@ -117,3 +117,11 @@ La validación del producto se realiza mediante:
 - main permanece intacta; PR no fusionada.
 - SQLite local sigue siendo la única fuente de verdad.
 - No declarar bloque TXT cerrado, homologado ni certificado SENIAT hasta completar los pendientes anteriores.
+
+### Revisión posterior de validación — 2026-11-02
+
+- SICOVEN CI #76: SUCCESS confirmado; las pruebas automatizadas y comprobación de tipos/build del workflow terminaron correctamente.
+- Desktop Validation #1287: SUCCESS confirmado.
+- Windows installer #1404: el instalador se construyó y verificó su existencia, pero el paso de actualización real 1.0.6 → 1.0.7 fue cancelado por el runner durante la ejecución; no se considera aprobado.
+- Se solicitó reejecutar únicamente el job de Windows installer para completar la prueba de actualización y persistencia SQLite. Pendiente de resultado.
+- Búsqueda adicional de fuentes técnicas oficiales SENIAT para RI_DRIVA2020-IT01V3_0_0 y SNAT/2025/000054 no devolvió resultados oficiales verificables en esta consulta. Se mantiene pendiente la confirmación primaria y no se eleva el estado de homologación.
