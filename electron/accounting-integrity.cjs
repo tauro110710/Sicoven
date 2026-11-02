@@ -886,8 +886,6 @@ function validateAccountingSnapshot(previousState, nextState) {
     const priorDocumentsById = new Map(asArray(priorState[collectionName])
       .map(document => [String(document.id), document]));
     for (const document of asArray(nextState[collectionName])) {
-      if (!document.journalEntryId || (document.documentType && document.documentType !== '01')) continue;
-      const linkedEntry = nextById.get(String(document.journalEntryId));
       const priorDocument = priorDocumentsById.get(String(document.id));
       const priorLinkedEntry = priorDocument?.journalEntryId
         ? priorById.get(String(priorDocument.journalEntryId))
@@ -908,6 +906,8 @@ function validateAccountingSnapshot(previousState, nextState) {
       if (priorLinkWasInvalid && !sameLegacyIdentity) {
         throw new Error('SQLite rechazó un vínculo de factura con un asiento de otra empresa, tipo o documento.');
       }
+      if (!document.journalEntryId || (document.documentType && document.documentType !== '01')) continue;
+      const linkedEntry = nextById.get(String(document.journalEntryId));
       if (!linkedEntry || String(linkedEntry.companyId) !== String(document.companyId) ||
           linkedEntry.type !== expectedEntryType) {
         // Compatibilidad no destructiva: se conserva sin reescritura el vínculo
