@@ -154,6 +154,18 @@ test('recognizes the bank movement reconciled by its own IVA payment journal ent
   ], [account]);
   assert.equal(summary.reconciledCount, 1);
   assert.equal(summary.pendingCount, 0);
+
+  const beforeFiling = buildVatBankReconciliationSummary(declaration, [filed, {
+    ...payment, occurredAt: '2026-10-16'
+  }], [
+    movement('m-1', 60, {
+      date: '2026-10-16', isReconciled: true,
+      reconciledWithJournalEntryId: 'entry-iva-1',
+      reconciledJournalEntryIds: ['entry-iva-1']
+    })
+  ], [account]);
+  assert.equal(beforeFiling.reconciledCount, 0);
+  assert.equal(beforeFiling.pendingCount, 1);
 });
 
 test('rejects impossible calendar dates in payment bank movements', () => {
