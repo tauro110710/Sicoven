@@ -161,6 +161,11 @@ test('IVA TXT classifies a linked supplier credit note and includes its affected
   assert.equal(fields[11], 'F-001');
 });
 
+test('IVA TXT rejects linked purchase identifiers that disagree with the retention voucher', () => {
+  const source = purchase({ invoiceNumber: 'OTHER-INVOICE' });
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [source]), /incompleto o inválido/);
+});
+
 test('IVA TXT refuses an unlinked voucher or a note without its affected invoice', () => {
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ id: 'unrelated-purchase' })]), /compra fuente/);
   const note = purchase({ documentType: '02', debitNoteNumber: 'ND-002', affectedInvoiceNumber: undefined });
