@@ -171,7 +171,7 @@ test('IVA TXT classifies a linked supplier debit note and includes its affected 
 
 test('IVA TXT classifies a linked supplier credit note and includes its affected invoice', () => {
   const source = purchase({ id: 'p-note', originalPurchaseId: 'p-original', documentType: '03', creditNoteNumber: 'NC-001', affectedInvoiceNumber: 'F-001' });
-  const fields = generateSeniatIvaTxt(company, [ivaVoucher({ invoiceNumber: 'NC-001' })], [purchase(), source]).split('\t');
+  const fields = generateSeniatIvaTxt(company, [ivaVoucher({ invoiceNumber: 'NC-001' })], [purchase({ id: 'p-original' }), source]).split('\t');
   assert.equal(fields[4], '03');
   assert.equal(fields[6], 'NC-001');
   assert.equal(fields[11], 'F-001');
