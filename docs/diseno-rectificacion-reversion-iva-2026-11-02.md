@@ -68,6 +68,23 @@ Estados de salida diferenciados:
 5. Implementar el nuevo libro de eventos append-only y sus validaciones SQLite; integrar el expediente de incidencia existente sin convertir `ACTION_RECORDED` en una aprobación fiscal.
 6. Pruebas de concurrencia, atomicidad, recuperación tras reinicio real de Electron y trazabilidad integral.
 
+## 8. Precisión normativa y referencias de consulta
+
+La lectura comparada de la Providencia SNAT/2025/000054 y del COT precisa los siguientes controles de diseño:
+
+- La Providencia 000054 fue publicada en Gaceta Oficial N.º 43.171 el 16-07-2025 y entró en vigencia el 01-08-2025. Derogó la Providencia SNAT/2015/0049.
+- El artículo 11 distingue expresamente el ajuste que disminuye el impuesto antes y después del enteramiento. Si ya se enteró, la vía descrita para el proveedor es el descuento de la cuota tributaria o la recuperación ante SENIAT, según el procedimiento remitido; no una devolución bancaria automática del agente.
+- El artículo 12 separa retención indebida no enterada, retención indebida enterada y enteramiento por el agente superior a lo efectivamente retenido. En este último supuesto, la solicitud de reintegro del agente se remite al artículo 205 y siguientes del COT.
+- El artículo 13 fija el momento de practicar la retención en el pago o abono en cuenta, lo que ocurra primero.
+- El artículo 14 regula la oportunidad del enteramiento por las quincenas y el calendario de sujetos pasivos especiales.
+- El artículo 15 regula la declaración de compras retenidas y el pago del impuesto retenido; el artículo 16 regula el comprobante y su entrega dentro de los primeros dos días hábiles del período siguiente.
+- El artículo 157 del COT permite modificaciones espontáneas mientras no se haya iniciado el procedimiento de fiscalización y determinación, pero establece consecuencias por dos o más declaraciones sustitutivas o por la primera sustitutiva presentada después de doce meses del vencimiento, con excepciones expresas. El motor no puede decidir por sí solo que una sustitutiva procede: requiere validar período, fecha límite, fiscalización y supuesto legal.
+
+Referencias consultadas (copias de consulta; no sustituyen la Gaceta oficial):
+- Providencia SNAT/2025/000054 y reproducción de Gaceta 43.171: https://www.marambio-hlb.com/wp-content/uploads/2025/07/PROVIDENCIA-000054-Ret.-IVA.-G.O.-43.171-16-07-2025.pdf
+- Código Orgánico Tributario, Gaceta 6.507 Extraordinario: https://accesoalajusticia.org/wp-content/uploads/2020/01/Gaceta-Oficial-n.%C2%BA-6.507-Extraordinario-del-29-de-enero-de-2020.pdf
+- La consulta de estas reproducciones no acredita que se haya validado el TXT, los servicios web, el flujo de Portal Fiscal o la aceptación oficial de SICOVEN.
+
 ## 7. Estado de SICOVEN a la fecha
 
 - El PR #85 ya bloquea la reversión contable genérica de asientos vinculados a enteramientos IVA y conserva el vínculo entre evento fiscal, asiento y débitos bancarios.
