@@ -328,6 +328,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const supplierDirectAdvanceInFlightRef = useRef<Set<string>>(new Set());
   // Evita dos enteramientos simultáneos sobre la misma declaración usando el mismo snapshot React.
   const vatPaymentInFlightRef = useRef<Set<string>>(new Set());
+  const vatDeclarationCreationInFlightRef = useRef<Set<string>>(new Set());
   // Los importadores pueden registrar varias facturas en el mismo ciclo de React;
   // estos contadores evitan reutilizar correlativos e identificadores por estado obsoleto.
   const runAtomicInvoiceImport = <T,>(operation: () => T): T => {
@@ -3404,20 +3405,29 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('SQLite no está disponible o todavía no está lista. No se creó la declaración.');
     }
     if (!currentCompany.id) throw new Error('Seleccione una empresa antes de preparar la declaración.');
-    const declaration = buildVatWithholdingDeclaration({
-      id: 'vat-decl-' + Date.now() + '-' + Math.floor(Math.random() * 1000000),
-      companyId: currentCompany.id,
-      year: input.year, month: input.month, window: input.window,
-      vouchers: vatVouchers.filter(item => item.companyId === currentCompany.id),
-      existingDeclarations: vatWithholdingDeclarations,
-      createdAt: new Date().toISOString(),
-      zeroOperations: input.zeroOperations,
-      legacyFiscalDates: input.legacyFiscalDates
-    });
-    const confirmation = waitForPersistence();
-    setVatWithholdingDeclarations(prev => [...prev, declaration]);
-    await confirmation;
-    return declaration;
+    const creationKey = [currentCompany.id, input.year, input.month, input.window].join(':');
+    if (vatDeclarationCreationInFlightRef.current.has(creationKey)) {
+      throw new Error('Ya se está preparando una declaración para esa empresa y quincena. Espere la confirmación de SQLite.');
+    }
+    vatDeclarationCreationInFlightRef.current.add(creationKey);
+    try {
+      const declaration = buildVatWithholdingDeclaration({
+        id: 'vat-decl-' + Date.now() + '-' + Math.floor(Math.random() * 1000000),
+        companyId: currentCompany.id,
+        year: input.year, month: input.month, window: input.window,
+        vouchers: vatVouchers.filter(item => item.companyId === currentCompany.id),
+        existingDeclarations: vatWithholdingDeclarations,
+        createdAt: new Date().toISOString(),
+        zeroOperations: input.zeroOperations,
+        legacyFiscalDates: input.legacyFiscalDates
+      });
+      const confirmation = waitForPersistence();
+      setVatWithholdingDeclarations(prev => [...prev, declaration]);
+      await confirmation;
+      return declaration;
+    } finally {
+      vatDeclarationCreationInFlightRef.current.delete(creationKey);
+    }
   };
 
   const recordVatWithholdingDeclarationEvent = async (
@@ -3442,16 +3452,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     validateVatDeclarationEventDraft(declaration, history, draft);
     validateVatPaymentBankLinks({ companyId: currentCompany.id, declaration, draft, events: vatWithholdingDeclarationEvents, bankAccounts, bankMovements: bankStatementMovements });
-    // Bloquea tanto la declaración como cada débito bancario: un mismo movimiento
-    // no puede respaldar pagos simultáneos de declaraciones diferentes.
-    const paymentLockKeys = draft.eventType === 'PAYMENT'
-      ? [
-          'declaration:' + declarationId,
-          ...(draft.bankStatementMovementIds || []).map(id => 'bank-movement:' + id)
-        ]
-      : [];
+    // Serializa todos los eventos de una declaración hasta confirmar SQLite.
+    // Así REVIEWED/FILED/PAYMENT no pueden competir usando el mismo historial React.
+    // Los débitos también se bloquean globalmente para impedir su reutilización
+    // simultánea entre declaraciones distintas.
+    const paymentLockKeys = [
+      'declaration-event:' + declarationId,
+      ...(draft.eventType === 'PAYMENT'
+        ? (draft.bankStatementMovementIds || []).map(id => 'bank-movement:' + id)
+        : [])
+    ];
     if (paymentLockKeys.some(key => vatPaymentInFlightRef.current.has(key))) {
-      throw new Error('Ya hay un enteramiento IVA en proceso para esta declaración o uno de los débitos bancarios seleccionados. Espere la confirmación de SQLite.');
+      throw new Error('Ya hay un evento fiscal en proceso para esta declaración o uno de los débitos bancarios seleccionados. Espere la confirmación de SQLite.');
     }
     paymentLockKeys.forEach(key => vatPaymentInFlightRef.current.add(key));
     let resolvePersistence!: () => void;
