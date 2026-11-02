@@ -188,6 +188,22 @@ test('rejects a same-company journal entry that is not linked to the original VA
   db.close();
 });
 
+test('does not allow adding a declaration to an incident created without one', () => {
+  const { db } = fixture();
+  const created = createVatFiscalIncident(db, createInput({
+    vatVoucherId: undefined, declarationId: undefined,
+    declarationEventIds: [], bankMovementIds: []
+  }), actor);
+  assert.equal(created.declarationId, null);
+  assert.throws(() => recordVatFiscalIncidentEvent(db, {
+    incidentId: created.id, eventType: 'REVIEW_RECORDED',
+    decisionText: 'Se intenta incorporar después una declaración que no fue vinculada al abrir el expediente.',
+    declarationId: 'declaration-1'
+  }, actor), /declaración del expediente es inmutable/);
+  assert.equal(getVatFiscalIncident(db, created.id).events.length, 1);
+  db.close();
+});
+
 test('requires a documented decision and an authorized administrator', () => {
   const { db } = fixture();
   assert.throws(() => createVatFiscalIncident(db, createInput({ reason: 'corto' }), actor), /Motivo/);
