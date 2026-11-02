@@ -1,6 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { persistAccountingSnapshot, registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
 
 const emptyState = () => ({
@@ -10,8 +13,8 @@ const emptyState = () => ({
   creditSettlements: [], displayCurrency: 'DUAL'
 });
 
-function createHarness({ authorized = true, validSession = true } = {}) {
-  const db = new Database(':memory:');
+function createHarness({ authorized = true, validSession = true, dbPath = ':memory:' } = {}) {
+  const db = new Database(dbPath);
   db.exec(`
     CREATE TABLE app_state (
       state_key TEXT PRIMARY KEY,
@@ -460,8 +463,10 @@ test('SQLite does not duplicate an opening that predates the exercise-link migra
 });
 
 
-test('SQLite appends an audit event when a VAT declaration is prepared and when its lifecycle advances', () => {
-  const harness = createHarness();
+test('SQLite restores a paid IVA declaration, journal and reconciled bank evidence after database restart', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-iva-restart-'));
+  const dbPath = path.join(tempDir, 'sicoven.sqlite');
+  const harness = createHarness({ dbPath });
   try {
     const voucher = {
       id: 'vat-audit-1', companyId: 'company-1', voucherNumber: '20261000000001',
@@ -565,8 +570,33 @@ test('SQLite appends an audit event when a VAT declaration is prepared and when 
     assert.equal(paymentDetails.amountBs, 120);
     assert.equal(paymentDetails.amountUsd, 1.2);
     assert.deepEqual(paymentDetails.bankStatementMovementIds, ['bank-debit-1']);
-  } finally {
+
+    // Simulate closing SICOVEN and opening the same on-disk SQLite database again.
     harness.db.close();
+    const reopenedDb = new Database(dbPath);
+    try {
+      const restored = JSON.parse(reopenedDb.prepare(
+        "SELECT state_json FROM app_state WHERE state_key='accounting'"
+      ).get().state_json);
+      assert.equal(restored.vatWithholdingDeclarationEvents.find(event => event.id === payment.id).journalEntryId, paymentJournal.id);
+      assert.equal(restored.journalEntries.find(entry => entry.id === paymentJournal.id).type, 'RETENCION_IVA');
+      const restoredMovement = restored.bankStatementMovements.find(item => item.id === 'bank-debit-1');
+      assert.equal(restoredMovement.isReconciled, true);
+      assert.equal(restoredMovement.reconciledWithJournalEntryId, paymentJournal.id);
+      assert.deepEqual(restoredMovement.reconciledJournalEntryIds, [paymentJournal.id]);
+      const restoredAudit = reopenedDb.prepare(
+        "SELECT details_json FROM audit_events WHERE event_type='vat_withholding_declaration_event' ORDER BY id DESC LIMIT 1"
+      ).get();
+      const restoredDetails = JSON.parse(restoredAudit.details_json);
+      assert.equal(restoredDetails.journalEntryId, paymentJournal.id);
+      assert.equal(restoredDetails.amountUsd, 1.2);
+      assert.deepEqual(restoredDetails.bankStatementMovementIds, ['bank-debit-1']);
+    } finally {
+      reopenedDb.close();
+    }
+  } finally {
+    try { harness.db.close(); } catch {}
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
