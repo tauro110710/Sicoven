@@ -58,10 +58,10 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     const documentPeriod = invoiceDate.slice(0, 7).replace('-', '');
     const documentType = linkedPurchase?.documentType || '';
     const documentNumber = documentType === '02'
-      ? String(linkedPurchase?.debitNoteNumber || '')
+      ? String(linkedPurchase.debitNoteNumber || '')
       : documentType === '03'
-        ? String(linkedPurchase?.creditNoteNumber || '')
-        : String(linkedPurchase?.invoiceNumber || v.invoiceNumber || '');
+        ? String(linkedPurchase.creditNoteNumber || '')
+        : String(linkedPurchase.invoiceNumber || '');
     const affectedDocument = documentType === '01' ? '0' : String(linkedPurchase?.affectedInvoiceNumber || '').trim();
     const expectedVat = Math.round(Number(v.taxableBaseBs) * Number(v.taxRate)) / 100;
     const expectedWithheld = Math.round(expectedVat * Number(v.retentionRate)) / 100;
