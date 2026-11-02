@@ -190,7 +190,10 @@ test('rejects impossible calendar dates in payment bank movements', () => {
       reconciledJournalEntryIds: ['entry-iva-invalid-date']
     })
   ], [account]);
-  assert.equal(summary.reconciledCount, 1);
+  // A bank link alone is insufficient: reconciliation requires the real,
+  // matching IVA journal entry to be present in the supplied accounting ledger.
+  assert.equal(summary.reconciledCount, 0);
+  assert.equal(summary.pendingCount, 1);
   const invalidSummary = buildVatBankReconciliationSummary(declaration, [filed, payment], [
     movement('m-1', 60, {
       date: '2026-02-30', isReconciled: true,
