@@ -66,7 +66,8 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
         amounts.some(value => !Number.isFinite(Number(value)) || Number(value) < 0) ||
         Number(v.taxRate) > 100 || !validRetentionRate ||
         Math.abs(Number(v.vatAmountBs) - expectedVat) > 0.01 ||
-        Math.abs(Number(v.vatWithheldBs) - expectedWithheld) > 0.01) {
+        Math.abs(Number(v.vatWithheldBs) - expectedWithheld) > 0.01 ||
+        Math.abs(Number(v.totalAmountBs) - (Number(v.exemptAmountBs || 0) + Number(v.taxableBaseBs) + Number(v.vatAmountBs))) > 0.01) {
       throw new Error('Comprobante de retención IVA incompleto o inválido. Revise período, fecha, RIF, numeración, alícuota e importes; no se generan valores sustitutos.');
     }
     const docType = documentType;
