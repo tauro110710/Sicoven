@@ -122,6 +122,8 @@ export function buildVatWithholdingDeclaration(input: {
       taxableBaseBs: money(values[0]),
       vatAmountBs: money(values[1]),
       vatWithheldBs: money(values[2]),
+      vatWithheldUsd: Number.isFinite(Number(voucher.vatWithheldUsd)) && Number(voucher.vatWithheldUsd) >= 0 ? money(Number(voucher.vatWithheldUsd)) : undefined,
+      bcvRate: Number.isFinite(Number(voucher.bcvRate)) && Number(voucher.bcvRate) > 0 ? Number(voucher.bcvRate) : undefined,
       requiresFiscalCorrection: Boolean(voucher.requiresFiscalCorrection)
     };
   });
@@ -138,6 +140,8 @@ export function buildVatWithholdingDeclaration(input: {
     totalTaxableBaseBs: sum('taxableBaseBs'),
     totalVatAmountBs: sum('vatAmountBs'),
     totalWithheldBs: sum('vatWithheldBs'),
+    totalWithheldUsd: snapshots.every(item => Number.isFinite(item.vatWithheldUsd) && Number(item.vatWithheldUsd) >= 0)
+      ? money(snapshots.reduce((total, item) => total + Number(item.vatWithheldUsd), 0)) : undefined,
     createdAt: input.createdAt,
     ...(input.createdBy ? { createdBy: input.createdBy } : {})
   };
