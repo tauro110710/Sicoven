@@ -98,7 +98,7 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     const rate = Number(v.taxRate).toFixed(2);
     const expeditionNum = '0';
 
-    // Fila estándar SENIAT
+    // Fila de agente de retención: la columna 11 es el IVA efectivamente retenido.
     const fields = [
       agentRif,
       period,
@@ -110,7 +110,7 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
       controlNum,
       totalAmount,
       baseAmount,
-      Number(v.vatAmountBs).toFixed(2),
+      withheldAmount,
       affectedDoc,
       voucherNum,
       exemptAmount,
