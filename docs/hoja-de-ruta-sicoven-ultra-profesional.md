@@ -900,3 +900,38 @@ Se verificaron en `main`:
 3. Diseñar recepción de mercancía adicional y ajuste de costo con evidencia y movimientos reales de inventario; no desbloquear por mera clasificación.
 4. Validar fiscalidad, retenciones e IGTF solo con fuente primaria vigente y revisión profesional.
 5. Mantener SQLite local como única fuente de verdad, el administrador semilla intocable y sin publicar instaladores/releases sin autorización.
+
+
+# ACTUALIZACIÓN DE CONTINUIDAD — 02/11/2026 — RELEASE 1.0.9 Y RECTIFICACIÓN IVA
+
+Esta actualización prevalece sobre cualquier referencia anterior a la versión estable, estado de PR #85 y estado de PR #87.
+
+## Publicación estable SICOVEN 1.0.9 — COMPLETADA
+- Release oficial: https://github.com/fenixlife1978/Sicoven/releases/tag/v1.0.9
+- Etiqueta: `v1.0.9`, no pre-release y marcada como Latest.
+- Commit etiquetado: `8ab9ceb559b060d7f541ee476754d47dd3e2c6d9`.
+- Instalador publicado: `SICOVEN-Setup-1.0.9-x64.exe` (135,181,031 bytes).
+- SHA-256: `d3c4285e6e4b4d3967a0c4870ade6b81b9d7de0d2eb660c54bba81aaa42228fb`.
+- CI de escritorio, TypeScript, pruebas automatizadas, auditoría de recursos, compilación NSIS, prueba real de actualización 1.0.6 → 1.0.9 y conservación de SQLite tras reinicio: SUCCESS en el workflow Windows #1444 (run 41520335682).
+- Verificación posterior a la publicación mediante API de GitHub: release `draft=false`, `prerelease=false`, `latest`, asset `state=uploaded`; etiqueta apunta al SHA esperado.
+
+## Bloque fiscal IVA — actualización de PR
+- **PR #85 — INTEGRADA:** commit de integración `7bc9f0e31d4818186fc318019105a7a1e4bafba7`. Control de entrega de comprobantes, exportación de período completo, conciliación bancaria de enteramientos, base USD histórica, diferencial cambiario, atomicidad y bloqueo de reversión contable genérica. El bloqueante A fue expresamente omitido por instrucción del titular; no se reabrió ni se usó para impedir la fusión. Los límites normativos permanecen documentados.
+- **PR #87 — INTEGRADA:** commit de integración `8fe29a34fa0e7ed9ecb7970817d20dd9ac7c3840`. Precisa los artículos 11–16 de la Providencia SNAT/2025/000054 y el artículo 157 del COT para separar rectificación tributaria, ajuste contable y reintegro bancario. Las referencias son copias de consulta; no prueban aceptación del TXT ni homologación SENIAT.
+- La rama `main` quedó en `8fe29a34fa0e7ed9ecb7970817d20dd9ac7c3840` después de integrar PR #87 y antes de cualquier cambio posterior.
+
+## Certificación operativa contable — PR #83
+- PR #83 permanece ABIERTA y en borrador; su rama candidata corresponde a SICOVEN 1.0.8 y parte de una base anterior a los cambios recientes de `main`.
+- En su SHA candidato `75ebbc63061545205e845b84dccd9160325a8658`, Desktop Validation run 41376676383 y Windows Installer run 41376676500 terminaron SUCCESS.
+- No se fusiona automáticamente: el PR declara G13 (restauración recuperable) pendiente de aceptación de fallos y pruebas en entorno Windows real. Además, debe actualizarse/rebasarse para evaluar la certificación sobre la línea base 1.0.9 y comprobar que no introduce publicación automática no autorizada.
+- No se declara certificación operativa integral mientras G1–G15 y la aceptación real pendiente no estén demostrados.
+
+## Próxima secuencia activa
+1. Auditar PR #83 contra `main` posterior a 1.0.9; separar y corregir cualquier cambio de workflow que publique releases automáticamente o modifique permisos más allá de lo necesario.
+2. Actualizar la certificación de 1.0.8 a una candidata basada en 1.0.9, preservando SQLite y administrador semilla.
+3. Ejecutar y documentar gates pendientes de restauración física (G13), incluidos fallos/interrupciones, rollback, integridad de base y documentos, y aceptación en Windows real.
+4. Continuar los frentes fiscales que no requieren una especificación SENIAT inaccesible; mantener bloqueada cualquier afirmación de homologación o aceptación del TXT hasta obtener evidencia primaria vigente y prueba autorizada del Portal Fiscal.
+5. Mantener SQLite local como única fuente de verdad, SICOVEN como aplicación de escritorio, y REME fuera del alcance funcional activo.
+
+## Instrucción permanente para mostrar el Plan Maestro
+Cada vez que el titular solicite el Plan Maestro actualizado, se entregará COMPLETO, conservando bloques, subbloques, estructura, numeración, dependencias y pendientes; cada tarea realizada se marcará con `[x]` y cada tarea pendiente con `[ ]`. Esta instrucción se incluirá nuevamente dentro de cada versión actualizada del propio Plan Maestro. No se presentará un resumen en sustitución del documento completo y no se marcará nada como completado sin evidencia de integración o pruebas.
