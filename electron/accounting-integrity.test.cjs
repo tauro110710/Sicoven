@@ -1728,9 +1728,11 @@ test('SQLite enforces review, filing receipt and supported payment event order f
   assert.throws(() => validateAccountingSnapshot(emptyState(), {
     ...state, vatWithholdingDeclarationEvents: [reviewed, payment]
   }), /enteramiento/);
-  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), {
+  // A bank debit alone is not sufficient: every new IVA payment must be
+  // atomically linked to its RETENCION_IVA journal and reconciled movement.
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
     ...state, ...paymentBankSupport, vatWithholdingDeclarationEvents: [reviewed, filed, payment]
-  }));
+  }), /asiento contable IVA correspondiente/);
 });
 
 test('SQLite blocks review of VAT declarations with pending fiscal corrections or unacknowledged legacy dates', () => {
