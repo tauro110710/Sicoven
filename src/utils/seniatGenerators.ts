@@ -134,22 +134,12 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
   return lines.join('\r\n');
 }
 
-/**
- * Registro de declaración informativa sin operaciones sujetas a retención.
- * La obligación de declarar en cero deriva del art. 15 de la Providencia
- * SNAT/2025/000054. La fila de 16 columnas es una adaptación conservadora
- * del modelo TXT histórico; debe validarse en el ambiente oficial SENIAT.
+/** 
+ * Las declaraciones sin operaciones se registran como evento fiscal y se presentan
+ * en el Portal Fiscal conforme al procedimiento habilitado por el SENIAT.
+ * No se fabrica una fila TXT de 16 campos: el instructivo técnico consultado no
+ * define una fila sintética para representar una declaración sin operaciones.
  */
-export function generateSeniatIvaZeroOperationsTxt(company: Company, period: string): string {
-  const agentRif = cleanRif(company.rif);
-  if (!validateVenezuelanRif(company.rif).isValid) {
-    throw new Error('El RIF del agente de retención no cumple la estructura venezolana válida.');
-  }
-  if (!/^\d{4}(0[1-9]|1[0-2])$/.test(period)) {
-    throw new Error('Seleccione un período fiscal válido para la declaración sin operaciones.');
-  }
-  return [agentRif, period, ...Array(14).fill('0')].join('\t');
-}
 
 /**
  * Genera el archivo XML oficial de Retenciones de ISLR para el portal SENIAT
