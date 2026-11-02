@@ -176,6 +176,20 @@ test('IVA TXT classifies a linked supplier credit note and includes its affected
   assert.equal(fields[11], 'F-001');
 });
 
+test('IVA TXT refuses to infer document type when source purchases are omitted', () => {
+  assert.throws(() => generateSeniatIvaTxtRaw(company, [ivaVoucher()]), /requiere las compras fuente/);
+});
+
+test('IVA TXT rejects missing or unsupported source document types instead of defaulting to invoice', () => {
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ documentType: undefined })]), /incompleto o inválido/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ documentType: '04' })]), /incompleto o inválido/);
+});
+
+test('IVA TXT rejects tab and newline injection in source document identifiers', () => {
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ invoiceNumber: 'F-001\\tINJECT' })]), /incompleto o inválido|16 columnas/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ controlNumber: '00-123\\r\\nINJECT' })]), /incompleto o inválido|16 columnas/);
+});
+
 test('IVA TXT rejects an empty supplied purchase collection instead of silently downgrading to legacy mode', () => {
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], []), /compra fuente/);
 });
