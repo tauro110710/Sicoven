@@ -216,6 +216,9 @@ function recordVatFiscalIncidentEvent(db, input, actor) {
   const eventType = String(input.eventType || '');
   if (!['REVIEW_RECORDED','ACTION_RECORDED'].includes(eventType)) throw new Error('Tipo de evento de incidencia no admitido.');
   const decisionText = requiredText(input.decisionText, 'Decisión o actuación documentada', 3000, 20);
+  if (String(input.declarationId || '') !== String(incident.declaration_id || '')) {
+    throw new Error('La declaración del expediente es inmutable; no se puede incorporar ni sustituir después de registrar la incidencia.');
+  }
   const state = readAccountingState(db);
   const references = validateReferences(state, input, String(incident.company_id), incident.declaration_id);
   if (references.voucherId && references.voucherId !== incident.vat_voucher_id) throw new Error('No se puede sustituir el comprobante original del expediente.');
