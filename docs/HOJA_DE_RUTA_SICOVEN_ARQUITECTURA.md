@@ -57,3 +57,12 @@ La validación del producto se realiza mediante:
 - El instructivo RI_DRIVA2020-IT01V3_0_0 es de septiembre de 2020 y documenta 16 campos separados por tabulador. No se ha localizado una especificación técnica SENIAT posterior que confirme que el layout sigue sin cambios a noviembre de 2026.
 - El instructivo de 2020 documenta separador tabulador y carga del archivo TXT. La salida se mantiene UTF-8 sin BOM, CRLF entre registros y sin salto final para archivos con operaciones; esta codificación aún requiere prueba de aceptación en ambiente SENIAT.
 - Estado de homologación: pendiente. Requiere confirmar el layout técnico vigente con SENIAT y procesar archivos de prueba representativos (factura, ND, NC, exento, alícuotas vigentes, declaración cero) en el ambiente oficial.
+
+
+## Endurecimiento adicional del TXT IVA (2026-11-02)
+
+- El proveedor con RIF igual a cero se admite únicamente cuando la retención es del 100%, conforme a la regla expresa del instructivo RI_DRIVA2020-IT01V3_0_0 para proveedor sin RIF y al supuesto de retención total de la Providencia SNAT/2025/000054.
+- Se bloquean comprobantes vinculados a compras anuladas, notas cuyo documento original esté anulado y documentos con monto total cero.
+- La compra fuente debe aportar su propio número de factura; no se permite completar el dato faltante usando el número que venga en el comprobante de retención.
+- Se añadieron pruebas de regresión para RIF cero/retención total, compra anulada, factura afectada anulada, documento cero y número de factura fuente ausente.
+- La última tanda de CI/validación/instalador se encuentra en ejecución sobre los cambios finales; no declarar verde hasta que concluyan los tres flujos sobre el mismo SHA.
