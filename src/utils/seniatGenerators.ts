@@ -26,11 +26,16 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     throw new Error('La exportación está bloqueada: existen comprobantes con corrección fiscal pendiente.');
   }
 
-  const enforcePurchaseLink = Array.isArray(purchases);
-  const purchasesById = new Map((purchases || []).filter(purchase => purchase.companyId === company.id).map(purchase => [purchase.id, purchase]));
+  // La clasificación fiscal no puede inferirse desde el número de factura ni
+  // degradarse silenciosamente a factura 01. Se exige la compra fuente para
+  // distinguir factura, nota de débito y nota de crédito con trazabilidad.
+  if (!Array.isArray(purchases)) {
+    throw new Error('La exportación TXT IVA requiere las compras fuente para validar el tipo documental; no se permite clasificar documentos por defecto.');
+  }
+  const purchasesById = new Map(purchases.filter(purchase => purchase.companyId === company.id).map(purchase => [purchase.id, purchase]));
 
   for (const v of vouchers) {
-    const linkedPurchase = enforcePurchaseLink ? purchasesById.get(v.purchaseRecordId) : undefined;
+    const linkedPurchase = purchasesById.get(v.purchaseRecordId);
     if (enforcePurchaseLink && !linkedPurchase) {
       throw new Error(`El comprobante ${v.voucherNumber} no tiene una compra fuente válida vinculada; no se puede clasificar el documento.`);
     }
@@ -47,7 +52,7 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     const validPeriod = /^\d{4}(0[1-9]|1[0-2])$/.test(period);
     const validRetentionRate = Number(v.retentionRate) === 75 || Number(v.retentionRate) === 100;
     const documentPeriod = invoiceDate.slice(0, 7).replace('-', '');
-    const documentType = linkedPurchase?.documentType || '01';
+    const documentType = linkedPurchase?.documentType || '';
     const documentNumber = documentType === '02'
       ? String(linkedPurchase?.debitNoteNumber || '')
       : documentType === '03'
@@ -80,7 +85,7 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     const expeditionNum = '0';
 
     // Fila estándar SENIAT
-    const line = [
+    const fields = [
       agentRif,
       period,
       invoiceDate,
@@ -97,9 +102,11 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
       exemptAmount,
       rate,
       expeditionNum
-    ].join('\t');
-
-    lines.push(line);
+    ];
+    if (fields.length !== 16 || fields.some(value => /[\t\r\n]/.test(value))) {
+      throw new Error('El comprobante contiene campos incompatibles con el formato TXT de 16 columnas; se bloqueó la exportación para evitar desplazar datos.');
+    }
+    lines.push(fields.join('\t'));
   }
 
   return lines.join('\r\n');
