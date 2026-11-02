@@ -42,7 +42,9 @@ export function buildVatPaymentAccountingPlan(input: {
   const bankBs=cents([...groups.values()].reduce((s,g)=>s+g.bs,0));
   const amountUsd=micros([...groups.values()].reduce((s,g)=>s+g.usd,0));
   if (Math.abs(bankBs-amountBs)>=0.01) throw new Error('Los débitos bancarios no coinciden exactamente con el importe en bolívares del pago fiscal.');
-  const diff=micros(amountUsd-liabilityUsd);
+  // Positivo: el pasivo histórico supera el débito bancario equivalente (ganancia).
+  // Negativo: el débito bancario supera el pasivo histórico (pérdida).
+  const diff=micros(liabilityUsd-amountUsd);
   const items:JournalEntryItem[]=[{accountCode:liability.code,accountName:liability.name,debitBs:amountBs,creditBs:0,debitUsd:liabilityUsd,creditUsd:0,description:'Cancelación del pasivo IVA a su valor USD histórico'}];
   for(const [code,g] of groups){const ac=input.accounts.find(x=>x.code===code)!;items.push({accountCode:code,accountName:ac.name,debitBs:0,creditBs:cents(g.bs),debitUsd:0,creditUsd:micros(g.usd),description:'Débito bancario '+g.bank.bankName+' · '+g.bank.accountNumber});}
   if(diff>0){const ac=input.accounts.find(x=>x.code==='4.2.1.01'&&x.type==='INGRESOS'&&x.isMovement);if(!ac)throw new Error('Falta la cuenta de movimiento 4.2.1.01 para ganancia por diferencial cambiario.');items.push({accountCode:ac.code,accountName:ac.name,debitBs:0,creditBs:0,debitUsd:0,creditUsd:diff,description:'Ganancia por diferencial cambiario en enteramiento IVA'});}
