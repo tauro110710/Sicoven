@@ -219,6 +219,15 @@ function recordVatFiscalIncidentEvent(db, input, actor) {
   const state = readAccountingState(db);
   const references = validateReferences(state, input, String(incident.company_id), incident.declaration_id);
   if (references.voucherId && references.voucherId !== incident.vat_voucher_id) throw new Error('No se puede sustituir el comprobante original del expediente.');
+  if (references.journalEntryId) {
+    const voucher = incident.vat_voucher_id ? byId(state.vatVouchers, incident.vat_voucher_id) : null;
+    const linkedCorrectionIds = voucher
+      ? [...new Set([voucher.correctionEntryId, ...(Array.isArray(voucher.correctionEntryIds) ? voucher.correctionEntryIds : [])].filter(Boolean).map(String))]
+      : [];
+    if (!linkedCorrectionIds.includes(references.journalEntryId)) {
+      throw new Error('El asiento correctivo debe estar enlazado previamente al comprobante IVA original; no se aceptan asientos de la misma empresa sin vínculo fiscal.');
+    }
+  }
   const priorEvents = JSON.parse(incident.declaration_event_ids_json);
   const priorMovements = JSON.parse(incident.bank_movement_ids_json);
   if (references.declarationEventIds.some(id => !priorEvents.includes(id))) throw new Error('El evento no puede incorporar referencias fiscales ajenas al expediente original.');
