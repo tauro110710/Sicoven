@@ -176,6 +176,21 @@ test('IVA TXT refuses an unlinked voucher or a note without its affected invoice
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ invoiceNumber: 'ND-002' })], [note]), /incompleto o inválido/);
 });
 
+test('IVA TXT rejects supplier, issue-date and control mismatches against the source purchase', () => {
+  const base = purchase();
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ supplierRif: 'J-11111111-1' })]), /incompleto o inválido/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ invoiceDate: '2026-10-06' })]), /incompleto o inválido/);
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher()], [purchase({ controlNumber: '00-999' })]), /incompleto o inválido/);
+  assert.equal(base.id, 'p1');
+});
+
+test('IVA TXT rejects a document date after its declared period', () => {
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({
+    invoiceDate: '2026-11-01',
+    voucherNumber: '20261000000002'
+  })]), /incompleto o inválido/);
+});
+
 test('IVA TXT rejects missing invoice/control identifiers instead of inventing replacements', () => {
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ invoiceNumber: '' })]), /incompleto o inválido/);
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ controlNumber: '' })]), /incompleto o inválido/);
