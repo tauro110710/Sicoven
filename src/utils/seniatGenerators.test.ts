@@ -155,7 +155,7 @@ const generateSeniatIvaTxt = (
 );
 
 test('IVA TXT exports only real voucher identifiers and the supplied amounts', () => {
-  const txt = generateSeniatIvaTxt(company, [ivaVoucher()]);
+  const txt = generateSeniatIvaTxt(company, [ivaVoucher()], [purchase()]);
   assert.match(txt, /^J123456789\t202610\t2026-10-05\tC\t01\tJ987654321\tF-001\t00-123\t1160\.00\t1000\.00\t120\.00/);
   assert.match(txt, /20261000000001/);
   assert.equal(txt.split('\t').length, 16);
@@ -257,7 +257,7 @@ test('IVA TXT without operations emits one 16-column zero row with agent RIF and
   assert.equal(fields[0], 'J123456789');
   assert.equal(fields[1], '202610');
   assert.ok(fields.slice(2).every(value => value === '0'));
-  assert.doesNotMatch(txt, /\\r|\\n/);
+  assert.doesNotMatch(txt, /\r|\n/);
 });
 
 test('IVA zero-operations TXT rejects invalid agent RIF and fiscal period', () => {
@@ -307,7 +307,7 @@ test('IVA TXT rejects duplicated voucher IDs or numbers and fiscal corrections s
 // RI_DRIVA2020-IT01V3_0_0). No equivalen a homologación ni sustituyen el contraste
 // con la especificación primaria vigente y una prueba de carga del Portal Fiscal.
 test('IVA TXT conserva el orden y significado de los 16 campos del instructivo histórico', () => {
-  const fields = generateSeniatIvaTxt(company, [ivaVoucher()]).split('\t');
+  const fields = generateSeniatIvaTxt(company, [ivaVoucher()], [purchase()]).split('\t');
   assert.deepEqual(fields, [
     'J123456789',       // 1 RIF agente
     '202610',           // 2 período de imposición
@@ -365,7 +365,7 @@ test('IVA TXT covers reduced rate with 75% retention and general rate with 100% 
     id: 'iva-reduced', voucherNumber: '20261000000011',
     taxableBaseBs: 1250, taxRate: 8, vatAmountBs: 100,
     retentionRate: 75, vatWithheldBs: 75, totalAmountBs: 1350
-  })]).split('\t');
+  })], [purchase({ id: 'p-reduced', invoiceNumber: 'F-001' })]).split('\t');
   assert.equal(reduced[9], '1250.00');
   assert.equal(reduced[10], '75.00');
   assert.equal(reduced[14], '8.00');
@@ -374,7 +374,7 @@ test('IVA TXT covers reduced rate with 75% retention and general rate with 100% 
     id: 'iva-full', voucherNumber: '20261000000012',
     taxableBaseBs: 500, taxRate: 16, vatAmountBs: 80,
     retentionRate: 100, vatWithheldBs: 80, totalAmountBs: 580
-  })]).split('\t');
+  })], [purchase({ id: 'p-full', invoiceNumber: 'F-001' })]).split('\t');
   assert.equal(full[10], '80.00');
   assert.equal(full[14], '16.00');
 });
@@ -384,7 +384,7 @@ test('IVA TXT permits an exempt document with zero taxable base and zero withhol
     id: 'iva-exempt', voucherNumber: '20261000000013',
     totalAmountBs: 450, exemptAmountBs: 450, taxableBaseBs: 0,
     taxRate: 0, vatAmountBs: 0, retentionRate: 75, vatWithheldBs: 0
-  })]).split('\t');
+  })], [purchase({ id: 'p-exempt', invoiceNumber: 'F-001' })]).split('\t');
   assert.equal(fields[8], '450.00');
   assert.equal(fields[9], '0.00');
   assert.equal(fields[10], '0.00');
