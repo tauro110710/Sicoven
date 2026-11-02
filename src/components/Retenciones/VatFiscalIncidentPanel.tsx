@@ -35,10 +35,11 @@ export const VatFiscalIncidentPanel: React.FC = () => {
     }
     const purchase = purchases.find(p => p.id === selectedPurchaseId);
     if (!purchase) return;
-    const originalPurchase = purchase.originalPurchaseId
-      ? purchases.find(p => p.id === purchase.originalPurchaseId && p.companyId === currentCompany.id)
-      : purchases.find(p => p.companyId === currentCompany.id && p.documentType === '01' &&
-          String(p.invoiceNumber || '').trim().toUpperCase() === String(purchase.affectedInvoiceNumber || '').trim().toUpperCase());
+    const linkedById = purchase.originalPurchaseId
+      ? purchases.find(p => p.id === purchase.originalPurchaseId && p.companyId === currentCompany.id && p.documentType === '01')
+      : undefined;
+    const originalPurchase = linkedById || purchases.find(p => p.companyId === currentCompany.id && p.documentType === '01' &&
+      String(p.invoiceNumber || '').trim().toUpperCase() === String(purchase.affectedInvoiceNumber || '').trim().toUpperCase());
     const voucher = originalPurchase
       ? vatVouchers.find(v => v.companyId === currentCompany.id && v.purchaseRecordId === originalPurchase.id)
       : undefined;
