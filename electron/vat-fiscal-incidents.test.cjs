@@ -23,7 +23,7 @@ function fixture() {
       { id: 'debit-2', companyId: 'co-2', documentType: '02', debitNoteNumber: 'ND-2', affectedInvoiceNumber: 'FAC-200', originalPurchaseId: 'invoice-2' },
       { id: 'invoice-2', companyId: 'co-2', documentType: '01', invoiceNumber: 'FAC-200' }
     ],
-    vatVouchers: [{ id: 'voucher-1', companyId: 'co-1', purchaseRecordId: 'invoice-1' }],
+    vatVouchers: [{ id: 'voucher-1', companyId: 'co-1', purchaseRecordId: 'invoice-1', correctionEntryIds: ['journal-1'] }],
     vatWithholdingDeclarations: [{ id: 'declaration-1', companyId: 'co-1', voucherIds: ['voucher-1'] }],
     vatWithholdingDeclarationEvents: [
       { id: 'filed-1', declarationId: 'declaration-1', eventType: 'FILED' },
@@ -31,7 +31,7 @@ function fixture() {
       { id: 'payment-2', declarationId: 'declaration-1', eventType: 'PAYMENT', bankStatementMovementIds: ['bank-1'] }
     ],
     bankStatementMovements: [{ id: 'bank-1', companyId: 'co-1' }, { id: 'bank-2', companyId: 'co-2' }],
-    journalEntries: [{ id: 'journal-1', companyId: 'co-1' }]
+    journalEntries: [{ id: 'journal-1', companyId: 'co-1' }, { id: 'journal-unrelated', companyId: 'co-1' }]
   };
   db.prepare('INSERT INTO app_state(state_key,state_json) VALUES(?,?)').run('accounting', JSON.stringify(state));
   initializeVatFiscalIncidentSchema(db);
@@ -168,6 +168,23 @@ test('rejects event attempts to attach another company journal or unlinked bank 
     decisionText: 'Se intenta vincular un movimiento bancario no incluido en el pago del expediente.',
     declarationId: 'declaration-1', declarationEventIds: ['filed-1'], bankMovementIds: ['bank-1']
   }, actor), /solo pueden vincularse/);
+  db.close();
+});
+
+test('rejects a same-company journal entry that is not linked to the original VAT voucher correction trail', () => {
+  const { db } = fixture();
+  const created = createVatFiscalIncident(db, createInput(), actor);
+  assert.throws(() => recordVatFiscalIncidentEvent(db, {
+    incidentId: created.id, eventType: 'ACTION_RECORDED',
+    decisionText: 'Se intenta adjuntar un asiento de la empresa sin vínculo con el comprobante IVA original.',
+    declarationId: 'declaration-1', journalEntryId: 'journal-unrelated'
+  }, actor), /enlazado previamente al comprobante IVA original/);
+  const valid = recordVatFiscalIncidentEvent(db, {
+    incidentId: created.id, eventType: 'ACTION_RECORDED',
+    decisionText: 'Se adjunta el asiento correctivo previamente vinculado al comprobante IVA original.',
+    declarationId: 'declaration-1', journalEntryId: 'journal-1'
+  }, actor);
+  assert.equal(valid.events.at(-1).journalEntryId, 'journal-1');
   db.close();
 });
 
