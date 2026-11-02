@@ -75,6 +75,71 @@ export interface VatBankReconciliationLine {
   movements: BankStatementMovement[];
 }
 
+function hasValidVatPaymentJournal(
+  entry: JournalEntry,
+  amountBs: number,
+  movements: BankStatementMovement[],
+  bankAccounts: BankAccount[]
+): boolean {
+  if (!Array.isArray(entry.items) || entry.items.length < 2) return false;
+  const values = entry.items.flatMap(item => [
+    item.debitBs, item.creditBs, item.debitUsd, item.creditUsd
+  ]);
+  if (values.some(value => !Number.isFinite(Number(value)) || Number(value) < 0)) return false;
+  const sum = (key: 'debitBs' | 'creditBs' | 'debitUsd' | 'creditUsd') =>
+    entry.items.reduce((total, item) => total + Number(item[key]), 0);
+  if (Math.abs(cents(sum('debitBs')) - cents(sum('creditBs'))) > 0 ||
+      Math.abs(Math.round(sum('debitUsd') * 1e6) - Math.round(sum('creditUsd') * 1e6)) > 0) return false;
+
+  const expectedBanks = new Map<string, number>();
+  for (const movement of movements) {
+    const account = bankAccounts.find(item =>
+      item.id === movement.bankAccountId && item.companyId === entry.companyId);
+    if (!account || account.currency !== 'BS' || !account.accountCode) return false;
+    expectedBanks.set(account.accountCode,
+      cents((expectedBanks.get(account.accountCode) || 0) + Number(movement.amountBs)));
+  }
+  const liabilityLines = entry.items.filter(item => item.accountCode === '2.1.2.03');
+  if (liabilityLines.length !== 1) return false;
+  const liability = liabilityLines[0];
+  if (cents(Number(liability.debitBs)) !== cents(amountBs) ||
+      cents(Number(liability.creditBs)) !== 0 ||
+      Number(liability.debitUsd) <= 0 || Number(liability.creditUsd) !== 0) return false;
+
+  const bankCodes = new Set(expectedBanks.keys());
+  for (const [code, expectedBs] of expectedBanks) {
+    const lines = entry.items.filter(item => item.accountCode === code);
+    if (lines.length !== 1 || cents(Number(lines[0].creditBs)) !== expectedBs ||
+        cents(Number(lines[0].debitBs)) !== 0 || Number(lines[0].debitUsd) !== 0 ||
+        Number(lines[0].creditUsd) <= 0) return false;
+  }
+
+  // In bolívares solo se admite débito al pasivo y créditos a los bancos enlazados.
+  for (const item of entry.items) {
+    const isLiability = item.accountCode === '2.1.2.03';
+    const isBank = bankCodes.has(item.accountCode);
+    if (!isLiability && !isBank &&
+        (cents(Number(item.debitBs)) !== 0 || cents(Number(item.creditBs)) !== 0)) return false;
+    if (isBank && item.accountCode === '2.1.2.03') return false;
+  }
+
+  // El diferencial cambiario solo puede reconocerse en las cuentas específicas.
+  for (const item of entry.items) {
+    if (item.accountCode === '4.2.1.01') {
+      if (Number(item.debitUsd) !== 0 || Number(item.creditUsd) < 0) return false;
+    } else if (item.accountCode === '6.1.1.08') {
+      if (Number(item.creditUsd) !== 0 || Number(item.debitUsd) < 0) return false;
+    } else if (item.accountCode !== '2.1.2.03' && !bankCodes.has(item.accountCode) &&
+      (Number(item.debitUsd) !== 0 || Number(item.creditUsd) !== 0)) return false;
+  }
+  const fxGain = entry.items.filter(item => item.accountCode === '4.2.1.01')
+    .reduce((total, item) => total + Number(item.creditUsd), 0);
+  const fxLoss = entry.items.filter(item => item.accountCode === '6.1.1.08')
+    .reduce((total, item) => total + Number(item.debitUsd), 0);
+  if (fxGain > 0 && fxLoss > 0) return false;
+  return true;
+}
+
 export function buildVatBankReconciliationSummary(
   declaration: VatWithholdingDeclaration,
   events: VatWithholdingDeclarationEvent[],
@@ -124,7 +189,10 @@ export function buildVatBankReconciliationSummary(
         movement.date <= event.occurredAt.slice(0, 10);
     });
     const linkedTotalCents = validMovements.reduce((sum, movement) => sum + cents(Number(movement.amountBs)), 0);
-    const complete = validPaymentAmount && validPaymentDate && Boolean(linkedJournal) && ids.length > 0 &&
+    const validJournal = Boolean(linkedJournal) && validPaymentAmount &&
+      movements.length === ids.length && validMovements.length === ids.length &&
+      hasValidVatPaymentJournal(linkedJournal as JournalEntry, paymentAmount, validMovements, bankAccounts);
+    const complete = validPaymentAmount && validPaymentDate && validJournal && ids.length > 0 &&
       movements.length === ids.length && validMovements.length === ids.length &&
       linkedTotalCents === cents(paymentAmount);
     return {
