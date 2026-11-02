@@ -103,7 +103,7 @@ export const RetencionesIvaView: React.FC = () => {
         ? 'No agente de retención'
         : 'Condición de agente por confirmar';
 
-  const generatedTxt = generateSeniatIvaTxt(currentCompany, periodVouchers);
+  const generatedTxt = generateSeniatIvaTxt(currentCompany, periodVouchers, purchases.filter(purchase => purchase.companyId === currentCompany.id));
 
   const handleDownloadTxt = () => {
     if (hasPendingFiscalCorrection) {
