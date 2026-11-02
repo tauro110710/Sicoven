@@ -228,6 +228,12 @@ test('IVA fiscal event rejects missing payment mode and impossible effective dat
 });
 
 
+test('IVA TXT rejects a document total that does not reconcile with exempt base, taxable base and VAT', () => {
+  assert.throws(() => generateSeniatIvaTxt(company, [
+    ivaVoucher({ totalAmountBs: 1159.98 })
+  ]), /incompleto o inválido/);
+});
+
 test('IVA TXT refuses to mix fiscal periods in one export file', () => {
   assert.throws(() => generateSeniatIvaTxt(company, [
     ivaVoucher(),
