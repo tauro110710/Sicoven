@@ -104,11 +104,29 @@ export const RetencionesIvaView: React.FC = () => {
         ? 'No agente de retención'
         : 'Condición de agente por confirmar';
 
-  const generatedTxt = generateSeniatIvaTxt(currentCompany, periodVouchers, purchases.filter(purchase => purchase.companyId === currentCompany.id));
+  // El generador rechaza correctamente un archivo vacío; ese rechazo no debe tumbar
+  // el render de la pantalla cuando el período aún no tiene comprobantes.
+  let generatedTxt = '';
+  let txtGenerationError = '';
+  if (periodVouchers.length > 0) {
+    try {
+      generatedTxt = generateSeniatIvaTxt(
+        currentCompany,
+        periodVouchers,
+        purchases.filter(purchase => purchase.companyId === currentCompany.id)
+      );
+    } catch (error) {
+      txtGenerationError = error instanceof Error ? error.message : 'No fue posible validar el TXT de retenciones IVA.';
+    }
+  }
 
   const handleDownloadTxt = () => {
     if (hasPendingFiscalCorrection) {
       alert('Exportación bloqueada: hay comprobantes afectados por notas de crédito o reversiones. Registre y concilie la rectificación fiscal antes de generar el archivo SENIAT.');
+      return;
+    }
+    if (txtGenerationError) {
+      alert('Exportación bloqueada: ' + txtGenerationError);
       return;
     }
     if (periodVouchers.length === 0) {
@@ -293,7 +311,11 @@ export const RetencionesIvaView: React.FC = () => {
               </button>
             </div>
             <pre className="p-3 bg-black/60 rounded-lg text-[11px] font-mono text-emerald-400 overflow-x-auto whitespace-pre max-h-48 border border-slate-800">
-              {generatedTxt || '// No hay registros de retención de IVA para este período'}
+              {txtGenerationError
+                ? '// EXPORTACIÓN BLOQUEADA: ' + txtGenerationError
+                : periodVouchers.length === 0
+                  ? '// No hay registros de retención de IVA para este período'
+                  : generatedTxt}
             </pre>
             <p className="text-[10px] text-slate-400 italic">
               Columnas: RIF Agente • Período • Fecha • Operación (C) • Tipo Doc (01) • RIF Proveedor • Factura • Control • Total • Base • IVA Retenido • Afectado • Comprobante (14 dígitos) • Exento • Alícuota • Expediente
