@@ -364,6 +364,17 @@ test('IVA TXT output is deterministic by voucher sequence, UTF-8 text without BO
   assert.ok(!forward.endsWith('\r') && !forward.endsWith('\n'));
 });
 
+test('IVA TXT accepts a supplier without RIF only when withholding is 100 percent', () => {
+  const fields = generateSeniatIvaTxt(company, [ivaVoucher({
+    supplierRif: '0', retentionRate: 100, vatWithheldBs: 160, vatWithheldUsd: 160
+  })], [purchase({ supplierRif: '0' })]).split('\t');
+  assert.equal(fields[5], '0');
+  assert.equal(fields[10], '160.00');
+  assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({
+    supplierRif: '0', retentionRate: 75, vatWithheldBs: 120
+  })], [purchase({ supplierRif: '0' })]), /incompleto o inválido/);
+});
+
 test('IVA TXT covers reduced rate with 75% retention and general rate with 100% retention', () => {
   const reduced = generateSeniatIvaTxt(company, [ivaVoucher({
     id: 'iva-reduced', voucherNumber: '20261000000011',
