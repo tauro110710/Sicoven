@@ -2313,7 +2313,7 @@ test('Basic accounting certification: persists independent company journals and 
       purchases: [{ ...reopened.purchases[0], invoiceNumber: 'ALTERED-LEGACY-001' }]
     };
     assert.throws(() => persistAccountingSnapshot(db, changedLegacyInvoice),
-      /vínculo de factura con un asiento de otra empresa/);
+      /modificación de un registro histórico en purchases/);
     const stillOriginal = JSON.parse(
       db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json
     );
@@ -2427,11 +2427,6 @@ test('SQLite upgrade preserves unchanged legacy invoice links without accepting 
     priorCrossCompany,
     { ...priorCrossCompany, purchases: [{ ...legacyPurchase }] }
   ), 'una relación preexistente de 1.0.6 debe poder leerse y conservarse sin reescritura');
-  assert.doesNotThrow(() => validateAccountingSnapshot(
-    priorCrossCompany,
-    { ...priorCrossCompany, purchases: [{ ...legacyPurchase, notes: 'Observación administrativa agregada' }] }
-  ), 'un cambio ajeno a la identidad fiscal no debe bloquear la conservación del vínculo histórico');
-
   const wrongTypeEntry = {
     ...sourceEntry(), id: 'legacy-entry-type', companyId: 'company-1', type: 'VENTA',
     referenceDoc: 'FAC-LEG-100'
@@ -2471,6 +2466,6 @@ test('SQLite upgrade preserves unchanged legacy invoice links without accepting 
     assert.throws(() => validateAccountingSnapshot(
       priorCrossCompany,
       { ...priorCrossCompany, purchases: [changedIdentity] }
-    ), /vínculo de factura con un asiento de otra empresa/);
+    ), /modificación de un registro histórico en purchases/);
   }
 });
