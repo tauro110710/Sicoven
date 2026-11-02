@@ -55,6 +55,11 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     const amounts = [v.totalAmountBs, v.exemptAmountBs ?? 0, v.taxableBaseBs, v.vatAmountBs, v.vatWithheldBs, v.taxRate, v.retentionRate];
     const validPeriod = /^\d{4}(0[1-9]|1[0-2])$/.test(period);
     const validRetentionRate = Number(v.retentionRate) === 75 || Number(v.retentionRate) === 100;
+    // El instructivo SENIAT 2020 admite RIF proveedor = 0 cuando no posee RIF,
+    // condicionado a retención del 100%; la Providencia 2025 mantiene el supuesto.
+    const validSupplierRif = supplierRif === '0'
+      ? Number(v.retentionRate) === 100
+      : validateVenezuelanRif(v.supplierRif).isValid;
     const documentPeriod = invoiceDate.slice(0, 7).replace('-', '');
     const documentType = linkedPurchase?.documentType || '';
     const documentNumber = documentType === '02'
@@ -65,7 +70,7 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     const affectedDocument = documentType === '01' ? '0' : String(linkedPurchase?.affectedInvoiceNumber || '').trim();
     const expectedVat = Math.round(Number(v.taxableBaseBs) * Number(v.taxRate)) / 100;
     const expectedWithheld = Math.round(expectedVat * Number(v.retentionRate)) / 100;
-    if (v.companyId !== company.id || !validateVenezuelanRif(v.supplierRif).isValid || !validPeriod || !validDate || !/^\d{14}$/.test(voucherNum) || voucherNum.slice(0, 6) !== period ||
+    if (v.companyId !== company.id || !validSupplierRif || !validPeriod || !validDate || !/^\d{14}$/.test(voucherNum) || voucherNum.slice(0, 6) !== period ||
         !supplierRif || !invoiceNum || !controlNum ||
         (documentPeriod && documentPeriod > period) ||
         !['01', '02', '03'].includes(documentType) ||
