@@ -103,6 +103,37 @@ function cleanupOperation(userDataDir,operationId) {
   const staging=path.join(userDataDir,'restore-staging',operationId);
   if(exists(staging)) { realDir(staging,'Staging de restauración'); fs.rmSync(staging,{recursive:true,force:true}); }
 }
+function verifyActiveMatchesBackup(backupDir, userDataDir) {
+  const verified = verifyBackupDirectory(backupDir);
+  const activeDb = path.join(userDataDir, DB);
+  realFile(activeDb, 'Base SQLite activa');
+  if (hashFile(activeDb) !== verified.databaseSha256) {
+    throw new Error('El journal indica restauración confirmada, pero la base activa no coincide con el staging. SICOVEN se mantiene bloqueado.');
+  }
+  const manifest = JSON.parse(fs.readFileSync(path.join(backupDir, 'manifest.json'), 'utf8'));
+  const activeDocs = path.join(userDataDir, DOCS);
+  const actual = [];
+  function walk(root, relative = '') {
+    if (!exists(root)) return;
+    realDir(root, 'Carpeta documental activa');
+    for (const entry of fs.readdirSync(root, { withFileTypes: true }).sort((a,b)=>a.name.localeCompare(b.name))) {
+      const absolute = path.join(root, entry.name);
+      const rel = relative ? relative + '/' + entry.name : entry.name;
+      if (entry.isSymbolicLink()) throw new Error('La carpeta documental activa contiene enlaces. SICOVEN se mantiene bloqueado.');
+      if (entry.isDirectory()) walk(absolute, rel);
+      else if (entry.isFile()) {
+        realFile(absolute, 'Documento activo');
+        actual.push({ path: rel, size: fs.statSync(absolute).size, sha256: hashFile(absolute) });
+      } else throw new Error('La carpeta documental activa contiene elementos especiales.');
+    }
+  }
+  walk(activeDocs);
+  if (JSON.stringify(actual) !== JSON.stringify(manifest.documents)) {
+    throw new Error('Los documentos activos no coinciden con el staging confirmado. SICOVEN se mantiene bloqueado.');
+  }
+  return verified;
+}
+
 function recoverPendingRestore({userDataDir}) {
   const root=path.resolve(userDataDir); realDir(root,'Datos de SICOVEN');
   const journalPath=path.join(root,JOURNAL);
@@ -113,7 +144,8 @@ function recoverPendingRestore({userDataDir}) {
   realDir(operationDir,'Operación de restauración');
   const rollbackDir=path.join(operationDir,'rollback');
   if(journal.state==='committed') {
-    const staged = verifyBackupDirectory(path.join(root,'restore-staging',journal.operationId));
+    const stagedDirectory = path.join(root,'restore-staging',journal.operationId);
+    const staged = verifyActiveMatchesBackup(stagedDirectory, root);
     appendRestoreOutcome({ userDataDir: root, operationId: journal.operationId, actor: journal.actor, outcome: 'RESTORE_COMMITTED', databaseSha256: staged.databaseSha256, documentCount: staged.documentCount });
     archiveCommittedRollback(root,journal.operationId);
     cleanupOperation(root,journal.operationId);
