@@ -299,7 +299,7 @@ export const RetencionesIvaView: React.FC = () => {
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-purple-400" />
                 <span className="text-xs font-bold text-purple-300">
-                  Estructura Oficial del Archivo TXT para el Portal SENIAT (Separador: Tabulador)
+                  Vista previa del TXT de retenciones IVA · 16 campos separados por tabulador
                 </span>
               </div>
               <button
@@ -318,7 +318,7 @@ export const RetencionesIvaView: React.FC = () => {
                   : generatedTxt}
             </pre>
             <p className="text-[10px] text-slate-400 italic">
-              Columnas: RIF Agente • Período • Fecha • Operación (C) • Tipo Doc (01) • RIF Proveedor • Factura • Control • Total • Base • IVA Retenido • Afectado • Comprobante (14 dígitos) • Exento • Alícuota • Expediente
+              Campos: RIF agente • Período • Fecha • Operación • Tipo de documento • RIF proveedor • Número de documento • Control • Total • Base imponible • IVA retenido • Documento afectado • Comprobante • Exento • Alícuota • Expediente
             </p>
           </div>
         )}
