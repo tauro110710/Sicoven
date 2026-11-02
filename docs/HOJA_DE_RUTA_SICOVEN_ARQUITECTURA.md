@@ -43,3 +43,16 @@ La validación del producto se realiza mediante:
 - Windows installer #1368: correcto; instalador generado y actualización 1.0.6 → 1.0.7 verificada conservando SQLite.
 - Próximo trabajo: terminar auditoría estructural del TXT de retenciones IVA (clasificación documental, integridad de los 16 campos, sanitización, codificación, orden determinista y casos límite); después contrastar la especificación SENIAT vigente y documentar con precisión qué queda probado y qué requiere homologación oficial.
 - Vercel queda expresamente fuera de alcance y no debe volver a aparecer como bloqueo o criterio de avance.
+
+
+## Continuidad técnica — TXT de retenciones IVA (actualización 2026-11-02)
+
+- La exportación con operaciones ahora exige la compra fuente de cada comprobante; no infiere ni sustituye silenciosamente el tipo documental.
+- Se valida la coincidencia de empresa, proveedor, fecha, número, control y tipo documental.
+- Para ND/NC se exige que la factura afectada exista en las compras de la misma empresa y proveedor; cuando existe `originalPurchaseId`, debe apuntar a esa factura.
+- Se validan 16 campos, separadores, longitudes máximas y ausencia de espacios internos en los identificadores de factura/control.
+- Se añadió una salida de 16 campos para declaración sin operaciones y su descarga desde la declaración quincenal preparada. Su fila es una adaptación técnica provisional: el instructivo histórico de 2017 describe el registro sin operaciones, pero con una disposición de campos distinta a la especificación de agente de retención publicada en 2020. No se declara homologada esta fila.
+- La Providencia SNAT/2025/000054 (G.O. 43.171, 16-07-2025), artículo 15, establece la obligación de presentar la declaración informativa incluso cuando no existan operaciones sujetas a retención. La declaración cero debe quedar registrada por quincena en el auxiliar SQLite.
+- El instructivo RI_DRIVA2020-IT01V3_0_0 es de septiembre de 2020 y documenta 16 campos separados por tabulador. No se ha localizado una especificación técnica SENIAT posterior que confirme que el layout sigue sin cambios a noviembre de 2026.
+- El instructivo de 2020 documenta separador tabulador y carga del archivo TXT. La salida se mantiene UTF-8 sin BOM, CRLF entre registros y sin salto final para archivos con operaciones; esta codificación aún requiere prueba de aceptación en ambiente SENIAT.
+- Estado de homologación: pendiente. Requiere confirmar el layout técnico vigente con SENIAT y procesar archivos de prueba representativos (factura, ND, NC, exento, alícuotas vigentes, declaración cero) en el ambiente oficial.
