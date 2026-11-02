@@ -34,22 +34,26 @@ test('cancels liability at historical USD carrying value',()=>{
  const p=build(100,1);assert.equal(p.liabilityUsd,1);assert.equal(p.fxDifferenceUsd,0);
  assert.equal(p.items[0].debitBs,p.items[1].creditBs);assert.equal(p.items[0].debitUsd,p.items[1].creditUsd);
 });
-test('recognizes exchange gain when bank USD exceeds liability',()=>{
- const p=build(100,1.1);assert.equal(p.fxDifferenceUsd,0.1);assert.equal(p.items[2].accountCode,'4.2.1.01');assert.equal(p.items[2].creditUsd,0.1);
+test('recognizes exchange gain when bank USD is below liability',()=>{
+ const p=build(100,0.9);assert.equal(p.fxDifferenceUsd,0.1);assert.equal(p.items[2].accountCode,'4.2.1.01');assert.equal(p.items[2].creditUsd,0.1);
 });
-test('recognizes exchange loss when bank USD is below liability',()=>{
- const p=build(100,0.9);assert.equal(p.fxDifferenceUsd,-0.1);assert.equal(p.items[2].accountCode,'6.1.1.08');assert.equal(p.items[2].debitUsd,0.1);
+test('recognizes exchange loss when bank USD exceeds liability',()=>{
+ const p=build(100,1.1);assert.equal(p.fxDifferenceUsd,-0.1);assert.equal(p.items[2].accountCode,'6.1.1.08');assert.equal(p.items[2].debitUsd,0.1);
 });
 test('allocates partial payments proportionally and final remainder exactly',()=>{
  const d=declaration(1,100);const first=build(33.33,0.333333,d);const last=build(66.67,0.666667,d,33.33);
  assert.equal(first.liabilityUsd,0.3333);assert.equal(last.liabilityUsd,0.6667);assert.equal(first.liabilityUsd+last.liabilityUsd,1);
+ for(const p of [first,last]) {
+   assert.equal(p.items.reduce((s,x)=>s+x.debitBs,0),p.items.reduce((s,x)=>s+x.creditBs,0));
+   assert.ok(Math.abs(p.items.reduce((s,x)=>s+x.debitUsd,0)-p.items.reduce((s,x)=>s+x.creditUsd,0))<0.000001);
+ }
 });
 test('blocks legacy declarations without historical USD basis',()=>{
  const old={...declaration(),totalWithheldUsd:undefined,voucherSnapshots:[{...declaration().voucherSnapshots[0],vatWithheldUsd:undefined,bcvRate:undefined}]};
  assert.throws(()=>build(100,1,old),/base USD histórica completa/);
 });
 test('requires the configured FX account when there is a gain',()=>{
- assert.throws(()=>build(100,1.1,declaration(),0,[movement('m1','b1',100,1.1)],accounts.filter(x=>x.code!=='4.2.1.01')),/4.2.1.01/);
+ assert.throws(()=>build(100,0.9,declaration(),0,[movement('m1','b1',100,0.9)],accounts.filter(x=>x.code!=='4.2.1.01')),/4.2.1.01/);
 });
 test('groups bank credits across multiple bank accounts',()=>{
  const p=build(100,0.7,declaration(0.7),0,[movement('m1','b1',60,0.4),movement('m2','b2',40,0.3)]);
