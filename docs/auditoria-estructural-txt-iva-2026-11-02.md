@@ -80,3 +80,11 @@ La revisión web de 02/11/2026 localizó el instructivo RI_DRIVA2020-IT01V3_0_0,
 El documento distingue expresamente el nombre Monto_IVA del significado para agentes de retención: el campo corresponde al monto retenido por el comprador. Por ello, la columna 11 debe recibir vatWithheldBs; la columna 15 contiene la alícuota aplicada. El generador actual sigue ese mapeo.
 
 El instructivo explica que el archivo puede probarse en el Portal Fiscal, opción Retención IVA (prueba carga de archivo). Esa aceptación no se ha ejecutado desde esta auditoría. La única ambigüedad técnica abierta aquí es la representación de una factura con varias alícuotas: el formato define un campo de alícuota por fila, pero no explica expresamente si se repite el documento en filas separadas ni cómo distribuir el comprobante y la retención. No se debe cambiar el layout de 16 campos por esa incertidumbre.
+
+
+## Cierre técnico del flujo sin operaciones — 02-11-2026
+
+- El artículo 15 de la Providencia SNAT/2025/000054 exige presentar declaración incluso cuando no se hayan efectuado operaciones sujetas a retención.
+- El instructivo RI_DRIVA2020-IT01V3_0_0 define el archivo TXT de operaciones con 16 columnas, pero no prescribe una fila sintética de 16 ceros para declarar un período sin operaciones.
+- Se retiró de SICOVEN la descarga de esa fila no especificada y su generador/pruebas asociadas. La declaración sin operaciones permanece como registro explícito en SQLite y se presenta mediante el procedimiento habilitado en el Portal Fiscal; la constancia se registra en el evento FILED.
+- No se modifica la estructura de los TXT de operaciones reales.
