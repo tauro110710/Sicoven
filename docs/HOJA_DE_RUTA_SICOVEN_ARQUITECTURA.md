@@ -236,3 +236,12 @@ La validación del producto se realiza mediante:
 - No se amplía el modelo ni se generan filas sintéticas mientras no exista especificación primaria SENIAT que determine cardinalidad de filas y tratamiento del comprobante/retención para documentos mixtos. Esta limitación permanece como bloqueo funcional explícito.
 - La declaración cero continúa provisional hasta verificar su formato en guía oficial vigente y en la prueba de carga del Portal Fiscal.
 - PR #88 sigue abierta y sin fusionar; main permanece intacta. SQLite local continúa como única fuente de verdad.
+
+
+### Aclaración documental del TXT IVA — 2026-11-02
+
+- Se adopta como referencia técnica vigente de trabajo el instructivo SENIAT RI_DRIVA2020-IT01V3_0_0, versión 3.0.0, septiembre de 2020. La búsqueda web del 02/11/2026 localizó reproducciones coincidentes del documento y no identificó una versión posterior sustitutiva.
+- La estructura se mantiene en 16 columnas. Campo 11 denominado Monto_IVA: para el agente de retención representa el monto efectivamente retenido por el comprador. Campo 15: alícuota aplicada. La implementación actual exporta vatWithheldBs en campo 11.
+- El instructivo describe el uso de Retención IVA (prueba carga de archivo) en el Portal Fiscal. La aceptación efectiva de un archivo concreto debe verificarse en esa herramienta; no se afirma que ya se haya ejecutado.
+- La guía no detalla expresamente cómo serializar en una o varias filas una factura con bases sujetas a distintas alícuotas. Este punto queda acotado a la cardinalidad y distribución de importes para facturas mixtas; no cuestiona la vigencia operativa del formato de 16 columnas ni autoriza cambiarlo.
+- La declaración cero se mantiene fuera del TXT de operaciones ordinarias hasta verificar en el portal el procedimiento aplicable; no se inventará una fila no descrita expresamente por la guía.
