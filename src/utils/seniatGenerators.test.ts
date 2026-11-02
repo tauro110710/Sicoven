@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generateSeniatIvaTxt as generateSeniatIvaTxtRaw, generateSeniatIslrOperationsXml, generateSeniatIslrOperationsTxt } from './seniatGenerators';
+import { generateSeniatIvaTxt as generateSeniatIvaTxtRaw, generateSeniatIvaZeroOperationsTxt, generateSeniatIslrOperationsXml, generateSeniatIslrOperationsTxt } from './seniatGenerators';
 import type { Company, PurchaseRecord, IslrRetentionVoucher, VatRetentionVoucher } from '../types/accounting';
 import type { IslrFiscalEvent } from '../types/islrFiscalEvent';
 import { resolvePurchaseVatFiscalEvent } from '../types/vatFiscalEvent';
@@ -240,6 +240,22 @@ test('IVA TXT rejects invalid period, sequence, date, RIF and inconsistent reten
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({ retentionRate: 50 })]), /incompleto o inválido/);
 });
 
+
+
+test('IVA TXT without operations emits one 16-column zero row with agent RIF and period', () => {
+  const txt = generateSeniatIvaZeroOperationsTxt(company, '202610');
+  const fields = txt.split('\\t');
+  assert.equal(fields.length, 16);
+  assert.equal(fields[0], 'J123456789');
+  assert.equal(fields[1], '202610');
+  assert.ok(fields.slice(2).every(value => value === '0'));
+  assert.doesNotMatch(txt, /\\r|\\n/);
+});
+
+test('IVA zero-operations TXT rejects invalid agent RIF and fiscal period', () => {
+  assert.throws(() => generateSeniatIvaZeroOperationsTxt({ ...company, rif: 'BAD' }, '202610'), /RIF del agente/);
+  assert.throws(() => generateSeniatIvaZeroOperationsTxt(company, '202613'), /período fiscal válido/);
+});
 
 test('IVA fiscal event uses effective payment date for cash purchases, not invoice issue date', () => {
   const event = resolvePurchaseVatFiscalEvent('CONTADO', '2026-11-02');
