@@ -34,8 +34,6 @@ export const VatFiscalIncidentPanel: React.FC = () => {
     if (!purchase) return;
     const originalId = purchase.documentType === '01' ? purchase.id : purchase.originalPurchaseId;
     const voucher = vatVouchers.find(v => v.companyId === currentCompany.id && v.purchaseRecordId === originalId);
-    const declaration = voucher ? (useAccounting as unknown) : null;
-    void declaration;
     setSaving(true); setError(''); setNotice('');
     try {
       const created = await createVatFiscalIncident({
