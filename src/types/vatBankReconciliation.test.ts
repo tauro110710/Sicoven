@@ -7,7 +7,7 @@ const declaration: VatWithholdingDeclaration = {
   id: 'decl-1', companyId: 'company-1', period: '202610', window: 'FIRST_HALF',
   startDate: '2026-10-01', endDate: '2026-10-15', zeroOperations: false,
   voucherIds: [], voucherSnapshots: [], legacyDateAssignments: [],
-  totalTaxableBaseBs: 1000, totalVatAmountBs: 160, totalWithheldBs: 120,
+  totalTaxableBaseBs: 1000, totalVatAmountBs: 160, totalWithheldBs: 120, totalWithheldUsd: 1.2,
   createdAt: '2026-10-16T10:00:00.000Z'
 };
 const account: BankAccount = {
@@ -292,6 +292,11 @@ test('requires real balanced journal lines matching the IVA liability and linked
   assert.equal(summaryFor([
     paymentJournal.items[0],
     { ...paymentJournal.items[1], creditUsd: 0.5 }
+  ]).pendingCount, 1);
+  assert.equal(summaryFor([
+    { ...paymentJournal.items[0], debitUsd: 0.5 },
+    paymentJournal.items[1],
+    { accountCode: '4.2.1.01', accountName: 'Ganancia cambiaria', debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0.1 }
   ]).pendingCount, 1);
   assert.equal(summaryFor([
     { ...paymentJournal.items[0], debitBs: Number.NaN },
