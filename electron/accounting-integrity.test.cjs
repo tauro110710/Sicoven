@@ -2456,16 +2456,17 @@ test('SQLite upgrade preserves unchanged legacy invoice links without accepting 
 
   // Un vínculo inválido heredado solo puede conservarse con la identidad
   // original; no se puede reasignar cambiando empresa, número o proveedor.
-  for (const changedIdentity of [
-    { ...legacyPurchase, companyId: 'company-2' },
-    { ...legacyPurchase, invoiceNumber: 'LEG-101' },
-    { ...legacyPurchase, supplierRif: 'J-999' },
-    { ...legacyPurchase, documentType: '02' },
-    { ...legacyPurchase, journalEntryId: undefined }
-  ]) {
+  const changedIdentityCases = [
+    { record: { ...legacyPurchase, companyId: 'company-2' }, expected: /SQLite bloqueó la modificación de un registro histórico en purchases/ },
+    { record: { ...legacyPurchase, invoiceNumber: 'LEG-101' }, expected: /SQLite bloqueó la modificación de un registro histórico en purchases/ },
+    { record: { ...legacyPurchase, supplierRif: 'J-999' }, expected: /SQLite bloqueó la modificación de un registro histórico en purchases/ },
+    { record: { ...legacyPurchase, documentType: '02' }, expected: /SQLite bloqueó la modificación de un registro histórico en purchases/ },
+    { record: { ...legacyPurchase, journalEntryId: undefined }, expected: /No se puede retirar ni modificar la marca histórica journalEntryId/ }
+  ];
+  for (const { record, expected } of changedIdentityCases) {
     assert.throws(() => validateAccountingSnapshot(
       priorCrossCompany,
-      { ...priorCrossCompany, purchases: [changedIdentity] }
-    ), /SQLite bloqueó la modificación de un registro histórico en purchases/);
+      { ...priorCrossCompany, purchases: [record] }
+    ), expected);
   }
 });
