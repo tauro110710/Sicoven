@@ -296,6 +296,21 @@ app.whenReady().then(async () => {
     return;
   }
 
+  ipcMain.handle('sicoven:improvement-consent:get', () => {
+    const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='improvement_consent'").get();
+    if (!row) return { decision: null, decidedAt: null };
+    try {
+      const value = JSON.parse(row.state_json);
+      return { decision: value.decision === 'yes' ? 'yes' : value.decision === 'no' ? 'no' : null, decidedAt: value.decidedAt || null };
+    } catch { return { decision: null, decidedAt: null }; }
+  });
+  ipcMain.handle('sicoven:improvement-consent:set', (_event, decision) => {
+    if (decision !== 'yes' && decision !== 'no') return { ok: false };
+    const value = { decision, decidedAt: new Date().toISOString(), policyVersion: 1 };
+    db.prepare("INSERT INTO app_state(state_key,state_json,updated_at) VALUES('improvement_consent',?,datetime('now')) ON CONFLICT(state_key) DO UPDATE SET state_json=excluded.state_json,updated_at=datetime('now')").run(JSON.stringify(value));
+    return { ok: true, decision };
+  });
+
   ipcMain.handle('sicoven:license-status', () => licenseView());
   ipcMain.handle('sicoven:license-activate', async (_event, key) => activateLicense(key));
   ipcMain.handle('sicoven:license-revalidate', async () => {
