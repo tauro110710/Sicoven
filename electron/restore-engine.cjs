@@ -152,6 +152,10 @@ function recoverPendingRestore({userDataDir}) {
   if(journal.state==='committed') {
     const stagedDirectory = path.join(root,'restore-staging',journal.operationId);
     const staged = verifyActiveMatchesBackup(stagedDirectory, root);
+    if (staged.databaseSha256 !== journal.hashes.stagedDatabase ||
+        hashFile(path.join(stagedDirectory, 'manifest.json')) !== journal.hashes.stagedManifest) {
+      throw new Error('El staging confirmado no coincide con las huellas del journal. SICOVEN se mantiene bloqueado.');
+    }
     appendRestoreOutcome({ userDataDir: root, operationId: journal.operationId, actor: journal.actor, outcome: 'RESTORE_COMMITTED', databaseSha256: staged.databaseSha256, documentCount: staged.documentCount });
     archiveCommittedRollback(root,journal.operationId);
     cleanupOperation(root,journal.operationId);
@@ -159,9 +163,13 @@ function recoverPendingRestore({userDataDir}) {
   }
   if(journal.state==='rolled_back') {
     // A journal transition is not proof that the physical rollback survived.
-    // Verify the active SQLite file and every supporting document before
-    // recording success or deleting the journal/snapshot evidence.
+    // Bind the return package to the journal, then verify active SQLite and
+    // every supporting document before recording success or deleting evidence.
     const rollback = verifyActiveMatchesBackup(rollbackDir, root);
+    if (rollback.databaseSha256 !== journal.hashes.rollbackDatabase ||
+        hashFile(path.join(rollbackDir, 'manifest.json')) !== journal.hashes.rollbackManifest) {
+      throw new Error('El snapshot de retorno no coincide con las huellas del journal. SICOVEN se mantiene bloqueado.');
+    }
     appendRestoreOutcome({ userDataDir: root, operationId: journal.operationId, actor: journal.actor, outcome: 'RESTORE_ROLLED_BACK', databaseSha256: rollback.databaseSha256, documentCount: rollback.documentCount });
     cleanupOperation(root,journal.operationId);
     return {ok:true,recovered:true,action:'finalized_rollback_cleanup'};
