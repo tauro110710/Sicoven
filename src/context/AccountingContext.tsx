@@ -4110,6 +4110,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setIslrFiscalEvents([]);
     setFinancialDisclosures([]);
     setDisplayCurrency('DUAL');
+    // No informar que terminó hasta que el nuevo estado vacío también quede
+    // confirmado por la cola de persistencia SQLite.
+    if (window.sicovenStore) await waitForPersistence();
   };
 
   const exportBackupJson = (): string => {
