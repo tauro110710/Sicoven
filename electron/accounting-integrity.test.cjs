@@ -236,12 +236,17 @@ test('SQLite preserves unchanged legacy invoice links but strictly validates new
     { ...emptyState([legacyEntry]), purchases: [newInvoice] }
   ), /vínculo de factura con un asiento/);
 
-  // An existing invoice cannot silently be relinked to an incompatible entry.
-  const changedInvoice = { ...legacyInvoice, journalEntryId: 'other-entry' };
+  // Sales allow a controlled journalEntryId update, so the strict link check must catch it.
+  const legacySale = {
+    id: 'legacy-sale', companyId: 'company-1', documentType: '01',
+    invoiceNumber: 'SALE-100', journalEntryId: 'legacy-entry'
+  };
+  const legacySalesState = { ...emptyState([legacyEntry]), sales: [legacySale] };
+  const changedSale = { ...legacySale, journalEntryId: 'other-entry' };
   const otherEntry = { ...legacyEntry, id: 'other-entry', companyId: 'company-1', type: 'MANUAL' };
   assert.throws(() => validateAccountingSnapshot(
-    legacyState,
-    { ...emptyState([legacyEntry, otherEntry]), purchases: [changedInvoice] }
+    legacySalesState,
+    { ...emptyState([legacyEntry, otherEntry]), sales: [changedSale] }
   ), /vínculo de factura con un asiento/);
 });
 
