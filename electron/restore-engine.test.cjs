@@ -187,3 +187,38 @@ test('committed recovery rejects a staged snapshot that no longer matches journa
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+
+test('prepared recovery preserves its journal when cleanup encounters an unsafe staging path', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-restore-cleanup-preflight-'));
+  const userData = path.join(root, 'user-data');
+  const operationId = '123e4567-e89b-42d3-a456-426614174003';
+  const operationRoot = path.join(userData, 'restore-operations');
+  const operationDir = path.join(operationRoot, operationId);
+  const stagingRoot = path.join(userData, 'restore-staging');
+  const stagingPath = path.join(stagingRoot, operationId);
+  const journalPath = path.join(userData, 'restore-journal.json');
+  fs.mkdirSync(userData);
+  fs.mkdirSync(operationRoot);
+  fs.mkdirSync(operationDir);
+  fs.mkdirSync(stagingRoot);
+  fs.writeFileSync(stagingPath, 'unsafe-not-a-directory');
+  try {
+    createJournal({
+      journalPath, operationId, actor: 'admin',
+      sourceDatabaseSha256: 'a'.repeat(64),
+      stagedDatabaseSha256: 'b'.repeat(64),
+      sourceManifestSha256: 'c'.repeat(64),
+      stagedManifestSha256: 'd'.repeat(64)
+    });
+    assert.throws(
+      () => recoverPendingRestore({ userDataDir: userData }),
+      /Staging de restauración no es un directorio real/
+    );
+    assert.equal(readJournal(journalPath).state, 'prepared');
+    assert.equal(fs.existsSync(operationDir), true);
+    assert.equal(fs.readFileSync(stagingPath, 'utf8'), 'unsafe-not-a-directory');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
