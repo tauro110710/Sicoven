@@ -862,8 +862,6 @@ export const ConfiguracionView: React.FC = () => {
               onClick={async () => {
                 const first = window.confirm('RESET DE FÁBRICA SICOVEN\\n\\nSe eliminarán los registros operativos: asientos, compras, ventas, inventario, movimientos, retenciones, conciliaciones, liquidaciones y cuentas bancarias operativas. Se eliminarán todas las empresas registradas y sus parámetros, junto con todos los registros operativos. Se conservarán el acceso administrativo y la licencia/prueba actual. Esta acción no se puede deshacer. ¿Deseas continuar?');
                 if (!first) return;
-                const confirmation = window.prompt('Para confirmar definitivamente, escribe: RESETEAR SICOVEN');
-                if (confirmation !== 'RESETEAR SICOVEN') { alert('Reset cancelado. No se modificaron los datos.'); return; }
                 setFactoryResetBusy(true);
                 setFactoryResetStage('Verificando sesión y preparando el reinicio…');
                 try {
