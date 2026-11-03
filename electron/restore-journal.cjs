@@ -1,0 +1,112 @@
+'use strict';
+
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const JOURNAL_FORMAT = 'SICOVEN_RESTORE_JOURNAL_V1';
+const MAX_JOURNAL_BYTES = 64 * 1024;
+const STATES = new Set(['prepared', 'rollback_ready', 'installing', 'installed', 'committed', 'rolling_back', 'rolled_back']);
+const TRANSITIONS = {
+  prepared: new Set(['rollback_ready', 'rolled_back']),
+  rollback_ready: new Set(['installing', 'rolling_back', 'rolled_back']),
+  installing: new Set(['installed', 'rolling_back']),
+  installed: new Set(['committed', 'rolling_back']),
+  committed: new Set(),
+  rolling_back: new Set(['rolled_back']),
+  rolled_back: new Set()
+};
+
+function assertSafeDirectory(directory) {
+  const resolved = path.resolve(directory), parsed = path.parse(resolved);
+  const segments = resolved.slice(parsed.root.length).split(path.sep).filter(Boolean);
+  let current = parsed.root;
+  for (const segment of segments) {
+    current = path.join(current, segment);
+    const stat = fs.lstatSync(current);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('La ruta del journal contiene un directorio no real o un enlace.');
+  }
+}
+function validateJournal(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+      value.format !== JOURNAL_FORMAT || value.version !== 1 ||
+      typeof value.operationId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.operationId) ||
+      !STATES.has(value.state) ||
+      typeof value.createdAt !== 'string' || !Number.isFinite(Date.parse(value.createdAt)) ||
+      typeof value.updatedAt !== 'string' || !Number.isFinite(Date.parse(value.updatedAt)) ||
+      typeof value.actor !== 'string' || !value.actor.trim() || value.actor.length > 120 ||
+      !value.hashes || typeof value.hashes !== 'object' || Array.isArray(value.hashes)) {
+    throw new Error('El journal de restauración está corrupto o no es compatible.');
+  }
+  for (const key of ['sourceDatabase', 'stagedDatabase', 'sourceManifest', 'stagedManifest']) {
+    if (typeof value.hashes[key] !== 'string' || !/^[a-f0-9]{64}$/.test(value.hashes[key])) throw new Error('El journal contiene huellas de base de datos inválidas.');
+  }
+  for (const key of ['rollbackDatabase', 'rollbackManifest']) {
+    if (value.hashes[key] !== null && (typeof value.hashes[key] !== 'string' || !/^[a-f0-9]{64}$/.test(value.hashes[key]))) throw new Error('El journal contiene una huella de retorno inválida.');
+  }
+  const rollbackRequired = ['rollback_ready', 'installing', 'installed', 'committed', 'rolling_back', 'rolled_back'].includes(value.state);
+  if (rollbackRequired && (value.hashes.rollbackDatabase === null || value.hashes.rollbackManifest === null)) throw new Error('El estado del journal exige huellas verificadas de base y documentos de retorno.');
+  if (typeof value.lastStep !== 'string' || value.lastStep.length > 80) throw new Error('El journal contiene un paso inválido.');
+  return value;
+}
+function syncDirectory(directory) {
+  let fd;
+  try { fd = fs.openSync(directory, 'r'); fs.fsyncSync(fd); }
+  catch { /* Windows puede no admitir fsync de directorios. */ }
+  finally { if (fd !== undefined) fs.closeSync(fd); }
+}
+function writeAtomic(file, value) {
+  const directory = path.dirname(file);
+  assertSafeDirectory(directory);
+  const temporary = file + '.tmp-' + crypto.randomUUID();
+  let fd;
+  try {
+    fd = fs.openSync(temporary, 'wx', 0o600);
+    fs.writeFileSync(fd, JSON.stringify(value, null, 2), 'utf8');
+    fs.fsyncSync(fd); fs.closeSync(fd); fd = undefined;
+    fs.renameSync(temporary, file); syncDirectory(directory);
+  } catch (error) {
+    if (fd !== undefined) fs.closeSync(fd);
+    try { fs.rmSync(temporary, { force: true }); } catch {}
+    throw error;
+  }
+}
+function lstatIfExists(file) {
+  try { return fs.lstatSync(file); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+}
+function readJournal(file) {
+  assertSafeDirectory(path.dirname(file));
+  const stat = lstatIfExists(file);
+  if (!stat) return null;
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('El journal no puede ser un enlace ni un elemento especial.');
+  if (stat.size > MAX_JOURNAL_BYTES) throw new Error('El journal excede el tamaño máximo permitido.');
+  return validateJournal(JSON.parse(fs.readFileSync(file, 'utf8')));
+}
+function createJournal({ journalPath, sourceDatabaseSha256, stagedDatabaseSha256, sourceManifestSha256, stagedManifestSha256, actor, operationId = crypto.randomUUID() }) {
+  if (lstatIfExists(journalPath)) throw new Error('Ya existe una operación de restauración pendiente.');
+  const now = new Date().toISOString();
+  const journal = {
+    format: JOURNAL_FORMAT, version: 1, operationId, actor: String(actor || '').trim(),
+    state: 'prepared', createdAt: now, updatedAt: now,
+    hashes: { sourceDatabase: sourceDatabaseSha256, stagedDatabase: stagedDatabaseSha256, sourceManifest: sourceManifestSha256, stagedManifest: stagedManifestSha256, rollbackDatabase: null, rollbackManifest: null },
+    lastStep: 'staging_verified'
+  };
+  validateJournal(journal); writeAtomic(journalPath, journal); return journal;
+}
+function transitionJournal({ journalPath, expectedState, nextState, lastStep, rollbackDatabaseSha256 = undefined, rollbackManifestSha256 = undefined }) {
+  if (!STATES.has(nextState) || typeof lastStep !== 'string' || lastStep.length > 80) throw new Error('La transición solicitada no es válida.');
+  const journal = readJournal(journalPath);
+  if (!journal) throw new Error('No existe una operación de restauración pendiente.');
+  if (journal.state !== expectedState) throw new Error('El estado del journal cambió; se cancela la transición.');
+  if (!TRANSITIONS[journal.state].has(nextState)) throw new Error('Transición de restauración no permitida: ' + journal.state + ' → ' + nextState);
+  if (nextState === 'rollback_ready') {
+    if (typeof rollbackDatabaseSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(rollbackDatabaseSha256) ||
+        typeof rollbackManifestSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(rollbackManifestSha256)) throw new Error('Se requieren las huellas verificadas de la base y documentos de retorno.');
+    journal.hashes.rollbackDatabase = rollbackDatabaseSha256; journal.hashes.rollbackManifest = rollbackManifestSha256;
+  }
+  journal.state = nextState; journal.lastStep = lastStep; journal.updatedAt = new Date().toISOString();
+  validateJournal(journal); writeAtomic(journalPath, journal); return journal;
+}
+module.exports = { JOURNAL_FORMAT, createJournal, readJournal, transitionJournal, validateJournal };

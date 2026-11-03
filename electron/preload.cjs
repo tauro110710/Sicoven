@@ -37,5 +37,7 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   openSupportingDocument: (token, documentId) => ipcRenderer.invoke('sicoven:document-open', token, documentId),
   createVatFiscalIncident: (token, input) => ipcRenderer.invoke('sicoven:vat-fiscal-incident-create', token, input),
   listVatFiscalIncidents: (token, filters) => ipcRenderer.invoke('sicoven:vat-fiscal-incident-list', token, filters),
-  recordVatFiscalIncidentEvent: (token, input) => ipcRenderer.invoke('sicoven:vat-fiscal-incident-event', token, input)
+  recordVatFiscalIncidentEvent: (token, input) => ipcRenderer.invoke('sicoven:vat-fiscal-incident-event', token, input),
+  createBackup: (token) => ipcRenderer.invoke('sicoven:backup-create', token),
+  restoreBackup: (token) => ipcRenderer.invoke('sicoven:restore-execute', token)
 }));

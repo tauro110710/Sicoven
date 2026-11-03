@@ -25,6 +25,10 @@ const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
+const { reconcileRestoreAudit } = require('./restore-audit-ledger.cjs');
+const { registerBackupIpc } = require('./backup-restore.cjs');
+const { registerRestoreIpc } = require('./restore-engine.cjs');
+const { recoverPendingRestore } = require('./restore-engine.cjs');
 const { registerInflationIndexIpc } = require('./inflation-indexes.cjs');
 const { registerInflationClassificationIpc } = require('./inflation-classifications.cjs');
 const { registerInflationRemeReadinessIpc } = require('./inflation-reme-readiness.cjs');
@@ -62,6 +66,8 @@ function openDatabase() {
       BEFORE DELETE ON audit_events
       BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END;
   `);
+  // Reconciliar el ledger externo antes de exponer la aplicación. Un ledger inválido bloquea el arranque.
+  reconcileRestoreAudit({ db, userDataDir: dataDir });
   db.exec(`CREATE TABLE IF NOT EXISTS auth_users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin')), is_seed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')));`);
   db.exec(`CREATE TABLE IF NOT EXISTS auth_sessions (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));`);
   db.exec(`CREATE TABLE IF NOT EXISTS license_state (id INTEGER PRIMARY KEY CHECK(id=1), installation_id TEXT NOT NULL, encrypted_key TEXT, license_id TEXT, customer TEXT, product TEXT, status TEXT NOT NULL DEFAULT 'unlicensed', last_checked_at TEXT, message TEXT);`);
@@ -283,6 +289,11 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   try {
+    const dataDir = app.getPath('userData');
+    fs.mkdirSync(dataDir, { recursive: true });
+    // Resolver cualquier journal pendiente antes de abrir o crear sicoven.sqlite.
+    // Si la recuperación no puede demostrar un estado íntegro, el arranque se bloquea.
+    recoverPendingRestore({ userDataDir: dataDir });
     openDatabase();
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -533,6 +544,32 @@ app.whenReady().then(async () => {
     }
     return { ok: true, cleared: true, verified: true };
   });
+
+  // Proxy dinámico: los handlers de respaldo siempre usan la conexión SQLite vigente
+  // después de que una restauración cierre y vuelva a abrir la base.
+  const dbHandle = new Proxy({}, {
+    get(_target, property) {
+      const current = db;
+      const value = current?.[property];
+      return typeof value === 'function' ? value.bind(current) : value;
+    }
+  });
+  const closeDatabase = async () => {
+    if (db?.open) {
+      db.pragma('wal_checkpoint(TRUNCATE)');
+      db.close();
+      db = null;
+    }
+  };
+  const reopenDatabase = async () => {
+    if (db?.open) throw new Error('SQLite ya está abierta; no se permite abrir una segunda conexión.');
+    openDatabase();
+  };
+  registerBackupIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession, dialog, app,
+    getWindow: () => BrowserWindow.getFocusedWindow() });
+  registerRestoreIpc({ ipcMain, app, dialog, licenseView, getActiveSession,
+    getDb: () => db, closeDatabase, reopenDatabase,
+    getWindow: () => BrowserWindow.getFocusedWindow() });
 
   registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession });
   registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession });

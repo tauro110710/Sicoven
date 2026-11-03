@@ -82,11 +82,8 @@ jobs:
           foreach ($required in @($app, $asar, $sqliteNative)) {
             if (-not (Test-Path $required -PathType Leaf)) { throw "Falta un archivo esencial de SICOVEN 1.0.6: $required" }
           }
-          $application = Start-Process -FilePath $app -ArgumentList @("--disable-gpu") -PassThru
-          Start-Sleep -Seconds 12
-          $application.Refresh()
-          if ($application.HasExited) { throw "SICOVEN 1.0.6 se cerró durante el arranque. Código: $($application.ExitCode)" }
-          & taskkill.exe /PID $application.Id /T /F | Out-Null
+          & (Join-Path $env:GITHUB_WORKSPACE "scripts/windows-renderer-smoke.ps1") -ExecutablePath $app -Version "1.0.6"
+          if ($LASTEXITCODE -ne 0) { throw "La interfaz gráfica de SICOVEN 1.0.6 no superó la prueba de renderizado." }
           $database = Get-ChildItem -Path $env:APPDATA -Filter "sicoven.sqlite" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $database) { throw "SICOVEN 1.0.6 no creó la base SQLite en userData." }
           $env:SICOVEN_DB_PATH = $database.FullName
@@ -98,12 +95,9 @@ jobs:
           if ($upgrade.ExitCode -ne 0) { throw "La actualización a 1.0.9 terminó con código $($upgrade.ExitCode)." }
           python -c "import os,sqlite3,sys; c=sqlite3.connect(os.environ['SICOVEN_DB_PATH']); r=c.execute('SELECT probe_value FROM _sicoven_upgrade_probe WHERE probe_key=?', ('upgrade',)).fetchone(); c.close(); sys.exit(0 if r and r[0]=='preserve-me' else 1)"
           if ($LASTEXITCODE -ne 0) { throw "La actualización 1.0.6 a 1.0.9 eliminó o alteró datos SQLite." }
-          # Relanzar la aplicación instalada y verificar la misma base después del arranque real.
-          $application = Start-Process -FilePath $app -ArgumentList @("--disable-gpu") -PassThru
-          Start-Sleep -Seconds 12
-          $application.Refresh()
-          if ($application.HasExited) { throw "SICOVEN 1.0.9 se cerró después del relanzamiento. Código: $($application.ExitCode)" }
-          & taskkill.exe /PID $application.Id /T /F | Out-Null
+          # Inspeccionar el DOM real del renderer después de actualizar a 1.0.9.
+          & (Join-Path $env:GITHUB_WORKSPACE "scripts/windows-renderer-smoke.ps1") -ExecutablePath $app -Version "1.0.9"
+          if ($LASTEXITCODE -ne 0) { throw "La interfaz gráfica de SICOVEN 1.0.9 no superó la prueba de renderizado." }
           python -c "import os,sqlite3,sys; c=sqlite3.connect(os.environ['SICOVEN_DB_PATH']); r=c.execute('SELECT probe_value FROM _sicoven_upgrade_probe WHERE probe_key=?', ('upgrade',)).fetchone(); c.close(); sys.exit(0 if r and r[0]=='preserve-me' else 1)"
           if ($LASTEXITCODE -ne 0) { throw "El arranque real de SICOVEN 1.0.9 no conservó los datos SQLite del equipo." }
           Write-Host "SICOVEN 1.0.6 -> 1.0.9: instalación, arranque, actualización, relanzamiento y persistencia SQLite verificados."
