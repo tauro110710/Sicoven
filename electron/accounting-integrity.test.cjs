@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateAccountingSnapshot } = require('./accounting-integrity.cjs');
+const { validateAccountingSnapshot, exceedsUsdPayable } = require('./accounting-integrity.cjs');
 const Database = require('better-sqlite3');
 
 const line = (debitBs, creditBs, debitUsd, creditUsd) => ({
@@ -2239,4 +2239,12 @@ test('SQLite accepts and constrains a cash payment against the ND own payable an
         ? { ...line, accountCode: '2.1.1.99' } : line)
     }]
   }), /pago de una ND/);
+});
+
+
+test('SQLite compares supplier payable applications at USD cent precision', () => {
+  const netPayable = 1270.0729927007299 - 131.38686131386862 - 21.8978102189781;
+  const roundedPayment = 1116.79;
+  assert.equal(exceedsUsdPayable(roundedPayment, netPayable), false);
+  assert.equal(exceedsUsdPayable(1116.80, netPayable), true);
 });
