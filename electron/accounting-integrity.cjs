@@ -1730,8 +1730,18 @@ function validateAccountingSnapshot(previousState, nextState) {
       .reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
     const netUsd = Number(purchase.totalAmountUsd) -
       Number(purchase.vatWithheldUsd || 0) - Number(purchase.islrWithheldUsd || 0);
-    if (paidUsd + creditedUsd + appliedUsd > netUsd + 0.00001) {
-      throw new Error('SQLite rechazó pagos, notas de crédito y anticipos aplicados que superan el principal neto de una factura o ND por pagar.');
+    const appliedTotalUsd = paidUsd + creditedUsd + appliedUsd;
+    if (appliedTotalUsd > netUsd + 0.00001) {
+      const documentLabel = purchase.documentType === '02' ? 'ND' : 'factura';
+      const documentNumber = String(purchase.debitNoteNumber || purchase.invoiceNumber || purchase.id || 'sin número');
+      throw new Error(
+        'SQLite rechazó aplicaciones de CxP en ' + documentLabel + ' ' + documentNumber +
+        ' (empresa ' + String(purchase.companyId || 'sin identificar') + '): pagos ' + paidUsd.toFixed(6) +
+        ' USD + notas de crédito ' + creditedUsd.toFixed(6) +
+        ' USD + anticipos ' + appliedUsd.toFixed(6) +
+        ' USD = ' + appliedTotalUsd.toFixed(6) +
+        ' USD; principal neto ' + netUsd.toFixed(6) + ' USD.'
+      );
     }
   }
 
