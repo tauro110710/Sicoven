@@ -126,3 +126,60 @@ test('rolled_back recovery rejects a valid but journal-unbound replacement snaps
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+
+test('committed recovery rejects a staged snapshot that no longer matches journal hashes', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-committed-journal-binding-'));
+  const userData = path.join(root, 'user-data');
+  const operationId = '123e4567-e89b-42d3-a456-426614174002';
+  const operationRoot = path.join(userData, 'restore-operations');
+  const operationDir = path.join(operationRoot, operationId);
+  const stagingRoot = path.join(userData, 'restore-staging');
+  const stagedDir = path.join(stagingRoot, operationId);
+  const journalPath = path.join(userData, 'restore-journal.json');
+  const dbPath = path.join(userData, 'sicoven.sqlite');
+  fs.mkdirSync(userData);
+  fs.mkdirSync(operationRoot);
+  fs.mkdirSync(operationDir);
+  fs.mkdirSync(stagingRoot);
+  const db = new Database(dbPath);
+  try {
+    db.exec("CREATE TABLE app_state(state_key TEXT PRIMARY KEY,state_json TEXT NOT NULL)");
+    db.prepare("INSERT INTO app_state(state_key,state_json) VALUES('accounting',?)").run(JSON.stringify({ companies: [], marker: 'restored' }));
+    const staged = await createBackup({
+      db, userDataDir: userData, destination: stagedDir, allowInternalDestination: true
+    });
+    const stagedManifest = sha256(path.join(stagedDir, 'manifest.json'));
+    createJournal({
+      journalPath, operationId, actor: 'admin',
+      sourceDatabaseSha256: sha256(dbPath),
+      stagedDatabaseSha256: staged.databaseSha256,
+      sourceManifestSha256: 'c'.repeat(64),
+      stagedManifestSha256: stagedManifest
+    });
+    transitionJournal({
+      journalPath, expectedState: 'prepared', nextState: 'rollback_ready',
+      lastStep: 'rollback_snapshot_verified',
+      rollbackDatabaseSha256: 'a'.repeat(64),
+      rollbackManifestSha256: 'b'.repeat(64)
+    });
+    transitionJournal({ journalPath, expectedState: 'rollback_ready', nextState: 'installing', lastStep: 'physical_swap_started' });
+    transitionJournal({ journalPath, expectedState: 'installing', nextState: 'installed', lastStep: 'database_and_documents_verified' });
+    transitionJournal({ journalPath, expectedState: 'installed', nextState: 'committed', lastStep: 'restore_committed' });
+    db.close();
+
+    const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8'));
+    journal.hashes.stagedDatabase = 'e'.repeat(64);
+    fs.writeFileSync(journalPath, JSON.stringify(journal));
+    assert.throws(
+      () => recoverPendingRestore({ userDataDir }),
+      /staging confirmado no coincide con las huellas del journal/
+    );
+    assert.equal(readJournal(journalPath).state, 'committed');
+    assert.equal(fs.existsSync(stagedDir), true);
+    assert.equal(fs.existsSync(path.join(userData, LEDGER_FILE)), false);
+  } finally {
+    if (db.open) db.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
