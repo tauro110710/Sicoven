@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   getLicenseStatus: () => ipcRenderer.invoke('sicoven:license-status'),
+  getImprovementConsent: () => ipcRenderer.invoke('sicoven:improvement-consent:get'),
+  setImprovementConsent: (decision) => ipcRenderer.invoke('sicoven:improvement-consent:set', decision),
   activateLicense: (key) => ipcRenderer.invoke('sicoven:license-activate', key),
   revalidateLicense: () => ipcRenderer.invoke('sicoven:license-revalidate'),
   onLicenseStatusChanged: (callback) => { const listener = (_event, status) => callback(status); ipcRenderer.on('sicoven:license-status-changed', listener); return () => ipcRenderer.removeListener('sicoven:license-status-changed', listener); },
