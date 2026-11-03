@@ -226,7 +226,7 @@ test('prepared recovery preserves its journal when cleanup encounters an unsafe 
 
 function makeDatabase(file, marker) {
   const database = new Database(file);
-  database.exec("CREATE TABLE app_state(state_key TEXT PRIMARY KEY,state_json TEXT NOT NULL)");
+  database.exec("CREATE TABLE app_state(state_key TEXT PRIMARY KEY,state_json TEXT NOT NULL); CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL)");
   database.prepare("INSERT INTO app_state(state_key,state_json) VALUES('accounting',?)")
     .run(JSON.stringify({ companies: [{ id: marker }], marker }));
   return database;
