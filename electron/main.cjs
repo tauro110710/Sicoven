@@ -522,11 +522,16 @@ app.whenReady().then(async () => {
     // auth_users, auth_sessions y license_state son tablas separadas y no se tocan.
     const emptyState = {
       companies: [], currentCompanyId: '', accounts: [],
-      journalEntries: [], purchases: [], sales: [], products: [], movements: [], vatVouchers: [], islrVouchers: [],
-      bankAccounts: [], bankStatementMovements: [], creditSettlements: [], supplierAdvanceSettlements: [], islrFiscalEvents: [], displayCurrency: 'DUAL', autoSyncBcv: true, bcvSyncResult: null
+      journalEntries: [], purchases: [], sales: [], products: [], movements: [],
+      vatVouchers: [], vatWithholdingDeclarations: [], vatWithholdingDeclarationEvents: [],
+      islrVouchers: [], islrFiscalEvents: [],
+      bankAccounts: [], bankStatementMovements: [], creditSettlements: [],
+      supplierAdvanceSettlements: [], supplierDirectAdvances: [], financialDisclosures: [],
+      displayCurrency: 'DUAL', autoSyncBcv: true, bcvSyncResult: null
     };
     const reset = db.transaction(() => {
-      db.prepare('DELETE FROM app_state').run();
+      // Conservar cualquier estado no contable; solo se sustituye la carga operativa.
+      db.prepare("DELETE FROM app_state WHERE state_key='accounting'").run();
       db.prepare("INSERT INTO app_state(state_key,state_json,updated_at) VALUES('accounting',?,datetime('now'))")
         .run(JSON.stringify(emptyState));
       // El reinicio operativo no borra la pista de auditoría: se conserva todo
