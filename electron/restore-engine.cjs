@@ -258,5 +258,5 @@ function registerRestoreIpc({ipcMain,app,dialog,licenseView,getActiveSession,get
     return result;
   });
 }
-module.exports={executeRestore,recoverPendingRestore,registerRestoreIpc};
+module.exports={executeRestore,recoverPendingRestore,registerRestoreIpc,restoreRollback};
 
