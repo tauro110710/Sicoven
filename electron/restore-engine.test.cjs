@@ -222,3 +222,98 @@ test('prepared recovery preserves its journal when cleanup encounters an unsafe 
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+
+function makeDatabase(file, marker) {
+  const database = new Database(file);
+  database.exec("CREATE TABLE app_state(state_key TEXT PRIMARY KEY,state_json TEXT NOT NULL)");
+  database.prepare("INSERT INTO app_state(state_key,state_json) VALUES('accounting',?)")
+    .run(JSON.stringify({ companies: [{ id: marker }], marker }));
+  return database;
+}
+
+test('executeRestore installs verified SQLite and documents and archives the rollback snapshot', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-execute-restore-success-'));
+  const userData = path.join(root, 'active');
+  const sourceData = path.join(root, 'source');
+  const backupDir = path.join(root, 'external-backup');
+  fs.mkdirSync(userData);
+  fs.mkdirSync(sourceData);
+  fs.mkdirSync(path.join(userData, 'supporting-documents'));
+  fs.mkdirSync(path.join(sourceData, 'supporting-documents'));
+  fs.writeFileSync(path.join(userData, 'supporting-documents', 'old.txt'), 'old-document');
+  fs.writeFileSync(path.join(sourceData, 'supporting-documents', 'new.txt'), 'new-document');
+  const sourceDb = makeDatabase(path.join(sourceData, 'sicoven.sqlite'), 'restored');
+  let activeDb = makeDatabase(path.join(userData, 'sicoven.sqlite'), 'original');
+  try {
+    await createBackup({ db: sourceDb, userDataDir: sourceData, destination: backupDir });
+    sourceDb.close();
+    const result = await require('./restore-engine.cjs').executeRestore({
+      backupDirectory: backupDir,
+      userDataDir: userData,
+      db: activeDb,
+      getDb: () => activeDb,
+      closeDatabase: async () => { if (activeDb?.open) activeDb.close(); },
+      reopenDatabase: async () => { activeDb = new Database(path.join(userData, 'sicoven.sqlite')); },
+      actor: 'admin'
+    });
+    assert.equal(result.ok, true);
+    assert.equal(activeDb.prepare("SELECT json_extract(state_json,'$.marker') AS marker FROM app_state WHERE state_key='accounting'").get().marker, 'restored');
+    assert.equal(fs.readFileSync(path.join(userData, 'supporting-documents', 'new.txt'), 'utf8'), 'new-document');
+    assert.equal(fs.existsSync(path.join(userData, 'supporting-documents', 'old.txt')), false);
+    const historyDir = path.join(userData, 'restore-history', result.operationId);
+    assert.equal(verifyBackupDirectory(historyDir).ok, true);
+    assert.equal(fs.existsSync(path.join(userData, 'restore-journal.json')), false);
+    assert.equal(fs.existsSync(path.join(userData, LEDGER_FILE)), true);
+  } finally {
+    if (activeDb?.open) activeDb.close();
+    if (sourceDb.open) sourceDb.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('executeRestore rolls back to the original SQLite and documents when reopening the restored DB fails once', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-execute-restore-rollback-'));
+  const userData = path.join(root, 'active');
+  const sourceData = path.join(root, 'source');
+  const backupDir = path.join(root, 'external-backup');
+  fs.mkdirSync(userData);
+  fs.mkdirSync(sourceData);
+  fs.mkdirSync(path.join(userData, 'supporting-documents'));
+  fs.mkdirSync(path.join(sourceData, 'supporting-documents'));
+  fs.writeFileSync(path.join(userData, 'supporting-documents', 'original.txt'), 'original-document');
+  fs.writeFileSync(path.join(sourceData, 'supporting-documents', 'replacement.txt'), 'replacement-document');
+  const sourceDb = makeDatabase(path.join(sourceData, 'sicoven.sqlite'), 'replacement');
+  let activeDb = makeDatabase(path.join(userData, 'sicoven.sqlite'), 'original');
+  let reopenAttempts = 0;
+  try {
+    await createBackup({ db: sourceDb, userDataDir: sourceData, destination: backupDir });
+    sourceDb.close();
+    await assert.rejects(
+      require('./restore-engine.cjs').executeRestore({
+        backupDirectory: backupDir,
+        userDataDir: userData,
+        db: activeDb,
+        getDb: () => activeDb,
+        closeDatabase: async () => { if (activeDb?.open) activeDb.close(); },
+        reopenDatabase: async () => {
+          reopenAttempts += 1;
+          if (reopenAttempts === 1) throw new Error('injected reopen failure');
+          activeDb = new Database(path.join(userData, 'sicoven.sqlite'));
+        },
+        actor: 'admin'
+      }),
+      /injected reopen failure/
+    );
+    assert.equal(reopenAttempts, 2);
+    assert.equal(activeDb.prepare("SELECT json_extract(state_json,'$.marker') AS marker FROM app_state WHERE state_key='accounting'").get().marker, 'original');
+    assert.equal(fs.readFileSync(path.join(userData, 'supporting-documents', 'original.txt'), 'utf8'), 'original-document');
+    assert.equal(fs.existsSync(path.join(userData, 'supporting-documents', 'replacement.txt')), false);
+    assert.equal(fs.existsSync(path.join(userData, 'restore-journal.json')), false);
+    assert.equal(fs.existsSync(path.join(userData, LEDGER_FILE)), true);
+  } finally {
+    if (activeDb?.open) activeDb.close();
+    if (sourceDb.open) sourceDb.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
