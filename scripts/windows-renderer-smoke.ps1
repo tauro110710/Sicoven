@@ -9,7 +9,6 @@ $ErrorActionPreference = "Stop"
 function Get-RendererSnapshot([string]$WebSocketUrl) {
   $socket = [System.Net.WebSockets.ClientWebSocket]::new()
   try {
-    $socket.Options.AddSubProtocol("") | Out-Null
     $socket.ConnectAsync([Uri]$WebSocketUrl, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
     $payload = @{
       id = 1
