@@ -102,12 +102,23 @@ function archiveCommittedRollback(userDataDir,operationId) {
 }
 function cleanupOperation(userDataDir,operationId) {
   const journal=path.join(userDataDir,JOURNAL);
-  if(exists(journal)) fs.rmSync(journal);
+  if(exists(journal)) {
+    const pending=readJournal(journal);
+    if(pending.operationId!==operationId) throw new Error('El journal pertenece a otra operación; no se permite limpiar evidencias.');
+  }
   const root=path.join(userDataDir,OP_ROOT);
   const dir=path.join(root,operationId);
-  if(exists(dir)) { realDir(dir,'Directorio de operación'); fs.rmSync(dir,{recursive:true,force:true}); }
-  const staging=path.join(userDataDir,'restore-staging',operationId);
-  if(exists(staging)) { realDir(staging,'Staging de restauración'); fs.rmSync(staging,{recursive:true,force:true}); }
+  const stagingRoot=path.join(userDataDir,'restore-staging');
+  const staging=path.join(stagingRoot,operationId);
+  // Preflight every path before deleting the journal. An unsafe staging or
+  // operation path must never erase the only durable recovery evidence.
+  if(exists(root)) realDir(root,'Operaciones de restauración');
+  if(exists(dir)) realDir(dir,'Directorio de operación');
+  if(exists(stagingRoot)) realDir(stagingRoot,'Carpeta de staging de restauración');
+  if(exists(staging)) realDir(staging,'Staging de restauración');
+  if(exists(journal)) fs.rmSync(journal);
+  if(exists(dir)) fs.rmSync(dir,{recursive:true,force:true});
+  if(exists(staging)) fs.rmSync(staging,{recursive:true,force:true});
 }
 function verifyActiveMatchesBackup(backupDir, userDataDir) {
   const verified = verifyBackupDirectory(backupDir);
