@@ -110,6 +110,8 @@ test('rolled_back recovery rejects a valid but journal-unbound replacement snaps
     transitionJournal({ journalPath, expectedState: 'installing', nextState: 'rolling_back', lastStep: 'rollback_started' });
     transitionJournal({ journalPath, expectedState: 'rolling_back', nextState: 'rolled_back', lastStep: 'startup_rollback_verified' });
     db.close();
+    // A completed physical rollback installs the exact verified snapshot bytes.
+    fs.copyFileSync(path.join(rollbackDir, 'sicoven.sqlite'), dbPath);
 
     const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8'));
     journal.hashes.rollbackDatabase = 'e'.repeat(64);
@@ -167,6 +169,8 @@ test('committed recovery rejects a staged snapshot that no longer matches journa
     transitionJournal({ journalPath, expectedState: 'installing', nextState: 'installed', lastStep: 'database_and_documents_verified' });
     transitionJournal({ journalPath, expectedState: 'installed', nextState: 'committed', lastStep: 'restore_committed' });
     db.close();
+    // A committed restore installs the exact staged SQLite file, not a logical re-save.
+    fs.copyFileSync(path.join(stagedDir, 'sicoven.sqlite'), dbPath);
 
     const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8'));
     journal.hashes.stagedDatabase = 'e'.repeat(64);
