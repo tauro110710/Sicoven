@@ -213,6 +213,43 @@ test('SQLite prevents ISLR allocations above taxable plus exempt invoice base', 
   ), /superior a la base de la factura/);
 });
 
+test('SQLite preserves unchanged legacy invoice links but strictly validates new or changed links', () => {
+  const legacyInvoice = {
+    id: 'legacy-purchase', companyId: 'company-1', documentType: '01',
+    invoiceNumber: 'OLD-100', journalEntryId: 'legacy-entry'
+  };
+  const legacyEntry = {
+    ...sourceEntry(), id: 'legacy-entry', companyId: 'company-2', type: 'MANUAL'
+  };
+  const legacyState = {
+    ...emptyState([legacyEntry]),
+    purchases: [legacyInvoice]
+  };
+
+  // Upgrading/saving an unchanged historical record must not brick the local database.
+  assert.doesNotThrow(() => validateAccountingSnapshot(legacyState, structuredClone(legacyState)));
+
+  // The same invalid relationship is rejected when introduced by a new invoice.
+  const newInvoice = { ...legacyInvoice, id: 'new-purchase', invoiceNumber: 'NEW-100' };
+  assert.throws(() => validateAccountingSnapshot(
+    emptyState([legacyEntry]),
+    { ...emptyState([legacyEntry]), purchases: [newInvoice] }
+  ), /vínculo de factura con un asiento/);
+
+  // Sales allow a controlled journalEntryId update, so the strict link check must catch it.
+  const legacySale = {
+    id: 'legacy-sale', companyId: 'company-1', documentType: '01',
+    invoiceNumber: 'SALE-100', journalEntryId: 'legacy-entry'
+  };
+  const legacySalesState = { ...emptyState([legacyEntry]), sales: [legacySale] };
+  const changedSale = { ...legacySale, journalEntryId: 'other-entry' };
+  const otherEntry = { ...legacyEntry, id: 'other-entry', companyId: 'company-1', type: 'MANUAL' };
+  assert.throws(() => validateAccountingSnapshot(
+    legacySalesState,
+    { ...emptyState([legacyEntry, otherEntry]), sales: [changedSale] }
+  ), /vínculo de factura con un asiento/);
+});
+
 test('SQLite rejects physical deletion of a posted journal entry', () => {
   assert.throws(
     () => validateAccountingSnapshot(emptyState([sourceEntry()]), emptyState([])),

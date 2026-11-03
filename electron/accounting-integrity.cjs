@@ -902,17 +902,25 @@ function validateAccountingSnapshot(previousState, nextState) {
 
   for (const collectionName of ['purchases', 'sales']) {
     const expectedEntryType = collectionName === 'sales' ? 'VENTA' : 'COMPRA';
-    for (const document of asArray(nextState[collectionName])) {
+    const oldDocuments = asArray(priorState[collectionName]);
+    const newDocuments = asArray(nextState[collectionName]);
+    const oldById = new Map(oldDocuments.map(document => [String(document.id), document]));
+    for (const document of newDocuments) {
       if (!document.journalEntryId || (document.documentType && document.documentType !== '01')) continue;
+      const oldDocument = oldById.get(String(document.id));
+      // Existing invoice-to-entry links are grandfathered for read/upgrade compatibility.
+      // A new document or any changed link/company/type must still pass strict validation.
+      const unchangedHistoricalLink = oldDocument &&
+        String(oldDocument.journalEntryId || '') === String(document.journalEntryId || '') &&
+        String(oldDocument.companyId || '') === String(document.companyId || '') &&
+        String(oldDocument.documentType || '01') === String(document.documentType || '01');
+      if (unchangedHistoricalLink) continue;
       const linkedEntry = nextById.get(String(document.journalEntryId));
       if (!linkedEntry || linkedEntry.companyId !== document.companyId ||
           linkedEntry.type !== expectedEntryType) {
         throw new Error('SQLite rechazó un vínculo de factura con un asiento de otra empresa, tipo o documento.');
       }
     }
-    const oldDocuments = asArray(priorState[collectionName]);
-    const newDocuments = asArray(nextState[collectionName]);
-    const oldById = new Map(oldDocuments.map(document => [String(document.id), document]));
     for (const document of newDocuments) {
       const oldDocument = oldById.get(String(document.id));
       if (!document.isCancelled || (oldDocument && oldDocument.isCancelled)) continue;
