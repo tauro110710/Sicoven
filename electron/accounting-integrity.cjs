@@ -8,6 +8,11 @@ function money(value) {
   return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 }
 
+// CxP balances in USD are recorded and settled to cents; compare at that same precision.
+function exceedsUsdPayable(applied, payable) {
+  return money(applied) > money(payable);
+}
+
 function isValidIsoDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(value + 'T00:00:00.000Z');
@@ -1731,7 +1736,7 @@ function validateAccountingSnapshot(previousState, nextState) {
     const netUsd = Number(purchase.totalAmountUsd) -
       Number(purchase.vatWithheldUsd || 0) - Number(purchase.islrWithheldUsd || 0);
     const appliedTotalUsd = paidUsd + creditedUsd + appliedUsd;
-    if (appliedTotalUsd > netUsd + 0.00001) {
+    if (exceedsUsdPayable(appliedTotalUsd, netUsd)) {
       const documentLabel = purchase.documentType === '02' ? 'ND' : 'factura';
       const documentNumber = String(purchase.debitNoteNumber || purchase.invoiceNumber || purchase.id || 'sin número');
       throw new Error(
@@ -1830,4 +1835,4 @@ function validateAccountingSnapshot(previousState, nextState) {
   return { priorEntries, nextEntries, priorById, nextById };
 }
 
-module.exports = { validateAccountingSnapshot, validateNewAccountCatalogEntries };
+module.exports = { validateAccountingSnapshot, validateNewAccountCatalogEntries, exceedsUsdPayable };
