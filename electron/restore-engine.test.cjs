@@ -58,7 +58,7 @@ test('rolled_back recovery refuses to clean evidence when active SQLite differs 
     db.close();
 
     assert.throws(
-      () => recoverPendingRestore({ userDataDir }),
+      () => recoverPendingRestore({ userDataDir: userData }),
       /base activa no coincide con el staging/
     );
     assert.equal(readJournal(journalPath).state, 'rolled_back');
@@ -115,7 +115,7 @@ test('rolled_back recovery rejects a valid but journal-unbound replacement snaps
     journal.hashes.rollbackDatabase = 'e'.repeat(64);
     fs.writeFileSync(journalPath, JSON.stringify(journal));
     assert.throws(
-      () => recoverPendingRestore({ userDataDir }),
+      () => recoverPendingRestore({ userDataDir: userData }),
       /snapshot de retorno no coincide con las huellas del journal/
     );
     assert.equal(readJournal(journalPath).state, 'rolled_back');
@@ -172,7 +172,7 @@ test('committed recovery rejects a staged snapshot that no longer matches journa
     journal.hashes.stagedDatabase = 'e'.repeat(64);
     fs.writeFileSync(journalPath, JSON.stringify(journal));
     assert.throws(
-      () => recoverPendingRestore({ userDataDir }),
+      () => recoverPendingRestore({ userDataDir: userData }),
       /staging confirmado no coincide con las huellas del journal/
     );
     assert.equal(readJournal(journalPath).state, 'committed');
