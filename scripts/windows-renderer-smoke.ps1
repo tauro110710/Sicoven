@@ -22,14 +22,19 @@ function Get-RendererSnapshot([string]$WebSocketUrl) {
     $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
     $socket.SendAsync([ArraySegment[byte]]::new($bytes), [System.Net.WebSockets.WebSocketMessageType]::Text, $true, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
     $buffer = [byte[]]::new(65536)
-    $builder = [Text.StringBuilder]::new()
-    do {
-      $part = $socket.ReceiveAsync([ArraySegment[byte]]::new($buffer), [Threading.CancellationToken]::None).GetAwaiter().GetResult()
-      if ($part.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) { throw "El renderer cerró el canal CDP." }
-      [void]$builder.Append([Text.Encoding]::UTF8.GetString($buffer, 0, $part.Count))
-    } while (-not $part.EndOfMessage)
-    $response = $builder.ToString() | ConvertFrom-Json
-    if ($response.id -ne 1) { throw "Respuesta CDP inesperada." }
+    $response = $null
+    $deadline = [DateTime]::UtcNow.AddSeconds(10)
+    while ([DateTime]::UtcNow -lt $deadline -and -not $response) {
+      $builder = [Text.StringBuilder]::new()
+      do {
+        $part = $socket.ReceiveAsync([ArraySegment[byte]]::new($buffer), [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+        if ($part.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) { throw "El renderer cerró el canal CDP." }
+        [void]$builder.Append([Text.Encoding]::UTF8.GetString($buffer, 0, $part.Count))
+      } while (-not $part.EndOfMessage)
+      $message = $builder.ToString() | ConvertFrom-Json
+      if ($message.id -eq 1) { $response = $message }
+    }
+    if (-not $response) { throw "Timeout esperando respuesta Runtime.evaluate de CDP." }
     $value = $response.result.result.value
     if (-not $value) { throw "El renderer no devolvió estado DOM." }
     return ($value | ConvertFrom-Json)
