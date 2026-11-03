@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
+import { isJournalEntryBalanced } from '../../types/journalEntryValidation';
 import {
   BookOpen,
   Plus,
@@ -270,7 +271,7 @@ export const LibroDiarioView: React.FC = () => {
             const sumCreditBs = entry.items.reduce((s, it) => s + (it.creditBs || 0), 0);
             const sumDebitUsd = entry.items.reduce((s, it) => s + (it.debitUsd || 0), 0);
             const sumCreditUsd = entry.items.reduce((s, it) => s + (it.creditUsd || 0), 0);
-            const isEntrySquare = Math.abs(sumDebitBs - sumCreditBs) < 0.01 && sumDebitBs > 0;
+            const isEntrySquare = isJournalEntryBalanced({ debitBs: sumDebitBs, creditBs: sumCreditBs, debitUsd: sumDebitUsd, creditUsd: sumCreditUsd });
             const reversalSource = entry.reversalOfEntryId
               ? journalEntries.find(candidate => candidate.id === entry.reversalOfEntryId)
               : undefined;

@@ -1,6 +1,6 @@
 # RT-01 — Independencia entre contabilización y respaldo documental
 
-**Estado:** criterio arquitectónico aprobado; auditoría inicial completada; implementación de gestión de adjuntos pendiente de diseño e integración.  
+**Estado:** política funcional aprobada; adjuntos voluntarios y nunca bloqueantes. La interfaz permite adjuntar, consultar, abrir y sustituir documentos opcionales.  
 **Alcance:** transversal a los módulos que registran operaciones, comprobantes y movimientos contables.  
 **Persistencia:** SQLite local, sin servicios remotos obligatorios.
 
@@ -27,7 +27,6 @@ Los campos serán condicionales al tipo de operación y a la normativa aplicable
 
 Cuando exista gestión de adjuntos, el sistema distinguirá al menos:
 
-- `PENDING_SUPPORT`: operación registrada sin respaldo digital incorporado.
 - `ATTACHED_UNREVIEWED`: documento incorporado, todavía no revisado.
 - `VERIFIED`: documento revisado por un usuario autorizado.
 - `OBSERVATION_REQUIRED`: existe una observación documental.
@@ -45,7 +44,6 @@ La futura gestión documental debe permitir:
 - Mantener hash SHA-256 para identificar integridad y duplicados.
 - Sustituir un archivo sin destruir el anterior ni modificar silenciosamente el asiento.
 - Registrar revisión, observaciones y usuario responsable.
-- Consultar y exportar listados de soportes pendientes por empresa, período, módulo y contraparte.
 
 Los archivos deben almacenarse localmente bajo el control de la aplicación y con rutas seguras. No guardar rutas arbitrarias proporcionadas por el renderer. La apertura debe impedir path traversal y validar tamaño, tipo y contenido permitido.
 
@@ -81,7 +79,7 @@ Por tanto, no se encontró una restricción de archivo adjunto que actualmente b
 - Un archivo puede incorporarse después sin recrear ni duplicar la operación.
 - Incorporar un archivo no modifica importes ni asientos.
 - Sustituir un archivo conserva la versión anterior y su auditoría.
-- El estado documental pendiente aparece en consultas e informes.
+- La ausencia de adjuntos no genera estados pendientes, informes de faltantes, alertas ni calificaciones negativas.
 - Un archivo inválido, demasiado grande o con ruta manipulada es rechazado sin afectar la operación contable.
 - Los adjuntos y su auditoría sobreviven al cierre y reapertura de SICOVEN y a la actualización de la aplicación.
 
@@ -91,7 +89,7 @@ Por tanto, no se encontró una restricción de archivo adjunto que actualmente b
 2. Diseñar tabla SQLite dedicada a documentos y eventos, evitando almacenar binarios dentro del JSON general de estado contable.
 3. Implementar IPC Electron validado para incorporar, consultar, abrir y sustituir archivos en almacenamiento local.
 4. Añadir interfaz opcional en compras, ventas, asientos y demás módulos según su pertinencia.
-5. Añadir estados documentales e informes de pendientes.
+5. Consultar los documentos que el usuario haya incorporado voluntariamente, sin generar informes de faltantes.
 6. Incorporar pruebas automatizadas de persistencia, seguridad, auditoría y actualización.
 7. Fusionar por etapas después de validar TypeScript, pruebas automatizadas, auditoría de recursos y compilación.
 
@@ -115,4 +113,4 @@ La API quedó expuesta por Electron preload y tipada en `src/electron.d.ts`.
 
 ## 10. Límites actuales
 
-El motor y sus pruebas automatizadas están añadidos en la rama de implementación, pero aún requieren CI aprobada y fusión. La interfaz visual para adjuntar, consultar, revisar y sustituir documentos todavía no está integrada en las pantallas contables. La ausencia de documento sigue sin bloquear ninguna operación.
+El motor local y sus pruebas automatizadas están integrados en la línea base; esta candidata incorpora el panel visual para adjuntar, consultar, abrir y sustituir documentos voluntariamente. La ausencia de documento no crea estados pendientes, alertas ni bloqueos. La aceptación final de la interfaz requiere CI y revisión funcional.

@@ -19,3 +19,19 @@ export function validateJournalEntryAccounts(
     }
   }
 }
+
+
+/** An entry is balanced only when both Bs. and USD totals balance. */
+export function isJournalEntryBalanced(
+  totals: { debitBs: number; creditBs: number; debitUsd: number; creditUsd: number },
+  toleranceBs = 0.01,
+  toleranceUsd = 0.000001
+): boolean {
+  const values = [totals.debitBs, totals.creditBs, totals.debitUsd, totals.creditUsd];
+  if (!values.every(value => Number.isFinite(value) && value >= 0)) return false;
+  const hasMovement = totals.debitBs > 0 || totals.creditBs > 0 ||
+    totals.debitUsd > 0 || totals.creditUsd > 0;
+  return hasMovement &&
+    Math.abs(totals.debitBs - totals.creditBs) < toleranceBs &&
+    Math.abs(totals.debitUsd - totals.creditUsd) < toleranceUsd;
+}
