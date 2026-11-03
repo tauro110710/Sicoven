@@ -63,13 +63,14 @@ jobs:
             throw "No se generó el instalador Windows x64 de SICOVEN."
           }
           $installer | Select-Object Name, Length, LastWriteTime | Format-Table
-      - name: Upgrade 1.0.6 to 1.0.9 and preserve SQLite data
+      - name: Upgrade 1.0.6 to current version and preserve SQLite data
         shell: pwsh
         run: |
           $previousInstaller = Get-ChildItem -Path (Join-Path $env:RUNNER_TEMP "SICOVEN-Previous") -Filter "SICOVEN-Setup-*-x64.exe" -File | Select-Object -First 1
           if (-not $previousInstaller) { throw "No se descargó el instalador anterior 1.0.6." }
-          $installer = Get-ChildItem -Path release -Filter "SICOVEN-Setup-1.0.9-x64.exe" -File | Select-Object -First 1
-          if (-not $installer) { throw "No se generó el instalador 1.0.9." }
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $installer = Get-ChildItem -Path release -Filter "SICOVEN-Setup-$version-x64.exe" -File | Select-Object -First 1
+          if (-not $installer) { throw "No se generó el instalador $version." }
           $installDir = Join-Path $env:RUNNER_TEMP "SICOVEN-Smoke"
           if (Test-Path $installDir) { Remove-Item -Path $installDir -Recurse -Force }
           $oldInstall = Start-Process -FilePath $previousInstaller.FullName -ArgumentList @("/S", "/D=$installDir") -PassThru
@@ -90,17 +91,17 @@ jobs:
           python -c "import os,sqlite3; c=sqlite3.connect(os.environ['SICOVEN_DB_PATH']); c.execute('CREATE TABLE IF NOT EXISTS _sicoven_upgrade_probe (probe_key TEXT PRIMARY KEY, probe_value TEXT NOT NULL)'); c.execute('INSERT OR REPLACE INTO _sicoven_upgrade_probe VALUES (?,?)', ('upgrade','preserve-me')); c.commit(); c.close()"
           if ($LASTEXITCODE -ne 0) { throw "No se pudo preparar el marcador SQLite en 1.0.6." }
           $upgrade = Start-Process -FilePath $installer.FullName -ArgumentList @("/S", "/D=$installDir") -PassThru
-          if (-not $upgrade.WaitForExit(120000)) { throw "La actualización 1.0.6 a 1.0.9 no terminó dentro del tiempo permitido." }
+          if (-not $upgrade.WaitForExit(120000)) { throw "La actualización 1.0.6 a $version no terminó dentro del tiempo permitido." }
           $upgrade.Refresh()
-          if ($upgrade.ExitCode -ne 0) { throw "La actualización a 1.0.9 terminó con código $($upgrade.ExitCode)." }
+          if ($upgrade.ExitCode -ne 0) { throw "La actualización a $version terminó con código $($upgrade.ExitCode)." }
           python -c "import os,sqlite3,sys; c=sqlite3.connect(os.environ['SICOVEN_DB_PATH']); r=c.execute('SELECT probe_value FROM _sicoven_upgrade_probe WHERE probe_key=?', ('upgrade',)).fetchone(); c.close(); sys.exit(0 if r and r[0]=='preserve-me' else 1)"
-          if ($LASTEXITCODE -ne 0) { throw "La actualización 1.0.6 a 1.0.9 eliminó o alteró datos SQLite." }
-          # Inspeccionar el DOM real del renderer después de actualizar a 1.0.9.
-          & (Join-Path $env:GITHUB_WORKSPACE "scripts/windows-renderer-smoke.ps1") -ExecutablePath $app -Version "1.0.9"
-          if ($LASTEXITCODE -ne 0) { throw "La interfaz gráfica de SICOVEN 1.0.9 no superó la prueba de renderizado." }
+          if ($LASTEXITCODE -ne 0) { throw "La actualización 1.0.6 a $version eliminó o alteró datos SQLite." }
+          # Inspeccionar el DOM real del renderer después de actualizar a la versión $version.
+          & (Join-Path $env:GITHUB_WORKSPACE "scripts/windows-renderer-smoke.ps1") -ExecutablePath $app -Version $version
+          if ($LASTEXITCODE -ne 0) { throw "La interfaz gráfica de SICOVEN $version no superó la prueba de renderizado." }
           python -c "import os,sqlite3,sys; c=sqlite3.connect(os.environ['SICOVEN_DB_PATH']); r=c.execute('SELECT probe_value FROM _sicoven_upgrade_probe WHERE probe_key=?', ('upgrade',)).fetchone(); c.close(); sys.exit(0 if r and r[0]=='preserve-me' else 1)"
-          if ($LASTEXITCODE -ne 0) { throw "El arranque real de SICOVEN 1.0.9 no conservó los datos SQLite del equipo." }
-          Write-Host "SICOVEN 1.0.6 -> 1.0.9: instalación, arranque, actualización, relanzamiento y persistencia SQLite verificados."
+          if ($LASTEXITCODE -ne 0) { throw "El arranque real de SICOVEN $version no conservó los datos SQLite del equipo." }
+          Write-Host "SICOVEN 1.0.6 -> ${version}: instalación, arranque, actualización, relanzamiento y persistencia SQLite verificados."
           Get-Item $installer.FullName | Select-Object Name, Length
       - name: Publish installer as a GitHub Release asset
         if: github.event_name != 'pull_request'
@@ -111,6 +112,7 @@ jobs:
         shell: pwsh
         run: |
           $installer = Get-ChildItem -Path release -Filter "SICOVEN-Setup-*-x64.exe" -File | Select-Object -First 1
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           if (-not $installer) { throw "No se encontró el instalador para publicar." }
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $shortSha = $env:GITHUB_SHA.Substring(0, 7)
