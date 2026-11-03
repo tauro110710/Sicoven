@@ -63,8 +63,10 @@ function replaceFromBackup(backupDir,userDataDir,operationDir) {
   }
 }
 function restoreRollback(rollbackDir,userDataDir,operationDir) {
-  clearSqliteSidecars(userDataDir);
+  // Verificar el snapshot completo antes de tocar WAL/SHM o la base activa.
+  // Si el respaldo está corrupto, la recuperación debe fallar sin alterar datos.
   const verified=verifyBackupDirectory(rollbackDir);
+  clearSqliteSidecars(userDataDir);
   const dbPath=path.join(userDataDir,DB), docsPath=path.join(userDataDir,DOCS);
   const tmpDb=path.join(operationDir,'rollback.sqlite');
   const tmpDocs=path.join(operationDir,'rollback-documents');
@@ -78,8 +80,12 @@ function restoreRollback(rollbackDir,userDataDir,operationDir) {
   fs.renameSync(tmpDb,dbPath);
   if(exists(docsPath)) { if(exists(displacedDocs)) fs.rmSync(displacedDocs,{recursive:true,force:true}); fs.renameSync(docsPath,displacedDocs); }
   fs.renameSync(tmpDocs,docsPath);
-  if(hashFile(dbPath)!==verified.databaseSha256) throw new Error('Rollback: la base restaurada no coincide.');
-  return verified;
+  // Verificar tanto SQLite como el conjunto íntegro de documentos tras el swap.
+  const restored = verifyActiveMatchesBackup(rollbackDir,userDataDir);
+  if(restored.databaseSha256!==verified.databaseSha256 || restored.documentCount!==verified.documentCount) {
+    throw new Error('Rollback: la base o los documentos restaurados no coinciden con el snapshot.');
+  }
+  return restored;
 }
 function archiveCommittedRollback(userDataDir,operationId) {
   const operationDir=path.join(userDataDir,OP_ROOT,operationId);
