@@ -43,3 +43,26 @@ test('journal rejects a missing or invalid actor', () => {
   assert.throws(() => validateJournal(value), /journal.*corrupto/i);
   assert.throws(() => validateJournal({ ...value, actor: 'x'.repeat(121) }), /journal.*corrupto/i);
 });
+
+
+test('rollback verifies the return package before deleting SQLite sidecars', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-restore-rollback-guard-'));
+  const backup = path.join(root, 'invalid-backup');
+  const userData = path.join(root, 'user-data');
+  const operation = path.join(root, 'operation');
+  fs.mkdirSync(backup);
+  fs.mkdirSync(userData);
+  fs.mkdirSync(operation);
+  const wal = path.join(userData, 'sicoven.sqlite-wal');
+  const shm = path.join(userData, 'sicoven.sqlite-shm');
+  fs.writeFileSync(wal, 'wal-preserve-me');
+  fs.writeFileSync(shm, 'shm-preserve-me');
+  try {
+    const { restoreRollback } = require('./restore-engine.cjs');
+    assert.throws(() => restoreRollback(backup, userData, operation), /manifiesto|respaldo/i);
+    assert.equal(fs.readFileSync(wal, 'utf8'), 'wal-preserve-me');
+    assert.equal(fs.readFileSync(shm, 'utf8'), 'shm-preserve-me');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
