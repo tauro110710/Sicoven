@@ -158,7 +158,10 @@ function recoverPendingRestore({userDataDir}) {
     return {ok:true,recovered:true,action:'kept_committed_restore'};
   }
   if(journal.state==='rolled_back') {
-    const rollback = verifyBackupDirectory(rollbackDir);
+    // A journal transition is not proof that the physical rollback survived.
+    // Verify the active SQLite file and every supporting document before
+    // recording success or deleting the journal/snapshot evidence.
+    const rollback = verifyActiveMatchesBackup(rollbackDir, root);
     appendRestoreOutcome({ userDataDir: root, operationId: journal.operationId, actor: journal.actor, outcome: 'RESTORE_ROLLED_BACK', databaseSha256: rollback.databaseSha256, documentCount: rollback.documentCount });
     cleanupOperation(root,journal.operationId);
     return {ok:true,recovered:true,action:'finalized_rollback_cleanup'};
