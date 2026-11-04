@@ -831,6 +831,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           if (cancelled) return;
           // La hidratación nunca elimina empresas ni movimientos históricos por identificadores o nombres.
           if (saved && typeof saved === 'object') {
+            lastPersistedSnapshotRef.current = saved;
             if (Array.isArray(saved.companies)) setCompanies(saved.companies as Company[]);
             if (typeof saved.currentCompanyId === 'string') setCurrentCompanyId(saved.currentCompanyId);
             if (Array.isArray(saved.accounts)) {
@@ -906,6 +907,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             if (initialSave?.ok !== true) {
               throw new Error('SQLite no confirmó la inicialización del estado contable vacío.');
             }
+            lastPersistedSnapshotRef.current = emptyAccountingState;
           }
         }
         initialized = true;
@@ -949,7 +951,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             // confirmado evita mostrar operaciones que nunca llegaron a la base local.
             setCompanies(confirmed.companies || []);
             setCurrentCompanyId(confirmed.currentCompanyId || confirmed.companies?.[0]?.id || '');
-            setAccounts(confirmed.accounts || DEFAULT_CHART_OF_ACCOUNTS);
+            const confirmedAccounts = Array.isArray(confirmed.accounts) ? confirmed.accounts : DEFAULT_CHART_OF_ACCOUNTS;
+            const confirmedCodes = new Set(confirmedAccounts.map((account: Account) => account.code));
+            setAccounts([...confirmedAccounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !confirmedCodes.has(account.code))]);
             setJournalEntries(confirmed.journalEntries || []);
             setPurchases(confirmed.purchases || []);
             setSales(confirmed.sales || []);
