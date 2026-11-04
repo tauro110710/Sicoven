@@ -85,11 +85,13 @@ test('execution evidence must be a correction document explicitly linked to the 
   {id:'sale-source',companyId:'co-1',invoiceNumber:'FAC-001',documentType:'01'},
   {id:'unrelated',companyId:'co-1',invoiceNumber:'NC-900',documentType:'03'},
   {id:'wrong-company',companyId:'co-2',invoiceNumber:'NC-901',documentType:'03',originalSaleId:'sale-source'},
-  {id:'linked-corrective',companyId:'co-1',invoiceNumber:'NC-001',documentType:'03',originalSaleId:'sale-source'}
+  {id:'linked-corrective',companyId:'co-1',invoiceNumber:'NC-001',documentType:'03',originalSaleId:'sale-source'},
+  {id:'linked-debit',companyId:'co-1',invoiceNumber:'ND-001',documentType:'02',originalSaleId:'sale-source'}
  ]};
  assert.equal(findLinkedCorrectionEvidence(state,item,'NC-900'),null);
  assert.equal(findLinkedCorrectionEvidence(state,item,'NC-901'),null);
  assert.equal(findLinkedCorrectionEvidence(state,item,'NC-001').id,'linked-corrective');
+ assert.equal(findLinkedCorrectionEvidence(state,item,'ND-001').id,'linked-debit');
  assert.equal(findLinkedCorrectionEvidence(state,item,'FAC-001'),null);
 });
 
@@ -182,4 +184,15 @@ test('execution cannot be marked complete without exact evidence identity and co
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Documento correctivo aplicado y conciliado.',evidenceRecordId:'credit-note-1',evidenceCollection:'purchases'},admin(3,'ejecutor')),/ID y la colección exacta/);
   assert.equal(getCorrectionCase(db,requested.id).status,'APPROVED');
  }finally{db.close();}
+});
+
+test('inventory correction evidence requires correctionForMovementId and the exact reference',()=>{
+ const item={company_id:'co-1',entity_type:'INVENTORY_MOVEMENT',entity_id:'movement-source'};
+ const state={movements:[
+  {id:'movement-source',companyId:'co-1',documentRef:'COMPRA-01'},
+  {id:'movement-unrelated',companyId:'co-1',documentRef:'DEV-02'},
+  {id:'movement-correction',companyId:'co-1',documentRef:'DEV-01',correctionForMovementId:'movement-source'}
+ ]};
+ assert.equal(findLinkedCorrectionEvidence(state,item,'DEV-01').id,'movement-correction');
+ assert.equal(findLinkedCorrectionEvidence(state,item,'DEV-02'),null);
 });
