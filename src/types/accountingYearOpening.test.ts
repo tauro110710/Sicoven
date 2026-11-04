@@ -81,6 +81,24 @@ test('no mezcla empresas ni movimientos posteriores al corte', () => {
 });
 
 
+test('rechaza asientos históricos con diferencias que exceden la tolerancia estricta de partida doble', () => {
+  const unbalancedBs = [entry('bad-bs', '2026-12-31', [
+    line('1.1.1', 100, 0, 1, 0), line('2.1.1', 0, 99.985, 0, 1)
+  ])];
+  assert.throws(() => buildOpeningEntryItems({
+    companyId: 'co-1', periodStartDate: '2026-01-01', periodEndDate: '2026-12-31', openingDate: '2027-01-01',
+    accounts, journalEntries: unbalancedBs, retainedEarningsAccountCode: '3.1.1'
+  }), /no cuadra/);
+
+  const unbalancedUsd = [entry('bad-usd', '2026-12-31', [
+    line('1.1.1', 100, 0, 1, 0), line('2.1.1', 0, 100, 0, 0.99995)
+  ])];
+  assert.throws(() => buildOpeningEntryItems({
+    companyId: 'co-1', periodStartDate: '2026-01-01', periodEndDate: '2026-12-31', openingDate: '2027-01-01',
+    accounts, journalEntries: unbalancedUsd, retainedEarningsAccountCode: '3.1.1'
+  }), /no cuadra/);
+});
+
 test('no vuelve a trasladar ingresos y gastos de ejercicios anteriores al resultado del nuevo período', () => {
   const journal = [
     entry('prior-income', '2025-12-30', [
