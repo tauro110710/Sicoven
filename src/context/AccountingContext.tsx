@@ -80,6 +80,7 @@ type SupportingDocumentDraft = { entityType: SupportingDocumentEntityType; entit
 interface AccountingContextType {
   getAuditEvents: (limit?: number) => Promise<AccountingAuditEvent[]>;
   requestAccountingCorrection: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'INVENTORY_PRODUCT'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason: string; workpaperNote: string }) => Promise<void>;
+  createCorrectionCase: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'INVENTORY_PRODUCT' | 'BCV_RATE'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason: string; workpaperNote: string }) => Promise<CorrectionCase>;
   listCorrectionCases: () => Promise<CorrectionCase[]>;
   reviewCorrectionCase: (input: { caseId: string; decision: 'APPROVE' | 'REJECT'; reason: string }) => Promise<CorrectionCase>;
   executeCorrectionCase: (input: { caseId: string; executionRef: string; reason: string }) => Promise<CorrectionCase>;
@@ -434,6 +435,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!result?.ok) throw new Error(result?.message || 'SQLite no pudo registrar la autorización de la corrección.');
   };
 
+  const createCorrectionCase = async (input: {entityType:string;entityId:string;correctionType:string;sourceDocumentRef:string;correctionDocumentRef:string;reason:string;workpaperNote:string}): Promise<CorrectionCase> => {
+    const store = window.sicovenStore as typeof window.sicovenStore & { createCorrectionCase?: (sessionToken:string,payload:Record<string,string>)=>Promise<CorrectionCase> };
+    if (!store?.createCorrectionCase) throw new Error('El registro formal de expedientes requiere la edición de escritorio.');
+    return store.createCorrectionCase(token,{...input,companyId:currentCompany.id});
+  };
   const listCorrectionCases = useCallback(async (): Promise<CorrectionCase[]> => {
     const store = window.sicovenStore as typeof window.sicovenStore & { listCorrectionCases?: (sessionToken: string, companyId: string) => Promise<CorrectionCase[]> };
     if (!store?.listCorrectionCases) throw new Error('El expediente de correcciones requiere la edición de escritorio.');
@@ -5261,6 +5267,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         companies,
         getAuditEvents,
         requestAccountingCorrection,
+        createCorrectionCase,
         listCorrectionCases,
         reviewCorrectionCase,
         executeCorrectionCase,
