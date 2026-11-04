@@ -2167,7 +2167,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id,
         entityId: sourceForAudit.id, correctionType: 'PURCHASE_INVENTORY_CREDIT_NOTE',
         sourceDocumentRef: sourceForAudit.invoiceNumber, correctionDocumentRef: request.creditNoteNumber,
-        reason: request.reason, workpaperNote: request.reason
+        reason: request.reason, workpaperNote: request.reason,
+        fiscalEmissionMedium: request.fiscalEmissionMedium, sameMediumAsOriginal: request.sameMediumAsOriginal
       });
       return await runAtomicInvoiceImport(async () => {
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la nota de crédito.');
@@ -2248,7 +2249,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       purchase, products: products.filter(item => item.companyId === currentCompany.id),
       lines: draftLines, returnDate: request.returnDate,
       creditNoteNumber: request.creditNoteNumber, controlNumber: request.controlNumber,
-      reason: request.reason, closedThroughDate: currentCompany.closedThroughDate
+      reason: request.reason, fiscalEmissionMedium: request.fiscalEmissionMedium,
+      sameMediumAsOriginal: request.sameMediumAsOriginal, closedThroughDate: currentCompany.closedThroughDate
     });
     const sourcePurchaseEntry = journalEntries.find(entry =>
       entry.companyId === currentCompany.id && entry.id === purchase.journalEntryId);
@@ -2386,6 +2388,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       supplierName: purchase.supplierName, supplierAddress: purchase.supplierAddress,
       invoiceNumber: request.creditNoteNumber.trim(), controlNumber: request.controlNumber.trim(),
       creditNoteNumber: request.creditNoteNumber.trim(), affectedInvoiceNumber: purchase.invoiceNumber,
+      affectedInvoiceDate: purchase.invoiceDate, affectedInvoiceControlNumber: purchase.controlNumber,
+      affectedInvoiceTotalAmountBs: purchase.totalAmountBs, affectedInvoiceTotalAmountUsd: purchase.totalAmountUsd,
+      fiscalEmissionMedium: request.fiscalEmissionMedium, sameMediumAsOriginal: request.sameMediumAsOriginal,
       documentType: '03', totalAmountBs: valuation.totalAmountBs,
       exemptAmountBs: valuation.exemptAmountBs, taxableBaseBs: valuation.taxableBaseBs,
       taxRate: purchase.taxRate, vatAmountBs: valuation.vatAmountBs,
@@ -2514,7 +2519,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         eventType: 'accounting_correction_executed', entityType: 'PURCHASE', companyId: currentCompany.id,
         entityId: purchase.id, correctionType: 'PURCHASE_INVENTORY_CREDIT_NOTE',
         sourceDocumentRef: purchase.invoiceNumber, correctionDocumentRef: request.creditNoteNumber,
-        reason: request.reason, workpaperNote: request.reason, journalEntryId: journal.id
+        reason: request.reason, workpaperNote: request.reason,
+        fiscalEmissionMedium: request.fiscalEmissionMedium, sameMediumAsOriginal: request.sameMediumAsOriginal,
+        journalEntryId: journal.id
       });
     } catch (auditError) {
       throw new Error('La devolución y NC quedaron guardadas en SQLite, pero falta el evento final de auditoría. No repita la operación. Asiento: ' + journal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
