@@ -9,7 +9,7 @@ const micros = (n: number) => Math.round((n + Number.EPSILON) * 1000000) / 10000
 
 /** Cancela el pasivo a su costo histórico USD y reconoce la diferencia cambiaria realizada. */
 export function buildVatPaymentAccountingPlan(input: {
-  occurredAt: string; amountBs: number; priorPaidBs: number; bcvRate: number; declaration: VatWithholdingDeclaration;
+  occurredAt: string; amountBs: number; priorPaidBs: number; bcvRate: number; bcvRateEffectiveDate: string; declaration: VatWithholdingDeclaration;
   movements: BankStatementMovement[]; bankAccounts: BankAccount[]; accounts: Account[];
 }): VatPaymentAccountingPlan {
   const date = String(input.occurredAt || '').slice(0, 10);
@@ -18,6 +18,7 @@ export function buildVatPaymentAccountingPlan(input: {
   const d = input.declaration;
   const bcvRate = Number(input.bcvRate);
   if (!Number.isFinite(bcvRate) || bcvRate <= 0) throw new Error('La tasa BCV vigente en la fecha del enteramiento debe ser mayor que cero.');
+  if (input.bcvRateEffectiveDate !== date) throw new Error('La tasa BCV debe estar confirmada para la misma fecha del enteramiento. Actualice o registre la tasa histórica antes de contabilizar.');
   if (!Number.isFinite(d.totalWithheldUsd) || Number(d.totalWithheldUsd) <= 0 || d.totalWithheldBs <= 0 ||
       d.voucherSnapshots.some(v => !Number.isFinite(v.vatWithheldUsd) || Number(v.vatWithheldUsd) < 0 || !Number.isFinite(v.bcvRate) || Number(v.bcvRate) <= 0)) {
     throw new Error('La declaración no conserva la base USD histórica completa del pasivo; requiere revisión y no admite contabilización automática.');
