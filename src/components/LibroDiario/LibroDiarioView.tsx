@@ -280,6 +280,9 @@ export const LibroDiarioView: React.FC = () => {
             const reversalEntry = entry.reversedByEntryId
               ? journalEntries.find(candidate => candidate.id === entry.reversedByEntryId)
               : journalEntries.find(candidate => candidate.companyId === entry.companyId && candidate.reversalOfEntryId === entry.id);
+            const adjustmentSource = entry.adjustmentForEntryId
+              ? journalEntries.find(candidate => candidate.id === entry.adjustmentForEntryId && candidate.companyId === entry.companyId)
+              : undefined;
 
             return (
               <div
@@ -332,6 +335,12 @@ export const LibroDiarioView: React.FC = () => {
                   <span className="text-slate-500 font-normal">Descripción: </span>
                   {entry.description}
                 </div>
+                {entry.adjustmentReason && <div className="px-4 py-3 border-b border-amber-100 bg-amber-50/50 text-xs text-amber-950 space-y-1">
+                  <div className="font-bold">Trazabilidad del ajuste manual</div>
+                  <p><strong>Motivo:</strong> {entry.adjustmentReason}</p>
+                  {entry.workpaperNote && <p className="whitespace-pre-wrap"><strong>Papel de trabajo:</strong> {entry.workpaperNote}</p>}
+                  {entry.adjustmentForEntryId && <p><strong>Asiento origen:</strong> #{adjustmentSource?.entryNumber ?? 'no localizado'} · ID {entry.adjustmentForEntryId}</p>}
+                </div>}
                 {(entry.reversalOfEntryId || entry.reversedByEntryId) && <div className="px-4 py-3 border-b border-indigo-100 bg-indigo-50/60 text-xs text-indigo-950 space-y-1">
                   <div className="flex flex-wrap items-center gap-2 font-bold"><ShieldCheck className="w-3.5 h-3.5" /> Trazabilidad de reversión</div>
                   {entry.reversalOfEntryId && <p>Contra-asiento del asiento original #{reversalSource?.entryNumber ?? 'no localizado'} · ID {entry.reversalOfEntryId}</p>}
