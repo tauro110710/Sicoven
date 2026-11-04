@@ -8,7 +8,7 @@ import type { VatFiscalIncident } from '../types/vatFiscalIncidents';
 export const ReversionFiscalView: React.FC = () => {
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, addMovement, addPurchaseCreditNote,
-    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, createCorrectionCase, listCorrectionCases, reviewCorrectionCase, observeCorrectionCase, resubmitCorrectionCase, withdrawCorrectionCase, executeCorrectionCase, listSupportingDocuments, attachSupportingDocument, reviewSupportingDocument, openSupportingDocument
+    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, createCorrectionCase, authorizeCorrectionCase, listCorrectionCases, reviewCorrectionCase, observeCorrectionCase, resubmitCorrectionCase, withdrawCorrectionCase, executeCorrectionCase, listSupportingDocuments, attachSupportingDocument, reviewSupportingDocument, openSupportingDocument
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -429,6 +429,7 @@ export const ReversionFiscalView: React.FC = () => {
     setCorrectionSubmitting(true);
     try {
       const rate = Number(original.bcvRate || currentCompany.bcvRate);
+      await authorizeCorrectionCase({entityType:'INVENTORY_MOVEMENT',entityId:original.id,sourceDocumentRef:original.documentRef,correctionDocumentRef:correctionDocumentRef.trim()});
       addMovement({
         productId: original.productId, productName: original.productName, productCode: original.productCode,
         date: correctionDate, type: isCustomerReturn ? 'ENTRADA' : 'SALIDA',
