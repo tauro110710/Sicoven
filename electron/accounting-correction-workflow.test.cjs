@@ -196,3 +196,25 @@ test('inventory correction evidence requires correctionForMovementId and the exa
  assert.equal(findLinkedCorrectionEvidence(state,item,'DEV-01').id,'movement-correction');
  assert.equal(findLinkedCorrectionEvidence(state,item,'DEV-02'),null);
 });
+
+test('legacy correction cases migrate to workflow stages without changing their statuses',()=>{
+ const db=new Database(':memory:');try{
+  db.exec("CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime('now')));");
+  db.exec(`CREATE TABLE accounting_correction_cases (
+    id TEXT PRIMARY KEY, company_id TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
+    correction_type TEXT NOT NULL, source_ref TEXT NOT NULL, correction_ref TEXT NOT NULL, reason TEXT NOT NULL,
+    workpaper TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('PENDING_REVIEW','APPROVED','REJECTED','EXECUTED')),
+    requested_by INTEGER NOT NULL, requested_by_name TEXT NOT NULL, reviewed_by INTEGER, reviewed_by_name TEXT,
+    review_reason TEXT, executed_by INTEGER, executed_by_name TEXT, execution_ref TEXT, created_at TEXT NOT NULL,
+    reviewed_at TEXT, executed_at TEXT
+  );`);
+  const insert=db.prepare("INSERT INTO accounting_correction_cases(id,company_id,entity_type,entity_id,correction_type,source_ref,correction_ref,reason,workpaper,status,requested_by,requested_by_name,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)");
+  for(const [id,status] of [['a','PENDING_REVIEW'],['b','APPROVED'],['c','REJECTED'],['d','EXECUTED']])
+    insert.run(id,'co-1','SALE','sale-1','CORRECCION','FAC-1','NC-1','Motivo histórico de corrección.','Papel de trabajo histórico. ',status,1,'admin','2026-01-01T00:00:00.000Z');
+  initializeCorrectionWorkflow(db);
+  const rows=db.prepare('SELECT id,status,workflow_stage FROM accounting_correction_cases ORDER BY id').all();
+  assert.deepEqual(rows.map(row=>[row.status,row.workflow_stage]),[
+   ['PENDING_REVIEW','IN_REVIEW'],['APPROVED','READY_FOR_EXECUTION'],['REJECTED','CLOSED'],['EXECUTED','COMPLETED']
+  ]);
+ }finally{db.close();}
+});
