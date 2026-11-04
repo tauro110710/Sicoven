@@ -158,6 +158,11 @@ test('records append-only review and action events without marking the incident 
 test('rejects event attempts to attach another company journal or unlinked bank movement', () => {
   const { db } = fixture();
   const created = createVatFiscalIncident(db, createInput(), actor);
+  recordVatFiscalIncidentEvent(db, {
+    incidentId: created.id, eventType: 'REVIEW_RECORDED',
+    decisionText: 'Se revisó el expediente y se documentó la verificación previa de la evidencia fiscal.',
+    declarationId: 'declaration-1'
+  }, actor);
   assert.throws(() => recordVatFiscalIncidentEvent(db, {
     incidentId: created.id, eventType: 'ACTION_RECORDED',
     decisionText: 'Se intenta vincular un asiento que no pertenece a la empresa del expediente.',
@@ -174,6 +179,11 @@ test('rejects event attempts to attach another company journal or unlinked bank 
 test('rejects a same-company journal entry that is not linked to the original VAT voucher correction trail', () => {
   const { db } = fixture();
   const created = createVatFiscalIncident(db, createInput(), actor);
+  recordVatFiscalIncidentEvent(db, {
+    incidentId: created.id, eventType: 'REVIEW_RECORDED',
+    decisionText: 'Se revisó el expediente y se cotejó el comprobante con la declaración del período.',
+    declarationId: 'declaration-1'
+  }, actor);
   assert.throws(() => recordVatFiscalIncidentEvent(db, {
     incidentId: created.id, eventType: 'ACTION_RECORDED',
     decisionText: 'Se intenta adjuntar un asiento de la empresa sin vínculo con el comprobante IVA original.',
