@@ -14,6 +14,7 @@ test('workflow enforces preparer-reviewer-executor segregation and append-only e
   assert.throws(()=>reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Revisión suficiente y documentada.'},admin(1,'preparador')),/no puede aprobar/);
   const approved=reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Soportes contrastados y efectos evaluados.'},admin(2,'revisor'));
   assert.equal(approved.status,'APPROVED');
+  requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(3,'ejecutor'));
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Se aplicó el documento correctivo.'},admin(2,'revisor')),/distinto del solicitante y del aprobador/);
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'FAC-001',reason:'Se intenta reutilizar la referencia original.'},admin(3,'ejecutor')),/misma del documento original/);
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-002',reason:'La referencia no coincide con el documento solicitado.'},admin(3,'ejecutor')),/no coincide con el documento correctivo/);
@@ -71,6 +72,7 @@ test('execution transition rolls back when the general audit ledger rejects the 
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
   reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Revisión completa con soportes suficientes.'},admin(2,'revisor'));
+  requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(3,'ejecutor'));
   db.exec("CREATE TRIGGER reject_execution_audit BEFORE INSERT ON audit_events WHEN NEW.event_type='accounting_correction_case_executed' BEGIN SELECT RAISE(ABORT,'execution audit failure'); END;");
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Ejecución documentada con soporte persistido.',evidenceRecordId:'credit-note-1',evidenceCollection:'sales'},admin(3,'ejecutor')),/execution audit failure/);
   const current=getCorrectionCase(db,requested.id);
@@ -172,6 +174,7 @@ test('execution cannot be marked complete without exact evidence identity and co
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
   reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Revisión completa con soportes suficientes.'},admin(2,'revisor'));
+  requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(3,'ejecutor'));
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Documento correctivo aplicado y conciliado.'},admin(3,'ejecutor')),/ID y la colección exacta/);
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Documento correctivo aplicado y conciliado.',evidenceRecordId:'credit-note-1',evidenceCollection:'purchases'},admin(3,'ejecutor')),/ID y la colección exacta/);
   assert.equal(getCorrectionCase(db,requested.id).status,'APPROVED');
