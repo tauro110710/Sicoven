@@ -166,9 +166,9 @@ function initializeCorrectionWorkflow(db) {
     migrateWorkflowEventSchema();
   }
 }
-function requireAdmin(actor) {
-  if (!actor || actor.role !== 'admin' || !Number.isSafeInteger(Number(actor.id)) || Number(actor.id) <= 0 || !String(actor.username || '').trim()) {
-    throw new Error('Se requiere una sesión administrativa autenticada con identidad válida.');
+function requireCorrectionActor(actor) {
+  if (!actor || actor.role !== 'contador' || !Number.isSafeInteger(Number(actor.id)) || Number(actor.id) <= 0 || !String(actor.username || '').trim()) {
+    throw new Error('El Centro de Correcciones requiere una sesión autenticada del contador con identidad válida.');
   }
 }
 function nextCorrectionEventAt(db, caseId) {
@@ -192,7 +192,7 @@ function appendEvent(db, _tx, event) {
     .run('accounting_correction_case_' + event.type.toLowerCase(), JSON.stringify({ caseId:event.id, actorUserId:Number(event.actor.id), actorUsername:String(event.actor.username || ''), reason:event.reason, metadata:event.metadata || {}, occurredAt:event.at }));
 }
 function registerCorrectionRequest(db, input, actor) {
-  requireAdmin(actor);
+  requireCorrectionActor(actor);
   const required = ['companyId','entityType','entityId','correctionType','sourceDocumentRef','correctionDocumentRef'];
   for (const key of required) if (!String(input?.[key] || '').trim()) throw new Error('Falta el campo obligatorio: '+key);
   const reason = String(input.reason || '').trim();
@@ -227,11 +227,11 @@ function registerCorrectionRequest(db, input, actor) {
   return getCorrectionCase(db,id);
 }
 function reviewCorrectionRequest(_db, _input, actor) {
-  requireAdmin(actor);
+  requireCorrectionActor(actor);
   throw new Error('La revisión y aprobación previa fueron retiradas. La corrección se habilita directamente al contador.');
 }
 function requireApprovedCorrectionCase(db, input, actor) {
-  requireAdmin(actor);
+  requireCorrectionActor(actor);
   const required=['companyId','entityType','entityId','sourceDocumentRef','correctionDocumentRef'];
   for(const key of required) if(!String(input?.[key] || '').trim())
     throw new Error('La ejecución correctiva requiere el dato obligatorio: '+key+'.');
@@ -268,7 +268,7 @@ function requireApprovedCorrectionCase(db, input, actor) {
   return tx();
 }
 function markCorrectionExecuted(db, {caseId,executionRef,reason,evidenceRecordId,evidenceCollection}, actor) {
-  requireAdmin(actor);
+  requireCorrectionActor(actor);
   const executionReason = String(reason || '').trim() || 'Correctivo persistido y vínculo de origen verificado automáticamente.';
   const at = new Date().toISOString();
   const tx = db.transaction(() => {
@@ -322,15 +322,15 @@ function appendWorkflowEvent(db, item, type, actor, reason, metadata = {}) {
     }));
 }
 function observeCorrectionRequest(_db, _input, actor) {
-  requireAdmin(actor);
+  requireCorrectionActor(actor);
   throw new Error('Las observaciones y subsanaciones administrativas fueron retiradas del Centro de Correcciones.');
 }
 function resubmitCorrectionRequest(_db, _input, actor) {
-  requireAdmin(actor);
+  requireCorrectionActor(actor);
   throw new Error('El reenvío a revisión fue retirado. El contador ejecuta directamente la corrección.');
 }
 function withdrawCorrectionRequest(_db, _input, actor) {
-  requireAdmin(actor);
+  requireCorrectionActor(actor);
   throw new Error('El retiro administrativo fue retirado del flujo operativo.');
 }
 function getCorrectionCase(db,id) {

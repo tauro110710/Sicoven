@@ -2970,7 +2970,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id,
           entityId: source.id, correctionType: 'PURCHASE_DEBIT_NOTE',
           sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: draft.debitNoteNumber,
-          reason: draft.reason, workpaperNote: draft.fiscalReviewNote,
+          reason: draft.reason, workpaperNote: '',
           fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal
         });
         if (!window.sicovenStore?.save) {
@@ -3010,7 +3010,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             eventType: 'accounting_correction_executed', entityType: 'PURCHASE', companyId: currentCompany.id,
             entityId: source.id, correctionType: 'PURCHASE_DEBIT_NOTE',
             sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: draft.debitNoteNumber,
-            reason: draft.reason, workpaperNote: draft.fiscalReviewNote,
+            reason: draft.reason, workpaperNote: '',
             fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal,
             journalEntryId: journal.id
           });
