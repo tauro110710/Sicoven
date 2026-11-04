@@ -948,7 +948,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
           <p>Origen: {item.source_ref} · Correctivo: {item.correction_ref}</p><p>{item.reason || 'Sin motivo adicional.'}</p>
           <p className="text-slate-500">Contador: {item.requested_by_name} · Registro: {item.created_at} · Ejecución: {item.executed_at || 'Pendiente'}</p>
 
-          <div className="border-t pt-2"><strong>Historial inalterable</strong>{item.events.map(ev=><p key={ev.id}>{ev.event_type==='APPROVED'?'HABILITADA PARA EJECUCIÓN DIRECTA':ev.event_type} · {ev.actor_name} · {ev.created_at} · {ev.reason}</p>)}</div>
+          <div className="border-t pt-2"><strong>Historial inalterable</strong>{item.events.map(ev=><p key={ev.id}>{ev.event_type==='REQUESTED'?'INICIADA':ev.event_type==='APPROVED'?'VALIDACIÓN AUTOMÁTICA':ev.event_type==='EXECUTED'?'EJECUTADA':ev.event_type} · {ev.actor_name} · {ev.created_at} · {ev.reason}</p>)}</div>
         </article>)}
       </section>
       </>}
@@ -1120,7 +1120,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
               : event.eventType === 'inventory_movement_posted' ? 'Movimiento de Kardex registrado'
               : event.eventType === 'inventory_correction_posted' ? 'Corrección de Kardex registrada'
               : event.eventType === 'accounting_period_closed' ? 'Período contable cerrado'
-              : event.eventType === 'accounting_correction_requested' ? 'Solicitud de corrección registrada · pendiente de revisión'
+              : event.eventType === 'accounting_correction_requested' ? 'Corrección directa iniciada · sin revisión previa'
               : event.eventType === 'accounting_correction_executed' ? 'Corrección ejecutada y auditada'
               : event.eventType === 'company_bcv_rate_updated' ? 'Tasa BCV modificada'
               : event.eventType === 'factory_reset' ? 'Reinicio de datos operativos'
