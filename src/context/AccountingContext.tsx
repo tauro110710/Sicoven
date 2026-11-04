@@ -1589,8 +1589,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   // Registrar compra y generar asiento automático y comprobantes de retención
   const addPurchase = (purchaseData: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>): PurchaseRecord => {
-    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
-      throw new Error('SQLite local no está disponible o la persistencia falló. No se registró la compra.');
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('La edición de escritorio requiere SQLite local disponible y lista. No se registró la compra.');
     }
     const settlementModeError = validatePurchaseSettlementMode(
       purchaseData.paymentTerm, purchaseData.paymentAccountCode, accounts, purchaseData.paymentReference
@@ -2090,8 +2090,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const purchaseCreditNoteInFlightRef = useRef(false);
   const supplierDebitNoteInFlightRef = useRef<Set<string>>(new Set());
   const addPurchaseCreditNote = async (request: PurchaseCreditNoteRequest): Promise<PurchaseRecord> => {
-    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
-      throw new Error('La persistencia SQLite no está disponible o falló. Reinicie SICOVEN antes de registrar una devolución.');
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('La devolución requiere SQLite local de escritorio disponible y lista. No se registró.');
     }
     if (purchaseCreditNoteInFlightRef.current) throw new Error('Ya hay una devolución a proveedor en proceso. Espere a que termine antes de intentar otra.');
     purchaseCreditNoteInFlightRef.current = true;
@@ -2446,8 +2446,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const addSupplierDebitNote = async (
     draft: Omit<SupplierDebitNoteAccountingDraft, 'companyId' | 'closedThroughDate'>
   ): Promise<PurchaseRecord> => {
-    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
-      throw new Error('SQLite local no está disponible o todavía no está lista. No se registró la ND.');
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('La nota de débito requiere SQLite local de escritorio disponible y lista. No se registró.');
     }
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la ND.');
     const operationKey = [
@@ -2519,8 +2519,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   // Registrar venta y generar asiento contable
   const addSale = (saleData: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>): SaleRecord => {
-    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
-      throw new Error('SQLite local no está disponible o la persistencia falló. No se registró la venta.');
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('La edición de escritorio requiere SQLite local disponible y lista. No se registró la venta.');
     }
     const settlementModeError = validateSaleSettlementMode(saleData.paymentTerm);
     if (settlementModeError) throw new Error(settlementModeError);
