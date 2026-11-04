@@ -135,7 +135,7 @@ export function buildCashFlowReport(
   ).at(-1);
   const openingEntries = openingBoundary
     ? [
-        ...companyEntries.filter(entry => entry.date >= openingBoundary.date && entry.date < start),
+        ...companyEntries.filter(entry => entry.date > openingBoundary.date && entry.date < start),
         openingBoundary
       ]
     : companyEntries.filter(entry => entry.date < start);
