@@ -108,7 +108,7 @@ export function buildCashFlowReport(
   // entry at the start of the year. A reversal dated later is a current-year
   // cash movement and must remain in the report.
   const reversedEntryIds = new Set(companyEntries
-    .filter(entry => entry.reversalOfEntryId && entry.date <= start)
+    .filter(entry => entry.reversalOfEntryId && entry.date < start)
     .map(entry => entry.reversalOfEntryId as string));
   for (const entry of companyEntries) {
     if (!isValidIsoDate(entry.date)) {
