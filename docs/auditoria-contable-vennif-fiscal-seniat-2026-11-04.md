@@ -88,3 +88,24 @@ La auditoría del Bloque 4 ya registra componentes implementados y límites expl
 La Fase 4 se cierra cuando la matriz GE/PYME, estados, revelaciones, inflación, moneda, inventario, impuesto diferido y aplicabilidad de criptoactivos tengan resultados documentados, reglas trazables y pruebas aprobadas, con revisión profesional de las conclusiones normativas.
 
 La Fase 5 se cierra cuando cada obligación aplicable tenga fuente, vigencia, cálculo, documento, presentación/acuse cuando corresponda, pago/enteramiento, asiento y conciliación trazables; cualquier formato no probado ante SENIAT seguirá etiquetado como preliminar, no homologado.
+
+
+## 6. Segunda pasada de inspección de código (04-11-2026)
+
+### 6.1 Configuración de marco contable — brecha confirmada
+La interfaz `Company` de `src/types/accounting.ts` contiene RIF, tipo de contribuyente, ejercicio fiscal, tasa BCV y datos generales, pero no contiene un selector/identificador persistido del marco VEN-NIF GE o VEN-NIF PYME ni su versión normativa. Por tanto, los reportes no pueden demostrar desde la configuración de la entidad qué marco y versión se aplicaron. No se añadió aún un campo porque falta rastrear creación/edición, persistencia SQLite, importación/exportación y compatibilidad de empresas existentes. La solución debe ser opcional/retrocompatible durante migración y exigir selección explícita para nuevos cierres, sin asignar un marco por inferencia.
+
+### 6.2 Impuesto diferido — no demostrado
+La interfaz `Company` y los tipos revisados no evidencian un registro completo de diferencias temporarias, bases fiscales, activos/pasivos por impuesto diferido, movimientos y revelaciones. Esto no basta para declarar ausencia en todo el sistema; queda pendiente búsqueda transversal y contraste con BA VEN-NIF 11 v1. No se habilitarán asientos automáticos con tasas no documentadas ni recuperabilidad presumida.
+
+### 6.3 Conversión y ajustes cambiarios
+`src/types/fxFiscalAdjustment.ts` implementa una propuesta proporcional de ajuste de base/exentos/IVA ante liquidaciones parciales. El propio motor exige revisión del contador en el modo de conservar IVA original y no emite documentos por sí solo. Esto es una salvaguarda útil, pero no sustituye el motor contable general de moneda funcional, medición de partidas monetarias/no monetarias y conversión de estados. Se debe evitar reutilizar este cálculo fiscal como regla general de diferencias de cambio.
+
+### 6.4 Exportaciones ISLR
+La ruta de exportación mensual usada por las pruebas es `generateSeniatIslrOperationsXml`: escapa caracteres XML, limita por período y contempla eventos fiscales, operaciones con retención cero y reversos/legado según sus constructores. La función heredada `generateSeniatIslrXml` serializa valores directamente sin escape ni validación equivalente; debe rastrearse su uso antes de retirarla o endurecerla para no romper consumidores. La exportación TXT heredada también carece de validaciones comparables a las del flujo de operaciones. No se declara homologación oficial de ninguno de los formatos.
+
+### 6.5 Cobertura automatizada ya existente
+`src/utils/seniatGenerators.test.ts` contiene pruebas de fechas de evento fiscal ISLR, selección mensual, deduplicación de eventos/comprobantes, escape XML, y validaciones del TXT IVA de 16 campos. Estas pruebas son evidencia técnica de comportamiento local, no evidencia de aceptación del Portal Fiscal ni de vigencia normativa de la estructura histórica. Se deben ampliar únicamente después de fijar especificaciones oficiales aplicables.
+
+### 6.6 Decisión de implementación
+No se introduce todavía un cambio de esquema ni un asiento automático: el siguiente bloque seguro es rastrear el ciclo completo de configuración de empresa y localizar todos los consumidores de los generadores ISLR heredados; en paralelo, obtener la fuente primaria FCCPV de BA VEN-NIF 8 v11 y BA VEN-NIF 11 v1, y la especificación primaria SENIAT vigente. La brecha de marco contable queda confirmada y registrada como defecto de trazabilidad normativa, no como prueba de que los estados actuales estén matemáticamente errados.
