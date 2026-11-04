@@ -113,7 +113,7 @@ export function buildCashFlowIndirectReport(
   // Carry forward from the latest linked annual opening at or before the
   // selected year's start, including movements posted after that opening.
   const openingBoundary = companyEntries.filter(entry =>
-    isLinkedAnnualOpening(entry) && entry.date <= start && !entry.reversedByEntryId && !reversedEntryIds.has(entry.id)
+    isLinkedAnnualOpening(entry) && entry.date <= start && !reversedEntryIds.has(entry.id)
   ).sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber).at(-1);
   const priorEntries = companyEntries.filter(entry => entry.date < start);
   const openingBasis = openingBoundary
