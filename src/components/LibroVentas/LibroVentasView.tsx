@@ -263,7 +263,7 @@ export const LibroVentasView: React.FC = () => {
                     <td className="py-2 px-2 text-center no-print">
                       <button onClick={() => setDocumentTarget({ id: s.id, title: 'Factura de venta ' + s.invoiceNumber })} className="mr-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes</button>
                       {s.paymentTerm === 'CREDITO' && <button onClick={() => setSettlementTarget({id:s.id, number:s.invoiceNumber, party:s.customerName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar cobro parcial o total">Cobrar</button>}
-                      {!s.isCancelled && <button
+                      {s.documentType === '01' && !s.isCancelled && <button
                         type="button"
                         disabled={!sqliteAvailable || !isStorageReady}
                         onClick={() => {
