@@ -98,8 +98,8 @@ export function buildCashFlowReport(
   }
   const start = String(year).padStart(4, '0') + '-01-01';
   const end = String(year).padStart(4, '0') + '-12-31';
-  const scopedEntries = entries.filter(entry => entry.companyId === companyId && entry.date <= end);
-  for (const entry of scopedEntries) {
+  const companyEntries = entries.filter(entry => entry.companyId === companyId);
+  for (const entry of companyEntries) {
     if (!isValidIsoDate(entry.date)) {
       throw new Error('El Estado de Flujos de Efectivo no puede calcularse: existe un asiento con fecha inválida.');
     }
@@ -112,7 +112,7 @@ export function buildCashFlowReport(
       }
     }
   }
-  const companyEntries = scopedEntries
+  const scopedEntries = companyEntries.filter(entry => entry.date <= end)
     .sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber);
   const accountsByCode = new Map(accounts.map(account => [account.code, account] as const));
   const cashCodes = new Set([
