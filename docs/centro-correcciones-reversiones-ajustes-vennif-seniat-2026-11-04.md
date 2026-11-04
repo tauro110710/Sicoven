@@ -118,3 +118,10 @@ No declarar completa esta capacidad hasta que cada tipo documental con efecto co
 5. Pruebas automatizadas de persistencia atómica, fallo SQLite, restauración y reportes sobre documentos reversados.
 
 **Estado:** la reversión general y los controles de cobro/pago sobre documentos reversados tienen avances implementados, pero las correcciones fiscales parciales y las notas de venta/servicios no están terminadas. No declarar la Fase 5 completa ni aptitud SENIAT por esta entrega.
+
+
+### Pruebas de idempotencia de reversión — 04/11/2026
+- Se añadieron pruebas unitarias que simulan un asiento fuente con un contra-asiento enlazado y verifican que la segunda reversión quede bloqueada.
+- Se añadió una prueba que verifica que un contra-asiento no puede seleccionarse como documento fuente para una nueva reversión genérica.
+- Estas pruebas cubren la evaluación de dominio `assessJournalReversal`; no sustituyen una prueba de concurrencia real de dos solicitudes simultáneas contra SQLite ni una prueba de persistencia/restore.
+- Las pruebas fueron incorporadas al repositorio, pero no se han ejecutado correctamente en CI por el bloqueo externo de Actions/Vercel. No se declara resultado verde.
