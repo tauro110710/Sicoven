@@ -54,33 +54,45 @@ La migración es aditiva: incorpora `workflow_stage` y normaliza las etapas de e
 
 ## Contraste de relaciones reales y alcance habilitado
 
-Se contrastaron los vínculos con los tipos persistidos:
+Se contrastaron los vínculos que persisten los generadores:
 - Ventas: NC/ND con `originalSaleId` y tipo fiscal `03`/`02`.
 - Compras: NC/ND con `originalPurchaseId` y tipo fiscal `03`/`02`.
 - Asientos: reversos con `reversalOfEntryId` y ajustes con `adjustmentForEntryId`.
-- Kardex: corrección con `correctionForMovementId`.
-- Comprobantes IVA/ISLR: la evidencia es el asiento correctivo referenciado por `correctionEntryId` / `correctionEntryIds` en el comprobante original.
+- Kardex: corrección física con `correctionForMovementId`.
+- Los efectos sobre comprobantes IVA/ISLR y eventos ISLR se gobiernan desde el expediente de compra o asiento que origina el contraasiento; no se abren expedientes independientes para subregistros que no tienen generador autónomo.
 
-El formulario de expedientes solo permite estas siete clases de origen, para evitar abrir casos ejecutables sobre entidades que todavía no persisten un vínculo correctivo verificable. Los otros escenarios no se consideran terminados; deben recibir su relación explícita antes de habilitarse.
+El formulario formal solo permite cuatro clases de origen: venta, compra, asiento contable y movimiento de inventario. Se retiraron los tipos que no tenían un generador autónomo conectado al ciclo de aprobación/ejecución. Esto evita aprobar un expediente que después no pueda ejecutarse por el flujo real.
 
-La suite del workflow contiene ahora **20 pruebas definidas** que cubren segregación, rollback, vínculos de NC/ND de compra y venta, reversos/ajustes de asientos, comprobantes de retención y ciclo de observación/subsanación. No se han ejecutado en esta sesión. La suite documental mantiene nueve pruebas definidas, tampoco ejecutadas.
+## Ciclo formal, autorización y retiro
 
-Se agregó además una prueba de migración aditiva para expedientes heredados `PENDING_REVIEW`, `APPROVED`, `REJECTED` y `EXECUTED`, que verifica que sus estados se conservan y reciben la etapa equivalente. Se añadieron casos de ND de venta, NC/ND de compra y corrección de Kardex. Total actual del archivo de pruebas: **16 casos definidos**, no ejecutados.
+El workflow conserva el expediente y registra eventos append-only:
+- `IN_REVIEW`: pendiente de revisión independiente.
+- `OBSERVATION_REQUIRED`: devuelto al solicitante con motivo obligatorio.
+- `READY_FOR_EXECUTION`: aprobado y sin observaciones pendientes.
+- `COMPLETED`: ejecución confirmada.
+- `CLOSED`: rechazado.
+- `WITHDRAWN`: retirado por el solicitante antes de ejecutar.
 
+Solo el solicitante original puede subsanar y reenviar una observación, o retirar el expediente antes de su ejecución. El reenvío invalida la aprobación anterior y exige nueva revisión. El retiro bloquea aprobación, reenvío y ejecución posteriores. La migración de casos y la reconstrucción del ledger de eventos se realizan de forma transaccional y conservan los eventos anteriores.
 
-Se agregó también el retiro controlado: solo el solicitante original puede retirar su expediente mientras no esté ejecutado ni rechazado. El retiro queda registrado como evento append-only y bloquea aprobación, reenvío y ejecución posteriores. Puede retirarse durante revisión, después de una observación o tras aprobación, siempre antes de la ejecución.
+Los generadores de NC/ND de venta y compra, ND de proveedor y reversión de asientos exigen ahora un expediente único aprobado que coincida con empresa, registro fuente y referencia correctiva; el operador debe ser distinto del solicitante y del aprobador. La devolución física desde el centro de reversión exige la misma autorización antes de crear el movimiento. La confirmación final vuelve a validar evidencia correctiva vinculada, ID/colección exactos y soporte `EVIDENCIA_CORRECCION` verificado. Después de una observación, el soporte debe volver a verificarse con fecha posterior a la observación más reciente.
 
-La ejecución exige además que al menos un soporte documental del expediente esté verificado después de la observación formal más reciente; una verificación antigua no permite cerrar un caso que haya sido devuelto para subsanar.
+## Pruebas definidas y límites de verificación
 
-Total actual de la suite del workflow: **19 pruebas definidas**, no ejecutadas.
-
-La migración también reconstruye de forma transaccional el ledger de eventos del workflow cuando una instalación previa todavía tiene la restricción anterior sin `WITHDRAWN`; conserva los eventos existentes y restablece sus triggers append-only. Se añadió un caso automatizado para esa migración.
-
+La suite del workflow contiene **21 pruebas definidas** para segregación, rollback, migración, retiro, observación/subsanación, autorización previa, vínculos de NC/ND, asientos y Kardex. La suite documental conserva nueve pruebas definidas. La suite de liquidaciones/auxiliares contiene **21 pruebas definidas**, incluyendo el incremento de CxP por ND de proveedor. Ninguna de estas suites se ejecutó en esta sesión; no se declara que estén aprobadas.
 
 ## Ajuste adicional de CxP por notas de débito de proveedor
 
-Durante la revisión de los auxiliares se detectó que el saldo CxP restaba las NC de proveedor, pero no sumaba las ND tipo `02` vinculadas mediante `originalPurchaseId`. Se corrigió el cálculo: las ND de proveedor aumentan el saldo por su total fiscal en Bs/USD; las NC continúan reduciéndolo solo por la porción aplicada a CxP, dejando excedentes como anticipo. En CxC, las ND de venta siguen usando el ajuste neto de la cuenta por cobrar, no el total bruto del documento.
+Se corrigió un defecto detectado en el auxiliar: antes se restaban las NC de proveedor, pero no se sumaban las ND tipo `02` vinculadas por `originalPurchaseId`. Ahora las ND aumentan el saldo CxP por su total fiscal en Bs/USD; las NC lo reducen por la porción aplicada a CxP y mantienen el excedente como anticipo. En CxC, las ND de venta siguen usando el ajuste neto de la cuenta por cobrar y no el total bruto del documento.
 
-Se incorporó el helper `summarizeCreditDocumentAdjustments` y **21 pruebas definidas** en la suite de liquidaciones/auxiliares. Estas pruebas tampoco se han ejecutado en esta sesión.
+Se incorporó el helper `summarizeCreditDocumentAdjustments` y sus pruebas unitarias correspondientes.
 
-También se habilitó el tipo `ISLR_EVENT` únicamente cuando existe un evento correctivo de tipo `REVERSAL` con `reversalOfEventId` explícito hacia el evento fuente. La prueba de vínculo ISLR se incorporó a la suite del workflow. La suite contiene ahora **20 casos definidos**, no ejecutados.
+## Pendientes reales
+
+No se declara terminado el centro. Aún falta integrar/validar:
+- Rectificativas/sustitutivas de declaraciones IVA/ISLR, libros fiscales rectificados y acuses/enteramientos.
+- Corrección formal autónoma de movimientos bancarios y tasa BCV, si se decide que deben tener expediente propio.
+- Reconciliación integral de efectos de todas las variantes de NC/ND sobre caja/bancos, retenciones, IGTF, costos, inventario y CxC/CxP, incluyendo pruebas de datos reales.
+- Pruebas de SQLite real, concurrencia, respaldo/restauración, TypeScript, build y empaquetado Electron.
+
+No se ejecutó CI ni se publicó release. No se modificó el administrador semilla ni se borraron registros fuente.
