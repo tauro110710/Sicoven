@@ -3716,11 +3716,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return newBank;
   };
 
-  const registerTreasuryMovement = (draft: {
+  const registerTreasuryMovement = (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; counterpartAccountCode?: string; destinationBankAccountId?: string }): JournalEntry => {
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('La operación bancaria requiere SQLite local de escritorio disponible y lista.');
     }
-     bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; counterpartAccountCode?: string; destinationBankAccountId?: string }): JournalEntry => {
     const source = bankAccounts.find(b => b.id === draft.bankAccountId && b.companyId === currentCompany.id);
     if (!source) throw new Error('Seleccione una cuenta bancaria de la empresa activa.');
     const parsedDate = new Date(draft.date + 'T00:00:00Z');
@@ -3954,11 +3953,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     );
   };
 
-  const runAutoReconciliation = (bankAccountId: string): {
+  const runAutoReconciliation = (bankAccountId: string): { matchedCount: number; matchedRefs: string[] } => {
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('La operación bancaria requiere SQLite local de escritorio disponible y lista.');
     }
-     matchedCount: number; matchedRefs: string[] } => {
     const targetAccount = bankAccounts.find(b => b.id === bankAccountId && b.companyId === currentCompany.id);
     if (!targetAccount) return { matchedCount: 0, matchedRefs: [] };
 
