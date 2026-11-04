@@ -65,8 +65,6 @@ const round = (value: number, places: number) => {
 };
 const isLinkedAnnualOpening = (entry: JournalEntry) =>
   entry.type === 'APERTURA' && entry.exerciseLink?.nextPeriodStartDate === entry.date;
-const isOpening = (entry: JournalEntry, year: number) =>
-  isLinkedAnnualOpening(entry) && entry.exerciseLink?.nextPeriodStartDate?.slice(0, 4) === String(year);
 const isExcludedFromIncome = (entry: JournalEntry) => entry.type === 'APERTURA' || entry.type === 'CIERRE';
 const balanceMovement = (entry: JournalEntry, code: string, normal: 'DEBIT' | 'CREDIT') =>
   entry.items.filter(item => item.accountCode === code).reduce((sum, item) => ({
