@@ -547,7 +547,7 @@ export const ReversionFiscalView: React.FC = () => {
       </section>
       <section className="rounded-2xl border border-indigo-200 bg-white p-4 sm:p-6 space-y-3">
         <h2 className="font-bold">Expedientes integrales · revisión segregada ({correctionCases.length})</h2>
-        <p className="text-xs text-slate-600">Solicitante, revisor y ejecutor deben ser tres administradores diferentes.</p>
+        <p className="text-xs text-slate-600">La corrección material (NC/ND, asiento, ajuste de Kardex, banco o rectificación fiscal) debe ejecutarse primero en su módulo especializado. Aquí se aprueba el expediente y se verifica la referencia persistida; solicitante, revisor y ejecutor deben ser tres administradores diferentes.</p>
         {correctionCases.map(item=><article key={item.id} className="rounded-lg border p-3 space-y-2 text-xs">
           <strong>{item.correction_type} · {item.entity_type} #{item.entity_id} · {item.status}</strong>
           <p>Origen: {item.source_ref} · Correctivo: {item.correction_ref||'Por asignar'}</p><p>{item.reason}</p><p>{item.workpaper}</p>
@@ -560,7 +560,7 @@ export const ReversionFiscalView: React.FC = () => {
           {item.status==='APPROVED' && <>
             <input value={caseExecutionRef[item.id]||''} onChange={e=>setCaseExecutionRef(p=>({...p,[item.id]:e.target.value}))} className="w-full rounded border p-2" placeholder="Referencia correctiva emitida"/>
             <textarea value={caseActionReason[item.id]||''} onChange={e=>setCaseActionReason(p=>({...p,[item.id]:e.target.value}))} className="w-full rounded border p-2" rows={2} placeholder="Constancia de ejecución (15 caracteres mínimo)"/>
-            <button disabled={caseActionBusy===item.id||!(caseExecutionRef[item.id]||'').trim()||(caseActionReason[item.id]||'').trim().length<15} onClick={async()=>{setCaseActionBusy(item.id);try{await executeCorrectionCase({caseId:item.id,executionRef:caseExecutionRef[item.id],reason:caseActionReason[item.id]});await refreshCorrectionCases();}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'Error de ejecución'});}finally{setCaseActionBusy(null);}}} className="rounded bg-indigo-700 px-3 py-2 text-white">Registrar ejecución</button>
+            <button disabled={caseActionBusy===item.id||!(caseExecutionRef[item.id]||'').trim()||(caseActionReason[item.id]||'').trim().length<15} onClick={async()=>{setCaseActionBusy(item.id);try{await executeCorrectionCase({caseId:item.id,executionRef:caseExecutionRef[item.id],reason:caseActionReason[item.id]});await refreshCorrectionCases();}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'Error de ejecución'});}finally{setCaseActionBusy(null);}}} className="rounded bg-indigo-700 px-3 py-2 text-white">Confirmar ejecución ya persistida</button>
           </>}
           <div className="border-t pt-2"><strong>Historial</strong>{item.events.map(ev=><p key={ev.id}>{ev.event_type} · {ev.actor_name} · {ev.created_at} · {ev.reason}</p>)}</div>
         </article>)}
