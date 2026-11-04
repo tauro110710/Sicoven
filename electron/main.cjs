@@ -593,7 +593,7 @@ app.whenReady().then(async () => {
     const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     const state = row ? JSON.parse(row.state_json) : {};
     const collections = { SALE:'sales', PURCHASE:'purchases', JOURNAL_ENTRY:'journalEntries',
-      INVENTORY_MOVEMENT:'movements', VAT_VOUCHER:'vatVouchers', ISLR_VOUCHER:'islrVouchers', ISLR_EVENT:'islrFiscalEvents' };
+      INVENTORY_MOVEMENT:'movements' };
     const companyId = String(input?.companyId || '');
     const existsCompany = Array.isArray(state.companies) && state.companies.some(x=>String(x.id)===companyId);
     const collection = state[collections[String(input?.entityType || '')]];
