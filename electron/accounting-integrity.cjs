@@ -1273,8 +1273,8 @@ function validateAccountingSnapshot(previousState, nextState) {
     const original = asArray(nextState.purchases).find(item =>
       item.id === note.originalPurchaseId && item.companyId === note.companyId && item.documentType === '01');
     const lines = Array.isArray(note.creditNoteLines) ? note.creditNoteLines : [];
-    const serviceNote = Boolean(original && !Array.isArray(original.inventoryLines) &&
-      !Array.isArray(note.inventoryLines) && lines.length === 0);
+    const serviceNote = Boolean(original && (!Array.isArray(original.inventoryLines) || original.inventoryLines.length === 0) &&
+      (!Array.isArray(note.inventoryLines) || note.inventoryLines.length === 0) && lines.length === 0);
     const company = asArray(nextState.companies).find(item => item.id === note.companyId);
     const duplicateNoteNumber = asArray(nextState.purchases).some(item =>
       item.id !== note.id && item.companyId === note.companyId && item.documentType === '03' &&
