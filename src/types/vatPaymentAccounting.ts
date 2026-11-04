@@ -16,9 +16,11 @@ export function buildVatPaymentAccountingPlan(input: {
   if (!isValidIsoDate(date)) throw new Error('La fecha del enteramiento no es válida para el asiento contable.');
   if (!input.movements.length) throw new Error('El enteramiento requiere débitos bancarios vinculados.');
   const d = input.declaration;
+  if (input.movements.some(movement => movement.date !== date)) {
+    throw new Error('Todos los movimientos bancarios deben tener la misma fecha del enteramiento.');
+  }
   const movementRates = input.movements.map(movement => Number(movement.bcvRate));
   if (input.movements.some(movement =>
-    movement.date !== date ||
     !isValidIsoDate(String(movement.bcvRateEffectiveDate || '')) ||
     String(movement.bcvRateEffectiveDate) > date ||
     !Number.isFinite(Number(movement.bcvRate)) ||
