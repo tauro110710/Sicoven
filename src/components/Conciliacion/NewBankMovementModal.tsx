@@ -22,12 +22,17 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
   const [description, setDescription] = useState<string>('');
   const [type, setType] = useState<BankMovementType>('CREDIT');
   const [amountBs, setAmountBs] = useState<string>('');
+  const [bcvRateEffectiveDate, setBcvRateEffectiveDate] = useState<string>(() =>
+    currentCompany.lastRateUpdate && currentCompany.lastRateUpdate <= date ? currentCompany.lastRateUpdate : ''
+  );
   const [movementBcvRate, setMovementBcvRate] = useState<string>(() =>
-    currentCompany.lastRateUpdate === date ? String(currentCompany.bcvRate || '') : ''
+    currentCompany.lastRateUpdate && currentCompany.lastRateUpdate <= date ? String(currentCompany.bcvRate || '') : ''
   );
 
   useEffect(() => {
-    setMovementBcvRate(currentCompany.lastRateUpdate === date ? String(currentCompany.bcvRate || '') : '');
+    const hasApplicableRate = Boolean(currentCompany.lastRateUpdate && currentCompany.lastRateUpdate <= date);
+    setBcvRateEffectiveDate(hasApplicableRate ? currentCompany.lastRateUpdate : '');
+    setMovementBcvRate(hasApplicableRate ? String(currentCompany.bcvRate || '') : '');
   }, [currentCompany.id, currentCompany.lastRateUpdate, currentCompany.bcvRate, date]);
 
   if (!isOpen) return null;
@@ -60,7 +65,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
         amountBs: parsedAmountBs,
         amountUsd,
         bcvRate,
-        bcvRateEffectiveDate: date,
+        bcvRateEffectiveDate,
         isReconciled: false
       });
       setReference('');
@@ -119,6 +124,21 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
                 <option value="CREDIT">Crédito (+) Depósito / Cobranza</option>
                 <option value="DEBIT">Débito (-) Pago / Comisión / Retiro</option>
               </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Fecha de vigencia BCV *</label>
+              <input type="date" required value={bcvRateEffectiveDate} max={date}
+                onChange={e => setBcvRateEffectiveDate(e.target.value)}
+                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV (Bs/USD) *</label>
+              <input type="number" required min="0.000001" step="0.000001" value={movementBcvRate}
+                onChange={e => setMovementBcvRate(e.target.value)}
+                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
             </div>
           </div>
 
