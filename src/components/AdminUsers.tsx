@@ -26,6 +26,7 @@ interface AdminUserRecord {
   id: number;
   username: string;
   isSeed: boolean;
+  role: string;
   createdAt: string;
 }
 
@@ -33,6 +34,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
   const [admins, setAdmins] = useState<AdminUserRecord[]>([]);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState<'admin' | 'contador'>('contador');
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -90,6 +92,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
         const r = await window.sicovenStore.createAdmin(token, {
           username: cleanUser,
           password,
+          role,
         });
         if (!r?.ok) {
           throw new Error(r?.message || 'No se pudo crear el administrador.');
@@ -100,7 +103,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
 
       setUsername('');
       setPassword('');
-      setMessage({ text: 'Administrador creado correctamente.', type: 'success' });
+      setMessage({ text: 'Usuario creado correctamente.', type: 'success' });
       await refresh();
     } catch (err) {
       setMessage({
@@ -181,7 +184,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200">
           <div>
             <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-              Control de Administradores
+              Administración de usuarios
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
               Administración de usuarios autorizados con acceso al sistema y base de datos local.
@@ -216,7 +219,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
         <section className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm">
           <div className="flex items-center gap-2 text-slate-900 font-bold text-base mb-4 pb-2 border-b border-slate-100">
             <UserPlus className="w-5 h-5 text-emerald-600" />
-            <h2>Registrar Nuevo Administrador</h2>
+            <h2>Registrar Nuevo Usuario</h2>
           </div>
 
           <form onSubmit={handleCreate} className="space-y-4">
@@ -242,20 +245,29 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Rol del usuario
+                </label>
+                <select value={role} onChange={e => setRole(e.target.value as 'admin' | 'contador')} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm">
+                  <option value="contador">Contador · acceso exclusivo al Centro de Correcciones</option>
+                  <option value="admin">Administrador · acceso completo</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Contraseña de acceso
                 </label>
                 <input
                   required
                   type="password"
-                  minLength={6}
+                  minLength={10}
                   maxLength={256}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Mínimo 6 caracteres"
+                  placeholder="Mínimo 10 caracteres"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-900 placeholder-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Mínimo 6 caracteres (admite letras, números y símbolos).
+                  Mínimo 10 caracteres (admite letras, números y símbolos).
                 </p>
               </div>
             </div>
@@ -267,7 +279,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
                 className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-sm transition cursor-pointer disabled:opacity-60"
               >
                 <UserPlus className="w-4 h-4" />
-                <span>{busy ? 'Creando administrador...' : 'Crear Administrador'}</span>
+                <span>{busy ? 'Creando usuario...' : 'Crear Usuario'}</span>
               </button>
             </div>
           </form>
@@ -278,7 +290,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
             <div className="flex items-center gap-2 text-slate-900 font-bold text-base">
               <ShieldCheck className="w-5 h-5 text-emerald-600" />
-              <h2>Usuarios Administradores ({admins.length})</h2>
+              <h2>Usuarios registrados ({admins.length})</h2>
             </div>
             <button
               onClick={() => void refresh()}
@@ -309,6 +321,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
                         <span className="font-bold text-slate-900 text-sm">
                           {adm.username}
                         </span>
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-sky-100 text-sky-800">{adm.role === 'contador' ? 'Contador' : 'Administrador'}</span>
                         {adm.isSeed && (
                           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
                             Semilla inicial
