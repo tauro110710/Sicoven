@@ -142,7 +142,7 @@ export const RetencionesIslrView: React.FC = () => {
     }
     const cleanR = cleanRif(currentCompany.rif);
     const period = activePeriod;
-    downloadFile(generatedXml, `RetencionesISLR_${cleanR}_${period}.xml`, 'application/xml;charset=utf-8');
+    downloadFile(generatedXml, `RetencionesISLR_${cleanR}_${period}.xml`, 'application/xml;charset=iso-8859-1', 'iso-8859-1');
   };
 
   const handleDownloadTxt = () => {
