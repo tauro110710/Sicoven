@@ -450,11 +450,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       companyId:currentCompany.id,entityType,entityId,sourceDocumentRef,correctionDocumentRef
     });
     if (!result?.ok || !result.caseId) throw new Error(result?.message || 'No existe una corrección directa habilitada para este registro.');
-    if (input.entityType === 'INVENTORY_MOVEMENT') {
-      inventoryCorrectionAuthorizationRef.current = String(input.entityId) + '|' + String(input.correctionDocumentRef).trim();
+    if (entityType === 'INVENTORY_MOVEMENT') {
+      inventoryCorrectionAuthorizationRef.current = String(entityId) + '|' + String(correctionDocumentRef).trim();
     }
-    if (input.entityType === 'JOURNAL_ENTRY') {
-      journalCorrectionAuthorizationRef.current = String(input.entityId) + '|' + String(input.correctionDocumentRef).trim();
+    if (entityType === 'JOURNAL_ENTRY') {
+      journalCorrectionAuthorizationRef.current = String(entityId) + '|' + String(correctionDocumentRef).trim();
     }
     return String(result.caseId);
   };
