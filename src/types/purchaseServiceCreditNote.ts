@@ -7,7 +7,7 @@ export interface PurchaseServiceCreditNoteRequest {
   creditNoteNumber: string;
   controlNumber: string;
   reason: string;
-  workpaperNote: string;
+  workpaperNote?: string;
   taxableBaseBs: number;
   exemptAmountBs: number;
   bcvRate: number;
@@ -61,8 +61,8 @@ export function calculatePurchaseServiceCreditNote(request: PurchaseServiceCredi
     throw new Error('La NC debe registrarse por el mismo medio de emisión de la factura original y esa condición debe confirmarse expresamente.');
   }
   if (!String(request.creditNoteNumber || '').trim() || !String(request.controlNumber || '').trim() ||
-      String(request.reason || '').trim().length < 10 || String(request.workpaperNote || '').trim().length < 10) {
-    throw new Error('La NC requiere número, control, motivo y papel de trabajo de al menos 10 caracteres.');
+      String(request.reason || '').trim().length < 10) {
+    throw new Error('La NC requiere número, control y un motivo de al menos 10 caracteres.');
   }
   const values = [request.taxableBaseBs, request.exemptAmountBs, request.bcvRate,
     purchase.taxableBaseBs, purchase.exemptAmountBs, purchase.taxRate, purchase.vatAmountBs];

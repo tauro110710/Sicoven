@@ -16,7 +16,7 @@ const draft = (overrides: Partial<Parameters<typeof calculateSaleCorrectionNote>
   kind: 'CREDIT' as const, sourceSale: source, noteDate: '2026-11-01',
   noteNumber: 'NC-001', controlNumber: 'CTRL-001',
   reason: 'Devolución parcial acordada con el cliente',
-  workpaperNote: 'Se revisó el documento original y el soporte comercial adjunto.',
+  workpaperNote: '',
   taxableBaseBs: 50, exemptAmountBs: 10, bcvRate: 110,
   fiscalEmissionMedium: 'DIGITAL' as const, sameMediumAsOriginal: true,
   priorCreditNotes: [], ...overrides
@@ -72,4 +72,9 @@ test('requires explicit matching fiscal emission medium for a correction note', 
   assert.throws(() => calculateSaleCorrectionNote(draft({
     fiscalEmissionMedium: '' as any, sameMediumAsOriginal: false
   })), /mismo medio de la factura original/);
+});
+
+test('does not require a workpaper attachment or note to calculate a sales correction', () => {
+  const result = calculateSaleCorrectionNote(draft({ workpaperNote: '' }));
+  assert.equal(result.totalAmountBs, 68);
 });

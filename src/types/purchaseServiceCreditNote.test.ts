@@ -17,7 +17,7 @@ const source: PurchaseRecord = {
 const draft = (overrides: Partial<Parameters<typeof calculatePurchaseServiceCreditNote>[0]> = {}) => ({
   purchase: source, noteDate: '2026-11-01', creditNoteNumber: 'NC-001',
   controlNumber: 'CTRL-NC-001', reason: 'Descuento parcial acordado con proveedor',
-  workpaperNote: 'Se verificó el contrato, el servicio y la nota fiscal recibida.',
+  workpaperNote: '',
   taxableBaseBs: 100, exemptAmountBs: 0, bcvRate: 100, fiscalEmissionMedium: 'DIGITAL' as const, sameMediumAsOriginal: true, priorCreditNotes: [],
   ...overrides
 });
@@ -51,4 +51,9 @@ test('blocks cumulative credit notes above the original taxable base', () => {
   assert.throws(() => calculatePurchaseServiceCreditNote(draft({
     priorCreditNotes: [prior], taxableBaseBs: 100
   })), /supera la base imponible/);
+});
+
+test('does not require a workpaper attachment or note for a service credit note', () => {
+  const result = calculatePurchaseServiceCreditNote(draft({ workpaperNote: '' }));
+  assert.equal(result.totalAmountBs, 116);
 });
