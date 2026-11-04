@@ -20,6 +20,8 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
   const [creditNoteNumber, setCreditNoteNumber] = useState('');
   const [controlNumber, setControlNumber] = useState('');
   const [reason, setReason] = useState('');
+  const [fiscalEmissionMedium, setFiscalEmissionMedium] = useState<'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | ''>('');
+  const [sameMediumAsOriginal, setSameMediumAsOriginal] = useState(false);
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -94,7 +96,8 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
         returnDate,
         creditNoteNumber: creditNoteNumber.trim(),
         controlNumber: controlNumber.trim(),
-        reason: reason.trim()
+        reason: reason.trim(), fiscalEmissionMedium: fiscalEmissionMedium as 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY',
+        sameMediumAsOriginal
       });
       setSuccess('Nota de crédito ' + (note.creditNoteNumber || note.invoiceNumber) + ' registrada y confirmada en SQLite. Kardex, saldo del proveedor y asiento contable quedaron enlazados.');
     } catch (cause) {
@@ -111,6 +114,7 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
           <div>
             <h2 className="text-base font-bold">Devolución a proveedor · Nota de crédito</h2>
             <p className="mt-1 text-xs text-slate-300">Factura {purchase.invoiceNumber} · {purchase.supplierName} · {purchase.supplierRif}</p>
+            <p className="mt-1 text-[11px] text-slate-300">Fecha original: {purchase.invoiceDate} · Control: {purchase.controlNumber} · Monto: Bs. {purchase.totalAmountBs.toLocaleString('es-VE', {minimumFractionDigits:2, maximumFractionDigits:2})}</p>
           </div>
           <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg p-2 text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-40" aria-label="Cerrar">
             <X className="h-5 w-5" />
@@ -133,6 +137,12 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
                 <input required value={controlNumber} onChange={event => setControlNumber(event.target.value)} maxLength={40} placeholder="00-000123" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono font-normal" />
               </label>
             </div>
+            <label className="text-xs font-semibold text-slate-700">Medio de emisión de la factura original
+              <select required value={fiscalEmissionMedium} onChange={event => setFiscalEmissionMedium(event.target.value as 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | '')} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal">
+                <option value="">Seleccione…</option><option value="DIGITAL">Digital / electrónico</option><option value="FISCAL_MACHINE">Máquina fiscal</option><option value="CONTINGENCY">Contingencia autorizada</option>
+              </select>
+            </label>
+            <label className="flex items-start gap-2 text-xs text-slate-700"><input type="checkbox" checked={sameMediumAsOriginal} onChange={event => setSameMediumAsOriginal(event.target.checked)} className="mt-0.5" />Confirmo que la NC fue emitida por el mismo medio de la factura original, conforme a la Providencia SNAT/2026/00093.</label>
             <div>
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-bold text-slate-800">Artículos devueltos</h3>
@@ -162,7 +172,7 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3">
             <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">Cancelar</button>
-            <button type="submit" disabled={submitting || !eligible || invalidRows.length > 0 || !sqliteAvailable || !isStorageReady || Boolean(success)} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">
+            <button type="submit" disabled={submitting || !eligible || invalidRows.length > 0 || !sqliteAvailable || !isStorageReady || !fiscalEmissionMedium || !sameMediumAsOriginal || Boolean(success)} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">
               {submitting ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando y confirmando en SQLite…</> : 'Registrar nota de crédito y devolución'}
             </button>
           </div>

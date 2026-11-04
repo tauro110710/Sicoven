@@ -204,6 +204,12 @@ export interface PurchaseRecord {
   supplierDebitNoteReview?: SupplierDebitNoteReview;
   /** Enlace inmutable de una nota de crédito de proveedor a su factura y movimientos físicos. */
   originalPurchaseId?: string;
+  affectedInvoiceDate?: string;
+  affectedInvoiceControlNumber?: string;
+  affectedInvoiceTotalAmountBs?: number;
+  affectedInvoiceTotalAmountUsd?: number;
+  fiscalEmissionMedium?: 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY';
+  sameMediumAsOriginal?: boolean;
   creditNoteLines?: PurchaseCreditNoteLine[];
   netPayableReductionBs?: number;
   netPayableReductionUsd?: number;
@@ -252,6 +258,8 @@ export interface PurchaseRecord {
   bcvRate: number;
   totalAmountUsd: number;
   taxableBaseUsd: number;
+  /** Equivalente USD histórico del monto exento, cuando el documento lo conserva. */
+  exemptAmountUsd?: number;
   vatAmountUsd: number;
   vatWithheldUsd: number;
   islrWithheldUsd?: number;
@@ -314,6 +322,19 @@ export interface SaleRecord {
   vatAmountUsd: number;
   vatWithheldUsd: number;
   journalEntryId?: string;
+  /** Vínculo append-only de NC/ND de cliente con la factura que corrige. */
+  originalSaleId?: string;
+  affectedInvoiceDate?: string;
+  affectedInvoiceControlNumber?: string;
+  affectedInvoiceTotalAmountBs?: number;
+  affectedInvoiceTotalAmountUsd?: number;
+  fiscalEmissionMedium?: 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY';
+  sameMediumAsOriginal?: boolean;
+  netReceivableAdjustmentBs?: number;
+  netReceivableAdjustmentUsd?: number;
+  exemptAmountUsd?: number;
+  correctionReason?: string;
+  correctionWorkpaper?: string;
   notes?: string;
   // Condiciones comerciales y fiscales del crédito (se preservan por documento)
   paymentTerm?: 'CONTADO' | 'CREDITO';

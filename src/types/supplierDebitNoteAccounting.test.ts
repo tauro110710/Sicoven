@@ -35,7 +35,8 @@ const sourceEntry: JournalEntry = {
 const draft = (overrides: Partial<SupplierDebitNoteAccountingDraft> = {}): SupplierDebitNoteAccountingDraft => ({
   companyId: 'company-1', sourcePurchaseId: 'purchase-1',
   debitNoteNumber: 'ND-001', controlNumber: 'CTRL-ND-001',
-  affectedInvoiceNumber: 'FAC-100', issueDate: '2026-10-10',
+  affectedInvoiceNumber: 'FAC-100', fiscalEmissionMedium: 'DIGITAL', sameMediumAsOriginal: true,
+  issueDate: '2026-10-10',
   recognitionDate: '2026-10-10', economicCause: 'ADDITIONAL_EXPENSE',
   reason: 'Gasto adicional documentado por proveedor.',
   debitAccountCode: '6.1.1.01', vatAccountCode: '1.1.3.01', taxableBaseBs: 25, exemptAmountBs: 0,
@@ -128,4 +129,28 @@ test('rejects nonconciliating totals and invalid rates', () => {
   assert.throws(() => build(draft({ totalAmountBs: 30 })), /no concilia/);
   assert.throws(() => build(draft({ taxRate: 15 })), /una única alícuota explícita/);
   assert.throws(() => build(draft({ bcvRate: 0 })), /tasa o importes no válidos/);
+});
+
+test('stores a snapshot of the original invoice for immutable correction traceability', () => {
+  const plan = build();
+  assert.equal(plan.document.affectedInvoiceDate, source.invoiceDate);
+  assert.equal(plan.document.affectedInvoiceControlNumber, source.controlNumber);
+  assert.equal(plan.document.affectedInvoiceTotalAmountBs, source.totalAmountBs);
+  assert.equal(plan.document.affectedInvoiceTotalAmountUsd, source.totalAmountUsd);
+  assert.equal(plan.document.fiscalEmissionMedium, 'DIGITAL');
+  assert.equal(plan.document.sameMediumAsOriginal, true);
+  assert.equal(source.invoiceNumber, 'FAC-100');
+  assert.equal(source.totalAmountBs, 116);
+});
+
+test('blocks a price difference on an inventory invoice until item-level revaluation is supported', () => {
+  const inventorySource = { ...source, inventoryLines: [{ productId: 'p-1', quantity: 1, unitCostBs: 100 }] };
+  assert.throws(() => buildSupplierDebitNoteAccountingPlan({
+    draft: draft({ economicCause: 'PRICE_DIFFERENCE' }),
+    purchases: [inventorySource], accounts,
+    sourceJournalEntry: { ...sourceEntry, items: [
+      { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+    ] }
+  }), /revalorizar lotes\/capas y Kardex/);
 });

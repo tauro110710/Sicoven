@@ -3,11 +3,12 @@ import { AlertTriangle, CheckCircle2, LockKeyhole, ShieldCheck, Undo2 } from 'lu
 import { useAccounting, type AccountingAuditEvent } from '../context/AccountingContext';
 import { formatBs, formatUsd, formatDate } from '../utils/formatters';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation, type BankStatementReversalReadiness } from '../types/journalReversal';
+import type { VatFiscalIncident } from '../types/vatFiscalIncidents';
 
 export const ReversionFiscalView: React.FC = () => {
   const {
-    currentCompany, accounts, journalEntries, sales, purchases, movements, products, addMovement, addPurchaseCreditNote,
-    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod
+    currentCompany, accounts, journalEntries, sales, purchases, movements, products, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, addMovement, addPurchaseCreditNote,
+    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, createCorrectionCase, listCorrectionCases, reviewCorrectionCase, executeCorrectionCase
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -36,10 +37,41 @@ export const ReversionFiscalView: React.FC = () => {
   const [auditEvents, setAuditEvents] = useState<AccountingAuditEvent[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
+  const [fiscalIncidents, setFiscalIncidents] = useState<VatFiscalIncident[]>([]);
+  const [incidentsLoading, setIncidentsLoading] = useState(false);
+  const [incidentError, setIncidentError] = useState<string | null>(null);
+  const [selectedIncidentId, setSelectedIncidentId] = useState('');
+  const [incidentEventType, setIncidentEventType] = useState<'REVIEW_RECORDED' | 'ACTION_RECORDED'>('REVIEW_RECORDED');
+  const [incidentDecision, setIncidentDecision] = useState('');
+  const [incidentExternalReference, setIncidentExternalReference] = useState('');
+  const [incidentSaving, setIncidentSaving] = useState(false);
+  const [incidentPurchaseId, setIncidentPurchaseId] = useState('');
+  const [incidentCreateReason, setIncidentCreateReason] = useState('');
+  const [incidentCreating, setIncidentCreating] = useState(false);
+  const [bcvCorrectionOpen, setBcvCorrectionOpen] = useState(false);
+  const [bcvCorrectionRate, setBcvCorrectionRate] = useState(String(currentCompany.bcvRate || ''));
+  const [bcvCorrectionDate, setBcvCorrectionDate] = useState(today);
+  const [bcvCorrectionReason, setBcvCorrectionReason] = useState('');
+  const [bcvCorrectionWorkpaper, setBcvCorrectionWorkpaper] = useState('');
+  const [bcvCorrectionSaving, setBcvCorrectionSaving] = useState(false);
+  const [requestEntityType, setRequestEntityType] = useState<'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'INVENTORY_PRODUCT' | 'BCV_RATE'>('JOURNAL_ENTRY');
+  const [requestEntityId, setRequestEntityId] = useState('');
+  const [requestCorrectionType, setRequestCorrectionType] = useState('CORRECCION_DOCUMENTAL');
+  const [requestSourceRef, setRequestSourceRef] = useState('');
+  const [requestTargetRef, setRequestTargetRef] = useState('');
+  const [requestReason, setRequestReason] = useState('');
+  const [requestWorkpaper, setRequestWorkpaper] = useState('');
+  const [requestSubmitting, setRequestSubmitting] = useState(false);
+  const [correctionCases, setCorrectionCases] = useState<import('../context/AccountingContext').CorrectionCase[]>([]);
+  const [caseActionReason, setCaseActionReason] = useState<Record<string,string>>({});
+  const [caseExecutionRef, setCaseExecutionRef] = useState<Record<string,string>>({});
+  const [caseActionBusy, setCaseActionBusy] = useState<string | null>(null);
+  const refreshCorrectionCases = useCallback(async () => { try { setCorrectionCases(await listCorrectionCases()); } catch (error) { setFeedback({kind:'error',message:error instanceof Error?error.message:'No se pudieron consultar los expedientes.'}); } },[listCorrectionCases]);
+  useEffect(() => { void refreshCorrectionCases(); },[refreshCorrectionCases]);
   const refreshAuditEvents = useCallback(async () => {
     setAuditLoading(true);
     try {
-      const events = await getAuditEvents(200);
+      const events = await getAuditEvents(500);
       setAuditEvents(events.filter(event =>
         !event.details.companyId || event.details.companyId === currentCompany.id
       ));
@@ -51,6 +83,128 @@ export const ReversionFiscalView: React.FC = () => {
     }
   }, [getAuditEvents, currentCompany.id]);
   useEffect(() => { void refreshAuditEvents(); }, [refreshAuditEvents]);
+  const correctionRequests = useMemo(() => auditEvents
+    .filter(event => event.eventType === 'accounting_correction_requested')
+    .map(request => {
+      const source = request.details || {};
+      const completedBy = auditEvents.find(event => {
+        if (event.eventType !== 'accounting_correction_executed') return false;
+        const result = event.details || {};
+        return result.companyId === source.companyId &&
+          result.entityType === source.entityType &&
+          result.entityId === source.entityId &&
+          result.correctionType === source.correctionType &&
+          result.correctionDocumentRef === source.correctionDocumentRef &&
+          (!request.createdAt || !event.createdAt || event.createdAt >= request.createdAt);
+      });
+      return { request, completedBy };
+    }), [auditEvents]);
+  const refreshFiscalIncidents = useCallback(async () => {
+    setIncidentsLoading(true);
+    try {
+      const items = await listVatFiscalIncidents();
+      setFiscalIncidents(items);
+      setIncidentError(null);
+    } catch (error) {
+      setIncidentError(error instanceof Error ? error.message : 'No se pudieron consultar los expedientes fiscales.');
+    } finally {
+      setIncidentsLoading(false);
+    }
+  }, [listVatFiscalIncidents]);
+  useEffect(() => { void refreshFiscalIncidents(); }, [refreshFiscalIncidents]);
+  const submitCreateFiscalIncident = async () => {
+    const note = purchases.find(item => item.id === incidentPurchaseId && item.companyId === currentCompany.id && item.documentType === '03');
+    if (!note || incidentCreateReason.trim().length < 15 || incidentCreating) return;
+    const original = purchases.find(item => item.id === note.originalPurchaseId && item.companyId === currentCompany.id);
+    if (!original) { setIncidentError('La nota no conserva una factura original verificable.'); return; }
+    const affectedVoucher = vatVouchers.find(item => item.companyId === currentCompany.id && item.purchaseRecordId === original.id);
+    const affectedDeclaration = affectedVoucher
+      ? vatWithholdingDeclarations.find(item => item.companyId === currentCompany.id && item.voucherIds.includes(affectedVoucher.id))
+      : undefined;
+    const declarationEventIds = affectedDeclaration
+      ? vatWithholdingDeclarationEvents.filter(item => item.declarationId === affectedDeclaration.id).map(item => item.id)
+      : [];
+    setIncidentCreating(true);
+    try {
+      await createVatFiscalIncident({
+        purchaseId: note.id, vatVoucherId: affectedVoucher?.id,
+        declarationId: affectedDeclaration?.id, declarationEventIds,
+        reason: incidentCreateReason.trim(), detectedAt: today
+      });
+      setIncidentPurchaseId('');
+      setIncidentCreateReason('');
+      await refreshFiscalIncidents();
+      setFeedback({kind:'success', message:'Incidencia fiscal creada y vinculada a la nota correctiva. El expediente permanece pendiente de revisión y actuación documentada.'});
+    } catch (error) {
+      setIncidentError(error instanceof Error ? error.message : 'No se pudo crear el expediente fiscal.');
+    } finally { setIncidentCreating(false); }
+  };
+  const submitCorrectionRequest = async () => {
+    if (requestSubmitting) return;
+    setRequestSubmitting(true);
+    try {
+      await createCorrectionCase({
+        entityType: requestEntityType, entityId: requestEntityId.trim(),
+        correctionType: requestCorrectionType.trim(),
+        sourceDocumentRef: requestSourceRef.trim(),
+        correctionDocumentRef: requestTargetRef.trim() || 'PENDIENTE DE DOCUMENTO CORRECTIVO',
+        reason: requestReason.trim(), workpaperNote: requestWorkpaper.trim()
+      });
+      setRequestEntityId(''); setRequestSourceRef(''); setRequestTargetRef('');
+      setRequestReason(''); setRequestWorkpaper('');
+      setFeedback({kind:'success',message:'Expediente creado en SQLite, pendiente de revisión independiente. No se modificó el documento original.'});
+      await refreshCorrectionCases();
+      await refreshAuditEvents();
+    } catch (error) {
+      setFeedback({kind:'error',message:error instanceof Error ? error.message : 'No se pudo registrar la solicitud.'});
+    } finally { setRequestSubmitting(false); }
+  };
+
+  const submitBcvRateCorrection = async () => {
+    if (bcvCorrectionSaving) return;
+    setBcvCorrectionSaving(true);
+    try {
+      await correctBcvRate({
+        newRate: Number(bcvCorrectionRate), effectiveDate: bcvCorrectionDate,
+        reason: bcvCorrectionReason, workpaperNote: bcvCorrectionWorkpaper
+      });
+      setBcvCorrectionOpen(false);
+      setBcvCorrectionReason('');
+      setBcvCorrectionWorkpaper('');
+      setFeedback({kind:'success', message:'La tasa BCV quedó corregida en SQLite y la solicitud/ejecución quedó registrada en auditoría.'});
+      await refreshAuditEvents();
+    } catch (error) {
+      setFeedback({kind:'error', message:error instanceof Error ? error.message : 'No se pudo corregir la tasa BCV.'});
+    } finally { setBcvCorrectionSaving(false); }
+  };
+  const submitFiscalIncidentEvent = async () => {
+    if (!selectedIncidentId || incidentDecision.trim().length < 20 || incidentSaving) return;
+    setIncidentSaving(true);
+    try {
+      await recordVatFiscalIncidentEvent({
+        incidentId: selectedIncidentId, eventType: incidentEventType,
+        decisionText: incidentDecision.trim(),
+        declarationId: fiscalIncidents.find(item => item.id === selectedIncidentId)?.declarationId || undefined,
+        declarationEventIds: fiscalIncidents.find(item => item.id === selectedIncidentId)?.declarationEventIds || [],
+        bankMovementIds: fiscalIncidents.find(item => item.id === selectedIncidentId)?.bankMovementIds || [],
+        journalEntryId: (() => {
+          const incident = fiscalIncidents.find(item => item.id === selectedIncidentId);
+          const note = purchases.find(item => item.id === incident?.purchaseId && item.companyId === currentCompany.id);
+          return incident?.vatVoucherId ? note?.journalEntryId : undefined;
+        })(),
+        externalReference: incidentExternalReference.trim() || undefined
+      });
+      setIncidentDecision('');
+      setIncidentExternalReference('');
+      setSelectedIncidentId('');
+      await refreshFiscalIncidents();
+      setFeedback({ kind: 'success', message: 'La actuación quedó incorporada al expediente fiscal en SQLite. El expediente permanece abierto hasta que exista evidencia de rectificación y validación.' });
+    } catch (error) {
+      setIncidentError(error instanceof Error ? error.message : 'No se pudo registrar la actuación fiscal.');
+    } finally {
+      setIncidentSaving(false);
+    }
+  };
 
   const source = journalEntries.find(entry => entry.id === selectedId && entry.companyId === currentCompany.id);
   const reversalAssessment = useMemo(() => {
@@ -70,6 +224,25 @@ export const ReversionFiscalView: React.FC = () => {
   const isPriorPeriod = Boolean(source && currentCompany.closedThroughDate && source.date <= currentCompany.closedThroughDate);
   const retainedEarningsAccounts = accounts.filter(account => account.type === 'PATRIMONIO' && account.isMovement);
   const accountMap = useMemo(() => new Map(accounts.map(account => [account.code, account])), [accounts]);
+  const correctionDocuments = useMemo(() => [
+    ...sales.filter(item => item.companyId === currentCompany.id && ['02', '03'].includes(item.documentType) && item.originalSaleId)
+      .map(item => ({ id: item.id, kind: item.documentType === '03' ? 'NC cliente' : 'ND cliente',
+        number: item.invoiceNumber, sourceNumber: item.affectedInvoiceNumber || '',
+        date: item.invoiceDate, party: item.customerName, amountBs: item.totalAmountBs,
+        amountUsd: item.totalAmountUsd, journalEntryId: item.journalEntryId || '',
+        reason: item.correctionReason || item.notes || '', workpaper: item.correctionWorkpaper || '', medium: item.fiscalEmissionMedium || '' })),
+    ...purchases.filter(item => item.companyId === currentCompany.id && item.documentType === '03' && item.originalPurchaseId)
+      .map(item => ({ id: item.id, kind: 'NC proveedor', number: item.creditNoteNumber || item.invoiceNumber,
+        sourceNumber: item.affectedInvoiceNumber || '', date: item.invoiceDate, party: item.supplierName,
+        amountBs: item.totalAmountBs, amountUsd: item.totalAmountUsd, journalEntryId: item.journalEntryId || '',
+        reason: item.notes || '', workpaper: '', medium: item.fiscalEmissionMedium || '' })),
+    ...purchases.filter(item => item.companyId === currentCompany.id && item.documentType === '02' && item.affectedInvoiceNumber)
+      .map(item => ({ id: item.id, kind: 'ND proveedor', number: item.debitNoteNumber || item.invoiceNumber,
+        sourceNumber: item.affectedInvoiceNumber || '', date: item.invoiceDate, party: item.supplierName,
+        amountBs: item.totalAmountBs, amountUsd: item.totalAmountUsd, journalEntryId: item.journalEntryId || '',
+        reason: item.notes || '', workpaper: '', medium: item.fiscalEmissionMedium || '' }))
+  ].sort((a, b) => b.date.localeCompare(a.date)), [sales, purchases, currentCompany.id]);
+
   const hasReversal = (entryId: string) => journalEntries.some(entry => entry.reversalOfEntryId === entryId) ||
     Boolean(journalEntries.find(entry => entry.id === entryId)?.reversedByEntryId);
 
@@ -320,6 +493,79 @@ export const ReversionFiscalView: React.FC = () => {
 
   return (
     <div className="space-y-5">
+      <section className="rounded-2xl border border-indigo-200 bg-white p-4 sm:p-6 space-y-3">
+        <div className="flex items-center gap-3"><ShieldCheck className="h-6 w-6 text-indigo-700"/><div><h2 className="font-bold text-slate-900">Centro Integral de Correcciones · Nueva solicitud</h2><p className="text-xs text-slate-500">Registra una solicitud trazable antes de modificar cualquier efecto contable o fiscal.</p></div></div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Este registro abre una solicitud, no autoriza ni ejecuta la corrección. Los documentos emitidos y asientos contabilizados permanecen intactos hasta completar el flujo especializado y la aprobación que corresponda.</div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-xs font-semibold text-slate-700">Tipo de registro origen
+            <select value={requestEntityType} onChange={e=>setRequestEntityType(e.target.value as typeof requestEntityType)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
+              <option value="JOURNAL_ENTRY">Asiento contable</option><option value="SALE">Venta / NC / ND</option><option value="PURCHASE">Compra / NC / ND</option><option value="INVENTORY_MOVEMENT">Movimiento de inventario / Kardex</option><option value="BANK_MOVEMENT">Movimiento bancario</option><option value="VAT_VOUCHER">Comprobante de retención IVA</option><option value="VAT_DECLARATION">Declaración IVA</option><option value="ISLR_VOUCHER">Comprobante ISLR</option><option value="ISLR_EVENT">Evento ISLR</option><option value="INVENTORY_PRODUCT">Artículo de inventario</option><option value="BCV_RATE">Tasa BCV de la empresa</option>
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-slate-700">ID interno exacto del registro *
+            <input value={requestEntityId} onChange={e=>setRequestEntityId(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="ID del registro origen"/>
+          </label>
+          <label className="text-xs font-semibold text-slate-700">Tipo de corrección *
+            <select value={requestCorrectionType} onChange={e=>setRequestCorrectionType(e.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
+              <option value="CORRECCION_DOCUMENTAL">Corrección documental</option><option value="ANULACION_DOCUMENTO">Anulación de documento</option><option value="REVERSIÓN_CONTABLE">Reversión contable</option><option value="AJUSTE_PARCIAL">Ajuste parcial</option><option value="SUSTITUCION_DOCUMENTO">Sustitución documental</option><option value="RECTIFICACION_FISCAL">Rectificación fiscal</option><option value="CORRECCION_INVENTARIO">Corrección de inventario</option><option value="CORRECCION_AUXILIAR">Corrección CxC / CxP / banco</option>
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-slate-700">Referencia del documento original *
+            <input value={requestSourceRef} onChange={e=>setRequestSourceRef(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Factura, NC/ND, asiento, comprobante…"/>
+          </label>
+          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Referencia correctiva (si ya existe)
+            <input value={requestTargetRef} onChange={e=>setRequestTargetRef(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Se completa al emitir el documento correctivo"/>
+          </label>
+          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Motivo y causa (mínimo 15 caracteres) *
+            <textarea value={requestReason} onChange={e=>setRequestReason(e.target.value)} rows={2} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Describa el error, hecho y alcance de la corrección."/>
+          </label>
+          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Papel de trabajo / evidencia (mínimo 15 caracteres) *
+            <textarea value={requestWorkpaper} onChange={e=>setRequestWorkpaper(e.target.value)} rows={2} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Conciliaciones, soportes, documentos relacionados y análisis preliminar."/>
+          </label>
+        </div>
+        <div><button type="button" onClick={()=>void submitCorrectionRequest()} disabled={requestSubmitting||!requestEntityId.trim()||!requestSourceRef.trim()||requestReason.trim().length<15||requestWorkpaper.trim().length<15} className="rounded bg-indigo-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{requestSubmitting?'Registrando solicitud…':'Registrar solicitud en SQLite'}</button></div>
+      </section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div><h2 className="font-bold text-slate-900">Bandeja de solicitudes pendientes</h2><p className="text-xs text-slate-500">Solicitudes abiertas registradas en auditoría SQLite; no representan aprobaciones ni ejecuciones.</p></div>
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">{correctionRequests.filter(item=>!item.completedBy).length} pendientes · {correctionRequests.filter(item=>item.completedBy).length} ejecutadas</span>
+        </div>
+        {auditError && <p className="text-xs text-rose-700">{auditError}</p>}
+        {correctionRequests.length===0
+          ? <p className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">{auditLoading?'Consultando solicitudes…':'No hay solicitudes de corrección en el historial consultado.'}</p>
+          : <div className="space-y-2">{correctionRequests.map(({request,completedBy})=>{
+            const details=request.details||{};
+            return <article key={request.id} className={`rounded-lg border p-3 text-xs space-y-1 ${completedBy?'border-emerald-200 bg-emerald-50/40':'border-amber-200 bg-amber-50/40'}`}>
+              <div className="flex flex-wrap items-center justify-between gap-2"><strong>{String(details.correctionType||'Corrección')}</strong><span className={`rounded px-2 py-1 font-semibold ${completedBy?'bg-emerald-100 text-emerald-900':'bg-amber-100 text-amber-900'}`}>{completedBy?'EJECUTADA · AUDITADA':'PENDIENTE DE REVISIÓN'}</span></div>
+              <p>{String(details.entityType||'')} · ID {String(details.entityId||'')} · Ref. {String(details.sourceDocumentRef||'')}</p>
+              <p><strong>Motivo:</strong> {String(details.reason||'')}</p>
+              <p><strong>Papel de trabajo:</strong> {String(details.workpaperNote||'')}</p>
+              <p className="text-slate-500">Solicitud #{request.id} · {request.createdAt} · {String(details.actorUsername||'Usuario')}</p>
+              {completedBy && <p className="text-emerald-800">Evento de ejecución #{completedBy.id} · {completedBy.createdAt} · Ref. correctiva {String(completedBy.details.correctionDocumentRef||'—')}</p>}
+            </article>;
+          })}</div>}
+      </section>
+      <section className="rounded-2xl border border-indigo-200 bg-white p-4 sm:p-6 space-y-3">
+        <h2 className="font-bold">Expedientes integrales · revisión segregada ({correctionCases.length})</h2>
+        <p className="text-xs text-slate-600">La corrección material (NC/ND, asiento, ajuste de Kardex, banco o rectificación fiscal) debe ejecutarse primero en su módulo especializado. Aquí se aprueba el expediente y se verifica la referencia persistida; solicitante, revisor y ejecutor deben ser tres administradores diferentes.</p>
+        {correctionCases.map(item=><article key={item.id} className="rounded-lg border p-3 space-y-2 text-xs">
+          <strong>{item.correction_type} · {item.entity_type} #{item.entity_id} · {item.status}</strong>
+          <p>Origen: {item.source_ref} · Correctivo: {item.correction_ref||'Por asignar'}</p><p>{item.reason}</p><p>{item.workpaper}</p>
+          <p className="text-slate-500">Solicitó {item.requested_by_name} · Revisó {item.reviewed_by_name||'—'} · Ejecutó {item.executed_by_name||'—'}</p>
+          {item.status==='PENDING_REVIEW' && <>
+            <textarea value={caseActionReason[item.id]||''} onChange={e=>setCaseActionReason(p=>({...p,[item.id]:e.target.value}))} className="w-full rounded border p-2" rows={2} placeholder="Justificación de decisión (15 caracteres mínimo)"/>
+            <button disabled={caseActionBusy===item.id||(caseActionReason[item.id]||'').trim().length<15} onClick={async()=>{setCaseActionBusy(item.id);try{await reviewCorrectionCase({caseId:item.id,decision:'APPROVE',reason:caseActionReason[item.id]});await refreshCorrectionCases();}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'Error de revisión'});}finally{setCaseActionBusy(null);}}} className="rounded bg-emerald-700 px-3 py-2 text-white">Aprobar</button>
+            <button disabled={caseActionBusy===item.id||(caseActionReason[item.id]||'').trim().length<15} onClick={async()=>{setCaseActionBusy(item.id);try{await reviewCorrectionCase({caseId:item.id,decision:'REJECT',reason:caseActionReason[item.id]});await refreshCorrectionCases();}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'Error de revisión'});}finally{setCaseActionBusy(null);}}} className="rounded border px-3 py-2">Rechazar</button>
+          </>}
+          {item.status==='APPROVED' && <>
+            <input value={caseExecutionRef[item.id]||''} onChange={e=>setCaseExecutionRef(p=>({...p,[item.id]:e.target.value}))} className="w-full rounded border p-2" placeholder="Referencia correctiva emitida"/>
+            <textarea value={caseActionReason[item.id]||''} onChange={e=>setCaseActionReason(p=>({...p,[item.id]:e.target.value}))} className="w-full rounded border p-2" rows={2} placeholder="Constancia de ejecución (15 caracteres mínimo)"/>
+            <button disabled={caseActionBusy===item.id||!(caseExecutionRef[item.id]||'').trim()||(caseActionReason[item.id]||'').trim().length<15} onClick={async()=>{setCaseActionBusy(item.id);try{await executeCorrectionCase({caseId:item.id,executionRef:caseExecutionRef[item.id],reason:caseActionReason[item.id]});await refreshCorrectionCases();}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'Error de ejecución'});}finally{setCaseActionBusy(null);}}} className="rounded bg-indigo-700 px-3 py-2 text-white">Confirmar ejecución ya persistida</button>
+          </>}
+          <div className="border-t pt-2"><strong>Historial</strong>{item.events.map(ev=><p key={ev.id}>{ev.event_type} · {ev.actor_name} · {ev.created_at} · {ev.reason}</p>)}</div>
+        </article>)}
+        {correctionCases.length===0 && <p className="text-sm text-slate-500">No hay expedientes formales.</p>}
+      </section>
       <section className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
         <div className="bg-slate-900 text-white px-5 py-4 flex items-center gap-3">
           <Undo2 className="h-6 w-6 text-emerald-300" />
@@ -390,7 +636,7 @@ export const ReversionFiscalView: React.FC = () => {
                         <div><label className="block text-xs font-semibold mb-1">Fecha de la nota</label><input type="date" min={linkedPurchase.invoiceDate} value={supplierReturnDate} onChange={event=>setSupplierReturnDate(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm"/></div>
                         <div><label className="block text-xs font-semibold mb-1">Número de nota de crédito</label><input value={supplierCreditNoteNumber} onChange={event=>setSupplierCreditNoteNumber(event.target.value)} maxLength={80} className="w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="NC-000123"/></div>
                         <div><label className="block text-xs font-semibold mb-1">Número de control</label><input value={supplierCreditControlNumber} onChange={event=>setSupplierCreditControlNumber(event.target.value)} maxLength={80} className="w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="00-000123"/></div>
-                        <div><label className="block text-xs font-semibold mb-1">Motivo y soporte (mínimo 10 caracteres)</label><textarea value={supplierCreditReason} onChange={event=>setSupplierCreditReason(event.target.value)} rows={2} maxLength={1000} className="w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="Motivo de devolución, referencia al soporte y condición de la mercancía…"/></div>
+                        <div><label className="block text-xs font-semibold mb-1">Motivo y soporte (mínimo 20 caracteres)</label><textarea value={supplierCreditReason} onChange={event=>setSupplierCreditReason(event.target.value)} rows={2} maxLength={1000} className="w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="Motivo de devolución, referencia al soporte y condición de la mercancía…"/></div>
                       </div>
                       <button type="button" onClick={submitSupplierCreditNote} disabled={supplierCreditNoteSubmitting||supplierReturnLines.some(row=>!row.productId||Number(row.quantity)<=0)||!supplierCreditNoteNumber.trim()||!supplierCreditControlNumber.trim()||supplierCreditReason.trim().length<10} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{supplierCreditNoteSubmitting?'Guardando y confirmando en SQLite…':'Registrar nota de crédito y devolución'}</button>
                     </div> : <p>La devolución permanece bloqueada hasta conciliar factura, líneas, Kardex y asiento. Corrija primero las diferencias indicadas arriba.</p>}</div> : correctableMovements.length > 0 ? <>
@@ -474,6 +720,11 @@ export const ReversionFiscalView: React.FC = () => {
         <div className="space-y-2">
           {auditEvents.map(event => {
             const details = event.details || {};
+            const authorizationDetails = details.authorization && typeof details.authorization === 'object'
+              ? details.authorization as Record<string, unknown> : {};
+            const actorDetails = details.actor && typeof details.actor === 'object'
+              ? details.actor as Record<string, unknown> : {};
+            const actorName = details.actorUsername || actorDetails.username;
             const title = event.eventType === 'journal_entry_reversed' ? 'Contra-asiento registrado'
               : event.eventType === 'journal_entry_posted' ? 'Asiento contabilizado'
               : event.eventType === 'fiscal_document_reversal_marked' ? 'Documento fiscal marcado como reversado contablemente'
@@ -483,12 +734,24 @@ export const ReversionFiscalView: React.FC = () => {
               : event.eventType === 'inventory_movement_posted' ? 'Movimiento de Kardex registrado'
               : event.eventType === 'inventory_correction_posted' ? 'Corrección de Kardex registrada'
               : event.eventType === 'accounting_period_closed' ? 'Período contable cerrado'
+              : event.eventType === 'accounting_correction_requested' ? 'Solicitud de corrección registrada · pendiente de revisión'
+              : event.eventType === 'accounting_correction_executed' ? 'Corrección ejecutada y auditada'
+              : event.eventType === 'company_bcv_rate_updated' ? 'Tasa BCV modificada'
               : event.eventType === 'factory_reset' ? 'Reinicio de datos operativos'
               : event.eventType === 'state_saved' ? 'Estado contable persistido en SQLite'
               : event.eventType.replace(/_/g, ' ');
             return <article key={event.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs space-y-1">
               <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-slate-900">{title}</strong><span className="font-mono text-slate-500">#{event.id} · {event.createdAt}</span></div>
               {details.entryNumber != null && <p>Asiento #{String(details.entryNumber)} · {String(details.date || '')} · {String(details.referenceDoc || '')}</p>}
+              {Boolean(actorName) && <p><strong>Responsable:</strong> {String(actorName)} · rol {String(details.actorRole || '')} · usuario #{String(details.actorUserId || actorDetails.userId || '')}</p>}
+              {Boolean(details.correctionType) && <p><strong>Operación:</strong> {String(details.correctionType)} · {String(details.entityType || '')} · registro {String(details.entityId || '')}</p>}
+              {details.previousRate != null && <p><strong>Tasa BCV:</strong> {String(details.previousRate)} → {String(details.newRate)} Bs/USD · vigencia {String(details.effectiveDate || 'sin fecha indicada')}</p>}
+              {Boolean(details.sourceDocumentRef) && <p><strong>Documento original:</strong> {String(details.sourceDocumentRef)} · <strong>Documento correctivo:</strong> {String(details.correctionDocumentRef || '')}</p>}
+              {Boolean(details.reason) && <p><strong>Motivo:</strong> {String(details.reason)}</p>}
+              {Boolean(details.workpaperNote) && <p><strong>Papel de trabajo:</strong> {String(details.workpaperNote)}</p>}
+              {Boolean(details.fiscalEmissionMedium) && <p><strong>Medio fiscal declarado:</strong> {String(details.fiscalEmissionMedium)} · coincidencia con original: {details.sameMediumAsOriginal ? 'confirmada' : 'no confirmada'}</p>}
+              {Boolean(details.authorization) && <p><strong>Autorización:</strong> sesión autenticada {String(authorizationDetails.method || '')} · confirmación expresa {authorizationDetails.explicitConfirmation ? 'sí' : 'no'}</p>}
+              {Boolean(details.journalEntryId) && <p><strong>Asiento correctivo:</strong> {String(details.journalEntryId)}</p>}
               {Boolean(details.reversalOfEntryId) && <p>Asiento original: {String(details.reversalOfEntryId)}</p>}
               {Boolean(details.invoiceNumber) && <p>Factura: {String(details.invoiceNumber)} · {String(details.collection || '')}</p>}
               {Boolean(details.reversalReason) && <p><strong>Motivo:</strong> {String(details.reversalReason)}</p>}
@@ -502,6 +765,83 @@ export const ReversionFiscalView: React.FC = () => {
           })}
         </div>
         <p className="text-[11px] text-slate-500">Se muestran los últimos 200 eventos. El historial se almacena en SQLite y el reinicio operativo no lo elimina.</p>
+      </section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div><h2 className="text-base font-bold text-slate-900">Corrección de tasa BCV</h2><p className="text-xs text-slate-500">Tasa vigente: {formatBs(currentCompany.bcvRate)} Bs/USD · última fecha: {currentCompany.lastRateUpdate || 'sin fecha registrada'}</p></div>
+          <button type="button" onClick={()=>{setBcvCorrectionRate(String(currentCompany.bcvRate || ''));setBcvCorrectionDate(today);setBcvCorrectionOpen(value=>!value);}} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold">{bcvCorrectionOpen ? 'Cerrar' : 'Corregir tasa BCV'}</button>
+        </div>
+        {bcvCorrectionOpen && <div className="mt-3 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+          <label className="text-xs font-semibold text-slate-700">Nueva tasa Bs/USD
+            <input type="number" min="0.000001" step="0.000001" value={bcvCorrectionRate} onChange={event=>setBcvCorrectionRate(event.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
+          </label>
+          <label className="text-xs font-semibold text-slate-700">Fecha de vigencia
+            <input type="date" value={bcvCorrectionDate} onChange={event=>setBcvCorrectionDate(event.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
+          </label>
+          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Motivo de la corrección
+            <textarea value={bcvCorrectionReason} onChange={event=>setBcvCorrectionReason(event.target.value)} rows={2} placeholder="Explique por qué debe corregirse la tasa registrada…" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
+          </label>
+          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Papel de trabajo y evidencia
+            <textarea value={bcvCorrectionWorkpaper} onChange={event=>setBcvCorrectionWorkpaper(event.target.value)} rows={2} placeholder="Indique fuente BCV, soporte, tasa sustituida y comprobación…" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
+          </label>
+          <div className="sm:col-span-2"><button type="button" disabled={bcvCorrectionSaving || Number(bcvCorrectionRate)<=0 || bcvCorrectionReason.trim().length<10 || bcvCorrectionWorkpaper.trim().length<10} onClick={()=>void submitBcvRateCorrection()} className="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{bcvCorrectionSaving ? 'Guardando corrección…' : 'Confirmar y auditar corrección'}</button></div>
+        </div>}
+      </section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div><h2 className="text-base font-bold text-slate-900">Expedientes de rectificación fiscal</h2><p className="text-xs text-slate-500">Incidencias append-only vinculadas a comprobantes, declaraciones y acciones documentadas</p></div>
+          <button type="button" onClick={() => void refreshFiscalIncidents()} disabled={incidentsLoading} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold disabled:opacity-50">{incidentsLoading ? 'Actualizando…' : 'Actualizar expedientes'}</button>
+        </div>
+        {incidentError && <p role="alert" className="mb-2 rounded-lg bg-rose-50 p-2 text-xs text-rose-800">{incidentError}</p>}
+        <div className="mb-3 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+          <label className="text-xs font-semibold text-slate-700">Nota de crédito de proveedor afectada
+            <select value={incidentPurchaseId} onChange={event=>setIncidentPurchaseId(event.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
+              <option value="">Seleccionar NC registrada…</option>
+              {purchases.filter(item=>item.companyId===currentCompany.id && item.documentType==='03' && item.originalPurchaseId && !fiscalIncidents.some(incident=>incident.purchaseId===item.id)).map(item=><option key={item.id} value={item.id}>{item.creditNoteNumber || item.invoiceNumber} · {item.affectedInvoiceNumber}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-slate-700">Motivo de revisión fiscal
+            <input value={incidentCreateReason} onChange={event=>setIncidentCreateReason(event.target.value)} placeholder="Explique qué comprobante o período debe rectificarse…" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
+          </label>
+          <div className="sm:col-span-2"><button type="button" disabled={incidentCreating || !incidentPurchaseId || incidentCreateReason.trim().length<10} onClick={()=>void submitCreateFiscalIncident()} className="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{incidentCreating ? 'Creando expediente…' : 'Crear expediente fiscal de esta NC'}</button></div>
+        </div>
+        {fiscalIncidents.length === 0 ? <p className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">{incidentsLoading ? 'Consultando SQLite…' : 'No hay incidencias fiscales registradas para esta empresa.'}</p> :
+          <div className="space-y-3">{fiscalIncidents.map(incident => <article key={incident.id} className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 text-xs space-y-1">
+            <div className="flex flex-wrap items-center justify-between gap-2"><strong>{incident.documentType} · {incident.documentNumber}</strong><span className="rounded bg-amber-100 px-2 py-1 font-semibold text-amber-900">{incident.status} · pendiente de cierre</span></div>
+            <p>Factura original: {incident.affectedInvoiceNumber || '—'} · comprobante IVA: {incident.vatVoucherId || '—'} · declaración: {incident.declarationId || '—'}</p>
+            <p><strong>Motivo:</strong> {incident.reason}</p>
+            <p>Registrado por {incident.createdByUsername} · {incident.createdAt}</p>
+            {incident.events.map(event => <p key={event.id} className="border-l-2 border-amber-300 pl-2 text-slate-600">{event.eventType} · {event.decisionText} {event.externalReference ? ' · Ref. ' + event.externalReference : ''} · {event.actorUsername} · {event.createdAt}</p>)}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button type="button" onClick={() => {setSelectedIncidentId(incident.id);setIncidentEventType('REVIEW_RECORDED');}} className="rounded border border-slate-300 bg-white px-2 py-1 font-semibold">Registrar revisión</button>
+              <button type="button" disabled={!incident.events.some(event=>event.eventType==='REVIEW_RECORDED')} onClick={() => {setSelectedIncidentId(incident.id);setIncidentEventType('ACTION_RECORDED');}} className="rounded border border-slate-300 bg-white px-2 py-1 font-semibold disabled:opacity-40">Registrar actuación</button>
+            </div>
+            {selectedIncidentId === incident.id && <div className="space-y-2 rounded border border-slate-200 bg-white p-3">
+              <p className="font-semibold">{incidentEventType === 'REVIEW_RECORDED' ? 'Documentar revisión profesional' : 'Documentar acción / rectificación externa'}</p>
+              <textarea value={incidentDecision} onChange={event=>setIncidentDecision(event.target.value)} rows={2} placeholder="Describa la revisión, decisión, trámite o resultado (mínimo 10 caracteres)…" className="w-full rounded border border-slate-300 p-2" />
+              <input value={incidentExternalReference} onChange={event=>setIncidentExternalReference(event.target.value)} placeholder="Referencia SENIAT / declaración / expediente (si aplica)" className="w-full rounded border border-slate-300 p-2" />
+              <div className="flex gap-2"><button type="button" disabled={incidentSaving || incidentDecision.trim().length < 10} onClick={() => void submitFiscalIncidentEvent()} className="rounded bg-slate-900 px-3 py-2 font-semibold text-white disabled:opacity-40">{incidentSaving ? 'Guardando…' : 'Guardar en SQLite'}</button><button type="button" onClick={()=>setSelectedIncidentId('')} className="rounded border px-3 py-2">Cancelar</button></div>
+            </div>}
+          </article>)}</div>}
+        <p className="mt-2 text-[11px] text-slate-500">Registrar una actuación no equivale a presentar una declaración sustitutiva ni a obtener aceptación del SENIAT. SICOVEN conserva el expediente abierto para impedir que se declare resuelto sin evidencia.</p>
+      </section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div><h2 className="text-base font-bold text-slate-900">Expedientes de notas correctivas</h2><p className="text-xs text-slate-500">NC/ND vinculadas a su documento original y asiento</p></div>
+          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{correctionDocuments.length} documento(s)</span>
+        </div>
+        {correctionDocuments.length === 0 ? <p className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">Todavía no hay notas correctivas vinculadas en esta empresa.</p> :
+          <div className="space-y-2">{correctionDocuments.map(document => <article key={document.id} className="rounded-lg border border-slate-200 p-3 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-slate-900">{document.kind} · {document.number}</strong><span className="font-mono text-slate-500">{document.date}</span></div>
+            <p className="mt-1 text-slate-600">{document.party} · afecta {document.sourceNumber}</p>
+            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-slate-600"><span>Bs. {formatBs(document.amountBs)}</span><span>USD {formatUsd(document.amountUsd)}</span><span>{document.journalEntryId ? 'Asiento vinculado' : 'Sin asiento enlazado'}</span></div>
+            {document.reason && <p className="mt-1"><strong>Motivo:</strong> {document.reason}</p>}
+            {document.workpaper && <p className="mt-1"><strong>Papel de trabajo:</strong> {document.workpaper}</p>}
+            {document.medium && <p className="mt-1"><strong>Medio fiscal declarado:</strong> {document.medium}</p>}
+            <div className="mt-2 flex items-center justify-between gap-2"><span className="text-amber-700">Revisar efecto fiscal y declaración del período</span>
+              {document.journalEntryId && <button type="button" onClick={() => setSelectedId(document.journalEntryId)} className="rounded bg-slate-100 px-2 py-1 font-semibold text-slate-700 hover:bg-slate-200">Consultar asiento</button>}
+            </div>
+          </article>)}</div>}
       </section>
     </div>
   );

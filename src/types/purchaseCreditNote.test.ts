@@ -41,6 +41,7 @@ const draft = (options: {
   }],
   returnDate: '2026-10-10', creditNoteNumber: 'NC-001',
   controlNumber: '00-NC-001', reason: 'Mercancía defectuosa devuelta',
+  fiscalEmissionMedium: 'DIGITAL' as const, sameMediumAsOriginal: true,
   closedThroughDate: options.closedThroughDate
 });
 

@@ -217,3 +217,40 @@ No declarar completa esta capacidad hasta que cada tipo documental con efecto co
 - Revisión adicional del restablecimiento de datos de muestra: el ledger de SQLite impide borrar asientos históricos mediante un snapshot ordinario. Por ello, el flujo ahora ejecuta primero el reinicio transaccional autorizado `resetAccounting` (que conserva autenticación, licencia y auditoría), verifica el resultado y después confirma el estado vacío desde el proveedor. No intenta eliminar asientos históricos a través del guardado normal.
 
 - Revisión de integridad del restablecimiento: ambos flujos deben limpiar todas las colecciones del `stateSnapshot`. Se incorporó el vaciado explícito de declaraciones y eventos de retención IVA y el restablecimiento de la moneda de visualización a DUAL; así el estado React no vuelve a escribir registros fiscales antiguos después de que Electron haya verificado el reinicio.
+
+
+## Continuación de implementación en rama de trabajo — 04/11/2026
+
+### Centro de solicitudes de corrección
+- Se añadió en `ReversionFiscalView` un formulario único para registrar solicitudes relacionadas con asientos, ventas, compras, Kardex, banco, comprobantes IVA/ISLR, declaraciones y artículos de inventario.
+- La solicitud exige ID interno del origen, referencia documental, tipo de corrección, motivo y papel de trabajo.
+- La solicitud se registra mediante el ledger de auditoría SQLite append-only y no altera el documento, el asiento ni los auxiliares.
+- La operación exige SQLite listo y sesión administrativa autenticada, según la compuerta existente de Electron.
+- Se corrigió la semántica del evento: una solicitud queda con estado `PENDING_REVIEW` y sin objeto de autorización. Solo los eventos `accounting_correction_executed` se etiquetan como ejecutados/autorizados. La interfaz ya no presenta una solicitud como corrección autorizada.
+
+### Límites expresos de esta entrega
+- El nuevo formulario constituye una bandeja de entrada auditable, no un motor completo de expedientes con estados transicionales, aprobador distinto del preparador, matriz de materialidad ni doble autorización.
+- Electron valida ahora que el ID interno exista en la colección correspondiente y pertenezca a la empresa activa antes de registrar el evento. La validación de existencia reduce referencias inventadas o cruzadas entre empresas; no sustituye la evaluación de dependencias y efectos contables del flujo especializado.
+- La ejecución de cada clase documental continúa dependiendo de su flujo especializado. La solicitud no habilita por sí sola edición, anulación, NC/ND, rectificación fiscal ni reversión de auxiliares.
+- No se declara completa la capacidad ni se afirma que build/pruebas estén verdes hasta ejecutar pruebas de escritorio y revisar los resultados.
+
+- Se incorporó una bandeja visible de solicitudes pendientes que presenta tipo, origen, referencia, motivo, papel de trabajo, actor y fecha. La bandeja se alimenta de eventos de auditoría consultados desde SQLite y etiqueta los eventos como pendientes; no ofrece un botón de aprobación ficticio ni ejecuta operaciones por sí sola.
+
+### Reconciliación de bandeja — 04/11/2026
+- La bandeja distingue solicitudes sin evento de ejecución de solicitudes que ya tienen un evento accounting_correction_executed correlacionado por empresa, tipo de entidad, ID de origen y tipo de corrección.
+- Se muestra el identificador y la fecha del evento de ejecución que cierra la solicitud visualmente. Los eventos originales permanecen intactos en el ledger append-only.
+- Esta correlación es informativa y no equivale a una aprobación segregada. El modelo de autenticación actual solo tiene rol administrativo; por tanto, no existe todavía separación técnica entre preparador y autorizador ni doble control efectivo.
+- La bandeja consulta los últimos 200 eventos disponibles en esta vista. No debe interpretarse como un expediente histórico completo si el volumen de auditoría supera ese límite.
+
+### Expediente formal con revisión segregada — 04/11/2026
+- Se creó un subsistema SQLite específico para expedientes de corrección, separado de los eventos históricos genéricos. Cada expediente tiene identificador UUID y estados `PENDING_REVIEW`, `APPROVED`, `REJECTED` y `EXECUTED`.
+- La solicitud conserva empresa, tipo e ID del origen, referencia fuente, referencia correctiva prevista, motivo, papel de trabajo, solicitante y fecha. La creación valida que el registro de origen exista en el snapshot SQLite y corresponda a la empresa seleccionada.
+- Las transiciones y su evento append-only se escriben dentro de una misma transacción SQLite. Los eventos no admiten UPDATE ni DELETE mediante triggers.
+- La aprobación/rechazo exige otro usuario administrador distinto del solicitante. La ejecución exige un tercer usuario distinto tanto del solicitante como del aprobador, expediente previamente aprobado, motivo y referencia correctiva.
+- Antes de cerrar el expediente, Electron comprueba que la referencia correctiva exista en un registro persistido de la misma empresa y que no sea el mismo registro de origen. Esto acredita la existencia de un posible documento correctivo, no certifica por sí solo que todos sus efectos contables, auxiliares y fiscales sean correctos.
+- El modelo actual de autenticación solo admite el rol `admin`; la segregación implementada es por identidad de usuario (tres cuentas administrativas distintas), no por perfiles contables separados. No se altera el administrador semilla.
+- Se añadieron pruebas automatizadas de transiciones, separación de funciones, rechazo terminal, permisos y append-only. No se declaran ejecutadas: aún se requiere runner local/CI para ejecutar `npm test` y `npm run check:types`.
+- La operación de cierre del expediente no crea automáticamente la NC/ND, asiento, movimiento bancario, rectificación de declaración o ajuste de inventario. Esos documentos deben generarse mediante sus circuitos especializados y después vincularse con su referencia persistida. La automatización coordinada por escenario y su batería integral permanecen pendientes.
+- Se añadieron guardas SQLite para impedir cambios de identidad del expediente, eliminación del expediente, transiciones fuera de secuencia y violaciones de segregación incluso si se intenta actualizar la tabla fuera de los handlers de interfaz.
+- La prueba de atomicidad incorpora un fallo inyectado al insertar el evento: el alta del expediente debe revertirse junto con su evento, sin dejar registros huérfanos.
+- Cada transición del expediente se incorpora también al ledger general `audit_events`, dentro de la misma transacción que actualiza el estado y el historial especializado. Así el historial general y el expediente no divergen ante un fallo de escritura.

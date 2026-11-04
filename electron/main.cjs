@@ -37,6 +37,7 @@ const { registerInflationRemeReadinessIpc } = require('./inflation-reme-readines
 const { registerInflationSourceDossierIpc } = require('./inflation-source-dossiers.cjs');
 const { registerDocumentVaultIpc } = require('./supporting-documents.cjs');
 const { registerVatFiscalIncidentIpc } = require('./vat-fiscal-incidents.cjs');
+const { initializeCorrectionWorkflow, registerCorrectionRequest, reviewCorrectionRequest, markCorrectionExecuted, listCorrectionCases } = require('./accounting-correction-workflow.cjs');
 
 let db;
 function openDatabase() {
@@ -68,6 +69,7 @@ function openDatabase() {
       BEFORE DELETE ON audit_events
       BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END;
   `);
+  initializeCorrectionWorkflow(db);
   // Reconciliar el ledger externo antes de exponer la aplicación. Un ledger inválido bloquea el arranque.
   reconcileRestoreAudit({ db, userDataDir: dataDir });
   db.exec(`CREATE TABLE IF NOT EXISTS auth_users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin')), is_seed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')));`);
@@ -513,6 +515,124 @@ app.whenReady().then(async () => {
         return { id: row.id, eventType: row.event_type, details, createdAt: row.created_at };
       })
     };
+  });
+
+  ipcMain.handle('sicoven:audit-record-correction', (_event, token, input) => {
+    const actor = getActiveSession(token);
+    if (!actor || actor.role !== 'admin') {
+      return { ok: false, message: 'Se requiere una sesión administrativa autenticada para autorizar y auditar correcciones.' };
+    }
+    const eventType = String(input?.eventType || '');
+    const allowedEvents = new Set(['accounting_correction_requested', 'accounting_correction_executed']);
+    const allowedEntities = new Set(['SALE', 'PURCHASE', 'JOURNAL_ENTRY', 'BANK_MOVEMENT', 'INVENTORY_MOVEMENT',
+      'VAT_VOUCHER', 'ISLR_VOUCHER', 'VAT_DECLARATION', 'ISLR_EVENT', 'BCV_RATE', 'INVENTORY_PRODUCT']);
+    const entityType = String(input?.entityType || '');
+    const companyId = String(input?.companyId || '').trim();
+    const entityId = String(input?.entityId || '').trim();
+    const correctionType = String(input?.correctionType || '').trim();
+    const reason = String(input?.reason || '').trim();
+    const workpaperNote = String(input?.workpaperNote || '').trim();
+    const sourceDocumentRef = String(input?.sourceDocumentRef || '').trim();
+    const correctionDocumentRef = String(input?.correctionDocumentRef || '').trim();
+    const journalEntryId = String(input?.journalEntryId || '').trim();
+    const fiscalEmissionMedium = String(input?.fiscalEmissionMedium || '');
+    const sameMediumAsOriginal = input?.sameMediumAsOriginal === true;
+    if (!allowedEvents.has(eventType) || !allowedEntities.has(entityType) ||
+        !companyId || companyId.length > 160 || !entityId || entityId.length > 160 || !correctionType || correctionType.length > 80 ||
+        reason.length < 10 || reason.length > 2000 || workpaperNote.length < 10 || workpaperNote.length > 4000 ||
+        sourceDocumentRef.length > 160 || correctionDocumentRef.length > 160 || journalEntryId.length > 160) {
+      return { ok: false, message: 'Los datos del evento de auditoría están incompletos o no son válidos.' };
+    }
+    const savedRow = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    let savedState = {};
+    try { savedState = savedRow ? JSON.parse(savedRow.state_json) : {}; } catch {}
+    if (!Array.isArray(savedState.companies) || !savedState.companies.some(company => String(company.id) === companyId)) {
+      return { ok: false, message: 'La empresa indicada no existe en el estado contable local.' };
+    }
+    const entityCollections = {
+      SALE: 'sales', PURCHASE: 'purchases', JOURNAL_ENTRY: 'journalEntries',
+      BANK_MOVEMENT: 'bankStatementMovements', INVENTORY_MOVEMENT: 'movements',
+      VAT_VOUCHER: 'vatVouchers', ISLR_VOUCHER: 'islrVouchers',
+      VAT_DECLARATION: 'vatWithholdingDeclarations', ISLR_EVENT: 'islrFiscalEvents',
+      INVENTORY_PRODUCT: 'products', BCV_RATE: 'companies'
+    };
+    const sourceCollection = savedState[entityCollections[entityType]];
+    const sourceEntity = Array.isArray(sourceCollection)
+      ? sourceCollection.find(item => String(item.id) === entityId && String(item.companyId || companyId) === companyId)
+      : null;
+    if (!sourceEntity) {
+      return { ok: false, message: 'El registro origen no existe en la empresa seleccionada. Verifique el ID interno y el tipo de registro.' };
+    }
+    const occurredAt = new Date().toISOString();
+    const details = {
+      actorUserId: Number(actor.id), actorUsername: String(actor.username || ''),
+      actorRole: String(actor.role || ''), companyId, entityType, entityId, correctionType,
+      sourceDocumentRef, correctionDocumentRef, reason, workpaperNote,
+      journalEntryId: journalEntryId || null,
+      fiscalEmissionMedium: fiscalEmissionMedium || null, sameMediumAsOriginal,
+      workflowStatus: eventType === 'accounting_correction_requested' ? 'PENDING_REVIEW' : 'EXECUTED',
+      authorization: eventType === 'accounting_correction_executed'
+        ? { method: 'AUTHENTICATED_ADMIN_SESSION', explicitConfirmation: true }
+        : null,
+      occurredAt
+    };
+    const inserted = db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+      .run(eventType, JSON.stringify(details));
+    return { ok: true, id: Number(inserted.lastInsertRowid), createdAt: occurredAt };
+  });
+
+  const correctionActor = token => {
+    const licensing = licenseView();
+    if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
+    const actor = getActiveSession(token);
+    if (!actor || actor.role !== 'admin') throw new Error('Se requiere una sesión administrativa autenticada.');
+    return actor;
+  };
+  ipcMain.handle('sicoven:correction-case-create', (_event, token, input) => {
+    const actor = correctionActor(token);
+    const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    const state = row ? JSON.parse(row.state_json) : {};
+    const collections = { SALE:'sales', PURCHASE:'purchases', JOURNAL_ENTRY:'journalEntries',
+      BANK_MOVEMENT:'bankStatementMovements', INVENTORY_MOVEMENT:'movements', VAT_VOUCHER:'vatVouchers',
+      ISLR_VOUCHER:'islrVouchers', VAT_DECLARATION:'vatWithholdingDeclarations', ISLR_EVENT:'islrFiscalEvents',
+      INVENTORY_PRODUCT:'products', BCV_RATE:'companies' };
+    const companyId = String(input?.companyId || '');
+    const existsCompany = Array.isArray(state.companies) && state.companies.some(x=>String(x.id)===companyId);
+    const collection = state[collections[String(input?.entityType || '')]];
+    const source = Array.isArray(collection) && collection.find(x=>String(x.id)===String(input?.entityId || '') && String(x.companyId || companyId)===companyId);
+    if (!existsCompany || !source) throw new Error('La empresa o el registro origen no existe en SQLite.');
+    const sourceReference = String(input?.sourceDocumentRef || '').trim();
+    const knownReferences = [source.documentNumber,source.invoiceNumber,source.number,source.opNumber,source.entryNumber,
+      source.reference,source.referenceDoc,source.documentRef,source.voucherNumber,source.declarationNumber,source.controlNumber]
+      .filter(value=>value!==undefined && value!==null && String(value).trim()!=='').map(value=>String(value).trim());
+    if (knownReferences.length && !knownReferences.includes(sourceReference)) {
+      throw new Error('La referencia documental no coincide con el registro de origen. Verifique factura, asiento, comprobante o movimiento.');
+    }
+    return registerCorrectionRequest(db,input,actor);
+  });
+  ipcMain.handle('sicoven:correction-case-review', (_event, token, input) => reviewCorrectionRequest(db,input,correctionActor(token)));
+  ipcMain.handle('sicoven:correction-case-execute', (_event, token, input) => {
+    const actor = correctionActor(token);
+    const item = db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(input?.caseId || ''));
+    if (!item) throw new Error('El expediente de corrección no existe.');
+    const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    const state = row ? JSON.parse(row.state_json) : {};
+    const evidenceCollections = ['sales','purchases','journalEntries','bankStatementMovements','movements',
+      'vatVouchers','islrVouchers','vatWithholdingDeclarations','islrFiscalEvents','products'];
+    const reference = String(input?.executionRef || '').trim();
+    const evidence = evidenceCollections.some(key => Array.isArray(state[key]) && state[key].some(record =>
+      String(record.companyId || '') === String(item.company_id) && String(record.id) !== String(item.entity_id) &&
+      [record.id,record.documentNumber,record.invoiceNumber,record.voucherNumber,record.declarationNumber,record.entryNumber,record.opNumber,record.documentRef,record.number,record.reference,record.referenceDoc,record.controlNumber]
+        .some(value => value != null && String(value).trim() === reference)));
+    if (!evidence) throw new Error('No se encontró en SQLite un documento, asiento o movimiento correctivo con esa referencia y empresa. No se cerró el expediente.');
+    return markCorrectionExecuted(db,input,actor);
+  });
+  ipcMain.handle('sicoven:correction-case-list', (_event, token, companyId) => {
+    correctionActor(token);
+    const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    const state = row ? JSON.parse(row.state_json) : {};
+    if (!Array.isArray(state.companies) || !state.companies.some(x=>String(x.id)===String(companyId))) throw new Error('La empresa solicitada no existe.');
+    return listCorrectionCases(db,companyId);
   });
 
   ipcMain.handle('sicoven:reset-accounting', (_event, token) => {

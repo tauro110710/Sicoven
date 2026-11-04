@@ -20,6 +20,7 @@ import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportComprasPdf } from '../../utils/pdfGenerator';
 import { PurchaseCreditNoteModal } from './PurchaseCreditNoteModal';
+import { PurchaseServiceCreditNoteModal } from './PurchaseServiceCreditNoteModal';
 import { SupplierDebitNoteModal } from './SupplierDebitNoteModal';
 import { SupplierAdvanceSettlementModal } from './SupplierAdvanceSettlementModal';
 import { getPurchaseAccountCreditDate, type PurchaseRecord } from '../../types/accounting';
@@ -40,6 +41,7 @@ export const LibroComprasView: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [documentTarget, setDocumentTarget] = useState<{ id: string; title: string } | null>(null);
   const [creditNoteTarget, setCreditNoteTarget] = useState<PurchaseRecord | null>(null);
+  const [serviceCreditNoteTarget, setServiceCreditNoteTarget] = useState<PurchaseRecord | null>(null);
   const [reversalTarget, setReversalTarget] = useState<import('../../types/accounting').JournalEntry | null>(null);
   const [debitNoteTarget, setDebitNoteTarget] = useState<PurchaseRecord | null>(null);
   const [showSupplierAdvances, setShowSupplierAdvances] = useState(false);
@@ -76,10 +78,9 @@ export const LibroComprasView: React.FC = () => {
     })
     .sort((a, b) => a.opNumber - b.opNumber);
 
-  // Los totales fiscales y la Forma 30 excluyen ND tipo 02 hasta validar su
-  // tratamiento tributario con fuente oficial vigente. Las ND siguen visibles
-  // en el Libro de Compras y en el auxiliar CxP como obligaciones independientes.
-  const fiscalPurchases = filteredPurchases.filter(p => p.documentType !== '02');
+  // Las facturas y ND aumentan los importes del período; las NC los disminuyen.
+  // Se registran en el mes de emisión/recepción, conservando el documento original.
+  const fiscalPurchases = filteredPurchases.filter(p => !p.isCancelled);
   const sign = (purchase: PurchaseRecord) => purchase.documentType === '03' ? -1 : 1;
   const signed = (purchase: PurchaseRecord, amount: number) => sign(purchase) * Number(amount || 0);
   const totalComprasConIvaBs = fiscalPurchases.reduce((s, p) => s + signed(p, p.totalAmountBs), 0);
@@ -132,7 +133,7 @@ export const LibroComprasView: React.FC = () => {
             <span className="text-indigo-700 font-medium">Libro Fiscal Reglamentario</span>
           </div>
 
-          {filteredPurchases.some(p => p.documentType === '02') && <p className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Las ND tipo 02 se conservan en el libro y CxP, pero se excluyen provisionalmente de los totales fiscales SENIAT hasta validar su tratamiento con especificaciones oficiales vigentes.</p>}
+          {filteredPurchases.some(p => p.documentType === '02' || p.documentType === '03') && <p className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Las notas de débito aumentan y las notas de crédito disminuyen la base y el impuesto cuando corresponda. Se registran en el período de emisión o recepción y conservan la referencia al documento original.</p>}
           <div className="flex items-center gap-2.5">
             <button
               onClick={handleExportPdf}
@@ -326,18 +327,23 @@ export const LibroComprasView: React.FC = () => {
                     </td>
                     <td className="py-2 px-2 text-center no-print">
                       <button onClick={() => setDocumentTarget({ id: p.id, title: 'Factura de compra ' + p.invoiceNumber })} className="mr-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes</button>
-                      {p.documentType === '01' && p.paymentTerm === 'CREDITO' && !p.isCancelled && <button onClick={() => setSettlementTarget({id:p.id, number:p.invoiceNumber, party:p.supplierName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar pago parcial o total">Pagar</button>}
+                      {p.documentType !== '03' && p.paymentTerm === 'CREDITO' && !p.isCancelled && <button onClick={() => setSettlementTarget({id:p.id, number:p.invoiceNumber, party:p.supplierName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar pago parcial o total">Pagar</button>}
                       {p.documentType === '01' && !p.isCancelled && <button
                         onClick={() => setDebitNoteTarget(p)}
                         disabled={!sqliteAvailable || !isStorageReady}
                         className="mr-1 rounded bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
                         title="Emitir ND tipo 02 vinculada a esta factura">ND</button>}
-                      {p.documentType === '01' && !p.isCancelled && <button
+                      {p.documentType === '01' && !p.isCancelled && p.inventoryLines?.length ? <button
                         onClick={() => setCreditNoteTarget(p)}
-                        disabled={!sqliteAvailable || !isStorageReady || !p.inventoryLines?.length}
+                        disabled={!sqliteAvailable || !isStorageReady}
                         className="mr-1 inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-40"
-                        title={!p.inventoryLines?.length ? 'Factura sin líneas de inventario conciliables' : p.paymentTerm === 'CONTADO' ? 'Registrar nota de crédito, salida física y saldo a favor del proveedor; no realiza reembolso automático de efectivo' : 'Registrar nota de crédito y devolución física'}
-                      ><RotateCcw className="h-3 w-3" />{p.paymentTerm === 'CONTADO' ? 'NC · saldo a favor' : 'Devolver'}</button>}
+                        title={p.paymentTerm === 'CONTADO' ? 'Registrar nota de crédito, salida física y saldo a favor del proveedor; no realiza reembolso automático de efectivo' : 'Registrar nota de crédito y devolución física'}
+                      ><RotateCcw className="h-3 w-3" />{p.paymentTerm === 'CONTADO' ? 'NC · saldo a favor' : 'Devolver'}</button> : null}
+                      {p.documentType === '01' && !p.isCancelled && !p.inventoryLines?.length && <button
+                        onClick={() => setServiceCreditNoteTarget(p)}
+                        disabled={!sqliteAvailable || !isStorageReady}
+                        className="mr-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-40"
+                        title="NC parcial para servicio imputado a costos/gastos, sin Kardex ni retenciones">NC servicio</button>}
                       {p.documentType === '01' && !p.isCancelled && <button
                         type="button"
                         disabled={!sqliteAvailable || !isStorageReady}
@@ -455,6 +461,7 @@ export const LibroComprasView: React.FC = () => {
       </div>}
 
       {creditNoteTarget && <PurchaseCreditNoteModal purchase={creditNoteTarget} onClose={() => setCreditNoteTarget(null)} />}
+      {serviceCreditNoteTarget && <PurchaseServiceCreditNoteModal purchase={serviceCreditNoteTarget} onClose={() => setServiceCreditNoteTarget(null)} />}
       <JournalReversalModal source={reversalTarget} onClose={() => setReversalTarget(null)} />
       {debitNoteTarget && <SupplierDebitNoteModal purchase={debitNoteTarget} onClose={() => setDebitNoteTarget(null)} />}
       {showSupplierAdvances && <SupplierAdvanceSettlementModal onClose={() => setShowSupplierAdvances(false)} />}

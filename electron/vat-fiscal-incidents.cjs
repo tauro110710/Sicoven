@@ -216,6 +216,10 @@ function recordVatFiscalIncidentEvent(db, input, actor) {
   const eventType = String(input.eventType || '');
   if (!['REVIEW_RECORDED','ACTION_RECORDED'].includes(eventType)) throw new Error('Tipo de evento de incidencia no admitido.');
   const decisionText = requiredText(input.decisionText, 'Decisión o actuación documentada', 3000, 20);
+  if (eventType === 'ACTION_RECORDED' &&
+      !db.prepare("SELECT 1 FROM vat_fiscal_incident_events WHERE incident_id=? AND event_type='REVIEW_RECORDED' LIMIT 1").get(incidentId)) {
+    throw new Error('Antes de registrar una actuación, el expediente debe contener una revisión profesional documentada.');
+  }
   if (String(input.declarationId || '') !== String(incident.declaration_id || '')) {
     throw new Error('La declaración del expediente es inmutable; no se puede incorporar ni sustituir después de registrar la incidencia.');
   }
@@ -235,7 +239,12 @@ function recordVatFiscalIncidentEvent(db, input, actor) {
   const priorMovements = JSON.parse(incident.bank_movement_ids_json);
   if (references.declarationEventIds.some(id => !priorEvents.includes(id))) throw new Error('El evento no puede incorporar referencias fiscales ajenas al expediente original.');
   if (references.bankMovementIds.some(id => !priorMovements.includes(id))) throw new Error('El evento no puede incorporar movimientos bancarios ajenos al expediente original.');
-  const externalReference = input.externalReference ? requiredText(input.externalReference, 'Referencia externa', 500) : null;
+  const externalReference = input.externalReference ? requiredText(input.externalReference, 'Referencia externa', 500, 4) : null;
+  if (eventType === 'ACTION_RECORDED' && !externalReference &&
+      !references.journalEntryId && references.declarationEventIds.length === 0 &&
+      references.bankMovementIds.length === 0) {
+    throw new Error('Una actuación fiscal requiere al menos una referencia externa, asiento correctivo, evento de declaración o movimiento bancario verificable.');
+  }
   const id = crypto.randomUUID(), now = new Date().toISOString();
   const save = db.transaction(() => {
     db.prepare(`INSERT INTO vat_fiscal_incident_events

@@ -2325,3 +2325,105 @@ test('SQLite compares supplier payable applications at USD cent precision', () =
   assert.equal(exceedsUsdPayable(roundedPayment, netPayable), false);
   assert.equal(exceedsUsdPayable(1116.80, netPayable), true);
 });
+
+test('SQLite accepts a sales credit note only when linked merchandise was fully returned with dual-currency cost entries', () => {
+  const originalInvoice = {
+    id: 'sale-invoice-journal', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-01', description: 'Factura de venta F-100', type: 'VENTA', bcvRate: 100,
+    referenceDoc: 'FAC-F-100',
+    items: [
+      { accountCode: '1.1.2.01', debitBs: 116, creditBs: 0, debitUsd: 1.16, creditUsd: 0 },
+      { accountCode: '4.1.1.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 },
+      { accountCode: '2.1.2.01', debitBs: 0, creditBs: 16, debitUsd: 0, creditUsd: 0.16 }
+    ], createdAt: '2026-10-01T10:00:00.000Z'
+  };
+  const source = {
+    id: 'sale-original', companyId: 'company-1', opNumber: 1,
+    invoiceDate: '2026-10-01', customerRif: 'J-12345678-9', customerName: 'Cliente',
+    invoiceNumber: 'F-100', controlNumber: 'CTRL-100', documentType: '01',
+    totalAmountBs: 116, taxableBaseBs: 100, exemptAmountBs: 0, taxRate: 16, vatAmountBs: 16,
+    vatWithheldBs: 0, bcvRate: 100, totalAmountUsd: 1.16, taxableBaseUsd: 1,
+    vatAmountUsd: 0.16, vatWithheldUsd: 0, paymentTerm: 'CREDITO',
+    journalEntryId: originalInvoice.id
+  };
+  const noteJournal = {
+    id: 'sale-credit-journal', companyId: 'company-1', entryNumber: 4,
+    date: '2026-10-10', description: 'NC de venta NC-100', type: 'AJUSTE', bcvRate: 100,
+    referenceDoc: 'NC-CLI-NC-100',
+    items: [
+      { accountCode: '4.1.1.01', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '2.1.2.01', debitBs: 16, creditBs: 0, debitUsd: 0.16, creditUsd: 0 },
+      { accountCode: '1.1.2.01', debitBs: 0, creditBs: 116, debitUsd: 0, creditUsd: 1.16 }
+    ], createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const note = {
+    ...source, id: 'sale-credit-note', opNumber: 2, invoiceDate: '2026-10-10',
+    invoiceNumber: 'NC-100', controlNumber: 'CTRL-NC-100', documentType: '03',
+    creditNoteNumber: 'NC-100', originalSaleId: source.id, affectedInvoiceNumber: source.invoiceNumber,
+    affectedInvoiceDate: source.invoiceDate, affectedInvoiceControlNumber: source.controlNumber,
+    affectedInvoiceTotalAmountBs: source.totalAmountBs, affectedInvoiceTotalAmountUsd: source.totalAmountUsd,
+    fiscalEmissionMedium: 'DIGITAL', sameMediumAsOriginal: true,
+    taxableBaseBs: 100, exemptAmountBs: 0, taxRate: 16, vatAmountBs: 16, totalAmountBs: 116,
+    bcvRate: 100, taxableBaseUsd: 1, exemptAmountUsd: 0, vatAmountUsd: 0.16, totalAmountUsd: 1.16,
+    netReceivableAdjustmentBs: 116, netReceivableAdjustmentUsd: 1.16,
+    paymentTerm: 'CREDITO', journalEntryId: noteJournal.id,
+    correctionReason: 'Devolución total de mercancía vendida.',
+    correctionWorkpaper: 'Se verificó la devolución física total y su costo histórico.'
+  };
+  const originalCostJournal = {
+    id: 'sale-cost-original', companyId: 'company-1', entryNumber: 2,
+    date: '2026-10-01', description: 'Costo de venta original', type: 'INVENTARIO', bcvRate: 100,
+    referenceDoc: 'FAC-F-100',
+    items: [
+      { accountCode: '5.1.1.01', debitBs: 50, creditBs: 0, debitUsd: 0.5, creditUsd: 0 },
+      { accountCode: '1.1.4.01', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 0.5 }
+    ], createdAt: '2026-10-01T10:01:00.000Z'
+  };
+  const returnCostJournal = {
+    id: 'sale-cost-return', companyId: 'company-1', entryNumber: 3,
+    date: '2026-10-10', description: 'Costo de devolución cliente', type: 'INVENTARIO', bcvRate: 100,
+    referenceDoc: 'DEV-CLIENTE-100',
+    items: [
+      { accountCode: '1.1.4.01', debitBs: 50, creditBs: 0, debitUsd: 0.5, creditUsd: 0 },
+      { accountCode: '5.1.1.01', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 0.5 }
+    ], createdAt: '2026-10-10T10:01:00.000Z'
+  };
+  const originalMovement = {
+    id: 'sale-stock-out', companyId: 'company-1', productId: 'product-1',
+    productCode: 'P-1', date: '2026-10-01', type: 'SALIDA', concept: 'VENTA',
+    documentRef: 'FAC-F-100', journalEntryId: originalCostJournal.id,
+    quantity: 1, unitCostBs: 50, unitCostUsd: 0.5, totalCostBs: 50, totalCostUsd: 0.5,
+    bcvRate: 100, balanceQty: 0
+  };
+  const returnMovement = {
+    ...originalMovement, id: 'sale-stock-return', date: '2026-10-10',
+    type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', documentRef: 'DEV-CLIENTE-100',
+    journalEntryId: returnCostJournal.id, correctionForMovementId: originalMovement.id,
+    balanceQty: 1
+  };
+  const product = {
+    id: 'product-1', companyId: 'company-1', code: 'P-1', name: 'Artículo',
+    currentStock: 1, inventoryAccountCode: '1.1.4.01', costOfSalesAccountCode: '5.1.1.01'
+  };
+  const accounts = [
+    { code: '1.1.2.01', name: 'Cuentas por cobrar', type: 'ACTIVO', isMovement: true },
+    { code: '4.1.1.01', name: 'Ingresos', type: 'INGRESOS', isMovement: true },
+    { code: '2.1.2.01', name: 'IVA débito fiscal', type: 'PASIVO', isMovement: true },
+    { code: '1.1.4.01', name: 'Inventario', type: 'ACTIVO', isMovement: true },
+    { code: '5.1.1.01', name: 'Costo de ventas', type: 'COSTOS', isMovement: true }
+  ];
+  const previous = {
+    ...emptyState([originalInvoice, originalCostJournal]), sales: [source],
+    movements: [originalMovement], products: [product], accounts,
+    companies: [{ id: 'company-1', name: 'Empresa de prueba' }]
+  };
+  const next = {
+    ...previous, sales: [source, note],
+    journalEntries: [...previous.journalEntries, returnCostJournal, noteJournal],
+    movements: [originalMovement, returnMovement]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next, movements: [originalMovement]
+  }), /documento, factura original, saldo fiscal, soporte o asiento correctivo/);
+});

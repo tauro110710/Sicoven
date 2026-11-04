@@ -8,6 +8,8 @@ export interface SupplierDebitNoteAccountingDraft {
   debitNoteNumber: string;
   controlNumber: string;
   affectedInvoiceNumber: string;
+  fiscalEmissionMedium: 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY';
+  sameMediumAsOriginal: boolean;
   issueDate: string;
   recognitionDate: string;
   economicCause: SupplierDebitNoteEconomicCause;
@@ -92,6 +94,12 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
       normalizeDocument(draft.affectedInvoiceNumber) !== normalizeDocument(source.invoiceNumber)) {
     throw new Error('La ND debe identificar número, control y el número exacto de la factura afectada.');
   }
+  if (!isValidIsoDate(source.invoiceDate) || !String(source.controlNumber || '').trim() || Number(source.totalAmountBs || 0) <= 0) {
+    throw new Error('La factura original debe conservar fecha, número, control y monto para referenciar legalmente la ND.');
+  }
+  if (!['DIGITAL', 'FISCAL_MACHINE', 'CONTINGENCY'].includes(draft.fiscalEmissionMedium) || draft.sameMediumAsOriginal !== true) {
+    throw new Error('La ND debe emitirse por el mismo medio de la factura original y esa condición debe confirmarse expresamente.');
+  }
   const duplicate = purchases.some(item =>
     item.companyId === companyId && item.documentType === '02' &&
     normalizeRif(item.supplierRif) === supplierRif &&
@@ -121,6 +129,11 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
   if (draft.economicCause === 'ADDITIONAL_GOODS_RECEIVED' ||
       draft.economicCause === 'INVENTORY_COST_ADJUSTMENT') {
     throw new Error('Esta causa requiere el flujo especializado de recepción/ajuste de inventario con líneas y evidencia de Kardex; no se permite contabilizarla como gasto genérico.');
+  }
+  if (draft.economicCause === 'PRICE_DIFFERENCE' &&
+      ((Array.isArray(source.inventoryLines) && source.inventoryLines.length > 0) ||
+       sourceJournalEntry.items.some(item => String(item.accountCode || '').startsWith('1.1.4.')))) {
+    throw new Error('La diferencia de precio afecta una compra de inventario: requiere revalorizar lotes/capas y Kardex por artículo. No se permite llevarla automáticamente a gasto.');
   }
   if (draft.economicCause === 'FINANCING_CHARGE') {
     const selected = accounts.find(item => item.code === draft.debitAccountCode);
@@ -225,7 +238,11 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
     invoiceDate: draft.issueDate, accountCreditDate: draft.recognitionDate,
     supplierRif: source.supplierRif, supplierName: source.supplierName,
     invoiceNumber: debitNoteNumber, debitNoteNumber, controlNumber,
-    affectedInvoiceNumber: source.invoiceNumber, documentType: '02',
+    affectedInvoiceNumber: source.invoiceNumber,
+    affectedInvoiceDate: source.invoiceDate, affectedInvoiceControlNumber: source.controlNumber,
+    affectedInvoiceTotalAmountBs: source.totalAmountBs, affectedInvoiceTotalAmountUsd: source.totalAmountUsd,
+    fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal,
+    documentType: '02',
     totalAmountBs, taxableBaseBs, exemptAmountBs, taxRate,
     vatAmountBs, retentionRate: 0, vatWithheldBs: 0,
     bcvRate: rate, totalAmountUsd,
