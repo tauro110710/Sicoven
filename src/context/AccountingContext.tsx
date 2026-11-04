@@ -415,7 +415,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   type CorrectionAuditInput = {
     eventType: 'accounting_correction_requested' | 'accounting_correction_executed';
-    entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'BCV_RATE';
+    entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'BCV_RATE' | 'INVENTORY_PRODUCT';
     companyId: string; entityId: string; correctionType: string; sourceDocumentRef: string;
     correctionDocumentRef: string; reason: string; workpaperNote: string; journalEntryId?: string;
     fiscalEmissionMedium?: 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY'; sameMediumAsOriginal?: boolean;
@@ -3566,15 +3566,55 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return importedMovements.length;
   };
 
-  const updateProduct = (updated: InventoryProduct) => {
-    assertSQLitePersistenceReady('Actualizar el artículo de inventario');
-    if (!products.some(p => p.id === updated.id && p.companyId === currentCompany.id)) {
-      throw new Error('El artículo no pertenece a la empresa activa.');
-    }
+  const updateProduct = async (updated: InventoryProduct, reason: string, workpaperNote: string): Promise<void> => {
+    assertSQLitePersistenceReady('Corregir los datos maestros del artículo');
+    const original = products.find(p => p.id === updated.id && p.companyId === currentCompany.id);
+    if (!original) throw new Error('El artículo no pertenece a la empresa activa.');
     if (products.some(p => p.id !== updated.id && p.companyId === currentCompany.id && p.code.trim().toLocaleUpperCase() === updated.code.trim().toLocaleUpperCase())) {
       throw new Error('Ya existe otro artículo con ese código en la empresa activa.');
     }
+    const immutableInventoryFields: Array<keyof InventoryProduct> = [
+      'currentStock', 'avgCostBs', 'avgCostUsd', 'lastCostBs', 'lastCostUsd',
+      'vnrProvisionBs', 'vnrProvisionUsd', 'inventoryAccountCode', 'costOfSalesAccountCode',
+      'adjustmentAccountCode', 'openingBalanceAccountCode', 'costingMethod', 'itemType',
+      'openingDate', 'openingBcvRate'
+    ];
+    if (immutableInventoryFields.some(field => Number.isFinite(Number(original[field])) && Number.isFinite(Number(updated[field]))
+      ? Number(original[field]) !== Number(updated[field])
+      : original[field] !== updated[field])) {
+      throw new Error('No se pueden corregir existencias, costos históricos, método de costeo ni cuentas de inventario editando la ficha. Use movimientos y ajustes de Kardex con asiento correctivo.');
+    }
+    const normalizedReason = String(reason || '').trim();
+    const normalizedWorkpaper = String(workpaperNote || '').trim();
+    if (normalizedReason.length < 10 || normalizedWorkpaper.length < 10) {
+      throw new Error('La corrección del artículo requiere motivo y papel de trabajo de al menos 10 caracteres.');
+    }
+    await recordCorrectionAudit({
+      eventType: 'accounting_correction_requested', entityType: 'INVENTORY_PRODUCT',
+      companyId: currentCompany.id, entityId: original.id, correctionType: 'PRODUCT_MASTER_DATA_CORRECTION',
+      sourceDocumentRef: original.code + ' · ' + original.name,
+      correctionDocumentRef: updated.code + ' · ' + updated.name,
+      reason: normalizedReason, workpaperNote: normalizedWorkpaper
+    });
     setProducts(prev => prev.map(p => (p.id === updated.id && p.companyId === currentCompany.id ? updated : p)));
+    try {
+      await waitForPersistence();
+    } catch (error) {
+      throw new Error('SQLite no confirmó la corrección del artículo. La ficha volvió al último estado confirmado; la solicitud permanece en auditoría. ' +
+        (error instanceof Error ? error.message : 'Error de persistencia.'));
+    }
+    try {
+      await recordCorrectionAudit({
+        eventType: 'accounting_correction_executed', entityType: 'INVENTORY_PRODUCT',
+        companyId: currentCompany.id, entityId: original.id, correctionType: 'PRODUCT_MASTER_DATA_CORRECTION',
+        sourceDocumentRef: original.code + ' · ' + original.name,
+        correctionDocumentRef: updated.code + ' · ' + updated.name,
+        reason: normalizedReason, workpaperNote: normalizedWorkpaper
+      });
+    } catch (error) {
+      throw new Error('La corrección de ficha quedó guardada en SQLite, pero falta el evento final de auditoría. No repita la corrección. ' +
+        (error instanceof Error ? error.message : 'Error de auditoría.'));
+    }
   };
 
   const addMovement = (movData: Omit<InventoryMovement, 'id' | 'companyId'>): InventoryMovement => {
