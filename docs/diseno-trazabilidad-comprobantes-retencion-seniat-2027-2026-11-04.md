@@ -80,7 +80,7 @@ El correo debe copiarse desde la compra fuente al comprobante al momento de emis
 
 - No reescribir correlativos históricos.
 - Antes de la fecha de vigencia, definir la fecha exacta de corte y la regla de transición con revisión normativa.
-- Para comprobantes nuevos sujetos al artículo 18, usar un secuencial de ocho dígitos con año y mes, único por agente y período conforme a la norma.
+- Para comprobantes nuevos sujetos al artículo 18, usar un secuencial de ocho dígitos con año y mes, consecutivo conforme al formato y al ámbito de control que defina la norma y el manual técnico. No generalizar a todos los agentes la regla adicional de numeración única por agente prevista para los supuestos especiales enumerados al final del artículo 18.
 - Añadir controles de unicidad, reinicio al superar el máximo, concurrencia y restauración de respaldo.
 - No reutilizar automáticamente el correlativo IVA sin verificar que su ámbito de unicidad coincida con el de ISLR y con el agente emisor.
 
