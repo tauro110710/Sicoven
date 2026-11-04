@@ -32,6 +32,8 @@ describe('accounting report integrity', () => {
     assert.equal(isBalanceSheetBalanced({ ...balanced, totalLiabilitiesAndEquityUsd: 24.99 }), false);
     assert.equal(isBalanceSheetBalanced({ ...balanced, totalLiabilitiesAndEquityBs: 999 }), false);
     assert.equal(isBalanceSheetBalanced({ ...balanced, totalAssetsUsd: Number.NaN }), false);
+    assert.equal(isBalanceSheetBalanced({ ...balanced, totalAssetsBs: 999.95 }, 0.05, 0), true);
+    assert.equal(isBalanceSheetBalanced(balanced, 0, 0), true);
   });
   it('includes an account with USD-only movement in report totals', () => {
     assert.equal(hasAccountMovement({ debitBs: 0, creditBs: 0, debitUsd: 12, creditUsd: 0 }), true);
@@ -55,6 +57,8 @@ describe('accounting report integrity', () => {
     assert.equal(isTrialBalanceBalanced({ ...balanced, totalCreditUsd: 9.99 }), false);
     assert.equal(isTrialBalanceBalanced({ ...balanced, creditBalancesUsd: 3.999 }), false);
     assert.equal(isTrialBalanceBalanced({ ...balanced, totalCreditBs: 100.01 }), true);
+    assert.equal(isTrialBalanceBalanced({ ...balanced, totalCreditUsd: 9.999995 }, 0, 0.000005), true);
+    assert.equal(isTrialBalanceBalanced(balanced, 0, 0), true);
   });
 
   it('rejects non-finite or negative report totals', () => {
