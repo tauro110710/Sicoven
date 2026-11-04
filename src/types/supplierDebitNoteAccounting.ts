@@ -130,6 +130,11 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
       draft.economicCause === 'INVENTORY_COST_ADJUSTMENT') {
     throw new Error('Esta causa requiere el flujo especializado de recepción/ajuste de inventario con líneas y evidencia de Kardex; no se permite contabilizarla como gasto genérico.');
   }
+  if (draft.economicCause === 'PRICE_DIFFERENCE' &&
+      ((Array.isArray(source.inventoryLines) && source.inventoryLines.length > 0) ||
+       sourceJournalEntry.items.some(item => String(item.accountCode || '').startsWith('1.1.4.')))) {
+    throw new Error('La diferencia de precio afecta una compra de inventario: requiere revalorizar lotes/capas y Kardex por artículo. No se permite llevarla automáticamente a gasto.');
+  }
   if (draft.economicCause === 'FINANCING_CHARGE') {
     const selected = accounts.find(item => item.code === draft.debitAccountCode);
     if (!selected || !selected.isMovement || selected.type !== 'GASTOS') {
