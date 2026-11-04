@@ -340,6 +340,7 @@ export const LibroComprasView: React.FC = () => {
                       ><RotateCcw className="h-3 w-3" />{p.paymentTerm === 'CONTADO' ? 'NC · saldo a favor' : 'Devolver'}</button>}
                       {p.documentType === '01' && !p.isCancelled && <button
                         type="button"
+                        disabled={!sqliteAvailable || !isStorageReady}
                         onClick={() => {
                           const source = journalEntries.find(entry => entry.companyId === p.companyId &&
                             (entry.id === p.journalEntryId || (!p.journalEntryId && entry.type === 'COMPRA' && entry.referenceDoc === 'FAC-' + p.invoiceNumber)));
@@ -347,7 +348,7 @@ export const LibroComprasView: React.FC = () => {
                           else setReversalTarget(source);
                         }}
                         className="inline-flex items-center gap-1 rounded bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-700 hover:bg-rose-100"
-                        title="Solicitar anulación con contra-asiento y análisis de dependencias"
+                        title={!sqliteAvailable || !isStorageReady ? "La anulación requiere SQLite local disponible" : "Solicitar anulación con contra-asiento y análisis de dependencias"}
                       ><AlertTriangle className="h-3 w-3" /> Anular</button>}
                     </td>
                   </tr>
