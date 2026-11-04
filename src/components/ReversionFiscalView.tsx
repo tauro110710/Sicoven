@@ -8,7 +8,7 @@ import type { VatFiscalIncident } from '../types/vatFiscalIncidents';
 export const ReversionFiscalView: React.FC = () => {
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, addMovement, addPurchaseCreditNote,
-    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, createCorrectionCase, listCorrectionCases, reviewCorrectionCase, executeCorrectionCase
+    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, createCorrectionCase, listCorrectionCases, reviewCorrectionCase, executeCorrectionCase, listSupportingDocuments, attachSupportingDocument, reviewSupportingDocument, openSupportingDocument
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -66,7 +66,8 @@ export const ReversionFiscalView: React.FC = () => {
   const [caseActionReason, setCaseActionReason] = useState<Record<string,string>>({});
   const [caseExecutionRef, setCaseExecutionRef] = useState<Record<string,string>>({});
   const [caseActionBusy, setCaseActionBusy] = useState<string | null>(null);
-  const refreshCorrectionCases = useCallback(async () => { try { setCorrectionCases(await listCorrectionCases()); } catch (error) { setFeedback({kind:'error',message:error instanceof Error?error.message:'No se pudieron consultar los expedientes.'}); } },[listCorrectionCases]);
+  const [correctionCaseDocs, setCorrectionCaseDocs] = useState<Record<string, Array<{id:string;title:string;fileName:string;status:string;createdAt:string}>>>({});
+  const refreshCorrectionCases = useCallback(async () => { try { const cases=await listCorrectionCases(); setCorrectionCases(cases); const docs=await Promise.all(cases.map(async item=>[item.id,await listSupportingDocuments({entityType:'CORRECTION_CASE',entityId:item.id})] as const)); setCorrectionCaseDocs(Object.fromEntries(docs)); } catch (error) { setFeedback({kind:'error',message:error instanceof Error?error.message:'No se pudieron consultar los expedientes.'}); } },[listCorrectionCases,listSupportingDocuments]);
   useEffect(() => { void refreshCorrectionCases(); },[refreshCorrectionCases]);
   const refreshAuditEvents = useCallback(async () => {
     setAuditLoading(true);
