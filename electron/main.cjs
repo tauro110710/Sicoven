@@ -37,7 +37,7 @@ const { registerInflationRemeReadinessIpc } = require('./inflation-reme-readines
 const { registerInflationSourceDossierIpc } = require('./inflation-source-dossiers.cjs');
 const { registerDocumentVaultIpc } = require('./supporting-documents.cjs');
 const { registerVatFiscalIncidentIpc } = require('./vat-fiscal-incidents.cjs');
-const { initializeCorrectionWorkflow, registerCorrectionRequest, reviewCorrectionRequest, markCorrectionExecuted, listCorrectionCases, findLinkedCorrectionEvidence, observeCorrectionRequest, resubmitCorrectionRequest, withdrawCorrectionRequest } = require('./accounting-correction-workflow.cjs');
+const { initializeCorrectionWorkflow, registerCorrectionRequest, reviewCorrectionRequest, markCorrectionExecuted, listCorrectionCases, findLinkedCorrectionEvidence, observeCorrectionRequest, resubmitCorrectionRequest, withdrawCorrectionRequest, requireApprovedCorrectionCase } = require('./accounting-correction-workflow.cjs');
 
 let db;
 function openDatabase() {
@@ -611,6 +611,7 @@ app.whenReady().then(async () => {
     return registerCorrectionRequest(db,input,actor);
   });
   ipcMain.handle('sicoven:correction-case-review', (_event, token, input) => reviewCorrectionRequest(db,input,correctionActor(token)));
+  ipcMain.handle('sicoven:correction-case-authorize', (_event, token, input) => requireApprovedCorrectionCase(db,input,correctionActor(token)));
   ipcMain.handle('sicoven:correction-case-observe', (_event, token, input) => observeCorrectionRequest(db,input,correctionActor(token)));
   ipcMain.handle('sicoven:correction-case-resubmit', (_event, token, input) => resubmitCorrectionRequest(db,input,correctionActor(token)));
   ipcMain.handle('sicoven:correction-case-withdraw', (_event, token, input) => withdrawCorrectionRequest(db,input,correctionActor(token)));
