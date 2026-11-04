@@ -20,7 +20,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [taxpayerType, setTaxpayerType] = useState<TaxpayerType>('ESPECIAL');
+  const [taxpayerType, setTaxpayerType] = useState<TaxpayerType>('ORDINARIO');
   const [defaultIvaRetentionRate, setDefaultIvaRetentionRate] = useState<number>(75);
   const [ivaRetentionAgentBasis, setIvaRetentionAgentBasis] = useState<IvaRetentionAgentBasis>('UNCONFIRMED');
   const [isPersonalFirm, setIsPersonalFirm] = useState(false);
@@ -234,7 +234,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
                   className="mt-0.5 text-purple-600 focus:ring-purple-500"
                 />
                 <div>
-                  <span className="block font-bold">Contribuyente Especial</span>
+                  <span className="block font-bold">Contribuyente Especial (con notificación SENIAT)</span>
                   <span className="text-[11px] font-normal text-slate-500">
                     Agente de Retención designado por el SENIAT (75% / 100% IVA e ISLR).
                   </span>
