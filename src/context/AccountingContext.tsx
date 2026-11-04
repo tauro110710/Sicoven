@@ -649,7 +649,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const totalCreditBs = reversedItems.reduce((sum, item) => sum + item.creditBs, 0);
     const totalDebitUsd = reversedItems.reduce((sum, item) => sum + item.debitUsd, 0);
     const totalCreditUsd = reversedItems.reduce((sum, item) => sum + item.creditUsd, 0);
-    if (Math.abs(totalDebitBs - totalCreditBs) >= 0.01 || Math.abs(totalDebitUsd - totalCreditUsd) >= 0.01) {
+    if (!isJournalEntryBalanced({ debitBs: totalDebitBs, creditBs: totalCreditBs, debitUsd: totalDebitUsd, creditUsd: totalCreditUsd })) {
       throw new Error('La vista previa de reversión no cuadra en Bs. y USD; no se registró ningún cambio.');
     }
     const bankReadiness = validateBankStatementReversal({
@@ -1921,7 +1921,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const creditBs = items.reduce((sum, item) => sum + (Number(item.creditBs) || 0), 0);
     const debitUsd = items.reduce((sum, item) => sum + (Number(item.debitUsd) || 0), 0);
     const creditUsd = items.reduce((sum, item) => sum + (Number(item.creditUsd) || 0), 0);
-    if (Math.abs(debitBs - creditBs) > 0.01 || Math.abs(debitUsd - creditUsd) > 0.01) {
+    if (!isJournalEntryBalanced({ debitBs, creditBs, debitUsd, creditUsd })) {
       throw new Error('El asiento automático de la compra no cuadra en Bs. y USD; la operación no se guardó.');
     }
 
@@ -2219,7 +2219,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const creditBs = items.reduce((sum, item) => sum + item.creditBs, 0);
     const debitUsd = items.reduce((sum, item) => sum + item.debitUsd, 0);
     const creditUsd = items.reduce((sum, item) => sum + item.creditUsd, 0);
-    if (Math.abs(debitBs - creditBs) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.0001) {
+    if (!isJournalEntryBalanced({ debitBs, creditBs, debitUsd, creditUsd })) {
       throw new Error('El asiento de la nota de crédito no cuadra en Bs. y USD. No se registró ningún cambio.');
     }
     const companyEntries = journalEntries.filter(entry => entry.companyId === currentCompany.id);
@@ -2656,7 +2656,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const saleCreditBs = items.reduce((sum, item) => sum + (Number(item.creditBs) || 0), 0);
     const saleDebitUsd = items.reduce((sum, item) => sum + (Number(item.debitUsd) || 0), 0);
     const saleCreditUsd = items.reduce((sum, item) => sum + (Number(item.creditUsd) || 0), 0);
-    if (Math.abs(saleDebitBs - saleCreditBs) > 0.01 || Math.abs(saleDebitUsd - saleCreditUsd) > 0.01) {
+    if (!isJournalEntryBalanced({ debitBs: saleDebitBs, creditBs: saleCreditBs, debitUsd: saleDebitUsd, creditUsd: saleCreditUsd })) {
       throw new Error('El asiento automático de la venta no cuadra en Bs. y USD; la operación no se guardó.');
     }
 
@@ -4269,7 +4269,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           debitBs += Number(line.debitBs); creditBs += Number(line.creditBs);
           debitUsd += Number(line.debitUsd); creditUsd += Number(line.creditUsd);
         }
-        if (Math.abs(debitBs-creditBs) >= 0.01 || Math.abs(debitUsd-creditUsd) >= 0.01 || debitBs <= 0 || debitUsd <= 0) {
+        if (!isJournalEntryBalanced({ debitBs, creditBs, debitUsd, creditUsd }) || debitBs <= 0 || debitUsd <= 0) {
           throw new Error('El asiento ' + entry.entryNumber + ' no cuadra en ambas monedas. No se restauró el respaldo.');
         }
       }
