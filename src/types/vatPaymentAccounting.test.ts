@@ -72,7 +72,7 @@ test('rejects invalid calendar dates and non-debit bank movements', () => {
     bankAccounts: banks, accounts
   }), /fecha del enteramiento/);
   assert.throws(() => buildVatPaymentAccountingPlan({
-    occurredAt: '2026-10-20', amountBs:100, priorPaidBs:0, bcvRate:250, declaration:declaration(),
+    occurredAt: '2026-10-20', amountBs:100, priorPaidBs:0, bcvRate:250, bcvRateEffectiveDate:'2026-10-20', declaration:declaration(),
     movements: [{ ...movement('m1', 'b1', 100, 1), type: 'CREDIT' }],
     bankAccounts: banks, accounts
   }), /Solo los débitos/);
