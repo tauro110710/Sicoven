@@ -21,6 +21,8 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [taxpayerType, setTaxpayerType] = useState<TaxpayerType>('ORDINARIO');
+  const [specialTaxpayerNotificationReference, setSpecialTaxpayerNotificationReference] = useState('');
+  const [specialTaxpayerNotificationDate, setSpecialTaxpayerNotificationDate] = useState('');
   const [defaultIvaRetentionRate, setDefaultIvaRetentionRate] = useState<number>(75);
   const [ivaRetentionAgentBasis, setIvaRetentionAgentBasis] = useState<IvaRetentionAgentBasis>('UNCONFIRMED');
   const [isPersonalFirm, setIsPersonalFirm] = useState(false);
@@ -61,6 +63,10 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       return;
     }
     if (!name.trim()) return;
+    if (taxpayerType === 'ESPECIAL' && (!specialTaxpayerNotificationReference.trim() || !specialTaxpayerNotificationDate)) {
+      window.alert('Para registrar una empresa como Contribuyente Especial, indique la referencia y fecha de la notificación expresa del SENIAT.');
+      return;
+    }
     const hasFrameworkMetadata = Boolean(accountingFramework || accountingFrameworkVersion.trim() || accountingFrameworkAdoptionDate);
     if (hasFrameworkMetadata && (!accountingFramework || !accountingFrameworkVersion.trim() || !accountingFrameworkAdoptionDate)) {
       window.alert('Para registrar la adopción VEN-NIF debe completar marco, versión normativa y fecha documentada.');
@@ -75,6 +81,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       phone: phone.trim() || '(0212) 000-0000',
       email: email.trim() || 'contacto@empresa.com.ve',
       taxpayerType,
+      ...(taxpayerType === 'ESPECIAL' ? { specialTaxpayerNotificationReference: specialTaxpayerNotificationReference.trim(), specialTaxpayerNotificationDate } : {}),
       ...(accountingFramework ? {
         accountingFramework,
         accountingFrameworkVersion: accountingFrameworkVersion.trim(),
@@ -273,6 +280,15 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
                 </div>
               </label>
             </div>
+
+            {taxpayerType === 'ESPECIAL' && (
+              <div className="rounded-lg border border-purple-200 bg-white p-3 space-y-2">
+                <label className="block text-xs font-semibold text-slate-800">Notificación expresa del SENIAT *</label>
+                <input required value={specialTaxpayerNotificationReference} onChange={e => setSpecialTaxpayerNotificationReference(e.target.value)} placeholder="Número o referencia de la notificación" className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg" />
+                <input required type="date" value={specialTaxpayerNotificationDate} onChange={e => setSpecialTaxpayerNotificationDate(e.target.value)} className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg" />
+                <p className="text-[10px] text-slate-600">La calificación se registra únicamente con respaldo documental; los umbrales económicos no sustituyen la notificación.</p>
+              </div>
+            )}
 
             {taxpayerType === 'ESPECIAL' && (
               <div className="pt-2 flex items-center justify-between text-xs">
