@@ -15,6 +15,16 @@ function currencyIsComplete(code: string, other?: string): boolean {
 export function validateFunctionalCurrencyAssessment(input: FunctionalCurrencyAssessment): string[] {
   const errors: string[] = [];
   if (!input.id.trim()) errors.push('Falta el identificador del expediente.');
+  if (input.functionalCurrency && !currencyIsComplete(input.functionalCurrency, input.functionalCurrencyOther)) errors.push('Indique una moneda funcional válida.');
+  if (input.presentationCurrency && !currencyIsComplete(input.presentationCurrency, input.presentationCurrencyOther)) errors.push('Indique una moneda de presentación válida.');
+  if (input.assessmentDate && !validIsoDate(input.assessmentDate)) errors.push('La fecha de evaluación no es válida.');
+  if (input.effectiveDate && !validIsoDate(input.effectiveDate)) errors.push('La fecha de vigencia no es válida.');
+  if (input.assessmentDate && input.effectiveDate && input.effectiveDate < input.assessmentDate) {
+    errors.push('La vigencia no puede ser anterior a la fecha de evaluación.');
+  }
+
+  // Un borrador puede quedar incompleto para revisión; la aprobación exige el expediente íntegro.
+  if (input.status !== 'APPROVED') return errors;
   if (!currencyIsComplete(input.functionalCurrency, input.functionalCurrencyOther)) errors.push('Indique una moneda funcional válida.');
   if (!currencyIsComplete(input.presentationCurrency, input.presentationCurrencyOther)) errors.push('Indique una moneda de presentación válida.');
   if (!validIsoDate(input.assessmentDate) || !validIsoDate(input.effectiveDate) || input.effectiveDate < input.assessmentDate) {
@@ -30,10 +40,8 @@ export function validateFunctionalCurrencyAssessment(input: FunctionalCurrencyAs
   if (!Array.isArray(input.evidenceReferences) || !input.evidenceReferences.some(item => item.trim())) {
     errors.push('Adjunte al menos una referencia de evidencia.');
   }
-  if (input.status === 'APPROVED') {
-    if (!input.approvedBy?.trim() || !validIsoDate(input.approvedAt || '')) {
-      errors.push('Un expediente aprobado requiere responsable y fecha de aprobación.');
-    }
+  if (!input.approvedBy?.trim() || !validIsoDate(input.approvedAt || '')) {
+    errors.push('Un expediente aprobado requiere responsable y fecha de aprobación.');
   }
   return errors;
 }
