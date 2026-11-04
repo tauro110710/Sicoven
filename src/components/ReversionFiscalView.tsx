@@ -502,6 +502,25 @@ export const ReversionFiscalView: React.FC = () => {
         </div>
         <div><button type="button" onClick={()=>void submitCorrectionRequest()} disabled={requestSubmitting||!requestEntityId.trim()||!requestSourceRef.trim()||requestReason.trim().length<15||requestWorkpaper.trim().length<15} className="rounded bg-indigo-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{requestSubmitting?'Registrando solicitud…':'Registrar solicitud en SQLite'}</button></div>
       </section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div><h2 className="font-bold text-slate-900">Bandeja de solicitudes pendientes</h2><p className="text-xs text-slate-500">Solicitudes abiertas registradas en auditoría SQLite; no representan aprobaciones ni ejecuciones.</p></div>
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">{auditEvents.filter(event=>event.eventType==='accounting_correction_requested').length} solicitudes registradas</span>
+        </div>
+        {auditError && <p className="text-xs text-rose-700">{auditError}</p>}
+        {auditEvents.filter(event=>event.eventType==='accounting_correction_requested').length===0
+          ? <p className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">{auditLoading?'Consultando solicitudes…':'No hay solicitudes de corrección en el historial consultado.'}</p>
+          : <div className="space-y-2">{auditEvents.filter(event=>event.eventType==='accounting_correction_requested').map(event=>{
+            const details=event.details||{};
+            return <article key={event.id} className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 text-xs space-y-1">
+              <div className="flex flex-wrap items-center justify-between gap-2"><strong>{String(details.correctionType||'Corrección')}</strong><span className="rounded bg-amber-100 px-2 py-1 font-semibold text-amber-900">PENDIENTE DE REVISIÓN</span></div>
+              <p>{String(details.entityType||'')} · ID {String(details.entityId||'')} · Ref. {String(details.sourceDocumentRef||'')}</p>
+              <p><strong>Motivo:</strong> {String(details.reason||'')}</p>
+              <p><strong>Papel de trabajo:</strong> {String(details.workpaperNote||'')}</p>
+              <p className="text-slate-500">Solicitud #{event.id} · {event.createdAt} · {String(details.actorUsername||'Usuario')}</p>
+            </article>;
+          })}</div>}
+      </section>
       <section className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
         <div className="bg-slate-900 text-white px-5 py-4 flex items-center gap-3">
           <Undo2 className="h-6 w-6 text-emerald-300" />
