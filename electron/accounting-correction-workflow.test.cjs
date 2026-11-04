@@ -293,3 +293,28 @@ test('correction generators require one matching approved case and an independen
   assert.throws(()=>registerCorrectionRequest(db,input,admin(4,'solicitante-2')),/Ya existe un expediente activo/);
  }finally{db.close();}
 });
+
+test('execution authorization is exclusive, prevents withdrawal/observation, and binds the exact operator and reference',()=>{
+ const db=setup();try{
+  const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
+  reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'La evidencia y el papel de trabajo fueron revisados.'},admin(2,'revisor'));
+  requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(3,'ejecutor'));
+  assert.throws(()=>requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(4,'otro-ejecutor')),/ya fue iniciada por otro operador/);
+  assert.throws(()=>observeCorrectionRequest(db,{caseId:requested.id,reason:'Se requiere una aclaratoria posterior a la autorización.'},admin(4,'revisor-2')),/ya fue iniciada/);
+  assert.throws(()=>withdrawCorrectionRequest(db,{caseId:requested.id,reason:'El solicitante desea retirar la solicitud antes de continuar.'},admin(1,'solicitante')),/ya fue iniciada/);
+  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-002',reason:'Se intenta confirmar una referencia distinta de la autorizada.',evidenceRecordId:'nc-2',evidenceCollection:'sales'},admin(3,'ejecutor')),/no coincide con el documento correctivo/);
+  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Otro operador intenta confirmar la ejecución.',evidenceRecordId:'nc-1',evidenceCollection:'sales'},admin(4,'otro-ejecutor')),/mismo operador independiente/);
+  assert.equal(getCorrectionCase(db,requested.id).workflow_stage,'READY_FOR_EXECUTION');
+ }finally{db.close();}
+});
+test('execution authorization rolls back its stage and event when the audit ledger fails',()=>{
+ const db=setup();try{
+  const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
+  reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'La evidencia y el papel de trabajo fueron revisados.'},admin(2,'revisor'));
+  db.exec("CREATE TRIGGER reject_authorization_audit BEFORE INSERT ON audit_events WHEN NEW.event_type='accounting_correction_case_execution_started' BEGIN SELECT RAISE(ABORT,'authorization audit failure'); END;");
+  assert.throws(()=>requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(3,'ejecutor')),/authorization audit failure/);
+  const current=getCorrectionCase(db,requested.id);
+  assert.equal(current.execution_started_at,null);
+  assert.deepEqual(current.events.map(e=>e.event_type),['REQUESTED','APPROVED']);
+ }finally{db.close();}
+});
