@@ -216,6 +216,10 @@ function recordVatFiscalIncidentEvent(db, input, actor) {
   const eventType = String(input.eventType || '');
   if (!['REVIEW_RECORDED','ACTION_RECORDED'].includes(eventType)) throw new Error('Tipo de evento de incidencia no admitido.');
   const decisionText = requiredText(input.decisionText, 'Decisión o actuación documentada', 3000, 20);
+  if (eventType === 'ACTION_RECORDED' &&
+      !db.prepare("SELECT 1 FROM vat_fiscal_incident_events WHERE incident_id=? AND event_type='REVIEW_RECORDED' LIMIT 1").get(incidentId)) {
+    throw new Error('Antes de registrar una actuación, el expediente debe contener una revisión profesional documentada.');
+  }
   if (String(input.declarationId || '') !== String(incident.declaration_id || '')) {
     throw new Error('La declaración del expediente es inmutable; no se puede incorporar ni sustituir después de registrar la incidencia.');
   }
