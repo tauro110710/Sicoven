@@ -326,7 +326,7 @@ export const LibroComprasView: React.FC = () => {
                     </td>
                     <td className="py-2 px-2 text-center no-print">
                       <button onClick={() => setDocumentTarget({ id: p.id, title: 'Factura de compra ' + p.invoiceNumber })} className="mr-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes</button>
-                      {p.documentType === '01' && p.paymentTerm === 'CREDITO' && <button onClick={() => setSettlementTarget({id:p.id, number:p.invoiceNumber, party:p.supplierName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar pago parcial o total">Pagar</button>}
+                      {p.documentType === '01' && p.paymentTerm === 'CREDITO' && !p.isCancelled && <button onClick={() => setSettlementTarget({id:p.id, number:p.invoiceNumber, party:p.supplierName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar pago parcial o total">Pagar</button>}
                       {p.documentType === '01' && !p.isCancelled && <button
                         onClick={() => setDebitNoteTarget(p)}
                         disabled={!sqliteAvailable || !isStorageReady}
