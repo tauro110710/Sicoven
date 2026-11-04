@@ -670,7 +670,7 @@ export const ReversionFiscalView: React.FC = () => {
               : event.eventType === 'inventory_movement_posted' ? 'Movimiento de Kardex registrado'
               : event.eventType === 'inventory_correction_posted' ? 'Corrección de Kardex registrada'
               : event.eventType === 'accounting_period_closed' ? 'Período contable cerrado'
-              : event.eventType === 'accounting_correction_requested' ? 'Corrección autorizada · solicitud registrada'
+              : event.eventType === 'accounting_correction_requested' ? 'Solicitud de corrección registrada · pendiente de revisión'
               : event.eventType === 'accounting_correction_executed' ? 'Corrección ejecutada y auditada'
               : event.eventType === 'company_bcv_rate_updated' ? 'Tasa BCV modificada'
               : event.eventType === 'factory_reset' ? 'Reinicio de datos operativos'
