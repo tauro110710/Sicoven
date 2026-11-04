@@ -180,3 +180,13 @@ La selección del marco y su evidencia de adopción no debe impedir el alta admi
 3. Revisar requisitos del comprobante de retención y los datos actuales del modelo; comprobar correo/domicilio del proveedor y fecha efectiva de entrega sin reescribir documentos históricos.
 4. Implementar calendario 2026 con tests de fechas por último dígito y tipo de sujeto, preservando reglas históricas.
 5. Rastrear el generador ISLR heredado en el árbol completo de la rama y probar restauración real de respaldos previos.
+
+### 9.6 Nueva Providencia SNAT/2026/00099 — sujetos pasivos especiales (vigente desde 01-11-2026)
+Se identificó la Providencia SNAT/2026/00099, publicada en Gaceta Oficial N° 43.485 del 22-10-2026 y vigente desde el 01-11-2026. Deroga la SNAT/2023/00005. Entre sus reglas relevantes:
+- La calificación como sujeto pasivo especial es expresa y debe ser notificada por la Administración Tributaria (artículo 1); el sistema no debe declarar a una empresa especial por el solo hecho de superar umbrales o por selección predeterminada.
+- Artículo 2: umbrales de 600.000 veces el tipo de cambio oficial de la moneda de mayor valor para ingresos anuales (dos últimas declaraciones) o ventas/servicios mensuales superiores a 50.000 veces (tres últimas declaraciones), en los supuestos regionales indicados.
+- Artículo 3: umbrales superiores para control de la Gerencia de Contribuyentes Especiales de la Región Capital (3.000.000 anual / 250.000 mensual) y categorías de actividad específicas.
+- Artículo 4: exclusiones para nuevos emprendimientos inscritos durante tres años, explotación primaria exclusiva agrícola/pecuaria/forestal/pesquera/acuícola, organizaciones del Poder Popular con RIF C y sujetos con menos de un año de operaciones (con las excepciones previstas).
+- Artículo 8: contempla revocación bajo los supuestos de ingresos o ventas inferiores durante los períodos indicados; artículo 16 preserva la condición de quienes ya estaban calificados y notificados antes de la entrada en vigencia.
+Fuente de transcripción normativa consultada (secundaria; cotejar con Gaceta oficial 43.485): https://tributos.ivecofi.net/informacion/legislacion/providencias/pa-2026-99
+Decisión preventiva en la rama: el formulario de alta deja de preseleccionar Contribuyente Especial y comienza como Ordinario; el usuario debe declarar expresamente la condición respaldada por notificación. No se altera la condición de empresas históricas ni se recalifica automáticamente ninguna entidad. La verificación documental de la notificación debe permanecer como evidencia pendiente de modelar.
