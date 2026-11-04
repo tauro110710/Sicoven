@@ -15,6 +15,7 @@ test('workflow enforces preparer-reviewer-executor segregation and append-only e
   const approved=reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Soportes contrastados y efectos evaluados.'},admin(2,'revisor'));
   assert.equal(approved.status,'APPROVED');
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Se aplicó el documento correctivo.'},admin(2,'revisor')),/distinto del solicitante y del aprobador/);
+  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'FAC-001',reason:'Se intenta reutilizar la referencia original.'},admin(3,'ejecutor')),/misma del documento original/);
   const executed=markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Se aplicó el documento correctivo.'},admin(3,'ejecutor'));
   assert.equal(executed.status,'EXECUTED');
   assert.deepEqual(executed.events.map(e=>e.event_type),['REQUESTED','APPROVED','EXECUTED']);
@@ -38,6 +39,8 @@ test('invalid actors and insufficient workpaper are rejected without records',()
  const db=setup();try{
   assert.throws(()=>registerCorrectionRequest(db,{...input,workpaperNote:'corto'},admin(1,'a')),/al menos 15/);
   assert.throws(()=>registerCorrectionRequest(db,input,{id:1,username:'x',role:'cashier'}),/sesión administrativa/);
+  assert.throws(()=>registerCorrectionRequest(db,input,{id:0,username:'a',role:'admin'}),/identidad válida/);
+  assert.throws(()=>registerCorrectionRequest(db,input,{id:1,username:'  ',role:'admin'}),/identidad válida/);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM accounting_correction_cases').get().n,0);
  }finally{db.close();}
 });
