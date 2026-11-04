@@ -46,6 +46,7 @@ Se agregó un ciclo formal de expediente sin sobrescribir su historial:
 - `READY_FOR_EXECUTION`: aprobado y sin observaciones pendientes.
 - `COMPLETED`: ejecución confirmada.
 - `CLOSED`: rechazado.
+- `WITHDRAWN`: retirado por el solicitante antes de ejecutar.
 
 La observación puede ocurrir durante revisión y también después de aprobar, antes de ejecutar. Solo el solicitante original puede subsanar y reenviar; el expediente vuelve a revisión y pierde la aprobación anterior. Cada observación y reenvío se registra en una tabla de eventos separada, append-only, y en la bitácora general. Si falla la bitácora, la transacción completa revierte. Se conserva el historial de aprobaciones/observaciones y se exige una nueva revisión independiente antes de ejecutar.
 
@@ -62,6 +63,13 @@ Se contrastaron los vínculos con los tipos persistidos:
 
 El formulario de expedientes solo permite estas seis clases de origen, para evitar abrir casos ejecutables sobre entidades que todavía no persisten un vínculo correctivo verificable. Los otros escenarios no se consideran terminados; deben recibir su relación explícita antes de habilitarse.
 
-La suite del workflow contiene ahora **16 pruebas definidas** que cubren segregación, rollback, vínculos de NC/ND de compra y venta, reversos/ajustes de asientos, comprobantes de retención y ciclo de observación/subsanación. No se han ejecutado en esta sesión. La suite documental mantiene nueve pruebas definidas, tampoco ejecutadas.
+La suite del workflow contiene ahora **18 pruebas definidas** que cubren segregación, rollback, vínculos de NC/ND de compra y venta, reversos/ajustes de asientos, comprobantes de retención y ciclo de observación/subsanación. No se han ejecutado en esta sesión. La suite documental mantiene nueve pruebas definidas, tampoco ejecutadas.
 
 Se agregó además una prueba de migración aditiva para expedientes heredados `PENDING_REVIEW`, `APPROVED`, `REJECTED` y `EXECUTED`, que verifica que sus estados se conservan y reciben la etapa equivalente. Se añadieron casos de ND de venta, NC/ND de compra y corrección de Kardex. Total actual del archivo de pruebas: **16 casos definidos**, no ejecutados.
+
+
+Se agregó también el retiro controlado: solo el solicitante original puede retirar su expediente mientras no esté ejecutado ni rechazado. El retiro queda registrado como evento append-only y bloquea aprobación, reenvío y ejecución posteriores. Puede retirarse durante revisión, después de una observación o tras aprobación, siempre antes de la ejecución.
+
+La ejecución exige además que al menos un soporte documental del expediente esté verificado después de la observación formal más reciente; una verificación antigua no permite cerrar un caso que haya sido devuelto para subsanar.
+
+Total actual de la suite del workflow: **18 pruebas definidas**, no ejecutadas.
