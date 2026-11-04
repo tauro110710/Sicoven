@@ -974,6 +974,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const setAccountCashFlowActivity = (accountCode: string, activity: CashFlowActivity) => {
+    assertSQLitePersistenceReady('Clasificar cuenta para flujo de efectivo');
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
       throw new Error('SQLite no está disponible o todavía no está lista. No se guardó la clasificación.');
     }
@@ -989,6 +990,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const setAccountCashFlowIndirectTreatment = (accountCode: string, treatment: CashFlowIndirectTreatment) => {
+    assertSQLitePersistenceReady('Clasificar tratamiento indirecto del flujo de efectivo');
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
       throw new Error('SQLite no está disponible o todavía no está lista. No se guardó el tratamiento indirecto.');
     }
