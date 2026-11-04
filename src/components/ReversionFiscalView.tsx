@@ -78,7 +78,7 @@ const CorrectionNoteFormFields: React.FC<CorrectionNoteFormFieldsProps> = ({
 export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole = 'admin' }) => {
   const isAccountant = userRole === 'contador';
   const {
-    currentCompany, accounts, journalEntries, sales, purchases, movements, products, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, addMovement, addPurchaseCreditNote, addPurchaseServiceCreditNote, addSaleCorrectionNote,
+    currentCompany, accounts, journalEntries, sales, purchases, movements, products, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, addMovement, addPurchaseCreditNote, addPurchaseServiceCreditNote, addSaleCorrectionNote, addSupplierDebitNote,
     bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, authorizeCorrectionCase, listCorrectionCases, executeCorrectionCase
   } = useAccounting();
   const now = new Date();
@@ -137,6 +137,15 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   const [requestFiscalEmissionMedium, setRequestFiscalEmissionMedium] = useState<'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | ''>('');
   const [requestSameMediumAsOriginal, setRequestSameMediumAsOriginal] = useState(false);
   const [requestActionSubmitting, setRequestActionSubmitting] = useState(false);
+  const [supplierDebitCause, setSupplierDebitCause] = useState<'PRICE_DIFFERENCE'|'ADDITIONAL_EXPENSE'|'FINANCING_CHARGE'|'OTHER'>('ADDITIONAL_EXPENSE');
+  const [supplierDebitClassificationNote, setSupplierDebitClassificationNote] = useState('');
+  const [supplierDebitAccountCode, setSupplierDebitAccountCode] = useState('');
+  const [supplierDebitVatAccountCode, setSupplierDebitVatAccountCode] = useState('');
+  const [supplierDebitPayableAccountCode, setSupplierDebitPayableAccountCode] = useState('');
+  const [supplierDebitTaxRate, setSupplierDebitTaxRate] = useState('16');
+  const [supplierDebitFiscalBreakdownReviewed, setSupplierDebitFiscalBreakdownReviewed] = useState(false);
+  const [supplierDebitNoWithholdingConfirmed, setSupplierDebitNoWithholdingConfirmed] = useState(false);
+  const [supplierDebitNoIgtfConfirmed, setSupplierDebitNoIgtfConfirmed] = useState(false);
   const [correctionCases, setCorrectionCases] = useState<import('../context/AccountingContext').CorrectionCase[]>([]);
   const refreshCorrectionCases = useCallback(async () => { try { setCorrectionCases(await listCorrectionCases()); } catch (error) { setFeedback({kind:'error',message:error instanceof Error?error.message:'No se pudo consultar el historial de correcciones.'}); } },[listCorrectionCases]);
   useEffect(() => { void refreshCorrectionCases(); },[refreshCorrectionCases]);
@@ -290,6 +299,49 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
         await waitForPersistence();
         setFeedback({kind:'success',message:(note.documentType === '03' ? 'Nota de crédito ' : 'Nota de débito ') +
           note.invoiceNumber + ' registrada. El asiento correctivo y el auxiliar CxC quedaron vinculados; la factura original permanece intacta.'});
+      } else if (selectedPurchaseForCorrection && requestCorrectionType === 'NOTA_DEBITO_PROVEEDOR') {
+        const taxableBase = Number(requestTaxableBaseBs);
+        const exemptAmount = Number(requestExemptAmountBs);
+        const taxRate = Number(supplierDebitTaxRate);
+        const vatAmount = Math.round((taxableBase * taxRate / 100 + Number.EPSILON) * 100) / 100;
+        const totalAmount = Math.round((taxableBase + exemptAmount + vatAmount + Number.EPSILON) * 100) / 100;
+        if (!supplierDebitAccountCode || (vatAmount > 0 && !supplierDebitVatAccountCode) ||
+            (selectedPurchaseForCorrection.paymentTerm === 'CONTADO' && !supplierDebitPayableAccountCode) ||
+            !supplierDebitFiscalBreakdownReviewed || !supplierDebitNoWithholdingConfirmed ||
+            !supplierDebitNoIgtfConfirmed ||
+            (supplierDebitCause === 'OTHER' && supplierDebitClassificationNote.trim().length < 10)) {
+          throw new Error('Complete la cuenta de débito, las cuentas fiscales que correspondan y las confirmaciones profesionales de IVA, retenciones e IGTF.');
+        }
+        const note = await addSupplierDebitNote({
+          companyId: currentCompany.id,
+          sourcePurchaseId: selectedPurchaseForCorrection.id,
+          debitNoteNumber: requestTargetRef.trim(),
+          controlNumber: requestControlNumber.trim(),
+          affectedInvoiceNumber: selectedPurchaseForCorrection.invoiceNumber,
+          fiscalEmissionMedium: requestFiscalEmissionMedium,
+          sameMediumAsOriginal: true,
+          issueDate: requestCorrectionDate,
+          recognitionDate: requestCorrectionDate,
+          economicCause: supplierDebitCause,
+          reason: requestReason.trim(),
+          classificationNote: supplierDebitClassificationNote.trim() || undefined,
+          debitAccountCode: supplierDebitAccountCode,
+          vatAccountCode: supplierDebitVatAccountCode || undefined,
+          payableAccountCode: supplierDebitPayableAccountCode || undefined,
+          taxableBaseBs: taxableBase,
+          exemptAmountBs: exemptAmount,
+          taxRate,
+          vatAmountBs: vatAmount,
+          totalAmountBs: totalAmount,
+          bcvRate: Number(selectedPurchaseForCorrection.bcvRate),
+          fiscalBreakdownReviewed: supplierDebitFiscalBreakdownReviewed,
+          withholdingNotApplicableConfirmed: supplierDebitNoWithholdingConfirmed,
+          igtfNotApplicableConfirmed: supplierDebitNoIgtfConfirmed,
+          fiscalReviewNote: requestReason.trim(),
+          closedThroughDate: currentCompany.closedThroughDate || undefined
+        });
+        await waitForPersistence();
+        setFeedback({kind:'success',message:'Nota de débito ' + (note.debitNoteNumber || note.invoiceNumber) + ' registrada con asiento correctivo y aumento trazable de CxP. La factura original permanece intacta.'});
       } else if (selectedPurchaseForCorrection && !selectedPurchaseHasInventory) {
         const note = await addPurchaseServiceCreditNote({
           purchaseId: selectedPurchaseForCorrection.id,
@@ -673,7 +725,19 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
             setRequestExemptAmountBs(String(sale?.exemptAmountBs ?? purchase?.exemptAmountBs ?? ''));
             setRequestFiscalEmissionMedium((sale?.fiscalEmissionMedium || purchase?.fiscalEmissionMedium || '') as typeof requestFiscalEmissionMedium);
             setRequestSameMediumAsOriginal(false);
-            setRequestCorrectionType(sale ? 'NOTA_CREDITO_VENTA' : purchase ? 'NOTA_CREDITO_SERVICIO' : 'REVERSIÓN_CONTABLE');
+            setRequestCorrectionType(sale ? 'NOTA_CREDITO_VENTA' : purchase ? ((purchase.inventoryLines?.length || movements.some(item=>item.companyId===currentCompany.id && (item.journalEntryId===purchase.journalEntryId || item.documentRef.trim().toUpperCase()===('FAC-'+purchase.invoiceNumber).trim().toUpperCase()))) ? 'NOTA_CREDITO_INVENTARIO' : 'NOTA_CREDITO_SERVICIO') : 'REVERSIÓN_CONTABLE');
+            if (purchase) {
+              const sourceEntry=journalEntries.find(item=>item.id===purchase.journalEntryId && item.companyId===currentCompany.id);
+              setSupplierDebitTaxRate(String(purchase.taxRate ?? 16));
+              setSupplierDebitAccountCode(accounts.find(item=>item.isMovement && ['COSTOS','GASTOS'].includes(item.type))?.code || '');
+              setSupplierDebitVatAccountCode('');
+              setSupplierDebitPayableAccountCode(sourceEntry?.items.find(item=>item.accountCode.startsWith('2.1.1.') && Number(item.creditBs)>0)?.accountCode || '');
+              setSupplierDebitCause('ADDITIONAL_EXPENSE');
+              setSupplierDebitClassificationNote('');
+              setSupplierDebitFiscalBreakdownReviewed(false);
+              setSupplierDebitNoWithholdingConfirmed(false);
+              setSupplierDebitNoIgtfConfirmed(false);
+            }
           }} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
             <option value="">Seleccione el registro que desea corregir…</option>
             {filteredCorrectionSources.map(item=><option key={item.entityType+'::'+item.id} value={item.entityType+'::'+item.id}>{item.label}</option>)}
@@ -708,10 +772,96 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
           </>}
         </div>}
         {selectedPurchaseForCorrection && <div className="space-y-3 rounded-lg border border-slate-200 p-3">
-          {selectedPurchaseForCorrection.documentType !== '01' || selectedPurchaseForCorrection.isCancelled ? <div className="space-y-2 text-xs"><p>Este documento ya es una nota correctiva o está anulado. No se emite otra NC sobre él desde este formulario.</p><button type="button" onClick={openExistingCorrectionFlow} className="rounded bg-indigo-700 px-3 py-2 font-semibold text-white">Abrir reversión del asiento vinculado</button></div> : selectedPurchaseHasInventory ? <div className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3 text-xs">
-            <p>La compra tiene mercancía/Kardex. La NC debe calcular la devolución física por líneas y su efecto sobre inventario, CxP, retenciones e impuestos.</p>
-            <button type="button" onClick={openExistingCorrectionFlow} className="rounded bg-indigo-700 px-3 py-2 font-semibold text-white">Abrir NC y devolución de inventario</button>
-          </div> : <CorrectionNoteFormFields
+          {selectedPurchaseForCorrection.documentType !== '01' || selectedPurchaseForCorrection.isCancelled ? <div className="space-y-2 text-xs"><p>Este documento ya es una nota correctiva o está anulado. No se emite otra nota sobre él desde este formulario.</p><button type="button" onClick={openExistingCorrectionFlow} className="rounded bg-indigo-700 px-3 py-2 font-semibold text-white">Abrir reversión del asiento vinculado</button></div> : <>
+            <label className="block text-xs font-semibold text-slate-700">Acción sobre la factura de compra
+              <select value={requestCorrectionType} onChange={e=>{
+                setRequestCorrectionType(e.target.value);
+                if(e.target.value==='NOTA_DEBITO_PROVEEDOR'){
+                  setRequestTargetRef('');setRequestControlNumber('');setRequestReason('');
+                  setRequestTaxableBaseBs('');setRequestExemptAmountBs('');setRequestSameMediumAsOriginal(false);
+                  setSupplierDebitVatAccountCode('');setSupplierDebitFiscalBreakdownReviewed(false);
+                  setSupplierDebitNoWithholdingConfirmed(false);setSupplierDebitNoIgtfConfirmed(false);
+                }
+              }} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
+                {selectedPurchaseHasInventory ? <option value="NOTA_CREDITO_INVENTARIO">NC por devolución de inventario</option> : <option value="NOTA_CREDITO_SERVICIO">NC de servicios/gastos</option>}
+                <option value="NOTA_DEBITO_PROVEEDOR">Emitir nota de débito del proveedor</option>
+              </select>
+            </label>
+            {requestCorrectionType === 'NOTA_DEBITO_PROVEEDOR' ? <div className="space-y-3 rounded border border-slate-200 p-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-xs font-semibold text-slate-700">Número de ND
+                  <input value={requestTargetRef} onChange={e=>setRequestTargetRef(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+                </label>
+                <label className="text-xs font-semibold text-slate-700">Control de ND
+                  <input value={requestControlNumber} onChange={e=>setRequestControlNumber(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+                </label>
+                <label className="text-xs font-semibold text-slate-700">Fecha de emisión / reconocimiento
+                  <input type="date" min={selectedPurchaseForCorrection.invoiceDate} value={requestCorrectionDate} onChange={e=>setRequestCorrectionDate(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+                </label>
+                <label className="text-xs font-semibold text-slate-700">Medio de emisión de la ND
+                  <select value={requestFiscalEmissionMedium} onChange={e=>setRequestFiscalEmissionMedium(e.target.value as typeof requestFiscalEmissionMedium)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
+                    <option value="">Seleccione el mismo medio de la factura original…</option>
+                    <option value="DIGITAL">Digital</option>
+                    <option value="FISCAL_MACHINE">Máquina fiscal</option>
+                    <option value="CONTINGENCY">Contingencia</option>
+                  </select>
+                </label>
+                <label className="text-xs font-semibold text-slate-700">Causa económica
+                  <select value={supplierDebitCause} onChange={e=>{
+                    const nextCause=e.target.value as typeof supplierDebitCause;
+                    setSupplierDebitCause(nextCause);
+                    if(nextCause==='FINANCING_CHARGE') setSupplierDebitAccountCode(accounts.find(item=>item.isMovement && item.type==='GASTOS')?.code || '');
+                  }} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
+                    <option value="PRICE_DIFFERENCE">Diferencia de precio</option>
+                    <option value="ADDITIONAL_EXPENSE">Gasto adicional</option>
+                    <option value="FINANCING_CHARGE">Cargo de financiación</option>
+                    <option value="OTHER">Otra causa</option>
+                  </select>
+                </label>
+                <label className="text-xs font-semibold text-slate-700">Base imponible (Bs.)
+                  <input type="number" min="0" step="0.01" value={requestTaxableBaseBs} onChange={e=>setRequestTaxableBaseBs(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+                </label>
+                <label className="text-xs font-semibold text-slate-700">Monto exento (Bs.)
+                  <input type="number" min="0" step="0.01" value={requestExemptAmountBs} onChange={e=>setRequestExemptAmountBs(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+                </label>
+                <label className="text-xs font-semibold text-slate-700">Alícuota IVA (%)
+                  <input type="number" min="0" max="100" step="0.01" value={supplierDebitTaxRate} onChange={e=>setSupplierDebitTaxRate(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+                </label>
+                <label className="text-xs font-semibold text-slate-700">Cuenta de débito
+                  <select value={supplierDebitAccountCode} onChange={e=>setSupplierDebitAccountCode(e.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
+                    <option value="">Seleccione la cuenta de costo/gasto…</option>
+                    {accounts.filter(item=>item.isMovement && (supplierDebitCause==='FINANCING_CHARGE' ? item.type==='GASTOS' : ['COSTOS','GASTOS'].includes(item.type))).map(item=><option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}
+                  </select>
+                </label>
+                {Number(requestTaxableBaseBs)>0 && Number(supplierDebitTaxRate)>0 && <label className="text-xs font-semibold text-slate-700">Cuenta de IVA de destino
+                  <select value={supplierDebitVatAccountCode} onChange={e=>setSupplierDebitVatAccountCode(e.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
+                    <option value="">Seleccione cuenta de destino…</option>
+                    {accounts.filter(item=>item.isMovement && ['ACTIVO','COSTOS','GASTOS'].includes(item.type)).map(item=><option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}
+                  </select>
+                </label>}
+                {selectedPurchaseForCorrection.paymentTerm === 'CONTADO' && <label className="text-xs font-semibold text-slate-700">Cuenta CxP para la nueva obligación
+                  <select value={supplierDebitPayableAccountCode} onChange={e=>setSupplierDebitPayableAccountCode(e.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
+                    <option value="">Seleccione auxiliar CxP…</option>
+                    {accounts.filter(item=>item.isMovement && item.type==='PASIVO' && item.code.startsWith('2.1.1.')).map(item=><option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}
+                  </select>
+                </label>}
+                {supplierDebitCause === 'OTHER' && <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Clasificación de la otra causa
+                  <input value={supplierDebitClassificationNote} onChange={e=>setSupplierDebitClassificationNote(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+                </label>}
+              </div>
+              <label className="block text-xs font-semibold text-slate-700">Motivo de la ND
+                <textarea value={requestReason} onChange={e=>setRequestReason(e.target.value)} rows={2} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Describa el motivo económico de la nota (mínimo 10 caracteres)."/>
+              </label>
+              <label className="flex items-start gap-2 text-xs text-slate-700"><input type="checkbox" checked={requestSameMediumAsOriginal} onChange={e=>setRequestSameMediumAsOriginal(e.target.checked)} className="mt-0.5"/> Confirmo que la ND se emitió por el mismo medio que la factura original.</label>
+              <label className="flex items-start gap-2 text-xs text-slate-700"><input type="checkbox" checked={supplierDebitFiscalBreakdownReviewed} onChange={e=>setSupplierDebitFiscalBreakdownReviewed(e.target.checked)} className="mt-0.5"/> Confirmo que la base, exento e IVA de la ND fueron revisados contra el documento fiscal.</label>
+              <label className="flex items-start gap-2 text-xs text-slate-700"><input type="checkbox" checked={supplierDebitNoWithholdingConfirmed} onChange={e=>setSupplierDebitNoWithholdingConfirmed(e.target.checked)} className="mt-0.5"/> Confirmo que no aplica retención de IVA ni ISLR a esta ND.</label>
+              <label className="flex items-start gap-2 text-xs text-slate-700"><input type="checkbox" checked={supplierDebitNoIgtfConfirmed} onChange={e=>setSupplierDebitNoIgtfConfirmed(e.target.checked)} className="mt-0.5"/> Confirmo que no aplica IGTF a esta ND.</label>
+              <p className="rounded bg-slate-50 p-2 text-xs text-slate-700">IVA calculado: Bs. {(Math.round((Number(requestTaxableBaseBs)*Number(supplierDebitTaxRate)/100+Number.EPSILON)*100)/100).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})} · Total: Bs. {(Math.round((Number(requestTaxableBaseBs)+Number(requestExemptAmountBs)+Number(requestTaxableBaseBs)*Number(supplierDebitTaxRate)/100+Number.EPSILON)*100)/100).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p>
+              <button type="button" disabled={requestActionSubmitting || !requestTargetRef.trim() || !requestControlNumber.trim() || requestReason.trim().length<10 || !requestFiscalEmissionMedium || !requestSameMediumAsOriginal || Number(requestTaxableBaseBs)<0 || Number(requestExemptAmountBs)<0 || Number(requestTaxableBaseBs)+Number(requestExemptAmountBs)<=0 || !supplierDebitAccountCode || !supplierDebitFiscalBreakdownReviewed || !supplierDebitNoWithholdingConfirmed || !supplierDebitNoIgtfConfirmed || (Number(requestTaxableBaseBs)>0 && Number(supplierDebitTaxRate)>0 && !supplierDebitVatAccountCode) || (selectedPurchaseForCorrection.paymentTerm==='CONTADO' && !supplierDebitPayableAccountCode) || (supplierDebitCause==='OTHER' && supplierDebitClassificationNote.trim().length<10)} onClick={()=>void submitDirectCorrection()} className="rounded bg-indigo-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{requestActionSubmitting ? 'Registrando…' : 'Registrar ND del proveedor'}</button>
+            </div> : selectedPurchaseHasInventory ? <div className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3 text-xs">
+              <p>La compra tiene mercancía/Kardex. La NC debe calcular la devolución física por líneas y su efecto sobre inventario, CxP, retenciones e impuestos.</p>
+              <button type="button" onClick={openExistingCorrectionFlow} className="rounded bg-indigo-700 px-3 py-2 font-semibold text-white">Abrir NC y devolución de inventario</button>
+            </div> : <CorrectionNoteFormFields
             minDate={selectedPurchaseForCorrection.invoiceDate}
             noteDate={requestCorrectionDate} setNoteDate={setRequestCorrectionDate}
             noteNumber={requestTargetRef} setNoteNumber={setRequestTargetRef}
@@ -725,6 +875,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
             onSubmit={()=>void submitDirectCorrection()}
             submitLabel="Registrar NC de compra de servicios"
           />}
+          </>}
         </div>}
         {(selectedJournalForCorrection || selectedMovementForCorrection || selectedBankMovementForCorrection || selectedCreditSettlementForCorrection || selectedSupplierAdvanceSettlementForCorrection) && !selectedSaleForCorrection && !selectedPurchaseForCorrection && <div className="rounded-lg border border-slate-200 p-3 text-xs space-y-2">
           {selectedBankMovementForCorrection && !selectedBankMovementForCorrection.isReconciled
