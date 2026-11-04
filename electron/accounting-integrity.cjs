@@ -616,6 +616,110 @@ function saleJournalMatchesInvoice(sale, entry, company) {
   return true;
 }
 
+function validateSaleCorrectionNotes(previousState, nextState) {
+  const priorSales = asArray(previousState?.sales);
+  const nextSales = asArray(nextState?.sales);
+  const priorIds = new Set(priorSales.map(item => String(item.id)));
+  const normalize = value => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
+  const round2 = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+  const round6 = value => Math.round((Number(value) + Number.EPSILON) * 1000000) / 1000000;
+  const close = (a, b, tolerance = 0.02) => Number.isFinite(Number(a)) && Number.isFinite(Number(b)) && Math.abs(Number(a) - Number(b)) <= tolerance;
+
+  for (const note of nextSales.filter(item => !priorIds.has(String(item.id)) && ['02', '03'].includes(item.documentType))) {
+    const source = nextSales.find(item => item.id === note.originalSaleId && item.companyId === note.companyId && item.documentType === '01');
+    const journal = asArray(nextState.journalEntries).find(item => item.id === note.journalEntryId && item.companyId === note.companyId);
+    const isCredit = note.documentType === '03';
+    const number = String(isCredit ? note.creditNoteNumber || note.invoiceNumber : note.debitNoteNumber || note.invoiceNumber).trim();
+    const company = asArray(nextState.companies).find(item => item.id === note.companyId);
+    const linkedInventory = asArray(nextState.movements).some(item => item.companyId === note.companyId &&
+      (item.journalEntryId === source?.journalEntryId ||
+       normalize(item.documentRef) === normalize('FAC-' + (source?.invoiceNumber || ''))));
+    const base = Number(note.taxableBaseBs || 0);
+    const exempt = Number(note.exemptAmountBs || 0);
+    const vat = Number(note.vatAmountBs || 0);
+    const total = Number(note.totalAmountBs || 0);
+    const rate = Number(note.bcvRate || 0);
+    const taxRate = Number(note.taxRate || 0);
+    const expectedVat = round2(base * taxRate / 100);
+    const expectedTotal = round2(base + exempt + vat);
+    const expectedRef = (isCredit ? 'NC-CLI-' : 'ND-CLI-') + number;
+    const duplicateNumber = nextSales.some(item => item.id !== note.id && item.companyId === note.companyId &&
+      normalize(item.invoiceNumber) === normalize(note.invoiceNumber));
+    const entries = asArray(journal?.items);
+    const amountsByAccount = new Map();
+    for (const line of entries) {
+      const old = amountsByAccount.get(String(line.accountCode)) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+      old.debitBs += Number(line.debitBs || 0); old.creditBs += Number(line.creditBs || 0);
+      old.debitUsd += Number(line.debitUsd || 0); old.creditUsd += Number(line.creditUsd || 0);
+      amountsByAccount.set(String(line.accountCode), old);
+    }
+    const revenue = amountsByAccount.get('4.1.1.01') || {};
+    const receivable = amountsByAccount.get('1.1.2.01') || {};
+    const vatAccount = amountsByAccount.get('2.1.2.01') || {};
+    const baseUsd = round6((base + exempt) / rate);
+    const vatUsd = round6(vat / rate);
+    const totalUsd = round6(total / rate);
+    const journalMatches = Boolean(journal && journal.type === 'AJUSTE' && journal.date === note.invoiceDate &&
+      close(journal.bcvRate, rate, 0.000001) && normalize(journal.referenceDoc) === normalize(expectedRef) &&
+      close(revenue.debitBs || 0, isCredit ? base + exempt : 0) &&
+      close(revenue.creditBs || 0, isCredit ? 0 : base + exempt) &&
+      close(revenue.debitUsd || 0, isCredit ? baseUsd : 0, 0.0001) &&
+      close(revenue.creditUsd || 0, isCredit ? 0 : baseUsd, 0.0001) &&
+      close(receivable.debitBs || 0, isCredit ? 0 : total) &&
+      close(receivable.creditBs || 0, isCredit ? total : 0) &&
+      close(receivable.debitUsd || 0, isCredit ? 0 : totalUsd, 0.0001) &&
+      close(receivable.creditUsd || 0, isCredit ? totalUsd : 0, 0.0001) &&
+      close(vatAccount.debitBs || 0, isCredit ? vat : 0) &&
+      close(vatAccount.creditBs || 0, isCredit ? 0 : vat) &&
+      close(vatAccount.debitUsd || 0, isCredit ? vatUsd : 0, 0.0001) &&
+      close(vatAccount.creditUsd || 0, isCredit ? 0 : vatUsd, 0.0001) &&
+      close(entries.reduce((sum, line) => sum + Number(line.debitBs || 0), 0),
+        entries.reduce((sum, line) => sum + Number(line.creditBs || 0), 0)) &&
+      close(entries.reduce((sum, line) => sum + Number(line.debitUsd || 0), 0),
+        entries.reduce((sum, line) => sum + Number(line.creditUsd || 0), 0), 0.0001));
+    if (!source || source.isCancelled || source.paymentTerm !== 'CREDITO' ||
+        Number(source.vatWithheldBs || 0) > 0 || String(source.retentionVoucherNumber || '').trim() ||
+        Number(source.igtfAmountBs || 0) > 0 || source.igtfApplicable === true ||
+        note.paymentTerm !== 'CREDITO' || normalize(note.affectedInvoiceNumber) !== normalize(source.invoiceNumber) ||
+        normalize(note.customerRif) !== normalize(source.customerRif) ||
+        !String(note.customerName || '').trim() || !number || !String(note.controlNumber || '').trim() ||
+        String(note.correctionReason || '').trim().length < 10 ||
+        String(note.correctionWorkpaper || '').trim().length < 10 ||
+        !isValidIsoDate(note.invoiceDate) || note.invoiceDate < source.invoiceDate ||
+        (company?.closedThroughDate && note.invoiceDate <= company.closedThroughDate) ||
+        linkedInventory || duplicateNumber || !Number.isFinite(rate) || rate <= 0 ||
+        !Number.isFinite(base) || !Number.isFinite(exempt) || base < 0 || exempt < 0 || base + exempt <= 0 ||
+        !Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100 ||
+        !close(vat, expectedVat) || !close(total, expectedTotal) ||
+        !close(note.totalAmountUsd, totalUsd, 0.0001) ||
+        !close(note.taxableBaseUsd, round6(base / rate), 0.0001) ||
+        !close(note.vatAmountUsd, vatUsd, 0.0001) ||
+        !close(note.netReceivableAdjustmentBs, total) ||
+        !close(note.netReceivableAdjustmentUsd, totalUsd, 0.0001) ||
+        !journalMatches) {
+      throw new Error('SQLite rechazó la NC/ND de venta: el documento, factura original, saldo fiscal, soporte o asiento correctivo no concilian.');
+    }
+  }
+
+  for (const source of nextSales.filter(item => item.documentType === '01')) {
+    const credits = nextSales.filter(item => item.originalSaleId === source.id && item.documentType === '03' && !item.isCancelled);
+    const creditBase = round2(credits.reduce((sum, item) => sum + Number(item.taxableBaseBs || 0), 0));
+    const creditExempt = round2(credits.reduce((sum, item) => sum + Number(item.exemptAmountBs || 0), 0));
+    if (creditBase > Number(source.taxableBaseBs || 0) + 0.01 ||
+        creditExempt > Number(source.exemptAmountBs || 0) + 0.01) {
+      throw new Error('SQLite bloqueó notas de crédito de venta que exceden la base original disponible.');
+    }
+    const originalUsd = Number(source.totalAmountUsd || 0);
+    const paidUsd = asArray(nextState.creditSettlements).filter(item =>
+      item.companyId === source.companyId && item.documentId === source.id &&
+      item.kind === 'SALE_COLLECTION' && !item.isReversed).reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
+    const creditedUsd = credits.reduce((sum, item) => sum + Number(item.netReceivableAdjustmentUsd || 0), 0);
+    if (creditedUsd > Math.max(0, originalUsd - paidUsd) + 0.01) {
+      throw new Error('SQLite bloqueó una NC de venta que supera el saldo por cobrar no liquidado.');
+    }
+  }
+}
+
 function validateAccountingSnapshot(previousState, nextState) {
   if (!nextState || typeof nextState !== 'object' || Array.isArray(nextState)) {
     throw new Error('Estado contable inválido.');
@@ -677,6 +781,7 @@ function validateAccountingSnapshot(previousState, nextState) {
   }
   assertAppendOnlyCollection(priorState, nextState, 'sales',
     ['journalEntryId', 'isCancelled', 'cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote'], ['isCancelled']);
+  validateSaleCorrectionNotes(priorState, nextState);
   assertAppendOnlyCollection(priorState, nextState, 'movements');
   assertAppendOnlyCollection(priorState, nextState, 'creditSettlements',
     ['isReversed', 'reversedByJournalEntryId'], ['isReversed']);
