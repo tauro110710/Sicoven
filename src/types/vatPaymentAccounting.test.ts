@@ -31,6 +31,8 @@ const build=(amountBs:number,bankUsd:number,d=declaration(),priorPaidBs=0,moves=
  buildVatPaymentAccountingPlan({occurredAt:'2026-10-20',amountBs,priorPaidBs,declaration:d,movements:moves,bankAccounts:banks,accounts:chart});
 
 test('rejects bank payment movements without a BCV snapshot effective on the payment date',()=>{ assert.throws(()=>build(100,1,declaration(),0,[{...movement('m1','b1',100,1),bcvRateEffectiveDate:'2026-10-19'}]),/misma fecha del enteramiento/); });
+test('rejects bank movements dated differently from the VAT payment',()=>{ assert.throws(()=>build(100,1,declaration(),0,[{...movement('m1','b1',100,1),date:'2026-10-19'}]),/misma fecha del enteramiento/); });
+test('rejects mixed historical BCV rates in one VAT payment',()=>{ assert.throws(()=>build(100,1,declaration(),0,[movement('m1','b1',50,0.5),{...movement('m2','b2',50,0.5),bcvRate:251}]),/tasas BCV históricas distintas/); });
 test('uses the historical BCV snapshot stored on the selected bank movement',()=>{ const p=build(100,0.9); assert.equal(p.bcvRate,250); });
 test('cancels liability at historical USD carrying value',()=>{
  const p=build(100,1);assert.equal(p.liabilityUsd,1);assert.equal(p.fxDifferenceUsd,0);
@@ -72,7 +74,7 @@ test('rejects invalid calendar dates and non-debit bank movements', () => {
     bankAccounts: banks, accounts
   }), /fecha del enteramiento/);
   assert.throws(() => buildVatPaymentAccountingPlan({
-    occurredAt: '2026-10-20', amountBs:100, priorPaidBs:0, bcvRate:250, bcvRateEffectiveDate:'2026-10-20', declaration:declaration(),
+    occurredAt: '2026-10-20', amountBs:100, priorPaidBs:0, declaration:declaration(),
     movements: [{ ...movement('m1', 'b1', 100, 1), type: 'CREDIT' }],
     bankAccounts: banks, accounts
   }), /Solo los débitos/);
