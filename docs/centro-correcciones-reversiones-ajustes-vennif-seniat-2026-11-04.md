@@ -133,3 +133,10 @@ No declarar completa esta capacidad hasta que cada tipo documental con efecto co
 - Hallazgo pendiente que bloquea el diseño de NC/ND de ventas: el formulario deshabilita la opción Contado y `validateSaleSettlementMode` también la rechaza en `addSale`, porque el asiento de ventas aún no identifica la cuenta de caja/banco receptora. Por tanto, actualmente solo se permite registrar ventas a crédito; no se genera una CxC ficticia para una venta contado.
 - Para habilitar ventas contado en el futuro se requiere añadir cuenta/medio/referencia de cobro, validar una cuenta de activo imputable, contabilizar el ingreso en la cuenta elegida y conservar el origen del cobro para devoluciones/reembolsos. No se debe convertir una factura contado en CxC ni generar reembolsos ficticios.
 - SICOVEN es una aplicación de escritorio cuya persistencia operativa es SQLite local. La validación pertinente para estos cambios es pruebas de dominio, integración con el almacén SQLite de escritorio, restauración de respaldos y build/paquete de escritorio; no requiere despliegues web.
+
+
+### Endurecimiento de escritura SQLite — continuación
+- Se endurecieron las guardas de `addPurchase`, `addSale`, `addPurchaseCreditNote` y `addSupplierDebitNote`: las cuatro operaciones ahora exigen que exista el puente `window.sicovenStore.save`, que `storageReady` sea verdadero y que no exista un fallo de persistencia.
+- Antes, la condición permitía continuar si `window.sicovenStore` no existía; ese comportamiento no es aceptable para el producto de escritorio y podía aceptar cambios sin el almacén local.
+- La guarda se ejecuta antes de validar o mutar documentos y bloquea explícitamente si la instancia SQLite de escritorio no está lista.
+- Este cambio no acredita todavía atomicidad de toda la operación ni reemplaza pruebas de integración del puente Electron/SQLite. Deben verificarse rollback ante fallo intermedio, persistencia de documento+asiento+auxiliares y restauración de backup en una instalación de escritorio.
