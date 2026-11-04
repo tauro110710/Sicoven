@@ -68,8 +68,9 @@ La Providencia SNAT/2026/00093 (Gaceta Oficial 43.484) establece en su artículo
 
 ## 6. Implementado en esta entrega
 - Se incorpora JournalReversalModal en Libro Diario y acción contextual Reversar asiento para asientos fuente no reversados.
+- Se habilita el mismo flujo desde Libro de Compras y Libro de Ventas: el botón Anular localiza el asiento de origen y abre el expediente de reversión; no ejecuta borrado ni reversión directa.
 - Solicita fecha efectiva, motivo y papel de trabajo; para asientos de períodos cerrados solicita cuenta de resultados acumulados y usa el flujo AIA existente.
-- Reutiliza reverseJournalEntry en AccountingContext: valida empresa, SQLite, duplicidad, fecha, período, dependencias, cuadre bimonetario y conciliación bancaria.
+- Reutiliza reverseJournalEntry en AccountingContext: valida empresa, SQLite, duplicidad, fecha, período, dependencias, cuadre bimonetario y conciliación bancaria. Para facturas vinculadas, conserva importes/documento fuente y registra indicadores de anulación con el ID del contra-asiento; actualiza los estados de liquidaciones vinculadas y marca comprobantes de retención con corrección fiscal pendiente cuando corresponde.
 - Contra-asiento conserva reversalOfEntryId, motivo y papel de trabajo. El asiento original no se reescribe; la UI deriva la relación buscando el contra-asiento enlazado. Se reconocen vínculos reversedByEntryId heredados solo por compatibilidad.
 - Excluye contra-asientos y asientos ya reversados.
 
@@ -78,12 +79,13 @@ La Providencia SNAT/2026/00093 (Gaceta Oficial 43.484) establece en su artículo
 2. Edición/descarte seguro de borradores antes de contabilizar o emitir.
 3. Sustitución de documentos con vínculo al original.
 4. Correcciones parciales por documento.
-5. NC/ND de ventas y compras con efectos completos en auxiliares, Kardex, caja/banco, CxC/CxP e impuestos.
+5. NC/ND de ventas y NC de compras de servicios/sin líneas de inventario, con efectos completos en auxiliares, Kardex cuando aplique, caja/banco, CxC/CxP e impuestos. La reversión total existente no sustituye la emisión fiscal de NC/ND.
 6. Devolución de compras contado conciliada contra salida de fondos o saldo a favor.
-7. Rectificación fiscal conectada a declaración, comprobante, enteramiento y acuse; sin reglas fiscales supuestas.
+7. Rectificación fiscal conectada a declaración, comprobante, enteramiento y acuse; sin reglas fiscales supuestas. La incidencia IVA actual es solo expediente de revisión/actuación, no ejecuta rectificación ni determina reintegros.
 8. Matriz de permisos, doble aprobación y límites por materialidad.
 9. Auditoría de backup/restore y persistencia SQLite.
 10. Pruebas de integración: duplicados, idempotencia, períodos cerrados, multiempresa, referencias faltantes, fallos de persistencia, Bs./USD, bancos, inventario y retenciones.
+11. Incorporar autorización por roles y doble control real en backend; los formularios actuales solicitan motivo y papel de trabajo, pero todavía no implementan una matriz de aprobaciones ni segregación efectiva de funciones.
 
 ## 8. Criterio de aceptación
 No declarar completa esta capacidad hasta que cada tipo documental con efecto contable tenga ruta especializada, la cadena pueda reconstruirse desde origen hasta documento/contra-asiento y evidencia fiscal, las pruebas de integridad/persistencia estén verdes y la normativa haya sido cotejada con fuentes primarias. Esta entrega abre la reversión desde la UI, pero no afirma que todos los flujos de corrección fiscal/documental estén terminados.
