@@ -132,7 +132,8 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
         taxableBaseBs, exemptAmountBs, vatAmountBs, totalAmountBs, taxRate: taxRateValue,
         bcvRate: Number(bcvRate), fiscalBreakdownReviewed,
         withholdingNotApplicableConfirmed, igtfNotApplicableConfirmed,
-        fiscalReviewNote: fiscalReviewNote.trim()
+        fiscalReviewNote: fiscalReviewNote.trim(), fiscalEmissionMedium: fiscalEmissionMedium as 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY',
+        sameMediumAsOriginal
       });
       setSuccess('ND ' + (note.debitNoteNumber || note.invoiceNumber) + ' registrada y confirmada en SQLite como obligación independiente. La factura original no fue modificada.');
     } catch (cause) {
