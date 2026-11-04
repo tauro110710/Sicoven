@@ -193,3 +193,7 @@ No declarar completa esta capacidad hasta que cada tipo documental con efecto co
 - Se aplicó el mismo requisito estricto de SQLite a cierre/reapertura de períodos y asiento de apertura anual; el cierre y la apertura esperan la confirmación persistente antes de terminar.
 - Se revisaron anticipos directos, liquidaciones de anticipos, cobros/pagos, creación de declaraciones de retención IVA, eventos de declaración y entregas de comprobantes IVA/ISLR: sus funciones de dominio ahora usan la guarda común y sus operaciones asíncronas esperan el snapshot confirmado antes de devolver éxito.
 - Las clasificaciones del Estado de Flujos de Efectivo (método directo e indirecto) también rechazan la modificación sin SQLite y sus formularios ya esperan confirmación.
+
+- Se cerró una vía adicional de escritura no confirmada: el importador JSON de bajo nivel dejó de exponerse directamente por el contexto; solo se utiliza internamente desde la restauración controlada, que valida, persiste y revierte a la copia previa si SQLite rechaza el snapshot.
+- Los restablecimientos de datos de muestra y de fábrica ahora exigen el puente SQLite y esperan la confirmación del nuevo estado vacío. La interfaz no informa éxito antes de la confirmación.
+- La restauración de respaldo también exige SQLite local antes de aplicar cambios y conserva su recuperación del snapshot previo ante fallo de persistencia.
