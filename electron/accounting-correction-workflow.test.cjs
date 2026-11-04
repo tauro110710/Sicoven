@@ -153,19 +153,11 @@ test('purchase credit and debit notes must link the original purchase explicitly
  assert.equal(findLinkedCorrectionEvidence(state,item,'ND-P-01').id,'purchase-nd');
  assert.equal(findLinkedCorrectionEvidence(state,item,'NC-P-02'),null);
 });
-test('retention voucher correction evidence is its persisted corrective journal entry',()=>{
+test('retention vouchers are corrected through their source purchase or journal case, not standalone cases',()=>{
  const item={company_id:'co-1',entity_type:'VAT_VOUCHER',entity_id:'vat-voucher-1'};
- const state={
-  vatVouchers:[{id:'vat-voucher-1',companyId:'co-1',correctionEntryId:'journal-correction-1',correctionEntryIds:['journal-correction-1']}],
-  journalEntries:[
-   {id:'journal-unrelated',companyId:'co-1',entryNumber:701},
-   {id:'journal-correction-1',companyId:'co-1',entryNumber:702}
-  ]
- };
- const evidence=findLinkedCorrectionEvidence(state,item,'702');
- assert.equal(evidence.id,'journal-correction-1');
- assert.equal(evidence.__evidenceCollection,'journalEntries');
- assert.equal(findLinkedCorrectionEvidence(state,item,'701'),null);
+ const state={vatVouchers:[{id:'vat-voucher-1',companyId:'co-1',correctionEntryId:'journal-correction-1'}],
+  journalEntries:[{id:'journal-correction-1',companyId:'co-1',entryNumber:702}]};
+ assert.equal(findLinkedCorrectionEvidence(state,item,'702'),null);
 });
 test('journal adjustments may link through adjustmentForEntryId',()=>{
  const item={company_id:'co-1',entity_type:'JOURNAL_ENTRY',entity_id:'entry-source'};
@@ -269,15 +261,13 @@ test('existing observation ledger migrates to allow withdrawal without losing ev
  }finally{db.close();}
 });
 
-test('ISLR fiscal event evidence must be a reversal linked to the exact source event',()=>{
+test('ISLR reversal events are governed by the purchase or journal correction case, not standalone cases',()=>{
  const item={company_id:'co-1',entity_type:'ISLR_EVENT',entity_id:'islr-source'};
  const state={islrFiscalEvents:[
   {id:'islr-source',companyId:'co-1',kind:'ACCOUNT_CREDIT'},
-  {id:'islr-unrelated',companyId:'co-1',kind:'REVERSAL',reversalOfEventId:'another-source'},
   {id:'islr-reversal',companyId:'co-1',kind:'REVERSAL',reversalOfEventId:'islr-source'}
  ]};
- assert.equal(findLinkedCorrectionEvidence(state,item,'islr-reversal').id,'islr-reversal');
- assert.equal(findLinkedCorrectionEvidence(state,item,'islr-unrelated'),null);
+ assert.equal(findLinkedCorrectionEvidence(state,item,'islr-reversal'),null);
 });
 
 test('correction generators require one matching approved case and an independent executor',()=>{
