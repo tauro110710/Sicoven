@@ -8,7 +8,7 @@ import type { VatFiscalIncident } from '../types/vatFiscalIncidents';
 export const ReversionFiscalView: React.FC = () => {
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, addMovement, addPurchaseCreditNote,
-    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent
+    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -48,6 +48,12 @@ export const ReversionFiscalView: React.FC = () => {
   const [incidentPurchaseId, setIncidentPurchaseId] = useState('');
   const [incidentCreateReason, setIncidentCreateReason] = useState('');
   const [incidentCreating, setIncidentCreating] = useState(false);
+  const [bcvCorrectionOpen, setBcvCorrectionOpen] = useState(false);
+  const [bcvCorrectionRate, setBcvCorrectionRate] = useState(String(currentCompany.bcvRate || ''));
+  const [bcvCorrectionDate, setBcvCorrectionDate] = useState(today);
+  const [bcvCorrectionReason, setBcvCorrectionReason] = useState('');
+  const [bcvCorrectionWorkpaper, setBcvCorrectionWorkpaper] = useState('');
+  const [bcvCorrectionSaving, setBcvCorrectionSaving] = useState(false);
   const refreshAuditEvents = useCallback(async () => {
     setAuditLoading(true);
     try {
@@ -102,6 +108,23 @@ export const ReversionFiscalView: React.FC = () => {
     } catch (error) {
       setIncidentError(error instanceof Error ? error.message : 'No se pudo crear el expediente fiscal.');
     } finally { setIncidentCreating(false); }
+  };
+  const submitBcvRateCorrection = async () => {
+    if (bcvCorrectionSaving) return;
+    setBcvCorrectionSaving(true);
+    try {
+      await correctBcvRate({
+        newRate: Number(bcvCorrectionRate), effectiveDate: bcvCorrectionDate,
+        reason: bcvCorrectionReason, workpaperNote: bcvCorrectionWorkpaper
+      });
+      setBcvCorrectionOpen(false);
+      setBcvCorrectionReason('');
+      setBcvCorrectionWorkpaper('');
+      setFeedback({kind:'success', message:'La tasa BCV quedó corregida en SQLite y la solicitud/ejecución quedó registrada en auditoría.'});
+      await refreshAuditEvents();
+    } catch (error) {
+      setFeedback({kind:'error', message:error instanceof Error ? error.message : 'No se pudo corregir la tasa BCV.'});
+    } finally { setBcvCorrectionSaving(false); }
   };
   const submitFiscalIncidentEvent = async () => {
     if (!selectedIncidentId || incidentDecision.trim().length < 20 || incidentSaving) return;
@@ -615,6 +638,27 @@ export const ReversionFiscalView: React.FC = () => {
           })}
         </div>
         <p className="text-[11px] text-slate-500">Se muestran los últimos 200 eventos. El historial se almacena en SQLite y el reinicio operativo no lo elimina.</p>
+      </section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div><h2 className="text-base font-bold text-slate-900">Corrección de tasa BCV</h2><p className="text-xs text-slate-500">Tasa vigente: {formatBs(currentCompany.bcvRate)} Bs/USD · última fecha: {currentCompany.lastRateUpdate || 'sin fecha registrada'}</p></div>
+          <button type="button" onClick={()=>{setBcvCorrectionRate(String(currentCompany.bcvRate || ''));setBcvCorrectionDate(today);setBcvCorrectionOpen(value=>!value);}} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold">{bcvCorrectionOpen ? 'Cerrar' : 'Corregir tasa BCV'}</button>
+        </div>
+        {bcvCorrectionOpen && <div className="mt-3 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+          <label className="text-xs font-semibold text-slate-700">Nueva tasa Bs/USD
+            <input type="number" min="0.000001" step="0.000001" value={bcvCorrectionRate} onChange={event=>setBcvCorrectionRate(event.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
+          </label>
+          <label className="text-xs font-semibold text-slate-700">Fecha de vigencia
+            <input type="date" value={bcvCorrectionDate} onChange={event=>setBcvCorrectionDate(event.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
+          </label>
+          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Motivo de la corrección
+            <textarea value={bcvCorrectionReason} onChange={event=>setBcvCorrectionReason(event.target.value)} rows={2} placeholder="Explique por qué debe corregirse la tasa registrada…" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
+          </label>
+          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Papel de trabajo y evidencia
+            <textarea value={bcvCorrectionWorkpaper} onChange={event=>setBcvCorrectionWorkpaper(event.target.value)} rows={2} placeholder="Indique fuente BCV, soporte, tasa sustituida y comprobación…" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
+          </label>
+          <div className="sm:col-span-2"><button type="button" disabled={bcvCorrectionSaving || Number(bcvCorrectionRate)<=0 || bcvCorrectionReason.trim().length<10 || bcvCorrectionWorkpaper.trim().length<10} onClick={()=>void submitBcvRateCorrection()} className="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{bcvCorrectionSaving ? 'Guardando corrección…' : 'Confirmar y auditar corrección'}</button></div>
+        </div>}
       </section>
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
