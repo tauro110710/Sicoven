@@ -67,7 +67,7 @@ const isLinkedAnnualOpening = (entry: JournalEntry) =>
   entry.exerciseLink?.nextPeriodStartDate === entry.date &&
   /^\\d{4}-\\d{2}-\\d{2}$/.test(entry.date);
 const isAnnualOpening = (entry: JournalEntry, year: number) =>
-  isLinkedAnnualOpening(entry) && entry.exerciseLink?.nextPeriodStartDate?.slice(0, 4) === String(year);
+  isLinkedAnnualOpening(entry) && entry.date === String(year).padStart(4, '0') + '-01-01';
 const counterpartAmount = (
   item: JournalEntry['items'][number],
   side: 'credit' | 'debit',
