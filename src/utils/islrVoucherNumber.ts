@@ -15,8 +15,11 @@ export function formatIslrVoucherNumber(period: string, sequence: number, issueD
   const month = Number(period.slice(4, 6));
   if (month < 1 || month > 12) throw new Error('El período ISLR contiene un mes inválido.');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(issueDate) ||
-      !Number.isFinite(Date.parse(issueDate + 'T00:00:00')) ||
-      new Date(issueDate + 'T00:00:00').toISOString().slice(0, 10) !== issueDate) {
+      !(() => {
+        const [year, month, day] = issueDate.split('-').map(Number);
+        const parsed = new Date(Date.UTC(year, month - 1, day));
+        return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+      })()) {
     throw new Error('La fecha de emisión ISLR no es válida.');
   }
   if (issueDate.slice(0, 7).replace('-', '') !== period) {
