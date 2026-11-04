@@ -44,8 +44,8 @@ export function isBalanceSheetBalanced(
   const values = Object.values(totals);
   if (values.some(value => !Number.isFinite(value))) return false;
   return (
-    Math.abs(totals.totalAssetsBs - totals.totalLiabilitiesAndEquityBs) < toleranceBs &&
-    Math.abs(totals.totalAssetsUsd - totals.totalLiabilitiesAndEquityUsd) < toleranceUsd
+    Math.abs(totals.totalAssetsBs - totals.totalLiabilitiesAndEquityBs) <= toleranceBs &&
+    Math.abs(totals.totalAssetsUsd - totals.totalLiabilitiesAndEquityUsd) <= toleranceUsd
   );
 }
 
@@ -70,10 +70,10 @@ export function isTrialBalanceBalanced(
   const values = Object.values(totals);
   if (values.some(value => !Number.isFinite(value) || value < 0)) return false;
   return (
-    Math.abs(totals.totalDebitBs - totals.totalCreditBs) < toleranceBs &&
-    Math.abs(totals.debitBalancesBs - totals.creditBalancesBs) < toleranceBs &&
-    Math.abs(totals.totalDebitUsd - totals.totalCreditUsd) < toleranceUsd &&
-    Math.abs(totals.debitBalancesUsd - totals.creditBalancesUsd) < toleranceUsd
+    Math.abs(totals.totalDebitBs - totals.totalCreditBs) <= toleranceBs &&
+    Math.abs(totals.debitBalancesBs - totals.creditBalancesBs) <= toleranceBs &&
+    Math.abs(totals.totalDebitUsd - totals.totalCreditUsd) <= toleranceUsd &&
+    Math.abs(totals.debitBalancesUsd - totals.creditBalancesUsd) <= toleranceUsd
   );
 }
 
