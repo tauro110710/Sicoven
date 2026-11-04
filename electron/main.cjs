@@ -593,9 +593,7 @@ app.whenReady().then(async () => {
     const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     const state = row ? JSON.parse(row.state_json) : {};
     const collections = { SALE:'sales', PURCHASE:'purchases', JOURNAL_ENTRY:'journalEntries',
-      BANK_MOVEMENT:'bankStatementMovements', INVENTORY_MOVEMENT:'movements', VAT_VOUCHER:'vatVouchers',
-      ISLR_VOUCHER:'islrVouchers', VAT_DECLARATION:'vatWithholdingDeclarations', ISLR_EVENT:'islrFiscalEvents',
-      INVENTORY_PRODUCT:'products', BCV_RATE:'companies' };
+      INVENTORY_MOVEMENT:'movements', VAT_VOUCHER:'vatVouchers', ISLR_VOUCHER:'islrVouchers' };
     const companyId = String(input?.companyId || '');
     const existsCompany = Array.isArray(state.companies) && state.companies.some(x=>String(x.id)===companyId);
     const collection = state[collections[String(input?.entityType || '')]];
@@ -636,7 +634,7 @@ app.whenReady().then(async () => {
     if (!verifiedCaseSupport) {
       throw new Error('El expediente requiere al menos un soporte adjunto y verificado por un revisor antes de cerrar la ejecución.');
     }
-    return markCorrectionExecuted(db,{...input,evidenceRecordId:evidence.id,evidenceCollection:({SALE:'sales',PURCHASE:'purchases',JOURNAL_ENTRY:'journalEntries',BANK_MOVEMENT:'bankStatementMovements',INVENTORY_MOVEMENT:'movements',VAT_VOUCHER:'vatVouchers',ISLR_VOUCHER:'islrVouchers',VAT_DECLARATION:'vatWithholdingDeclarations',ISLR_EVENT:'islrFiscalEvents',INVENTORY_PRODUCT:'movements',BCV_RATE:'companies'})[item.entity_type]},actor);
+    return markCorrectionExecuted(db,{...input,evidenceRecordId:evidence.id,evidenceCollection:evidence.__evidenceCollection},actor);
   });
   ipcMain.handle('sicoven:correction-case-list', (_event, token, companyId) => {
     correctionActor(token);
