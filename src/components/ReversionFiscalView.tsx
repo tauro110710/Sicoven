@@ -88,6 +88,7 @@ export const ReversionFiscalView: React.FC = () => {
           result.entityType === source.entityType &&
           result.entityId === source.entityId &&
           result.correctionType === source.correctionType &&
+          result.correctionDocumentRef === source.correctionDocumentRef &&
           (!request.createdAt || !event.createdAt || event.createdAt >= request.createdAt);
       });
       return { request, completedBy };
