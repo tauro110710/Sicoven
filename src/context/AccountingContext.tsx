@@ -3489,8 +3489,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         occurredAt: draft.occurredAt,
         amountBs: Number(draft.amountBs),
         priorPaidBs,
-        bcvRate: Number(currentCompany.bcvRate),
-        bcvRateEffectiveDate: String(currentCompany.lastRateUpdate || ''),
         declaration,
         movements: paymentMovements,
         bankAccounts: bankAccounts.filter(item => item.companyId === currentCompany.id),
