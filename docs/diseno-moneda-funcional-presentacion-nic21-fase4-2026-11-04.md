@@ -186,12 +186,12 @@ Este añadido amplía los criterios de diseño; no implementa el motor NIC 21, n
 - Company admite historial opcional de expedientes `functionalCurrencyAssessments` y evaluaciones `exchangeabilityAssessments`; la ausencia de datos sigue significando pendiente, sin moneda por defecto.
 - Configuración permite registrar un expediente NIC 21 en borrador o aprobarlo con moneda funcional, moneda de presentación, fechas, preparador/aprobador, entorno económico, factores primarios y referencias documentales.
 - La validación permite borradores incompletos, pero impide aprobar sin fechas coherentes, juicio profesional, factores y evidencia.
-- Se incorporó un validador de convertibilidad que exige fecha, propósito, monto, mecanismo legal, evidencia y aprobación; para convertible exige acceso legal y efectivo, monto suficiente y tasa spot accesible; para no convertible exige tasa estimada, metodología y evidencia.
+- Configuración incorpora captura de convertibilidad por fecha, propósito, monto, mecanismo legal, acceso, evidencia y aprobación; para convertible exige acceso legal y efectivo, monto suficiente y tasa spot accesible; para no convertible exige tasa estimada, metodología y evidencia. El validador aplica estos bloqueos.
 - El historial se agrega sin reemplazar evaluaciones previas. No se conectó a conversiones ni modifica asientos.
 
 ### Pendiente
 
-- Construir la interfaz para capturar y aprobar las evaluaciones de convertibilidad por fecha y propósito.
+- Validar la interfaz de captura y aprobación de convertibilidad con expedientes reales y pruebas de restauración.
 - Verificar persistencia/backup/restore en SQLite con registros históricos y nuevos expedientes.
 - Implementar motor de conversión NIC 21 separado de la presentación bimonetaria, con tasas históricas y diferencias de conversión diferenciadas del resultado cambiario.
 - Analizar NIC 29 conjuntamente según el marco VEN-NIF efectivamente adoptado.
