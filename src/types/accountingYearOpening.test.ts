@@ -99,6 +99,38 @@ test('rechaza asientos históricos con diferencias que exceden la tolerancia est
   }), /no cuadra/);
 });
 
+test('uses the latest linked annual opening as the balance carry-forward boundary', () => {
+  const opening2025 = entry('opening-2025', '2025-01-01', [
+    line('1.1.1', 100, 0, 1, 0), line('3.1.1', 0, 100, 0, 1)
+  ]);
+  opening2025.type = 'APERTURA';
+  opening2025.exerciseLink = {
+    priorPeriodStartDate: '2024-01-01', priorPeriodEndDate: '2024-12-31', nextPeriodStartDate: '2025-01-01'
+  };
+  const priorSale = entry('sale-2025', '2025-06-01', [
+    line('1.1.1', 50, 0, 0.5, 0), line('4.1.1', 0, 50, 0, 0.5)
+  ]);
+  const opening2026 = entry('opening-2026', '2026-01-01', [
+    line('1.1.1', 150, 0, 1.5, 0), line('3.1.1', 0, 150, 0, 1.5)
+  ]);
+  opening2026.type = 'APERTURA';
+  opening2026.exerciseLink = {
+    priorPeriodStartDate: '2025-01-01', priorPeriodEndDate: '2025-12-31', nextPeriodStartDate: '2026-01-01'
+  };
+  const currentExpense = entry('expense-2026', '2026-06-01', [
+    line('6.1.1', 20, 0, 0.2, 0), line('1.1.1', 0, 20, 0, 0.2)
+  ]);
+  const items = buildOpeningEntryItems({
+    companyId: 'co-1', periodStartDate: '2026-01-01', periodEndDate: '2026-12-31',
+    openingDate: '2027-01-01', accounts, journalEntries: [opening2025, priorSale, opening2026, currentExpense],
+    retainedEarningsAccountCode: '3.1.1'
+  });
+  assert.equal(items.find(item => item.accountCode === '1.1.1')?.debitBs, 130);
+  assert.equal(items.find(item => item.accountCode === '1.1.1')?.debitUsd, 1.3);
+  assert.equal(items.find(item => item.accountCode === '3.1.1')?.creditBs, 130);
+  assert.equal(items.find(item => item.accountCode === '3.1.1')?.creditUsd, 1.3);
+});
+
 test('no vuelve a trasladar ingresos y gastos de ejercicios anteriores al resultado del nuevo período', () => {
   const journal = [
     entry('prior-income', '2025-12-30', [
