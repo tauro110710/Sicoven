@@ -204,6 +204,12 @@ export interface PurchaseRecord {
   supplierDebitNoteReview?: SupplierDebitNoteReview;
   /** Enlace inmutable de una nota de crédito de proveedor a su factura y movimientos físicos. */
   originalPurchaseId?: string;
+  affectedInvoiceDate?: string;
+  affectedInvoiceControlNumber?: string;
+  affectedInvoiceTotalAmountBs?: number;
+  affectedInvoiceTotalAmountUsd?: number;
+  fiscalEmissionMedium?: 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY';
+  sameMediumAsOriginal?: boolean;
   creditNoteLines?: PurchaseCreditNoteLine[];
   netPayableReductionBs?: number;
   netPayableReductionUsd?: number;
@@ -318,6 +324,12 @@ export interface SaleRecord {
   journalEntryId?: string;
   /** Vínculo append-only de NC/ND de cliente con la factura que corrige. */
   originalSaleId?: string;
+  affectedInvoiceDate?: string;
+  affectedInvoiceControlNumber?: string;
+  affectedInvoiceTotalAmountBs?: number;
+  affectedInvoiceTotalAmountUsd?: number;
+  fiscalEmissionMedium?: 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY';
+  sameMediumAsOriginal?: boolean;
   netReceivableAdjustmentBs?: number;
   netReceivableAdjustmentUsd?: number;
   exemptAmountUsd?: number;
