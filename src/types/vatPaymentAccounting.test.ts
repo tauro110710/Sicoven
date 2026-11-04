@@ -31,7 +31,8 @@ const build=(amountBs:number,bankUsd:number,d=declaration(),priorPaidBs=0,moves=
  buildVatPaymentAccountingPlan({occurredAt:'2026-10-20',amountBs,priorPaidBs,declaration:d,movements:moves,bankAccounts:banks,accounts:chart});
 
 test('rejects bank movement USD equivalents inconsistent with the stored BCV rate',()=>{ assert.throws(()=>build(100,1,declaration(),0,[{...movement('m1','b1',100,1),bcvRate:250}]),/no concilia en Bs. y USD/); });
-test('rejects bank payment movements without a BCV snapshot effective on the payment date',()=>{ assert.throws(()=>build(100,1,declaration(),0,[{...movement('m1','b1',100,1),bcvRateEffectiveDate:'2026-10-19'}]),/misma fecha del enteramiento/); });
+test('rejects bank payment movements with a BCV snapshot effective after the payment date',()=>{ assert.throws(()=>build(100,1,declaration(),0,[{...movement('m1','b1',100,1),bcvRateEffectiveDate:'2026-10-21'}]),/vigente a la fecha del enteramiento/); });
+test('accepts a prior official BCV effective date for a weekend bank movement',()=>{ const p=build(100,1,declaration(),0,[{...movement('m1','b1',100,1),date:'2026-10-20',bcvRateEffectiveDate:'2026-10-19'}]); assert.equal(p.amountBs,100); });
 test('rejects bank movements dated differently from the VAT payment',()=>{ assert.throws(()=>build(100,1,declaration(),0,[{...movement('m1','b1',100,1),date:'2026-10-19'}]),/misma fecha del enteramiento/); });
 test('rejects mixed historical BCV rates in one VAT payment',()=>{ assert.throws(()=>build(100,1,declaration(),0,[movement('m1','b1',50,0.5),{...movement('m2','b2',50,50/251),bcvRate:251}]),/tasas BCV históricas distintas/); });
 test('uses the historical BCV snapshot stored on the selected bank movement',()=>{ const p=build(100,0.9); assert.equal(p.bcvRate,100 / 0.9); });
