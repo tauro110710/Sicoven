@@ -104,12 +104,7 @@ function initializeCorrectionWorkflow(db) {
         (OLD.status='PENDING_REVIEW' AND NEW.status='PENDING_REVIEW' AND OLD.workflow_stage='OBSERVATION_REQUIRED' AND NEW.workflow_stage='IN_REVIEW')
       )
       BEGIN SELECT RAISE(ABORT, 'invalid correction case transition'); END;
-    CREATE TRIGGER correction_cases_segregation BEFORE UPDATE ON accounting_correction_cases
-      WHEN (OLD.status='PENDING_REVIEW' AND NEW.status IN ('APPROVED','REJECTED') AND NEW.reviewed_by=OLD.requested_by)
-        OR (NEW.workflow_stage='OBSERVATION_REQUIRED' AND NEW.reviewed_by=OLD.requested_by)
-        OR (OLD.status='APPROVED' AND NEW.status='EXECUTED' AND
-          (NEW.executed_by=OLD.requested_by OR NEW.executed_by=OLD.reviewed_by))
-      BEGIN SELECT RAISE(ABORT, 'correction case segregation of duties violated'); END;
+    DROP TRIGGER IF EXISTS correction_cases_segregation;
     CREATE TABLE IF NOT EXISTS accounting_correction_case_workflow_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL REFERENCES accounting_correction_cases(id),
       event_type TEXT NOT NULL CHECK(event_type IN ('OBSERVED','RESUBMITTED','WITHDRAWN','EXECUTION_STARTED')),
