@@ -171,7 +171,7 @@ describe('cash flow statement', () => {
       line('1.1.1.01', 'Caja principal', 100, 0, 10, 0),
       line('3.1', 'Capital social', 0, 100, 0, 10)
     ], { priorPeriodStartDate: '2025-01-01', priorPeriodEndDate: '2025-12-31', nextPeriodStartDate: '2026-01-01' });
-    const reversal = entry('reversal-opening-2026', '2026-01-02', 'REVERSO', [
+    const reversal = entry('reversal-opening-2026', '2026-01-02', 'AJUSTE', [
       line('3.1', 'Capital social', 100, 0, 10, 0),
       line('1.1.1.01', 'Caja principal', 0, 100, 0, 10)
     ]);
