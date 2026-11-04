@@ -16,6 +16,7 @@ test('workflow enforces preparer-reviewer-executor segregation and append-only e
   assert.equal(approved.status,'APPROVED');
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Se aplicó el documento correctivo.'},admin(2,'revisor')),/distinto del solicitante y del aprobador/);
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'FAC-001',reason:'Se intenta reutilizar la referencia original.'},admin(3,'ejecutor')),/misma del documento original/);
+  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-002',reason:'La referencia no coincide con el documento solicitado.'},admin(3,'ejecutor')),/no coincide con el documento correctivo/);
   const executed=markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Se aplicó el documento correctivo.',evidenceRecordId:'credit-note-1',evidenceCollection:'sales'},admin(3,'ejecutor'));
   assert.equal(executed.status,'EXECUTED');
   assert.deepEqual(executed.events.map(e=>e.event_type),['REQUESTED','APPROVED','EXECUTED']);
