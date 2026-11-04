@@ -1,12 +1,9 @@
 name: SICOVEN Desktop Validation
 
+# Manual deep validation only. CI and the Windows installer workflow
+# already cover tests, TypeScript, renderer build, and production asset checks.
+# Avoid duplicate automatic Windows-minute consumption.
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
