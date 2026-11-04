@@ -11,7 +11,7 @@ function setup() {
   initializeCorrectionWorkflow(db);
   return db;
 }
-const actor={id:7,username:'contador',role:'admin'};
+const actor={id:7,username:'contador',role:'contador'};
 const input={companyId:'company-1',entityType:'SALE',entityId:'sale-1',correctionType:'ANULACION',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001',reason:'Error en la factura original.',workpaperNote:''};
 test('a correction is immediately available without approval or workpaper',()=>{
   const db=setup();try{
@@ -92,4 +92,13 @@ test('corrective evidence requires exact source linkage and company',()=>{
     assert.equal(findLinkedCorrectionEvidence(state,item,'NC-001').id,'nc-1');
     assert.equal(findLinkedCorrectionEvidence(state,item,'NC-OTHER'),null);
   }finally{db.close();}
+});
+
+test('the administrator role cannot enter or execute correction cases',()=>{
+  const db=setup();
+  const administrator={id:8,username:'admin',role:'admin'};
+  try {
+    assert.throws(()=>registerCorrectionRequest(db,input,administrator),/requiere una sesión autenticada del contador/);
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM accounting_correction_cases').get().n,0);
+  } finally { db.close(); }
 });
