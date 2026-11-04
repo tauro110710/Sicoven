@@ -14,7 +14,9 @@ import {
 import { Account, AccountType } from '../../types/accounting';
 
 export const CatalogoView: React.FC = () => {
-  const { accounts, addAccount } = useAccounting();
+  const { accounts, addAccount, waitForPersistence } = useAccounting();
+  const savingRef = React.useRef(false);
+  const [saving, setSaving] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
@@ -36,10 +38,13 @@ export const CatalogoView: React.FC = () => {
     return true;
   });
 
-  const handleCreateAccount = (e: React.FormEvent) => {
+  const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!code.trim() || !name.trim()) return;
 
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     try {
       const level = code.trim().split('.').length;
       addAccount({
@@ -49,12 +54,16 @@ export const CatalogoView: React.FC = () => {
         level,
         isMovement
       });
+      await waitForPersistence();
       setIsModalOpen(false);
       setCode('');
       setName('');
       setAccountError(null);
     } catch (error) {
       setAccountError(error instanceof Error ? error.message : 'No se pudo validar la cuenta contable.');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
 
@@ -293,16 +302,18 @@ export const CatalogoView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer"
+                  disabled={saving}
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer disabled:opacity-40"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
+                  disabled={saving}
                   className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
-                  Agregar al Catálogo
+                  {saving ? "Confirmando SQLite..." : "Agregar al Catálogo"}
                 </button>
               </div>
             </form>
