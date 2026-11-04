@@ -89,6 +89,7 @@ function initializeCorrectionWorkflow(db) {
     CREATE TRIGGER IF NOT EXISTS correction_case_events_no_delete BEFORE DELETE ON accounting_correction_case_events
       BEGIN SELECT RAISE(ABORT, 'correction case events are append-only'); END;
   `);
+  const migrateCorrectionCaseSchema = db.transaction(() => {
   const caseColumns = new Set(db.prepare('PRAGMA table_info(accounting_correction_cases)').all().map(column => String(column.name)));
   if (!caseColumns.has('workflow_stage')) {
     db.exec("ALTER TABLE accounting_correction_cases ADD COLUMN workflow_stage TEXT NOT NULL DEFAULT 'IN_REVIEW'");
@@ -129,6 +130,8 @@ function initializeCorrectionWorkflow(db) {
     CREATE TRIGGER IF NOT EXISTS correction_case_workflow_events_no_delete BEFORE DELETE ON accounting_correction_case_workflow_events
       BEGIN SELECT RAISE(ABORT, 'correction workflow events are append-only'); END;
   `);
+  });
+  migrateCorrectionCaseSchema();
   const workflowEventSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='accounting_correction_case_workflow_events'").get();
   if (workflowEventSchema && !String(workflowEventSchema.sql || '').includes("'WITHDRAWN'")) {
     const migrateWorkflowEventSchema = db.transaction(() => db.exec(`
