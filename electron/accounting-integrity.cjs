@@ -683,8 +683,11 @@ function validateSaleCorrectionNotes(previousState, nextState) {
     if (!source || source.isCancelled || source.paymentTerm !== 'CREDITO' ||
         Number(source.vatWithheldBs || 0) > 0 || String(source.retentionVoucherNumber || '').trim() ||
         Number(source.igtfAmountBs || 0) > 0 || source.igtfApplicable === true ||
-        note.paymentTerm !== 'CREDITO' || normalize(note.affectedInvoiceNumber) !== normalize(source.invoiceNumber) ||
+        note.paymentTerm !== 'CREDITO' || normalize(note.invoiceNumber) !== normalize(number) ||
+        (isCredit ? normalize(note.creditNoteNumber) : normalize(note.debitNoteNumber)) !== normalize(number) ||
+        normalize(note.affectedInvoiceNumber) !== normalize(source.invoiceNumber) ||
         normalize(note.customerRif) !== normalize(source.customerRif) ||
+        normalize(note.customerName) !== normalize(source.customerName) ||
         !String(note.customerName || '').trim() || !number || !String(note.controlNumber || '').trim() ||
         String(note.correctionReason || '').trim().length < 10 ||
         String(note.correctionWorkpaper || '').trim().length < 10 ||
@@ -696,7 +699,11 @@ function validateSaleCorrectionNotes(previousState, nextState) {
         !close(vat, expectedVat) || !close(total, expectedTotal) ||
         !close(note.totalAmountUsd, totalUsd, 0.0001) ||
         !close(note.taxableBaseUsd, round6(base / rate), 0.0001) ||
+        !close(note.exemptAmountUsd, round6(exempt / rate), 0.0001) ||
         !close(note.vatAmountUsd, vatUsd, 0.0001) ||
+        !close(note.taxRate, source.taxRate, 0.000001) ||
+        Number(note.vatWithheldBs || 0) !== 0 || Number(note.igtfAmountBs || 0) !== 0 ||
+        Number(note.igtfAmountUsd || 0) !== 0 ||
         !close(note.netReceivableAdjustmentBs, total) ||
         !close(note.netReceivableAdjustmentUsd, totalUsd, 0.0001) ||
         !journalMatches) {
