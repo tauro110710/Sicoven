@@ -708,8 +708,8 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
     <div className="space-y-5">
       <section className="rounded-2xl border border-indigo-200 bg-white p-4 sm:p-6 space-y-4">
         <div className="flex items-center gap-3"><ShieldCheck className="h-6 w-6 text-indigo-700"/><div><h2 className="font-bold text-slate-900">Centro de Correcciones</h2><p className="text-xs text-slate-500">Busque el asiento o documento original y ejecute aquí la corrección compatible. No se crea una solicitud ni un expediente previo.</p></div></div>
-        <label className="block text-xs font-semibold text-slate-700">Buscar asiento, venta, compra o movimiento de Kardex
-          <input value={requestSearch} onChange={e=>setRequestSearch(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Factura, asiento, referencia, proveedor, cliente o artículo…"/>
+        <label className="block text-xs font-semibold text-slate-700">Buscar asiento, venta, compra, Kardex, banco o auxiliar
+          <input value={requestSearch} onChange={e=>setRequestSearch(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Factura, asiento, banco, cobro, pago, proveedor, cliente o artículo…"/>
         </label>
         <label className="block text-xs font-semibold text-slate-700">Registro original
           <select value={requestEntityId ? requestEntityType+'::'+requestEntityId : ''} onChange={e=>{
@@ -729,7 +729,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
             if (purchase) {
               const sourceEntry=journalEntries.find(item=>item.id===purchase.journalEntryId && item.companyId===currentCompany.id);
               setSupplierDebitTaxRate(String(purchase.taxRate ?? 16));
-              setSupplierDebitAccountCode(accounts.find(item=>item.isMovement && ['COSTOS','GASTOS'].includes(item.type))?.code || '');
+              setSupplierDebitAccountCode('');
               setSupplierDebitVatAccountCode('');
               setSupplierDebitPayableAccountCode(sourceEntry?.items.find(item=>item.accountCode.startsWith('2.1.1.') && Number(item.creditBs)>0)?.accountCode || '');
               setSupplierDebitCause('ADDITIONAL_EXPENSE');
@@ -810,7 +810,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
                   <select value={supplierDebitCause} onChange={e=>{
                     const nextCause=e.target.value as typeof supplierDebitCause;
                     setSupplierDebitCause(nextCause);
-                    if(nextCause==='FINANCING_CHARGE') setSupplierDebitAccountCode(accounts.find(item=>item.isMovement && item.type==='GASTOS')?.code || '');
+                    setSupplierDebitAccountCode('');
                   }} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
                     <option value="PRICE_DIFFERENCE">Diferencia de precio</option>
                     <option value="ADDITIONAL_EXPENSE">Gasto adicional</option>
