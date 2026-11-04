@@ -43,7 +43,7 @@ export function validateBankMovementFxSnapshot(input: {
   }
   const rateDate = String(input.bcvRateEffectiveDate || '');
   const parsedRateDate = new Date(rateDate + 'T00:00:00.000Z');
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(rateDate) ||
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(rateDate) ||
       !Number.isFinite(parsedRateDate.getTime()) ||
       parsedRateDate.toISOString().slice(0, 10) !== rateDate ||
       rateDate > input.date) {
@@ -55,7 +55,7 @@ export function validateBankMovementFxSnapshot(input: {
   }
 }
 
-/** Requires a bank statement line to reconcile in both ledger currencies, not just the bank account's display currency. */
+/** Requires a bank statement line to reconcile in both Bs and USD, not just the bank account's display currency. */
 export function matchesBankStatementDualCurrency(input: {
   movementType: 'DEBIT' | 'CREDIT';
   amountBs: number;
