@@ -597,7 +597,7 @@ app.whenReady().then(async () => {
     const companyId = String(input?.companyId || '');
     const existsCompany = Array.isArray(state.companies) && state.companies.some(x=>String(x.id)===companyId);
     const collection = state[collections[String(input?.entityType || '')]];
-    const source = Array.isArray(collection) && collection.find(x=>String(x.id)===String(input?.entityId || '') && String(x.companyId || companyId)===companyId);
+    const source = Array.isArray(collection) && collection.find(x=>String(x.id)===String(input?.entityId || '') && String(x.companyId)===companyId);
     if (!existsCompany || !source) throw new Error('La empresa o el registro origen no existe en SQLite.');
     const sourceReference = String(input?.sourceDocumentRef || '').trim();
     const knownReferences = [source.id,source.documentNumber,source.invoiceNumber,source.number,source.opNumber,source.entryNumber,
