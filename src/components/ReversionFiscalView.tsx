@@ -8,7 +8,7 @@ import type { VatFiscalIncident } from '../types/vatFiscalIncidents';
 export const ReversionFiscalView: React.FC = () => {
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, addMovement, addPurchaseCreditNote,
-    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, recordVatFiscalIncidentEvent
+    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -45,6 +45,9 @@ export const ReversionFiscalView: React.FC = () => {
   const [incidentDecision, setIncidentDecision] = useState('');
   const [incidentExternalReference, setIncidentExternalReference] = useState('');
   const [incidentSaving, setIncidentSaving] = useState(false);
+  const [incidentPurchaseId, setIncidentPurchaseId] = useState('');
+  const [incidentCreateReason, setIncidentCreateReason] = useState('');
+  const [incidentCreating, setIncidentCreating] = useState(false);
   const refreshAuditEvents = useCallback(async () => {
     setAuditLoading(true);
     try {
@@ -73,6 +76,27 @@ export const ReversionFiscalView: React.FC = () => {
     }
   }, [listVatFiscalIncidents]);
   useEffect(() => { void refreshFiscalIncidents(); }, [refreshFiscalIncidents]);
+  const submitCreateFiscalIncident = async () => {
+    const note = purchases.find(item => item.id === incidentPurchaseId && item.companyId === currentCompany.id && item.documentType === '03');
+    if (!note || incidentCreateReason.trim().length < 10 || incidentCreating) return;
+    const original = purchases.find(item => item.id === note.originalPurchaseId && item.companyId === currentCompany.id);
+    if (!original) { setIncidentError('La nota no conserva una factura original verificable.'); return; }
+    const voucher = (useAccounting as unknown as { vatVouchers?: any }).vatVouchers;
+    const affectedVoucher = Array.isArray(voucher) ? voucher.find(item => item.companyId === currentCompany.id && item.purchaseRecordId === original.id) : undefined;
+    setIncidentCreating(true);
+    try {
+      await createVatFiscalIncident({
+        purchaseId: note.id, vatVoucherId: affectedVoucher?.id,
+        reason: incidentCreateReason.trim(), detectedAt: today
+      });
+      setIncidentPurchaseId('');
+      setIncidentCreateReason('');
+      await refreshFiscalIncidents();
+      setFeedback({kind:'success', message:'Incidencia fiscal creada y vinculada a la nota correctiva. El expediente permanece pendiente de revisión y actuación documentada.'});
+    } catch (error) {
+      setIncidentError(error instanceof Error ? error.message : 'No se pudo crear el expediente fiscal.');
+    } finally { setIncidentCreating(false); }
+  };
   const submitFiscalIncidentEvent = async () => {
     if (!selectedIncidentId || incidentDecision.trim().length < 10 || incidentSaving) return;
     setIncidentSaving(true);
@@ -582,6 +606,18 @@ export const ReversionFiscalView: React.FC = () => {
           <button type="button" onClick={() => void refreshFiscalIncidents()} disabled={incidentsLoading} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold disabled:opacity-50">{incidentsLoading ? 'Actualizando…' : 'Actualizar expedientes'}</button>
         </div>
         {incidentError && <p role="alert" className="mb-2 rounded-lg bg-rose-50 p-2 text-xs text-rose-800">{incidentError}</p>}
+        <div className="mb-3 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+          <label className="text-xs font-semibold text-slate-700">Nota de crédito de proveedor afectada
+            <select value={incidentPurchaseId} onChange={event=>setIncidentPurchaseId(event.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
+              <option value="">Seleccionar NC registrada…</option>
+              {purchases.filter(item=>item.companyId===currentCompany.id && item.documentType==='03' && item.originalPurchaseId).map(item=><option key={item.id} value={item.id}>{item.creditNoteNumber || item.invoiceNumber} · {item.affectedInvoiceNumber}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-slate-700">Motivo de revisión fiscal
+            <input value={incidentCreateReason} onChange={event=>setIncidentCreateReason(event.target.value)} placeholder="Explique qué comprobante o período debe rectificarse…" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
+          </label>
+          <div className="sm:col-span-2"><button type="button" disabled={incidentCreating || !incidentPurchaseId || incidentCreateReason.trim().length<10} onClick={()=>void submitCreateFiscalIncident()} className="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{incidentCreating ? 'Creando expediente…' : 'Crear expediente fiscal de esta NC'}</button></div>
+        </div>
         {fiscalIncidents.length === 0 ? <p className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">{incidentsLoading ? 'Consultando SQLite…' : 'No hay incidencias fiscales registradas para esta empresa.'}</p> :
           <div className="space-y-3">{fiscalIncidents.map(incident => <article key={incident.id} className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 text-xs space-y-1">
             <div className="flex flex-wrap items-center justify-between gap-2"><strong>{incident.documentType} · {incident.documentNumber}</strong><span className="rounded bg-amber-100 px-2 py-1 font-semibold text-amber-900">{incident.status} · pendiente de cierre</span></div>
