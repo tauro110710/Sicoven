@@ -230,6 +230,6 @@ No declarar completa esta capacidad hasta que cada tipo documental con efecto co
 
 ### Límites expresos de esta entrega
 - El nuevo formulario constituye una bandeja de entrada auditable, no un motor completo de expedientes con estados transicionales, aprobador distinto del preparador, matriz de materialidad ni doble autorización.
-- El ID interno del origen es capturado por el operador y todavía no se valida automáticamente contra la colección específica seleccionada. Esta validación debe añadirse antes de permitir ejecución.
+- Electron valida ahora que el ID interno exista en la colección correspondiente y pertenezca a la empresa activa antes de registrar el evento. La validación de existencia reduce referencias inventadas o cruzadas entre empresas; no sustituye la evaluación de dependencias y efectos contables del flujo especializado.
 - La ejecución de cada clase documental continúa dependiendo de su flujo especializado. La solicitud no habilita por sí sola edición, anulación, NC/ND, rectificación fiscal ni reversión de auxiliares.
 - No se declara completa la capacidad ni se afirma que build/pruebas estén verdes hasta ejecutar pruebas de escritorio y revisar los resultados.
