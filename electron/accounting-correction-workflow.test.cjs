@@ -122,6 +122,7 @@ test('observation returns the case to its requester and resubmission restarts in
   assert.deepEqual(resubmitted.events.map(e=>e.event_type),['REQUESTED','OBSERVED','RESUBMITTED']);
   const approved=reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Se verificaron los soportes nuevos y la conciliación.'},admin(3,'revisor-2'));
   assert.equal(approved.workflow_stage,'READY_FOR_EXECUTION');
+  requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(4,'ejecutor'));
   const executed=markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Documento correctivo aplicado y conciliado.',evidenceRecordId:'credit-note-1',evidenceCollection:'sales'},admin(4,'ejecutor'));
   assert.equal(executed.workflow_stage,'COMPLETED');
   assert.deepEqual(executed.events.map(e=>e.event_type),['REQUESTED','OBSERVED','RESUBMITTED','APPROVED','EXECUTION_STARTED','EXECUTED']);
