@@ -323,6 +323,14 @@ function persistAccountingSnapshot(db, state, actor = null) {
     const oldCompanies = new Map((Array.isArray(priorState.companies) ? priorState.companies : []).map(company => [String(company.id), company]));
     for (const company of (Array.isArray(state.companies) ? state.companies : [])) {
       const oldCompany = oldCompanies.get(String(company.id));
+      if (oldCompany && Number(oldCompany.bcvRate) !== Number(company.bcvRate)) {
+        auditInsert.run('company_bcv_rate_updated', JSON.stringify({
+          companyId: company.id, companyName: company.name,
+          previousRate: Number(oldCompany.bcvRate), newRate: Number(company.bcvRate),
+          effectiveDate: company.lastRateUpdate || null,
+          actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null
+        }));
+      }
       if (company.closedThroughDate && company.closedThroughDate !== oldCompany?.closedThroughDate) {
         auditInsert.run('accounting_period_closed', JSON.stringify({
           companyId: company.id, companyName: company.name,
