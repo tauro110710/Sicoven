@@ -45,7 +45,7 @@ export function validateBankMovementFxSnapshot(input: {
     throw new Error('La tasa BCV debe corresponder a la fecha del movimiento bancario. Actualice o registre la tasa histórica antes de importar.');
   }
   if (Math.abs(Math.round(Number(input.amountBs) * 100) / 100 -
-      Math.round(Number(input.amountUsd) * Number(input.bcvRate) * 100) / 100) > 0.02) {
+      Math.round(Number(input.amountUsd) * Number(input.bcvRate) * 100) / 100) > 0.01) {
     throw new Error('Los importes Bs. y USD del movimiento no concilian con la tasa BCV efectiva en esa fecha.');
   }
 }
