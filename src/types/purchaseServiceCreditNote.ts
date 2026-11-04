@@ -48,6 +48,9 @@ export function calculatePurchaseServiceCreditNote(request: PurchaseServiceCredi
   if (!['CREDITO', 'CONTADO'].includes(purchase.paymentTerm || '')) {
     throw new Error('La modalidad de la compra no permite determinar el efecto sobre CxP o anticipo del proveedor.');
   }
+  if (!isValidIsoDate(purchase.invoiceDate) || !String(purchase.invoiceNumber || '').trim() || !String(purchase.controlNumber || '').trim() || Number(purchase.totalAmountBs || 0) <= 0) {
+    throw new Error('La factura original debe conservar fecha, número, control y monto para referenciar legalmente la NC.');
+  }
   if (!isValidIsoDate(request.noteDate) || request.noteDate < purchase.invoiceDate) {
     throw new Error('La fecha de la NC debe ser válida y no anterior a la factura original.');
   }
