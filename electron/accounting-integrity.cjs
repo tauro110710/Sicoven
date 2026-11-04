@@ -1295,6 +1295,12 @@ function validateAccountingSnapshot(previousState, nextState) {
     if (!original || original.isCancelled || !isValidIsoDate(original.invoiceDate) || !isValidIsoDate(note.invoiceDate) ||
         normalizeRif(note.supplierRif) !== normalizeRif(original.supplierRif) ||
         note.affectedInvoiceNumber !== original.invoiceNumber || note.invoiceDate < original.invoiceDate ||
+        note.affectedInvoiceDate !== original.invoiceDate ||
+        normalizeDocument(note.affectedInvoiceControlNumber) !== normalizeDocument(original.controlNumber) ||
+        Math.abs(Number(note.affectedInvoiceTotalAmountBs) - Number(original.totalAmountBs)) > 0.02 ||
+        Math.abs(Number(note.affectedInvoiceTotalAmountUsd) - Number(original.totalAmountUsd)) > 0.0001 ||
+        !['DIGITAL', 'FISCAL_MACHINE', 'CONTINGENCY'].includes(note.fiscalEmissionMedium) ||
+        note.sameMediumAsOriginal !== true ||
         (company?.closedThroughDate && note.invoiceDate <= company.closedThroughDate) ||
         duplicateNoteNumber ||
         !note.creditNoteNumber || !note.controlNumber || String(note.notes || '').trim().length < 10 ||
