@@ -219,8 +219,7 @@ function registerCorrectionRequest(db, input, actor) {
       (id,company_id,entity_type,entity_id,correction_type,source_ref,correction_ref,reason,workpaper,status,workflow_stage,requested_by,requested_by_name,reviewed_by,reviewed_by_name,review_reason,created_at,reviewed_at)
       VALUES(?,?,?,?,?,?,?,?,?,'APPROVED','READY_FOR_EXECUTION',?,?,NULL,NULL,'Ejecución directa; no requiere revisión humana.',?,NULL)`).run(id,String(input.companyId),String(input.entityType),String(input.entityId),
       String(input.correctionType),String(input.sourceDocumentRef),String(input.correctionDocumentRef || ''),reason,workpaperNote,
-      Number(actor.id),String(actor.username || ''),Number(actor.id),String(actor.username || ''),
-      'Habilitada para ejecución directa por el contador.',at,at);
+      Number(actor.id),String(actor.username || ''),at);
     appendEvent(db, tx, {id,type:'REQUESTED',actor,reason,metadata:{companyId:String(input.companyId),entityType:String(input.entityType),entityId:String(input.entityId)},at});
     appendEvent(db, tx, {id,type:'APPROVED',actor,reason:'Habilitada automáticamente para ejecución directa; no requiere revisión ni aprobación.',metadata:{automatic:true,directExecution:true},at});
   });
