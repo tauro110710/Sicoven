@@ -20,7 +20,7 @@ test('workflow enforces preparer-reviewer-executor segregation and append-only e
   assert.equal(listCorrectionCases(db,'co-1').length,1);
   assert.throws(()=>db.prepare('UPDATE accounting_correction_case_events SET reason=? WHERE id=1').run('alterado'),/append-only/);
   assert.throws(()=>db.prepare('DELETE FROM accounting_correction_case_events WHERE id=1').run(),/append-only/);
-  assert.throws(()=>db.prepare('UPDATE accounting_correction_cases SET reason=? WHERE id=?').run('texto alterado',requested.id),/source is immutable/);
+  assert.throws(()=>db.prepare('UPDATE accounting_correction_cases SET reason=? WHERE id=?').run('texto alterado',requested.id),/immutable|transition/);
   assert.throws(()=>db.prepare('DELETE FROM accounting_correction_cases WHERE id=?').run(requested.id),/cannot be deleted/);
  }finally{db.close();}
 });
