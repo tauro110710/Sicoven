@@ -2759,7 +2759,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id,
           entityId: source.id, correctionType: 'PURCHASE_DEBIT_NOTE',
           sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: draft.debitNoteNumber,
-          reason: draft.reason, workpaperNote: draft.fiscalReviewNote
+          reason: draft.reason, workpaperNote: draft.fiscalReviewNote,
+          fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal
         });
         if (!window.sicovenStore?.save) {
           throw new Error('No se puede confirmar la ND: SQLite local no está disponible. No se modificó el estado contable.');
@@ -2798,7 +2799,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             eventType: 'accounting_correction_executed', entityType: 'PURCHASE', companyId: currentCompany.id,
             entityId: source.id, correctionType: 'PURCHASE_DEBIT_NOTE',
             sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: draft.debitNoteNumber,
-            reason: draft.reason, workpaperNote: draft.fiscalReviewNote, journalEntryId: journal.id
+            reason: draft.reason, workpaperNote: draft.fiscalReviewNote,
+            fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal,
+            journalEntryId: journal.id
           });
         } catch (auditError) {
           throw new Error('La ND quedó guardada en SQLite, pero falta el evento final de auditoría. No repita el documento. Asiento: ' + journal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
