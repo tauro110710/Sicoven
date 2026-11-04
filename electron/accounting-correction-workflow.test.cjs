@@ -174,8 +174,8 @@ test('execution cannot be marked complete without exact evidence identity and co
   const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
   reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Revisión completa con soportes suficientes.'},admin(2,'revisor'));
   requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(1,'contador'));
-  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Documento correctivo aplicado y conciliado.'},admin(3,'ejecutor')),/ID y la colección exacta/);
-  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Documento correctivo aplicado y conciliado.',evidenceRecordId:'credit-note-1',evidenceCollection:'purchases'},admin(3,'ejecutor')),/ID y la colección exacta/);
+  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Documento correctivo aplicado y conciliado.'},admin(1,'contador')),/ID y la colección exacta/);
+  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Documento correctivo aplicado y conciliado.',evidenceRecordId:'credit-note-1',evidenceCollection:'purchases'},admin(1,'contador')),/ID y la colección exacta/);
   assert.equal(getCorrectionCase(db,requested.id).status,'APPROVED');
  }finally{db.close();}
 });
@@ -293,9 +293,9 @@ test('execution authorization binds operator/reference and permits audited recov
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
   reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'El contador verificó evidencia y papel de trabajo.'},admin(1,'contador'));
-  requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(3,'ejecutor'));
-  assert.deepEqual(requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(1,'contador')),{ok:true,caseId:requested.id,correctionType:'ANULACION',resumed:false});
-  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'El contador intenta confirmar sin el ID documental.',evidenceCollection:'sales'},admin(3,'contador')),/ID y la colección exacta/);
+  requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(1,'contador'));
+  assert.deepEqual(requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(1,'contador')),{ok:true,caseId:requested.id,correctionType:'ANULACION',resumed:true});
+  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'El contador intenta confirmar sin el ID documental.',evidenceCollection:'sales'},admin(1,'contador')),/ID y la colección exacta/);
   const observed=observeCorrectionRequest(db,{caseId:requested.id,reason:'El contador detectó que la emisión no llegó a persistirse.'},admin(1,'contador'));
   assert.equal(observed.workflow_stage,'OBSERVATION_REQUIRED');
   assert.equal(observed.execution_started_at,null);
