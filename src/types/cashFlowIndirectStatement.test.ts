@@ -70,6 +70,7 @@ describe('cash flow indirect method', () => {
       line('1.1.1.01', 0, 100, 0, 10)
     ]);
     reversal.reversalOfEntryId = opening.id;
+    opening.reversedByEntryId = reversal.id;
     const report = buildCashFlowIndirectReport([opening, reversal], accounts, banks, 'co-1', 2026);
     assert.equal(report.openingCashBs, 100);
     assert.equal(report.netChangeBs, -100);
