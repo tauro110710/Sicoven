@@ -26,6 +26,7 @@ const verifyPassword = (password, salt, expected) => {
 const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
+const { migrateAuthUserRoles } = require('./auth-roles.cjs');
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
 const { reconcileRestoreAudit } = require('./restore-audit-ledger.cjs');
 const { registerBackupIpc } = require('./backup-restore.cjs');
@@ -72,7 +73,8 @@ function openDatabase() {
   initializeCorrectionWorkflow(db);
   // Reconciliar el ledger externo antes de exponer la aplicación. Un ledger inválido bloquea el arranque.
   reconcileRestoreAudit({ db, userDataDir: dataDir });
-  db.exec(`CREATE TABLE IF NOT EXISTS auth_users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin')), is_seed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')));`);
+  db.exec(`CREATE TABLE IF NOT EXISTS auth_users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','contador')), is_seed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')));`);
+  migrateAuthUserRoles(db);
   db.exec(`CREATE TABLE IF NOT EXISTS auth_sessions (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));`);
   db.exec(`CREATE TABLE IF NOT EXISTS license_state (id INTEGER PRIMARY KEY CHECK(id=1), installation_id TEXT NOT NULL, encrypted_key TEXT, license_id TEXT, customer TEXT, product TEXT, status TEXT NOT NULL DEFAULT 'unlicensed', last_checked_at TEXT, message TEXT);`);
   const licenseColumns = new Set(db.prepare('PRAGMA table_info(license_state)').all().map(column => String(column.name)));
@@ -452,7 +454,7 @@ app.whenReady().then(async () => {
     if (!actor || actor.role !== 'admin') return { ok: false, message: 'Permisos insuficientes o sesión no válida.' };
     return {
       ok: true,
-      admins: db.prepare('SELECT id,username,is_seed AS isSeed,created_at AS createdAt FROM auth_users ORDER BY id').all().map(u => ({ ...u, isSeed: Boolean(u.isSeed) }))
+      admins: db.prepare('SELECT id,username,role,is_seed AS isSeed,created_at AS createdAt FROM auth_users ORDER BY id').all().map(u => ({ ...u, isSeed: Boolean(u.isSeed) }))
     };
   });
 
@@ -462,13 +464,15 @@ app.whenReady().then(async () => {
     const rawUsername = String(input?.username || '').trim();
     const username = rawUsername.replace(/\s+/g, '_');
     const password = String(input?.password || '');
+    const role = String(input?.role || 'admin');
+    if (!['admin', 'contador'].includes(role)) return { ok: false, message: 'El rol solicitado no está permitido.' };
     if (!/^[A-Za-z0-9._-]{3,32}$/.test(username)) return { ok: false, message: 'El usuario debe tener entre 3 y 32 caracteres (solo letras sin acentos, números, punto, guion o guion bajo).' };
     if (password.length < 10 || password.length > 256) return { ok: false, message: 'La contraseña debe tener al menos 10 caracteres.' };
     try {
       const credential = hashPassword(password);
       const createAdmin = db.transaction(() => {
-        const result = db.prepare('INSERT INTO auth_users(username,password_hash,password_salt,role,is_seed) VALUES(?,?,?,?,0)').run(username, credential.hash, credential.salt, 'admin');
-        db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('admin_created', JSON.stringify({ username, by: actor.username, userId: Number(result.lastInsertRowid) }));
+        const result = db.prepare('INSERT INTO auth_users(username,password_hash,password_salt,role,is_seed) VALUES(?,?,?,?,0)').run(username, credential.hash, credential.salt, role);
+        db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run(role === 'contador' ? 'accountant_created' : 'admin_created', JSON.stringify({ username, role, by: actor.username, userId: Number(result.lastInsertRowid) }));
       });
       createAdmin();
       return { ok: true };
@@ -519,8 +523,8 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('sicoven:audit-record-correction', (_event, token, input) => {
     const actor = getActiveSession(token);
-    if (!actor || actor.role !== 'admin') {
-      return { ok: false, message: 'Se requiere una sesión administrativa autenticada para autorizar y auditar correcciones.' };
+    if (!actor || actor.role !== 'contador') {
+      return { ok: false, message: 'El Centro de Correcciones requiere una sesión autenticada del contador.' };
     }
     const eventType = String(input?.eventType || '');
     const allowedEvents = new Set(['accounting_correction_requested', 'accounting_correction_executed']);
@@ -585,7 +589,7 @@ app.whenReady().then(async () => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const actor = getActiveSession(token);
-    if (!actor || actor.role !== 'admin') throw new Error('Se requiere una sesión administrativa autenticada.');
+    if (!actor || actor.role !== 'contador') throw new Error('El Centro de Correcciones requiere una sesión autenticada del contador.');
     return actor;
   };
   ipcMain.handle('sicoven:correction-case-create', (_event, token, input) => {

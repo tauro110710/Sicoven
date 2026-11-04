@@ -35,13 +35,15 @@ interface NavbarProps {
   setActiveTab: (tab: string) => void;
   onOpenCompanyModal: () => void;
   onOpenBcvModal?: () => void;
+  userRole: string;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
   onOpenCompanyModal,
-  onOpenBcvModal
+  onOpenBcvModal,
+  userRole
 }) => {
   const {
     companies,
@@ -92,6 +94,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'inflacion', label: 'Inflación y REME', icon: TrendingUp },
     { id: 'config', label: 'Configuración', icon: Settings },
   ];
+
+  const visibleTabs = userRole === 'contador' ? tabs.filter(tab => tab.id === 'reversiones') : tabs;
 
   const navContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -309,7 +313,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             Módulos Contables
           </div>
           <div className="grid grid-cols-2 gap-1.5">
-            {tabs.map(tab => {
+            {visibleTabs.map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
@@ -353,7 +357,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           className="w-full overflow-x-auto scroll-smooth px-3 sm:px-6 py-2 flex items-center gap-1.5 [scrollbar-width:thin] [scrollbar-color:#334155_transparent] touch-pan-x"
         >
           <div className="flex items-center space-x-1.5 min-w-max mx-auto">
-            {tabs.map(tab => {
+            {visibleTabs.map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (

@@ -32,8 +32,8 @@ declare global {
       login: (credentials: { username: string; password: string }) => Promise<{ ok: boolean; message?: string; token?: string; user?: { username: string; role: string; isSeed: boolean } }>;
       restoreSession: (token: string) => Promise<{ ok: boolean; message?: string; token?: string; user?: { username: string; role: string; isSeed: boolean } }>;
       logout: (token: string) => Promise<{ ok: boolean }>;
-      listAdmins: (token: string) => Promise<{ ok: boolean; message?: string; admins?: Array<{ id: number; username: string; isSeed: boolean; createdAt: string }> }>;
-      createAdmin: (token: string, input: { username: string; password: string }) => Promise<{ ok: boolean; message?: string }>;
+      listAdmins: (token: string) => Promise<{ ok: boolean; message?: string; admins?: Array<{ id: number; username: string; role: string; isSeed: boolean; createdAt: string }> }>;
+      createAdmin: (token: string, input: { username: string; password: string; role?: 'admin' | 'contador' }) => Promise<{ ok: boolean; message?: string }>;
       deleteSeedAdmin: (token: string) => Promise<{ ok: boolean; message?: string }>;
       load: (token: string) => Promise<Record<string, unknown> | null>;
       listAuditEvents: (token: string, limit?: number) => Promise<{ ok: boolean; message?: string; events?: Array<{ id: number; eventType: string; details: Record<string, unknown>; createdAt: string }> }>;

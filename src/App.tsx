@@ -26,7 +26,7 @@ import { LicenseGate } from './components/LicenseGate';
 
 const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => Promise<void> }> = ({ auth, logout }) => {
   const [showAdmins, setShowAdmins] = useState(false);
-  const [activeTab, setActiveTab] = useState<string>('diario');
+  const [activeTab, setActiveTab] = useState<string>(auth.user.role === 'contador' ? 'reversiones' : 'diario');
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [isBcvModalOpen, setIsBcvModalOpen] = useState(false);
   const { currentCompany, companies, isStorageReady, storageError } = useAccounting();
@@ -36,6 +36,7 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
   }, [isStorageReady, companies.length]);
 
   const renderActiveTab = () => {
+    if (auth.user.role === 'contador') return <ReversionFiscalView />;
     switch (activeTab) {
       case 'diario':
         return <LibroDiarioView />;
@@ -90,13 +91,14 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col selection:bg-emerald-500 selection:text-white">
-      {auth && <div className="flex items-center justify-end gap-3 bg-slate-800 px-4 py-2 text-xs text-white no-print"><span>Sesión: <strong>{auth.user.username}</strong></span><button onClick={()=>setShowAdmins(true)} className="rounded-lg border border-slate-600 px-3 py-1.5 hover:bg-slate-700">Administradores</button><button onClick={logout} className="rounded-lg bg-emerald-600 px-3 py-1.5 font-semibold hover:bg-emerald-700">Cerrar sesión</button></div>}
+      {auth && <div className="flex items-center justify-end gap-3 bg-slate-800 px-4 py-2 text-xs text-white no-print"><span>Sesión: <strong>{auth.user.username}</strong></span>{auth.user.role === 'admin' && <button onClick={()=>setShowAdmins(true)} className="rounded-lg border border-slate-600 px-3 py-1.5 hover:bg-slate-700">Usuarios</button>}<button onClick={logout} className="rounded-lg bg-emerald-600 px-3 py-1.5 font-semibold hover:bg-emerald-700">Cerrar sesión</button></div>}
       {/* Navigation Header */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenCompanyModal={() => setIsCompanyModalOpen(true)}
         onOpenBcvModal={() => setIsBcvModalOpen(true)}
+        userRole={auth.user.role}
       />
 
       {/* Main Container */}
