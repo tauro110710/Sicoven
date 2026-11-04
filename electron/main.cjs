@@ -37,6 +37,7 @@ const { registerInflationRemeReadinessIpc } = require('./inflation-reme-readines
 const { registerInflationSourceDossierIpc } = require('./inflation-source-dossiers.cjs');
 const { registerDocumentVaultIpc } = require('./supporting-documents.cjs');
 const { registerVatFiscalIncidentIpc } = require('./vat-fiscal-incidents.cjs');
+const { initializeCorrectionWorkflow, registerCorrectionRequest, reviewCorrectionRequest, markCorrectionExecuted, listCorrectionCases } = require('./accounting-correction-workflow.cjs');
 
 let db;
 function openDatabase() {
@@ -68,6 +69,7 @@ function openDatabase() {
       BEFORE DELETE ON audit_events
       BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END;
   `);
+  initializeCorrectionWorkflow(db);
   // Reconciliar el ledger externo antes de exponer la aplicación. Un ledger inválido bloquea el arranque.
   reconcileRestoreAudit({ db, userDataDir: dataDir });
   db.exec(`CREATE TABLE IF NOT EXISTS auth_users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin')), is_seed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')));`);
