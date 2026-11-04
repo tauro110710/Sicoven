@@ -1046,6 +1046,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const rate = Number(input.newRate);
     if (!Number.isFinite(rate) || rate <= 0) throw new Error('La nueva tasa BCV debe ser un número positivo.');
     if (!isValidIsoDate(input.effectiveDate)) throw new Error('La fecha de vigencia de la tasa BCV no es válida.');
+    if (currentCompany.closedThroughDate && input.effectiveDate <= currentCompany.closedThroughDate) {
+      throw new Error('La tasa no puede corregirse dentro de un período cerrado. Reabra formalmente el período o tramite el ajuste del período anterior.');
+    }
     const reason = String(input.reason || '').trim();
     const workpaperNote = String(input.workpaperNote || '').trim();
     if (reason.length < 10 || workpaperNote.length < 10) {
