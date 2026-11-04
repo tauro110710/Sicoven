@@ -73,6 +73,24 @@ describe('cash flow statement', () => {
     assert.equal(report.isReconciled, true);
   });
 
+  it('rejects malformed dates and invalid monetary values instead of silently treating them as zero', () => {
+    const invalidAmount = entry('invalid-amount', '2026-02-01', 'MANUAL', [
+      line('1.1.1.01', 'Caja principal', Number.NaN, 0, 1, 0),
+      line('4.1', 'Ingresos operacionales', 0, 0, 0, 1)
+    ]);
+    assert.throws(() => buildCashFlowReport([invalidAmount], accounts, banks, 'co-1', 2026), /importes inválidos/);
+    const negativeAmount = entry('negative-amount', '2026-02-01', 'MANUAL', [
+      line('1.1.1.01', 'Caja principal', 0, 0, -1, 0),
+      line('4.1', 'Ingresos operacionales', 0, 0, 0, 1)
+    ]);
+    assert.throws(() => buildCashFlowReport([negativeAmount], accounts, banks, 'co-1', 2026), /importes inválidos/);
+    const invalidDate = entry('invalid-date', '2026-02-30', 'MANUAL', [
+      line('1.1.1.01', 'Caja principal', 100, 0, 1, 0),
+      line('4.1', 'Ingresos operacionales', 0, 100, 0, 1)
+    ]);
+    assert.throws(() => buildCashFlowReport([invalidDate], accounts, banks, 'co-1', 2026), /fecha inválida/);
+  });
+
   it('does not classify transfers between company cash accounts as operating flows', () => {
     const entries = [
       entry('transfer-1', '2026-02-01', 'MANUAL', [
