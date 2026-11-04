@@ -138,7 +138,7 @@ export function buildCashFlowReport(
   // first day. If the current year has no opening yet, carry forward that
   // prior opening plus only the movements posted after it.
   const openingBoundary = companyEntries.filter(entry =>
-    isLinkedAnnualOpening(entry) && entry.date <= start && !entry.reversedByEntryId && !reversedEntryIds.has(entry.id)
+    isLinkedAnnualOpening(entry) && entry.date <= start && !reversedEntryIds.has(entry.id)
   ).sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber).at(-1);
   const openingEntries = openingBoundary
     ? [
