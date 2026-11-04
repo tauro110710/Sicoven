@@ -61,7 +61,8 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       return;
     }
     if (!name.trim()) return;
-    if (!accountingFramework || !accountingFrameworkVersion.trim() || !accountingFrameworkAdoptionDate) return;
+    const hasFrameworkMetadata = Boolean(accountingFramework || accountingFrameworkVersion.trim() || accountingFrameworkAdoptionDate);
+    if (hasFrameworkMetadata && (!accountingFramework || !accountingFrameworkVersion.trim() || !accountingFrameworkAdoptionDate)) return;
 
     addCompany({
       rif: rifValidation.formattedRif,
@@ -71,9 +72,11 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       phone: phone.trim() || '(0212) 000-0000',
       email: email.trim() || 'contacto@empresa.com.ve',
       taxpayerType,
-      accountingFramework,
-      accountingFrameworkVersion: accountingFrameworkVersion.trim(),
-      accountingFrameworkAdoptionDate,
+      ...(accountingFramework ? {
+        accountingFramework,
+        accountingFrameworkVersion: accountingFrameworkVersion.trim(),
+        accountingFrameworkAdoptionDate
+      } : {}),
       defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
       ivaRetentionAgentBasis,
       isPersonalFirm,
@@ -187,20 +190,20 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
           </div>
 
           <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 space-y-2">
-            <label className="block text-xs font-bold text-slate-800">Marco contable VEN-NIF adoptado *</label>
-            <select required value={accountingFramework} onChange={e => setAccountingFramework(e.target.value as AccountingFramework | '')} className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white">
+            <label className="block text-xs font-bold text-slate-800">Marco contable VEN-NIF adoptado (si está documentado)</label>
+            <select value={accountingFramework} onChange={e => setAccountingFramework(e.target.value as AccountingFramework | '')} className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white">
               <option value="">Seleccione el marco aplicable</option>
               <option value="VEN_NIF_GE">VEN-NIF GE — Grandes Entidades</option>
               <option value="VEN_NIF_PYME">VEN-NIF PYME — Pequeñas y Medianas Entidades</option>
             </select>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Versión / referencia normativa *</label>
-                <input required value={accountingFrameworkVersion} onChange={e => setAccountingFrameworkVersion(e.target.value)} placeholder="Ej. BA VEN-NIF 8, versión aplicable" className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg" />
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Versión / referencia normativa</label>
+                <input value={accountingFrameworkVersion} onChange={e => setAccountingFrameworkVersion(e.target.value)} placeholder="Ej. BA VEN-NIF 8, versión aplicable" className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg" />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Fecha documentada de adopción *</label>
-                <input required type="date" value={accountingFrameworkAdoptionDate} onChange={e => setAccountingFrameworkAdoptionDate(e.target.value)} className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg" />
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Fecha documentada de adopción</label>
+                <input type="date" value={accountingFrameworkAdoptionDate} onChange={e => setAccountingFrameworkAdoptionDate(e.target.value)} className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg" />
               </div>
             </div>
             <p className="text-[10px] text-slate-600">Registre la referencia y fecha respaldadas por la evaluación del contador. SICOVEN no presume la clasificación ni asigna automáticamente una versión.</p>
