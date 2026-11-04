@@ -3,11 +3,12 @@ import { AlertTriangle, CheckCircle2, LockKeyhole, ShieldCheck, Undo2 } from 'lu
 import { useAccounting, type AccountingAuditEvent } from '../context/AccountingContext';
 import { formatBs, formatUsd, formatDate } from '../utils/formatters';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation, type BankStatementReversalReadiness } from '../types/journalReversal';
+import type { VatFiscalIncident } from '../types/vatFiscalIncidents';
 
 export const ReversionFiscalView: React.FC = () => {
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, addMovement, addPurchaseCreditNote,
-    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod
+    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, recordVatFiscalIncidentEvent
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -36,6 +37,14 @@ export const ReversionFiscalView: React.FC = () => {
   const [auditEvents, setAuditEvents] = useState<AccountingAuditEvent[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
+  const [fiscalIncidents, setFiscalIncidents] = useState<VatFiscalIncident[]>([]);
+  const [incidentsLoading, setIncidentsLoading] = useState(false);
+  const [incidentError, setIncidentError] = useState<string | null>(null);
+  const [selectedIncidentId, setSelectedIncidentId] = useState('');
+  const [incidentEventType, setIncidentEventType] = useState<'REVIEW_RECORDED' | 'ACTION_RECORDED'>('REVIEW_RECORDED');
+  const [incidentDecision, setIncidentDecision] = useState('');
+  const [incidentExternalReference, setIncidentExternalReference] = useState('');
+  const [incidentSaving, setIncidentSaving] = useState(false);
   const refreshAuditEvents = useCallback(async () => {
     setAuditLoading(true);
     try {
@@ -51,6 +60,39 @@ export const ReversionFiscalView: React.FC = () => {
     }
   }, [getAuditEvents, currentCompany.id]);
   useEffect(() => { void refreshAuditEvents(); }, [refreshAuditEvents]);
+  const refreshFiscalIncidents = useCallback(async () => {
+    setIncidentsLoading(true);
+    try {
+      const items = await listVatFiscalIncidents();
+      setFiscalIncidents(items);
+      setIncidentError(null);
+    } catch (error) {
+      setIncidentError(error instanceof Error ? error.message : 'No se pudieron consultar los expedientes fiscales.');
+    } finally {
+      setIncidentsLoading(false);
+    }
+  }, [listVatFiscalIncidents]);
+  useEffect(() => { void refreshFiscalIncidents(); }, [refreshFiscalIncidents]);
+  const submitFiscalIncidentEvent = async () => {
+    if (!selectedIncidentId || incidentDecision.trim().length < 10 || incidentSaving) return;
+    setIncidentSaving(true);
+    try {
+      await recordVatFiscalIncidentEvent({
+        incidentId: selectedIncidentId, eventType: incidentEventType,
+        decisionText: incidentDecision.trim(),
+        externalReference: incidentExternalReference.trim() || undefined
+      });
+      setIncidentDecision('');
+      setIncidentExternalReference('');
+      setSelectedIncidentId('');
+      await refreshFiscalIncidents();
+      setFeedback({ kind: 'success', message: 'La actuación quedó incorporada al expediente fiscal en SQLite. El expediente permanece abierto hasta que exista evidencia de rectificación y validación.' });
+    } catch (error) {
+      setIncidentError(error instanceof Error ? error.message : 'No se pudo registrar la actuación fiscal.');
+    } finally {
+      setIncidentSaving(false);
+    }
+  };
 
   const source = journalEntries.find(entry => entry.id === selectedId && entry.companyId === currentCompany.id);
   const reversalAssessment = useMemo(() => {
@@ -531,6 +573,32 @@ export const ReversionFiscalView: React.FC = () => {
           })}
         </div>
         <p className="text-[11px] text-slate-500">Se muestran los últimos 200 eventos. El historial se almacena en SQLite y el reinicio operativo no lo elimina.</p>
+      </section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div><h2 className="text-base font-bold text-slate-900">Expedientes de rectificación fiscal</h2><p className="text-xs text-slate-500">Incidencias append-only vinculadas a comprobantes, declaraciones y acciones documentadas</p></div>
+          <button type="button" onClick={() => void refreshFiscalIncidents()} disabled={incidentsLoading} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold disabled:opacity-50">{incidentsLoading ? 'Actualizando…' : 'Actualizar expedientes'}</button>
+        </div>
+        {incidentError && <p role="alert" className="mb-2 rounded-lg bg-rose-50 p-2 text-xs text-rose-800">{incidentError}</p>}
+        {fiscalIncidents.length === 0 ? <p className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">{incidentsLoading ? 'Consultando SQLite…' : 'No hay incidencias fiscales registradas para esta empresa.'}</p> :
+          <div className="space-y-3">{fiscalIncidents.map(incident => <article key={incident.id} className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 text-xs space-y-1">
+            <div className="flex flex-wrap items-center justify-between gap-2"><strong>{incident.documentType} · {incident.documentNumber}</strong><span className="rounded bg-amber-100 px-2 py-1 font-semibold text-amber-900">{incident.status} · pendiente de cierre</span></div>
+            <p>Factura original: {incident.affectedInvoiceNumber || '—'} · comprobante IVA: {incident.vatVoucherId || '—'} · declaración: {incident.declarationId || '—'}</p>
+            <p><strong>Motivo:</strong> {incident.reason}</p>
+            <p>Registrado por {incident.createdByUsername} · {incident.createdAt}</p>
+            {incident.events.map(event => <p key={event.id} className="border-l-2 border-amber-300 pl-2 text-slate-600">{event.eventType} · {event.decisionText} {event.externalReference ? ' · Ref. ' + event.externalReference : ''} · {event.actorUsername} · {event.createdAt}</p>)}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button type="button" onClick={() => {setSelectedIncidentId(incident.id);setIncidentEventType('REVIEW_RECORDED');}} className="rounded border border-slate-300 bg-white px-2 py-1 font-semibold">Registrar revisión</button>
+              <button type="button" onClick={() => {setSelectedIncidentId(incident.id);setIncidentEventType('ACTION_RECORDED');}} className="rounded border border-slate-300 bg-white px-2 py-1 font-semibold">Registrar actuación</button>
+            </div>
+            {selectedIncidentId === incident.id && <div className="space-y-2 rounded border border-slate-200 bg-white p-3">
+              <p className="font-semibold">{incidentEventType === 'REVIEW_RECORDED' ? 'Documentar revisión profesional' : 'Documentar acción / rectificación externa'}</p>
+              <textarea value={incidentDecision} onChange={event=>setIncidentDecision(event.target.value)} rows={2} placeholder="Describa la revisión, decisión, trámite o resultado (mínimo 10 caracteres)…" className="w-full rounded border border-slate-300 p-2" />
+              <input value={incidentExternalReference} onChange={event=>setIncidentExternalReference(event.target.value)} placeholder="Referencia SENIAT / declaración / expediente (si aplica)" className="w-full rounded border border-slate-300 p-2" />
+              <div className="flex gap-2"><button type="button" disabled={incidentSaving || incidentDecision.trim().length < 10} onClick={() => void submitFiscalIncidentEvent()} className="rounded bg-slate-900 px-3 py-2 font-semibold text-white disabled:opacity-40">{incidentSaving ? 'Guardando…' : 'Guardar en SQLite'}</button><button type="button" onClick={()=>setSelectedIncidentId('')} className="rounded border px-3 py-2">Cancelar</button></div>
+            </div>}
+          </article>)}</div>}
+        <p className="mt-2 text-[11px] text-slate-500">Registrar una actuación no equivale a presentar una declaración sustitutiva ni a obtener aceptación del SENIAT. SICOVEN conserva el expediente abierto para impedir que se declare resuelto sin evidencia.</p>
       </section>
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
