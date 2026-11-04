@@ -37,7 +37,7 @@ const { registerInflationRemeReadinessIpc } = require('./inflation-reme-readines
 const { registerInflationSourceDossierIpc } = require('./inflation-source-dossiers.cjs');
 const { registerDocumentVaultIpc } = require('./supporting-documents.cjs');
 const { registerVatFiscalIncidentIpc } = require('./vat-fiscal-incidents.cjs');
-const { initializeCorrectionWorkflow, registerCorrectionRequest, reviewCorrectionRequest, markCorrectionExecuted, listCorrectionCases } = require('./accounting-correction-workflow.cjs');
+const { initializeCorrectionWorkflow, registerCorrectionRequest, reviewCorrectionRequest, markCorrectionExecuted, listCorrectionCases, findLinkedCorrectionEvidence } = require('./accounting-correction-workflow.cjs');
 
 let db;
 function openDatabase() {
@@ -617,14 +617,11 @@ app.whenReady().then(async () => {
     if (!item) throw new Error('El expediente de corrección no existe.');
     const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     const state = row ? JSON.parse(row.state_json) : {};
-    const evidenceCollections = ['sales','purchases','journalEntries','bankStatementMovements','movements',
-      'vatVouchers','islrVouchers','vatWithholdingDeclarations','islrFiscalEvents','products'];
     const reference = String(input?.executionRef || '').trim();
-    const evidence = evidenceCollections.some(key => Array.isArray(state[key]) && state[key].some(record =>
-      String(record.companyId || '') === String(item.company_id) && String(record.id) !== String(item.entity_id) &&
-      [record.id,record.documentNumber,record.invoiceNumber,record.voucherNumber,record.declarationNumber,record.entryNumber,record.opNumber,record.documentRef,record.number,record.reference,record.referenceDoc,record.controlNumber]
-        .some(value => value != null && String(value).trim() === reference)));
-    if (!evidence) throw new Error('No se encontró en SQLite un documento, asiento o movimiento correctivo con esa referencia y empresa. No se cerró el expediente.');
+    const evidence = findLinkedCorrectionEvidence(state,item,reference);
+    if (!evidence) {
+      throw new Error('No se encontró un documento correctivo de la misma empresa con referencia coincidente y vínculo explícito al registro origen. El expediente permanece aprobado y abierto.');
+    }
     return markCorrectionExecuted(db,input,actor);
   });
   ipcMain.handle('sicoven:correction-case-list', (_event, token, companyId) => {
