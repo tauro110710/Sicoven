@@ -62,7 +62,10 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
     }
     if (!name.trim()) return;
     const hasFrameworkMetadata = Boolean(accountingFramework || accountingFrameworkVersion.trim() || accountingFrameworkAdoptionDate);
-    if (hasFrameworkMetadata && (!accountingFramework || !accountingFrameworkVersion.trim() || !accountingFrameworkAdoptionDate)) return;
+    if (hasFrameworkMetadata && (!accountingFramework || !accountingFrameworkVersion.trim() || !accountingFrameworkAdoptionDate)) {
+      window.alert('Para registrar la adopción VEN-NIF debe completar marco, versión normativa y fecha documentada.');
+      return;
+    }
 
     addCompany({
       rif: rifValidation.formattedRif,
@@ -214,6 +217,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
             <label className="block text-xs font-bold text-slate-800 uppercase tracking-wide">
               Calificación Tributaria SENIAT
             </label>
+            <p className="text-[11px] text-slate-600">Marque Contribuyente Especial únicamente si existe notificación expresa del SENIAT. La categoría no se presume por ingresos ni por el RIF.</p>
             <div className="grid grid-cols-2 gap-3">
               <label
                 className={`flex items-start gap-3 p-3 rounded-xl border text-xs cursor-pointer transition ${
