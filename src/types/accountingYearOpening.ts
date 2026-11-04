@@ -51,6 +51,7 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
   const latestAnnualOpening = companyHistory
     .filter(entry => entry.type === 'APERTURA' &&
       entry.exerciseLink?.nextPeriodStartDate === entry.date &&
+      entry.exerciseLink.nextPeriodStartDate <= input.periodStartDate &&
       isIsoDate(entry.exerciseLink.nextPeriodStartDate))
     .sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber)
     .at(-1);
