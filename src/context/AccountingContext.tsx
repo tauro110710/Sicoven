@@ -80,7 +80,7 @@ type SupportingDocumentDraft = { entityType: SupportingDocumentEntityType; entit
 interface AccountingContextType {
   getAuditEvents: (limit?: number) => Promise<AccountingAuditEvent[]>;
   requestAccountingCorrection: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'INVENTORY_PRODUCT'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason: string; workpaperNote: string }) => Promise<void>;
-  createCorrectionCase: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'INVENTORY_MOVEMENT'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason: string; workpaperNote: string }) => Promise<CorrectionCase>;
+  createCorrectionCase: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'INVENTORY_MOVEMENT'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason?: string; workpaperNote?: string }) => Promise<CorrectionCase>;
   authorizeCorrectionCase: (input: { entityType: string; entityId: string; sourceDocumentRef: string; correctionDocumentRef: string }) => Promise<void>;
   listCorrectionCases: () => Promise<CorrectionCase[]>;
   reviewCorrectionCase: (input: { caseId: string; decision: 'APPROVE' | 'REJECT'; reason: string }) => Promise<CorrectionCase>;
@@ -116,7 +116,7 @@ interface AccountingContextType {
   journalEntries: JournalEntry[];
   addJournalEntry: (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>) => JournalEntry;
   deleteJournalEntry: (id: string) => void;
-  reverseJournalEntry: (id: string, effectiveDate: string, reason: string, workpaperNote: string, priorPeriodAdjustment?: boolean, retainedEarningsAccountCode?: string) => Promise<JournalEntry>;
+  reverseJournalEntry: (id: string, effectiveDate: string, reason: string, workpaperNote?: string, priorPeriodAdjustment?: boolean, retainedEarningsAccountCode?: string) => Promise<JournalEntry>;
   closeAccountingPeriod: (closedThroughDate: string) => Promise<void>;
   reopenAccountingPeriod: (reopenedThroughDate: string | null, reason: string) => Promise<void>;
   createAccountingYearOpening: (input: { periodStartDate: string; periodEndDate: string; openingDate: string; retainedEarningsAccountCode?: string }) => Promise<JournalEntry>;
@@ -427,7 +427,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     eventType: 'accounting_correction_requested' | 'accounting_correction_executed';
     entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'BCV_RATE' | 'INVENTORY_PRODUCT';
     companyId: string; entityId: string; correctionType: string; sourceDocumentRef: string;
-    correctionDocumentRef: string; reason: string; workpaperNote: string; journalEntryId?: string;
+    correctionDocumentRef: string; reason: string; workpaperNote?: string; journalEntryId?: string;
     fiscalEmissionMedium?: 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY'; sameMediumAsOriginal?: boolean;
   };
   const recordCorrectionAudit = async (input: CorrectionAuditInput): Promise<void> => {
@@ -460,7 +460,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const authorizeCorrectionCase = async (input: {entityType:string;entityId:string;sourceDocumentRef:string;correctionDocumentRef:string}): Promise<void> => {
     await requireApprovedCorrectionCase(input.entityType,input.entityId,input.sourceDocumentRef,input.correctionDocumentRef);
   };
-  const createCorrectionCase = async (input: {entityType:string;entityId:string;correctionType:string;sourceDocumentRef:string;correctionDocumentRef:string;reason:string;workpaperNote:string}): Promise<CorrectionCase> => {
+  const createCorrectionCase = async (input: {entityType:string;entityId:string;correctionType:string;sourceDocumentRef:string;correctionDocumentRef:string;reason?:string;workpaperNote?:string}): Promise<CorrectionCase> => {
     const store = window.sicovenStore as typeof window.sicovenStore & { createCorrectionCase?: (sessionToken:string,payload:Record<string,string>)=>Promise<CorrectionCase> };
     if (!store?.createCorrectionCase) throw new Error('El registro formal de expedientes requiere la edición de escritorio.');
     return store.createCorrectionCase(token,{...input,companyId:currentCompany.id});
@@ -498,8 +498,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const requestAccountingCorrection = async (input: Omit<CorrectionAuditInput, 'eventType' | 'companyId'>): Promise<void> => {
     if (!currentCompany.id) throw new Error('Seleccione una empresa antes de solicitar una corrección.');
-    if (!input.entityId.trim() || !input.correctionType.trim() || input.reason.trim().length < 15 || input.workpaperNote.trim().length < 15) {
-      throw new Error('La solicitud requiere registro origen, tipo de corrección, motivo y papel de trabajo de al menos 15 caracteres.');
+    if (!input.entityId.trim() || !input.correctionType.trim() || String(input.reason || '').length > 2000 || String(input.workpaperNote || '').length > 4000) {
+      throw new Error('La corrección contiene datos inválidos o excede los límites permitidos.');
     }
     if (!window.sicovenStore || !storageReady || persistenceFaultRef.current) {
       throw new Error('SQLite no está disponible. No se registró la solicitud de corrección.');
@@ -706,7 +706,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     id: string,
     effectiveDate: string,
     reason: string,
-    workpaperNote: string,
+    workpaperNote = '',
     priorPeriodAdjustment = false,
     retainedEarningsAccountCode?: string
   ): Promise<JournalEntry> => {
@@ -738,9 +738,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (currentCompany.closedThroughDate && effectiveDate <= currentCompany.closedThroughDate) {
       throw new Error('La reversión debe registrarse después del último día cerrado (' + currentCompany.closedThroughDate + ').');
     }
-    if (reason.trim().length < 10 || workpaperNote.trim().length < 10) {
-      throw new Error('La causa y el papel de trabajo deben contener al menos 10 caracteres cada uno.');
-    }
+    const correctionReason = String(reason || '').trim() || 'Corrección contable';
+    if (correctionReason.length > 2000 || workpaperNote.trim().length > 4000) throw new Error('El motivo o la nota exceden el máximo permitido.');
     const assessment = assessJournalReversal({
       companyId: currentCompany.id, source, accounts, sales, purchases, movements, products,
       journalEntries, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements,
@@ -782,7 +781,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       eventType: 'accounting_correction_requested', entityType: 'JOURNAL_ENTRY', companyId: currentCompany.id,
       entityId: source.id, correctionType: priorPeriodAdjustment ? 'PRIOR_PERIOD_ADJUSTMENT_REVERSAL' : 'JOURNAL_REVERSAL',
       sourceDocumentRef: source.referenceDoc || String(source.entryNumber),
-      correctionDocumentRef: 'REV-' + source.entryNumber, reason: reason.trim(), workpaperNote: workpaperNote.trim()
+      correctionDocumentRef: 'REV-' + source.entryNumber, reason: correctionReason, workpaperNote: workpaperNote.trim()
     });
     let resolvePersistence!: () => void;
     let rejectPersistence!: (error: Error) => void;
@@ -797,13 +796,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       reversal = addJournalEntry({
       entryNumber: 0, // addJournalEntry asigna el siguiente correlativo inmutable.
       date: effectiveDate,
-      description: (priorPeriodAdjustment ? 'AIA / ' : 'REVERSIÓN / ') + source.description + ' · ' + reason.trim(),
+      description: (priorPeriodAdjustment ? 'AIA / ' : 'REVERSIÓN / ') + source.description + ' · ' + correctionReason,
       type: 'AJUSTE',
       bcvRate: Number(source.bcvRate) > 0 ? source.bcvRate : currentCompany.bcvRate,
       items: reversedItems,
       referenceDoc: 'REV-' + source.entryNumber,
       reversalOfEntryId: source.id,
-      reversalReason: reason.trim(),
+      reversalReason: correctionReason,
       workpaperNote: workpaperNote.trim(),
       priorPeriodAdjustment
       });
@@ -814,21 +813,21 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // El asiento fuente no se modifica: el vínculo se deriva del contra-asiento
     // mediante reversalOfEntryId, preservando el registro original.
     setSales(prev => prev.map(sale => sale.companyId === currentCompany.id && (sale.journalEntryId === source.id || (source.type === 'VENTA' && source.referenceDoc === 'FAC-' + sale.invoiceNumber))
-      ? { ...sale, journalEntryId: sale.journalEntryId || source.id, isCancelled: true, cancelledByJournalEntryId: reversal.id, cancellationReason: reason.trim(), cancellationNote: workpaperNote.trim() }
+      ? { ...sale, journalEntryId: sale.journalEntryId || source.id, isCancelled: true, cancelledByJournalEntryId: reversal.id, cancellationReason: correctionReason, cancellationNote: workpaperNote.trim() }
       : sale));
     setPurchases(prev => prev.map(purchase => purchase.companyId === currentCompany.id && (purchase.journalEntryId === source.id || (source.type === 'COMPRA' && source.referenceDoc === 'FAC-' + purchase.invoiceNumber))
-      ? { ...purchase, journalEntryId: purchase.journalEntryId || source.id, isCancelled: true, cancelledByJournalEntryId: reversal.id, cancellationReason: reason.trim(), cancellationNote: workpaperNote.trim() }
+      ? { ...purchase, journalEntryId: purchase.journalEntryId || source.id, isCancelled: true, cancelledByJournalEntryId: reversal.id, cancellationReason: correctionReason, cancellationNote: workpaperNote.trim() }
       : purchase));
     if (linkedPurchase) {
       setVatVouchers(prev => prev.map(voucher => voucher.purchaseRecordId === linkedPurchase.id
         ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: reversal.id,
           correctionEntryIds: [...new Set([...(voucher.correctionEntryIds || (voucher.correctionEntryId ? [voucher.correctionEntryId] : [])), reversal.id])],
-          correctionNote: [voucher.correctionNote, reason.trim()].filter(Boolean).join(' | ') }
+          correctionNote: [voucher.correctionNote, correctionReason].filter(Boolean).join(' | ') }
         : voucher));
       setIslrVouchers(prev => prev.map(voucher => voucher.id === 'vouch-islr-' + linkedPurchase.id
         ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: reversal.id,
           correctionEntryIds: [...new Set([...(voucher.correctionEntryIds || (voucher.correctionEntryId ? [voucher.correctionEntryId] : [])), reversal.id])],
-          correctionNote: [voucher.correctionNote, reason.trim()].filter(Boolean).join(' | ') }
+          correctionNote: [voucher.correctionNote, correctionReason].filter(Boolean).join(' | ') }
         : voucher));
     }
     setCreditSettlements(prev => prev.map(settlement => settlement.companyId === currentCompany.id && settlement.journalEntryId === source.id
@@ -868,7 +867,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         eventType: 'accounting_correction_executed', entityType: 'JOURNAL_ENTRY', companyId: currentCompany.id,
         entityId: source.id, correctionType: priorPeriodAdjustment ? 'PRIOR_PERIOD_ADJUSTMENT_REVERSAL' : 'JOURNAL_REVERSAL',
         sourceDocumentRef: source.referenceDoc || String(source.entryNumber),
-        correctionDocumentRef: 'REV-' + source.entryNumber, reason: reason.trim(),
+        correctionDocumentRef: 'REV-' + source.entryNumber, reason: correctionReason,
         workpaperNote: workpaperNote.trim(), journalEntryId: reversal.id
       });
     } catch (auditError) {
@@ -1120,7 +1119,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const correctBcvRate = async (input: {
-    newRate: number; effectiveDate: string; reason: string; workpaperNote: string;
+    newRate: number; effectiveDate: string; reason: string; workpaperNote?: string;
   }): Promise<void> => {
     assertSQLitePersistenceReady('Corregir la tasa BCV');
     if (!currentCompany.id) throw new Error('Seleccione una empresa antes de corregir la tasa BCV.');
@@ -1130,11 +1129,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (currentCompany.closedThroughDate && input.effectiveDate <= currentCompany.closedThroughDate) {
       throw new Error('La tasa no puede corregirse dentro de un período cerrado. Reabra formalmente el período o tramite el ajuste del período anterior.');
     }
-    const reason = String(input.reason || '').trim();
+    const reason = String(input.reason || '').trim() || 'Corrección de tasa BCV';
     const workpaperNote = String(input.workpaperNote || '').trim();
-    if (reason.length < 10 || workpaperNote.length < 10) {
-      throw new Error('La corrección de tasa BCV requiere motivo y papel de trabajo de al menos 10 caracteres.');
-    }
+    if (reason.length > 2000 || workpaperNote.length > 4000) throw new Error('El motivo o la nota exceden el máximo permitido.');
     if (rate === Number(currentCompany.bcvRate) && input.effectiveDate === currentCompany.lastRateUpdate) return;
     const auditInput: CorrectionAuditInput = {
       eventType: 'accounting_correction_requested', entityType: 'BCV_RATE',

@@ -539,7 +539,7 @@ app.whenReady().then(async () => {
     const sameMediumAsOriginal = input?.sameMediumAsOriginal === true;
     if (!allowedEvents.has(eventType) || !allowedEntities.has(entityType) ||
         !companyId || companyId.length > 160 || !entityId || entityId.length > 160 || !correctionType || correctionType.length > 80 ||
-        reason.length < 10 || reason.length > 2000 || workpaperNote.length < 10 || workpaperNote.length > 4000 ||
+        reason.length > 2000 || workpaperNote.length > 4000 ||
         sourceDocumentRef.length > 160 || correctionDocumentRef.length > 160 || journalEntryId.length > 160) {
       return { ok: false, message: 'Los datos del evento de auditoría están incompletos o no son válidos.' };
     }
@@ -610,37 +610,17 @@ app.whenReady().then(async () => {
     }
     return registerCorrectionRequest(db,input,actor);
   });
-  ipcMain.handle('sicoven:correction-case-review', (_event, token, input) => reviewCorrectionRequest(db,input,correctionActor(token)));
-  ipcMain.handle('sicoven:correction-case-authorize', (_event, token, input) => requireApprovedCorrectionCase(db,input,correctionActor(token)));
-  const assertCorrectionDocumentNotPersisted = caseId => {
-    const item=db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(caseId || ''));
-    if(!item) throw new Error('El expediente de corrección no existe.');
-    const stateRow=db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
-    const state=stateRow ? JSON.parse(stateRow.state_json) : {};
-    const collectionByType={SALE:'sales',PURCHASE:'purchases',JOURNAL_ENTRY:'journalEntries',INVENTORY_MOVEMENT:'movements'};
-    const candidates=Array.isArray(state[collectionByType[item.entity_type]]) ? state[collectionByType[item.entity_type]] : [];
-    const ref=String(item.correction_ref || '').trim().toLocaleUpperCase();
-    const referenceFields=['id','documentNumber','invoiceNumber','entryNumber','referenceDoc','documentRef','number','creditNoteNumber','debitNoteNumber'];
-    const persistedCandidate=candidates.some(candidate=>
-      String(candidate.companyId || '')===String(item.company_id) &&
-      String(candidate.id)!==String(item.entity_id) &&
-      (!['SALE','PURCHASE'].includes(item.entity_type) || ['02','03'].includes(String(candidate.documentType || ''))) &&
-      referenceFields.some(field=>candidate[field]!=null && String(candidate[field]).trim().toLocaleUpperCase()===ref)
-    );
-    if(persistedCandidate || findLinkedCorrectionEvidence(state,item,item.correction_ref)) {
-      throw new Error('El documento correctivo ya está persistido (esté o no vinculado correctamente). No se puede observar ni retirar; debe regularizarse su trazabilidad y completar la confirmación de ejecución.');
-    }
-  };
-  ipcMain.handle('sicoven:correction-case-observe', (_event, token, input) => {
-    const actor=correctionActor(token);
-    assertCorrectionDocumentNotPersisted(input?.caseId);
-    return observeCorrectionRequest(db,input,actor);
+  ipcMain.handle('sicoven:correction-case-review', () => {
+    throw new Error('La revisión y aprobación previa ya no forman parte del Centro de Correcciones.');
   });
-  ipcMain.handle('sicoven:correction-case-resubmit', (_event, token, input) => resubmitCorrectionRequest(db,input,correctionActor(token)));
-  ipcMain.handle('sicoven:correction-case-withdraw', (_event, token, input) => {
-    const actor=correctionActor(token);
-    assertCorrectionDocumentNotPersisted(input?.caseId);
-    return withdrawCorrectionRequest(db,input,actor);
+  ipcMain.handle('sicoven:correction-case-observe', () => {
+    throw new Error('Las observaciones administrativas fueron retiradas del flujo operativo.');
+  });
+  ipcMain.handle('sicoven:correction-case-resubmit', () => {
+    throw new Error('La subsanación y el reenvío a revisión fueron retirados.');
+  });
+  ipcMain.handle('sicoven:correction-case-withdraw', () => {
+    throw new Error('El retiro administrativo fue retirado del flujo operativo.');
   });
   ipcMain.handle('sicoven:correction-case-execute', (_event, token, input) => {
     const actor = correctionActor(token);
@@ -652,21 +632,6 @@ app.whenReady().then(async () => {
     const evidence = findLinkedCorrectionEvidence(state,item,reference);
     if (!evidence) {
       throw new Error('No se encontró un documento correctivo de la misma empresa con referencia coincidente y vínculo explícito al registro origen. El expediente permanece aprobado y abierto.');
-    }
-    const verifiedCaseSupport = db.prepare(`
-      SELECT COUNT(*) AS total FROM supporting_documents d
-      WHERE d.company_id=? AND d.entity_type='CORRECTION_CASE' AND d.entity_id=? AND d.document_type='EVIDENCIA_CORRECCION'
-        AND (SELECT e.event_type FROM supporting_document_events e
-             WHERE e.document_id=d.id AND e.event_type<>'ACCESSED'
-             ORDER BY e.id DESC LIMIT 1)='REVIEWED'
-        AND (SELECT e.created_at FROM supporting_document_events e
-             WHERE e.document_id=d.id AND e.event_type<>'ACCESSED'
-             ORDER BY e.id DESC LIMIT 1) > COALESCE(
-               (SELECT MAX(w.created_at) FROM accounting_correction_case_workflow_events w
-                WHERE w.case_id=d.entity_id AND w.event_type='OBSERVED'),'')
-    `).get(item.company_id,item.id).total;
-    if (!verifiedCaseSupport) {
-      throw new Error('El expediente requiere al menos un soporte adjunto y verificado por el contador antes de cerrar la ejecución.');
     }
     return markCorrectionExecuted(db,{...input,evidenceRecordId:evidence.id,evidenceCollection:evidence.__evidenceCollection},actor);
   });

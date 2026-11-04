@@ -8,7 +8,7 @@ import type { VatFiscalIncident } from '../types/vatFiscalIncidents';
 export const ReversionFiscalView: React.FC = () => {
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, addMovement, addPurchaseCreditNote,
-    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, createCorrectionCase, authorizeCorrectionCase, listCorrectionCases, reviewCorrectionCase, observeCorrectionCase, resubmitCorrectionCase, withdrawCorrectionCase, executeCorrectionCase, listSupportingDocuments, attachSupportingDocument, reviewSupportingDocument, openSupportingDocument
+    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, createCorrectionCase, authorizeCorrectionCase, listCorrectionCases, executeCorrectionCase
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -52,22 +52,18 @@ export const ReversionFiscalView: React.FC = () => {
   const [bcvCorrectionRate, setBcvCorrectionRate] = useState(String(currentCompany.bcvRate || ''));
   const [bcvCorrectionDate, setBcvCorrectionDate] = useState(today);
   const [bcvCorrectionReason, setBcvCorrectionReason] = useState('');
-  const [bcvCorrectionWorkpaper, setBcvCorrectionWorkpaper] = useState('');
   const [bcvCorrectionSaving, setBcvCorrectionSaving] = useState(false);
   const [requestEntityType, setRequestEntityType] = useState<'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'INVENTORY_MOVEMENT'>('JOURNAL_ENTRY');
+  const [requestSearch, setRequestSearch] = useState('');
   const [requestEntityId, setRequestEntityId] = useState('');
   const [requestCorrectionType, setRequestCorrectionType] = useState('CORRECCION_DOCUMENTAL');
   const [requestSourceRef, setRequestSourceRef] = useState('');
   const [requestTargetRef, setRequestTargetRef] = useState('');
   const [requestReason, setRequestReason] = useState('');
-  const [requestWorkpaper, setRequestWorkpaper] = useState('');
   const [requestSubmitting, setRequestSubmitting] = useState(false);
   const [correctionCases, setCorrectionCases] = useState<import('../context/AccountingContext').CorrectionCase[]>([]);
-  const [caseActionReason, setCaseActionReason] = useState<Record<string,string>>({});
-  const [caseExecutionRef, setCaseExecutionRef] = useState<Record<string,string>>({});
   const [caseActionBusy, setCaseActionBusy] = useState<string | null>(null);
-  const [correctionCaseDocs, setCorrectionCaseDocs] = useState<Record<string, Array<{id:string;title:string;fileName:string;status:string;createdAt:string}>>>({});
-  const refreshCorrectionCases = useCallback(async () => { try { const cases=await listCorrectionCases(); setCorrectionCases(cases); const docs=await Promise.all(cases.map(async item=>[item.id,await listSupportingDocuments({entityType:'CORRECTION_CASE',entityId:item.id})] as const)); setCorrectionCaseDocs(Object.fromEntries(docs)); } catch (error) { setFeedback({kind:'error',message:error instanceof Error?error.message:'No se pudieron consultar los expedientes.'}); } },[listCorrectionCases,listSupportingDocuments]);
+  const refreshCorrectionCases = useCallback(async () => { try { setCorrectionCases(await listCorrectionCases()); } catch (error) { setFeedback({kind:'error',message:error instanceof Error?error.message:'No se pudo consultar el historial de correcciones.'}); } },[listCorrectionCases]);
   useEffect(() => { void refreshCorrectionCases(); },[refreshCorrectionCases]);
   const refreshAuditEvents = useCallback(async () => {
     setAuditLoading(true);
@@ -140,6 +136,17 @@ export const ReversionFiscalView: React.FC = () => {
       setIncidentError(error instanceof Error ? error.message : 'No se pudo crear el expediente fiscal.');
     } finally { setIncidentCreating(false); }
   };
+  const correctionSourceOptions = useMemo(() => [
+    ...journalEntries.filter(item=>item.companyId===currentCompany.id).map(item=>({entityType:'JOURNAL_ENTRY' as const,id:String(item.id),reference:String(item.referenceDoc || item.entryNumber || item.id),label:`Asiento #${item.entryNumber} · ${item.date} · ${item.description || ''}`})),
+    ...sales.filter(item=>item.companyId===currentCompany.id).map(item=>({entityType:'SALE' as const,id:String(item.id),reference:String(item.invoiceNumber || item.id),label:`Venta ${item.invoiceNumber || item.id} · ${item.invoiceDate} · ${item.customerName || ''}`})),
+    ...purchases.filter(item=>item.companyId===currentCompany.id).map(item=>({entityType:'PURCHASE' as const,id:String(item.id),reference:String(item.invoiceNumber || item.id),label:`Compra ${item.invoiceNumber || item.id} · ${item.invoiceDate} · ${item.supplierName || ''}`})),
+    ...movements.filter(item=>item.companyId===currentCompany.id).map(item=>({entityType:'INVENTORY_MOVEMENT' as const,id:String(item.id),reference:String(item.documentRef || item.id),label:`Kardex ${item.documentRef || item.id} · ${item.date} · ${item.productName || ''}`}))
+  ],[journalEntries,sales,purchases,movements,currentCompany.id]);
+  const filteredCorrectionSources = useMemo(() => {
+    const query=requestSearch.trim().toLocaleLowerCase();
+    return correctionSourceOptions.filter(item=>!query || (item.label+' '+item.reference+' '+item.id).toLocaleLowerCase().includes(query)).slice(0,100);
+  },[correctionSourceOptions,requestSearch]);
+
   const submitCorrectionRequest = async () => {
     if (requestSubmitting) return;
     setRequestSubmitting(true);
@@ -149,11 +156,11 @@ export const ReversionFiscalView: React.FC = () => {
         correctionType: requestCorrectionType.trim(),
         sourceDocumentRef: requestSourceRef.trim(),
         correctionDocumentRef: requestTargetRef.trim(),
-        reason: requestReason.trim(), workpaperNote: requestWorkpaper.trim()
+        reason: requestReason.trim(), workpaperNote: ''
       });
       setRequestEntityId(''); setRequestSourceRef(''); setRequestTargetRef('');
-      setRequestReason(''); setRequestWorkpaper('');
-      setFeedback({kind:'success',message:'Expediente creado en SQLite, pendiente de evaluación y aprobación del contador. No se modificó el documento original.'});
+      setRequestReason('');
+      setFeedback({kind:'success',message:'Corrección habilitada directamente para el contador. El original permanece intacto.'});
       await refreshCorrectionCases();
       await refreshAuditEvents();
     } catch (error) {
@@ -165,13 +172,9 @@ export const ReversionFiscalView: React.FC = () => {
     if (bcvCorrectionSaving) return;
     setBcvCorrectionSaving(true);
     try {
-      await correctBcvRate({
-        newRate: Number(bcvCorrectionRate), effectiveDate: bcvCorrectionDate,
-        reason: bcvCorrectionReason, workpaperNote: bcvCorrectionWorkpaper
-      });
+      await correctBcvRate({newRate:Number(bcvCorrectionRate),effectiveDate:bcvCorrectionDate,reason:bcvCorrectionReason,workpaperNote:''});
       setBcvCorrectionOpen(false);
       setBcvCorrectionReason('');
-      setBcvCorrectionWorkpaper('');
       setFeedback({kind:'success', message:'La tasa BCV quedó corregida en SQLite y la solicitud/ejecución quedó registrada en auditoría.'});
       await refreshAuditEvents();
     } catch (error) {
@@ -465,7 +468,7 @@ export const ReversionFiscalView: React.FC = () => {
     try {
       const entry = await reverseJournalEntry(
         source.id, effectiveDate, reason,
-        workpaperNote,
+        '',
         isPriorPeriod, isPriorPeriod ? retainedEarningsCode : undefined
       );
       setFeedback({kind:'success', message:'Contra-asiento '+entry.entryNumber+' registrado y enlazado al asiento '+source.entryNumber+'. El original permanece en el historial.'});
@@ -495,88 +498,49 @@ export const ReversionFiscalView: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-2xl border border-indigo-200 bg-white p-4 sm:p-6 space-y-3">
-        <div className="flex items-center gap-3"><ShieldCheck className="h-6 w-6 text-indigo-700"/><div><h2 className="font-bold text-slate-900">Centro Integral de Correcciones · Nueva solicitud</h2><p className="text-xs text-slate-500">Registra una solicitud trazable antes de modificar cualquier efecto contable o fiscal.</p></div></div>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Este registro abre una solicitud, no autoriza ni ejecuta la corrección. Los documentos emitidos y asientos contabilizados permanecen intactos hasta completar el flujo especializado y la aprobación que corresponda.</div>
+      <section className="rounded-2xl border border-indigo-200 bg-white p-4 sm:p-6 space-y-4">
+        <div className="flex items-center gap-3"><ShieldCheck className="h-6 w-6 text-indigo-700"/><div><h2 className="font-bold text-slate-900">Centro de Correcciones</h2><p className="text-xs text-slate-500">Localice el registro original, consulte sus datos y habilite directamente la acción correctiva.</p></div></div>
+        <label className="block text-xs font-semibold text-slate-700">Buscar asiento, venta, compra o movimiento de Kardex
+          <input value={requestSearch} onChange={e=>setRequestSearch(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Número de factura, asiento, documento, proveedor, cliente o artículo…"/>
+        </label>
+        <label className="block text-xs font-semibold text-slate-700">Registro original
+          <select value={requestEntityId ? requestEntityType+'::'+requestEntityId : ''} onChange={e=>{
+            const value=e.target.value; const split=value.indexOf('::');
+            if(split<0){setRequestEntityId('');setRequestSourceRef('');return;}
+            const entityType=value.slice(0,split) as typeof requestEntityType; const id=value.slice(split+2);
+            const found=correctionSourceOptions.find(item=>item.entityType===entityType&&item.id===id);
+            setRequestEntityType(entityType);setRequestEntityId(id);setRequestSourceRef(found?.reference||'');
+          }} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
+            <option value="">Seleccione el registro que desea corregir…</option>
+            {filteredCorrectionSources.map(item=><option key={item.entityType+'::'+item.id} value={item.entityType+'::'+item.id}>{item.label}</option>)}
+          </select>
+        </label>
+        {requestEntityId && <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs"><p><strong>ID:</strong> {requestEntityId} · <strong>Referencia:</strong> {requestSourceRef}</p></div>}
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-xs font-semibold text-slate-700">Tipo de registro origen
-            <select value={requestEntityType} onChange={e=>setRequestEntityType(e.target.value as typeof requestEntityType)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
-              <option value="JOURNAL_ENTRY">Asiento contable</option><option value="SALE">Venta / NC / ND</option><option value="PURCHASE">Compra / NC / ND</option><option value="INVENTORY_MOVEMENT">Movimiento de inventario / Kardex</option>
-            </select>
-          </label>
-          <label className="text-xs font-semibold text-slate-700">ID interno exacto del registro *
-            <input value={requestEntityId} onChange={e=>setRequestEntityId(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="ID del registro origen"/>
-          </label>
-          <label className="text-xs font-semibold text-slate-700">Tipo de corrección *
+          <label className="text-xs font-semibold text-slate-700">Acción correctiva
             <select value={requestCorrectionType} onChange={e=>setRequestCorrectionType(e.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
-              <option value="CORRECCION_DOCUMENTAL">Corrección documental</option><option value="ANULACION_DOCUMENTO">Anulación de documento</option><option value="REVERSIÓN_CONTABLE">Reversión contable</option><option value="AJUSTE_PARCIAL">Ajuste parcial</option><option value="SUSTITUCION_DOCUMENTO">Sustitución documental</option><option value="RECTIFICACION_FISCAL">Rectificación fiscal</option><option value="CORRECCION_INVENTARIO">Corrección de inventario</option><option value="CORRECCION_AUXILIAR">Corrección CxC / CxP / banco</option>
+              <option value="CORRECCION_DOCUMENTAL">Corregir documento</option><option value="ANULACION_DOCUMENTO">Anular operación / documento</option><option value="REVERSIÓN_CONTABLE">Revertir asiento</option><option value="AJUSTE_PARCIAL">Ajuste parcial</option><option value="SUSTITUCION_DOCUMENTO">Sustituir documento</option><option value="RECTIFICACION_FISCAL">Rectificación fiscal</option><option value="CORRECCION_INVENTARIO">Corregir inventario / Kardex</option><option value="CORRECCION_AUXILIAR">Ajustar auxiliar</option>
             </select>
           </label>
-          <label className="text-xs font-semibold text-slate-700">Referencia del documento original *
-            <input value={requestSourceRef} onChange={e=>setRequestSourceRef(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Factura, NC/ND, asiento, comprobante…"/>
+          <label className="text-xs font-semibold text-slate-700">Referencia del documento correctivo
+            <input value={requestTargetRef} onChange={e=>setRequestTargetRef(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Número de NC, ND, asiento o movimiento correctivo"/>
           </label>
-          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Referencia correctiva que se emitirá *
-            <input value={requestTargetRef} onChange={e=>setRequestTargetRef(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Asigne el número fiscal antes de solicitar la autorización"/>
-          </label>
-          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Motivo y causa (mínimo 15 caracteres) *
-            <textarea value={requestReason} onChange={e=>setRequestReason(e.target.value)} rows={2} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Describa el error, hecho y alcance de la corrección."/>
-          </label>
-          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Papel de trabajo / evidencia (mínimo 15 caracteres) *
-            <textarea value={requestWorkpaper} onChange={e=>setRequestWorkpaper(e.target.value)} rows={2} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Conciliaciones, soportes, documentos relacionados y análisis preliminar."/>
+          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Motivo breve (opcional)
+            <textarea value={requestReason} onChange={e=>setRequestReason(e.target.value)} rows={2} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Indique brevemente qué error debe corregirse."/>
           </label>
         </div>
-        <div><button type="button" onClick={()=>void submitCorrectionRequest()} disabled={requestSubmitting||!requestEntityId.trim()||!requestSourceRef.trim()||!requestTargetRef.trim()||requestReason.trim().length<15||requestWorkpaper.trim().length<15} className="rounded bg-indigo-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{requestSubmitting?'Registrando solicitud…':'Registrar solicitud en SQLite'}</button></div>
+        <div><button type="button" onClick={()=>void submitCorrectionRequest()} disabled={requestSubmitting||!requestEntityId.trim()||!requestSourceRef.trim()||!requestTargetRef.trim()} className="rounded bg-indigo-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{requestSubmitting?'Procesando…':'Habilitar corrección directa'}</button></div>
+        <p className="text-xs text-slate-500">No se solicitan aprobaciones, expedientes administrativos, papeles de trabajo ni adjuntos. SICOVEN conserva el original, identifica al contador, registra fecha/hora y exige que el documento correctivo quede vinculado al origen antes de cerrar la operación.</p>
       </section>
       <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div><h2 className="font-bold text-slate-900">Bandeja de solicitudes pendientes</h2><p className="text-xs text-slate-500">Solicitudes abiertas registradas en auditoría SQLite; no representan aprobaciones ni ejecuciones.</p></div>
-          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">{correctionRequests.filter(item=>!item.completedBy).length} pendientes · {correctionRequests.filter(item=>item.completedBy).length} ejecutadas</span>
-        </div>
-        {auditError && <p className="text-xs text-rose-700">{auditError}</p>}
-        {correctionRequests.length===0
-          ? <p className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">{auditLoading?'Consultando solicitudes…':'No hay solicitudes de corrección en el historial consultado.'}</p>
-          : <div className="space-y-2">{correctionRequests.map(({request,completedBy})=>{
-            const details=request.details||{};
-            return <article key={request.id} className={`rounded-lg border p-3 text-xs space-y-1 ${completedBy?'border-emerald-200 bg-emerald-50/40':'border-amber-200 bg-amber-50/40'}`}>
-              <div className="flex flex-wrap items-center justify-between gap-2"><strong>{String(details.correctionType||'Corrección')}</strong><span className={`rounded px-2 py-1 font-semibold ${completedBy?'bg-emerald-100 text-emerald-900':'bg-amber-100 text-amber-900'}`}>{completedBy?'EJECUTADA · AUDITADA':'PENDIENTE DE REVISIÓN'}</span></div>
-              <p>{String(details.entityType||'')} · ID {String(details.entityId||'')} · Ref. {String(details.sourceDocumentRef||'')}</p>
-              <p><strong>Motivo:</strong> {String(details.reason||'')}</p>
-              <p><strong>Papel de trabajo:</strong> {String(details.workpaperNote||'')}</p>
-              <p className="text-slate-500">Solicitud #{request.id} · {request.createdAt} · {String(details.actorUsername||'Usuario')}</p>
-              {completedBy && <p className="text-emerald-800">Evento de ejecución #{completedBy.id} · {completedBy.createdAt} · Ref. correctiva {String(completedBy.details.correctionDocumentRef||'—')}</p>}
-            </article>;
-          })}</div>}
-      </section>
-      <section className="rounded-2xl border border-indigo-200 bg-white p-4 sm:p-6 space-y-3">
-        <h2 className="font-bold">Expedientes integrales · revisión segregada ({correctionCases.length})</h2>
-        <p className="text-xs text-slate-600">La corrección material de ventas/compras, asientos y movimientos de Kardex debe ejecutarse en su módulo especializado después de esta autorización. El sistema lo opera un único contador autenticado: registra, evalúa, autoriza, ejecuta y documenta la corrección. SICOVEN conserva el historial inalterable, exige justificación, evidencia, validaciones y confirmación explícita. Banco, BCV y rectificativas fiscales aún no están integrados.</p>
-        {correctionCases.map(item=><article key={item.id} className="rounded-lg border p-3 space-y-2 text-xs">
-          <strong>{item.correction_type} · {item.entity_type} #{item.entity_id} · {item.workflow_stage==='WITHDRAWN'?'RETIRADO':item.status}</strong>
-          <p>Origen: {item.source_ref} · Correctivo: {item.correction_ref||'Por asignar'}</p><p>Etapa del expediente: {item.workflow_stage==='READY_FOR_EXECUTION' && item.execution_started_at ? 'Aprobado · ejecución iniciada' : ({IN_REVIEW:'En revisión',OBSERVATION_REQUIRED:'Observado · requiere subsanación',READY_FOR_EXECUTION:'Aprobado · listo para ejecución',CLOSED:'Cerrado sin ejecución',COMPLETED:'Ejecutado',WITHDRAWN:'Retirado por el solicitante'})[item.workflow_stage] || item.workflow_stage}</p><p>{item.reason}</p><p>{item.workpaper}</p>
-          <p className="text-slate-500">Solicitó {item.requested_by_name} · Revisó {item.reviewed_by_name||'—'} · Ejecutó {item.executed_by_name||'—'}</p>
-          <button type="button" onClick={async()=>{try{await attachSupportingDocument({entityType:'CORRECTION_CASE',entityId:item.id,documentType:'EVIDENCIA_CORRECCION',title:'Soporte del expediente'});await refreshCorrectionCases();}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'No se pudo adjuntar el soporte.'});}}} className="rounded border px-2 py-1">Adjuntar soporte documental</button>
-          {(correctionCaseDocs[item.id]||[]).map(doc=><p key={doc.id}>{doc.title} · {doc.fileName} · {doc.status} <button type="button" onClick={()=>void openSupportingDocument(doc.id)}>Abrir</button> {doc.status!=='VERIFIED'&&doc.status!=='REPLACED'&&<button type="button" onClick={async()=>{try{await reviewSupportingDocument({documentId:doc.id,decision:'VERIFIED',reason:'Soporte cotejado contra el documento correctivo y el registro fuente.'});await refreshCorrectionCases();}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'No se pudo verificar el soporte.'});}}}>Verificar</button>}{doc.status!=='VERIFIED'&&doc.status!=='REPLACED'&&<button type="button" onClick={async()=>{try{await reviewSupportingDocument({documentId:doc.id,decision:'OBSERVATION_REQUIRED',reason:'El soporte requiere aclaración, integridad o mejor legibilidad.'});await refreshCorrectionCases();}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'No se pudo observar el soporte.'});}}}>Observar</button>}</p>)}
-          {item.workflow_stage==='OBSERVATION_REQUIRED' && <>
-            <p className="rounded border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900">Expediente observado: {item.review_reason || 'Debe subsanarse antes de una nueva revisión.'}</p>
-            <textarea value={caseActionReason[item.id]||''} onChange={e=>setCaseActionReason(p=>({...p,[item.id]:e.target.value}))} className="w-full rounded border p-2" rows={2} placeholder="Describa la subsanación y los nuevos soportes (15 caracteres mínimo)"/>
-            <button disabled={caseActionBusy===item.id||(caseActionReason[item.id]||'').trim().length<15} onClick={async()=>{setCaseActionBusy(item.id);try{await resubmitCorrectionCase({caseId:item.id,reason:caseActionReason[item.id]});await refreshCorrectionCases();setCaseActionReason(p=>({...p,[item.id]:''}));}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'Error al reenviar el expediente'});}finally{setCaseActionBusy(null);}}} className="rounded bg-amber-700 px-3 py-2 text-white">Subsanar y reenviar a revisión</button>
-          </>}
-          {item.status==='PENDING_REVIEW' && item.workflow_stage==='IN_REVIEW' && <>
-            <textarea value={caseActionReason[item.id]||''} onChange={e=>setCaseActionReason(p=>({...p,[item.id]:e.target.value}))} className="w-full rounded border p-2" rows={2} placeholder="Justificación de decisión u observación (15 caracteres mínimo)"/>
-            <button disabled={caseActionBusy===item.id||(caseActionReason[item.id]||'').trim().length<15} onClick={async()=>{setCaseActionBusy(item.id);try{await reviewCorrectionCase({caseId:item.id,decision:'APPROVE',reason:caseActionReason[item.id]});await refreshCorrectionCases();}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'Error de revisión'});}finally{setCaseActionBusy(null);}}} className="rounded bg-emerald-700 px-3 py-2 text-white">Aprobar</button>
-            <button disabled={caseActionBusy===item.id||(caseActionReason[item.id]||'').trim().length<15} onClick={async()=>{setCaseActionBusy(item.id);try{await reviewCorrectionCase({caseId:item.id,decision:'REJECT',reason:caseActionReason[item.id]});await refreshCorrectionCases();}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'Error de revisión'});}finally{setCaseActionBusy(null);}}} className="rounded border px-3 py-2">Rechazar</button>
-            <button disabled={caseActionBusy===item.id||(caseActionReason[item.id]||'').trim().length<15} onClick={async()=>{setCaseActionBusy(item.id);try{await observeCorrectionCase({caseId:item.id,reason:caseActionReason[item.id]});await refreshCorrectionCases();}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'Error al observar el expediente'});}finally{setCaseActionBusy(null);}}} className="rounded border border-amber-600 px-3 py-2 text-amber-800">Observar y devolver para subsanar</button>
-          </>}
-          {item.status==='APPROVED' && item.workflow_stage==='READY_FOR_EXECUTION' && <>
-            <input value={caseExecutionRef[item.id]||''} onChange={e=>setCaseExecutionRef(p=>({...p,[item.id]:e.target.value}))} className="w-full rounded border p-2" placeholder="Referencia correctiva emitida"/>
-            <textarea value={caseActionReason[item.id]||''} onChange={e=>setCaseActionReason(p=>({...p,[item.id]:e.target.value}))} className="w-full rounded border p-2" rows={2} placeholder="Constancia de ejecución (15 caracteres mínimo)"/>
-            <button disabled={caseActionBusy===item.id||!(caseExecutionRef[item.id]||'').trim()||(caseActionReason[item.id]||'').trim().length<15} onClick={async()=>{setCaseActionBusy(item.id);try{await executeCorrectionCase({caseId:item.id,executionRef:caseExecutionRef[item.id],reason:caseActionReason[item.id]});await refreshCorrectionCases();}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'Error de ejecución'});}finally{setCaseActionBusy(null);}}} className="rounded bg-indigo-700 px-3 py-2 text-white">Confirmar ejecución ya persistida</button>
-            <button disabled={caseActionBusy===item.id||(caseActionReason[item.id]||'').trim().length<15} onClick={async()=>{setCaseActionBusy(item.id);try{await observeCorrectionCase({caseId:item.id,reason:caseActionReason[item.id]});await refreshCorrectionCases();}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'No se pudo devolver el expediente para subsanar'});}finally{setCaseActionBusy(null);}}} className="rounded border border-amber-600 px-3 py-2 text-amber-800">Observar / liberar intento fallido y devolver a revisión</button>
-          </>}
-          {['IN_REVIEW','OBSERVATION_REQUIRED','READY_FOR_EXECUTION'].includes(item.workflow_stage) && <button disabled={caseActionBusy===item.id||(caseActionReason[item.id]||'').trim().length<15} onClick={async()=>{setCaseActionBusy(item.id);try{await withdrawCorrectionCase({caseId:item.id,reason:caseActionReason[item.id]});await refreshCorrectionCases();}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'No se pudo retirar el expediente'});}finally{setCaseActionBusy(null);}}} className="rounded border border-rose-600 px-3 py-2 text-rose-800">Retirar expediente</button>}
-          <div className="border-t pt-2"><strong>Historial</strong>{item.events.map(ev=><p key={ev.id}>{ev.event_type} · {ev.actor_name} · {ev.created_at} · {ev.reason}</p>)}</div>
+        <div className="flex items-center justify-between gap-2"><h2 className="font-bold text-slate-900">Historial de correcciones ({correctionCases.length})</h2><button type="button" onClick={()=>void refreshCorrectionCases()} className="rounded border px-3 py-1">Actualizar</button></div>
+        {correctionCases.length===0 ? <p className="text-sm text-slate-500">Todavía no hay correcciones registradas.</p> : correctionCases.map(item=><article key={item.id} className="rounded-lg border p-3 space-y-2 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2"><strong>{item.correction_type} · {item.entity_type} · {item.entity_id}</strong><span className="font-semibold">{item.status==='EXECUTED'?'EJECUTADA':item.status==='APPROVED'?'LISTA PARA EJECUTAR':item.status}</span></div>
+          <p>Origen: {item.source_ref} · Correctivo: {item.correction_ref}</p><p>{item.reason || 'Sin motivo adicional.'}</p>
+          <p className="text-slate-500">Contador: {item.requested_by_name} · Registro: {item.created_at} · Ejecución: {item.executed_at || 'Pendiente'}</p>
+          {item.status==='APPROVED' && item.workflow_stage==='READY_FOR_EXECUTION' && <button type="button" disabled={caseActionBusy===item.id} onClick={async()=>{setCaseActionBusy(item.id);try{await executeCorrectionCase({caseId:item.id,executionRef:item.correction_ref,reason:'Documento correctivo persistido; vínculo de origen verificado por SICOVEN.'});await refreshCorrectionCases();setFeedback({kind:'success',message:'La corrección quedó cerrada con trazabilidad e integridad verificadas.'});}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'No se pudo verificar la corrección.'});}finally{setCaseActionBusy(null);}}} className="rounded bg-indigo-700 px-3 py-2 text-white disabled:opacity-40">Verificar vínculo y cerrar corrección</button>}
+          <div className="border-t pt-2"><strong>Historial inalterable</strong>{item.events.map(ev=><p key={ev.id}>{ev.event_type} · {ev.actor_name} · {ev.created_at} · {ev.reason}</p>)}</div>
         </article>)}
-        {correctionCases.length===0 && <p className="text-sm text-slate-500">No hay expedientes formales.</p>}
       </section>
       <section className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
         <div className="bg-slate-900 text-white px-5 py-4 flex items-center gap-3">
