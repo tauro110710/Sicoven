@@ -3984,12 +3984,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const contraAccountName = contraAccount.name;
 
-    const rate = currentCompany.bcvRate;
-    if (!Number.isFinite(rate) || rate <= 0) {
-      throw new Error('Configure una tasa BCV válida para generar el asiento de conciliación.');
-    }
-    const amountBs = statementMovement.amountBs;
-    const amountUsd = statementMovement.amountUsd || (amountBs / rate);
+    const rate = Number(statementMovement.bcvRate);
+    const amountBs = Number(statementMovement.amountBs);
+    const amountUsd = Number(statementMovement.amountUsd);
+    validateBankMovementFxSnapshot({
+      date: statementMovement.date,
+      amountBs,
+      amountUsd,
+      bcvRate: rate,
+      bcvRateEffectiveDate: statementMovement.bcvRateEffectiveDate
+    });
 
     const items: JournalEntryItem[] = [];
 
