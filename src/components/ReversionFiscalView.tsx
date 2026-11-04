@@ -77,6 +77,21 @@ export const ReversionFiscalView: React.FC = () => {
     }
   }, [getAuditEvents, currentCompany.id]);
   useEffect(() => { void refreshAuditEvents(); }, [refreshAuditEvents]);
+  const correctionRequests = useMemo(() => auditEvents
+    .filter(event => event.eventType === 'accounting_correction_requested')
+    .map(request => {
+      const source = request.details || {};
+      const completedBy = auditEvents.find(event => {
+        if (event.eventType !== 'accounting_correction_executed') return false;
+        const result = event.details || {};
+        return result.companyId === source.companyId &&
+          result.entityType === source.entityType &&
+          result.entityId === source.entityId &&
+          result.correctionType === source.correctionType &&
+          (!request.createdAt || !event.createdAt || event.createdAt >= request.createdAt);
+      });
+      return { request, completedBy };
+    }), [auditEvents]);
   const refreshFiscalIncidents = useCallback(async () => {
     setIncidentsLoading(true);
     try {
@@ -505,19 +520,20 @@ export const ReversionFiscalView: React.FC = () => {
       <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div><h2 className="font-bold text-slate-900">Bandeja de solicitudes pendientes</h2><p className="text-xs text-slate-500">Solicitudes abiertas registradas en auditoría SQLite; no representan aprobaciones ni ejecuciones.</p></div>
-          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">{auditEvents.filter(event=>event.eventType==='accounting_correction_requested').length} solicitudes registradas</span>
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">{correctionRequests.filter(item=>!item.completedBy).length} pendientes · {correctionRequests.filter(item=>item.completedBy).length} ejecutadas</span>
         </div>
         {auditError && <p className="text-xs text-rose-700">{auditError}</p>}
-        {auditEvents.filter(event=>event.eventType==='accounting_correction_requested').length===0
+        {correctionRequests.length===0
           ? <p className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">{auditLoading?'Consultando solicitudes…':'No hay solicitudes de corrección en el historial consultado.'}</p>
-          : <div className="space-y-2">{auditEvents.filter(event=>event.eventType==='accounting_correction_requested').map(event=>{
-            const details=event.details||{};
-            return <article key={event.id} className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 text-xs space-y-1">
-              <div className="flex flex-wrap items-center justify-between gap-2"><strong>{String(details.correctionType||'Corrección')}</strong><span className="rounded bg-amber-100 px-2 py-1 font-semibold text-amber-900">PENDIENTE DE REVISIÓN</span></div>
+          : <div className="space-y-2">{correctionRequests.map(({request,completedBy})=>{
+            const details=request.details||{};
+            return <article key={request.id} className={`rounded-lg border p-3 text-xs space-y-1 ${completedBy?'border-emerald-200 bg-emerald-50/40':'border-amber-200 bg-amber-50/40'}`}>
+              <div className="flex flex-wrap items-center justify-between gap-2"><strong>{String(details.correctionType||'Corrección')}</strong><span className={`rounded px-2 py-1 font-semibold ${completedBy?'bg-emerald-100 text-emerald-900':'bg-amber-100 text-amber-900'}`}>{completedBy?'EJECUTADA · AUDITADA':'PENDIENTE DE REVISIÓN'}</span></div>
               <p>{String(details.entityType||'')} · ID {String(details.entityId||'')} · Ref. {String(details.sourceDocumentRef||'')}</p>
               <p><strong>Motivo:</strong> {String(details.reason||'')}</p>
               <p><strong>Papel de trabajo:</strong> {String(details.workpaperNote||'')}</p>
-              <p className="text-slate-500">Solicitud #{event.id} · {event.createdAt} · {String(details.actorUsername||'Usuario')}</p>
+              <p className="text-slate-500">Solicitud #{request.id} · {request.createdAt} · {String(details.actorUsername||'Usuario')}</p>
+              {completedBy && <p className="text-emerald-800">Evento de ejecución #{completedBy.id} · {completedBy.createdAt} · Ref. correctiva {String(completedBy.details.correctionDocumentRef||'—')}</p>}
             </article>;
           })}</div>}
       </section>
