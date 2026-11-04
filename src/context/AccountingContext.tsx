@@ -22,7 +22,7 @@ import {
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 import { prepareAccountForCatalog } from '../types/chartOfAccounts';
 import { validateJournalEntryAccounts, isJournalEntryBalanced } from '../types/journalEntryValidation';
-import { matchesBankStatementLine } from '../types/bankStatementMatching';
+import { matchesBankStatementLine, validateBankMovementFxSnapshot } from '../types/bankStatementMatching';
 import { buildOpeningEntryItems } from '../types/accountingYearOpening';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
 import {
@@ -3740,10 +3740,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // La contabilidad de SICOVEN valida cada asiento en Bs y USD. Guardar
     // cero en la moneda equivalente permite importar el movimiento, pero luego
     // impide generar un ajuste de conciliación válido en partida doble.
-    if (!Number.isFinite(amountBs) || !Number.isFinite(amountUsd) ||
-        amountBs <= 0 || amountUsd <= 0) {
-      throw new Error('El movimiento debe tener importes positivos y válidos tanto en la moneda de la cuenta como en su equivalente.');
-    }
+    validateBankMovementFxSnapshot({
+      date: movData.date,
+      amountBs,
+      amountUsd,
+      bcvRate: Number(currentCompany.bcvRate),
+      bcvRateEffectiveDate: currentCompany.lastRateUpdate
+    });
     const newMov: BankStatementMovement = {
       ...movData,
       amountBs: Math.round(amountBs * 100) / 100,
