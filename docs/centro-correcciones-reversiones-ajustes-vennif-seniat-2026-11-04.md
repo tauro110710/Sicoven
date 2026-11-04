@@ -213,3 +213,5 @@ No declarar completa esta capacidad hasta que cada tipo documental con efecto co
 - Se cerró una vía adicional de escritura no confirmada: el importador JSON de bajo nivel dejó de exponerse directamente por el contexto; solo se utiliza internamente desde la restauración controlada, que valida, persiste y revierte a la copia previa si SQLite rechaza el snapshot.
 - Los restablecimientos de datos de muestra y de fábrica ahora exigen el puente SQLite y esperan la confirmación del nuevo estado vacío. La interfaz no informa éxito antes de la confirmación.
 - La restauración de respaldo también exige SQLite local antes de aplicar cambios y conserva su recuperación del snapshot previo ante fallo de persistencia.
+
+- Revisión adicional del restablecimiento de datos de muestra: el ledger de SQLite impide borrar asientos históricos mediante un snapshot ordinario. Por ello, el flujo ahora ejecuta primero el reinicio transaccional autorizado `resetAccounting` (que conserva autenticación, licencia y auditoría), verifica el resultado y después confirma el estado vacío desde el proveedor. No intenta eliminar asientos históricos a través del guardado normal.
