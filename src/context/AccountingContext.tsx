@@ -62,6 +62,7 @@ import { allocateDirectSupplierAdvance, validateSupplierDirectAdvanceDraft, type
 import { allocateSupplierAdvanceCreditNotes, validateSupplierAdvanceCreditNoteAllocations, validateSupplierAdvanceSettlementDraft, type SupplierAdvanceSettlement, type SupplierAdvanceSettlementDraft } from '../types/supplierAdvanceSettlement';
 import type { VatFiscalIncident, VatFiscalIncidentCreateInput, VatFiscalIncidentEventInput } from '../types/vatFiscalIncidents';
 import { buildSupplierDebitNoteAccountingPlan, type SupplierDebitNoteAccountingDraft } from '../types/supplierDebitNoteAccounting';
+import { calculatePurchaseServiceCreditNote, type PurchaseServiceCreditNoteRequest } from '../types/purchaseServiceCreditNote';
 import { calculateSaleCorrectionNote, type SaleCorrectionNoteRequest } from '../types/saleCorrectionNote';
 
 export interface AccountingAuditEvent {
@@ -123,6 +124,7 @@ interface AccountingContextType {
   purchases: PurchaseRecord[];
   addPurchase: (purchase: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>) => PurchaseRecord;
   addPurchaseCreditNote: (request: PurchaseCreditNoteRequest) => Promise<PurchaseRecord>;
+  addPurchaseServiceCreditNote: (draft: Omit<PurchaseServiceCreditNoteRequest, 'purchase' | 'priorCreditNotes' | 'closedThroughDate'> & { purchaseId: string }) => Promise<PurchaseRecord>;
   addSupplierDebitNote: (draft: Omit<SupplierDebitNoteAccountingDraft, 'companyId' | 'closedThroughDate'>) => Promise<PurchaseRecord>;
   deletePurchase: (id: string) => void;
 
@@ -2474,6 +2476,180 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
+  const addPurchaseServiceCreditNote = async (
+    draft: Omit<PurchaseServiceCreditNoteRequest, 'purchase' | 'priorCreditNotes' | 'closedThroughDate'> & { purchaseId: string }
+  ): Promise<PurchaseRecord> => {
+    assertSQLitePersistenceReady('Registrar NC de compra de servicios');
+    if (correctionWorkflowInFlightRef.current || purchaseCreditNoteInFlightRef.current) {
+      throw new Error('Ya existe una corrección documental en proceso. Espere la confirmación de SQLite.');
+    }
+    const source = purchases.find(item => item.id === draft.purchaseId && item.companyId === currentCompany.id);
+    if (!source) throw new Error('No se encontró la factura original en la empresa activa.');
+    const sourceEntry = source.journalEntryId
+      ? journalEntries.find(item => item.id === source.journalEntryId && item.companyId === currentCompany.id)
+      : undefined;
+    if (!sourceEntry || sourceEntry.type !== 'COMPRA' ||
+        sourceEntry.date !== (source.accountCreditDate || source.invoiceDate) ||
+        sourceEntry.referenceDoc !== 'FAC-' + source.invoiceNumber) {
+      throw new Error('La factura de servicios no conserva un asiento de compra verificable.');
+    }
+    const linkedMovements = movements.filter(item => item.companyId === currentCompany.id &&
+      (item.journalEntryId === sourceEntry.id ||
+       item.documentRef.trim().toUpperCase().replace(/\\s+/g, '') ===
+       ('FAC-' + source.invoiceNumber).trim().toUpperCase().replace(/\\s+/g, '')));
+    if (linkedMovements.length || source.inventoryLines?.length) {
+      throw new Error('La factura tiene inventario/Kardex vinculado. Debe utilizarse la NC de devolución física por líneas.');
+    }
+    if (source.vatWithheldBs > 0 || Number(source.islrWithheldBs || 0) > 0 ||
+        Number(source.igtfAmountBs || 0) > 0 || source.igtfApplicable ||
+        vatVouchers.some(item => item.companyId === currentCompany.id && item.purchaseRecordId === source.id) ||
+        islrVouchers.some(item => item.companyId === currentCompany.id && item.invoiceNumber === source.invoiceNumber && item.supplierRif === source.supplierRif)) {
+      throw new Error('La factura tiene retenciones/IGTF o comprobantes asociados. La NC requiere rectificación fiscal específica y no se registró.');
+    }
+    if (Math.abs(Number(draft.bcvRate) - Number(source.bcvRate)) > 0.000001) {
+      throw new Error('La tasa de la NC debe coincidir con la tasa contable original. El diferencial cambiario requiere el circuito NIC 21/ajuste de CxP, aún no automatizado para esta operación.');
+    }
+    const priorCreditNotes = purchases.filter(item => item.companyId === currentCompany.id &&
+      item.originalPurchaseId === source.id && item.documentType === '03' &&
+      !item.isCancelled && !(item.creditNoteLines?.length));
+    const amounts = calculatePurchaseServiceCreditNote({
+      ...draft, purchase: source, priorCreditNotes,
+      closedThroughDate: currentCompany.closedThroughDate || undefined
+    });
+    const duplicateNumber = purchases.some(item => item.companyId === currentCompany.id &&
+      item.documentType === '03' &&
+      String(item.creditNoteNumber || item.invoiceNumber).trim().toUpperCase() === String(draft.creditNoteNumber).trim().toUpperCase());
+    if (duplicateNumber) throw new Error('El número de nota de crédito ya está registrado en esta empresa.');
+    const sourcePayableCodes = [...new Set(sourceEntry.items
+      .filter(item => String(item.accountCode || '').startsWith('2.1.1.') && Number(item.creditBs || 0) > 0)
+      .map(item => String(item.accountCode)))];
+    const cashPurchase = source.paymentTerm === 'CONTADO';
+    if ((!cashPurchase && sourcePayableCodes.length !== 1) || (cashPurchase && sourcePayableCodes.length !== 0)) {
+      throw new Error('La modalidad de la factura original no concilia con sus cuentas CxP/tesorería.');
+    }
+    const payableCode = sourcePayableCodes[0];
+    const expenseLines = sourceEntry.items.filter(line => {
+      const account = accounts.find(item => item.code === line.accountCode);
+      return Number(line.debitBs || 0) > 0 && account?.isMovement &&
+        (account.type === 'COSTOS' || account.type === 'GASTOS');
+    });
+    const sourceBaseBs = Number(source.taxableBaseBs) + Number(source.exemptAmountBs);
+    const expenseBaseBs = expenseLines.reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
+    const expenseBaseUsd = expenseLines.reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
+    if (!expenseLines.length || Math.abs(expenseBaseBs - sourceBaseBs) > 0.02 ||
+        Math.abs(expenseBaseUsd - sourceBaseBs / Number(source.bcvRate)) > 0.0001) {
+      throw new Error('El asiento original no permite aislar gastos/servicios sin inventario ni concilia su base en Bs. y USD.');
+    }
+    const vatLines = sourceEntry.items.filter(line =>
+      String(line.accountCode || '').startsWith('1.1.3.') && Number(line.debitBs || 0) > 0);
+    if ((Number(source.vatAmountBs || 0) > 0 && (vatLines.length !== 1 ||
+        Math.abs(Number(vatLines[0].debitBs) - Number(source.vatAmountBs)) > 0.02 ||
+        Math.abs(Number(vatLines[0].debitUsd) - Number(source.vatAmountBs) / Number(source.bcvRate)) > 0.0001)) ||
+        (Number(source.vatAmountBs || 0) === 0 && vatLines.length > 0)) {
+      throw new Error('El IVA crédito fiscal del asiento original no concilia; no se puede emitir una NC automática.');
+    }
+    const balance = cashPurchase ? undefined : getCreditBalance(source.id, 'PURCHASE_PAYMENT');
+    const allocation = allocateSupplierCredit(
+      amounts.netPayableReductionUsd, amounts.netPayableReductionBs,
+      balance?.outstandingUsd ?? 0, Number(source.bcvRate)
+    );
+    const advanceAccount = allocation.supplierAdvanceBs > 0.02
+      ? accounts.find(item => item.code === '1.1.2.03' && item.type === 'ACTIVO' && item.isMovement)
+      : undefined;
+    if (allocation.supplierAdvanceBs > 0.02 && !advanceAccount) {
+      throw new Error('No existe la cuenta de movimiento de anticipos a proveedores para registrar el excedente de la NC.');
+    }
+    const expenseBaseNoteBs = amounts.taxableBaseBs + amounts.exemptAmountBs;
+    const expenseBaseNoteUsd = amounts.taxableBaseUsd + amounts.exemptAmountUsd;
+    const items: JournalEntryItem[] = [];
+    if (allocation.appliedToPayableBs > 0.02 && payableCode) {
+      const payable = accounts.find(item => item.code === payableCode && item.type === 'PASIVO' && item.isMovement);
+      if (!payable) throw new Error('La cuenta CxP original ya no está disponible como cuenta de movimiento.');
+      items.push({ accountCode: payable.code, accountName: payable.name,
+        debitBs: allocation.appliedToPayableBs, creditBs: 0,
+        debitUsd: allocation.appliedToPayableUsd, creditUsd: 0,
+        description: 'Disminución de CxP por NC ' + draft.creditNoteNumber });
+    }
+    if (allocation.supplierAdvanceBs > 0.02 && advanceAccount) {
+      items.push({ accountCode: advanceAccount.code, accountName: advanceAccount.name,
+        debitBs: allocation.supplierAdvanceBs, creditBs: 0,
+        debitUsd: allocation.supplierAdvanceUsd, creditUsd: 0,
+        description: 'Saldo a favor del proveedor por NC ' + draft.creditNoteNumber });
+    }
+    let allocatedBs = 0, allocatedUsd = 0;
+    expenseLines.forEach((line, index) => {
+      const last = index === expenseLines.length - 1;
+      const share = Number(line.debitBs) / expenseBaseBs;
+      const creditBs = last ? Math.round((expenseBaseNoteBs - allocatedBs) * 100) / 100
+        : Math.round(expenseBaseNoteBs * share * 100) / 100;
+      const creditUsd = last ? Math.round((expenseBaseNoteUsd - allocatedUsd) * 1000000) / 1000000
+        : Math.round(expenseBaseNoteUsd * share * 1000000) / 1000000;
+      allocatedBs += creditBs; allocatedUsd += creditUsd;
+      const account = accounts.find(item => item.code === line.accountCode)!;
+      items.push({ accountCode: account.code, accountName: account.name,
+        debitBs: 0, creditBs, debitUsd: 0, creditUsd,
+        description: 'Reversión parcial del gasto de la factura ' + source.invoiceNumber });
+    });
+    if (amounts.vatAmountBs > 0 && vatLines[0]) {
+      const vatAccount = accounts.find(item => item.code === vatLines[0].accountCode && item.isMovement);
+      if (!vatAccount) throw new Error('La cuenta de IVA crédito fiscal original no está disponible.');
+      items.push({ accountCode: vatAccount.code, accountName: vatAccount.name,
+        debitBs: 0, creditBs: amounts.vatAmountBs, debitUsd: 0, creditUsd: amounts.vatAmountUsd,
+        description: 'Disminución del IVA crédito fiscal por NC ' + draft.creditNoteNumber });
+    }
+    const debitBs = items.reduce((sum, line) => sum + line.debitBs, 0);
+    const creditBs = items.reduce((sum, line) => sum + line.creditBs, 0);
+    const debitUsd = items.reduce((sum, line) => sum + line.debitUsd, 0);
+    const creditUsd = items.reduce((sum, line) => sum + line.creditUsd, 0);
+    if (Math.abs(debitBs - creditBs) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.0001 || items.length < 2) {
+      throw new Error('El asiento de NC de servicios no cuadra en Bs. y USD. No se registró.');
+    }
+    correctionWorkflowInFlightRef.current = true;
+    purchaseCreditNoteInFlightRef.current = true;
+    try {
+      return await runAtomicInvoiceImport(async () => {
+        const journal = addJournalEntry({
+          entryNumber: 0, date: draft.noteDate,
+          description: 'Nota de crédito de servicios ' + draft.creditNoteNumber + ' afecta ' + source.invoiceNumber,
+          type: 'AJUSTE', bcvRate: Number(source.bcvRate),
+          referenceDoc: 'NC-PROV-' + draft.creditNoteNumber, items
+        });
+        const nextOp = Math.max(
+          purchases.filter(item => item.companyId === currentCompany.id).reduce((max, item) => Math.max(max, item.opNumber || 0), 0),
+          purchaseSequenceRef.current[currentCompany.id] || 0
+        ) + 1;
+        purchaseSequenceRef.current[currentCompany.id] = nextOp;
+        const note: PurchaseRecord = {
+          ...source, id: 'pur-service-credit-' + currentCompany.id + '-' + Date.now() + '-' + Math.floor(Math.random() * 100000),
+          companyId: currentCompany.id, opNumber: nextOp, invoiceDate: draft.noteDate,
+          accountCreditDate: draft.noteDate, invoiceNumber: String(draft.creditNoteNumber).trim(),
+          creditNoteNumber: String(draft.creditNoteNumber).trim(), controlNumber: String(draft.controlNumber).trim(),
+          affectedInvoiceNumber: source.invoiceNumber, documentType: '03', originalPurchaseId: source.id,
+          creditNoteLines: [], inventoryLines: undefined,
+          taxableBaseBs: amounts.taxableBaseBs, exemptAmountBs: amounts.exemptAmountBs,
+          vatAmountBs: amounts.vatAmountBs, totalAmountBs: amounts.totalAmountBs,
+          taxableBaseUsd: amounts.taxableBaseUsd, exemptAmountUsd: amounts.exemptAmountUsd,
+          vatAmountUsd: amounts.vatAmountUsd, totalAmountUsd: amounts.totalAmountUsd,
+          vatWithheldBs: 0, vatWithheldUsd: 0, islrWithheldBs: 0, islrWithheldUsd: 0,
+          igtfApplicable: false, igtfAmountBs: 0, igtfAmountUsd: 0,
+          netPayableReductionBs: amounts.netPayableReductionBs,
+          netPayableReductionUsd: amounts.netPayableReductionUsd,
+          supplierAdvanceBs: allocation.supplierAdvanceBs,
+          supplierAdvanceUsd: allocation.supplierAdvanceUsd,
+          bcvRate: Number(source.bcvRate), journalEntryId: journal.id,
+          notes: 'NC de servicio vinculada a ' + source.invoiceNumber + '. Motivo: ' + draft.reason.trim() +
+            '. Papel de trabajo: ' + draft.workpaperNote.trim()
+        };
+        setPurchases(prev => [...prev, note]);
+        await waitForPersistence();
+        return note;
+      });
+    } finally {
+      correctionWorkflowInFlightRef.current = false;
+      purchaseCreditNoteInFlightRef.current = false;
+    }
+  };
+
   const addSupplierDebitNote = async (
     draft: Omit<SupplierDebitNoteAccountingDraft, 'companyId' | 'closedThroughDate'>
   ): Promise<PurchaseRecord> => {
@@ -4784,6 +4960,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         purchases: purchases.filter(p => p.companyId === currentCompany.id),
         addPurchase,
         addPurchaseCreditNote,
+        addPurchaseServiceCreditNote,
         addSupplierDebitNote,
         deletePurchase,
         sales: sales.filter(s => s.companyId === currentCompany.id),
