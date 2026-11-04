@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { NewBankAccountModal } from '../Conciliacion/NewBankAccountModal';
 import { Landmark, Plus, ArrowDownLeft, ArrowUpRight, ArrowRightLeft, Wallet, ReceiptText } from 'lucide-react';
@@ -7,7 +7,9 @@ import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 type MovementKind = 'INCOME' | 'EXPENSE' | 'TRANSFER';
 
 export const TesoreriaView: React.FC = () => {
-  const { currentCompany, accounts, bankAccounts, journalEntries, registerTreasuryMovement } = useAccounting();
+  const { currentCompany, accounts, bankAccounts, journalEntries, registerTreasuryMovement, waitForPersistence } = useAccounting();
+  const savingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
   const [showNewBank, setShowNewBank] = useState(false);
   const [selectedBankId, setSelectedBankId] = useState('');
   const [kind, setKind] = useState<MovementKind>('INCOME');
@@ -37,9 +39,12 @@ export const TesoreriaView: React.FC = () => {
       return total;
     }, hasOpeningEntry ? { bs: 0, usd: 0 } : { bs: bank.initialBalanceBs, usd: bank.initialBalanceUsd });
   };
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setMessage('');
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setMessage('Guardando movimiento en SQLite...');
     try {
       const entry = registerTreasuryMovement({
         bankAccountId: activeBank?.id || selectedBankId,
@@ -47,10 +52,14 @@ export const TesoreriaView: React.FC = () => {
         counterpartAccountCode: kind === 'TRANSFER' ? undefined : counterpartCode,
         destinationBankAccountId: kind === 'TRANSFER' ? destinationBankId : undefined
       });
-      setMessage('Movimiento contabilizado automáticamente en el asiento #' + entry.entryNumber + '.');
+      await waitForPersistence();
+      setMessage('SQLite confirmó el movimiento contabilizado en el asiento #' + entry.entryNumber + '.');
       setReference(''); setDescription(''); setAmount('');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo registrar el movimiento.');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
 
@@ -100,7 +109,7 @@ export const TesoreriaView: React.FC = () => {
           <div><label className="mb-1 block text-xs font-semibold text-slate-700">Referencia / cheque / transferencia</label><input required value={reference} onChange={e=>setReference(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs" placeholder="N.º de operación"/></div>
           <div><label className="mb-1 block text-xs font-semibold text-slate-700">Concepto</label><input required value={description} onChange={e=>setDescription(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs" placeholder="Descripción de la operación"/></div>
           <div><label className="mb-1 block text-xs font-semibold text-slate-700">Importe ({activeBank?.currency === 'USD' ? '$ USD' : 'Bs.'})</label><input required type="number" min="0.01" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm" placeholder="0.00"/></div>
-          <button type="submit" className="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-500">Contabilizar movimiento</button>
+          <button type="submit" disabled={saving} className="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-40">{saving ? "Confirmando SQLite..." : "Contabilizar movimiento"}</button>
           {message && <p role="status" className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700">{message}</p>}
         </form>
 
