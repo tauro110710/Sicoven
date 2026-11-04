@@ -3031,6 +3031,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const addMovement = (movData: Omit<InventoryMovement, 'id' | 'companyId'>): InventoryMovement => {
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('El movimiento de inventario requiere SQLite local de escritorio disponible y lista.');
+    }
     const prod = products.find(p => p.id === movData.productId && p.companyId === currentCompany.id);
     if (!prod) throw new Error('El artículo no existe en la empresa activa.');
     if (!isValidIsoDate(movData.date)) throw new Error('La fecha del movimiento no es válida.');
