@@ -608,7 +608,13 @@ test('SQLite audit records the VAT retention decision and the later voucher deli
     const purchase = {
       id: 'purchase-iva-audit', companyId: 'company-1', documentType: '01', journalEntryId: 'purchase-journal',
       invoiceNumber: 'FAC-IVA-1', supplierRif: 'J-12345678-9', supplierName: 'Proveedor Uno',
-      invoiceDate: '2026-10-03', taxableBaseBs: 1000, vatAmountBs: 160, totalAmountBs: 1160,
+      invoiceDate: '2026-10-03', accountCreditDate: '2026-10-03',
+      controlNumber: '00-IVA-1', taxableBaseBs: 1000, exemptAmountBs: 0, taxRate: 16,
+      vatAmountBs: 160, vatWithheldBs: 120, retentionRate: 75, islrWithheldBs: 0,
+      igtfAmountBs: 0, totalAmountBs: 1160, bcvRate: 1,
+      totalAmountUsd: 1160, taxableBaseUsd: 1000, vatAmountUsd: 160,
+      vatWithheldUsd: 120, islrWithheldUsd: 0, igtfAmountUsd: 0,
+      paymentTerm: 'CREDITO',
       ivaRetentionDecision: {
         buyerAgentStatus: 'SPECIAL_DESIGNATED', supplierTaxStatus: 'ORDINARY',
         article2Transaction: false, article3Exclusions: [],
@@ -631,8 +637,10 @@ test('SQLite audit records the VAT retention decision and the later voucher deli
       date: '2026-10-03', description: 'Compra original', type: 'COMPRA',
       bcvRate: 1, referenceDoc: 'FAC-FAC-IVA-1',
       items: [
-        { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 1160, creditBs: 0, debitUsd: 1160, creditUsd: 0 },
-        { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 0, creditBs: 1160, debitUsd: 0, creditUsd: 1160 }
+        { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 1000, creditBs: 0, debitUsd: 1000, creditUsd: 0 },
+        { accountCode: '1.1.3.01', accountName: 'IVA Crédito Fiscal', debitBs: 160, creditBs: 0, debitUsd: 160, creditUsd: 0 },
+        { accountCode: '2.1.2.03', accountName: 'Retención IVA por enterar', debitBs: 0, creditBs: 120, debitUsd: 0, creditUsd: 120 },
+        { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 0, creditBs: 1040, debitUsd: 0, creditUsd: 1040 }
       ], createdAt: '2026-10-03T10:00:00.000Z'
     };
     const initial = {
