@@ -1273,6 +1273,8 @@ function validateAccountingSnapshot(previousState, nextState) {
     const original = asArray(nextState.purchases).find(item =>
       item.id === note.originalPurchaseId && item.companyId === note.companyId && item.documentType === '01');
     const lines = Array.isArray(note.creditNoteLines) ? note.creditNoteLines : [];
+    const serviceNote = Boolean(original && !Array.isArray(original.inventoryLines) &&
+      !Array.isArray(note.inventoryLines) && lines.length === 0);
     const company = asArray(nextState.companies).find(item => item.id === note.companyId);
     const duplicateNoteNumber = asArray(nextState.purchases).some(item =>
       item.id !== note.id && item.companyId === note.companyId && item.documentType === '03' &&
@@ -1283,7 +1285,7 @@ function validateAccountingSnapshot(previousState, nextState) {
         (company?.closedThroughDate && note.invoiceDate <= company.closedThroughDate) ||
         duplicateNoteNumber ||
         !note.creditNoteNumber || !note.controlNumber || String(note.notes || '').trim().length < 10 ||
-        lines.length === 0 || !note.journalEntryId ||
+        (lines.length === 0 && !serviceNote) || !note.journalEntryId ||
         !Number.isFinite(Number(note.bcvRate)) || Number(note.bcvRate) <= 0 ||
         !Number.isFinite(Number(note.totalAmountBs)) || Number(note.totalAmountBs) <= 0 ||
         !Number.isFinite(Number(note.totalAmountUsd)) || Number(note.totalAmountUsd) <= 0 ||
@@ -1312,6 +1314,104 @@ function validateAccountingSnapshot(previousState, nextState) {
     // Para contado no existe auxiliar CxP; el crédito recuperable se registra
     // íntegramente como anticipo a favor del proveedor (1.1.2.03).
     const sourcePayableAccountCode = sourcePayableAccounts[0] || '';
+    if (serviceNote) {
+      const sourceEntry = original.journalEntryId ? nextById.get(String(original.journalEntryId)) : undefined;
+      const sourceMovements = asArray(nextState.movements).filter(item => item.companyId === original.companyId &&
+        (item.journalEntryId === original.journalEntryId ||
+         normalizeDocument(item.documentRef) === normalizeDocument('FAC-' + original.invoiceNumber)));
+      const rate = Number(original.bcvRate);
+      const baseBs = Number(note.taxableBaseBs || 0) + Number(note.exemptAmountBs || 0);
+      const baseUsd = Number(note.taxableBaseUsd || 0) + Number(note.exemptAmountUsd || 0);
+      const vatBs = Number(note.vatAmountBs || 0);
+      const vatUsd = Number(note.vatAmountUsd || 0);
+      const totalBs = Number(note.totalAmountBs || 0);
+      const totalUsd = Number(note.totalAmountUsd || 0);
+      const sourceBaseBs = Number(original.taxableBaseBs || 0) + Number(original.exemptAmountBs || 0);
+      const expenseLines = asArray(sourceEntry?.items).filter(line => {
+        const account = asArray(nextState.accounts).find(item => item.code === line.accountCode);
+        return Number(line.debitBs || 0) > 0 && account?.isMovement &&
+          (account.type === 'COSTOS' || account.type === 'GASTOS');
+      });
+      const sourceExpenseBs = expenseLines.reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
+      const sourceExpenseUsd = expenseLines.reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
+      const sourceVatLines = asArray(sourceEntry?.items).filter(line =>
+        String(line.accountCode || '').startsWith('1.1.3.') && Number(line.debitBs || 0) > 0);
+      const sourcePayable = sourcePayableAccounts[0] || '';
+      const payableAppliedBs = money(totalBs - Number(note.supplierAdvanceBs || 0));
+      const payableAppliedUsd = Math.round((totalUsd - Number(note.supplierAdvanceUsd || 0)) * 1000000) / 1000000;
+      const journal = nextById.get(String(note.journalEntryId));
+      const expectedCredits = new Map();
+      for (const line of expenseLines) {
+        const code = String(line.accountCode);
+        const prior = expectedCredits.get(code) || { bs: 0, usd: 0 };
+        prior.bs += Number(line.debitBs || 0) / sourceExpenseBs * baseBs;
+        prior.usd += Number(line.debitUsd || 0) / sourceExpenseUsd * baseUsd;
+        expectedCredits.set(code, prior);
+      }
+      const journalRows = asArray(journal?.items);
+      const rowFor = code => journalRows.filter(line => String(line.accountCode) === String(code))
+        .reduce((sum, line) => ({
+          debitBs: sum.debitBs + Number(line.debitBs || 0), creditBs: sum.creditBs + Number(line.creditBs || 0),
+          debitUsd: sum.debitUsd + Number(line.debitUsd || 0), creditUsd: sum.creditUsd + Number(line.creditUsd || 0)
+        }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
+      const expectedLineCount = expenseLines.length + (vatBs > 0 ? 1 : 0) +
+        (payableAppliedBs > 0.02 ? 1 : 0) + (Number(note.supplierAdvanceBs || 0) > 0.02 ? 1 : 0);
+      const validExpenseCredits = [...expectedCredits.entries()].every(([code, expected]) => {
+        const actual = rowFor(code);
+        return close(actual.creditBs, expected.bs) && close(actual.creditUsd, expected.usd, 0.0001) &&
+          close(actual.debitBs, 0) && close(actual.debitUsd, 0, 0.0001);
+      });
+      const payableRow = sourcePayable ? rowFor(sourcePayable) : { debitBs: 0, debitUsd: 0 };
+      const advanceRow = rowFor('1.1.2.03');
+      const vatRow = sourceVatLines.length === 1 ? rowFor(sourceVatLines[0].accountCode) : { creditBs: 0, creditUsd: 0 };
+      if (original.inventoryLines?.length || sourceMovements.length > 0 ||
+          original.vatWithheldBs > 0 || Number(original.islrWithheldBs || 0) > 0 ||
+          Number(original.igtfAmountBs || 0) > 0 || original.igtfApplicable === true ||
+          asArray(nextState.vatVouchers).some(item => item.companyId === original.companyId && item.purchaseRecordId === original.id) ||
+          asArray(nextState.islrVouchers).some(item => item.companyId === original.companyId && item.invoiceNumber === original.invoiceNumber && item.supplierRif === original.supplierRif) ||
+          !sourceEntry || sourceEntry.type !== 'COMPRA' ||
+          sourceEntry.date !== String(original.accountCreditDate || original.invoiceDate) ||
+          normalizeDocument(sourceEntry.referenceDoc) !== normalizeDocument('FAC-' + original.invoiceNumber) ||
+          Math.abs(Number(sourceEntry.bcvRate) - rate) > 0.000001 ||
+          !purchaseJournalMatchesInvoice(original, sourceEntry, asArray(nextState.products), asArray(nextState.accounts)) ||
+          !Number.isFinite(rate) || rate <= 0 || !Number.isFinite(sourceBaseBs) || sourceBaseBs <= 0 ||
+          Math.abs(sourceExpenseBs - sourceBaseBs) > 0.02 ||
+          Math.abs(sourceExpenseUsd - sourceBaseBs / rate) > 0.0001 ||
+          (Number(original.vatAmountBs || 0) > 0 && (sourceVatLines.length !== 1 ||
+            Math.abs(Number(sourceVatLines[0].debitBs) - Number(original.vatAmountBs)) > 0.02)) ||
+          Math.abs(Number(note.bcvRate) - rate) > 0.000001 ||
+          Math.abs(totalBs - baseBs - vatBs) > 0.02 ||
+          Math.abs(totalUsd - baseUsd - vatUsd) > 0.0001 ||
+          Math.abs(baseUsd - baseBs / rate) > 0.0001 ||
+          Math.abs(vatUsd - vatBs / rate) > 0.0001 ||
+          Math.abs(totalUsd - totalBs / rate) > 0.0001 ||
+          Math.abs(Number(note.netPayableReductionBs) - totalBs) > 0.02 ||
+          Math.abs(Number(note.netPayableReductionUsd) - totalUsd) > 0.0001 ||
+          !Number.isFinite(Number(note.supplierAdvanceBs || 0)) || Number(note.supplierAdvanceBs || 0) < 0 ||
+          !Number.isFinite(Number(note.supplierAdvanceUsd || 0)) || Number(note.supplierAdvanceUsd || 0) < 0 ||
+          Number(note.supplierAdvanceBs || 0) > totalBs + 0.02 ||
+          Number(note.supplierAdvanceUsd || 0) > totalUsd + 0.0001 ||
+          (cashOriginalPurchase && (payableAppliedBs > 0.02 || payableAppliedUsd > 0.0001)) ||
+          (!cashOriginalPurchase && !sourcePayable) ||
+          !journal || journal.companyId !== note.companyId || journal.type !== 'AJUSTE' ||
+          journal.date !== note.invoiceDate ||
+          normalizeDocument(journal.referenceDoc) !== normalizeDocument('NC-PROV-' + note.creditNoteNumber) ||
+          journalRows.length !== expectedLineCount ||
+          !validExpenseCredits ||
+          Math.abs(payableRow.debitBs - payableAppliedBs) > 0.02 ||
+          Math.abs(payableRow.debitUsd - payableAppliedUsd) > 0.0001 ||
+          Math.abs(advanceRow.debitBs - Number(note.supplierAdvanceBs || 0)) > 0.02 ||
+          Math.abs(advanceRow.debitUsd - Number(note.supplierAdvanceUsd || 0)) > 0.0001 ||
+          Math.abs(vatRow.creditBs - vatBs) > 0.02 ||
+          Math.abs(vatRow.creditUsd - vatUsd) > 0.0001 ||
+          !close(journalRows.reduce((sum, line) => sum + Number(line.debitBs || 0), 0),
+            journalRows.reduce((sum, line) => sum + Number(line.creditBs || 0), 0)) ||
+          !close(journalRows.reduce((sum, line) => sum + Number(line.debitUsd || 0), 0),
+            journalRows.reduce((sum, line) => sum + Number(line.creditUsd || 0), 0), 0.0001)) {
+        throw new Error('SQLite rechazó la NC de servicios: la factura, gasto original, IVA, CxP/anticipo o asiento correctivo no concilian.');
+      }
+      continue;
+    }
     const sourceLines = Array.isArray(original.inventoryLines) ? original.inventoryLines : [];
     const sourceProducts = asArray(nextState.products);
     for (const sourceLine of sourceLines) {
