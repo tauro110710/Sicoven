@@ -314,6 +314,12 @@ export interface SaleRecord {
   vatAmountUsd: number;
   vatWithheldUsd: number;
   journalEntryId?: string;
+  /** Vínculo append-only de NC/ND de cliente con la factura que corrige. */
+  originalSaleId?: string;
+  netReceivableAdjustmentBs?: number;
+  netReceivableAdjustmentUsd?: number;
+  correctionReason?: string;
+  correctionWorkpaper?: string;
   notes?: string;
   // Condiciones comerciales y fiscales del crédito (se preservan por documento)
   paymentTerm?: 'CONTADO' | 'CREDITO';
