@@ -15,6 +15,7 @@ interface Props {
 export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcvRate, onClose, onSubmit }) => {
   const today = new Date().toISOString().slice(0, 10);
   const [noteDate, setNoteDate] = useState(today);
+  const [noteBcvRate, setNoteBcvRate] = useState(String(bcvRate));
   const [noteNumber, setNoteNumber] = useState('');
   const [controlNumber, setControlNumber] = useState('');
   const [taxableBaseBs, setTaxableBaseBs] = useState('0');
@@ -33,7 +34,7 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
       await onSubmit({
         kind, sourceSaleId: sourceSale.id, noteDate, noteNumber, controlNumber,
         taxableBaseBs: Number(taxableBaseBs), exemptAmountBs: Number(exemptAmountBs),
-        bcvRate, reason, workpaperNote
+        bcvRate: Number(noteBcvRate), reason, workpaperNote
       });
       onClose();
     } catch (cause) {
@@ -66,8 +67,8 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
           <label className="text-xs font-semibold text-slate-700">Número de control
             <input required value={controlNumber} onChange={e=>setControlNumber(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
           </label>
-          <label className="text-xs font-semibold text-slate-700">Tasa BCV de la nota
-            <input required type="number" min="0.000001" step="0.000001" value={bcvRate} readOnly className="mt-1 w-full rounded-lg border bg-slate-50 p-2.5 text-sm font-normal" />
+          <label className="text-xs font-semibold text-slate-700">Tasa BCV vigente en la fecha de emisión
+            <input required type="number" min="0.000001" step="0.000001" value={noteBcvRate} onChange={e=>setNoteBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
           </label>
           <label className="text-xs font-semibold text-slate-700">Base imponible (Bs.)
             <input required type="number" min="0" step="0.01" value={taxableBaseBs} onChange={e=>setTaxableBaseBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
