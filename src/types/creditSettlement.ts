@@ -38,9 +38,47 @@ export interface CreditBalance {
   /** Reducción documental por notas de crédito; no se considera pago de efectivo. */
   creditedByNotesUsd?: number;
   creditedByNotesBs?: number;
+  /** Increase to the receivable/payable caused by debit notes. */
+  debitedByNotesUsd?: number;
+  debitedByNotesBs?: number;
   /** Supplier advances applied directly to this invoice without a cash payment. */
   creditedBySupplierAdvancesUsd?: number;
   creditedBySupplierAdvancesBs?: number;
+}
+
+export interface CreditDocumentAdjustmentRecord {
+  netReceivableAdjustmentUsd?: number;
+  netReceivableAdjustmentBs?: number;
+  netPayableReductionUsd?: number;
+  netPayableReductionBs?: number;
+  totalAmountUsd?: number;
+  totalAmountBs?: number;
+}
+export interface CreditDocumentAdjustmentTotals {
+  creditedByNotesUsd: number;
+  creditedByNotesBs: number;
+  debitedByNotesUsd: number;
+  debitedByNotesBs: number;
+}
+/** Documental adjustments are distinct from cash settlements. Purchase debit notes increase CxP by their full fiscal total; sale debit notes use their net receivable adjustment. */
+export function summarizeCreditDocumentAdjustments(
+  kind: CreditSettlementKind,
+  creditNotes: CreditDocumentAdjustmentRecord[],
+  debitNotes: CreditDocumentAdjustmentRecord[]
+): CreditDocumentAdjustmentTotals {
+  const creditedByNotesUsd = creditNotes.reduce((sum,item)=>sum+Number(
+    kind === 'PURCHASE_PAYMENT' ? (item.netPayableReductionUsd ?? item.netReceivableAdjustmentUsd ?? 0) : (item.netReceivableAdjustmentUsd ?? 0)
+  ),0);
+  const creditedByNotesBs = creditNotes.reduce((sum,item)=>sum+Number(
+    kind === 'PURCHASE_PAYMENT' ? (item.netPayableReductionBs ?? item.netReceivableAdjustmentBs ?? 0) : (item.netReceivableAdjustmentBs ?? 0)
+  ),0);
+  const debitedByNotesUsd = debitNotes.reduce((sum,item)=>sum+Number(
+    kind === 'PURCHASE_PAYMENT' ? (item.totalAmountUsd ?? 0) : (item.netReceivableAdjustmentUsd ?? 0)
+  ),0);
+  const debitedByNotesBs = debitNotes.reduce((sum,item)=>sum+Number(
+    kind === 'PURCHASE_PAYMENT' ? (item.totalAmountBs ?? 0) : (item.netReceivableAdjustmentBs ?? 0)
+  ),0);
+  return {creditedByNotesUsd,creditedByNotesBs,debitedByNotesUsd,debitedByNotesBs};
 }
 
 export interface CreditSettlementDraft {
