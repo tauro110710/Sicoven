@@ -33,6 +33,33 @@ Si cualquiera de estas condiciones falla, el expediente permanece aprobado y abi
 
 ## Pendientes
 
-Falta validar en ejecución los nombres reales de relaciones de cada generador de documentos; la integración completa de los efectos de NC/ND, contraasientos, CxC/CxP, bancos, retenciones, Kardex y declaraciones; el flujo formal de observación/subsanación del propio expediente; y las pruebas completas de SQLite, concurrencia, respaldo/restauración, TypeScript y empaquetado Electron.
+Falta validar en ejecución los nombres reales de relaciones de cada generador de documentos; la integración completa de los efectos de NC/ND, contraasientos, CxC/CxP, bancos, retenciones, Kardex y declaraciones; las pruebas completas de SQLite, concurrencia, respaldo/restauración, TypeScript y empaquetado Electron.
 
 No se ha ejecutado CI ni se ha publicado un release. No se modificó el administrador semilla ni se alteraron registros fuente.
+
+
+## Continuación incorporada: observación y subsanación formal
+
+Se agregó un ciclo formal de expediente sin sobrescribir su historial:
+- `IN_REVIEW`: pendiente de revisión independiente.
+- `OBSERVATION_REQUIRED`: devuelto al solicitante con motivo obligatorio.
+- `READY_FOR_EXECUTION`: aprobado y sin observaciones pendientes.
+- `COMPLETED`: ejecución confirmada.
+- `CLOSED`: rechazado.
+
+La observación puede ocurrir durante revisión y también después de aprobar, antes de ejecutar. Solo el solicitante original puede subsanar y reenviar; el expediente vuelve a revisión y pierde la aprobación anterior. Cada observación y reenvío se registra en una tabla de eventos separada, append-only, y en la bitácora general. Si falla la bitácora, la transacción completa revierte. Se conserva el historial de aprobaciones/observaciones y se exige una nueva revisión independiente antes de ejecutar.
+
+La migración es aditiva: incorpora `workflow_stage` y normaliza las etapas de expedientes existentes según su estado, sin borrar documentos ni expedientes.
+
+## Contraste de relaciones reales y alcance habilitado
+
+Se contrastaron los vínculos con los tipos persistidos:
+- Ventas: NC/ND con `originalSaleId` y tipo fiscal `03`/`02`.
+- Compras: NC/ND con `originalPurchaseId` y tipo fiscal `03`/`02`.
+- Asientos: reversos con `reversalOfEntryId` y ajustes con `adjustmentForEntryId`.
+- Kardex: corrección con `correctionForMovementId`.
+- Comprobantes IVA/ISLR: la evidencia es el asiento correctivo referenciado por `correctionEntryId` / `correctionEntryIds` en el comprobante original.
+
+El formulario de expedientes solo permite estas seis clases de origen, para evitar abrir casos ejecutables sobre entidades que todavía no persisten un vínculo correctivo verificable. Los otros escenarios no se consideran terminados; deben recibir su relación explícita antes de habilitarse.
+
+La suite del workflow contiene ahora **13 pruebas definidas** que cubren segregación, rollback, vínculos de NC/ND de compra y venta, reversos/ajustes de asientos, comprobantes de retención y ciclo de observación/subsanación. No se han ejecutado en esta sesión. La suite documental mantiene nueve pruebas definidas, tampoco ejecutadas.
