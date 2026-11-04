@@ -633,7 +633,7 @@ app.whenReady().then(async () => {
              ORDER BY e.id DESC LIMIT 1)='REVIEWED'
         AND (SELECT e.created_at FROM supporting_document_events e
              WHERE e.document_id=d.id AND e.event_type<>'ACCESSED'
-             ORDER BY e.id DESC LIMIT 1) >= COALESCE(
+             ORDER BY e.id DESC LIMIT 1) > COALESCE(
                (SELECT MAX(w.created_at) FROM accounting_correction_case_workflow_events w
                 WHERE w.case_id=d.entity_id AND w.event_type='OBSERVED'),'')
     `).get(item.company_id,item.id).total;
