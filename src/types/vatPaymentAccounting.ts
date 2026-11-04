@@ -9,13 +9,15 @@ const micros = (n: number) => Math.round((n + Number.EPSILON) * 1000000) / 10000
 
 /** Cancela el pasivo a su costo histórico USD y reconoce la diferencia cambiaria realizada. */
 export function buildVatPaymentAccountingPlan(input: {
-  occurredAt: string; amountBs: number; priorPaidBs: number; declaration: VatWithholdingDeclaration;
+  occurredAt: string; amountBs: number; priorPaidBs: number; bcvRate: number; declaration: VatWithholdingDeclaration;
   movements: BankStatementMovement[]; bankAccounts: BankAccount[]; accounts: Account[];
 }): VatPaymentAccountingPlan {
   const date = String(input.occurredAt || '').slice(0, 10);
   if (!isValidIsoDate(date)) throw new Error('La fecha del enteramiento no es válida para el asiento contable.');
   if (!input.movements.length) throw new Error('El enteramiento requiere débitos bancarios vinculados.');
   const d = input.declaration;
+  const bcvRate = Number(input.bcvRate);
+  if (!Number.isFinite(bcvRate) || bcvRate <= 0) throw new Error('La tasa BCV vigente en la fecha del enteramiento debe ser mayor que cero.');
   if (!Number.isFinite(d.totalWithheldUsd) || Number(d.totalWithheldUsd) <= 0 || d.totalWithheldBs <= 0 ||
       d.voucherSnapshots.some(v => !Number.isFinite(v.vatWithheldUsd) || Number(v.vatWithheldUsd) < 0 || !Number.isFinite(v.bcvRate) || Number(v.bcvRate) <= 0)) {
     throw new Error('La declaración no conserva la base USD histórica completa del pasivo; requiere revisión y no admite contabilización automática.');
@@ -52,5 +54,5 @@ export function buildVatPaymentAccountingPlan(input: {
   const db=cents(items.reduce((s,x)=>s+x.debitBs,0)), cb=cents(items.reduce((s,x)=>s+x.creditBs,0));
   const du=micros(items.reduce((s,x)=>s+x.debitUsd,0)), cu=micros(items.reduce((s,x)=>s+x.creditUsd,0));
   if(Math.abs(db-cb)>=0.01||Math.abs(du-cu)>=0.000001)throw new Error('El asiento de enteramiento no cuadra en ambas monedas después de reconocer el diferencial cambiario.');
-  return {date,amountBs,amountUsd,liabilityUsd,fxDifferenceUsd:diff,bcvRate:amountBs/amountUsd,items};
+  return {date,amountBs,amountUsd,liabilityUsd,fxDifferenceUsd:diff,bcvRate,items};
 }
