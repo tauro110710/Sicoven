@@ -546,6 +546,66 @@ function validateVatDeclarationLedger(previousState, nextState) {
   }
 }
 
+
+function saleJournalMatchesInvoice(sale, entry) {
+  if (!sale || !entry || entry.type !== 'VENTA' || entry.companyId !== sale.companyId ||
+      entry.date !== sale.invoiceDate ||
+      String(entry.referenceDoc || '').trim().toUpperCase().replace(/\\s+/g, '') !==
+        ('FAC-' + String(sale.invoiceNumber || '')).trim().toUpperCase().replace(/\\s+/g, '') ||
+      !Array.isArray(entry.items) || entry.items.length < 2) return false;
+
+  const rate = Number(sale.bcvRate);
+  const taxableBase = Number(sale.taxableBaseBs);
+  const exempt = Number(sale.exemptAmountBs);
+  const vat = Number(sale.vatAmountBs);
+  const withheld = Number(sale.vatWithheldBs || 0);
+  const igtf = Number(sale.igtfAmountBs || 0);
+  const total = Number(sale.totalAmountBs);
+  const taxRate = Number(sale.taxRate);
+  const values = [rate, taxableBase, exempt, vat, withheld, igtf, total, taxRate,
+    Number(sale.totalAmountUsd), Number(sale.taxableBaseUsd), Number(sale.vatAmountUsd),
+    Number(sale.vatWithheldUsd || 0)];
+  if (values.some(value => !Number.isFinite(value) || value < 0) || rate <= 0 ||
+      taxRate > 100 || total <= 0 || withheld > vat + 0.01 ||
+      Math.abs(vat - Math.round((taxableBase * taxRate + Number.EPSILON) * 100) / 100) > 0.01 ||
+      Math.abs(total - (taxableBase + exempt + vat + igtf)) > 0.01 ||
+      Math.abs(Number(sale.totalAmountUsd) - total / rate) > 0.0001 ||
+      Math.abs(Number(sale.taxableBaseUsd) - taxableBase / rate) > 0.0001 ||
+      Math.abs(Number(sale.vatAmountUsd) - vat / rate) > 0.0001 ||
+      Math.abs(Number(sale.vatWithheldUsd || 0) - withheld / rate) > 0.0001 ||
+      Math.abs(Number(entry.bcvRate) - rate) > 0.000001) return false;
+
+  const expected = new Map([
+    ['1.1.2.01', { debitBs: total - withheld, creditBs: 0, debitUsd: (total - withheld) / rate, creditUsd: 0 }],
+    ['1.1.3.03', { debitBs: withheld, creditBs: 0, debitUsd: withheld / rate, creditUsd: 0 }],
+    ['2.1.2.06', { debitBs: 0, creditBs: igtf, debitUsd: 0, creditUsd: igtf / rate }],
+    ['4.1.1.01', { debitBs: 0, creditBs: taxableBase + exempt, debitUsd: 0, creditUsd: (taxableBase + exempt) / rate }],
+    ['2.1.2.01', { debitBs: 0, creditBs: vat, debitUsd: 0, creditUsd: vat / rate }]
+  ]);
+  const actual = new Map();
+  for (const item of entry.items) {
+    const code = String(item.accountCode || '');
+    if (!expected.has(code)) return false;
+    const amounts = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(Number);
+    if (amounts.some(value => !Number.isFinite(value) || value < 0) ||
+        (amounts[0] > 0 && amounts[1] > 0) || (amounts[2] > 0 && amounts[3] > 0)) return false;
+    const total = actual.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+    total.debitBs += amounts[0]; total.creditBs += amounts[1];
+    total.debitUsd += amounts[2]; total.creditUsd += amounts[3];
+    actual.set(code, total);
+  }
+  const money = value => Math.round((value + Number.EPSILON) * 100) / 100;
+  const micros = value => Math.round((value + Number.EPSILON) * 1000000) / 1000000;
+  for (const [code, wanted] of expected) {
+    const got = actual.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+    if (Math.abs(money(got.debitBs) - money(wanted.debitBs)) > 0.01 ||
+        Math.abs(money(got.creditBs) - money(wanted.creditBs)) > 0.01 ||
+        Math.abs(micros(got.debitUsd) - micros(wanted.debitUsd)) > 0.0001 ||
+        Math.abs(micros(got.creditUsd) - micros(wanted.creditUsd)) > 0.0001) return false;
+  }
+  return true;
+}
+
 function validateAccountingSnapshot(previousState, nextState) {
   if (!nextState || typeof nextState !== 'object' || Array.isArray(nextState)) {
     throw new Error('Estado contable inválido.');
@@ -911,8 +971,14 @@ function validateAccountingSnapshot(previousState, nextState) {
     const newDocuments = asArray(nextState[collectionName]);
     const oldById = new Map(oldDocuments.map(document => [String(document.id), document]));
     for (const document of newDocuments) {
-      if (!document.journalEntryId || (document.documentType && document.documentType !== '01')) continue;
       const oldDocument = oldById.get(String(document.id));
+      if (document.documentType && document.documentType !== '01') continue;
+      if (!document.journalEntryId) {
+        if (collectionName === 'sales' && !oldDocument) {
+          throw new Error('SQLite rechazó la venta nueva: falta su asiento contable enlazado.');
+        }
+        continue;
+      }
       // Existing invoice-to-entry links are grandfathered for read/upgrade compatibility.
       // A new document or any changed link/company/type must still pass strict validation.
       const unchangedHistoricalLink = oldDocument &&
@@ -924,6 +990,9 @@ function validateAccountingSnapshot(previousState, nextState) {
       if (!linkedEntry || linkedEntry.companyId !== document.companyId ||
           linkedEntry.type !== expectedEntryType) {
         throw new Error('SQLite rechazó un vínculo de factura con un asiento de otra empresa, tipo o documento.');
+      }
+      if (collectionName === 'sales' && !saleJournalMatchesInvoice(document, linkedEntry)) {
+        throw new Error('SQLite rechazó la venta: el asiento no concilia fecha, tasa BCV, CxC, retención recibida, IGTF, ingresos e IVA en Bs. y USD con la factura.');
       }
     }
     for (const document of newDocuments) {
