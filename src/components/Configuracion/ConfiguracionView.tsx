@@ -17,7 +17,7 @@ import {
   CalendarCheck,
   LockKeyhole
 } from 'lucide-react';
-import { TaxpayerType, IvaRetentionAgentBasis, JournalEntryItem } from '../../types/accounting';
+import { AccountingFramework, TaxpayerType, IvaRetentionAgentBasis, JournalEntryItem } from '../../types/accounting';
 import { buildOpeningEntryItems } from '../../types/accountingYearOpening';
 import { CompanyModal } from '../CompanyModal';
 import { BcvRateModal } from '../BcvRateModal';
@@ -92,6 +92,9 @@ export const ConfiguracionView: React.FC = () => {
   const [email, setEmail] = useState(currentCompany.email);
   const [fiscalYear, setFiscalYear] = useState(currentCompany.fiscalYear);
   const [bcvRate, setBcvRate] = useState(String(currentCompany.bcvRate));
+  const [accountingFramework, setAccountingFramework] = useState<AccountingFramework | ''>(currentCompany.accountingFramework || '');
+  const [accountingFrameworkVersion, setAccountingFrameworkVersion] = useState(currentCompany.accountingFrameworkVersion || '');
+  const [accountingFrameworkAdoptionDate, setAccountingFrameworkAdoptionDate] = useState(currentCompany.accountingFrameworkAdoptionDate || '');
 
   // Sync state if currentCompany switches
   React.useEffect(() => {
@@ -109,6 +112,9 @@ export const ConfiguracionView: React.FC = () => {
     setEmail(currentCompany.email);
     setFiscalYear(currentCompany.fiscalYear);
     setBcvRate(String(currentCompany.bcvRate));
+    setAccountingFramework(currentCompany.accountingFramework || '');
+    setAccountingFrameworkVersion(currentCompany.accountingFrameworkVersion || '');
+    setAccountingFrameworkAdoptionDate(currentCompany.accountingFrameworkAdoptionDate || '');
     setPeriodCloseDate(currentCompany.closedThroughDate || (() => {
       const now = new Date();
       return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -228,12 +234,17 @@ export const ConfiguracionView: React.FC = () => {
       return;
     }
     setRifError(null);
+    if ((accountingFramework || accountingFrameworkVersion.trim() || accountingFrameworkAdoptionDate) && (!accountingFramework || !accountingFrameworkVersion.trim() || !accountingFrameworkAdoptionDate)) {
+      window.alert('Para registrar la adopción VEN-NIF debe completar marco, versión normativa y fecha documentada.');
+      return;
+    }
     updateCompany({
       ...currentCompany,
       name: name.trim().toUpperCase(),
       tradeName: tradeName.trim() || undefined,
       rif: rifValidation.formattedRif,
       taxpayerType,
+      ...(accountingFramework ? { accountingFramework, accountingFrameworkVersion: accountingFrameworkVersion.trim(), accountingFrameworkAdoptionDate } : { accountingFramework: undefined, accountingFrameworkVersion: undefined, accountingFrameworkAdoptionDate: undefined }),
       defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
       ivaRetentionAgentBasis,
       isPersonalFirm,
@@ -452,6 +463,20 @@ export const ConfiguracionView: React.FC = () => {
         </div>
 
         <form onSubmit={handleSaveCompany} className="pt-6 space-y-4 text-xs">
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 space-y-2">
+            <label className="block font-bold text-slate-800">Marco contable VEN-NIF adoptado</label>
+            <select value={accountingFramework} onChange={e => setAccountingFramework(e.target.value as AccountingFramework | '')} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
+              <option value="">Sin adopción documentada / pendiente</option>
+              <option value="VEN_NIF_GE">VEN-NIF GE — Grandes Entidades</option>
+              <option value="VEN_NIF_PYME">VEN-NIF PYME — Pequeñas y Medianas Entidades</option>
+            </select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div><label className="block font-semibold text-slate-700 mb-1">Versión / referencia normativa</label><input value={accountingFrameworkVersion} onChange={e => setAccountingFrameworkVersion(e.target.value)} placeholder="Referencia realmente aplicada" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block font-semibold text-slate-700 mb-1">Fecha documentada de adopción</label><input type="date" value={accountingFrameworkAdoptionDate} onChange={e => setAccountingFrameworkAdoptionDate(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+            </div>
+            <p className="text-[11px] text-slate-600">Los registros históricos sin esta información permanecen intactos. No se infiere ni se asigna una versión normativa automáticamente.</p>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <div className="flex items-center justify-between mb-1">
