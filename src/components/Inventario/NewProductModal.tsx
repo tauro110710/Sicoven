@@ -92,7 +92,8 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            disabled={saving}
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer disabled:opacity-40"
           >
             <X className="w-5 h-5" />
           </button>
