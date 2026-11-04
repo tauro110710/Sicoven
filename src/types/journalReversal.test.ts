@@ -53,6 +53,16 @@ test('bloquea la reversión si el asiento original está descuadrado en Bs o USD
  assert.throws(()=>buildReversalItems(unbalanced,accounts),/no cuadra simultáneamente/i);
 });
 
+test('rejects a USD imbalance that exceeds the shared reversal tolerance', () => {
+ const unbalancedUsd = { ...source, items: source.items.map((item,index) =>
+   index === 0 ? { ...item, debitUsd: 100 } :
+   index === 1 ? { ...item, creditUsd: 79.995 } :
+   index === 2 ? { ...item, debitUsd: 20 } :
+   { ...item, creditUsd: 40 }
+ ) };
+ assert.throws(() => buildReversalItems(unbalancedUsd, accounts), /no cuadra simultáneamente/i);
+});
+
 test('bloquea líneas negativas o con Debe y Haber simultáneos',()=>{
  const negative = { ...source, items: source.items.map((item,index)=>index===0 ? {...item,debitBs:-1} : item) };
  assert.throws(()=>buildReversalItems(negative,accounts),/líneas inválidas/i);
