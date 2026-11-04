@@ -95,7 +95,11 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
                 type="date"
                 required
                 value={date}
-                onChange={e => setDate(e.target.value)}
+                onChange={e => {
+                  const nextDate = e.target.value;
+                  setDate(nextDate);
+                  setMovementBcvRate(nextDate === currentCompany.lastRateUpdate ? String(currentCompany.bcvRate || '') : '');
+                }}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               />
             </div>
