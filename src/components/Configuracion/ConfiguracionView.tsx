@@ -31,6 +31,7 @@ export const ConfiguracionView: React.FC = () => {
     currentCompany,
     setCurrentCompanyId,
     updateCompany,
+    waitForPersistence,
     resetToSampleData,
     resetFactoryData,
     exportBackupJson,
@@ -46,6 +47,7 @@ export const ConfiguracionView: React.FC = () => {
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [isBcvModalOpen, setIsBcvModalOpen] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [companySaveBusy, setCompanySaveBusy] = useState(false);
   const [factoryResetBusy, setFactoryResetBusy] = useState(false);
   const [factoryResetStage, setFactoryResetStage] = useState('');
   const [backupRestoreBusy, setBackupRestoreBusy] = useState(false);
@@ -261,7 +263,7 @@ export const ConfiguracionView: React.FC = () => {
     }
   };
 
-  const handleSaveCompany = (e: React.FormEvent) => {
+  const handleSaveCompany = async (e: React.FormEvent) => {
     e.preventDefault();
     const rifValidation = validateVenezuelanRif(rif);
     if (!rifValidation.isValid) {
@@ -355,28 +357,37 @@ export const ConfiguracionView: React.FC = () => {
       newExchangeabilityAssessment = assessment;
     }
 
-    updateCompany({
-      ...currentCompany,
-      ...(newCurrencyAssessment ? { functionalCurrencyAssessments: [...(currentCompany.functionalCurrencyAssessments || []), newCurrencyAssessment] } : {}),
-      ...(newExchangeabilityAssessment ? { exchangeabilityAssessments: [...(currentCompany.exchangeabilityAssessments || []), newExchangeabilityAssessment] } : {}),
-      name: name.trim().toUpperCase(),
-      tradeName: tradeName.trim() || undefined,
-      rif: rifValidation.formattedRif,
-      taxpayerType,
-      ...(hasSpecialNoticeMetadata ? { specialTaxpayerNotificationReference: specialTaxpayerNotificationReference.trim(), specialTaxpayerNotificationDate } : {}),
-      ...(accountingFramework ? { accountingFramework, accountingFrameworkVersion: accountingFrameworkVersion.trim(), accountingFrameworkAdoptionDate } : {}),
-      defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
-      ivaRetentionAgentBasis,
-      isPersonalFirm,
-      isIgtfPerceptionAgent,
-      address: address.trim(),
-      phone: phone.trim(),
-      email: email.trim(),
-      fiscalYear: Number(fiscalYear),
-      bcvRate: Number(bcvRate)
-    });
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    if (companySaveBusy) return;
+    setCompanySaveBusy(true);
+    try {
+      updateCompany({
+        ...currentCompany,
+        ...(newCurrencyAssessment ? { functionalCurrencyAssessments: [...(currentCompany.functionalCurrencyAssessments || []), newCurrencyAssessment] } : {}),
+        ...(newExchangeabilityAssessment ? { exchangeabilityAssessments: [...(currentCompany.exchangeabilityAssessments || []), newExchangeabilityAssessment] } : {}),
+        name: name.trim().toUpperCase(),
+        tradeName: tradeName.trim() || undefined,
+        rif: rifValidation.formattedRif,
+        taxpayerType,
+        ...(hasSpecialNoticeMetadata ? { specialTaxpayerNotificationReference: specialTaxpayerNotificationReference.trim(), specialTaxpayerNotificationDate } : {}),
+        ...(accountingFramework ? { accountingFramework, accountingFrameworkVersion: accountingFrameworkVersion.trim(), accountingFrameworkAdoptionDate } : {}),
+        defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
+        ivaRetentionAgentBasis,
+        isPersonalFirm,
+        isIgtfPerceptionAgent,
+        address: address.trim(),
+        phone: phone.trim(),
+        email: email.trim(),
+        fiscalYear: Number(fiscalYear),
+        bcvRate: Number(bcvRate)
+      });
+      await waitForPersistence();
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'SQLite no confirmó los parámetros de la empresa.');
+    } finally {
+      setCompanySaveBusy(false);
+    }
   };
 
   const handleExportBackup = () => {
@@ -813,10 +824,11 @@ export const ConfiguracionView: React.FC = () => {
           <div className="flex justify-end pt-3 border-t border-slate-200">
             <button
               type="submit"
-              className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
+              disabled={companySaveBusy}
+              className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 disabled:opacity-40 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
             >
               <Save className="w-4 h-4" />
-              Guardar Parámetros de Empresa
+              {companySaveBusy ? "Confirmando SQLite..." : "Guardar Parámetros de Empresa"}
             </button>
           </div>
         </form>
