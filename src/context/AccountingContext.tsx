@@ -1001,8 +1001,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const addJournalEntry = (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>): JournalEntry => {
-    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
-      throw new Error('La persistencia SQLite no está disponible o todavía no está lista. No se registró el asiento contable.');
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('El asiento requiere SQLite local de escritorio disponible y lista. No se registró.');
     }
     if (!isValidIsoDate(entry.date)) throw new Error('El asiento requiere una fecha válida.');
     if (currentCompany.closedThroughDate && entry.date <= currentCompany.closedThroughDate) {
