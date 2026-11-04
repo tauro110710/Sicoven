@@ -574,7 +574,12 @@ export function assessJournalReversal(input: {
   }
   if (linkedCreditNotes.length) blockers.push('La factura tiene ' + linkedCreditNotes.length + ' nota(s) de crédito de proveedor vinculada(s). Debe conciliarse primero el historial fiscal y físico de esas notas; no se permite reversar la factura como si estuviera intacta.');
   let inventoryReadiness: SaleInventoryReturnReadiness | PurchaseInventoryReconciliation | undefined;
-  const hasInventoryAssetFootprint = source.items.some(item =>
+  const hasLinkedPurchaseInventoryJournal = Boolean(purchase && journalEntries.some(entry =>
+    entry.companyId === companyId && entry.id !== source.id && entry.type === 'INVENTARIO' &&
+    (String(entry.referenceDoc || '').trim().toUpperCase() === ('FAC-' + purchase.invoiceNumber).trim().toUpperCase() ||
+     String(entry.referenceDoc || '').trim().toUpperCase() === String(purchase.invoiceNumber).trim().toUpperCase())
+  ));
+  const hasInventoryAssetFootprint = hasLinkedPurchaseInventoryJournal || source.items.some(item =>
     String(item.accountCode || '').startsWith('1.1.4.') ||
     /inventario/i.test(String(item.accountName || ''))
   );

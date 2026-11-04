@@ -2748,7 +2748,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       (item.journalEntryId === sourceEntry.id ||
        item.documentRef.trim().toUpperCase().replace(/\\s+/g, '') ===
        ('FAC-' + source.invoiceNumber).trim().toUpperCase().replace(/\\s+/g, '')));
-    const hasInventoryAccountingFootprint = sourceEntry.items.some(item =>
+    const hasLinkedInventoryJournal = journalEntries.some(entry =>
+      entry.companyId === currentCompany.id && entry.id !== sourceEntry.id && entry.type === 'INVENTARIO' &&
+      (String(entry.referenceDoc || '').trim().toUpperCase() === ('FAC-' + source.invoiceNumber).trim().toUpperCase() ||
+       String(entry.referenceDoc || '').trim().toUpperCase() === source.invoiceNumber.trim().toUpperCase())
+    );
+    const hasInventoryAccountingFootprint = hasLinkedInventoryJournal || sourceEntry.items.some(item =>
       String(item.accountCode || '').startsWith('1.1.4.')
     );
     if (linkedMovements.length || source.inventoryLines?.length || hasInventoryAccountingFootprint) {
