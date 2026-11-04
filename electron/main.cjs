@@ -602,7 +602,7 @@ app.whenReady().then(async () => {
     const sourceReference = String(input?.sourceDocumentRef || '').trim();
     const knownReferences = [source.id,source.documentNumber,source.invoiceNumber,source.number,source.opNumber,source.entryNumber,
       source.reference,source.referenceDoc,source.documentRef,source.voucherNumber,source.declarationNumber,source.controlNumber,
-      source.creditNoteNumber,source.debitNoteNumber]
+      source.creditNoteNumber,source.debitNoteNumber,source.sequence,source.journalEntryId,source.voucherId]
       .filter(value=>value!==undefined && value!==null && String(value).trim()!=='')
       .map(value=>String(value).trim().toLocaleUpperCase());
     if (!knownReferences.includes(sourceReference.toLocaleUpperCase())) {
