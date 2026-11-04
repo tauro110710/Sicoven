@@ -2405,10 +2405,17 @@ test('SQLite accepts a sales credit note only when linked merchandise was fully 
     id: 'product-1', companyId: 'company-1', code: 'P-1', name: 'Artículo',
     currentStock: 1, inventoryAccountCode: '1.1.4.01', costOfSalesAccountCode: '5.1.1.01'
   };
+  const accounts = [
+    { code: '1.1.2.01', name: 'Cuentas por cobrar', type: 'ACTIVO', isMovement: true },
+    { code: '4.1.1.01', name: 'Ingresos', type: 'INGRESOS', isMovement: true },
+    { code: '2.1.2.01', name: 'IVA débito fiscal', type: 'PASIVO', isMovement: true },
+    { code: '1.1.4.01', name: 'Inventario', type: 'ACTIVO', isMovement: true },
+    { code: '5.1.1.01', name: 'Costo de ventas', type: 'COSTOS', isMovement: true }
+  ];
   const previous = {
     ...emptyState([originalInvoice, originalCostJournal]), sales: [source],
-    movements: [originalMovement], products: [product],
-    companies: [{ id: 'company-1' }]
+    movements: [originalMovement], products: [product], accounts,
+    companies: [{ id: 'company-1', name: 'Empresa de prueba' }]
   };
   const next = {
     ...previous, sales: [source, note],
