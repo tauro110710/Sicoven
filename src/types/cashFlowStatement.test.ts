@@ -139,6 +139,10 @@ describe('cash flow statement', () => {
   });
 
   it('uses a prior annual opening as the carry-forward boundary when the current year has no opening', () => {
+    const olderOpening = entry('opening-2024', '2024-01-01', 'APERTURA', [
+      line('1.1.1.01', 'Caja principal', 100, 0, 10, 0),
+      line('3.1', 'Capital social', 0, 100, 0, 10)
+    ], { priorPeriodStartDate: '2023-01-01', priorPeriodEndDate: '2023-12-31', nextPeriodStartDate: '2024-01-01' });
     const priorOpening = entry('opening-2025', '2025-01-01', 'APERTURA', [
       line('1.1.1.01', 'Caja principal', 200, 0, 20, 0),
       line('3.1', 'Capital social', 0, 200, 0, 20)
@@ -151,7 +155,8 @@ describe('cash flow statement', () => {
       line('5.1', 'Gastos operacionales', 20, 0, 2, 0),
       line('1.1.1.01', 'Caja principal', 0, 20, 0, 2)
     ]);
-    const report = buildCashFlowReport([priorOpening, priorMovement, currentMovement], accounts, banks, 'co-1', 2026);
+    // Deliberately shuffle history: the most recent linked opening must be chosen by date, not array order.
+    const report = buildCashFlowReport([priorOpening, currentMovement, olderOpening, priorMovement], accounts, banks, 'co-1', 2026);
     assert.equal(report.openingCashBs, 250);
     assert.equal(report.openingCashUsd, 25);
     assert.equal(report.netChangeBs, -20);
