@@ -79,7 +79,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   const isAccountant = userRole === 'contador';
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, addMovement, addPurchaseCreditNote, addPurchaseServiceCreditNote, addSaleCorrectionNote, addSupplierDebitNote,
-    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, authorizeCorrectionCase, listCorrectionCases, executeCorrectionCase
+    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, islrVouchers, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, authorizeCorrectionCase, listCorrectionCases, executeCorrectionCase
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -282,6 +282,23 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
     movements.some(item => item.companyId === currentCompany.id &&
       (item.journalEntryId === selectedPurchaseForCorrection.journalEntryId ||
        item.documentRef.trim().toUpperCase() === ('FAC-' + selectedPurchaseForCorrection.invoiceNumber).trim().toUpperCase()))
+  ));
+  const selectedSaleFiscalBlockReason = selectedSaleForCorrection
+    ? selectedSaleForCorrection.paymentTerm !== 'CREDITO'
+      ? 'La factura es de contado. Antes de emitir una NC/ND debe ejecutarse el circuito de devolución o reembolso de tesorería; este formulario no alterará la factura.'
+      : Number(selectedSaleForCorrection.vatWithheldBs || 0) > 0 || Boolean(String(selectedSaleForCorrection.retentionVoucherNumber || '').trim())
+        ? 'La factura tiene retención de IVA o comprobante vinculado. La nota exige rectificar primero el comprobante y sus efectos fiscales; no se emitirá una NC/ND parcial que deje la retención incoherente.'
+        : Number(selectedSaleForCorrection.igtfAmountBs || 0) > 0 || Boolean(selectedSaleForCorrection.igtfApplicable)
+          ? 'La factura contiene IGTF. Debe conciliarse primero su percepción, enteramiento y eventual reintegro; no se modificará el documento original.'
+          : ''
+    : '';
+  const selectedPurchaseHasFiscalEffects = Boolean(selectedPurchaseForCorrection && (
+    Number(selectedPurchaseForCorrection.vatWithheldBs || 0) > 0 ||
+    Number(selectedPurchaseForCorrection.islrWithheldBs || 0) > 0 ||
+    Number(selectedPurchaseForCorrection.igtfAmountBs || 0) > 0 ||
+    Boolean(selectedPurchaseForCorrection.igtfApplicable) ||
+    vatVouchers.some(item=>item.companyId===currentCompany.id && item.purchaseRecordId===selectedPurchaseForCorrection.id) ||
+    islrVouchers.some(item=>item.companyId===currentCompany.id && item.invoiceNumber===selectedPurchaseForCorrection.invoiceNumber && item.supplierRif===selectedPurchaseForCorrection.supplierRif)
   ));
   const selectedCorrectionJournalId = selectedJournalForCorrection?.id ||
     selectedSaleForCorrection?.journalEntryId || selectedPurchaseForCorrection?.journalEntryId ||
@@ -796,7 +813,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
               <option value="NOTA_DEBITO_VENTA">Emitir nota de débito (ND)</option>
             </select>
           </label>
-          {selectedSaleHasInventory && requestCorrectionType === 'NOTA_CREDITO_VENTA' && !saleInventoryReadiness?.ready ? <div className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3 text-xs">
+          {selectedSaleFiscalBlockReason ? <div className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">{selectedSaleFiscalBlockReason}</div> : selectedSaleHasInventory && requestCorrectionType === 'NOTA_CREDITO_VENTA' && !saleInventoryReadiness?.ready ? <div className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3 text-xs">
             <p>Esta factura tiene huella contable de inventario. Primero debe registrar la devolución física de todas las unidades y conciliar su costo por artículo en el asistente.</p>
             <button type="button" onClick={openExistingCorrectionFlow} className="rounded bg-indigo-700 px-3 py-2 font-semibold text-white">Abrir devolución y conciliación de Kardex</button>
             {saleInventoryReadiness?.reason && <p className="text-amber-900">{saleInventoryReadiness.reason}</p>}
@@ -909,7 +926,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
             </div> : selectedPurchaseHasInventory ? <div className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3 text-xs">
               <p>La compra tiene mercancía/Kardex. La NC debe calcular la devolución física por líneas y su efecto sobre inventario, CxP, retenciones e impuestos.</p>
               <button type="button" onClick={openExistingCorrectionFlow} className="rounded bg-indigo-700 px-3 py-2 font-semibold text-white">Abrir NC y devolución de inventario</button>
-            </div> : <CorrectionNoteFormFields
+            </div> : selectedPurchaseHasFiscalEffects ? <div className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">Esta factura tiene retenciones IVA/ISLR, IGTF o comprobantes vinculados. La NC de servicios requiere su rectificación fiscal específica; el Centro no registrará una NC que deje comprobantes o declaraciones incoherentes.</div> : <CorrectionNoteFormFields
             minDate={selectedPurchaseForCorrection.invoiceDate}
             noteDate={requestCorrectionDate} setNoteDate={setRequestCorrectionDate}
             noteNumber={requestTargetRef} setNoteNumber={setRequestTargetRef}
