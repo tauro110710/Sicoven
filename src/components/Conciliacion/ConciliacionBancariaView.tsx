@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import {
   Landmark,
@@ -38,6 +38,7 @@ export const ConciliacionBancariaView: React.FC = () => {
     runAutoReconciliation,
     unreconcileAll,
     createAdjustingEntryForBankMovement,
+    waitForPersistence,
     displayCurrency
   } = useAccounting();
 
@@ -60,6 +61,8 @@ export const ConciliacionBancariaView: React.FC = () => {
   const [selectedBookEntryId, setSelectedBookEntryId] = useState<string | null>(null);
   const [selectedStatementId, setSelectedStatementId] = useState<string | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const adjustmentInFlightRef = useRef(false);
+  const [isCreatingAdjustment, setIsCreatingAdjustment] = useState(false);
 
   const companyBanks = bankAccounts.filter(b => b.companyId === currentCompany.id);
   const activeBank =
@@ -225,6 +228,22 @@ export const ConciliacionBancariaView: React.FC = () => {
       console.error('Error generating conciliation PDF:', err);
     } finally {
       setIsExportingPdf(false);
+    }
+  };
+
+  const handleCreateAdjustment = async (movement: BankStatementMovement, counterpartAccountCode: string) => {
+    if (adjustmentInFlightRef.current) return;
+    adjustmentInFlightRef.current = true;
+    setIsCreatingAdjustment(true);
+    try {
+      createAdjustingEntryForBankMovement(movement, counterpartAccountCode);
+      await waitForPersistence();
+      window.alert('SQLite confirmó el asiento de ajuste y la conciliación bancaria.');
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo confirmar el ajuste bancario en SQLite.');
+    } finally {
+      adjustmentInFlightRef.current = false;
+      setIsCreatingAdjustment(false);
     }
   };
 
@@ -683,12 +702,10 @@ export const ConciliacionBancariaView: React.FC = () => {
                                   <button
                                     onClick={() => {
                                       const defaultAcc = isDebit ? '6.1.1.07' : '4.2.1.02';
-                                      createAdjustingEntryForBankMovement(s, defaultAcc);
-                                      alert(
-                                        `Asiento de Ajuste generado automáticamente en el Libro Diario y partida conciliada.`
-                                      );
+                                      void handleCreateAdjustment(s, defaultAcc);
                                     }}
-                                    className="p-1 text-indigo-600 hover:bg-indigo-50 rounded"
+                                    disabled={isCreatingAdjustment}
+                                    className="p-1 text-indigo-600 hover:bg-indigo-50 rounded disabled:opacity-40"
                                     title={
                                       isDebit
                                         ? 'Crear asiento contable automático por gasto bancario'
