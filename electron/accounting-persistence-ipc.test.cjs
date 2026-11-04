@@ -685,8 +685,10 @@ test('SQLite audit records the VAT retention decision and the later voucher deli
       reversalReason: 'Factura original anulada por error documentado.',
       workpaperNote: 'Se revisó la factura y el soporte de la reversión.',
       items: [
-        { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 0, creditBs: 1160, debitUsd: 0, creditUsd: 1160 },
-        { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 1160, creditBs: 0, debitUsd: 1160, creditUsd: 0 }
+        { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 0, creditBs: 1000, debitUsd: 0, creditUsd: 1000 },
+        { accountCode: '1.1.3.01', accountName: 'IVA Crédito Fiscal', debitBs: 0, creditBs: 160, debitUsd: 0, creditUsd: 160 },
+        { accountCode: '2.1.2.03', accountName: 'Retención IVA por enterar', debitBs: 120, creditBs: 0, debitUsd: 120, creditUsd: 0 },
+        { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 1040, creditBs: 0, debitUsd: 1040, creditUsd: 0 }
       ], createdAt: '2026-10-04T10:00:00.000Z'
     };
     const corrected = {
