@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { matchesBankStatementLine, validateBankMovementFxSnapshot } from './bankStatementMatching';
+import { matchesBankStatementLine, matchesBankStatementDualCurrency, validateBankMovementFxSnapshot } from './bankStatementMatching';
 
 test('matches Bs bank lines at cent precision and rejects fuzzy five-cent differences', () => {
   assert.equal(matchesBankStatementLine({
@@ -45,4 +45,14 @@ test('requires a BCV snapshot effective on the bank movement date', () => {
   assert.doesNotThrow(() => validateBankMovementFxSnapshot({
     date: '2026-10-20', amountBs: 250, amountUsd: 1, bcvRate: 250, bcvRateEffectiveDate: '2026-10-20'
   }));
+});
+
+test('reconciles a bank line only when both Bs and USD equivalents match', () => {
+  const matching = {
+    movementType: 'DEBIT' as const, amountBs: 250, amountUsd: 1,
+    debitBs: 0, creditBs: 250, debitUsd: 0, creditUsd: 1
+  };
+  assert.equal(matchesBankStatementDualCurrency(matching), true);
+  assert.equal(matchesBankStatementDualCurrency({ ...matching, creditUsd: 0.99 }), false);
+  assert.equal(matchesBankStatementDualCurrency({ ...matching, creditBs: 249.99 }), false);
 });
