@@ -275,8 +275,7 @@ function markCorrectionExecuted(db, {caseId,executionRef,reason,evidenceRecordId
       throw new Error('La referencia de ejecución no puede ser la misma del documento original.');
     }
     const expectedCorrectionRef = String(item.correction_ref || '').trim();
-    if (expectedCorrectionRef && expectedCorrectionRef !== 'PENDIENTE DE DOCUMENTO CORRECTIVO' &&
-        normalizedExecutionRef !== expectedCorrectionRef.toLocaleUpperCase()) {
+    if (expectedCorrectionRef && normalizedExecutionRef !== expectedCorrectionRef.toLocaleUpperCase()) {
       throw new Error('La referencia ejecutada no coincide con el documento correctivo indicado en la solicitud.');
     }
     const linkedEvidenceId = String(evidenceRecordId || '').trim();
