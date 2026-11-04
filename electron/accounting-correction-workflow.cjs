@@ -116,6 +116,28 @@ function initializeCorrectionWorkflow(db) {
   `);
   });
   migrateCorrectionCaseSchema();
+  const migrateOpenCasesToDirectExecution = db.transaction(() => {
+    const legacyCases = db.prepare(`
+      SELECT id,requested_by,requested_by_name FROM accounting_correction_cases
+      WHERE status='PENDING_REVIEW' AND workflow_stage IN ('IN_REVIEW','OBSERVATION_REQUIRED')
+    `).all();
+    for (const item of legacyCases) {
+      const at = nextCorrectionEventAt(db,item.id);
+      db.prepare(`
+        UPDATE accounting_correction_cases
+        SET status='APPROVED',workflow_stage='READY_FOR_EXECUTION',
+            reviewed_by=NULL,reviewed_by_name=NULL,
+            review_reason='Migración técnica al flujo de ejecución directa del contador; sin revisión humana.',
+            reviewed_at=NULL
+        WHERE id=? AND status='PENDING_REVIEW'
+      `).run(item.id);
+      appendEvent(db,null,{id:item.id,type:'APPROVED',
+        actor:{id:item.requested_by,username:item.requested_by_name},
+        reason:'Caso heredado habilitado para ejecución directa; no requiere aprobación.',
+        metadata:{automatic:true,legacyWorkflowMigrated:true},at});
+    }
+  });
+  migrateOpenCasesToDirectExecution();
   const workflowEventSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='accounting_correction_case_workflow_events'").get();
   if (workflowEventSchema && (!String(workflowEventSchema.sql || '').includes("'WITHDRAWN'") || !String(workflowEventSchema.sql || '').includes("'EXECUTION_STARTED'"))) {
     const migrateWorkflowEventSchema = db.transaction(() => db.exec(`
@@ -171,9 +193,10 @@ function appendEvent(db, _tx, event) {
 }
 function registerCorrectionRequest(db, input, actor) {
   requireAdmin(actor);
-  const required = ['companyId','entityType','entityId','correctionType','sourceDocumentRef','correctionDocumentRef','reason','workpaperNote'];
+  const required = ['companyId','entityType','entityId','correctionType','sourceDocumentRef','correctionDocumentRef'];
   for (const key of required) if (!String(input?.[key] || '').trim()) throw new Error('Falta el campo obligatorio: '+key);
-  if (String(input.reason).trim().length < 15 || String(input.workpaperNote).trim().length < 15) throw new Error('El motivo y el papel de trabajo deben tener al menos 15 caracteres.');
+  const reason = String(input.reason || '').trim();
+  const workpaperNote = String(input.workpaperNote || '').trim();
   const limits = { companyId:160, entityType:40, entityId:160, correctionType:80, sourceDocumentRef:160,
     correctionDocumentRef:160, reason:2000, workpaperNote:4000 };
   for (const [key,max] of Object.entries(limits)) if (String(input[key] || '').length > max) throw new Error('El campo '+key+' excede el máximo permitido.');
@@ -184,7 +207,7 @@ function registerCorrectionRequest(db, input, actor) {
     WHERE company_id=? AND entity_type=? AND entity_id=?
       AND UPPER(TRIM(source_ref))=UPPER(TRIM(?))
       AND UPPER(TRIM(correction_ref))=UPPER(TRIM(?))
-      AND status IN ('PENDING_REVIEW','APPROVED') AND workflow_stage<>'WITHDRAWN'
+      AND status IN ('PENDING_REVIEW','APPROVED','EXECUTED') AND workflow_stage<>'WITHDRAWN'
     LIMIT 1
   `).get(String(input.companyId),String(input.entityType),String(input.entityId),
     String(input.sourceDocumentRef),String(input.correctionDocumentRef));
@@ -193,31 +216,19 @@ function registerCorrectionRequest(db, input, actor) {
   const id = crypto.randomUUID(), at = new Date().toISOString();
   const tx = db.transaction(() => {
     db.prepare(`INSERT INTO accounting_correction_cases
-      (id,company_id,entity_type,entity_id,correction_type,source_ref,correction_ref,reason,workpaper,status,requested_by,requested_by_name,created_at)
-      VALUES(?,?,?,?,?,?,?,?,?,'PENDING_REVIEW',?,?,?)`).run(id,String(input.companyId),String(input.entityType),String(input.entityId),
-      String(input.correctionType),String(input.sourceDocumentRef),String(input.correctionDocumentRef || ''),String(input.reason),String(input.workpaperNote),
+      (id,company_id,entity_type,entity_id,correction_type,source_ref,correction_ref,reason,workpaper,status,workflow_stage,requested_by,requested_by_name,reviewed_by,reviewed_by_name,review_reason,created_at,reviewed_at)
+      VALUES(?,?,?,?,?,?,?,?,?,'APPROVED','READY_FOR_EXECUTION',?,?,NULL,NULL,'Ejecución directa; no requiere revisión humana.',?,NULL)`).run(id,String(input.companyId),String(input.entityType),String(input.entityId),
+      String(input.correctionType),String(input.sourceDocumentRef),String(input.correctionDocumentRef || ''),reason,workpaperNote,
       Number(actor.id),String(actor.username || ''),at);
-    appendEvent(db, tx, {id,type:'REQUESTED',actor,reason:String(input.reason),metadata:{companyId:String(input.companyId),entityType:String(input.entityType),entityId:String(input.entityId)},at});
+    appendEvent(db, tx, {id,type:'REQUESTED',actor,reason,metadata:{companyId:String(input.companyId),entityType:String(input.entityType),entityId:String(input.entityId)},at});
+    appendEvent(db, tx, {id,type:'APPROVED',actor,reason:'Habilitada automáticamente para ejecución directa; no requiere revisión ni aprobación.',metadata:{automatic:true,directExecution:true},at});
   });
   tx();
   return getCorrectionCase(db,id);
 }
-function reviewCorrectionRequest(db, {caseId,decision,reason}, actor) {
+function reviewCorrectionRequest(_db, _input, actor) {
   requireAdmin(actor);
-  if (!['APPROVE','REJECT'].includes(decision)) throw new Error('Decisión de revisión inválida.');
-  if (String(reason || '').trim().length < 15) throw new Error('La decisión requiere una justificación de al menos 15 caracteres.');
-  const at = new Date().toISOString();
-  const tx = db.transaction(() => {
-    const item = db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(caseId));
-    if (!item) throw new Error('El expediente de corrección no existe.');
-    if (item.status !== 'PENDING_REVIEW' || item.workflow_stage !== 'IN_REVIEW') throw new Error('El expediente ya fue revisado o no está en revisión; atienda primero las observaciones o el estado actual.');
-    const status = decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
-    db.prepare('UPDATE accounting_correction_cases SET status=?,workflow_stage=?,reviewed_by=?,reviewed_by_name=?,review_reason=?,reviewed_at=? WHERE id=? AND status=?')
-      .run(status,decision === 'APPROVE' ? 'READY_FOR_EXECUTION' : 'CLOSED',Number(actor.id),String(actor.username || ''),String(reason).trim(),at,item.id,'PENDING_REVIEW');
-    appendEvent(db, tx, {id:item.id,type:decision==='APPROVE'?'APPROVED':'REJECTED',actor,reason:String(reason).trim(),metadata:{requestedBy:Number(item.requested_by)},at});
-  });
-  tx();
-  return getCorrectionCase(db,String(caseId));
+  throw new Error('La revisión y aprobación previa fueron retiradas. La corrección se habilita directamente al contador.');
 }
 function requireApprovedCorrectionCase(db, input, actor) {
   requireAdmin(actor);
@@ -238,7 +249,7 @@ function requireApprovedCorrectionCase(db, input, actor) {
       ORDER BY created_at DESC
     `).all(String(input.companyId),String(input.entityType),String(input.entityId),sourceRef,correctionRef);
     if(rows.length===0)
-      throw new Error('No existe un expediente formal aprobado para esta empresa, registro origen y referencia correctiva. La operación no se ejecutó.');
+      throw new Error('No existe una corrección habilitada para ejecución directa en esta empresa, registro origen y referencia correctiva. La operación no se ejecutó.');
     if(rows.length!==1)
       throw new Error('Hay más de un expediente aprobado para la misma corrección. Debe resolverse la duplicidad antes de ejecutar.');
     const item=rows[0];
@@ -258,16 +269,20 @@ function requireApprovedCorrectionCase(db, input, actor) {
 }
 function markCorrectionExecuted(db, {caseId,executionRef,reason,evidenceRecordId,evidenceCollection}, actor) {
   requireAdmin(actor);
-  if (String(reason || '').trim().length < 15) throw new Error('La ejecución requiere una justificación de al menos 15 caracteres.');
+  const executionReason = String(reason || '').trim() || 'Correctivo persistido y vínculo de origen verificado automáticamente.';
   const at = new Date().toISOString();
   const tx = db.transaction(() => {
     const item = db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(caseId));
     if (!item) throw new Error('El expediente de corrección no existe.');
-    if (item.status !== 'APPROVED' || item.workflow_stage !== 'READY_FOR_EXECUTION') throw new Error('Solo se puede ejecutar un expediente aprobado y sin observaciones pendientes.');
+    const normalizedExecutionRef = String(executionRef || '').trim().toLocaleUpperCase();
+    if (item.status === 'EXECUTED') {
+      if (String(item.execution_ref || '').trim().toLocaleUpperCase() === normalizedExecutionRef && Number(item.executed_by) === Number(actor.id)) return;
+      throw new Error('La corrección ya fue ejecutada con otra referencia o identidad. No se repetirá la operación.');
+    }
+    if (item.status !== 'APPROVED' || item.workflow_stage !== 'READY_FOR_EXECUTION') throw new Error('La corrección no está habilitada para ejecución directa.');
     if (!item.execution_started_at || Number(item.execution_started_by)!==Number(actor.id)) {
       throw new Error('La ejecución debe haber sido iniciada y autorizada previamente por el contador autenticado.');
     }
-    const normalizedExecutionRef = String(executionRef || '').trim().toLocaleUpperCase();
     if (!normalizedExecutionRef || normalizedExecutionRef.length > 160) throw new Error('Indique una referencia correctiva válida de hasta 160 caracteres.');
     if (normalizedExecutionRef === String(item.source_ref || '').trim().toLocaleUpperCase()) {
       throw new Error('La referencia de ejecución no puede ser la misma del documento original.');
@@ -288,7 +303,7 @@ function markCorrectionExecuted(db, {caseId,executionRef,reason,evidenceRecordId
     }
     db.prepare("UPDATE accounting_correction_cases SET status='EXECUTED',workflow_stage='COMPLETED',executed_by=?,executed_by_name=?,execution_ref=?,executed_at=? WHERE id=? AND status='APPROVED'")
       .run(Number(actor.id),String(actor.username || ''),String(executionRef).trim(),at,item.id);
-    appendEvent(db, tx, {id:item.id,type:'EXECUTED',actor,reason:String(reason).trim(),metadata:{
+    appendEvent(db, tx, {id:item.id,type:'EXECUTED',actor,reason:executionReason,metadata:{
       executionRef:String(executionRef).trim(),
       ...(linkedEvidenceId ? {evidenceRecordId:linkedEvidenceId,evidenceCollection:linkedEvidenceCollection} : {})
     },at});
@@ -306,56 +321,17 @@ function appendWorkflowEvent(db, item, type, actor, reason, metadata = {}) {
       reason:String(reason).trim(),metadata,occurredAt:at
     }));
 }
-function observeCorrectionRequest(db, {caseId,reason}, actor) {
+function observeCorrectionRequest(_db, _input, actor) {
   requireAdmin(actor);
-  const note=String(reason || '').trim();
-  if(note.length<15) throw new Error('La observación debe explicar qué falta o debe corregirse (mínimo 15 caracteres).');
-  const at=new Date().toISOString();
-  const tx=db.transaction(()=>{
-    const item=db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(caseId));
-    if(!item) throw new Error('El expediente de corrección no existe.');
-    if(!['PENDING_REVIEW','APPROVED'].includes(item.status) || !['IN_REVIEW','READY_FOR_EXECUTION'].includes(item.workflow_stage))
-      throw new Error('El expediente no admite observaciones en su estado actual.');
-    db.prepare("UPDATE accounting_correction_cases SET status='PENDING_REVIEW',workflow_stage='OBSERVATION_REQUIRED',reviewed_by=?,reviewed_by_name=?,review_reason=?,reviewed_at=?,execution_started_by=NULL,execution_started_at=NULL,execution_started_ref=NULL WHERE id=?")
-      .run(Number(actor.id),String(actor.username || ''),note,at,item.id);
-    appendWorkflowEvent(db,item,'OBSERVED',actor,note,{previousStatus:item.status,previousStage:item.workflow_stage,previousExecutionStartedBy:item.execution_started_by || null,previousExecutionStartedAt:item.execution_started_at || null,previousExecutionRef:item.execution_started_ref || null});
-  });
-  tx();
-  return getCorrectionCase(db,String(caseId));
+  throw new Error('Las observaciones y subsanaciones administrativas fueron retiradas del Centro de Correcciones.');
 }
-function resubmitCorrectionRequest(db, {caseId,reason}, actor) {
+function resubmitCorrectionRequest(_db, _input, actor) {
   requireAdmin(actor);
-  const note=String(reason || '').trim();
-  if(note.length<15) throw new Error('La subsanación debe describir los cambios y soportes aportados (mínimo 15 caracteres).');
-  const at=new Date().toISOString();
-  const tx=db.transaction(()=>{
-    const item=db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(caseId));
-    if(!item) throw new Error('El expediente de corrección no existe.');
-    if(item.status!=='PENDING_REVIEW' || item.workflow_stage!=='OBSERVATION_REQUIRED')
-      throw new Error('El expediente no tiene observaciones pendientes de subsanación.');
-    db.prepare("UPDATE accounting_correction_cases SET workflow_stage='IN_REVIEW',reviewed_by=NULL,reviewed_by_name=NULL,review_reason=NULL,reviewed_at=NULL WHERE id=? AND status='PENDING_REVIEW'")
-      .run(item.id);
-    appendWorkflowEvent(db,item,'RESUBMITTED',actor,note,{previousReviewerId:item.reviewed_by || null});
-  });
-  tx();
-  return getCorrectionCase(db,String(caseId));
+  throw new Error('El reenvío a revisión fue retirado. El contador ejecuta directamente la corrección.');
 }
-function withdrawCorrectionRequest(db, {caseId,reason}, actor) {
+function withdrawCorrectionRequest(_db, _input, actor) {
   requireAdmin(actor);
-  const note=String(reason || '').trim();
-  if(note.length<15) throw new Error('El retiro requiere una justificación de al menos 15 caracteres.');
-  const tx=db.transaction(()=>{
-    const item=db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(caseId));
-    if(!item) throw new Error('El expediente de corrección no existe.');
-    if(!['PENDING_REVIEW','APPROVED'].includes(item.status) ||
-       !['IN_REVIEW','OBSERVATION_REQUIRED','READY_FOR_EXECUTION'].includes(item.workflow_stage))
-      throw new Error('El expediente ya está cerrado, ejecutado o retirado; no admite retiro.');
-    db.prepare("UPDATE accounting_correction_cases SET status='PENDING_REVIEW',workflow_stage='WITHDRAWN',execution_started_by=NULL,execution_started_at=NULL,execution_started_ref=NULL WHERE id=?")
-      .run(item.id);
-    appendWorkflowEvent(db,item,'WITHDRAWN',actor,note,{previousStatus:item.status,previousStage:item.workflow_stage,previousExecutionStartedBy:item.execution_started_by || null,previousExecutionStartedAt:item.execution_started_at || null,previousExecutionRef:item.execution_started_ref || null});
-  });
-  tx();
-  return getCorrectionCase(db,String(caseId));
+  throw new Error('El retiro administrativo fue retirado del flujo operativo.');
 }
 function getCorrectionCase(db,id) {
   const row=db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(id));
