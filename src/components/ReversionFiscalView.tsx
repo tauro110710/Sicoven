@@ -535,6 +535,8 @@ export const ReversionFiscalView: React.FC = () => {
         <div className="space-y-2">
           {auditEvents.map(event => {
             const details = event.details || {};
+            const authorizationDetails = details.authorization && typeof details.authorization === 'object'
+              ? details.authorization as Record<string, unknown> : {};
             const title = event.eventType === 'journal_entry_reversed' ? 'Contra-asiento registrado'
               : event.eventType === 'journal_entry_posted' ? 'Asiento contabilizado'
               : event.eventType === 'fiscal_document_reversal_marked' ? 'Documento fiscal marcado como reversado contablemente'
@@ -558,7 +560,7 @@ export const ReversionFiscalView: React.FC = () => {
               {Boolean(details.reason) && <p><strong>Motivo:</strong> {String(details.reason)}</p>}
               {Boolean(details.workpaperNote) && <p><strong>Papel de trabajo:</strong> {String(details.workpaperNote)}</p>}
               {Boolean(details.fiscalEmissionMedium) && <p><strong>Medio fiscal declarado:</strong> {String(details.fiscalEmissionMedium)} · coincidencia con original: {details.sameMediumAsOriginal ? 'confirmada' : 'no confirmada'}</p>}
-              {Boolean(details.authorization) && <p><strong>Autorización:</strong> sesión autenticada {String(details.authorization.method || '')} · confirmación expresa {details.authorization.explicitConfirmation ? 'sí' : 'no'}</p>}
+              {Boolean(details.authorization) && <p><strong>Autorización:</strong> sesión autenticada {String(authorizationDetails.method || '')} · confirmación expresa {authorizationDetails.explicitConfirmation ? 'sí' : 'no'}</p>}
               {Boolean(details.journalEntryId) && <p><strong>Asiento correctivo:</strong> {String(details.journalEntryId)}</p>}
               {Boolean(details.reversalOfEntryId) && <p>Asiento original: {String(details.reversalOfEntryId)}</p>}
               {Boolean(details.invoiceNumber) && <p>Factura: {String(details.invoiceNumber)} · {String(details.collection || '')}</p>}
