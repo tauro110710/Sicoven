@@ -209,10 +209,13 @@ export const ConciliacionBancariaView: React.FC = () => {
     setIsReconciling(true);
     try {
       const res = runAutoReconciliation(activeBank.id);
-      await waitForPersistence();
-      setAutoReconcileFeedback(res.matchedCount > 0
-        ? `SQLite confirmó ${res.matchedCount} partidas conciliadas automáticamente.`
-        : 'SQLite confirmó la revisión; no se encontraron partidas pendientes coincidentes.');
+      if (res.matchedCount > 0) {
+        await waitForPersistence();
+        setAutoReconcileFeedback(`SQLite confirmó ${res.matchedCount} partidas conciliadas automáticamente.`);
+      } else {
+        // Sin coincidencias no hay mutación ni snapshot nuevo que esperar.
+        setAutoReconcileFeedback('No se encontraron partidas automáticas pendientes por vincular; no se modificaron registros.');
+      }
     } catch (error) {
       setAutoReconcileFeedback(error instanceof Error ? error.message : 'SQLite no confirmó la conciliación automática.');
     } finally {
