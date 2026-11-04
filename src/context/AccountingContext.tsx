@@ -471,6 +471,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     openingDate: string;
     retainedEarningsAccountCode?: string;
   }): Promise<JournalEntry> => {
+    assertSQLitePersistenceReady('Crear asiento de apertura');
     if (yearOpeningInFlightRef.current) throw new Error('Ya hay un asiento de apertura en proceso.');
     if (persistenceFaultRef.current) throw new Error('La persistencia SQLite falló. Reinicie SICOVEN antes de continuar.');
     if (!window.sicovenStore || !storageReady) throw new Error('La apertura contable solo puede registrarse cuando SQLite de escritorio esté disponible.');
@@ -524,6 +525,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const closeAccountingPeriod = async (closedThroughDate: string): Promise<void> => {
+    assertSQLitePersistenceReady('Cerrar el período contable');
     if (periodClosureInFlightRef.current) throw new Error('Ya hay un cierre contable en proceso.');
     if (!isValidIsoDate(closedThroughDate)) throw new Error('Indique una fecha de cierre válida.');
     const now = new Date();
@@ -561,6 +563,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const reopenAccountingPeriod = async (reopenedThroughDate: string | null, reason: string): Promise<void> => {
+    assertSQLitePersistenceReady('Reabrir el período contable');
     if (periodReopeningInFlightRef.current) throw new Error('Ya hay una reapertura contable en proceso.');
     const store = window.sicovenStore;
     if (persistenceFaultRef.current || !store || !storageReady) {
