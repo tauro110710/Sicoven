@@ -19,7 +19,7 @@ import {
 } from '../../utils/seniatGenerators';
 
 export const RetencionesIslrView: React.FC = () => {
-  const { currentCompany, islrVouchers, purchases, islrFiscalEvents, displayCurrency } = useAccounting();
+  const { currentCompany, islrVouchers, purchases, islrFiscalEvents, displayCurrency, recordIslrVoucherDelivery } = useAccounting();
 
   const [selectedVoucher, setSelectedVoucher] = useState<IslrRetentionVoucher | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -405,7 +405,7 @@ export const RetencionesIslrView: React.FC = () => {
                 filteredVouchers.map(v => (
                   <tr key={v.id} className="hover:bg-slate-50 transition">
                     <td className="py-2.5 px-4 font-mono font-bold text-indigo-900 bg-indigo-50/30 whitespace-nowrap">
-                      {v.voucherNumber}{v.requiresFiscalCorrection && <span title={v.correctionNote || 'Revisar regularización fiscal'} className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-800">REVISAR</span>}
+                      {v.voucherNumber}{!v.deliveryDate && <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-800">PEND. ENTREGA</span>}{v.deliveryDate && <span className="ml-1 rounded bg-emerald-100 px-1 py-0.5 text-[9px] font-bold text-emerald-800">ENTREGADO</span>}{v.requiresFiscalCorrection && <span title={v.correctionNote || 'Revisar regularización fiscal'} className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-800">REVISAR</span>}
                     </td>
                     <td className="py-2.5 px-4 font-mono text-slate-600 whitespace-nowrap">
                       {formatDate(v.date)}
@@ -464,6 +464,12 @@ export const RetencionesIslrView: React.FC = () => {
       <IslrVoucherModal
         voucher={selectedVoucher}
         company={currentCompany}
+        onRecordDelivery={async draft => {
+          if (!selectedVoucher) throw new Error('Seleccione un comprobante.');
+          const updated = await recordIslrVoucherDelivery(selectedVoucher.id, draft);
+          setSelectedVoucher(updated);
+          return updated;
+        }}
         onClose={() => setSelectedVoucher(null)}
       />
     </div>
