@@ -234,6 +234,11 @@ export const ConciliacionBancariaView: React.FC = () => {
     }
   };
 
+  const handleLinkSelectedPair = async () => {
+    if (!selectedStatementId || !selectedBookEntryId) return;
+    await handleLinkMovementToSelectedBook(selectedStatementId, selectedBookEntryId);
+  };
+
   const handleUnreconcileMovement = async (movementId: string) => {
     await runReconciliationWrite(() => unreconcileMovement(movementId));
   };
@@ -526,8 +531,9 @@ export const ConciliacionBancariaView: React.FC = () => {
                   Limpiar Selección
                 </button>
                 <button
-                  onClick={handleLinkSelectedPair}
-                  className="px-4 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded shadow cursor-pointer"
+                  onClick={() => { void handleLinkSelectedPair(); }}
+                  disabled={!selectedStatementId || !selectedBookEntryId || isReconciling}
+                  className="px-4 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded shadow cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Vincular y Conciliar Selección
                 </button>
