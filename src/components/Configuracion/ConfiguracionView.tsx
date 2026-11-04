@@ -300,11 +300,11 @@ export const ConfiguracionView: React.FC = () => {
         salesPriceFactors: salesPriceFactors.trim(), costFactors: costFactors.trim(),
         financingFactors: financingFactors.trim(), operatingReceiptsFactors: operatingReceiptsFactors.trim(),
         professionalConclusion: currencyProfessionalConclusion.trim(),
-        evidenceReferences: currencyEvidenceReferences.split('\\n').map(item => item.trim()).filter(Boolean)
+        evidenceReferences: currencyEvidenceReferences.split(String.fromCharCode(10)).map(item => item.trim()).filter(Boolean)
       };
       const currencyErrors = validateFunctionalCurrencyAssessment(draft);
       if (currencyErrors.length) {
-        window.alert('No se guardó la evaluación NIC 21:\\n- ' + currencyErrors.join('\\n- '));
+        window.alert('No se guardó la evaluación NIC 21:' + String.fromCharCode(10) + '- ' + currencyErrors.join(String.fromCharCode(10) + '- '));
         return;
       }
       newCurrencyAssessment = draft;
