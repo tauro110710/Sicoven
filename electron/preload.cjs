@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   recordAuditCorrection: (token, input) => ipcRenderer.invoke('sicoven:audit-record-correction', token, input),
   createCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-create', token, input),
   reviewCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-review', token, input),
+  authorizeCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-authorize', token, input),
   observeCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-observe', token, input),
   resubmitCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-resubmit', token, input),
   withdrawCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-withdraw', token, input),
