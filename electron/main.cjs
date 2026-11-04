@@ -88,7 +88,7 @@ function openDatabase() {
   // obligatoriamente por las credenciales definitivas del cliente.
   const userCount = Number(db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count);
   if (userCount === 0) {
-    const credential = hashPassword('Admin123');
+    const credential = hashPassword('admin123');
     const createSeed = db.transaction(() => {
       const currentCount = Number(db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count);
       if (currentCount !== 0) return;
