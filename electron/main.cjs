@@ -547,6 +547,20 @@ app.whenReady().then(async () => {
     if (!Array.isArray(savedState.companies) || !savedState.companies.some(company => String(company.id) === companyId)) {
       return { ok: false, message: 'La empresa indicada no existe en el estado contable local.' };
     }
+    const entityCollections = {
+      SALE: 'sales', PURCHASE: 'purchases', JOURNAL_ENTRY: 'journalEntries',
+      BANK_MOVEMENT: 'bankStatementMovements', INVENTORY_MOVEMENT: 'movements',
+      VAT_VOUCHER: 'vatVouchers', ISLR_VOUCHER: 'islrVouchers',
+      VAT_DECLARATION: 'vatWithholdingDeclarations', ISLR_EVENT: 'islrFiscalEvents',
+      INVENTORY_PRODUCT: 'products', BCV_RATE: 'companies'
+    };
+    const sourceCollection = savedState[entityCollections[entityType]];
+    const sourceEntity = Array.isArray(sourceCollection)
+      ? sourceCollection.find(item => String(item.id) === entityId && String(item.companyId || companyId) === companyId)
+      : null;
+    if (!sourceEntity) {
+      return { ok: false, message: 'El registro origen no existe en la empresa seleccionada. Verifique el ID interno y el tipo de registro.' };
+    }
     const occurredAt = new Date().toISOString();
     const details = {
       actorUserId: Number(actor.id), actorUsername: String(actor.username || ''),
