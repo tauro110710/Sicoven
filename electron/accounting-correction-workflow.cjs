@@ -105,6 +105,7 @@ function initializeCorrectionWorkflow(db) {
         (OLD.status='PENDING_REVIEW' AND NEW.status IN ('APPROVED','REJECTED')) OR
         (OLD.status='APPROVED' AND NEW.status='EXECUTED') OR
         (OLD.status IN ('PENDING_REVIEW','APPROVED') AND NEW.status='PENDING_REVIEW' AND NEW.workflow_stage='OBSERVATION_REQUIRED') OR
+        (OLD.status IN ('PENDING_REVIEW','APPROVED') AND NEW.status='PENDING_REVIEW' AND NEW.workflow_stage='WITHDRAWN') OR
         (OLD.status='PENDING_REVIEW' AND NEW.status='PENDING_REVIEW' AND OLD.workflow_stage='OBSERVATION_REQUIRED' AND NEW.workflow_stage='IN_REVIEW')
       )
       BEGIN SELECT RAISE(ABORT, 'invalid correction case transition'); END;
@@ -116,7 +117,7 @@ function initializeCorrectionWorkflow(db) {
       BEGIN SELECT RAISE(ABORT, 'correction case segregation of duties violated'); END;
     CREATE TABLE IF NOT EXISTS accounting_correction_case_workflow_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL REFERENCES accounting_correction_cases(id),
-      event_type TEXT NOT NULL CHECK(event_type IN ('OBSERVED','RESUBMITTED')),
+      event_type TEXT NOT NULL CHECK(event_type IN ('OBSERVED','RESUBMITTED','WITHDRAWN')),
       actor_id INTEGER NOT NULL, actor_name TEXT NOT NULL, reason TEXT NOT NULL,
       metadata_json TEXT NOT NULL, created_at TEXT NOT NULL
     );
@@ -266,6 +267,25 @@ function resubmitCorrectionRequest(db, {caseId,reason}, actor) {
   tx();
   return getCorrectionCase(db,String(caseId));
 }
+function withdrawCorrectionRequest(db, {caseId,reason}, actor) {
+  requireAdmin(actor);
+  const note=String(reason || '').trim();
+  if(note.length<15) throw new Error('El retiro requiere una justificación de al menos 15 caracteres.');
+  const tx=db.transaction(()=>{
+    const item=db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(caseId));
+    if(!item) throw new Error('El expediente de corrección no existe.');
+    if(!['PENDING_REVIEW','APPROVED'].includes(item.status) ||
+       !['IN_REVIEW','OBSERVATION_REQUIRED','READY_FOR_EXECUTION'].includes(item.workflow_stage))
+      throw new Error('El expediente ya está cerrado, ejecutado o retirado; no admite retiro.');
+    if(Number(item.requested_by)!==Number(actor.id))
+      throw new Error('Solo el solicitante original puede retirar el expediente.');
+    db.prepare("UPDATE accounting_correction_cases SET status='PENDING_REVIEW',workflow_stage='WITHDRAWN' WHERE id=?")
+      .run(item.id);
+    appendWorkflowEvent(db,item,'WITHDRAWN',actor,note,{previousStatus:item.status,previousStage:item.workflow_stage});
+  });
+  tx();
+  return getCorrectionCase(db,String(caseId));
+}
 function getCorrectionCase(db,id) {
   const row=db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(id));
   if(!row)return null;
@@ -279,4 +299,4 @@ function listCorrectionCases(db,companyId) {
   return db.prepare('SELECT id FROM accounting_correction_cases WHERE company_id=? ORDER BY created_at DESC').all(String(companyId))
     .map(row=>getCorrectionCase(db,row.id));
 }
-module.exports={initializeCorrectionWorkflow,registerCorrectionRequest,reviewCorrectionRequest,observeCorrectionRequest,resubmitCorrectionRequest,markCorrectionExecuted,getCorrectionCase,listCorrectionCases,findLinkedCorrectionEvidence};
+module.exports={initializeCorrectionWorkflow,registerCorrectionRequest,reviewCorrectionRequest,observeCorrectionRequest,resubmitCorrectionRequest,withdrawCorrectionRequest,markCorrectionExecuted,getCorrectionCase,listCorrectionCases,findLinkedCorrectionEvidence};
