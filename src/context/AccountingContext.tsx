@@ -1126,6 +1126,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     calculateOutstandingSupplierAdvance(supplierRif, purchases, supplierAdvanceSettlements, currentCompany.id, supplierDirectAdvances);
 
   const addSupplierDirectAdvance = async (draft: SupplierDirectAdvanceDraft): Promise<SupplierDirectAdvance> => {
+    assertSQLitePersistenceReady('Registrar anticipo directo a proveedor');
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
       throw new Error('SQLite no está disponible. No se registró el anticipo.');
     }
@@ -1184,6 +1185,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const addSupplierAdvanceSettlement = async (draft: SupplierAdvanceSettlementDraft): Promise<SupplierAdvanceSettlement> => {
+    assertSQLitePersistenceReady('Liquidar anticipo a proveedor');
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) throw new Error('SQLite no está disponible. No se registró la liquidación.');
     const rif = String(draft.supplierRif || '').trim().toUpperCase();
     const operationKey = [
@@ -1398,6 +1400,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const addCreditSettlement = async (draft: CreditSettlementDraft): Promise<CreditSettlement> => {
+    assertSQLitePersistenceReady('Registrar cobro o pago de factura');
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
       throw new Error('La persistencia SQLite no está disponible o todavía no está lista. No se registró el cobro/pago.');
     }
@@ -3444,6 +3447,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     year: number; month: number; window: VatDeclarationWindow; zeroOperations?: boolean;
     legacyFiscalDates?: Record<string, { fiscalDate: string; note: string }>;
   }): Promise<VatWithholdingDeclaration> => {
+    assertSQLitePersistenceReady('Crear declaración de retenciones IVA');
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
       throw new Error('SQLite no está disponible o todavía no está lista. No se creó la declaración.');
     }
@@ -3477,6 +3481,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     declarationId: string,
     draft: Omit<VatWithholdingDeclarationEvent, 'id' | 'declarationId' | 'recordedAt'>
   ): Promise<VatWithholdingDeclarationEvent> => {
+    assertSQLitePersistenceReady('Registrar evento de declaración IVA');
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
       throw new Error('SQLite no está disponible o todavía no está lista. No se registró el evento fiscal.');
     }
@@ -3586,6 +3591,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     id: string,
     draft: { deliveryDate: string; deliveryMethod: 'PHYSICAL' | 'ELECTRONIC'; electronicDeliveryAgreed?: boolean }
   ): Promise<VatRetentionVoucher> => {
+    assertSQLitePersistenceReady('Registrar entrega de comprobante IVA');
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
       throw new Error('SQLite no está disponible o todavía no está lista. No se registró la entrega.');
     }
@@ -3625,6 +3631,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     id: string,
     draft: { deliveryDate: string; deliveryMethod: 'PHYSICAL' | 'ELECTRONIC'; electronicDeliveryAgreed?: boolean }
   ): Promise<IslrRetentionVoucher> => {
+    assertSQLitePersistenceReady('Registrar entrega de comprobante ISLR');
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
       throw new Error('SQLite no está disponible o todavía no está lista. No se registró la entrega.');
     }
