@@ -98,8 +98,9 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
           Number(allocation.baseAmountBs) > eligibleBase + 0.01) {
         throw new Error('SQLite rechazó una asignación ISLR superior a la base de la factura antes del IVA.');
       }
-      if (event.kind === 'ACCOUNT_CREDIT' && purchase.paymentTerm === 'CONTADO') {
-        throw new Error('SQLite rechazó un evento ACCOUNT_CREDIT para una compra de contado cuyo disparador fiscal es PAYMENT.');
+      if ((event.kind === 'ACCOUNT_CREDIT' && purchase.paymentTerm === 'CONTADO') ||
+          (event.kind === 'PAYMENT' && purchase.paymentTerm !== 'CONTADO')) {
+        throw new Error('SQLite rechazó el evento ISLR: el disparador PAYMENT/ACCOUNT_CREDIT no coincide con la modalidad de pago de la factura.');
       }
       // El primer hecho fiscal (pago o abono en cuenta) dispara la retención.
       // Una factura no puede volver a generar un segundo disparador de la otra clase.
