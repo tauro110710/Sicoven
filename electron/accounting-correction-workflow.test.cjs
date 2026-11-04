@@ -242,3 +242,29 @@ test('requester may withdraw an approved case before any execution',()=>{
   assert.equal(withdrawn.events.map(e=>e.event_type).join(','),'REQUESTED,APPROVED,WITHDRAWN');
  }finally{db.close();}
 });
+
+test('existing observation ledger migrates to allow withdrawal without losing events',()=>{
+ const db=setup();try{
+  const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
+  db.exec(`
+   DROP TRIGGER IF EXISTS correction_case_workflow_events_no_update;
+   DROP TRIGGER IF EXISTS correction_case_workflow_events_no_delete;
+   DROP INDEX IF EXISTS idx_correction_case_workflow_events_case;
+   DROP TABLE accounting_correction_case_workflow_events;
+   CREATE TABLE accounting_correction_case_workflow_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL REFERENCES accounting_correction_cases(id),
+    event_type TEXT NOT NULL CHECK(event_type IN ('OBSERVED','RESUBMITTED')),
+    actor_id INTEGER NOT NULL, actor_name TEXT NOT NULL, reason TEXT NOT NULL,
+    metadata_json TEXT NOT NULL, created_at TEXT NOT NULL
+   );
+  `);
+  db.prepare("INSERT INTO accounting_correction_case_workflow_events(case_id,event_type,actor_id,actor_name,reason,metadata_json,created_at) VALUES(?,?,?,?,?,?,?)")
+   .run(requested.id,'OBSERVED',2,'revisor','Falta soporte verificable.','{}','2026-11-01T00:00:00.000Z');
+  initializeCorrectionWorkflow(db);
+  const preserved=db.prepare('SELECT event_type,actor_name FROM accounting_correction_case_workflow_events WHERE case_id=?').get(requested.id);
+  assert.deepEqual(preserved,{event_type:'OBSERVED',actor_name:'revisor'});
+  db.prepare("INSERT INTO accounting_correction_case_workflow_events(case_id,event_type,actor_id,actor_name,reason,metadata_json,created_at) VALUES(?,?,?,?,?,?,?)")
+   .run(requested.id,'WITHDRAWN',1,'solicitante','Se retira formalmente la solicitud.','{}','2026-11-02T00:00:00.000Z');
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM accounting_correction_case_workflow_events WHERE event_type='WITHDRAWN'").get().n,1);
+ }finally{db.close();}
+});
