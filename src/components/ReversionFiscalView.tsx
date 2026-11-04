@@ -624,7 +624,7 @@ export const ReversionFiscalView: React.FC = () => {
           <label className="text-xs font-semibold text-slate-700">Nota de crédito de proveedor afectada
             <select value={incidentPurchaseId} onChange={event=>setIncidentPurchaseId(event.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
               <option value="">Seleccionar NC registrada…</option>
-              {purchases.filter(item=>item.companyId===currentCompany.id && item.documentType==='03' && item.originalPurchaseId).map(item=><option key={item.id} value={item.id}>{item.creditNoteNumber || item.invoiceNumber} · {item.affectedInvoiceNumber}</option>)}
+              {purchases.filter(item=>item.companyId===currentCompany.id && item.documentType==='03' && item.originalPurchaseId && !fiscalIncidents.some(incident=>incident.purchaseId===item.id)).map(item=><option key={item.id} value={item.id}>{item.creditNoteNumber || item.invoiceNumber} · {item.affectedInvoiceNumber}</option>)}
             </select>
           </label>
           <label className="text-xs font-semibold text-slate-700">Motivo de revisión fiscal
