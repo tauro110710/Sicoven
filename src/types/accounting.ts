@@ -11,6 +11,9 @@ export interface Company {
   phone: string;
   email: string;
   taxpayerType: TaxpayerType;
+  /** Referencia y fecha de la notificación expresa del SENIAT que acredita la calificación de sujeto pasivo especial. */
+  specialTaxpayerNotificationReference?: string;
+  specialTaxpayerNotificationDate?: string;
   /** Marco contable expresamente adoptado; ausente en empresas históricas hasta documentar su adopción. */
   accountingFramework?: AccountingFramework;
   /** Identificador de la versión normativa realmente aplicada, no se infiere ni se autocompleta. */
