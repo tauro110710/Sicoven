@@ -225,9 +225,9 @@ export const ConciliacionBancariaView: React.FC = () => {
   };
 
   // Handle manual pair matching
-  const handleLinkSelectedPair = async () => {
-    if (!selectedStatementId || !selectedBookEntryId) return;
-    const saved = await runReconciliationWrite(() => reconcileMovementManual(selectedStatementId, selectedBookEntryId));
+  const handleLinkMovementToSelectedBook = async (statementId: string, entryId: string) => {
+    if (!entryId) return;
+    const saved = await runReconciliationWrite(() => reconcileMovementManual(statementId, entryId));
     if (saved) {
       setSelectedStatementId(null);
       setSelectedBookEntryId(null);
@@ -732,7 +732,7 @@ export const ConciliacionBancariaView: React.FC = () => {
                               ) : (
                                 <div className="flex items-center justify-center gap-1">
                                   <button
-                                    onClick={() => { if (selectedBookEntryId) void runReconciliationWrite(() => reconcileMovementManual(s.id, selectedBookEntryId)); }}
+                                    onClick={() => { if (selectedBookEntryId) void handleLinkMovementToSelectedBook(s.id, selectedBookEntryId); }}
                                     disabled={!selectedBookEntryId || isReconciling}
                                     className="text-[10px] font-bold text-amber-800 bg-amber-100 hover:bg-emerald-100 hover:text-emerald-800 px-2 py-0.5 rounded-full border border-amber-300 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                     title="Seleccione primero el asiento coincidente del Libro Diario"
