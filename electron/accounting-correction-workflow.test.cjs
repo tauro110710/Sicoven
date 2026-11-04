@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
-const {initializeCorrectionWorkflow,registerCorrectionRequest,reviewCorrectionRequest,markCorrectionExecuted,getCorrectionCase,listCorrectionCases}=require('./accounting-correction-workflow.cjs');
+const {initializeCorrectionWorkflow,registerCorrectionRequest,reviewCorrectionRequest,markCorrectionExecuted,getCorrectionCase,listCorrectionCases,findLinkedCorrectionEvidence}=require('./accounting-correction-workflow.cjs');
 function setup(){const db=new Database(':memory:');db.exec('CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime(\'now\')));');initializeCorrectionWorkflow(db);return db;}
 const input={companyId:'co-1',entityType:'SALE',entityId:'sale-1',correctionType:'ANULACION',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001',reason:'Se detectó una duplicidad documental que debe corregirse.',workpaperNote:'Conciliación con libro de ventas, comprobante fiscal y asiento relacionado.'};
 const admin=(id,username)=>({id,username,role:'admin'});
@@ -74,4 +74,29 @@ test('execution transition rolls back when the general audit ledger rejects the 
   assert.equal(current.status,'APPROVED');
   assert.deepEqual(current.events.map(e=>e.event_type),['REQUESTED','APPROVED']);
  }finally{db.close();}
+});
+
+test('execution evidence must be a correction document explicitly linked to the source record',()=>{
+ const item={company_id:'co-1',entity_type:'SALE',entity_id:'sale-source'};
+ const state={sales:[
+  {id:'sale-source',companyId:'co-1',invoiceNumber:'FAC-001',documentType:'01'},
+  {id:'unrelated',companyId:'co-1',invoiceNumber:'NC-900',documentType:'03'},
+  {id:'wrong-company',companyId:'co-2',invoiceNumber:'NC-901',documentType:'03',originalSaleId:'sale-source'},
+  {id:'linked-corrective',companyId:'co-1',invoiceNumber:'NC-001',documentType:'03',originalSaleId:'sale-source'}
+ ]};
+ assert.equal(findLinkedCorrectionEvidence(state,item,'NC-900'),null);
+ assert.equal(findLinkedCorrectionEvidence(state,item,'NC-901'),null);
+ assert.equal(findLinkedCorrectionEvidence(state,item,'NC-001').id,'linked-corrective');
+ assert.equal(findLinkedCorrectionEvidence(state,item,'FAC-001'),null);
+});
+
+test('journal reversal evidence requires reversalOfEntryId and exact reference',()=>{
+ const item={company_id:'co-1',entity_type:'JOURNAL_ENTRY',entity_id:'entry-source'};
+ const state={journalEntries:[
+  {id:'entry-source',companyId:'co-1',entryNumber:'ASI-001'},
+  {id:'entry-unrelated',companyId:'co-1',entryNumber:'ASI-REV-001'},
+  {id:'entry-reversal',companyId:'co-1',entryNumber:'ASI-REV-001',reversalOfEntryId:'entry-source'}
+ ]};
+ assert.equal(findLinkedCorrectionEvidence(state,item,'ASI-REV-001').id,'entry-reversal');
+ assert.equal(findLinkedCorrectionEvidence(state,item,'ASI-001'),null);
 });
