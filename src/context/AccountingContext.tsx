@@ -450,6 +450,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       companyId:currentCompany.id,entityType,entityId,sourceDocumentRef,correctionDocumentRef
     });
     if (!result?.ok) throw new Error(result?.message || 'No existe autorización formal aprobada para esta corrección.');
+    if (input.entityType === 'INVENTORY_MOVEMENT') {
+      inventoryCorrectionAuthorizationRef.current = String(input.entityId) + '|' + String(input.correctionDocumentRef).trim();
+    }
   };
   const authorizeCorrectionCase = async (input: {entityType:string;entityId:string;sourceDocumentRef:string;correctionDocumentRef:string}): Promise<void> => {
     await requireApprovedCorrectionCase(input.entityType,input.entityId,input.sourceDocumentRef,input.correctionDocumentRef);
@@ -3707,7 +3710,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
+  const inventoryCorrectionAuthorizationRef = useRef<string | null>(null);
   const addMovement = (movData: Omit<InventoryMovement, 'id' | 'companyId'>): InventoryMovement => {
+    if (movData.correctionForMovementId) {
+      const authorizationKey = String(movData.correctionForMovementId) + '|' + String(movData.documentRef || '').trim();
+      if (inventoryCorrectionAuthorizationRef.current !== authorizationKey) {
+        throw new Error('El movimiento correctivo requiere autorización formal aprobada para el movimiento fuente y su referencia documental.');
+      }
+      inventoryCorrectionAuthorizationRef.current = null;
+    }
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('El movimiento de inventario requiere SQLite local de escritorio disponible y lista.');
     }
