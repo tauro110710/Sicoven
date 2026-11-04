@@ -279,7 +279,7 @@ export const LibroDiarioView: React.FC = () => {
               : undefined;
             const reversalEntry = entry.reversedByEntryId
               ? journalEntries.find(candidate => candidate.id === entry.reversedByEntryId)
-              : undefined;
+              : journalEntries.find(candidate => candidate.companyId === entry.companyId && candidate.reversalOfEntryId === entry.id);
 
             return (
               <div
@@ -287,7 +287,7 @@ export const LibroDiarioView: React.FC = () => {
                 className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print-break-inside-avoid"
               >
                 {/* Entry Header */}
-                <div className="flex flex-wrap justify-end gap-2 border-b border-slate-100 px-4 py-2 no-print"><button onClick={() => setDocumentTarget({ id: entry.id, title: 'Asiento contable N° ' + entry.entryNumber })} className="rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes</button>{!entry.reversalOfEntryId && !entry.reversedByEntryId && <button onClick={() => setReversalTarget(entry)} className="rounded bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-700 hover:bg-rose-100">Reversar asiento</button>}</div>
+                <div className="flex flex-wrap justify-end gap-2 border-b border-slate-100 px-4 py-2 no-print"><button onClick={() => setDocumentTarget({ id: entry.id, title: 'Asiento contable N° ' + entry.entryNumber })} className="rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes</button>{!entry.reversalOfEntryId && !entry.reversedByEntryId && !journalEntries.some(candidate => candidate.companyId === entry.companyId && candidate.reversalOfEntryId === entry.id) && <button onClick={() => setReversalTarget(entry)} className="rounded bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-700 hover:bg-rose-100">Reversar asiento</button>}</div>
                 <div className="bg-slate-50/80 px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5 flex-wrap">
                     <span className="font-mono font-bold text-xs bg-slate-900 text-white px-2 py-0.5 rounded">
