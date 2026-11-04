@@ -614,7 +614,7 @@ app.whenReady().then(async () => {
       'vatVouchers','islrVouchers','vatWithholdingDeclarations','islrFiscalEvents','products'];
     const reference = String(input?.executionRef || '').trim();
     const evidence = evidenceCollections.some(key => Array.isArray(state[key]) && state[key].some(record =>
-      String(record.companyId || '') === String(item.company_id) &&
+      String(record.companyId || '') === String(item.company_id) && String(record.id) !== String(item.entity_id) &&
       [record.id,record.documentNumber,record.number,record.reference,record.referenceDoc,record.controlNumber]
         .some(value => value != null && String(value).trim() === reference)));
     if (!evidence) throw new Error('No se encontró en SQLite un documento, asiento o movimiento correctivo con esa referencia y empresa. No se cerró el expediente.');
