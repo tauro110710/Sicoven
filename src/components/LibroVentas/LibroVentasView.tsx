@@ -18,6 +18,7 @@ import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportVentasPdf } from '../../utils/pdfGenerator';
 import { SupportingDocumentsPanel } from '../shared/SupportingDocumentsPanel';
 import { JournalReversalModal } from '../LibroDiario/JournalReversalModal';
+import { SaleCorrectionNoteModal } from './SaleCorrectionNoteModal';
 
 export const LibroVentasView: React.FC = () => {
   const {
@@ -25,7 +26,8 @@ export const LibroVentasView: React.FC = () => {
     sales,
     journalEntries,
     isStorageReady,
-    displayCurrency
+    displayCurrency,
+    addSaleCorrectionNote
   } = useAccounting();
 
   const sqliteAvailable = typeof window !== 'undefined' && Boolean(window.sicovenStore?.save);
@@ -33,6 +35,7 @@ export const LibroVentasView: React.FC = () => {
   const [documentTarget, setDocumentTarget] = useState<{ id: string; title: string } | null>(null);
   const [reversalTarget, setReversalTarget] = useState<import('../../types/accounting').JournalEntry | null>(null);
   const [settlementTarget, setSettlementTarget] = useState<{id:string; number:string; party:string} | null>(null);
+  const [correctionTarget, setCorrectionTarget] = useState<{ sale: import('../../types/accounting').SaleRecord; kind: 'CREDIT' | 'DEBIT' } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
   const [isExportingPdf, setIsExportingPdf] = useState(false);
@@ -65,18 +68,20 @@ export const LibroVentasView: React.FC = () => {
     })
     .sort((a, b) => a.opNumber - b.opNumber);
 
-  // Totals for SENIAT Forma 30
-  const totalVentasConIvaBs = filteredSales.reduce((s, x) => s + x.totalAmountBs, 0);
-  const totalExentoBs = filteredSales.reduce((s, x) => s + (x.exemptAmountBs || 0), 0);
-  const totalBaseBs = filteredSales.reduce((s, x) => s + x.taxableBaseBs, 0);
-  const totalIvaDebitoBs = filteredSales.reduce((s, x) => s + x.vatAmountBs, 0);
-  const totalIvaRetenidoBs = filteredSales.reduce((s, x) => s + (x.vatWithheldBs || 0), 0);
-  const totalIgtfBs = filteredSales.reduce((s, x) => s + (x.igtfAmountBs || 0), 0);
+  // NC reduce el libro; ND incrementa sus importes. El documento original permanece intacto.
+  const signed = (document: import('../../types/accounting').SaleRecord, amount: number) =>
+    (document.documentType === '03' ? -1 : 1) * Number(amount || 0);
+  const totalVentasConIvaBs = filteredSales.reduce((s, x) => s + signed(x, x.totalAmountBs), 0);
+  const totalExentoBs = filteredSales.reduce((s, x) => s + signed(x, x.exemptAmountBs || 0), 0);
+  const totalBaseBs = filteredSales.reduce((s, x) => s + signed(x, x.taxableBaseBs), 0);
+  const totalIvaDebitoBs = filteredSales.reduce((s, x) => s + signed(x, x.vatAmountBs), 0);
+  const totalIvaRetenidoBs = filteredSales.reduce((s, x) => s + signed(x, x.vatWithheldBs || 0), 0);
+  const totalIgtfBs = filteredSales.reduce((s, x) => s + signed(x, x.igtfAmountBs || 0), 0);
 
-  const totalVentasConIvaUsd = filteredSales.reduce((s, x) => s + x.totalAmountUsd, 0);
-  const totalBaseUsd = filteredSales.reduce((s, x) => s + x.taxableBaseUsd, 0);
-  const totalIvaDebitoUsd = filteredSales.reduce((s, x) => s + x.vatAmountUsd, 0);
-  const totalIvaRetenidoUsd = filteredSales.reduce((s, x) => s + (x.vatWithheldUsd || 0), 0);
+  const totalVentasConIvaUsd = filteredSales.reduce((s, x) => s + signed(x, x.totalAmountUsd), 0);
+  const totalBaseUsd = filteredSales.reduce((s, x) => s + signed(x, x.taxableBaseUsd), 0);
+  const totalIvaDebitoUsd = filteredSales.reduce((s, x) => s + signed(x, x.vatAmountUsd), 0);
+  const totalIvaRetenidoUsd = filteredSales.reduce((s, x) => s + signed(x, x.vatWithheldUsd || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -207,7 +212,8 @@ export const LibroVentasView: React.FC = () => {
                       {s.customerName}
                     </td>
                     <td className="py-2 px-3 font-mono font-semibold text-slate-800 whitespace-nowrap">
-                      {s.invoiceNumber}
+                      {s.documentType === '03' ? 'NC ' : s.documentType === '02' ? 'ND ' : ''}{s.invoiceNumber}
+                      {s.originalSaleId && <div className="text-[9px] text-slate-500">Afecta: {s.affectedInvoiceNumber}</div>}
                       {s.isCancelled && <span title={s.cancellationNote || 'Pendiente regularización fiscal'} className="ml-1 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">REVERSADA CONTABLE</span>}
                     </td>
                     <td className="py-2 px-3 font-mono text-slate-600 whitespace-nowrap">
@@ -262,7 +268,13 @@ export const LibroVentasView: React.FC = () => {
                     </td>
                     <td className="py-2 px-2 text-center no-print">
                       <button onClick={() => setDocumentTarget({ id: s.id, title: 'Factura de venta ' + s.invoiceNumber })} className="mr-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes</button>
-                      {s.paymentTerm === 'CREDITO' && !s.isCancelled && <button onClick={() => setSettlementTarget({id:s.id, number:s.invoiceNumber, party:s.customerName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar cobro parcial o total">Cobrar</button>}
+                      {s.documentType === '01' && s.paymentTerm === 'CREDITO' && !s.isCancelled && <button onClick={() => setSettlementTarget({id:s.id, number:s.invoiceNumber, party:s.customerName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar cobro parcial o total">Cobrar</button>}
+                      {s.documentType === '01' && s.paymentTerm === 'CREDITO' && !s.isCancelled && <>
+                        <button type="button" disabled={!sqliteAvailable || !isStorageReady} onClick={() => setCorrectionTarget({sale:s,kind:'CREDIT'})}
+                          className="mr-1 rounded bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800 hover:bg-amber-100">NC</button>
+                        <button type="button" disabled={!sqliteAvailable || !isStorageReady} onClick={() => setCorrectionTarget({sale:s,kind:'DEBIT'})}
+                          className="mr-1 rounded bg-sky-50 px-2 py-1 text-[10px] font-semibold text-sky-800 hover:bg-sky-100">ND</button>
+                      </>}
                       {s.documentType === '01' && !s.isCancelled && <button
                         type="button"
                         disabled={!sqliteAvailable || !isStorageReady}
@@ -378,6 +390,8 @@ export const LibroVentasView: React.FC = () => {
 
       {settlementTarget && <CreditSettlementModal documentId={settlementTarget.id} documentNumber={settlementTarget.number} partyName={settlementTarget.party} kind="SALE_COLLECTION" onClose={() => setSettlementTarget(null)} />}
       <JournalReversalModal source={reversalTarget} onClose={() => setReversalTarget(null)} />
+      {correctionTarget && <SaleCorrectionNoteModal sourceSale={correctionTarget.sale} kind={correctionTarget.kind}
+        bcvRate={currentCompany.bcvRate} onClose={() => setCorrectionTarget(null)} onSubmit={addSaleCorrectionNote} />}
     </div>
   );
 };
