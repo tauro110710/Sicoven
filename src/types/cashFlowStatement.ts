@@ -1,4 +1,5 @@
 import type { Account, BankAccount, CashFlowActivity, JournalEntry } from './accounting';
+import { isValidIsoDate } from './migrationParsing';
 
 export type CashFlowSection = 'OPERACION' | 'INVERSION' | 'FINANCIACION' | 'SIN_CLASIFICAR';
 
@@ -97,8 +98,21 @@ export function buildCashFlowReport(
   }
   const start = String(year).padStart(4, '0') + '-01-01';
   const end = String(year).padStart(4, '0') + '-12-31';
-  const companyEntries = entries
-    .filter(entry => entry.companyId === companyId && /^\d{4}-\d{2}-\d{2}$/.test(entry.date) && entry.date <= end)
+  const scopedEntries = entries.filter(entry => entry.companyId === companyId && entry.date <= end);
+  for (const entry of scopedEntries) {
+    if (!isValidIsoDate(entry.date)) {
+      throw new Error('El Estado de Flujos de Efectivo no puede calcularse: existe un asiento con fecha inválida.');
+    }
+    for (const item of entry.items) {
+      const values = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(Number);
+      if (values.some(value => !Number.isFinite(value) || value < 0) ||
+          (Number(item.debitBs) > 0 && Number(item.creditBs) > 0) ||
+          (Number(item.debitUsd) > 0 && Number(item.creditUsd) > 0)) {
+        throw new Error('El Estado de Flujos de Efectivo no puede calcularse: existe una línea contable con importes inválidos.');
+      }
+    }
+  }
+  const companyEntries = scopedEntries
     .sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber);
   const accountsByCode = new Map(accounts.map(account => [account.code, account] as const));
   const cashCodes = new Set([
