@@ -50,7 +50,9 @@ function initializeCorrectionWorkflow(db) {
   `);
 }
 function requireAdmin(actor) {
-  if (!actor || actor.role !== 'admin' || !Number.isInteger(Number(actor.id))) throw new Error('Se requiere una sesión administrativa autenticada.');
+  if (!actor || actor.role !== 'admin' || !Number.isSafeInteger(Number(actor.id)) || Number(actor.id) <= 0 || !String(actor.username || '').trim()) {
+    throw new Error('Se requiere una sesión administrativa autenticada con identidad válida.');
+  }
 }
 function appendEvent(db, _tx, event) {
   db.prepare('INSERT INTO accounting_correction_case_events(case_id,event_type,actor_id,actor_name,reason,metadata_json,created_at) VALUES(?,?,?,?,?,?,?)')
@@ -112,7 +114,11 @@ function markCorrectionExecuted(db, {caseId,executionRef,reason}, actor) {
     if (Number(item.requested_by) === Number(actor.id) || Number(item.reviewed_by) === Number(actor.id)) {
       throw new Error('El ejecutor debe ser distinto del solicitante y del aprobador.');
     }
-    if (!String(executionRef || '').trim()) throw new Error('Indique la referencia del documento o asiento correctivo generado.');
+    const normalizedExecutionRef = String(executionRef || '').trim().toLocaleUpperCase();
+    if (!normalizedExecutionRef || normalizedExecutionRef.length > 160) throw new Error('Indique una referencia correctiva válida de hasta 160 caracteres.');
+    if (normalizedExecutionRef === String(item.source_ref || '').trim().toLocaleUpperCase()) {
+      throw new Error('La referencia de ejecución no puede ser la misma del documento original.');
+    }
     db.prepare("UPDATE accounting_correction_cases SET status='EXECUTED',executed_by=?,executed_by_name=?,execution_ref=?,executed_at=? WHERE id=? AND status='APPROVED'")
       .run(Number(actor.id),String(actor.username || ''),String(executionRef).trim(),at,item.id);
     appendEvent(db, tx, {id:item.id,type:'EXECUTED',actor,reason:String(reason).trim(),metadata:{executionRef:String(executionRef).trim()},at});
