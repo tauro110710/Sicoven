@@ -1273,13 +1273,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const creditNotes = kind === 'PURCHASE_PAYMENT'
       ? purchases.filter(item => item.companyId === currentCompany.id && item.originalPurchaseId === documentId && item.documentType === '03' && !item.isCancelled)
       : sales.filter(item => item.companyId === currentCompany.id && item.originalSaleId === documentId && item.documentType === '03' && !item.isCancelled);
-    const debitNotes = kind === 'SALE_COLLECTION'
-      ? sales.filter(item => item.companyId === currentCompany.id && item.originalSaleId === documentId && item.documentType === '02' && !item.isCancelled)
-      : [];
-    const creditedByNotesUsd = creditNotes.reduce((sum, item) => sum + Number(item.netReceivableAdjustmentUsd ?? item.netPayableReductionUsd ?? 0), 0);
-    const creditedByNotesBs = creditNotes.reduce((sum, item) => sum + Number(item.netReceivableAdjustmentBs ?? item.netPayableReductionBs ?? 0), 0);
-    const debitedByNotesUsd = debitNotes.reduce((sum, item) => sum + Number(item.netReceivableAdjustmentUsd || 0), 0);
-    const debitedByNotesBs = debitNotes.reduce((sum, item) => sum + Number(item.netReceivableAdjustmentBs || 0), 0);
+    const debitNotes = kind === 'PURCHASE_PAYMENT'
+      ? purchases.filter(item => item.companyId === currentCompany.id && item.originalPurchaseId === documentId && item.documentType === '02' && !item.isCancelled)
+      : sales.filter(item => item.companyId === currentCompany.id && item.originalSaleId === documentId && item.documentType === '02' && !item.isCancelled);
+    const {creditedByNotesUsd,creditedByNotesBs,debitedByNotesUsd,debitedByNotesBs} =
+      summarizeCreditDocumentAdjustments(kind,creditNotes,debitNotes);
     const advanceApplications = kind === 'PURCHASE_PAYMENT'
       ? supplierAdvanceSettlements.filter(item => item.companyId === currentCompany.id &&
           !item.isReversed && item.kind === 'APPLIED_TO_PURCHASE' && item.targetPurchaseId === documentId)
