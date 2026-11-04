@@ -356,7 +356,7 @@ export function downloadFile(
         // bytes so TypeScript 7 does not widen the view to ArrayBufferLike.
         const buffer = new ArrayBuffer(bytes.byteLength);
         new Uint8Array(buffer).set(bytes);
-        return new Blob([buffer], { type: contentType });
+        return new Blob([buffer as BlobPart], { type: contentType });
       })()
     : new Blob([content], { type: contentType });
   const url = URL.createObjectURL(blob);
