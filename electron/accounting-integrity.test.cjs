@@ -281,6 +281,10 @@ test('SQLite reconciles every new sale with its complete invoice journal in Bs a
   }), /venta: el asiento no concilia/);
   assert.throws(() => validateAccountingSnapshot(previous, {
     ...next,
+    sales: [{ ...sale, igtfAmountUsd: 0.01 }]
+  }), /venta: el asiento no concilia/);
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next,
     journalEntries: [{ ...journal, items: journal.items.map(item => {
       if (item.accountCode === '4.1.1.01') return { ...item, creditBs: 999 };
       if (item.accountCode === '2.1.2.01') return { ...item, creditBs: 161, creditUsd: 1.61 };
