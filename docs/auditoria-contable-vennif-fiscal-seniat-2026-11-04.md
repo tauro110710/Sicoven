@@ -109,3 +109,25 @@ La ruta de exportación mensual usada por las pruebas es `generateSeniatIslrOper
 
 ### 6.6 Decisión de implementación
 No se introduce todavía un cambio de esquema ni un asiento automático: el siguiente bloque seguro es rastrear el ciclo completo de configuración de empresa y localizar todos los consumidores de los generadores ISLR heredados; en paralelo, obtener la fuente primaria FCCPV de BA VEN-NIF 8 v11 y BA VEN-NIF 11 v1, y la especificación primaria SENIAT vigente. La brecha de marco contable queda confirmada y registrada como defecto de trazabilidad normativa, no como prueba de que los estados actuales estén matemáticamente errados.
+
+
+## 7. Trazabilidad de configuración y persistencia (04-11-2026)
+
+### 7.1 Persistencia de Company
+La interfaz `Company` se encuentra en `src/types/accounting.ts`. El estado completo de contabilidad se serializa como JSON en `app_state.state_json` mediante `electron/accounting-persistence.cjs` dentro de una transacción SQLite; el guardado agrega evento `state_saved` a la bitácora. No se encontró una tabla relacional independiente de empresas en esta ruta. Por ello, agregar campos opcionales a `Company` es técnicamente compatible con el modelo de snapshot, pero aún exige revisar restauración de respaldos, importación/migración y consumidores que construyen empresas.
+ 
+### 7.2 Flujos de alta y edición
+El alta se ejecuta en `src/components/CompanyModal.tsx` y llama `addCompany`; la edición se ejecuta en `src/components/Configuracion/ConfiguracionView.tsx` y llama `updateCompany`. Ambos formularios construyen/actualizan explícitamente las propiedades de empresa. Para no perder una futura selección normativa, se debe incluir el campo en ambos y mantenerlo en el spread de edición. No se modificó código en esta pasada.
+
+### 7.3 Datos iniciales y restauración
+`src/data/initialData.ts` declara `INITIAL_COMPANIES = []` en la configuración limpia de producción. La persistencia lee el snapshot previo con `JSON.parse` y guarda el nuevo snapshot íntegro. Los campos opcionales ausentes en empresas antiguas deben seguir ausentes y nunca convertirse silenciosamente en GE o PYME. La restauración de respaldo debe preservar valores conocidos y no inferir el marco por el tipo tributario, tamaño, RIF o nombre.
+
+### 7.4 Generadores ISLR: riesgo técnico acotado
+El generador heredado `generateSeniatIslrXml` interpola directamente RIF, período, factura, control y fecha en XML sin escape. También deriva el período de la primera retención y, cuando no hay comprobantes, usa un período predeterminado construido con el año fiscal y el literal `10`. Esto es comportamiento inseguro para entradas no confiables y semánticamente riesgoso para una declaración mensual vacía. El generador de operaciones `generateSeniatIslrOperationsXml` sí escapa contenido XML y recibe período explícito. La búsqueda automatizada del índice del repositorio no devolvió consumidores (el buscador consulta la rama por defecto, no esta rama de auditoría); por tanto el estado de uso del generador heredado permanece **no verificado**. No se debe retirar ni declarar muerto hasta una búsqueda en checkout de la rama y compilación completa.
+
+### 7.5 Próxima implementación segura
+1. Añadir un tipo discriminado explícito para marco contable, versión normativa y fecha de adopción, manteniendo opcionales los datos históricos.
+2. Agregar selección obligatoria únicamente al crear nuevas empresas y al preparar el primer cierre nuevo; nunca inferir ni reescribir históricos.
+3. Añadir pruebas para alta, edición, cambio de empresa, persistencia SQLite, exportación/restauración de respaldo y compatibilidad de snapshots sin marco.
+4. Rastrear consumidores ISLR en el checkout de la rama; si se mantiene el generador heredado, hacer que valide período explícito y escape XML sin alterar el formato aprobado, con pruebas de regresión.
+5. Bloquear la emisión de estados identificados como conformes VEN-NIF cuando no exista marco/version seleccionados y evidencia de adopción; no bloquear el registro contable diario solo por falta de metadatos históricos.
