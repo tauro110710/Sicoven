@@ -3716,7 +3716,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return newBank;
   };
 
-  const registerTreasuryMovement = (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; counterpartAccountCode?: string; destinationBankAccountId?: string }): JournalEntry => {
+  const registerTreasuryMovement = (draft: {
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('La operación bancaria requiere SQLite local de escritorio disponible y lista.');
+    }
+     bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; counterpartAccountCode?: string; destinationBankAccountId?: string }): JournalEntry => {
     const source = bankAccounts.find(b => b.id === draft.bankAccountId && b.companyId === currentCompany.id);
     if (!source) throw new Error('Seleccione una cuenta bancaria de la empresa activa.');
     const parsedDate = new Date(draft.date + 'T00:00:00Z');
@@ -3838,6 +3842,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const reconcileMovementManual = (statementMovementId: string, journalEntryId: string) => {
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('La operación bancaria requiere SQLite local de escritorio disponible y lista.');
+    }
+    
     if (!journalEntryId?.trim()) throw new Error('Seleccione un asiento del Libro Diario antes de marcar el movimiento como conciliado.');
     const statement = bankStatementMovements.find(m =>
       m.id === statementMovementId && m.companyId === currentCompany.id
@@ -3901,6 +3909,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const unreconcileMovement = (statementMovementId: string) => {
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('La operación bancaria requiere SQLite local de escritorio disponible y lista.');
+    }
+    
     setBankStatementMovements(prev =>
       prev.map(m =>
         m.id === statementMovementId && m.companyId === currentCompany.id
@@ -3920,6 +3932,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const unreconcileAll = (bankAccountId: string) => {
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('La operación bancaria requiere SQLite local de escritorio disponible y lista.');
+    }
+    
     setBankStatementMovements(prev =>
       prev.map(m =>
         m.companyId === currentCompany.id && m.bankAccountId === bankAccountId
@@ -3938,7 +3954,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     );
   };
 
-  const runAutoReconciliation = (bankAccountId: string): { matchedCount: number; matchedRefs: string[] } => {
+  const runAutoReconciliation = (bankAccountId: string): {
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('La operación bancaria requiere SQLite local de escritorio disponible y lista.');
+    }
+     matchedCount: number; matchedRefs: string[] } => {
     const targetAccount = bankAccounts.find(b => b.id === bankAccountId && b.companyId === currentCompany.id);
     if (!targetAccount) return { matchedCount: 0, matchedRefs: [] };
 
@@ -4024,6 +4044,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     statementMovement: BankStatementMovement,
     contraAccountCode: string
   ): JournalEntry => {
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('La operación bancaria requiere SQLite local de escritorio disponible y lista.');
+    }
+    
     if (statementMovement.companyId !== currentCompany.id) {
       throw new Error('El movimiento bancario no pertenece a la empresa activa.');
     }
