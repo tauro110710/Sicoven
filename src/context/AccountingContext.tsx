@@ -3252,7 +3252,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (source.documentType !== '01' || source.isCancelled) throw new Error('Solo se pueden corregir facturas de venta vigentes tipo 01.');
     const correctionCaseId = await requireApprovedCorrectionCase('SALE',source.id,source.invoiceNumber,draft.noteNumber);
     const sourceEntry = journalEntries.find(item => item.id === source.journalEntryId && item.companyId === currentCompany.id);
-    const hasInventoryAccountingFootprint = Boolean(sourceEntry?.items.some(item =>
+    const hasLinkedInventoryJournal = journalEntries.some(entry =>
+      entry.companyId === currentCompany.id && entry.id !== source.journalEntryId && entry.type === 'INVENTARIO' &&
+      (String(entry.referenceDoc || '').trim().toUpperCase() === ('FAC-' + source.invoiceNumber).trim().toUpperCase() ||
+       String(entry.referenceDoc || '').trim().toUpperCase() === source.invoiceNumber.trim().toUpperCase())
+    );
+    const hasInventoryAccountingFootprint = hasLinkedInventoryJournal || Boolean(sourceEntry?.items.some(item =>
       String(item.accountCode || '').startsWith('1.1.4.') ||
       accounts.some(account => account.code === item.accountCode && account.type === 'COSTOS')
     ));
