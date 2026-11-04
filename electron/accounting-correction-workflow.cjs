@@ -8,6 +8,7 @@ const CORRECTION_EVIDENCE_RULES = Object.freeze({
   PURCHASE: { collection:'purchases', links:['originalPurchaseId','correctedPurchaseId','correctionOfPurchaseId','affectedPurchaseId','originalDocumentId'] },
   JOURNAL_ENTRY: { collection:'journalEntries', links:['reversalOfEntryId','adjustmentForEntryId','reversesEntryId','correctionOfEntryId','correctsEntryId'] },
   INVENTORY_MOVEMENT: { collection:'movements', links:['correctionForMovementId','reversalOfMovementId','correctsMovementId','originalMovementId'] },
+  ISLR_EVENT: { collection:'islrFiscalEvents', links:['reversalOfEventId'] },
   VAT_VOUCHER: { collection:'journalEntries', links:[] },
   ISLR_VOUCHER: { collection:'journalEntries', links:[] },
 });
@@ -36,6 +37,7 @@ function findLinkedCorrectionEvidence(state, item, reference) {
     if (!linked) return false;
     if (['SALE','PURCHASE'].includes(String(item.entity_type)) &&
         !['02','03'].includes(String(candidate.documentType || ''))) return false;
+    if (item.entity_type === 'ISLR_EVENT' && candidate.kind !== 'REVERSAL') return false;
     return referenceFields.some(field => candidate[field] != null &&
       String(candidate[field]).trim().toLocaleUpperCase() === normalizedReference);
   });
@@ -180,7 +182,7 @@ function registerCorrectionRequest(db, input, actor) {
   const limits = { companyId:160, entityType:40, entityId:160, correctionType:80, sourceDocumentRef:160,
     correctionDocumentRef:160, reason:2000, workpaperNote:4000 };
   for (const [key,max] of Object.entries(limits)) if (String(input[key] || '').length > max) throw new Error('El campo '+key+' excede el máximo permitido.');
-  const allowedEntities = new Set(['SALE','PURCHASE','JOURNAL_ENTRY','INVENTORY_MOVEMENT','VAT_VOUCHER','ISLR_VOUCHER']);
+  const allowedEntities = new Set(['SALE','PURCHASE','JOURNAL_ENTRY','INVENTORY_MOVEMENT','VAT_VOUCHER','ISLR_VOUCHER','ISLR_EVENT']);
   if (!allowedEntities.has(String(input.entityType))) throw new Error('Tipo de registro origen no admitido.');
 
   const id = crypto.randomUUID(), at = new Date().toISOString();
@@ -237,7 +239,7 @@ function markCorrectionExecuted(db, {caseId,executionRef,reason,evidenceRecordId
     const linkedEvidenceId = String(evidenceRecordId || '').trim();
     const linkedEvidenceCollection = String(evidenceCollection || '').trim();
     const expectedEvidenceCollection = ({SALE:'sales',PURCHASE:'purchases',JOURNAL_ENTRY:'journalEntries',
-      INVENTORY_MOVEMENT:'movements',VAT_VOUCHER:'journalEntries',ISLR_VOUCHER:'journalEntries'})[item.entity_type];
+      INVENTORY_MOVEMENT:'movements',VAT_VOUCHER:'journalEntries',ISLR_VOUCHER:'journalEntries',ISLR_EVENT:'islrFiscalEvents'})[item.entity_type];
     if (!linkedEvidenceId || !expectedEvidenceCollection || linkedEvidenceCollection !== expectedEvidenceCollection) {
       throw new Error('La ejecución requiere el ID y la colección exacta de la evidencia correctiva verificada.');
     }
