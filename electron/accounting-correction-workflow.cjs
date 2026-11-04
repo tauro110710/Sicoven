@@ -57,6 +57,13 @@ function registerCorrectionRequest(db, input, actor) {
   const required = ['companyId','entityType','entityId','correctionType','sourceDocumentRef','reason','workpaperNote'];
   for (const key of required) if (!String(input?.[key] || '').trim()) throw new Error('Falta el campo obligatorio: '+key);
   if (String(input.reason).trim().length < 15 || String(input.workpaperNote).trim().length < 15) throw new Error('El motivo y el papel de trabajo deben tener al menos 15 caracteres.');
+  const limits = { companyId:160, entityType:40, entityId:160, correctionType:80, sourceDocumentRef:160,
+    correctionDocumentRef:160, reason:2000, workpaperNote:4000 };
+  for (const [key,max] of Object.entries(limits)) if (String(input[key] || '').length > max) throw new Error('El campo '+key+' excede el máximo permitido.');
+  const allowedEntities = new Set(['SALE','PURCHASE','JOURNAL_ENTRY','BANK_MOVEMENT','INVENTORY_MOVEMENT',
+    'VAT_VOUCHER','ISLR_VOUCHER','VAT_DECLARATION','ISLR_EVENT','INVENTORY_PRODUCT','BCV_RATE']);
+  if (!allowedEntities.has(String(input.entityType))) throw new Error('Tipo de registro origen no admitido.');
+
   const id = crypto.randomUUID(), at = new Date().toISOString();
   const tx = db.transaction(() => {
     db.prepare(`INSERT INTO accounting_correction_cases
