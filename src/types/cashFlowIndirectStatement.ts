@@ -176,8 +176,8 @@ export function buildCashFlowIndirectReport(
       accountCode: account.code, accountName: account.name, treatment,
       openingBalanceBs: round(opening.bs, 2), closingBalanceBs: round(closing.bs, 2),
       changeBs: round(periodChange.bs, 2), adjustmentBs: round(adjustmentBs, 2),
-      openingBalanceUsd: round(opening.usd, 2), closingBalanceUsd: round(closing.usd, 2),
-      changeUsd: round(periodChange.usd, 2), adjustmentUsd: round(adjustmentUsd, 2)
+      openingBalanceUsd: round(opening.usd, 6), closingBalanceUsd: round(closing.usd, 6),
+      changeUsd: round(periodChange.usd, 6), adjustmentUsd: round(adjustmentUsd, 6)
     });
   }
 
@@ -192,15 +192,15 @@ export function buildCashFlowIndirectReport(
   const workingCapitalAdjustmentsBs = workingCapital.reduce((sum, row) => sum + row.adjustmentBs, 0);
   const workingCapitalAdjustmentsUsd = workingCapital.reduce((sum, row) => sum + row.adjustmentUsd, 0);
   const operatingCashFlowBs = round(netIncomeBs + nonCashAdjustmentsBs + workingCapitalAdjustmentsBs, 2);
-  const operatingCashFlowUsd = round(netIncomeUsd + nonCashAdjustmentsUsd + workingCapitalAdjustmentsUsd, 2);
+  const operatingCashFlowUsd = round(netIncomeUsd + nonCashAdjustmentsUsd + workingCapitalAdjustmentsUsd, 6);
   const investingCashFlowBs = direct.activities.INVERSION.netBs;
   const investingCashFlowUsd = direct.activities.INVERSION.netUsd;
   const financingCashFlowBs = direct.activities.FINANCIACION.netBs;
   const financingCashFlowUsd = direct.activities.FINANCIACION.netUsd;
   const netChangeBs = round(operatingCashFlowBs + investingCashFlowBs + financingCashFlowBs, 2);
-  const netChangeUsd = round(operatingCashFlowUsd + investingCashFlowUsd + financingCashFlowUsd, 2);
+  const netChangeUsd = round(operatingCashFlowUsd + investingCashFlowUsd + financingCashFlowUsd, 6);
   const reconciliationDifferenceBs = round(direct.ledgerClosingCashBs - (direct.openingCashBs + netChangeBs), 2);
-  const reconciliationDifferenceUsd = round(direct.ledgerClosingCashUsd - (direct.openingCashUsd + netChangeUsd), 2);
+  const reconciliationDifferenceUsd = round(direct.ledgerClosingCashUsd - (direct.openingCashUsd + netChangeUsd), 6);
   const unclassifiedPnl = accounts.some(account =>
     account.isMovement && ['INGRESOS', 'COSTOS', 'GASTOS'].includes(account.type) &&
     periodEntries.some(entry => entry.items.some(item => item.accountCode === account.code)) &&
@@ -218,17 +218,17 @@ export function buildCashFlowIndirectReport(
   );
   const isFullyClassified = direct.isFullyClassified && !unclassifiedPnl && !unclassifiedBalanceChanges && !invalidTreatments;
   return {
-    year, netIncomeBs: round(netIncomeBs, 2), netIncomeUsd: round(netIncomeUsd, 2),
-    nonCashAdjustmentsBs: round(nonCashAdjustmentsBs, 2), nonCashAdjustmentsUsd: round(nonCashAdjustmentsUsd, 2),
-    workingCapitalAdjustmentsBs: round(workingCapitalAdjustmentsBs, 2), workingCapitalAdjustmentsUsd: round(workingCapitalAdjustmentsUsd, 2),
+    year, netIncomeBs: round(netIncomeBs, 2), netIncomeUsd: round(netIncomeUsd, 6),
+    nonCashAdjustmentsBs: round(nonCashAdjustmentsBs, 2), nonCashAdjustmentsUsd: round(nonCashAdjustmentsUsd, 6),
+    workingCapitalAdjustmentsBs: round(workingCapitalAdjustmentsBs, 2), workingCapitalAdjustmentsUsd: round(workingCapitalAdjustmentsUsd, 6),
     operatingCashFlowBs, operatingCashFlowUsd, investingCashFlowBs, investingCashFlowUsd,
     financingCashFlowBs, financingCashFlowUsd, netChangeBs, netChangeUsd,
     openingCashBs: direct.openingCashBs, openingCashUsd: direct.openingCashUsd,
     closingCashBs: round(direct.openingCashBs + netChangeBs, 2),
-    closingCashUsd: round(direct.openingCashUsd + netChangeUsd, 2),
+    closingCashUsd: round(direct.openingCashUsd + netChangeUsd, 6),
     ledgerClosingCashBs: direct.ledgerClosingCashBs, ledgerClosingCashUsd: direct.ledgerClosingCashUsd,
     reconciliationDifferenceBs, reconciliationDifferenceUsd,
-    isReconciled: Math.abs(reconciliationDifferenceBs) <= 0.05 && Math.abs(reconciliationDifferenceUsd) <= 0.01,
+    isReconciled: Math.abs(reconciliationDifferenceBs) <= 0.05 && Math.abs(reconciliationDifferenceUsd) <= 0.000005,
     isFullyClassified, adjustments: accountRows, directBasis: direct
   };
 }
