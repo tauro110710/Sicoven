@@ -4738,29 +4738,23 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // documentos que ya tienen asientos, Kardex o referencias fiscales. Para
     // volver físicamente a un punto anterior se usa el restaurador SQLite verificado.
     const incoming = JSON.parse(jsonData);
-    const protectedCollections: Array<[string, Array<{ id?: string }>]> = [
-      ['empresas', companies], ['cuentas', accounts], ['asientos', journalEntries],
-      ['compras', purchases], ['ventas', sales], ['artículos', products],
-      ['movimientos de inventario', movements], ['comprobantes IVA', vatVouchers],
-      ['declaraciones IVA', vatWithholdingDeclarations],
-      ['eventos de declaraciones IVA', vatWithholdingDeclarationEvents],
-      ['comprobantes ISLR', islrVouchers], ['cuentas bancarias', bankAccounts],
-      ['movimientos bancarios', bankStatementMovements], ['cobros y pagos', creditSettlements],
-      ['liquidaciones de anticipos', supplierAdvanceSettlements],
-      ['anticipos directos', supplierDirectAdvances], ['eventos fiscales ISLR', islrFiscalEvents],
-      ['revelaciones financieras', financialDisclosures]
+    const protectedCollections: Array<[string, string, Array<{ id?: string }>]> = [
+      ['empresas', 'companies', companies], ['cuentas', 'accounts', accounts],
+      ['asientos', 'journalEntries', journalEntries], ['compras', 'purchases', purchases],
+      ['ventas', 'sales', sales], ['artículos', 'products', products],
+      ['movimientos de inventario', 'movements', movements], ['comprobantes IVA', 'vatVouchers', vatVouchers],
+      ['declaraciones IVA', 'vatWithholdingDeclarations', vatWithholdingDeclarations],
+      ['eventos de declaraciones IVA', 'vatWithholdingDeclarationEvents', vatWithholdingDeclarationEvents],
+      ['comprobantes ISLR', 'islrVouchers', islrVouchers], ['cuentas bancarias', 'bankAccounts', bankAccounts],
+      ['movimientos bancarios', 'bankStatementMovements', bankStatementMovements],
+      ['cobros y pagos', 'creditSettlements', creditSettlements],
+      ['liquidaciones de anticipos', 'supplierAdvanceSettlements', supplierAdvanceSettlements],
+      ['anticipos directos', 'supplierDirectAdvances', supplierDirectAdvances],
+      ['eventos fiscales ISLR', 'islrFiscalEvents', islrFiscalEvents],
+      ['revelaciones financieras', 'financialDisclosures', financialDisclosures]
     ];
-    for (const [label, currentRows] of protectedCollections) {
-      const incomingRows = incoming?.[({
-        'empresas':'companies','cuentas':'accounts','asientos':'journalEntries',
-        'compras':'purchases','ventas':'sales','artículos':'products',
-        'movimientos de inventario':'movements','comprobantes IVA':'vatVouchers',
-        'declaraciones IVA':'vatWithholdingDeclarations','eventos de declaraciones IVA':'vatWithholdingDeclarationEvents',
-        'comprobantes ISLR':'islrVouchers','cuentas bancarias':'bankAccounts',
-        'movimientos bancarios':'bankStatementMovements','cobros y pagos':'creditSettlements',
-        'liquidaciones de anticipos':'supplierAdvanceSettlements','anticipos directos':'supplierDirectAdvances',
-        'eventos fiscales ISLR':'islrFiscalEvents','revelaciones financieras':'financialDisclosures'
-      } as Record<string, string>)[label]];
+    for (const [label, collectionKey, currentRows] of protectedCollections) {
+      const incomingRows = incoming?.[collectionKey];
       if (currentRows.length > 0 && !Array.isArray(incomingRows)) {
         throw new Error('El respaldo JSON no contiene la colección ' + label + '. No se modificó ningún dato.');
       }
