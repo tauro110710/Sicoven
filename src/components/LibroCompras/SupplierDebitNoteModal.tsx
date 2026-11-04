@@ -42,6 +42,8 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
   const [withholdingNotApplicableConfirmed, setWithholdingNotApplicableConfirmed] = useState(false);
   const [igtfNotApplicableConfirmed, setIgtfNotApplicableConfirmed] = useState(false);
   const [fiscalReviewNote, setFiscalReviewNote] = useState('');
+  const [fiscalEmissionMedium, setFiscalEmissionMedium] = useState<'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | ''>('');
+  const [sameMediumAsOriginal, setSameMediumAsOriginal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -122,6 +124,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
         debitNoteNumber: debitNoteNumber.trim(),
         controlNumber: controlNumber.trim(),
         affectedInvoiceNumber: purchase.invoiceNumber,
+        fiscalEmissionMedium: fiscalEmissionMedium as 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY', sameMediumAsOriginal,
         issueDate, recognitionDate, economicCause, reason: reason.trim(),
         classificationNote: classificationNote.trim() || undefined,
         debitAccountCode, payableAccountCode: payableAccountCode || suggestedPayableCode,
@@ -161,7 +164,13 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
             <label className="text-xs font-semibold text-slate-700">Fecha de reconocimiento / abono<input required type="date" value={recognitionDate} onChange={e=>setRecognitionDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
             <label className="text-xs font-semibold text-slate-700">Tasa BCV de la ND<input required type="number" min="0.000001" step="0.000001" value={bcvRate} onChange={e=>setBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="text-xs font-semibold text-slate-700">Medio de emisión de la factura original
+          <select required value={fiscalEmissionMedium} onChange={event => setFiscalEmissionMedium(event.target.value as 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | '')} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal">
+            <option value="">Seleccione…</option><option value="DIGITAL">Digital / electrónico</option><option value="FISCAL_MACHINE">Máquina fiscal</option><option value="CONTINGENCY">Contingencia autorizada</option>
+          </select>
+        </label>
+        <label className="flex items-start gap-2 text-xs text-slate-700"><input type="checkbox" checked={sameMediumAsOriginal} onChange={event => setSameMediumAsOriginal(event.target.checked)} className="mt-0.5" />Confirmo que la ND se emitió por el mismo medio de la factura original, conforme a la Providencia SNAT/2026/00093.</label>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="text-xs font-semibold text-slate-700">Causa económica<select value={economicCause} onChange={e=>setEconomicCause(e.target.value as SupplierDebitNoteEconomicCause)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
               <option value="PRICE_DIFFERENCE">Diferencia de precio</option>
               <option value="ADDITIONAL_EXPENSE">Gasto adicional</option>
