@@ -17,16 +17,19 @@ import { CreditSettlementModal } from '../shared/CreditSettlementModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportVentasPdf } from '../../utils/pdfGenerator';
 import { SupportingDocumentsPanel } from '../shared/SupportingDocumentsPanel';
+import { JournalReversalModal } from '../LibroDiario/JournalReversalModal';
 
 export const LibroVentasView: React.FC = () => {
   const {
     currentCompany,
     sales,
+    journalEntries,
     displayCurrency
   } = useAccounting();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [documentTarget, setDocumentTarget] = useState<{ id: string; title: string } | null>(null);
+  const [reversalTarget, setReversalTarget] = useState<import('../../types/accounting').JournalEntry | null>(null);
   const [settlementTarget, setSettlementTarget] = useState<{id:string; number:string; party:string} | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
@@ -258,13 +261,17 @@ export const LibroVentasView: React.FC = () => {
                     <td className="py-2 px-2 text-center no-print">
                       <button onClick={() => setDocumentTarget({ id: s.id, title: 'Factura de venta ' + s.invoiceNumber })} className="mr-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes</button>
                       {s.paymentTerm === 'CREDITO' && <button onClick={() => setSettlementTarget({id:s.id, number:s.invoiceNumber, party:s.customerName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar cobro parcial o total">Cobrar</button>}
-                      <button
-                        onClick={() => window.alert('Esta factura ya está contabilizada y no se puede eliminar físicamente. Para corregirla debe habilitarse el flujo de anulación con asiento reverso y ajuste de los libros fiscales.')}
-                        className="p-1 text-slate-400 hover:text-amber-600 transition cursor-pointer"
-                        title="Anulación con reversión contable pendiente"
-                      >
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                      </button>
+                      {!s.isCancelled && <button
+                        type="button"
+                        onClick={() => {
+                          const source = journalEntries.find(entry => entry.companyId === s.companyId &&
+                            (entry.id === s.journalEntryId || (!s.journalEntryId && entry.type === 'VENTA' && entry.referenceDoc === 'FAC-' + s.invoiceNumber)));
+                          if (!source) window.alert('No se encontró el asiento contable de origen. No se puede anular sin conciliar primero la factura y su asiento.');
+                          else setReversalTarget(source);
+                        }}
+                        className="inline-flex items-center gap-1 rounded bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-700 hover:bg-rose-100"
+                        title="Solicitar anulación con contra-asiento y análisis de dependencias"
+                      ><AlertTriangle className="h-3 w-3" /> Anular</button>}
                     </td>
                   </tr>
                 ))
@@ -367,6 +374,7 @@ export const LibroVentasView: React.FC = () => {
       </div>}
 
       {settlementTarget && <CreditSettlementModal documentId={settlementTarget.id} documentNumber={settlementTarget.number} partyName={settlementTarget.party} kind="SALE_COLLECTION" onClose={() => setSettlementTarget(null)} />}
+      <JournalReversalModal source={reversalTarget} onClose={() => setReversalTarget(null)} />
     </div>
   );
 };
