@@ -156,6 +156,9 @@ export interface JournalEntry {
   reversalReason?: string;
   workpaperNote?: string;
   priorPeriodAdjustment?: boolean;
+  /** Asiento origen de un ajuste manual; no modifica el asiento fuente. */
+  adjustmentForEntryId?: string;
+  adjustmentReason?: string;
   /** Vínculo inmutable entre el ejercicio cerrado y el ejercicio que inicia con esta apertura. */
   exerciseLink?: {
     priorPeriodStartDate: string;
