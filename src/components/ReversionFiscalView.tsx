@@ -153,7 +153,7 @@ export const ReversionFiscalView: React.FC = () => {
       });
       setRequestEntityId(''); setRequestSourceRef(''); setRequestTargetRef('');
       setRequestReason(''); setRequestWorkpaper('');
-      setFeedback({kind:'success',message:'Expediente creado en SQLite, pendiente de revisión independiente. No se modificó el documento original.'});
+      setFeedback({kind:'success',message:'Expediente creado en SQLite, pendiente de evaluación y aprobación del contador. No se modificó el documento original.'});
       await refreshCorrectionCases();
       await refreshAuditEvents();
     } catch (error) {
