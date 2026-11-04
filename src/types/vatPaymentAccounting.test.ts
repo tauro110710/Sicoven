@@ -28,8 +28,9 @@ const declaration = (usd = 1, bs = 100): VatWithholdingDeclaration => ({
   createdAt:'2026-10-16T00:00:00.000Z'
 });
 const build=(amountBs:number,bankUsd:number,d=declaration(),priorPaidBs=0,moves=[movement('m1','b1',amountBs,bankUsd)],chart=accounts)=>
- buildVatPaymentAccountingPlan({occurredAt:'2026-10-20',amountBs,priorPaidBs,bcvRate:250,declaration:d,movements:moves,bankAccounts:banks,accounts:chart});
+ buildVatPaymentAccountingPlan({occurredAt:'2026-10-20',amountBs,priorPaidBs,bcvRate:250,bcvRateEffectiveDate:'2026-10-20',declaration:d,movements:moves,bankAccounts:banks,accounts:chart});
 
+test('rejects a BCV rate whose effective date differs from the tax payment date',()=>{ assert.throws(()=>buildVatPaymentAccountingPlan({occurredAt:'2026-10-20',amountBs:100,priorPaidBs:0,bcvRate:250,bcvRateEffectiveDate:'2026-10-19',declaration:declaration(),movements:[movement('m1','b1',100,1)],bankAccounts:banks,accounts}),/misma fecha del enteramiento/); });
 test('uses the effective BCV rate for the journal header, not the bank movement implied rate',()=>{ const p=build(100,0.9); assert.equal(p.bcvRate,250); });
 test('cancels liability at historical USD carrying value',()=>{
  const p=build(100,1);assert.equal(p.liabilityUsd,1);assert.equal(p.fxDifferenceUsd,0);
@@ -67,7 +68,7 @@ test('rejects bank amount mismatch and missing historical bank USD',()=>{
 
 test('rejects invalid calendar dates and non-debit bank movements', () => {
   assert.throws(() => buildVatPaymentAccountingPlan({
-    occurredAt: '2026-02-31', amountBs:100, priorPaidBs:0, bcvRate:250, declaration:declaration(), movements: [movement('m1', 'b1', 100, 1)],
+    occurredAt: '2026-02-31', amountBs:100, priorPaidBs:0, bcvRate:250, bcvRateEffectiveDate:'2026-10-20', declaration:declaration(), movements: [movement('m1', 'b1', 100, 1)],
     bankAccounts: banks, accounts
   }), /fecha del enteramiento/);
   assert.throws(() => buildVatPaymentAccountingPlan({
