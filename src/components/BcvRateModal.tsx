@@ -79,6 +79,7 @@ export const BcvRateModal: React.FC<BcvRateModalProps> = ({ isOpen, onClose }) =
           <button
             type="button"
             onClick={onClose}
+            disabled={saving}
             aria-label="Cerrar"
             className="rounded-lg p-1.5 text-slate-300 transition hover:bg-slate-800 hover:text-white"
           >
