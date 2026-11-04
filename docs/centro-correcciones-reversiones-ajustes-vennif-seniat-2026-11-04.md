@@ -178,3 +178,14 @@ No declarar completa esta capacidad hasta que cada tipo documental con efecto co
 - Los métodos de dominio de tesorería y conciliación también rechazan operaciones si SQLite no está disponible, aunque se invoquen desde otro componente.
 - La interfaz serializa las operaciones de conciliación y evita dobles acciones durante el guardado.
 - Validación de esta continuación: revisión estática de los archivos y de los contratos de persistencia; no se ejecutó compilación ni pruebas automatizadas. La confirmación real en SQLite debe verificarse con la aplicación de escritorio y su archivo de base de datos.
+
+### Catálogo, empresa, BCV, inventario y clasificación del flujo de efectivo
+
+- Se centralizó `assertSQLitePersistenceReady` para bloquear escrituras sin el puente `window.sicovenStore.save`, con SQLite no inicializada o después de un fallo de persistencia.
+- Se aplicó al alta/actualización de empresa, registro de cuentas contables, actualización manual de tasa BCV, alta/edición de artículos, anticipos y liquidaciones a proveedores, cobros/pagos, declaraciones y eventos de retención IVA, y registro de entrega de comprobantes IVA/ISLR.
+- La clasificación de cuentas para flujo de efectivo (método directo e indirecto) también exige SQLite.
+- Los formularios de empresa, BCV, artículo, movimiento de inventario y catálogo contable ahora esperan `waitForPersistence()` antes de cerrar o informar éxito; bloquean doble envío y cierre mientras se guarda.
+- La edición de parámetros de empresa y expedientes NIC 21/convertibilidad espera la confirmación SQLite antes de mostrar el mensaje de guardado exitoso.
+- Se conserva el modelo de snapshot completo y transacción SQLite ya documentado. Las modificaciones del estado React no se revierten automáticamente si la escritura falla; el proveedor bloquea nuevas escrituras y el reinicio vuelve a hidratar el último snapshot confirmado.
+- La revisión estática identificó además que el módulo de configuración y catálogo contable no deben considerar el estado React como confirmación de persistencia. Los cambios anteriores eliminan esa señal prematura.
+- No se certifica todavía el flujo de edición de artículos desde interfaces no localizadas ni se afirma que todos los formularios de importación/migración hayan sido sometidos a pruebas de integración.
