@@ -79,14 +79,16 @@ describe('cash flow indirect method', () => {
   it('preserves sub-cent USD precision and rejects a material cash-flow reconciliation difference', () => {
     const precisionAccounts = [
       ...accounts,
-      { code: '5.1.3', name: 'Ajuste de gasto no monetario pendiente', type: 'GASTOS' as const,
-        level: 4, isMovement: true, cashFlowActivity: 'OPERACION' as const }
+      { code: '5.1.3', name: 'Gasto sin ajuste indirecto', type: 'GASTOS' as const,
+        level: 4, isMovement: true, cashFlowActivity: 'OPERACION' as const },
+      { code: '2.1.1.02', name: 'Pasivo sin tratamiento indirecto', type: 'PASIVO' as const,
+        level: 4, isMovement: true }
     ];
     const report = buildCashFlowIndirectReport([
       entry('precision-only', '2026-06-01', [
         line('5.1.3', 100, 0, 0.004, 0),
         line('4.1.1', 0, 100, 0, 0),
-        line('2.1.1.01', 0, 0, 0, 0.004)
+        line('2.1.1.02', 0, 0, 0, 0.004)
       ])
     ], precisionAccounts, banks, 'co-1', 2026);
     assert.equal(report.netIncomeUsd, -0.004);
