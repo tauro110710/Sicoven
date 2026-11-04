@@ -5,6 +5,8 @@ const crypto = require('node:crypto');
 const sessions = new Map();
 const LICENSE_API = 'https://crm-sicoven.vercel.app/api/activations';
 const LICENSE_PRODUCT_CODE = 'SICOVEN_DESKTOP';
+const TRIAL_DURATION_HOURS = 120;
+const TRIAL_DURATION_MS = TRIAL_DURATION_HOURS * 60 * 60 * 1000;
 let licenseRecheckTimer = null;
 let trialExpiryTimer = null;
 
@@ -93,7 +95,7 @@ function openDatabase() {
       db.prepare('INSERT INTO auth_users(username,password_hash,password_salt,role,is_seed) VALUES(?,?,?,?,1)')
         .run('admin', credential.hash, credential.salt, 'admin');
       db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
-        .run('seed_admin_created', JSON.stringify({ username: 'admin', purpose: '24-hour-trial' }));
+        .run('seed_admin_created', JSON.stringify({ username: 'admin', purpose: '120-hour-trial' }));
     });
     createSeed();
   }
@@ -134,8 +136,8 @@ function licenseView(row = readLicenseRow()) {
   const offlineExpired = hasKey && String(row.status) === 'active' &&
     (!Number.isFinite(lastOnline) || offlineDays === 0 || Date.now() > lastOnline + offlineDays * 86400000);
   const trialStarted = row.trial_started_at ? Date.parse(String(row.trial_started_at)) : NaN;
-  const trialExpiresAt = Number.isFinite(trialStarted) ? new Date(trialStarted + 24 * 60 * 60 * 1000).toISOString() : null;
-  const trialActive = !hasKey && Number.isFinite(trialStarted) && Date.now() < trialStarted + 24 * 60 * 60 * 1000;
+  const trialExpiresAt = Number.isFinite(trialStarted) ? new Date(trialStarted + TRIAL_DURATION_MS).toISOString() : null;
+  const trialActive = !hasKey && Number.isFinite(trialStarted) && Date.now() < trialStarted + TRIAL_DURATION_MS;
   const authorized = (hasKey && String(row.status) === 'active' && !offlineExpired) || trialActive;
   return {
     authorized,
@@ -148,13 +150,13 @@ function licenseView(row = readLicenseRow()) {
     lastOnlineSuccessAt: row.last_online_success_at || null,
     lastCheckedAt: row.last_checked_at || null,
     message: trialActive
-      ? 'Prueba de SICOVEN activa durante 24 horas. Los datos se guardan localmente en SQLite.'
+      ? 'Prueba de SICOVEN activa durante 120 horas (5 días). Los datos se guardan localmente en SQLite.'
       : authorized
         ? (row.message || 'Licencia activada. SICOVEN puede trabajar con sus datos locales.')
         : offlineExpired
           ? 'Se venció el período de uso sin conexión autorizado por el administrador del CRM. Conecta este equipo a internet para revalidar la licencia.'
-          : (Date.now() >= (Number.isFinite(trialStarted) ? trialStarted + 24 * 60 * 60 * 1000 : 0)
-              ? 'El período de prueba de 24 horas terminó. Introduce una clave de licencia para continuar.'
+          : (Date.now() >= (Number.isFinite(trialStarted) ? trialStarted + TRIAL_DURATION_MS : 0)
+              ? 'El período de prueba de 120 horas (5 días) terminó. Introduce una clave de licencia para continuar.'
               : (row.message || 'Active SICOVEN con una clave de licencia.'))
   };
 }
