@@ -43,3 +43,13 @@ test('no convertibilidad exige tasa estimada, metodología y evidencia', () => {
   assert.deepEqual(validateExchangeabilityAssessment(notConvertible), []);
   assert.ok(validateExchangeabilityAssessment({ ...notConvertible, estimationMethod: '' }).some(x => x.includes('metodología')));
 });
+
+test('permite conservar un borrador incompleto sin asignar moneda por defecto', () => {
+  assert.deepEqual(validateFunctionalCurrencyAssessment({
+    id: 'fc-draft', status: 'DRAFT', functionalCurrency: '' as never,
+    presentationCurrency: '' as never, assessmentDate: '', effectiveDate: '',
+    preparedBy: '', primaryEconomicEnvironment: '', salesPriceFactors: '',
+    costFactors: '', financingFactors: '', operatingReceiptsFactors: '',
+    professionalConclusion: '', evidenceReferences: []
+  }), []);
+});
