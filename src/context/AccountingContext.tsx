@@ -4207,6 +4207,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setProducts([]);
     setMovements([]);
     setVatVouchers([]);
+    setVatWithholdingDeclarations([]);
+    setVatWithholdingDeclarationEvents([]);
     setIslrVouchers([]);
     setBankAccounts([]);
     setBankStatementMovements([]);
@@ -4215,6 +4217,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setSupplierDirectAdvances([]);
     setIslrFiscalEvents([]);
     setFinancialDisclosures([]);
+    setDisplayCurrency('DUAL');
     await waitForPersistence();
   };
 
@@ -4236,6 +4239,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setProducts([]);
     setMovements([]);
     setVatVouchers([]);
+    setVatWithholdingDeclarations([]);
+    setVatWithholdingDeclarationEvents([]);
     setIslrVouchers([]);
     setBankAccounts([]);
     setBankStatementMovements([]);
