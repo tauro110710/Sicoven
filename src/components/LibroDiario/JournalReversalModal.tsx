@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { JournalEntry } from '../../types/accounting';
 
@@ -25,6 +25,9 @@ export const JournalReversalModal: React.FC<JournalReversalModalProps> = ({ sour
     }
     return source.date;
   })();
+  useEffect(() => {
+    if (minEffectiveDate && effectiveDate < minEffectiveDate) setEffectiveDate(minEffectiveDate);
+  }, [minEffectiveDate, effectiveDate]);
   const retainedAccounts = useMemo(() => accounts.filter(account => account.isMovement && account.type === 'PATRIMONIO'), [accounts]);
 
   if (!source) return null;
