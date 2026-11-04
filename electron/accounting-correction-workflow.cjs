@@ -13,7 +13,7 @@ const CORRECTION_EVIDENCE_RULES = Object.freeze({
   ISLR_VOUCHER: { collection:'islrVouchers', links:['correctionOfVoucherId','originalVoucherId','reversalOfVoucherId','correctsVoucherId'] },
   VAT_DECLARATION: { collection:'vatWithholdingDeclarations', links:['correctionOfDeclarationId','originalDeclarationId','replacesDeclarationId','rectifiesDeclarationId'] },
   ISLR_EVENT: { collection:'islrFiscalEvents', links:['correctionOfEventId','originalEventId','reversesEventId','rectifiesEventId'] },
-  INVENTORY_PRODUCT: { collection:'movements', links:['correctionOfProductId','adjustmentForProductId','productId'] },
+  INVENTORY_PRODUCT: { collection:'movements', links:['correctionOfProductId','adjustmentForProductId'] },
   BCV_RATE: { collection:'companies', links:['correctionOfBcvRateId','originalBcvRateId','replacesBcvRateId'] }
 });
 function findLinkedCorrectionEvidence(state, item, reference) {
@@ -33,6 +33,8 @@ function findLinkedCorrectionEvidence(state, item, reference) {
     if (String(candidate.companyId || '') !== String(item.company_id) || String(candidate.id) === String(item.entity_id)) return false;
     const linked = rule.links.some(field => candidate[field] != null && String(candidate[field]) === String(item.entity_id));
     if (!linked) return false;
+    if (['SALE','PURCHASE'].includes(String(item.entity_type)) &&
+        !['02','03'].includes(String(candidate.documentType || ''))) return false;
     return referenceFields.some(field => candidate[field] != null &&
       String(candidate[field]).trim().toLocaleUpperCase() === normalizedReference);
   }) || null;
