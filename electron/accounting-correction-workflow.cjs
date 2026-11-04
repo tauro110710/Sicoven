@@ -2,6 +2,42 @@
 
 const crypto = require('node:crypto');
 
+
+const CORRECTION_EVIDENCE_RULES = Object.freeze({
+  SALE: { collection:'sales', links:['originalSaleId','correctedSaleId','correctionOfSaleId','affectedSaleId','originalDocumentId'] },
+  PURCHASE: { collection:'purchases', links:['originalPurchaseId','correctedPurchaseId','correctionOfPurchaseId','affectedPurchaseId','originalDocumentId'] },
+  JOURNAL_ENTRY: { collection:'journalEntries', links:['reversalOfEntryId','reversesEntryId','correctionOfEntryId','correctsEntryId'] },
+  BANK_MOVEMENT: { collection:'bankStatementMovements', links:['reversalOfMovementId','correctionOfMovementId','correctsMovementId','originalMovementId'] },
+  INVENTORY_MOVEMENT: { collection:'movements', links:['correctionForMovementId','reversalOfMovementId','correctsMovementId','originalMovementId'] },
+  VAT_VOUCHER: { collection:'vatVouchers', links:['correctionOfVoucherId','originalVoucherId','reversalOfVoucherId','correctsVoucherId'] },
+  ISLR_VOUCHER: { collection:'islrVouchers', links:['correctionOfVoucherId','originalVoucherId','reversalOfVoucherId','correctsVoucherId'] },
+  VAT_DECLARATION: { collection:'vatWithholdingDeclarations', links:['correctionOfDeclarationId','originalDeclarationId','replacesDeclarationId','rectifiesDeclarationId'] },
+  ISLR_EVENT: { collection:'islrFiscalEvents', links:['correctionOfEventId','originalEventId','reversesEventId','rectifiesEventId'] },
+  INVENTORY_PRODUCT: { collection:'movements', links:['correctionOfProductId','adjustmentForProductId','productId'] },
+  BCV_RATE: { collection:'companies', links:['correctionOfBcvRateId','originalBcvRateId','replacesBcvRateId'] }
+});
+function findLinkedCorrectionEvidence(state, item, reference) {
+  const rule = CORRECTION_EVIDENCE_RULES[String(item.entity_type)];
+  if (!rule) return null;
+  const sourceCollection = item.entity_type === 'BCV_RATE' ? 'companies' :
+    item.entity_type === 'INVENTORY_PRODUCT' ? 'products' : rule.collection;
+  const source = Array.isArray(state[sourceCollection]) && state[sourceCollection].find(record =>
+    String(record.id) === String(item.entity_id) && String(record.companyId || item.company_id) === String(item.company_id));
+  if (!source) return null;
+  const candidates = Array.isArray(state[rule.collection]) ? state[rule.collection] : [];
+  const normalizedReference = String(reference || '').trim().toLocaleUpperCase();
+  if (!normalizedReference) return null;
+  const referenceFields = ['id','documentNumber','invoiceNumber','voucherNumber','declarationNumber','entryNumber',
+    'opNumber','documentRef','number','reference','referenceDoc','controlNumber','creditNoteNumber','debitNoteNumber'];
+  return candidates.find(candidate => {
+    if (String(candidate.companyId || '') !== String(item.company_id) || String(candidate.id) === String(item.entity_id)) return false;
+    const linked = rule.links.some(field => candidate[field] != null && String(candidate[field]) === String(item.entity_id));
+    if (!linked) return false;
+    return referenceFields.some(field => candidate[field] != null &&
+      String(candidate[field]).trim().toLocaleUpperCase() === normalizedReference);
+  }) || null;
+}
+
 function initializeCorrectionWorkflow(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS accounting_correction_cases (
@@ -137,4 +173,4 @@ function listCorrectionCases(db,companyId) {
   return db.prepare('SELECT id FROM accounting_correction_cases WHERE company_id=? ORDER BY created_at DESC').all(String(companyId))
     .map(row=>getCorrectionCase(db,row.id));
 }
-module.exports={initializeCorrectionWorkflow,registerCorrectionRequest,reviewCorrectionRequest,markCorrectionExecuted,getCorrectionCase,listCorrectionCases};
+module.exports={initializeCorrectionWorkflow,registerCorrectionRequest,reviewCorrectionRequest,markCorrectionExecuted,getCorrectionCase,listCorrectionCases,findLinkedCorrectionEvidence};
