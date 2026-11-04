@@ -18,7 +18,7 @@ const draft = (overrides: Partial<Parameters<typeof calculatePurchaseServiceCred
   purchase: source, noteDate: '2026-11-01', creditNoteNumber: 'NC-001',
   controlNumber: 'CTRL-NC-001', reason: 'Descuento parcial acordado con proveedor',
   workpaperNote: 'Se verificó el contrato, el servicio y la nota fiscal recibida.',
-  taxableBaseBs: 100, exemptAmountBs: 0, bcvRate: 100, priorCreditNotes: [],
+  taxableBaseBs: 100, exemptAmountBs: 0, bcvRate: 100, fiscalEmissionMedium: 'DIGITAL' as const, sameMediumAsOriginal: true, priorCreditNotes: [],
   ...overrides
 });
 
