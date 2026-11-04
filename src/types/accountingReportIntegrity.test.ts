@@ -51,6 +51,10 @@ describe('accounting report integrity', () => {
     assert.equal(isTrialBalanceBalanced(balanced), true);
     assert.equal(isTrialBalanceBalanced({ ...balanced, totalCreditUsd: 9.5 }), false);
     assert.equal(isTrialBalanceBalanced({ ...balanced, creditBalancesUsd: 3.9 }), false);
+    // A five-cent USD difference must fail even though Bs. permits a 0.05 tolerance.
+    assert.equal(isTrialBalanceBalanced({ ...balanced, totalCreditUsd: 9.99 }), false);
+    assert.equal(isTrialBalanceBalanced({ ...balanced, creditBalancesUsd: 3.999 }), false);
+    assert.equal(isTrialBalanceBalanced({ ...balanced, totalCreditBs: 100.01 }), true);
   });
 
   it('rejects non-finite or negative report totals', () => {
