@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   reviewCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-review', token, input),
   observeCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-observe', token, input),
   resubmitCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-resubmit', token, input),
+  withdrawCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-withdraw', token, input),
   executeCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-execute', token, input),
   listCorrectionCases: (token, companyId) => ipcRenderer.invoke('sicoven:correction-case-list', token, companyId),
   save: (token, state) => ipcRenderer.invoke('sicoven:save-state', token, state),
