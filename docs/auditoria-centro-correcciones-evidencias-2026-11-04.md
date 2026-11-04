@@ -48,7 +48,7 @@ Se agregó un ciclo formal de expediente sin sobrescribir su historial:
 - `CLOSED`: rechazado.
 - `WITHDRAWN`: retirado por el solicitante antes de ejecutar.
 
-La observación puede ocurrir durante revisión y también después de aprobar, antes de ejecutar. El contador puede subsanar y reenviar; el expediente vuelve a revisión y pierde la aprobación anterior. Cada observación y reenvío se registra en una tabla de eventos separada, append-only, y en la bitácora general. Si falla la bitácora, la transacción completa revierte. Se conserva el historial de aprobaciones/observaciones y se exige una nueva revisión independiente antes de ejecutar.
+La observación puede ocurrir durante revisión y también después de aprobar, antes de ejecutar. El contador puede subsanar y reenviar; el expediente vuelve a revisión y pierde la aprobación anterior. Cada observación y reenvío se registra en una tabla de eventos separada, append-only, y en la bitácora general. Si falla la bitácora, la transacción completa revierte. Se conserva el historial de aprobaciones/observaciones y se exige una nueva aprobación del contador antes de ejecutar.
 
 La migración es aditiva: incorpora `workflow_stage` y normaliza las etapas de expedientes existentes según su estado, sin borrar documentos ni expedientes.
 
@@ -79,7 +79,7 @@ Los generadores de NC/ND de venta y compra, ND de proveedor y reversión de asie
 
 ## Pruebas definidas y límites de verificación
 
-La suite del workflow contiene **24 pruebas definidas** para segregación, rollback, migración, retiro, observación/subsanación, autorización previa, vínculos de NC/ND, asientos y Kardex. La suite documental conserva nueve pruebas definidas. La suite de liquidaciones/auxiliares contiene **22 pruebas definidas**, incluyendo el incremento de CxP por ND de proveedor. Ninguna de estas suites se ejecutó en esta sesión; no se declara que estén aprobadas.
+La suite del workflow contiene **24 pruebas definidas** para operación de contador único, rollback, migración, retiro, observación/subsanación, autorización previa, vínculos de NC/ND, asientos y Kardex. La suite documental conserva nueve pruebas definidas. La suite de liquidaciones/auxiliares contiene **22 pruebas definidas**, incluyendo el incremento de CxP por ND de proveedor. Ninguna de estas suites se ejecutó en esta sesión; no se declara que estén aprobadas.
 
 ## Ajuste adicional de CxP por notas de débito de proveedor
 
