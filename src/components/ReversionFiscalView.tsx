@@ -725,6 +725,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
 
   return (
     <div className="space-y-5">
+      {isAccountant && <>
       <section className="rounded-2xl border border-indigo-200 bg-white p-4 sm:p-6 space-y-4">
         <div className="flex items-center gap-3"><ShieldCheck className="h-6 w-6 text-indigo-700"/><div><h2 className="font-bold text-slate-900">Centro de Correcciones</h2><p className="text-xs text-slate-500">Busque el asiento o documento original y ejecute aquí la corrección compatible. No se crea una solicitud ni un expediente previo.</p></div></div>
         <label className="block text-xs font-semibold text-slate-700">Buscar asiento, venta, compra, Kardex, banco o auxiliar
@@ -924,6 +925,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
           <div className="border-t pt-2"><strong>Historial inalterable</strong>{item.events.map(ev=><p key={ev.id}>{ev.event_type==='APPROVED'?'HABILITADA PARA EJECUCIÓN DIRECTA':ev.event_type} · {ev.actor_name} · {ev.created_at} · {ev.reason}</p>)}</div>
         </article>)}
       </section>
+      </>}
       <section id="correction-execution-assistant" className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
         <div className="bg-slate-900 text-white px-5 py-4 flex items-center gap-3">
           <Undo2 className="h-6 w-6 text-emerald-300" />
