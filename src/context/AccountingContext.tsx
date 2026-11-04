@@ -176,10 +176,9 @@ interface AccountingContextType {
   setDisplayCurrency: (curr: 'BS' | 'USD' | 'DUAL') => void;
 
   // Respaldo
-  resetToSampleData: () => void;
+  resetToSampleData: () => Promise<void>;
   resetFactoryData: () => Promise<void>;
   exportBackupJson: () => string;
-  importBackupJson: (jsonData: string) => boolean;
   restoreBackupJson: (jsonData: string) => Promise<boolean>;
 }
 
@@ -4190,7 +4189,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return record;
   };
 
-  const resetToSampleData = () => {
+  const resetToSampleData = async (): Promise<void> => {
+    assertSQLitePersistenceReady('Restablecer datos de muestra');
     // Mantiene el comportamiento anterior del restablecimiento de datos de muestra.
     setCompanies([]);
     setCurrentCompanyId('');
@@ -4209,9 +4209,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setSupplierDirectAdvances([]);
     setIslrFiscalEvents([]);
     setFinancialDisclosures([]);
+    await waitForPersistence();
   };
 
   const resetFactoryData = async () => {
+    assertSQLitePersistenceReady('Restablecer SICOVEN de fábrica');
     // En escritorio, borrar primero el estado persistido en SQLite de forma atómica.
     // No se muestra éxito hasta que la base de datos confirma la operación.
     if (window.sicovenStore) {
@@ -4269,17 +4271,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const restoreBackupJson = async (jsonData: string): Promise<boolean> => {
+    assertSQLitePersistenceReady('Restaurar respaldo');
     // Captura el estado completo antes de aplicar un respaldo. Si SQLite rechaza
     // la escritura, restaura también la memoria de React y vuelve a intentar
     // persistir el estado previo; nunca deja activa una importación no confirmada.
     const previousBackup = exportBackupJson();
     const previousCompanyId = currentCompanyId;
-    if (!importBackupJson(jsonData)) return false;
+    if (!applyBackupJson(jsonData)) return false;
     try {
       await waitForPersistence();
       return true;
     } catch (persistenceError) {
-      const rolledBack = importBackupJson(previousBackup);
+      const rolledBack = applyBackupJson(previousBackup);
       if (rolledBack) {
         if (companies.some(company => company.id === previousCompanyId)) {
           setCurrentCompanyId(previousCompanyId);
@@ -4294,7 +4297,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
-  const importBackupJson = (jsonData: string): boolean => {
+  const applyBackupJson = (jsonData: string): boolean => {
     try {
       const data = JSON.parse(jsonData);
       // Los respaldos anteriores a la incorporación del libro fiscal siguen siendo legibles.
@@ -4697,7 +4700,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         resetToSampleData,
         resetFactoryData,
         exportBackupJson,
-        importBackupJson,
         restoreBackupJson
       }}
     >
