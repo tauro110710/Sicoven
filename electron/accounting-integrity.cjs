@@ -659,7 +659,10 @@ function validateSaleCorrectionNotes(previousState, nextState) {
     const baseUsd = round6((base + exempt) / rate);
     const vatUsd = round6(vat / rate);
     const totalUsd = round6(total / rate);
-    const journalMatches = Boolean(journal && journal.type === 'AJUSTE' && journal.date === note.invoiceDate &&
+    const expectedLineCount = vat > 0 ? 3 : 2;
+    const journalMatches = Boolean(journal && entries.length === expectedLineCount &&
+      entries.every(line => ['4.1.1.01', '1.1.2.01', ...(vat > 0 ? ['2.1.2.01'] : [])].includes(String(line.accountCode))) &&
+      journal.type === 'AJUSTE' && journal.date === note.invoiceDate &&
       close(journal.bcvRate, rate, 0.000001) && normalize(journal.referenceDoc) === normalize(expectedRef) &&
       close(revenue.debitBs || 0, isCredit ? base + exempt : 0) &&
       close(revenue.creditBs || 0, isCredit ? 0 : base + exempt) &&
@@ -713,8 +716,10 @@ function validateSaleCorrectionNotes(previousState, nextState) {
     const paidUsd = asArray(nextState.creditSettlements).filter(item =>
       item.companyId === source.companyId && item.documentId === source.id &&
       item.kind === 'SALE_COLLECTION' && !item.isReversed).reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
+    const debitedUsd = nextSales.filter(item => item.originalSaleId === source.id && item.documentType === '02' && !item.isCancelled)
+      .reduce((sum, item) => sum + Number(item.netReceivableAdjustmentUsd || 0), 0);
     const creditedUsd = credits.reduce((sum, item) => sum + Number(item.netReceivableAdjustmentUsd || 0), 0);
-    if (creditedUsd > Math.max(0, originalUsd - paidUsd) + 0.01) {
+    if (creditedUsd > Math.max(0, originalUsd - paidUsd + debitedUsd) + 0.01) {
       throw new Error('SQLite bloqueó una NC de venta que supera el saldo por cobrar no liquidado.');
     }
   }
