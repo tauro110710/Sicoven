@@ -3647,6 +3647,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   // Tesorería: alta bancaria y creación automática del auxiliar contable.
   const addBankAccount = (bankData: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'>): BankAccount => {
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('Registrar una cuenta bancaria requiere SQLite local de escritorio disponible y lista.');
+    }
     if (!currentCompany.id) throw new Error('Registre o seleccione una empresa antes de crear cuentas bancarias.');
     const digits = String(bankData.accountNumber || '').replace(/\D/g, '');
     if (digits.length !== 20) throw new Error('El número de cuenta bancaria debe contener exactamente 20 dígitos.');
@@ -3775,6 +3778,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const addBankStatementMovement = (movData: Omit<BankStatementMovement, 'id' | 'companyId'>): BankStatementMovement => {
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('Registrar movimientos de extracto requiere SQLite local de escritorio disponible y lista.');
+    }
     const bank = bankAccounts.find(item =>
       item.id === movData.bankAccountId && item.companyId === currentCompany.id
     );
