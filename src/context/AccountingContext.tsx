@@ -2751,8 +2751,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       (item.journalEntryId === sourceEntry.id ||
        item.documentRef.trim().toUpperCase().replace(/\\s+/g, '') ===
        ('FAC-' + source.invoiceNumber).trim().toUpperCase().replace(/\\s+/g, '')));
-    if (linkedMovements.length || source.inventoryLines?.length) {
-      throw new Error('La factura tiene inventario/Kardex vinculado. Debe utilizarse la NC de devolución física por líneas.');
+    const hasInventoryAccountingFootprint = sourceEntry.items.some(item =>
+      String(item.accountCode || '').startsWith('1.1.4.')
+    );
+    if (linkedMovements.length || source.inventoryLines?.length || hasInventoryAccountingFootprint) {
+      throw new Error('La factura tiene inventario/Kardex o una imputación contable de inventario. Debe utilizarse la NC de devolución física por líneas; si faltan movimientos de Kardex, primero debe reconstruirse y conciliarse el vínculo sin alterar el original.');
     }
     if (source.vatWithheldBs > 0 || Number(source.islrWithheldBs || 0) > 0 ||
         Number(source.igtfAmountBs || 0) > 0 || source.igtfApplicable ||
@@ -3248,12 +3251,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!source) throw new Error('No se encontró la factura original de venta en la empresa activa.');
     if (source.documentType !== '01' || source.isCancelled) throw new Error('Solo se pueden corregir facturas de venta vigentes tipo 01.');
     const correctionCaseId = await requireApprovedCorrectionCase('SALE',source.id,source.invoiceNumber,draft.noteNumber);
-    const linkedInventory = movements.some(item => item.companyId === currentCompany.id &&
+    const sourceEntry = journalEntries.find(item => item.id === source.journalEntryId && item.companyId === currentCompany.id);
+    const hasInventoryAccountingFootprint = Boolean(sourceEntry?.items.some(item =>
+      String(item.accountCode || '').startsWith('1.1.4.') ||
+      accounts.some(account => account.code === item.accountCode && account.type === 'COSTOS')
+    ));
+    const linkedInventory = hasInventoryAccountingFootprint || movements.some(item => item.companyId === currentCompany.id &&
       (item.journalEntryId === source.journalEntryId ||
        item.documentRef.trim().toUpperCase().replace(/\\s+/g, '') ===
        ('FAC-' + source.invoiceNumber).trim().toUpperCase().replace(/\\s+/g, '')));
     if (linkedInventory && draft.kind === 'CREDIT') {
-      const sourceEntry = journalEntries.find(item => item.id === source.journalEntryId && item.companyId === currentCompany.id);
       if (!sourceEntry) throw new Error('La factura con inventario no conserva su asiento original verificable.');
       const returnReadiness = validateSaleInventoryReturnReconciliation({
         companyId: currentCompany.id, invoiceNumber: source.invoiceNumber,

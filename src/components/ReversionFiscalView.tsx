@@ -247,10 +247,29 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
       (item.journalEntryId === selectedPurchaseForCorrection.journalEntryId ||
        item.documentRef.trim().toUpperCase() === ('FAC-' + selectedPurchaseForCorrection.invoiceNumber).trim().toUpperCase()))
   ));
-  const selectedSaleHasInventory = Boolean(selectedSaleForCorrection && movements.some(item =>
-    item.companyId === currentCompany.id &&
-    (item.journalEntryId === selectedSaleForCorrection.journalEntryId ||
-     item.documentRef.trim().toUpperCase() === ('FAC-' + selectedSaleForCorrection.invoiceNumber).trim().toUpperCase())
+  const selectedSaleEntryForCorrection = selectedSaleForCorrection?.journalEntryId
+    ? journalEntries.find(item=>item.id===selectedSaleForCorrection.journalEntryId && item.companyId===currentCompany.id)
+    : undefined;
+  const selectedSaleHasInventory = Boolean(selectedSaleForCorrection && (
+    selectedSaleEntryForCorrection?.items.some(line =>
+      String(line.accountCode || '').startsWith('1.1.4.') ||
+      accounts.some(account=>account.code===line.accountCode && account.type==='COSTOS')
+    ) ||
+    movements.some(item =>
+      item.companyId === currentCompany.id &&
+      (item.journalEntryId === selectedSaleForCorrection.journalEntryId ||
+       item.documentRef.trim().toUpperCase() === ('FAC-' + selectedSaleForCorrection.invoiceNumber).trim().toUpperCase())
+    )
+  ));
+  const selectedPurchaseEntryForCorrection = selectedPurchaseForCorrection?.journalEntryId
+    ? journalEntries.find(item=>item.id===selectedPurchaseForCorrection.journalEntryId && item.companyId===currentCompany.id)
+    : undefined;
+  const selectedPurchaseHasInventory = Boolean(selectedPurchaseForCorrection && (
+    selectedPurchaseForCorrection.inventoryLines?.length ||
+    selectedPurchaseEntryForCorrection?.items.some(line=>String(line.accountCode || '').startsWith('1.1.4.')) ||
+    movements.some(item => item.companyId === currentCompany.id &&
+      (item.journalEntryId === selectedPurchaseForCorrection.journalEntryId ||
+       item.documentRef.trim().toUpperCase() === ('FAC-' + selectedPurchaseForCorrection.invoiceNumber).trim().toUpperCase()))
   ));
   const selectedCorrectionJournalId = selectedJournalForCorrection?.id ||
     selectedSaleForCorrection?.journalEntryId || selectedPurchaseForCorrection?.journalEntryId ||
