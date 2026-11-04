@@ -70,6 +70,25 @@ export const ReversionFiscalView: React.FC = () => {
   const isPriorPeriod = Boolean(source && currentCompany.closedThroughDate && source.date <= currentCompany.closedThroughDate);
   const retainedEarningsAccounts = accounts.filter(account => account.type === 'PATRIMONIO' && account.isMovement);
   const accountMap = useMemo(() => new Map(accounts.map(account => [account.code, account])), [accounts]);
+  const correctionDocuments = useMemo(() => [
+    ...sales.filter(item => item.companyId === currentCompany.id && ['02', '03'].includes(item.documentType) && item.originalSaleId)
+      .map(item => ({ id: item.id, kind: item.documentType === '03' ? 'NC cliente' : 'ND cliente',
+        number: item.invoiceNumber, sourceNumber: item.affectedInvoiceNumber || '',
+        date: item.invoiceDate, party: item.customerName, amountBs: item.totalAmountBs,
+        amountUsd: item.totalAmountUsd, journalEntryId: item.journalEntryId || '',
+        reason: item.correctionReason || item.notes || '' })),
+    ...purchases.filter(item => item.companyId === currentCompany.id && item.documentType === '03' && item.originalPurchaseId)
+      .map(item => ({ id: item.id, kind: 'NC proveedor', number: item.creditNoteNumber || item.invoiceNumber,
+        sourceNumber: item.affectedInvoiceNumber || '', date: item.invoiceDate, party: item.supplierName,
+        amountBs: item.totalAmountBs, amountUsd: item.totalAmountUsd, journalEntryId: item.journalEntryId || '',
+        reason: item.notes || '' })),
+    ...purchases.filter(item => item.companyId === currentCompany.id && item.documentType === '02' && item.affectedInvoiceNumber)
+      .map(item => ({ id: item.id, kind: 'ND proveedor', number: item.debitNoteNumber || item.invoiceNumber,
+        sourceNumber: item.affectedInvoiceNumber || '', date: item.invoiceDate, party: item.supplierName,
+        amountBs: item.totalAmountBs, amountUsd: item.totalAmountUsd, journalEntryId: item.journalEntryId || '',
+        reason: item.notes || '' }))
+  ].sort((a, b) => b.date.localeCompare(a.date)), [sales, purchases, currentCompany.id]);
+
   const hasReversal = (entryId: string) => journalEntries.some(entry => entry.reversalOfEntryId === entryId) ||
     Boolean(journalEntries.find(entry => entry.id === entryId)?.reversedByEntryId);
 
@@ -483,12 +502,20 @@ export const ReversionFiscalView: React.FC = () => {
               : event.eventType === 'inventory_movement_posted' ? 'Movimiento de Kardex registrado'
               : event.eventType === 'inventory_correction_posted' ? 'Corrección de Kardex registrada'
               : event.eventType === 'accounting_period_closed' ? 'Período contable cerrado'
+              : event.eventType === 'accounting_correction_requested' ? 'Corrección autorizada · solicitud registrada'
+              : event.eventType === 'accounting_correction_executed' ? 'Corrección ejecutada y auditada'
               : event.eventType === 'factory_reset' ? 'Reinicio de datos operativos'
               : event.eventType === 'state_saved' ? 'Estado contable persistido en SQLite'
               : event.eventType.replace(/_/g, ' ');
             return <article key={event.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs space-y-1">
               <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-slate-900">{title}</strong><span className="font-mono text-slate-500">#{event.id} · {event.createdAt}</span></div>
               {details.entryNumber != null && <p>Asiento #{String(details.entryNumber)} · {String(details.date || '')} · {String(details.referenceDoc || '')}</p>}
+              {Boolean(details.actorUsername) && <p><strong>Responsable:</strong> {String(details.actorUsername)} · rol {String(details.actorRole || '')} · usuario #{String(details.actorUserId || '')}</p>}
+              {Boolean(details.correctionType) && <p><strong>Operación:</strong> {String(details.correctionType)} · {String(details.entityType || '')} · registro {String(details.entityId || '')}</p>}
+              {Boolean(details.sourceDocumentRef) && <p><strong>Documento original:</strong> {String(details.sourceDocumentRef)} · <strong>Documento correctivo:</strong> {String(details.correctionDocumentRef || '')}</p>}
+              {Boolean(details.reason) && <p><strong>Motivo:</strong> {String(details.reason)}</p>}
+              {Boolean(details.authorization) && <p><strong>Autorización:</strong> sesión autenticada {String(details.authorization.method || '')} · confirmación expresa {details.authorization.explicitConfirmation ? 'sí' : 'no'}</p>}
+              {Boolean(details.journalEntryId) && <p><strong>Asiento correctivo:</strong> {String(details.journalEntryId)}</p>}
               {Boolean(details.reversalOfEntryId) && <p>Asiento original: {String(details.reversalOfEntryId)}</p>}
               {Boolean(details.invoiceNumber) && <p>Factura: {String(details.invoiceNumber)} · {String(details.collection || '')}</p>}
               {Boolean(details.reversalReason) && <p><strong>Motivo:</strong> {String(details.reversalReason)}</p>}
@@ -502,6 +529,22 @@ export const ReversionFiscalView: React.FC = () => {
           })}
         </div>
         <p className="text-[11px] text-slate-500">Se muestran los últimos 200 eventos. El historial se almacena en SQLite y el reinicio operativo no lo elimina.</p>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div><h2 className="text-base font-bold text-slate-900">Expedientes de notas correctivas</h2><p className="text-xs text-slate-500">NC/ND vinculadas a su documento original y asiento</p></div>
+          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{correctionDocuments.length} documento(s)</span>
+        </div>
+        {correctionDocuments.length === 0 ? <p className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">Todavía no hay notas correctivas vinculadas en esta empresa.</p> :
+          <div className="space-y-2">{correctionDocuments.map(document => <article key={document.id} className="rounded-lg border border-slate-200 p-3 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-slate-900">{document.kind} · {document.number}</strong><span className="font-mono text-slate-500">{document.date}</span></div>
+            <p className="mt-1 text-slate-600">{document.party} · afecta {document.sourceNumber}</p>
+            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-slate-600"><span>Bs. {formatBs(document.amountBs)}</span><span>USD {formatUsd(document.amountUsd)}</span><span>{document.journalEntryId ? 'Asiento vinculado' : 'Sin asiento enlazado'}</span></div>
+            {document.reason && <p className="mt-1"><strong>Motivo:</strong> {document.reason}</p>}
+            <div className="mt-2 flex items-center justify-between gap-2"><span className="text-amber-700">Revisar efecto fiscal y declaración del período</span>
+              {document.journalEntryId && <button type="button" onClick={() => setSelectedId(document.journalEntryId)} className="rounded bg-slate-100 px-2 py-1 font-semibold text-slate-700 hover:bg-slate-200">Consultar asiento</button>}
+            </div>
+          </article>)}</div>}
+      </section>
       </section>
     </div>
   );
