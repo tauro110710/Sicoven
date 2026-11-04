@@ -72,7 +72,7 @@ export interface AccountingAuditEvent {
   createdAt: string;
 }
 
-export type CorrectionCase = { id: string; company_id: string; entity_type: string; entity_id: string; correction_type: string; source_ref: string; correction_ref: string; reason: string; workpaper: string; status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'EXECUTED'; requested_by: number; requested_by_name: string; reviewed_by?: number; reviewed_by_name?: string; review_reason?: string; executed_by?: number; executed_by_name?: string; execution_ref?: string; created_at: string; reviewed_at?: string; executed_at?: string; events: Array<{ id: number; event_type: string; actor_id: number; actor_name: string; reason: string; created_at: string; metadata: Record<string, unknown> }> };
+export type CorrectionCase = { id: string; company_id: string; entity_type: string; entity_id: string; correction_type: string; source_ref: string; correction_ref: string; reason: string; workpaper: string; status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'EXECUTED'; workflow_stage: 'IN_REVIEW' | 'OBSERVATION_REQUIRED' | 'READY_FOR_EXECUTION' | 'CLOSED' | 'COMPLETED'; requested_by: number; requested_by_name: string; reviewed_by?: number; reviewed_by_name?: string; review_reason?: string; executed_by?: number; executed_by_name?: string; execution_ref?: string; created_at: string; reviewed_at?: string; executed_at?: string; events: Array<{ id: number; event_type: string; actor_id: number; actor_name: string; reason: string; created_at: string; metadata: Record<string, unknown> }> };
 type SupportingDocumentEntityType = 'PURCHASE' | 'SALE' | 'JOURNAL_ENTRY' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'INVENTORY_MOVEMENT' | 'BANK_STATEMENT_MOVEMENT' | 'CORRECTION_CASE';
 type SupportingDocument = { id: string; companyId: string; entityType: string; entityId: string; documentType: string; title: string; description?: string | null; fileName: string; mimeType: string; sha256: string; byteSize: number; uploadedBy: string; createdAt: string; status: string };
 type SupportingDocumentDraft = { entityType: SupportingDocumentEntityType; entityId: string; documentType: string; title: string; description?: string; replacesDocumentId?: string };
@@ -83,6 +83,8 @@ interface AccountingContextType {
   createCorrectionCase: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'INVENTORY_PRODUCT' | 'BCV_RATE'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason: string; workpaperNote: string }) => Promise<CorrectionCase>;
   listCorrectionCases: () => Promise<CorrectionCase[]>;
   reviewCorrectionCase: (input: { caseId: string; decision: 'APPROVE' | 'REJECT'; reason: string }) => Promise<CorrectionCase>;
+  observeCorrectionCase: (input: { caseId: string; reason: string }) => Promise<CorrectionCase>;
+  resubmitCorrectionCase: (input: { caseId: string; reason: string }) => Promise<CorrectionCase>;
   executeCorrectionCase: (input: { caseId: string; executionRef: string; reason: string }) => Promise<CorrectionCase>;
   listSupportingDocuments: (filters: { entityType?: SupportingDocumentEntityType; entityId?: string }) => Promise<SupportingDocument[]>;
   attachSupportingDocument: (input: SupportingDocumentDraft) => Promise<{ ok: boolean; canceled?: boolean; document?: Pick<SupportingDocument, 'id' | 'companyId' | 'entityType' | 'entityId' | 'documentType' | 'title' | 'fileName' | 'mimeType' | 'sha256' | 'byteSize' | 'status' | 'createdAt'> }>;
@@ -449,6 +451,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const store = window.sicovenStore as typeof window.sicovenStore & { reviewCorrectionCase?: (sessionToken:string,payload:typeof input)=>Promise<CorrectionCase> };
     if (!store?.reviewCorrectionCase) throw new Error('La revisión de expedientes no está disponible.');
     return store.reviewCorrectionCase(token,input);
+  };
+  const observeCorrectionCase = async (input: {caseId:string;reason:string}): Promise<CorrectionCase> => {
+    const store = window.sicovenStore as typeof window.sicovenStore & { observeCorrectionCase?: (sessionToken:string,payload:typeof input)=>Promise<CorrectionCase> };
+    if (!store?.observeCorrectionCase) throw new Error('La observación formal de expedientes no está disponible.');
+    return store.observeCorrectionCase(token,input);
+  };
+  const resubmitCorrectionCase = async (input: {caseId:string;reason:string}): Promise<CorrectionCase> => {
+    const store = window.sicovenStore as typeof window.sicovenStore & { resubmitCorrectionCase?: (sessionToken:string,payload:typeof input)=>Promise<CorrectionCase> };
+    if (!store?.resubmitCorrectionCase) throw new Error('La subsanación y reenvío de expedientes no está disponible.');
+    return store.resubmitCorrectionCase(token,input);
   };
   const executeCorrectionCase = async (input: {caseId:string;executionRef:string;reason:string}): Promise<CorrectionCase> => {
     const store = window.sicovenStore as typeof window.sicovenStore & { executeCorrectionCase?: (sessionToken:string,payload:typeof input)=>Promise<CorrectionCase> };
@@ -5270,6 +5282,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         createCorrectionCase,
         listCorrectionCases,
         reviewCorrectionCase,
+        observeCorrectionCase,
+        resubmitCorrectionCase,
         executeCorrectionCase,
         listSupportingDocuments,
         attachSupportingDocument,
