@@ -6,7 +6,7 @@ const {initializeCorrectionWorkflow,registerCorrectionRequest,reviewCorrectionRe
 function setup(){const db=new Database(':memory:');db.exec('CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime(\'now\')));');initializeCorrectionWorkflow(db);return db;}
 const input={companyId:'co-1',entityType:'SALE',entityId:'sale-1',correctionType:'ANULACION',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001',reason:'Se detectó una duplicidad documental que debe corregirse.',workpaperNote:'Conciliación con libro de ventas, comprobante fiscal y asiento relacionado.'};
 const admin=(id,username)=>({id,username,role:'admin'});
-test('workflow enforces preparer-reviewer-executor segregation and append-only events',()=>{
+test('single accountant can approve and execute with immutable append-only events',()=>{
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'preparador'));
   assert.equal(requested.status,'PENDING_REVIEW');
@@ -15,8 +15,8 @@ test('workflow enforces preparer-reviewer-executor segregation and append-only e
   assert.equal(approved.status,'APPROVED');
   requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(1,'contador'));
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Se aplicó el documento correctivo.'},admin(1,'contador')),/ID y la colección exacta/);
-  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'FAC-001',reason:'Se intenta reutilizar la referencia original.'},admin(3,'ejecutor')),/misma del documento original/);
-  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-002',reason:'La referencia no coincide con el documento solicitado.'},admin(3,'ejecutor')),/no coincide con el documento correctivo/);
+  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'FAC-001',reason:'Se intenta reutilizar la referencia original.'},admin(1,'contador')),/misma del documento original/);
+  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-002',reason:'La referencia no coincide con el documento solicitado.'},admin(1,'contador')),/no coincide con el documento correctivo/);
   const executed=markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'El contador confirmó la NC persistida y conciliada.',evidenceRecordId:'credit-note-1',evidenceCollection:'sales'},admin(1,'contador'));
   assert.equal(executed.status,'EXECUTED');
   assert.deepEqual(executed.events.map(e=>e.event_type),['REQUESTED','APPROVED','EXECUTION_STARTED','EXECUTED']);
@@ -71,7 +71,7 @@ test('execution transition rolls back when the general audit ledger rejects the 
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
   reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Revisión completa con soportes suficientes.'},admin(2,'revisor'));
-  requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(3,'ejecutor'));
+  requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(1,'contador'));
   db.exec("CREATE TRIGGER reject_execution_audit BEFORE INSERT ON audit_events WHEN NEW.event_type='accounting_correction_case_executed' BEGIN SELECT RAISE(ABORT,'execution audit failure'); END;");
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Ejecución documentada con soporte persistido.',evidenceRecordId:'credit-note-1',evidenceCollection:'sales'},admin(3,'ejecutor')),/execution audit failure/);
   const current=getCorrectionCase(db,requested.id);
@@ -173,7 +173,7 @@ test('execution cannot be marked complete without exact evidence identity and co
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
   reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Revisión completa con soportes suficientes.'},admin(2,'revisor'));
-  requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(3,'ejecutor'));
+  requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(1,'contador'));
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Documento correctivo aplicado y conciliado.'},admin(3,'ejecutor')),/ID y la colección exacta/);
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Documento correctivo aplicado y conciliado.',evidenceRecordId:'credit-note-1',evidenceCollection:'purchases'},admin(3,'ejecutor')),/ID y la colección exacta/);
   assert.equal(getCorrectionCase(db,requested.id).status,'APPROVED');
@@ -213,7 +213,7 @@ test('legacy correction cases migrate to workflow stages without changing their 
  }finally{db.close();}
 });
 
-test('requester can withdraw an unexecuted case and withdrawal is terminal and auditable',()=>{
+test('single accountant can withdraw an unexecuted case and withdrawal is terminal and auditable',()=>{
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
   assert.throws(()=>withdrawCorrectionRequest(db,{caseId:requested.id,reason:'Se decide retirar la solicitud por cambio de criterio.'},admin(2,'otro')),/solicitante original/);
@@ -277,17 +277,15 @@ test('ISLR reversal events are governed by the purchase or journal correction ca
  assert.equal(findLinkedCorrectionEvidence(state,item,'islr-reversal'),null);
 });
 
-test('correction generators require one matching approved case and an independent executor',()=>{
+test('correction generators require one matching approved case and the authenticated accountant',()=>{
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
   const gateInput={companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'};
   assert.throws(()=>requireApprovedCorrectionCase(db,gateInput,admin(3,'ejecutor')),/No existe un expediente formal aprobado/);
-  reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Se verificó la solicitud y los soportes.'},admin(2,'revisor'));
-  assert.throws(()=>requireApprovedCorrectionCase(db,gateInput,admin(1,'solicitante')),/distinto del solicitante y del aprobador/);
-  assert.throws(()=>requireApprovedCorrectionCase(db,gateInput,admin(2,'revisor')),/distinto del solicitante y del aprobador/);
+  reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'El contador verificó la solicitud y los soportes.'},admin(1,'contador'));
+  assert.deepEqual(requireApprovedCorrectionCase(db,gateInput,admin(1,'contador')),{ok:true,caseId:requested.id,correctionType:'ANULACION',resumed:false});
   assert.throws(()=>requireApprovedCorrectionCase(db,{...gateInput,correctionDocumentRef:'NC-999'},admin(3,'ejecutor')),/No existe un expediente formal aprobado/);
-  assert.deepEqual(requireApprovedCorrectionCase(db,gateInput,admin(3,'ejecutor')),{ok:true,caseId:requested.id,correctionType:'ANULACION',resumed:false});
-  assert.deepEqual(requireApprovedCorrectionCase(db,gateInput,admin(3,'ejecutor')),{ok:true,caseId:requested.id,correctionType:'ANULACION',resumed:true});
+  assert.deepEqual(requireApprovedCorrectionCase(db,gateInput,admin(1,'contador')),{ok:true,caseId:requested.id,correctionType:'ANULACION',resumed:true});
   assert.throws(()=>registerCorrectionRequest(db,input,admin(4,'solicitante-2')),/Ya existe un expediente activo/);
  }finally{db.close();}
 });
@@ -295,22 +293,22 @@ test('correction generators require one matching approved case and an independen
 test('execution authorization binds operator/reference and permits audited recovery before a document is persisted',()=>{
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
-  reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'La evidencia y el papel de trabajo fueron revisados.'},admin(2,'revisor'));
+  reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'El contador verificó evidencia y papel de trabajo.'},admin(1,'contador'));
   requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(3,'ejecutor'));
-  assert.deepEqual(requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(3,'contador-en-sesion-restaurada')),{ok:true,caseId:requested.id,correctionType:'ANULACION',resumed:false});
+  assert.deepEqual(requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(1,'contador')),{ok:true,caseId:requested.id,correctionType:'ANULACION',resumed:false});
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'El contador intenta confirmar sin el ID documental.',evidenceCollection:'sales'},admin(3,'contador')),/ID y la colección exacta/);
   const observed=observeCorrectionRequest(db,{caseId:requested.id,reason:'El contador detectó que la emisión no llegó a persistirse.'},admin(1,'contador'));
   assert.equal(observed.workflow_stage,'OBSERVATION_REQUIRED');
   assert.equal(observed.execution_started_at,null);
   assert.equal(observed.events.at(-1).metadata.previousExecutionStartedBy,3);
   const resubmitted=resubmitCorrectionRequest(db,{caseId:requested.id,reason:'El contador corrige la incidencia técnica y reenvía el expediente.'},admin(1,'contador'));
-  reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Se revisó nuevamente el expediente subsanado.'},admin(5,'revisor-3'));
-  const authorization=requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(6,'nuevo-ejecutor'));
+  reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'El contador revisó nuevamente el expediente subsanado.'},admin(1,'contador'));
+  const authorization=requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(1,'contador'));
   assert.equal(authorization.caseId,requested.id);
   assert.equal(getCorrectionCase(db,requested.id).workflow_stage,'READY_FOR_EXECUTION');
  }finally{db.close();}
 });
-test('execution authorization rolls back its stage and event when the audit ledger fails',()=>{
+test('execution authorization rolls back its stage and event when the audit ledger fails for the single accountant',()=>{
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
   reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'La evidencia y el papel de trabajo fueron revisados.'},admin(2,'revisor'));
