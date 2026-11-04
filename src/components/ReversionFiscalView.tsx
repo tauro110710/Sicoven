@@ -598,6 +598,9 @@ export const ReversionFiscalView: React.FC = () => {
             const details = event.details || {};
             const authorizationDetails = details.authorization && typeof details.authorization === 'object'
               ? details.authorization as Record<string, unknown> : {};
+            const actorDetails = details.actor && typeof details.actor === 'object'
+              ? details.actor as Record<string, unknown> : {};
+            const actorName = details.actorUsername || actorDetails.username;
             const title = event.eventType === 'journal_entry_reversed' ? 'Contra-asiento registrado'
               : event.eventType === 'journal_entry_posted' ? 'Asiento contabilizado'
               : event.eventType === 'fiscal_document_reversal_marked' ? 'Documento fiscal marcado como reversado contablemente'
@@ -616,7 +619,7 @@ export const ReversionFiscalView: React.FC = () => {
             return <article key={event.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs space-y-1">
               <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-slate-900">{title}</strong><span className="font-mono text-slate-500">#{event.id} · {event.createdAt}</span></div>
               {details.entryNumber != null && <p>Asiento #{String(details.entryNumber)} · {String(details.date || '')} · {String(details.referenceDoc || '')}</p>}
-              {Boolean(details.actorUsername) && <p><strong>Responsable:</strong> {String(details.actorUsername)} · rol {String(details.actorRole || '')} · usuario #{String(details.actorUserId || '')}</p>}
+              {Boolean(actorName) && <p><strong>Responsable:</strong> {String(actorName)} · rol {String(details.actorRole || '')} · usuario #{String(details.actorUserId || actorDetails.userId || '')}</p>}
               {Boolean(details.correctionType) && <p><strong>Operación:</strong> {String(details.correctionType)} · {String(details.entityType || '')} · registro {String(details.entityId || '')}</p>}
               {details.previousRate != null && <p><strong>Tasa BCV:</strong> {String(details.previousRate)} → {String(details.newRate)} Bs/USD · vigencia {String(details.effectiveDate || 'sin fecha indicada')}</p>}
               {Boolean(details.sourceDocumentRef) && <p><strong>Documento original:</strong> {String(details.sourceDocumentRef)} · <strong>Documento correctivo:</strong> {String(details.correctionDocumentRef || '')}</p>}
