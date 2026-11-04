@@ -61,6 +61,10 @@ La Providencia SNAT/2026/00093 (Gaceta Oficial 43.484) establece en su artículo
 - Aplicar el texto VEN-NIF adoptado por la entidad (GE o PYME), BA VEN-NIF vigente y versión incorporada al marco venezolano; no asumir adopción automática de toda norma NIIF internacional.
 - AIA, reexpresión y revelaciones requieren validación de contador público colegiado para el caso concreto.
 
+### Código Orgánico Tributario
+
+El Código Orgánico Tributario publicado en Gaceta Oficial N° 6.507 Extraordinario (29-01-2020) debe ser considerado en el circuito fiscal. Su artículo 27 establece la responsabilidad del agente por los importes retenidos/percibidos y contempla, bajo sus supuestos, la solicitud de reintegro o compensación cuando se enteró una retención efectuada sin base legal. El artículo 195 regula la presentación de declaración omitida o rectificación de la presentada dentro de los quince días hábiles siguientes a la notificación de un Acta de Reparo. **Ese artículo no debe convertirse en una regla genérica de rectificación voluntaria automática dentro del software**: el flujo debe identificar el procedimiento legal concreto aplicable al tributo y situación.
+
 ### Retenciones y declaraciones
 - Una reversión contable no elimina comprobante de retención, no deshace enteramiento ni rectifica declaración.
 - Si documento fue declarado o pagado, conservar snapshot, período, acuse, pago/conciliación y decisión fiscal. No calcular reintegro/compensación ni marcar resuelto sin procedimiento y fuente primaria vigente.
