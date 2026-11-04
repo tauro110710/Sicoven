@@ -19,6 +19,8 @@ function fixture() {
     purchases: [{ id: 'purchase-1', companyId: 'co-1', invoiceNumber: 'FC-001' }],
     sales: [], journalEntries: [], vatVouchers: [], islrVouchers: [], movements: [], bankStatementMovements: []
   }));
+  db.exec("CREATE TABLE accounting_correction_cases(id TEXT PRIMARY KEY,company_id TEXT NOT NULL)");
+  db.prepare('INSERT INTO accounting_correction_cases(id,company_id) VALUES(?,?)').run('case-1','co-1');
   initializeDocumentVaultSchema(db);
   const storageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-docs-'));
   return { db, storageDir, close() { db.close(); fs.rmSync(storageDir, { recursive: true, force: true }); } };
@@ -107,4 +109,14 @@ test('document review records an explicit reason and refuses a substituted docum
     assert.equal(reviewed.status, 'OBSERVATION_REQUIRED');
     assert.equal(listDocuments(h.db, { companyId: 'co-1' }).find(row => row.id === second.document.id).status, 'OBSERVATION_REQUIRED');
   } finally { h.close(); }
+});
+
+test('correction case evidence is attached to the exact case and company',()=>{
+ const h=fixture();try{
+  const result=attachDocument(h.db,{storageDir:h.storageDir,input:{companyId:'co-1',entityType:'CORRECTION_CASE',entityId:'case-1',documentType:'PAPEL_TRABAJO',title:'Conciliación de corrección',fileName:'soporte.pdf'},buffer:pdf,actor});
+  assert.equal(result.document.entityType,'CORRECTION_CASE');
+  assert.equal(result.document.entityId,'case-1');
+  assert.equal(listDocuments(h.db,{companyId:'co-1',entityType:'CORRECTION_CASE',entityId:'case-1'}).length,1);
+  assert.throws(()=>attachDocument(h.db,{storageDir:h.storageDir,input:{companyId:'other',entityType:'CORRECTION_CASE',entityId:'case-1',documentType:'PAPEL_TRABAJO',title:'Soporte',fileName:'soporte.pdf'},buffer:pdf,actor}),/empresa asociada/);
+ }finally{h.close();}
 });
