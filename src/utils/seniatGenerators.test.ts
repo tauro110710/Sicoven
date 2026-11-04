@@ -432,12 +432,12 @@ test('IVA TXT rounds exported monetary amounts to integers without mutating sour
   });
   // Las validaciones y cálculos fiscales conservan precisión decimal;
   // únicamente la representación del archivo se redondea a enteros.
-  const fields = generateSeniatIvaTxt(company, [sourceVoucher], [purchase()]).split('\\t');
+  const fields = generateSeniatIvaTxt(company, [sourceVoucher], [purchase()]).split('\t');
   assert.deepEqual([fields[8], fields[9], fields[10], fields[13], fields[14]], ['1161', '1001', '120', '0', '16']);
   assert.equal(sourceVoucher.totalAmountBs, 1161.07);
   assert.equal(sourceVoucher.taxableBaseBs, 1000.5);
   assert.equal(sourceVoucher.vatWithheldBs, 120.06);
-  assert.ok(fields.every(value => !/\\d+\\.\\d+/.test(value)));
+  assert.ok(fields.every(value => !/\d+\.\d+/.test(value)));
 });
 
 test('IVA TXT column 11 exports the withheld VAT amount, not total VAT caused', () => {
