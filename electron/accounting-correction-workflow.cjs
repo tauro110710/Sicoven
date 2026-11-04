@@ -139,7 +139,7 @@ function reviewCorrectionRequest(db, {caseId,decision,reason}, actor) {
   tx();
   return getCorrectionCase(db,String(caseId));
 }
-function markCorrectionExecuted(db, {caseId,executionRef,reason}, actor) {
+function markCorrectionExecuted(db, {caseId,executionRef,reason,evidenceRecordId,evidenceCollection}, actor) {
   requireAdmin(actor);
   if (String(reason || '').trim().length < 15) throw new Error('La ejecución requiere una justificación de al menos 15 caracteres.');
   const at = new Date().toISOString();
@@ -155,9 +155,19 @@ function markCorrectionExecuted(db, {caseId,executionRef,reason}, actor) {
     if (normalizedExecutionRef === String(item.source_ref || '').trim().toLocaleUpperCase()) {
       throw new Error('La referencia de ejecución no puede ser la misma del documento original.');
     }
+    const expectedCorrectionRef = String(item.correction_ref || '').trim();
+    if (expectedCorrectionRef && expectedCorrectionRef !== 'PENDIENTE DE DOCUMENTO CORRECTIVO' &&
+        normalizedExecutionRef !== expectedCorrectionRef.toLocaleUpperCase()) {
+      throw new Error('La referencia ejecutada no coincide con el documento correctivo indicado en la solicitud.');
+    }
+    const linkedEvidenceId = String(evidenceRecordId || '').trim();
+    const linkedEvidenceCollection = String(evidenceCollection || '').trim();
     db.prepare("UPDATE accounting_correction_cases SET status='EXECUTED',executed_by=?,executed_by_name=?,execution_ref=?,executed_at=? WHERE id=? AND status='APPROVED'")
       .run(Number(actor.id),String(actor.username || ''),String(executionRef).trim(),at,item.id);
-    appendEvent(db, tx, {id:item.id,type:'EXECUTED',actor,reason:String(reason).trim(),metadata:{executionRef:String(executionRef).trim()},at});
+    appendEvent(db, tx, {id:item.id,type:'EXECUTED',actor,reason:String(reason).trim(),metadata:{
+      executionRef:String(executionRef).trim(),
+      ...(linkedEvidenceId ? {evidenceRecordId:linkedEvidenceId,evidenceCollection:linkedEvidenceCollection} : {})
+    },at});
   });
   tx();
   return getCorrectionCase(db,String(caseId));
