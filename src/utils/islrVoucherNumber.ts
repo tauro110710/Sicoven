@@ -41,3 +41,25 @@ export function formatIslrVoucherNumber(period: string, sequence: number, issueD
   }
   return `${period}${String(sequence).padStart(8, '0')}`;
 }
+
+/**
+ * Recupera el mayor correlativo ya emitido para un período, aceptando
+ * los dos formatos históricos/futuros. Nunca deduce el siguiente número
+ * a partir del total de documentos, porque podrían existir huecos.
+ */
+export function getMaxIslrVoucherSequence(period: string, voucherNumbers: readonly string[]): number {
+  if (!/^\\d{6}$/.test(period)) {
+    throw new Error('El período ISLR debe tener formato AAAAMM.');
+  }
+  let maximum = 0;
+  for (const value of voucherNumbers) {
+    const legacy = value.match(new RegExp('^ISLR-' + period + '-(\\\\d+)$'));
+    const current = value.match(new RegExp('^' + period + '(\\\\d{8})$'));
+    const raw = legacy?.[1] ?? current?.[1];
+    if (raw !== undefined) {
+      const sequence = Number(raw);
+      if (Number.isSafeInteger(sequence) && sequence > maximum) maximum = sequence;
+    }
+  }
+  return maximum;
+}
