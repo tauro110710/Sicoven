@@ -3794,7 +3794,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
       const isUsdAccount = statementBank.currency === 'USD';
       const expectedAmount = isUsdAccount ? statement.amountUsd : statement.amountBs;
-      const tolerance = isUsdAccount ? 0.000001 : 0.05;
       const hasExactBankLine = linkedEntry.items.some(item => {
         if (item.accountCode !== statementBank.accountCode) return false;
         const debit = isUsdAccount ? Number(item.debitUsd) : Number(item.debitBs);
@@ -3802,7 +3801,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const expectsDebit = statement.type === 'CREDIT';
         const amount = expectsDebit ? debit : credit;
         const opposite = expectsDebit ? credit : debit;
-        return Math.abs(amount - expectedAmount) < tolerance && opposite === 0;
+        const sameAmount = isUsdAccount
+          ? Math.round(amount * 1_000_000) === Math.round(Number(expectedAmount) * 1_000_000)
+          : Math.round(amount * 100) === Math.round(Number(expectedAmount) * 100);
+        return sameAmount && opposite === 0;
       });
       if (!hasExactBankLine) {
         throw new Error('El asiento no coincide con la cuenta, el importe y la naturaleza débito/crédito del movimiento bancario.');
@@ -3887,10 +3889,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const amount = isUsdAccount ? stmt.amountUsd : stmt.amountBs;
         const debit = isUsdAccount ? item.debitUsd : item.debitBs;
         const credit = isUsdAccount ? item.creditUsd : item.creditBs;
-        const tolerance = isUsdAccount ? 0.000001 : 0.05;
+        const sameAmount = isUsdAccount
+          ? Math.round(Number(amount) * 1_000_000) === Math.round(Number(stmt.amountUsd) * 1_000_000)
+          : Math.round(Number(amount) * 100) === Math.round(Number(stmt.amountBs) * 100);
         return stmt.type === 'CREDIT'
-          ? Math.abs(debit - amount) < tolerance && credit === 0
-          : Math.abs(credit - amount) < tolerance && debit === 0;
+          ? sameAmount && credit === 0
+          : sameAmount && debit === 0;
       });
 
     for (const stmt of statementRows) {
