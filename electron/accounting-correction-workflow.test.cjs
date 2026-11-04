@@ -222,6 +222,8 @@ test('requester can withdraw an unexecuted case and withdrawal is terminal and a
   assert.throws(()=>reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Se revisa la solicitud retirada por el usuario.'},admin(2,'revisor')),/ya fue revisado|no está en revisión/);
   assert.throws(()=>resubmitCorrectionRequest(db,{caseId:requested.id,reason:'Se desea volver a enviar la solicitud retirada.'},admin(1,'solicitante')),/no tiene observaciones pendientes/);
   assert.throws(()=>withdrawCorrectionRequest(db,{caseId:requested.id,reason:'Se intenta retirar una segunda vez.'},admin(1,'solicitante')),/cerrado, ejecutado o retirado/);
+  const reopened=registerCorrectionRequest(db,input,admin(4,'solicitante-2'));
+  assert.equal(reopened.status,'PENDING_REVIEW');
  }finally{db.close();}
 });
 test('requester may withdraw an approved case before any execution',()=>{
@@ -280,8 +282,6 @@ test('correction generators require one matching approved case and an independen
   assert.throws(()=>requireApprovedCorrectionCase(db,gateInput,admin(2,'revisor')),/distinto del solicitante y del aprobador/);
   assert.throws(()=>requireApprovedCorrectionCase(db,{...gateInput,correctionDocumentRef:'NC-999'},admin(3,'ejecutor')),/No existe un expediente formal aprobado/);
   assert.deepEqual(requireApprovedCorrectionCase(db,gateInput,admin(3,'ejecutor')),{ok:true,caseId:requested.id,correctionType:'ANULACION'});
-  const duplicate=registerCorrectionRequest(db,input,admin(4,'solicitante-2'));
-  reviewCorrectionRequest(db,{caseId:duplicate.id,decision:'APPROVE',reason:'Segundo expediente duplicado aprobado.'},admin(5,'revisor-2'));
-  assert.throws(()=>requireApprovedCorrectionCase(db,gateInput,admin(6,'ejecutor')),/más de un expediente aprobado/);
+  assert.throws(()=>registerCorrectionRequest(db,input,admin(4,'solicitante-2')),/Ya existe un expediente activo/);
  }finally{db.close();}
 });
