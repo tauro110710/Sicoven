@@ -235,7 +235,12 @@ function recordVatFiscalIncidentEvent(db, input, actor) {
   const priorMovements = JSON.parse(incident.bank_movement_ids_json);
   if (references.declarationEventIds.some(id => !priorEvents.includes(id))) throw new Error('El evento no puede incorporar referencias fiscales ajenas al expediente original.');
   if (references.bankMovementIds.some(id => !priorMovements.includes(id))) throw new Error('El evento no puede incorporar movimientos bancarios ajenos al expediente original.');
-  const externalReference = input.externalReference ? requiredText(input.externalReference, 'Referencia externa', 500) : null;
+  const externalReference = input.externalReference ? requiredText(input.externalReference, 'Referencia externa', 500, 4) : null;
+  if (eventType === 'ACTION_RECORDED' && !externalReference &&
+      !references.journalEntryId && references.declarationEventIds.length === 0 &&
+      references.bankMovementIds.length === 0) {
+    throw new Error('Una actuación fiscal requiere al menos una referencia externa, asiento correctivo, evento de declaración o movimiento bancario verificable.');
+  }
   const id = crypto.randomUUID(), now = new Date().toISOString();
   const save = db.transaction(() => {
     db.prepare(`INSERT INTO vat_fiscal_incident_events
