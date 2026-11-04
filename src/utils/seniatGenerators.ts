@@ -349,8 +349,16 @@ export function downloadFile(
   contentType: string = 'text/plain;charset=utf-8',
   encoding: 'utf-8' | 'iso-8859-1' = 'utf-8'
 ) {
-  const payload = encoding === 'iso-8859-1' ? encodeIso88591(content) : content;
-  const blob = new Blob([payload], { type: contentType });
+  const blob = encoding === 'iso-8859-1'
+    ? (() => {
+        const bytes = encodeIso88591(content);
+        // BlobPart requires an ArrayBuffer here; copy the exact ISO-8859-1
+        // bytes so TypeScript 7 does not widen the view to ArrayBufferLike.
+        const buffer = new ArrayBuffer(bytes.byteLength);
+        new Uint8Array(buffer).set(bytes);
+        return new Blob([buffer], { type: contentType });
+      })()
+    : new Blob([content], { type: contentType });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
