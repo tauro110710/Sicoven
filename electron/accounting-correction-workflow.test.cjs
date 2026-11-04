@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
-const {initializeCorrectionWorkflow,registerCorrectionRequest,reviewCorrectionRequest,markCorrectionExecuted,getCorrectionCase,listCorrectionCases,findLinkedCorrectionEvidence}=require('./accounting-correction-workflow.cjs');
+const {initializeCorrectionWorkflow,registerCorrectionRequest,reviewCorrectionRequest,markCorrectionExecuted,observeCorrectionRequest,resubmitCorrectionRequest,getCorrectionCase,listCorrectionCases,findLinkedCorrectionEvidence}=require('./accounting-correction-workflow.cjs');
 function setup(){const db=new Database(':memory:');db.exec('CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime(\'now\')));');initializeCorrectionWorkflow(db);return db;}
 const input={companyId:'co-1',entityType:'SALE',entityId:'sale-1',correctionType:'ANULACION',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001',reason:'Se detectó una duplicidad documental que debe corregirse.',workpaperNote:'Conciliación con libro de ventas, comprobante fiscal y asiento relacionado.'};
 const admin=(id,username)=>({id,username,role:'admin'});
@@ -102,4 +102,39 @@ test('journal reversal evidence requires reversalOfEntryId and exact reference',
  ]};
  assert.equal(findLinkedCorrectionEvidence(state,item,'ASI-REV-001').id,'entry-reversal');
  assert.equal(findLinkedCorrectionEvidence(state,item,'ASI-001'),null);
+});
+
+test('observation returns the case to its requester and resubmission restarts independent review',()=>{
+ const db=setup();try{
+  const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
+  const observed=observeCorrectionRequest(db,{caseId:requested.id,reason:'Falta el soporte fiscal legible y la conciliación del asiento.'},admin(2,'revisor-1'));
+  assert.equal(observed.status,'PENDING_REVIEW');
+  assert.equal(observed.workflow_stage,'OBSERVATION_REQUIRED');
+  assert.equal(observed.reviewed_by,2);
+  assert.throws(()=>resubmitCorrectionRequest(db,{caseId:requested.id,reason:'Se completó la documentación requerida y se adjunta el soporte.'},admin(3,'otro-admin')),/solicitante original/);
+  const resubmitted=resubmitCorrectionRequest(db,{caseId:requested.id,reason:'Se completó la documentación requerida y se adjunta el soporte.'},admin(1,'solicitante'));
+  assert.equal(resubmitted.workflow_stage,'IN_REVIEW');
+  assert.equal(resubmitted.reviewed_by,null);
+  assert.deepEqual(resubmitted.events.map(e=>e.event_type),['REQUESTED','OBSERVED','RESUBMITTED']);
+  const approved=reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Se verificaron los soportes nuevos y la conciliación.'},admin(3,'revisor-2'));
+  assert.equal(approved.workflow_stage,'READY_FOR_EXECUTION');
+  const executed=markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Documento correctivo aplicado y conciliado.',evidenceRecordId:'credit-note-1',evidenceCollection:'sales'},admin(4,'ejecutor'));
+  assert.equal(executed.workflow_stage,'COMPLETED');
+  assert.deepEqual(executed.events.map(e=>e.event_type),['REQUESTED','OBSERVED','RESUBMITTED','APPROVED','EXECUTED']);
+ }finally{db.close();}
+});
+test('observation and resubmission are append-only and roll back with audit failures',()=>{
+ const db=setup();try{
+  const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
+  db.exec("CREATE TRIGGER reject_observation_audit BEFORE INSERT ON audit_events WHEN NEW.event_type='accounting_correction_case_observed' BEGIN SELECT RAISE(ABORT,'observation audit failure'); END;");
+  assert.throws(()=>observeCorrectionRequest(db,{caseId:requested.id,reason:'Falta evidencia legible y conciliación del asiento.'},admin(2,'revisor')),/observation audit failure/);
+  assert.equal(getCorrectionCase(db,requested.id).workflow_stage,'IN_REVIEW');
+  db.exec('DROP TRIGGER reject_observation_audit');
+  observeCorrectionRequest(db,{caseId:requested.id,reason:'Falta evidencia legible y conciliación del asiento.'},admin(2,'revisor'));
+  db.exec("CREATE TRIGGER reject_resubmission_audit BEFORE INSERT ON audit_events WHEN NEW.event_type='accounting_correction_case_resubmitted' BEGIN SELECT RAISE(ABORT,'resubmission audit failure'); END;");
+  assert.throws(()=>resubmitCorrectionRequest(db,{caseId:requested.id,reason:'Se incorpora soporte adicional y conciliación completa.'},admin(1,'solicitante')),/resubmission audit failure/);
+  assert.equal(getCorrectionCase(db,requested.id).workflow_stage,'OBSERVATION_REQUIRED');
+  assert.throws(()=>db.prepare('UPDATE accounting_correction_case_workflow_events SET reason=? WHERE id=1').run('alterado'),/append-only/);
+  assert.throws(()=>db.prepare('DELETE FROM accounting_correction_case_workflow_events WHERE id=1').run(),/append-only/);
+ }finally{db.close();}
 });
