@@ -43,6 +43,8 @@ export interface PurchaseCreditNoteRequest {
   creditNoteNumber: string;
   controlNumber: string;
   reason: string;
+  fiscalEmissionMedium: 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY';
+  sameMediumAsOriginal: boolean;
 }
 
 export interface PurchaseCreditNoteDraftLine {
@@ -63,6 +65,8 @@ export interface PurchaseCreditNoteDraft {
   creditNoteNumber: string;
   controlNumber: string;
   reason: string;
+  fiscalEmissionMedium: 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY';
+  sameMediumAsOriginal: boolean;
   closedThroughDate?: string;
 }
 
@@ -81,6 +85,12 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
   }
   if (draft.closedThroughDate && draft.returnDate <= draft.closedThroughDate) {
     throw new Error('La fecha de la nota pertenece a un período contable cerrado.');
+  }
+  if (!['DIGITAL', 'FISCAL_MACHINE', 'CONTINGENCY'].includes(draft.fiscalEmissionMedium) || draft.sameMediumAsOriginal !== true) {
+    throw new Error('La NC debe emitirse por el mismo medio de la factura original y esa condición debe confirmarse expresamente.');
+  }
+  if (!String(purchase.invoiceNumber || '').trim() || !String(purchase.controlNumber || '').trim() || Number(purchase.totalAmountBs || 0) <= 0) {
+    throw new Error('La factura original debe conservar fecha, número, control y monto para referenciar legalmente la NC.');
   }
   if (!String(draft.creditNoteNumber || '').trim() || !String(draft.controlNumber || '').trim() || String(draft.reason || '').trim().length < 10) {
     throw new Error('La nota requiere número, control y una justificación de al menos 10 caracteres.');
