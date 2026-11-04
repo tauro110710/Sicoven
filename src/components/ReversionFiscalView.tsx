@@ -7,7 +7,7 @@ import type { VatFiscalIncident } from '../types/vatFiscalIncidents';
 
 export const ReversionFiscalView: React.FC = () => {
   const {
-    currentCompany, accounts, journalEntries, sales, purchases, movements, products, addMovement, addPurchaseCreditNote,
+    currentCompany, accounts, journalEntries, sales, purchases, movements, products, vatVouchers, addMovement, addPurchaseCreditNote,
     bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent
   } = useAccounting();
   const now = new Date();
@@ -81,8 +81,7 @@ export const ReversionFiscalView: React.FC = () => {
     if (!note || incidentCreateReason.trim().length < 10 || incidentCreating) return;
     const original = purchases.find(item => item.id === note.originalPurchaseId && item.companyId === currentCompany.id);
     if (!original) { setIncidentError('La nota no conserva una factura original verificable.'); return; }
-    const voucher = (useAccounting as unknown as { vatVouchers?: any }).vatVouchers;
-    const affectedVoucher = Array.isArray(voucher) ? voucher.find(item => item.companyId === currentCompany.id && item.purchaseRecordId === original.id) : undefined;
+    const affectedVoucher = vatVouchers.find(item => item.companyId === currentCompany.id && item.purchaseRecordId === original.id);
     setIncidentCreating(true);
     try {
       await createVatFiscalIncident({
