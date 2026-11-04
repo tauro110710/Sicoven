@@ -33,8 +33,9 @@ export interface SaleCorrectionNoteAmounts {
 
 /**
  * Valida y calcula una NC/ND parcial de venta. No emite el documento ni muta
- * el original. Los casos con retenciones, IGTF, inventario o contado se bloquean
- * hasta que exista un circuito específico para sus efectos auxiliares/fiscales.
+ * el original. Retenciones, IGTF y ventas de contado se bloquean hasta completar
+ * sus circuitos específicos. Las ventas con inventario exigen devolución física
+ * total y conciliada de Kardex/costo en la capa de contexto y en el validador SQLite.
  */
 export function calculateSaleCorrectionNote(request: SaleCorrectionNoteRequest): SaleCorrectionNoteAmounts {
   const { sourceSale } = request;
