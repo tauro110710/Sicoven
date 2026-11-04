@@ -65,7 +65,7 @@ const zeroTotals = (): CashFlowTotals => ({
 const isLinkedAnnualOpening = (entry: JournalEntry) =>
   entry.type === 'APERTURA' &&
   entry.exerciseLink?.nextPeriodStartDate === entry.date &&
-  /^\\d{4}-\\d{2}-\\d{2}$/.test(entry.date);
+  isValidIsoDate(entry.date);
 const isAnnualOpening = (entry: JournalEntry, year: number) =>
   isLinkedAnnualOpening(entry) && entry.date === String(year).padStart(4, '0') + '-01-01';
 const counterpartAmount = (
