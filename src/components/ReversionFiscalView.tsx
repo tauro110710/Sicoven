@@ -276,6 +276,9 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   const selectedPurchaseHasInventory = Boolean(selectedPurchaseForCorrection && (
     selectedPurchaseForCorrection.inventoryLines?.length ||
     selectedPurchaseEntryForCorrection?.items.some(line=>String(line.accountCode || '').startsWith('1.1.4.')) ||
+    journalEntries.some(entry=>entry.companyId===currentCompany.id && entry.id!==selectedPurchaseForCorrection.journalEntryId && entry.type==='INVENTARIO' &&
+      (String(entry.referenceDoc || '').trim().toUpperCase()===('FAC-'+selectedPurchaseForCorrection.invoiceNumber).trim().toUpperCase() ||
+       String(entry.referenceDoc || '').trim().toUpperCase()===selectedPurchaseForCorrection.invoiceNumber.trim().toUpperCase())) ||
     movements.some(item => item.companyId === currentCompany.id &&
       (item.journalEntryId === selectedPurchaseForCorrection.journalEntryId ||
        item.documentRef.trim().toUpperCase() === ('FAC-' + selectedPurchaseForCorrection.invoiceNumber).trim().toUpperCase()))
