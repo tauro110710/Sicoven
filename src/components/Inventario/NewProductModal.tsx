@@ -64,7 +64,9 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
 
   const bcvRate = Number(openingBcvRateInput);
   const avgCostUsd = bcvRate > 0 ? avgCostBs / bcvRate : 0;
-  const salesPriceUsd = bcvRate > 0 ? salesPriceBs / bcvRate : 0;
+  const salesPriceUsd = product && currentCompany.bcvRate > 0
+    ? salesPriceBs / currentCompany.bcvRate
+    : bcvRate > 0 ? salesPriceBs / bcvRate : 0;
 
   const movementAccounts = accounts.filter(account => account.isMovement);
   const inventoryAccounts = movementAccounts.filter(account => account.type === 'ACTIVO');
