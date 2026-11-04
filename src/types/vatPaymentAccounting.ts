@@ -50,6 +50,9 @@ export function buildVatPaymentAccountingPlan(input: {
     if (!input.accounts.some(x => x.code === bank.accountCode && x.type === 'ACTIVO' && x.isMovement)) throw new Error('La cuenta contable bancaria ' + bank.accountCode + ' no existe o no acepta movimientos.');
     const bs=Number(m.amountBs), usd=Number(m.amountUsd);
     if (!Number.isFinite(bs)||bs<=0||!Number.isFinite(usd)||usd<=0) throw new Error('El débito bancario ' + m.reference + ' no tiene equivalentes históricos positivos en Bs. y USD.');
+    if (Math.abs(cents(bs) - cents(usd * Number(m.bcvRate))) > 0.02) {
+      throw new Error('El débito bancario ' + m.reference + ' no concilia en Bs. y USD con su tasa BCV histórica.');
+    }
     const g=groups.get(bank.accountCode)||{bank,bs:0,usd:0}; g.bs+=bs;g.usd+=usd;groups.set(bank.accountCode,g);
   }
   const bankBs=cents([...groups.values()].reduce((s,g)=>s+g.bs,0));
