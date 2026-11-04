@@ -19,11 +19,12 @@ export function buildVatPaymentAccountingPlan(input: {
   const movementRates = input.movements.map(movement => Number(movement.bcvRate));
   if (input.movements.some(movement =>
     movement.date !== date ||
-    movement.bcvRateEffectiveDate !== date ||
+    !isValidIsoDate(String(movement.bcvRateEffectiveDate || '')) ||
+    String(movement.bcvRateEffectiveDate) > date ||
     !Number.isFinite(Number(movement.bcvRate)) ||
     Number(movement.bcvRate) <= 0
   )) {
-    throw new Error('Cada débito bancario debe conservar la tasa BCV histórica válida de la misma fecha del enteramiento.');
+    throw new Error('Cada débito bancario debe conservar una tasa BCV histórica válida y vigente a la fecha del enteramiento.');
   }
   const bcvRate = movementRates[0];
   if (movementRates.some(rate => Math.abs(rate - bcvRate) > 0.000001)) {
