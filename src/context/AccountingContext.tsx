@@ -3889,12 +3889,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const amount = isUsdAccount ? stmt.amountUsd : stmt.amountBs;
         const debit = isUsdAccount ? item.debitUsd : item.debitBs;
         const credit = isUsdAccount ? item.creditUsd : item.creditBs;
+        const matchedAmount = stmt.type === 'CREDIT' ? debit : credit;
+        const opposite = stmt.type === 'CREDIT' ? credit : debit;
         const sameAmount = isUsdAccount
-          ? Math.round(Number(amount) * 1_000_000) === Math.round(Number(stmt.amountUsd) * 1_000_000)
-          : Math.round(Number(amount) * 100) === Math.round(Number(stmt.amountBs) * 100);
-        return stmt.type === 'CREDIT'
-          ? sameAmount && credit === 0
-          : sameAmount && debit === 0;
+          ? Math.round(Number(matchedAmount) * 1_000_000) === Math.round(Number(amount) * 1_000_000)
+          : Math.round(Number(matchedAmount) * 100) === Math.round(Number(amount) * 100);
+        return sameAmount && opposite === 0;
       });
 
     for (const stmt of statementRows) {
