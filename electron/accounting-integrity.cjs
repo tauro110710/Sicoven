@@ -686,6 +686,12 @@ function validateSaleCorrectionNotes(previousState, nextState) {
         note.paymentTerm !== 'CREDITO' || normalize(note.invoiceNumber) !== normalize(number) ||
         (isCredit ? normalize(note.creditNoteNumber) : normalize(note.debitNoteNumber)) !== normalize(number) ||
         normalize(note.affectedInvoiceNumber) !== normalize(source.invoiceNumber) ||
+        note.affectedInvoiceDate !== source.invoiceDate ||
+        normalize(note.affectedInvoiceControlNumber) !== normalize(source.controlNumber) ||
+        !close(note.affectedInvoiceTotalAmountBs, source.totalAmountBs) ||
+        !close(note.affectedInvoiceTotalAmountUsd, source.totalAmountUsd, 0.0001) ||
+        !['DIGITAL', 'FISCAL_MACHINE', 'CONTINGENCY'].includes(note.fiscalEmissionMedium) ||
+        note.sameMediumAsOriginal !== true ||
         normalize(note.customerRif) !== normalize(source.customerRif) ||
         normalize(note.customerName) !== normalize(source.customerName) ||
         !String(note.customerName || '').trim() || !number || !String(note.controlNumber || '').trim() ||
@@ -1420,6 +1426,12 @@ function validateAccountingSnapshot(previousState, nextState) {
           Math.abs(payableAppliedBs / rate - payableAppliedUsd) > 0.0001 ||
           (cashOriginalPurchase && (payableAppliedBs > 0.02 || payableAppliedUsd > 0.0001)) ||
           (!cashOriginalPurchase && !sourcePayable) ||
+          note.affectedInvoiceDate !== original.invoiceDate ||
+          normalizeDocument(note.affectedInvoiceControlNumber) !== normalizeDocument(original.controlNumber) ||
+          Math.abs(Number(note.affectedInvoiceTotalAmountBs) - Number(original.totalAmountBs)) > 0.02 ||
+          Math.abs(Number(note.affectedInvoiceTotalAmountUsd) - Number(original.totalAmountUsd)) > 0.0001 ||
+          !['DIGITAL', 'FISCAL_MACHINE', 'CONTINGENCY'].includes(note.fiscalEmissionMedium) ||
+          note.sameMediumAsOriginal !== true ||
           !journal || journal.companyId !== note.companyId || journal.type !== 'AJUSTE' ||
           journal.date !== note.invoiceDate ||
           normalizeDocument(journal.referenceDoc) !== normalizeDocument('NC-PROV-' + note.creditNoteNumber) ||
