@@ -427,7 +427,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     eventType: 'accounting_correction_requested' | 'accounting_correction_executed';
     entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'BCV_RATE' | 'INVENTORY_PRODUCT';
     companyId: string; entityId: string; correctionType: string; sourceDocumentRef: string;
-    correctionDocumentRef: string; reason: string; workpaperNote?: string; journalEntryId?: string;
+    correctionDocumentRef: string; reason?: string; workpaperNote?: string; journalEntryId?: string;
     fiscalEmissionMedium?: 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY'; sameMediumAsOriginal?: boolean;
   };
   const recordCorrectionAudit = async (input: CorrectionAuditInput): Promise<void> => {
@@ -435,7 +435,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       recordAuditCorrection?: (sessionToken: string, event: CorrectionAuditInput) => Promise<{ ok: boolean; message?: string; id?: number }>;
     };
     if (!store?.recordAuditCorrection) throw new Error('La auditoría local de correcciones no está disponible. No se ejecutó la operación.');
-    const result = await store.recordAuditCorrection(token, input);
+    const result = await store.recordAuditCorrection(token, {...input,reason:String(input.reason || 'Corrección contable'),workpaperNote:String(input.workpaperNote || '')});
     if (!result?.ok) throw new Error(result?.message || 'SQLite no pudo registrar la autorización de la corrección.');
   };
 
@@ -463,7 +463,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const createCorrectionCase = async (input: {entityType:string;entityId:string;correctionType:string;sourceDocumentRef:string;correctionDocumentRef:string;reason?:string;workpaperNote?:string}): Promise<CorrectionCase> => {
     const store = window.sicovenStore as typeof window.sicovenStore & { createCorrectionCase?: (sessionToken:string,payload:Record<string,string>)=>Promise<CorrectionCase> };
     if (!store?.createCorrectionCase) throw new Error('El registro formal de expedientes requiere la edición de escritorio.');
-    return store.createCorrectionCase(token,{...input,companyId:currentCompany.id});
+    return store.createCorrectionCase(token,{entityType:input.entityType,entityId:input.entityId,correctionType:input.correctionType,sourceDocumentRef:input.sourceDocumentRef,correctionDocumentRef:input.correctionDocumentRef,reason:String(input.reason || ''),workpaperNote:String(input.workpaperNote || ''),companyId:currentCompany.id});
   };
   const listCorrectionCases = useCallback(async (): Promise<CorrectionCase[]> => {
     const store = window.sicovenStore as typeof window.sicovenStore & { listCorrectionCases?: (sessionToken: string, companyId: string) => Promise<CorrectionCase[]> };
