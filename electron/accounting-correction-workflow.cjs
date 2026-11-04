@@ -130,7 +130,7 @@ function initializeCorrectionWorkflow(db) {
             review_reason='Migración técnica al flujo de ejecución directa del contador; sin revisión humana.',
             reviewed_at=NULL
         WHERE id=? AND status='PENDING_REVIEW'
-      `).run(at,item.id);
+      `).run(item.id);
       appendEvent(db,null,{id:item.id,type:'APPROVED',
         actor:{id:item.requested_by,username:item.requested_by_name},
         reason:'Caso heredado habilitado para ejecución directa; no requiere aprobación.',
