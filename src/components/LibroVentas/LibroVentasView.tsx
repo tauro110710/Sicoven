@@ -153,7 +153,7 @@ export const LibroVentasView: React.FC = () => {
           </div>
 
           <div className="flex items-center justify-end text-xs text-slate-500">
-            <span>Facturas Emitidas: <strong className="text-slate-800">{filteredSales.length}</strong></span>
+            <span>Documentos fiscales: <strong className="text-slate-800">{filteredSales.length}</strong></span>
           </div>
         </div>
       </div>
