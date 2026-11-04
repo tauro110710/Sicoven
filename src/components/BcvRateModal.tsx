@@ -12,7 +12,9 @@ interface BcvRateModalProps {
  * SICOVEN no consulta proveedores externos ni sustituye la tasa ingresada por el usuario.
  */
 export const BcvRateModal: React.FC<BcvRateModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, updateBcvRate } = useAccounting();
+  const { currentCompany, updateBcvRate, waitForPersistence } = useAccounting();
+  const savingRef = React.useRef(false);
+  const [saving, setSaving] = useState(false);
   const [rate, setRate] = useState<string>(currentCompany.bcvRate ? String(currentCompany.bcvRate) : '');
   const [effectiveDate, setEffectiveDate] = useState<string>(
     currentCompany.lastRateUpdate || new Date().toISOString().slice(0, 10)
@@ -27,7 +29,7 @@ export const BcvRateModal: React.FC<BcvRateModalProps> = ({ isOpen, onClose }) =
 
   if (!isOpen) return null;
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const normalizedRate = rate.trim().replace(',', '.');
     const parsedRate = Number(normalizedRate);
@@ -41,8 +43,19 @@ export const BcvRateModal: React.FC<BcvRateModalProps> = ({ isOpen, onClose }) =
       setValidationError('Seleccione la fecha valor correspondiente a la tasa.');
       return;
     }
-    updateBcvRate(parsedRate, effectiveDate);
-    onClose();
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      updateBcvRate(parsedRate, effectiveDate);
+      await waitForPersistence();
+      onClose();
+    } catch (error) {
+      setValidationError(error instanceof Error ? error.message : 'SQLite no confirmó la tasa BCV.');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   };
 
   return (
@@ -125,16 +138,18 @@ export const BcvRateModal: React.FC<BcvRateModalProps> = ({ isOpen, onClose }) =
             <button
               type="button"
               onClick={onClose}
+              disabled={saving}
               className="rounded-lg px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
             >
               Cancelar
             </button>
             <button
               type="submit"
+              disabled={saving}
               className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700"
             >
               <Check className="h-4 w-4" />
-              Guardar tasa manual
+              {saving ? "Confirmando SQLite..." : "Guardar tasa manual"}
             </button>
           </div>
         </form>
