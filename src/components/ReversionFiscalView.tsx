@@ -283,7 +283,11 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   const selectedCorrectionJournalId = selectedJournalForCorrection?.id ||
     selectedSaleForCorrection?.journalEntryId || selectedPurchaseForCorrection?.journalEntryId ||
     selectedMovementForCorrection?.journalEntryId ||
-    (selectedBankMovementForCorrection?.isReconciled ? selectedBankMovementForCorrection.reconciledWithJournalEntryId : '') ||
+    (selectedBankMovementForCorrection?.isReconciled
+      ? selectedBankMovementForCorrection.reconciledWithJournalEntryId ||
+        (selectedBankMovementForCorrection.reconciledJournalEntryIds?.length === 1
+          ? selectedBankMovementForCorrection.reconciledJournalEntryIds[0] : '')
+      : '') ||
     selectedCreditSettlementForCorrection?.journalEntryId ||
     selectedSupplierAdvanceSettlementForCorrection?.journalEntryId || '';
 
@@ -921,9 +925,11 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
         {(selectedJournalForCorrection || selectedMovementForCorrection || selectedBankMovementForCorrection || selectedCreditSettlementForCorrection || selectedSupplierAdvanceSettlementForCorrection) && !selectedSaleForCorrection && !selectedPurchaseForCorrection && <div className="rounded-lg border border-slate-200 p-3 text-xs space-y-2">
           {selectedBankMovementForCorrection && !selectedBankMovementForCorrection.isReconciled
             ? <p>El movimiento bancario no está conciliado con un asiento. Se conserva como original y no se permite inventar una reversión sin contrapartida contable vinculada.</p>
-            : selectedCreditSettlementForCorrection
-              ? <p>Se reversará el asiento de este cobro/pago y SICOVEN marcará la liquidación como reversada, restaurando el saldo del auxiliar sin borrar el movimiento original.</p>
-              : selectedSupplierAdvanceSettlementForCorrection
+            : selectedBankMovementForCorrection && !selectedCorrectionJournalId
+              ? <p>El movimiento bancario no conserva un único asiento conciliado. Si la fila está vinculada a varios asientos, seleccione cada asiento original por separado; SICOVEN no elegirá uno arbitrariamente.</p>
+              : selectedCreditSettlementForCorrection
+                ? <p>Se reversará el asiento de este cobro/pago y SICOVEN marcará la liquidación como reversada, restaurando el saldo del auxiliar sin borrar el movimiento original.</p>
+                : selectedSupplierAdvanceSettlementForCorrection
                 ? <p>Se reversará el asiento de esta aplicación/devolución de anticipo y se restaurará el saldo del anticipo del proveedor, conservando la liquidación original.</p>
                 : selectedBankMovementForCorrection
                   ? <p>Se abrirá el asiento conciliado. La reversión comprobará la contrapartida bancaria antes de retirar la conciliación vigente, conservando el historial de vínculos.</p>
