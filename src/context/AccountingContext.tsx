@@ -62,6 +62,7 @@ import { allocateDirectSupplierAdvance, validateSupplierDirectAdvanceDraft, type
 import { allocateSupplierAdvanceCreditNotes, validateSupplierAdvanceCreditNoteAllocations, validateSupplierAdvanceSettlementDraft, type SupplierAdvanceSettlement, type SupplierAdvanceSettlementDraft } from '../types/supplierAdvanceSettlement';
 import type { VatFiscalIncident, VatFiscalIncidentCreateInput, VatFiscalIncidentEventInput } from '../types/vatFiscalIncidents';
 import { buildSupplierDebitNoteAccountingPlan, type SupplierDebitNoteAccountingDraft } from '../types/supplierDebitNoteAccounting';
+import { calculateSaleCorrectionNote, type SaleCorrectionNoteRequest } from '../types/saleCorrectionNote';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -128,6 +129,7 @@ interface AccountingContextType {
   // Ventas
   sales: SaleRecord[];
   addSale: (sale: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>) => SaleRecord;
+  addSaleCorrectionNote: (draft: Omit<SaleCorrectionNoteRequest, 'sourceSale' | 'priorCreditNotes' | 'closedThroughDate'> & { sourceSaleId: string }) => Promise<SaleRecord>;
   deleteSale: (id: string) => void;
   runAtomicInvoiceImport: <T>(operation: () => T) => T;
 
@@ -1104,20 +1106,27 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     );
     const creditNotes = kind === 'PURCHASE_PAYMENT'
       ? purchases.filter(item => item.companyId === currentCompany.id && item.originalPurchaseId === documentId && item.documentType === '03' && !item.isCancelled)
+      : sales.filter(item => item.companyId === currentCompany.id && item.originalSaleId === documentId && item.documentType === '03' && !item.isCancelled);
+    const debitNotes = kind === 'SALE_COLLECTION'
+      ? sales.filter(item => item.companyId === currentCompany.id && item.originalSaleId === documentId && item.documentType === '02' && !item.isCancelled)
       : [];
-    const creditedByNotesUsd = creditNotes.reduce((sum, item) => sum + Number(item.netPayableReductionUsd || 0), 0);
-    const creditedByNotesBs = creditNotes.reduce((sum, item) => sum + Number(item.netPayableReductionBs || 0), 0);
+    const creditedByNotesUsd = creditNotes.reduce((sum, item) => sum + Number(item.netReceivableAdjustmentUsd ?? item.netPayableReductionUsd ?? 0), 0);
+    const creditedByNotesBs = creditNotes.reduce((sum, item) => sum + Number(item.netReceivableAdjustmentBs ?? item.netPayableReductionBs ?? 0), 0);
+    const debitedByNotesUsd = debitNotes.reduce((sum, item) => sum + Number(item.netReceivableAdjustmentUsd || 0), 0);
+    const debitedByNotesBs = debitNotes.reduce((sum, item) => sum + Number(item.netReceivableAdjustmentBs || 0), 0);
     const advanceApplications = kind === 'PURCHASE_PAYMENT'
       ? supplierAdvanceSettlements.filter(item => item.companyId === currentCompany.id &&
           !item.isReversed && item.kind === 'APPLIED_TO_PURCHASE' && item.targetPurchaseId === documentId)
       : [];
     const creditedBySupplierAdvancesUsd = advanceApplications.reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
     const creditedBySupplierAdvancesBs = advanceApplications.reduce((sum, item) => sum + Number(item.advanceBookValueBs ?? item.amountBs ?? 0), 0);
-    const outstandingUsd = Math.max(0, Math.round((balance.outstandingUsd - creditedByNotesUsd - creditedBySupplierAdvancesUsd) * 1000000) / 1000000);
+    const outstandingUsd = Math.max(0, Math.round((balance.outstandingUsd - creditedByNotesUsd - creditedBySupplierAdvancesUsd + debitedByNotesUsd) * 1000000) / 1000000);
     return {
       ...balance,
       creditedByNotesUsd,
       creditedByNotesBs,
+      debitedByNotesUsd,
+      debitedByNotesBs,
       creditedBySupplierAdvancesUsd,
       creditedBySupplierAdvancesBs,
       outstandingUsd,
@@ -2740,6 +2749,116 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     setSales(prev => [...prev, finalSale]);
     return finalSale;
+  };
+
+  const addSaleCorrectionNote = async (
+    draft: Omit<SaleCorrectionNoteRequest, 'sourceSale' | 'priorCreditNotes' | 'closedThroughDate'> & { sourceSaleId: string }
+  ): Promise<SaleRecord> => {
+    assertSQLitePersistenceReady('Registrar nota de crédito/débito de venta');
+    if (correctionWorkflowInFlightRef.current) {
+      throw new Error('Ya existe una corrección documental en proceso. Espere la confirmación de SQLite.');
+    }
+    const source = sales.find(item => item.id === draft.sourceSaleId && item.companyId === currentCompany.id);
+    if (!source) throw new Error('No se encontró la factura original de venta en la empresa activa.');
+    if (source.documentType !== '01' || source.isCancelled) throw new Error('Solo se pueden corregir facturas de venta vigentes tipo 01.');
+    const linkedInventory = movements.some(item => item.companyId === currentCompany.id &&
+      (item.journalEntryId === source.journalEntryId ||
+       item.documentRef.trim().toUpperCase().replace(/\\s+/g, '') ===
+       ('FAC-' + source.invoiceNumber).trim().toUpperCase().replace(/\\s+/g, '')));
+    if (linkedInventory) {
+      throw new Error('La factura tiene movimientos de inventario. La nota requiere devolución/ajuste de Kardex por líneas y costo histórico; no se registró un asiento parcial sin su efecto físico.');
+    }
+    const number = String(draft.noteNumber || '').trim();
+    const normalizedNumber = number.toUpperCase().replace(/\\s+/g, '');
+    if (sales.some(item => item.companyId === currentCompany.id &&
+      String(item.invoiceNumber || '').trim().toUpperCase().replace(/\\s+/g, '') === normalizedNumber)) {
+      throw new Error('El número fiscal de la nota ya está registrado en esta empresa.');
+    }
+    const priorCreditNotes = sales.filter(item => item.companyId === currentCompany.id &&
+      item.originalSaleId === source.id && item.documentType === '03' && !item.isCancelled);
+    const amounts = calculateSaleCorrectionNote({
+      ...draft, sourceSale: source, priorCreditNotes,
+      closedThroughDate: currentCompany.closedThroughDate || undefined
+    });
+    if (draft.kind === 'CREDIT') {
+      const balance = getCreditBalance(source.id, 'SALE_COLLECTION');
+      if (amounts.netReceivableAdjustmentUsd > balance.outstandingUsd + 0.005) {
+        throw new Error('La nota de crédito supera el saldo de CxC todavía exigible. Si ya hubo cobros, debe tramitarse primero el circuito de devolución/reembolso y su conciliación bancaria.');
+      }
+    }
+    const revenue = accounts.find(item => item.code === '4.1.1.01' && item.isMovement && item.type === 'INGRESOS');
+    const receivable = accounts.find(item => item.code === '1.1.2.01' && item.isMovement && item.type === 'ACTIVO');
+    const vat = accounts.find(item => item.code === '2.1.2.01' && item.isMovement && item.type === 'PASIVO');
+    if (!revenue || !receivable || (amounts.vatAmountBs > 0 && !vat)) {
+      throw new Error('Faltan cuentas de movimiento para ventas, CxC o débito fiscal IVA. No se registró la nota.');
+    }
+    const isCredit = draft.kind === 'CREDIT';
+    const items: JournalEntryItem[] = [];
+    const baseBs = amounts.taxableBaseBs + amounts.exemptAmountBs;
+    const baseUsd = amounts.taxableBaseUsd + amounts.exemptAmountUsd;
+    if (isCredit) {
+      items.push({ accountCode: revenue.code, accountName: revenue.name, debitBs: baseBs, creditBs: 0,
+        debitUsd: baseUsd, creditUsd: 0, description: 'Reversión parcial de ingresos · ' + source.invoiceNumber });
+      if (amounts.vatAmountBs > 0 && vat) items.push({ accountCode: vat.code, accountName: vat.name,
+        debitBs: amounts.vatAmountBs, creditBs: 0, debitUsd: amounts.vatAmountUsd, creditUsd: 0,
+        description: 'Disminución de débito fiscal IVA · ' + source.invoiceNumber });
+      items.push({ accountCode: receivable.code, accountName: receivable.name,
+        debitBs: 0, creditBs: amounts.totalAmountBs, debitUsd: 0, creditUsd: amounts.totalAmountUsd,
+        description: 'Disminución de CxC por NC ' + number });
+    } else {
+      items.push({ accountCode: receivable.code, accountName: receivable.name,
+        debitBs: amounts.totalAmountBs, creditBs: 0, debitUsd: amounts.totalAmountUsd, creditUsd: 0,
+        description: 'Incremento de CxC por ND ' + number });
+      items.push({ accountCode: revenue.code, accountName: revenue.name,
+        debitBs: 0, creditBs: baseBs, debitUsd: 0, creditUsd: baseUsd,
+        description: 'Ingreso adicional por ND · ' + source.invoiceNumber });
+      if (amounts.vatAmountBs > 0 && vat) items.push({ accountCode: vat.code, accountName: vat.name,
+        debitBs: 0, creditBs: amounts.vatAmountBs, debitUsd: 0, creditUsd: amounts.vatAmountUsd,
+        description: 'Incremento de débito fiscal IVA · ' + source.invoiceNumber });
+    }
+    correctionWorkflowInFlightRef.current = true;
+    try {
+      return await runAtomicInvoiceImport(async () => {
+        const journal = addJournalEntry({
+          entryNumber: 0, date: draft.noteDate,
+          description: (isCredit ? 'Nota de crédito' : 'Nota de débito') + ' de cliente ' + number + ' afecta ' + source.invoiceNumber,
+          type: 'AJUSTE', bcvRate: draft.bcvRate,
+          referenceDoc: (isCredit ? 'NC-CLI-' : 'ND-CLI-') + number,
+          items
+        });
+        const nextOp = Math.max(
+          sales.filter(item => item.companyId === currentCompany.id).reduce((max, item) => Math.max(max, item.opNumber || 0), 0),
+          saleSequenceRef.current[currentCompany.id] || 0
+        ) + 1;
+        saleSequenceRef.current[currentCompany.id] = nextOp;
+        const note: SaleRecord = {
+          ...source, id: 'sale-correction-' + currentCompany.id + '-' + Date.now() + '-' + Math.floor(Math.random() * 100000),
+          companyId: currentCompany.id, opNumber: nextOp, invoiceDate: draft.noteDate,
+          invoiceNumber: number, controlNumber: String(draft.controlNumber).trim(),
+          documentType: isCredit ? '03' : '02',
+          creditNoteNumber: isCredit ? number : undefined,
+          debitNoteNumber: isCredit ? undefined : number,
+          affectedInvoiceNumber: source.invoiceNumber, originalSaleId: source.id,
+          taxableBaseBs: amounts.taxableBaseBs, exemptAmountBs: amounts.exemptAmountBs,
+          vatAmountBs: amounts.vatAmountBs, totalAmountBs: amounts.totalAmountBs,
+          bcvRate: draft.bcvRate, taxableBaseUsd: amounts.taxableBaseUsd,
+          exemptAmountUsd: amounts.exemptAmountUsd, vatAmountUsd: amounts.vatAmountUsd,
+          totalAmountUsd: amounts.totalAmountUsd, vatWithheldBs: 0, vatWithheldUsd: 0,
+          igtfApplicable: false, igtfAmountBs: 0, igtfAmountUsd: 0,
+          paymentTerm: 'CREDITO', journalEntryId: journal.id,
+          netReceivableAdjustmentBs: amounts.netReceivableAdjustmentBs,
+          netReceivableAdjustmentUsd: amounts.netReceivableAdjustmentUsd,
+          correctionReason: String(draft.reason).trim(),
+          correctionWorkpaper: String(draft.workpaperNote).trim(),
+          notes: 'Documento correctivo vinculado a ' + source.invoiceNumber + '. Motivo: ' + String(draft.reason).trim()
+        };
+        setSales(prev => [...prev, note]);
+        await waitForPersistence();
+        return note;
+      });
+    } finally {
+      correctionWorkflowInFlightRef.current = false;
+    }
   };
 
   const deleteSale = (id: string) => {
@@ -4671,6 +4790,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         deletePurchase,
         sales: sales.filter(s => s.companyId === currentCompany.id),
         addSale,
+        addSaleCorrectionNote,
         deleteSale,
         runAtomicInvoiceImport,
         products: products.filter(p => p.companyId === currentCompany.id),
