@@ -16,9 +16,11 @@ test('workflow enforces preparer-reviewer-executor segregation and append-only e
   assert.equal(approved.status,'APPROVED');
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Se aplicó el documento correctivo.'},admin(2,'revisor')),/distinto del solicitante y del aprobador/);
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'FAC-001',reason:'Se intenta reutilizar la referencia original.'},admin(3,'ejecutor')),/misma del documento original/);
-  const executed=markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Se aplicó el documento correctivo.'},admin(3,'ejecutor'));
+  const executed=markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Se aplicó el documento correctivo.',evidenceRecordId:'credit-note-1',evidenceCollection:'sales'},admin(3,'ejecutor'));
   assert.equal(executed.status,'EXECUTED');
   assert.deepEqual(executed.events.map(e=>e.event_type),['REQUESTED','APPROVED','EXECUTED']);
+  assert.equal(executed.events[2].metadata.evidenceRecordId,'credit-note-1');
+  assert.equal(executed.events[2].metadata.evidenceCollection,'sales');
   assert.equal(listCorrectionCases(db,'co-1').length,1);
   assert.throws(()=>db.prepare('UPDATE accounting_correction_case_events SET reason=? WHERE id=1').run('alterado'),/append-only/);
   assert.throws(()=>db.prepare('DELETE FROM accounting_correction_case_events WHERE id=1').run(),/append-only/);
