@@ -62,8 +62,12 @@ const zeroTotals = (): CashFlowTotals => ({
   receiptsBs: 0, paymentsBs: 0, netBs: 0,
   receiptsUsd: 0, paymentsUsd: 0, netUsd: 0
 });
+const isLinkedAnnualOpening = (entry: JournalEntry) =>
+  entry.type === 'APERTURA' &&
+  entry.exerciseLink?.nextPeriodStartDate === entry.date &&
+  /^\\d{4}-\\d{2}-\\d{2}$/.test(entry.date);
 const isAnnualOpening = (entry: JournalEntry, year: number) =>
-  entry.type === 'APERTURA' && entry.exerciseLink?.nextPeriodStartDate?.slice(0, 4) === String(year);
+  isLinkedAnnualOpening(entry) && entry.exerciseLink?.nextPeriodStartDate?.slice(0, 4) === String(year);
 const counterpartAmount = (
   item: JournalEntry['items'][number],
   side: 'credit' | 'debit',
@@ -123,16 +127,22 @@ export function buildCashFlowReport(
       account.code.startsWith('1.1.1.')
     )).map(account => account.code)
   ]);
-  const annualOpenings = companyEntries.filter(entry => isAnnualOpening(entry, year));
-  const annualOpening = annualOpenings.at(-1);
-  // A linked annual opening already carries the prior year's closing balance.
-  // Never add it on top of the historical movements that it replaces.
-  const opening = annualOpening
-    ? cashNet(annualOpening, cashCodes)
-    : companyEntries.filter(entry => entry.date < start).reduce((sum, entry) => {
-        const net = cashNet(entry, cashCodes);
-        return { bs: sum.bs + net.bs, usd: sum.usd + net.usd };
-      }, { bs: 0, usd: 0 });
+  // Start from the latest linked annual opening on or before this year's
+  // first day. If the current year has no opening yet, carry forward that
+  // prior opening plus only the movements posted after it.
+  const openingBoundary = companyEntries.filter(entry =>
+    isLinkedAnnualOpening(entry) && entry.date <= start
+  ).at(-1);
+  const openingEntries = openingBoundary
+    ? [
+        ...companyEntries.filter(entry => entry.date >= openingBoundary.date && entry.date < start),
+        openingBoundary
+      ]
+    : companyEntries.filter(entry => entry.date < start);
+  const opening = openingEntries.reduce((sum, entry) => {
+    const net = cashNet(entry, cashCodes);
+    return { bs: sum.bs + net.bs, usd: sum.usd + net.usd };
+  }, { bs: 0, usd: 0 });
 
   const activities: Record<CashFlowSection, CashFlowTotals> = {
     OPERACION: zeroTotals(),
@@ -269,7 +279,9 @@ export function buildCashFlowReport(
 
   // Reconcile against the same opening basis: a linked annual opening supersedes
   // the prior-year ledger movements for this year's opening balance.
-  const ledgerEntries = annualOpening ? [annualOpening, ...periodEntries] : companyEntries;
+  const ledgerEntries = openingBoundary
+    ? companyEntries.filter(entry => entry.date >= openingBoundary.date)
+    : companyEntries;
   const ledgerClosing = ledgerEntries.reduce((sum, entry) => {
     const net = cashNet(entry, cashCodes);
     return { bs: sum.bs + net.bs, usd: sum.usd + net.usd };
