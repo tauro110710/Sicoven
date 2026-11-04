@@ -2,6 +2,60 @@ export type TaxpayerType = 'ESPECIAL' | 'ORDINARIO';
 export type AccountingFramework = 'VEN_NIF_GE' | 'VEN_NIF_PYME';
 export type IvaRetentionAgentBasis = 'ARTICLE_1_SPECIAL_DESIGNATED' | 'ARTICLE_2_METALS' | 'ARTICLE_1_AND_2' | 'NOT_AGENT' | 'UNCONFIRMED';
 
+export type AccountingCurrencyCode = 'VES' | 'USD' | 'EUR' | 'OTHER';
+
+/**
+ * Expediente de juicio profesional NIC 21. No se infiere por la tasa BCV,
+ * por la moneda de caja ni por el volumen de operaciones.
+ */
+export interface FunctionalCurrencyAssessment {
+  id: string;
+  status: 'DRAFT' | 'APPROVED' | 'SUPERSEDED';
+  functionalCurrency: AccountingCurrencyCode;
+  functionalCurrencyOther?: string;
+  presentationCurrency: AccountingCurrencyCode;
+  presentationCurrencyOther?: string;
+  assessmentDate: string;
+  effectiveDate: string;
+  preparedBy: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  primaryEconomicEnvironment: string;
+  salesPriceFactors: string;
+  costFactors: string;
+  financingFactors: string;
+  operatingReceiptsFactors: string;
+  professionalConclusion: string;
+  evidenceReferences: string[];
+}
+
+/**
+ * Evaluación de convertibilidad para una fecha y propósito concretos.
+ * La evidencia y el juicio aprobado preceden cualquier conversión contable.
+ */
+export interface ExchangeabilityAssessment {
+  id: string;
+  measurementDate: string;
+  purpose: string;
+  currency: AccountingCurrencyCode;
+  currencyOther?: string;
+  amountRequired: number;
+  legalMechanism: string;
+  legallyAccessible: boolean;
+  actuallyAccessible: boolean;
+  expectedDelayDays?: number;
+  amountAvailable?: number;
+  accessibleSpotRate?: number;
+  evidenceReferences: string[];
+  conclusion: 'CONVERTIBLE' | 'NOT_CONVERTIBLE';
+  estimatedSpotRate?: number;
+  estimationMethod?: string;
+  estimationEvidence?: string;
+  preparedBy: string;
+  approvedBy: string;
+  approvedAt: string;
+}
+
 export interface Company {
   id: string;
   rif: string; // e.g., "J-40892182-3"
@@ -32,6 +86,10 @@ export interface Company {
   lastRateUpdate?: string;
   /** Último día incluido en un período contable bloqueado. */
   closedThroughDate?: string;
+  /** Historial de evaluaciones NIC 21; ausencia = pendiente, nunca se asigna moneda por defecto. */
+  functionalCurrencyAssessments?: FunctionalCurrencyAssessment[];
+  /** Evaluaciones de convertibilidad fechadas y ligadas a un propósito concreto. */
+  exchangeabilityAssessments?: ExchangeabilityAssessment[];
   logoUrl?: string; // URL o base64 del logo de la empresa
 }
 
