@@ -10,7 +10,9 @@ interface CompanyModalProps {
 }
 
 export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) => {
-  const { addCompany } = useAccounting();
+  const { addCompany, waitForPersistence } = useAccounting();
+  const savingRef = React.useRef(false);
+  const [saving, setSaving] = useState(false);
 
   const [rif, setRif] = useState('');
   const [rifError, setRifError] = useState<string | null>(null);
@@ -54,7 +56,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const rifValidation = validateVenezuelanRif(rif);
     if (!rifValidation.isValid) {
@@ -73,6 +75,10 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       return;
     }
 
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
     addCompany({
       rif: rifValidation.formattedRif,
       name: name.trim().toUpperCase(),
@@ -95,8 +101,14 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       bcvRate: Number(bcvRate) || 0,
       lastRateUpdate: new Date().toISOString().split('T')[0]
     });
-
+    await waitForPersistence();
     onClose();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo confirmar el registro de la empresa en SQLite.');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   };
 
   return (
@@ -406,16 +418,18 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer"
+              disabled={saving}
+              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer disabled:opacity-40"
             >
               Cancelar
             </button>
             <button
               type="submit"
+              disabled={saving}
               className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-md transition cursor-pointer"
             >
               <Check className="w-4 h-4" />
-              Guardar y Activar Empresa
+              {saving ? "Confirmando SQLite..." : "Guardar y Activar Empresa"}
             </button>
           </div>
         </form>
