@@ -133,7 +133,7 @@ export const LibroComprasView: React.FC = () => {
             <span className="text-indigo-700 font-medium">Libro Fiscal Reglamentario</span>
           </div>
 
-          {filteredPurchases.some(p => p.documentType === '02') && <p className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Las ND tipo 02 se incluyen en los ajustes del período cuando modifican la base o el impuesto; las NC se registran como deducciones. n provisionalmente de los totales fiscales SENIAT hasta validar su tratamiento con especificaciones oficiales vigentes.</p>}
+          {filteredPurchases.some(p => p.documentType === '02' || p.documentType === '03') && <p className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Las notas de débito aumentan y las notas de crédito disminuyen la base y el impuesto cuando corresponda. Se registran en el período de emisión o recepción y conservan la referencia al documento original.</p>}
           <div className="flex items-center gap-2.5">
             <button
               onClick={handleExportPdf}
