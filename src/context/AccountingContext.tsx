@@ -438,6 +438,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!result?.ok) throw new Error(result?.message || 'SQLite no pudo registrar la autorización de la corrección.');
   };
 
+  const requireApprovedCorrectionCase = async (
+    entityType: string, entityId: string, sourceDocumentRef: string, correctionDocumentRef: string
+  ): Promise<void> => {
+    const store = window.sicovenStore as typeof window.sicovenStore & {
+      authorizeCorrectionCase?: (sessionToken:string,payload:Record<string,string>)=>Promise<{ok:boolean;caseId?:string;message?:string}>
+    };
+    if (!store?.authorizeCorrectionCase) throw new Error('La autorización formal de correcciones no está disponible. No se ejecutó la operación.');
+    const result = await store.authorizeCorrectionCase(token,{
+      companyId:currentCompany.id,entityType,entityId,sourceDocumentRef,correctionDocumentRef
+    });
+    if (!result?.ok) throw new Error(result?.message || 'No existe autorización formal aprobada para esta corrección.');
+  };
   const createCorrectionCase = async (input: {entityType:string;entityId:string;correctionType:string;sourceDocumentRef:string;correctionDocumentRef:string;reason:string;workpaperNote:string}): Promise<CorrectionCase> => {
     const store = window.sicovenStore as typeof window.sicovenStore & { createCorrectionCase?: (sessionToken:string,payload:Record<string,string>)=>Promise<CorrectionCase> };
     if (!store?.createCorrectionCase) throw new Error('El registro formal de expedientes requiere la edición de escritorio.');
