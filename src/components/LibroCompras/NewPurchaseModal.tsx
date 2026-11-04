@@ -14,7 +14,9 @@ interface NewPurchaseModalProps {
 }
 
 export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, accounts, products, movements, purchases, addPurchase, addMovement, runAtomicInvoiceImport } = useAccounting();
+  const { currentCompany, accounts, products, movements, purchases, addPurchase, addMovement, runAtomicInvoiceImport, waitForPersistence } = useAccounting();
+  const savingRef = React.useRef(false);
+  const [saving, setSaving] = useState(false);
 
   const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [accountCreditDate, setAccountCreditDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -153,7 +155,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
     new Set(inventoryLines.map(line=>line.productId)).size === inventoryLines.length
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supplierRif.trim() || !supplierName.trim() || !invoiceNumber.trim()) {
       window.alert('Completa el RIF, nombre del proveedor y número de factura.');
@@ -214,6 +216,9 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       return;
     }
 
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     try {
       runAtomicInvoiceImport(() => {
       addPurchase({
@@ -290,9 +295,13 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
         }
       }
       });
+      await waitForPersistence();
       onClose();
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'No se pudo registrar la compra. Verifica los datos e inténtalo nuevamente.');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
 
@@ -664,17 +673,18 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer"
+              disabled={saving}
+              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer disabled:opacity-40"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              disabled={totalAmountBs <= 0}
+              disabled={saving || totalAmountBs <= 0}
               className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer disabled:opacity-40"
             >
               <Check className="w-4 h-4" />
-              Guardar Compra y Generar Asientos
+              {saving ? "Confirmando SQLite..." : "Guardar Compra y Generar Asientos"}
             </button>
           </div>
         </form>
