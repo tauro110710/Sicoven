@@ -4770,8 +4770,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // volver físicamente a un punto anterior se usa el restaurador SQLite verificado.
     const incoming = JSON.parse(jsonData);
     const protectedCollections: Array<[string, string, Array<{ id?: string }>]> = [
-      ['empresas', 'companies', companies], ['cuentas', 'accounts', accounts],
-      ['asientos', 'journalEntries', journalEntries], ['compras', 'purchases', purchases],
+      ['empresas', 'companies', companies], ['asientos', 'journalEntries', journalEntries], ['compras', 'purchases', purchases],
       ['ventas', 'sales', sales], ['artículos', 'products', products],
       ['movimientos de inventario', 'movements', movements], ['comprobantes IVA', 'vatVouchers', vatVouchers],
       ['declaraciones IVA', 'vatWithholdingDeclarations', vatWithholdingDeclarations],
