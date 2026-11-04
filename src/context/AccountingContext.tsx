@@ -2010,8 +2010,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         companyId: currentCompany.id,
         voucherNumber: (() => {
           const voucherKey = `${companyKey}:${islrPeriod}`;
-          const existingCount = islrVouchers.filter(v => v.companyId === currentCompany.id && v.period === islrPeriod).length;
-          const sequence = Math.max(existingCount, islrVoucherSequenceRef.current[voucherKey] || 0) + 1;
+          const existingSequence = getMaxIslrVoucherSequence(
+            islrPeriod,
+            islrVouchers.filter(v => v.companyId === currentCompany.id && v.period === islrPeriod).map(v => v.voucherNumber)
+          );
+          const sequence = Math.max(existingSequence, islrVoucherSequenceRef.current[voucherKey] || 0) + 1;
           const number = formatIslrVoucherNumber(islrPeriod, sequence, purchaseData.accountCreditDate!);
           islrVoucherSequenceRef.current[voucherKey] = sequence;
           return number;
