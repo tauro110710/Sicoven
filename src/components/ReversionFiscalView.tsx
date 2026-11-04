@@ -5,10 +5,81 @@ import { formatBs, formatUsd, formatDate } from '../utils/formatters';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation, type BankStatementReversalReadiness } from '../types/journalReversal';
 import type { VatFiscalIncident } from '../types/vatFiscalIncidents';
 
-export const ReversionFiscalView: React.FC = () => {
+type CorrectionEmissionMedium = 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | '';
+
+interface CorrectionNoteFormFieldsProps {
+  minDate: string;
+  noteDate: string;
+  setNoteDate: (value: string) => void;
+  noteNumber: string;
+  setNoteNumber: (value: string) => void;
+  controlNumber: string;
+  setControlNumber: (value: string) => void;
+  reason: string;
+  setReason: (value: string) => void;
+  taxableBase: string;
+  setTaxableBase: (value: string) => void;
+  exemptAmount: string;
+  setExemptAmount: (value: string) => void;
+  medium: CorrectionEmissionMedium;
+  setMedium: (value: CorrectionEmissionMedium) => void;
+  sameMedium: boolean;
+  setSameMedium: (value: boolean) => void;
+  submitting: boolean;
+  onSubmit: () => void;
+  submitLabel: string;
+}
+
+const CorrectionNoteFormFields: React.FC<CorrectionNoteFormFieldsProps> = ({
+  minDate, noteDate, setNoteDate, noteNumber, setNoteNumber,
+  controlNumber, setControlNumber, reason, setReason,
+  taxableBase, setTaxableBase, exemptAmount, setExemptAmount,
+  medium, setMedium, sameMedium, setSameMedium, submitting, onSubmit, submitLabel
+}) => (
+  <div className="space-y-3">
+    <div className="grid gap-3 sm:grid-cols-2">
+      <label className="text-xs font-semibold text-slate-700">Fecha de emisión
+        <input type="date" min={minDate} value={noteDate} onChange={event=>setNoteDate(event.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+      </label>
+      <label className="text-xs font-semibold text-slate-700">Número de nota
+        <input value={noteNumber} onChange={event=>setNoteNumber(event.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="NC / ND"/>
+      </label>
+      <label className="text-xs font-semibold text-slate-700">Número de control
+        <input value={controlNumber} onChange={event=>setControlNumber(event.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+      </label>
+      <label className="text-xs font-semibold text-slate-700">Base imponible (Bs.)
+        <input type="number" min="0" step="0.01" value={taxableBase} onChange={event=>setTaxableBase(event.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+      </label>
+      <label className="text-xs font-semibold text-slate-700">Monto exento (Bs.)
+        <input type="number" min="0" step="0.01" value={exemptAmount} onChange={event=>setExemptAmount(event.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+      </label>
+      <label className="text-xs font-semibold text-slate-700">Medio de emisión de la nota
+        <select value={medium} onChange={event=>setMedium(event.target.value as CorrectionEmissionMedium)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
+          <option value="">Seleccione el medio utilizado en la factura original…</option>
+          <option value="DIGITAL">Digital</option>
+          <option value="FISCAL_MACHINE">Máquina fiscal</option>
+          <option value="CONTINGENCY">Contingencia</option>
+        </select>
+      </label>
+    </div>
+    <label className="block text-xs font-semibold text-slate-700">Motivo de la corrección
+      <textarea value={reason} onChange={event=>setReason(event.target.value)} rows={2} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Explique brevemente el motivo (mínimo 10 caracteres)."/>
+    </label>
+    <label className="flex items-start gap-2 text-xs text-slate-700">
+      <input type="checkbox" checked={sameMedium} onChange={event=>setSameMedium(event.target.checked)} className="mt-0.5"/>
+      Confirmo que la nota será emitida por el mismo medio de la factura original.
+    </label>
+    <button type="button" onClick={onSubmit} disabled={submitting || !noteDate || !noteNumber.trim() || !controlNumber.trim() || reason.trim().length<10 || !medium || !sameMedium || Number(taxableBase)<0 || Number(exemptAmount)<0 || Number(taxableBase)+Number(exemptAmount)<=0} className="rounded bg-indigo-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
+      {submitting ? 'Registrando y validando…' : submitLabel}
+    </button>
+  </div>
+);
+
+export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole = 'admin' }) => {
+  const isAccountant = userRole === 'contador';
   const {
-    currentCompany, accounts, journalEntries, sales, purchases, movements, products, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, addMovement, addPurchaseCreditNote,
-    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, createCorrectionCase, authorizeCorrectionCase, listCorrectionCases, executeCorrectionCase
+    currentCompany, accounts, journalEntries, sales, purchases, movements, products, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, addMovement, addPurchaseCreditNote, addPurchaseServiceCreditNote, addSaleCorrectionNote,
+    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, authorizeCorrectionCase, listCorrectionCases, executeCorrectionCase
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -55,13 +126,18 @@ export const ReversionFiscalView: React.FC = () => {
   const [requestEntityType, setRequestEntityType] = useState<'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'INVENTORY_MOVEMENT'>('JOURNAL_ENTRY');
   const [requestSearch, setRequestSearch] = useState('');
   const [requestEntityId, setRequestEntityId] = useState('');
-  const [requestCorrectionType, setRequestCorrectionType] = useState('CORRECCION_DOCUMENTAL');
+  const [requestCorrectionType, setRequestCorrectionType] = useState('NOTA_CREDITO_VENTA');
   const [requestSourceRef, setRequestSourceRef] = useState('');
   const [requestTargetRef, setRequestTargetRef] = useState('');
   const [requestReason, setRequestReason] = useState('');
-  const [requestSubmitting, setRequestSubmitting] = useState(false);
+  const [requestCorrectionDate, setRequestCorrectionDate] = useState(today);
+  const [requestControlNumber, setRequestControlNumber] = useState('');
+  const [requestTaxableBaseBs, setRequestTaxableBaseBs] = useState('');
+  const [requestExemptAmountBs, setRequestExemptAmountBs] = useState('');
+  const [requestFiscalEmissionMedium, setRequestFiscalEmissionMedium] = useState<'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | ''>('');
+  const [requestSameMediumAsOriginal, setRequestSameMediumAsOriginal] = useState(false);
+  const [requestActionSubmitting, setRequestActionSubmitting] = useState(false);
   const [correctionCases, setCorrectionCases] = useState<import('../context/AccountingContext').CorrectionCase[]>([]);
-  const [caseActionBusy, setCaseActionBusy] = useState<string | null>(null);
   const refreshCorrectionCases = useCallback(async () => { try { setCorrectionCases(await listCorrectionCases()); } catch (error) { setFeedback({kind:'error',message:error instanceof Error?error.message:'No se pudo consultar el historial de correcciones.'}); } },[listCorrectionCases]);
   useEffect(() => { void refreshCorrectionCases(); },[refreshCorrectionCases]);
   const refreshAuditEvents = useCallback(async () => {
@@ -146,25 +222,98 @@ export const ReversionFiscalView: React.FC = () => {
     return correctionSourceOptions.filter(item=>!query || (item.label+' '+item.reference+' '+item.id).toLocaleLowerCase().includes(query)).slice(0,100);
   },[correctionSourceOptions,requestSearch]);
 
-  const submitCorrectionRequest = async () => {
-    if (requestSubmitting) return;
-    setRequestSubmitting(true);
+  const selectedSaleForCorrection = requestEntityType === 'SALE' ? sales.find(item => item.id === requestEntityId && item.companyId === currentCompany.id) : undefined;
+  const selectedPurchaseForCorrection = requestEntityType === 'PURCHASE' ? purchases.find(item => item.id === requestEntityId && item.companyId === currentCompany.id) : undefined;
+  const selectedMovementForCorrection = requestEntityType === 'INVENTORY_MOVEMENT' ? movements.find(item => item.id === requestEntityId && item.companyId === currentCompany.id) : undefined;
+  const selectedJournalForCorrection = requestEntityType === 'JOURNAL_ENTRY' ? journalEntries.find(item => item.id === requestEntityId && item.companyId === currentCompany.id) : undefined;
+  const selectedPurchaseHasInventory = Boolean(selectedPurchaseForCorrection && (
+    selectedPurchaseForCorrection.inventoryLines?.length ||
+    movements.some(item => item.companyId === currentCompany.id &&
+      (item.journalEntryId === selectedPurchaseForCorrection.journalEntryId ||
+       item.documentRef.trim().toUpperCase() === ('FAC-' + selectedPurchaseForCorrection.invoiceNumber).trim().toUpperCase()))
+  ));
+  const selectedSaleHasInventory = Boolean(selectedSaleForCorrection && movements.some(item =>
+    item.companyId === currentCompany.id &&
+    (item.journalEntryId === selectedSaleForCorrection.journalEntryId ||
+     item.documentRef.trim().toUpperCase() === ('FAC-' + selectedSaleForCorrection.invoiceNumber).trim().toUpperCase())
+  ));
+  const selectedCorrectionJournalId = selectedJournalForCorrection?.id ||
+    selectedSaleForCorrection?.journalEntryId || selectedPurchaseForCorrection?.journalEntryId ||
+    selectedMovementForCorrection?.journalEntryId || '';
+
+  const openExistingCorrectionFlow = () => {
+    if (!selectedCorrectionJournalId) {
+      setFeedback({kind:'error',message:'El registro no conserva un asiento contable vinculado. No se puede abrir una reversión segura.'});
+      return;
+    }
+    setSelectedId(selectedCorrectionJournalId);
+    setEffectiveDate(today);
+    setReason(requestReason);
+    document.getElementById('correction-execution-assistant')?.scrollIntoView({behavior:'smooth',block:'start'});
+  };
+
+  const submitDirectCorrection = async () => {
+    if (requestActionSubmitting) return;
+    if (!requestTargetRef.trim() || !requestControlNumber.trim() || requestReason.trim().length < 10 ||
+        !requestCorrectionDate || !requestFiscalEmissionMedium || !requestSameMediumAsOriginal ||
+        Number(requestTaxableBaseBs) < 0 || Number(requestExemptAmountBs) < 0 ||
+        Number(requestTaxableBaseBs) + Number(requestExemptAmountBs) <= 0) {
+      setFeedback({kind:'error',message:'Complete número y control de la nota, fecha, motivo, bases y confirme el mismo medio de emisión de la factura original.'});
+      return;
+    }
+    setRequestActionSubmitting(true);
     try {
-      await createCorrectionCase({
-        entityType: requestEntityType, entityId: requestEntityId.trim(),
-        correctionType: requestCorrectionType.trim(),
-        sourceDocumentRef: requestSourceRef.trim(),
-        correctionDocumentRef: requestTargetRef.trim(),
-        reason: requestReason.trim(), workpaperNote: ''
-      });
-      setRequestEntityId(''); setRequestSourceRef(''); setRequestTargetRef('');
+      if (selectedSaleForCorrection) {
+        const note = await addSaleCorrectionNote({
+          sourceSaleId: selectedSaleForCorrection.id,
+          kind: requestCorrectionType === 'NOTA_DEBITO_VENTA' ? 'DEBIT' : 'CREDIT',
+          noteDate: requestCorrectionDate,
+          noteNumber: requestTargetRef.trim(),
+          controlNumber: requestControlNumber.trim(),
+          reason: requestReason.trim(),
+          workpaperNote: '',
+          taxableBaseBs: Number(requestTaxableBaseBs),
+          exemptAmountBs: Number(requestExemptAmountBs),
+          bcvRate: Number(selectedSaleForCorrection.bcvRate),
+          fiscalEmissionMedium: requestFiscalEmissionMedium,
+          sameMediumAsOriginal: true
+        });
+        await waitForPersistence();
+        setFeedback({kind:'success',message:(note.documentType === '03' ? 'Nota de crédito ' : 'Nota de débito ') +
+          note.invoiceNumber + ' registrada. El asiento correctivo y el auxiliar CxC quedaron vinculados; la factura original permanece intacta.'});
+      } else if (selectedPurchaseForCorrection && !selectedPurchaseHasInventory) {
+        const note = await addPurchaseServiceCreditNote({
+          purchaseId: selectedPurchaseForCorrection.id,
+          noteDate: requestCorrectionDate,
+          creditNoteNumber: requestTargetRef.trim(),
+          controlNumber: requestControlNumber.trim(),
+          reason: requestReason.trim(),
+          workpaperNote: '',
+          taxableBaseBs: Number(requestTaxableBaseBs),
+          exemptAmountBs: Number(requestExemptAmountBs),
+          bcvRate: Number(selectedPurchaseForCorrection.bcvRate),
+          fiscalEmissionMedium: requestFiscalEmissionMedium,
+          sameMediumAsOriginal: true
+        });
+        await waitForPersistence();
+        setFeedback({kind:'success',message:'Nota de crédito ' + (note.creditNoteNumber || note.invoiceNumber) +
+          ' registrada con asiento correctivo y ajuste del auxiliar CxP/anticipo. La factura original permanece intacta.'});
+      } else {
+        setFeedback({kind:'error',message:'Este tipo de registro requiere el flujo especializado de reversión o devolución que se abre desde el asistente inferior.'});
+        return;
+      }
+      setRequestTargetRef('');
+      setRequestControlNumber('');
       setRequestReason('');
-      setFeedback({kind:'success',message:'Corrección habilitada directamente para el contador. El original permanece intacto.'});
+      setRequestTaxableBaseBs('');
+      setRequestExemptAmountBs('');
+      setRequestSameMediumAsOriginal(false);
+      setRequestFiscalEmissionMedium('');
       await refreshCorrectionCases();
       await refreshAuditEvents();
     } catch (error) {
-      setFeedback({kind:'error',message:error instanceof Error ? error.message : 'No se pudo registrar la solicitud.'});
-    } finally { setRequestSubmitting(false); }
+      setFeedback({kind:'error',message:error instanceof Error ? error.message : 'No se pudo ejecutar la corrección en SQLite.'});
+    } finally { setRequestActionSubmitting(false); }
   };
 
   const submitBcvRateCorrection = async () => {
@@ -497,9 +646,9 @@ export const ReversionFiscalView: React.FC = () => {
   return (
     <div className="space-y-5">
       <section className="rounded-2xl border border-indigo-200 bg-white p-4 sm:p-6 space-y-4">
-        <div className="flex items-center gap-3"><ShieldCheck className="h-6 w-6 text-indigo-700"/><div><h2 className="font-bold text-slate-900">Centro de Correcciones</h2><p className="text-xs text-slate-500">Localice el registro original, consulte sus datos y habilite directamente la acción correctiva.</p></div></div>
+        <div className="flex items-center gap-3"><ShieldCheck className="h-6 w-6 text-indigo-700"/><div><h2 className="font-bold text-slate-900">Centro de Correcciones</h2><p className="text-xs text-slate-500">Busque el asiento o documento original y ejecute aquí la corrección compatible. No se crea una solicitud ni un expediente previo.</p></div></div>
         <label className="block text-xs font-semibold text-slate-700">Buscar asiento, venta, compra o movimiento de Kardex
-          <input value={requestSearch} onChange={e=>setRequestSearch(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Número de factura, asiento, documento, proveedor, cliente o artículo…"/>
+          <input value={requestSearch} onChange={e=>setRequestSearch(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Factura, asiento, referencia, proveedor, cliente o artículo…"/>
         </label>
         <label className="block text-xs font-semibold text-slate-700">Registro original
           <select value={requestEntityId ? requestEntityType+'::'+requestEntityId : ''} onChange={e=>{
@@ -507,45 +656,89 @@ export const ReversionFiscalView: React.FC = () => {
             if(split<0){setRequestEntityId('');setRequestSourceRef('');return;}
             const entityType=value.slice(0,split) as typeof requestEntityType; const id=value.slice(split+2);
             const found=correctionSourceOptions.find(item=>item.entityType===entityType&&item.id===id);
+            const sale=sales.find(item=>item.id===id&&item.companyId===currentCompany.id);
+            const purchase=purchases.find(item=>item.id===id&&item.companyId===currentCompany.id);
             setRequestEntityType(entityType);setRequestEntityId(id);setRequestSourceRef(found?.reference||'');
+            setRequestCorrectionDate(today);setRequestTargetRef('');setRequestControlNumber('');setRequestReason('');
+            setRequestTaxableBaseBs(String(sale?.taxableBaseBs ?? purchase?.taxableBaseBs ?? ''));
+            setRequestExemptAmountBs(String(sale?.exemptAmountBs ?? purchase?.exemptAmountBs ?? ''));
+            setRequestFiscalEmissionMedium((sale?.fiscalEmissionMedium || purchase?.fiscalEmissionMedium || '') as typeof requestFiscalEmissionMedium);
+            setRequestSameMediumAsOriginal(false);
+            setRequestCorrectionType(sale ? 'NOTA_CREDITO_VENTA' : purchase ? 'NOTA_CREDITO_SERVICIO' : 'REVERSIÓN_CONTABLE');
           }} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
             <option value="">Seleccione el registro que desea corregir…</option>
             {filteredCorrectionSources.map(item=><option key={item.entityType+'::'+item.id} value={item.entityType+'::'+item.id}>{item.label}</option>)}
           </select>
         </label>
-        {requestEntityId && <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs"><p><strong>ID:</strong> {requestEntityId} · <strong>Referencia:</strong> {requestSourceRef}</p></div>}
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-xs font-semibold text-slate-700">Acción correctiva
+        {requestEntityId && <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs"><p><strong>Original:</strong> {requestSourceRef} · <strong>Tipo:</strong> {requestEntityType}</p></div>}
+        {selectedSaleForCorrection && <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+          {selectedSaleForCorrection.documentType !== '01' || selectedSaleForCorrection.isCancelled ? <div className="space-y-2 text-xs"><p>Este documento ya es una nota correctiva o está anulado. No se emite otra nota sobre él desde este formulario.</p><button type="button" onClick={openExistingCorrectionFlow} className="rounded bg-indigo-700 px-3 py-2 font-semibold text-white">Abrir reversión del asiento vinculado</button></div> : <>
+          <label className="block text-xs font-semibold text-slate-700">Acción sobre la factura de venta
             <select value={requestCorrectionType} onChange={e=>setRequestCorrectionType(e.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
-              <option value="CORRECCION_DOCUMENTAL">Corregir documento</option><option value="ANULACION_DOCUMENTO">Anular operación / documento</option><option value="REVERSIÓN_CONTABLE">Revertir asiento</option><option value="AJUSTE_PARCIAL">Ajuste parcial</option><option value="SUSTITUCION_DOCUMENTO">Sustituir documento</option><option value="RECTIFICACION_FISCAL">Rectificación fiscal</option><option value="CORRECCION_INVENTARIO">Corregir inventario / Kardex</option><option value="CORRECCION_AUXILIAR">Ajustar auxiliar</option>
+              <option value="NOTA_CREDITO_VENTA">Emitir nota de crédito (NC)</option>
+              <option value="NOTA_DEBITO_VENTA">Emitir nota de débito (ND)</option>
             </select>
           </label>
-          <label className="text-xs font-semibold text-slate-700">Referencia del documento correctivo
-            <input value={requestTargetRef} onChange={e=>setRequestTargetRef(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Número de NC, ND, asiento o movimiento correctivo"/>
-          </label>
-          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Motivo breve (opcional)
-            <textarea value={requestReason} onChange={e=>setRequestReason(e.target.value)} rows={2} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Indique brevemente qué error debe corregirse."/>
-          </label>
-        </div>
-        <div><button type="button" onClick={()=>void submitCorrectionRequest()} disabled={requestSubmitting||!requestEntityId.trim()||!requestSourceRef.trim()||!requestTargetRef.trim()} className="rounded bg-indigo-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{requestSubmitting?'Procesando…':'Habilitar corrección directa'}</button></div>
-        <p className="text-xs text-slate-500">No se solicitan aprobaciones, expedientes administrativos, papeles de trabajo ni adjuntos. SICOVEN conserva el original, identifica al contador, registra fecha/hora y exige que el documento correctivo quede vinculado al origen antes de cerrar la operación.</p>
+          {selectedSaleHasInventory && requestCorrectionType === 'NOTA_CREDITO_VENTA' ? <div className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3 text-xs">
+            <p>Esta factura tiene movimientos de inventario. Primero debe conciliar la devolución física y su costo por artículo.</p>
+            <button type="button" onClick={openExistingCorrectionFlow} className="rounded bg-indigo-700 px-3 py-2 font-semibold text-white">Abrir devolución y conciliación de Kardex</button>
+          </div> : <CorrectionNoteFormFields
+            minDate={selectedSaleForCorrection.invoiceDate}
+            noteDate={requestCorrectionDate} setNoteDate={setRequestCorrectionDate}
+            noteNumber={requestTargetRef} setNoteNumber={setRequestTargetRef}
+            controlNumber={requestControlNumber} setControlNumber={setRequestControlNumber}
+            reason={requestReason} setReason={setRequestReason}
+            taxableBase={requestTaxableBaseBs} setTaxableBase={setRequestTaxableBaseBs}
+            exemptAmount={requestExemptAmountBs} setExemptAmount={setRequestExemptAmountBs}
+            medium={requestFiscalEmissionMedium} setMedium={setRequestFiscalEmissionMedium}
+            sameMedium={requestSameMediumAsOriginal} setSameMedium={setRequestSameMediumAsOriginal}
+            submitting={requestActionSubmitting}
+            onSubmit={()=>void submitDirectCorrection()}
+            submitLabel={requestCorrectionType === 'NOTA_DEBITO_VENTA' ? 'Registrar ND de venta' : 'Registrar NC de venta'}
+          />}
+          </>}
+        </div>}
+        {selectedPurchaseForCorrection && <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+          {selectedPurchaseForCorrection.documentType !== '01' || selectedPurchaseForCorrection.isCancelled ? <div className="space-y-2 text-xs"><p>Este documento ya es una nota correctiva o está anulado. No se emite otra NC sobre él desde este formulario.</p><button type="button" onClick={openExistingCorrectionFlow} className="rounded bg-indigo-700 px-3 py-2 font-semibold text-white">Abrir reversión del asiento vinculado</button></div> : selectedPurchaseHasInventory ? <div className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3 text-xs">
+            <p>La compra tiene mercancía/Kardex. La NC debe calcular la devolución física por líneas y su efecto sobre inventario, CxP, retenciones e impuestos.</p>
+            <button type="button" onClick={openExistingCorrectionFlow} className="rounded bg-indigo-700 px-3 py-2 font-semibold text-white">Abrir NC y devolución de inventario</button>
+          </div> : <CorrectionNoteFormFields
+            minDate={selectedPurchaseForCorrection.invoiceDate}
+            noteDate={requestCorrectionDate} setNoteDate={setRequestCorrectionDate}
+            noteNumber={requestTargetRef} setNoteNumber={setRequestTargetRef}
+            controlNumber={requestControlNumber} setControlNumber={setRequestControlNumber}
+            reason={requestReason} setReason={setRequestReason}
+            taxableBase={requestTaxableBaseBs} setTaxableBase={setRequestTaxableBaseBs}
+            exemptAmount={requestExemptAmountBs} setExemptAmount={setRequestExemptAmountBs}
+            medium={requestFiscalEmissionMedium} setMedium={setRequestFiscalEmissionMedium}
+            sameMedium={requestSameMediumAsOriginal} setSameMedium={setRequestSameMediumAsOriginal}
+            submitting={requestActionSubmitting}
+            onSubmit={()=>void submitDirectCorrection()}
+            submitLabel="Registrar NC de compra de servicios"
+          />}
+        </div>}
+        {(selectedJournalForCorrection || selectedMovementForCorrection) && !selectedSaleForCorrection && !selectedPurchaseForCorrection && <div className="rounded-lg border border-slate-200 p-3 text-xs">
+          <p>Este registro requiere una operación contable vinculada. SICOVEN abrirá el asistente con su asiento original para validar los efectos cruzados antes de ejecutar.</p>
+          <button type="button" onClick={openExistingCorrectionFlow} className="mt-2 rounded bg-indigo-700 px-3 py-2 font-semibold text-white">Abrir corrección del asiento</button>
+        </div>}
+        <p className="text-xs text-slate-500">Las notas se contabilizan desde el flujo especializado existente; el motivo, la sesión del contador y la fecha quedan auditados. El original nunca se sobrescribe. Los casos no cubiertos se bloquean en lugar de registrar una corrección ficticia.</p>
       </section>
       <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 space-y-3">
         <div className="flex items-center justify-between gap-2"><h2 className="font-bold text-slate-900">Historial de correcciones ({correctionCases.length})</h2><button type="button" onClick={()=>void refreshCorrectionCases()} className="rounded border px-3 py-1">Actualizar</button></div>
         {correctionCases.length===0 ? <p className="text-sm text-slate-500">Todavía no hay correcciones registradas.</p> : correctionCases.map(item=><article key={item.id} className="rounded-lg border p-3 space-y-2 text-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2"><strong>{item.correction_type} · {item.entity_type} · {item.entity_id}</strong><span className="font-semibold">{item.status==='EXECUTED'?'EJECUTADA':item.status==='APPROVED'?'LISTA PARA EJECUTAR':item.status}</span></div>
+          <div className="flex flex-wrap items-center justify-between gap-2"><strong>{item.correction_type} · {item.entity_type} · {item.entity_id}</strong><span className="font-semibold">{item.status==='EXECUTED'?'EJECUTADA':item.status==='APPROVED'?'EN CURSO':item.status}</span></div>
           <p>Origen: {item.source_ref} · Correctivo: {item.correction_ref}</p><p>{item.reason || 'Sin motivo adicional.'}</p>
           <p className="text-slate-500">Contador: {item.requested_by_name} · Registro: {item.created_at} · Ejecución: {item.executed_at || 'Pendiente'}</p>
-          {item.status==='APPROVED' && item.workflow_stage==='READY_FOR_EXECUTION' && <button type="button" disabled={caseActionBusy===item.id} onClick={async()=>{setCaseActionBusy(item.id);try{await executeCorrectionCase({caseId:item.id,executionRef:item.correction_ref,reason:'Documento correctivo persistido; vínculo de origen verificado por SICOVEN.'});await refreshCorrectionCases();setFeedback({kind:'success',message:'La corrección quedó cerrada con trazabilidad e integridad verificadas.'});}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'No se pudo verificar la corrección.'});}finally{setCaseActionBusy(null);}}} className="rounded bg-indigo-700 px-3 py-2 text-white disabled:opacity-40">Verificar vínculo y cerrar corrección</button>}
+
           <div className="border-t pt-2"><strong>Historial inalterable</strong>{item.events.map(ev=><p key={ev.id}>{ev.event_type==='APPROVED'?'HABILITADA PARA EJECUCIÓN DIRECTA':ev.event_type} · {ev.actor_name} · {ev.created_at} · {ev.reason}</p>)}</div>
         </article>)}
       </section>
-      <section className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
+      <section id="correction-execution-assistant" className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
         <div className="bg-slate-900 text-white px-5 py-4 flex items-center gap-3">
           <Undo2 className="h-6 w-6 text-emerald-300" />
           <div>
-            <h1 className="text-lg font-bold">Asistente de reversión guiada</h1>
-            <p className="text-sm text-slate-300">Inmutabilidad del Libro Diario · impacto cruzado · papeles de trabajo</p>
+            <h1 className="text-lg font-bold">Ejecución de correcciones con efectos cruzados</h1>
+            <p className="text-sm text-slate-300">Inmutabilidad del Libro Diario · validación de efectos cruzados</p>
           </div>
         </div>
         <div className="p-4 sm:p-6 space-y-5">
@@ -675,6 +868,7 @@ export const ReversionFiscalView: React.FC = () => {
         </div>
       </section>
 
+      {!isAccountant && <>
       <section className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 sm:p-6 space-y-4">
         <div className="flex items-center gap-3"><LockKeyhole className="w-6 h-6 text-indigo-700" /><div><h2 className="font-bold text-slate-900">Candado de períodos fiscales</h2><p className="text-sm text-slate-500">Bloquea nuevos asientos y facturas con fecha igual o anterior al corte.</p></div></div>
         <div className="rounded-lg bg-slate-50 border p-3 text-sm">Estado actual: {currentCompany.closedThroughDate ? <strong>cerrado hasta {currentCompany.closedThroughDate}</strong> : <strong>sin período cerrado</strong>}</div>
@@ -720,14 +914,12 @@ export const ReversionFiscalView: React.FC = () => {
               {details.previousRate != null && <p><strong>Tasa BCV:</strong> {String(details.previousRate)} → {String(details.newRate)} Bs/USD · vigencia {String(details.effectiveDate || 'sin fecha indicada')}</p>}
               {Boolean(details.sourceDocumentRef) && <p><strong>Documento original:</strong> {String(details.sourceDocumentRef)} · <strong>Documento correctivo:</strong> {String(details.correctionDocumentRef || '')}</p>}
               {Boolean(details.reason) && <p><strong>Motivo:</strong> {String(details.reason)}</p>}
-              {Boolean(details.workpaperNote) && <p><strong>Papel de trabajo:</strong> {String(details.workpaperNote)}</p>}
               {Boolean(details.fiscalEmissionMedium) && <p><strong>Medio fiscal declarado:</strong> {String(details.fiscalEmissionMedium)} · coincidencia con original: {details.sameMediumAsOriginal ? 'confirmada' : 'no confirmada'}</p>}
               {Boolean(details.authorization) && <p><strong>Autorización:</strong> sesión autenticada {String(authorizationDetails.method || '')} · confirmación expresa {authorizationDetails.explicitConfirmation ? 'sí' : 'no'}</p>}
               {Boolean(details.journalEntryId) && <p><strong>Asiento correctivo:</strong> {String(details.journalEntryId)}</p>}
               {Boolean(details.reversalOfEntryId) && <p>Asiento original: {String(details.reversalOfEntryId)}</p>}
               {Boolean(details.invoiceNumber) && <p>Factura: {String(details.invoiceNumber)} · {String(details.collection || '')}</p>}
               {Boolean(details.reversalReason) && <p><strong>Motivo:</strong> {String(details.reversalReason)}</p>}
-              {Boolean(details.workpaperNote) && <p className="whitespace-pre-wrap"><strong>Papel de trabajo:</strong> {String(details.workpaperNote)}</p>}
               {Boolean(details.cancellationReason) && <p><strong>Motivo de regularización:</strong> {String(details.cancellationReason)}</p>}
               {Boolean(details.documentId) && <p>Documento vinculado: {String(details.documentId)}</p>}
               {Boolean(details.closedThroughDate) && <p>Cierre hasta: {String(details.closedThroughDate)}</p>}
@@ -738,6 +930,7 @@ export const ReversionFiscalView: React.FC = () => {
         </div>
         <p className="text-[11px] text-slate-500">Se muestran los últimos 200 eventos. El historial se almacena en SQLite y el reinicio operativo no lo elimina.</p>
       </section>
+      </>}
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div><h2 className="text-base font-bold text-slate-900">Corrección de tasa BCV</h2><p className="text-xs text-slate-500">Tasa vigente: {formatBs(currentCompany.bcvRate)} Bs/USD · última fecha: {currentCompany.lastRateUpdate || 'sin fecha registrada'}</p></div>
@@ -756,7 +949,7 @@ export const ReversionFiscalView: React.FC = () => {
           <div className="sm:col-span-2"><button type="button" disabled={bcvCorrectionSaving || Number(bcvCorrectionRate)<=0} onClick={()=>void submitBcvRateCorrection()} className="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{bcvCorrectionSaving ? 'Guardando corrección…' : 'Confirmar y auditar corrección'}</button></div>
         </div>}
       </section>
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      {!isAccountant && <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div><h2 className="text-base font-bold text-slate-900">Expedientes de rectificación fiscal</h2><p className="text-xs text-slate-500">Incidencias append-only vinculadas a comprobantes, declaraciones y acciones documentadas</p></div>
           <button type="button" onClick={() => void refreshFiscalIncidents()} disabled={incidentsLoading} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold disabled:opacity-50">{incidentsLoading ? 'Actualizando…' : 'Actualizar expedientes'}</button>
@@ -793,10 +986,10 @@ export const ReversionFiscalView: React.FC = () => {
             </div>}
           </article>)}</div>}
         <p className="mt-2 text-[11px] text-slate-500">Registrar una actuación no equivale a presentar una declaración sustitutiva ni a obtener aceptación del SENIAT. SICOVEN conserva el expediente abierto para impedir que se declare resuelto sin evidencia.</p>
-      </section>
+      </section>}
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div><h2 className="text-base font-bold text-slate-900">Expedientes de notas correctivas</h2><p className="text-xs text-slate-500">NC/ND vinculadas a su documento original y asiento</p></div>
+          <div><h2 className="text-base font-bold text-slate-900">Documentos correctivos registrados</h2><p className="text-xs text-slate-500">NC/ND vinculadas a su documento original y asiento</p></div>
           <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{correctionDocuments.length} documento(s)</span>
         </div>
         {correctionDocuments.length === 0 ? <p className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">Todavía no hay notas correctivas vinculadas en esta empresa.</p> :
@@ -805,7 +998,6 @@ export const ReversionFiscalView: React.FC = () => {
             <p className="mt-1 text-slate-600">{document.party} · afecta {document.sourceNumber}</p>
             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-slate-600"><span>Bs. {formatBs(document.amountBs)}</span><span>USD {formatUsd(document.amountUsd)}</span><span>{document.journalEntryId ? 'Asiento vinculado' : 'Sin asiento enlazado'}</span></div>
             {document.reason && <p className="mt-1"><strong>Motivo:</strong> {document.reason}</p>}
-            {document.workpaper && <p className="mt-1"><strong>Papel de trabajo:</strong> {document.workpaper}</p>}
             {document.medium && <p className="mt-1"><strong>Medio fiscal declarado:</strong> {document.medium}</p>}
             <div className="mt-2 flex items-center justify-between gap-2"><span className="text-amber-700">Revisar efecto fiscal y declaración del período</span>
               {document.journalEntryId && <button type="button" onClick={() => setSelectedId(document.journalEntryId)} className="rounded bg-slate-100 px-2 py-1 font-semibold text-slate-700 hover:bg-slate-200">Consultar asiento</button>}
