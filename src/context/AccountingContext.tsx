@@ -767,6 +767,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('Reversión bancaria bloqueada: ' + (bankReadiness.reason || 'no existe una contrapartida bancaria verificable.') +
         ' No se registró ningún contra-asiento.');
     }
+    await requireApprovedCorrectionCase('JOURNAL_ENTRY',source.id,source.referenceDoc || String(source.entryNumber),'REV-' + source.entryNumber);
     await recordCorrectionAudit({
       eventType: 'accounting_correction_requested', entityType: 'JOURNAL_ENTRY', companyId: currentCompany.id,
       entityId: source.id, correctionType: priorPeriodAdjustment ? 'PRIOR_PERIOD_ADJUSTMENT_REVERSAL' : 'JOURNAL_REVERSAL',
@@ -2306,6 +2307,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     try {
       const sourceForAudit = purchases.find(item => item.id === request.purchaseId && item.companyId === currentCompany.id);
       if (!sourceForAudit) throw new Error('No se encontró la factura original en la empresa activa.');
+      await requireApprovedCorrectionCase('PURCHASE',sourceForAudit.id,sourceForAudit.invoiceNumber,request.creditNoteNumber);
       await recordCorrectionAudit({
         eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id,
         entityId: sourceForAudit.id, correctionType: 'PURCHASE_INVENTORY_CREDIT_NOTE',
@@ -2709,6 +2711,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const source = purchases.find(item => item.id === draft.purchaseId && item.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró la factura original en la empresa activa.');
+    await requireApprovedCorrectionCase('PURCHASE',source.id,source.invoiceNumber,draft.creditNoteNumber);
     const sourceEntry = source.journalEntryId
       ? journalEntries.find(item => item.id === source.journalEntryId && item.companyId === currentCompany.id)
       : undefined;
@@ -2907,6 +2910,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('La nota de débito requiere SQLite local de escritorio disponible y lista. No se registró.');
     }
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la ND.');
+    const sourceForApproval = purchases.find(item=>item.id===draft.sourcePurchaseId && item.companyId===currentCompany.id);
+    if (!sourceForApproval) throw new Error('No se encontró la factura original en la empresa activa.');
+    await requireApprovedCorrectionCase('PURCHASE',sourceForApproval.id,sourceForApproval.invoiceNumber,draft.debitNoteNumber);
     const operationKey = [
       currentCompany.id, draft.sourcePurchaseId, String(draft.debitNoteNumber || '').trim().toUpperCase()
     ].join('|');
@@ -3204,6 +3210,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const source = sales.find(item => item.id === draft.sourceSaleId && item.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró la factura original de venta en la empresa activa.');
     if (source.documentType !== '01' || source.isCancelled) throw new Error('Solo se pueden corregir facturas de venta vigentes tipo 01.');
+    await requireApprovedCorrectionCase('SALE',source.id,source.invoiceNumber,draft.noteNumber);
     const linkedInventory = movements.some(item => item.companyId === currentCompany.id &&
       (item.journalEntryId === source.journalEntryId ||
        item.documentRef.trim().toUpperCase().replace(/\\s+/g, '') ===
