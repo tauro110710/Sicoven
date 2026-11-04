@@ -66,17 +66,22 @@ export function summarizeCreditDocumentAdjustments(
   creditNotes: CreditDocumentAdjustmentRecord[],
   debitNotes: CreditDocumentAdjustmentRecord[]
 ): CreditDocumentAdjustmentTotals {
-  const creditedByNotesUsd = creditNotes.reduce((sum,item)=>sum+Number(
-    kind === 'PURCHASE_PAYMENT' ? (item.netPayableReductionUsd ?? item.netReceivableAdjustmentUsd ?? 0) : (item.netReceivableAdjustmentUsd ?? 0)
+  const amount = (value: number | undefined): number => {
+    const parsed=Number(value ?? 0);
+    if(!Number.isFinite(parsed) || parsed<0) throw new Error('Una NC/ND contiene un importe no válido para el auxiliar de crédito.');
+    return parsed;
+  };
+  const creditedByNotesUsd = creditNotes.reduce((sum,item)=>sum+amount(
+    kind === 'PURCHASE_PAYMENT' ? (item.netPayableReductionUsd ?? item.netReceivableAdjustmentUsd) : item.netReceivableAdjustmentUsd
   ),0);
-  const creditedByNotesBs = creditNotes.reduce((sum,item)=>sum+Number(
-    kind === 'PURCHASE_PAYMENT' ? (item.netPayableReductionBs ?? item.netReceivableAdjustmentBs ?? 0) : (item.netReceivableAdjustmentBs ?? 0)
+  const creditedByNotesBs = creditNotes.reduce((sum,item)=>sum+amount(
+    kind === 'PURCHASE_PAYMENT' ? (item.netPayableReductionBs ?? item.netReceivableAdjustmentBs) : item.netReceivableAdjustmentBs
   ),0);
-  const debitedByNotesUsd = debitNotes.reduce((sum,item)=>sum+Number(
-    kind === 'PURCHASE_PAYMENT' ? (item.totalAmountUsd ?? 0) : (item.netReceivableAdjustmentUsd ?? 0)
+  const debitedByNotesUsd = debitNotes.reduce((sum,item)=>sum+amount(
+    kind === 'PURCHASE_PAYMENT' ? item.totalAmountUsd : item.netReceivableAdjustmentUsd
   ),0);
-  const debitedByNotesBs = debitNotes.reduce((sum,item)=>sum+Number(
-    kind === 'PURCHASE_PAYMENT' ? (item.totalAmountBs ?? 0) : (item.netReceivableAdjustmentBs ?? 0)
+  const debitedByNotesBs = debitNotes.reduce((sum,item)=>sum+amount(
+    kind === 'PURCHASE_PAYMENT' ? item.totalAmountBs : item.netReceivableAdjustmentBs
   ),0);
   return {creditedByNotesUsd,creditedByNotesBs,debitedByNotesUsd,debitedByNotesBs};
 }
