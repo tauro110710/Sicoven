@@ -59,3 +59,37 @@ test('accounting snapshot and its audit events commit or roll back as one SQLite
     db.close();
   }
 });
+
+test('BCV rate corrections retain prior/new rate, effective date and authenticated actor', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE app_state (
+      state_key TEXT PRIMARY KEY, state_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL,
+      details_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  try {
+    const prior = emptyState();
+    prior.companies[0].bcvRate = 100;
+    prior.companies[0].lastRateUpdate = '2026-10-01';
+    persistAccountingSnapshot(db, prior, { id: 7, username: 'contador', role: 'admin' });
+    const next = {
+      ...prior,
+      companies: [{ ...prior.companies[0], bcvRate: 110, lastRateUpdate: '2026-10-02' }]
+    };
+    persistAccountingSnapshot(db, next, { id: 7, username: 'contador', role: 'admin' });
+    const event = db.prepare("SELECT details_json FROM audit_events WHERE event_type='company_bcv_rate_updated'").get();
+    assert.ok(event);
+    const details = JSON.parse(event.details_json);
+    assert.equal(details.previousRate, 100);
+    assert.equal(details.newRate, 110);
+    assert.equal(details.effectiveDate, '2026-10-02');
+    assert.equal(details.actor.username, 'contador');
+  } finally {
+    db.close();
+  }
+});
