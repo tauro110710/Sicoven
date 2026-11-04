@@ -41,8 +41,13 @@ export function validateBankMovementFxSnapshot(input: {
   if (values.some(value => !Number.isFinite(value) || value <= 0)) {
     throw new Error('El movimiento y la tasa BCV deben tener importes positivos y válidos en ambas monedas.');
   }
-  if (input.bcvRateEffectiveDate !== input.date) {
-    throw new Error('La tasa BCV debe corresponder a la fecha del movimiento bancario. Actualice o registre la tasa histórica antes de importar.');
+  const rateDate = String(input.bcvRateEffectiveDate || '');
+  const parsedRateDate = new Date(rateDate + 'T00:00:00.000Z');
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(rateDate) ||
+      !Number.isFinite(parsedRateDate.getTime()) ||
+      parsedRateDate.toISOString().slice(0, 10) !== rateDate ||
+      rateDate > input.date) {
+    throw new Error('La fecha de vigencia de la tasa BCV debe ser válida y no puede ser posterior al movimiento bancario.');
   }
   if (Math.abs(Math.round(Number(input.amountBs) * 100) / 100 -
       Math.round(Number(input.amountUsd) * Number(input.bcvRate) * 100) / 100) > 0.01) {
