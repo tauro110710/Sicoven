@@ -1142,7 +1142,7 @@ test('SQLite rejects cumulative supplier returns above the original invoice quan
 });
 
 
-test('Production SQLite persistence rolls back atomically on audit failure and survives database reopen', () => {
+test('Production SQLite persistence rolls back the updated snapshot when the final audit insert fails and survives database reopen', () => {
   const fs = require('node:fs');
   const os = require('node:os');
   const path = require('node:path');
@@ -1176,7 +1176,7 @@ test('Production SQLite persistence rolls back atomically on audit failure and s
       .run('accounting', JSON.stringify(prior));
 
     db.exec(`CREATE TRIGGER reject_supplier_credit_audit BEFORE INSERT ON audit_events
-      WHEN NEW.event_type='supplier_credit_note_posted'
+      WHEN NEW.event_type='state_saved'
       BEGIN SELECT RAISE(ABORT, 'simulated audit write failure'); END;`);
     assert.throws(() => persistAccountingSnapshot(db, next), /simulated audit write failure/);
     assert.deepEqual(
