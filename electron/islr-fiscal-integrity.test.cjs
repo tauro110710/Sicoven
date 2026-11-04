@@ -22,7 +22,7 @@ test('SQLite isolates ISLR events when two companies reuse the same purchase ID'
   const journal = (id, companyId) => ({ id, companyId, date: '2026-10-01', type: 'PAGO' });
   const event = (id, companyId, journalEntryId) => ({
     id, companyId, supplierRif: 'J-12345678-9', conceptCode: '003',
-    fiscalDate: '2026-10-01', sequence: 1, kind: 'PAYMENT',
+    fiscalDate: '2026-10-01', sequence: 1, kind: 'ACCOUNT_CREDIT',
     allocations: [{ purchaseId: 'shared-purchase', baseAmountBs: 100 }],
     basePercentage: 90, unitTaxValueBs: 43, withheldAmountBs: 0,
     journalEntryId, createdAt: '2026-10-01T10:00:00.000Z'
@@ -296,7 +296,7 @@ test('reconciles cash-purchase ISLR PAYMENT event against the cash purchase, vou
   assert.doesNotThrow(() => validateIslrFiscalEventLedger(previous, next));
   assert.throws(() => validateIslrFiscalEventLedger(previous, {
     ...next, islrFiscalEvents: [{ ...fiscalEvent, kind: 'ACCOUNT_CREDIT' }]
-  }), /ACCOUNT_CREDIT para una compra de contado/);
+  }), /disparador PAYMENT\/ACCOUNT_CREDIT no coincide/);
 });
 
 
