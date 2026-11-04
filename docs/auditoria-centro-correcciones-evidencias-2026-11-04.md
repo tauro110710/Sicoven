@@ -75,3 +75,10 @@ La ejecución exige además que al menos un soporte documental del expediente es
 Total actual de la suite del workflow: **19 pruebas definidas**, no ejecutadas.
 
 La migración también reconstruye de forma transaccional el ledger de eventos del workflow cuando una instalación previa todavía tiene la restricción anterior sin `WITHDRAWN`; conserva los eventos existentes y restablece sus triggers append-only. Se añadió un caso automatizado para esa migración.
+
+
+## Ajuste adicional de CxP por notas de débito de proveedor
+
+Durante la revisión de los auxiliares se detectó que el saldo CxP restaba las NC de proveedor, pero no sumaba las ND tipo `02` vinculadas mediante `originalPurchaseId`. Se corrigió el cálculo: las ND de proveedor aumentan el saldo por su total fiscal en Bs/USD; las NC continúan reduciéndolo solo por la porción aplicada a CxP, dejando excedentes como anticipo. En CxC, las ND de venta siguen usando el ajuste neto de la cuenta por cobrar, no el total bruto del documento.
+
+Se incorporó el helper `summarizeCreditDocumentAdjustments` y **21 pruebas definidas** en la suite de liquidaciones/auxiliares. Estas pruebas tampoco se han ejecutado en esta sesión.
