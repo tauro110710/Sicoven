@@ -523,7 +523,7 @@ test('SQLite accepts cash expense purchase with effective payment/account-credit
   alteredVat.purchases[0].totalAmountBs = 231;
   alteredVat.purchases[0].totalAmountUsd = 2.31;
   assert.throws(() => validateAccountingSnapshot(emptyState(), alteredVat),
-    /factura de compra: el asiento no concilia en Bs\\. y USD/);
+    /factura de compra: el asiento no concilia en Bs\. y USD/);
 });
 
 test('SQLite rejects a purchase when the inventory debit differs from its Kardex total', () => {
