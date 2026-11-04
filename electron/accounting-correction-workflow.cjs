@@ -102,8 +102,9 @@ function initializeCorrectionWorkflow(db) {
       WHERE workflow_stage='IN_REVIEW' AND status IN ('APPROVED','REJECTED','EXECUTED');
     CREATE TRIGGER correction_cases_valid_transition BEFORE UPDATE ON accounting_correction_cases
       WHEN NOT (
-        (OLD.status='PENDING_REVIEW' AND NEW.status IN ('APPROVED','REJECTED')) OR
-        (OLD.status='APPROVED' AND NEW.status='EXECUTED') OR
+        (OLD.status='PENDING_REVIEW' AND NEW.status='APPROVED' AND NEW.workflow_stage='READY_FOR_EXECUTION') OR
+        (OLD.status='PENDING_REVIEW' AND NEW.status='REJECTED' AND NEW.workflow_stage='CLOSED') OR
+        (OLD.status='APPROVED' AND NEW.status='EXECUTED' AND NEW.workflow_stage='COMPLETED') OR
         (OLD.status IN ('PENDING_REVIEW','APPROVED') AND NEW.status='PENDING_REVIEW' AND NEW.workflow_stage='OBSERVATION_REQUIRED') OR
         (OLD.status IN ('PENDING_REVIEW','APPROVED') AND NEW.status='PENDING_REVIEW' AND NEW.workflow_stage='WITHDRAWN') OR
         (OLD.status='PENDING_REVIEW' AND NEW.status='PENDING_REVIEW' AND OLD.workflow_stage='OBSERVATION_REQUIRED' AND NEW.workflow_stage='IN_REVIEW')
