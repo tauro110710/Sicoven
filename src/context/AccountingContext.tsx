@@ -38,6 +38,7 @@ import {
   INITIAL_STATEMENT_MOVEMENTS
 } from '../data/initialData';
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
+import { formatIslrVoucherNumber } from '../utils/islrVoucherNumber';
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus } from '../types/ivaRetentionEligibility';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { FinancialDisclosure, validateFinancialDisclosure } from '../types/financialDisclosures';
@@ -2011,8 +2012,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           const voucherKey = `${companyKey}:${islrPeriod}`;
           const existingCount = islrVouchers.filter(v => v.companyId === currentCompany.id && v.period === islrPeriod).length;
           const sequence = Math.max(existingCount, islrVoucherSequenceRef.current[voucherKey] || 0) + 1;
+          const number = formatIslrVoucherNumber(islrPeriod, sequence, purchaseData.accountCreditDate!);
           islrVoucherSequenceRef.current[voucherKey] = sequence;
-          return `ISLR-${islrPeriod}-${String(sequence).padStart(6, '0')}`;
+          return number;
         })(),
         date: purchaseData.accountCreditDate!,
         period: islrPeriod,
