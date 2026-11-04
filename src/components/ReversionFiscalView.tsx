@@ -8,7 +8,7 @@ import type { VatFiscalIncident } from '../types/vatFiscalIncidents';
 export const ReversionFiscalView: React.FC = () => {
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, addMovement, addPurchaseCreditNote,
-    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate
+    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, requestAccountingCorrection
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -54,6 +54,14 @@ export const ReversionFiscalView: React.FC = () => {
   const [bcvCorrectionReason, setBcvCorrectionReason] = useState('');
   const [bcvCorrectionWorkpaper, setBcvCorrectionWorkpaper] = useState('');
   const [bcvCorrectionSaving, setBcvCorrectionSaving] = useState(false);
+  const [requestEntityType, setRequestEntityType] = useState<'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'INVENTORY_PRODUCT'>('JOURNAL_ENTRY');
+  const [requestEntityId, setRequestEntityId] = useState('');
+  const [requestCorrectionType, setRequestCorrectionType] = useState('CORRECCION_DOCUMENTAL');
+  const [requestSourceRef, setRequestSourceRef] = useState('');
+  const [requestTargetRef, setRequestTargetRef] = useState('');
+  const [requestReason, setRequestReason] = useState('');
+  const [requestWorkpaper, setRequestWorkpaper] = useState('');
+  const [requestSubmitting, setRequestSubmitting] = useState(false);
   const refreshAuditEvents = useCallback(async () => {
     setAuditLoading(true);
     try {
@@ -109,6 +117,26 @@ export const ReversionFiscalView: React.FC = () => {
       setIncidentError(error instanceof Error ? error.message : 'No se pudo crear el expediente fiscal.');
     } finally { setIncidentCreating(false); }
   };
+  const submitCorrectionRequest = async () => {
+    if (requestSubmitting) return;
+    setRequestSubmitting(true);
+    try {
+      await requestAccountingCorrection({
+        entityType: requestEntityType, entityId: requestEntityId.trim(),
+        correctionType: requestCorrectionType.trim(),
+        sourceDocumentRef: requestSourceRef.trim(),
+        correctionDocumentRef: requestTargetRef.trim() || 'PENDIENTE DE DOCUMENTO CORRECTIVO',
+        reason: requestReason.trim(), workpaperNote: requestWorkpaper.trim()
+      });
+      setRequestEntityId(''); setRequestSourceRef(''); setRequestTargetRef('');
+      setRequestReason(''); setRequestWorkpaper('');
+      setFeedback({kind:'success',message:'Solicitud de corrección registrada en la pista append-only de SQLite. No se modificó el documento ni se ejecutó ningún asiento.'});
+      await refreshAuditEvents();
+    } catch (error) {
+      setFeedback({kind:'error',message:error instanceof Error ? error.message : 'No se pudo registrar la solicitud.'});
+    } finally { setRequestSubmitting(false); }
+  };
+
   const submitBcvRateCorrection = async () => {
     if (bcvCorrectionSaving) return;
     setBcvCorrectionSaving(true);
@@ -442,6 +470,38 @@ export const ReversionFiscalView: React.FC = () => {
 
   return (
     <div className="space-y-5">
+      <section className="rounded-2xl border border-indigo-200 bg-white p-4 sm:p-6 space-y-3">
+        <div className="flex items-center gap-3"><ShieldCheck className="h-6 w-6 text-indigo-700"/><div><h2 className="font-bold text-slate-900">Centro Integral de Correcciones · Nueva solicitud</h2><p className="text-xs text-slate-500">Registra una solicitud trazable antes de modificar cualquier efecto contable o fiscal.</p></div></div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Este registro abre una solicitud, no autoriza ni ejecuta la corrección. Los documentos emitidos y asientos contabilizados permanecen intactos hasta completar el flujo especializado y la aprobación que corresponda.</div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-xs font-semibold text-slate-700">Tipo de registro origen
+            <select value={requestEntityType} onChange={e=>setRequestEntityType(e.target.value as typeof requestEntityType)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
+              <option value="JOURNAL_ENTRY">Asiento contable</option><option value="SALE">Venta / NC / ND</option><option value="PURCHASE">Compra / NC / ND</option><option value="INVENTORY_MOVEMENT">Movimiento de inventario / Kardex</option><option value="BANK_MOVEMENT">Movimiento bancario</option><option value="VAT_VOUCHER">Comprobante de retención IVA</option><option value="VAT_DECLARATION">Declaración IVA</option><option value="ISLR_VOUCHER">Comprobante ISLR</option><option value="ISLR_EVENT">Evento ISLR</option><option value="INVENTORY_PRODUCT">Artículo de inventario</option>
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-slate-700">ID interno exacto del registro *
+            <input value={requestEntityId} onChange={e=>setRequestEntityId(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="ID del registro origen"/>
+          </label>
+          <label className="text-xs font-semibold text-slate-700">Tipo de corrección *
+            <select value={requestCorrectionType} onChange={e=>setRequestCorrectionType(e.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
+              <option value="CORRECCION_DOCUMENTAL">Corrección documental</option><option value="ANULACION_DOCUMENTO">Anulación de documento</option><option value="REVERSIÓN_CONTABLE">Reversión contable</option><option value="AJUSTE_PARCIAL">Ajuste parcial</option><option value="SUSTITUCION_DOCUMENTO">Sustitución documental</option><option value="RECTIFICACION_FISCAL">Rectificación fiscal</option><option value="CORRECCION_INVENTARIO">Corrección de inventario</option><option value="CORRECCION_AUXILIAR">Corrección CxC / CxP / banco</option>
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-slate-700">Referencia del documento original *
+            <input value={requestSourceRef} onChange={e=>setRequestSourceRef(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Factura, NC/ND, asiento, comprobante…"/>
+          </label>
+          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Referencia correctiva (si ya existe)
+            <input value={requestTargetRef} onChange={e=>setRequestTargetRef(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Se completa al emitir el documento correctivo"/>
+          </label>
+          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Motivo y causa (mínimo 15 caracteres) *
+            <textarea value={requestReason} onChange={e=>setRequestReason(e.target.value)} rows={2} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Describa el error, hecho y alcance de la corrección."/>
+          </label>
+          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Papel de trabajo / evidencia (mínimo 15 caracteres) *
+            <textarea value={requestWorkpaper} onChange={e=>setRequestWorkpaper(e.target.value)} rows={2} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Conciliaciones, soportes, documentos relacionados y análisis preliminar."/>
+          </label>
+        </div>
+        <div><button type="button" onClick={()=>void submitCorrectionRequest()} disabled={requestSubmitting||!requestEntityId.trim()||!requestSourceRef.trim()||requestReason.trim().length<15||requestWorkpaper.trim().length<15} className="rounded bg-indigo-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{requestSubmitting?'Registrando solicitud…':'Registrar solicitud en SQLite'}</button></div>
+      </section>
       <section className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
         <div className="bg-slate-900 text-white px-5 py-4 flex items-center gap-3">
           <Undo2 className="h-6 w-6 text-emerald-300" />
