@@ -37,6 +37,9 @@ La suite del módulo contiene ocho pruebas automatizadas. No se ejecutaron en es
 
 ## Riesgos y pendientes no resueltos
 
-Los nombres de campos de relación deben contrastarse con cada generador real de documentos. Para entidades cuyos módulos no persisten un vínculo explícito, el expediente queda bloqueado deliberadamente en vez de aceptar evidencia débil. Debe completarse la integración real de NC/ND, reversiones, CxC/CxP, tesorería, retenciones, declaraciones, Kardex y soportes. También faltan el ciclo de observación/subsanación, retiro controlado, pruebas de integración con SQLite real, restauración y empaquetado Electron.
+Los nombres de campos de relación deben contrastarse con cada generador real de documentos. Para entidades cuyos módulos no persisten un vínculo explícito, el expediente queda bloqueado deliberadamente en vez de aceptar evidencia débil. Debe completarse la integración real de NC/ND, reversiones, CxC/CxP, tesorería, retenciones, declaraciones, Kardex y soportes. También faltan las pruebas de integración con SQLite real, restauración y empaquetado Electron.
 
 No se tocaron los registros originales ni el administrador semilla. No se publicaron releases ni se iniciaron ejecuciones de CI.
+
+
+La continuación posterior incorporó observación/subsanación/reenvío, retiro controlado por el solicitante y validación de soportes posteriores a la última observación. Véase `auditoria-centro-correcciones-evidencias-2026-11-04.md` para el alcance y las limitaciones vigentes.
