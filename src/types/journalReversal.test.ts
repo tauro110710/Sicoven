@@ -661,7 +661,7 @@ test('bloquea una compra con asiento de inventario separado aunque falten las fi
   };
   const linkedInventoryJournal: JournalEntry = {
     ...reconciledPurchaseJournal, id:'purchase-linked-inventory-journal',
-    type:'INVENTARIO', referenceDoc:'FAC-100',
+    type:'INVENTARIO', referenceDoc:'FAC-200',
     items:[
       {accountCode:'1.1.4.01',accountName:'Inventario',debitBs:200,creditBs:0,debitUsd:2,creditUsd:0},
       {accountCode:'2.1',accountName:'Contrapartida inventario',debitBs:0,creditBs:200,debitUsd:0,creditUsd:2}
