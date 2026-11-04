@@ -103,6 +103,7 @@ export function buildCashFlowReport(
     if (!isValidIsoDate(entry.date)) {
       throw new Error('El Estado de Flujos de Efectivo no puede calcularse: existe un asiento con fecha inválida.');
     }
+    if (entry.date > end) continue;
     for (const item of entry.items) {
       const values = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(Number);
       if (values.some(value => !Number.isFinite(value) || value < 0) ||
