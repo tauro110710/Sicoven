@@ -514,6 +514,8 @@ export const ReversionFiscalView: React.FC = () => {
               {Boolean(details.correctionType) && <p><strong>Operación:</strong> {String(details.correctionType)} · {String(details.entityType || '')} · registro {String(details.entityId || '')}</p>}
               {Boolean(details.sourceDocumentRef) && <p><strong>Documento original:</strong> {String(details.sourceDocumentRef)} · <strong>Documento correctivo:</strong> {String(details.correctionDocumentRef || '')}</p>}
               {Boolean(details.reason) && <p><strong>Motivo:</strong> {String(details.reason)}</p>}
+              {Boolean(details.workpaperNote) && <p><strong>Papel de trabajo:</strong> {String(details.workpaperNote)}</p>}
+              {Boolean(details.fiscalEmissionMedium) && <p><strong>Medio fiscal declarado:</strong> {String(details.fiscalEmissionMedium)} · coincidencia con original: {details.sameMediumAsOriginal ? 'confirmada' : 'no confirmada'}</p>}
               {Boolean(details.authorization) && <p><strong>Autorización:</strong> sesión autenticada {String(details.authorization.method || '')} · confirmación expresa {details.authorization.explicitConfirmation ? 'sí' : 'no'}</p>}
               {Boolean(details.journalEntryId) && <p><strong>Asiento correctivo:</strong> {String(details.journalEntryId)}</p>}
               {Boolean(details.reversalOfEntryId) && <p>Asiento original: {String(details.reversalOfEntryId)}</p>}
