@@ -49,3 +49,28 @@ export function validateBankMovementFxSnapshot(input: {
     throw new Error('Los importes Bs. y USD del movimiento no concilian con la tasa BCV efectiva en esa fecha.');
   }
 }
+
+/** Requires a bank statement line to reconcile in both ledger currencies, not just the bank account's display currency. */
+export function matchesBankStatementDualCurrency(input: {
+  movementType: 'DEBIT' | 'CREDIT';
+  amountBs: number;
+  amountUsd: number;
+  debitBs: number;
+  creditBs: number;
+  debitUsd: number;
+  creditUsd: number;
+}): boolean {
+  return matchesBankStatementLine({
+    currency: 'BS',
+    movementType: input.movementType,
+    statementAmount: input.amountBs,
+    debit: input.debitBs,
+    credit: input.creditBs
+  }) && matchesBankStatementLine({
+    currency: 'USD',
+    movementType: input.movementType,
+    statementAmount: input.amountUsd,
+    debit: input.debitUsd,
+    credit: input.creditUsd
+  });
+}
