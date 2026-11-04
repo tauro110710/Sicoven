@@ -533,6 +533,8 @@ app.whenReady().then(async () => {
     const sourceDocumentRef = String(input?.sourceDocumentRef || '').trim();
     const correctionDocumentRef = String(input?.correctionDocumentRef || '').trim();
     const journalEntryId = String(input?.journalEntryId || '').trim();
+    const fiscalEmissionMedium = String(input?.fiscalEmissionMedium || '');
+    const sameMediumAsOriginal = input?.sameMediumAsOriginal === true;
     if (!allowedEvents.has(eventType) || !allowedEntities.has(entityType) ||
         !companyId || companyId.length > 160 || !entityId || entityId.length > 160 || !correctionType || correctionType.length > 80 ||
         reason.length < 10 || reason.length > 2000 || workpaperNote.length < 10 || workpaperNote.length > 4000 ||
@@ -551,6 +553,7 @@ app.whenReady().then(async () => {
       actorRole: String(actor.role || ''), companyId, entityType, entityId, correctionType,
       sourceDocumentRef, correctionDocumentRef, reason, workpaperNote,
       journalEntryId: journalEntryId || null,
+      fiscalEmissionMedium: fiscalEmissionMedium || null, sameMediumAsOriginal,
       authorization: { method: 'AUTHENTICATED_ADMIN_SESSION', explicitConfirmation: true },
       occurredAt
     };
