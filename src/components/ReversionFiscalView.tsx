@@ -78,7 +78,7 @@ export const ReversionFiscalView: React.FC = () => {
   useEffect(() => { void refreshFiscalIncidents(); }, [refreshFiscalIncidents]);
   const submitCreateFiscalIncident = async () => {
     const note = purchases.find(item => item.id === incidentPurchaseId && item.companyId === currentCompany.id && item.documentType === '03');
-    if (!note || incidentCreateReason.trim().length < 10 || incidentCreating) return;
+    if (!note || incidentCreateReason.trim().length < 15 || incidentCreating) return;
     const original = purchases.find(item => item.id === note.originalPurchaseId && item.companyId === currentCompany.id);
     if (!original) { setIncidentError('La nota no conserva una factura original verificable.'); return; }
     const affectedVoucher = vatVouchers.find(item => item.companyId === currentCompany.id && item.purchaseRecordId === original.id);
@@ -104,12 +104,20 @@ export const ReversionFiscalView: React.FC = () => {
     } finally { setIncidentCreating(false); }
   };
   const submitFiscalIncidentEvent = async () => {
-    if (!selectedIncidentId || incidentDecision.trim().length < 10 || incidentSaving) return;
+    if (!selectedIncidentId || incidentDecision.trim().length < 20 || incidentSaving) return;
     setIncidentSaving(true);
     try {
       await recordVatFiscalIncidentEvent({
         incidentId: selectedIncidentId, eventType: incidentEventType,
         decisionText: incidentDecision.trim(),
+        declarationId: fiscalIncidents.find(item => item.id === selectedIncidentId)?.declarationId || undefined,
+        declarationEventIds: fiscalIncidents.find(item => item.id === selectedIncidentId)?.declarationEventIds || [],
+        bankMovementIds: fiscalIncidents.find(item => item.id === selectedIncidentId)?.bankMovementIds || [],
+        journalEntryId: (() => {
+          const incident = fiscalIncidents.find(item => item.id === selectedIncidentId);
+          const note = purchases.find(item => item.id === incident?.purchaseId && item.companyId === currentCompany.id);
+          return incident?.vatVoucherId ? note?.journalEntryId : undefined;
+        })(),
         externalReference: incidentExternalReference.trim() || undefined
       });
       setIncidentDecision('');
@@ -481,7 +489,7 @@ export const ReversionFiscalView: React.FC = () => {
                         <div><label className="block text-xs font-semibold mb-1">Fecha de la nota</label><input type="date" min={linkedPurchase.invoiceDate} value={supplierReturnDate} onChange={event=>setSupplierReturnDate(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm"/></div>
                         <div><label className="block text-xs font-semibold mb-1">Número de nota de crédito</label><input value={supplierCreditNoteNumber} onChange={event=>setSupplierCreditNoteNumber(event.target.value)} maxLength={80} className="w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="NC-000123"/></div>
                         <div><label className="block text-xs font-semibold mb-1">Número de control</label><input value={supplierCreditControlNumber} onChange={event=>setSupplierCreditControlNumber(event.target.value)} maxLength={80} className="w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="00-000123"/></div>
-                        <div><label className="block text-xs font-semibold mb-1">Motivo y soporte (mínimo 10 caracteres)</label><textarea value={supplierCreditReason} onChange={event=>setSupplierCreditReason(event.target.value)} rows={2} maxLength={1000} className="w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="Motivo de devolución, referencia al soporte y condición de la mercancía…"/></div>
+                        <div><label className="block text-xs font-semibold mb-1">Motivo y soporte (mínimo 20 caracteres)</label><textarea value={supplierCreditReason} onChange={event=>setSupplierCreditReason(event.target.value)} rows={2} maxLength={1000} className="w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="Motivo de devolución, referencia al soporte y condición de la mercancía…"/></div>
                       </div>
                       <button type="button" onClick={submitSupplierCreditNote} disabled={supplierCreditNoteSubmitting||supplierReturnLines.some(row=>!row.productId||Number(row.quantity)<=0)||!supplierCreditNoteNumber.trim()||!supplierCreditControlNumber.trim()||supplierCreditReason.trim().length<10} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{supplierCreditNoteSubmitting?'Guardando y confirmando en SQLite…':'Registrar nota de crédito y devolución'}</button>
                     </div> : <p>La devolución permanece bloqueada hasta conciliar factura, líneas, Kardex y asiento. Corrija primero las diferencias indicadas arriba.</p>}</div> : correctableMovements.length > 0 ? <>
