@@ -22,10 +22,11 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
   const [description, setDescription] = useState<string>('');
   const [type, setType] = useState<BankMovementType>('CREDIT');
   const [amountBs, setAmountBs] = useState<string>('');
+  const [movementBcvRate, setMovementBcvRate] = useState<string>(() => String(currentCompany.bcvRate || ''));
 
   if (!isOpen) return null;
 
-  const bcvRate = Number(currentCompany.bcvRate) || 0;
+  const bcvRate = Number(movementBcvRate) || 0;
   const parsedAmount = Number(amountBs) || 0;
   const parsedAmountBs = bankAccount.currency === 'USD'
     ? (bcvRate > 0 ? Math.round(parsedAmount * bcvRate * 100) / 100 : 0)
@@ -52,6 +53,8 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
         type,
         amountBs: parsedAmountBs,
         amountUsd,
+        bcvRate,
+        bcvRateEffectiveDate: date,
         isReconciled: false
       });
       setReference('');
@@ -138,6 +141,14 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
           </div>
 
           <div>
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Tasa BCV oficial para {date} (Bs./USD) *</label>
+            <input type="number" min="0.000001" step="0.000001" required value={movementBcvRate}
+              onChange={e => setMovementBcvRate(e.target.value)}
+              className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none" />
+            <span className="text-[11px] text-amber-700 mt-1 block">Verifique la tasa BCV histórica correspondiente a la fecha del movimiento antes de guardar. Se conservará como soporte del cálculo bimonetario.</span>
+          </div>
+
             <label className="block font-semibold text-slate-700 mb-1">Monto de la Operación ({bankAccount.currency === 'USD' ? 'USD' : 'Bs.'}) *</label>
             <div className="relative">
               <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">{bankAccount.currency === 'USD' ? 'USD' : 'Bs.'}</span>
@@ -169,7 +180,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={parsedAmountBs <= 0 || !description.trim()}
+              disabled={parsedAmountBs <= 0 || bcvRate <= 0 || !description.trim()}
               className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
             >
               <Check className="w-4 h-4" />
