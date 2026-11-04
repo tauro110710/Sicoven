@@ -656,7 +656,12 @@ function validateSaleCorrectionNotes(previousState, nextState) {
         .reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
       const originalCostDebitUsd = asArray(originalCost.items).filter(line => line.accountCode === costCode)
         .reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
-      if (!close(originalInventoryCredit, original.totalCostBs) ||
+      const originalDebitBs = asArray(originalCost.items).reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
+      const originalCreditBs = asArray(originalCost.items).reduce((sum, line) => sum + Number(line.creditBs || 0), 0);
+      const originalDebitUsd = asArray(originalCost.items).reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
+      const originalCreditUsd = asArray(originalCost.items).reduce((sum, line) => sum + Number(line.creditUsd || 0), 0);
+      if (!close(originalDebitBs, originalCreditBs) || !close(originalDebitUsd, originalCreditUsd, 0.0001) ||
+          !close(originalInventoryCredit, original.totalCostBs) ||
           !close(originalCostDebit, original.totalCostBs) ||
           !close(originalInventoryCreditUsd, original.totalCostUsd, 0.0001) ||
           !close(originalCostDebitUsd, original.totalCostUsd, 0.0001)) return false;
