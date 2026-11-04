@@ -170,13 +170,13 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Tipo de artículo contable</label>
-              <select value={itemType} onChange={e => { const value = e.target.value as typeof itemType; setItemType(value); setInventoryAccountCode(value === 'MATERIA_PRIMA' ? '1.1.4.02' : value === 'PRODUCTO_EN_PROCESO' ? '1.1.4.04' : '1.1.4.01'); }} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
+              <select value={itemType} disabled={Boolean(product)} onChange={e => { const value = e.target.value as typeof itemType; setItemType(value); setInventoryAccountCode(value === 'MATERIA_PRIMA' ? '1.1.4.02' : value === 'PRODUCTO_EN_PROCESO' ? '1.1.4.04' : '1.1.4.01'); }} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
                 <option value="MERCANCIA">Mercancía</option><option value="MATERIA_PRIMA">Materia prima</option><option value="PRODUCTO_EN_PROCESO">Producto en proceso</option><option value="PRODUCTO_TERMINADO">Producto terminado</option><option value="SUBPRODUCTO">Subproducto</option>
               </select>
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Método de costeo</label>
-              <select value={costingMethod} onChange={e => setCostingMethod(e.target.value as typeof costingMethod)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
+              <select value={costingMethod} disabled={Boolean(product)} onChange={e => setCostingMethod(e.target.value as typeof costingMethod)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
                 <option value="PROMEDIO_PONDERADO">Promedio ponderado</option><option value="PEPS">PEPS / FIFO</option>
               </select>
             </div>
@@ -191,25 +191,25 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
           <div className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-3">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Cuenta contable de inventario *</label>
-              <select required value={inventoryAccountCode} onChange={e => setInventoryAccountCode(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
+              <select required value={inventoryAccountCode} disabled={Boolean(product)} onChange={e => setInventoryAccountCode(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
                 {inventoryAccounts.map(a => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
               </select>
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Cuenta de costo de ventas/consumo *</label>
-              <select required value={costOfSalesAccountCode} onChange={e => setCostOfSalesAccountCode(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
+              <select required value={costOfSalesAccountCode} disabled={Boolean(product)} onChange={e => setCostOfSalesAccountCode(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
                 {costAccounts.map(a => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
               </select>
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Cuenta de mermas y ajustes *</label>
-              <select required value={adjustmentAccountCode} onChange={e => setAdjustmentAccountCode(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
+              <select required value={adjustmentAccountCode} disabled={Boolean(product)} onChange={e => setAdjustmentAccountCode(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
                 {costAccounts.map(a => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
               </select>
             </div>
             {Number(currentStock) > 0 && <div>
               <label className="block font-semibold text-slate-700 mb-1">Contrapartida de apertura *</label>
-              <select required value={openingBalanceAccountCode} onChange={e => setOpeningBalanceAccountCode(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
+              <select required value={openingBalanceAccountCode} disabled={Boolean(product)} onChange={e => setOpeningBalanceAccountCode(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
                 {equityAccounts.map(a => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
               </select>
             </div>}
@@ -340,7 +340,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
               className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
             >
               <Check className="w-4 h-4" />
-              {saving ? "Confirmando SQLite..." : "Crear Artículo"}
+              {saving ? "Confirmando SQLite..." : product ? "Confirmar corrección auditada" : "Crear Artículo"}
             </button>
           </div>
         </form>
