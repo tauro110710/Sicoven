@@ -123,7 +123,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   const [bcvCorrectionDate, setBcvCorrectionDate] = useState(today);
   const [bcvCorrectionReason, setBcvCorrectionReason] = useState('');
   const [bcvCorrectionSaving, setBcvCorrectionSaving] = useState(false);
-  const [requestEntityType, setRequestEntityType] = useState<'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'INVENTORY_MOVEMENT'>('JOURNAL_ENTRY');
+  const [requestEntityType, setRequestEntityType] = useState<'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'INVENTORY_MOVEMENT' | 'BANK_MOVEMENT' | 'CREDIT_SETTLEMENT' | 'SUPPLIER_ADVANCE_SETTLEMENT'>('JOURNAL_ENTRY');
   const [requestSearch, setRequestSearch] = useState('');
   const [requestEntityId, setRequestEntityId] = useState('');
   const [requestCorrectionType, setRequestCorrectionType] = useState('NOTA_CREDITO_VENTA');
@@ -215,8 +215,11 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
     ...journalEntries.filter(item=>item.companyId===currentCompany.id).map(item=>({entityType:'JOURNAL_ENTRY' as const,id:String(item.id),reference:String(item.referenceDoc || item.entryNumber || item.id),label:`Asiento #${item.entryNumber} · ${item.date} · ${item.description || ''}`})),
     ...sales.filter(item=>item.companyId===currentCompany.id).map(item=>({entityType:'SALE' as const,id:String(item.id),reference:String(item.invoiceNumber || item.id),label:`Venta ${item.invoiceNumber || item.id} · ${item.invoiceDate} · ${item.customerName || ''}`})),
     ...purchases.filter(item=>item.companyId===currentCompany.id).map(item=>({entityType:'PURCHASE' as const,id:String(item.id),reference:String(item.invoiceNumber || item.id),label:`Compra ${item.invoiceNumber || item.id} · ${item.invoiceDate} · ${item.supplierName || ''}`})),
-    ...movements.filter(item=>item.companyId===currentCompany.id).map(item=>({entityType:'INVENTORY_MOVEMENT' as const,id:String(item.id),reference:String(item.documentRef || item.id),label:`Kardex ${item.documentRef || item.id} · ${item.date} · ${item.productName || ''}`}))
-  ],[journalEntries,sales,purchases,movements,currentCompany.id]);
+    ...movements.filter(item=>item.companyId===currentCompany.id).map(item=>({entityType:'INVENTORY_MOVEMENT' as const,id:String(item.id),reference:String(item.documentRef || item.id),label:`Kardex ${item.documentRef || item.id} · ${item.date} · ${item.productName || ''}`})),
+    ...bankStatementMovements.filter(item=>item.companyId===currentCompany.id).map(item=>({entityType:'BANK_MOVEMENT' as const,id:String(item.id),reference:String(item.reference || item.id),label:`Banco ${item.reference || item.id} · ${item.date} · ${item.description || ''} · ${item.isReconciled ? 'Conciliado' : 'Sin conciliar'}`})),
+    ...creditSettlements.filter(item=>item.companyId===currentCompany.id && !item.isReversed).map(item=>({entityType:'CREDIT_SETTLEMENT' as const,id:String(item.id),reference:String(item.reference || item.id),label:`${item.kind==='SALE_COLLECTION'?'Cobro CxC':'Pago CxP'} ${item.reference || item.id} · ${item.settlementDate} · ${item.amountBs.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})} Bs.`})),
+    ...supplierAdvanceSettlements.filter(item=>item.companyId===currentCompany.id && !item.isReversed).map(item=>({entityType:'SUPPLIER_ADVANCE_SETTLEMENT' as const,id:String(item.id),reference:String(item.reference || item.id),label:`Anticipo proveedor ${item.reference || item.id} · ${item.date} · ${item.supplierName}`}))
+  ],[journalEntries,sales,purchases,movements,bankStatementMovements,creditSettlements,supplierAdvanceSettlements,currentCompany.id]);
   const filteredCorrectionSources = useMemo(() => {
     const query=requestSearch.trim().toLocaleLowerCase();
     return correctionSourceOptions.filter(item=>!query || (item.label+' '+item.reference+' '+item.id).toLocaleLowerCase().includes(query)).slice(0,100);
@@ -225,6 +228,9 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   const selectedSaleForCorrection = requestEntityType === 'SALE' ? sales.find(item => item.id === requestEntityId && item.companyId === currentCompany.id) : undefined;
   const selectedPurchaseForCorrection = requestEntityType === 'PURCHASE' ? purchases.find(item => item.id === requestEntityId && item.companyId === currentCompany.id) : undefined;
   const selectedMovementForCorrection = requestEntityType === 'INVENTORY_MOVEMENT' ? movements.find(item => item.id === requestEntityId && item.companyId === currentCompany.id) : undefined;
+  const selectedBankMovementForCorrection = requestEntityType === 'BANK_MOVEMENT' ? bankStatementMovements.find(item => item.id === requestEntityId && item.companyId === currentCompany.id) : undefined;
+  const selectedCreditSettlementForCorrection = requestEntityType === 'CREDIT_SETTLEMENT' ? creditSettlements.find(item => item.id === requestEntityId && item.companyId === currentCompany.id) : undefined;
+  const selectedSupplierAdvanceSettlementForCorrection = requestEntityType === 'SUPPLIER_ADVANCE_SETTLEMENT' ? supplierAdvanceSettlements.find(item => item.id === requestEntityId && item.companyId === currentCompany.id) : undefined;
   const selectedJournalForCorrection = requestEntityType === 'JOURNAL_ENTRY' ? journalEntries.find(item => item.id === requestEntityId && item.companyId === currentCompany.id) : undefined;
   const selectedPurchaseHasInventory = Boolean(selectedPurchaseForCorrection && (
     selectedPurchaseForCorrection.inventoryLines?.length ||
@@ -239,7 +245,10 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   ));
   const selectedCorrectionJournalId = selectedJournalForCorrection?.id ||
     selectedSaleForCorrection?.journalEntryId || selectedPurchaseForCorrection?.journalEntryId ||
-    selectedMovementForCorrection?.journalEntryId || '';
+    selectedMovementForCorrection?.journalEntryId ||
+    (selectedBankMovementForCorrection?.isReconciled ? selectedBankMovementForCorrection.reconciledWithJournalEntryId : '') ||
+    selectedCreditSettlementForCorrection?.journalEntryId ||
+    selectedSupplierAdvanceSettlementForCorrection?.journalEntryId || '';
 
   const openExistingCorrectionFlow = () => {
     if (!selectedCorrectionJournalId) {
@@ -717,9 +726,17 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
             submitLabel="Registrar NC de compra de servicios"
           />}
         </div>}
-        {(selectedJournalForCorrection || selectedMovementForCorrection) && !selectedSaleForCorrection && !selectedPurchaseForCorrection && <div className="rounded-lg border border-slate-200 p-3 text-xs">
-          <p>Este registro requiere una operación contable vinculada. SICOVEN abrirá el asistente con su asiento original para validar los efectos cruzados antes de ejecutar.</p>
-          <button type="button" onClick={openExistingCorrectionFlow} className="mt-2 rounded bg-indigo-700 px-3 py-2 font-semibold text-white">Abrir corrección del asiento</button>
+        {(selectedJournalForCorrection || selectedMovementForCorrection || selectedBankMovementForCorrection || selectedCreditSettlementForCorrection || selectedSupplierAdvanceSettlementForCorrection) && !selectedSaleForCorrection && !selectedPurchaseForCorrection && <div className="rounded-lg border border-slate-200 p-3 text-xs space-y-2">
+          {selectedBankMovementForCorrection && !selectedBankMovementForCorrection.isReconciled
+            ? <p>El movimiento bancario no está conciliado con un asiento. Se conserva como original y no se permite inventar una reversión sin contrapartida contable vinculada.</p>
+            : selectedCreditSettlementForCorrection
+              ? <p>Se reversará el asiento de este cobro/pago y SICOVEN marcará la liquidación como reversada, restaurando el saldo del auxiliar sin borrar el movimiento original.</p>
+              : selectedSupplierAdvanceSettlementForCorrection
+                ? <p>Se reversará el asiento de esta aplicación/devolución de anticipo y se restaurará el saldo del anticipo del proveedor, conservando la liquidación original.</p>
+                : selectedBankMovementForCorrection
+                  ? <p>Se abrirá el asiento conciliado. La reversión comprobará la contrapartida bancaria antes de retirar la conciliación vigente, conservando el historial de vínculos.</p>
+                  : <p>Este registro requiere una operación contable vinculada. SICOVEN abrirá el asistente con su asiento original para validar los efectos cruzados antes de ejecutar.</p>}
+          <button type="button" disabled={!selectedCorrectionJournalId} onClick={openExistingCorrectionFlow} className="rounded bg-indigo-700 px-3 py-2 font-semibold text-white disabled:opacity-40">Abrir reversión y validar efectos cruzados</button>
         </div>}
         <p className="text-xs text-slate-500">Las notas se contabilizan desde el flujo especializado existente; el motivo, la sesión del contador y la fecha quedan auditados. El original nunca se sobrescribe. Los casos no cubiertos se bloquean en lugar de registrar una corrección ficticia.</p>
       </section>
