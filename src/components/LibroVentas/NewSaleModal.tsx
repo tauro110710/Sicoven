@@ -10,7 +10,9 @@ interface NewSaleModalProps {
 }
 
 export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, addSale } = useAccounting();
+  const { currentCompany, addSale, waitForPersistence } = useAccounting();
+  const savingRef = React.useRef(false);
+  const [saving, setSaving] = useState(false);
 
   const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [customerRif, setCustomerRif] = useState<string>('J-');
@@ -63,7 +65,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const vatAmountUsd = bcvRate > 0 ? vatAmountBs / bcvRate : 0;
   const vatWithheldUsd = bcvRate > 0 ? vatWithheldBs / bcvRate : 0;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hasValidBcvRate) {
       window.alert('No hay una tasa BCV válida registrada para esta empresa. Actualice la tasa en Configuración antes de registrar la venta.');
@@ -84,6 +86,9 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
       return;
     }
 
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     try {
       addSale({
       invoiceDate,
@@ -120,9 +125,13 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
       currencyPricingMode,
       fiscalAdjustmentMode
       });
+      await waitForPersistence();
       onClose();
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'No se pudo registrar la venta. Verifica los datos e inténtalo nuevamente.');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
 
@@ -403,17 +412,18 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer"
+              disabled={saving}
+              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer disabled:opacity-40"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              disabled={!hasValidBcvRate || totalAmountBs <= 0}
+              disabled={saving || !hasValidBcvRate || totalAmountBs <= 0}
               className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer disabled:opacity-40"
             >
               <Check className="w-4 h-4" />
-              Guardar Factura de Venta
+              {saving ? "Confirmando SQLite..." : "Guardar Factura de Venta"}
             </button>
           </div>
         </form>
