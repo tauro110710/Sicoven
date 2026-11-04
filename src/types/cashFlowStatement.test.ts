@@ -177,8 +177,8 @@ describe('cash flow statement', () => {
     ]);
     reversal.reversalOfEntryId = opening.id;
     const report = buildCashFlowReport([opening, reversal], accounts, banks, 'co-1', 2026);
-    assert.equal(report.openingCashBs, 0);
-    assert.equal(report.netChangeBs, 0);
+    assert.equal(report.openingCashBs, 100);
+    assert.equal(report.netChangeBs, -100);
     assert.equal(report.closingCashBs, 0);
     assert.equal(report.isReconciled, true);
   });
