@@ -121,12 +121,11 @@ test('correction case evidence is attached to the exact case and company',()=>{
  }finally{h.close();}
 });
 
-test('the uploader cannot verify their own correction-case evidence',()=>{
+test('the single accountant can verify their own correction-case evidence',()=>{
  const h=fixture();try{
   const result=attachDocument(h.db,{storageDir:h.storageDir,input:{companyId:'co-1',entityType:'CORRECTION_CASE',entityId:'case-1',documentType:'EVIDENCIA',title:'Soporte',fileName:'soporte.pdf'},buffer:pdf,actor});
-  assert.throws(()=>reviewDocument(h.db,{documentId:result.document.id,decision:'VERIFIED',reason:'Documento revisado y cotejado.'},actor),/revisor independiente/);
-  assert.equal(listDocuments(h.db,{companyId:'co-1',entityType:'CORRECTION_CASE',entityId:'case-1'})[0].status,'ATTACHED_UNREVIEWED');
-  const independent={id:8,username:'revisor',role:'admin'};
-  assert.equal(reviewDocument(h.db,{documentId:result.document.id,decision:'VERIFIED',reason:'Documento revisado por persona independiente.'},independent).status,'VERIFIED');
+  const verified=reviewDocument(h.db,{documentId:result.document.id,decision:'VERIFIED',reason:'El contador cotejó el soporte con el registro fuente y el papel de trabajo.'},actor);
+  assert.equal(verified.status,'VERIFIED');
+  assert.equal(verified.events.at(-1).actorUsername,actor.username);
  }finally{h.close();}
 });
