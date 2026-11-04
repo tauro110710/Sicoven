@@ -8,6 +8,8 @@ export interface SupplierDebitNoteAccountingDraft {
   debitNoteNumber: string;
   controlNumber: string;
   affectedInvoiceNumber: string;
+  fiscalEmissionMedium: 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY';
+  sameMediumAsOriginal: boolean;
   issueDate: string;
   recognitionDate: string;
   economicCause: SupplierDebitNoteEconomicCause;
@@ -91,6 +93,12 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
   if (!debitNoteNumber || !controlNumber ||
       normalizeDocument(draft.affectedInvoiceNumber) !== normalizeDocument(source.invoiceNumber)) {
     throw new Error('La ND debe identificar número, control y el número exacto de la factura afectada.');
+  }
+  if (!isValidIsoDate(source.invoiceDate) || !String(source.controlNumber || '').trim() || Number(source.totalAmountBs || 0) <= 0) {
+    throw new Error('La factura original debe conservar fecha, número, control y monto para referenciar legalmente la ND.');
+  }
+  if (!['DIGITAL', 'FISCAL_MACHINE', 'CONTINGENCY'].includes(draft.fiscalEmissionMedium) || draft.sameMediumAsOriginal !== true) {
+    throw new Error('La ND debe emitirse por el mismo medio de la factura original y esa condición debe confirmarse expresamente.');
   }
   const duplicate = purchases.some(item =>
     item.companyId === companyId && item.documentType === '02' &&
@@ -225,7 +233,11 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
     invoiceDate: draft.issueDate, accountCreditDate: draft.recognitionDate,
     supplierRif: source.supplierRif, supplierName: source.supplierName,
     invoiceNumber: debitNoteNumber, debitNoteNumber, controlNumber,
-    affectedInvoiceNumber: source.invoiceNumber, documentType: '02',
+    affectedInvoiceNumber: source.invoiceNumber,
+    affectedInvoiceDate: source.invoiceDate, affectedInvoiceControlNumber: source.controlNumber,
+    affectedInvoiceTotalAmountBs: source.totalAmountBs, affectedInvoiceTotalAmountUsd: source.totalAmountUsd,
+    fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal,
+    documentType: '02',
     totalAmountBs, taxableBaseBs, exemptAmountBs, taxRate,
     vatAmountBs, retentionRate: 0, vatWithheldBs: 0,
     bcvRate: rate, totalAmountUsd,
