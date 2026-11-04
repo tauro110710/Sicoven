@@ -612,9 +612,26 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('sicoven:correction-case-review', (_event, token, input) => reviewCorrectionRequest(db,input,correctionActor(token)));
   ipcMain.handle('sicoven:correction-case-authorize', (_event, token, input) => requireApprovedCorrectionCase(db,input,correctionActor(token)));
-  ipcMain.handle('sicoven:correction-case-observe', (_event, token, input) => observeCorrectionRequest(db,input,correctionActor(token)));
+  const assertCorrectionDocumentNotPersisted = caseId => {
+    const item=db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(caseId || ''));
+    if(!item) throw new Error('El expediente de corrección no existe.');
+    const stateRow=db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    const state=stateRow ? JSON.parse(stateRow.state_json) : {};
+    if(findLinkedCorrectionEvidence(state,item,item.correction_ref)) {
+      throw new Error('El documento correctivo ya está persistido y vinculado. No se puede observar ni retirar; complete la verificación documental y la confirmación de ejecución.');
+    }
+  };
+  ipcMain.handle('sicoven:correction-case-observe', (_event, token, input) => {
+    const actor=correctionActor(token);
+    assertCorrectionDocumentNotPersisted(input?.caseId);
+    return observeCorrectionRequest(db,input,actor);
+  });
   ipcMain.handle('sicoven:correction-case-resubmit', (_event, token, input) => resubmitCorrectionRequest(db,input,correctionActor(token)));
-  ipcMain.handle('sicoven:correction-case-withdraw', (_event, token, input) => withdrawCorrectionRequest(db,input,correctionActor(token)));
+  ipcMain.handle('sicoven:correction-case-withdraw', (_event, token, input) => {
+    const actor=correctionActor(token);
+    assertCorrectionDocumentNotPersisted(input?.caseId);
+    return withdrawCorrectionRequest(db,input,actor);
+  });
   ipcMain.handle('sicoven:correction-case-execute', (_event, token, input) => {
     const actor = correctionActor(token);
     const item = db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(input?.caseId || ''));
