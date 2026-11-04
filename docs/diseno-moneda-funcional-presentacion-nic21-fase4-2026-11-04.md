@@ -141,3 +141,39 @@ La fase 4 no se considerará terminada hasta que exista:
 - validación final de las reglas contra el marco VEN-NIF efectivamente adoptado.
 
 **No se autoriza** activar conversión automática, fijar USD o VES como moneda funcional universal, alterar los asientos históricos ni declarar cumplimiento VEN-NIF/NIC 21 solo por disponer de dos columnas monetarias.
+
+
+## Ampliación de auditoría: falta de convertibilidad y contexto venezolano
+
+La revisión de la guía oficial IAS 21 de IFRS confirma que la moneda funcional es la del entorno económico principal en el que la entidad genera y consume efectivo; la moneda de presentación puede ser distinta. Por ello, SICOVEN no debe derivar la moneda funcional de la tasa BCV, de la moneda de facturación ni de una preferencia de visualización.
+
+La agenda oficial del IFRIC de septiembre de 2018 trató expresamente circunstancias de Venezuela en las que la moneda funcional no podía cambiarse por otras monedas mediante un mecanismo legal accesible. El Comité señaló que el tipo oficial solo puede utilizarse como tasa de cierre o tasa de transacción cuando represente la tasa spot a la que la entidad tendría acceso mediante un mecanismo legal de cambio. La evaluación debe repetirse en cada fecha de reporte porque las condiciones pueden cambiar. Esto impide que SICOVEN asuma que publicar una tasa BCV equivale a demostrar convertibilidad o acceso efectivo.
+
+Las modificaciones de IAS 21 sobre falta de convertibilidad, emitidas en agosto de 2023 y efectivas para períodos anuales iniciados desde el 01-01-2025, requieren evaluar la convertibilidad en la fecha de medición y para un propósito específico; si no existe convertibilidad, se estima una tasa spot que refleje una transacción ordenada entre participantes del mercado y se revelan la metodología, información y riesgos. La aplicación exacta en SICOVEN debe seguir el marco VEN-NIF adoptado y su versión aplicable, no incorporar automáticamente IFRS si no forma parte del marco de la entidad.
+
+### Consecuencia para el diseño de datos
+
+La futura evaluación debe capturar, por fecha de reporte y propósito:
+- moneda de origen y moneda de destino;
+- importe que la entidad necesita convertir y propósito (liquidación de transacciones, pago de pasivos, conversión de estados, etc.);
+- mecanismo legal específico disponible, requisitos, límites, plazos y evidencia de acceso real;
+- importe que puede obtenerse, plazo administrativo normal y si el acceso es solo insignificante;
+- tasa observada, fuente, fecha/hora y evidencia verificable;
+- conclusión de convertibilidad, responsable, aprobación y vigencia;
+- si no es convertible, método de estimación, datos observables, supuestos y sensibilidad;
+- revelaciones necesarias y fecha de reevaluación.
+
+No basta con un booleano general «moneda convertible» ni con guardar una tasa oficial única. La evaluación depende del propósito, fecha y cantidad. Los controles deben bloquear conversiones automáticas sin evidencia aprobada y mantener separadas las diferencias de cambio de transacción, diferencias de conversión a presentación y efectos de inflación.
+
+### NIC 29 y cambios normativos
+
+La conversión de estados de una entidad cuya moneda funcional corresponde a una economía hiperinflacionaria requiere el tratamiento especial de IAS 21, párrafo 42, en conjunto con IAS 29 cuando el marco aplicable lo exija. No se debe aplicar sin análisis el promedio de tasas a ingresos y gastos en esas circunstancias. Además, el IASB emitió en noviembre de 2025 modificaciones sobre conversión a moneda de presentación hiperinflacionaria, con vigencia desde períodos anuales iniciados el 01-01-2027 y posibilidad de aplicación anticipada; la revisión de VEN-NIF debe determinar si y cuándo se incorpora esa modificación al marco adoptado.
+
+### Evidencia consultada
+
+- IFRS Foundation, IAS 21: definición de moneda funcional, transacciones en moneda extranjera y conversión a moneda de presentación.
+- IFRIC Update, septiembre de 2018: análisis explícito de Venezuela y de la tasa a la que la entidad realmente tendría acceso mediante un mecanismo legal.
+- IFRS Foundation, enmienda Lack of Exchangeability (2023): evaluación por fecha y propósito, estimación de tasa y revelaciones.
+- IASB/IAS 21: modificaciones de noviembre de 2025 relativas a conversión a moneda de presentación hiperinflacionaria, con vigencia 2027.
+
+Este añadido amplía los criterios de diseño; no implementa el motor NIC 21, no selecciona tasa ni moneda funcional y no certifica cumplimiento VEN-NIF.
