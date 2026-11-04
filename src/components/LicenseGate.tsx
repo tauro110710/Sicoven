@@ -119,7 +119,7 @@ export function LicenseGate({ onReady }: { onReady: () => void }) {
           <div className={`mb-5 rounded-xl border p-4 text-sm ${status.status === 'trial' ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-900'}`}>
             <p className="flex items-center gap-2 font-bold">
               <CheckCircle2 className={`h-5 w-5 ${status.status === 'trial' ? 'text-amber-600' : 'text-emerald-600'}`} />
-              {status.status === 'trial' ? 'Prueba gratuita activa · 24 horas' : 'Licencia de pago autorizada'}
+              {status.status === 'trial' ? 'Prueba gratuita activa · 120 horas (5 días)' : 'Licencia de pago autorizada'}
             </p>
             {status.status === 'trial' && <p className="mt-1">Puedes activar tu licencia de pago ahora o continuar con la prueba temporal.</p>}
             {status.product && <p className="mt-1">Producto: {status.product}</p>}
