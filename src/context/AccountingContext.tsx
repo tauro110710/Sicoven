@@ -47,7 +47,7 @@ import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
-import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
+import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 import { resolvePurchaseVatFiscalEvent } from '../types/vatFiscalEvent';
@@ -3042,8 +3042,22 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       (item.journalEntryId === source.journalEntryId ||
        item.documentRef.trim().toUpperCase().replace(/\\s+/g, '') ===
        ('FAC-' + source.invoiceNumber).trim().toUpperCase().replace(/\\s+/g, '')));
-    if (linkedInventory) {
-      throw new Error('La factura tiene movimientos de inventario. La nota requiere devolución/ajuste de Kardex por líneas y costo histórico; no se registró un asiento parcial sin su efecto físico.');
+    if (linkedInventory && draft.kind === 'CREDIT') {
+      const sourceEntry = journalEntries.find(item => item.id === source.journalEntryId && item.companyId === currentCompany.id);
+      if (!sourceEntry) throw new Error('La factura con inventario no conserva su asiento original verificable.');
+      const returnReadiness = validateSaleInventoryReturnReconciliation({
+        companyId: currentCompany.id, invoiceNumber: source.invoiceNumber,
+        source: sourceEntry, movements, products, journalEntries
+      });
+      if (!returnReadiness.ready) {
+        throw new Error('La NC de mercancía exige devolución física total y conciliada en Kardex, con su asiento de costo por artículo. ' +
+          (returnReadiness.reason || 'No se registró la nota.'));
+      }
+      const originalNetBs = Number(source.taxableBaseBs || 0) + Number(source.exemptAmountBs || 0) + Number(source.vatAmountBs || 0);
+      if (Math.abs(Number(draft.taxableBaseBs) + Number(draft.exemptAmountBs) + 
+          (Number(draft.taxableBaseBs) * Number(source.taxRate || 0) / 100) - originalNetBs) > 0.02) {
+        throw new Error('La devolución de mercancía solo admite NC total mientras no exista distribución fiscal por líneas de devolución parcial. La factura original permanece intacta.');
+      }
     }
     const number = String(draft.noteNumber || '').trim();
     const normalizedNumber = number.toUpperCase().replace(/\\s+/g, '');
