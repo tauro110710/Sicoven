@@ -78,10 +78,9 @@ export const LibroComprasView: React.FC = () => {
     })
     .sort((a, b) => a.opNumber - b.opNumber);
 
-  // Los totales fiscales y la Forma 30 excluyen ND tipo 02 hasta validar su
-  // tratamiento tributario con fuente oficial vigente. Las ND siguen visibles
-  // en el Libro de Compras y en el auxiliar CxP como obligaciones independientes.
-  const fiscalPurchases = filteredPurchases.filter(p => p.documentType !== '02');
+  // Las facturas y ND aumentan los importes del período; las NC los disminuyen.
+  // Se registran en el mes de emisión/recepción, conservando el documento original.
+  const fiscalPurchases = filteredPurchases.filter(p => !p.isCancelled);
   const sign = (purchase: PurchaseRecord) => purchase.documentType === '03' ? -1 : 1;
   const signed = (purchase: PurchaseRecord, amount: number) => sign(purchase) * Number(amount || 0);
   const totalComprasConIvaBs = fiscalPurchases.reduce((s, p) => s + signed(p, p.totalAmountBs), 0);
@@ -134,7 +133,7 @@ export const LibroComprasView: React.FC = () => {
             <span className="text-indigo-700 font-medium">Libro Fiscal Reglamentario</span>
           </div>
 
-          {filteredPurchases.some(p => p.documentType === '02') && <p className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Las ND tipo 02 se conservan en el libro y CxP, pero se excluyen provisionalmente de los totales fiscales SENIAT hasta validar su tratamiento con especificaciones oficiales vigentes.</p>}
+          {filteredPurchases.some(p => p.documentType === '02') && <p className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Las ND tipo 02 se incluyen en los ajustes del período cuando modifican la base o el impuesto; las NC se registran como deducciones. n provisionalmente de los totales fiscales SENIAT hasta validar su tratamiento con especificaciones oficiales vigentes.</p>}
           <div className="flex items-center gap-2.5">
             <button
               onClick={handleExportPdf}
@@ -328,7 +327,7 @@ export const LibroComprasView: React.FC = () => {
                     </td>
                     <td className="py-2 px-2 text-center no-print">
                       <button onClick={() => setDocumentTarget({ id: p.id, title: 'Factura de compra ' + p.invoiceNumber })} className="mr-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes</button>
-                      {p.documentType === '01' && p.paymentTerm === 'CREDITO' && !p.isCancelled && <button onClick={() => setSettlementTarget({id:p.id, number:p.invoiceNumber, party:p.supplierName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar pago parcial o total">Pagar</button>}
+                      {p.documentType !== '03' && p.paymentTerm === 'CREDITO' && !p.isCancelled && <button onClick={() => setSettlementTarget({id:p.id, number:p.invoiceNumber, party:p.supplierName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar pago parcial o total">Pagar</button>}
                       {p.documentType === '01' && !p.isCancelled && <button
                         onClick={() => setDebitNoteTarget(p)}
                         disabled={!sqliteAvailable || !isStorageReady}
