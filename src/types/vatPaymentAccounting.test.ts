@@ -16,7 +16,7 @@ const banks: BankAccount[] = [
 ];
 const movement = (id: string, bankAccountId: string, amountBs: number, amountUsd: number): BankStatementMovement => ({
   id, companyId: 'c1', bankAccountId, date: '2026-10-20', reference: id, description: 'Enteramiento SENIAT',
-  type: 'DEBIT', amountBs, amountUsd, isReconciled: false
+  type: 'DEBIT', amountBs, amountUsd, bcvRate: amountUsd > 0 ? amountBs / amountUsd : 250, bcvRateEffectiveDate: '2026-10-20', isReconciled: false
 });
 
 const declaration = (usd = 1, bs = 100): VatWithholdingDeclaration => ({
@@ -30,6 +30,12 @@ const declaration = (usd = 1, bs = 100): VatWithholdingDeclaration => ({
 const build=(amountBs:number,bankUsd:number,d=declaration(),priorPaidBs=0,moves=[movement('m1','b1',amountBs,bankUsd)],chart=accounts)=>
  buildVatPaymentAccountingPlan({occurredAt:'2026-10-20',amountBs,priorPaidBs,declaration:d,movements:moves,bankAccounts:banks,accounts:chart});
 
+test('rejects bank movement USD equivalents inconsistent with the stored BCV rate',()=>{ assert.throws(()=>build(100,1,declaration(),0,[{...movement('m1','b1',100,1),bcvRate:250}]),/no concilia en Bs. y USD/); });
+test('rejects bank payment movements with a BCV snapshot effective after the payment date',()=>{ assert.throws(()=>build(100,1,declaration(),0,[{...movement('m1','b1',100,1),bcvRateEffectiveDate:'2026-10-21'}]),/vigente a la fecha del enteramiento/); });
+test('accepts a prior official BCV effective date for a weekend bank movement',()=>{ const p=build(100,1,declaration(),0,[{...movement('m1','b1',100,1),date:'2026-10-20',bcvRateEffectiveDate:'2026-10-19'}]); assert.equal(p.amountBs,100); });
+test('rejects bank movements dated differently from the VAT payment',()=>{ assert.throws(()=>build(100,1,declaration(),0,[{...movement('m1','b1',100,1),date:'2026-10-19'}]),/misma fecha del enteramiento/); });
+test('rejects mixed historical BCV rates in one VAT payment',()=>{ assert.throws(()=>build(100,1,declaration(),0,[movement('m1','b1',50,0.5),{...movement('m2','b2',50,50/251),bcvRate:251}]),/tasas BCV históricas distintas/); });
+test('uses the historical BCV snapshot stored on the selected bank movement',()=>{ const p=build(100,0.9); assert.equal(p.bcvRate,100 / 0.9); });
 test('cancels liability at historical USD carrying value',()=>{
  const p=build(100,1);assert.equal(p.liabilityUsd,1);assert.equal(p.fxDifferenceUsd,0);
  assert.equal(p.items[0].debitBs,p.items[1].creditBs);assert.equal(p.items[0].debitUsd,p.items[1].creditUsd);
@@ -41,7 +47,7 @@ test('recognizes exchange loss when bank USD exceeds liability',()=>{
  const p=build(100,1.1);assert.equal(p.fxDifferenceUsd,-0.1);assert.equal(p.items[2].accountCode,'6.1.1.08');assert.equal(p.items[2].debitUsd,0.1);
 });
 test('allocates partial payments proportionally and final remainder exactly',()=>{
- const d=declaration(1,100);const first=build(33.33,0.333333,d);const last=build(66.67,0.666667,d,33.33);
+ const d=declaration(1,100);const first=build(33.33,0.333333,d,0,[{...movement('m1','b1',33.33,0.333333),bcvRate:100}]);const last=build(66.67,0.666667,d,33.33,[{...movement('m2','b1',66.67,0.666667),bcvRate:100}]);
  assert.equal(first.liabilityUsd,0.3333);assert.equal(last.liabilityUsd,0.6667);assert.equal(first.liabilityUsd+last.liabilityUsd,1);
  for(const p of [first,last]) {
    assert.equal(p.items.reduce((s,x)=>s+x.debitBs,0),p.items.reduce((s,x)=>s+x.creditBs,0));
@@ -56,7 +62,7 @@ test('requires the configured FX account when there is a gain',()=>{
  assert.throws(()=>build(100,0.9,declaration(),0,[movement('m1','b1',100,0.9)],accounts.filter(x=>x.code!=='4.2.1.01')),/4.2.1.01/);
 });
 test('groups bank credits across multiple bank accounts',()=>{
- const p=build(100,0.7,declaration(0.7),0,[movement('m1','b1',60,0.4),movement('m2','b2',40,0.3)]);
+ const p=build(100,0.7,declaration(0.666667),0,[{...movement('m1','b1',60,0.4),bcvRate:150},{...movement('m2','b2',40,0.266667),bcvRate:150}]);
  assert.deepEqual(p.items.slice(1).map(x=>x.accountCode),['1.1.1.03','1.1.1.04']);
 });
 test('rejects bank amount mismatch and missing historical bank USD',()=>{

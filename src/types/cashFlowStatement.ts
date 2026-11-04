@@ -1,4 +1,5 @@
 import type { Account, BankAccount, CashFlowActivity, JournalEntry } from './accounting';
+import { isValidIsoDate } from './migrationParsing';
 
 export type CashFlowSection = 'OPERACION' | 'INVERSION' | 'FINANCIACION' | 'SIN_CLASIFICAR';
 
@@ -61,8 +62,13 @@ const zeroTotals = (): CashFlowTotals => ({
   receiptsBs: 0, paymentsBs: 0, netBs: 0,
   receiptsUsd: 0, paymentsUsd: 0, netUsd: 0
 });
+const isLinkedAnnualOpening = (entry: JournalEntry) =>
+  entry.type === 'APERTURA' &&
+  entry.exerciseLink?.nextPeriodStartDate === entry.date &&
+  isValidIsoDate(entry.date);
 const isAnnualOpening = (entry: JournalEntry, year: number) =>
-  entry.type === 'APERTURA' && entry.exerciseLink?.nextPeriodStartDate?.slice(0, 4) === String(year);
+  isLinkedAnnualOpening(entry) &&
+  entry.date === String(year).padStart(4, '0') + '-01-01';
 const counterpartAmount = (
   item: JournalEntry['items'][number],
   side: 'credit' | 'debit',
@@ -97,8 +103,28 @@ export function buildCashFlowReport(
   }
   const start = String(year).padStart(4, '0') + '-01-01';
   const end = String(year).padStart(4, '0') + '-12-31';
-  const companyEntries = entries
-    .filter(entry => entry.companyId === companyId && /^\d{4}-\d{2}-\d{2}$/.test(entry.date) && entry.date <= end)
+  const companyEntries = entries.filter(entry => entry.companyId === companyId);
+  // Only reversals posted on or before the opening boundary cancel an opening
+  // entry at the start of the year. A reversal dated later is a current-year
+  // cash movement and must remain in the report.
+  const reversedEntryIds = new Set(companyEntries
+    .filter(entry => entry.reversalOfEntryId && entry.date < start)
+    .map(entry => entry.reversalOfEntryId as string));
+  for (const entry of companyEntries) {
+    if (!isValidIsoDate(entry.date)) {
+      throw new Error('El Estado de Flujos de Efectivo no puede calcularse: existe un asiento con fecha inválida.');
+    }
+    if (entry.date > end) continue;
+    for (const item of entry.items) {
+      const values = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(Number);
+      if (values.some(value => !Number.isFinite(value) || value < 0) ||
+          (Number(item.debitBs) > 0 && Number(item.creditBs) > 0) ||
+          (Number(item.debitUsd) > 0 && Number(item.creditUsd) > 0)) {
+        throw new Error('El Estado de Flujos de Efectivo no puede calcularse: existe una línea contable con importes inválidos.');
+      }
+    }
+  }
+  const scopedEntries = companyEntries.filter(entry => entry.date <= end)
     .sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber);
   const accountsByCode = new Map(accounts.map(account => [account.code, account] as const));
   const cashCodes = new Set([
@@ -108,16 +134,22 @@ export function buildCashFlowReport(
       account.code.startsWith('1.1.1.')
     )).map(account => account.code)
   ]);
-  const annualOpenings = companyEntries.filter(entry => isAnnualOpening(entry, year));
-  const annualOpening = annualOpenings.at(-1);
-  // A linked annual opening already carries the prior year's closing balance.
-  // Never add it on top of the historical movements that it replaces.
-  const opening = annualOpening
-    ? cashNet(annualOpening, cashCodes)
-    : companyEntries.filter(entry => entry.date < start).reduce((sum, entry) => {
-        const net = cashNet(entry, cashCodes);
-        return { bs: sum.bs + net.bs, usd: sum.usd + net.usd };
-      }, { bs: 0, usd: 0 });
+  // Start from the latest linked annual opening on or before this year's
+  // first day. If the current year has no opening yet, carry forward that
+  // prior opening plus only the movements posted after it.
+  const openingBoundary = companyEntries.filter(entry =>
+    isLinkedAnnualOpening(entry) && entry.date <= start && !reversedEntryIds.has(entry.id)
+  ).sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber).at(-1);
+  const openingEntries = openingBoundary
+    ? [
+        ...companyEntries.filter(entry => entry.date > openingBoundary.date && entry.date < start),
+        openingBoundary
+      ]
+    : companyEntries.filter(entry => entry.date < start);
+  const opening = openingEntries.reduce((sum, entry) => {
+    const net = cashNet(entry, cashCodes);
+    return { bs: sum.bs + net.bs, usd: sum.usd + net.usd };
+  }, { bs: 0, usd: 0 });
 
   const activities: Record<CashFlowSection, CashFlowTotals> = {
     OPERACION: zeroTotals(),
@@ -234,7 +266,9 @@ export function buildCashFlowReport(
     }
   };
 
-  const periodEntries = companyEntries.filter(entry => entry.date >= start && !isAnnualOpening(entry, year));
+  const periodEntries = companyEntries.filter(entry =>
+    entry.date >= start && !isAnnualOpening(entry, year)
+  );
   for (const entry of periodEntries) {
     const net = cashNet(entry, cashCodes);
     netChangeBs += net.bs;
@@ -254,7 +288,9 @@ export function buildCashFlowReport(
 
   // Reconcile against the same opening basis: a linked annual opening supersedes
   // the prior-year ledger movements for this year's opening balance.
-  const ledgerEntries = annualOpening ? [annualOpening, ...periodEntries] : companyEntries;
+  const ledgerEntries = openingBoundary
+    ? companyEntries.filter(entry => entry.date >= openingBoundary.date)
+    : companyEntries;
   const ledgerClosing = ledgerEntries.reduce((sum, entry) => {
     const net = cashNet(entry, cashCodes);
     return { bs: sum.bs + net.bs, usd: sum.usd + net.usd };

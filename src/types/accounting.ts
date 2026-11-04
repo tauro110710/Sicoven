@@ -519,6 +519,9 @@ export interface BankStatementMovement {
   type: BankMovementType; // DEBIT: cargo/salida en banco; CREDIT: abono/depósito en banco
   amountBs: number;
   amountUsd: number;
+  /** Tasa BCV histórica utilizada para convertir este movimiento. */
+  bcvRate?: number;
+  bcvRateEffectiveDate?: string;
   isReconciled: boolean;
   reconciledWithJournalEntryId?: string;
   /** IDs de asientos que alguna vez se vincularon a esta línea; historial no removible. */

@@ -1,4 +1,5 @@
 import type { Account, BankAccount, BankStatementMovement, InventoryMovement, InventoryProduct, JournalEntry, JournalEntryItem, PurchaseRecord, SaleRecord } from './accounting';
+import { isJournalEntryBalanced } from './journalEntryValidation';
 
 /**
  * Builds an immutable contra-entry by swapping debit/credit in both currencies.
@@ -27,9 +28,7 @@ export function buildReversalItems(
     sum.creditUsd += Number(item.creditUsd);
     return sum;
   }, { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
-  if (Math.abs(totals.debitBs - totals.creditBs) >= 0.01 ||
-      Math.abs(totals.debitUsd - totals.creditUsd) >= 0.01 ||
-      totals.debitBs <= 0 || totals.debitUsd <= 0) {
+  if (!isJournalEntryBalanced(totals) || totals.debitBs <= 0 || totals.debitUsd <= 0) {
     throw new Error('El asiento original no cuadra simultáneamente en Bs. y USD; requiere conciliación antes de reversarlo.');
   }
   const accountByCode = new Map(accounts.map(account => [account.code, account]));
@@ -131,8 +130,7 @@ export function validateSaleInventoryReturnReconciliation(input: {
       costDebitUsd: sum.costDebitUsd + (item.accountCode === costCode ? Number(item.debitUsd ?? 0) : 0)
     }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0,
       inventoryCreditBs: 0, costDebitBs: 0, inventoryCreditUsd: 0, costDebitUsd: 0 });
-    if (Math.abs(originalCostTotals.debitBs - originalCostTotals.creditBs) >= 0.01 ||
-        Math.abs(originalCostTotals.debitUsd - originalCostTotals.creditUsd) >= 0.01 ||
+    if (!isJournalEntryBalanced(originalCostTotals) ||
         Math.abs(originalCostTotals.inventoryCreditBs - Number(original.totalCostBs)) > 0.02 ||
         Math.abs(originalCostTotals.costDebitBs - Number(original.totalCostBs)) > 0.02 ||
         Math.abs(originalCostTotals.inventoryCreditUsd - Number(original.totalCostUsd)) > 0.02 ||
@@ -182,8 +180,7 @@ export function validateSaleInventoryReturnReconciliation(input: {
         costCreditUsd: sum.costCreditUsd + (item.accountCode === costCode ? Number(item.creditUsd ?? 0) : 0)
       }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0,
         inventoryDebitBs: 0, costCreditBs: 0, inventoryDebitUsd: 0, costCreditUsd: 0 });
-      if (Math.abs(totals.debitBs - totals.creditBs) >= 0.01 ||
-          Math.abs(totals.debitUsd - totals.creditUsd) >= 0.01 ||
+      if (!isJournalEntryBalanced(totals) ||
           Math.abs(totals.inventoryDebitBs - Number(correction.totalCostBs)) > 0.02 ||
           Math.abs(totals.costCreditBs - Number(correction.totalCostBs)) > 0.02 ||
           Math.abs(totals.inventoryDebitUsd - Number(correction.totalCostUsd)) > 0.02 ||
@@ -343,8 +340,10 @@ export function validatePurchaseInventoryReconciliation(input: {
   const journalCreditBs = journalItems.reduce((sum, item) => sum + Number(item.creditBs ?? 0), 0);
   const journalDebitUsd = journalItems.reduce((sum, item) => sum + Number(item.debitUsd ?? 0), 0);
   const journalCreditUsd = journalItems.reduce((sum, item) => sum + Number(item.creditUsd ?? 0), 0);
-  const journalBalanced = Math.abs(journalDebitBs - journalCreditBs) <= 0.02 &&
-    Math.abs(journalDebitUsd - journalCreditUsd) <= 0.0001;
+  const journalBalanced = isJournalEntryBalanced({
+    debitBs: journalDebitBs, creditBs: journalCreditBs,
+    debitUsd: journalDebitUsd, creditUsd: journalCreditUsd
+  });
   const purchaseUsdMatches = Math.abs(Number(purchase.totalAmountUsd) - total / rate) <= 0.0001 &&
     Math.abs(Number(purchase.taxableBaseUsd) - taxableBase / rate) <= 0.0001 &&
     Math.abs(Number(purchase.vatAmountUsd) - vat / rate) <= 0.0001 &&

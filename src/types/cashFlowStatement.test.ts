@@ -73,6 +73,24 @@ describe('cash flow statement', () => {
     assert.equal(report.isReconciled, true);
   });
 
+  it('rejects malformed dates and invalid monetary values instead of silently treating them as zero', () => {
+    const invalidAmount = entry('invalid-amount', '2026-02-01', 'MANUAL', [
+      line('1.1.1.01', 'Caja principal', Number.NaN, 0, 1, 0),
+      line('4.1', 'Ingresos operacionales', 0, 0, 0, 1)
+    ]);
+    assert.throws(() => buildCashFlowReport([invalidAmount], accounts, banks, 'co-1', 2026), /importes inválidos/);
+    const negativeAmount = entry('negative-amount', '2026-02-01', 'MANUAL', [
+      line('1.1.1.01', 'Caja principal', 0, 0, -1, 0),
+      line('4.1', 'Ingresos operacionales', 0, 0, 0, 1)
+    ]);
+    assert.throws(() => buildCashFlowReport([negativeAmount], accounts, banks, 'co-1', 2026), /importes inválidos/);
+    const invalidDate = entry('invalid-date', '2026-02-30', 'MANUAL', [
+      line('1.1.1.01', 'Caja principal', 100, 0, 1, 0),
+      line('4.1', 'Ingresos operacionales', 0, 100, 0, 1)
+    ]);
+    assert.throws(() => buildCashFlowReport([invalidDate], accounts, banks, 'co-1', 2026), /fecha inválida/);
+  });
+
   it('does not classify transfers between company cash accounts as operating flows', () => {
     const entries = [
       entry('transfer-1', '2026-02-01', 'MANUAL', [
@@ -118,6 +136,52 @@ describe('cash flow statement', () => {
     assert.equal(report.unclassifiedNetBs, 0);
     assert.equal(report.activities.SIN_CLASIFICAR.receiptsBs + report.activities.SIN_CLASIFICAR.paymentsBs, 50);
     assert.equal(report.isFullyClassified, false);
+  });
+
+  it('uses a prior annual opening as the carry-forward boundary when the current year has no opening', () => {
+    const olderOpening = entry('opening-2024', '2024-01-01', 'APERTURA', [
+      line('1.1.1.01', 'Caja principal', 100, 0, 10, 0),
+      line('3.1', 'Capital social', 0, 100, 0, 10)
+    ], { priorPeriodStartDate: '2023-01-01', priorPeriodEndDate: '2023-12-31', nextPeriodStartDate: '2024-01-01' });
+    const priorOpening = entry('opening-2025', '2025-01-01', 'APERTURA', [
+      line('1.1.1.01', 'Caja principal', 200, 0, 20, 0),
+      line('3.1', 'Capital social', 0, 200, 0, 20)
+    ], { priorPeriodStartDate: '2024-01-01', priorPeriodEndDate: '2024-12-31', nextPeriodStartDate: '2025-01-01' });
+    const priorMovement = entry('prior-receipt', '2025-06-01', 'VENTA', [
+      line('1.1.1.01', 'Caja principal', 50, 0, 5, 0),
+      line('4.1', 'Ingresos operacionales', 0, 50, 0, 5)
+    ]);
+    const currentMovement = entry('current-payment', '2026-06-01', 'MANUAL', [
+      line('5.1', 'Gastos operacionales', 20, 0, 2, 0),
+      line('1.1.1.01', 'Caja principal', 0, 20, 0, 2)
+    ]);
+    // Deliberately shuffle history: the most recent linked opening must be chosen by date, not array order.
+    const report = buildCashFlowReport([priorOpening, currentMovement, olderOpening, priorMovement], accounts, banks, 'co-1', 2026);
+    assert.equal(report.openingCashBs, 250);
+    assert.equal(report.openingCashUsd, 25);
+    assert.equal(report.netChangeBs, -20);
+    assert.equal(report.netChangeUsd, -2);
+    assert.equal(report.closingCashBs, 230);
+    assert.equal(report.ledgerClosingCashBs, 230);
+    assert.equal(report.isReconciled, true);
+  });
+
+  it('counts a same-day reversal of the linked annual opening as a period cash flow', () => {
+    const opening = entry('opening-2026', '2026-01-01', 'APERTURA', [
+      line('1.1.1.01', 'Caja principal', 100, 0, 10, 0),
+      line('3.1', 'Capital social', 0, 100, 0, 10)
+    ], { priorPeriodStartDate: '2025-01-01', priorPeriodEndDate: '2025-12-31', nextPeriodStartDate: '2026-01-01' });
+    const reversal = entry('reversal-opening-2026', '2026-01-01', 'AJUSTE', [
+      line('3.1', 'Capital social', 100, 0, 10, 0),
+      line('1.1.1.01', 'Caja principal', 0, 100, 0, 10)
+    ]);
+    reversal.reversalOfEntryId = opening.id;
+    opening.reversedByEntryId = reversal.id;
+    const report = buildCashFlowReport([opening, reversal], accounts, banks, 'co-1', 2026);
+    assert.equal(report.openingCashBs, 100);
+    assert.equal(report.netChangeBs, -100);
+    assert.equal(report.closingCashBs, 0);
+    assert.equal(report.isReconciled, true);
   });
 
   it('treats a linked annual opening as opening cash, not as a period cash flow', () => {

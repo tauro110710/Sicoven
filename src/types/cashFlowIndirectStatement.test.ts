@@ -58,6 +58,57 @@ describe('cash flow indirect method', () => {
     assert.equal(report.isReconciled, true);
   });
 
+  it('keeps the opening balance when an annual opening is reversed on the first day of the year', () => {
+    const opening = entry('opening-2026', '2026-01-01', [
+      line('1.1.1.01', 100, 0, 10, 0),
+      line('3.1.1', 0, 100, 0, 10)
+    ], 'APERTURA', {
+      priorPeriodStartDate: '2025-01-01', priorPeriodEndDate: '2025-12-31', nextPeriodStartDate: '2026-01-01'
+    });
+    const reversal = entry('reversal-opening-2026', '2026-01-01', [
+      line('3.1.1', 100, 0, 10, 0),
+      line('1.1.1.01', 0, 100, 0, 10)
+    ]);
+    reversal.reversalOfEntryId = opening.id;
+    opening.reversedByEntryId = reversal.id;
+    const report = buildCashFlowIndirectReport([opening, reversal], accounts, banks, 'co-1', 2026);
+    assert.equal(report.openingCashBs, 100);
+    assert.equal(report.netChangeBs, -100);
+    assert.equal(report.closingCashBs, 0);
+    assert.equal(report.isReconciled, true);
+  });
+
+  it('uses the latest prior annual opening and subsequent pre-period movements for indirect opening balances', () => {
+    const history = entry('history-2024', '2024-06-01', [
+      line('1.1.2.01', 100, 0, 1, 0),
+      line('3.1.1', 0, 100, 0, 1)
+    ]);
+    const opening2025 = entry('opening-2025', '2025-01-01', [
+      line('1.1.1.01', 200, 0, 20, 0),
+      line('1.1.2.01', 200, 0, 2, 0),
+      line('3.1.1', 0, 400, 0, 40)
+    ], 'APERTURA', {
+      priorPeriodStartDate: '2024-01-01', priorPeriodEndDate: '2024-12-31', nextPeriodStartDate: '2025-01-01'
+    });
+    const priorSale = entry('prior-sale-credit', '2025-06-01', [
+      line('1.1.2.01', 50, 0, 5, 0),
+      line('4.1.1', 0, 50, 0, 5)
+    ]);
+    const currentExpense = entry('current-cash-expense', '2026-06-01', [
+      line('5.1.2', 20, 0, 2, 0),
+      line('1.1.1.01', 0, 20, 0, 2)
+    ]);
+    const report = buildCashFlowIndirectReport(
+      [history, opening2025, priorSale, currentExpense], accounts, banks, 'co-1', 2026
+    );
+    const receivables = report.adjustments.find(row => row.accountCode === '1.1.2.01');
+    assert.equal(receivables?.openingBalanceBs, 250);
+    assert.equal(report.openingCashBs, 200);
+    assert.equal(report.netChangeBs, -20);
+    assert.equal(report.closingCashBs, 180);
+    assert.equal(report.isReconciled, true);
+  });
+
   it('isolates companies and refuses invalid periods', () => {
     const other = entry('other', '2026-01-01', [line('1.1.1.01', 0, 100, 0, 10)]);
     other.companyId = 'co-2';
@@ -74,6 +125,26 @@ describe('cash flow indirect method', () => {
       () => buildCashFlowIndirectReport([invalid], accounts, banks, 'co-1', 2026),
       /importe no finito/
     );
+  });
+
+  it('preserves sub-cent USD precision and rejects a material cash-flow reconciliation difference', () => {
+    const precisionAccounts = [
+      ...accounts,
+      { code: '5.1.3', name: 'Gasto sin ajuste indirecto', type: 'GASTOS' as const,
+        level: 4, isMovement: true, cashFlowActivity: 'OPERACION' as const },
+      { code: '2.1.1.02', name: 'Pasivo sin tratamiento indirecto', type: 'PASIVO' as const,
+        level: 4, isMovement: true }
+    ];
+    const report = buildCashFlowIndirectReport([
+      entry('precision-only', '2026-06-01', [
+        line('5.1.3', 100, 0, 0.004, 0),
+        line('4.1.1', 0, 100, 0, 0),
+        line('2.1.1.02', 0, 0, 0, 0.004)
+      ])
+    ], precisionAccounts, banks, 'co-1', 2026);
+    assert.equal(report.netIncomeUsd, -0.004);
+    assert.equal(report.reconciliationDifferenceUsd, 0.004);
+    assert.equal(report.isReconciled, false);
   });
 
   it('does not silently mark unknown income and balance accounts as classified', () => {

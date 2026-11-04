@@ -1,4 +1,5 @@
 import type { Account, JournalEntry, JournalEntryItem } from './accounting';
+import { isJournalEntryBalanced } from './journalEntryValidation';
 
 export interface OpeningEntryBuildInput {
   companyId: string;
@@ -41,9 +42,32 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
 
   const balances = new Map<string, Totals>();
   const profitLoss = { bs: 0, usd: 0 };
-  const priorEntries = journalEntries.filter(entry =>
-    entry.companyId === companyId && entry.date <= periodEndDate
-  );
+  const companyLedger = journalEntries.filter(entry => entry.companyId === companyId);
+  for (const entry of companyLedger) {
+    if (!isIsoDate(entry.date)) {
+      throw new Error('El asiento #' + entry.entryNumber + ' contiene una fecha inválida; no se puede preparar la apertura.');
+    }
+  }
+  const companyHistory = companyLedger.filter(entry => entry.date <= periodEndDate);
+  // Only reversals effective on or before the closing date can change
+  // the balances being carried forward. Later reversals must not rewrite history.
+  const reversedEntryIds = new Set(companyHistory
+    .filter(entry => entry.reversalOfEntryId)
+    .map(entry => entry.reversalOfEntryId as string));
+  // A linked annual opening is the authoritative carry-forward snapshot.
+  // Earlier ledger activity is already represented in that opening and must
+  // not be added again when preparing the next exercise.
+  const latestAnnualOpening = companyHistory
+    .filter(entry => entry.type === 'APERTURA' &&
+      entry.exerciseLink?.nextPeriodStartDate === entry.date &&
+      entry.exerciseLink.nextPeriodStartDate <= input.periodStartDate &&
+      isIsoDate(entry.exerciseLink.nextPeriodStartDate) &&
+      !reversedEntryIds.has(entry.id))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber)
+    .at(-1);
+  const priorEntries = latestAnnualOpening
+    ? companyHistory.filter(entry => entry.date >= latestAnnualOpening.date)
+    : companyHistory;
 
   for (const entry of priorEntries) {
     const totals = emptyTotals();
@@ -86,8 +110,7 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
         balances.set(account.code, current);
       }
     }
-    if (Math.abs(totals.debitBs - totals.creditBs) > 0.02 ||
-        Math.abs(totals.debitUsd - totals.creditUsd) > 0.0001) {
+    if (!isJournalEntryBalanced(totals)) {
       throw new Error('El asiento #' + entry.entryNumber + ' no cuadra en ambas monedas; no se puede preparar la apertura.');
     }
   }
@@ -132,8 +155,7 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
     debitBs: sum.debitBs + item.debitBs, creditBs: sum.creditBs + item.creditBs,
     debitUsd: sum.debitUsd + item.debitUsd, creditUsd: sum.creditUsd + item.creditUsd
   }), emptyTotals());
-  if (Math.abs(total.debitBs - total.creditBs) > 0.02 ||
-      Math.abs(total.debitUsd - total.creditUsd) > 0.0001) {
+  if (!isJournalEntryBalanced(total)) {
     throw new Error('Los saldos históricos no cuadran en ambas monedas (Bs debe ' + total.debitBs + ', Bs haber ' + total.creditBs + ', USD debe ' + total.debitUsd + ', USD haber ' + total.creditUsd + '). Regularice el balance antes de abrir el ejercicio.');
   }
   return items;

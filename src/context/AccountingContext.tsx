@@ -21,7 +21,8 @@ import {
 } from '../types/accounting';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 import { prepareAccountForCatalog } from '../types/chartOfAccounts';
-import { validateJournalEntryAccounts } from '../types/journalEntryValidation';
+import { validateJournalEntryAccounts, isJournalEntryBalanced } from '../types/journalEntryValidation';
+import { matchesBankStatementDualCurrency, validateBankMovementFxSnapshot } from '../types/bankStatementMatching';
 import { buildOpeningEntryItems } from '../types/accountingYearOpening';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
 import {
@@ -528,7 +529,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const creditBs = entry.items.reduce((sum, item) => sum + Number(item.creditBs || 0), 0);
       const debitUsd = entry.items.reduce((sum, item) => sum + Number(item.debitUsd || 0), 0);
       const creditUsd = entry.items.reduce((sum, item) => sum + Number(item.creditUsd || 0), 0);
-      if (Math.abs(debitBs - creditBs) >= 0.01 || Math.abs(debitUsd - creditUsd) >= 0.01) {
+      if (!isJournalEntryBalanced({ debitBs, creditBs, debitUsd, creditUsd })) {
         throw new Error('No se puede cerrar el período: el asiento #' + entry.entryNumber + ' no cuadra en Bs. y USD.');
       }
     }
@@ -649,7 +650,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const totalCreditBs = reversedItems.reduce((sum, item) => sum + item.creditBs, 0);
     const totalDebitUsd = reversedItems.reduce((sum, item) => sum + item.debitUsd, 0);
     const totalCreditUsd = reversedItems.reduce((sum, item) => sum + item.creditUsd, 0);
-    if (Math.abs(totalDebitBs - totalCreditBs) >= 0.01 || Math.abs(totalDebitUsd - totalCreditUsd) >= 0.01) {
+    if (!isJournalEntryBalanced({ debitBs: totalDebitBs, creditBs: totalCreditBs, debitUsd: totalDebitUsd, creditUsd: totalCreditUsd })) {
       throw new Error('La vista previa de reversión no cuadra en Bs. y USD; no se registró ningún cambio.');
     }
     const bankReadiness = validateBankStatementReversal({
@@ -1022,7 +1023,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       (Number(item.debitUsd) > 0 && Number(item.creditUsd) > 0)
     );
 
-    if (entry.items.length < 2 || invalidLines || diff >= 0.01 || diffUsd >= 0.01 || totalDebitBs <= 0 || totalDebitUsd <= 0) {
+    if (entry.items.length < 2 || invalidLines ||
+        !isJournalEntryBalanced({ debitBs: totalDebitBs, creditBs: totalCreditBs, debitUsd: totalDebitUsd, creditUsd: totalCreditUsd }) ||
+        totalDebitBs <= 0 || totalDebitUsd <= 0) {
       throw new Error(
         `Verificación de asiento fallida. Bs: Debe ${totalDebitBs.toFixed(2)} / Haber ${totalCreditBs.toFixed(2)} (dif. ${diff.toFixed(2)}); USD: Debe ${totalDebitUsd.toFixed(2)} / Haber ${totalCreditUsd.toFixed(2)} (dif. ${diffUsd.toFixed(2)}). Revise líneas, importes y cuentas.`
       );
@@ -1919,7 +1922,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const creditBs = items.reduce((sum, item) => sum + (Number(item.creditBs) || 0), 0);
     const debitUsd = items.reduce((sum, item) => sum + (Number(item.debitUsd) || 0), 0);
     const creditUsd = items.reduce((sum, item) => sum + (Number(item.creditUsd) || 0), 0);
-    if (Math.abs(debitBs - creditBs) > 0.01 || Math.abs(debitUsd - creditUsd) > 0.01) {
+    if (!isJournalEntryBalanced({ debitBs, creditBs, debitUsd, creditUsd })) {
       throw new Error('El asiento automático de la compra no cuadra en Bs. y USD; la operación no se guardó.');
     }
 
@@ -2217,7 +2220,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const creditBs = items.reduce((sum, item) => sum + item.creditBs, 0);
     const debitUsd = items.reduce((sum, item) => sum + item.debitUsd, 0);
     const creditUsd = items.reduce((sum, item) => sum + item.creditUsd, 0);
-    if (Math.abs(debitBs - creditBs) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.0001) {
+    if (!isJournalEntryBalanced({ debitBs, creditBs, debitUsd, creditUsd })) {
       throw new Error('El asiento de la nota de crédito no cuadra en Bs. y USD. No se registró ningún cambio.');
     }
     const companyEntries = journalEntries.filter(entry => entry.companyId === currentCompany.id);
@@ -2654,7 +2657,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const saleCreditBs = items.reduce((sum, item) => sum + (Number(item.creditBs) || 0), 0);
     const saleDebitUsd = items.reduce((sum, item) => sum + (Number(item.debitUsd) || 0), 0);
     const saleCreditUsd = items.reduce((sum, item) => sum + (Number(item.creditUsd) || 0), 0);
-    if (Math.abs(saleDebitBs - saleCreditBs) > 0.01 || Math.abs(saleDebitUsd - saleCreditUsd) > 0.01) {
+    if (!isJournalEntryBalanced({ debitBs: saleDebitBs, creditBs: saleCreditBs, debitUsd: saleDebitUsd, creditUsd: saleCreditUsd })) {
       throw new Error('El asiento automático de la venta no cuadra en Bs. y USD; la operación no se guardó.');
     }
 
@@ -3735,12 +3738,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // La contabilidad de SICOVEN valida cada asiento en Bs y USD. Guardar
     // cero en la moneda equivalente permite importar el movimiento, pero luego
     // impide generar un ajuste de conciliación válido en partida doble.
-    if (!Number.isFinite(amountBs) || !Number.isFinite(amountUsd) ||
-        amountBs <= 0 || amountUsd <= 0) {
-      throw new Error('El movimiento debe tener importes positivos y válidos tanto en la moneda de la cuenta como en su equivalente.');
-    }
+    validateBankMovementFxSnapshot({
+      date: movData.date,
+      amountBs,
+      amountUsd,
+      bcvRate: Number(movData.bcvRate),
+      bcvRateEffectiveDate: movData.bcvRateEffectiveDate
+    });
     const newMov: BankStatementMovement = {
       ...movData,
+      bcvRate: Number(movData.bcvRate),
+      bcvRateEffectiveDate: String(movData.bcvRateEffectiveDate || ''),
       amountBs: Math.round(amountBs * 100) / 100,
       amountUsd: Math.round(amountUsd * 1000000) / 1000000,
       id: `stmt-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
@@ -3790,18 +3798,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       );
       if (alreadyUsed) throw new Error('Ese asiento ya está vinculado a otro movimiento conciliado de esta cuenta bancaria.');
 
-      const isUsdAccount = statementBank.currency === 'USD';
-      const expectedAmount = isUsdAccount ? statement.amountUsd : statement.amountBs;
-      const tolerance = isUsdAccount ? 0.000001 : 0.05;
-      const hasExactBankLine = linkedEntry.items.some(item => {
-        if (item.accountCode !== statementBank.accountCode) return false;
-        const debit = isUsdAccount ? Number(item.debitUsd) : Number(item.debitBs);
-        const credit = isUsdAccount ? Number(item.creditUsd) : Number(item.creditBs);
-        const expectsDebit = statement.type === 'CREDIT';
-        const amount = expectsDebit ? debit : credit;
-        const opposite = expectsDebit ? credit : debit;
-        return Math.abs(amount - expectedAmount) < tolerance && opposite === 0;
-      });
+      if (linkedEntry.date !== statement.date) {
+        throw new Error('El asiento seleccionado debe tener la misma fecha del movimiento del extracto bancario.');
+      }
+      const hasExactBankLine = linkedEntry.items.some(item =>
+        item.accountCode === statementBank.accountCode && matchesBankStatementDualCurrency({
+          movementType: statement.type,
+          amountBs: Number(statement.amountBs),
+          amountUsd: Number(statement.amountUsd),
+          debitBs: Number(item.debitBs),
+          creditBs: Number(item.creditBs),
+          debitUsd: Number(item.debitUsd),
+          creditUsd: Number(item.creditUsd)
+        })
+      );
       if (!hasExactBankLine) {
         throw new Error('El asiento no coincide con la cuenta, el importe y la naturaleza débito/crédito del movimiento bancario.');
       }
@@ -3878,18 +3888,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const updates = new Map<string, BankStatementMovement>();
     const matchedRefs: string[] = [];
     const now = new Date().toISOString();
-    const isUsdAccount = targetAccount.currency === 'USD';
     const matchesAmountAndNature = (stmt: BankStatementMovement, entry: JournalEntry) =>
-      entry.date === stmt.date && entry.items.some(item => {
-        if (item.accountCode !== bankCode) return false;
-        const amount = isUsdAccount ? stmt.amountUsd : stmt.amountBs;
-        const debit = isUsdAccount ? item.debitUsd : item.debitBs;
-        const credit = isUsdAccount ? item.creditUsd : item.creditBs;
-        const tolerance = isUsdAccount ? 0.000001 : 0.05;
-        return stmt.type === 'CREDIT'
-          ? Math.abs(debit - amount) < tolerance && credit === 0
-          : Math.abs(credit - amount) < tolerance && debit === 0;
-      });
+      entry.date === stmt.date && entry.items.some(item =>
+        item.accountCode === bankCode && matchesBankStatementDualCurrency({
+          movementType: stmt.type,
+          amountBs: Number(stmt.amountBs),
+          amountUsd: Number(stmt.amountUsd),
+          debitBs: Number(item.debitBs),
+          creditBs: Number(item.creditBs),
+          debitUsd: Number(item.debitUsd),
+          creditUsd: Number(item.creditUsd)
+        })
+      );
 
     for (const stmt of statementRows) {
       if (stmt.isReconciled) continue;
@@ -3968,12 +3978,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const contraAccountName = contraAccount.name;
 
-    const rate = currentCompany.bcvRate;
-    if (!Number.isFinite(rate) || rate <= 0) {
-      throw new Error('Configure una tasa BCV válida para generar el asiento de conciliación.');
-    }
-    const amountBs = statementMovement.amountBs;
-    const amountUsd = statementMovement.amountUsd || (amountBs / rate);
+    const rate = Number(statementMovement.bcvRate);
+    const amountBs = Number(statementMovement.amountBs);
+    const amountUsd = Number(statementMovement.amountUsd);
+    validateBankMovementFxSnapshot({
+      date: statementMovement.date,
+      amountBs,
+      amountUsd,
+      bcvRate: rate,
+      bcvRateEffectiveDate: statementMovement.bcvRateEffectiveDate
+    });
 
     const items: JournalEntryItem[] = [];
 
@@ -4267,7 +4281,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           debitBs += Number(line.debitBs); creditBs += Number(line.creditBs);
           debitUsd += Number(line.debitUsd); creditUsd += Number(line.creditUsd);
         }
-        if (Math.abs(debitBs-creditBs) >= 0.01 || Math.abs(debitUsd-creditUsd) >= 0.01 || debitBs <= 0 || debitUsd <= 0) {
+        if (!isJournalEntryBalanced({ debitBs, creditBs, debitUsd, creditUsd }) || debitBs <= 0 || debitUsd <= 0) {
           throw new Error('El asiento ' + entry.entryNumber + ' no cuadra en ambas monedas. No se restauró el respaldo.');
         }
       }

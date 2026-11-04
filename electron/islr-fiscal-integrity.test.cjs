@@ -16,13 +16,15 @@ test('rejects duplicate ISLR sequence against historical events', () => {
 test('SQLite isolates ISLR events when two companies reuse the same purchase ID', () => {
   const purchase = companyId => ({
     id: 'shared-purchase', companyId, supplierRif: 'J-12345678-9',
-    documentType: '01', paymentTerm: 'CREDITO', taxableBaseBs: 100,
-    exemptAmountBs: 0, isCancelled: false
+    documentType: '01', invoiceDate: '2026-10-01', invoiceNumber: 'F-SHARED',
+    paymentTerm: 'CREDITO', taxableBaseBs: 100, exemptAmountBs: 0,
+    isCancelled: false, islrConceptCode: '003', islrBasePercentage: 90,
+    islrUnitTaxValueBs: 43, islrWithheldBs: 0
   });
-  const journal = (id, companyId) => ({ id, companyId, date: '2026-10-01', type: 'PAGO' });
+  const journal = (id, companyId) => ({ id, companyId, date: '2026-10-01', type: 'COMPRA' });
   const event = (id, companyId, journalEntryId) => ({
     id, companyId, supplierRif: 'J-12345678-9', conceptCode: '003',
-    fiscalDate: '2026-10-01', sequence: 1, kind: 'PAYMENT',
+    fiscalDate: '2026-10-01', sequence: 1, kind: 'ACCOUNT_CREDIT',
     allocations: [{ purchaseId: 'shared-purchase', baseAmountBs: 100 }],
     basePercentage: 90, unitTaxValueBs: 43, withheldAmountBs: 0,
     journalEntryId, createdAt: '2026-10-01T10:00:00.000Z'
@@ -129,7 +131,38 @@ test('rejects duplicate ISLR withholding events when partial payments follow the
     journalEntries: [journal('j-purchase', '2026-10-01'), journal('j-payment-1', '2026-10-05', 'PAGO'), journal('j-payment-2', '2026-10-06', 'PAGO')],
     islrVouchers: [voucher], islrFiscalEvents: [accountCredit, paymentOne, paymentTwo]
   };
-  assert.throws(() => validateIslrFiscalEventLedger(previous, next), /asignaciones acumuladas exceden la base elegible/);
+  assert.throws(() => validateIslrFiscalEventLedger(previous, next), /la factura ya tiene registrado el otro disparador fiscal/);
+});
+
+test('rejects a later partial PAYMENT trigger after the invoice already triggered ISLR on account credit', () => {
+  const purchase = {
+    id: 'p-trigger', companyId: 'c1', supplierRif: 'J-12345678-9',
+    documentType: '01', invoiceDate: '2026-10-01', invoiceNumber: 'F-TRIGGER',
+    paymentTerm: 'CREDITO', taxableBaseBs: 100, exemptAmountBs: 0, isCancelled: false,
+    islrConceptCode: '003', islrBasePercentage: 90, islrUnitTaxValueBs: 43, islrWithheldBs: 5
+  };
+  const accountCredit = {
+    id: 'e-account-credit', companyId: 'c1', supplierRif: purchase.supplierRif,
+    conceptCode: '003', fiscalDate: '2026-10-01', sequence: 1, kind: 'ACCOUNT_CREDIT',
+    allocations: [{ purchaseId: purchase.id, baseAmountBs: 100 }],
+    basePercentage: 90, unitTaxValueBs: 43, withheldAmountBs: 5,
+    journalEntryId: 'j-purchase', createdAt: '2026-10-01T10:00:00.000Z'
+  };
+  const laterPayment = {
+    ...accountCredit, id: 'e-payment', fiscalDate: '2026-10-05', kind: 'PAYMENT',
+    allocations: [{ purchaseId: purchase.id, baseAmountBs: 25 }],
+    withheldAmountBs: 1, journalEntryId: 'j-payment'
+  };
+  const previous = {
+    purchases: [purchase], journalEntries: [{ id: 'j-purchase', companyId: 'c1', date: '2026-10-01' }],
+    islrVouchers: [], islrFiscalEvents: [accountCredit]
+  };
+  const next = {
+    ...previous,
+    journalEntries: [...previous.journalEntries, { id: 'j-payment', companyId: 'c1', date: '2026-10-05', type: 'PAGO' }],
+    islrFiscalEvents: [accountCredit, laterPayment]
+  };
+  assert.throws(() => validateIslrFiscalEventLedger(previous, next), /la factura ya tiene registrado el otro disparador fiscal/);
 });
 
 test('requires and reconciles an ISLR voucher for positive account-credit withholding', () => {
@@ -265,7 +298,7 @@ test('reconciles cash-purchase ISLR PAYMENT event against the cash purchase, vou
   assert.doesNotThrow(() => validateIslrFiscalEventLedger(previous, next));
   assert.throws(() => validateIslrFiscalEventLedger(previous, {
     ...next, islrFiscalEvents: [{ ...fiscalEvent, kind: 'ACCOUNT_CREDIT' }]
-  }), /ACCOUNT_CREDIT para una compra de contado/);
+  }), /disparador PAYMENT\/ACCOUNT_CREDIT no coincide/);
 });
 
 
@@ -280,4 +313,27 @@ test('ISLR fiscal integrity uses verified UT values at period boundaries', () =>
   assert.equal(getVerifiedUt('2025-07'), 43);
   assert.equal(getVerifiedUt('2026-11'), 43);
   assert.equal(getVerifiedUt('2026-13'), null);
+});
+
+
+test('rejects a PAYMENT ISLR trigger for a supplier invoice registered as credit', () => {
+  const purchase = {
+    id: 'p-credit-trigger', companyId: 'c1', supplierRif: 'J-12345678-9',
+    documentType: '01', invoiceDate: '2026-10-01', invoiceNumber: 'F-CREDIT',
+    paymentTerm: 'CREDITO', taxableBaseBs: 100, exemptAmountBs: 0, isCancelled: false
+  };
+  const event = {
+    id: 'e-invalid-payment', companyId: 'c1', supplierRif: purchase.supplierRif,
+    conceptCode: '003', fiscalDate: '2026-10-01', sequence: 1, kind: 'PAYMENT',
+    allocations: [{ purchaseId: purchase.id, baseAmountBs: 25 }],
+    basePercentage: 90, unitTaxValueBs: 43, withheldAmountBs: 0,
+    journalEntryId: 'j-payment', createdAt: '2026-10-01T10:00:00.000Z'
+  };
+  const previous = { purchases: [purchase], journalEntries: [], islrVouchers: [], islrFiscalEvents: [] };
+  const next = {
+    purchases: [purchase],
+    journalEntries: [{ id: 'j-payment', companyId: 'c1', date: '2026-10-01', type: 'PAGO' }],
+    islrVouchers: [], islrFiscalEvents: [event]
+  };
+  assert.throws(() => validateIslrFiscalEventLedger(previous, next), /disparador PAYMENT\/ACCOUNT_CREDIT no coincide/);
 });

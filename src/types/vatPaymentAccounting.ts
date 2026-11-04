@@ -16,6 +16,22 @@ export function buildVatPaymentAccountingPlan(input: {
   if (!isValidIsoDate(date)) throw new Error('La fecha del enteramiento no es válida para el asiento contable.');
   if (!input.movements.length) throw new Error('El enteramiento requiere débitos bancarios vinculados.');
   const d = input.declaration;
+  if (input.movements.some(movement => movement.date !== date)) {
+    throw new Error('Todos los movimientos bancarios deben tener la misma fecha del enteramiento.');
+  }
+  const movementRates = input.movements.map(movement => Number(movement.bcvRate));
+  if (input.movements.some(movement =>
+    !isValidIsoDate(String(movement.bcvRateEffectiveDate || '')) ||
+    String(movement.bcvRateEffectiveDate) > date ||
+    !Number.isFinite(Number(movement.bcvRate)) ||
+    Number(movement.bcvRate) <= 0
+  )) {
+    throw new Error('Cada débito bancario debe conservar una tasa BCV histórica válida y vigente a la fecha del enteramiento.');
+  }
+  const bcvRate = movementRates[0];
+  if (movementRates.some(rate => Math.abs(rate - bcvRate) > 0.000001)) {
+    throw new Error('Los débitos bancarios seleccionados tienen tasas BCV históricas distintas; sepárelos por fecha o corrija sus soportes.');
+  }
   if (!Number.isFinite(d.totalWithheldUsd) || Number(d.totalWithheldUsd) <= 0 || d.totalWithheldBs <= 0 ||
       d.voucherSnapshots.some(v => !Number.isFinite(v.vatWithheldUsd) || Number(v.vatWithheldUsd) < 0 || !Number.isFinite(v.bcvRate) || Number(v.bcvRate) <= 0)) {
     throw new Error('La declaración no conserva la base USD histórica completa del pasivo; requiere revisión y no admite contabilización automática.');
@@ -37,6 +53,9 @@ export function buildVatPaymentAccountingPlan(input: {
     if (!input.accounts.some(x => x.code === bank.accountCode && x.type === 'ACTIVO' && x.isMovement)) throw new Error('La cuenta contable bancaria ' + bank.accountCode + ' no existe o no acepta movimientos.');
     const bs=Number(m.amountBs), usd=Number(m.amountUsd);
     if (!Number.isFinite(bs)||bs<=0||!Number.isFinite(usd)||usd<=0) throw new Error('El débito bancario ' + m.reference + ' no tiene equivalentes históricos positivos en Bs. y USD.');
+    if (Math.abs(cents(bs) - cents(usd * Number(m.bcvRate))) > 0.02) {
+      throw new Error('El débito bancario ' + m.reference + ' no concilia en Bs. y USD con su tasa BCV histórica.');
+    }
     const g=groups.get(bank.accountCode)||{bank,bs:0,usd:0}; g.bs+=bs;g.usd+=usd;groups.set(bank.accountCode,g);
   }
   const bankBs=cents([...groups.values()].reduce((s,g)=>s+g.bs,0));
@@ -52,5 +71,5 @@ export function buildVatPaymentAccountingPlan(input: {
   const db=cents(items.reduce((s,x)=>s+x.debitBs,0)), cb=cents(items.reduce((s,x)=>s+x.creditBs,0));
   const du=micros(items.reduce((s,x)=>s+x.debitUsd,0)), cu=micros(items.reduce((s,x)=>s+x.creditUsd,0));
   if(Math.abs(db-cb)>=0.01||Math.abs(du-cu)>=0.000001)throw new Error('El asiento de enteramiento no cuadra en ambas monedas después de reconocer el diferencial cambiario.');
-  return {date,amountBs,amountUsd,liabilityUsd,fxDifferenceUsd:diff,bcvRate:amountBs/amountUsd,items};
+  return {date,amountBs,amountUsd,liabilityUsd,fxDifferenceUsd:diff,bcvRate,items};
 }

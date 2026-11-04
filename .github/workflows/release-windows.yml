@@ -1,6 +1,10 @@
 name: SICOVEN Windows Release
 on:
   push:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
     tags:
       - 'v*'
   workflow_dispatch:
@@ -57,17 +61,17 @@ jobs:
             throw 'El bundle completo contiene datos de ejemplo; no se publicará este instalador.'
           }
       - name: Package full Windows installer
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push')
         run: npm run dist
       - name: Verify full installer
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push')
         shell: pwsh
         run: |
           $installer = Get-ChildItem -Path release -Filter '*.exe' -File | Select-Object -First 1
           if (-not $installer) { throw 'No se generó el instalador completo .exe de SICOVEN.' }
           Get-FileHash $installer.FullName -Algorithm SHA256 | Format-List
       - name: Install and launch smoke test
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push')
         shell: pwsh
         run: |
           $installer = Get-ChildItem -Path release -Filter "SICOVEN-Setup-*-x64.exe" -File | Select-Object -First 1
@@ -119,7 +123,7 @@ jobs:
           Write-Host "Instalación, app.asar, módulo SQLite nativo, creación de sicoven.sqlite y arranque verificados."
           Get-Item $installer.FullName | Select-Object Name, Length
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push')
         env:
           GH_TOKEN: ${{ github.token }}
           REF_NAME: ${{ github.ref_name }}
@@ -127,7 +131,12 @@ jobs:
         shell: pwsh
         run: |
           $files = @((Get-ChildItem -Path release -Filter '*.exe' -File).FullName)
-          $tag = $env:REF_NAME
+          if ($env:GITHUB_REF -eq 'refs/heads/main') {
+            $version = node -p "require('./package.json').version"
+            $tag = "v$version"
+          } else {
+            $tag = $env:REF_NAME
+          }
           $title = "SICOVEN $tag"
           $notes = 'Instalador completo de SICOVEN para Windows, compilado por GitHub Actions. El período de prueba se gestiona mediante licenciamiento, no con una edición DEMO separada.'
           $releaseExists = $false
@@ -143,7 +152,7 @@ jobs:
             gh release create $tag $files --target $env:GITHUB_SHA --title $title --notes $notes
           }
       - name: Upload complete edition installer
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push')
         uses: actions/upload-artifact@v4
         with:
           name: SICOVEN-COMPLETO-Windows-x64
@@ -151,7 +160,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Publish artifact checksums
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push')
         shell: pwsh
         run: |
           $files = @((Get-ChildItem -Path release -Filter '*.exe' -File))
@@ -162,7 +171,7 @@ jobs:
             "$hash  $($file.Name)" | Out-File -FilePath checksums-sha256.txt -Append -Encoding utf8
           }
       - name: Upload installer checksums
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push')
         uses: actions/upload-artifact@v4
         with:
           name: SICOVEN-SHA256-checksums

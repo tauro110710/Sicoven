@@ -45,6 +45,12 @@ describe('journal entry dual-currency balance indicator', () => {
   it('rejects an entry balanced in USD but unbalanced in Bs.', () => {
     assert.equal(isJournalEntryBalanced({ debitBs: 1000, creditBs: 999, debitUsd: 10, creditUsd: 10 }), false);
   });
+  it('rejects USD imbalances that the former one-cent context tolerance allowed', () => {
+    assert.equal(isJournalEntryBalanced({ debitBs: 1000, creditBs: 1000, debitUsd: 10, creditUsd: 9.991 }), false);
+  });
+  it('accepts sub-micro-dollar floating-point noise within the journal tolerance', () => {
+    assert.equal(isJournalEntryBalanced({ debitBs: 1000, creditBs: 1000, debitUsd: 10, creditUsd: 9.9999995 }), true);
+  });
   it('rejects empty or invalid entries', () => {
     assert.equal(isJournalEntryBalanced({ debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 }), false);
     assert.equal(isJournalEntryBalanced({ debitBs: -1, creditBs: -1, debitUsd: 0, creditUsd: 0 }), false);
