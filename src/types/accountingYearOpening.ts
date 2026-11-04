@@ -1,4 +1,5 @@
 import type { Account, JournalEntry, JournalEntryItem } from './accounting';
+import { isJournalEntryBalanced } from './journalEntryValidation';
 
 export interface OpeningEntryBuildInput {
   companyId: string;
@@ -86,8 +87,7 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
         balances.set(account.code, current);
       }
     }
-    if (Math.abs(totals.debitBs - totals.creditBs) > 0.02 ||
-        Math.abs(totals.debitUsd - totals.creditUsd) > 0.0001) {
+    if (!isJournalEntryBalanced(totals)) {
       throw new Error('El asiento #' + entry.entryNumber + ' no cuadra en ambas monedas; no se puede preparar la apertura.');
     }
   }
@@ -132,8 +132,7 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
     debitBs: sum.debitBs + item.debitBs, creditBs: sum.creditBs + item.creditBs,
     debitUsd: sum.debitUsd + item.debitUsd, creditUsd: sum.creditUsd + item.creditUsd
   }), emptyTotals());
-  if (Math.abs(total.debitBs - total.creditBs) > 0.02 ||
-      Math.abs(total.debitUsd - total.creditUsd) > 0.0001) {
+  if (!isJournalEntryBalanced(total)) {
     throw new Error('Los saldos históricos no cuadran en ambas monedas (Bs debe ' + total.debitBs + ', Bs haber ' + total.creditBs + ', USD debe ' + total.debitUsd + ', USD haber ' + total.creditUsd + '). Regularice el balance antes de abrir el ejercicio.');
   }
   return items;
