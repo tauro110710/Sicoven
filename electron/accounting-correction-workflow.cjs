@@ -19,7 +19,7 @@ function findLinkedCorrectionEvidence(state, item, reference) {
     item.entity_type === 'INVENTORY_MOVEMENT' ? 'movements' :
     item.entity_type === 'JOURNAL_ENTRY' ? 'journalEntries' : rule.collection;
   const source = Array.isArray(state[sourceCollection]) && state[sourceCollection].find(record =>
-    String(record.id) === String(item.entity_id) && String(record.companyId || item.company_id) === String(item.company_id));
+    String(record.id) === String(item.entity_id) && String(record.companyId) === String(item.company_id));
   if (!source) return null;
   const candidates = Array.isArray(state[rule.collection]) ? state[rule.collection] : [];
   const voucherCorrectionIds = ['VAT_VOUCHER','ISLR_VOUCHER'].includes(String(item.entity_type))
@@ -204,6 +204,11 @@ function markCorrectionExecuted(db, {caseId,executionRef,reason,evidenceRecordId
     }
     const linkedEvidenceId = String(evidenceRecordId || '').trim();
     const linkedEvidenceCollection = String(evidenceCollection || '').trim();
+    const expectedEvidenceCollection = ({SALE:'sales',PURCHASE:'purchases',JOURNAL_ENTRY:'journalEntries',
+      INVENTORY_MOVEMENT:'movements',VAT_VOUCHER:'journalEntries',ISLR_VOUCHER:'journalEntries'})[item.entity_type];
+    if (!linkedEvidenceId || !expectedEvidenceCollection || linkedEvidenceCollection !== expectedEvidenceCollection) {
+      throw new Error('La ejecución requiere el ID y la colección exacta de la evidencia correctiva verificada.');
+    }
     db.prepare("UPDATE accounting_correction_cases SET status='EXECUTED',workflow_stage='COMPLETED',executed_by=?,executed_by_name=?,execution_ref=?,executed_at=? WHERE id=? AND status='APPROVED'")
       .run(Number(actor.id),String(actor.username || ''),String(executionRef).trim(),at,item.id);
     appendEvent(db, tx, {id:item.id,type:'EXECUTED',actor,reason:String(reason).trim(),metadata:{
