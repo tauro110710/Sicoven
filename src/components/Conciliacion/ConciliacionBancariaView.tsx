@@ -268,9 +268,11 @@ export const ConciliacionBancariaView: React.FC = () => {
   };
 
   const handleCreateAdjustment = async (movement: BankStatementMovement, counterpartAccountCode: string) => {
-    if (adjustmentInFlightRef.current) return;
+    if (adjustmentInFlightRef.current || reconciliationInFlightRef.current) return;
     adjustmentInFlightRef.current = true;
+    reconciliationInFlightRef.current = true;
     setIsCreatingAdjustment(true);
+    setIsReconciling(true);
     try {
       createAdjustingEntryForBankMovement(movement, counterpartAccountCode);
       await waitForPersistence();
@@ -279,7 +281,9 @@ export const ConciliacionBancariaView: React.FC = () => {
       window.alert(error instanceof Error ? error.message : 'No se pudo confirmar el ajuste bancario en SQLite.');
     } finally {
       adjustmentInFlightRef.current = false;
+      reconciliationInFlightRef.current = false;
       setIsCreatingAdjustment(false);
+      setIsReconciling(false);
     }
   };
 
@@ -738,7 +742,7 @@ export const ConciliacionBancariaView: React.FC = () => {
                                       const defaultAcc = isDebit ? '6.1.1.07' : '4.2.1.02';
                                       void handleCreateAdjustment(s, defaultAcc);
                                     }}
-                                    disabled={isCreatingAdjustment}
+                                    disabled={isCreatingAdjustment || isReconciling}
                                     className="p-1 text-indigo-600 hover:bg-indigo-50 rounded disabled:opacity-40"
                                     title={
                                       isDebit
