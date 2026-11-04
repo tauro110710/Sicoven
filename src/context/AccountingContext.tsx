@@ -3796,6 +3796,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
       const isUsdAccount = statementBank.currency === 'USD';
       const expectedAmount = isUsdAccount ? statement.amountUsd : statement.amountBs;
+      if (linkedEntry.date !== statement.date) {
+        throw new Error('El asiento seleccionado debe tener la misma fecha del movimiento del extracto bancario.');
+      }
       const hasExactBankLine = linkedEntry.items.some(item => {
         if (item.accountCode !== statementBank.accountCode) return false;
         const debit = isUsdAccount ? Number(item.debitUsd) : Number(item.debitBs);
