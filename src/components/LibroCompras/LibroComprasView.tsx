@@ -20,6 +20,7 @@ import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportComprasPdf } from '../../utils/pdfGenerator';
 import { PurchaseCreditNoteModal } from './PurchaseCreditNoteModal';
+import { PurchaseServiceCreditNoteModal } from './PurchaseServiceCreditNoteModal';
 import { SupplierDebitNoteModal } from './SupplierDebitNoteModal';
 import { SupplierAdvanceSettlementModal } from './SupplierAdvanceSettlementModal';
 import { getPurchaseAccountCreditDate, type PurchaseRecord } from '../../types/accounting';
@@ -40,6 +41,7 @@ export const LibroComprasView: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [documentTarget, setDocumentTarget] = useState<{ id: string; title: string } | null>(null);
   const [creditNoteTarget, setCreditNoteTarget] = useState<PurchaseRecord | null>(null);
+  const [serviceCreditNoteTarget, setServiceCreditNoteTarget] = useState<PurchaseRecord | null>(null);
   const [reversalTarget, setReversalTarget] = useState<import('../../types/accounting').JournalEntry | null>(null);
   const [debitNoteTarget, setDebitNoteTarget] = useState<PurchaseRecord | null>(null);
   const [showSupplierAdvances, setShowSupplierAdvances] = useState(false);
@@ -332,12 +334,17 @@ export const LibroComprasView: React.FC = () => {
                         disabled={!sqliteAvailable || !isStorageReady}
                         className="mr-1 rounded bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
                         title="Emitir ND tipo 02 vinculada a esta factura">ND</button>}
-                      {p.documentType === '01' && !p.isCancelled && <button
+                      {p.documentType === '01' && !p.isCancelled && p.inventoryLines?.length ? <button
                         onClick={() => setCreditNoteTarget(p)}
-                        disabled={!sqliteAvailable || !isStorageReady || !p.inventoryLines?.length}
+                        disabled={!sqliteAvailable || !isStorageReady}
                         className="mr-1 inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-40"
-                        title={!p.inventoryLines?.length ? 'Factura sin líneas de inventario conciliables' : p.paymentTerm === 'CONTADO' ? 'Registrar nota de crédito, salida física y saldo a favor del proveedor; no realiza reembolso automático de efectivo' : 'Registrar nota de crédito y devolución física'}
-                      ><RotateCcw className="h-3 w-3" />{p.paymentTerm === 'CONTADO' ? 'NC · saldo a favor' : 'Devolver'}</button>}
+                        title={p.paymentTerm === 'CONTADO' ? 'Registrar nota de crédito, salida física y saldo a favor del proveedor; no realiza reembolso automático de efectivo' : 'Registrar nota de crédito y devolución física'}
+                      ><RotateCcw className="h-3 w-3" />{p.paymentTerm === 'CONTADO' ? 'NC · saldo a favor' : 'Devolver'}</button> : null}
+                      {p.documentType === '01' && !p.isCancelled && !p.inventoryLines?.length && <button
+                        onClick={() => setServiceCreditNoteTarget(p)}
+                        disabled={!sqliteAvailable || !isStorageReady}
+                        className="mr-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-40"
+                        title="NC parcial para servicio imputado a costos/gastos, sin Kardex ni retenciones">NC servicio</button>}
                       {p.documentType === '01' && !p.isCancelled && <button
                         type="button"
                         disabled={!sqliteAvailable || !isStorageReady}
@@ -455,6 +462,7 @@ export const LibroComprasView: React.FC = () => {
       </div>}
 
       {creditNoteTarget && <PurchaseCreditNoteModal purchase={creditNoteTarget} onClose={() => setCreditNoteTarget(null)} />}
+      {serviceCreditNoteTarget && <PurchaseServiceCreditNoteModal purchase={serviceCreditNoteTarget} onClose={() => setServiceCreditNoteTarget(null)} />}
       <JournalReversalModal source={reversalTarget} onClose={() => setReversalTarget(null)} />
       {debitNoteTarget && <SupplierDebitNoteModal purchase={debitNoteTarget} onClose={() => setDebitNoteTarget(null)} />}
       {showSupplierAdvances && <SupplierAdvanceSettlementModal onClose={() => setShowSupplierAdvances(false)} />}
