@@ -3570,6 +3570,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     assertSQLitePersistenceReady('Corregir los datos maestros del artículo');
     const original = products.find(p => p.id === updated.id && p.companyId === currentCompany.id);
     if (!original) throw new Error('El artículo no pertenece a la empresa activa.');
+    if (!updated.code.trim() || !updated.name.trim() || !updated.category.trim() || !updated.unit.trim()) {
+      throw new Error('Código, descripción, categoría y unidad son obligatorios.');
+    }
+    if (![updated.minStock, updated.salesPriceBs, updated.salesPriceUsd].every(value => Number.isFinite(Number(value)) && Number(value) >= 0)) {
+      throw new Error('Stock mínimo y precios deben ser importes numéricos no negativos.');
+    }
+    if (!['GENERAL_16', 'REDUCIDA_8', 'EXENTO', 'EXONERADO'].includes(updated.vatTreatment)) {
+      throw new Error('El tratamiento IVA del artículo no es válido.');
+    }
     if (products.some(p => p.id !== updated.id && p.companyId === currentCompany.id && p.code.trim().toLocaleUpperCase() === updated.code.trim().toLocaleUpperCase())) {
       throw new Error('Ya existe otro artículo con ese código en la empresa activa.');
     }
