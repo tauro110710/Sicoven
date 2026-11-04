@@ -567,7 +567,7 @@ function saleJournalMatchesInvoice(sale, entry) {
     Number(sale.vatWithheldUsd || 0)];
   if (values.some(value => !Number.isFinite(value) || value < 0) || rate <= 0 ||
       taxRate > 100 || total <= 0 || withheld > vat + 0.01 ||
-      Math.abs(vat - Math.round((taxableBase * taxRate + Number.EPSILON) * 100) / 100) > 0.01 ||
+      Math.abs(vat - Math.round((taxableBase * taxRate / 100 + Number.EPSILON) * 100) / 100) > 0.01 ||
       Math.abs(total - (taxableBase + exempt + vat + igtf)) > 0.01 ||
       Math.abs(Number(sale.totalAmountUsd) - total / rate) > 0.0001 ||
       Math.abs(Number(sale.taxableBaseUsd) - taxableBase / rate) > 0.0001 ||
