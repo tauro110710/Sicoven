@@ -22,12 +22,14 @@ import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportDiarioPdf } from '../../utils/pdfGenerator';
 import { Download } from 'lucide-react';
 import { SupportingDocumentsPanel } from '../shared/SupportingDocumentsPanel';
+import { JournalReversalModal } from './JournalReversalModal';
 
 export const LibroDiarioView: React.FC = () => {
   const { currentCompany, journalEntries, displayCurrency } = useAccounting();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [documentTarget, setDocumentTarget] = useState<{ id: string; title: string } | null>(null);
+  const [reversalTarget, setReversalTarget] = useState<import('../../types/accounting').JournalEntry | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
   const [startDate, setStartDate] = useState('');
@@ -285,7 +287,7 @@ export const LibroDiarioView: React.FC = () => {
                 className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print-break-inside-avoid"
               >
                 {/* Entry Header */}
-                <div className="flex justify-end border-b border-slate-100 px-4 py-2 no-print"><button onClick={() => setDocumentTarget({ id: entry.id, title: 'Asiento contable N° ' + entry.entryNumber })} className="rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes</button></div>
+                <div className="flex flex-wrap justify-end gap-2 border-b border-slate-100 px-4 py-2 no-print"><button onClick={() => setDocumentTarget({ id: entry.id, title: 'Asiento contable N° ' + entry.entryNumber })} className="rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes</button>{!entry.reversalOfEntryId && !entry.reversedByEntryId && <button onClick={() => setReversalTarget(entry)} className="rounded bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-700 hover:bg-rose-100">Reversar asiento</button>}</div>
                 <div className="bg-slate-50/80 px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5 flex-wrap">
                     <span className="font-mono font-bold text-xs bg-slate-900 text-white px-2 py-0.5 rounded">
@@ -479,6 +481,8 @@ export const LibroDiarioView: React.FC = () => {
           <p className="text-[10px] text-slate-500">REPRESENTANTE LEGAL / ADMINISTRADOR</p>
         </div>
       </div>
+
+      <JournalReversalModal source={reversalTarget} onClose={() => setReversalTarget(null)} />
 
       {/* New Entry Modal */}
       <NewEntryModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
