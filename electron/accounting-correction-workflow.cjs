@@ -47,6 +47,7 @@ function initializeCorrectionWorkflow(db) {
       entity_id TEXT NOT NULL, correction_type TEXT NOT NULL, source_ref TEXT NOT NULL,
       correction_ref TEXT NOT NULL, reason TEXT NOT NULL, workpaper TEXT NOT NULL,
       status TEXT NOT NULL CHECK(status IN ('PENDING_REVIEW','APPROVED','REJECTED','EXECUTED')),
+      workflow_stage TEXT NOT NULL DEFAULT 'IN_REVIEW',
       requested_by INTEGER NOT NULL, requested_by_name TEXT NOT NULL,
       reviewed_by INTEGER, reviewed_by_name TEXT, review_reason TEXT,
       executed_by INTEGER, executed_by_name TEXT, execution_ref TEXT,
@@ -85,6 +86,40 @@ function initializeCorrectionWorkflow(db) {
       BEGIN SELECT RAISE(ABORT, 'correction case events are append-only'); END;
     CREATE TRIGGER IF NOT EXISTS correction_case_events_no_delete BEFORE DELETE ON accounting_correction_case_events
       BEGIN SELECT RAISE(ABORT, 'correction case events are append-only'); END;
+  `);
+  const caseColumns = new Set(db.prepare('PRAGMA table_info(accounting_correction_cases)').all().map(column => String(column.name)));
+  if (!caseColumns.has('workflow_stage')) {
+    db.exec("ALTER TABLE accounting_correction_cases ADD COLUMN workflow_stage TEXT NOT NULL DEFAULT 'IN_REVIEW'");
+  }
+  db.exec(`
+    DROP TRIGGER IF EXISTS correction_cases_valid_transition;
+    DROP TRIGGER IF EXISTS correction_cases_segregation;
+    CREATE TRIGGER correction_cases_valid_transition BEFORE UPDATE ON accounting_correction_cases
+      WHEN NOT (
+        (OLD.status='PENDING_REVIEW' AND NEW.status IN ('APPROVED','REJECTED')) OR
+        (OLD.status='APPROVED' AND NEW.status='EXECUTED') OR
+        (OLD.status IN ('PENDING_REVIEW','APPROVED') AND NEW.status='PENDING_REVIEW' AND NEW.workflow_stage='OBSERVATION_REQUIRED') OR
+        (OLD.status='PENDING_REVIEW' AND NEW.status='PENDING_REVIEW' AND OLD.workflow_stage='OBSERVATION_REQUIRED' AND NEW.workflow_stage='IN_REVIEW')
+      )
+      BEGIN SELECT RAISE(ABORT, 'invalid correction case transition'); END;
+    CREATE TRIGGER correction_cases_segregation BEFORE UPDATE ON accounting_correction_cases
+      WHEN (OLD.status='PENDING_REVIEW' AND NEW.status IN ('APPROVED','REJECTED') AND NEW.reviewed_by=OLD.requested_by)
+        OR (NEW.workflow_stage='OBSERVATION_REQUIRED' AND NEW.reviewed_by=OLD.requested_by)
+        OR (OLD.status='APPROVED' AND NEW.status='EXECUTED' AND
+          (NEW.executed_by=OLD.requested_by OR NEW.executed_by=OLD.reviewed_by))
+      BEGIN SELECT RAISE(ABORT, 'correction case segregation of duties violated'); END;
+    CREATE TABLE IF NOT EXISTS accounting_correction_case_workflow_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL REFERENCES accounting_correction_cases(id),
+      event_type TEXT NOT NULL CHECK(event_type IN ('OBSERVED','RESUBMITTED')),
+      actor_id INTEGER NOT NULL, actor_name TEXT NOT NULL, reason TEXT NOT NULL,
+      metadata_json TEXT NOT NULL, created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_correction_case_workflow_events_case
+      ON accounting_correction_case_workflow_events(case_id,id);
+    CREATE TRIGGER IF NOT EXISTS correction_case_workflow_events_no_update BEFORE UPDATE ON accounting_correction_case_workflow_events
+      BEGIN SELECT RAISE(ABORT, 'correction workflow events are append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS correction_case_workflow_events_no_delete BEFORE DELETE ON accounting_correction_case_workflow_events
+      BEGIN SELECT RAISE(ABORT, 'correction workflow events are append-only'); END;
   `);
 }
 function requireAdmin(actor) {
@@ -131,11 +166,11 @@ function reviewCorrectionRequest(db, {caseId,decision,reason}, actor) {
   const tx = db.transaction(() => {
     const item = db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(caseId));
     if (!item) throw new Error('El expediente de corrección no existe.');
-    if (item.status !== 'PENDING_REVIEW') throw new Error('El expediente ya fue revisado y no admite otra decisión.');
+    if (item.status !== 'PENDING_REVIEW' || item.workflow_stage !== 'IN_REVIEW') throw new Error('El expediente no está en revisión; atienda primero las observaciones o el estado actual.');
     if (Number(item.requested_by) === Number(actor.id)) throw new Error('El solicitante no puede aprobar ni rechazar su propio expediente. Se requiere otro administrador.');
     const status = decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
-    db.prepare('UPDATE accounting_correction_cases SET status=?,reviewed_by=?,reviewed_by_name=?,review_reason=?,reviewed_at=? WHERE id=? AND status=?')
-      .run(status,Number(actor.id),String(actor.username || ''),String(reason).trim(),at,item.id,'PENDING_REVIEW');
+    db.prepare('UPDATE accounting_correction_cases SET status=?,workflow_stage=?,reviewed_by=?,reviewed_by_name=?,review_reason=?,reviewed_at=? WHERE id=? AND status=?')
+      .run(status,decision === 'APPROVE' ? 'READY_FOR_EXECUTION' : 'CLOSED',Number(actor.id),String(actor.username || ''),String(reason).trim(),at,item.id,'PENDING_REVIEW');
     appendEvent(db, tx, {id:item.id,type:decision==='APPROVE'?'APPROVED':'REJECTED',actor,reason:String(reason).trim(),metadata:{requestedBy:Number(item.requested_by)},at});
   });
   tx();
@@ -148,7 +183,7 @@ function markCorrectionExecuted(db, {caseId,executionRef,reason,evidenceRecordId
   const tx = db.transaction(() => {
     const item = db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(caseId));
     if (!item) throw new Error('El expediente de corrección no existe.');
-    if (item.status !== 'APPROVED') throw new Error('Solo se puede ejecutar un expediente aprobado.');
+    if (item.status !== 'APPROVED' || item.workflow_stage !== 'READY_FOR_EXECUTION') throw new Error('Solo se puede ejecutar un expediente aprobado y sin observaciones pendientes.');
     if (Number(item.requested_by) === Number(actor.id) || Number(item.reviewed_by) === Number(actor.id)) {
       throw new Error('El ejecutor debe ser distinto del solicitante y del aprobador.');
     }
@@ -164,7 +199,7 @@ function markCorrectionExecuted(db, {caseId,executionRef,reason,evidenceRecordId
     }
     const linkedEvidenceId = String(evidenceRecordId || '').trim();
     const linkedEvidenceCollection = String(evidenceCollection || '').trim();
-    db.prepare("UPDATE accounting_correction_cases SET status='EXECUTED',executed_by=?,executed_by_name=?,execution_ref=?,executed_at=? WHERE id=? AND status='APPROVED'")
+    db.prepare("UPDATE accounting_correction_cases SET status='EXECUTED',workflow_stage='COMPLETED',executed_by=?,executed_by_name=?,execution_ref=?,executed_at=? WHERE id=? AND status='APPROVED'")
       .run(Number(actor.id),String(actor.username || ''),String(executionRef).trim(),at,item.id);
     appendEvent(db, tx, {id:item.id,type:'EXECUTED',actor,reason:String(reason).trim(),metadata:{
       executionRef:String(executionRef).trim(),
@@ -174,15 +209,64 @@ function markCorrectionExecuted(db, {caseId,executionRef,reason,evidenceRecordId
   tx();
   return getCorrectionCase(db,String(caseId));
 }
+function appendWorkflowEvent(db, item, type, actor, reason, metadata = {}) {
+  const at = new Date().toISOString();
+  db.prepare('INSERT INTO accounting_correction_case_workflow_events(case_id,event_type,actor_id,actor_name,reason,metadata_json,created_at) VALUES(?,?,?,?,?,?,?)')
+    .run(item.id,type,Number(actor.id),String(actor.username || ''),String(reason).trim(),JSON.stringify(metadata),at);
+  db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+    .run('accounting_correction_case_' + type.toLowerCase(),JSON.stringify({
+      caseId:item.id,actorUserId:Number(actor.id),actorUsername:String(actor.username || ''),
+      reason:String(reason).trim(),metadata,occurredAt:at
+    }));
+}
+function observeCorrectionRequest(db, {caseId,reason}, actor) {
+  requireAdmin(actor);
+  const note=String(reason || '').trim();
+  if(note.length<15) throw new Error('La observación debe explicar qué falta o debe corregirse (mínimo 15 caracteres).');
+  const at=new Date().toISOString();
+  const tx=db.transaction(()=>{
+    const item=db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(caseId));
+    if(!item) throw new Error('El expediente de corrección no existe.');
+    if(!['PENDING_REVIEW','APPROVED'].includes(item.status) || !['IN_REVIEW','READY_FOR_EXECUTION'].includes(item.workflow_stage))
+      throw new Error('El expediente no admite observaciones en su estado actual.');
+    if(Number(item.requested_by)===Number(actor.id)) throw new Error('El solicitante no puede observar su propio expediente.');
+    db.prepare("UPDATE accounting_correction_cases SET status='PENDING_REVIEW',workflow_stage='OBSERVATION_REQUIRED',reviewed_by=?,reviewed_by_name=?,review_reason=?,reviewed_at=? WHERE id=?")
+      .run(Number(actor.id),String(actor.username || ''),note,at,item.id);
+    appendWorkflowEvent(db,item,'OBSERVED',actor,note,{previousStatus:item.status,previousStage:item.workflow_stage});
+  });
+  tx();
+  return getCorrectionCase(db,String(caseId));
+}
+function resubmitCorrectionRequest(db, {caseId,reason}, actor) {
+  requireAdmin(actor);
+  const note=String(reason || '').trim();
+  if(note.length<15) throw new Error('La subsanación debe describir los cambios y soportes aportados (mínimo 15 caracteres).');
+  const at=new Date().toISOString();
+  const tx=db.transaction(()=>{
+    const item=db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(caseId));
+    if(!item) throw new Error('El expediente de corrección no existe.');
+    if(item.status!=='PENDING_REVIEW' || item.workflow_stage!=='OBSERVATION_REQUIRED')
+      throw new Error('El expediente no tiene observaciones pendientes de subsanación.');
+    if(Number(item.requested_by)!==Number(actor.id))
+      throw new Error('Solo el solicitante original puede subsanar y reenviar este expediente.');
+    db.prepare("UPDATE accounting_correction_cases SET workflow_stage='IN_REVIEW',reviewed_by=NULL,reviewed_by_name=NULL,review_reason=NULL,reviewed_at=NULL WHERE id=? AND status='PENDING_REVIEW'")
+      .run(item.id);
+    appendWorkflowEvent(db,item,'RESUBMITTED',actor,note,{previousReviewerId:item.reviewed_by || null});
+  });
+  tx();
+  return getCorrectionCase(db,String(caseId));
+}
 function getCorrectionCase(db,id) {
   const row=db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(id));
   if(!row)return null;
   const events=db.prepare('SELECT id,event_type,actor_id,actor_name,reason,metadata_json,created_at FROM accounting_correction_case_events WHERE case_id=? ORDER BY id').all(row.id)
     .map(e=>({...e,metadata:JSON.parse(e.metadata_json)}));
-  return {...row,events};
+  const workflowEvents=db.prepare('SELECT id,event_type,actor_id,actor_name,reason,metadata_json,created_at FROM accounting_correction_case_workflow_events WHERE case_id=? ORDER BY id').all(row.id)
+    .map(e=>({...e,id:'W'+e.id,metadata:JSON.parse(e.metadata_json)}));
+  return {...row,events:[...events,...workflowEvents].sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)))};
 }
 function listCorrectionCases(db,companyId) {
   return db.prepare('SELECT id FROM accounting_correction_cases WHERE company_id=? ORDER BY created_at DESC').all(String(companyId))
     .map(row=>getCorrectionCase(db,row.id));
 }
-module.exports={initializeCorrectionWorkflow,registerCorrectionRequest,reviewCorrectionRequest,markCorrectionExecuted,getCorrectionCase,listCorrectionCases,findLinkedCorrectionEvidence};
+module.exports={initializeCorrectionWorkflow,registerCorrectionRequest,reviewCorrectionRequest,observeCorrectionRequest,resubmitCorrectionRequest,markCorrectionExecuted,getCorrectionCase,listCorrectionCases,findLinkedCorrectionEvidence};
