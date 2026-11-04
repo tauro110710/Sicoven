@@ -991,7 +991,7 @@ function validateAccountingSnapshot(previousState, nextState) {
           linkedEntry.type !== expectedEntryType) {
         throw new Error('SQLite rechazó un vínculo de factura con un asiento de otra empresa, tipo o documento.');
       }
-      if (collectionName === 'sales' && !saleJournalMatchesInvoice(document, linkedEntry)) {
+      if (collectionName === 'sales' && !oldDocument && !saleJournalMatchesInvoice(document, linkedEntry)) {
         throw new Error('SQLite rechazó la venta: el asiento no concilia fecha, tasa BCV, CxC, retención recibida, IGTF, ingresos e IVA en Bs. y USD con la factura.');
       }
     }
