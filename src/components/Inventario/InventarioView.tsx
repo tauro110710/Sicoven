@@ -15,6 +15,7 @@ import {
   Pencil
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import type { InventoryProduct } from '../../types/accounting';
 import { NewProductModal } from './NewProductModal';
 import { NewMovementModal } from './NewMovementModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
@@ -26,7 +27,7 @@ export const InventarioView: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'EXISTENCIAS' | 'KARDEX' | 'CONTABILIDAD'>('EXISTENCIAS');
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
-  const [productToEdit, setProductToEdit] = useState<import('../../types/accounting').InventoryProduct | null>(null);
+  const [productToEdit, setProductToEdit] = useState<InventoryProduct | null>(null);
   const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
   const [isMigrationWizardOpen, setIsMigrationWizardOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
