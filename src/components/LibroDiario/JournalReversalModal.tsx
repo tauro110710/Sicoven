@@ -16,6 +16,15 @@ export const JournalReversalModal: React.FC<JournalReversalModalProps> = ({ sour
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sourceInClosedPeriod = Boolean(source && currentCompany.closedThroughDate && source.date <= currentCompany.closedThroughDate);
+  const minEffectiveDate = (() => {
+    if (!source) return undefined;
+    if (currentCompany.closedThroughDate && source.date <= currentCompany.closedThroughDate) {
+      const nextOpenDay = new Date(currentCompany.closedThroughDate + 'T00:00:00.000Z');
+      nextOpenDay.setUTCDate(nextOpenDay.getUTCDate() + 1);
+      return nextOpenDay.toISOString().slice(0, 10);
+    }
+    return source.date;
+  })();
   const retainedAccounts = useMemo(() => accounts.filter(account => account.isMovement && account.type === 'PATRIMONIO'), [accounts]);
 
   if (!source) return null;
@@ -52,7 +61,7 @@ export const JournalReversalModal: React.FC<JournalReversalModalProps> = ({ sour
         <form onSubmit={handleSubmit} className="space-y-4 p-4">
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-700">Fecha efectiva del contra-asiento *</label>
-            <input type="date" required min={source.date} value={effectiveDate} onChange={event => setEffectiveDate(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            <input type="date" required min={minEffectiveDate} value={effectiveDate} onChange={event => setEffectiveDate(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
             {currentCompany.closedThroughDate && <p className="mt-1 text-[11px] text-slate-500">Período cerrado hasta: {currentCompany.closedThroughDate}. La reversión debe registrarse en un período abierto.</p>}
           </div>
           {sourceInClosedPeriod && (
