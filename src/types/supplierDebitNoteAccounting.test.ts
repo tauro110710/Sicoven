@@ -142,3 +142,15 @@ test('stores a snapshot of the original invoice for immutable correction traceab
   assert.equal(source.invoiceNumber, 'FAC-100');
   assert.equal(source.totalAmountBs, 116);
 });
+
+test('blocks a price difference on an inventory invoice until item-level revaluation is supported', () => {
+  const inventorySource = { ...source, inventoryLines: [{ productId: 'p-1', quantity: 1, unitCostBs: 100 }] };
+  assert.throws(() => buildSupplierDebitNoteAccountingPlan({
+    draft: draft({ economicCause: 'PRICE_DIFFERENCE' }),
+    purchases: [inventorySource], accounts,
+    sourceJournalEntry: { ...sourceEntry, items: [
+      { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+    ] }
+  }), /revalorizar lotes\/capas y Kardex/);
+});
