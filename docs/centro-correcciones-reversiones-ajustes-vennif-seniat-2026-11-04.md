@@ -124,4 +124,12 @@ No declarar completa esta capacidad hasta que cada tipo documental con efecto co
 - Se añadieron pruebas unitarias que simulan un asiento fuente con un contra-asiento enlazado y verifican que la segunda reversión quede bloqueada.
 - Se añadió una prueba que verifica que un contra-asiento no puede seleccionarse como documento fuente para una nueva reversión genérica.
 - Estas pruebas cubren la evaluación de dominio `assessJournalReversal`; no sustituyen una prueba de concurrencia real de dos solicitudes simultáneas contra SQLite ni una prueba de persistencia/restore.
-- Las pruebas fueron incorporadas al repositorio, pero no se han ejecutado correctamente en CI por el bloqueo externo de Actions/Vercel. No se declara resultado verde.
+- Las pruebas fueron incorporadas al repositorio, pero no se han ejecutado correctamente en CI por el bloqueo externo de GitHub Actions. No se declara resultado verde.
+
+
+### Persistencia local y ventas contado — revisión 04/11/2026
+- Se detectó que las funciones de dominio `addPurchase` y `addSale` no comprobaban el estado de la persistencia antes de aceptar una nueva factura, a diferencia de otros circuitos contables.
+- Se incorporó una guarda en ambas funciones: si la persistencia SQLite reportó un fallo o la instancia de escritorio todavía no está lista, el alta se rechaza con error explícito. El cambio no convierte LocalStorage/caché en autoridad ni permite continuar sin SQLite cuando el almacén de escritorio está presente.
+- Hallazgo pendiente que bloquea el diseño de NC/ND de ventas: `addSale` actualmente debita Cuentas por Cobrar para toda factura, incluso cuando `paymentTerm === 'CONTADO'`; el formulario no solicita cuenta de caja/banco ni referencia de cobro para venta contado. No debe implementarse devolución de contado ni nota correctiva hasta distinguir correctamente venta cobrada, saldo por cobrar, retenciones y cobros ya registrados.
+- La corrección de ese circuito requiere añadir cuenta/medio/referencia de cobro de contado, validar cuenta de activo imputable, contabilizar el ingreso en la cuenta elegida y conservar el origen del cobro para devoluciones/reembolsos. No se debe convertir una factura contado en CxC ni generar reembolsos ficticios.
+- SICOVEN es una aplicación de escritorio cuya persistencia operativa es SQLite local. La validación pertinente para estos cambios es pruebas de dominio, integración con el almacén SQLite de escritorio, restauración de respaldos y build/paquete de escritorio; no requiere despliegues web.
