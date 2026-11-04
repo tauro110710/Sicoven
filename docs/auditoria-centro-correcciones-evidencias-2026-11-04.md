@@ -61,9 +61,9 @@ Se contrastaron los vínculos con los tipos persistidos:
 - Kardex: corrección con `correctionForMovementId`.
 - Comprobantes IVA/ISLR: la evidencia es el asiento correctivo referenciado por `correctionEntryId` / `correctionEntryIds` en el comprobante original.
 
-El formulario de expedientes solo permite estas seis clases de origen, para evitar abrir casos ejecutables sobre entidades que todavía no persisten un vínculo correctivo verificable. Los otros escenarios no se consideran terminados; deben recibir su relación explícita antes de habilitarse.
+El formulario de expedientes solo permite estas siete clases de origen, para evitar abrir casos ejecutables sobre entidades que todavía no persisten un vínculo correctivo verificable. Los otros escenarios no se consideran terminados; deben recibir su relación explícita antes de habilitarse.
 
-La suite del workflow contiene ahora **19 pruebas definidas** que cubren segregación, rollback, vínculos de NC/ND de compra y venta, reversos/ajustes de asientos, comprobantes de retención y ciclo de observación/subsanación. No se han ejecutado en esta sesión. La suite documental mantiene nueve pruebas definidas, tampoco ejecutadas.
+La suite del workflow contiene ahora **20 pruebas definidas** que cubren segregación, rollback, vínculos de NC/ND de compra y venta, reversos/ajustes de asientos, comprobantes de retención y ciclo de observación/subsanación. No se han ejecutado en esta sesión. La suite documental mantiene nueve pruebas definidas, tampoco ejecutadas.
 
 Se agregó además una prueba de migración aditiva para expedientes heredados `PENDING_REVIEW`, `APPROVED`, `REJECTED` y `EXECUTED`, que verifica que sus estados se conservan y reciben la etapa equivalente. Se añadieron casos de ND de venta, NC/ND de compra y corrección de Kardex. Total actual del archivo de pruebas: **16 casos definidos**, no ejecutados.
 
@@ -82,3 +82,5 @@ La migración también reconstruye de forma transaccional el ledger de eventos d
 Durante la revisión de los auxiliares se detectó que el saldo CxP restaba las NC de proveedor, pero no sumaba las ND tipo `02` vinculadas mediante `originalPurchaseId`. Se corrigió el cálculo: las ND de proveedor aumentan el saldo por su total fiscal en Bs/USD; las NC continúan reduciéndolo solo por la porción aplicada a CxP, dejando excedentes como anticipo. En CxC, las ND de venta siguen usando el ajuste neto de la cuenta por cobrar, no el total bruto del documento.
 
 Se incorporó el helper `summarizeCreditDocumentAdjustments` y **21 pruebas definidas** en la suite de liquidaciones/auxiliares. Estas pruebas tampoco se han ejecutado en esta sesión.
+
+También se habilitó el tipo `ISLR_EVENT` únicamente cuando existe un evento correctivo de tipo `REVERSAL` con `reversalOfEventId` explícito hacia el evento fuente. La prueba de vínculo ISLR se incorporó a la suite del workflow. La suite contiene ahora **20 casos definidos**, no ejecutados.
