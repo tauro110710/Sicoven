@@ -250,6 +250,52 @@ test('SQLite preserves unchanged legacy invoice links but strictly validates new
   ), /vínculo de factura con un asiento/);
 });
 
+
+test('SQLite reconciles every new sale with its complete invoice journal in Bs and USD', () => {
+  const sale = {
+    id: 'sale-new-1', companyId: 'company-1', invoiceDate: '2026-11-04',
+    invoiceNumber: 'V-1001', documentType: '01', bcvRate: 100,
+    taxableBaseBs: 1000, exemptAmountBs: 0, taxRate: 16, vatAmountBs: 160,
+    vatWithheldBs: 40, igtfAmountBs: 0, totalAmountBs: 1160,
+    totalAmountUsd: 11.6, taxableBaseUsd: 10, vatAmountUsd: 1.6,
+    vatWithheldUsd: 0.4, journalEntryId: 'sale-journal-1'
+  };
+  const journal = {
+    id: 'sale-journal-1', companyId: 'company-1', entryNumber: 1,
+    date: sale.invoiceDate, description: 'Factura de venta V-1001',
+    type: 'VENTA', bcvRate: 100, referenceDoc: 'FAC-V-1001',
+    items: [
+      { accountCode: '1.1.3.03', debitBs: 40, creditBs: 0, debitUsd: 0.4, creditUsd: 0 },
+      { accountCode: '1.1.2.01', debitBs: 1120, creditBs: 0, debitUsd: 11.2, creditUsd: 0 },
+      { accountCode: '4.1.1.01', debitBs: 0, creditBs: 1000, debitUsd: 0, creditUsd: 10 },
+      { accountCode: '2.1.2.01', debitBs: 0, creditBs: 160, debitUsd: 0, creditUsd: 1.6 }
+    ],
+    createdAt: '2026-11-04T10:00:00.000Z'
+  };
+  const previous = emptyState();
+  const next = { ...emptyState([journal]), sales: [sale] };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next,
+    sales: [{ ...sale, taxableBaseBs: 900 }]
+  }), /venta: el asiento no concilia/);
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next,
+    journalEntries: [{ ...journal, items: journal.items.map(item =>
+      item.accountCode === '4.1.1.01' ? { ...item, creditBs: 999 } : item
+    ) }]
+  }), /venta: el asiento no concilia/);
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next,
+    journalEntries: [{ ...journal, items: [...journal.items, {
+      accountCode: '6.1.1.01', debitBs: 1, creditBs: 0, debitUsd: 0.01, creditUsd: 0
+    }] }]
+  }), /venta: el asiento no concilia/);
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...emptyState(), sales: [{ ...sale, journalEntryId: undefined }]
+  }), /falta su asiento contable enlazado/);
+});
+
 test('SQLite rejects physical deletion of a posted journal entry', () => {
   assert.throws(
     () => validateAccountingSnapshot(emptyState([sourceEntry()]), emptyState([])),
