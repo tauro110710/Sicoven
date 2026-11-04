@@ -69,6 +69,26 @@ export const JournalReversalModal: React.FC<JournalReversalModalProps> = ({ sour
           <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">El asiento original se conservará. Se generará un contra-asiento enlazado; los efectos fiscales y auxiliares relacionados quedarán sujetos a sus controles específicos.</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4 p-4">
+          <section className="overflow-hidden rounded-lg border border-slate-200">
+            <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-800">Vista previa del contra-asiento · importes intercambiados</div>
+            <div className="max-h-48 overflow-auto">
+              <table className="w-full min-w-[760px] text-[10px]">
+                <thead className="bg-white text-slate-500"><tr>
+                  <th className="p-2 text-left">Cuenta origen</th><th className="p-2 text-right">Debe Bs origen</th><th className="p-2 text-right">Haber Bs origen</th><th className="p-2 text-right">Debe Bs contra</th><th className="p-2 text-right">Haber Bs contra</th><th className="p-2 text-right">Debe USD contra</th><th className="p-2 text-right">Haber USD contra</th>
+                </tr></thead>
+                <tbody>{source.items.map((item, index) => <tr key={index} className="border-t border-slate-100">
+                  <td className="p-2 font-medium text-slate-700">{item.accountCode} · {item.accountName}</td>
+                  <td className="p-2 text-right tabular-nums">{Number(item.debitBs || 0).toFixed(2)}</td>
+                  <td className="p-2 text-right tabular-nums">{Number(item.creditBs || 0).toFixed(2)}</td>
+                  <td className="p-2 text-right tabular-nums text-rose-700">{Number(item.creditBs || 0).toFixed(2)}</td>
+                  <td className="p-2 text-right tabular-nums text-rose-700">{Number(item.debitBs || 0).toFixed(2)}</td>
+                  <td className="p-2 text-right tabular-nums text-rose-700">{Number(item.creditUsd || 0).toFixed(6)}</td>
+                  <td className="p-2 text-right tabular-nums text-rose-700">{Number(item.debitUsd || 0).toFixed(6)}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+            {sourceInClosedPeriod && <p className="border-t border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-900">En AIA, las líneas de ingresos, costos y gastos se reclasifican a la cuenta patrimonial seleccionada; los importes no cambian.</p>}
+          </section>
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-700">Fecha efectiva del contra-asiento *</label>
             <input type="date" required min={minEffectiveDate} value={effectiveDate} onChange={event => setEffectiveDate(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
