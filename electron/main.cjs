@@ -525,6 +525,7 @@ app.whenReady().then(async () => {
     const allowedEntities = new Set(['SALE', 'PURCHASE', 'JOURNAL_ENTRY', 'BANK_MOVEMENT', 'INVENTORY_MOVEMENT',
       'VAT_VOUCHER', 'ISLR_VOUCHER', 'VAT_DECLARATION', 'ISLR_EVENT']);
     const entityType = String(input?.entityType || '');
+    const companyId = String(input?.companyId || '').trim();
     const entityId = String(input?.entityId || '').trim();
     const correctionType = String(input?.correctionType || '').trim();
     const reason = String(input?.reason || '').trim();
@@ -533,7 +534,7 @@ app.whenReady().then(async () => {
     const correctionDocumentRef = String(input?.correctionDocumentRef || '').trim();
     const journalEntryId = String(input?.journalEntryId || '').trim();
     if (!allowedEvents.has(eventType) || !allowedEntities.has(entityType) ||
-        !entityId || entityId.length > 160 || !correctionType || correctionType.length > 80 ||
+        !companyId || companyId.length > 160 || !entityId || entityId.length > 160 || !correctionType || correctionType.length > 80 ||
         reason.length < 10 || reason.length > 2000 || workpaperNote.length < 10 || workpaperNote.length > 4000 ||
         sourceDocumentRef.length > 160 || correctionDocumentRef.length > 160 || journalEntryId.length > 160) {
       return { ok: false, message: 'Los datos del evento de auditoría están incompletos o no son válidos.' };
@@ -541,7 +542,7 @@ app.whenReady().then(async () => {
     const occurredAt = new Date().toISOString();
     const details = {
       actorUserId: Number(actor.id), actorUsername: String(actor.username || ''),
-      actorRole: String(actor.role || ''), entityType, entityId, correctionType,
+      actorRole: String(actor.role || ''), companyId, entityType, entityId, correctionType,
       sourceDocumentRef, correctionDocumentRef, reason, workpaperNote,
       journalEntryId: journalEntryId || null,
       authorization: { method: 'AUTHENTICATED_ADMIN_SESSION', explicitConfirmation: true },
