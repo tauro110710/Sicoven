@@ -126,9 +126,9 @@ function initializeCorrectionWorkflow(db) {
       db.prepare(`
         UPDATE accounting_correction_cases
         SET status='APPROVED',workflow_stage='READY_FOR_EXECUTION',
-            reviewed_by=requested_by,reviewed_by_name=requested_by_name,
-            review_reason='Migración al flujo de ejecución directa del contador.',
-            reviewed_at=?
+            reviewed_by=NULL,reviewed_by_name=NULL,
+            review_reason='Migración técnica al flujo de ejecución directa del contador; sin revisión humana.',
+            reviewed_at=NULL
         WHERE id=? AND status='PENDING_REVIEW'
       `).run(at,item.id);
       appendEvent(db,null,{id:item.id,type:'APPROVED',
@@ -217,7 +217,7 @@ function registerCorrectionRequest(db, input, actor) {
   const tx = db.transaction(() => {
     db.prepare(`INSERT INTO accounting_correction_cases
       (id,company_id,entity_type,entity_id,correction_type,source_ref,correction_ref,reason,workpaper,status,workflow_stage,requested_by,requested_by_name,reviewed_by,reviewed_by_name,review_reason,created_at,reviewed_at)
-      VALUES(?,?,?,?,?,?,?,?,?,'APPROVED','READY_FOR_EXECUTION',?,?,?,?,?,?,?)`).run(id,String(input.companyId),String(input.entityType),String(input.entityId),
+      VALUES(?,?,?,?,?,?,?,?,?,'APPROVED','READY_FOR_EXECUTION',?,?,NULL,NULL,'Ejecución directa; no requiere revisión humana.',?,NULL)`).run(id,String(input.companyId),String(input.entityType),String(input.entityId),
       String(input.correctionType),String(input.sourceDocumentRef),String(input.correctionDocumentRef || ''),reason,workpaperNote,
       Number(actor.id),String(actor.username || ''),Number(actor.id),String(actor.username || ''),
       'Habilitada para ejecución directa por el contador.',at,at);
@@ -250,7 +250,7 @@ function requireApprovedCorrectionCase(db, input, actor) {
       ORDER BY created_at DESC
     `).all(String(input.companyId),String(input.entityType),String(input.entityId),sourceRef,correctionRef);
     if(rows.length===0)
-      throw new Error('No existe un expediente formal aprobado para esta empresa, registro origen y referencia correctiva. La operación no se ejecutó.');
+      throw new Error('No existe una corrección habilitada para ejecución directa en esta empresa, registro origen y referencia correctiva. La operación no se ejecutó.');
     if(rows.length!==1)
       throw new Error('Hay más de un expediente aprobado para la misma corrección. Debe resolverse la duplicidad antes de ejecutar.');
     const item=rows[0];

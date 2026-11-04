@@ -445,7 +445,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const store = window.sicovenStore as typeof window.sicovenStore & {
       authorizeCorrectionCase?: (sessionToken:string,payload:Record<string,string>)=>Promise<{ok:boolean;caseId?:string;message?:string}>
     };
-    if (!store?.authorizeCorrectionCase) throw new Error('La autorización formal de correcciones no está disponible. No se ejecutó la operación.');
+    if (!store?.authorizeCorrectionCase) throw new Error('La validación de integridad de la corrección no está disponible. No se ejecutó la operación.');
     const result = await store.authorizeCorrectionCase(token,{
       companyId:currentCompany.id,entityType,entityId,sourceDocumentRef,correctionDocumentRef
     });

@@ -17,7 +17,7 @@ test('a correction is immediately available without approval or workpaper',()=>{
   const db=setup();try{
     const item=registerCorrectionRequest(db,input,actor);
     assert.equal(item.status,'APPROVED');assert.equal(item.workflow_stage,'READY_FOR_EXECUTION');
-    assert.equal(item.requested_by,actor.id);assert.equal(item.reviewed_by,actor.id);assert.equal(item.workpaper,'');
+    assert.equal(item.requested_by,actor.id);assert.equal(item.reviewed_by,null);assert.equal(item.reviewed_at,null);assert.equal(item.workpaper,'');
     assert.deepEqual(item.events.map(e=>e.event_type),['REQUESTED','APPROVED']);
     assert.equal(item.events[1].metadata.directExecution,true);
     assert.throws(()=>reviewCorrectionRequest(db,{caseId:item.id,decision:'APPROVE'},actor),/retiradas/);

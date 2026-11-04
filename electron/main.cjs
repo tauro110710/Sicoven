@@ -638,7 +638,7 @@ app.whenReady().then(async () => {
     const state = row ? JSON.parse(row.state_json) : {};
     const evidence = findLinkedCorrectionEvidence(state,item,reference);
     if (!evidence) {
-      throw new Error('No se encontró un documento correctivo de la misma empresa con referencia coincidente y vínculo explícito al registro origen. El expediente permanece aprobado y abierto.');
+      throw new Error('No se encontró un documento correctivo de la misma empresa con referencia coincidente y vínculo explícito al registro origen. La corrección permanece abierta; la operación no se marca como finalizada.');
     }
     return markCorrectionExecuted(db,{...input,evidenceRecordId:evidence.id,evidenceCollection:evidence.__evidenceCollection},actor);
   });

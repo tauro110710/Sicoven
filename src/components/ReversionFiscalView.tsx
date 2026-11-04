@@ -537,7 +537,7 @@ export const ReversionFiscalView: React.FC = () => {
           <p>Origen: {item.source_ref} · Correctivo: {item.correction_ref}</p><p>{item.reason || 'Sin motivo adicional.'}</p>
           <p className="text-slate-500">Contador: {item.requested_by_name} · Registro: {item.created_at} · Ejecución: {item.executed_at || 'Pendiente'}</p>
           {item.status==='APPROVED' && item.workflow_stage==='READY_FOR_EXECUTION' && <button type="button" disabled={caseActionBusy===item.id} onClick={async()=>{setCaseActionBusy(item.id);try{await executeCorrectionCase({caseId:item.id,executionRef:item.correction_ref,reason:'Documento correctivo persistido; vínculo de origen verificado por SICOVEN.'});await refreshCorrectionCases();setFeedback({kind:'success',message:'La corrección quedó cerrada con trazabilidad e integridad verificadas.'});}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'No se pudo verificar la corrección.'});}finally{setCaseActionBusy(null);}}} className="rounded bg-indigo-700 px-3 py-2 text-white disabled:opacity-40">Verificar vínculo y cerrar corrección</button>}
-          <div className="border-t pt-2"><strong>Historial inalterable</strong>{item.events.map(ev=><p key={ev.id}>{ev.event_type} · {ev.actor_name} · {ev.created_at} · {ev.reason}</p>)}</div>
+          <div className="border-t pt-2"><strong>Historial inalterable</strong>{item.events.map(ev=><p key={ev.id}>{ev.event_type==='APPROVED'?'HABILITADA PARA EJECUCIÓN DIRECTA':ev.event_type} · {ev.actor_name} · {ev.created_at} · {ev.reason}</p>)}</div>
         </article>)}
       </section>
       <section className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
