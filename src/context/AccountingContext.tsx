@@ -806,6 +806,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // no deben competir y permitir que una instantánea antigua sobrescriba una nueva.
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const persistenceFaultRef = useRef(false);
+  const lastPersistedSnapshotRef = useRef<any>(null);
   const journalReversalInFlightRef = useRef(false);
   // Serializa correcciones documentales que pueden afectar simultáneamente factura,
   // asiento, auxiliares, Kardex, retenciones y conciliaciones.
@@ -932,6 +933,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         if (persistenceFaultRef.current) throw new Error('La persistencia SQLite quedó bloqueada tras un fallo anterior.');
         const result = await window.sicovenStore!.save(token, snapshotToSave);
         if (result?.ok !== true) throw new Error('SQLite no confirmó el guardado del estado contable.');
+        lastPersistedSnapshotRef.current = snapshotToSave;
         setStorageError(null);
       });
       saveQueueRef.current = saveTask.then(() => undefined, () => undefined);
@@ -941,6 +943,31 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           const normalized = error instanceof Error ? error : new Error('Error desconocido al guardar en SQLite.');
           console.error('Error guardando los datos contables en SQLite:', normalized);
           persistenceFaultRef.current = true;
+          const confirmed = lastPersistedSnapshotRef.current;
+          if (confirmed) {
+            // La transacción SQLite falló: regresar la interfaz al último snapshot
+            // confirmado evita mostrar operaciones que nunca llegaron a la base local.
+            setCompanies(confirmed.companies || []);
+            setCurrentCompanyId(confirmed.currentCompanyId || confirmed.companies?.[0]?.id || '');
+            setAccounts(confirmed.accounts || DEFAULT_CHART_OF_ACCOUNTS);
+            setJournalEntries(confirmed.journalEntries || []);
+            setPurchases(confirmed.purchases || []);
+            setSales(confirmed.sales || []);
+            setProducts(confirmed.products || []);
+            setMovements(confirmed.movements || []);
+            setVatVouchers(confirmed.vatVouchers || []);
+            setVatWithholdingDeclarations(confirmed.vatWithholdingDeclarations || []);
+            setVatWithholdingDeclarationEvents(confirmed.vatWithholdingDeclarationEvents || []);
+            setIslrVouchers(confirmed.islrVouchers || []);
+            setBankAccounts(confirmed.bankAccounts || []);
+            setBankStatementMovements(confirmed.bankStatementMovements || []);
+            setCreditSettlements(confirmed.creditSettlements || []);
+            setSupplierAdvanceSettlements(confirmed.supplierAdvanceSettlements || []);
+            setSupplierDirectAdvances(confirmed.supplierDirectAdvances || []);
+            setIslrFiscalEvents(confirmed.islrFiscalEvents || []);
+            setFinancialDisclosures(confirmed.financialDisclosures || []);
+            setDisplayCurrency(confirmed.displayCurrency || 'DUAL');
+          }
           setStorageError(normalized.message);
           setStorageReady(false);
           waitersForSnapshot.forEach(waiter => waiter.reject(normalized));
@@ -970,7 +997,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       console.error('Error guardando datos locales de desarrollo:', normalized);
       waitersForSnapshot.forEach(waiter => waiter.reject(normalized));
     }
-  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, displayCurrency]);
+  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency]);
 
   const addCompany = (comp: Omit<Company, 'id'>): Company => {
     assertSQLitePersistenceReady('Registrar la empresa');
