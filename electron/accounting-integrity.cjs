@@ -547,7 +547,7 @@ function validateVatDeclarationLedger(previousState, nextState) {
 }
 
 
-function saleJournalMatchesInvoice(sale, entry) {
+function saleJournalMatchesInvoice(sale, entry, company) {
   if (!sale || !entry || entry.type !== 'VENTA' || entry.companyId !== sale.companyId ||
       entry.date !== sale.invoiceDate ||
       String(entry.referenceDoc || '').trim().toUpperCase().replace(/\s+/g, '') !==
@@ -562,6 +562,15 @@ function saleJournalMatchesInvoice(sale, entry) {
   const igtf = Number(sale.igtfAmountBs || 0);
   const total = Number(sale.totalAmountBs);
   const taxRate = Number(sale.taxRate);
+  const igtfApplicable = sale.igtfApplicable === true;
+  if (igtf > 0 || igtfApplicable) {
+    const eligibleIgtf = company?.isIgtfPerceptionAgent === true &&
+      sale.paymentTerm === 'CONTADO' &&
+      ['FOREIGN_CASH', 'CRYPTO'].includes(sale.paymentCurrency);
+    const expectedIgtf = Math.round((taxableBase + exempt + vat) * 3) / 100;
+    if (!eligibleIgtf || Number(sale.igtfRate || 0) !== 3 ||
+        Math.abs(igtf - expectedIgtf) > 0.01) return false;
+  }
   const values = [rate, taxableBase, exempt, vat, withheld, igtf, total, taxRate,
     Number(sale.totalAmountUsd), Number(sale.taxableBaseUsd), Number(sale.vatAmountUsd),
     Number(sale.vatWithheldUsd || 0), Number(sale.igtfAmountUsd || 0)];
@@ -992,7 +1001,8 @@ function validateAccountingSnapshot(previousState, nextState) {
           linkedEntry.type !== expectedEntryType) {
         throw new Error('SQLite rechazó un vínculo de factura con un asiento de otra empresa, tipo o documento.');
       }
-      if (collectionName === 'sales' && !oldDocument && !saleJournalMatchesInvoice(document, linkedEntry)) {
+      if (collectionName === 'sales' && !oldDocument && !saleJournalMatchesInvoice(document, linkedEntry,
+            asArray(nextState.companies).find(company => String(company.id) === String(document.companyId)))) {
         throw new Error('SQLite rechazó la venta: el asiento no concilia fecha, tasa BCV, CxC, retención recibida, IGTF, ingresos e IVA en Bs. y USD con la factura.');
       }
     }
