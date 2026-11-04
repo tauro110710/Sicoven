@@ -453,6 +453,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (input.entityType === 'INVENTORY_MOVEMENT') {
       inventoryCorrectionAuthorizationRef.current = String(input.entityId) + '|' + String(input.correctionDocumentRef).trim();
     }
+    if (input.entityType === 'JOURNAL_ENTRY') {
+      journalCorrectionAuthorizationRef.current = String(input.entityId) + '|' + String(input.correctionDocumentRef).trim();
+    }
   };
   const authorizeCorrectionCase = async (input: {entityType:string;entityId:string;sourceDocumentRef:string;correctionDocumentRef:string}): Promise<void> => {
     await requireApprovedCorrectionCase(input.entityType,input.entityId,input.sourceDocumentRef,input.correctionDocumentRef);
@@ -774,7 +777,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('Reversión bancaria bloqueada: ' + (bankReadiness.reason || 'no existe una contrapartida bancaria verificable.') +
         ' No se registró ningún contra-asiento.');
     }
-    await requireApprovedCorrectionCase('JOURNAL_ENTRY',source.id,source.referenceDoc || String(source.entryNumber),'REV-' + source.entryNumber);
+    await authorizeCorrectionCase({entityType:'JOURNAL_ENTRY',entityId:source.id,sourceDocumentRef:source.referenceDoc || String(source.entryNumber),correctionDocumentRef:'REV-' + source.entryNumber});
     await recordCorrectionAudit({
       eventType: 'accounting_correction_requested', entityType: 'JOURNAL_ENTRY', companyId: currentCompany.id,
       entityId: source.id, correctionType: priorPeriodAdjustment ? 'PRIOR_PERIOD_ADJUSTMENT_REVERSAL' : 'JOURNAL_REVERSAL',
@@ -1237,6 +1240,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error(
         `Verificación de asiento fallida. Bs: Debe ${totalDebitBs.toFixed(2)} / Haber ${totalCreditBs.toFixed(2)} (dif. ${diff.toFixed(2)}); USD: Debe ${totalDebitUsd.toFixed(2)} / Haber ${totalCreditUsd.toFixed(2)} (dif. ${diffUsd.toFixed(2)}). Revise líneas, importes y cuentas.`
       );
+    }
+    if (entry.reversalOfEntryId || entry.adjustmentForEntryId) {
+      const sourceEntryId=String(entry.reversalOfEntryId || entry.adjustmentForEntryId);
+      const correctionReference=String(entry.referenceDoc || entry.entryNumber || '').trim();
+      const authorizationKey=sourceEntryId+'|'+correctionReference;
+      if(journalCorrectionAuthorizationRef.current!==authorizationKey) {
+        throw new Error('Un reverso o ajuste de asiento requiere autorización formal aprobada para el asiento fuente y la referencia correctiva.');
+      }
+      journalCorrectionAuthorizationRef.current=null;
     }
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
     const maxEntryNum = companyEntries.reduce((max, e) => (e.entryNumber > max ? e.entryNumber : max), 0);
@@ -3711,6 +3723,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const inventoryCorrectionAuthorizationRef = useRef<string | null>(null);
+  const journalCorrectionAuthorizationRef = useRef<string | null>(null);
   const addMovement = (movData: Omit<InventoryMovement, 'id' | 'companyId'>): InventoryMovement => {
     if (movData.correctionForMovementId) {
       const authorizationKey = String(movData.correctionForMovementId) + '|' + String(movData.documentRef || '').trim();
