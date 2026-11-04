@@ -233,3 +233,5 @@ No declarar completa esta capacidad hasta que cada tipo documental con efecto co
 - Electron valida ahora que el ID interno exista en la colección correspondiente y pertenezca a la empresa activa antes de registrar el evento. La validación de existencia reduce referencias inventadas o cruzadas entre empresas; no sustituye la evaluación de dependencias y efectos contables del flujo especializado.
 - La ejecución de cada clase documental continúa dependiendo de su flujo especializado. La solicitud no habilita por sí sola edición, anulación, NC/ND, rectificación fiscal ni reversión de auxiliares.
 - No se declara completa la capacidad ni se afirma que build/pruebas estén verdes hasta ejecutar pruebas de escritorio y revisar los resultados.
+
+- Se incorporó una bandeja visible de solicitudes pendientes que presenta tipo, origen, referencia, motivo, papel de trabajo, actor y fecha. La bandeja se alimenta de eventos de auditoría consultados desde SQLite y etiqueta los eventos como pendientes; no ofrece un botón de aprobación ficticio ni ejecuta operaciones por sí sola.
