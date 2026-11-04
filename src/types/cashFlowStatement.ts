@@ -67,7 +67,7 @@ const isLinkedAnnualOpening = (entry: JournalEntry) =>
   entry.exerciseLink?.nextPeriodStartDate === entry.date &&
   isValidIsoDate(entry.date);
 const isAnnualOpening = (entry: JournalEntry, year: number) =>
-  isLinkedAnnualOpening(entry) && entry.date === String(year).padStart(4, '0') + '-01-01';
+  isLinkedAnnualOpening(entry) && entry.date === String(year).padStart(4, '0') + '-01-01' && !entry.reversedByEntryId && !reversedEntryIds.has(entry.id);
 const counterpartAmount = (
   item: JournalEntry['items'][number],
   side: 'credit' | 'debit',
@@ -103,6 +103,9 @@ export function buildCashFlowReport(
   const start = String(year).padStart(4, '0') + '-01-01';
   const end = String(year).padStart(4, '0') + '-12-31';
   const companyEntries = entries.filter(entry => entry.companyId === companyId);
+  const reversedEntryIds = new Set(companyEntries
+    .filter(entry => entry.reversalOfEntryId)
+    .map(entry => entry.reversalOfEntryId as string));
   for (const entry of companyEntries) {
     if (!isValidIsoDate(entry.date)) {
       throw new Error('El Estado de Flujos de Efectivo no puede calcularse: existe un asiento con fecha inválida.');
@@ -131,7 +134,7 @@ export function buildCashFlowReport(
   // first day. If the current year has no opening yet, carry forward that
   // prior opening plus only the movements posted after it.
   const openingBoundary = companyEntries.filter(entry =>
-    isLinkedAnnualOpening(entry) && entry.date <= start
+    isLinkedAnnualOpening(entry) && entry.date <= start && !entry.reversedByEntryId && !reversedEntryIds.has(entry.id)
   ).sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber).at(-1);
   const openingEntries = openingBoundary
     ? [
