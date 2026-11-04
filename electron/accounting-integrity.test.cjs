@@ -515,9 +515,15 @@ test('SQLite accepts cash expense purchase with effective payment/account-credit
     createdAt: '2026-10-10T10:00:00.000Z'
   };
   const account = { code: '1.1.1.01', name: 'Caja Principal', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.1' };
-  assert.doesNotThrow(() => validateAccountingSnapshot(
-    emptyState(), { ...emptyState([entry]), accounts: [account], purchases: [purchase] }
-  ));
+  const validState = { ...emptyState([entry]), accounts: [account], purchases: [purchase] };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), validState));
+
+  const alteredVat = structuredClone(validState);
+  alteredVat.purchases[0].vatAmountBs = 31;
+  alteredVat.purchases[0].totalAmountBs = 231;
+  alteredVat.purchases[0].totalAmountUsd = 2.31;
+  assert.throws(() => validateAccountingSnapshot(emptyState(), alteredVat),
+    /factura de compra: el asiento no concilia en Bs\\. y USD/);
 });
 
 test('SQLite rejects a purchase when the inventory debit differs from its Kardex total', () => {
