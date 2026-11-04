@@ -17,8 +17,8 @@ import {
   CalendarCheck,
   LockKeyhole
 } from 'lucide-react';
-import { AccountingFramework, TaxpayerType, IvaRetentionAgentBasis, JournalEntryItem, AccountingCurrencyCode, FunctionalCurrencyAssessment } from '../../types/accounting';
-import { validateFunctionalCurrencyAssessment } from '../../types/functionalCurrency';
+import { AccountingFramework, TaxpayerType, IvaRetentionAgentBasis, JournalEntryItem, AccountingCurrencyCode, FunctionalCurrencyAssessment, ExchangeabilityAssessment } from '../../types/accounting';
+import { validateFunctionalCurrencyAssessment, validateExchangeabilityAssessment } from '../../types/functionalCurrency';
 import { buildOpeningEntryItems } from '../../types/accountingYearOpening';
 import { CompanyModal } from '../CompanyModal';
 import { BcvRateModal } from '../BcvRateModal';
@@ -115,6 +115,10 @@ export const ConfiguracionView: React.FC = () => {
   const [operatingReceiptsFactors, setOperatingReceiptsFactors] = useState('');
   const [currencyProfessionalConclusion, setCurrencyProfessionalConclusion] = useState('');
   const [currencyEvidenceReferences, setCurrencyEvidenceReferences] = useState('');
+  const [exchangeabilityDraft, setExchangeabilityDraft] = useState<Partial<ExchangeabilityAssessment>>({
+    legallyAccessible: false, actuallyAccessible: false, conclusion: 'NOT_CONVERTIBLE'
+  });
+  const [exchangeabilityEvidence, setExchangeabilityEvidence] = useState('');
 
   // Sync state if currentCompany switches
   React.useEffect(() => {
@@ -144,6 +148,8 @@ export const ConfiguracionView: React.FC = () => {
     setPrimaryEconomicEnvironment(''); setSalesPriceFactors(''); setCostFactors('');
     setFinancingFactors(''); setOperatingReceiptsFactors('');
     setCurrencyProfessionalConclusion(''); setCurrencyEvidenceReferences('');
+    setExchangeabilityDraft({ legallyAccessible: false, actuallyAccessible: false, conclusion: 'NOT_CONVERTIBLE' });
+    setExchangeabilityEvidence('');
     setPeriodCloseDate(currentCompany.closedThroughDate || (() => {
       const now = new Date();
       return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -309,9 +315,50 @@ export const ConfiguracionView: React.FC = () => {
       }
       newCurrencyAssessment = draft;
     }
+
+    const x = exchangeabilityDraft;
+    const hasExchangeabilityInput = Boolean(
+      x.measurementDate || x.purpose || x.currency || x.amountRequired || x.legalMechanism ||
+      x.expectedDelayDays !== undefined || x.amountAvailable !== undefined || x.accessibleSpotRate !== undefined ||
+      x.estimatedSpotRate !== undefined || x.estimationMethod || x.estimationEvidence ||
+      x.preparedBy || x.approvedBy || x.approvedAt || exchangeabilityEvidence.trim()
+    );
+    let newExchangeabilityAssessment: ExchangeabilityAssessment | undefined;
+    if (hasExchangeabilityInput) {
+      const assessment: ExchangeabilityAssessment = {
+        id: 'ex-' + currentCompany.id + '-' + Date.now(),
+        measurementDate: String(x.measurementDate || ''),
+        purpose: String(x.purpose || ''),
+        currency: (x.currency || '') as AccountingCurrencyCode,
+        ...(x.currency === 'OTHER' ? { currencyOther: String(x.currencyOther || '') } : {}),
+        amountRequired: Number(x.amountRequired || 0),
+        legalMechanism: String(x.legalMechanism || ''),
+        legallyAccessible: x.legallyAccessible === true,
+        actuallyAccessible: x.actuallyAccessible === true,
+        ...(x.expectedDelayDays !== undefined ? { expectedDelayDays: Number(x.expectedDelayDays) } : {}),
+        ...(x.amountAvailable !== undefined ? { amountAvailable: Number(x.amountAvailable) } : {}),
+        ...(x.accessibleSpotRate !== undefined ? { accessibleSpotRate: Number(x.accessibleSpotRate) } : {}),
+        evidenceReferences: exchangeabilityEvidence.split(String.fromCharCode(10)).map(item => item.trim()).filter(Boolean),
+        conclusion: (x.conclusion || 'NOT_CONVERTIBLE') as 'CONVERTIBLE' | 'NOT_CONVERTIBLE',
+        ...(x.estimatedSpotRate !== undefined ? { estimatedSpotRate: Number(x.estimatedSpotRate) } : {}),
+        ...(x.estimationMethod ? { estimationMethod: String(x.estimationMethod) } : {}),
+        ...(x.estimationEvidence ? { estimationEvidence: String(x.estimationEvidence) } : {}),
+        preparedBy: String(x.preparedBy || ''),
+        approvedBy: String(x.approvedBy || ''),
+        approvedAt: String(x.approvedAt || '')
+      };
+      const exchangeabilityErrors = validateExchangeabilityAssessment(assessment);
+      if (exchangeabilityErrors.length) {
+        window.alert('No se guardó la evaluación de convertibilidad:' + String.fromCharCode(10) + '- ' + exchangeabilityErrors.join(String.fromCharCode(10) + '- '));
+        return;
+      }
+      newExchangeabilityAssessment = assessment;
+    }
+
     updateCompany({
       ...currentCompany,
       ...(newCurrencyAssessment ? { functionalCurrencyAssessments: [...(currentCompany.functionalCurrencyAssessments || []), newCurrencyAssessment] } : {}),
+      ...(newExchangeabilityAssessment ? { exchangeabilityAssessments: [...(currentCompany.exchangeabilityAssessments || []), newExchangeabilityAssessment] } : {}),
       name: name.trim().toUpperCase(),
       tradeName: tradeName.trim() || undefined,
       rif: rifValidation.formattedRif,
@@ -579,6 +626,42 @@ export const ConfiguracionView: React.FC = () => {
             </div>
             <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Referencias de evidencia (una por línea)</label><textarea value={currencyEvidenceReferences} onChange={e => setCurrencyEvidenceReferences(e.target.value)} rows={2} placeholder="Documento, contrato, extracto bancario, soporte..." className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
             <p className="text-[10px] text-slate-600">Cada evaluación se agrega al historial y no reemplaza las anteriores. Aprobar requiere preparador, aprobador, fechas, factores y evidencia. Esta captura no ejecuta conversiones ni altera asientos históricos.</p>
+          </div>
+
+          <div className="rounded-xl border border-sky-200 bg-sky-50/50 p-3 space-y-3">
+            <div>
+              <label className="block font-bold text-slate-800">Convertibilidad — evaluación por fecha y propósito</label>
+              {(() => {
+                const latest = (currentCompany.exchangeabilityAssessments || []).slice(-1)[0];
+                return latest
+                  ? <p className="mt-1 text-[11px] text-slate-700">Última evaluación: {latest.conclusion === 'CONVERTIBLE' ? 'CONVERTIBLE' : 'NO CONVERTIBLE'} para {latest.purpose}, fecha {latest.measurementDate}.</p>
+                  : <p className="mt-1 text-[11px] font-semibold text-amber-800">Sin evaluación registrada. La tasa BCV no se presume accesible para cada propósito.</p>;
+              })()}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Fecha de medición</label><input type="date" value={String(exchangeabilityDraft.measurementDate || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, measurementDate: e.target.value }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Propósito concreto</label><input value={String(exchangeabilityDraft.purpose || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, purpose: e.target.value }))} placeholder="Ej. pagar proveedor extranjero" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Moneda requerida</label><select value={String(exchangeabilityDraft.currency || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, currency: e.target.value as AccountingCurrencyCode }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="">Seleccione</option><option value="VES">VES</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="OTHER">Otra</option></select>{exchangeabilityDraft.currency === 'OTHER' && <input value={String(exchangeabilityDraft.currencyOther || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, currencyOther: e.target.value }))} placeholder="Código de moneda" className="mt-1 w-full px-3 py-1.5 border border-slate-300 rounded-lg" />}</div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Monto que se necesita convertir</label><input type="number" min="0" step="0.01" value={String(exchangeabilityDraft.amountRequired ?? '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, amountRequired: e.target.value === '' ? undefined : Number(e.target.value) }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div className="sm:col-span-2"><label className="block text-[11px] font-semibold text-slate-700 mb-1">Mecanismo legal evaluado</label><textarea value={String(exchangeabilityDraft.legalMechanism || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, legalMechanism: e.target.value }))} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">¿Legalmente accesible?</label><select value={String(exchangeabilityDraft.legallyAccessible)} onChange={e => setExchangeabilityDraft(p => ({ ...p, legallyAccessible: e.target.value === 'true' }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="false">No / no acreditado</option><option value="true">Sí, con evidencia</option></select></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">¿Acceso efectivo para la entidad?</label><select value={String(exchangeabilityDraft.actuallyAccessible)} onChange={e => setExchangeabilityDraft(p => ({ ...p, actuallyAccessible: e.target.value === 'true' }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="false">No / no acreditado</option><option value="true">Sí, probado</option></select></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Plazo estimado (días)</label><input type="number" min="0" step="1" value={String(exchangeabilityDraft.expectedDelayDays ?? '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, expectedDelayDays: e.target.value === '' ? undefined : Number(e.target.value) }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Conclusión</label><select value={String(exchangeabilityDraft.conclusion || 'NOT_CONVERTIBLE')} onChange={e => setExchangeabilityDraft(p => ({ ...p, conclusion: e.target.value as 'CONVERTIBLE' | 'NOT_CONVERTIBLE' }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="CONVERTIBLE">Convertible</option><option value="NOT_CONVERTIBLE">No convertible</option></select></div>
+              {exchangeabilityDraft.conclusion === 'CONVERTIBLE' ? <>
+                <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Monto realmente disponible</label><input type="number" min="0" step="0.01" value={String(exchangeabilityDraft.amountAvailable ?? '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, amountAvailable: e.target.value === '' ? undefined : Number(e.target.value) }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+                <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Tasa spot accesible</label><input type="number" min="0" step="0.000001" value={String(exchangeabilityDraft.accessibleSpotRate ?? '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, accessibleSpotRate: e.target.value === '' ? undefined : Number(e.target.value) }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              </> : <>
+                <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Tasa spot estimada</label><input type="number" min="0" step="0.000001" value={String(exchangeabilityDraft.estimatedSpotRate ?? '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, estimatedSpotRate: e.target.value === '' ? undefined : Number(e.target.value) }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+                <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Metodología de estimación</label><textarea value={String(exchangeabilityDraft.estimationMethod || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, estimationMethod: e.target.value }))} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+                <div className="sm:col-span-2"><label className="block text-[11px] font-semibold text-slate-700 mb-1">Evidencia de la estimación</label><textarea value={String(exchangeabilityDraft.estimationEvidence || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, estimationEvidence: e.target.value }))} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              </>}
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Preparado por</label><input value={String(exchangeabilityDraft.preparedBy || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, preparedBy: e.target.value }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Aprobado por</label><input value={String(exchangeabilityDraft.approvedBy || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, approvedBy: e.target.value }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Fecha de aprobación</label><input type="date" value={String(exchangeabilityDraft.approvedAt || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, approvedAt: e.target.value }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+            </div>
+            <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Referencias documentales (una por línea)</label><textarea value={exchangeabilityEvidence} onChange={e => setExchangeabilityEvidence(e.target.value)} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+            <p className="text-[10px] text-slate-600">Cada conclusión queda vinculada a una fecha, propósito y monto. No se infiere acceso a divisas por la tasa oficial y esta evaluación no ejecuta conversión contable.</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
