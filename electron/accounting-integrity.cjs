@@ -645,7 +645,9 @@ function validateSaleCorrectionNotes(previousState, nextState) {
         ? asArray(nextState.journalEntries).find(item => item.id === original.journalEntryId && item.companyId === companyId)
         : undefined;
       if (!originalCost || originalCost.type !== 'INVENTARIO' ||
-          originalCost.date !== original.date || originalCost.referenceDoc !== original.documentRef) return false;
+          originalCost.date !== original.date || originalCost.referenceDoc !== original.documentRef ||
+          !Array.isArray(originalCost.items) || originalCost.items.length !== 2 ||
+          originalCost.items.some(line => ![inventoryCode, costCode].includes(String(line.accountCode)))) return false;
       const originalInventoryCredit = asArray(originalCost.items).filter(line => line.accountCode === inventoryCode)
         .reduce((sum, line) => sum + Number(line.creditBs || 0), 0);
       const originalInventoryCreditUsd = asArray(originalCost.items).filter(line => line.accountCode === inventoryCode)
@@ -668,7 +670,8 @@ function validateSaleCorrectionNotes(previousState, nextState) {
           : undefined;
         if (returned.type !== 'ENTRADA' || returned.concept !== 'DEVOLUCION_CLIENTE' ||
             !entry || entry.type !== 'INVENTARIO' || entry.date !== returned.date ||
-            entry.referenceDoc !== returned.documentRef) return false;
+            entry.referenceDoc !== returned.documentRef || !Array.isArray(entry.items) ||
+            entry.items.length !== 2 || entry.items.some(line => ![inventoryCode, costCode].includes(String(line.accountCode)))) return false;
         const inventoryDebit = asArray(entry.items).filter(line => line.accountCode === inventoryCode)
           .reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
         const inventoryDebitUsd = asArray(entry.items).filter(line => line.accountCode === inventoryCode)
@@ -677,7 +680,12 @@ function validateSaleCorrectionNotes(previousState, nextState) {
           .reduce((sum, line) => sum + Number(line.creditBs || 0), 0);
         const costCreditUsd = asArray(entry.items).filter(line => line.accountCode === costCode)
           .reduce((sum, line) => sum + Number(line.creditUsd || 0), 0);
-        if (!close(inventoryDebit, returned.totalCostBs) ||
+        const debitBs = asArray(entry.items).reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
+        const creditBs = asArray(entry.items).reduce((sum, line) => sum + Number(line.creditBs || 0), 0);
+        const debitUsd = asArray(entry.items).reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
+        const creditUsd = asArray(entry.items).reduce((sum, line) => sum + Number(line.creditUsd || 0), 0);
+        if (!close(debitBs, creditBs) || !close(debitUsd, creditUsd, 0.0001) ||
+            !close(inventoryDebit, returned.totalCostBs) ||
             !close(costCredit, returned.totalCostBs) ||
             !close(inventoryDebitUsd, returned.totalCostUsd, 0.0001) ||
             !close(costCreditUsd, returned.totalCostUsd, 0.0001)) return false;
