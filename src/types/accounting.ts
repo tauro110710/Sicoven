@@ -158,6 +158,8 @@ export interface PurchaseRecord {
   supplierRif: string; // e.g. "J-12345678-9"
   supplierName: string;
   supplierAddress?: string;
+  /** Correo declarado del proveedor; opcional para compatibilidad con compras históricas. */
+  supplierEmail?: string;
   supplierTaxStatus?: 'ORDINARY' | 'FORMAL' | 'SPECIAL' | 'NON_REGISTERED' | 'UNKNOWN';
   ivaRetentionDecision?: PurchaseIvaRetentionSnapshot;
   invoiceNumber: string;
@@ -360,6 +362,7 @@ export interface VatRetentionVoucher {
   agentNameSnapshot?: string;
   agentRifSnapshot?: string;
   agentAddressSnapshot?: string;
+  supplierEmailSnapshot?: string;
   supplierRif: string;
   supplierName: string;
   supplierAddress: string;
@@ -502,6 +505,15 @@ export interface IslrRetentionVoucher {
   /** Todos los asientos correctivos asociados al comprobante; correctionEntryId conserva el último para compatibilidad. */
   correctionEntryIds?: string[];
   correctionNote?: string;
+  /** Instantánea fiscal del emisor y del proveedor al emitir; ausente en comprobantes históricos. */
+  agentNameSnapshot?: string;
+  agentRifSnapshot?: string;
+  agentAddressSnapshot?: string;
+  supplierEmailSnapshot?: string;
+  /** Registro de entrega inmutable; ausente en comprobantes históricos. */
+  deliveryDate?: string;
+  deliveryMethod?: 'PHYSICAL' | 'ELECTRONIC';
+  electronicDeliveryAgreed?: boolean;
 }
 
 export interface BankAccount {
