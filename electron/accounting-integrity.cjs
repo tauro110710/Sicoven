@@ -1394,8 +1394,8 @@ function validateAccountingSnapshot(previousState, nextState) {
           Math.abs(totalUsd - baseUsd - vatUsd) > 0.0001 ||
           Math.abs(noteTaxableBs * noteTaxRate / 100 - vatBs) > 0.02 ||
           Math.abs(noteTaxRate - Number(original.taxRate || 0)) > 0.000001 ||
-          Math.abs(cumulativeServiceTaxable - Number(original.taxableBaseBs || 0)) > 0.01 ||
-          Math.abs(cumulativeServiceExempt - Number(original.exemptAmountBs || 0)) > 0.01 ||
+          cumulativeServiceTaxable > Number(original.taxableBaseBs || 0) + 0.01 ||
+          cumulativeServiceExempt > Number(original.exemptAmountBs || 0) + 0.01 ||
           Number(note.vatWithheldBs || 0) !== 0 || Number(note.islrWithheldBs || 0) !== 0 ||
           Number(note.igtfAmountBs || 0) !== 0 ||
           Math.abs(Number(note.taxableBaseUsd || 0) - noteTaxableBs / rate) > 0.0001 ||
