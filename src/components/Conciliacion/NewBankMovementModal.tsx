@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { BankAccount, BankMovementType } from '../../types/accounting';
 import { Landmark, X, Check } from 'lucide-react';
@@ -25,6 +25,10 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
   const [movementBcvRate, setMovementBcvRate] = useState<string>(() =>
     currentCompany.lastRateUpdate === date ? String(currentCompany.bcvRate || '') : ''
   );
+
+  useEffect(() => {
+    setMovementBcvRate(currentCompany.lastRateUpdate === date ? String(currentCompany.bcvRate || '') : '');
+  }, [currentCompany.id]);
 
   if (!isOpen) return null;
 
