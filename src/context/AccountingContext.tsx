@@ -22,6 +22,7 @@ import {
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 import { prepareAccountForCatalog } from '../types/chartOfAccounts';
 import { validateJournalEntryAccounts, isJournalEntryBalanced } from '../types/journalEntryValidation';
+import { matchesBankStatementLine } from '../types/bankStatementMatching';
 import { buildOpeningEntryItems } from '../types/accountingYearOpening';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
 import {
@@ -3798,13 +3799,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         if (item.accountCode !== statementBank.accountCode) return false;
         const debit = isUsdAccount ? Number(item.debitUsd) : Number(item.debitBs);
         const credit = isUsdAccount ? Number(item.creditUsd) : Number(item.creditBs);
-        const expectsDebit = statement.type === 'CREDIT';
-        const amount = expectsDebit ? debit : credit;
-        const opposite = expectsDebit ? credit : debit;
-        const sameAmount = isUsdAccount
-          ? Math.round(amount * 1_000_000) === Math.round(Number(expectedAmount) * 1_000_000)
-          : Math.round(amount * 100) === Math.round(Number(expectedAmount) * 100);
-        return sameAmount && opposite === 0;
+        return matchesBankStatementLine({
+          currency: statementBank.currency,
+          movementType: statement.type,
+          statementAmount: Number(expectedAmount),
+          debit,
+          credit
+        });
       });
       if (!hasExactBankLine) {
         throw new Error('El asiento no coincide con la cuenta, el importe y la naturaleza débito/crédito del movimiento bancario.');
@@ -3889,12 +3890,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const amount = isUsdAccount ? stmt.amountUsd : stmt.amountBs;
         const debit = isUsdAccount ? item.debitUsd : item.debitBs;
         const credit = isUsdAccount ? item.creditUsd : item.creditBs;
-        const matchedAmount = stmt.type === 'CREDIT' ? debit : credit;
-        const opposite = stmt.type === 'CREDIT' ? credit : debit;
-        const sameAmount = isUsdAccount
-          ? Math.round(Number(matchedAmount) * 1_000_000) === Math.round(Number(amount) * 1_000_000)
-          : Math.round(Number(matchedAmount) * 100) === Math.round(Number(amount) * 100);
-        return sameAmount && opposite === 0;
+        return matchesBankStatementLine({
+          currency: targetAccount.currency,
+          movementType: stmt.type,
+          statementAmount: Number(amount),
+          debit: Number(debit),
+          credit: Number(credit)
+        });
       });
 
     for (const stmt of statementRows) {
