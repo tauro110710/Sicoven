@@ -529,6 +529,7 @@ export const ReversionFiscalView: React.FC = () => {
           })}
         </div>
         <p className="text-[11px] text-slate-500">Se muestran los últimos 200 eventos. El historial se almacena en SQLite y el reinicio operativo no lo elimina.</p>
+      </section>
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div><h2 className="text-base font-bold text-slate-900">Expedientes de notas correctivas</h2><p className="text-xs text-slate-500">NC/ND vinculadas a su documento original y asiento</p></div>
@@ -544,7 +545,6 @@ export const ReversionFiscalView: React.FC = () => {
               {document.journalEntryId && <button type="button" onClick={() => setSelectedId(document.journalEntryId)} className="rounded bg-slate-100 px-2 py-1 font-semibold text-slate-700 hover:bg-slate-200">Consultar asiento</button>}
             </div>
           </article>)}</div>}
-      </section>
       </section>
     </div>
   );
