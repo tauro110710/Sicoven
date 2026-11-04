@@ -624,6 +624,55 @@ function validateSaleCorrectionNotes(previousState, nextState) {
   const round2 = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
   const round6 = value => Math.round((Number(value) + Number.EPSILON) * 1000000) / 1000000;
   const close = (a, b, tolerance = 0.02) => Number.isFinite(Number(a)) && Number.isFinite(Number(b)) && Math.abs(Number(a) - Number(b)) <= tolerance;
+  const saleInventoryReturnComplete = (source, companyId) => {
+    const originals = asArray(nextState.movements).filter(item =>
+      item.companyId === companyId && !item.correctionForMovementId &&
+      (item.journalEntryId === source?.journalEntryId ||
+       normalize(item.documentRef) === normalize('FAC-' + (source?.invoiceNumber || ''))));
+    if (!originals.length) return true;
+    for (const original of originals) {
+      if (original.type !== 'SALIDA' || original.concept !== 'VENTA') return false;
+      const product = asArray(nextState.products).find(item =>
+        item.id === original.productId && item.companyId === companyId);
+      if (!product) return false;
+      const inventoryCode = product.inventoryAccountCode || '1.1.4.01';
+      const costCode = product.costOfSalesAccountCode || '5.1.1.01';
+      if (asArray(source?.items).some(line =>
+        [inventoryCode, costCode].includes(String(line.accountCode)) &&
+        Number(line.debitBs || 0) + Number(line.creditBs || 0) +
+        Number(line.debitUsd || 0) + Number(line.creditUsd || 0) > 0.01)) return false;
+      const originalCost = original.journalEntryId
+        ? asArray(nextState.journalEntries).find(item => item.id === original.journalEntryId && item.companyId === companyId)
+        : undefined;
+      if (!originalCost || originalCost.type !== 'INVENTARIO' ||
+          originalCost.date !== original.date || originalCost.referenceDoc !== original.documentRef) return false;
+      const originalInventoryCredit = asArray(originalCost.items).filter(line => line.accountCode === inventoryCode)
+        .reduce((sum, line) => sum + Number(line.creditBs || 0), 0);
+      const originalCostDebit = asArray(originalCost.items).filter(line => line.accountCode === costCode)
+        .reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
+      if (!close(originalInventoryCredit, original.totalCostBs) || !close(originalCostDebit, original.totalCostBs)) return false;
+      const returns = asArray(nextState.movements).filter(item =>
+        item.companyId === companyId && item.correctionForMovementId === original.id);
+      const returnedQty = returns.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+      if (!close(returnedQty, original.quantity, 0.000001) || !returns.length) return false;
+      for (const returned of returns) {
+        const entry = returned.journalEntryId
+          ? asArray(nextState.journalEntries).find(item => item.id === returned.journalEntryId && item.companyId === companyId)
+          : undefined;
+        if (returned.type !== 'ENTRADA' || returned.concept !== 'DEVOLUCION_CLIENTE' ||
+            !entry || entry.type !== 'INVENTARIO' || entry.date !== returned.date ||
+            entry.referenceDoc !== returned.documentRef) return false;
+        const inventoryDebit = asArray(entry.items).filter(line => line.accountCode === inventoryCode)
+          .reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
+        const costCredit = asArray(entry.items).filter(line => line.accountCode === costCode)
+          .reduce((sum, line) => sum + Number(line.creditBs || 0), 0);
+        if (!close(inventoryDebit, returned.totalCostBs) || !close(costCredit, returned.totalCostBs)) return false;
+      }
+      const returnedCost = returns.reduce((sum, item) => sum + Number(item.totalCostBs || 0), 0);
+      if (!close(returnedCost, original.totalCostBs)) return false;
+    }
+    return true;
+  };
 
   for (const note of nextSales.filter(item => !priorIds.has(String(item.id)) && ['02', '03'].includes(item.documentType))) {
     const source = nextSales.find(item => item.id === note.originalSaleId && item.companyId === note.companyId && item.documentType === '01');
@@ -699,7 +748,8 @@ function validateSaleCorrectionNotes(previousState, nextState) {
         String(note.correctionWorkpaper || '').trim().length < 10 ||
         !isValidIsoDate(note.invoiceDate) || note.invoiceDate < source.invoiceDate ||
         (company?.closedThroughDate && note.invoiceDate <= company.closedThroughDate) ||
-        linkedInventory || duplicateNumber || !Number.isFinite(rate) || rate <= 0 ||
+        (isCredit && linkedInventory && (!saleInventoryReturnComplete(source, note.companyId) ||
+          !close(total, Number(source.totalAmountBs || 0)))) || duplicateNumber || !Number.isFinite(rate) || rate <= 0 ||
         !Number.isFinite(base) || !Number.isFinite(exempt) || base < 0 || exempt < 0 || base + exempt <= 0 ||
         !Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100 ||
         !close(vat, expectedVat) || !close(total, expectedTotal) ||
