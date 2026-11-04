@@ -1064,6 +1064,12 @@ function validateAccountingSnapshot(previousState, nextState) {
         normalizeDocument(note.invoiceNumber) !== normalizeDocument(debitNoteNumber) ||
         !String(note.controlNumber || '').trim() ||
         normalizeDocument(note.affectedInvoiceNumber) !== normalizeDocument(original.invoiceNumber) ||
+        note.affectedInvoiceDate !== original.invoiceDate ||
+        normalizeDocument(note.affectedInvoiceControlNumber) !== normalizeDocument(original.controlNumber) ||
+        Math.abs(Number(note.affectedInvoiceTotalAmountBs) - Number(original.totalAmountBs)) > 0.02 ||
+        Math.abs(Number(note.affectedInvoiceTotalAmountUsd) - Number(original.totalAmountUsd)) > 0.0001 ||
+        !['DIGITAL', 'FISCAL_MACHINE', 'CONTINGENCY'].includes(note.fiscalEmissionMedium) ||
+        note.sameMediumAsOriginal !== true ||
         normalizeRif(note.supplierRif) !== normalizeRif(original.supplierRif) ||
         !isValidIsoDate(note.invoiceDate) || !isValidIsoDate(note.accountCreditDate || note.invoiceDate) ||
         note.invoiceDate < original.invoiceDate || note.accountCreditDate < note.invoiceDate ||
