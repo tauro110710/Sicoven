@@ -104,8 +104,11 @@ export function buildCashFlowReport(
   const start = String(year).padStart(4, '0') + '-01-01';
   const end = String(year).padStart(4, '0') + '-12-31';
   const companyEntries = entries.filter(entry => entry.companyId === companyId);
+  // Only reversals posted on or before the opening boundary cancel an opening
+  // entry at the start of the year. A reversal dated later is a current-year
+  // cash movement and must remain in the report.
   const reversedEntryIds = new Set(companyEntries
-    .filter(entry => entry.reversalOfEntryId)
+    .filter(entry => entry.reversalOfEntryId && entry.date <= start)
     .map(entry => entry.reversalOfEntryId as string));
   for (const entry of companyEntries) {
     if (!isValidIsoDate(entry.date)) {
@@ -263,13 +266,8 @@ export function buildCashFlowReport(
     }
   };
 
-  const linkedAnnualOpeningIds = new Set(companyEntries
-    .filter(isLinkedAnnualOpening)
-    .map(entry => entry.id));
   const periodEntries = companyEntries.filter(entry =>
-    entry.date >= start &&
-    !isAnnualOpening(entry, year) &&
-    !(entry.reversalOfEntryId && linkedAnnualOpeningIds.has(entry.reversalOfEntryId))
+    entry.date >= start && !isAnnualOpening(entry, year)
   );
   for (const entry of periodEntries) {
     const net = cashNet(entry, cashCodes);
