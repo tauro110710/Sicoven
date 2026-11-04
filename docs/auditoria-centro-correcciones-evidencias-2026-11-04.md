@@ -63,7 +63,7 @@ Se contrastaron los vínculos con los tipos persistidos:
 
 El formulario de expedientes solo permite estas seis clases de origen, para evitar abrir casos ejecutables sobre entidades que todavía no persisten un vínculo correctivo verificable. Los otros escenarios no se consideran terminados; deben recibir su relación explícita antes de habilitarse.
 
-La suite del workflow contiene ahora **18 pruebas definidas** que cubren segregación, rollback, vínculos de NC/ND de compra y venta, reversos/ajustes de asientos, comprobantes de retención y ciclo de observación/subsanación. No se han ejecutado en esta sesión. La suite documental mantiene nueve pruebas definidas, tampoco ejecutadas.
+La suite del workflow contiene ahora **19 pruebas definidas** que cubren segregación, rollback, vínculos de NC/ND de compra y venta, reversos/ajustes de asientos, comprobantes de retención y ciclo de observación/subsanación. No se han ejecutado en esta sesión. La suite documental mantiene nueve pruebas definidas, tampoco ejecutadas.
 
 Se agregó además una prueba de migración aditiva para expedientes heredados `PENDING_REVIEW`, `APPROVED`, `REJECTED` y `EXECUTED`, que verifica que sus estados se conservan y reciben la etapa equivalente. Se añadieron casos de ND de venta, NC/ND de compra y corrección de Kardex. Total actual del archivo de pruebas: **16 casos definidos**, no ejecutados.
 
@@ -72,4 +72,6 @@ Se agregó también el retiro controlado: solo el solicitante original puede ret
 
 La ejecución exige además que al menos un soporte documental del expediente esté verificado después de la observación formal más reciente; una verificación antigua no permite cerrar un caso que haya sido devuelto para subsanar.
 
-Total actual de la suite del workflow: **18 pruebas definidas**, no ejecutadas.
+Total actual de la suite del workflow: **19 pruebas definidas**, no ejecutadas.
+
+La migración también reconstruye de forma transaccional el ledger de eventos del workflow cuando una instalación previa todavía tiene la restricción anterior sin `WITHDRAWN`; conserva los eventos existentes y restablece sus triggers append-only. Se añadió un caso automatizado para esa migración.
