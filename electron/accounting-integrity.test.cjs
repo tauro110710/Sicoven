@@ -301,6 +301,24 @@ test('SQLite reconciles every new sale with its complete invoice journal in Bs a
   assert.throws(() => validateAccountingSnapshot(previous, {
     ...emptyState(), sales: [{ ...sale, journalEntryId: undefined }]
   }), /falta su asiento contable enlazado/);
+
+  const igftSale = {
+    ...sale, igtfApplicable: true, igtfRate: 3,
+    paymentTerm: 'CONTADO', paymentCurrency: 'FOREIGN_CASH',
+    igtfAmountBs: 34.8, igtfAmountUsd: 0.348,
+    totalAmountBs: 1194.8, totalAmountUsd: 11.948
+  };
+  const igftJournal = {
+    ...journal,
+    items: journal.items.map(item => item.accountCode === '1.1.2.01'
+      ? { ...item, debitBs: 1154.8, debitUsd: 11.548 } : item)
+      .concat([{ accountCode: '2.1.2.06', debitBs: 0, creditBs: 34.8, debitUsd: 0, creditUsd: 0.348 }])
+  };
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...emptyState([igftJournal]),
+    companies: [{ id: 'company-1', isIgtfPerceptionAgent: false }],
+    sales: [igftSale]
+  }), /venta: el asiento no concilia/);
 });
 
 test('SQLite rejects physical deletion of a posted journal entry', () => {
