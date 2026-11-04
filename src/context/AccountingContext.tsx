@@ -94,6 +94,7 @@ interface AccountingContextType {
   addCompany: (comp: Omit<Company, 'id'>) => Company;
   updateCompany: (comp: Company) => void;
   updateBcvRate: (newRate: number, effectiveDate?: string) => void;
+  correctBcvRate: (input: { newRate: number; effectiveDate: string; reason: string; workpaperNote: string }) => Promise<void>;
 
   // Cuentas
   accounts: Account[];
@@ -414,7 +415,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   type CorrectionAuditInput = {
     eventType: 'accounting_correction_requested' | 'accounting_correction_executed';
-    entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT';
+    entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'BCV_RATE';
     companyId: string; entityId: string; correctionType: string; sourceDocumentRef: string;
     correctionDocumentRef: string; reason: string; workpaperNote: string; journalEntryId?: string;
     fiscalEmissionMedium?: 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY'; sameMediumAsOriginal?: boolean;
@@ -1035,6 +1036,44 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       bcvRate: newRate,
       lastRateUpdate: today
     });
+  };
+
+  const correctBcvRate = async (input: {
+    newRate: number; effectiveDate: string; reason: string; workpaperNote: string;
+  }): Promise<void> => {
+    assertSQLitePersistenceReady('Corregir la tasa BCV');
+    if (!currentCompany.id) throw new Error('Seleccione una empresa antes de corregir la tasa BCV.');
+    const rate = Number(input.newRate);
+    if (!Number.isFinite(rate) || rate <= 0) throw new Error('La nueva tasa BCV debe ser un número positivo.');
+    if (!isValidIsoDate(input.effectiveDate)) throw new Error('La fecha de vigencia de la tasa BCV no es válida.');
+    const reason = String(input.reason || '').trim();
+    const workpaperNote = String(input.workpaperNote || '').trim();
+    if (reason.length < 10 || workpaperNote.length < 10) {
+      throw new Error('La corrección de tasa BCV requiere motivo y papel de trabajo de al menos 10 caracteres.');
+    }
+    if (rate === Number(currentCompany.bcvRate) && input.effectiveDate === currentCompany.lastRateUpdate) return;
+    const auditInput: CorrectionAuditInput = {
+      eventType: 'accounting_correction_requested', entityType: 'BCV_RATE',
+      companyId: currentCompany.id, entityId: currentCompany.id,
+      correctionType: 'BCV_RATE_CORRECTION',
+      sourceDocumentRef: String(currentCompany.bcvRate) + ' Bs/USD',
+      correctionDocumentRef: String(rate) + ' Bs/USD · ' + input.effectiveDate,
+      reason, workpaperNote
+    };
+    await recordCorrectionAudit(auditInput);
+    updateCompany({ ...currentCompany, bcvRate: rate, lastRateUpdate: input.effectiveDate });
+    try {
+      await waitForPersistence();
+    } catch (error) {
+      throw new Error('SQLite no confirmó la corrección BCV. La interfaz volvió al último estado confirmado; el evento de solicitud permanece en auditoría. ' +
+        (error instanceof Error ? error.message : 'Error de persistencia.'));
+    }
+    try {
+      await recordCorrectionAudit({ ...auditInput, eventType: 'accounting_correction_executed' });
+    } catch (error) {
+      throw new Error('La nueva tasa BCV quedó guardada en SQLite, pero falta registrar el evento final de auditoría. No repita la corrección. ' +
+        (error instanceof Error ? error.message : 'Error de auditoría.'));
+    }
   };
 
   const addAccount = (account: Account) => {
@@ -5146,6 +5185,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         addCompany,
         updateCompany,
         updateBcvRate,
+        correctBcvRate,
         accounts,
         addAccount,
         setAccountCashFlowActivity,
