@@ -41,7 +41,7 @@ No se ha ejecutado CI ni se ha publicado un release. No se modificó el administ
 ## Continuación incorporada: observación y subsanación formal
 
 Se agregó un ciclo formal de expediente sin sobrescribir su historial:
-- `IN_REVIEW`: pendiente de revisión independiente.
+- `IN_REVIEW`: pendiente de evaluación del contador.
 - `OBSERVATION_REQUIRED`: devuelto al solicitante con motivo obligatorio.
 - `READY_FOR_EXECUTION`: aprobado y sin observaciones pendientes.
 - `COMPLETED`: ejecución confirmada.
