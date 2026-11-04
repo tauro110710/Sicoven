@@ -28,7 +28,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
 
   useEffect(() => {
     setMovementBcvRate(currentCompany.lastRateUpdate === date ? String(currentCompany.bcvRate || '') : '');
-  }, [currentCompany.id]);
+  }, [currentCompany.id, currentCompany.lastRateUpdate, currentCompany.bcvRate, date]);
 
   if (!isOpen) return null;
 
