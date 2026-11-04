@@ -310,7 +310,7 @@ test('execution authorization binds operator/reference and permits audited recov
 test('execution authorization rolls back its stage and event when the audit ledger fails for the single accountant',()=>{
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
-  reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'La evidencia y el papel de trabajo fueron revisados.'},admin(2,'revisor'));
+  reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'El contador verificó la evidencia y el papel de trabajo.'},admin(1,'contador'));
   db.exec("CREATE TRIGGER reject_authorization_audit BEFORE INSERT ON audit_events WHEN NEW.event_type='accounting_correction_case_execution_started' BEGIN SELECT RAISE(ABORT,'authorization audit failure'); END;");
   assert.throws(()=>requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(1,'contador')),/authorization audit failure/);
   const current=getCorrectionCase(db,requested.id);
@@ -319,7 +319,7 @@ test('execution authorization rolls back its stage and event when the audit ledg
  }finally{db.close();}
 });
 
-test('requester can withdraw an authorized but not-yet-persisted correction attempt',()=>{
+test('the accountant can withdraw an authorized but not-yet-persisted correction attempt',()=>{
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
   reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'El contador aprobó el expediente para ejecución.'},admin(1,'contador'));
@@ -327,6 +327,6 @@ test('requester can withdraw an authorized but not-yet-persisted correction atte
   const withdrawn=withdrawCorrectionRequest(db,{caseId:requested.id,reason:'El contador retira el intento porque no se emitió documento.'},admin(1,'contador'));
   assert.equal(withdrawn.workflow_stage,'WITHDRAWN');
   assert.equal(withdrawn.execution_started_at,null);
-  assert.equal(withdrawn.events.at(-1).metadata.previousExecutionStartedBy,3);
+  assert.equal(withdrawn.events.at(-1).metadata.previousExecutionStartedBy,1);
  }finally{db.close();}
 });
