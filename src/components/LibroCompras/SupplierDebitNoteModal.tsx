@@ -51,6 +51,8 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
   const sourceEntry = journalEntries.find(entry =>
     entry.companyId === purchase.companyId && entry.id === purchase.journalEntryId
   );
+  const sourceContainsInventory = Boolean(purchase.inventoryLines?.length) ||
+    Boolean(sourceEntry?.items.some(item => String(item.accountCode || '').startsWith('1.1.4.')));
   const sourcePayableCodes = [...new Set((sourceEntry?.items || [])
     .filter(item => item.accountCode.startsWith('2.1.1.') && Number(item.creditBs) > 0)
     .map(item => item.accountCode))];
@@ -174,7 +176,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
         <label className="flex items-start gap-2 text-xs text-slate-700"><input type="checkbox" checked={sameMediumAsOriginal} onChange={event => setSameMediumAsOriginal(event.target.checked)} className="mt-0.5" />Confirmo que la ND se emitió por el mismo medio de la factura original, conforme a la Providencia SNAT/2026/00093.</label>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="text-xs font-semibold text-slate-700">Causa económica<select value={economicCause} onChange={e=>setEconomicCause(e.target.value as SupplierDebitNoteEconomicCause)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
-              <option value="PRICE_DIFFERENCE">Diferencia de precio</option>
+              <option value="PRICE_DIFFERENCE" disabled={sourceContainsInventory}>{sourceContainsInventory ? 'Diferencia de precio (requiere revalorización de inventario)' : 'Diferencia de precio'}</option>
               <option value="ADDITIONAL_EXPENSE">Gasto adicional</option>
               <option value="FINANCING_CHARGE">Cargo de financiación</option>
               <option value="OTHER">Otra causa</option>
