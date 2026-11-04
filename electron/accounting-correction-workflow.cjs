@@ -98,6 +98,7 @@ function initializeCorrectionWorkflow(db) {
         (OLD.status='PENDING_REVIEW' AND NEW.status='APPROVED' AND NEW.workflow_stage='READY_FOR_EXECUTION') OR
         (OLD.status='PENDING_REVIEW' AND NEW.status='REJECTED' AND NEW.workflow_stage='CLOSED') OR
         (OLD.status='APPROVED' AND NEW.status='EXECUTED' AND NEW.workflow_stage='COMPLETED') OR
+        (OLD.status='APPROVED' AND NEW.status='APPROVED' AND OLD.workflow_stage='READY_FOR_EXECUTION' AND NEW.workflow_stage='READY_FOR_EXECUTION' AND OLD.execution_started_at IS NULL AND NEW.execution_started_at IS NOT NULL AND NEW.execution_started_by IS NOT NULL AND NEW.execution_started_ref=NEW.correction_ref) OR
         (OLD.status IN ('PENDING_REVIEW','APPROVED') AND NEW.status='PENDING_REVIEW' AND NEW.workflow_stage='OBSERVATION_REQUIRED') OR
         (OLD.status IN ('PENDING_REVIEW','APPROVED') AND NEW.status='PENDING_REVIEW' AND NEW.workflow_stage='WITHDRAWN') OR
         (OLD.status='PENDING_REVIEW' AND NEW.status='PENDING_REVIEW' AND OLD.workflow_stage='OBSERVATION_REQUIRED' AND NEW.workflow_stage='IN_REVIEW')
@@ -220,24 +221,39 @@ function requireApprovedCorrectionCase(db, input, actor) {
   const required=['companyId','entityType','entityId','sourceDocumentRef','correctionDocumentRef'];
   for(const key of required) if(!String(input?.[key] || '').trim())
     throw new Error('La ejecución correctiva requiere el dato obligatorio: '+key+'.');
-  const rows=db.prepare(`
-    SELECT id,requested_by,reviewed_by,correction_type
-    FROM accounting_correction_cases
-    WHERE company_id=? AND entity_type=? AND entity_id=?
-      AND UPPER(TRIM(source_ref))=UPPER(TRIM(?))
-      AND UPPER(TRIM(correction_ref))=UPPER(TRIM(?))
-      AND status='APPROVED' AND workflow_stage='READY_FOR_EXECUTION'
-    ORDER BY created_at DESC
-  `).all(String(input.companyId),String(input.entityType),String(input.entityId),
-    String(input.sourceDocumentRef),String(input.correctionDocumentRef));
-  if(rows.length===0)
-    throw new Error('No existe un expediente formal aprobado para esta empresa, registro origen y referencia correctiva. La operación no se ejecutó.');
-  if(rows.length!==1)
-    throw new Error('Hay más de un expediente aprobado para la misma corrección. Debe resolverse la duplicidad antes de ejecutar.');
-  const item=rows[0];
-  if(Number(item.requested_by)===Number(actor.id) || Number(item.reviewed_by)===Number(actor.id))
-    throw new Error('Quien ejecuta la corrección debe ser distinto del solicitante y del aprobador del expediente.');
-  return {ok:true,caseId:item.id,correctionType:item.correction_type};
+  const sourceRef=String(input.sourceDocumentRef).trim();
+  const correctionRef=String(input.correctionDocumentRef).trim();
+  const at=new Date().toISOString();
+  const tx=db.transaction(()=>{
+    const rows=db.prepare(`
+      SELECT id,requested_by,reviewed_by,correction_type,execution_started_by,execution_started_ref,execution_started_at
+      FROM accounting_correction_cases
+      WHERE company_id=? AND entity_type=? AND entity_id=?
+        AND UPPER(TRIM(source_ref))=UPPER(TRIM(?))
+        AND UPPER(TRIM(correction_ref))=UPPER(TRIM(?))
+        AND status='APPROVED' AND workflow_stage='READY_FOR_EXECUTION'
+      ORDER BY created_at DESC
+    `).all(String(input.companyId),String(input.entityType),String(input.entityId),sourceRef,correctionRef);
+    if(rows.length===0)
+      throw new Error('No existe un expediente formal aprobado para esta empresa, registro origen y referencia correctiva. La operación no se ejecutó.');
+    if(rows.length!==1)
+      throw new Error('Hay más de un expediente aprobado para la misma corrección. Debe resolverse la duplicidad antes de ejecutar.');
+    const item=rows[0];
+    if(Number(item.requested_by)===Number(actor.id) || Number(item.reviewed_by)===Number(actor.id))
+      throw new Error('Quien ejecuta la corrección debe ser distinto del solicitante y del aprobador del expediente.');
+    if(item.execution_started_at) {
+      if(Number(item.execution_started_by)!==Number(actor.id) ||
+         String(item.execution_started_ref || '').trim().toLocaleUpperCase()!==correctionRef.toLocaleUpperCase())
+        throw new Error('La ejecución de este expediente ya fue iniciada por otro operador o con otra referencia.');
+      return {ok:true,caseId:item.id,correctionType:item.correction_type,resumed:true};
+    }
+    db.prepare(`UPDATE accounting_correction_cases
+      SET execution_started_by=?,execution_started_at=?,execution_started_ref=? WHERE id=?`)
+      .run(Number(actor.id),at,correctionRef,item.id);
+    appendWorkflowEvent(db,item,'EXECUTION_STARTED',actor,'Inicio de ejecución autorizado para '+correctionRef,{correctionDocumentRef:correctionRef});
+    return {ok:true,caseId:item.id,correctionType:item.correction_type,resumed:false};
+  });
+  return tx();
 }
 function markCorrectionExecuted(db, {caseId,executionRef,reason,evidenceRecordId,evidenceCollection}, actor) {
   requireAdmin(actor);
@@ -249,6 +265,9 @@ function markCorrectionExecuted(db, {caseId,executionRef,reason,evidenceRecordId
     if (item.status !== 'APPROVED' || item.workflow_stage !== 'READY_FOR_EXECUTION') throw new Error('Solo se puede ejecutar un expediente aprobado y sin observaciones pendientes.');
     if (Number(item.requested_by) === Number(actor.id) || Number(item.reviewed_by) === Number(actor.id)) {
       throw new Error('El ejecutor debe ser distinto del solicitante y del aprobador.');
+    }
+    if (!item.execution_started_at || Number(item.execution_started_by)!==Number(actor.id)) {
+      throw new Error('La ejecución debe confirmarla el mismo operador independiente que fue autorizado para iniciar la corrección.');
     }
     const normalizedExecutionRef = String(executionRef || '').trim().toLocaleUpperCase();
     if (!normalizedExecutionRef || normalizedExecutionRef.length > 160) throw new Error('Indique una referencia correctiva válida de hasta 160 caracteres.');
@@ -264,6 +283,9 @@ function markCorrectionExecuted(db, {caseId,executionRef,reason,evidenceRecordId
     const linkedEvidenceCollection = String(evidenceCollection || '').trim();
     const expectedEvidenceCollection = ({SALE:'sales',PURCHASE:'purchases',JOURNAL_ENTRY:'journalEntries',
       INVENTORY_MOVEMENT:'movements'})[item.entity_type];
+    if (String(item.execution_started_ref || '').trim().toLocaleUpperCase() !== String(executionRef || '').trim().toLocaleUpperCase()) {
+      throw new Error('La referencia ejecutada no coincide con la referencia autorizada al iniciar la operación.');
+    }
     if (!linkedEvidenceId || !expectedEvidenceCollection || linkedEvidenceCollection !== expectedEvidenceCollection) {
       throw new Error('La ejecución requiere el ID y la colección exacta de la evidencia correctiva verificada.');
     }
