@@ -21,7 +21,7 @@ import {
 } from '../types/accounting';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 import { prepareAccountForCatalog } from '../types/chartOfAccounts';
-import { validateJournalEntryAccounts } from '../types/journalEntryValidation';
+import { validateJournalEntryAccounts, isJournalEntryBalanced } from '../types/journalEntryValidation';
 import { buildOpeningEntryItems } from '../types/accountingYearOpening';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
 import {
@@ -528,7 +528,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const creditBs = entry.items.reduce((sum, item) => sum + Number(item.creditBs || 0), 0);
       const debitUsd = entry.items.reduce((sum, item) => sum + Number(item.debitUsd || 0), 0);
       const creditUsd = entry.items.reduce((sum, item) => sum + Number(item.creditUsd || 0), 0);
-      if (Math.abs(debitBs - creditBs) >= 0.01 || Math.abs(debitUsd - creditUsd) >= 0.01) {
+      if (!isJournalEntryBalanced({ debitBs, creditBs, debitUsd, creditUsd })) {
         throw new Error('No se puede cerrar el período: el asiento #' + entry.entryNumber + ' no cuadra en Bs. y USD.');
       }
     }
@@ -1022,7 +1022,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       (Number(item.debitUsd) > 0 && Number(item.creditUsd) > 0)
     );
 
-    if (entry.items.length < 2 || invalidLines || diff >= 0.01 || diffUsd >= 0.01 || totalDebitBs <= 0 || totalDebitUsd <= 0) {
+    if (entry.items.length < 2 || invalidLines ||
+        !isJournalEntryBalanced({ debitBs: totalDebitBs, creditBs: totalCreditBs, debitUsd: totalDebitUsd, creditUsd: totalCreditUsd }) ||
+        totalDebitBs <= 0 || totalDebitUsd <= 0) {
       throw new Error(
         `Verificación de asiento fallida. Bs: Debe ${totalDebitBs.toFixed(2)} / Haber ${totalCreditBs.toFixed(2)} (dif. ${diff.toFixed(2)}); USD: Debe ${totalDebitUsd.toFixed(2)} / Haber ${totalCreditUsd.toFixed(2)} (dif. ${diffUsd.toFixed(2)}). Revise líneas, importes y cuentas.`
       );
