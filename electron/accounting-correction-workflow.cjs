@@ -98,7 +98,7 @@ function initializeCorrectionWorkflow(db) {
         (OLD.status='PENDING_REVIEW' AND NEW.status='APPROVED' AND NEW.workflow_stage='READY_FOR_EXECUTION') OR
         (OLD.status='PENDING_REVIEW' AND NEW.status='REJECTED' AND NEW.workflow_stage='CLOSED') OR
         (OLD.status='APPROVED' AND NEW.status='EXECUTED' AND NEW.workflow_stage='COMPLETED') OR
-        (OLD.status='APPROVED' AND NEW.status='APPROVED' AND OLD.workflow_stage='READY_FOR_EXECUTION' AND NEW.workflow_stage='READY_FOR_EXECUTION' AND OLD.execution_started_at IS NULL AND NEW.execution_started_at IS NOT NULL AND NEW.execution_started_by IS NOT NULL AND NEW.execution_started_ref=NEW.correction_ref) OR
+        (OLD.status='APPROVED' AND NEW.status='APPROVED' AND OLD.workflow_stage='READY_FOR_EXECUTION' AND NEW.workflow_stage='READY_FOR_EXECUTION' AND OLD.execution_started_at IS NULL AND NEW.execution_started_at IS NOT NULL AND NEW.execution_started_by IS NOT NULL AND UPPER(TRIM(NEW.execution_started_ref))=UPPER(TRIM(NEW.correction_ref))) OR
         (OLD.status IN ('PENDING_REVIEW','APPROVED') AND NEW.status='PENDING_REVIEW' AND NEW.workflow_stage='OBSERVATION_REQUIRED') OR
         (OLD.status IN ('PENDING_REVIEW','APPROVED') AND NEW.status='PENDING_REVIEW' AND NEW.workflow_stage='WITHDRAWN') OR
         (OLD.status='PENDING_REVIEW' AND NEW.status='PENDING_REVIEW' AND OLD.workflow_stage='OBSERVATION_REQUIRED' AND NEW.workflow_stage='IN_REVIEW')
