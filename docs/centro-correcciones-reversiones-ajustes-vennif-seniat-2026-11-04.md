@@ -189,3 +189,7 @@ No declarar completa esta capacidad hasta que cada tipo documental con efecto co
 - Se conserva el modelo de snapshot completo y transacción SQLite ya documentado. Las modificaciones del estado React no se revierten automáticamente si la escritura falla; el proveedor bloquea nuevas escrituras y el reinicio vuelve a hidratar el último snapshot confirmado.
 - La revisión estática identificó además que el módulo de configuración y catálogo contable no deben considerar el estado React como confirmación de persistencia. Los cambios anteriores eliminan esa señal prematura.
 - No se certifica todavía el flujo de edición de artículos desde interfaces no localizadas ni se afirma que todos los formularios de importación/migración hayan sido sometidos a pruebas de integración.
+
+- Se aplicó el mismo requisito estricto de SQLite a cierre/reapertura de períodos y asiento de apertura anual; el cierre y la apertura esperan la confirmación persistente antes de terminar.
+- Se revisaron anticipos directos, liquidaciones de anticipos, cobros/pagos, creación de declaraciones de retención IVA, eventos de declaración y entregas de comprobantes IVA/ISLR: sus funciones de dominio ahora usan la guarda común y sus operaciones asíncronas esperan el snapshot confirmado antes de devolver éxito.
+- Las clasificaciones del Estado de Flujos de Efectivo (método directo e indirecto) también rechazan la modificación sin SQLite y sus formularios ya esperan confirmación.
