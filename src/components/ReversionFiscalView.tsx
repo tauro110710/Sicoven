@@ -54,7 +54,7 @@ export const ReversionFiscalView: React.FC = () => {
   const [bcvCorrectionReason, setBcvCorrectionReason] = useState('');
   const [bcvCorrectionWorkpaper, setBcvCorrectionWorkpaper] = useState('');
   const [bcvCorrectionSaving, setBcvCorrectionSaving] = useState(false);
-  const [requestEntityType, setRequestEntityType] = useState<'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'INVENTORY_PRODUCT' | 'BCV_RATE'>('JOURNAL_ENTRY');
+  const [requestEntityType, setRequestEntityType] = useState<'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER'>('JOURNAL_ENTRY');
   const [requestEntityId, setRequestEntityId] = useState('');
   const [requestCorrectionType, setRequestCorrectionType] = useState('CORRECCION_DOCUMENTAL');
   const [requestSourceRef, setRequestSourceRef] = useState('');
@@ -500,7 +500,7 @@ export const ReversionFiscalView: React.FC = () => {
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-xs font-semibold text-slate-700">Tipo de registro origen
             <select value={requestEntityType} onChange={e=>setRequestEntityType(e.target.value as typeof requestEntityType)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
-              <option value="JOURNAL_ENTRY">Asiento contable</option><option value="SALE">Venta / NC / ND</option><option value="PURCHASE">Compra / NC / ND</option><option value="INVENTORY_MOVEMENT">Movimiento de inventario / Kardex</option><option value="BANK_MOVEMENT">Movimiento bancario</option><option value="VAT_VOUCHER">Comprobante de retención IVA</option><option value="VAT_DECLARATION">Declaración IVA</option><option value="ISLR_VOUCHER">Comprobante ISLR</option><option value="ISLR_EVENT">Evento ISLR</option><option value="INVENTORY_PRODUCT">Artículo de inventario</option><option value="BCV_RATE">Tasa BCV de la empresa</option>
+              <option value="JOURNAL_ENTRY">Asiento contable</option><option value="SALE">Venta / NC / ND</option><option value="PURCHASE">Compra / NC / ND</option><option value="INVENTORY_MOVEMENT">Movimiento de inventario / Kardex</option><option value="VAT_VOUCHER">Comprobante de retención IVA</option><option value="ISLR_VOUCHER">Comprobante ISLR</option>
             </select>
           </label>
           <label className="text-xs font-semibold text-slate-700">ID interno exacto del registro *
