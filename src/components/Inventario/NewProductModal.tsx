@@ -1,15 +1,17 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { Package, X, Check } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
+import type { InventoryProduct } from '../../types/accounting';
 
 interface NewProductModalProps {
   isOpen: boolean;
   onClose: () => void;
+  product?: InventoryProduct | null;
 }
 
-export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, addProduct, accounts, waitForPersistence } = useAccounting();
+export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClose, product = null }) => {
+  const { currentCompany, addProduct, updateProduct, accounts, waitForPersistence } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
@@ -31,6 +33,32 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   const [vatTreatment, setVatTreatment] = useState<'GENERAL_16' | 'REDUCIDA_8' | 'EXENTO' | 'EXONERADO'>('GENERAL_16');
   const [itemType, setItemType] = useState<'MERCANCIA' | 'MATERIA_PRIMA' | 'PRODUCTO_EN_PROCESO' | 'PRODUCTO_TERMINADO' | 'SUBPRODUCTO'>('MERCANCIA');
   const [error, setError] = useState('');
+  const [correctionReason, setCorrectionReason] = useState('');
+  const [correctionWorkpaper, setCorrectionWorkpaper] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setError('');
+    setCorrectionReason('');
+    setCorrectionWorkpaper('');
+    if (product) {
+      setCode(product.code); setName(product.name); setCategory(product.category); setUnit(product.unit);
+      setMinStock(product.minStock); setCurrentStock(product.currentStock);
+      setOpeningDate(product.openingDate || new Date().toISOString().slice(0, 10));
+      setOpeningBcvRateInput(String(product.openingBcvRate || currentCompany.bcvRate || ''));
+      setAvgCostBs(product.avgCostBs); setSalesPriceBs(product.salesPriceBs);
+      setInventoryAccountCode(product.inventoryAccountCode); setCostOfSalesAccountCode(product.costOfSalesAccountCode);
+      setAdjustmentAccountCode(product.adjustmentAccountCode); setOpeningBalanceAccountCode(product.openingBalanceAccountCode);
+      setCostingMethod(product.costingMethod); setVatTreatment(product.vatTreatment); setItemType(product.itemType);
+    } else {
+      setCode(''); setName(''); setCategory('Mercancías Generales'); setUnit('Unidad');
+      setMinStock(10); setCurrentStock(0); setOpeningDate(new Date().toISOString().slice(0, 10));
+      setOpeningBcvRateInput(String(currentCompany.bcvRate || '')); setAvgCostBs(0); setSalesPriceBs(0);
+      setInventoryAccountCode('1.1.4.01'); setCostOfSalesAccountCode('5.1.1.01');
+      setAdjustmentAccountCode('5.1.2.01'); setOpeningBalanceAccountCode('3.3.1.01');
+      setCostingMethod('PROMEDIO_PONDERADO'); setVatTreatment('GENERAL_16'); setItemType('MERCANCIA');
+    }
+  }, [isOpen, product, currentCompany.bcvRate]);
 
   if (!isOpen) return null;
 
@@ -51,23 +79,37 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
     savingRef.current = true;
     setSaving(true);
     try {
-    addProduct({
-      code: code.trim().toUpperCase(),
-      name: name.trim().toUpperCase(),
-      category: category.trim(),
-      unit: unit.trim(),
-      minStock: Number(minStock) || 0,
-      currentStock: Number(currentStock) || 0,
-      avgCostBs: Number(avgCostBs) || 0,
-      avgCostUsd,
-      lastCostBs: Number(avgCostBs) || 0,
-      lastCostUsd: avgCostUsd,
-      salesPriceBs: Number(salesPriceBs) || 0,
-      salesPriceUsd,
-      inventoryAccountCode, costOfSalesAccountCode, adjustmentAccountCode, openingBalanceAccountCode,
-      costingMethod, vatTreatment, itemType, openingDate, openingBcvRate: bcvRate
-    });
-    await waitForPersistence();
+    if (product) {
+      if (correctionReason.trim().length < 10 || correctionWorkpaper.trim().length < 10) {
+        throw new Error('La corrección requiere motivo y papel de trabajo de al menos 10 caracteres.');
+      }
+      await updateProduct({
+        ...product,
+        code: code.trim().toUpperCase(), name: name.trim().toUpperCase(),
+        category: category.trim(), unit: unit.trim(), minStock: Number(minStock) || 0,
+        salesPriceBs: Number(salesPriceBs) || 0,
+        salesPriceUsd: currentCompany.bcvRate > 0 ? (Number(salesPriceBs) || 0) / currentCompany.bcvRate : product.salesPriceUsd,
+        vatTreatment
+      }, correctionReason, correctionWorkpaper);
+    } else {
+      addProduct({
+        code: code.trim().toUpperCase(),
+        name: name.trim().toUpperCase(),
+        category: category.trim(),
+        unit: unit.trim(),
+        minStock: Number(minStock) || 0,
+        currentStock: Number(currentStock) || 0,
+        avgCostBs: Number(avgCostBs) || 0,
+        avgCostUsd,
+        lastCostBs: Number(avgCostBs) || 0,
+        lastCostUsd: avgCostUsd,
+        salesPriceBs: Number(salesPriceBs) || 0,
+        salesPriceUsd,
+        inventoryAccountCode, costOfSalesAccountCode, adjustmentAccountCode, openingBalanceAccountCode,
+        costingMethod, vatTreatment, itemType, openingDate, openingBcvRate: bcvRate
+      });
+      await waitForPersistence();
+    }
     onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo crear el artículo.');
@@ -86,8 +128,8 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
               <Package className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-semibold text-base">Nuevo Artículo de Inventario</h3>
-              <p className="text-xs text-slate-400">Control de existencias y costos bajo VEN-NIF NIC 2</p>
+              <h3 className="font-semibold text-base">{product ? 'Corregir ficha de artículo' : 'Nuevo Artículo de Inventario'}</h3>
+              <p className="text-xs text-slate-400">{product ? 'Corrección auditada de datos maestros · sin alterar Kardex ni costo histórico' : 'Control de existencias y costos bajo VEN-NIF NIC 2'}</p>
             </div>
           </div>
           <button
@@ -221,6 +263,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
                 min="0"
                 step="0.000001"
                 value={currentStock}
+                disabled={Boolean(product)}
                 onChange={e => setCurrentStock(Number(e.target.value))}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               />
@@ -246,6 +289,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
                 step="0.01"
                 min="0"
                 value={avgCostBs || ''}
+                disabled={Boolean(product)}
                 placeholder="0.00"
                 onChange={e => setAvgCostBs(parseFloat(e.target.value) || 0)}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
@@ -271,6 +315,14 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
             </div>
           </div>
 
+          {product && <div className="grid gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <label className="block font-semibold text-slate-700">Motivo de la corrección *
+              <textarea required minLength={10} value={correctionReason} onChange={e=>setCorrectionReason(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 font-normal" placeholder="Explique qué dato de la ficha debe corregirse…" />
+            </label>
+            <label className="block font-semibold text-slate-700">Papel de trabajo / soporte *
+              <textarea required minLength={10} value={correctionWorkpaper} onChange={e=>setCorrectionWorkpaper(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 font-normal" placeholder="Describa el documento, autorización o evidencia que respalda el cambio…" />
+            </label>
+          </div>}
           {error && <p role="alert" className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-rose-700">{error}</p>}
 
           <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">
