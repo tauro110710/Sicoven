@@ -9,7 +9,7 @@ interface Props {
   kind: 'CREDIT' | 'DEBIT';
   bcvRate: number;
   onClose: () => void;
-  onSubmit: (draft: Draft) => Promise<void>;
+  onSubmit: (draft: Draft) => Promise<unknown>;
 }
 
 export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcvRate, onClose, onSubmit }) => {
