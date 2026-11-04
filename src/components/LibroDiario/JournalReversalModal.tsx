@@ -29,6 +29,12 @@ export const JournalReversalModal: React.FC<JournalReversalModalProps> = ({ sour
   useEffect(() => {
     if (minEffectiveDate && effectiveDate < minEffectiveDate) setEffectiveDate(minEffectiveDate);
   }, [minEffectiveDate, effectiveDate]);
+  useEffect(() => {
+    setConfirmed(false);
+    setReason('');
+    setWorkpaperNote('');
+    setError(null);
+  }, [source?.id]);
   const retainedAccounts = useMemo(() => accounts.filter(account => account.isMovement && account.type === 'PATRIMONIO'), [accounts]);
 
   if (!source) return null;
