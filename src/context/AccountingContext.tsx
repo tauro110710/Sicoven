@@ -3744,11 +3744,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       date: movData.date,
       amountBs,
       amountUsd,
-      bcvRate: Number(currentCompany.bcvRate),
-      bcvRateEffectiveDate: currentCompany.lastRateUpdate
+      bcvRate: Number(movData.bcvRate),
+      bcvRateEffectiveDate: movData.bcvRateEffectiveDate
     });
     const newMov: BankStatementMovement = {
       ...movData,
+      bcvRate: Number(movData.bcvRate),
+      bcvRateEffectiveDate: movData.date,
       amountBs: Math.round(amountBs * 100) / 100,
       amountUsd: Math.round(amountUsd * 1000000) / 1000000,
       id: `stmt-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
