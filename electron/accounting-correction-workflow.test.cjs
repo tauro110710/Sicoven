@@ -294,16 +294,21 @@ test('correction generators require one matching approved case and an independen
  }finally{db.close();}
 });
 
-test('execution authorization is exclusive, prevents withdrawal/observation, and binds the exact operator and reference',()=>{
+test('execution authorization binds operator/reference and permits audited recovery before a document is persisted',()=>{
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
   reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'La evidencia y el papel de trabajo fueron revisados.'},admin(2,'revisor'));
   requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(3,'ejecutor'));
   assert.throws(()=>requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(4,'otro-ejecutor')),/ya fue iniciada por otro operador/);
-  assert.throws(()=>observeCorrectionRequest(db,{caseId:requested.id,reason:'Se requiere una aclaratoria posterior a la autorización.'},admin(4,'revisor-2')),/ya fue iniciada/);
-  assert.throws(()=>withdrawCorrectionRequest(db,{caseId:requested.id,reason:'El solicitante desea retirar la solicitud antes de continuar.'},admin(1,'solicitante')),/ya fue iniciada/);
-  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-002',reason:'Se intenta confirmar una referencia distinta de la autorizada.',evidenceRecordId:'nc-2',evidenceCollection:'sales'},admin(3,'ejecutor')),/no coincide con el documento correctivo/);
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Otro operador intenta confirmar la ejecución.',evidenceRecordId:'nc-1',evidenceCollection:'sales'},admin(4,'otro-ejecutor')),/mismo operador independiente/);
+  const observed=observeCorrectionRequest(db,{caseId:requested.id,reason:'La emisión no llegó a persistirse; se revisará el intento.'},admin(4,'revisor-2'));
+  assert.equal(observed.workflow_stage,'OBSERVATION_REQUIRED');
+  assert.equal(observed.execution_started_at,null);
+  assert.equal(observed.events.at(-1).metadata.previousExecutionStartedBy,3);
+  const resubmitted=resubmitCorrectionRequest(db,{caseId:requested.id,reason:'Se corrige la incidencia técnica y se reenvía el expediente.'},admin(1,'solicitante'));
+  reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Se revisó nuevamente el expediente subsanado.'},admin(5,'revisor-3'));
+  const authorization=requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(6,'nuevo-ejecutor'));
+  assert.equal(authorization.caseId,requested.id);
   assert.equal(getCorrectionCase(db,requested.id).workflow_stage,'READY_FOR_EXECUTION');
  }finally{db.close();}
 });
@@ -316,5 +321,17 @@ test('execution authorization rolls back its stage and event when the audit ledg
   const current=getCorrectionCase(db,requested.id);
   assert.equal(current.execution_started_at,null);
   assert.deepEqual(current.events.map(e=>e.event_type),['REQUESTED','APPROVED']);
+ }finally{db.close();}
+});
+
+test('requester can withdraw an authorized but not-yet-persisted correction attempt',()=>{
+ const db=setup();try{
+  const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
+  reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'El expediente fue aprobado para ejecución.'},admin(2,'revisor'));
+  requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(3,'ejecutor'));
+  const withdrawn=withdrawCorrectionRequest(db,{caseId:requested.id,reason:'Se decide retirar porque el documento no llegó a emitirse.'},admin(1,'solicitante'));
+  assert.equal(withdrawn.workflow_stage,'WITHDRAWN');
+  assert.equal(withdrawn.execution_started_at,null);
+  assert.equal(withdrawn.events.at(-1).metadata.previousExecutionStartedBy,3);
  }finally{db.close();}
 });
