@@ -602,8 +602,8 @@ app.whenReady().then(async () => {
     const source = Array.isArray(collection) && collection.find(x=>String(x.id)===String(input?.entityId || '') && String(x.companyId || companyId)===companyId);
     if (!existsCompany || !source) throw new Error('La empresa o el registro origen no existe en SQLite.');
     const sourceReference = String(input?.sourceDocumentRef || '').trim();
-    const knownReferences = [source.id,source.documentNumber,source.invoiceNumber,source.number,source.reference,
-      source.referenceDoc,source.voucherNumber,source.declarationNumber,source.controlNumber]
+    const knownReferences = [source.documentNumber,source.invoiceNumber,source.number,source.opNumber,source.entryNumber,
+      source.reference,source.referenceDoc,source.documentRef,source.voucherNumber,source.declarationNumber,source.controlNumber]
       .filter(value=>value!==undefined && value!==null && String(value).trim()!=='').map(value=>String(value).trim());
     if (knownReferences.length && !knownReferences.includes(sourceReference)) {
       throw new Error('La referencia documental no coincide con el registro de origen. Verifique factura, asiento, comprobante o movimiento.');
