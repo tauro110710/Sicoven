@@ -1354,12 +1354,13 @@ function validateAccountingSnapshot(previousState, nextState) {
           debitBs: sum.debitBs + Number(line.debitBs || 0), creditBs: sum.creditBs + Number(line.creditBs || 0),
           debitUsd: sum.debitUsd + Number(line.debitUsd || 0), creditUsd: sum.creditUsd + Number(line.creditUsd || 0)
         }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
+      const within = (a, b, tolerance = 0.02) => Number.isFinite(Number(a)) && Number.isFinite(Number(b)) && Math.abs(Number(a) - Number(b)) <= tolerance;
       const expectedLineCount = expenseLines.length + (vatBs > 0 ? 1 : 0) +
         (payableAppliedBs > 0.02 ? 1 : 0) + (Number(note.supplierAdvanceBs || 0) > 0.02 ? 1 : 0);
       const validExpenseCredits = [...expectedCredits.entries()].every(([code, expected]) => {
         const actual = rowFor(code);
-        return close(actual.creditBs, expected.bs) && close(actual.creditUsd, expected.usd, 0.0001) &&
-          close(actual.debitBs, 0) && close(actual.debitUsd, 0, 0.0001);
+        return within(actual.creditBs, expected.bs) && within(actual.creditUsd, expected.usd, 0.0001) &&
+          within(actual.debitBs, 0) && within(actual.debitUsd, 0, 0.0001);
       });
       const payableRow = sourcePayable ? rowFor(sourcePayable) : { debitBs: 0, debitUsd: 0 };
       const advanceRow = rowFor('1.1.2.03');
@@ -1404,9 +1405,9 @@ function validateAccountingSnapshot(previousState, nextState) {
           Math.abs(advanceRow.debitUsd - Number(note.supplierAdvanceUsd || 0)) > 0.0001 ||
           Math.abs(vatRow.creditBs - vatBs) > 0.02 ||
           Math.abs(vatRow.creditUsd - vatUsd) > 0.0001 ||
-          !close(journalRows.reduce((sum, line) => sum + Number(line.debitBs || 0), 0),
+          !within(journalRows.reduce((sum, line) => sum + Number(line.debitBs || 0), 0),
             journalRows.reduce((sum, line) => sum + Number(line.creditBs || 0), 0)) ||
-          !close(journalRows.reduce((sum, line) => sum + Number(line.debitUsd || 0), 0),
+          !within(journalRows.reduce((sum, line) => sum + Number(line.debitUsd || 0), 0),
             journalRows.reduce((sum, line) => sum + Number(line.creditUsd || 0), 0), 0.0001)) {
         throw new Error('SQLite rechazó la NC de servicios: la factura, gasto original, IVA, CxP/anticipo o asiento correctivo no concilian.');
       }
