@@ -72,6 +72,7 @@ export interface AccountingAuditEvent {
   createdAt: string;
 }
 
+export type CorrectionCase = { id: string; company_id: string; entity_type: string; entity_id: string; correction_type: string; source_ref: string; correction_ref: string; reason: string; workpaper: string; status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'EXECUTED'; requested_by: number; requested_by_name: string; reviewed_by?: number; reviewed_by_name?: string; review_reason?: string; executed_by?: number; executed_by_name?: string; execution_ref?: string; created_at: string; reviewed_at?: string; executed_at?: string; events: Array<{ id: number; event_type: string; actor_id: number; actor_name: string; reason: string; created_at: string; metadata: Record<string, unknown> }> };
 type SupportingDocumentEntityType = 'PURCHASE' | 'SALE' | 'JOURNAL_ENTRY' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'INVENTORY_MOVEMENT' | 'BANK_STATEMENT_MOVEMENT';
 type SupportingDocument = { id: string; companyId: string; entityType: string; entityId: string; documentType: string; title: string; description?: string | null; fileName: string; mimeType: string; sha256: string; byteSize: number; uploadedBy: string; createdAt: string; status: string };
 type SupportingDocumentDraft = { entityType: SupportingDocumentEntityType; entityId: string; documentType: string; title: string; description?: string; replacesDocumentId?: string };
@@ -79,6 +80,9 @@ type SupportingDocumentDraft = { entityType: SupportingDocumentEntityType; entit
 interface AccountingContextType {
   getAuditEvents: (limit?: number) => Promise<AccountingAuditEvent[]>;
   requestAccountingCorrection: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'INVENTORY_PRODUCT'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason: string; workpaperNote: string }) => Promise<void>;
+  listCorrectionCases: () => Promise<CorrectionCase[]>;
+  reviewCorrectionCase: (input: { caseId: string; decision: 'APPROVE' | 'REJECT'; reason: string }) => Promise<CorrectionCase>;
+  executeCorrectionCase: (input: { caseId: string; executionRef: string; reason: string }) => Promise<CorrectionCase>;
   listSupportingDocuments: (filters: { entityType?: SupportingDocumentEntityType; entityId?: string }) => Promise<SupportingDocument[]>;
   attachSupportingDocument: (input: SupportingDocumentDraft) => Promise<{ ok: boolean; canceled?: boolean; document?: Pick<SupportingDocument, 'id' | 'companyId' | 'entityType' | 'entityId' | 'documentType' | 'title' | 'fileName' | 'mimeType' | 'sha256' | 'byteSize' | 'status' | 'createdAt'> }>;
   reviewSupportingDocument: (input: { documentId: string; decision: 'VERIFIED' | 'OBSERVATION_REQUIRED'; reason: string }) => Promise<{ ok: boolean; documentId: string; status: string }>;
@@ -428,6 +432,22 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!store?.recordAuditCorrection) throw new Error('La auditoría local de correcciones no está disponible. No se ejecutó la operación.');
     const result = await store.recordAuditCorrection(token, input);
     if (!result?.ok) throw new Error(result?.message || 'SQLite no pudo registrar la autorización de la corrección.');
+  };
+
+  const listCorrectionCases = useCallback(async (): Promise<CorrectionCase[]> => {
+    const store = window.sicovenStore as typeof window.sicovenStore & { listCorrectionCases?: (sessionToken: string, companyId: string) => Promise<CorrectionCase[]> };
+    if (!store?.listCorrectionCases) throw new Error('El expediente de correcciones requiere la edición de escritorio.');
+    return store.listCorrectionCases(token,currentCompany.id);
+  },[token,currentCompany.id]);
+  const reviewCorrectionCase = async (input: {caseId:string;decision:'APPROVE'|'REJECT';reason:string}): Promise<CorrectionCase> => {
+    const store = window.sicovenStore as typeof window.sicovenStore & { reviewCorrectionCase?: (sessionToken:string,payload:typeof input)=>Promise<CorrectionCase> };
+    if (!store?.reviewCorrectionCase) throw new Error('La revisión de expedientes no está disponible.');
+    return store.reviewCorrectionCase(token,input);
+  };
+  const executeCorrectionCase = async (input: {caseId:string;executionRef:string;reason:string}): Promise<CorrectionCase> => {
+    const store = window.sicovenStore as typeof window.sicovenStore & { executeCorrectionCase?: (sessionToken:string,payload:typeof input)=>Promise<CorrectionCase> };
+    if (!store?.executeCorrectionCase) throw new Error('La ejecución de expedientes no está disponible.');
+    return store.executeCorrectionCase(token,input);
   };
 
   const requestAccountingCorrection = async (input: Omit<CorrectionAuditInput, 'eventType' | 'companyId'>): Promise<void> => {
@@ -5241,6 +5261,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         companies,
         getAuditEvents,
         requestAccountingCorrection,
+        listCorrectionCases,
+        reviewCorrectionCase,
+        executeCorrectionCase,
         listSupportingDocuments,
         attachSupportingDocument,
         reviewSupportingDocument,
