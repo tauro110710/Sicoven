@@ -100,6 +100,7 @@ export const IslrVoucherModal: React.FC<IslrVoucherModalProps> = ({ voucher, com
                 <span className="font-bold">FECHA DE EMISIÓN: </span>
                 <span className="font-mono">{formatDate(voucher.date)}</span>
               </div>
+              <div><span className="font-bold">FECHA DE ENTREGA: </span><span className="font-mono">{voucher.deliveryDate ? formatDate(voucher.deliveryDate) : 'Pendiente de registrar'}</span></div>
               <div>
                 <span className="font-bold">PERÍODO FISCAL: </span>
                 <span className="font-mono">{voucher.period} (Año: {voucher.period.slice(0, 4)} Mes: {voucher.period.slice(4, 6)})</span>
@@ -256,7 +257,7 @@ export const IslrVoucherModal: React.FC<IslrVoucherModalProps> = ({ voucher, com
           <div className="grid grid-cols-2 gap-8 pt-8">
             <div className="text-center space-y-1">
               <div className="border-t border-black w-64 mx-auto pt-1"></div>
-              <p className="font-bold uppercase text-[11px]">{company.name}</p>
+              <p className="font-bold uppercase text-[11px]">{agentName}</p>
               <p className="text-[10px] text-slate-600">FIRMA Y SELLO DEL AGENTE DE RETENCIÓN</p>
             </div>
             <div className="text-center space-y-1">
