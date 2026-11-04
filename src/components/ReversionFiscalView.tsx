@@ -430,7 +430,7 @@ export const ReversionFiscalView: React.FC = () => {
     setCorrectionSubmitting(true);
     try {
       const rate = Number(original.bcvRate || currentCompany.bcvRate);
-      await authorizeCorrectionCase({entityType:'INVENTORY_MOVEMENT',entityId:original.id,sourceDocumentRef:original.documentRef,correctionDocumentRef:correctionDocumentRef.trim()});
+      const correctionCaseId = await authorizeCorrectionCase({entityType:'INVENTORY_MOVEMENT',entityId:original.id,sourceDocumentRef:original.documentRef,correctionDocumentRef:correctionDocumentRef.trim()});
       addMovement({
         productId: original.productId, productName: original.productName, productCode: original.productCode,
         date: correctionDate, type: isCustomerReturn ? 'ENTRADA' : 'SALIDA',
@@ -445,7 +445,8 @@ export const ReversionFiscalView: React.FC = () => {
         correctionForMovementId: original.id
       });
       await waitForPersistence();
-      setFeedback({kind:'success', message:'Devolución física registrada y enlazada al movimiento original del Kardex. El asistente volverá a comprobar si todas las cantidades de la factura fueron devueltas y si cada asiento de costo concilia; una devolución parcial no habilita la reversión total.'});
+      await executeCorrectionCase({caseId:correctionCaseId,executionRef:correctionDocumentRef.trim(),reason:'Devolución física registrada y vinculada al movimiento original del Kardex.'});
+      setFeedback({kind:'success', message:'Devolución física registrada, vinculada al movimiento original del Kardex y corrección cerrada automáticamente con trazabilidad. El asistente comprobará si todas las cantidades de la factura fueron devueltas y si cada asiento de costo concilia; una devolución parcial no habilita la reversión total.'});
       setCorrectionQuantity('1');
       setCorrectionMovementId('');
       setCorrectionDocumentRef('');
@@ -641,7 +642,7 @@ export const ReversionFiscalView: React.FC = () => {
               <label className="block text-sm font-semibold text-slate-700">3. Motivo de la reversión (opcional)</label>
               <textarea value={reason} onChange={event=>setReason(event.target.value)} rows={2} maxLength={1000} placeholder="Ej. Factura emitida con RIF incorrecto; documento soporte…" className="w-full rounded-lg border border-slate-300 p-2.5 text-sm" />
               {previewError && <div role="alert" className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900"><strong>No se puede simular una reversión válida:</strong> {previewError}</div>}
-              {reversalBlockReasons.length > 0 && <div role="alert" className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900 space-y-1"><strong>Reversión bloqueada por integridad cruzada</strong>{reversalBlockReasons.map((message,index)=><p key={index}>• {message}</p>)}<p className="font-medium">No basta con marcar una revisión manual: el sistema debe comprobar la reversión de los auxiliares y su asiento vinculado antes de permitir la aprobación.</p></div>}
+              {reversalBlockReasons.length > 0 && <div role="alert" className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900 space-y-1"><strong>Reversión bloqueada por integridad cruzada</strong>{reversalBlockReasons.map((message,index)=><p key={index}>• {message}</p>)}<p className="font-medium">No basta con una confirmación manual: SICOVEN comprueba la reversión de los auxiliares y su asiento vinculado antes de permitir la ejecución.</p></div>}
                             <button disabled={reversalDisabled || reversalSubmitting} onClick={submitReversal} className="w-full rounded-lg bg-emerald-700 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 flex items-center justify-center gap-2"><ShieldCheck className="w-4 h-4" /> {reversalSubmitting ? 'Guardando y confirmando en SQLite…' : 'Ejecutar reversión y registrar contra-asiento'}</button>
             </div>
             <div className="space-y-3">

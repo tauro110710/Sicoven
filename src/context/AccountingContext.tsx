@@ -441,7 +441,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const requireApprovedCorrectionCase = async (
     entityType: string, entityId: string, sourceDocumentRef: string, correctionDocumentRef: string
-  ): Promise<void> => {
+  ): Promise<string> => {
     const store = window.sicovenStore as typeof window.sicovenStore & {
       authorizeCorrectionCase?: (sessionToken:string,payload:Record<string,string>)=>Promise<{ok:boolean;caseId?:string;message?:string}>
     };
@@ -449,16 +449,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const result = await store.authorizeCorrectionCase(token,{
       companyId:currentCompany.id,entityType,entityId,sourceDocumentRef,correctionDocumentRef
     });
-    if (!result?.ok) throw new Error(result?.message || 'No existe autorización formal aprobada para esta corrección.');
+    if (!result?.ok || !result.caseId) throw new Error(result?.message || 'No existe una corrección directa habilitada para este registro.');
     if (input.entityType === 'INVENTORY_MOVEMENT') {
       inventoryCorrectionAuthorizationRef.current = String(input.entityId) + '|' + String(input.correctionDocumentRef).trim();
     }
     if (input.entityType === 'JOURNAL_ENTRY') {
       journalCorrectionAuthorizationRef.current = String(input.entityId) + '|' + String(input.correctionDocumentRef).trim();
     }
+    return String(result.caseId);
   };
-  const authorizeCorrectionCase = async (input: {entityType:string;entityId:string;sourceDocumentRef:string;correctionDocumentRef:string}): Promise<void> => {
-    await requireApprovedCorrectionCase(input.entityType,input.entityId,input.sourceDocumentRef,input.correctionDocumentRef);
+  const authorizeCorrectionCase = async (input: {entityType:string;entityId:string;sourceDocumentRef:string;correctionDocumentRef:string}): Promise<string> => {
+    return requireApprovedCorrectionCase(input.entityType,input.entityId,input.sourceDocumentRef,input.correctionDocumentRef);
   };
   const createCorrectionCase = async (input: {entityType:string;entityId:string;correctionType:string;sourceDocumentRef:string;correctionDocumentRef:string;reason?:string;workpaperNote?:string}): Promise<CorrectionCase> => {
     const store = window.sicovenStore as typeof window.sicovenStore & { createCorrectionCase?: (sessionToken:string,payload:Record<string,string>)=>Promise<CorrectionCase> };
@@ -776,7 +777,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('Reversión bancaria bloqueada: ' + (bankReadiness.reason || 'no existe una contrapartida bancaria verificable.') +
         ' No se registró ningún contra-asiento.');
     }
-    await authorizeCorrectionCase({entityType:'JOURNAL_ENTRY',entityId:source.id,sourceDocumentRef:source.referenceDoc || String(source.entryNumber),correctionDocumentRef:'REV-' + source.entryNumber});
+    const correctionCaseId = await authorizeCorrectionCase({entityType:'JOURNAL_ENTRY',entityId:source.id,sourceDocumentRef:source.referenceDoc || String(source.entryNumber),correctionDocumentRef:'REV-' + source.entryNumber});
     await recordCorrectionAudit({
       eventType: 'accounting_correction_requested', entityType: 'JOURNAL_ENTRY', companyId: currentCompany.id,
       entityId: source.id, correctionType: priorPeriodAdjustment ? 'PRIOR_PERIOD_ADJUSTMENT_REVERSAL' : 'JOURNAL_REVERSAL',
@@ -872,6 +873,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
     } catch (auditError) {
       throw new Error('El contra-asiento quedó guardado en SQLite, pero falta el evento final de auditoría. No repita la reversión. Asiento: ' + reversal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
+    }
+    try {
+      await executeCorrectionCase({caseId:correctionCaseId,executionRef:'REV-' + source.entryNumber,reason:correctionReason});
+    } catch (caseError) {
+      throw new Error('El contra-asiento ' + reversal.entryNumber + ' quedó guardado y auditado, pero SICOVEN no pudo cerrar el historial de la corrección. No repita la reversión; actualice el Centro de Correcciones. ' + (caseError instanceof Error ? caseError.message : 'Error al cerrar el historial.'));
     }
     return reversal;
     } finally {
