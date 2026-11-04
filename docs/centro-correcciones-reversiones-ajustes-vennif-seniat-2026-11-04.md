@@ -215,3 +215,5 @@ No declarar completa esta capacidad hasta que cada tipo documental con efecto co
 - La restauración de respaldo también exige SQLite local antes de aplicar cambios y conserva su recuperación del snapshot previo ante fallo de persistencia.
 
 - Revisión adicional del restablecimiento de datos de muestra: el ledger de SQLite impide borrar asientos históricos mediante un snapshot ordinario. Por ello, el flujo ahora ejecuta primero el reinicio transaccional autorizado `resetAccounting` (que conserva autenticación, licencia y auditoría), verifica el resultado y después confirma el estado vacío desde el proveedor. No intenta eliminar asientos históricos a través del guardado normal.
+
+- Revisión de integridad del restablecimiento: ambos flujos deben limpiar todas las colecciones del `stateSnapshot`. Se incorporó el vaciado explícito de declaraciones y eventos de retención IVA y el restablecimiento de la moneda de visualización a DUAL; así el estado React no vuelve a escribir registros fiscales antiguos después de que Electron haya verificado el reinicio.
