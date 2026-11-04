@@ -600,8 +600,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     priorPeriodAdjustment = false,
     retainedEarningsAccountCode?: string
   ): Promise<JournalEntry> => {
-    if (journalReversalInFlightRef.current) throw new Error('Ya hay una reversión contable en proceso. Espere a que SQLite confirme su resultado.');
+    if (journalReversalInFlightRef.current || correctionWorkflowInFlightRef.current) throw new Error('Ya hay una corrección o reversión contable en proceso. Espere a que SQLite confirme su resultado.');
     journalReversalInFlightRef.current = true;
+    correctionWorkflowInFlightRef.current = true;
     try {
     if (persistenceFaultRef.current) throw new Error('La persistencia SQLite falló. Reinicie SICOVEN antes de continuar.');
     if (!window.sicovenStore?.save || !storageReady) throw new Error('La reversión requiere SQLite local disponible y confirmada. No se permite registrar contra-asientos usando únicamente caché del navegador.');
@@ -748,6 +749,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return reversal;
     } finally {
       journalReversalInFlightRef.current = false;
+      correctionWorkflowInFlightRef.current = false;
     }
   };
 
@@ -759,6 +761,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const persistenceFaultRef = useRef(false);
   const journalReversalInFlightRef = useRef(false);
+  // Serializa correcciones documentales que pueden afectar simultáneamente factura,
+  // asiento, auxiliares, Kardex, retenciones y conciliaciones.
+  const correctionWorkflowInFlightRef = useRef(false);
   const productionInFlightRef = useRef(false);
   const periodClosureInFlightRef = useRef(false);
   const periodReopeningInFlightRef = useRef(false);
@@ -2093,8 +2098,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('La devolución requiere SQLite local de escritorio disponible y lista. No se registró.');
     }
-    if (purchaseCreditNoteInFlightRef.current) throw new Error('Ya hay una devolución a proveedor en proceso. Espere a que termine antes de intentar otra.');
+    if (purchaseCreditNoteInFlightRef.current || correctionWorkflowInFlightRef.current) throw new Error('Ya hay una corrección o reversión documental en proceso. Espere a que SQLite confirme antes de intentar otra.');
     purchaseCreditNoteInFlightRef.current = true;
+    correctionWorkflowInFlightRef.current = true;
     try {
       return await runAtomicInvoiceImport(async () => {
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la nota de crédito.');
@@ -2440,6 +2446,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
     } finally {
       purchaseCreditNoteInFlightRef.current = false;
+      correctionWorkflowInFlightRef.current = false;
     }
   };
 
@@ -2453,10 +2460,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const operationKey = [
       currentCompany.id, draft.sourcePurchaseId, String(draft.debitNoteNumber || '').trim().toUpperCase()
     ].join('|');
-    if (supplierDebitNoteInFlightRef.current.has(operationKey)) {
-      throw new Error('Esta ND ya se está registrando. Espera la confirmación de SQLite antes de reintentar.');
+    if (supplierDebitNoteInFlightRef.current.has(operationKey) || correctionWorkflowInFlightRef.current) {
+      throw new Error('Ya hay una corrección o reversión documental en proceso. Espera la confirmación de SQLite antes de reintentar.');
     }
     supplierDebitNoteInFlightRef.current.add(operationKey);
+    correctionWorkflowInFlightRef.current = true;
     try {
       return await runAtomicInvoiceImport(async () => {
         const source = purchases.find(item =>
@@ -2506,6 +2514,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
     } finally {
       supplierDebitNoteInFlightRef.current.delete(operationKey);
+      correctionWorkflowInFlightRef.current = false;
     }
   };
 
