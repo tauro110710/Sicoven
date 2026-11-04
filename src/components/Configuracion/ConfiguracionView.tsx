@@ -1080,16 +1080,25 @@ export const ConfiguracionView: React.FC = () => {
             </label>
 
             <button
-              onClick={() => {
-                if (confirm('¿Restablecer el sistema a los datos de muestra iniciales? Se sobrescribirán los datos actuales.')) {
-                  resetToSampleData();
-                  alert('Sistema restablecido a los datos de prueba oficiales.');
+              disabled={factoryResetBusy}
+              onClick={async () => {
+                if (!confirm('¿Restablecer el sistema a los datos de muestra iniciales? Se sobrescribirán los datos actuales.')) return;
+                setFactoryResetBusy(true);
+                setFactoryResetStage('Guardando restablecimiento en SQLite…');
+                try {
+                  await resetToSampleData();
+                  alert('SQLite confirmó el restablecimiento a los datos de prueba oficiales.');
+                } catch (error) {
+                  alert(error instanceof Error ? error.message : 'No se pudo confirmar el restablecimiento en SQLite.');
+                } finally {
+                  setFactoryResetBusy(false);
+                  setFactoryResetStage('');
                 }
               }}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2 text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-semibold transition cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-semibold transition cursor-pointer disabled:opacity-40"
             >
               <RotateCcw className="w-4 h-4" />
-              Restablecer a Datos de Prueba Oficiales
+              {factoryResetBusy ? 'Confirmando SQLite…' : 'Restablecer a Datos de Prueba Oficiales'}
             </button>
 
             <button
