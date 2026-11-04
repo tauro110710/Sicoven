@@ -627,7 +627,7 @@ app.whenReady().then(async () => {
     }
     const verifiedCaseSupport = db.prepare(`
       SELECT COUNT(*) AS total FROM supporting_documents d
-      WHERE d.company_id=? AND d.entity_type='CORRECTION_CASE' AND d.entity_id=?
+      WHERE d.company_id=? AND d.entity_type='CORRECTION_CASE' AND d.entity_id=? AND d.document_type='EVIDENCIA_CORRECCION'
         AND (SELECT e.event_type FROM supporting_document_events e
              WHERE e.document_id=d.id AND e.event_type<>'ACCESSED'
              ORDER BY e.id DESC LIMIT 1)='REVIEWED'
