@@ -108,7 +108,7 @@ export function buildCashFlowIndirectReport(
     entry.companyId === companyId && /^\d{4}-\d{2}-\d{2}$/.test(entry.date) && entry.date <= end
   );
   const reversedEntryIds = new Set(companyEntries
-    .filter(entry => entry.reversalOfEntryId)
+    .filter(entry => entry.reversalOfEntryId && entry.date < start)
     .map(entry => entry.reversalOfEntryId as string));
   // Carry forward from the latest linked annual opening at or before the
   // selected year's start, including movements posted after that opening.
