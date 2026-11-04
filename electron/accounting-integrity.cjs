@@ -564,7 +564,7 @@ function saleJournalMatchesInvoice(sale, entry) {
   const taxRate = Number(sale.taxRate);
   const values = [rate, taxableBase, exempt, vat, withheld, igtf, total, taxRate,
     Number(sale.totalAmountUsd), Number(sale.taxableBaseUsd), Number(sale.vatAmountUsd),
-    Number(sale.vatWithheldUsd || 0)];
+    Number(sale.vatWithheldUsd || 0), Number(sale.igtfAmountUsd || 0)];
   if (values.some(value => !Number.isFinite(value) || value < 0) || rate <= 0 ||
       taxRate > 100 || total <= 0 || withheld > vat + 0.01 ||
       Math.abs(vat - Math.round((taxableBase * taxRate / 100 + Number.EPSILON) * 100) / 100) > 0.01 ||
@@ -573,6 +573,7 @@ function saleJournalMatchesInvoice(sale, entry) {
       Math.abs(Number(sale.taxableBaseUsd) - taxableBase / rate) > 0.0001 ||
       Math.abs(Number(sale.vatAmountUsd) - vat / rate) > 0.0001 ||
       Math.abs(Number(sale.vatWithheldUsd || 0) - withheld / rate) > 0.0001 ||
+      Math.abs(Number(sale.igtfAmountUsd || 0) - igtf / rate) > 0.0001 ||
       Math.abs(Number(entry.bcvRate) - rate) > 0.000001) return false;
 
   const expected = new Map([
