@@ -617,8 +617,18 @@ app.whenReady().then(async () => {
     if(!item) throw new Error('El expediente de corrección no existe.');
     const stateRow=db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     const state=stateRow ? JSON.parse(stateRow.state_json) : {};
-    if(findLinkedCorrectionEvidence(state,item,item.correction_ref)) {
-      throw new Error('El documento correctivo ya está persistido y vinculado. No se puede observar ni retirar; complete la verificación documental y la confirmación de ejecución.');
+    const collectionByType={SALE:'sales',PURCHASE:'purchases',JOURNAL_ENTRY:'journalEntries',INVENTORY_MOVEMENT:'movements'};
+    const candidates=Array.isArray(state[collectionByType[item.entity_type]]) ? state[collectionByType[item.entity_type]] : [];
+    const ref=String(item.correction_ref || '').trim().toLocaleUpperCase();
+    const referenceFields=['id','documentNumber','invoiceNumber','entryNumber','referenceDoc','documentRef','number','creditNoteNumber','debitNoteNumber'];
+    const persistedCandidate=candidates.some(candidate=>
+      String(candidate.companyId || '')===String(item.company_id) &&
+      String(candidate.id)!==String(item.entity_id) &&
+      (!['SALE','PURCHASE'].includes(item.entity_type) || ['02','03'].includes(String(candidate.documentType || ''))) &&
+      referenceFields.some(field=>candidate[field]!=null && String(candidate[field]).trim().toLocaleUpperCase()===ref)
+    );
+    if(persistedCandidate || findLinkedCorrectionEvidence(state,item,item.correction_ref)) {
+      throw new Error('El documento correctivo ya está persistido (esté o no vinculado correctamente). No se puede observar ni retirar; debe regularizarse su trazabilidad y completar la confirmación de ejecución.');
     }
   };
   ipcMain.handle('sicoven:correction-case-observe', (_event, token, input) => {
