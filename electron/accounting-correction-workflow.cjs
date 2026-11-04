@@ -82,9 +82,10 @@ function initializeCorrectionWorkflow(db) {
   `);
   const migrateCorrectionCaseSchema = db.transaction(() => {
   const caseColumns = new Set(db.prepare('PRAGMA table_info(accounting_correction_cases)').all().map(column => String(column.name)));
-  if (!caseColumns.has('workflow_stage')) {
-    db.exec("ALTER TABLE accounting_correction_cases ADD COLUMN workflow_stage TEXT NOT NULL DEFAULT 'IN_REVIEW'");
-  }
+  if (!caseColumns.has('workflow_stage')) db.exec("ALTER TABLE accounting_correction_cases ADD COLUMN workflow_stage TEXT NOT NULL DEFAULT 'IN_REVIEW'");
+  if (!caseColumns.has('execution_started_by')) db.exec('ALTER TABLE accounting_correction_cases ADD COLUMN execution_started_by INTEGER');
+  if (!caseColumns.has('execution_started_at')) db.exec('ALTER TABLE accounting_correction_cases ADD COLUMN execution_started_at TEXT');
+  if (!caseColumns.has('execution_started_ref')) db.exec('ALTER TABLE accounting_correction_cases ADD COLUMN execution_started_ref TEXT');
   db.exec(`
     DROP TRIGGER IF EXISTS correction_cases_valid_transition;
     DROP TRIGGER IF EXISTS correction_cases_segregation;
@@ -110,7 +111,7 @@ function initializeCorrectionWorkflow(db) {
       BEGIN SELECT RAISE(ABORT, 'correction case segregation of duties violated'); END;
     CREATE TABLE IF NOT EXISTS accounting_correction_case_workflow_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL REFERENCES accounting_correction_cases(id),
-      event_type TEXT NOT NULL CHECK(event_type IN ('OBSERVED','RESUBMITTED','WITHDRAWN')),
+      event_type TEXT NOT NULL CHECK(event_type IN ('OBSERVED','RESUBMITTED','WITHDRAWN','EXECUTION_STARTED')),
       actor_id INTEGER NOT NULL, actor_name TEXT NOT NULL, reason TEXT NOT NULL,
       metadata_json TEXT NOT NULL, created_at TEXT NOT NULL
     );
@@ -124,7 +125,7 @@ function initializeCorrectionWorkflow(db) {
   });
   migrateCorrectionCaseSchema();
   const workflowEventSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='accounting_correction_case_workflow_events'").get();
-  if (workflowEventSchema && !String(workflowEventSchema.sql || '').includes("'WITHDRAWN'")) {
+  if (workflowEventSchema && (!String(workflowEventSchema.sql || '').includes("'WITHDRAWN'") || !String(workflowEventSchema.sql || '').includes("'EXECUTION_STARTED'"))) {
     const migrateWorkflowEventSchema = db.transaction(() => db.exec(`
       DROP TRIGGER IF EXISTS correction_case_workflow_events_no_update;
       DROP TRIGGER IF EXISTS correction_case_workflow_events_no_delete;
@@ -132,7 +133,7 @@ function initializeCorrectionWorkflow(db) {
       ALTER TABLE accounting_correction_case_workflow_events RENAME TO accounting_correction_case_workflow_events_legacy;
       CREATE TABLE accounting_correction_case_workflow_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL REFERENCES accounting_correction_cases(id),
-        event_type TEXT NOT NULL CHECK(event_type IN ('OBSERVED','RESUBMITTED','WITHDRAWN')),
+        event_type TEXT NOT NULL CHECK(event_type IN ('OBSERVED','RESUBMITTED','WITHDRAWN','EXECUTION_STARTED')),
         actor_id INTEGER NOT NULL, actor_name TEXT NOT NULL, reason TEXT NOT NULL,
         metadata_json TEXT NOT NULL, created_at TEXT NOT NULL
       );
