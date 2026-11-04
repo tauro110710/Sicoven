@@ -11,7 +11,8 @@ import {
   Boxes,
   FileSpreadsheet,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Pencil
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import { NewProductModal } from './NewProductModal';
@@ -25,6 +26,7 @@ export const InventarioView: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'EXISTENCIAS' | 'KARDEX' | 'CONTABILIDAD'>('EXISTENCIAS');
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [productToEdit, setProductToEdit] = useState<import('../../types/accounting').InventoryProduct | null>(null);
   const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
   const [isMigrationWizardOpen, setIsMigrationWizardOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -106,7 +108,7 @@ export const InventarioView: React.FC = () => {
               Nuevo Movimiento
             </button>
             <button
-              onClick={() => setIsProductModalOpen(true)}
+              onClick={() => { setProductToEdit(null); setIsProductModalOpen(true); }}
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition shadow cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -241,12 +243,13 @@ export const InventarioView: React.FC = () => {
                   <th className="py-2.5 px-4 text-right w-32">Precio Venta (Bs. / USD)</th>
                   <th className="py-2.5 px-4 text-right w-36">Valoración Total (Bs. / USD)</th>
                   <th className="py-2.5 px-3 text-center w-28">Estado Stock</th>
+                  <th className="py-2.5 px-3 text-center w-24">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-slate-400">
+                    <td colSpan={10} className="py-12 text-center text-slate-400">
                       No hay artículos de inventario registrados.
                     </td>
                   </tr>
@@ -302,6 +305,12 @@ export const InventarioView: React.FC = () => {
                               Normal
                             </span>
                           )}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <button type="button" onClick={() => { setProductToEdit(prod); setIsProductModalOpen(true); }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1.5 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">
+                            <Pencil className="h-3 w-3" /> Corregir
+                          </button>
                         </td>
                       </tr>
                     );
@@ -403,7 +412,7 @@ export const InventarioView: React.FC = () => {
       )}
 
       {/* Modals */}
-      <NewProductModal isOpen={isProductModalOpen} onClose={() => setIsProductModalOpen(false)} />
+      <NewProductModal isOpen={isProductModalOpen} product={productToEdit} onClose={() => { setIsProductModalOpen(false); setProductToEdit(null); }} />
       <NewMovementModal isOpen={isMovementModalOpen} onClose={() => setIsMovementModalOpen(false)} />
       {isMigrationWizardOpen && <IntelligentMigrationWizard onClose={() => setIsMigrationWizardOpen(false)} />}
     </div>
