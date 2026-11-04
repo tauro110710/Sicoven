@@ -165,7 +165,7 @@ function appendEvent(db, _tx, event) {
 }
 function registerCorrectionRequest(db, input, actor) {
   requireAdmin(actor);
-  const required = ['companyId','entityType','entityId','correctionType','sourceDocumentRef','reason','workpaperNote'];
+  const required = ['companyId','entityType','entityId','correctionType','sourceDocumentRef','correctionDocumentRef','reason','workpaperNote'];
   for (const key of required) if (!String(input?.[key] || '').trim()) throw new Error('Falta el campo obligatorio: '+key);
   if (String(input.reason).trim().length < 15 || String(input.workpaperNote).trim().length < 15) throw new Error('El motivo y el papel de trabajo deben tener al menos 15 caracteres.');
   const limits = { companyId:160, entityType:40, entityId:160, correctionType:80, sourceDocumentRef:160,
@@ -173,6 +173,16 @@ function registerCorrectionRequest(db, input, actor) {
   for (const [key,max] of Object.entries(limits)) if (String(input[key] || '').length > max) throw new Error('El campo '+key+' excede el máximo permitido.');
   const allowedEntities = new Set(['SALE','PURCHASE','JOURNAL_ENTRY','INVENTORY_MOVEMENT']);
   if (!allowedEntities.has(String(input.entityType))) throw new Error('Tipo de registro origen no admitido.');
+  const duplicate = db.prepare(`
+    SELECT id FROM accounting_correction_cases
+    WHERE company_id=? AND entity_type=? AND entity_id=?
+      AND UPPER(TRIM(source_ref))=UPPER(TRIM(?))
+      AND UPPER(TRIM(correction_ref))=UPPER(TRIM(?))
+      AND status IN ('PENDING_REVIEW','APPROVED') AND workflow_stage<>'WITHDRAWN'
+    LIMIT 1
+  `).get(String(input.companyId),String(input.entityType),String(input.entityId),
+    String(input.sourceDocumentRef),String(input.correctionDocumentRef));
+  if (duplicate) throw new Error('Ya existe un expediente activo para la misma referencia fuente y documento correctivo. Consulte su historial en lugar de duplicarlo.');
 
   const id = crypto.randomUUID(), at = new Date().toISOString();
   const tx = db.transaction(() => {
