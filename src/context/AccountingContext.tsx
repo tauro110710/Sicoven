@@ -693,9 +693,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       persistenceWaitersRef.current = persistenceWaitersRef.current.filter(waiter => waiter !== persistenceWaiter);
       throw error;
     }
-    setJournalEntries(prev => prev.map(entry => entry.id === source.id
-      ? { ...entry, reversedByEntryId: reversal.id, isAdjusted: true }
-      : entry));
+    // El asiento fuente no se modifica: el vínculo se deriva del contra-asiento
+    // mediante reversalOfEntryId, preservando el registro original.
     setSales(prev => prev.map(sale => sale.companyId === currentCompany.id && (sale.journalEntryId === source.id || (source.type === 'VENTA' && source.referenceDoc === 'FAC-' + sale.invoiceNumber))
       ? { ...sale, journalEntryId: sale.journalEntryId || source.id, isCancelled: true, cancelledByJournalEntryId: reversal.id, cancellationReason: reason.trim(), cancellationNote: workpaperNote.trim() }
       : sale));
