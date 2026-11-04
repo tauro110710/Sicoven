@@ -1,4 +1,5 @@
 import type { Account, BankAccount, BankStatementMovement, InventoryMovement, InventoryProduct, JournalEntry, JournalEntryItem, PurchaseRecord, SaleRecord } from './accounting';
+import { isJournalEntryBalanced } from './journalEntryValidation';
 
 /**
  * Builds an immutable contra-entry by swapping debit/credit in both currencies.
@@ -27,9 +28,7 @@ export function buildReversalItems(
     sum.creditUsd += Number(item.creditUsd);
     return sum;
   }, { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
-  if (Math.abs(totals.debitBs - totals.creditBs) >= 0.01 ||
-      Math.abs(totals.debitUsd - totals.creditUsd) >= 0.01 ||
-      totals.debitBs <= 0 || totals.debitUsd <= 0) {
+  if (!isJournalEntryBalanced(totals) || totals.debitBs <= 0 || totals.debitUsd <= 0) {
     throw new Error('El asiento original no cuadra simultáneamente en Bs. y USD; requiere conciliación antes de reversarlo.');
   }
   const accountByCode = new Map(accounts.map(account => [account.code, account]));
