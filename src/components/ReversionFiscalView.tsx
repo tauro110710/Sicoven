@@ -15,7 +15,6 @@ export const ReversionFiscalView: React.FC = () => {
   const [selectedId, setSelectedId] = useState('');
   const [effectiveDate, setEffectiveDate] = useState(today);
   const [reason, setReason] = useState('');
-  const [workpaperNote, setWorkpaperNote] = useState('');
   const [retainedEarningsCode, setRetainedEarningsCode] = useState('');
   const [correctionMovementId, setCorrectionMovementId] = useState('');
   const [correctionQuantity, setCorrectionQuantity] = useState('1');
@@ -316,7 +315,6 @@ export const ReversionFiscalView: React.FC = () => {
     ...(activeLinkedSettlements.length ? ['La factura tiene ' + activeLinkedSettlements.length + ' cobro(s)/pago(s) vigente(s) que deben reversarse antes.'] : [])
   ];
   const reversalDisabled = !source || Boolean(previewError) || hasReversal(source.id) || reversalBlockReasons.length > 0 ||
-    reason.trim().length < 10 || workpaperNote.trim().length < 10 ||
     (isPriorPeriod && !retainedEarningsAccounts.some(account => account.code === retainedEarningsCode)) ||
     !effectiveDate || effectiveDate < (source?.date || today) ||
     Boolean(currentCompany.closedThroughDate && effectiveDate <= currentCompany.closedThroughDate);
@@ -473,7 +471,6 @@ export const ReversionFiscalView: React.FC = () => {
       );
       setFeedback({kind:'success', message:'Contra-asiento '+entry.entryNumber+' registrado y enlazado al asiento '+source.entryNumber+'. El original permanece en el historial.'});
       setReason('');
-      setWorkpaperNote('');
       setSelectedId('');
     } catch (error) {
       setFeedback({kind:'error', message:error instanceof Error ? error.message : 'No se pudo registrar la reversión en SQLite.'});
@@ -631,7 +628,7 @@ export const ReversionFiscalView: React.FC = () => {
                     </div>
                     {selectedCorrectionSource && !linkedSale && products.find(item=>item.id===selectedCorrectionSource.productId)?.costingMethod === 'PEPS' && <p className="text-xs text-amber-800">PEPS: la devolución al proveedor queda bloqueada hasta identificar el lote original; no se descargará un lote aproximado.</p>}
                     <button type="button" onClick={registerInventoryCorrection} disabled={correctionSubmitting} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700">{correctionSubmitting ? 'Guardando y confirmando en SQLite…' : 'Registrar devolución y asiento de inventario'}</button>
-                  </> : <p className="text-xs text-slate-600">No hay unidades pendientes que coincidan con una salida por venta o una entrada por compra. Si la mercancía no regresó físicamente, documente su disposición en el papel de trabajo sin alterar existencias.</p>}
+                  </> : <p className="text-xs text-slate-600">No hay unidades pendientes que coincidan con una salida por venta o una entrada por compra. Si la mercancía no regresó físicamente, indique su disposición cuando sea necesario, sin alterar existencias.</p>}
                 </div>
                 <div className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-xs text-rose-900"><strong>Control de seguridad:</strong> una casilla o una referencia escrita no sustituyen la conciliación técnica. Mientras existan movimientos de Kardex vinculados, el contra-asiento de la factura permanecerá bloqueado hasta completar el flujo coordinado de inventario, costo y documento fiscal.</div></div>}
                 {hasReversal(source.id) && <p className="text-red-700 font-semibold">Este asiento ya fue reversado.</p>}
@@ -641,13 +638,11 @@ export const ReversionFiscalView: React.FC = () => {
               {isPriorPeriod && <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"><strong>Ajuste de Ejercicio Anterior (AIA).</strong> El asiento original está en período cerrado hasta {currentCompany.closedThroughDate}. El contra-asiento se registrará en el período abierto y las cuentas de ingresos, costos y gastos se reclasificarán a resultados acumulados. Revise el criterio con el contador responsable.</div>}
               {isPriorPeriod && <label className="block text-sm font-semibold text-slate-700">Cuenta de patrimonio para resultados acumulados</label>}
               {isPriorPeriod && <select value={retainedEarningsCode} onChange={event=>setRetainedEarningsCode(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2.5 text-sm bg-white"><option value="">Seleccione cuenta de patrimonio…</option>{retainedEarningsAccounts.map(account=><option key={account.code} value={account.code}>{account.code} · {account.name}</option>)}</select>}
-              <label className="block text-sm font-semibold text-slate-700">3. Causa de la reversión (mínimo 10 caracteres)</label>
+              <label className="block text-sm font-semibold text-slate-700">3. Motivo de la reversión (opcional)</label>
               <textarea value={reason} onChange={event=>setReason(event.target.value)} rows={2} maxLength={1000} placeholder="Ej. Factura emitida con RIF incorrecto; documento soporte…" className="w-full rounded-lg border border-slate-300 p-2.5 text-sm" />
-              <label className="block text-sm font-semibold text-slate-700">4. Nota explicativa / papel de trabajo (mínimo 10 caracteres)</label>
-              <textarea value={workpaperNote} onChange={event=>setWorkpaperNote(event.target.value)} rows={3} maxLength={5000} placeholder="Fundamento técnico, soporte revisado, responsable y efecto fiscal pendiente…" className="w-full rounded-lg border border-slate-300 p-2.5 text-sm" />
               {previewError && <div role="alert" className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900"><strong>No se puede simular una reversión válida:</strong> {previewError}</div>}
               {reversalBlockReasons.length > 0 && <div role="alert" className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900 space-y-1"><strong>Reversión bloqueada por integridad cruzada</strong>{reversalBlockReasons.map((message,index)=><p key={index}>• {message}</p>)}<p className="font-medium">No basta con marcar una revisión manual: el sistema debe comprobar la reversión de los auxiliares y su asiento vinculado antes de permitir la aprobación.</p></div>}
-                            <button disabled={reversalDisabled || reversalSubmitting} onClick={submitReversal} className="w-full rounded-lg bg-emerald-700 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 flex items-center justify-center gap-2"><ShieldCheck className="w-4 h-4" /> {reversalSubmitting ? 'Guardando y confirmando en SQLite…' : 'Aprobar y registrar contra-asiento'}</button>
+                            <button disabled={reversalDisabled || reversalSubmitting} onClick={submitReversal} className="w-full rounded-lg bg-emerald-700 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 flex items-center justify-center gap-2"><ShieldCheck className="w-4 h-4" /> {reversalSubmitting ? 'Guardando y confirmando en SQLite…' : 'Ejecutar reversión y registrar contra-asiento'}</button>
             </div>
             <div className="space-y-3">
               <h2 className="font-bold text-slate-900">Vista previa del impacto contable</h2>
@@ -757,10 +752,7 @@ export const ReversionFiscalView: React.FC = () => {
           <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Motivo de la corrección
             <textarea value={bcvCorrectionReason} onChange={event=>setBcvCorrectionReason(event.target.value)} rows={2} placeholder="Explique por qué debe corregirse la tasa registrada…" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
           </label>
-          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Papel de trabajo y evidencia
-            <textarea value={bcvCorrectionWorkpaper} onChange={event=>setBcvCorrectionWorkpaper(event.target.value)} rows={2} placeholder="Indique fuente BCV, soporte, tasa sustituida y comprobación…" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
-          </label>
-          <div className="sm:col-span-2"><button type="button" disabled={bcvCorrectionSaving || Number(bcvCorrectionRate)<=0 || bcvCorrectionReason.trim().length<10 || bcvCorrectionWorkpaper.trim().length<10} onClick={()=>void submitBcvRateCorrection()} className="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{bcvCorrectionSaving ? 'Guardando corrección…' : 'Confirmar y auditar corrección'}</button></div>
+          <div className="sm:col-span-2"><button type="button" disabled={bcvCorrectionSaving || Number(bcvCorrectionRate)<=0} onClick={()=>void submitBcvRateCorrection()} className="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{bcvCorrectionSaving ? 'Guardando corrección…' : 'Confirmar y auditar corrección'}</button></div>
         </div>}
       </section>
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

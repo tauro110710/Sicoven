@@ -79,7 +79,7 @@ type SupportingDocumentDraft = { entityType: SupportingDocumentEntityType; entit
 
 interface AccountingContextType {
   getAuditEvents: (limit?: number) => Promise<AccountingAuditEvent[]>;
-  requestAccountingCorrection: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'INVENTORY_PRODUCT'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason: string; workpaperNote: string }) => Promise<void>;
+  requestAccountingCorrection: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'INVENTORY_PRODUCT'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason?: string; workpaperNote?: string }) => Promise<void>;
   createCorrectionCase: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'INVENTORY_MOVEMENT'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason?: string; workpaperNote?: string }) => Promise<CorrectionCase>;
   authorizeCorrectionCase: (input: { entityType: string; entityId: string; sourceDocumentRef: string; correctionDocumentRef: string }) => Promise<void>;
   listCorrectionCases: () => Promise<CorrectionCase[]>;
@@ -104,7 +104,7 @@ interface AccountingContextType {
   addCompany: (comp: Omit<Company, 'id'>) => Company;
   updateCompany: (comp: Company) => void;
   updateBcvRate: (newRate: number, effectiveDate?: string) => void;
-  correctBcvRate: (input: { newRate: number; effectiveDate: string; reason: string; workpaperNote: string }) => Promise<void>;
+  correctBcvRate: (input: { newRate: number; effectiveDate: string; reason?: string; workpaperNote?: string }) => Promise<void>;
 
   // Cuentas
   accounts: Account[];
@@ -3686,10 +3686,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       : original[field] !== updated[field])) {
       throw new Error('No se pueden corregir existencias, costos históricos, método de costeo ni cuentas de inventario editando la ficha. Use movimientos y ajustes de Kardex con asiento correctivo.');
     }
-    const normalizedReason = String(reason || '').trim();
+    const normalizedReason = String(reason || '').trim() || 'Corrección de datos maestros del artículo';
     const normalizedWorkpaper = String(workpaperNote || '').trim();
-    if (normalizedReason.length < 10 || normalizedWorkpaper.length < 10) {
-      throw new Error('La corrección del artículo requiere motivo y papel de trabajo de al menos 10 caracteres.');
+    if (normalizedReason.length > 2000 || normalizedWorkpaper.length > 4000) {
+      throw new Error('El motivo o la nota exceden el máximo permitido.');
     }
     await recordCorrectionAudit({
       eventType: 'accounting_correction_requested', entityType: 'INVENTORY_PRODUCT',
