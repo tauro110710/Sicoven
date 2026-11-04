@@ -10,6 +10,7 @@ test('workflow enforces preparer-reviewer-executor segregation and append-only e
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'preparador'));
   assert.equal(requested.status,'PENDING_REVIEW');
+  assert.throws(()=>db.prepare("UPDATE accounting_correction_cases SET status='APPROVED',reviewed_by=1,reviewed_by_name='preparador' WHERE id=?").run(requested.id),/segregation/);
   assert.throws(()=>reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Revisión suficiente y documentada.'},admin(1,'preparador')),/no puede aprobar/);
   const approved=reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Soportes contrastados y efectos evaluados.'},admin(2,'revisor'));
   assert.equal(approved.status,'APPROVED');
