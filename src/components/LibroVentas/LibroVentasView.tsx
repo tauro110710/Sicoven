@@ -24,9 +24,11 @@ export const LibroVentasView: React.FC = () => {
     currentCompany,
     sales,
     journalEntries,
+    isStorageReady,
     displayCurrency
   } = useAccounting();
 
+  const sqliteAvailable = typeof window !== 'undefined' && Boolean(window.sicovenStore?.save);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [documentTarget, setDocumentTarget] = useState<{ id: string; title: string } | null>(null);
   const [reversalTarget, setReversalTarget] = useState<import('../../types/accounting').JournalEntry | null>(null);
@@ -263,6 +265,7 @@ export const LibroVentasView: React.FC = () => {
                       {s.paymentTerm === 'CREDITO' && <button onClick={() => setSettlementTarget({id:s.id, number:s.invoiceNumber, party:s.customerName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar cobro parcial o total">Cobrar</button>}
                       {!s.isCancelled && <button
                         type="button"
+                        disabled={!sqliteAvailable || !isStorageReady}
                         onClick={() => {
                           const source = journalEntries.find(entry => entry.companyId === s.companyId &&
                             (entry.id === s.journalEntryId || (!s.journalEntryId && entry.type === 'VENTA' && entry.referenceDoc === 'FAC-' + s.invoiceNumber)));
@@ -270,7 +273,7 @@ export const LibroVentasView: React.FC = () => {
                           else setReversalTarget(source);
                         }}
                         className="inline-flex items-center gap-1 rounded bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-700 hover:bg-rose-100"
-                        title="Solicitar anulación con contra-asiento y análisis de dependencias"
+                        title={!sqliteAvailable || !isStorageReady ? "La anulación requiere SQLite local disponible" : "Solicitar anulación con contra-asiento y análisis de dependencias"}
                       ><AlertTriangle className="h-3 w-3" /> Anular</button>}
                     </td>
                   </tr>
