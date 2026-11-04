@@ -551,7 +551,7 @@ function saleJournalMatchesInvoice(sale, entry) {
   if (!sale || !entry || entry.type !== 'VENTA' || entry.companyId !== sale.companyId ||
       entry.date !== sale.invoiceDate ||
       String(entry.referenceDoc || '').trim().toUpperCase().replace(/\s+/g, '') !==
-        ('FAC-' + String(sale.invoiceNumber || '')).trim().toUpperCase().replace(/\\s+/g, '') ||
+        ('FAC-' + String(sale.invoiceNumber || '')).trim().toUpperCase().replace(/\s+/g, '') ||
       !Array.isArray(entry.items) || entry.items.length < 2) return false;
 
   const rate = Number(sale.bcvRate);
