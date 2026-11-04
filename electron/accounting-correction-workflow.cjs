@@ -158,7 +158,20 @@ function requireAdmin(actor) {
     throw new Error('Se requiere una sesión administrativa autenticada con identidad válida.');
   }
 }
+function nextCorrectionEventAt(db, caseId) {
+  const latest=db.prepare(`
+    SELECT MAX(created_at) AS latest FROM (
+      SELECT created_at FROM accounting_correction_case_events WHERE case_id=?
+      UNION ALL
+      SELECT created_at FROM accounting_correction_case_workflow_events WHERE case_id=?
+    )
+  `).get(String(caseId),String(caseId)).latest;
+  const now=Date.now();
+  const previous=latest ? Date.parse(latest) : NaN;
+  return new Date(Number.isFinite(previous) && previous>=now ? previous+1 : now).toISOString();
+}
 function appendEvent(db, _tx, event) {
+  event.at=nextCorrectionEventAt(db,event.id);
   db.prepare('INSERT INTO accounting_correction_case_events(case_id,event_type,actor_id,actor_name,reason,metadata_json,created_at) VALUES(?,?,?,?,?,?,?)')
     .run(event.id, event.type, Number(event.actor.id), String(event.actor.username || ''),
       event.reason, JSON.stringify(event.metadata || {}), event.at);
@@ -299,7 +312,7 @@ function markCorrectionExecuted(db, {caseId,executionRef,reason,evidenceRecordId
   return getCorrectionCase(db,String(caseId));
 }
 function appendWorkflowEvent(db, item, type, actor, reason, metadata = {}) {
-  const at = new Date().toISOString();
+  const at = nextCorrectionEventAt(db,item.id);
   db.prepare('INSERT INTO accounting_correction_case_workflow_events(case_id,event_type,actor_id,actor_name,reason,metadata_json,created_at) VALUES(?,?,?,?,?,?,?)')
     .run(item.id,type,Number(actor.id),String(actor.username || ''),String(reason).trim(),JSON.stringify(metadata),at);
   db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
