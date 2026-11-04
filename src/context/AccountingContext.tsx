@@ -38,7 +38,7 @@ import {
   INITIAL_STATEMENT_MOVEMENTS
 } from '../data/initialData';
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
-import { formatIslrVoucherNumber } from '../utils/islrVoucherNumber';
+import { formatIslrVoucherNumber, getMaxIslrVoucherSequence } from '../utils/islrVoucherNumber';
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus } from '../types/ivaRetentionEligibility';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { FinancialDisclosure, validateFinancialDisclosure } from '../types/financialDisclosures';
