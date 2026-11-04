@@ -17,7 +17,7 @@ describe('credit settlement balances and validation', () => {
   it('adds supplier debit notes to CxP using the complete note total and subtracts supplier credit notes', () => {
     const adjustments = summarizeCreditDocumentAdjustments('PURCHASE_PAYMENT',
       [{netPayableReductionUsd: 8, netPayableReductionBs: 800}],
-      [{documentType: '02', totalAmountUsd: 15, totalAmountBs: 1500}]
+      [{totalAmountUsd: 15, totalAmountBs: 1500}]
     );
     assert.deepEqual(adjustments, {
       creditedByNotesUsd: 8, creditedByNotesBs: 800,
