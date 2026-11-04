@@ -31,7 +31,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
 
   useEffect(() => {
     const hasApplicableRate = Boolean(currentCompany.lastRateUpdate && currentCompany.lastRateUpdate <= date);
-    setBcvRateEffectiveDate(hasApplicableRate ? currentCompany.lastRateUpdate : '');
+    setBcvRateEffectiveDate(hasApplicableRate ? (currentCompany.lastRateUpdate || '') : '');
     setMovementBcvRate(hasApplicableRate ? String(currentCompany.bcvRate || '') : '');
   }, [currentCompany.id, currentCompany.lastRateUpdate, currentCompany.bcvRate, date]);
 
