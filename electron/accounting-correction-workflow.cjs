@@ -129,6 +129,32 @@ function initializeCorrectionWorkflow(db) {
     CREATE TRIGGER IF NOT EXISTS correction_case_workflow_events_no_delete BEFORE DELETE ON accounting_correction_case_workflow_events
       BEGIN SELECT RAISE(ABORT, 'correction workflow events are append-only'); END;
   `);
+  const workflowEventSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='accounting_correction_case_workflow_events'").get();
+  if (workflowEventSchema && !String(workflowEventSchema.sql || '').includes("'WITHDRAWN'")) {
+    db.exec(`
+      DROP TRIGGER IF EXISTS correction_case_workflow_events_no_update;
+      DROP TRIGGER IF EXISTS correction_case_workflow_events_no_delete;
+      DROP INDEX IF EXISTS idx_correction_case_workflow_events_case;
+      ALTER TABLE accounting_correction_case_workflow_events RENAME TO accounting_correction_case_workflow_events_legacy;
+      CREATE TABLE accounting_correction_case_workflow_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL REFERENCES accounting_correction_cases(id),
+        event_type TEXT NOT NULL CHECK(event_type IN ('OBSERVED','RESUBMITTED','WITHDRAWN')),
+        actor_id INTEGER NOT NULL, actor_name TEXT NOT NULL, reason TEXT NOT NULL,
+        metadata_json TEXT NOT NULL, created_at TEXT NOT NULL
+      );
+      INSERT INTO accounting_correction_case_workflow_events
+        (id,case_id,event_type,actor_id,actor_name,reason,metadata_json,created_at)
+      SELECT id,case_id,event_type,actor_id,actor_name,reason,metadata_json,created_at
+        FROM accounting_correction_case_workflow_events_legacy;
+      DROP TABLE accounting_correction_case_workflow_events_legacy;
+      CREATE INDEX idx_correction_case_workflow_events_case
+        ON accounting_correction_case_workflow_events(case_id,id);
+      CREATE TRIGGER correction_case_workflow_events_no_update BEFORE UPDATE ON accounting_correction_case_workflow_events
+        BEGIN SELECT RAISE(ABORT, 'correction workflow events are append-only'); END;
+      CREATE TRIGGER correction_case_workflow_events_no_delete BEFORE DELETE ON accounting_correction_case_workflow_events
+        BEGIN SELECT RAISE(ABORT, 'correction workflow events are append-only'); END;
+    `);
+  }
 }
 function requireAdmin(actor) {
   if (!actor || actor.role !== 'admin' || !Number.isSafeInteger(Number(actor.id)) || Number(actor.id) <= 0 || !String(actor.username || '').trim()) {
