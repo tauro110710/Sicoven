@@ -163,15 +163,15 @@ export const LibroDiarioView: React.FC = () => {
           </button>
         </div>
         <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4">
-          <div className="rounded-lg bg-slate-50 p-3"><div className="text-[10px] text-slate-500">Asientos fuente reversibles</div><div className="text-xl font-bold tabular-nums text-slate-900">{pendingReversals.length}</div></div>
+          <div className="rounded-lg bg-slate-50 p-3"><div className="text-[10px] text-slate-500">Asientos fuente sin reversión</div><div className="text-xl font-bold tabular-nums text-slate-900">{pendingReversals.length}</div></div>
           <div className="rounded-lg bg-slate-50 p-3"><div className="text-[10px] text-slate-500">Asientos reversados</div><div className="text-xl font-bold tabular-nums text-slate-900">{reversedEntries.length}</div></div>
-          <div className="rounded-lg bg-slate-50 p-3"><div className="text-[10px] text-slate-500">Facturas de compra por revisar</div><div className="text-xl font-bold tabular-nums text-slate-900">{purchaseCorrectionsPending.length}</div></div>
+          <div className="rounded-lg bg-slate-50 p-3"><div className="text-[10px] text-slate-500">Facturas de compra activas</div><div className="text-xl font-bold tabular-nums text-slate-900">{purchaseCorrectionsPending.length}</div></div>
           <div className="rounded-lg bg-slate-50 p-3"><div className="text-[10px] text-slate-500">Facturas de venta registradas</div><div className="text-xl font-bold tabular-nums text-slate-900">{salesWithManualCorrectionNeed.length}</div></div>
         </div>
         {showCorrectionCenter && <div className="grid gap-4 border-t border-slate-100 p-4 lg:grid-cols-2">
           <div className="space-y-2">
             <h3 className="text-xs font-bold text-slate-800">Asientos contables</h3>
-            {pendingReversals.length === 0 ? <p className="text-xs text-slate-500">No hay asientos fuente disponibles para reversión.</p> : pendingReversals.slice(0, 8).map(entry => (
+            {pendingReversals.length === 0 ? <p className="text-xs text-slate-500">No hay asientos fuente sin contra-asiento.</p> : pendingReversals.slice(0, 8).map(entry => (
               <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-2">
                 <div className="min-w-0"><p className="text-xs font-semibold text-slate-800">#{entry.entryNumber} · {entry.description}</p><p className="text-[10px] text-slate-500">{entry.date} · {entry.type} · {entry.referenceDoc || 'Sin referencia documental'}</p></div>
                 <button type="button" onClick={() => setReversalTarget(entry)} className="shrink-0 rounded bg-rose-50 px-2 py-1.5 text-[10px] font-bold text-rose-700">Reversar</button>
@@ -183,7 +183,7 @@ export const LibroDiarioView: React.FC = () => {
             })}
           </div>
           <div className="space-y-2">
-            <h3 className="text-xs font-bold text-slate-800">Documentos que requieren tratamiento especializado</h3>
+            <h3 className="text-xs font-bold text-slate-800">Documentos y rutas de corrección</h3>
             {purchaseCorrectionsPending.slice(0, 5).map(purchase => <div key={purchase.id} className="rounded-lg border border-slate-200 p-2 text-[11px]"><strong>Compra {purchase.invoiceNumber}</strong> · {purchase.supplierName}<p className="text-slate-500">{purchase.inventoryLines?.length ? 'Puede evaluarse devolución parcial mediante NC si Kardex y costos concilian.' : 'No tiene flujo automático de nota de crédito: requiere análisis documental/contable especializado.'}</p></div>)}
             {salesWithManualCorrectionNeed.slice(0, 5).map(sale => <div key={sale.id} className="rounded-lg border border-slate-200 p-2 text-[11px]"><strong>Venta {sale.invoiceNumber}</strong> · {sale.customerName}<p className="text-slate-500">La anulación/NC/ND de venta aún requiere circuito fiscal y conciliación de cobros e inventario; no se habilita una reversión ciega.</p></div>)}
             {purchaseNotes.length > 0 && <p className="text-[10px] text-slate-500">{purchaseNotes.length} notas de débito/crédito de proveedor registradas y conservadas en el Libro de Compras.</p>}
