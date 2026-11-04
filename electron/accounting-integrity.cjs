@@ -624,7 +624,7 @@ function validateSaleCorrectionNotes(previousState, nextState) {
   const round2 = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
   const round6 = value => Math.round((Number(value) + Number.EPSILON) * 1000000) / 1000000;
   const close = (a, b, tolerance = 0.02) => Number.isFinite(Number(a)) && Number.isFinite(Number(b)) && Math.abs(Number(a) - Number(b)) <= tolerance;
-  const saleInventoryReturnComplete = (source, companyId) => {
+  const saleInventoryReturnComplete = (source, companyId, sourceInvoiceEntry) => {
     const originals = asArray(nextState.movements).filter(item =>
       item.companyId === companyId && !item.correctionForMovementId &&
       (item.journalEntryId === source?.journalEntryId ||
@@ -637,7 +637,7 @@ function validateSaleCorrectionNotes(previousState, nextState) {
       if (!product) return false;
       const inventoryCode = product.inventoryAccountCode || '1.1.4.01';
       const costCode = product.costOfSalesAccountCode || '5.1.1.01';
-      if (asArray(source?.items).some(line =>
+      if (asArray(sourceInvoiceEntry?.items).some(line =>
         [inventoryCode, costCode].includes(String(line.accountCode)) &&
         Number(line.debitBs || 0) + Number(line.creditBs || 0) +
         Number(line.debitUsd || 0) + Number(line.creditUsd || 0) > 0.01)) return false;
@@ -705,6 +705,9 @@ function validateSaleCorrectionNotes(previousState, nextState) {
 
   for (const note of nextSales.filter(item => !priorIds.has(String(item.id)) && ['02', '03'].includes(item.documentType))) {
     const source = nextSales.find(item => item.id === note.originalSaleId && item.companyId === note.companyId && item.documentType === '01');
+    const sourceInvoiceEntry = source?.journalEntryId
+      ? asArray(nextState.journalEntries).find(item => item.id === source.journalEntryId && item.companyId === note.companyId)
+      : undefined;
     const journal = asArray(nextState.journalEntries).find(item => item.id === note.journalEntryId && item.companyId === note.companyId);
     const isCredit = note.documentType === '03';
     const number = String(isCredit ? note.creditNoteNumber || note.invoiceNumber : note.debitNoteNumber || note.invoiceNumber).trim();
@@ -777,7 +780,7 @@ function validateSaleCorrectionNotes(previousState, nextState) {
         String(note.correctionWorkpaper || '').trim().length < 10 ||
         !isValidIsoDate(note.invoiceDate) || note.invoiceDate < source.invoiceDate ||
         (company?.closedThroughDate && note.invoiceDate <= company.closedThroughDate) ||
-        (isCredit && linkedInventory && (!saleInventoryReturnComplete(source, note.companyId) ||
+        (isCredit && linkedInventory && (!saleInventoryReturnComplete(source, note.companyId, sourceInvoiceEntry) ||
           !close(total, Number(source.totalAmountBs || 0)))) || duplicateNumber || !Number.isFinite(rate) || rate <= 0 ||
         !Number.isFinite(base) || !Number.isFinite(exempt) || base < 0 || exempt < 0 || base + exempt <= 0 ||
         !Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100 ||
