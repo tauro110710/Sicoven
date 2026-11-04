@@ -2327,16 +2327,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     purchaseCreditNoteInFlightRef.current = true;
     correctionWorkflowInFlightRef.current = true;
     try {
-      const sourceForAudit = purchases.find(item => item.id === request.purchaseId && item.companyId === currentCompany.id);
-      if (!sourceForAudit) throw new Error('No se encontró la factura original en la empresa activa.');
-      const correctionCaseId = await requireApprovedCorrectionCase('PURCHASE',sourceForAudit.id,sourceForAudit.invoiceNumber,request.creditNoteNumber);
-      await recordCorrectionAudit({
-        eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id,
-        entityId: sourceForAudit.id, correctionType: 'PURCHASE_INVENTORY_CREDIT_NOTE',
-        sourceDocumentRef: sourceForAudit.invoiceNumber, correctionDocumentRef: request.creditNoteNumber,
-        reason: request.reason, workpaperNote: '',
-        fiscalEmissionMedium: request.fiscalEmissionMedium, sameMediumAsOriginal: request.sameMediumAsOriginal
-      });
       return await runAtomicInvoiceImport(async () => {
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la nota de crédito.');
     const purchase = purchases.find(item => item.id === request.purchaseId && item.companyId === currentCompany.id);
@@ -2637,6 +2627,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       islrEventSequenceRef.current[eventKey] = nextEventSequence;
     }
     const fiscalCorrectionNote = 'La nota de crédito ' + note.creditNoteNumber + ' afecta la retención de la factura ' + purchase.invoiceNumber + '. Verifique el tratamiento del comprobante original y la rectificación que corresponda antes de declarar.';
+    const correctionCaseId = await requireApprovedCorrectionCase('PURCHASE',purchase.id,purchase.invoiceNumber,request.creditNoteNumber);
+    await recordCorrectionAudit({
+      eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id,
+      entityId: purchase.id, correctionType: 'PURCHASE_INVENTORY_CREDIT_NOTE',
+      sourceDocumentRef: purchase.invoiceNumber, correctionDocumentRef: request.creditNoteNumber,
+      reason: request.reason, workpaperNote: '',
+      fiscalEmissionMedium: request.fiscalEmissionMedium, sameMediumAsOriginal: request.sameMediumAsOriginal
+    });
     if (!window.sicovenStore?.save) {
       throw new Error('No se puede confirmar la devolución: SQLite local no está disponible. No se modificó el estado contable.');
     }
@@ -2738,7 +2736,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const source = purchases.find(item => item.id === draft.purchaseId && item.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró la factura original en la empresa activa.');
-    const correctionCaseId = await requireApprovedCorrectionCase('PURCHASE',source.id,source.invoiceNumber,draft.creditNoteNumber);
     const sourceEntry = source.journalEntryId
       ? journalEntries.find(item => item.id === source.journalEntryId && item.companyId === currentCompany.id)
       : undefined;
@@ -2861,6 +2858,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (Math.abs(debitBs - creditBs) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.0001 || items.length < 2) {
       throw new Error('El asiento de NC de servicios no cuadra en Bs. y USD. No se registró.');
     }
+    const correctionCaseId = await requireApprovedCorrectionCase('PURCHASE',source.id,source.invoiceNumber,draft.creditNoteNumber);
     correctionWorkflowInFlightRef.current = true;
     purchaseCreditNoteInFlightRef.current = true;
     try { await recordCorrectionAudit({
@@ -2946,7 +2944,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la ND.');
     const sourceForApproval = purchases.find(item=>item.id===draft.sourcePurchaseId && item.companyId===currentCompany.id);
     if (!sourceForApproval) throw new Error('No se encontró la factura original en la empresa activa.');
-    const correctionCaseId = await requireApprovedCorrectionCase('PURCHASE',sourceForApproval.id,sourceForApproval.invoiceNumber,draft.debitNoteNumber);
     const operationKey = [
       currentCompany.id, draft.sourcePurchaseId, String(draft.debitNoteNumber || '').trim().toUpperCase()
     ].join('|');
@@ -2968,6 +2965,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           draft: { ...draft, companyId: currentCompany.id, closedThroughDate: currentCompany.closedThroughDate || undefined },
           purchases, accounts, sourceJournalEntry
         });
+        const correctionCaseId = await requireApprovedCorrectionCase('PURCHASE',source.id,source.invoiceNumber,draft.debitNoteNumber);
         await recordCorrectionAudit({
           eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id,
           entityId: source.id, correctionType: 'PURCHASE_DEBIT_NOTE',
@@ -3249,7 +3247,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const source = sales.find(item => item.id === draft.sourceSaleId && item.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró la factura original de venta en la empresa activa.');
     if (source.documentType !== '01' || source.isCancelled) throw new Error('Solo se pueden corregir facturas de venta vigentes tipo 01.');
-    const correctionCaseId = await requireApprovedCorrectionCase('SALE',source.id,source.invoiceNumber,draft.noteNumber);
     const sourceEntry = journalEntries.find(item => item.id === source.journalEntryId && item.companyId === currentCompany.id);
     const hasLinkedInventoryJournal = journalEntries.some(entry =>
       entry.companyId === currentCompany.id && entry.id !== source.journalEntryId && entry.type === 'INVENTARIO' &&
@@ -3328,6 +3325,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         debitBs: 0, creditBs: amounts.vatAmountBs, debitUsd: 0, creditUsd: amounts.vatAmountUsd,
         description: 'Incremento de débito fiscal IVA · ' + source.invoiceNumber });
     }
+    const correctionCaseId = await requireApprovedCorrectionCase('SALE',source.id,source.invoiceNumber,draft.noteNumber);
     correctionWorkflowInFlightRef.current = true;
     try { await recordCorrectionAudit({
       eventType: 'accounting_correction_requested', entityType: 'SALE', companyId: currentCompany.id, entityId: source.id,
