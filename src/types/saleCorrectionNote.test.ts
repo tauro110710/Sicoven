@@ -18,6 +18,7 @@ const draft = (overrides: Partial<Parameters<typeof calculateSaleCorrectionNote>
   reason: 'Devolución parcial acordada con el cliente',
   workpaperNote: 'Se revisó el documento original y el soporte comercial adjunto.',
   taxableBaseBs: 50, exemptAmountBs: 10, bcvRate: 110,
+  fiscalEmissionMedium: 'DIGITAL' as const, sameMediumAsOriginal: true,
   priorCreditNotes: [], ...overrides
 });
 
@@ -65,4 +66,10 @@ test('blocks a note dated inside a closed accounting period', () => {
   assert.throws(() => calculateSaleCorrectionNote(draft({
     closedThroughDate: '2026-11-01'
   })), /período contable cerrado/);
+});
+
+test('requires explicit matching fiscal emission medium for a correction note', () => {
+  assert.throws(() => calculateSaleCorrectionNote(draft({
+    fiscalEmissionMedium: '' as any, sameMediumAsOriginal: false
+  })), /mismo medio de la factura original/);
 });
