@@ -771,10 +771,13 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
               <option value="NOTA_DEBITO_VENTA">Emitir nota de débito (ND)</option>
             </select>
           </label>
-          {selectedSaleHasInventory && requestCorrectionType === 'NOTA_CREDITO_VENTA' ? <div className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3 text-xs">
-            <p>Esta factura tiene movimientos de inventario. Primero debe conciliar la devolución física y su costo por artículo.</p>
+          {selectedSaleHasInventory && requestCorrectionType === 'NOTA_CREDITO_VENTA' && !saleInventoryReadiness?.ready ? <div className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3 text-xs">
+            <p>Esta factura tiene huella contable de inventario. Primero debe registrar la devolución física de todas las unidades y conciliar su costo por artículo en el asistente.</p>
             <button type="button" onClick={openExistingCorrectionFlow} className="rounded bg-indigo-700 px-3 py-2 font-semibold text-white">Abrir devolución y conciliación de Kardex</button>
-          </div> : <CorrectionNoteFormFields
+            {saleInventoryReadiness?.reason && <p className="text-amber-900">{saleInventoryReadiness.reason}</p>}
+          </div> : <>
+          {selectedSaleHasInventory && requestCorrectionType === 'NOTA_CREDITO_VENTA' && saleInventoryReadiness?.ready && <p className="rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-900">Devolución física total y asiento de costo conciliados. Ya puede emitir la NC fiscal; SICOVEN volverá a validar el Kardex antes de guardar.</p>}
+          <CorrectionNoteFormFields
             minDate={selectedSaleForCorrection.invoiceDate}
             noteDate={requestCorrectionDate} setNoteDate={setRequestCorrectionDate}
             noteNumber={requestTargetRef} setNoteNumber={setRequestTargetRef}
@@ -788,6 +791,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
             onSubmit={()=>void submitDirectCorrection()}
             submitLabel={requestCorrectionType === 'NOTA_DEBITO_VENTA' ? 'Registrar ND de venta' : 'Registrar NC de venta'}
           />}
+          </>}
           </>}
         </div>}
         {selectedPurchaseForCorrection && <div className="space-y-3 rounded-lg border border-slate-200 p-3">
