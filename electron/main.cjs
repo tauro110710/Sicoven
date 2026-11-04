@@ -515,6 +515,43 @@ app.whenReady().then(async () => {
     };
   });
 
+  ipcMain.handle('sicoven:audit-record-correction', (_event, token, input) => {
+    const actor = getActiveSession(token);
+    if (!actor || actor.role !== 'admin') {
+      return { ok: false, message: 'Se requiere una sesión administrativa autenticada para autorizar y auditar correcciones.' };
+    }
+    const eventType = String(input?.eventType || '');
+    const allowedEvents = new Set(['accounting_correction_requested', 'accounting_correction_executed']);
+    const allowedEntities = new Set(['SALE', 'PURCHASE', 'JOURNAL_ENTRY', 'BANK_MOVEMENT', 'INVENTORY_MOVEMENT',
+      'VAT_VOUCHER', 'ISLR_VOUCHER', 'VAT_DECLARATION', 'ISLR_EVENT']);
+    const entityType = String(input?.entityType || '');
+    const entityId = String(input?.entityId || '').trim();
+    const correctionType = String(input?.correctionType || '').trim();
+    const reason = String(input?.reason || '').trim();
+    const workpaperNote = String(input?.workpaperNote || '').trim();
+    const sourceDocumentRef = String(input?.sourceDocumentRef || '').trim();
+    const correctionDocumentRef = String(input?.correctionDocumentRef || '').trim();
+    const journalEntryId = String(input?.journalEntryId || '').trim();
+    if (!allowedEvents.has(eventType) || !allowedEntities.has(entityType) ||
+        !entityId || entityId.length > 160 || !correctionType || correctionType.length > 80 ||
+        reason.length < 10 || reason.length > 2000 || workpaperNote.length < 10 || workpaperNote.length > 4000 ||
+        sourceDocumentRef.length > 160 || correctionDocumentRef.length > 160 || journalEntryId.length > 160) {
+      return { ok: false, message: 'Los datos del evento de auditoría están incompletos o no son válidos.' };
+    }
+    const occurredAt = new Date().toISOString();
+    const details = {
+      actorUserId: Number(actor.id), actorUsername: String(actor.username || ''),
+      actorRole: String(actor.role || ''), entityType, entityId, correctionType,
+      sourceDocumentRef, correctionDocumentRef, reason, workpaperNote,
+      journalEntryId: journalEntryId || null,
+      authorization: { method: 'AUTHENTICATED_ADMIN_SESSION', explicitConfirmation: true },
+      occurredAt
+    };
+    const inserted = db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+      .run(eventType, JSON.stringify(details));
+    return { ok: true, id: Number(inserted.lastInsertRowid), createdAt: occurredAt };
+  });
+
   ipcMain.handle('sicoven:reset-accounting', (_event, token) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
