@@ -22,6 +22,11 @@ function initializeCorrectionWorkflow(db) {
         (OLD.status='APPROVED' AND NEW.status='EXECUTED')
       )
       BEGIN SELECT RAISE(ABORT, 'invalid correction case transition'); END;
+    CREATE TRIGGER IF NOT EXISTS correction_cases_segregation BEFORE UPDATE ON accounting_correction_cases
+      WHEN (OLD.status='PENDING_REVIEW' AND NEW.status IN ('APPROVED','REJECTED') AND NEW.reviewed_by=OLD.requested_by)
+        OR (OLD.status='APPROVED' AND NEW.status='EXECUTED' AND
+          (NEW.executed_by=OLD.requested_by OR NEW.executed_by=OLD.reviewed_by))
+      BEGIN SELECT RAISE(ABORT, 'correction case segregation of duties violated'); END;
     CREATE TRIGGER IF NOT EXISTS correction_cases_source_immutable BEFORE UPDATE ON accounting_correction_cases
       WHEN NEW.id<>OLD.id OR NEW.company_id<>OLD.company_id OR NEW.entity_type<>OLD.entity_type OR
         NEW.entity_id<>OLD.entity_id OR NEW.correction_type<>OLD.correction_type OR
