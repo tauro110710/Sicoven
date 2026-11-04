@@ -26,6 +26,11 @@ describe('credit settlement balances and validation', () => {
     assert.equal(Math.round((100 - adjustments.creditedByNotesUsd + adjustments.debitedByNotesUsd) * 100) / 100, 107);
   });
 
+  it('rejects non-finite or negative note adjustments instead of corrupting the auxiliary balance', () => {
+    assert.throws(()=>summarizeCreditDocumentAdjustments('PURCHASE_PAYMENT',[],[{totalAmountUsd:Number.NaN}]),/importe no válido/i);
+    assert.throws(()=>summarizeCreditDocumentAdjustments('SALE_COLLECTION',[],[{netReceivableAdjustmentUsd:-1}]),/importe no válido/i);
+  });
+
   it('uses the net receivable adjustment for sales debit notes rather than gross total', () => {
     const adjustments = summarizeCreditDocumentAdjustments('SALE_COLLECTION',
       [{netReceivableAdjustmentUsd: 6, netReceivableAdjustmentBs: 600}],
