@@ -610,6 +610,8 @@ app.whenReady().then(async () => {
     }
     return registerCorrectionRequest(db,input,actor);
   });
+  ipcMain.handle('sicoven:correction-case-authorize', (_event, token, input) =>
+    requireApprovedCorrectionCase(db,input,correctionActor(token)));
   ipcMain.handle('sicoven:correction-case-review', () => {
     throw new Error('La revisión y aprobación previa ya no forman parte del Centro de Correcciones.');
   });
@@ -626,9 +628,14 @@ app.whenReady().then(async () => {
     const actor = correctionActor(token);
     const item = db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(input?.caseId || ''));
     if (!item) throw new Error('El expediente de corrección no existe.');
+    const reference = String(input?.executionRef || '').trim();
+    if (item.status === 'EXECUTED') return markCorrectionExecuted(db,{...input,executionRef:reference},actor);
+    requireApprovedCorrectionCase(db,{
+      companyId:item.company_id,entityType:item.entity_type,entityId:item.entity_id,
+      sourceDocumentRef:item.source_ref,correctionDocumentRef:item.correction_ref
+    },actor);
     const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     const state = row ? JSON.parse(row.state_json) : {};
-    const reference = String(input?.executionRef || '').trim();
     const evidence = findLinkedCorrectionEvidence(state,item,reference);
     if (!evidence) {
       throw new Error('No se encontró un documento correctivo de la misma empresa con referencia coincidente y vínculo explícito al registro origen. El expediente permanece aprobado y abierto.');

@@ -216,8 +216,8 @@ function registerCorrectionRequest(db, input, actor) {
   const id = crypto.randomUUID(), at = new Date().toISOString();
   const tx = db.transaction(() => {
     db.prepare(`INSERT INTO accounting_correction_cases
-      (id,company_id,entity_type,entity_id,correction_type,source_ref,correction_ref,reason,workpaper,status,requested_by,requested_by_name,reviewed_by,reviewed_by_name,review_reason,created_at,reviewed_at)
-      VALUES(?,?,?,?,?,?,?,?,?,'APPROVED',?,?,?,?,?,?,?)`).run(id,String(input.companyId),String(input.entityType),String(input.entityId),
+      (id,company_id,entity_type,entity_id,correction_type,source_ref,correction_ref,reason,workpaper,status,workflow_stage,requested_by,requested_by_name,reviewed_by,reviewed_by_name,review_reason,created_at,reviewed_at)
+      VALUES(?,?,?,?,?,?,?,?,?,'APPROVED','READY_FOR_EXECUTION',?,?,?,?,?,?,?)`).run(id,String(input.companyId),String(input.entityType),String(input.entityId),
       String(input.correctionType),String(input.sourceDocumentRef),String(input.correctionDocumentRef || ''),reason,workpaperNote,
       Number(actor.id),String(actor.username || ''),Number(actor.id),String(actor.username || ''),
       'Habilitada para ejecución directa por el contador.',at,at);
