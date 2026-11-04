@@ -166,12 +166,12 @@ describe('cash flow statement', () => {
     assert.equal(report.isReconciled, true);
   });
 
-  it('excludes a reversal of the linked annual opening from period cash flows', () => {
+  it('counts a same-day reversal of the linked annual opening as a period cash flow', () => {
     const opening = entry('opening-2026', '2026-01-01', 'APERTURA', [
       line('1.1.1.01', 'Caja principal', 100, 0, 10, 0),
       line('3.1', 'Capital social', 0, 100, 0, 10)
     ], { priorPeriodStartDate: '2025-01-01', priorPeriodEndDate: '2025-12-31', nextPeriodStartDate: '2026-01-01' });
-    const reversal = entry('reversal-opening-2026', '2026-01-02', 'AJUSTE', [
+    const reversal = entry('reversal-opening-2026', '2026-01-01', 'AJUSTE', [
       line('3.1', 'Capital social', 100, 0, 10, 0),
       line('1.1.1.01', 'Caja principal', 0, 100, 0, 10)
     ]);
