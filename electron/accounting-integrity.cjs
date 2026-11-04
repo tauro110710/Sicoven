@@ -648,9 +648,16 @@ function validateSaleCorrectionNotes(previousState, nextState) {
           originalCost.date !== original.date || originalCost.referenceDoc !== original.documentRef) return false;
       const originalInventoryCredit = asArray(originalCost.items).filter(line => line.accountCode === inventoryCode)
         .reduce((sum, line) => sum + Number(line.creditBs || 0), 0);
+      const originalInventoryCreditUsd = asArray(originalCost.items).filter(line => line.accountCode === inventoryCode)
+        .reduce((sum, line) => sum + Number(line.creditUsd || 0), 0);
       const originalCostDebit = asArray(originalCost.items).filter(line => line.accountCode === costCode)
         .reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
-      if (!close(originalInventoryCredit, original.totalCostBs) || !close(originalCostDebit, original.totalCostBs)) return false;
+      const originalCostDebitUsd = asArray(originalCost.items).filter(line => line.accountCode === costCode)
+        .reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
+      if (!close(originalInventoryCredit, original.totalCostBs) ||
+          !close(originalCostDebit, original.totalCostBs) ||
+          !close(originalInventoryCreditUsd, original.totalCostUsd, 0.0001) ||
+          !close(originalCostDebitUsd, original.totalCostUsd, 0.0001)) return false;
       const returns = asArray(nextState.movements).filter(item =>
         item.companyId === companyId && item.correctionForMovementId === original.id);
       const returnedQty = returns.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
@@ -664,12 +671,21 @@ function validateSaleCorrectionNotes(previousState, nextState) {
             entry.referenceDoc !== returned.documentRef) return false;
         const inventoryDebit = asArray(entry.items).filter(line => line.accountCode === inventoryCode)
           .reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
+        const inventoryDebitUsd = asArray(entry.items).filter(line => line.accountCode === inventoryCode)
+          .reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
         const costCredit = asArray(entry.items).filter(line => line.accountCode === costCode)
           .reduce((sum, line) => sum + Number(line.creditBs || 0), 0);
-        if (!close(inventoryDebit, returned.totalCostBs) || !close(costCredit, returned.totalCostBs)) return false;
+        const costCreditUsd = asArray(entry.items).filter(line => line.accountCode === costCode)
+          .reduce((sum, line) => sum + Number(line.creditUsd || 0), 0);
+        if (!close(inventoryDebit, returned.totalCostBs) ||
+            !close(costCredit, returned.totalCostBs) ||
+            !close(inventoryDebitUsd, returned.totalCostUsd, 0.0001) ||
+            !close(costCreditUsd, returned.totalCostUsd, 0.0001)) return false;
       }
       const returnedCost = returns.reduce((sum, item) => sum + Number(item.totalCostBs || 0), 0);
-      if (!close(returnedCost, original.totalCostBs)) return false;
+      const returnedCostUsd = returns.reduce((sum, item) => sum + Number(item.totalCostUsd || 0), 0);
+      if (!close(returnedCost, original.totalCostBs) ||
+          !close(returnedCostUsd, original.totalCostUsd, 0.0001)) return false;
     }
     return true;
   };
