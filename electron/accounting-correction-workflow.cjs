@@ -166,7 +166,7 @@ function reviewCorrectionRequest(db, {caseId,decision,reason}, actor) {
   const tx = db.transaction(() => {
     const item = db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(caseId));
     if (!item) throw new Error('El expediente de corrección no existe.');
-    if (item.status !== 'PENDING_REVIEW' || item.workflow_stage !== 'IN_REVIEW') throw new Error('El expediente no está en revisión; atienda primero las observaciones o el estado actual.');
+    if (item.status !== 'PENDING_REVIEW' || item.workflow_stage !== 'IN_REVIEW') throw new Error('El expediente ya fue revisado o no está en revisión; atienda primero las observaciones o el estado actual.');
     if (Number(item.requested_by) === Number(actor.id)) throw new Error('El solicitante no puede aprobar ni rechazar su propio expediente. Se requiere otro administrador.');
     const status = decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
     db.prepare('UPDATE accounting_correction_cases SET status=?,workflow_stage=?,reviewed_by=?,reviewed_by_name=?,review_reason=?,reviewed_at=? WHERE id=? AND status=?')
