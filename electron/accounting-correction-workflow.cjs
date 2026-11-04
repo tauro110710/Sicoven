@@ -357,9 +357,9 @@ function withdrawCorrectionRequest(db, {caseId,reason}, actor) {
       throw new Error('El expediente ya está cerrado, ejecutado o retirado; no admite retiro.');
     if(Number(item.requested_by)!==Number(actor.id))
       throw new Error('Solo el solicitante original puede retirar el expediente.');
-    db.prepare("UPDATE accounting_correction_cases SET status='PENDING_REVIEW',workflow_stage='WITHDRAWN' WHERE id=?")
+    db.prepare("UPDATE accounting_correction_cases SET status='PENDING_REVIEW',workflow_stage='WITHDRAWN',execution_started_by=NULL,execution_started_at=NULL,execution_started_ref=NULL WHERE id=?")
       .run(item.id);
-    appendWorkflowEvent(db,item,'WITHDRAWN',actor,note,{previousStatus:item.status,previousStage:item.workflow_stage});
+    appendWorkflowEvent(db,item,'WITHDRAWN',actor,note,{previousStatus:item.status,previousStage:item.workflow_stage,previousExecutionStartedBy:item.execution_started_by || null,previousExecutionStartedAt:item.execution_started_at || null,previousExecutionRef:item.execution_started_ref || null});
   });
   tx();
   return getCorrectionCase(db,String(caseId));
