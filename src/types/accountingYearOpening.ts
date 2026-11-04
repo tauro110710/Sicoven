@@ -42,9 +42,13 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
 
   const balances = new Map<string, Totals>();
   const profitLoss = { bs: 0, usd: 0 };
-  const companyHistory = journalEntries.filter(entry =>
-    entry.companyId === companyId && entry.date <= periodEndDate
-  );
+  const companyLedger = journalEntries.filter(entry => entry.companyId === companyId);
+  for (const entry of companyLedger) {
+    if (!isIsoDate(entry.date)) {
+      throw new Error('El asiento #' + entry.entryNumber + ' contiene una fecha inválida; no se puede preparar la apertura.');
+    }
+  }
+  const companyHistory = companyLedger.filter(entry => entry.date <= periodEndDate);
   // A linked annual opening is the authoritative carry-forward snapshot.
   // Earlier ledger activity is already represented in that opening and must
   // not be added again when preparing the next exercise.
