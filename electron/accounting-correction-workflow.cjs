@@ -6,38 +6,40 @@ const crypto = require('node:crypto');
 const CORRECTION_EVIDENCE_RULES = Object.freeze({
   SALE: { collection:'sales', links:['originalSaleId','correctedSaleId','correctionOfSaleId','affectedSaleId','originalDocumentId'] },
   PURCHASE: { collection:'purchases', links:['originalPurchaseId','correctedPurchaseId','correctionOfPurchaseId','affectedPurchaseId','originalDocumentId'] },
-  JOURNAL_ENTRY: { collection:'journalEntries', links:['reversalOfEntryId','reversesEntryId','correctionOfEntryId','correctsEntryId'] },
-  BANK_MOVEMENT: { collection:'bankStatementMovements', links:['reversalOfMovementId','correctionOfMovementId','correctsMovementId','originalMovementId'] },
+  JOURNAL_ENTRY: { collection:'journalEntries', links:['reversalOfEntryId','adjustmentForEntryId','reversesEntryId','correctionOfEntryId','correctsEntryId'] },
   INVENTORY_MOVEMENT: { collection:'movements', links:['correctionForMovementId','reversalOfMovementId','correctsMovementId','originalMovementId'] },
-  VAT_VOUCHER: { collection:'vatVouchers', links:['correctionOfVoucherId','originalVoucherId','reversalOfVoucherId','correctsVoucherId'] },
-  ISLR_VOUCHER: { collection:'islrVouchers', links:['correctionOfVoucherId','originalVoucherId','reversalOfVoucherId','correctsVoucherId'] },
-  VAT_DECLARATION: { collection:'vatWithholdingDeclarations', links:['correctionOfDeclarationId','originalDeclarationId','replacesDeclarationId','rectifiesDeclarationId'] },
-  ISLR_EVENT: { collection:'islrFiscalEvents', links:['correctionOfEventId','originalEventId','reversesEventId','rectifiesEventId'] },
-  INVENTORY_PRODUCT: { collection:'movements', links:['correctionOfProductId','adjustmentForProductId'] },
-  BCV_RATE: { collection:'companies', links:['correctionOfBcvRateId','originalBcvRateId','replacesBcvRateId'] }
+  VAT_VOUCHER: { collection:'journalEntries', links:[] },
+  ISLR_VOUCHER: { collection:'journalEntries', links:[] },
 });
 function findLinkedCorrectionEvidence(state, item, reference) {
   const rule = CORRECTION_EVIDENCE_RULES[String(item.entity_type)];
   if (!rule) return null;
-  const sourceCollection = item.entity_type === 'BCV_RATE' ? 'companies' :
-    item.entity_type === 'INVENTORY_PRODUCT' ? 'products' : rule.collection;
+  const sourceCollection = item.entity_type === 'VAT_VOUCHER' ? 'vatVouchers' :
+    item.entity_type === 'ISLR_VOUCHER' ? 'islrVouchers' :
+    item.entity_type === 'INVENTORY_MOVEMENT' ? 'movements' :
+    item.entity_type === 'JOURNAL_ENTRY' ? 'journalEntries' : rule.collection;
   const source = Array.isArray(state[sourceCollection]) && state[sourceCollection].find(record =>
     String(record.id) === String(item.entity_id) && String(record.companyId || item.company_id) === String(item.company_id));
   if (!source) return null;
   const candidates = Array.isArray(state[rule.collection]) ? state[rule.collection] : [];
+  const voucherCorrectionIds = ['VAT_VOUCHER','ISLR_VOUCHER'].includes(String(item.entity_type))
+    ? [...new Set([...(source?.correctionEntryIds || []),source?.correctionEntryId].filter(Boolean).map(String))] : [];
   const normalizedReference = String(reference || '').trim().toLocaleUpperCase();
   if (!normalizedReference) return null;
   const referenceFields = ['id','documentNumber','invoiceNumber','voucherNumber','declarationNumber','entryNumber',
     'opNumber','documentRef','number','reference','referenceDoc','controlNumber','creditNoteNumber','debitNoteNumber'];
   return candidates.find(candidate => {
     if (String(candidate.companyId || '') !== String(item.company_id) || String(candidate.id) === String(item.entity_id)) return false;
-    const linked = rule.links.some(field => candidate[field] != null && String(candidate[field]) === String(item.entity_id));
+    const linked = voucherCorrectionIds.length
+      ? voucherCorrectionIds.includes(String(candidate.id))
+      : rule.links.some(field => candidate[field] != null && String(candidate[field]) === String(item.entity_id));
     if (!linked) return false;
     if (['SALE','PURCHASE'].includes(String(item.entity_type)) &&
         !['02','03'].includes(String(candidate.documentType || ''))) return false;
     return referenceFields.some(field => candidate[field] != null &&
       String(candidate[field]).trim().toLocaleUpperCase() === normalizedReference);
-  }) || null;
+  });
+  return evidence ? {...evidence,__evidenceCollection:rule.collection} : null;
 }
 
 function initializeCorrectionWorkflow(db) {
@@ -142,8 +144,7 @@ function registerCorrectionRequest(db, input, actor) {
   const limits = { companyId:160, entityType:40, entityId:160, correctionType:80, sourceDocumentRef:160,
     correctionDocumentRef:160, reason:2000, workpaperNote:4000 };
   for (const [key,max] of Object.entries(limits)) if (String(input[key] || '').length > max) throw new Error('El campo '+key+' excede el máximo permitido.');
-  const allowedEntities = new Set(['SALE','PURCHASE','JOURNAL_ENTRY','BANK_MOVEMENT','INVENTORY_MOVEMENT',
-    'VAT_VOUCHER','ISLR_VOUCHER','VAT_DECLARATION','ISLR_EVENT','INVENTORY_PRODUCT','BCV_RATE']);
+  const allowedEntities = new Set(['SALE','PURCHASE','JOURNAL_ENTRY','INVENTORY_MOVEMENT','VAT_VOUCHER','ISLR_VOUCHER']);
   if (!allowedEntities.has(String(input.entityType))) throw new Error('Tipo de registro origen no admitido.');
 
   const id = crypto.randomUUID(), at = new Date().toISOString();
