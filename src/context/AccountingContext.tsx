@@ -78,6 +78,7 @@ type SupportingDocumentDraft = { entityType: SupportingDocumentEntityType; entit
 
 interface AccountingContextType {
   getAuditEvents: (limit?: number) => Promise<AccountingAuditEvent[]>;
+  requestAccountingCorrection: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'INVENTORY_PRODUCT'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason: string; workpaperNote: string }) => Promise<void>;
   listSupportingDocuments: (filters: { entityType?: SupportingDocumentEntityType; entityId?: string }) => Promise<SupportingDocument[]>;
   attachSupportingDocument: (input: SupportingDocumentDraft) => Promise<{ ok: boolean; canceled?: boolean; document?: Pick<SupportingDocument, 'id' | 'companyId' | 'entityType' | 'entityId' | 'documentType' | 'title' | 'fileName' | 'mimeType' | 'sha256' | 'byteSize' | 'status' | 'createdAt'> }>;
   reviewSupportingDocument: (input: { documentId: string; decision: 'VERIFIED' | 'OBSERVATION_REQUIRED'; reason: string }) => Promise<{ ok: boolean; documentId: string; status: string }>;
@@ -427,6 +428,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!store?.recordAuditCorrection) throw new Error('La auditoría local de correcciones no está disponible. No se ejecutó la operación.');
     const result = await store.recordAuditCorrection(token, input);
     if (!result?.ok) throw new Error(result?.message || 'SQLite no pudo registrar la autorización de la corrección.');
+  };
+
+  const requestAccountingCorrection = async (input: Omit<CorrectionAuditInput, 'eventType' | 'companyId'>): Promise<void> => {
+    if (!currentCompany.id) throw new Error('Seleccione una empresa antes de solicitar una corrección.');
+    if (!input.entityId.trim() || !input.correctionType.trim() || input.reason.trim().length < 15 || input.workpaperNote.trim().length < 15) {
+      throw new Error('La solicitud requiere registro origen, tipo de corrección, motivo y papel de trabajo de al menos 15 caracteres.');
+    }
+    if (!window.sicovenStore || !storageReady || persistenceFaultRef.current) {
+      throw new Error('SQLite no está disponible. No se registró la solicitud de corrección.');
+    }
+    await recordCorrectionAudit({
+      ...input, eventType: 'accounting_correction_requested', companyId: currentCompany.id
+    });
   };
 
   const getAuditEvents = useCallback(async (limit = 100): Promise<AccountingAuditEvent[]> => {
@@ -5226,6 +5240,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       value={{
         companies,
         getAuditEvents,
+        requestAccountingCorrection,
         listSupportingDocuments,
         attachSupportingDocument,
         reviewSupportingDocument,
