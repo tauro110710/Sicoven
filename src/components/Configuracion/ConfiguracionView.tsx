@@ -95,6 +95,8 @@ export const ConfiguracionView: React.FC = () => {
   const [accountingFramework, setAccountingFramework] = useState<AccountingFramework | ''>(currentCompany.accountingFramework || '');
   const [accountingFrameworkVersion, setAccountingFrameworkVersion] = useState(currentCompany.accountingFrameworkVersion || '');
   const [accountingFrameworkAdoptionDate, setAccountingFrameworkAdoptionDate] = useState(currentCompany.accountingFrameworkAdoptionDate || '');
+  const [specialTaxpayerNotificationReference, setSpecialTaxpayerNotificationReference] = useState(currentCompany.specialTaxpayerNotificationReference || '');
+  const [specialTaxpayerNotificationDate, setSpecialTaxpayerNotificationDate] = useState(currentCompany.specialTaxpayerNotificationDate || '');
 
   // Sync state if currentCompany switches
   React.useEffect(() => {
@@ -115,6 +117,8 @@ export const ConfiguracionView: React.FC = () => {
     setAccountingFramework(currentCompany.accountingFramework || '');
     setAccountingFrameworkVersion(currentCompany.accountingFrameworkVersion || '');
     setAccountingFrameworkAdoptionDate(currentCompany.accountingFrameworkAdoptionDate || '');
+    setSpecialTaxpayerNotificationReference(currentCompany.specialTaxpayerNotificationReference || '');
+    setSpecialTaxpayerNotificationDate(currentCompany.specialTaxpayerNotificationDate || '');
     setPeriodCloseDate(currentCompany.closedThroughDate || (() => {
       const now = new Date();
       return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -234,6 +238,15 @@ export const ConfiguracionView: React.FC = () => {
       return;
     }
     setRifError(null);
+    const hasSpecialNoticeMetadata = Boolean(specialTaxpayerNotificationReference.trim() || specialTaxpayerNotificationDate);
+    if (taxpayerType === 'ESPECIAL' && currentCompany.taxpayerType !== 'ESPECIAL' && (!specialTaxpayerNotificationReference.trim() || !specialTaxpayerNotificationDate)) {
+      window.alert('Para cambiar la empresa a Contribuyente Especial, indique la referencia y fecha de la notificación expresa del SENIAT.');
+      return;
+    }
+    if (hasSpecialNoticeMetadata && (!specialTaxpayerNotificationReference.trim() || !specialTaxpayerNotificationDate)) {
+      window.alert('Complete tanto la referencia como la fecha de la notificación SENIAT.');
+      return;
+    }
     if ((accountingFramework || accountingFrameworkVersion.trim() || accountingFrameworkAdoptionDate) && (!accountingFramework || !accountingFrameworkVersion.trim() || !accountingFrameworkAdoptionDate)) {
       window.alert('Para registrar la adopción VEN-NIF debe completar marco, versión normativa y fecha documentada.');
       return;
@@ -244,6 +257,7 @@ export const ConfiguracionView: React.FC = () => {
       tradeName: tradeName.trim() || undefined,
       rif: rifValidation.formattedRif,
       taxpayerType,
+      ...(hasSpecialNoticeMetadata ? { specialTaxpayerNotificationReference: specialTaxpayerNotificationReference.trim(), specialTaxpayerNotificationDate } : {}),
       ...(accountingFramework ? { accountingFramework, accountingFrameworkVersion: accountingFrameworkVersion.trim(), accountingFrameworkAdoptionDate } : {}),
       defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
       ivaRetentionAgentBasis,
@@ -528,10 +542,18 @@ export const ConfiguracionView: React.FC = () => {
                 }}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-semibold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               >
-                <option value="ESPECIAL">Contribuyente Especial (Agente Retención)</option>
+                <option value="ESPECIAL">Contribuyente Especial (con notificación SENIAT)</option>
                 <option value="ORDINARIO">Contribuyente Ordinario</option>
               </select>
             </div>
+            {taxpayerType === 'ESPECIAL' && (
+              <div className="sm:col-span-3 rounded-lg border border-purple-200 bg-purple-50 p-3 space-y-2">
+                <label className="block font-semibold text-slate-800">Notificación expresa del SENIAT</label>
+                <input value={specialTaxpayerNotificationReference} onChange={e => setSpecialTaxpayerNotificationReference(e.target.value)} placeholder="Número o referencia de la notificación" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
+                <input type="date" value={specialTaxpayerNotificationDate} onChange={e => setSpecialTaxpayerNotificationDate(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
+                <p className="text-[11px] text-slate-600">La condición debe estar respaldada por notificación expresa. Los registros históricos especiales sin estos metadatos se conservan; para nuevas calificaciones, complete ambos datos.</p>
+              </div>
+            )}
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Retención IVA por Defecto</label>
               <select
