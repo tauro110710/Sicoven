@@ -319,9 +319,9 @@ function observeCorrectionRequest(db, {caseId,reason}, actor) {
     if(!['PENDING_REVIEW','APPROVED'].includes(item.status) || !['IN_REVIEW','READY_FOR_EXECUTION'].includes(item.workflow_stage))
       throw new Error('El expediente no admite observaciones en su estado actual.');
     if(Number(item.requested_by)===Number(actor.id)) throw new Error('El solicitante no puede observar su propio expediente.');
-    db.prepare("UPDATE accounting_correction_cases SET status='PENDING_REVIEW',workflow_stage='OBSERVATION_REQUIRED',reviewed_by=?,reviewed_by_name=?,review_reason=?,reviewed_at=? WHERE id=?")
+    db.prepare("UPDATE accounting_correction_cases SET status='PENDING_REVIEW',workflow_stage='OBSERVATION_REQUIRED',reviewed_by=?,reviewed_by_name=?,review_reason=?,reviewed_at=?,execution_started_by=NULL,execution_started_at=NULL,execution_started_ref=NULL WHERE id=?")
       .run(Number(actor.id),String(actor.username || ''),note,at,item.id);
-    appendWorkflowEvent(db,item,'OBSERVED',actor,note,{previousStatus:item.status,previousStage:item.workflow_stage});
+    appendWorkflowEvent(db,item,'OBSERVED',actor,note,{previousStatus:item.status,previousStage:item.workflow_stage,previousExecutionStartedBy:item.execution_started_by || null,previousExecutionStartedAt:item.execution_started_at || null,previousExecutionRef:item.execution_started_ref || null});
   });
   tx();
   return getCorrectionCase(db,String(caseId));
