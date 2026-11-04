@@ -58,6 +58,25 @@ describe('cash flow indirect method', () => {
     assert.equal(report.isReconciled, true);
   });
 
+  it('keeps the opening balance when an annual opening is reversed on the first day of the year', () => {
+    const opening = entry('opening-2026', '2026-01-01', [
+      line('1.1.1.01', 100, 0, 10, 0),
+      line('3.1.1', 0, 100, 0, 10)
+    ], 'APERTURA', {
+      priorPeriodStartDate: '2025-01-01', priorPeriodEndDate: '2025-12-31', nextPeriodStartDate: '2026-01-01'
+    });
+    const reversal = entry('reversal-opening-2026', '2026-01-01', [
+      line('3.1.1', 100, 0, 10, 0),
+      line('1.1.1.01', 0, 100, 0, 10)
+    ]);
+    reversal.reversalOfEntryId = opening.id;
+    const report = buildCashFlowIndirectReport([opening, reversal], accounts, banks, 'co-1', 2026);
+    assert.equal(report.openingCashBs, 100);
+    assert.equal(report.netChangeBs, -100);
+    assert.equal(report.closingCashBs, 0);
+    assert.equal(report.isReconciled, true);
+  });
+
   it('uses the latest prior annual opening and subsequent pre-period movements for indirect opening balances', () => {
     const history = entry('history-2024', '2024-06-01', [
       line('1.1.2.01', 100, 0, 1, 0),
