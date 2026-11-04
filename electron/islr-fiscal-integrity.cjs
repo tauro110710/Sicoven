@@ -103,7 +103,7 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
       }
       // El primer hecho fiscal (pago o abono en cuenta) dispara la retención.
       // Una factura no puede volver a generar un segundo disparador de la otra clase.
-      const conflictingTrigger = next.some(other => other && String(other.id) !== id &&
+      const conflictingTrigger = event.kind !== 'REVERSAL' && next.some(other => other && String(other.id) !== id &&
         other.companyId === event.companyId && other.kind !== 'REVERSAL' &&
         other.kind !== event.kind && Array.isArray(other.allocations) &&
         other.allocations.some(item => String(item.purchaseId) === String(allocation.purchaseId)));
