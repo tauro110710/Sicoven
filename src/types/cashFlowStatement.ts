@@ -66,8 +66,11 @@ const isLinkedAnnualOpening = (entry: JournalEntry) =>
   entry.type === 'APERTURA' &&
   entry.exerciseLink?.nextPeriodStartDate === entry.date &&
   isValidIsoDate(entry.date);
-const isAnnualOpening = (entry: JournalEntry, year: number) =>
-  isLinkedAnnualOpening(entry) && entry.date === String(year).padStart(4, '0') + '-01-01' && !entry.reversedByEntryId && !reversedEntryIds.has(entry.id);
+const isAnnualOpening = (entry: JournalEntry, year: number, reversedEntryIds: Set<string>) =>
+  isLinkedAnnualOpening(entry) &&
+  entry.date === String(year).padStart(4, '0') + '-01-01' &&
+  !entry.reversedByEntryId &&
+  !reversedEntryIds.has(entry.id);
 const counterpartAmount = (
   item: JournalEntry['items'][number],
   side: 'credit' | 'debit',
@@ -262,7 +265,7 @@ export function buildCashFlowReport(
     }
   };
 
-  const periodEntries = companyEntries.filter(entry => entry.date >= start && !isAnnualOpening(entry, year));
+  const periodEntries = companyEntries.filter(entry => entry.date >= start && !isAnnualOpening(entry, year, reversedEntryIds));
   for (const entry of periodEntries) {
     const net = cashNet(entry, cashCodes);
     netChangeBs += net.bs;
