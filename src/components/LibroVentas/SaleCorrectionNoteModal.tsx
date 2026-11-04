@@ -16,6 +16,8 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
   const today = new Date().toISOString().slice(0, 10);
   const [noteDate, setNoteDate] = useState(today);
   const [noteBcvRate, setNoteBcvRate] = useState(String(bcvRate));
+  const [fiscalEmissionMedium, setFiscalEmissionMedium] = useState<'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | ''>('');
+  const [sameMediumAsOriginal, setSameMediumAsOriginal] = useState(false);
   const [noteNumber, setNoteNumber] = useState('');
   const [controlNumber, setControlNumber] = useState('');
   const [taxableBaseBs, setTaxableBaseBs] = useState('0');
@@ -34,7 +36,8 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
       await onSubmit({
         kind, sourceSaleId: sourceSale.id, noteDate, noteNumber, controlNumber,
         taxableBaseBs: Number(taxableBaseBs), exemptAmountBs: Number(exemptAmountBs),
-        bcvRate: Number(noteBcvRate), reason, workpaperNote
+        bcvRate: Number(noteBcvRate), reason, workpaperNote,
+        fiscalEmissionMedium: fiscalEmissionMedium as 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY', sameMediumAsOriginal
       });
       onClose();
     } catch (cause) {
@@ -51,6 +54,7 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
           <div>
             <h2 className="text-lg font-bold text-slate-900">{kind === 'CREDIT' ? 'Nueva nota de crédito de venta' : 'Nueva nota de débito de venta'}</h2>
             <p className="mt-1 text-xs text-slate-500">Factura afectada: {sourceSale.invoiceNumber} · {sourceSale.customerName}</p>
+            <p className="mt-1 text-[11px] text-slate-500">Fecha original: {sourceSale.invoiceDate} · Control: {sourceSale.controlNumber} · Monto original: Bs. {sourceSale.totalAmountBs.toLocaleString('es-VE', {minimumFractionDigits:2, maximumFractionDigits:2})}</p>
           </div>
           <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg border px-3 py-1.5 text-xs">Cerrar</button>
         </div>
@@ -77,6 +81,14 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
             <input required type="number" min="0" step="0.01" value={exemptAmountBs} onChange={e=>setExemptAmountBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
           </label>
         </div>
+        <label className="block text-xs font-semibold text-slate-700">Medio de emisión utilizado por la factura original
+          <select required value={fiscalEmissionMedium} onChange={e=>setFiscalEmissionMedium(e.target.value as 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | '')} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal">
+            <option value="">Seleccione el medio original…</option><option value="DIGITAL">Digital / electrónico</option><option value="FISCAL_MACHINE">Máquina fiscal</option><option value="CONTINGENCY">Formato de contingencia autorizado</option>
+          </select>
+        </label>
+        <label className="flex items-start gap-2 text-xs text-slate-700"><input type="checkbox" checked={sameMediumAsOriginal} onChange={e=>setSameMediumAsOriginal(e.target.checked)} className="mt-0.5" />
+          Confirmo que esta nota se emitió por el mismo medio utilizado para la factura original, conforme a la Providencia SNAT/2026/00093
+        </label>
         <label className="block text-xs font-semibold text-slate-700">Motivo de la corrección
           <textarea required minLength={10} value={reason} onChange={e=>setReason(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
         </label>
@@ -86,7 +98,7 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
         {error && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</div>}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button>
-          <button type="submit" disabled={submitting} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{submitting ? 'Confirmando SQLite…' : 'Registrar y confirmar'}</button>
+          <button type="submit" disabled={submitting || !fiscalEmissionMedium || !sameMediumAsOriginal} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{submitting ? 'Confirmando SQLite…' : 'Registrar y confirmar'}</button>
         </div>
       </form>
     </div>
