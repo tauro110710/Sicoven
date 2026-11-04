@@ -515,8 +515,8 @@ export const ReversionFiscalView: React.FC = () => {
           <label className="text-xs font-semibold text-slate-700">Referencia del documento original *
             <input value={requestSourceRef} onChange={e=>setRequestSourceRef(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Factura, NC/ND, asiento, comprobante…"/>
           </label>
-          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Referencia correctiva (si ya existe)
-            <input value={requestTargetRef} onChange={e=>setRequestTargetRef(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Se completa al emitir el documento correctivo"/>
+          <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Referencia correctiva que se emitirá *
+            <input value={requestTargetRef} onChange={e=>setRequestTargetRef(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Asigne el número fiscal antes de solicitar la autorización"/>
           </label>
           <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Motivo y causa (mínimo 15 caracteres) *
             <textarea value={requestReason} onChange={e=>setRequestReason(e.target.value)} rows={2} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Describa el error, hecho y alcance de la corrección."/>
@@ -525,7 +525,7 @@ export const ReversionFiscalView: React.FC = () => {
             <textarea value={requestWorkpaper} onChange={e=>setRequestWorkpaper(e.target.value)} rows={2} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Conciliaciones, soportes, documentos relacionados y análisis preliminar."/>
           </label>
         </div>
-        <div><button type="button" onClick={()=>void submitCorrectionRequest()} disabled={requestSubmitting||!requestEntityId.trim()||!requestSourceRef.trim()||requestReason.trim().length<15||requestWorkpaper.trim().length<15} className="rounded bg-indigo-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{requestSubmitting?'Registrando solicitud…':'Registrar solicitud en SQLite'}</button></div>
+        <div><button type="button" onClick={()=>void submitCorrectionRequest()} disabled={requestSubmitting||!requestEntityId.trim()||!requestSourceRef.trim()||!requestTargetRef.trim()||requestReason.trim().length<15||requestWorkpaper.trim().length<15} className="rounded bg-indigo-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{requestSubmitting?'Registrando solicitud…':'Registrar solicitud en SQLite'}</button></div>
       </section>
       <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
