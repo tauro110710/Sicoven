@@ -14,6 +14,7 @@ export const JournalReversalModal: React.FC<JournalReversalModalProps> = ({ sour
   const [workpaperNote, setWorkpaperNote] = useState('');
   const [retainedEarningsAccountCode, setRetainedEarningsAccountCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sourceInClosedPeriod = Boolean(source && currentCompany.closedThroughDate && source.date <= currentCompany.closedThroughDate);
   const minEffectiveDate = (() => {
@@ -85,10 +86,14 @@ export const JournalReversalModal: React.FC<JournalReversalModalProps> = ({ sour
             <label className="mb-1 block text-xs font-semibold text-slate-700">Papel de trabajo / soporte de la decisión * (mínimo 10 caracteres)</label>
             <textarea required minLength={10} value={workpaperNote} onChange={event => setWorkpaperNote(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Indique soportes, conciliaciones, autorizaciones y análisis contable efectuado." />
           </div>
+          <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+            <input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} className="mt-0.5" />
+            <span>Confirmo que revisé el documento y sus soportes. Entiendo que el original no se borra, se registrará un contra-asiento y que los efectos fiscales deben tramitarse por separado cuando corresponda.</span>
+          </label>
           {error && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">{error}</div>}
           <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:justify-end">
             <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50">Cancelar</button>
-            <button type="submit" disabled={submitting || reason.trim().length < 10 || workpaperNote.trim().length < 10 || (sourceInClosedPeriod && !retainedEarningsAccountCode)} className="rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{submitting ? 'Registrando y confirmando SQLite…' : 'Confirmar reversión'}</button>
+            <button type="submit" disabled={submitting || !confirmed || reason.trim().length < 10 || workpaperNote.trim().length < 10 || (sourceInClosedPeriod && !retainedEarningsAccountCode)} className="rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{submitting ? 'Registrando y confirmando SQLite…' : 'Confirmar reversión'}</button>
           </div>
         </form>
       </div>
