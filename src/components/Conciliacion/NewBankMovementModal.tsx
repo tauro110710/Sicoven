@@ -22,7 +22,9 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
   const [description, setDescription] = useState<string>('');
   const [type, setType] = useState<BankMovementType>('CREDIT');
   const [amountBs, setAmountBs] = useState<string>('');
-  const [movementBcvRate, setMovementBcvRate] = useState<string>(() => String(currentCompany.bcvRate || ''));
+  const [movementBcvRate, setMovementBcvRate] = useState<string>(() =>
+    currentCompany.lastRateUpdate === date ? String(currentCompany.bcvRate || '') : ''
+  );
 
   if (!isOpen) return null;
 
