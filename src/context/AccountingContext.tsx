@@ -4734,6 +4734,45 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const restoreBackupJson = async (jsonData: string): Promise<boolean> => {
     assertSQLitePersistenceReady('Restaurar respaldo');
+    // La importación JSON no puede retroceder un ledger append-only ni borrar
+    // documentos que ya tienen asientos, Kardex o referencias fiscales. Para
+    // volver físicamente a un punto anterior se usa el restaurador SQLite verificado.
+    const incoming = JSON.parse(jsonData);
+    const protectedCollections: Array<[string, Array<{ id?: string }>]> = [
+      ['empresas', companies], ['cuentas', accounts], ['asientos', journalEntries],
+      ['compras', purchases], ['ventas', sales], ['artículos', products],
+      ['movimientos de inventario', movements], ['comprobantes IVA', vatVouchers],
+      ['declaraciones IVA', vatWithholdingDeclarations],
+      ['eventos de declaraciones IVA', vatWithholdingDeclarationEvents],
+      ['comprobantes ISLR', islrVouchers], ['cuentas bancarias', bankAccounts],
+      ['movimientos bancarios', bankStatementMovements], ['cobros y pagos', creditSettlements],
+      ['liquidaciones de anticipos', supplierAdvanceSettlements],
+      ['anticipos directos', supplierDirectAdvances], ['eventos fiscales ISLR', islrFiscalEvents],
+      ['revelaciones financieras', financialDisclosures]
+    ];
+    for (const [label, currentRows] of protectedCollections) {
+      const incomingRows = incoming?.[({
+        'empresas':'companies','cuentas':'accounts','asientos':'journalEntries',
+        'compras':'purchases','ventas':'sales','artículos':'products',
+        'movimientos de inventario':'movements','comprobantes IVA':'vatVouchers',
+        'declaraciones IVA':'vatWithholdingDeclarations','eventos de declaraciones IVA':'vatWithholdingDeclarationEvents',
+        'comprobantes ISLR':'islrVouchers','cuentas bancarias':'bankAccounts',
+        'movimientos bancarios':'bankStatementMovements','cobros y pagos':'creditSettlements',
+        'liquidaciones de anticipos':'supplierAdvanceSettlements','anticipos directos':'supplierDirectAdvances',
+        'eventos fiscales ISLR':'islrFiscalEvents','revelaciones financieras':'financialDisclosures'
+      } as Record<string, string>)[label]];
+      if (currentRows.length > 0 && !Array.isArray(incomingRows)) {
+        throw new Error('El respaldo JSON no contiene la colección ' + label + '. No se modificó ningún dato.');
+      }
+      const incomingIds = new Set((Array.isArray(incomingRows) ? incomingRows : [])
+        .map(row => String(row?.id || '')).filter(Boolean));
+      const missing = currentRows.filter(row => row.id && !incomingIds.has(String(row.id)));
+      if (missing.length > 0) {
+        throw new Error('Restauración JSON bloqueada: el respaldo no contiene ' + missing.length +
+          ' registro(s) histórico(s) actual(es) de ' + label +
+          '. Para restaurar un punto anterior sin mezclar ni destruir el ledger, utilice el restaurador SQLite completo y verificado. No se modificó ningún dato.');
+      }
+    }
     // Captura el estado completo antes de aplicar un respaldo. Si SQLite rechaza
     // la escritura, restaura también la memoria de React y vuelve a intentar
     // persistir el estado previo; nunca deja activa una importación no confirmada.
