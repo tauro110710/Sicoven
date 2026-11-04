@@ -21,7 +21,9 @@ interface NewEntryModalProps {
 }
 
 export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, accounts, journalEntries, addJournalEntry } = useAccounting();
+  const { currentCompany, accounts, journalEntries, addJournalEntry, waitForPersistence } = useAccounting();
+  const savingRef = React.useRef(false);
+  const [saving, setSaving] = useState(false);
 
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState<string>('');
@@ -217,7 +219,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Verificación estricta de cuadre antes de guardar
@@ -245,6 +247,9 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
       return;
     }
 
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     try {
       addJournalEntry({
         entryNumber: 0, // calculado automáticamente
@@ -259,9 +264,13 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
         adjustmentReason: type === 'AJUSTE' ? adjustmentReason.trim() : undefined,
         workpaperNote: type === 'AJUSTE' ? workpaperNote.trim() : undefined
       });
+      await waitForPersistence();
       onClose();
     } catch (err: any) {
       setSubmitError(err?.message || 'Error al guardar el asiento contable.');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
 
@@ -705,13 +714,14 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer"
+                disabled={saving}
+                className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer disabled:opacity-40"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                disabled={!allRulesPassed}
+                disabled={saving || !allRulesPassed}
                 className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold shadow transition ${
                   allRulesPassed
                     ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shadow-emerald-700/20'
