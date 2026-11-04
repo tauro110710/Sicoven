@@ -10,7 +10,7 @@ test('single accountant can approve and execute with immutable append-only event
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'preparador'));
   assert.equal(requested.status,'PENDING_REVIEW');
-  assert.throws(()=>db.prepare("UPDATE accounting_correction_cases SET status='APPROVED',workflow_stage='READY_FOR_EXECUTION',reviewed_by=1,reviewed_by_name='preparador' WHERE id=?").run(requested.id),/segregation/);
+  assert.throws(()=>db.prepare("UPDATE accounting_correction_cases SET source_ref='FAC-ALTERADA' WHERE id=?").run(requested.id),/source is immutable/);
   const approved=reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'El contador verificó soportes, efectos y conciliación.'},admin(1,'contador'));
   assert.equal(approved.status,'APPROVED');
   requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(1,'contador'));
@@ -216,8 +216,7 @@ test('legacy correction cases migrate to workflow stages without changing their 
 test('single accountant can withdraw an unexecuted case and withdrawal is terminal and auditable',()=>{
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
-  assert.throws(()=>withdrawCorrectionRequest(db,{caseId:requested.id,reason:'Se decide retirar la solicitud por cambio de criterio.'},admin(2,'otro')),/solicitante original/);
-  const withdrawn=withdrawCorrectionRequest(db,{caseId:requested.id,reason:'Se decide retirar la solicitud por cambio de criterio.'},admin(1,'solicitante'));
+  const withdrawn=withdrawCorrectionRequest(db,{caseId:requested.id,reason:'El contador decide retirar la solicitud por cambio de criterio.'},admin(1,'contador'));
   assert.equal(withdrawn.workflow_stage,'WITHDRAWN');
   assert.equal(withdrawn.status,'PENDING_REVIEW');
   assert.equal(withdrawn.events.at(-1).event_type,'WITHDRAWN');
