@@ -73,7 +73,7 @@ test('execution transition rolls back when the general audit ledger rejects the 
   reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Revisión completa con soportes suficientes.'},admin(2,'revisor'));
   requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(1,'contador'));
   db.exec("CREATE TRIGGER reject_execution_audit BEFORE INSERT ON audit_events WHEN NEW.event_type='accounting_correction_case_executed' BEGIN SELECT RAISE(ABORT,'execution audit failure'); END;");
-  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Ejecución documentada con soporte persistido.',evidenceRecordId:'credit-note-1',evidenceCollection:'sales'},admin(3,'ejecutor')),/execution audit failure/);
+  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Ejecución documentada con soporte persistido.',evidenceRecordId:'credit-note-1',evidenceCollection:'sales'},admin(1,'contador')),/execution audit failure/);
   const current=getCorrectionCase(db,requested.id);
   assert.equal(current.status,'APPROVED');
   assert.deepEqual(current.events.map(e=>e.event_type),['REQUESTED','APPROVED','EXECUTION_STARTED']);
@@ -107,10 +107,10 @@ test('journal reversal evidence requires reversalOfEntryId and exact reference',
  assert.equal(findLinkedCorrectionEvidence(state,item,'ASI-001'),null);
 });
 
-test('observation returns the case to its requester and resubmission restarts independent review',()=>{
+test('the accountant can observe, correct, resubmit and approve the same case',()=>{
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
-  const observed=observeCorrectionRequest(db,{caseId:requested.id,reason:'Falta el soporte fiscal legible y la conciliación del asiento.'},admin(2,'revisor-1'));
+  const observed=observeCorrectionRequest(db,{caseId:requested.id,reason:'El contador detectó que falta soporte fiscal legible y conciliación.'},admin(1,'contador'));
   assert.equal(observed.status,'PENDING_REVIEW');
   assert.equal(observed.workflow_stage,'OBSERVATION_REQUIRED');
   assert.equal(observed.reviewed_by,2);
@@ -118,10 +118,10 @@ test('observation returns the case to its requester and resubmission restarts in
   assert.equal(resubmitted.workflow_stage,'IN_REVIEW');
   assert.equal(resubmitted.reviewed_by,null);
   assert.deepEqual(resubmitted.events.map(e=>e.event_type),['REQUESTED','OBSERVED','RESUBMITTED']);
-  const approved=reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Se verificaron los soportes nuevos y la conciliación.'},admin(3,'revisor-2'));
+  const approved=reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'El contador verificó los soportes nuevos y la conciliación.'},admin(1,'contador'));
   assert.equal(approved.workflow_stage,'READY_FOR_EXECUTION');
-  requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(4,'ejecutor'));
-  const executed=markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Documento correctivo aplicado y conciliado.',evidenceRecordId:'credit-note-1',evidenceCollection:'sales'},admin(4,'ejecutor'));
+  requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(1,'contador'));
+  const executed=markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'El contador aplicó y concilió el documento correctivo.',evidenceRecordId:'credit-note-1',evidenceCollection:'sales'},admin(1,'contador'));
   assert.equal(executed.workflow_stage,'COMPLETED');
   assert.deepEqual(executed.events.map(e=>e.event_type),['REQUESTED','OBSERVED','RESUBMITTED','APPROVED','EXECUTION_STARTED','EXECUTED']);
  }finally{db.close();}
@@ -299,7 +299,7 @@ test('execution authorization binds operator/reference and permits audited recov
   const observed=observeCorrectionRequest(db,{caseId:requested.id,reason:'El contador detectó que la emisión no llegó a persistirse.'},admin(1,'contador'));
   assert.equal(observed.workflow_stage,'OBSERVATION_REQUIRED');
   assert.equal(observed.execution_started_at,null);
-  assert.equal(observed.events.at(-1).metadata.previousExecutionStartedBy,3);
+  assert.equal(observed.events.at(-1).metadata.previousExecutionStartedBy,1);
   const resubmitted=resubmitCorrectionRequest(db,{caseId:requested.id,reason:'El contador corrige la incidencia técnica y reenvía el expediente.'},admin(1,'contador'));
   reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'El contador revisó nuevamente el expediente subsanado.'},admin(1,'contador'));
   const authorization=requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(1,'contador'));
@@ -312,7 +312,7 @@ test('execution authorization rolls back its stage and event when the audit ledg
   const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
   reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'La evidencia y el papel de trabajo fueron revisados.'},admin(2,'revisor'));
   db.exec("CREATE TRIGGER reject_authorization_audit BEFORE INSERT ON audit_events WHEN NEW.event_type='accounting_correction_case_execution_started' BEGIN SELECT RAISE(ABORT,'authorization audit failure'); END;");
-  assert.throws(()=>requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(3,'ejecutor')),/authorization audit failure/);
+  assert.throws(()=>requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(1,'contador')),/authorization audit failure/);
   const current=getCorrectionCase(db,requested.id);
   assert.equal(current.execution_started_at,null);
   assert.deepEqual(current.events.map(e=>e.event_type),['REQUESTED','APPROVED']);
@@ -322,8 +322,8 @@ test('execution authorization rolls back its stage and event when the audit ledg
 test('requester can withdraw an authorized but not-yet-persisted correction attempt',()=>{
  const db=setup();try{
   const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
-  reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'El expediente fue aprobado para ejecución.'},admin(2,'revisor'));
-  requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(3,'ejecutor'));
+  reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'El contador aprobó el expediente para ejecución.'},admin(1,'contador'));
+  requireApprovedCorrectionCase(db,{companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},admin(1,'contador'));
   const withdrawn=withdrawCorrectionRequest(db,{caseId:requested.id,reason:'El contador retira el intento porque no se emitió documento.'},admin(1,'contador'));
   assert.equal(withdrawn.workflow_stage,'WITHDRAWN');
   assert.equal(withdrawn.execution_started_at,null);
