@@ -523,7 +523,7 @@ app.whenReady().then(async () => {
     const eventType = String(input?.eventType || '');
     const allowedEvents = new Set(['accounting_correction_requested', 'accounting_correction_executed']);
     const allowedEntities = new Set(['SALE', 'PURCHASE', 'JOURNAL_ENTRY', 'BANK_MOVEMENT', 'INVENTORY_MOVEMENT',
-      'VAT_VOUCHER', 'ISLR_VOUCHER', 'VAT_DECLARATION', 'ISLR_EVENT', 'BCV_RATE']);
+      'VAT_VOUCHER', 'ISLR_VOUCHER', 'VAT_DECLARATION', 'ISLR_EVENT', 'BCV_RATE', 'INVENTORY_PRODUCT']);
     const entityType = String(input?.entityType || '');
     const companyId = String(input?.companyId || '').trim();
     const entityId = String(input?.entityId || '').trim();
