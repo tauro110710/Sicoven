@@ -1355,6 +1355,15 @@ function validateAccountingSnapshot(previousState, nextState) {
           debitUsd: sum.debitUsd + Number(line.debitUsd || 0), creditUsd: sum.creditUsd + Number(line.creditUsd || 0)
         }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
       const within = (a, b, tolerance = 0.02) => Number.isFinite(Number(a)) && Number.isFinite(Number(b)) && Math.abs(Number(a) - Number(b)) <= tolerance;
+      const priorServiceNotes = asArray(nextState.purchases).filter(item =>
+        item.id !== note.id && item.companyId === original.companyId &&
+        item.originalPurchaseId === original.id && item.documentType === '03' &&
+        !(Array.isArray(item.creditNoteLines) && item.creditNoteLines.length > 0) && !item.isCancelled);
+      const cumulativeServiceTaxable = priorServiceNotes.reduce((sum, item) => sum + Number(item.taxableBaseBs || 0), 0) + Number(note.taxableBaseBs || 0);
+      const cumulativeServiceExempt = priorServiceNotes.reduce((sum, item) => sum + Number(item.exemptAmountBs || 0), 0) + Number(note.exemptAmountBs || 0);
+      const noteTaxableBs = Number(note.taxableBaseBs || 0);
+      const noteExemptBs = Number(note.exemptAmountBs || 0);
+      const noteTaxRate = Number(note.taxRate || 0);
       const expectedLineCount = expenseLines.length + (vatBs > 0 ? 1 : 0) +
         (payableAppliedBs > 0.02 ? 1 : 0) + (Number(note.supplierAdvanceBs || 0) > 0.02 ? 1 : 0);
       const validExpenseCredits = [...expectedCredits.entries()].every(([code, expected]) => {
@@ -1383,6 +1392,14 @@ function validateAccountingSnapshot(previousState, nextState) {
           Math.abs(Number(note.bcvRate) - rate) > 0.000001 ||
           Math.abs(totalBs - baseBs - vatBs) > 0.02 ||
           Math.abs(totalUsd - baseUsd - vatUsd) > 0.0001 ||
+          Math.abs(noteTaxableBs * noteTaxRate / 100 - vatBs) > 0.02 ||
+          Math.abs(noteTaxRate - Number(original.taxRate || 0)) > 0.000001 ||
+          Math.abs(cumulativeServiceTaxable - Number(original.taxableBaseBs || 0)) > 0.01 ||
+          Math.abs(cumulativeServiceExempt - Number(original.exemptAmountBs || 0)) > 0.01 ||
+          Number(note.vatWithheldBs || 0) !== 0 || Number(note.islrWithheldBs || 0) !== 0 ||
+          Number(note.igtfAmountBs || 0) !== 0 ||
+          Math.abs(Number(note.taxableBaseUsd || 0) - noteTaxableBs / rate) > 0.0001 ||
+          Math.abs(Number(note.exemptAmountUsd || 0) - noteExemptBs / rate) > 0.0001 ||
           Math.abs(baseUsd - baseBs / rate) > 0.0001 ||
           Math.abs(vatUsd - vatBs / rate) > 0.0001 ||
           Math.abs(totalUsd - totalBs / rate) > 0.0001 ||
@@ -1392,6 +1409,8 @@ function validateAccountingSnapshot(previousState, nextState) {
           !Number.isFinite(Number(note.supplierAdvanceUsd || 0)) || Number(note.supplierAdvanceUsd || 0) < 0 ||
           Number(note.supplierAdvanceBs || 0) > totalBs + 0.02 ||
           Number(note.supplierAdvanceUsd || 0) > totalUsd + 0.0001 ||
+          Math.abs(Number(note.supplierAdvanceBs || 0) / rate - Number(note.supplierAdvanceUsd || 0)) > 0.0001 ||
+          Math.abs(payableAppliedBs / rate - payableAppliedUsd) > 0.0001 ||
           (cashOriginalPurchase && (payableAppliedBs > 0.02 || payableAppliedUsd > 0.0001)) ||
           (!cashOriginalPurchase && !sourcePayable) ||
           !journal || journal.companyId !== note.companyId || journal.type !== 'AJUSTE' ||
