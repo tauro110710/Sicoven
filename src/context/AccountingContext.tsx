@@ -1289,6 +1289,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ...balance,
       creditedByNotesUsd,
       creditedByNotesBs,
+      debitedByNotesUsd,
+      debitedByNotesBs,
       creditedBySupplierAdvancesUsd,
       creditedBySupplierAdvancesBs,
       outstandingUsd,
