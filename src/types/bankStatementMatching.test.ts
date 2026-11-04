@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { matchesBankStatementLine } from './bankStatementMatching';
+import { matchesBankStatementLine, validateBankMovementFxSnapshot } from './bankStatementMatching';
 
 test('matches Bs bank lines at cent precision and rejects fuzzy five-cent differences', () => {
   assert.equal(matchesBankStatementLine({
@@ -33,4 +33,16 @@ test('requires the correct debit or credit side and rejects invalid amounts', ()
   assert.equal(matchesBankStatementLine({
     currency: 'BS', movementType: 'DEBIT', statementAmount: 50, debit: 1, credit: 50
   }), false);
+});
+
+test('requires a BCV snapshot effective on the bank movement date', () => {
+  assert.throws(() => validateBankMovementFxSnapshot({
+    date: '2026-10-20', amountBs: 250, amountUsd: 1, bcvRate: 250, bcvRateEffectiveDate: '2026-10-19'
+  }), /fecha del movimiento bancario/);
+  assert.throws(() => validateBankMovementFxSnapshot({
+    date: '2026-10-20', amountBs: 251, amountUsd: 1, bcvRate: 250, bcvRateEffectiveDate: '2026-10-20'
+  }), /no concilian/);
+  assert.doesNotThrow(() => validateBankMovementFxSnapshot({
+    date: '2026-10-20', amountBs: 250, amountUsd: 1, bcvRate: 250, bcvRateEffectiveDate: '2026-10-20'
+  }));
 });
