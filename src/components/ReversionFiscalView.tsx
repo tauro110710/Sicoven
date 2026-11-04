@@ -8,7 +8,7 @@ import type { VatFiscalIncident } from '../types/vatFiscalIncidents';
 export const ReversionFiscalView: React.FC = () => {
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, addMovement, addPurchaseCreditNote,
-    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, requestAccountingCorrection
+    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, requestAccountingCorrection, createCorrectionCase, listCorrectionCases, reviewCorrectionCase, executeCorrectionCase
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -62,6 +62,12 @@ export const ReversionFiscalView: React.FC = () => {
   const [requestReason, setRequestReason] = useState('');
   const [requestWorkpaper, setRequestWorkpaper] = useState('');
   const [requestSubmitting, setRequestSubmitting] = useState(false);
+  const [correctionCases, setCorrectionCases] = useState<import('../context/AccountingContext').CorrectionCase[]>([]);
+  const [caseActionReason, setCaseActionReason] = useState<Record<string,string>>({});
+  const [caseExecutionRef, setCaseExecutionRef] = useState<Record<string,string>>({});
+  const [caseActionBusy, setCaseActionBusy] = useState<string | null>(null);
+  const refreshCorrectionCases = useCallback(async () => { try { setCorrectionCases(await listCorrectionCases()); } catch (error) { setFeedback({kind:'error',message:error instanceof Error?error.message:'No se pudieron consultar los expedientes.'}); } },[listCorrectionCases]);
+  useEffect(() => { void refreshCorrectionCases(); },[refreshCorrectionCases]);
   const refreshAuditEvents = useCallback(async () => {
     setAuditLoading(true);
     try {
@@ -137,7 +143,7 @@ export const ReversionFiscalView: React.FC = () => {
     if (requestSubmitting) return;
     setRequestSubmitting(true);
     try {
-      await requestAccountingCorrection({
+      await createCorrectionCase({
         entityType: requestEntityType, entityId: requestEntityId.trim(),
         correctionType: requestCorrectionType.trim(),
         sourceDocumentRef: requestSourceRef.trim(),
@@ -146,7 +152,8 @@ export const ReversionFiscalView: React.FC = () => {
       });
       setRequestEntityId(''); setRequestSourceRef(''); setRequestTargetRef('');
       setRequestReason(''); setRequestWorkpaper('');
-      setFeedback({kind:'success',message:'Solicitud de corrección registrada en la pista append-only de SQLite. No se modificó el documento ni se ejecutó ningún asiento.'});
+      setFeedback({kind:'success',message:'Expediente creado en SQLite, pendiente de revisión independiente. No se modificó el documento original.'});
+      await refreshCorrectionCases();
       await refreshAuditEvents();
     } catch (error) {
       setFeedback({kind:'error',message:error instanceof Error ? error.message : 'No se pudo registrar la solicitud.'});
@@ -537,6 +544,27 @@ export const ReversionFiscalView: React.FC = () => {
               {completedBy && <p className="text-emerald-800">Evento de ejecución #{completedBy.id} · {completedBy.createdAt} · Ref. correctiva {String(completedBy.details.correctionDocumentRef||'—')}</p>}
             </article>;
           })}</div>}
+      </section>
+      <section className="rounded-2xl border border-indigo-200 bg-white p-4 sm:p-6 space-y-3">
+        <h2 className="font-bold">Expedientes integrales · revisión segregada ({correctionCases.length})</h2>
+        <p className="text-xs text-slate-600">Solicitante, revisor y ejecutor deben ser tres administradores diferentes.</p>
+        {correctionCases.map(item=><article key={item.id} className="rounded-lg border p-3 space-y-2 text-xs">
+          <strong>{item.correction_type} · {item.entity_type} #{item.entity_id} · {item.status}</strong>
+          <p>Origen: {item.source_ref} · Correctivo: {item.correction_ref||'Por asignar'}</p><p>{item.reason}</p><p>{item.workpaper}</p>
+          <p className="text-slate-500">Solicitó {item.requested_by_name} · Revisó {item.reviewed_by_name||'—'} · Ejecutó {item.executed_by_name||'—'}</p>
+          {item.status==='PENDING_REVIEW' && <>
+            <textarea value={caseActionReason[item.id]||''} onChange={e=>setCaseActionReason(p=>({...p,[item.id]:e.target.value}))} className="w-full rounded border p-2" rows={2} placeholder="Justificación de decisión (15 caracteres mínimo)"/>
+            <button disabled={caseActionBusy===item.id||(caseActionReason[item.id]||'').trim().length<15} onClick={async()=>{setCaseActionBusy(item.id);try{await reviewCorrectionCase({caseId:item.id,decision:'APPROVE',reason:caseActionReason[item.id]});await refreshCorrectionCases();}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'Error de revisión'});}finally{setCaseActionBusy(null);}}} className="rounded bg-emerald-700 px-3 py-2 text-white">Aprobar</button>
+            <button disabled={caseActionBusy===item.id||(caseActionReason[item.id]||'').trim().length<15} onClick={async()=>{setCaseActionBusy(item.id);try{await reviewCorrectionCase({caseId:item.id,decision:'REJECT',reason:caseActionReason[item.id]});await refreshCorrectionCases();}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'Error de revisión'});}finally{setCaseActionBusy(null);}}} className="rounded border px-3 py-2">Rechazar</button>
+          </>}
+          {item.status==='APPROVED' && <>
+            <input value={caseExecutionRef[item.id]||''} onChange={e=>setCaseExecutionRef(p=>({...p,[item.id]:e.target.value}))} className="w-full rounded border p-2" placeholder="Referencia correctiva emitida"/>
+            <textarea value={caseActionReason[item.id]||''} onChange={e=>setCaseActionReason(p=>({...p,[item.id]:e.target.value}))} className="w-full rounded border p-2" rows={2} placeholder="Constancia de ejecución (15 caracteres mínimo)"/>
+            <button disabled={caseActionBusy===item.id||!(caseExecutionRef[item.id]||'').trim()||(caseActionReason[item.id]||'').trim().length<15} onClick={async()=>{setCaseActionBusy(item.id);try{await executeCorrectionCase({caseId:item.id,executionRef:caseExecutionRef[item.id],reason:caseActionReason[item.id]});await refreshCorrectionCases();}catch(e){setFeedback({kind:'error',message:e instanceof Error?e.message:'Error de ejecución'});}finally{setCaseActionBusy(null);}}} className="rounded bg-indigo-700 px-3 py-2 text-white">Registrar ejecución</button>
+          </>}
+          <div className="border-t pt-2"><strong>Historial</strong>{item.events.map(ev=><p key={ev.id}>{ev.event_type} · {ev.actor_name} · {ev.created_at} · {ev.reason}</p>)}</div>
+        </article>)}
+        {correctionCases.length===0 && <p className="text-sm text-slate-500">No hay expedientes formales.</p>}
       </section>
       <section className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
         <div className="bg-slate-900 text-white px-5 py-4 flex items-center gap-3">
