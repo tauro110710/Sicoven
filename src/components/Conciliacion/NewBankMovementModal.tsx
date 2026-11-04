@@ -15,7 +15,9 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
   onClose,
   bankAccount
 }) => {
-  const { currentCompany, addBankStatementMovement } = useAccounting();
+  const { currentCompany, addBankStatementMovement, waitForPersistence } = useAccounting();
+  const savingRef = React.useRef(false);
+  const [saving, setSaving] = useState(false);
 
   const [date, setDate] = useState<string>(() => { const now = new Date(); const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000); return local.toISOString().slice(0, 10); });
   const [reference, setReference] = useState<string>('');
@@ -46,7 +48,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
     ? Math.round(parsedAmount * 1000000) / 1000000
     : (bcvRate > 0 ? Math.round((parsedAmountBs / bcvRate) * 1000000) / 1000000 : 0);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) return;
     if (!description.trim()) return;
@@ -55,6 +57,9 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
       return;
     }
 
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     try {
       addBankStatementMovement({
         bankAccountId: bankAccount.id,
@@ -68,12 +73,16 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
         bcvRateEffectiveDate,
         isReconciled: false
       });
+      await waitForPersistence();
       setReference('');
       setDescription('');
       setAmountBs('');
       onClose();
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'No se pudo registrar el movimiento del extracto bancario.');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
 
@@ -92,7 +101,8 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            disabled={saving}
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer disabled:opacity-40"
           >
             <X className="w-5 h-5" />
           </button>
@@ -196,17 +206,18 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer"
+              disabled={saving}
+              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer disabled:opacity-40"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              disabled={parsedAmountBs <= 0 || bcvRate <= 0 || !description.trim()}
+              disabled={saving || parsedAmountBs <= 0 || bcvRate <= 0 || !description.trim()}
               className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
             >
               <Check className="w-4 h-4" />
-              Guardar Movimiento
+              {saving ? "Confirmando SQLite..." : "Guardar Movimiento"}
             </button>
           </div>
         </form>
