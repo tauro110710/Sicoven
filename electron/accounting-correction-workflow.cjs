@@ -96,6 +96,10 @@ function initializeCorrectionWorkflow(db) {
   db.exec(`
     DROP TRIGGER IF EXISTS correction_cases_valid_transition;
     DROP TRIGGER IF EXISTS correction_cases_segregation;
+    UPDATE accounting_correction_cases SET workflow_stage=CASE status
+      WHEN 'APPROVED' THEN 'READY_FOR_EXECUTION' WHEN 'REJECTED' THEN 'CLOSED'
+      WHEN 'EXECUTED' THEN 'COMPLETED' ELSE 'IN_REVIEW' END
+      WHERE workflow_stage='IN_REVIEW' AND status IN ('APPROVED','REJECTED','EXECUTED');
     CREATE TRIGGER correction_cases_valid_transition BEFORE UPDATE ON accounting_correction_cases
       WHEN NOT (
         (OLD.status='PENDING_REVIEW' AND NEW.status IN ('APPROVED','REJECTED')) OR
