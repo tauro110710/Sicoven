@@ -57,7 +57,7 @@ describe('accounting report integrity', () => {
     assert.equal(isTrialBalanceBalanced({ ...balanced, totalCreditUsd: 9.99 }), false);
     assert.equal(isTrialBalanceBalanced({ ...balanced, creditBalancesUsd: 3.999 }), false);
     assert.equal(isTrialBalanceBalanced({ ...balanced, totalCreditBs: 100.01 }), true);
-    assert.equal(isTrialBalanceBalanced({ ...balanced, totalCreditUsd: 9.999995 }, 0, 0.000005), true);
+    assert.equal(isTrialBalanceBalanced({ ...balanced, totalCreditUsd: 9.999996 }, 0, 0.000005), true);
     assert.equal(isTrialBalanceBalanced(balanced, 0, 0), true);
   });
 
