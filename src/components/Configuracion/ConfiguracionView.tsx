@@ -244,7 +244,7 @@ export const ConfiguracionView: React.FC = () => {
       tradeName: tradeName.trim() || undefined,
       rif: rifValidation.formattedRif,
       taxpayerType,
-      ...(accountingFramework ? { accountingFramework, accountingFrameworkVersion: accountingFrameworkVersion.trim(), accountingFrameworkAdoptionDate } : { accountingFramework: undefined, accountingFrameworkVersion: undefined, accountingFrameworkAdoptionDate: undefined }),
+      ...(accountingFramework ? { accountingFramework, accountingFrameworkVersion: accountingFrameworkVersion.trim(), accountingFrameworkAdoptionDate } : {}),
       defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
       ivaRetentionAgentBasis,
       isPersonalFirm,
