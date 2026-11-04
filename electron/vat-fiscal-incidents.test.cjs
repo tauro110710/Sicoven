@@ -220,3 +220,24 @@ test('requires a documented decision and an authorized administrator', () => {
   assert.throws(() => createVatFiscalIncident(db, createInput(), { username: 'operator', role: 'user' }), /administrador/);
   db.close();
 });
+
+test('requires review before action and verifiable evidence for an action', () => {
+  const { db } = fixture();
+  const created = createVatFiscalIncident(db, createInput(), actor);
+  assert.throws(() => recordVatFiscalIncidentEvent(db, {
+    incidentId: created.id, eventType: 'ACTION_RECORDED',
+    decisionText: 'Se documenta una actuación sin revisión previa ni evidencia externa verificable.',
+    declarationId: 'declaration-1', externalReference: 'EXT-REF-1'
+  }, actor), /revisión profesional documentada/);
+  recordVatFiscalIncidentEvent(db, {
+    incidentId: created.id, eventType: 'REVIEW_RECORDED',
+    decisionText: 'Se realizó la revisión profesional inicial del expediente y sus documentos originales.',
+    declarationId: 'declaration-1'
+  }, actor);
+  assert.throws(() => recordVatFiscalIncidentEvent(db, {
+    incidentId: created.id, eventType: 'ACTION_RECORDED',
+    decisionText: 'Se registra una actuación sin documento ni asiento ni referencia externa verificable.',
+    declarationId: 'declaration-1'
+  }, actor), /requiere al menos una referencia externa/);
+  db.close();
+});
