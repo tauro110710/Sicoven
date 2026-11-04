@@ -1,4 +1,5 @@
 export type TaxpayerType = 'ESPECIAL' | 'ORDINARIO';
+export type AccountingFramework = 'VEN_NIF_GE' | 'VEN_NIF_PYME';
 export type IvaRetentionAgentBasis = 'ARTICLE_1_SPECIAL_DESIGNATED' | 'ARTICLE_2_METALS' | 'ARTICLE_1_AND_2' | 'NOT_AGENT' | 'UNCONFIRMED';
 
 export interface Company {
@@ -10,6 +11,12 @@ export interface Company {
   phone: string;
   email: string;
   taxpayerType: TaxpayerType;
+  /** Marco contable expresamente adoptado; ausente en empresas históricas hasta documentar su adopción. */
+  accountingFramework?: AccountingFramework;
+  /** Identificador de la versión normativa realmente aplicada, no se infiere ni se autocompleta. */
+  accountingFrameworkVersion?: string;
+  /** Fecha documentada de adopción del marco, YYYY-MM-DD. */
+  accountingFrameworkAdoptionDate?: string;
   defaultIvaRetentionRate: number; // 75 or 100
   /** Supuesto expreso de designación como agente bajo Providencia SNAT/2025/000054. Ausente = pendiente de confirmar. */
   ivaRetentionAgentBasis?: IvaRetentionAgentBasis;
