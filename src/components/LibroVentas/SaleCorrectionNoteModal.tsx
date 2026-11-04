@@ -59,7 +59,7 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
           <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg border px-3 py-1.5 text-xs">Cerrar</button>
         </div>
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
-          Solo se habilita para facturas a crédito sin retención IVA, IGTF ni movimientos de inventario vinculados. Los cobros previos limitan el monto de la NC al saldo exigible. Los casos excluidos permanecen bloqueados hasta contar con su circuito de reembolso, Kardex y rectificación fiscal.
+          Se habilita para facturas a crédito sin retención IVA ni IGTF. Si la factura contiene mercancía, la NC solo se confirma después de la devolución física total y de conciliar el Kardex y el asiento de costo en Bs y USD. Los cobros previos limitan la NC al saldo exigible; ventas de contado y reembolsos requieren un circuito separado.
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="text-xs font-semibold text-slate-700">Fecha de emisión
