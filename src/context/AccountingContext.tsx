@@ -604,7 +604,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     journalReversalInFlightRef.current = true;
     try {
     if (persistenceFaultRef.current) throw new Error('La persistencia SQLite falló. Reinicie SICOVEN antes de continuar.');
-    if (window.sicovenStore && !storageReady) throw new Error('SQLite todavía no está lista. No se registró la reversión.');
+    if (!window.sicovenStore?.save || !storageReady) throw new Error('La reversión requiere SQLite local disponible y confirmada. No se permite registrar contra-asientos usando únicamente caché del navegador.');
     const source = journalEntries.find(entry => entry.id === id && entry.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró el asiento original en la empresa activa.');
     const vatPaymentReversalBlocker = getVatPaymentJournalReversalBlocker(
