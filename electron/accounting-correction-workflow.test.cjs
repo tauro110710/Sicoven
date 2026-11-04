@@ -19,7 +19,7 @@ test('workflow enforces preparer-reviewer-executor segregation and append-only e
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-002',reason:'La referencia no coincide con el documento solicitado.'},admin(3,'ejecutor')),/no coincide con el documento correctivo/);
   const executed=markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Se aplicó el documento correctivo.',evidenceRecordId:'credit-note-1',evidenceCollection:'sales'},admin(3,'ejecutor'));
   assert.equal(executed.status,'EXECUTED');
-  assert.deepEqual(executed.events.map(e=>e.event_type),['REQUESTED','APPROVED','EXECUTED']);
+  assert.deepEqual(executed.events.map(e=>e.event_type),['REQUESTED','APPROVED','EXECUTION_STARTED','EXECUTED']);
   assert.equal(executed.events[2].metadata.evidenceRecordId,'credit-note-1');
   assert.equal(executed.events[2].metadata.evidenceCollection,'sales');
   assert.equal(listCorrectionCases(db,'co-1').length,1);
@@ -122,7 +122,7 @@ test('observation returns the case to its requester and resubmission restarts in
   assert.equal(approved.workflow_stage,'READY_FOR_EXECUTION');
   const executed=markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Documento correctivo aplicado y conciliado.',evidenceRecordId:'credit-note-1',evidenceCollection:'sales'},admin(4,'ejecutor'));
   assert.equal(executed.workflow_stage,'COMPLETED');
-  assert.deepEqual(executed.events.map(e=>e.event_type),['REQUESTED','OBSERVED','RESUBMITTED','APPROVED','EXECUTED']);
+  assert.deepEqual(executed.events.map(e=>e.event_type),['REQUESTED','OBSERVED','RESUBMITTED','APPROVED','EXECUTION_STARTED','EXECUTED']);
  }finally{db.close();}
 });
 test('observation and resubmission are append-only and roll back with audit failures',()=>{
@@ -259,7 +259,10 @@ test('existing observation ledger migrates to allow withdrawal without losing ev
   assert.deepEqual(preserved,{event_type:'OBSERVED',actor_name:'revisor'});
   db.prepare("INSERT INTO accounting_correction_case_workflow_events(case_id,event_type,actor_id,actor_name,reason,metadata_json,created_at) VALUES(?,?,?,?,?,?,?)")
    .run(requested.id,'WITHDRAWN',1,'solicitante','Se retira formalmente la solicitud.','{}','2026-11-02T00:00:00.000Z');
+  db.prepare("INSERT INTO accounting_correction_case_workflow_events(case_id,event_type,actor_id,actor_name,reason,metadata_json,created_at) VALUES(?,?,?,?,?,?,?)")
+   .run(requested.id,'EXECUTION_STARTED',3,'ejecutor','Inicio de ejecución autorizado.','{}','2026-11-03T00:00:00.000Z');
   assert.equal(db.prepare("SELECT COUNT(*) n FROM accounting_correction_case_workflow_events WHERE event_type='WITHDRAWN'").get().n,1);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM accounting_correction_case_workflow_events WHERE event_type='EXECUTION_STARTED'").get().n,1);
  }finally{db.close();}
 });
 
@@ -281,7 +284,8 @@ test('correction generators require one matching approved case and an independen
   assert.throws(()=>requireApprovedCorrectionCase(db,gateInput,admin(1,'solicitante')),/distinto del solicitante y del aprobador/);
   assert.throws(()=>requireApprovedCorrectionCase(db,gateInput,admin(2,'revisor')),/distinto del solicitante y del aprobador/);
   assert.throws(()=>requireApprovedCorrectionCase(db,{...gateInput,correctionDocumentRef:'NC-999'},admin(3,'ejecutor')),/No existe un expediente formal aprobado/);
-  assert.deepEqual(requireApprovedCorrectionCase(db,gateInput,admin(3,'ejecutor')),{ok:true,caseId:requested.id,correctionType:'ANULACION'});
+  assert.deepEqual(requireApprovedCorrectionCase(db,gateInput,admin(3,'ejecutor')),{ok:true,caseId:requested.id,correctionType:'ANULACION',resumed:false});
+  assert.deepEqual(requireApprovedCorrectionCase(db,gateInput,admin(3,'ejecutor')),{ok:true,caseId:requested.id,correctionType:'ANULACION',resumed:true});
   assert.throws(()=>registerCorrectionRequest(db,input,admin(4,'solicitante-2')),/Ya existe un expediente activo/);
  }finally{db.close();}
 });
