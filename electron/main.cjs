@@ -624,7 +624,7 @@ app.whenReady().then(async () => {
     if (!evidence) {
       throw new Error('No se encontró un documento correctivo de la misma empresa con referencia coincidente y vínculo explícito al registro origen. El expediente permanece aprobado y abierto.');
     }
-    return markCorrectionExecuted(db,input,actor);
+    return markCorrectionExecuted(db,{...input,evidenceRecordId:evidence.id,evidenceCollection:({SALE:'sales',PURCHASE:'purchases',JOURNAL_ENTRY:'journalEntries',BANK_MOVEMENT:'bankStatementMovements',INVENTORY_MOVEMENT:'movements',VAT_VOUCHER:'vatVouchers',ISLR_VOUCHER:'islrVouchers',VAT_DECLARATION:'vatWithholdingDeclarations',ISLR_EVENT:'islrFiscalEvents',INVENTORY_PRODUCT:'movements',BCV_RATE:'companies'})[item.entity_type]},actor);
   });
   ipcMain.handle('sicoven:correction-case-list', (_event, token, companyId) => {
     correctionActor(token);
