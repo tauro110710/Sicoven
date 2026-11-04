@@ -49,6 +49,9 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
     }
   }
   const companyHistory = companyLedger.filter(entry => entry.date <= periodEndDate);
+  const reversedEntryIds = new Set(companyLedger
+    .filter(entry => entry.companyId === companyId && entry.reversalOfEntryId)
+    .map(entry => entry.reversalOfEntryId as string));
   // A linked annual opening is the authoritative carry-forward snapshot.
   // Earlier ledger activity is already represented in that opening and must
   // not be added again when preparing the next exercise.
@@ -56,7 +59,8 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
     .filter(entry => entry.type === 'APERTURA' &&
       entry.exerciseLink?.nextPeriodStartDate === entry.date &&
       entry.exerciseLink.nextPeriodStartDate <= input.periodStartDate &&
-      isIsoDate(entry.exerciseLink.nextPeriodStartDate))
+      isIsoDate(entry.exerciseLink.nextPeriodStartDate) &&
+      !entry.reversedByEntryId && !reversedEntryIds.has(entry.id))
     .sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber)
     .at(-1);
   const priorEntries = latestAnnualOpening
