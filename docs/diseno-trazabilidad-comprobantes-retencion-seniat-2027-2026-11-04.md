@@ -112,3 +112,12 @@ No declarar terminada esta adaptación hasta:
 - validar profesionalmente la aplicabilidad de cada requisito.
 
 Este documento es un diseño de auditoría, no una declaración de cumplimiento ni una modificación del comportamiento de producción.
+
+
+## Correlativo ISLR de 14 dígitos — implementación en PR #95
+
+- El código conserva el formato histórico ISLR antes del 19-04-2027 y genera seis dígitos AAAAMM más ocho dígitos correlativos desde la fecha de vigencia indicada.
+- La secuencia se recupera desde el mayor correlativo de los comprobantes del período, no desde el número de registros; se bloquea al superar 99.999.999.
+- No se renumeran comprobantes históricos ni se reinicia la secuencia ante desbordamiento.
+- La implementación actual toma el período de `accountCreditDate`, siguiendo el período fiscal que usa el flujo ISLR existente. **Antes de declarar cumplimiento**, debe cotejarse con el manual técnico SENIAT si el AAAAMM debe referirse al período del evento fiscal o al mes de emisión material del comprobante, especialmente para emisiones tardías o registros retroactivos.
+- Los tests unitarios están añadidos, pero no se han ejecutado con éxito en el HEAD actual; GitHub Actions falla antes de iniciar steps.
