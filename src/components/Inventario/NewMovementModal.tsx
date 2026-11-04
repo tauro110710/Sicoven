@@ -14,7 +14,9 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   onClose,
   defaultProductId
 }) => {
-  const { currentCompany, products, movements, purchases, journalEntries, addMovement } = useAccounting();
+  const { currentCompany, products, movements, purchases, journalEntries, addMovement, waitForPersistence } = useAccounting();
+  const savingRef = React.useRef(false);
+  const [saving, setSaving] = useState(false);
 
   const [productId, setProductId] = useState<string>(
     defaultProductId || products[0]?.id || ''
@@ -64,7 +66,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const balanceTotalBs = balanceQty * unitCostBs;
   const balanceTotalUsd = bcvRate > 0 ? balanceTotalBs / bcvRate : 0;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     if ((type !== 'AJUSTE' && quantity <= 0) || (type === 'AJUSTE' && quantity < 0) || !Number.isFinite(bcvRate) || bcvRate <= 0) { setError('Verifique que la cantidad y la tasa BCV sean válidas.'); return; }
@@ -110,6 +112,9 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
         return;
       }
     }
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     try {
     addMovement({
       productId: selectedProduct.id,
@@ -131,10 +136,13 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
       balanceTotalBs,
       balanceTotalUsd: Number(balanceTotalUsd.toFixed(2))
     });
-
+    await waitForPersistence();
     onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar el movimiento.');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
 
@@ -153,7 +161,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            disabled={saving}
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer disabled:opacity-40"
           >
             <X className="w-5 h-5" />
           </button>
@@ -335,16 +344,18 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer"
+              disabled={saving}
+              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer disabled:opacity-40"
             >
               Cancelar
             </button>
             <button
               type="submit"
+              disabled={saving}
               className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
             >
               <Check className="w-4 h-4" />
-              Procesar Movimiento
+              {saving ? "Confirmando SQLite..." : "Procesar Movimiento"}
             </button>
           </div>
         </form>
