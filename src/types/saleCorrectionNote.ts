@@ -88,10 +88,7 @@ export function calculateSaleCorrectionNote(request: SaleCorrectionNoteRequest):
     if (taxableBaseBs > remainingTaxable + 0.01 || exemptAmountBs > remainingExempt + 0.01) {
       throw new Error('La nota de crédito supera la base imponible o exenta todavía disponible de la factura original.');
     }
-    if (taxableBaseBs > 0 && Math.abs(Number(sourceSale.taxRate) - Number(sourceSale.taxRate)) > 0.0001) {
-      throw new Error('La alícuota de la nota no coincide con la factura original.');
-    }
-  }
+      }
   const taxableBaseUsd = usd(taxableBaseBs / request.bcvRate);
   const exemptAmountUsd = usd(exemptAmountBs / request.bcvRate);
   const vatAmountUsd = usd(vatAmountBs / request.bcvRate);
