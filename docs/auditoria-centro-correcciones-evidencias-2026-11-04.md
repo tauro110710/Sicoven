@@ -29,7 +29,7 @@ La ejecución ahora requiere simultáneamente:
 4. Documento correctivo persistido en la misma empresa, con referencia coincidente y vínculo explícito al registro fuente.
 5. Al menos un soporte documental asociado al expediente y verificado por una identidad distinta de quien lo adjuntó.
 
-Si cualquiera de estas condiciones falla, el expediente permanece aprobado y abierto.
+Si cualquiera de estas condiciones falla, el expediente permanece aprobado y abierto. El motor de estados también exige que la función de ejecución reciba el ID y la colección exacta de evidencia; no permite completar expedientes desde una llamada sin identidad documental.
 
 ## Pendientes
 
@@ -62,4 +62,6 @@ Se contrastaron los vínculos con los tipos persistidos:
 
 El formulario de expedientes solo permite estas seis clases de origen, para evitar abrir casos ejecutables sobre entidades que todavía no persisten un vínculo correctivo verificable. Los otros escenarios no se consideran terminados; deben recibir su relación explícita antes de habilitarse.
 
-La suite del workflow contiene ahora **13 pruebas definidas** que cubren segregación, rollback, vínculos de NC/ND de compra y venta, reversos/ajustes de asientos, comprobantes de retención y ciclo de observación/subsanación. No se han ejecutado en esta sesión. La suite documental mantiene nueve pruebas definidas, tampoco ejecutadas.
+La suite del workflow contiene ahora **16 pruebas definidas** que cubren segregación, rollback, vínculos de NC/ND de compra y venta, reversos/ajustes de asientos, comprobantes de retención y ciclo de observación/subsanación. No se han ejecutado en esta sesión. La suite documental mantiene nueve pruebas definidas, tampoco ejecutadas.
+
+Se agregó además una prueba de migración aditiva para expedientes heredados `PENDING_REVIEW`, `APPROVED`, `REJECTED` y `EXECUTED`, que verifica que sus estados se conservan y reciben la etapa equivalente. Se añadieron casos de ND de venta, NC/ND de compra y corrección de Kardex. Total actual del archivo de pruebas: **16 casos definidos**, no ejecutados.
