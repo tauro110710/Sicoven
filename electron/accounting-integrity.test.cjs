@@ -263,7 +263,7 @@ test('SQLite reconciles every new sale with its complete invoice journal in Bs a
   const journal = {
     id: 'sale-journal-1', companyId: 'company-1', entryNumber: 1,
     date: sale.invoiceDate, description: 'Factura de venta V-1001',
-    type: 'VENTA', bcvRate: 100, referenceDoc: 'FAC-V-1001',
+    type: 'VENTA', bcvRate: 100, referenceDoc: 'FAC- V-1001',
     items: [
       { accountCode: '1.1.3.03', debitBs: 40, creditBs: 0, debitUsd: 0.4, creditUsd: 0 },
       { accountCode: '1.1.2.01', debitBs: 1120, creditBs: 0, debitUsd: 11.2, creditUsd: 0 },
