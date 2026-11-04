@@ -43,9 +43,14 @@ function assertLinkedEntity(db, input) {
   const companyId = requiredText(input.companyId, 'Empresa', 120);
   if (!(Array.isArray(state.companies) ? state.companies : []).some(c => String(c.id) === companyId)) throw new Error('La empresa asociada al documento no existe en SQLite.');
   const entityType = requiredText(input.entityType, 'Tipo de operación', 50).toUpperCase();
+  const entityId = requiredText(input.entityId, 'Identificador de operación', 120);
+  if (entityType === 'CORRECTION_CASE') {
+    const correctionCase = db.prepare('SELECT id FROM accounting_correction_cases WHERE id=? AND company_id=?').get(entityId,companyId);
+    if (!correctionCase) throw new Error('El expediente de corrección no existe o no pertenece a la empresa seleccionada.');
+    return { companyId, entityType, entityId };
+  }
   const collection = ENTITY_COLLECTIONS[entityType];
   if (!collection) throw new Error('Tipo de operación no admitido para respaldo documental.');
-  const entityId = requiredText(input.entityId, 'Identificador de operación', 120);
   const entity = (Array.isArray(state[collection]) ? state[collection] : []).find(item => String(item.id) === entityId && String(item.companyId) === companyId);
   if (!entity) throw new Error('La operación no existe o no pertenece a la empresa seleccionada.');
   return { companyId, entityType, entityId };
