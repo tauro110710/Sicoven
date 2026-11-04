@@ -17,7 +17,8 @@ import {
   CalendarCheck,
   LockKeyhole
 } from 'lucide-react';
-import { AccountingFramework, TaxpayerType, IvaRetentionAgentBasis, JournalEntryItem } from '../../types/accounting';
+import { AccountingFramework, TaxpayerType, IvaRetentionAgentBasis, JournalEntryItem, AccountingCurrencyCode, FunctionalCurrencyAssessment } from '../../types/accounting';
+import { validateFunctionalCurrencyAssessment } from '../../types/functionalCurrency';
 import { buildOpeningEntryItems } from '../../types/accountingYearOpening';
 import { CompanyModal } from '../CompanyModal';
 import { BcvRateModal } from '../BcvRateModal';
@@ -97,6 +98,23 @@ export const ConfiguracionView: React.FC = () => {
   const [accountingFrameworkAdoptionDate, setAccountingFrameworkAdoptionDate] = useState(currentCompany.accountingFrameworkAdoptionDate || '');
   const [specialTaxpayerNotificationReference, setSpecialTaxpayerNotificationReference] = useState(currentCompany.specialTaxpayerNotificationReference || '');
   const [specialTaxpayerNotificationDate, setSpecialTaxpayerNotificationDate] = useState(currentCompany.specialTaxpayerNotificationDate || '');
+  const [functionalCurrency, setFunctionalCurrency] = useState<AccountingCurrencyCode | ''>('');
+  const [functionalCurrencyOther, setFunctionalCurrencyOther] = useState('');
+  const [presentationCurrency, setPresentationCurrency] = useState<AccountingCurrencyCode | ''>('');
+  const [presentationCurrencyOther, setPresentationCurrencyOther] = useState('');
+  const [currencyAssessmentStatus, setCurrencyAssessmentStatus] = useState<'DRAFT' | 'APPROVED'>('DRAFT');
+  const [currencyAssessmentDate, setCurrencyAssessmentDate] = useState('');
+  const [currencyEffectiveDate, setCurrencyEffectiveDate] = useState('');
+  const [currencyPreparedBy, setCurrencyPreparedBy] = useState('');
+  const [currencyApprovedBy, setCurrencyApprovedBy] = useState('');
+  const [currencyApprovedAt, setCurrencyApprovedAt] = useState('');
+  const [primaryEconomicEnvironment, setPrimaryEconomicEnvironment] = useState('');
+  const [salesPriceFactors, setSalesPriceFactors] = useState('');
+  const [costFactors, setCostFactors] = useState('');
+  const [financingFactors, setFinancingFactors] = useState('');
+  const [operatingReceiptsFactors, setOperatingReceiptsFactors] = useState('');
+  const [currencyProfessionalConclusion, setCurrencyProfessionalConclusion] = useState('');
+  const [currencyEvidenceReferences, setCurrencyEvidenceReferences] = useState('');
 
   // Sync state if currentCompany switches
   React.useEffect(() => {
@@ -119,6 +137,13 @@ export const ConfiguracionView: React.FC = () => {
     setAccountingFrameworkAdoptionDate(currentCompany.accountingFrameworkAdoptionDate || '');
     setSpecialTaxpayerNotificationReference(currentCompany.specialTaxpayerNotificationReference || '');
     setSpecialTaxpayerNotificationDate(currentCompany.specialTaxpayerNotificationDate || '');
+    setFunctionalCurrency(''); setFunctionalCurrencyOther('');
+    setPresentationCurrency(''); setPresentationCurrencyOther('');
+    setCurrencyAssessmentStatus('DRAFT'); setCurrencyAssessmentDate(''); setCurrencyEffectiveDate('');
+    setCurrencyPreparedBy(''); setCurrencyApprovedBy(''); setCurrencyApprovedAt('');
+    setPrimaryEconomicEnvironment(''); setSalesPriceFactors(''); setCostFactors('');
+    setFinancingFactors(''); setOperatingReceiptsFactors('');
+    setCurrencyProfessionalConclusion(''); setCurrencyEvidenceReferences('');
     setPeriodCloseDate(currentCompany.closedThroughDate || (() => {
       const now = new Date();
       return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -251,8 +276,42 @@ export const ConfiguracionView: React.FC = () => {
       window.alert('Para registrar la adopción VEN-NIF debe completar marco, versión normativa y fecha documentada.');
       return;
     }
+    const hasCurrencyAssessmentInput = Boolean(
+      functionalCurrency || functionalCurrencyOther.trim() || presentationCurrency ||
+      presentationCurrencyOther.trim() || currencyAssessmentDate || currencyEffectiveDate ||
+      currencyPreparedBy.trim() || currencyApprovedBy.trim() || currencyApprovedAt ||
+      primaryEconomicEnvironment.trim() || salesPriceFactors.trim() || costFactors.trim() ||
+      financingFactors.trim() || operatingReceiptsFactors.trim() ||
+      currencyProfessionalConclusion.trim() || currencyEvidenceReferences.trim()
+    );
+    let newCurrencyAssessment: FunctionalCurrencyAssessment | undefined;
+    if (hasCurrencyAssessmentInput) {
+      const draft: FunctionalCurrencyAssessment = {
+        id: 'fc-' + currentCompany.id + '-' + Date.now(),
+        status: currencyAssessmentStatus,
+        functionalCurrency: functionalCurrency as AccountingCurrencyCode,
+        ...(functionalCurrency === 'OTHER' ? { functionalCurrencyOther: functionalCurrencyOther.trim() } : {}),
+        presentationCurrency: presentationCurrency as AccountingCurrencyCode,
+        ...(presentationCurrency === 'OTHER' ? { presentationCurrencyOther: presentationCurrencyOther.trim() } : {}),
+        assessmentDate: currencyAssessmentDate, effectiveDate: currencyEffectiveDate,
+        preparedBy: currencyPreparedBy.trim(),
+        ...(currencyAssessmentStatus === 'APPROVED' ? { approvedBy: currencyApprovedBy.trim(), approvedAt: currencyApprovedAt } : {}),
+        primaryEconomicEnvironment: primaryEconomicEnvironment.trim(),
+        salesPriceFactors: salesPriceFactors.trim(), costFactors: costFactors.trim(),
+        financingFactors: financingFactors.trim(), operatingReceiptsFactors: operatingReceiptsFactors.trim(),
+        professionalConclusion: currencyProfessionalConclusion.trim(),
+        evidenceReferences: currencyEvidenceReferences.split('\\n').map(item => item.trim()).filter(Boolean)
+      };
+      const currencyErrors = validateFunctionalCurrencyAssessment(draft);
+      if (currencyErrors.length) {
+        window.alert('No se guardó la evaluación NIC 21:\\n- ' + currencyErrors.join('\\n- '));
+        return;
+      }
+      newCurrencyAssessment = draft;
+    }
     updateCompany({
       ...currentCompany,
+      ...(newCurrencyAssessment ? { functionalCurrencyAssessments: [...(currentCompany.functionalCurrencyAssessments || []), newCurrencyAssessment] } : {}),
       name: name.trim().toUpperCase(),
       tradeName: tradeName.trim() || undefined,
       rif: rifValidation.formattedRif,
@@ -489,6 +548,37 @@ export const ConfiguracionView: React.FC = () => {
               <div><label className="block font-semibold text-slate-700 mb-1">Fecha documentada de adopción</label><input type="date" value={accountingFrameworkAdoptionDate} onChange={e => setAccountingFrameworkAdoptionDate(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
             </div>
             <p className="text-[11px] text-slate-600">Los registros históricos sin esta información permanecen intactos. No se infiere ni se asigna una versión normativa automáticamente.</p>
+          </div>
+
+          <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 space-y-3">
+            <div>
+              <label className="block font-bold text-slate-800">Moneda funcional y de presentación — NIC 21</label>
+              {(() => {
+                const approved = (currentCompany.functionalCurrencyAssessments || []).filter(item => item.status === 'APPROVED').slice(-1)[0];
+                return approved
+                  ? <p className="mt-1 text-[11px] text-emerald-800">Última evaluación aprobada: funcional {approved.functionalCurrency === 'OTHER' ? approved.functionalCurrencyOther : approved.functionalCurrency}; presentación {approved.presentationCurrency === 'OTHER' ? approved.presentationCurrencyOther : approved.presentationCurrency}; vigente desde {approved.effectiveDate}.</p>
+                  : <p className="mt-1 text-[11px] font-semibold text-amber-800">PENDIENTE DE EVALUACIÓN. No se presume moneda funcional ni se activa conversión automática.</p>;
+              })()}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Moneda funcional propuesta</label><select value={functionalCurrency} onChange={e => setFunctionalCurrency(e.target.value as AccountingCurrencyCode | '')} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="">Sin determinar</option><option value="VES">VES — Bolívar</option><option value="USD">USD — Dólar</option><option value="EUR">EUR — Euro</option><option value="OTHER">Otra</option></select>{functionalCurrency === 'OTHER' && <input value={functionalCurrencyOther} onChange={e => setFunctionalCurrencyOther(e.target.value)} placeholder="Código y nombre de moneda" className="mt-1 w-full px-3 py-1.5 border border-slate-300 rounded-lg" />}</div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Moneda de presentación</label><select value={presentationCurrency} onChange={e => setPresentationCurrency(e.target.value as AccountingCurrencyCode | '')} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="">Sin determinar</option><option value="VES">VES — Bolívar</option><option value="USD">USD — Dólar</option><option value="EUR">EUR — Euro</option><option value="OTHER">Otra</option></select>{presentationCurrency === 'OTHER' && <input value={presentationCurrencyOther} onChange={e => setPresentationCurrencyOther(e.target.value)} placeholder="Código y nombre de moneda" className="mt-1 w-full px-3 py-1.5 border border-slate-300 rounded-lg" />}</div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Fecha de evaluación</label><input type="date" value={currencyAssessmentDate} onChange={e => setCurrencyAssessmentDate(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Fecha de vigencia propuesta</label><input type="date" value={currencyEffectiveDate} onChange={e => setCurrencyEffectiveDate(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Preparado por</label><input value={currencyPreparedBy} onChange={e => setCurrencyPreparedBy(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Estado del expediente</label><select value={currencyAssessmentStatus} onChange={e => setCurrencyAssessmentStatus(e.target.value as 'DRAFT' | 'APPROVED')} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="DRAFT">Borrador / revisión</option><option value="APPROVED">Aprobado</option></select></div>
+              {currencyAssessmentStatus === 'APPROVED' && <><div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Aprobado por</label><input value={currencyApprovedBy} onChange={e => setCurrencyApprovedBy(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div><div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Fecha de aprobación</label><input type="date" value={currencyApprovedAt} onChange={e => setCurrencyApprovedAt(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div></>}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Entorno económico principal</label><textarea value={primaryEconomicEnvironment} onChange={e => setPrimaryEconomicEnvironment(e.target.value)} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Factores de precios de venta</label><textarea value={salesPriceFactors} onChange={e => setSalesPriceFactors(e.target.value)} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Factores de costos</label><textarea value={costFactors} onChange={e => setCostFactors(e.target.value)} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Factores de financiación</label><textarea value={financingFactors} onChange={e => setFinancingFactors(e.target.value)} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Cobros y retención de efectivo operativo</label><textarea value={operatingReceiptsFactors} onChange={e => setOperatingReceiptsFactors(e.target.value)} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Conclusión del juicio profesional</label><textarea value={currencyProfessionalConclusion} onChange={e => setCurrencyProfessionalConclusion(e.target.value)} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+            </div>
+            <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Referencias de evidencia (una por línea)</label><textarea value={currencyEvidenceReferences} onChange={e => setCurrencyEvidenceReferences(e.target.value)} rows={2} placeholder="Documento, contrato, extracto bancario, soporte..." className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+            <p className="text-[10px] text-slate-600">Cada evaluación se agrega al historial y no reemplaza las anteriores. Aprobar requiere preparador, aprobador, fechas, factores y evidencia. Esta captura no ejecuta conversiones ni altera asientos históricos.</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
