@@ -31,9 +31,10 @@ function initializeCorrectionWorkflow(db) {
 function requireAdmin(actor) {
   if (!actor || actor.role !== 'admin' || !Number.isInteger(Number(actor.id))) throw new Error('Se requiere una sesión administrativa autenticada.');
 }
-function appendEvent(db, tx, event) {
-  tx.insertEvent.run(event.id, event.type, Number(event.actor.id), String(event.actor.username || ''),
-    event.reason, JSON.stringify(event.metadata || {}), event.at);
+function appendEvent(db, _tx, event) {
+  db.prepare('INSERT INTO accounting_correction_case_events(case_id,event_type,actor_id,actor_name,reason,metadata_json,created_at) VALUES(?,?,?,?,?,?,?)')
+    .run(event.id, event.type, Number(event.actor.id), String(event.actor.username || ''),
+      event.reason, JSON.stringify(event.metadata || {}), event.at);
 }
 function registerCorrectionRequest(db, input, actor) {
   requireAdmin(actor);
