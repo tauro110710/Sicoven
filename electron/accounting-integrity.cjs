@@ -1117,6 +1117,21 @@ function validateAccountingSnapshot(previousState, nextState) {
     }
   }
 
+  // Toda factura nueva de proveedor debe conciliar con su asiento, incluso
+  // cuando corresponde a servicios/gastos y no genera líneas de inventario.
+  // Sin esta segunda barrera, una factura de gasto podía guardar IVA, retenciones
+  // o CxP distintos del asiento mientras superaba la validación del Kardex (que no aplica).
+  for (const purchase of asArray(nextState.purchases)) {
+    if (priorPurchaseIdsForIntegrity.has(String(purchase.id)) || purchase.documentType !== '01') continue;
+    const purchaseEntry = purchase.journalEntryId
+      ? nextById.get(String(purchase.journalEntryId))
+      : undefined;
+    if (!purchaseEntry ||
+        !purchaseJournalMatchesInvoice(purchase, purchaseEntry, asArray(nextState.products), asArray(nextState.accounts))) {
+      throw new Error('SQLite rechazó la factura de compra: el asiento no concilia en Bs. y USD la base, IVA, IGTF, retenciones y obligación/pago.');
+    }
+  }
+
   const priorMovementIdSet = new Set(asArray(priorState.movements).map(item => String(item.id)));
   const priorPurchaseIdSet = new Set(asArray(priorState.purchases).map(item => String(item.id)));
   const newSupplierReturns = asArray(nextState.movements).filter(movement =>
