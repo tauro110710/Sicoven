@@ -95,12 +95,18 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
       throw new Error('Comprobante de retención IVA incompleto o inválido. Revise período, fecha, RIF, numeración, alícuota e importes; no se generan valores sustitutos.');
     }
     const docType = documentType;
-    const totalAmount = Number(v.totalAmountBs).toFixed(2);
-    const baseAmount = Number(v.taxableBaseBs).toFixed(2);
-    const withheldAmount = Number(v.vatWithheldBs).toFixed(2);
+    // El TXT del Portal Fiscal se serializa en bolívares enteros, según la
+    // validación operativa reportada por el contribuyente. El redondeo afecta
+    // únicamente la representación exportada: nunca modifica los comprobantes,
+    // cálculos, libros, asientos ni saldos almacenados.
+    const formatSeniatInteger = (value: number) =>
+      String(Math.round(Number(value) + Number.EPSILON));
+    const totalAmount = formatSeniatInteger(v.totalAmountBs);
+    const baseAmount = formatSeniatInteger(v.taxableBaseBs);
+    const withheldAmount = formatSeniatInteger(v.vatWithheldBs);
     const affectedDoc = documentType === '01' ? '0' : affectedDocument;
-    const exemptAmount = Number(v.exemptAmountBs || 0).toFixed(2);
-    const rate = Number(v.taxRate).toFixed(2);
+    const exemptAmount = formatSeniatInteger(v.exemptAmountBs || 0);
+    const rate = formatSeniatInteger(v.taxRate);
     const expeditionNum = '0';
 
     // Fila de agente de retención: la columna 11 es el IVA efectivamente retenido.
