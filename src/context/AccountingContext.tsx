@@ -2514,6 +2514,25 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     ));
     if (fiscalReversalEvents.length > 0) setIslrFiscalEvents(prev => [...prev, ...fiscalReversalEvents]);
     await persistenceConfirmation;
+    const affectedVatVoucher = vatVouchers.find(voucher =>
+      voucher.companyId === currentCompany.id && voucher.purchaseRecordId === purchase.id);
+    if (affectedVatVoucher) {
+      const affectedDeclaration = vatWithholdingDeclarations.find(declaration =>
+        declaration.companyId === currentCompany.id && declaration.voucherIds.includes(affectedVatVoucher.id));
+      const declarationEventIds = affectedDeclaration
+        ? vatWithholdingDeclarationEvents.filter(event => event.declarationId === affectedDeclaration.id).map(event => event.id)
+        : [];
+      try {
+        await createVatFiscalIncident({
+          purchaseId: note.id, vatVoucherId: affectedVatVoucher.id,
+          declarationId: affectedDeclaration?.id, declarationEventIds,
+          reason: 'NC de devolución vinculada a factura con comprobante de retención IVA. Revisar el comprobante y la declaración del período antes de declarar o cerrar el expediente.',
+          detectedAt: request.returnDate
+        });
+      } catch (incidentError) {
+        throw new Error('La NC y sus efectos contables/Kardex quedaron confirmados en SQLite, pero no se pudo abrir el expediente fiscal automático. No repita la NC; cree la incidencia desde el Centro de Correcciones. ' + (incidentError instanceof Error ? incidentError.message : 'Error de expediente fiscal.'));
+      }
+    }
     try {
       await recordCorrectionAudit({
         eventType: 'accounting_correction_executed', entityType: 'PURCHASE', companyId: currentCompany.id,
