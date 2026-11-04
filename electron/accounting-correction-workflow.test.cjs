@@ -268,3 +268,14 @@ test('existing observation ledger migrates to allow withdrawal without losing ev
   assert.equal(db.prepare("SELECT COUNT(*) n FROM accounting_correction_case_workflow_events WHERE event_type='WITHDRAWN'").get().n,1);
  }finally{db.close();}
 });
+
+test('ISLR fiscal event evidence must be a reversal linked to the exact source event',()=>{
+ const item={company_id:'co-1',entity_type:'ISLR_EVENT',entity_id:'islr-source'};
+ const state={islrFiscalEvents:[
+  {id:'islr-source',companyId:'co-1',kind:'ACCOUNT_CREDIT'},
+  {id:'islr-unrelated',companyId:'co-1',kind:'REVERSAL',reversalOfEventId:'another-source'},
+  {id:'islr-reversal',companyId:'co-1',kind:'REVERSAL',reversalOfEventId:'islr-source'}
+ ]};
+ assert.equal(findLinkedCorrectionEvidence(state,item,'islr-reversal').id,'islr-reversal');
+ assert.equal(findLinkedCorrectionEvidence(state,item,'islr-unrelated'),null);
+});
