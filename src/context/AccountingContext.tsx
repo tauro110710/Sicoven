@@ -38,6 +38,7 @@ import {
   INITIAL_STATEMENT_MOVEMENTS
 } from '../data/initialData';
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
+import { formatIslrVoucherNumber, getMaxIslrVoucherSequence } from '../utils/islrVoucherNumber';
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus } from '../types/ivaRetentionEligibility';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { FinancialDisclosure, validateFinancialDisclosure } from '../types/financialDisclosures';
@@ -154,6 +155,7 @@ interface AccountingContextType {
   islrFiscalEvents: IslrFiscalEvent[];
   deleteVatVoucher: (id: string) => void;
   recordVatVoucherDelivery: (id: string, draft: { deliveryDate: string; deliveryMethod: 'PHYSICAL' | 'ELECTRONIC'; electronicDeliveryAgreed?: boolean }) => Promise<VatRetentionVoucher>;
+  recordIslrVoucherDelivery: (id: string, draft: { deliveryDate: string; deliveryMethod: 'PHYSICAL' | 'ELECTRONIC'; electronicDeliveryAgreed?: boolean }) => Promise<IslrRetentionVoucher>;
   deleteIslrVoucher: (id: string) => void;
 
   // Conciliación Bancaria
@@ -602,7 +604,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     journalReversalInFlightRef.current = true;
     try {
     if (persistenceFaultRef.current) throw new Error('La persistencia SQLite falló. Reinicie SICOVEN antes de continuar.');
-    if (window.sicovenStore && !storageReady) throw new Error('SQLite todavía no está lista. No se registró la reversión.');
+    if (!window.sicovenStore?.save || !storageReady) throw new Error('La reversión requiere SQLite local disponible y confirmada. No se permite registrar contra-asientos usando únicamente caché del navegador.');
     const source = journalEntries.find(entry => entry.id === id && entry.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró el asiento original en la empresa activa.');
     const vatPaymentReversalBlocker = getVatPaymentJournalReversalBlocker(
@@ -691,9 +693,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       persistenceWaitersRef.current = persistenceWaitersRef.current.filter(waiter => waiter !== persistenceWaiter);
       throw error;
     }
-    setJournalEntries(prev => prev.map(entry => entry.id === source.id
-      ? { ...entry, reversedByEntryId: reversal.id, isAdjusted: true }
-      : entry));
+    // El asiento fuente no se modifica: el vínculo se deriva del contra-asiento
+    // mediante reversalOfEntryId, preservando el registro original.
     setSales(prev => prev.map(sale => sale.companyId === currentCompany.id && (sale.journalEntryId === source.id || (source.type === 'VENTA' && source.referenceDoc === 'FAC-' + sale.invoiceNumber))
       ? { ...sale, journalEntryId: sale.journalEntryId || source.id, isCancelled: true, cancelledByJournalEntryId: reversal.id, cancellationReason: reason.trim(), cancellationNote: workpaperNote.trim() }
       : sale));
@@ -1588,6 +1589,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   // Registrar compra y generar asiento automático y comprobantes de retención
   const addPurchase = (purchaseData: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>): PurchaseRecord => {
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('La edición de escritorio requiere SQLite local disponible y lista. No se registró la compra.');
+    }
     const settlementModeError = validatePurchaseSettlementMode(
       purchaseData.paymentTerm, purchaseData.paymentAccountCode, accounts, purchaseData.paymentReference
     );
@@ -1981,6 +1985,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         supplierRif: purchaseData.supplierRif,
         supplierName: purchaseData.supplierName,
         supplierAddress: purchaseData.supplierAddress || 'Venezuela',
+        supplierEmailSnapshot: purchaseData.supplierEmail?.trim() || undefined,
         purchaseRecordId: purchaseId,
         invoiceDate: purchaseData.invoiceDate,
         invoiceNumber: purchaseData.invoiceNumber,
@@ -2007,16 +2012,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         companyId: currentCompany.id,
         voucherNumber: (() => {
           const voucherKey = `${companyKey}:${islrPeriod}`;
-          const existingCount = islrVouchers.filter(v => v.companyId === currentCompany.id && v.period === islrPeriod).length;
-          const sequence = Math.max(existingCount, islrVoucherSequenceRef.current[voucherKey] || 0) + 1;
+          const existingSequence = getMaxIslrVoucherSequence(
+            islrPeriod,
+            islrVouchers.filter(v => v.companyId === currentCompany.id && v.period === islrPeriod).map(v => v.voucherNumber)
+          );
+          const sequence = Math.max(existingSequence, islrVoucherSequenceRef.current[voucherKey] || 0) + 1;
+          const number = formatIslrVoucherNumber(islrPeriod, sequence, purchaseData.accountCreditDate!);
           islrVoucherSequenceRef.current[voucherKey] = sequence;
-          return `ISLR-${islrPeriod}-${String(sequence).padStart(6, '0')}`;
+          return number;
         })(),
         date: purchaseData.accountCreditDate!,
         period: islrPeriod,
         supplierRif: purchaseData.supplierRif,
         supplierName: purchaseData.supplierName,
         supplierAddress: purchaseData.supplierAddress || 'Venezuela',
+        supplierEmailSnapshot: purchaseData.supplierEmail?.trim() || undefined,
+        agentNameSnapshot: currentCompany.name,
+        agentRifSnapshot: currentCompany.rif,
+        agentAddressSnapshot: currentCompany.address,
         isPersonNatural: purchaseData.islrBeneficiaryType === 'PN',
         isResident: purchaseData.islrResidency === 'RESIDENT' || purchaseData.islrResidency === 'DOMICILED',
         conceptCode: purchaseData.islrConceptCode as string,
@@ -2077,8 +2090,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const purchaseCreditNoteInFlightRef = useRef(false);
   const supplierDebitNoteInFlightRef = useRef<Set<string>>(new Set());
   const addPurchaseCreditNote = async (request: PurchaseCreditNoteRequest): Promise<PurchaseRecord> => {
-    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
-      throw new Error('La persistencia SQLite no está disponible o falló. Reinicie SICOVEN antes de registrar una devolución.');
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('La devolución requiere SQLite local de escritorio disponible y lista. No se registró.');
     }
     if (purchaseCreditNoteInFlightRef.current) throw new Error('Ya hay una devolución a proveedor en proceso. Espere a que termine antes de intentar otra.');
     purchaseCreditNoteInFlightRef.current = true;
@@ -2433,8 +2446,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const addSupplierDebitNote = async (
     draft: Omit<SupplierDebitNoteAccountingDraft, 'companyId' | 'closedThroughDate'>
   ): Promise<PurchaseRecord> => {
-    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
-      throw new Error('SQLite local no está disponible o todavía no está lista. No se registró la ND.');
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('La nota de débito requiere SQLite local de escritorio disponible y lista. No se registró.');
     }
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la ND.');
     const operationKey = [
@@ -2506,6 +2519,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   // Registrar venta y generar asiento contable
   const addSale = (saleData: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>): SaleRecord => {
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('La edición de escritorio requiere SQLite local disponible y lista. No se registró la venta.');
+    }
     const settlementModeError = validateSaleSettlementMode(saleData.paymentTerm);
     if (settlementModeError) throw new Error(settlementModeError);
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la venta.');
@@ -3581,6 +3597,39 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (typeof window !== 'undefined') window.alert('El comprobante de retención de IVA es un soporte fiscal histórico y no puede eliminarse. Registre la corrección mediante el procedimiento fiscal correspondiente.');
   };
 
+  const recordIslrVoucherDelivery = async (
+    id: string,
+    draft: { deliveryDate: string; deliveryMethod: 'PHYSICAL' | 'ELECTRONIC'; electronicDeliveryAgreed?: boolean }
+  ): Promise<IslrRetentionVoucher> => {
+    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
+      throw new Error('SQLite no está disponible o todavía no está lista. No se registró la entrega.');
+    }
+    const voucher = islrVouchers.find(item => item.id === id && item.companyId === currentCompany.id);
+    if (!voucher) throw new Error('No se encontró el comprobante ISLR de la empresa activa.');
+    if (voucher.deliveryDate || voucher.deliveryMethod) {
+      throw new Error('La entrega de este comprobante ya fue registrada y no puede sobrescribirse.');
+    }
+    if (!isValidIsoDate(draft.deliveryDate) || draft.deliveryDate < voucher.date) {
+      throw new Error('La fecha de entrega debe ser válida y no puede ser anterior a la emisión del comprobante.');
+    }
+    if (draft.deliveryMethod !== 'PHYSICAL' && draft.deliveryMethod !== 'ELECTRONIC') {
+      throw new Error('Seleccione un medio de entrega válido.');
+    }
+    if (draft.deliveryMethod === 'ELECTRONIC' && draft.electronicDeliveryAgreed !== true) {
+      throw new Error('La entrega electrónica requiere acuerdo previo con el proveedor.');
+    }
+    const updated: IslrRetentionVoucher = {
+      ...voucher,
+      deliveryDate: draft.deliveryDate,
+      deliveryMethod: draft.deliveryMethod,
+      ...(draft.deliveryMethod === 'ELECTRONIC' ? { electronicDeliveryAgreed: true } : {})
+    };
+    const confirmation = waitForPersistence();
+    setIslrVouchers(prev => prev.map(item => item.id === id ? updated : item));
+    await confirmation;
+    return updated;
+  };
+
   const deleteIslrVoucher = (id: string) => {
     const voucher = islrVouchers.find(item => item.id === id && item.companyId === currentCompany.id);
     if (!voucher) return;
@@ -4566,6 +4615,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         saveFinancialDisclosure,
         deleteVatVoucher,
         recordVatVoucherDelivery,
+        recordIslrVoucherDelivery,
         deleteIslrVoucher,
         bankAccounts: bankAccounts.filter(b => b.companyId === currentCompany.id),
         bankStatementMovements: bankStatementMovements.filter(m => m.companyId === currentCompany.id),

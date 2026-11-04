@@ -1,10 +1,9 @@
 name: SICOVEN Windows installer
 
+# Expensive Windows packaging and upgrade smoke test: run only on demand.
+# Linux CI remains automatic for pull requests; this workflow is reserved for
+# deliberate installer/release builds to protect the GitHub Free allowance.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

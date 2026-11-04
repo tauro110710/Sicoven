@@ -322,10 +322,43 @@ export function generateSeniatIslrOperationsTxt(
 }
 
 /**
- * Descarga un archivo de texto en el navegador del usuario
+ * Codifica texto en ISO-8859-1. Se rechazan caracteres no representables y
+ * controles XML inválidos para evitar entregar un archivo cuya cabecera declare
+ * una codificación distinta de sus bytes reales.
  */
-export function downloadFile(content: string, fileName: string, contentType: string = 'text/plain;charset=utf-8') {
-  const blob = new Blob([content], { type: contentType });
+export function encodeIso88591(content: string): Uint8Array {
+  const bytes = new Uint8Array(content.length);
+  for (let index = 0; index < content.length; index += 1) {
+    const code = content.charCodeAt(index);
+    const isAllowedXmlControl = code === 0x09 || code === 0x0A || code === 0x0D;
+    if (code > 0xFF || (code < 0x20 && !isAllowedXmlControl)) {
+      throw new Error('El XML contiene caracteres que no se pueden representar de forma segura en ISO-8859-1.');
+    }
+    bytes[index] = code;
+  }
+  return bytes;
+}
+
+/**
+ * Descarga un archivo de texto en el navegador del usuario.
+ * UTF-8 es el valor predeterminado; ISO-8859-1 debe solicitarse explícitamente.
+ */
+export function downloadFile(
+  content: string,
+  fileName: string,
+  contentType: string = 'text/plain;charset=utf-8',
+  encoding: 'utf-8' | 'iso-8859-1' = 'utf-8'
+) {
+  const blob = encoding === 'iso-8859-1'
+    ? (() => {
+        const bytes = encodeIso88591(content);
+        // BlobPart requires an ArrayBuffer here; copy the exact ISO-8859-1
+        // bytes so TypeScript 7 does not widen the view to ArrayBufferLike.
+        const buffer = new ArrayBuffer(bytes.byteLength);
+        new Uint8Array(buffer).set(bytes);
+        return new Blob([buffer as BlobPart], { type: contentType });
+      })()
+    : new Blob([content], { type: contentType });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

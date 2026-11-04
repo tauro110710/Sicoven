@@ -21,6 +21,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [supplierRif, setSupplierRif] = useState<string>('J-');
   const [supplierName, setSupplierName] = useState<string>('');
   const [supplierAddress, setSupplierAddress] = useState<string>('');
+  const [supplierEmail, setSupplierEmail] = useState<string>('');
   const [supplierTaxStatus, setSupplierTaxStatus] = useState<'AUTO' | IvaSupplierTaxStatus>('AUTO');
   const [article3Exclusion, setArticle3Exclusion] = useState<IvaArticle3Exclusion | ''>('');
   const [portalArticle3ExclusionConfirmed, setPortalArticle3ExclusionConfirmed] = useState(false);
@@ -221,6 +222,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       supplierRif: formatRif(supplierRif),
       supplierName: supplierName.trim().toUpperCase(),
       supplierAddress: supplierAddress.trim() || undefined,
+      supplierEmail: supplierEmail.trim() || undefined,
       invoiceNumber: invoiceNumber.trim(),
       controlNumber: controlNumber.trim(),
       documentType,
@@ -349,6 +351,10 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg uppercase focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div><label className="block font-semibold text-slate-700 mb-1">Domicilio fiscal del proveedor</label><input type="text" value={supplierAddress} onChange={e => setSupplierAddress(e.target.value)} maxLength={300} placeholder="Dirección fiscal declarada" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block font-semibold text-slate-700 mb-1">Correo electrónico del proveedor</label><input type="email" value={supplierEmail} onChange={e => setSupplierEmail(e.target.value)} maxLength={254} placeholder="proveedor@dominio.com" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /><p className="text-[10px] text-slate-500 mt-1">Dato opcional para comprobantes emitidos bajo el régimen vigente; se conservará como instantánea para futuras reimpresiones.</p></div>
             </div>
 
             <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 space-y-2">

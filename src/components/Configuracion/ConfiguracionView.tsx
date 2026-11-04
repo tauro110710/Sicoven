@@ -17,7 +17,8 @@ import {
   CalendarCheck,
   LockKeyhole
 } from 'lucide-react';
-import { TaxpayerType, IvaRetentionAgentBasis, JournalEntryItem } from '../../types/accounting';
+import { AccountingFramework, TaxpayerType, IvaRetentionAgentBasis, JournalEntryItem, AccountingCurrencyCode, FunctionalCurrencyAssessment, ExchangeabilityAssessment } from '../../types/accounting';
+import { validateFunctionalCurrencyAssessment, validateExchangeabilityAssessment } from '../../types/functionalCurrency';
 import { buildOpeningEntryItems } from '../../types/accountingYearOpening';
 import { CompanyModal } from '../CompanyModal';
 import { BcvRateModal } from '../BcvRateModal';
@@ -92,6 +93,32 @@ export const ConfiguracionView: React.FC = () => {
   const [email, setEmail] = useState(currentCompany.email);
   const [fiscalYear, setFiscalYear] = useState(currentCompany.fiscalYear);
   const [bcvRate, setBcvRate] = useState(String(currentCompany.bcvRate));
+  const [accountingFramework, setAccountingFramework] = useState<AccountingFramework | ''>(currentCompany.accountingFramework || '');
+  const [accountingFrameworkVersion, setAccountingFrameworkVersion] = useState(currentCompany.accountingFrameworkVersion || '');
+  const [accountingFrameworkAdoptionDate, setAccountingFrameworkAdoptionDate] = useState(currentCompany.accountingFrameworkAdoptionDate || '');
+  const [specialTaxpayerNotificationReference, setSpecialTaxpayerNotificationReference] = useState(currentCompany.specialTaxpayerNotificationReference || '');
+  const [specialTaxpayerNotificationDate, setSpecialTaxpayerNotificationDate] = useState(currentCompany.specialTaxpayerNotificationDate || '');
+  const [functionalCurrency, setFunctionalCurrency] = useState<AccountingCurrencyCode | ''>('');
+  const [functionalCurrencyOther, setFunctionalCurrencyOther] = useState('');
+  const [presentationCurrency, setPresentationCurrency] = useState<AccountingCurrencyCode | ''>('');
+  const [presentationCurrencyOther, setPresentationCurrencyOther] = useState('');
+  const [currencyAssessmentStatus, setCurrencyAssessmentStatus] = useState<'DRAFT' | 'APPROVED'>('DRAFT');
+  const [currencyAssessmentDate, setCurrencyAssessmentDate] = useState('');
+  const [currencyEffectiveDate, setCurrencyEffectiveDate] = useState('');
+  const [currencyPreparedBy, setCurrencyPreparedBy] = useState('');
+  const [currencyApprovedBy, setCurrencyApprovedBy] = useState('');
+  const [currencyApprovedAt, setCurrencyApprovedAt] = useState('');
+  const [primaryEconomicEnvironment, setPrimaryEconomicEnvironment] = useState('');
+  const [salesPriceFactors, setSalesPriceFactors] = useState('');
+  const [costFactors, setCostFactors] = useState('');
+  const [financingFactors, setFinancingFactors] = useState('');
+  const [operatingReceiptsFactors, setOperatingReceiptsFactors] = useState('');
+  const [currencyProfessionalConclusion, setCurrencyProfessionalConclusion] = useState('');
+  const [currencyEvidenceReferences, setCurrencyEvidenceReferences] = useState('');
+  const [exchangeabilityDraft, setExchangeabilityDraft] = useState<Partial<ExchangeabilityAssessment>>({
+    legallyAccessible: false, actuallyAccessible: false, conclusion: 'NOT_CONVERTIBLE'
+  });
+  const [exchangeabilityEvidence, setExchangeabilityEvidence] = useState('');
 
   // Sync state if currentCompany switches
   React.useEffect(() => {
@@ -109,6 +136,20 @@ export const ConfiguracionView: React.FC = () => {
     setEmail(currentCompany.email);
     setFiscalYear(currentCompany.fiscalYear);
     setBcvRate(String(currentCompany.bcvRate));
+    setAccountingFramework(currentCompany.accountingFramework || '');
+    setAccountingFrameworkVersion(currentCompany.accountingFrameworkVersion || '');
+    setAccountingFrameworkAdoptionDate(currentCompany.accountingFrameworkAdoptionDate || '');
+    setSpecialTaxpayerNotificationReference(currentCompany.specialTaxpayerNotificationReference || '');
+    setSpecialTaxpayerNotificationDate(currentCompany.specialTaxpayerNotificationDate || '');
+    setFunctionalCurrency(''); setFunctionalCurrencyOther('');
+    setPresentationCurrency(''); setPresentationCurrencyOther('');
+    setCurrencyAssessmentStatus('DRAFT'); setCurrencyAssessmentDate(''); setCurrencyEffectiveDate('');
+    setCurrencyPreparedBy(''); setCurrencyApprovedBy(''); setCurrencyApprovedAt('');
+    setPrimaryEconomicEnvironment(''); setSalesPriceFactors(''); setCostFactors('');
+    setFinancingFactors(''); setOperatingReceiptsFactors('');
+    setCurrencyProfessionalConclusion(''); setCurrencyEvidenceReferences('');
+    setExchangeabilityDraft({ legallyAccessible: false, actuallyAccessible: false, conclusion: 'NOT_CONVERTIBLE' });
+    setExchangeabilityEvidence('');
     setPeriodCloseDate(currentCompany.closedThroughDate || (() => {
       const now = new Date();
       return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -228,12 +269,102 @@ export const ConfiguracionView: React.FC = () => {
       return;
     }
     setRifError(null);
+    const hasSpecialNoticeMetadata = Boolean(specialTaxpayerNotificationReference.trim() || specialTaxpayerNotificationDate);
+    if (taxpayerType === 'ESPECIAL' && currentCompany.taxpayerType !== 'ESPECIAL' && (!specialTaxpayerNotificationReference.trim() || !specialTaxpayerNotificationDate)) {
+      window.alert('Para cambiar la empresa a Contribuyente Especial, indique la referencia y fecha de la notificación expresa del SENIAT.');
+      return;
+    }
+    if (hasSpecialNoticeMetadata && (!specialTaxpayerNotificationReference.trim() || !specialTaxpayerNotificationDate)) {
+      window.alert('Complete tanto la referencia como la fecha de la notificación SENIAT.');
+      return;
+    }
+    if ((accountingFramework || accountingFrameworkVersion.trim() || accountingFrameworkAdoptionDate) && (!accountingFramework || !accountingFrameworkVersion.trim() || !accountingFrameworkAdoptionDate)) {
+      window.alert('Para registrar la adopción VEN-NIF debe completar marco, versión normativa y fecha documentada.');
+      return;
+    }
+    const hasCurrencyAssessmentInput = Boolean(
+      functionalCurrency || functionalCurrencyOther.trim() || presentationCurrency ||
+      presentationCurrencyOther.trim() || currencyAssessmentDate || currencyEffectiveDate ||
+      currencyPreparedBy.trim() || currencyApprovedBy.trim() || currencyApprovedAt ||
+      primaryEconomicEnvironment.trim() || salesPriceFactors.trim() || costFactors.trim() ||
+      financingFactors.trim() || operatingReceiptsFactors.trim() ||
+      currencyProfessionalConclusion.trim() || currencyEvidenceReferences.trim()
+    );
+    let newCurrencyAssessment: FunctionalCurrencyAssessment | undefined;
+    if (hasCurrencyAssessmentInput) {
+      const draft: FunctionalCurrencyAssessment = {
+        id: 'fc-' + currentCompany.id + '-' + Date.now(),
+        status: currencyAssessmentStatus,
+        functionalCurrency: functionalCurrency as AccountingCurrencyCode,
+        ...(functionalCurrency === 'OTHER' ? { functionalCurrencyOther: functionalCurrencyOther.trim() } : {}),
+        presentationCurrency: presentationCurrency as AccountingCurrencyCode,
+        ...(presentationCurrency === 'OTHER' ? { presentationCurrencyOther: presentationCurrencyOther.trim() } : {}),
+        assessmentDate: currencyAssessmentDate, effectiveDate: currencyEffectiveDate,
+        preparedBy: currencyPreparedBy.trim(),
+        ...(currencyAssessmentStatus === 'APPROVED' ? { approvedBy: currencyApprovedBy.trim(), approvedAt: currencyApprovedAt } : {}),
+        primaryEconomicEnvironment: primaryEconomicEnvironment.trim(),
+        salesPriceFactors: salesPriceFactors.trim(), costFactors: costFactors.trim(),
+        financingFactors: financingFactors.trim(), operatingReceiptsFactors: operatingReceiptsFactors.trim(),
+        professionalConclusion: currencyProfessionalConclusion.trim(),
+        evidenceReferences: currencyEvidenceReferences.split(String.fromCharCode(10)).map(item => item.trim()).filter(Boolean)
+      };
+      const currencyErrors = validateFunctionalCurrencyAssessment(draft);
+      if (currencyErrors.length) {
+        window.alert('No se guardó la evaluación NIC 21:' + String.fromCharCode(10) + '- ' + currencyErrors.join(String.fromCharCode(10) + '- '));
+        return;
+      }
+      newCurrencyAssessment = draft;
+    }
+
+    const x = exchangeabilityDraft;
+    const hasExchangeabilityInput = Boolean(
+      x.measurementDate || x.purpose || x.currency || x.amountRequired || x.legalMechanism ||
+      x.expectedDelayDays !== undefined || x.amountAvailable !== undefined || x.accessibleSpotRate !== undefined ||
+      x.estimatedSpotRate !== undefined || x.estimationMethod || x.estimationEvidence ||
+      x.preparedBy || x.approvedBy || x.approvedAt || exchangeabilityEvidence.trim()
+    );
+    let newExchangeabilityAssessment: ExchangeabilityAssessment | undefined;
+    if (hasExchangeabilityInput) {
+      const assessment: ExchangeabilityAssessment = {
+        id: 'ex-' + currentCompany.id + '-' + Date.now(),
+        measurementDate: String(x.measurementDate || ''),
+        purpose: String(x.purpose || ''),
+        currency: (x.currency || '') as AccountingCurrencyCode,
+        ...(x.currency === 'OTHER' ? { currencyOther: String(x.currencyOther || '') } : {}),
+        amountRequired: Number(x.amountRequired || 0),
+        legalMechanism: String(x.legalMechanism || ''),
+        legallyAccessible: x.legallyAccessible === true,
+        actuallyAccessible: x.actuallyAccessible === true,
+        ...(x.expectedDelayDays !== undefined ? { expectedDelayDays: Number(x.expectedDelayDays) } : {}),
+        ...(x.amountAvailable !== undefined ? { amountAvailable: Number(x.amountAvailable) } : {}),
+        ...(x.accessibleSpotRate !== undefined ? { accessibleSpotRate: Number(x.accessibleSpotRate) } : {}),
+        evidenceReferences: exchangeabilityEvidence.split(String.fromCharCode(10)).map(item => item.trim()).filter(Boolean),
+        conclusion: (x.conclusion || 'NOT_CONVERTIBLE') as 'CONVERTIBLE' | 'NOT_CONVERTIBLE',
+        ...(x.estimatedSpotRate !== undefined ? { estimatedSpotRate: Number(x.estimatedSpotRate) } : {}),
+        ...(x.estimationMethod ? { estimationMethod: String(x.estimationMethod) } : {}),
+        ...(x.estimationEvidence ? { estimationEvidence: String(x.estimationEvidence) } : {}),
+        preparedBy: String(x.preparedBy || ''),
+        approvedBy: String(x.approvedBy || ''),
+        approvedAt: String(x.approvedAt || '')
+      };
+      const exchangeabilityErrors = validateExchangeabilityAssessment(assessment);
+      if (exchangeabilityErrors.length) {
+        window.alert('No se guardó la evaluación de convertibilidad:' + String.fromCharCode(10) + '- ' + exchangeabilityErrors.join(String.fromCharCode(10) + '- '));
+        return;
+      }
+      newExchangeabilityAssessment = assessment;
+    }
+
     updateCompany({
       ...currentCompany,
+      ...(newCurrencyAssessment ? { functionalCurrencyAssessments: [...(currentCompany.functionalCurrencyAssessments || []), newCurrencyAssessment] } : {}),
+      ...(newExchangeabilityAssessment ? { exchangeabilityAssessments: [...(currentCompany.exchangeabilityAssessments || []), newExchangeabilityAssessment] } : {}),
       name: name.trim().toUpperCase(),
       tradeName: tradeName.trim() || undefined,
       rif: rifValidation.formattedRif,
       taxpayerType,
+      ...(hasSpecialNoticeMetadata ? { specialTaxpayerNotificationReference: specialTaxpayerNotificationReference.trim(), specialTaxpayerNotificationDate } : {}),
+      ...(accountingFramework ? { accountingFramework, accountingFrameworkVersion: accountingFrameworkVersion.trim(), accountingFrameworkAdoptionDate } : {}),
       defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
       ivaRetentionAgentBasis,
       isPersonalFirm,
@@ -452,6 +583,87 @@ export const ConfiguracionView: React.FC = () => {
         </div>
 
         <form onSubmit={handleSaveCompany} className="pt-6 space-y-4 text-xs">
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 space-y-2">
+            <label className="block font-bold text-slate-800">Marco contable VEN-NIF adoptado</label>
+            <select value={accountingFramework} onChange={e => setAccountingFramework(e.target.value as AccountingFramework | '')} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
+              <option value="">Sin adopción documentada / pendiente</option>
+              <option value="VEN_NIF_GE">VEN-NIF GE — Grandes Entidades</option>
+              <option value="VEN_NIF_PYME">VEN-NIF PYME — Pequeñas y Medianas Entidades</option>
+            </select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div><label className="block font-semibold text-slate-700 mb-1">Versión / referencia normativa</label><input value={accountingFrameworkVersion} onChange={e => setAccountingFrameworkVersion(e.target.value)} placeholder="Referencia realmente aplicada" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block font-semibold text-slate-700 mb-1">Fecha documentada de adopción</label><input type="date" value={accountingFrameworkAdoptionDate} onChange={e => setAccountingFrameworkAdoptionDate(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+            </div>
+            <p className="text-[11px] text-slate-600">Los registros históricos sin esta información permanecen intactos. No se infiere ni se asigna una versión normativa automáticamente.</p>
+          </div>
+
+          <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 space-y-3">
+            <div>
+              <label className="block font-bold text-slate-800">Moneda funcional y de presentación — NIC 21</label>
+              {(() => {
+                const approved = (currentCompany.functionalCurrencyAssessments || []).filter(item => item.status === 'APPROVED').slice(-1)[0];
+                return approved
+                  ? <p className="mt-1 text-[11px] text-emerald-800">Última evaluación aprobada: funcional {approved.functionalCurrency === 'OTHER' ? approved.functionalCurrencyOther : approved.functionalCurrency}; presentación {approved.presentationCurrency === 'OTHER' ? approved.presentationCurrencyOther : approved.presentationCurrency}; vigente desde {approved.effectiveDate}.</p>
+                  : <p className="mt-1 text-[11px] font-semibold text-amber-800">PENDIENTE DE EVALUACIÓN. No se presume moneda funcional ni se activa conversión automática.</p>;
+              })()}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Moneda funcional propuesta</label><select value={functionalCurrency} onChange={e => setFunctionalCurrency(e.target.value as AccountingCurrencyCode | '')} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="">Sin determinar</option><option value="VES">VES — Bolívar</option><option value="USD">USD — Dólar</option><option value="EUR">EUR — Euro</option><option value="OTHER">Otra</option></select>{functionalCurrency === 'OTHER' && <input value={functionalCurrencyOther} onChange={e => setFunctionalCurrencyOther(e.target.value)} placeholder="Código y nombre de moneda" className="mt-1 w-full px-3 py-1.5 border border-slate-300 rounded-lg" />}</div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Moneda de presentación</label><select value={presentationCurrency} onChange={e => setPresentationCurrency(e.target.value as AccountingCurrencyCode | '')} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="">Sin determinar</option><option value="VES">VES — Bolívar</option><option value="USD">USD — Dólar</option><option value="EUR">EUR — Euro</option><option value="OTHER">Otra</option></select>{presentationCurrency === 'OTHER' && <input value={presentationCurrencyOther} onChange={e => setPresentationCurrencyOther(e.target.value)} placeholder="Código y nombre de moneda" className="mt-1 w-full px-3 py-1.5 border border-slate-300 rounded-lg" />}</div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Fecha de evaluación</label><input type="date" value={currencyAssessmentDate} onChange={e => setCurrencyAssessmentDate(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Fecha de vigencia propuesta</label><input type="date" value={currencyEffectiveDate} onChange={e => setCurrencyEffectiveDate(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Preparado por</label><input value={currencyPreparedBy} onChange={e => setCurrencyPreparedBy(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Estado del expediente</label><select value={currencyAssessmentStatus} onChange={e => setCurrencyAssessmentStatus(e.target.value as 'DRAFT' | 'APPROVED')} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="DRAFT">Borrador / revisión</option><option value="APPROVED">Aprobado</option></select></div>
+              {currencyAssessmentStatus === 'APPROVED' && <><div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Aprobado por</label><input value={currencyApprovedBy} onChange={e => setCurrencyApprovedBy(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div><div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Fecha de aprobación</label><input type="date" value={currencyApprovedAt} onChange={e => setCurrencyApprovedAt(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div></>}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Entorno económico principal</label><textarea value={primaryEconomicEnvironment} onChange={e => setPrimaryEconomicEnvironment(e.target.value)} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Factores de precios de venta</label><textarea value={salesPriceFactors} onChange={e => setSalesPriceFactors(e.target.value)} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Factores de costos</label><textarea value={costFactors} onChange={e => setCostFactors(e.target.value)} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Factores de financiación</label><textarea value={financingFactors} onChange={e => setFinancingFactors(e.target.value)} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Cobros y retención de efectivo operativo</label><textarea value={operatingReceiptsFactors} onChange={e => setOperatingReceiptsFactors(e.target.value)} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Conclusión del juicio profesional</label><textarea value={currencyProfessionalConclusion} onChange={e => setCurrencyProfessionalConclusion(e.target.value)} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+            </div>
+            <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Referencias de evidencia (una por línea)</label><textarea value={currencyEvidenceReferences} onChange={e => setCurrencyEvidenceReferences(e.target.value)} rows={2} placeholder="Documento, contrato, extracto bancario, soporte..." className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+            <p className="text-[10px] text-slate-600">Cada evaluación se agrega al historial y no reemplaza las anteriores. Aprobar requiere preparador, aprobador, fechas, factores y evidencia. Esta captura no ejecuta conversiones ni altera asientos históricos.</p>
+          </div>
+
+          <div className="rounded-xl border border-sky-200 bg-sky-50/50 p-3 space-y-3">
+            <div>
+              <label className="block font-bold text-slate-800">Convertibilidad — evaluación por fecha y propósito</label>
+              {(() => {
+                const latest = (currentCompany.exchangeabilityAssessments || []).slice(-1)[0];
+                return latest
+                  ? <p className="mt-1 text-[11px] text-slate-700">Última evaluación: {latest.conclusion === 'CONVERTIBLE' ? 'CONVERTIBLE' : 'NO CONVERTIBLE'} para {latest.purpose}, fecha {latest.measurementDate}.</p>
+                  : <p className="mt-1 text-[11px] font-semibold text-amber-800">Sin evaluación registrada. La tasa BCV no se presume accesible para cada propósito.</p>;
+              })()}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Fecha de medición</label><input type="date" value={String(exchangeabilityDraft.measurementDate || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, measurementDate: e.target.value }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Propósito concreto</label><input value={String(exchangeabilityDraft.purpose || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, purpose: e.target.value }))} placeholder="Ej. pagar proveedor extranjero" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Moneda requerida</label><select value={String(exchangeabilityDraft.currency || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, currency: e.target.value as AccountingCurrencyCode }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="">Seleccione</option><option value="VES">VES</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="OTHER">Otra</option></select>{exchangeabilityDraft.currency === 'OTHER' && <input value={String(exchangeabilityDraft.currencyOther || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, currencyOther: e.target.value }))} placeholder="Código de moneda" className="mt-1 w-full px-3 py-1.5 border border-slate-300 rounded-lg" />}</div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Monto que se necesita convertir</label><input type="number" min="0" step="0.01" value={String(exchangeabilityDraft.amountRequired ?? '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, amountRequired: e.target.value === '' ? undefined : Number(e.target.value) }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div className="sm:col-span-2"><label className="block text-[11px] font-semibold text-slate-700 mb-1">Mecanismo legal evaluado</label><textarea value={String(exchangeabilityDraft.legalMechanism || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, legalMechanism: e.target.value }))} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">¿Legalmente accesible?</label><select value={String(exchangeabilityDraft.legallyAccessible)} onChange={e => setExchangeabilityDraft(p => ({ ...p, legallyAccessible: e.target.value === 'true' }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="false">No / no acreditado</option><option value="true">Sí, con evidencia</option></select></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">¿Acceso efectivo para la entidad?</label><select value={String(exchangeabilityDraft.actuallyAccessible)} onChange={e => setExchangeabilityDraft(p => ({ ...p, actuallyAccessible: e.target.value === 'true' }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="false">No / no acreditado</option><option value="true">Sí, probado</option></select></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Plazo estimado (días)</label><input type="number" min="0" step="1" value={String(exchangeabilityDraft.expectedDelayDays ?? '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, expectedDelayDays: e.target.value === '' ? undefined : Number(e.target.value) }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Conclusión</label><select value={String(exchangeabilityDraft.conclusion || 'NOT_CONVERTIBLE')} onChange={e => setExchangeabilityDraft(p => ({ ...p, conclusion: e.target.value as 'CONVERTIBLE' | 'NOT_CONVERTIBLE' }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="CONVERTIBLE">Convertible</option><option value="NOT_CONVERTIBLE">No convertible</option></select></div>
+              {exchangeabilityDraft.conclusion === 'CONVERTIBLE' ? <>
+                <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Monto realmente disponible</label><input type="number" min="0" step="0.01" value={String(exchangeabilityDraft.amountAvailable ?? '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, amountAvailable: e.target.value === '' ? undefined : Number(e.target.value) }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+                <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Tasa spot accesible</label><input type="number" min="0" step="0.000001" value={String(exchangeabilityDraft.accessibleSpotRate ?? '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, accessibleSpotRate: e.target.value === '' ? undefined : Number(e.target.value) }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              </> : <>
+                <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Tasa spot estimada</label><input type="number" min="0" step="0.000001" value={String(exchangeabilityDraft.estimatedSpotRate ?? '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, estimatedSpotRate: e.target.value === '' ? undefined : Number(e.target.value) }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+                <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Metodología de estimación</label><textarea value={String(exchangeabilityDraft.estimationMethod || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, estimationMethod: e.target.value }))} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+                <div className="sm:col-span-2"><label className="block text-[11px] font-semibold text-slate-700 mb-1">Evidencia de la estimación</label><textarea value={String(exchangeabilityDraft.estimationEvidence || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, estimationEvidence: e.target.value }))} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              </>}
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Preparado por</label><input value={String(exchangeabilityDraft.preparedBy || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, preparedBy: e.target.value }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Aprobado por</label><input value={String(exchangeabilityDraft.approvedBy || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, approvedBy: e.target.value }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Fecha de aprobación</label><input type="date" value={String(exchangeabilityDraft.approvedAt || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, approvedAt: e.target.value }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+            </div>
+            <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Referencias documentales (una por línea)</label><textarea value={exchangeabilityEvidence} onChange={e => setExchangeabilityEvidence(e.target.value)} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+            <p className="text-[10px] text-slate-600">Cada conclusión queda vinculada a una fecha, propósito y monto. No se infiere acceso a divisas por la tasa oficial y esta evaluación no ejecuta conversión contable.</p>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -503,10 +715,18 @@ export const ConfiguracionView: React.FC = () => {
                 }}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-semibold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               >
-                <option value="ESPECIAL">Contribuyente Especial (Agente Retención)</option>
+                <option value="ESPECIAL">Contribuyente Especial (con notificación SENIAT)</option>
                 <option value="ORDINARIO">Contribuyente Ordinario</option>
               </select>
             </div>
+            {taxpayerType === 'ESPECIAL' && (
+              <div className="sm:col-span-3 rounded-lg border border-purple-200 bg-purple-50 p-3 space-y-2">
+                <label className="block font-semibold text-slate-800">Notificación expresa del SENIAT</label>
+                <input value={specialTaxpayerNotificationReference} onChange={e => setSpecialTaxpayerNotificationReference(e.target.value)} placeholder="Número o referencia de la notificación" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
+                <input type="date" value={specialTaxpayerNotificationDate} onChange={e => setSpecialTaxpayerNotificationDate(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
+                <p className="text-[11px] text-slate-600">La condición debe estar respaldada por notificación expresa. Los registros históricos especiales sin estos metadatos se conservan; para nuevas calificaciones, complete ambos datos.</p>
+              </div>
+            )}
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Retención IVA por Defecto</label>
               <select

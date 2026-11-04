@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Company, IslrRetentionVoucher } from '../../types/accounting';
 import { X, Printer, ShieldCheck } from 'lucide-react';
 import { formatBs, formatUsd, formatDate, formatNumberVe } from '../../utils/formatters';
@@ -7,10 +7,26 @@ interface IslrVoucherModalProps {
   voucher: IslrRetentionVoucher | null;
   company: Company;
   onClose: () => void;
+  onRecordDelivery: (draft: { deliveryDate: string; deliveryMethod: 'PHYSICAL' | 'ELECTRONIC'; electronicDeliveryAgreed?: boolean }) => Promise<IslrRetentionVoucher>;
 }
 
-export const IslrVoucherModal: React.FC<IslrVoucherModalProps> = ({ voucher, company, onClose }) => {
+export const IslrVoucherModal: React.FC<IslrVoucherModalProps> = ({ voucher, company, onClose, onRecordDelivery }) => {
+  const localToday = () => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+  const [deliveryDate, setDeliveryDate] = useState(localToday);
+  const [deliveryMethod, setDeliveryMethod] = useState<'PHYSICAL' | 'ELECTRONIC'>('PHYSICAL');
+  const [electronicAgreed, setElectronicAgreed] = useState(false);
+  const [deliveryBusy, setDeliveryBusy] = useState(false);
+  const [deliveryMessage, setDeliveryMessage] = useState('');
   if (!voucher) return null;
+  const handleRecordDelivery = async () => {
+    setDeliveryBusy(true); setDeliveryMessage('');
+    try { await onRecordDelivery({ deliveryDate, deliveryMethod, ...(deliveryMethod === 'ELECTRONIC' ? { electronicDeliveryAgreed: electronicAgreed } : {}) }); setDeliveryMessage('Entrega registrada y guardada.'); }
+    catch (error) { setDeliveryMessage(error instanceof Error ? error.message : 'No se pudo registrar la entrega.'); }
+    finally { setDeliveryBusy(false); }
+  };
+  const agentName = voucher.agentNameSnapshot || company.name;
+  const agentRif = voucher.agentRifSnapshot || company.rif;
+  const agentAddress = voucher.agentAddressSnapshot || company.address;
 
   const handlePrint = () => {
     window.print();
@@ -44,6 +60,18 @@ export const IslrVoucherModal: React.FC<IslrVoucherModalProps> = ({ voucher, com
           </div>
         </div>
 
+        {!voucher.deliveryDate ? (
+          <div className="no-print border-b border-slate-200 bg-slate-50 px-4 sm:px-6 py-4 space-y-3">
+            <div><h3 className="text-xs font-bold text-slate-900">Registrar entrega al proveedor</h3><p className="mt-1 text-[11px] text-slate-600">Registre la fecha efectiva y el medio de entrega. La entrega electrónica requiere acuerdo previo del proveedor. No se modifica el contenido histórico del comprobante al registrar esta constancia.</p></div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <label className="text-xs font-semibold text-slate-700">Fecha efectiva de entrega<input type="date" min={voucher.date} value={deliveryDate} onChange={event => setDeliveryDate(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" /></label>
+              <label className="text-xs font-semibold text-slate-700">Medio de entrega<select value={deliveryMethod} onChange={event => setDeliveryMethod(event.target.value as 'PHYSICAL' | 'ELECTRONIC')} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"><option value="PHYSICAL">Físico</option><option value="ELECTRONIC">Electrónico</option></select></label>
+              {deliveryMethod === 'ELECTRONIC' && <label className="flex items-center gap-2 text-xs text-slate-700 sm:pt-6"><input type="checkbox" checked={electronicAgreed} onChange={event => setElectronicAgreed(event.target.checked)} /> Existe acuerdo con el proveedor</label>}
+            </div>
+            <div className="flex flex-wrap items-center gap-3"><button type="button" disabled={deliveryBusy || !deliveryDate || (deliveryMethod === 'ELECTRONIC' && !electronicAgreed)} onClick={() => void handleRecordDelivery()} className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">{deliveryBusy ? 'Guardando…' : 'Registrar entrega'}</button>{deliveryMessage && <p role="status" className="text-xs text-slate-700">{deliveryMessage}</p>}</div>
+          </div>
+        ) : <div className="no-print border-b border-emerald-200 bg-emerald-50 px-4 sm:px-6 py-3 text-xs text-emerald-900">Entregado el {formatDate(voucher.deliveryDate)} por medio {voucher.deliveryMethod === 'ELECTRONIC' ? 'electrónico (acuerdo confirmado)' : 'físico'}.</div>}
+
         {/* Printable Official Voucher Document */}
         <div className="p-3 sm:p-8 text-black bg-white space-y-3 sm:space-y-4 print:p-0 print:space-y-3 font-sans text-xs">
           {/* Header Title */}
@@ -72,6 +100,7 @@ export const IslrVoucherModal: React.FC<IslrVoucherModalProps> = ({ voucher, com
                 <span className="font-bold">FECHA DE EMISIÓN: </span>
                 <span className="font-mono">{formatDate(voucher.date)}</span>
               </div>
+              <div><span className="font-bold">FECHA DE ENTREGA: </span><span className="font-mono">{voucher.deliveryDate ? formatDate(voucher.deliveryDate) : 'Pendiente de registrar'}</span></div>
               <div>
                 <span className="font-bold">PERÍODO FISCAL: </span>
                 <span className="font-mono">{voucher.period} (Año: {voucher.period.slice(0, 4)} Mes: {voucher.period.slice(4, 6)})</span>
@@ -103,16 +132,16 @@ export const IslrVoucherModal: React.FC<IslrVoucherModalProps> = ({ voucher, com
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
               <div className="sm:col-span-2">
                 <span className="font-bold">NOMBRE O RAZÓN SOCIAL: </span>
-                <span className="font-semibold">{company.name}</span>
+                <span className="font-semibold">{agentName}</span>
               </div>
               <div>
                 <span className="font-bold">NÚMERO DE RIF: </span>
-                <span className="font-mono font-bold">{company.rif}</span>
+                <span className="font-mono font-bold">{agentRif}</span>
               </div>
             </div>
             <div>
               <span className="font-bold">DIRECCIÓN FISCAL: </span>
-              <span>{company.address}</span>
+              <span>{agentAddress}</span>
             </div>
           </div>
 
@@ -145,6 +174,7 @@ export const IslrVoucherModal: React.FC<IslrVoucherModalProps> = ({ voucher, com
               <span className="font-bold">DIRECCIÓN FISCAL: </span>
               <span>{voucher.supplierAddress || 'Venezuela'}</span>
             </div>
+            {voucher.supplierEmailSnapshot && <div><span className="font-bold">CORREO ELECTRÓNICO: </span><span>{voucher.supplierEmailSnapshot}</span></div>}
           </div>
 
           {/* Table of ISLR Operations */}
@@ -227,7 +257,7 @@ export const IslrVoucherModal: React.FC<IslrVoucherModalProps> = ({ voucher, com
           <div className="grid grid-cols-2 gap-8 pt-8">
             <div className="text-center space-y-1">
               <div className="border-t border-black w-64 mx-auto pt-1"></div>
-              <p className="font-bold uppercase text-[11px]">{company.name}</p>
+              <p className="font-bold uppercase text-[11px]">{agentName}</p>
               <p className="text-[10px] text-slate-600">FIRMA Y SELLO DEL AGENTE DE RETENCIÓN</p>
             </div>
             <div className="text-center space-y-1">

@@ -633,3 +633,61 @@ test('permite evaluar la reversión del propio asiento de liquidación de antici
   assert.equal(result.activeSupplierAdvanceSettlementCount, 1);
 });
 
+
+
+test('building a contra-entry never mutates the original journal entry', () => {
+  const before = JSON.stringify(source);
+  const contra = buildReversalItems(source, accounts);
+  assert.equal(JSON.stringify(source), before);
+  assert.deepEqual(contra.map(line => ({
+    debitBs: line.debitBs, creditBs: line.creditBs,
+    debitUsd: line.debitUsd, creditUsd: line.creditUsd
+  })), source.items.map(line => ({
+    debitBs: line.creditBs, creditBs: line.debitBs,
+    debitUsd: line.creditUsd, creditUsd: line.debitUsd
+  })));
+});
+
+test('a reversal preview rejects a source entry that does not balance in both currencies', () => {
+  const unbalanced = {
+    ...source,
+    items: source.items.map((line, index) => index === 0 ? { ...line, debitBs: line.debitBs + 1 } : line)
+  };
+  assert.throws(() => buildReversalItems(unbalanced, accounts), /no cuadra simultáneamente en Bs. y USD/);
+});
+
+
+test('bloquea una segunda reversión cuando ya existe un contra-asiento enlazado', () => {
+  const contra: JournalEntry = {
+    ...source,
+    id: 'j-1-reversal',
+    entryNumber: 2,
+    description: 'Reversión de Venta',
+    type: 'AJUSTE',
+    reversalOfEntryId: source.id
+  };
+  const result = assessJournalReversal({
+    companyId: 'c-1', source, accounts, sales: [], purchases: [],
+    movements: [], products: [], journalEntries: [source, contra],
+    bankAccounts: [], bankStatementMovements: [], creditSettlements: []
+  });
+  assert.equal(result.ready, false);
+  assert.match(result.blockers.join(' '), /ya tiene una reversión registrada/);
+});
+
+test('bloquea intentar reversar un contra-asiento como si fuera documento fuente', () => {
+  const contra: JournalEntry = {
+    ...source,
+    id: 'j-1-reversal',
+    entryNumber: 2,
+    type: 'AJUSTE',
+    reversalOfEntryId: source.id
+  };
+  const result = assessJournalReversal({
+    companyId: 'c-1', source: contra, accounts, sales: [], purchases: [],
+    movements: [], products: [], journalEntries: [source, contra],
+    bankAccounts: [], bankStatementMovements: [], creditSettlements: []
+  });
+  assert.equal(result.ready, false);
+  assert.match(result.blockers.join(' '), /ya es un contra-asiento/);
+});

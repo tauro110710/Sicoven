@@ -24,11 +24,13 @@ import { SupplierDebitNoteModal } from './SupplierDebitNoteModal';
 import { SupplierAdvanceSettlementModal } from './SupplierAdvanceSettlementModal';
 import { getPurchaseAccountCreditDate, type PurchaseRecord } from '../../types/accounting';
 import { SupportingDocumentsPanel } from '../shared/SupportingDocumentsPanel';
+import { JournalReversalModal } from '../LibroDiario/JournalReversalModal';
 
 export const LibroComprasView: React.FC = () => {
   const {
     currentCompany,
     purchases,
+    journalEntries,
     vatVouchers,
     isStorageReady,
     displayCurrency
@@ -38,6 +40,7 @@ export const LibroComprasView: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [documentTarget, setDocumentTarget] = useState<{ id: string; title: string } | null>(null);
   const [creditNoteTarget, setCreditNoteTarget] = useState<PurchaseRecord | null>(null);
+  const [reversalTarget, setReversalTarget] = useState<import('../../types/accounting').JournalEntry | null>(null);
   const [debitNoteTarget, setDebitNoteTarget] = useState<PurchaseRecord | null>(null);
   const [showSupplierAdvances, setShowSupplierAdvances] = useState(false);
   const [settlementTarget, setSettlementTarget] = useState<{id:string; number:string; party:string} | null>(null);
@@ -323,7 +326,7 @@ export const LibroComprasView: React.FC = () => {
                     </td>
                     <td className="py-2 px-2 text-center no-print">
                       <button onClick={() => setDocumentTarget({ id: p.id, title: 'Factura de compra ' + p.invoiceNumber })} className="mr-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes</button>
-                      {p.documentType === '01' && p.paymentTerm === 'CREDITO' && <button onClick={() => setSettlementTarget({id:p.id, number:p.invoiceNumber, party:p.supplierName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar pago parcial o total">Pagar</button>}
+                      {p.documentType === '01' && p.paymentTerm === 'CREDITO' && !p.isCancelled && <button onClick={() => setSettlementTarget({id:p.id, number:p.invoiceNumber, party:p.supplierName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar pago parcial o total">Pagar</button>}
                       {p.documentType === '01' && !p.isCancelled && <button
                         onClick={() => setDebitNoteTarget(p)}
                         disabled={!sqliteAvailable || !isStorageReady}
@@ -335,13 +338,18 @@ export const LibroComprasView: React.FC = () => {
                         className="mr-1 inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-40"
                         title={!p.inventoryLines?.length ? 'Factura sin líneas de inventario conciliables' : p.paymentTerm === 'CONTADO' ? 'Registrar nota de crédito, salida física y saldo a favor del proveedor; no realiza reembolso automático de efectivo' : 'Registrar nota de crédito y devolución física'}
                       ><RotateCcw className="h-3 w-3" />{p.paymentTerm === 'CONTADO' ? 'NC · saldo a favor' : 'Devolver'}</button>}
-                      {p.documentType === '01' && <button
-                        onClick={() => window.alert('Esta factura ya está contabilizada y no se puede eliminar físicamente. Para corregirla debe habilitarse el flujo de anulación con asiento reverso y ajuste de los libros fiscales.')}
-                        className="p-1 text-slate-400 hover:text-amber-600 transition cursor-pointer"
-                        title="Anulación con reversión contable pendiente"
-                      >
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                      </button>}
+                      {p.documentType === '01' && !p.isCancelled && <button
+                        type="button"
+                        disabled={!sqliteAvailable || !isStorageReady}
+                        onClick={() => {
+                          const source = journalEntries.find(entry => entry.companyId === p.companyId &&
+                            (entry.id === p.journalEntryId || (!p.journalEntryId && entry.type === 'COMPRA' && entry.referenceDoc === 'FAC-' + p.invoiceNumber)));
+                          if (!source) window.alert('No se encontró el asiento contable de origen. No se puede anular sin conciliar primero la factura y su asiento.');
+                          else setReversalTarget(source);
+                        }}
+                        className="inline-flex items-center gap-1 rounded bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-700 hover:bg-rose-100"
+                        title={!sqliteAvailable || !isStorageReady ? "La anulación requiere SQLite local disponible" : "Solicitar anulación con contra-asiento y análisis de dependencias"}
+                      ><AlertTriangle className="h-3 w-3" /> Anular</button>}
                     </td>
                   </tr>
                 ))
@@ -447,6 +455,7 @@ export const LibroComprasView: React.FC = () => {
       </div>}
 
       {creditNoteTarget && <PurchaseCreditNoteModal purchase={creditNoteTarget} onClose={() => setCreditNoteTarget(null)} />}
+      <JournalReversalModal source={reversalTarget} onClose={() => setReversalTarget(null)} />
       {debitNoteTarget && <SupplierDebitNoteModal purchase={debitNoteTarget} onClose={() => setDebitNoteTarget(null)} />}
       {showSupplierAdvances && <SupplierAdvanceSettlementModal onClose={() => setShowSupplierAdvances(false)} />}
       {settlementTarget && <CreditSettlementModal documentId={settlementTarget.id} documentNumber={settlementTarget.number} partyName={settlementTarget.party} kind="PURCHASE_PAYMENT" onClose={() => setSettlementTarget(null)} />}

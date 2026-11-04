@@ -218,6 +218,7 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, corre
               <span className="font-bold">DIRECCIÓN FISCAL: </span>
               <span>{voucher.supplierAddress || 'No registrada'}</span>
             </div>
+            {voucher.supplierEmailSnapshot && <div><span className="font-bold">CORREO ELECTRÓNICO: </span><span>{voucher.supplierEmailSnapshot}</span></div>}
           </div>
 
           {/* Table of operations */}

@@ -1,5 +1,60 @@
 export type TaxpayerType = 'ESPECIAL' | 'ORDINARIO';
+export type AccountingFramework = 'VEN_NIF_GE' | 'VEN_NIF_PYME';
 export type IvaRetentionAgentBasis = 'ARTICLE_1_SPECIAL_DESIGNATED' | 'ARTICLE_2_METALS' | 'ARTICLE_1_AND_2' | 'NOT_AGENT' | 'UNCONFIRMED';
+
+export type AccountingCurrencyCode = 'VES' | 'USD' | 'EUR' | 'OTHER';
+
+/**
+ * Expediente de juicio profesional NIC 21. No se infiere por la tasa BCV,
+ * por la moneda de caja ni por el volumen de operaciones.
+ */
+export interface FunctionalCurrencyAssessment {
+  id: string;
+  status: 'DRAFT' | 'APPROVED' | 'SUPERSEDED';
+  functionalCurrency: AccountingCurrencyCode;
+  functionalCurrencyOther?: string;
+  presentationCurrency: AccountingCurrencyCode;
+  presentationCurrencyOther?: string;
+  assessmentDate: string;
+  effectiveDate: string;
+  preparedBy: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  primaryEconomicEnvironment: string;
+  salesPriceFactors: string;
+  costFactors: string;
+  financingFactors: string;
+  operatingReceiptsFactors: string;
+  professionalConclusion: string;
+  evidenceReferences: string[];
+}
+
+/**
+ * Evaluación de convertibilidad para una fecha y propósito concretos.
+ * La evidencia y el juicio aprobado preceden cualquier conversión contable.
+ */
+export interface ExchangeabilityAssessment {
+  id: string;
+  measurementDate: string;
+  purpose: string;
+  currency: AccountingCurrencyCode;
+  currencyOther?: string;
+  amountRequired: number;
+  legalMechanism: string;
+  legallyAccessible: boolean;
+  actuallyAccessible: boolean;
+  expectedDelayDays?: number;
+  amountAvailable?: number;
+  accessibleSpotRate?: number;
+  evidenceReferences: string[];
+  conclusion: 'CONVERTIBLE' | 'NOT_CONVERTIBLE';
+  estimatedSpotRate?: number;
+  estimationMethod?: string;
+  estimationEvidence?: string;
+  preparedBy: string;
+  approvedBy: string;
+  approvedAt: string;
+}
 
 export interface Company {
   id: string;
@@ -10,6 +65,15 @@ export interface Company {
   phone: string;
   email: string;
   taxpayerType: TaxpayerType;
+  /** Referencia y fecha de la notificación expresa del SENIAT que acredita la calificación de sujeto pasivo especial. */
+  specialTaxpayerNotificationReference?: string;
+  specialTaxpayerNotificationDate?: string;
+  /** Marco contable expresamente adoptado; ausente en empresas históricas hasta documentar su adopción. */
+  accountingFramework?: AccountingFramework;
+  /** Identificador de la versión normativa realmente aplicada, no se infiere ni se autocompleta. */
+  accountingFrameworkVersion?: string;
+  /** Fecha documentada de adopción del marco, YYYY-MM-DD. */
+  accountingFrameworkAdoptionDate?: string;
   defaultIvaRetentionRate: number; // 75 or 100
   /** Supuesto expreso de designación como agente bajo Providencia SNAT/2025/000054. Ausente = pendiente de confirmar. */
   ivaRetentionAgentBasis?: IvaRetentionAgentBasis;
@@ -22,6 +86,10 @@ export interface Company {
   lastRateUpdate?: string;
   /** Último día incluido en un período contable bloqueado. */
   closedThroughDate?: string;
+  /** Historial de evaluaciones NIC 21; ausencia = pendiente, nunca se asigna moneda por defecto. */
+  functionalCurrencyAssessments?: FunctionalCurrencyAssessment[];
+  /** Evaluaciones de convertibilidad fechadas y ligadas a un propósito concreto. */
+  exchangeabilityAssessments?: ExchangeabilityAssessment[];
   logoUrl?: string; // URL o base64 del logo de la empresa
 }
 
@@ -88,6 +156,9 @@ export interface JournalEntry {
   reversalReason?: string;
   workpaperNote?: string;
   priorPeriodAdjustment?: boolean;
+  /** Asiento origen de un ajuste manual; no modifica el asiento fuente. */
+  adjustmentForEntryId?: string;
+  adjustmentReason?: string;
   /** Vínculo inmutable entre el ejercicio cerrado y el ejercicio que inicia con esta apertura. */
   exerciseLink?: {
     priorPeriodStartDate: string;
@@ -148,6 +219,8 @@ export interface PurchaseRecord {
   supplierRif: string; // e.g. "J-12345678-9"
   supplierName: string;
   supplierAddress?: string;
+  /** Correo declarado del proveedor; opcional para compatibilidad con compras históricas. */
+  supplierEmail?: string;
   supplierTaxStatus?: 'ORDINARY' | 'FORMAL' | 'SPECIAL' | 'NON_REGISTERED' | 'UNKNOWN';
   ivaRetentionDecision?: PurchaseIvaRetentionSnapshot;
   invoiceNumber: string;
@@ -350,6 +423,7 @@ export interface VatRetentionVoucher {
   agentNameSnapshot?: string;
   agentRifSnapshot?: string;
   agentAddressSnapshot?: string;
+  supplierEmailSnapshot?: string;
   supplierRif: string;
   supplierName: string;
   supplierAddress: string;
@@ -492,6 +566,15 @@ export interface IslrRetentionVoucher {
   /** Todos los asientos correctivos asociados al comprobante; correctionEntryId conserva el último para compatibilidad. */
   correctionEntryIds?: string[];
   correctionNote?: string;
+  /** Instantánea fiscal del emisor y del proveedor al emitir; ausente en comprobantes históricos. */
+  agentNameSnapshot?: string;
+  agentRifSnapshot?: string;
+  agentAddressSnapshot?: string;
+  supplierEmailSnapshot?: string;
+  /** Registro de entrega inmutable; ausente en comprobantes históricos. */
+  deliveryDate?: string;
+  deliveryMethod?: 'PHYSICAL' | 'ELECTRONIC';
+  electronicDeliveryAgreed?: boolean;
 }
 
 export interface BankAccount {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAccounting } from '../context/AccountingContext';
 import { Building2, X, ShieldAlert, Check, AlertCircle } from 'lucide-react';
-import { TaxpayerType, IvaRetentionAgentBasis } from '../types/accounting';
+import { AccountingFramework, TaxpayerType, IvaRetentionAgentBasis } from '../types/accounting';
 import { validateVenezuelanRif } from '../utils/formatters';
 
 interface CompanyModalProps {
@@ -20,13 +20,18 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [taxpayerType, setTaxpayerType] = useState<TaxpayerType>('ESPECIAL');
+  const [taxpayerType, setTaxpayerType] = useState<TaxpayerType>('ORDINARIO');
+  const [specialTaxpayerNotificationReference, setSpecialTaxpayerNotificationReference] = useState('');
+  const [specialTaxpayerNotificationDate, setSpecialTaxpayerNotificationDate] = useState('');
   const [defaultIvaRetentionRate, setDefaultIvaRetentionRate] = useState<number>(75);
   const [ivaRetentionAgentBasis, setIvaRetentionAgentBasis] = useState<IvaRetentionAgentBasis>('UNCONFIRMED');
   const [isPersonalFirm, setIsPersonalFirm] = useState(false);
   const [isIgtfPerceptionAgent, setIsIgtfPerceptionAgent] = useState(false);
   const [bcvRate, setBcvRate] = useState<string>('');
   const [fiscalYear, setFiscalYear] = useState<string>(String(new Date().getFullYear()));
+  const [accountingFramework, setAccountingFramework] = useState<AccountingFramework | ''>('');
+  const [accountingFrameworkVersion, setAccountingFrameworkVersion] = useState('');
+  const [accountingFrameworkAdoptionDate, setAccountingFrameworkAdoptionDate] = useState('');
 
   if (!isOpen) return null;
 
@@ -58,6 +63,15 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       return;
     }
     if (!name.trim()) return;
+    if (taxpayerType === 'ESPECIAL' && (!specialTaxpayerNotificationReference.trim() || !specialTaxpayerNotificationDate)) {
+      window.alert('Para registrar una empresa como Contribuyente Especial, indique la referencia y fecha de la notificación expresa del SENIAT.');
+      return;
+    }
+    const hasFrameworkMetadata = Boolean(accountingFramework || accountingFrameworkVersion.trim() || accountingFrameworkAdoptionDate);
+    if (hasFrameworkMetadata && (!accountingFramework || !accountingFrameworkVersion.trim() || !accountingFrameworkAdoptionDate)) {
+      window.alert('Para registrar la adopción VEN-NIF debe completar marco, versión normativa y fecha documentada.');
+      return;
+    }
 
     addCompany({
       rif: rifValidation.formattedRif,
@@ -67,6 +81,12 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       phone: phone.trim() || '(0212) 000-0000',
       email: email.trim() || 'contacto@empresa.com.ve',
       taxpayerType,
+      ...(taxpayerType === 'ESPECIAL' ? { specialTaxpayerNotificationReference: specialTaxpayerNotificationReference.trim(), specialTaxpayerNotificationDate } : {}),
+      ...(accountingFramework ? {
+        accountingFramework,
+        accountingFrameworkVersion: accountingFrameworkVersion.trim(),
+        accountingFrameworkAdoptionDate
+      } : {}),
       defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
       ivaRetentionAgentBasis,
       isPersonalFirm,
@@ -179,11 +199,32 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
             />
           </div>
 
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 space-y-2">
+            <label className="block text-xs font-bold text-slate-800">Marco contable VEN-NIF adoptado (si está documentado)</label>
+            <select value={accountingFramework} onChange={e => setAccountingFramework(e.target.value as AccountingFramework | '')} className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white">
+              <option value="">Seleccione el marco aplicable</option>
+              <option value="VEN_NIF_GE">VEN-NIF GE — Grandes Entidades</option>
+              <option value="VEN_NIF_PYME">VEN-NIF PYME — Pequeñas y Medianas Entidades</option>
+            </select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Versión / referencia normativa</label>
+                <input value={accountingFrameworkVersion} onChange={e => setAccountingFrameworkVersion(e.target.value)} placeholder="Ej. BA VEN-NIF 8, versión aplicable" className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Fecha documentada de adopción</label>
+                <input type="date" value={accountingFrameworkAdoptionDate} onChange={e => setAccountingFrameworkAdoptionDate(e.target.value)} className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg" />
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-600">Registre la referencia y fecha respaldadas por la evaluación del contador. SICOVEN no presume la clasificación ni asigna automáticamente una versión.</p>
+          </div>
+
           {/* Calificación SENIAT */}
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
             <label className="block text-xs font-bold text-slate-800 uppercase tracking-wide">
               Calificación Tributaria SENIAT
             </label>
+            <p className="text-[11px] text-slate-600">Marque Contribuyente Especial únicamente si existe notificación expresa del SENIAT. La categoría no se presume por ingresos ni por el RIF.</p>
             <div className="grid grid-cols-2 gap-3">
               <label
                 className={`flex items-start gap-3 p-3 rounded-xl border text-xs cursor-pointer transition ${
@@ -204,7 +245,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
                   className="mt-0.5 text-purple-600 focus:ring-purple-500"
                 />
                 <div>
-                  <span className="block font-bold">Contribuyente Especial</span>
+                  <span className="block font-bold">Contribuyente Especial (con notificación SENIAT)</span>
                   <span className="text-[11px] font-normal text-slate-500">
                     Agente de Retención designado por el SENIAT (75% / 100% IVA e ISLR).
                   </span>
@@ -239,6 +280,15 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
                 </div>
               </label>
             </div>
+
+            {taxpayerType === 'ESPECIAL' && (
+              <div className="rounded-lg border border-purple-200 bg-white p-3 space-y-2">
+                <label className="block text-xs font-semibold text-slate-800">Notificación expresa del SENIAT *</label>
+                <input required value={specialTaxpayerNotificationReference} onChange={e => setSpecialTaxpayerNotificationReference(e.target.value)} placeholder="Número o referencia de la notificación" className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg" />
+                <input required type="date" value={specialTaxpayerNotificationDate} onChange={e => setSpecialTaxpayerNotificationDate(e.target.value)} className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg" />
+                <p className="text-[10px] text-slate-600">La calificación se registra únicamente con respaldo documental; los umbrales económicos no sustituyen la notificación.</p>
+              </div>
+            )}
 
             {taxpayerType === 'ESPECIAL' && (
               <div className="pt-2 flex items-center justify-between text-xs">

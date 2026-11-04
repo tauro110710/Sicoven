@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generateSeniatIvaTxt as generateSeniatIvaTxtRaw, generateSeniatIslrOperationsXml, generateSeniatIslrOperationsTxt } from './seniatGenerators';
+import { encodeIso88591, generateSeniatIvaTxt as generateSeniatIvaTxtRaw, generateSeniatIslrOperationsXml, generateSeniatIslrOperationsTxt } from './seniatGenerators';
 import type { Company, PurchaseRecord, IslrRetentionVoucher, VatRetentionVoucher } from '../types/accounting';
 import type { IslrFiscalEvent } from '../types/islrFiscalEvent';
 import { resolvePurchaseVatFiscalEvent } from '../types/vatFiscalEvent';
@@ -442,4 +442,14 @@ test('IVA TXT permits an exempt document with zero taxable base and zero withhol
   assert.equal(fields[10], '0.00');
   assert.equal(fields[13], '450.00');
   assert.equal(fields[14], '0.00');
+});
+
+
+test('ISO-8859-1 encoder preserves Latin-1 bytes for SENIAT XML', () => {
+  assert.deepEqual([...encodeIso88591('áéíóúñüÑ')], [225, 233, 237, 243, 250, 241, 252, 209]);
+});
+
+test('ISO-8859-1 encoder rejects unsupported Unicode and invalid XML control characters', () => {
+  assert.throws(() => encodeIso88591('Proveedor 😀'), /ISO-8859-1/);
+  assert.throws(() => encodeIso88591('texto\u0001inválido'), /ISO-8859-1/);
 });

@@ -22,12 +22,15 @@ import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportDiarioPdf } from '../../utils/pdfGenerator';
 import { Download } from 'lucide-react';
 import { SupportingDocumentsPanel } from '../shared/SupportingDocumentsPanel';
+import { JournalReversalModal } from './JournalReversalModal';
 
 export const LibroDiarioView: React.FC = () => {
-  const { currentCompany, journalEntries, displayCurrency } = useAccounting();
+  const { currentCompany, journalEntries, purchases, sales, displayCurrency } = useAccounting();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [documentTarget, setDocumentTarget] = useState<{ id: string; title: string } | null>(null);
+  const [reversalTarget, setReversalTarget] = useState<import('../../types/accounting').JournalEntry | null>(null);
+  const [showCorrectionCenter, setShowCorrectionCenter] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
   const [startDate, setStartDate] = useState('');
@@ -136,8 +139,57 @@ export const LibroDiarioView: React.FC = () => {
     }
   };
 
+  const reversalFor = (entryId: string) => journalEntries.find(candidate =>
+    candidate.companyId === currentCompany.id && candidate.reversalOfEntryId === entryId
+  );
+  const sourceEntries = journalEntries.filter(entry => !entry.reversalOfEntryId);
+  const pendingReversals = sourceEntries.filter(entry => !entry.reversedByEntryId && !reversalFor(entry.id));
+  const reversedEntries = sourceEntries.filter(entry => entry.reversedByEntryId || reversalFor(entry.id));
+  const purchaseNotes = purchases.filter(purchase => purchase.documentType === '02' || purchase.documentType === '03');
+  const purchaseCorrectionsPending = purchases.filter(purchase => purchase.documentType === '01' && !purchase.isCancelled &&
+    !purchaseNotes.some(note => note.originalPurchaseId === purchase.id));
+  const salesWithManualCorrectionNeed = sales.filter(sale => sale.documentType === '01' && !sale.isCancelled);
+
   return (
     <div className="space-y-6">
+      <section className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm print:hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-amber-50 px-4 py-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Centro de Correcciones y Ajustes</h2>
+            <p className="mt-1 text-[11px] text-slate-600">Conserva los originales y localiza los asientos que requieren revisión o reversión.</p>
+          </div>
+          <button type="button" onClick={() => setShowCorrectionCenter(value => !value)} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-900">
+            {showCorrectionCenter ? 'Ocultar expediente' : 'Abrir centro'}
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4">
+          <div className="rounded-lg bg-slate-50 p-3"><div className="text-[10px] text-slate-500">Asientos fuente sin reversión</div><div className="text-xl font-bold tabular-nums text-slate-900">{pendingReversals.length}</div></div>
+          <div className="rounded-lg bg-slate-50 p-3"><div className="text-[10px] text-slate-500">Asientos reversados</div><div className="text-xl font-bold tabular-nums text-slate-900">{reversedEntries.length}</div></div>
+          <div className="rounded-lg bg-slate-50 p-3"><div className="text-[10px] text-slate-500">Facturas de compra activas</div><div className="text-xl font-bold tabular-nums text-slate-900">{purchaseCorrectionsPending.length}</div></div>
+          <div className="rounded-lg bg-slate-50 p-3"><div className="text-[10px] text-slate-500">Facturas de venta registradas</div><div className="text-xl font-bold tabular-nums text-slate-900">{salesWithManualCorrectionNeed.length}</div></div>
+        </div>
+        {showCorrectionCenter && <div className="grid gap-4 border-t border-slate-100 p-4 lg:grid-cols-2">
+          <div className="space-y-2">
+            <h3 className="text-xs font-bold text-slate-800">Asientos contables</h3>
+            {pendingReversals.length === 0 ? <p className="text-xs text-slate-500">No hay asientos fuente sin contra-asiento.</p> : pendingReversals.slice(0, 8).map(entry => (
+              <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-2">
+                <div className="min-w-0"><p className="text-xs font-semibold text-slate-800">#{entry.entryNumber} · {entry.description}</p><p className="text-[10px] text-slate-500">{entry.date} · {entry.type} · {entry.referenceDoc || 'Sin referencia documental'}</p></div>
+                <button type="button" onClick={() => setReversalTarget(entry)} className="shrink-0 rounded bg-rose-50 px-2 py-1.5 text-[10px] font-bold text-rose-700">Reversar</button>
+              </div>
+            ))}
+            {reversedEntries.slice(0, 5).map(entry => {
+              const contra = reversalFor(entry.id);
+              return <div key={entry.id} className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-2 text-[11px] text-indigo-950"><strong>Asiento #{entry.entryNumber} reversado</strong><p>Contra-asiento: {contra ? '#' + contra.entryNumber : '#' + (entry.reversedByEntryId || 'no localizado')} · {contra?.date || 'fecha no disponible'}</p><p className="mt-1">{contra?.reversalReason || entry.reversalReason || 'Motivo histórico no disponible'}</p></div>;
+            })}
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-xs font-bold text-slate-800">Documentos y rutas de corrección</h3>
+            {purchaseCorrectionsPending.slice(0, 5).map(purchase => <div key={purchase.id} className="rounded-lg border border-slate-200 p-2 text-[11px]"><strong>Compra {purchase.invoiceNumber}</strong> · {purchase.supplierName}<p className="text-slate-500">{purchase.inventoryLines?.length ? 'Puede evaluarse devolución parcial mediante NC si Kardex y costos concilian.' : 'No tiene flujo automático de nota de crédito: requiere análisis documental/contable especializado.'}</p></div>)}
+            {salesWithManualCorrectionNeed.slice(0, 5).map(sale => <div key={sale.id} className="rounded-lg border border-slate-200 p-2 text-[11px]"><strong>Venta {sale.invoiceNumber}</strong> · {sale.customerName}<p className="text-slate-500">La anulación/NC/ND de venta aún requiere circuito fiscal y conciliación de cobros e inventario; no se habilita una reversión ciega.</p></div>)}
+            {purchaseNotes.length > 0 && <p className="text-[10px] text-slate-500">{purchaseNotes.length} notas de débito/crédito de proveedor registradas y conservadas en el Libro de Compras.</p>}
+          </div>
+        </div>}
+      </section>
       {/* Official Header with Selected Company Logo */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 print:border-none print:shadow-none print:p-0">
         <CompanyLogoHeader
@@ -277,6 +329,9 @@ export const LibroDiarioView: React.FC = () => {
               : undefined;
             const reversalEntry = entry.reversedByEntryId
               ? journalEntries.find(candidate => candidate.id === entry.reversedByEntryId)
+              : journalEntries.find(candidate => candidate.companyId === entry.companyId && candidate.reversalOfEntryId === entry.id);
+            const adjustmentSource = entry.adjustmentForEntryId
+              ? journalEntries.find(candidate => candidate.id === entry.adjustmentForEntryId && candidate.companyId === entry.companyId)
               : undefined;
 
             return (
@@ -285,7 +340,7 @@ export const LibroDiarioView: React.FC = () => {
                 className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print-break-inside-avoid"
               >
                 {/* Entry Header */}
-                <div className="flex justify-end border-b border-slate-100 px-4 py-2 no-print"><button onClick={() => setDocumentTarget({ id: entry.id, title: 'Asiento contable N° ' + entry.entryNumber })} className="rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes</button></div>
+                <div className="flex flex-wrap justify-end gap-2 border-b border-slate-100 px-4 py-2 no-print"><button onClick={() => setDocumentTarget({ id: entry.id, title: 'Asiento contable N° ' + entry.entryNumber })} className="rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes</button>{!entry.reversalOfEntryId && !entry.reversedByEntryId && !journalEntries.some(candidate => candidate.companyId === entry.companyId && candidate.reversalOfEntryId === entry.id) && <button onClick={() => setReversalTarget(entry)} className="rounded bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-700 hover:bg-rose-100">Reversar asiento</button>}</div>
                 <div className="bg-slate-50/80 px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5 flex-wrap">
                     <span className="font-mono font-bold text-xs bg-slate-900 text-white px-2 py-0.5 rounded">
@@ -330,10 +385,16 @@ export const LibroDiarioView: React.FC = () => {
                   <span className="text-slate-500 font-normal">Descripción: </span>
                   {entry.description}
                 </div>
-                {(entry.reversalOfEntryId || entry.reversedByEntryId) && <div className="px-4 py-3 border-b border-indigo-100 bg-indigo-50/60 text-xs text-indigo-950 space-y-1">
+                {entry.adjustmentReason && <div className="px-4 py-3 border-b border-amber-100 bg-amber-50/50 text-xs text-amber-950 space-y-1">
+                  <div className="font-bold">Trazabilidad del ajuste manual</div>
+                  <p><strong>Motivo:</strong> {entry.adjustmentReason}</p>
+                  {entry.workpaperNote && <p className="whitespace-pre-wrap"><strong>Papel de trabajo:</strong> {entry.workpaperNote}</p>}
+                  {entry.adjustmentForEntryId && <p><strong>Asiento origen:</strong> #{adjustmentSource?.entryNumber ?? 'no localizado'} · ID {entry.adjustmentForEntryId}</p>}
+                </div>}
+                {(entry.reversalOfEntryId || entry.reversedByEntryId || reversalEntry) && <div className="px-4 py-3 border-b border-indigo-100 bg-indigo-50/60 text-xs text-indigo-950 space-y-1">
                   <div className="flex flex-wrap items-center gap-2 font-bold"><ShieldCheck className="w-3.5 h-3.5" /> Trazabilidad de reversión</div>
                   {entry.reversalOfEntryId && <p>Contra-asiento del asiento original #{reversalSource?.entryNumber ?? 'no localizado'} · ID {entry.reversalOfEntryId}</p>}
-                  {entry.reversedByEntryId && <p>Este asiento fue reversado por el contra-asiento #{reversalEntry?.entryNumber ?? 'no localizado'} · ID {entry.reversedByEntryId}</p>}
+                  {(entry.reversedByEntryId || reversalEntry) && <p>Este asiento fue reversado por el contra-asiento #{reversalEntry?.entryNumber ?? 'no localizado'} · ID {entry.reversedByEntryId || reversalEntry?.id}</p>}
                   {entry.reversalReason && <p><strong>Motivo:</strong> {entry.reversalReason}</p>}
                   {entry.workpaperNote && <p className="whitespace-pre-wrap"><strong>Papel de trabajo:</strong> {entry.workpaperNote}</p>}
                   {entry.priorPeriodAdjustment && <p className="font-semibold">Ajuste de ejercicio anterior (AIA).</p>}
@@ -479,6 +540,8 @@ export const LibroDiarioView: React.FC = () => {
           <p className="text-[10px] text-slate-500">REPRESENTANTE LEGAL / ADMINISTRADOR</p>
         </div>
       </div>
+
+      <JournalReversalModal source={reversalTarget} onClose={() => setReversalTarget(null)} />
 
       {/* New Entry Modal */}
       <NewEntryModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />

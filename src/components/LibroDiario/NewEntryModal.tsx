@@ -21,13 +21,16 @@ interface NewEntryModalProps {
 }
 
 export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, accounts, addJournalEntry } = useAccounting();
+  const { currentCompany, accounts, journalEntries, addJournalEntry } = useAccounting();
 
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState<string>('');
   const [type, setType] = useState<EntryType>('MANUAL');
   const [bcvRate, setBcvRate] = useState<number>(currentCompany.bcvRate || 68.50);
   const [referenceDoc, setReferenceDoc] = useState<string>('');
+  const [adjustmentForEntryId, setAdjustmentForEntryId] = useState<string>('');
+  const [adjustmentReason, setAdjustmentReason] = useState<string>('');
+  const [workpaperNote, setWorkpaperNote] = useState<string>('');
   const [isAdjusted, setIsAdjusted] = useState<boolean>(false);
   const [showDiagnostics, setShowDiagnostics] = useState<boolean>(true);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -229,6 +232,18 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
       setSubmitError('Debe ingresar la descripción o glosa del asiento contable.');
       return;
     }
+    if (type === 'AJUSTE' && referenceDoc.trim().length < 3) {
+      setSubmitError('Todo ajuste manual debe identificar su documento o expediente de soporte.');
+      return;
+    }
+    if (type === 'AJUSTE' && (adjustmentReason.trim().length < 10 || workpaperNote.trim().length < 10)) {
+      setSubmitError('Todo ajuste manual requiere motivo y papel de trabajo de al menos 10 caracteres.');
+      return;
+    }
+    if (type === 'AJUSTE' && adjustmentForEntryId && !journalEntries.some(entry => entry.id === adjustmentForEntryId && entry.companyId === currentCompany.id)) {
+      setSubmitError('El asiento origen seleccionado no pertenece a la empresa activa o ya no está disponible.');
+      return;
+    }
 
     try {
       addJournalEntry({
@@ -239,7 +254,10 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
         bcvRate,
         items,
         isAdjusted: type === 'AJUSTE' || isAdjusted,
-        referenceDoc: referenceDoc.trim() || undefined
+        referenceDoc: referenceDoc.trim() || undefined,
+        adjustmentForEntryId: type === 'AJUSTE' ? adjustmentForEntryId || undefined : undefined,
+        adjustmentReason: type === 'AJUSTE' ? adjustmentReason.trim() : undefined,
+        workpaperNote: type === 'AJUSTE' ? workpaperNote.trim() : undefined
       });
       onClose();
     } catch (err: any) {
@@ -372,6 +390,32 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
               className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
             />
           </div>
+
+          {type === 'AJUSTE' && (
+            <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 space-y-3">
+              <div>
+                <h4 className="text-xs font-bold text-amber-950">Trazabilidad obligatoria del ajuste</h4>
+                <p className="mt-1 text-[11px] text-amber-800">El ajuste no altera el asiento fuente. Identifique el origen cuando corresponda y documente la causa y el papel de trabajo.</p>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700">Asiento origen relacionado (opcional si es ajuste general)</label>
+                <select value={adjustmentForEntryId} onChange={e => setAdjustmentForEntryId(e.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs">
+                  <option value="">Ajuste general / sin asiento origen</option>
+                  {journalEntries.filter(entry => entry.companyId === currentCompany.id && !entry.reversalOfEntryId).map(entry => (
+                    <option key={entry.id} value={entry.id}>#{entry.entryNumber} · {entry.date} · {entry.description.slice(0, 90)}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700">Motivo del ajuste * (mínimo 10 caracteres)</label>
+                <textarea value={adjustmentReason} onChange={e => setAdjustmentReason(e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs" placeholder="Explique el error, reclasificación, estimación o hecho que justifica el ajuste." />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700">Papel de trabajo y soporte * (mínimo 10 caracteres)</label>
+                <textarea value={workpaperNote} onChange={e => setWorkpaperNote(e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs" placeholder="Describa conciliaciones, cálculos, evidencia y revisión profesional." />
+              </div>
+            </section>
+          )}
 
           {/* Items Table */}
           <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
