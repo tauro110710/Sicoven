@@ -11,7 +11,7 @@ const today = () => {
 };
 
 export const PurchaseServiceCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) => {
-  const { currentCompany, addPurchaseServiceCreditNote, isStorageReady, storageError } = useAccounting();
+  const { addPurchaseServiceCreditNote, isStorageReady, storageError } = useAccounting();
   const [noteDate, setNoteDate] = useState(today);
   const [creditNoteNumber, setCreditNoteNumber] = useState('');
   const [controlNumber, setControlNumber] = useState('');
