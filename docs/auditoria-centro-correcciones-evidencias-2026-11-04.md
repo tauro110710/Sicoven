@@ -7,7 +7,7 @@ Fecha: 04/11/2026
 - La vista de Reversión Fiscal permite adjuntar soporte al expediente, abrirlo, verificarlo u observarlo.
 - El contexto contable incorpora el tipo `CORRECTION_CASE` para las operaciones documentales.
 - El cierre del expediente exige al menos un soporte documental asociado directamente al expediente y cuyo último evento de revisión sea `REVIEWED`.
-- Quien adjuntó la evidencia no puede verificarla ni observarla. La revisión exige una identidad distinta y queda registrada en los eventos append-only del archivo documental y en la auditoría general.
+- El contador puede adjuntar y verificar sus propios soportes. La verificación registra identidad, fecha, decisión y motivo; no exige una segunda cuenta.
 - Los archivos conservan huella SHA-256, tamaño, autor, fecha y eventos de acceso/revisión; no se sobrescribe ni elimina el soporte anterior.
 
 ## Pruebas incorporadas
@@ -24,7 +24,7 @@ El workflow de expedientes conserva ocho pruebas. Ninguna de estas suites se ha 
 
 La ejecución ahora requiere simultáneamente:
 1. Expediente aprobado.
-2. Ejecutor distinto del solicitante y del aprobador.
+2. Ejecución por el mismo contador autenticado, con confirmación expresa y referencia documental exacta.
 3. Referencia correctiva distinta de la referencia fuente y coincidente con la declarada, cuando se haya declarado.
 4. Documento correctivo persistido en la misma empresa, con referencia coincidente y vínculo explícito al registro fuente.
 5. Al menos un soporte documental asociado al expediente y verificado por una identidad distinta de quien lo adjuntó.
@@ -48,7 +48,7 @@ Se agregó un ciclo formal de expediente sin sobrescribir su historial:
 - `CLOSED`: rechazado.
 - `WITHDRAWN`: retirado por el solicitante antes de ejecutar.
 
-La observación puede ocurrir durante revisión y también después de aprobar, antes de ejecutar. Solo el solicitante original puede subsanar y reenviar; el expediente vuelve a revisión y pierde la aprobación anterior. Cada observación y reenvío se registra en una tabla de eventos separada, append-only, y en la bitácora general. Si falla la bitácora, la transacción completa revierte. Se conserva el historial de aprobaciones/observaciones y se exige una nueva revisión independiente antes de ejecutar.
+La observación puede ocurrir durante revisión y también después de aprobar, antes de ejecutar. El contador puede subsanar y reenviar; el expediente vuelve a revisión y pierde la aprobación anterior. Cada observación y reenvío se registra en una tabla de eventos separada, append-only, y en la bitácora general. Si falla la bitácora, la transacción completa revierte. Se conserva el historial de aprobaciones/observaciones y se exige una nueva revisión independiente antes de ejecutar.
 
 La migración es aditiva: incorpora `workflow_stage` y normaliza las etapas de expedientes existentes según su estado, sin borrar documentos ni expedientes.
 
@@ -73,9 +73,9 @@ El workflow conserva el expediente y registra eventos append-only:
 - `CLOSED`: rechazado.
 - `WITHDRAWN`: retirado por el solicitante antes de ejecutar.
 
-Solo el solicitante original puede subsanar y reenviar una observación, o retirar el expediente antes de su ejecución. El reenvío invalida la aprobación anterior y exige nueva revisión. El retiro bloquea aprobación, reenvío y ejecución posteriores. La migración de casos y la reconstrucción del ledger de eventos se realizan de forma transaccional y conservan los eventos anteriores.
+El contador puede subsanar y reenviar una observación, o retirar el expediente antes de su ejecución. El reenvío invalida la aprobación anterior y exige nueva revisión. El retiro bloquea aprobación, reenvío y ejecución posteriores. La migración de casos y la reconstrucción del ledger de eventos se realizan de forma transaccional y conservan los eventos anteriores.
 
-Los generadores de NC/ND de venta y compra, ND de proveedor y reversión de asientos exigen ahora un expediente único aprobado que coincida con empresa, registro fuente y referencia correctiva; el operador debe ser distinto del solicitante y del aprobador. La devolución física desde el centro de reversión exige la misma autorización antes de crear el movimiento. La confirmación final vuelve a validar evidencia correctiva vinculada, ID/colección exactos y soporte `EVIDENCIA_CORRECCION` verificado. Después de una observación, el soporte debe volver a verificarse con fecha posterior a la observación más reciente.
+Los generadores de NC/ND de venta y compra, ND de proveedor y reversión de asientos exigen ahora un expediente único aprobado que coincida con empresa, registro fuente y referencia correctiva; el contador autenticado puede registrar, aprobar e iniciar la ejecución. La devolución física desde el centro de reversión exige la misma autorización antes de crear el movimiento. La confirmación final vuelve a validar evidencia correctiva vinculada, ID/colección exactos y soporte `EVIDENCIA_CORRECCION` verificado. Después de una observación, el soporte debe volver a verificarse con fecha posterior a la observación más reciente.
 
 ## Pruebas definidas y límites de verificación
 
@@ -98,8 +98,13 @@ No se declara terminado el centro. Aún falta integrar/validar:
 No se ejecutó CI ni se publicó release. No se modificó el administrador semilla ni se borraron registros fuente.
 
 
-La autorización previa ahora se registra en SQLite antes de ejecutar el generador: conserva operador, fecha y referencia, exige que el operador sea distinto del solicitante y aprobador, permite reintento al mismo operador con la misma referencia y vincula el inicio al operador y a la referencia aprobados. Si el documento correctivo todavía no se persistió, el expediente puede devolverse a observación o retirarse; el IPC comprueba primero que no exista evidencia correctiva vinculada. Si ya existe, se bloquean observación y retiro y debe completarse la confirmación. La confirmación final debe realizarla el mismo operador que inició la ejecución. El evento de inicio y su auditoría se escriben atómicamente.
+La autorización previa ahora se registra en SQLite antes de ejecutar el generador: conserva operador, fecha y referencia, permite que el único contador autenticado registre, apruebe e inicie la operación y vincula el inicio a la referencia aprobada. Si el documento correctivo todavía no se persistió, el expediente puede devolverse a observación o retirarse; el IPC comprueba primero que no exista evidencia correctiva vinculada. Si ya existe, se bloquean observación y retiro y debe completarse la confirmación. La confirmación final debe realizarla el contador autenticado que inició la ejecución. El evento de inicio y su auditoría se escriben atómicamente.
 
 El auxiliar también falla de forma cerrada si una NC/ND contiene importes no finitos o negativos, para no contaminar los saldos calculados.
 
 Se agregó recuperación auditable para intentos fallidos: al observar o retirar un expediente sin documento correctivo persistido, se limpia la autorización temporal y el historial conserva quién la inició y con qué referencia. La suite del workflow contiene ahora **24 pruebas definidas**, aún no ejecutadas.
+
+
+## Ajuste del modelo operativo: contador único
+
+Se elimina la segregación artificial solicitante/revisor/ejecutor. SICOVEN es operado por un único contador: una misma cuenta administrativa autenticada puede registrar la solicitud, revisar y aprobar sus fundamentos, adjuntar/verificar soportes, subsanar, retirar, autorizar e informar la ejecución. No se exige crear usuarios adicionales ni disponer de otro administrador. Se mantienen las salvaguardas técnicas: motivo obligatorio, papel de trabajo, evidencia adjunta y verificada, vínculo exacto al documento origen y correctivo, confirmación explícita, controles de período y empresa, bitácora append-only y prohibición de modificar/eliminar el original. Los eventos distinguen el tipo de acción aunque los realice la misma persona. Esta adaptación se alinea con la operación real de SICOVEN y no supone que exista una segunda persona que haga una revisión independiente.
