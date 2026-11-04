@@ -297,7 +297,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
     Number(selectedPurchaseForCorrection.islrWithheldBs || 0) > 0 ||
     Number(selectedPurchaseForCorrection.igtfAmountBs || 0) > 0 ||
     Boolean(selectedPurchaseForCorrection.igtfApplicable) ||
-    vatVouchers.some(item=>item.companyId===currentCompany.id && item.purchaseRecordId===selectedPurchaseForCorrection.id) ||
+    vatVouchers.some(item=>item.companyId===currentCompany.id && (item.purchaseRecordId===selectedPurchaseForCorrection.id || (item.invoiceNumber===selectedPurchaseForCorrection.invoiceNumber && item.supplierRif===selectedPurchaseForCorrection.supplierRif))) ||
     islrVouchers.some(item=>item.companyId===currentCompany.id && item.invoiceNumber===selectedPurchaseForCorrection.invoiceNumber && item.supplierRif===selectedPurchaseForCorrection.supplierRif)
   ));
   const selectedCorrectionJournalId = selectedJournalForCorrection?.id ||
