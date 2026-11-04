@@ -89,7 +89,8 @@ El Código Orgánico Tributario publicado en Gaceta Oficial N° 6.507 Extraordin
 8. Matriz de permisos, doble aprobación y límites por materialidad.
 9. Auditoría de backup/restore y persistencia SQLite.
 10. Pruebas de integración: duplicados, idempotencia, períodos cerrados, multiempresa, referencias faltantes, fallos de persistencia, Bs./USD, bancos, inventario y retenciones.
-11. Incorporar autorización por roles y doble control real en backend; los formularios actuales solicitan motivo y papel de trabajo, pero todavía no implementan una matriz de aprobaciones ni segregación efectiva de funciones.
+11. Se agregan pruebas unitarias para verificar que construir un contra-asiento no muta el asiento fuente y rechaza asientos que no cuadran en ambas monedas.
+12. Incorporar autorización por roles y doble control real en backend; los formularios actuales solicitan motivo y papel de trabajo, pero todavía no implementan una matriz de aprobaciones ni segregación efectiva de funciones.
 
 ## 8. Criterio de aceptación
 No declarar completa esta capacidad hasta que cada tipo documental con efecto contable tenga ruta especializada, la cadena pueda reconstruirse desde origen hasta documento/contra-asiento y evidencia fiscal, las pruebas de integridad/persistencia estén verdes y la normativa haya sido cotejada con fuentes primarias. Esta entrega abre la reversión desde la UI, pero no afirma que todos los flujos de corrección fiscal/documental estén terminados.
