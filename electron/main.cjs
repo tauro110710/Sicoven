@@ -554,7 +554,10 @@ app.whenReady().then(async () => {
       sourceDocumentRef, correctionDocumentRef, reason, workpaperNote,
       journalEntryId: journalEntryId || null,
       fiscalEmissionMedium: fiscalEmissionMedium || null, sameMediumAsOriginal,
-      authorization: { method: 'AUTHENTICATED_ADMIN_SESSION', explicitConfirmation: true },
+      workflowStatus: eventType === 'accounting_correction_requested' ? 'PENDING_REVIEW' : 'EXECUTED',
+      authorization: eventType === 'accounting_correction_executed'
+        ? { method: 'AUTHENTICATED_ADMIN_SESSION', explicitConfirmation: true }
+        : null,
       occurredAt
     };
     const inserted = db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
