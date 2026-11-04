@@ -171,14 +171,6 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
           </div>
 
           <div>
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1">Tasa BCV oficial para {date} (Bs./USD) *</label>
-            <input type="number" min="0.000001" step="0.000001" required value={movementBcvRate}
-              onChange={e => setMovementBcvRate(e.target.value)}
-              className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none" />
-            <span className="text-[11px] text-amber-700 mt-1 block">Verifique la tasa BCV histórica correspondiente a la fecha del movimiento antes de guardar. Se conservará como soporte del cálculo bimonetario.</span>
-          </div>
-
             <label className="block font-semibold text-slate-700 mb-1">Monto de la Operación ({bankAccount.currency === 'USD' ? 'USD' : 'Bs.'}) *</label>
             <div className="relative">
               <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">{bankAccount.currency === 'USD' ? 'USD' : 'Bs.'}</span>
