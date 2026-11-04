@@ -36,7 +36,7 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
   }, [isStorageReady, companies.length]);
 
   const renderActiveTab = () => {
-    if (auth.user.role === 'contador') return <ReversionFiscalView />;
+    if (auth.user.role === 'contador') return <ReversionFiscalView userRole={auth.user.role} />;
     switch (activeTab) {
       case 'diario':
         return <LibroDiarioView />;
@@ -67,7 +67,7 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
       case 'config':
         return <ConfiguracionView />;
       case 'reversiones':
-        return <ReversionFiscalView />;
+        return <ReversionFiscalView userRole={auth.user.role} />;
       case 'inflacion':
         return <InflationWorkspace token={auth.token} userRole={auth.user.role} />;
       default:

@@ -2329,7 +2329,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     try {
       const sourceForAudit = purchases.find(item => item.id === request.purchaseId && item.companyId === currentCompany.id);
       if (!sourceForAudit) throw new Error('No se encontró la factura original en la empresa activa.');
-      await requireApprovedCorrectionCase('PURCHASE',sourceForAudit.id,sourceForAudit.invoiceNumber,request.creditNoteNumber);
+      const correctionCaseId = await requireApprovedCorrectionCase('PURCHASE',sourceForAudit.id,sourceForAudit.invoiceNumber,request.creditNoteNumber);
       await recordCorrectionAudit({
         eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id,
         entityId: sourceForAudit.id, correctionType: 'PURCHASE_INVENTORY_CREDIT_NOTE',
@@ -2713,8 +2713,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     } catch (auditError) {
       throw new Error('La devolución y NC quedaron guardadas en SQLite, pero falta el evento final de auditoría. No repita la operación. Asiento: ' + journal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
     }
+    try {
+      await executeCorrectionCase({caseId:correctionCaseId,executionRef:request.creditNoteNumber,reason:'Nota de crédito, devolución física, Kardex y asiento correctivo persistidos y conciliados.'});
+    } catch (caseError) {
+      throw new Error('La NC y sus efectos quedaron guardados y auditados en SQLite, pero falta cerrar su trazabilidad interna. No repita la operación. ' + (caseError instanceof Error ? caseError.message : 'Error al cerrar la corrección.'));
+    }
     if (fiscalIncidentError) {
-      throw new Error('La NC, su Kardex, el asiento y la auditoría de ejecución quedaron confirmados en SQLite, pero no se pudo abrir el expediente fiscal automático. No repita la NC; cree la incidencia desde el Centro de Correcciones. ' + (fiscalIncidentError instanceof Error ? fiscalIncidentError.message : 'Error de expediente fiscal.'));
+      throw new Error('La NC, su Kardex, el asiento y la auditoría de ejecución quedaron confirmados en SQLite, pero no se pudo abrir la incidencia fiscal automática. No repita la NC. ' + (fiscalIncidentError instanceof Error ? fiscalIncidentError.message : 'Error de incidencia fiscal.'));
     }
     return note;
       });
@@ -2733,7 +2738,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const source = purchases.find(item => item.id === draft.purchaseId && item.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró la factura original en la empresa activa.');
-    await requireApprovedCorrectionCase('PURCHASE',source.id,source.invoiceNumber,draft.creditNoteNumber);
+    const correctionCaseId = await requireApprovedCorrectionCase('PURCHASE',source.id,source.invoiceNumber,draft.creditNoteNumber);
     const sourceEntry = source.journalEntryId
       ? journalEntries.find(item => item.id === source.journalEntryId && item.companyId === currentCompany.id)
       : undefined;
@@ -2917,6 +2922,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         } catch (auditError) {
           throw new Error('La NC quedó guardada y confirmada en SQLite, pero falta registrar el evento final de auditoría. No repita el documento. Asiento: ' + journal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
         }
+        try {
+          await executeCorrectionCase({caseId:correctionCaseId,executionRef:String(draft.creditNoteNumber).trim(),reason:'Nota de crédito de servicios, asiento correctivo y auxiliar CxP persistidos.'});
+        } catch (caseError) {
+          throw new Error('La NC de servicios quedó guardada y auditada en SQLite, pero falta cerrar su trazabilidad interna. No repita el documento. ' + (caseError instanceof Error ? caseError.message : 'Error al cerrar la corrección.'));
+        }
         return note;
       });
     } finally {
@@ -2934,7 +2944,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la ND.');
     const sourceForApproval = purchases.find(item=>item.id===draft.sourcePurchaseId && item.companyId===currentCompany.id);
     if (!sourceForApproval) throw new Error('No se encontró la factura original en la empresa activa.');
-    await requireApprovedCorrectionCase('PURCHASE',sourceForApproval.id,sourceForApproval.invoiceNumber,draft.debitNoteNumber);
+    const correctionCaseId = await requireApprovedCorrectionCase('PURCHASE',sourceForApproval.id,sourceForApproval.invoiceNumber,draft.debitNoteNumber);
     const operationKey = [
       currentCompany.id, draft.sourcePurchaseId, String(draft.debitNoteNumber || '').trim().toUpperCase()
     ].join('|');
@@ -3006,6 +3016,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           });
         } catch (auditError) {
           throw new Error('La ND quedó guardada en SQLite, pero falta el evento final de auditoría. No repita el documento. Asiento: ' + journal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
+        }
+        try {
+          await executeCorrectionCase({caseId:correctionCaseId,executionRef:String(draft.debitNoteNumber).trim(),reason:'Nota de débito, asiento correctivo y auxiliar CxP persistidos.'});
+        } catch (caseError) {
+          throw new Error('La ND quedó guardada y auditada en SQLite, pero falta cerrar su trazabilidad interna. No repita el documento. ' + (caseError instanceof Error ? caseError.message : 'Error al cerrar la corrección.'));
         }
         return note;
       });
@@ -3232,7 +3247,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const source = sales.find(item => item.id === draft.sourceSaleId && item.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró la factura original de venta en la empresa activa.');
     if (source.documentType !== '01' || source.isCancelled) throw new Error('Solo se pueden corregir facturas de venta vigentes tipo 01.');
-    await requireApprovedCorrectionCase('SALE',source.id,source.invoiceNumber,draft.noteNumber);
+    const correctionCaseId = await requireApprovedCorrectionCase('SALE',source.id,source.invoiceNumber,draft.noteNumber);
     const linkedInventory = movements.some(item => item.companyId === currentCompany.id &&
       (item.journalEntryId === source.journalEntryId ||
        item.documentRef.trim().toUpperCase().replace(/\\s+/g, '') ===
@@ -3361,6 +3376,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           });
         } catch (auditError) {
           throw new Error('La nota quedó guardada y confirmada en SQLite, pero falta registrar el evento final de auditoría. No repita el documento. Asiento: ' + journal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
+        }
+        try {
+          await executeCorrectionCase({caseId:correctionCaseId,executionRef:number,reason:'Nota correctiva de venta, asiento y auxiliar CxC persistidos.'});
+        } catch (caseError) {
+          throw new Error('La nota de venta quedó guardada y auditada en SQLite, pero falta cerrar su trazabilidad interna. No repita el documento. ' + (caseError instanceof Error ? caseError.message : 'Error al cerrar la corrección.'));
         }
         return note;
       });
