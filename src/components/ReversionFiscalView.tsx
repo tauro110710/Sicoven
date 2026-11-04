@@ -65,7 +65,7 @@ export const ReversionFiscalView: React.FC = () => {
   const refreshAuditEvents = useCallback(async () => {
     setAuditLoading(true);
     try {
-      const events = await getAuditEvents(200);
+      const events = await getAuditEvents(500);
       setAuditEvents(events.filter(event =>
         !event.details.companyId || event.details.companyId === currentCompany.id
       ));
