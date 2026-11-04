@@ -130,3 +130,15 @@ test('rejects nonconciliating totals and invalid rates', () => {
   assert.throws(() => build(draft({ taxRate: 15 })), /una única alícuota explícita/);
   assert.throws(() => build(draft({ bcvRate: 0 })), /tasa o importes no válidos/);
 });
+
+test('stores a snapshot of the original invoice for immutable correction traceability', () => {
+  const plan = build();
+  assert.equal(plan.document.affectedInvoiceDate, source.invoiceDate);
+  assert.equal(plan.document.affectedInvoiceControlNumber, source.controlNumber);
+  assert.equal(plan.document.affectedInvoiceTotalAmountBs, source.totalAmountBs);
+  assert.equal(plan.document.affectedInvoiceTotalAmountUsd, source.totalAmountUsd);
+  assert.equal(plan.document.fiscalEmissionMedium, 'DIGITAL');
+  assert.equal(plan.document.sameMediumAsOriginal, true);
+  assert.equal(source.invoiceNumber, 'FAC-100');
+  assert.equal(source.totalAmountBs, 116);
+});
