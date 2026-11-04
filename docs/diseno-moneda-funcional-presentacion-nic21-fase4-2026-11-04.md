@@ -177,3 +177,22 @@ La conversión de estados de una entidad cuya moneda funcional corresponde a una
 - IASB/IAS 21: modificaciones de noviembre de 2025 relativas a conversión a moneda de presentación hiperinflacionaria, con vigencia 2027.
 
 Este añadido amplía los criterios de diseño; no implementa el motor NIC 21, no selecciona tasa ni moneda funcional y no certifica cumplimiento VEN-NIF.
+
+
+## Estado de implementación en PR #95 — 04/11/2026
+
+### Implementado en rama, pendiente de pruebas
+
+- Company admite historial opcional de expedientes `functionalCurrencyAssessments` y evaluaciones `exchangeabilityAssessments`; la ausencia de datos sigue significando pendiente, sin moneda por defecto.
+- Configuración permite registrar un expediente NIC 21 en borrador o aprobarlo con moneda funcional, moneda de presentación, fechas, preparador/aprobador, entorno económico, factores primarios y referencias documentales.
+- La validación permite borradores incompletos, pero impide aprobar sin fechas coherentes, juicio profesional, factores y evidencia.
+- Se incorporó un validador de convertibilidad que exige fecha, propósito, monto, mecanismo legal, evidencia y aprobación; para convertible exige acceso legal y efectivo, monto suficiente y tasa spot accesible; para no convertible exige tasa estimada, metodología y evidencia.
+- El historial se agrega sin reemplazar evaluaciones previas. No se conectó a conversiones ni modifica asientos.
+
+### Pendiente
+
+- Construir la interfaz para capturar y aprobar las evaluaciones de convertibilidad por fecha y propósito.
+- Verificar persistencia/backup/restore en SQLite con registros históricos y nuevos expedientes.
+- Implementar motor de conversión NIC 21 separado de la presentación bimonetaria, con tasas históricas y diferencias de conversión diferenciadas del resultado cambiario.
+- Analizar NIC 29 conjuntamente según el marco VEN-NIF efectivamente adoptado.
+- Ejecutar pruebas, TypeScript y build en entorno habilitado; no existe evidencia de CI para el HEAD actual por bloqueo de ejecución de Actions.
