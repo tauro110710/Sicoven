@@ -8,7 +8,7 @@ export interface SaleCorrectionNoteRequest {
   noteNumber: string;
   controlNumber: string;
   reason: string;
-  workpaperNote: string;
+  workpaperNote?: string;
   taxableBaseBs: number;
   exemptAmountBs: number;
   bcvRate: number;
@@ -41,7 +41,7 @@ export function calculateSaleCorrectionNote(request: SaleCorrectionNoteRequest):
   const { sourceSale } = request;
   const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
   const usd = (value: number) => Math.round((value + Number.EPSILON) * 1000000) / 1000000;
-  const normalize = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
+  const normalize = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
 
   if (sourceSale.documentType !== '01' || sourceSale.isCancelled) {
     throw new Error('La nota debe afectar una factura de venta vigente tipo 01.');
@@ -68,9 +68,8 @@ export function calculateSaleCorrectionNote(request: SaleCorrectionNoteRequest):
     throw new Error('La nota debe emitirse por el mismo medio de la factura original y esa condición debe confirmarse expresamente.');
   }
   if (!normalize(request.noteNumber) || !normalize(request.controlNumber) ||
-      String(request.reason || '').trim().length < 10 ||
-      String(request.workpaperNote || '').trim().length < 10) {
-    throw new Error('La nota requiere número, control, motivo y papel de trabajo de al menos 10 caracteres.');
+      String(request.reason || '').trim().length < 10) {
+    throw new Error('La nota requiere número, control y un motivo de al menos 10 caracteres.');
   }
   const values = [request.taxableBaseBs, request.exemptAmountBs, request.bcvRate,
     sourceSale.taxableBaseBs, sourceSale.exemptAmountBs, sourceSale.taxRate,
