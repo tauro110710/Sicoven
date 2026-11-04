@@ -312,3 +312,26 @@ test('ISLR fiscal integrity uses verified UT values at period boundaries', () =>
   assert.equal(getVerifiedUt('2026-11'), 43);
   assert.equal(getVerifiedUt('2026-13'), null);
 });
+
+
+test('rejects a PAYMENT ISLR trigger for a supplier invoice registered as credit', () => {
+  const purchase = {
+    id: 'p-credit-trigger', companyId: 'c1', supplierRif: 'J-12345678-9',
+    documentType: '01', invoiceDate: '2026-10-01', invoiceNumber: 'F-CREDIT',
+    paymentTerm: 'CREDITO', taxableBaseBs: 100, exemptAmountBs: 0, isCancelled: false
+  };
+  const event = {
+    id: 'e-invalid-payment', companyId: 'c1', supplierRif: purchase.supplierRif,
+    conceptCode: '003', fiscalDate: '2026-10-01', sequence: 1, kind: 'PAYMENT',
+    allocations: [{ purchaseId: purchase.id, baseAmountBs: 25 }],
+    basePercentage: 90, unitTaxValueBs: 43, withheldAmountBs: 0,
+    journalEntryId: 'j-payment', createdAt: '2026-10-01T10:00:00.000Z'
+  };
+  const previous = { purchases: [purchase], journalEntries: [], islrVouchers: [], islrFiscalEvents: [] };
+  const next = {
+    purchases: [purchase],
+    journalEntries: [{ id: 'j-payment', companyId: 'c1', date: '2026-10-01', type: 'PAGO' }],
+    islrVouchers: [], islrFiscalEvents: [event]
+  };
+  assert.throws(() => validateIslrFiscalEventLedger(previous, next), /disparador PAYMENT\/ACCOUNT_CREDIT no coincide/);
+});
