@@ -48,6 +48,7 @@ export const ConfiguracionView: React.FC = () => {
   const [isBcvModalOpen, setIsBcvModalOpen] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [companySaveBusy, setCompanySaveBusy] = useState(false);
+  const companySaveInFlightRef = React.useRef(false);
   const [factoryResetBusy, setFactoryResetBusy] = useState(false);
   const [factoryResetStage, setFactoryResetStage] = useState('');
   const [backupRestoreBusy, setBackupRestoreBusy] = useState(false);
@@ -357,7 +358,8 @@ export const ConfiguracionView: React.FC = () => {
       newExchangeabilityAssessment = assessment;
     }
 
-    if (companySaveBusy) return;
+    if (companySaveInFlightRef.current) return;
+    companySaveInFlightRef.current = true;
     setCompanySaveBusy(true);
     try {
       updateCompany({
@@ -386,6 +388,7 @@ export const ConfiguracionView: React.FC = () => {
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'SQLite no confirmó los parámetros de la empresa.');
     } finally {
+      companySaveInFlightRef.current = false;
       setCompanySaveBusy(false);
     }
   };
