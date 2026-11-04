@@ -341,10 +341,10 @@ export const LibroDiarioView: React.FC = () => {
                   {entry.workpaperNote && <p className="whitespace-pre-wrap"><strong>Papel de trabajo:</strong> {entry.workpaperNote}</p>}
                   {entry.adjustmentForEntryId && <p><strong>Asiento origen:</strong> #{adjustmentSource?.entryNumber ?? 'no localizado'} · ID {entry.adjustmentForEntryId}</p>}
                 </div>}
-                {(entry.reversalOfEntryId || entry.reversedByEntryId) && <div className="px-4 py-3 border-b border-indigo-100 bg-indigo-50/60 text-xs text-indigo-950 space-y-1">
+                {(entry.reversalOfEntryId || entry.reversedByEntryId || reversalEntry) && <div className="px-4 py-3 border-b border-indigo-100 bg-indigo-50/60 text-xs text-indigo-950 space-y-1">
                   <div className="flex flex-wrap items-center gap-2 font-bold"><ShieldCheck className="w-3.5 h-3.5" /> Trazabilidad de reversión</div>
                   {entry.reversalOfEntryId && <p>Contra-asiento del asiento original #{reversalSource?.entryNumber ?? 'no localizado'} · ID {entry.reversalOfEntryId}</p>}
-                  {entry.reversedByEntryId && <p>Este asiento fue reversado por el contra-asiento #{reversalEntry?.entryNumber ?? 'no localizado'} · ID {entry.reversedByEntryId}</p>}
+                  {(entry.reversedByEntryId || reversalEntry) && <p>Este asiento fue reversado por el contra-asiento #{reversalEntry?.entryNumber ?? 'no localizado'} · ID {entry.reversedByEntryId || reversalEntry?.id}</p>}
                   {entry.reversalReason && <p><strong>Motivo:</strong> {entry.reversalReason}</p>}
                   {entry.workpaperNote && <p className="whitespace-pre-wrap"><strong>Papel de trabajo:</strong> {entry.workpaperNote}</p>}
                   {entry.priorPeriodAdjustment && <p className="font-semibold">Ajuste de ejercicio anterior (AIA).</p>}
