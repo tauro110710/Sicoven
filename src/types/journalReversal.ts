@@ -92,7 +92,19 @@ export function validateSaleInventoryReturnReconciliation(input: {
     ready: false, reason, originalMovementCount: originals.length, returnedMovementCount: 0
   });
   if (!originals.length) {
-    return { ready: true, originalMovementCount: 0, returnedMovementCount: 0 };
+    const hasLinkedInventoryJournal = journalEntries.some(entry =>
+      entry.companyId === companyId && entry.id !== source.id && entry.type === 'INVENTARIO' &&
+      (normalize(entry.referenceDoc || '') === normalize('FAC-' + invoiceNumber) ||
+       normalize(entry.referenceDoc || '') === normalize(invoiceNumber))
+    );
+    const hasInventoryAccountingFootprint = hasLinkedInventoryJournal || source.items.some(item =>
+      String(item.accountCode || '').startsWith('1.1.4.') ||
+      String(item.accountCode || '').startsWith('5.1.1.') ||
+      /inventario|costo de ventas/i.test(String(item.accountName || ''))
+    );
+    return hasInventoryAccountingFootprint
+      ? blocked('El asiento original muestra inventario o costo de ventas, pero no existe el movimiento original de Kardex vinculado. No se puede emitir la NC ni reversar el asiento hasta reconstruir y conciliar el Kardex desde el documento fuente.')
+      : { ready: true, originalMovementCount: 0, returnedMovementCount: 0 };
   }
   let returnedMovementCount = 0;
   for (const original of originals) {
@@ -562,14 +574,22 @@ export function assessJournalReversal(input: {
   }
   if (linkedCreditNotes.length) blockers.push('La factura tiene ' + linkedCreditNotes.length + ' nota(s) de crédito de proveedor vinculada(s). Debe conciliarse primero el historial fiscal y físico de esas notas; no se permite reversar la factura como si estuviera intacta.');
   let inventoryReadiness: SaleInventoryReturnReadiness | PurchaseInventoryReconciliation | undefined;
-  if (purchase?.inventoryLines?.length) {
-    inventoryReadiness = validatePurchaseInventoryReconciliation({
-      companyId, purchase, movements, journalEntries, products
-    });
-    blockers.push(inventoryReadiness.ready
-      ? 'La compra tiene inventario vinculado: debe tramitarse mediante documento fiscal de nota de crédito y devolución coordinada, no con un contra-asiento aislado.'
-      : 'La conciliación de compra no está aprobada: ' + (inventoryReadiness.reason || 'revise factura, Kardex y asiento.'));
-  } else if (sale && linkedMovements.length) {
+  const hasInventoryAssetFootprint = source.items.some(item =>
+    String(item.accountCode || '').startsWith('1.1.4.') ||
+    /inventario/i.test(String(item.accountName || ''))
+  );
+  if (purchase) {
+    if (purchase.inventoryLines?.length) {
+      inventoryReadiness = validatePurchaseInventoryReconciliation({
+        companyId, purchase, movements, journalEntries, products
+      });
+      blockers.push(inventoryReadiness.ready
+        ? 'La compra tiene inventario vinculado: debe tramitarse mediante documento fiscal de nota de crédito y devolución coordinada, no con un contra-asiento aislado.'
+        : 'La conciliación de compra no está aprobada: ' + (inventoryReadiness.reason || 'revise factura, Kardex y asiento.'));
+    } else if (linkedMovements.length || hasInventoryAssetFootprint) {
+      blockers.push('La compra muestra inventario en el asiento o en Kardex, pero no conserva líneas completas para conciliar la devolución física. No se permite un contra-asiento aislado ni se inventan movimientos.');
+    }
+  } else if (sale) {
     inventoryReadiness = validateSaleInventoryReturnReconciliation({
       companyId, invoiceNumber: sale.invoiceNumber, source, movements, products, journalEntries
     });

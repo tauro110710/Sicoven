@@ -125,13 +125,31 @@ const customerReturnEntry: JournalEntry = {
   ]
 };
 
-test('no exige reversión de inventario si la factura no tiene movimientos de Kardex', () => {
+test('no exige reversión de inventario si la factura no tiene movimientos ni huella contable de inventario', () => {
   const result = validateSaleInventoryReturnReconciliation({
     companyId: 'c-1', invoiceNumber: '100', source: saleInvoice,
-    movements: [], products: [inventoryProduct], journalEntries: [saleInvoice, originalSaleCostEntry]
+    movements: [], products: [inventoryProduct], journalEntries: [saleInvoice]
   });
   assert.equal(result.ready, true);
   assert.equal(result.originalMovementCount, 0);
+});
+
+test('bloquea NC y reversión si el asiento o el asiento de costo vinculado refleja inventario pero falta el movimiento original de Kardex', () => {
+  const sourceWithInventoryFootprint: JournalEntry = {
+    ...saleInvoice,
+    items: [...saleInvoice.items,
+      { accountCode:'5.1.1.01', accountName:'Costo de ventas', debitBs:200, creditBs:0, debitUsd:2, creditUsd:0 },
+      { accountCode:'1.1.4.01', accountName:'Inventario', debitBs:0, creditBs:200, debitUsd:0, creditUsd:2 }
+    ]
+  };
+  const result = validateSaleInventoryReturnReconciliation({
+    companyId:'c-1', invoiceNumber:'100', source:sourceWithInventoryFootprint,
+    movements:[], products:[inventoryProduct], journalEntries:[sourceWithInventoryFootprint,
+      { ...originalSaleCostEntry, referenceDoc:'FAC-100' }]
+  });
+  assert.equal(result.ready,false);
+  assert.equal(result.originalMovementCount,0);
+  assert.match(result.reason || '',/no existe el movimiento original de Kardex/i);
 });
 
 test('bloquea la reversión total de venta cuando la mercancía no ha sido devuelta', () => {
@@ -598,12 +616,19 @@ test('bloquea reversar una compra mientras conserve aplicaciones de anticipo vig
   assert.match(result.blockers.join(' '), /aplicación\(es\) de anticipo vigente\(s\)/);
 });
 
-test('no bloquea reversar una compra cuando su aplicación de anticipo ya fue reversada', () => {
-  const purchase = { ...reconciledPurchase, inventoryLines: undefined };
+test('no bloquea reversar una compra de servicios cuando su aplicación de anticipo ya fue reversada', () => {
+  const serviceJournal: JournalEntry = {
+    ...reconciledPurchaseJournal, id:'service-purchase-journal',
+    items:[
+      {accountCode:'5.1',accountName:'Gastos de servicios',debitBs:200,creditBs:0,debitUsd:2,creditUsd:0},
+      {accountCode:'2.1',accountName:'Proveedores',debitBs:0,creditBs:200,debitUsd:0,creditUsd:2}
+    ]
+  };
+  const purchase = { ...reconciledPurchase, journalEntryId:serviceJournal.id, inventoryLines: undefined };
   const result = assessJournalReversal({
-    companyId: 'c-1', source: reconciledPurchaseJournal, accounts, sales: [],
+    companyId: 'c-1', source: serviceJournal, accounts, sales: [],
     purchases: [purchase], movements: [], products: [],
-    journalEntries: [reconciledPurchaseJournal], bankAccounts: [],
+    journalEntries: [serviceJournal], bankAccounts: [],
     bankStatementMovements: [], creditSettlements: [],
     supplierAdvanceSettlements: [{
       companyId: 'c-1', journalEntryId: 'advance-settlement-journal',
@@ -612,6 +637,18 @@ test('no bloquea reversar una compra cuando su aplicación de anticipo ya fue re
   });
   assert.equal(result.ready, true);
   assert.equal(result.activeSupplierAdvanceSettlementCount, 0);
+});
+
+test('bloquea una compra cuyo asiento refleja inventario aunque falten líneas y movimientos de Kardex', () => {
+  const purchase = { ...reconciledPurchase, inventoryLines: undefined };
+  const result = assessJournalReversal({
+    companyId:'c-1', source:reconciledPurchaseJournal, accounts, sales:[],
+    purchases:[purchase], movements:[], products:[],
+    journalEntries:[reconciledPurchaseJournal], bankAccounts:[],
+    bankStatementMovements:[], creditSettlements:[]
+  });
+  assert.equal(result.ready,false);
+  assert.match(result.blockers.join(' '),/no conserva líneas completas para conciliar la devolución física/i);
 });
 
 test('permite evaluar la reversión del propio asiento de liquidación de anticipo', () => {

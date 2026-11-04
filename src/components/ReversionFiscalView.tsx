@@ -255,6 +255,9 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
       String(line.accountCode || '').startsWith('1.1.4.') ||
       accounts.some(account=>account.code===line.accountCode && account.type==='COSTOS')
     ) ||
+    journalEntries.some(entry=>entry.companyId===currentCompany.id && entry.type==='INVENTARIO' &&
+      (String(entry.referenceDoc || '').trim().toUpperCase()===('FAC-'+selectedSaleForCorrection.invoiceNumber).trim().toUpperCase() ||
+       String(entry.referenceDoc || '').trim().toUpperCase()===selectedSaleForCorrection.invoiceNumber.trim().toUpperCase())) ||
     movements.some(item =>
       item.companyId === currentCompany.id &&
       (item.journalEntryId === selectedSaleForCorrection.journalEntryId ||
@@ -514,7 +517,14 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
         source, movements, products, journalEntries
       })
     : null;
-  const requiresInventoryReview = (linkedInventoryMovements.length > 0 || Boolean(linkedPurchase?.inventoryLines?.length)) &&
+  const sourceHasInventoryAccountingFootprint = Boolean(source?.items.some(line =>
+    String(line.accountCode || '').startsWith('1.1.4.') ||
+    String(line.accountCode || '').startsWith('5.1.1.') ||
+    /inventario|costo de ventas/i.test(String(line.accountName || '')) ||
+    accounts.some(account=>account.code===line.accountCode && account.type==='COSTOS')
+  ));
+  const requiresInventoryReview = (linkedInventoryMovements.length > 0 ||
+    Boolean(linkedPurchase?.inventoryLines?.length) || sourceHasInventoryAccountingFootprint) &&
     (!linkedSale || Boolean(linkedPurchase) || !saleInventoryReadiness?.ready);
   const linkedBankMovements = source
     ? bankStatementMovements.filter(movement => movement.companyId === currentCompany.id &&
