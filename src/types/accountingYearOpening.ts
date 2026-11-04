@@ -42,9 +42,21 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
 
   const balances = new Map<string, Totals>();
   const profitLoss = { bs: 0, usd: 0 };
-  const priorEntries = journalEntries.filter(entry =>
+  const companyHistory = journalEntries.filter(entry =>
     entry.companyId === companyId && entry.date <= periodEndDate
   );
+  // A linked annual opening is the authoritative carry-forward snapshot.
+  // Earlier ledger activity is already represented in that opening and must
+  // not be added again when preparing the next exercise.
+  const latestAnnualOpening = companyHistory
+    .filter(entry => entry.type === 'APERTURA' &&
+      entry.exerciseLink?.nextPeriodStartDate === entry.date &&
+      isIsoDate(entry.exerciseLink.nextPeriodStartDate))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber)
+    .at(-1);
+  const priorEntries = latestAnnualOpening
+    ? companyHistory.filter(entry => entry.date >= latestAnnualOpening.date)
+    : companyHistory;
 
   for (const entry of priorEntries) {
     const totals = emptyTotals();
