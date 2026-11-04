@@ -113,7 +113,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
       return;
     }
     if (isInventoryCause) {
-      setError('Las ND por mercancía adicional o ajuste de inventario permanecen bloqueadas hasta completar recepción, costos y Kardex por líneas.');
+      setError('Esta causa requiere el flujo de recepción de mercancía/ajuste de inventario por líneas. No se registró la ND ni un asiento incompleto.');
       return;
     }
 
@@ -150,12 +150,13 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
           <div>
             <h2 className="text-base font-bold">Nota de débito de proveedor · Tipo 02</h2>
             <p className="mt-1 text-xs text-slate-300">Factura afectada {purchase.invoiceNumber} · {purchase.supplierName} · {purchase.supplierRif}</p>
+            <p className="mt-1 text-[11px] text-slate-400">Fecha original: {purchase.invoiceDate} · Control: {purchase.controlNumber} · Total original: Bs. {purchase.totalAmountBs.toLocaleString('es-VE', {minimumFractionDigits:2, maximumFractionDigits:2})}</p>
           </div>
           <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg p-2 text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-40" aria-label="Cerrar"><X className="h-5 w-5" /></button>
         </div>
         <form onSubmit={submit} className="space-y-5 overflow-y-auto p-5">
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-            <div className="flex gap-2"><AlertTriangle className="h-4 w-4 shrink-0" /><p>La ND se registra como documento y obligación propios. No modifica la factura original ni genera movimientos de inventario. Retenciones, IGTF y efectos fiscales automáticos permanecen desactivados.</p></div>
+            <div className="flex gap-2"><AlertTriangle className="h-4 w-4 shrink-0" /><p>La ND se registra como documento independiente vinculado a la factura original. La factura no se modifica. En esta versión, las causas de mercancía adicional y ajustes de inventario se bloquean hasta disponer de recepción por líneas y Kardex; retenciones e IGTF no se calculan automáticamente y requieren revisión profesional documentada.</p></div>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <label className="text-xs font-semibold text-slate-700">Número de ND<input required value={debitNoteNumber} onChange={e=>setDebitNoteNumber(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
