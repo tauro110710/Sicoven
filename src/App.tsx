@@ -36,6 +36,7 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
   }, [isStorageReady, companies.length]);
 
   const renderActiveTab = () => {
+    if (auth.user.role === 'contador') return <ReversionFiscalView />;
     switch (activeTab) {
       case 'diario':
         return <LibroDiarioView />;
