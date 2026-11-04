@@ -138,6 +138,29 @@ describe('cash flow statement', () => {
     assert.equal(report.isFullyClassified, false);
   });
 
+  it('uses a prior annual opening as the carry-forward boundary when the current year has no opening', () => {
+    const priorOpening = entry('opening-2025', '2025-01-01', 'APERTURA', [
+      line('1.1.1.01', 'Caja principal', 200, 0, 20, 0),
+      line('3.1', 'Capital social', 0, 200, 0, 20)
+    ], { priorPeriodStartDate: '2024-01-01', priorPeriodEndDate: '2024-12-31', nextPeriodStartDate: '2025-01-01' });
+    const priorMovement = entry('prior-receipt', '2025-06-01', 'VENTA', [
+      line('1.1.1.01', 'Caja principal', 50, 0, 5, 0),
+      line('4.1', 'Ingresos operacionales', 0, 50, 0, 5)
+    ]);
+    const currentMovement = entry('current-payment', '2026-06-01', 'MANUAL', [
+      line('5.1', 'Gastos operacionales', 20, 0, 2, 0),
+      line('1.1.1.01', 'Caja principal', 0, 20, 0, 2)
+    ]);
+    const report = buildCashFlowReport([priorOpening, priorMovement, currentMovement], accounts, banks, 'co-1', 2026);
+    assert.equal(report.openingCashBs, 250);
+    assert.equal(report.openingCashUsd, 25);
+    assert.equal(report.netChangeBs, -20);
+    assert.equal(report.netChangeUsd, -2);
+    assert.equal(report.closingCashBs, 230);
+    assert.equal(report.ledgerClosingCashBs, 230);
+    assert.equal(report.isReconciled, true);
+  });
+
   it('treats a linked annual opening as opening cash, not as a period cash flow', () => {
     const entries = [
       entry('prior-year-cash', '2025-12-31', 'MANUAL', [
