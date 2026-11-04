@@ -4798,28 +4798,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           '. Para restaurar un punto anterior sin mezclar ni destruir el ledger, utilice el restaurador SQLite completo y verificado. No se modificó ningún dato.');
       }
     }
-    // Captura el estado completo antes de aplicar un respaldo. Si SQLite rechaza
-    // la escritura, restaura también la memoria de React y vuelve a intentar
-    // persistir el estado previo; nunca deja activa una importación no confirmada.
-    const previousBackup = exportBackupJson();
-    const previousCompanyId = currentCompanyId;
+    // La capa de persistencia revierte la interfaz al último snapshot confirmado
+    // cuando la transacción SQLite falla; no se vuelve a aplicar un JSON en paralelo.
     if (!applyBackupJson(jsonData)) return false;
     try {
       await waitForPersistence();
       return true;
     } catch (persistenceError) {
-      const rolledBack = applyBackupJson(previousBackup);
-      if (rolledBack) {
-        if (companies.some(company => company.id === previousCompanyId)) {
-          setCurrentCompanyId(previousCompanyId);
-        }
-        try {
-          await waitForPersistence();
-        } catch {
-          throw new Error('SQLite rechazó el respaldo y tampoco pudo confirmar la restauración del estado anterior. La memoria de SICOVEN volvió al estado previo; cierre la aplicación y revise la base local antes de continuar.');
-        }
-      }
-      throw persistenceError;
+      throw new Error('SQLite rechazó el respaldo. SICOVEN restauró la última instantánea confirmada y bloqueó nuevas escrituras; cierre y vuelva a abrir la aplicación antes de intentar otra restauración. ' +
+        (persistenceError instanceof Error ? persistenceError.message : 'Error de persistencia.'));
     }
   };
 
