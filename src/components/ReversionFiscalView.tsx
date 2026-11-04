@@ -156,17 +156,17 @@ export const ReversionFiscalView: React.FC = () => {
         number: item.invoiceNumber, sourceNumber: item.affectedInvoiceNumber || '',
         date: item.invoiceDate, party: item.customerName, amountBs: item.totalAmountBs,
         amountUsd: item.totalAmountUsd, journalEntryId: item.journalEntryId || '',
-        reason: item.correctionReason || item.notes || '' })),
+        reason: item.correctionReason || item.notes || '', workpaper: item.correctionWorkpaper || '', medium: item.fiscalEmissionMedium || '' })),
     ...purchases.filter(item => item.companyId === currentCompany.id && item.documentType === '03' && item.originalPurchaseId)
       .map(item => ({ id: item.id, kind: 'NC proveedor', number: item.creditNoteNumber || item.invoiceNumber,
         sourceNumber: item.affectedInvoiceNumber || '', date: item.invoiceDate, party: item.supplierName,
         amountBs: item.totalAmountBs, amountUsd: item.totalAmountUsd, journalEntryId: item.journalEntryId || '',
-        reason: item.notes || '' })),
+        reason: item.notes || '', workpaper: '', medium: item.fiscalEmissionMedium || '' })),
     ...purchases.filter(item => item.companyId === currentCompany.id && item.documentType === '02' && item.affectedInvoiceNumber)
       .map(item => ({ id: item.id, kind: 'ND proveedor', number: item.debitNoteNumber || item.invoiceNumber,
         sourceNumber: item.affectedInvoiceNumber || '', date: item.invoiceDate, party: item.supplierName,
         amountBs: item.totalAmountBs, amountUsd: item.totalAmountUsd, journalEntryId: item.journalEntryId || '',
-        reason: item.notes || '' }))
+        reason: item.notes || '', workpaper: '', medium: item.fiscalEmissionMedium || '' }))
   ].sort((a, b) => b.date.localeCompare(a.date)), [sales, purchases, currentCompany.id]);
 
   const hasReversal = (entryId: string) => journalEntries.some(entry => entry.reversalOfEntryId === entryId) ||
@@ -663,6 +663,8 @@ export const ReversionFiscalView: React.FC = () => {
             <p className="mt-1 text-slate-600">{document.party} · afecta {document.sourceNumber}</p>
             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-slate-600"><span>Bs. {formatBs(document.amountBs)}</span><span>USD {formatUsd(document.amountUsd)}</span><span>{document.journalEntryId ? 'Asiento vinculado' : 'Sin asiento enlazado'}</span></div>
             {document.reason && <p className="mt-1"><strong>Motivo:</strong> {document.reason}</p>}
+            {document.workpaper && <p className="mt-1"><strong>Papel de trabajo:</strong> {document.workpaper}</p>}
+            {document.medium && <p className="mt-1"><strong>Medio fiscal declarado:</strong> {document.medium}</p>}
             <div className="mt-2 flex items-center justify-between gap-2"><span className="text-amber-700">Revisar efecto fiscal y declaración del período</span>
               {document.journalEntryId && <button type="button" onClick={() => setSelectedId(document.journalEntryId)} className="rounded bg-slate-100 px-2 py-1 font-semibold text-slate-700 hover:bg-slate-200">Consultar asiento</button>}
             </div>
