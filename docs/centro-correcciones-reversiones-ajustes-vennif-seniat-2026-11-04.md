@@ -217,3 +217,19 @@ No declarar completa esta capacidad hasta que cada tipo documental con efecto co
 - Revisión adicional del restablecimiento de datos de muestra: el ledger de SQLite impide borrar asientos históricos mediante un snapshot ordinario. Por ello, el flujo ahora ejecuta primero el reinicio transaccional autorizado `resetAccounting` (que conserva autenticación, licencia y auditoría), verifica el resultado y después confirma el estado vacío desde el proveedor. No intenta eliminar asientos históricos a través del guardado normal.
 
 - Revisión de integridad del restablecimiento: ambos flujos deben limpiar todas las colecciones del `stateSnapshot`. Se incorporó el vaciado explícito de declaraciones y eventos de retención IVA y el restablecimiento de la moneda de visualización a DUAL; así el estado React no vuelve a escribir registros fiscales antiguos después de que Electron haya verificado el reinicio.
+
+
+## Continuación de implementación en rama de trabajo — 04/11/2026
+
+### Centro de solicitudes de corrección
+- Se añadió en `ReversionFiscalView` un formulario único para registrar solicitudes relacionadas con asientos, ventas, compras, Kardex, banco, comprobantes IVA/ISLR, declaraciones y artículos de inventario.
+- La solicitud exige ID interno del origen, referencia documental, tipo de corrección, motivo y papel de trabajo.
+- La solicitud se registra mediante el ledger de auditoría SQLite append-only y no altera el documento, el asiento ni los auxiliares.
+- La operación exige SQLite listo y sesión administrativa autenticada, según la compuerta existente de Electron.
+- Se corrigió la semántica del evento: una solicitud queda con estado `PENDING_REVIEW` y sin objeto de autorización. Solo los eventos `accounting_correction_executed` se etiquetan como ejecutados/autorizados. La interfaz ya no presenta una solicitud como corrección autorizada.
+
+### Límites expresos de esta entrega
+- El nuevo formulario constituye una bandeja de entrada auditable, no un motor completo de expedientes con estados transicionales, aprobador distinto del preparador, matriz de materialidad ni doble autorización.
+- El ID interno del origen es capturado por el operador y todavía no se valida automáticamente contra la colección específica seleccionada. Esta validación debe añadirse antes de permitir ejecución.
+- La ejecución de cada clase documental continúa dependiendo de su flujo especializado. La solicitud no habilita por sí sola edición, anulación, NC/ND, rectificación fiscal ni reversión de auxiliares.
+- No se declara completa la capacidad ni se afirma que build/pruebas estén verdes hasta ejecutar pruebas de escritorio y revisar los resultados.
