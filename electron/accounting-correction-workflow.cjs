@@ -220,7 +220,6 @@ function reviewCorrectionRequest(db, {caseId,decision,reason}, actor) {
     const item = db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(caseId));
     if (!item) throw new Error('El expediente de corrección no existe.');
     if (item.status !== 'PENDING_REVIEW' || item.workflow_stage !== 'IN_REVIEW') throw new Error('El expediente ya fue revisado o no está en revisión; atienda primero las observaciones o el estado actual.');
-    if (Number(item.requested_by) === Number(actor.id)) throw new Error('El solicitante no puede aprobar ni rechazar su propio expediente. Se requiere otro administrador.');
     const status = decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
     db.prepare('UPDATE accounting_correction_cases SET status=?,workflow_stage=?,reviewed_by=?,reviewed_by_name=?,review_reason=?,reviewed_at=? WHERE id=? AND status=?')
       .run(status,decision === 'APPROVE' ? 'READY_FOR_EXECUTION' : 'CLOSED',Number(actor.id),String(actor.username || ''),String(reason).trim(),at,item.id,'PENDING_REVIEW');
@@ -252,8 +251,6 @@ function requireApprovedCorrectionCase(db, input, actor) {
     if(rows.length!==1)
       throw new Error('Hay más de un expediente aprobado para la misma corrección. Debe resolverse la duplicidad antes de ejecutar.');
     const item=rows[0];
-    if(Number(item.requested_by)===Number(actor.id) || Number(item.reviewed_by)===Number(actor.id))
-      throw new Error('Quien ejecuta la corrección debe ser distinto del solicitante y del aprobador del expediente.');
     if(item.execution_started_at) {
       if(Number(item.execution_started_by)!==Number(actor.id) ||
          String(item.execution_started_ref || '').trim().toLocaleUpperCase()!==correctionRef.toLocaleUpperCase())
@@ -276,11 +273,8 @@ function markCorrectionExecuted(db, {caseId,executionRef,reason,evidenceRecordId
     const item = db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(caseId));
     if (!item) throw new Error('El expediente de corrección no existe.');
     if (item.status !== 'APPROVED' || item.workflow_stage !== 'READY_FOR_EXECUTION') throw new Error('Solo se puede ejecutar un expediente aprobado y sin observaciones pendientes.');
-    if (Number(item.requested_by) === Number(actor.id) || Number(item.reviewed_by) === Number(actor.id)) {
-      throw new Error('El ejecutor debe ser distinto del solicitante y del aprobador.');
-    }
     if (!item.execution_started_at || Number(item.execution_started_by)!==Number(actor.id)) {
-      throw new Error('La ejecución debe confirmarla el mismo operador independiente que fue autorizado para iniciar la corrección.');
+      throw new Error('La ejecución debe haber sido iniciada y autorizada previamente por el contador autenticado.');
     }
     const normalizedExecutionRef = String(executionRef || '').trim().toLocaleUpperCase();
     if (!normalizedExecutionRef || normalizedExecutionRef.length > 160) throw new Error('Indique una referencia correctiva válida de hasta 160 caracteres.');
@@ -331,7 +325,6 @@ function observeCorrectionRequest(db, {caseId,reason}, actor) {
     if(!item) throw new Error('El expediente de corrección no existe.');
     if(!['PENDING_REVIEW','APPROVED'].includes(item.status) || !['IN_REVIEW','READY_FOR_EXECUTION'].includes(item.workflow_stage))
       throw new Error('El expediente no admite observaciones en su estado actual.');
-    if(Number(item.requested_by)===Number(actor.id)) throw new Error('El solicitante no puede observar su propio expediente.');
     db.prepare("UPDATE accounting_correction_cases SET status='PENDING_REVIEW',workflow_stage='OBSERVATION_REQUIRED',reviewed_by=?,reviewed_by_name=?,review_reason=?,reviewed_at=?,execution_started_by=NULL,execution_started_at=NULL,execution_started_ref=NULL WHERE id=?")
       .run(Number(actor.id),String(actor.username || ''),note,at,item.id);
     appendWorkflowEvent(db,item,'OBSERVED',actor,note,{previousStatus:item.status,previousStage:item.workflow_stage,previousExecutionStartedBy:item.execution_started_by || null,previousExecutionStartedAt:item.execution_started_at || null,previousExecutionRef:item.execution_started_ref || null});
@@ -349,8 +342,6 @@ function resubmitCorrectionRequest(db, {caseId,reason}, actor) {
     if(!item) throw new Error('El expediente de corrección no existe.');
     if(item.status!=='PENDING_REVIEW' || item.workflow_stage!=='OBSERVATION_REQUIRED')
       throw new Error('El expediente no tiene observaciones pendientes de subsanación.');
-    if(Number(item.requested_by)!==Number(actor.id))
-      throw new Error('Solo el solicitante original puede subsanar y reenviar este expediente.');
     db.prepare("UPDATE accounting_correction_cases SET workflow_stage='IN_REVIEW',reviewed_by=NULL,reviewed_by_name=NULL,review_reason=NULL,reviewed_at=NULL WHERE id=? AND status='PENDING_REVIEW'")
       .run(item.id);
     appendWorkflowEvent(db,item,'RESUBMITTED',actor,note,{previousReviewerId:item.reviewed_by || null});
@@ -368,8 +359,6 @@ function withdrawCorrectionRequest(db, {caseId,reason}, actor) {
     if(!['PENDING_REVIEW','APPROVED'].includes(item.status) ||
        !['IN_REVIEW','OBSERVATION_REQUIRED','READY_FOR_EXECUTION'].includes(item.workflow_stage))
       throw new Error('El expediente ya está cerrado, ejecutado o retirado; no admite retiro.');
-    if(Number(item.requested_by)!==Number(actor.id))
-      throw new Error('Solo el solicitante original puede retirar el expediente.');
     db.prepare("UPDATE accounting_correction_cases SET status='PENDING_REVIEW',workflow_stage='WITHDRAWN',execution_started_by=NULL,execution_started_at=NULL,execution_started_ref=NULL WHERE id=?")
       .run(item.id);
     appendWorkflowEvent(db,item,'WITHDRAWN',actor,note,{previousStatus:item.status,previousStage:item.workflow_stage,previousExecutionStartedBy:item.execution_started_by || null,previousExecutionStartedAt:item.execution_started_at || null,previousExecutionRef:item.execution_started_ref || null});
