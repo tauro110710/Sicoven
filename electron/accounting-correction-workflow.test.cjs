@@ -52,3 +52,26 @@ test('request row rolls back when its audit event cannot be appended',()=>{
   assert.equal(db.prepare('SELECT COUNT(*) n FROM accounting_correction_cases').get().n,0);
  }finally{db.close();}
 });
+
+test('review transition rolls back when the general audit ledger rejects the event',()=>{
+ const db=setup();try{
+  const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
+  db.exec("CREATE TRIGGER reject_review_audit BEFORE INSERT ON audit_events WHEN NEW.event_type='accounting_correction_case_approved' BEGIN SELECT RAISE(ABORT,'review audit failure'); END;");
+  assert.throws(()=>reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Revisión completa con soportes suficientes.'},admin(2,'revisor')),/review audit failure/);
+  const current=getCorrectionCase(db,requested.id);
+  assert.equal(current.status,'PENDING_REVIEW');
+  assert.deepEqual(current.events.map(e=>e.event_type),['REQUESTED']);
+ }finally{db.close();}
+});
+
+test('execution transition rolls back when the general audit ledger rejects the event',()=>{
+ const db=setup();try{
+  const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
+  reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Revisión completa con soportes suficientes.'},admin(2,'revisor'));
+  db.exec("CREATE TRIGGER reject_execution_audit BEFORE INSERT ON audit_events WHEN NEW.event_type='accounting_correction_case_executed' BEGIN SELECT RAISE(ABORT,'execution audit failure'); END;");
+  assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Ejecución documentada con soporte persistido.'},admin(3,'ejecutor')),/execution audit failure/);
+  const current=getCorrectionCase(db,requested.id);
+  assert.equal(current.status,'APPROVED');
+  assert.deepEqual(current.events.map(e=>e.event_type),['REQUESTED','APPROVED']);
+ }finally{db.close();}
+});
