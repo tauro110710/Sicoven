@@ -128,8 +128,11 @@ function reviewDocument(db, input, actor) {
   const id = requiredText(input.documentId, 'Documento', 80), action = String(input.decision || '').toUpperCase();
   if (!['VERIFIED', 'OBSERVATION_REQUIRED'].includes(action)) throw new Error('Decisión documental no admitida.');
   const note = requiredText(input.reason, 'Justificación de revisión', 2000);
-  const document = db.prepare('SELECT id,company_id,entity_type,entity_id FROM supporting_documents WHERE id=?').get(id);
+  const document = db.prepare('SELECT id,company_id,entity_type,entity_id,uploaded_by_user_id,uploaded_by_username FROM supporting_documents WHERE id=?').get(id);
   if (!document) throw new Error('El documento solicitado no existe.');
+  if (document.entity_type === 'CORRECTION_CASE' && ((document.uploaded_by_user_id != null && Number(document.uploaded_by_user_id) === Number(actor.id)) || String(document.uploaded_by_username).toLocaleLowerCase() === String(actor.username).toLocaleLowerCase())) {
+    throw new Error('Quien adjuntó la evidencia del expediente no puede verificarla ni observarla; se requiere un revisor independiente.');
+  }
   if (currentDocumentStatus(db, id) === 'REPLACED') throw new Error('No se puede revisar un documento sustituido.');
   const now = new Date().toISOString(), eventType = action === 'VERIFIED' ? 'REVIEWED' : 'OBSERVATION_RECORDED';
   db.transaction(() => {
