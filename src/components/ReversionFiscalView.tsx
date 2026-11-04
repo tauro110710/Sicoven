@@ -586,6 +586,7 @@ export const ReversionFiscalView: React.FC = () => {
               : event.eventType === 'accounting_period_closed' ? 'Período contable cerrado'
               : event.eventType === 'accounting_correction_requested' ? 'Corrección autorizada · solicitud registrada'
               : event.eventType === 'accounting_correction_executed' ? 'Corrección ejecutada y auditada'
+              : event.eventType === 'company_bcv_rate_updated' ? 'Tasa BCV modificada'
               : event.eventType === 'factory_reset' ? 'Reinicio de datos operativos'
               : event.eventType === 'state_saved' ? 'Estado contable persistido en SQLite'
               : event.eventType.replace(/_/g, ' ');
@@ -594,6 +595,7 @@ export const ReversionFiscalView: React.FC = () => {
               {details.entryNumber != null && <p>Asiento #{String(details.entryNumber)} · {String(details.date || '')} · {String(details.referenceDoc || '')}</p>}
               {Boolean(details.actorUsername) && <p><strong>Responsable:</strong> {String(details.actorUsername)} · rol {String(details.actorRole || '')} · usuario #{String(details.actorUserId || '')}</p>}
               {Boolean(details.correctionType) && <p><strong>Operación:</strong> {String(details.correctionType)} · {String(details.entityType || '')} · registro {String(details.entityId || '')}</p>}
+              {details.previousRate != null && <p><strong>Tasa BCV:</strong> {String(details.previousRate)} → {String(details.newRate)} Bs/USD · vigencia {String(details.effectiveDate || 'sin fecha indicada')}</p>}
               {Boolean(details.sourceDocumentRef) && <p><strong>Documento original:</strong> {String(details.sourceDocumentRef)} · <strong>Documento correctivo:</strong> {String(details.correctionDocumentRef || '')}</p>}
               {Boolean(details.reason) && <p><strong>Motivo:</strong> {String(details.reason)}</p>}
               {Boolean(details.workpaperNote) && <p><strong>Papel de trabajo:</strong> {String(details.workpaperNote)}</p>}
