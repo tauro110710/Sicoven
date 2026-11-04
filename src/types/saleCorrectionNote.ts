@@ -54,6 +54,9 @@ export function calculateSaleCorrectionNote(request: SaleCorrectionNoteRequest):
   if (Number(sourceSale.igtfAmountBs || 0) > 0 || sourceSale.igtfApplicable) {
     throw new Error('La factura contiene IGTF. Requiere un circuito específico de percepción, enteramiento y eventual reintegro antes de emitir la nota.');
   }
+  if (!isValidIsoDate(sourceSale.invoiceDate) || !String(sourceSale.invoiceNumber || '').trim() || !String(sourceSale.controlNumber || '').trim() || Number(sourceSale.totalAmountBs || 0) <= 0) {
+    throw new Error('La factura original debe conservar fecha, número, control y monto para referenciar legalmente la nota.');
+  }
   if (!isValidIsoDate(request.noteDate) || request.noteDate < sourceSale.invoiceDate) {
     throw new Error('La fecha de la nota debe ser válida y no anterior a la factura afectada.');
   }
