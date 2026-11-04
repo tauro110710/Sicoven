@@ -604,7 +604,22 @@ app.whenReady().then(async () => {
     return registerCorrectionRequest(db,input,actor);
   });
   ipcMain.handle('sicoven:correction-case-review', (_event, token, input) => reviewCorrectionRequest(db,input,correctionActor(token)));
-  ipcMain.handle('sicoven:correction-case-execute', (_event, token, input) => markCorrectionExecuted(db,input,correctionActor(token)));
+  ipcMain.handle('sicoven:correction-case-execute', (_event, token, input) => {
+    const actor = correctionActor(token);
+    const item = db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(input?.caseId || ''));
+    if (!item) throw new Error('El expediente de corrección no existe.');
+    const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    const state = row ? JSON.parse(row.state_json) : {};
+    const evidenceCollections = ['sales','purchases','journalEntries','bankStatementMovements','movements',
+      'vatVouchers','islrVouchers','vatWithholdingDeclarations','islrFiscalEvents','products'];
+    const reference = String(input?.executionRef || '').trim();
+    const evidence = evidenceCollections.some(key => Array.isArray(state[key]) && state[key].some(record =>
+      String(record.companyId || '') === String(item.company_id) &&
+      [record.id,record.documentNumber,record.number,record.reference,record.referenceDoc,record.controlNumber]
+        .some(value => value != null && String(value).trim() === reference)));
+    if (!evidence) throw new Error('No se encontró en SQLite un documento, asiento o movimiento correctivo con esa referencia y empresa. No se cerró el expediente.');
+    return markCorrectionExecuted(db,input,actor);
+  });
   ipcMain.handle('sicoven:correction-case-list', (_event, token, companyId) => {
     correctionActor(token);
     const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
