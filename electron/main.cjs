@@ -624,6 +624,16 @@ app.whenReady().then(async () => {
     if (!evidence) {
       throw new Error('No se encontró un documento correctivo de la misma empresa con referencia coincidente y vínculo explícito al registro origen. El expediente permanece aprobado y abierto.');
     }
+    const verifiedCaseSupport = db.prepare(`
+      SELECT COUNT(*) AS total FROM supporting_documents d
+      WHERE d.company_id=? AND d.entity_type='CORRECTION_CASE' AND d.entity_id=?
+        AND (SELECT e.event_type FROM supporting_document_events e
+             WHERE e.document_id=d.id AND e.event_type<>'ACCESSED'
+             ORDER BY e.id DESC LIMIT 1)='REVIEWED'
+    `).get(item.company_id,item.id).total;
+    if (!verifiedCaseSupport) {
+      throw new Error('El expediente requiere al menos un soporte adjunto y verificado por un revisor antes de cerrar la ejecución.');
+    }
     return markCorrectionExecuted(db,{...input,evidenceRecordId:evidence.id,evidenceCollection:({SALE:'sales',PURCHASE:'purchases',JOURNAL_ENTRY:'journalEntries',BANK_MOVEMENT:'bankStatementMovements',INVENTORY_MOVEMENT:'movements',VAT_VOUCHER:'vatVouchers',ISLR_VOUCHER:'islrVouchers',VAT_DECLARATION:'vatWithholdingDeclarations',ISLR_EVENT:'islrFiscalEvents',INVENTORY_PRODUCT:'movements',BCV_RATE:'companies'})[item.entity_type]},actor);
   });
   ipcMain.handle('sicoven:correction-case-list', (_event, token, companyId) => {
