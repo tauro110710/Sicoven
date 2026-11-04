@@ -19,7 +19,7 @@ test('SQLite isolates ISLR events when two companies reuse the same purchase ID'
     documentType: '01', paymentTerm: 'CREDITO', taxableBaseBs: 100,
     exemptAmountBs: 0, isCancelled: false
   });
-  const journal = (id, companyId) => ({ id, companyId, date: '2026-10-01', type: 'PAGO' });
+  const journal = (id, companyId) => ({ id, companyId, date: '2026-10-01', type: 'COMPRA' });
   const event = (id, companyId, journalEntryId) => ({
     id, companyId, supplierRif: 'J-12345678-9', conceptCode: '003',
     fiscalDate: '2026-10-01', sequence: 1, kind: 'ACCOUNT_CREDIT',
