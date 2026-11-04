@@ -417,6 +417,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT';
     companyId: string; entityId: string; correctionType: string; sourceDocumentRef: string;
     correctionDocumentRef: string; reason: string; workpaperNote: string; journalEntryId?: string;
+    fiscalEmissionMedium?: 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY'; sameMediumAsOriginal?: boolean;
   };
   const recordCorrectionAudit = async (input: CorrectionAuditInput): Promise<void> => {
     const store = window.sicovenStore as typeof window.sicovenStore & {
@@ -2660,7 +2661,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id, entityId: source.id,
       correctionType: 'PURCHASE_SERVICE_CREDIT_NOTE',
       sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: String(draft.creditNoteNumber).trim(),
-      reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote).trim()
+      reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote).trim(),
+      fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal
     }); } catch (auditError) { correctionWorkflowInFlightRef.current = false; purchaseCreditNoteInFlightRef.current = false; throw auditError; }
     try {
       return await runAtomicInvoiceImport(async () => {
@@ -2704,6 +2706,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             correctionType: 'PURCHASE_SERVICE_CREDIT_NOTE',
             sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: String(draft.creditNoteNumber).trim(),
             reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote).trim(),
+            fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal,
             journalEntryId: journal.id
           });
         } catch (auditError) {
@@ -3078,7 +3081,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       eventType: 'accounting_correction_requested', entityType: 'SALE', companyId: currentCompany.id, entityId: source.id,
       correctionType: isCredit ? 'SALES_CREDIT_NOTE' : 'SALES_DEBIT_NOTE',
       sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: number,
-      reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote).trim()
+      reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote).trim(),
+      fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal
     }); } catch (auditError) { correctionWorkflowInFlightRef.current = false; throw auditError; }
     try {
       return await runAtomicInvoiceImport(async () => {
@@ -3102,6 +3106,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           creditNoteNumber: isCredit ? number : undefined,
           debitNoteNumber: isCredit ? undefined : number,
           affectedInvoiceNumber: source.invoiceNumber, originalSaleId: source.id,
+      affectedInvoiceDate: source.invoiceDate, affectedInvoiceControlNumber: source.controlNumber,
+      affectedInvoiceTotalAmountBs: source.totalAmountBs, affectedInvoiceTotalAmountUsd: source.totalAmountUsd,
+      fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal,
           taxableBaseBs: amounts.taxableBaseBs, exemptAmountBs: amounts.exemptAmountBs,
           vatAmountBs: amounts.vatAmountBs, totalAmountBs: amounts.totalAmountBs,
           bcvRate: draft.bcvRate, taxableBaseUsd: amounts.taxableBaseUsd,
@@ -3123,6 +3130,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             correctionType: isCredit ? 'SALES_CREDIT_NOTE' : 'SALES_DEBIT_NOTE',
             sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: number,
             reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote).trim(),
+            fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal,
             journalEntryId: journal.id
           });
         } catch (auditError) {
