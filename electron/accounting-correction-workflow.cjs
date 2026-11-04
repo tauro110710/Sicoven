@@ -215,6 +215,30 @@ function reviewCorrectionRequest(db, {caseId,decision,reason}, actor) {
   tx();
   return getCorrectionCase(db,String(caseId));
 }
+function requireApprovedCorrectionCase(db, input, actor) {
+  requireAdmin(actor);
+  const required=['companyId','entityType','entityId','sourceDocumentRef','correctionDocumentRef'];
+  for(const key of required) if(!String(input?.[key] || '').trim())
+    throw new Error('La ejecución correctiva requiere el dato obligatorio: '+key+'.');
+  const rows=db.prepare(`
+    SELECT id,requested_by,reviewed_by,correction_type
+    FROM accounting_correction_cases
+    WHERE company_id=? AND entity_type=? AND entity_id=?
+      AND UPPER(TRIM(source_ref))=UPPER(TRIM(?))
+      AND UPPER(TRIM(correction_ref))=UPPER(TRIM(?))
+      AND status='APPROVED' AND workflow_stage='READY_FOR_EXECUTION'
+    ORDER BY created_at DESC
+  `).all(String(input.companyId),String(input.entityType),String(input.entityId),
+    String(input.sourceDocumentRef),String(input.correctionDocumentRef));
+  if(rows.length===0)
+    throw new Error('No existe un expediente formal aprobado para esta empresa, registro origen y referencia correctiva. La operación no se ejecutó.');
+  if(rows.length!==1)
+    throw new Error('Hay más de un expediente aprobado para la misma corrección. Debe resolverse la duplicidad antes de ejecutar.');
+  const item=rows[0];
+  if(Number(item.requested_by)===Number(actor.id) || Number(item.reviewed_by)===Number(actor.id))
+    throw new Error('Quien ejecuta la corrección debe ser distinto del solicitante y del aprobador del expediente.');
+  return {ok:true,caseId:item.id,correctionType:item.correction_type};
+}
 function markCorrectionExecuted(db, {caseId,executionRef,reason,evidenceRecordId,evidenceCollection}, actor) {
   requireAdmin(actor);
   if (String(reason || '').trim().length < 15) throw new Error('La ejecución requiere una justificación de al menos 15 caracteres.');
@@ -332,4 +356,4 @@ function listCorrectionCases(db,companyId) {
   return db.prepare('SELECT id FROM accounting_correction_cases WHERE company_id=? ORDER BY created_at DESC').all(String(companyId))
     .map(row=>getCorrectionCase(db,row.id));
 }
-module.exports={initializeCorrectionWorkflow,registerCorrectionRequest,reviewCorrectionRequest,observeCorrectionRequest,resubmitCorrectionRequest,withdrawCorrectionRequest,markCorrectionExecuted,getCorrectionCase,listCorrectionCases,findLinkedCorrectionEvidence};
+module.exports={initializeCorrectionWorkflow,registerCorrectionRequest,reviewCorrectionRequest,observeCorrectionRequest,resubmitCorrectionRequest,withdrawCorrectionRequest,requireApprovedCorrectionCase,markCorrectionExecuted,getCorrectionCase,listCorrectionCases,findLinkedCorrectionEvidence};
