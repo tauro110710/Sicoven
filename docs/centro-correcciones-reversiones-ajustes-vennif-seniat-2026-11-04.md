@@ -235,3 +235,9 @@ No declarar completa esta capacidad hasta que cada tipo documental con efecto co
 - No se declara completa la capacidad ni se afirma que build/pruebas estén verdes hasta ejecutar pruebas de escritorio y revisar los resultados.
 
 - Se incorporó una bandeja visible de solicitudes pendientes que presenta tipo, origen, referencia, motivo, papel de trabajo, actor y fecha. La bandeja se alimenta de eventos de auditoría consultados desde SQLite y etiqueta los eventos como pendientes; no ofrece un botón de aprobación ficticio ni ejecuta operaciones por sí sola.
+
+### Reconciliación de bandeja — 04/11/2026
+- La bandeja distingue solicitudes sin evento de ejecución de solicitudes que ya tienen un evento accounting_correction_executed correlacionado por empresa, tipo de entidad, ID de origen y tipo de corrección.
+- Se muestra el identificador y la fecha del evento de ejecución que cierra la solicitud visualmente. Los eventos originales permanecen intactos en el ledger append-only.
+- Esta correlación es informativa y no equivale a una aprobación segregada. El modelo de autenticación actual solo tiene rol administrativo; por tanto, no existe todavía separación técnica entre preparador y autorizador ni doble control efectivo.
+- La bandeja consulta los últimos 200 eventos disponibles en esta vista. No debe interpretarse como un expediente histórico completo si el volumen de auditoría supera ese límite.
