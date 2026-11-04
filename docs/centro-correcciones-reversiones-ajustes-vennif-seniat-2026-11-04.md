@@ -193,3 +193,23 @@ No declarar completa esta capacidad hasta que cada tipo documental con efecto co
 - Se aplicó el mismo requisito estricto de SQLite a cierre/reapertura de períodos y asiento de apertura anual; el cierre y la apertura esperan la confirmación persistente antes de terminar.
 - Se revisaron anticipos directos, liquidaciones de anticipos, cobros/pagos, creación de declaraciones de retención IVA, eventos de declaración y entregas de comprobantes IVA/ISLR: sus funciones de dominio ahora usan la guarda común y sus operaciones asíncronas esperan el snapshot confirmado antes de devolver éxito.
 - Las clasificaciones del Estado de Flujos de Efectivo (método directo e indirecto) también rechazan la modificación sin SQLite y sus formularios ya esperan confirmación.
+
+### Catálogo, empresa, BCV, inventario y clasificación del flujo de efectivo
+
+- Se centralizó `assertSQLitePersistenceReady` para bloquear escrituras sin el puente `window.sicovenStore.save`, con SQLite no inicializada o después de un fallo de persistencia.
+- Se aplicó al alta/actualización de empresa, registro de cuentas contables, actualización manual de tasa BCV, alta/edición de artículos, anticipos y liquidaciones a proveedores, cobros/pagos, declaraciones y eventos de retención IVA, y registro de entrega de comprobantes IVA/ISLR.
+- La clasificación de cuentas para flujo de efectivo (método directo e indirecto) también exige SQLite.
+- Los formularios de empresa, BCV, artículo, movimiento de inventario y catálogo contable ahora esperan `waitForPersistence()` antes de cerrar o informar éxito; bloquean doble envío y cierre mientras se guarda.
+- La edición de parámetros de empresa y expedientes NIC 21/convertibilidad espera la confirmación SQLite antes de mostrar el mensaje de guardado exitoso.
+- Se conserva el modelo de snapshot completo y transacción SQLite ya documentado. Las modificaciones del estado React no se revierten automáticamente si la escritura falla; el proveedor bloquea nuevas escrituras y el reinicio vuelve a hidratar el último snapshot confirmado.
+- La revisión estática identificó además que el módulo de configuración y catálogo contable no deben considerar el estado React como confirmación de persistencia. Los cambios anteriores eliminan esa señal prematura.
+- No se certifica todavía el flujo de edición de artículos desde interfaces no localizadas ni se afirma que todos los formularios de importación/migración hayan sido sometidos a pruebas de integración.
+- Se aplicó el mismo requisito estricto de SQLite a cierre/reapertura de períodos y asiento de apertura anual; el cierre y la apertura esperan la confirmación persistente antes de terminar.
+- Se revisaron anticipos directos, liquidaciones de anticipos, cobros/pagos, creación de declaraciones de retención IVA, eventos de declaración y entregas de comprobantes IVA/ISLR: sus funciones de dominio ahora usan la guarda común y sus operaciones asíncronas esperan el snapshot confirmado antes de devolver éxito.
+- Las clasificaciones del Estado de Flujos de Efectivo (método directo e indirecto) también rechazan la modificación sin SQLite y sus formularios ya esperan confirmación.
+
+### Reinicios y restauración de respaldos
+
+- Se cerró una vía adicional de escritura no confirmada: el importador JSON de bajo nivel dejó de exponerse directamente por el contexto; solo se utiliza internamente desde la restauración controlada, que valida, persiste y revierte a la copia previa si SQLite rechaza el snapshot.
+- Los restablecimientos de datos de muestra y de fábrica ahora exigen el puente SQLite y esperan la confirmación del nuevo estado vacío. La interfaz no informa éxito antes de la confirmación.
+- La restauración de respaldo también exige SQLite local antes de aplicar cambios y conserva su recuperación del snapshot previo ante fallo de persistencia.
