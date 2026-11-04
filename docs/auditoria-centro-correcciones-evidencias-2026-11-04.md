@@ -79,7 +79,7 @@ Los generadores de NC/ND de venta y compra, ND de proveedor y reversión de asie
 
 ## Pruebas definidas y límites de verificación
 
-La suite del workflow contiene **23 pruebas definidas** para segregación, rollback, migración, retiro, observación/subsanación, autorización previa, vínculos de NC/ND, asientos y Kardex. La suite documental conserva nueve pruebas definidas. La suite de liquidaciones/auxiliares contiene **22 pruebas definidas**, incluyendo el incremento de CxP por ND de proveedor. Ninguna de estas suites se ejecutó en esta sesión; no se declara que estén aprobadas.
+La suite del workflow contiene **24 pruebas definidas** para segregación, rollback, migración, retiro, observación/subsanación, autorización previa, vínculos de NC/ND, asientos y Kardex. La suite documental conserva nueve pruebas definidas. La suite de liquidaciones/auxiliares contiene **22 pruebas definidas**, incluyendo el incremento de CxP por ND de proveedor. Ninguna de estas suites se ejecutó en esta sesión; no se declara que estén aprobadas.
 
 ## Ajuste adicional de CxP por notas de débito de proveedor
 
@@ -98,6 +98,8 @@ No se declara terminado el centro. Aún falta integrar/validar:
 No se ejecutó CI ni se publicó release. No se modificó el administrador semilla ni se borraron registros fuente.
 
 
-La autorización previa ahora se registra en SQLite antes de ejecutar el generador: conserva operador, fecha y referencia, exige que el operador sea distinto del solicitante y aprobador, permite reintento al mismo operador con la misma referencia y bloquea el retiro/observación mientras la ejecución está iniciada. La confirmación final debe realizarla ese mismo operador. El evento de inicio y su auditoría se escriben atómicamente.
+La autorización previa ahora se registra en SQLite antes de ejecutar el generador: conserva operador, fecha y referencia, exige que el operador sea distinto del solicitante y aprobador, permite reintento al mismo operador con la misma referencia y vincula el inicio al operador y a la referencia aprobados. Si el documento correctivo todavía no se persistió, el expediente puede devolverse a observación o retirarse; el IPC comprueba primero que no exista evidencia correctiva vinculada. Si ya existe, se bloquean observación y retiro y debe completarse la confirmación. La confirmación final debe realizarla el mismo operador que inició la ejecución. El evento de inicio y su auditoría se escriben atómicamente.
 
 El auxiliar también falla de forma cerrada si una NC/ND contiene importes no finitos o negativos, para no contaminar los saldos calculados.
+
+Se agregó recuperación auditable para intentos fallidos: al observar o retirar un expediente sin documento correctivo persistido, se limpia la autorización temporal y el historial conserva quién la inició y con qué referencia. La suite del workflow contiene ahora **24 pruebas definidas**, aún no ejecutadas.
