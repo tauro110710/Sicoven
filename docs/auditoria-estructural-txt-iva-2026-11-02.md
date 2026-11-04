@@ -112,3 +112,12 @@ La consulta del instructivo RI_DRIVA2020-IT01V3_0_0 confirma que la columna 15 r
 | Windows installer | #1438 | SUCCESS |
 
 Estos resultados acreditan las pruebas automatizadas del commit indicado; no equivalen a aceptación del archivo por SENIAT ni a certificación oficial.
+
+
+## Adenda operativa: serialización de importes enteros (04/11/2026)
+
+Tras el rechazo de un archivo TXT en el Portal Fiscal, la contadora del contribuyente indicó que la carga requiere campos numéricos sin decimales y montos redondeados a enteros. Se ajustó el generador de Retenciones IVA para serializar las columnas de montos (9, 10, 11 y 14) y la alícuota (15) como enteros, sin sufijos decimales.
+
+El redondeo ocurre exclusivamente al construir el TXT. Los comprobantes fuente, importes calculados, libros, asientos, saldos y persistencia mantienen su precisión original. Las validaciones previas a la serialización continúan operando sobre los importes decimales originales.
+
+Esta adaptación responde al rechazo operativo reportado y debe confirmarse con una nueva prueba de carga en el Portal Fiscal. No constituye por sí sola una homologación ni prueba que todos los casos de redondeo sean aceptados por el SENIAT.
