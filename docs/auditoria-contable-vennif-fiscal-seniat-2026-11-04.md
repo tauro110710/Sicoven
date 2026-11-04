@@ -151,3 +151,32 @@ El generador heredado `generateSeniatIslrXml` interpola directamente RIF, perío
 ### 8.3 Hallazgo normativo fiscal: Providencia SNAT/2025/000054
 La Providencia SNAT/2025/000054 fue publicada en Gaceta Oficial 43.171 del 16-07-2025 y entró en vigor el 01-08-2025 según alertas legales profesionales. Deroga la SNAT/2015/0049. Amplía el artículo 1 a personas naturales calificadas y notificadas como sujetos pasivos especiales que estén constituidas como firma personal; conserva retención general del 75%, supuestos de retención del 100%, oportunidad al pago o abono en cuenta (lo primero), declaración incluso sin operaciones y comprobante de 14 caracteres AAAAMMSSSSSSSS. El código ya incluye campos para firma personal, condición de agente y fecha del evento fiscal; debe contrastarse cada excepción con el texto íntegro de la Gaceta y comprobar la vigencia de la norma antes de cambiar reglas.
 Fuentes consultadas: IVECOFI con transcripción de la providencia (fuente secundaria) y alertas de Grant Thornton/Baker McKenzie; no se halló todavía una URL primaria SENIAT estable con el texto oficial.
+
+## 9. Verificación de fuentes normativas y ajustes de alcance (04-11-2026)
+
+### 9.1 Precisión obligatoria sobre BA VEN-NIF 11, versión 01
+La Biblioteca Virtual oficial de la FCCPV identifica BA VEN-NIF 11 v01 con su alcance específico: reconocimiento del pasivo por impuesto diferido originado por la supresión del sistema de ajuste por inflación fiscal en Venezuela. No debe describirse como si, por sí solo, fuera una norma general que cubre todas las diferencias temporarias e impuestos diferidos de cualquier origen. La evaluación debe distinguir ese supuesto particular de los requerimientos generales de la norma internacional aplicable al marco GE/PYME y del resto de diferencias temporarias. La aplicabilidad se documentará por entidad y período, sin contabilización automática hasta validar el texto completo y las reglas de transición.
+Fuente primaria de identificación: Biblioteca Virtual FCCPV, entradas 25–27 (BA VEN-NIF 12 v01, BA VEN-NIF 11 v01 y BA VEN-NIF 8 v11): https://biblioteca.fccpv.org/
+
+### 9.2 Nueva norma de facturación: Providencia SNAT/2026/00093
+Se detectó la Providencia Administrativa SNAT/2026/00093, publicada según la fuente consultada en Gaceta Oficial N° 43.484 del 21-10-2026. La fuente secundaria consultada transcribe, entre otros, los siguientes puntos:
+- Artículos 4–6: medios digitales/electrónicos, imprentas autorizadas y máquinas fiscales; elección del medio y uso de formatos físicos de contingencia bajo supuestos específicos.
+- Artículo 18: comprobantes de retención IVA e ISLR con numeración de 14 caracteres AAAAMMSSSSSSSS, datos de agente/proveedor, RIF, domicilio, correo electrónico del proveedor, fechas de emisión y entrega, documento, período, base e impuesto retenido.
+- Disposiciones transitorias y derogatorias: cambios relevantes al régimen previo de facturación, con derogaciones parciales/totales de providencias anteriores.
+- Disposición final octava: entrada en vigencia 180 días continuos contados desde su publicación. Si la fecha de publicación indicada se confirma en la Gaceta, la fecha calculada sería 19-04-2027; el sistema debe conservar el régimen anterior para operaciones previas y preparar una configuración normativa con vigencia futura, no activar la nueva regla anticipadamente.
+Fuente secundaria para revisión técnica: https://tributos.ivecofi.net/informacion/legislacion/providencias/pa-2026-93
+La publicación y el cómputo de vigencia deben confirmarse contra el ejemplar íntegro de la Gaceta Oficial y cualquier instructivo/manual técnico SENIAT antes de declarar cumplimiento. No se cambian aún los generadores ni la numeración histórica.
+
+### 9.3 Calendario de obligaciones 2026
+La Providencia SNAT/2025/000091 y el calendario 2026 de sujetos pasivos especiales/agentes de retención aparecen publicados en la Gaceta Oficial N° 43.273 de 09-12-2025. El calendario debe tratarse como una matriz anual versionada por último dígito del RIF, tipo de obligación y condición del contribuyente; no como una regla mensual uniforme. La copia consultada es la Gaceta reproducida por Acceso a la Justicia; se requiere conservar la fuente primaria SENIAT/Gaceta y sus eventuales correcciones.
+Fuente: https://accesoalajusticia.org/wp-content/uploads/2025/12/Calendarios_Fiscales_SENIAT_2026.pdf
+
+### 9.4 Ajuste de alcance de la captura VEN-NIF
+La selección del marco y su evidencia de adopción no debe impedir el alta administrativa de una entidad cuando el contador aún no haya documentado formalmente la clasificación. Por ello, en la rama de auditoría se ajustó el formulario de alta para permitir metadatos ausentes y exigir el conjunto completo solo cuando se empieza a registrar una adopción. La edición de una empresa conserva los metadatos previamente persistidos si el formulario queda vacío; no los elimina por omisión accidental. Los reportes no podrán presentarse como conformes a un marco específico mientras falte la evidencia: el bloqueo de emisión conforme queda pendiente de rastrear e implementar en el punto común de generación de estados.
+
+### 9.5 Próxima validación
+1. Obtener y archivar los PDF completos FCCPV de BA VEN-NIF 8 v11, 11 v01 y 12 v01; extraer alcance, transición, vigencia y referencias exactas.
+2. Obtener el ejemplar oficial completo de Gaceta 43.484 y el manual técnico SENIAT que desarrolle SNAT/2026/00093.
+3. Revisar requisitos del comprobante de retención y los datos actuales del modelo; comprobar correo/domicilio del proveedor y fecha efectiva de entrega sin reescribir documentos históricos.
+4. Implementar calendario 2026 con tests de fechas por último dígito y tipo de sujeto, preservando reglas históricas.
+5. Rastrear el generador ISLR heredado en el árbol completo de la rama y probar restauración real de respaldos previos.
