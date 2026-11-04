@@ -633,3 +633,25 @@ test('permite evaluar la reversión del propio asiento de liquidación de antici
   assert.equal(result.activeSupplierAdvanceSettlementCount, 1);
 });
 
+
+
+test('building a contra-entry never mutates the original journal entry', () => {
+  const before = JSON.stringify(source);
+  const contra = buildReversalItems(source, accounts);
+  assert.equal(JSON.stringify(source), before);
+  assert.deepEqual(contra.map(line => ({
+    debitBs: line.debitBs, creditBs: line.creditBs,
+    debitUsd: line.debitUsd, creditUsd: line.creditUsd
+  })), source.items.map(line => ({
+    debitBs: line.creditBs, creditBs: line.debitBs,
+    debitUsd: line.creditUsd, creditUsd: line.debitUsd
+  })));
+});
+
+test('a reversal preview rejects a source entry that does not balance in both currencies', () => {
+  const unbalanced = {
+    ...source,
+    items: source.items.map((line, index) => index === 0 ? { ...line, debitBs: line.debitBs + 1 } : line)
+  };
+  assert.throws(() => buildReversalItems(unbalanced, accounts), /no cuadra simultáneamente en Bs. y USD/);
+});
