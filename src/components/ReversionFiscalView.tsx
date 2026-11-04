@@ -147,7 +147,7 @@ export const ReversionFiscalView: React.FC = () => {
         entityType: requestEntityType, entityId: requestEntityId.trim(),
         correctionType: requestCorrectionType.trim(),
         sourceDocumentRef: requestSourceRef.trim(),
-        correctionDocumentRef: requestTargetRef.trim() || 'PENDIENTE DE DOCUMENTO CORRECTIVO',
+        correctionDocumentRef: requestTargetRef.trim(),
         reason: requestReason.trim(), workpaperNote: requestWorkpaper.trim()
       });
       setRequestEntityId(''); setRequestSourceRef(''); setRequestTargetRef('');
