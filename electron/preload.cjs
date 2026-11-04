@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   deleteSeedAdmin: (token) => ipcRenderer.invoke('sicoven:auth-delete-seed', token),
   load: (token) => ipcRenderer.invoke('sicoven:load-state', token),
   listAuditEvents: (token, limit) => ipcRenderer.invoke('sicoven:audit-list', token, limit),
+  recordAuditCorrection: (token, input) => ipcRenderer.invoke('sicoven:audit-record-correction', token, input),
   save: (token, state) => ipcRenderer.invoke('sicoven:save-state', token, state),
   reopenAccountingPeriod: (token, input) => ipcRenderer.invoke('sicoven:reopen-accounting-period', token, input),
   resetAccounting: (token) => ipcRenderer.invoke('sicoven:reset-accounting', token),
