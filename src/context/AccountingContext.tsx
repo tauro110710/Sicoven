@@ -695,6 +695,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('Reversión bancaria bloqueada: ' + (bankReadiness.reason || 'no existe una contrapartida bancaria verificable.') +
         ' No se registró ningún contra-asiento.');
     }
+    await recordCorrectionAudit({
+      eventType: 'accounting_correction_requested', entityType: 'JOURNAL_ENTRY', companyId: currentCompany.id,
+      entityId: source.id, correctionType: priorPeriodAdjustment ? 'PRIOR_PERIOD_ADJUSTMENT_REVERSAL' : 'JOURNAL_REVERSAL',
+      sourceDocumentRef: source.referenceDoc || String(source.entryNumber),
+      correctionDocumentRef: 'REV-' + source.entryNumber, reason: reason.trim(), workpaperNote: workpaperNote.trim()
+    });
     let resolvePersistence!: () => void;
     let rejectPersistence!: (error: Error) => void;
     const persistenceConfirmation = new Promise<void>((resolve, reject) => {
@@ -774,6 +780,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }));
     }
     await persistenceConfirmation;
+    try {
+      await recordCorrectionAudit({
+        eventType: 'accounting_correction_executed', entityType: 'JOURNAL_ENTRY', companyId: currentCompany.id,
+        entityId: source.id, correctionType: priorPeriodAdjustment ? 'PRIOR_PERIOD_ADJUSTMENT_REVERSAL' : 'JOURNAL_REVERSAL',
+        sourceDocumentRef: source.referenceDoc || String(source.entryNumber),
+        correctionDocumentRef: 'REV-' + source.entryNumber, reason: reason.trim(),
+        workpaperNote: workpaperNote.trim(), journalEntryId: reversal.id
+      });
+    } catch (auditError) {
+      throw new Error('El contra-asiento quedó guardado en SQLite, pero falta el evento final de auditoría. No repita la reversión. Asiento: ' + reversal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
+    }
     return reversal;
     } finally {
       journalReversalInFlightRef.current = false;
@@ -2143,6 +2160,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     purchaseCreditNoteInFlightRef.current = true;
     correctionWorkflowInFlightRef.current = true;
     try {
+      const sourceForAudit = purchases.find(item => item.id === request.purchaseId && item.companyId === currentCompany.id);
+      if (!sourceForAudit) throw new Error('No se encontró la factura original en la empresa activa.');
+      await recordCorrectionAudit({
+        eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id,
+        entityId: sourceForAudit.id, correctionType: 'PURCHASE_INVENTORY_CREDIT_NOTE',
+        sourceDocumentRef: sourceForAudit.invoiceNumber, correctionDocumentRef: request.creditNoteNumber,
+        reason: request.reason, workpaperNote: request.reason
+      });
       return await runAtomicInvoiceImport(async () => {
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la nota de crédito.');
     const purchase = purchases.find(item => item.id === request.purchaseId && item.companyId === currentCompany.id);
@@ -2483,6 +2508,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     ));
     if (fiscalReversalEvents.length > 0) setIslrFiscalEvents(prev => [...prev, ...fiscalReversalEvents]);
     await persistenceConfirmation;
+    try {
+      await recordCorrectionAudit({
+        eventType: 'accounting_correction_executed', entityType: 'PURCHASE', companyId: currentCompany.id,
+        entityId: purchase.id, correctionType: 'PURCHASE_INVENTORY_CREDIT_NOTE',
+        sourceDocumentRef: purchase.invoiceNumber, correctionDocumentRef: request.creditNoteNumber,
+        reason: request.reason, workpaperNote: request.reason, journalEntryId: journal.id
+      });
+    } catch (auditError) {
+      throw new Error('La devolución y NC quedaron guardadas en SQLite, pero falta el evento final de auditoría. No repita la operación. Asiento: ' + journal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
+    }
     return note;
       });
     } finally {
@@ -2710,6 +2745,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           draft: { ...draft, companyId: currentCompany.id, closedThroughDate: currentCompany.closedThroughDate || undefined },
           purchases, accounts, sourceJournalEntry
         });
+        await recordCorrectionAudit({
+          eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id,
+          entityId: source.id, correctionType: 'PURCHASE_DEBIT_NOTE',
+          sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: draft.debitNoteNumber,
+          reason: draft.reason, workpaperNote: draft.fiscalReviewNote
+        });
         if (!window.sicovenStore?.save) {
           throw new Error('No se puede confirmar la ND: SQLite local no está disponible. No se modificó el estado contable.');
         }
@@ -2742,6 +2783,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         });
         setPurchases(prev => [...prev, note]);
         await persistenceConfirmation;
+        try {
+          await recordCorrectionAudit({
+            eventType: 'accounting_correction_executed', entityType: 'PURCHASE', companyId: currentCompany.id,
+            entityId: source.id, correctionType: 'PURCHASE_DEBIT_NOTE',
+            sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: draft.debitNoteNumber,
+            reason: draft.reason, workpaperNote: draft.fiscalReviewNote, journalEntryId: journal.id
+          });
+        } catch (auditError) {
+          throw new Error('La ND quedó guardada en SQLite, pero falta el evento final de auditoría. No repita el documento. Asiento: ' + journal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
+        }
         return note;
       });
     } finally {
