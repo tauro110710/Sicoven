@@ -33,7 +33,7 @@ export function validateBankMovementFxSnapshot(input: {
   bcvRateEffectiveDate?: string;
 }): void {
   const parsed = new Date(String(input.date || '') + 'T00:00:00.000Z');
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(input.date || '')) ||
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(input.date || '')) ||
       !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== input.date) {
     throw new Error('La fecha del movimiento bancario no es válida.');
   }
