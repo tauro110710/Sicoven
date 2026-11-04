@@ -35,7 +35,8 @@ const sourceEntry: JournalEntry = {
 const draft = (overrides: Partial<SupplierDebitNoteAccountingDraft> = {}): SupplierDebitNoteAccountingDraft => ({
   companyId: 'company-1', sourcePurchaseId: 'purchase-1',
   debitNoteNumber: 'ND-001', controlNumber: 'CTRL-ND-001',
-  affectedInvoiceNumber: 'FAC-100', issueDate: '2026-10-10',
+  affectedInvoiceNumber: 'FAC-100', fiscalEmissionMedium: 'DIGITAL', sameMediumAsOriginal: true,
+  issueDate: '2026-10-10',
   recognitionDate: '2026-10-10', economicCause: 'ADDITIONAL_EXPENSE',
   reason: 'Gasto adicional documentado por proveedor.',
   debitAccountCode: '6.1.1.01', vatAccountCode: '1.1.3.01', taxableBaseBs: 25, exemptAmountBs: 0,
