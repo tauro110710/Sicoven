@@ -131,7 +131,7 @@ function initializeCorrectionWorkflow(db) {
   `);
   const workflowEventSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='accounting_correction_case_workflow_events'").get();
   if (workflowEventSchema && !String(workflowEventSchema.sql || '').includes("'WITHDRAWN'")) {
-    db.exec(`
+    const migrateWorkflowEventSchema = db.transaction(() => db.exec(`
       DROP TRIGGER IF EXISTS correction_case_workflow_events_no_update;
       DROP TRIGGER IF EXISTS correction_case_workflow_events_no_delete;
       DROP INDEX IF EXISTS idx_correction_case_workflow_events_case;
@@ -153,7 +153,8 @@ function initializeCorrectionWorkflow(db) {
         BEGIN SELECT RAISE(ABORT, 'correction workflow events are append-only'); END;
       CREATE TRIGGER correction_case_workflow_events_no_delete BEFORE DELETE ON accounting_correction_case_workflow_events
         BEGIN SELECT RAISE(ABORT, 'correction workflow events are append-only'); END;
-    `);
+    `));
+    migrateWorkflowEventSchema();
   }
 }
 function requireAdmin(actor) {
