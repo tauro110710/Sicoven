@@ -40,3 +40,11 @@ test('invalid actors and insufficient workpaper are rejected without records',()
   assert.equal(db.prepare('SELECT COUNT(*) n FROM accounting_correction_cases').get().n,0);
  }finally{db.close();}
 });
+
+test('request row rolls back when its audit event cannot be appended',()=>{
+ const db=setup();try{
+  db.exec("CREATE TRIGGER reject_case_event BEFORE INSERT ON accounting_correction_case_events BEGIN SELECT RAISE(ABORT,'injected event failure'); END;");
+  assert.throws(()=>registerCorrectionRequest(db,input,admin(1,'a')),/injected event failure/);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM accounting_correction_cases').get().n,0);
+ }finally{db.close();}
+});
