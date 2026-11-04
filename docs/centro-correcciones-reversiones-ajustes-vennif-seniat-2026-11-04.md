@@ -155,3 +155,26 @@ No declarar completa esta capacidad hasta que cada tipo documental con efecto co
 - Este cerrojo evita carreras entre esos tres circuitos de corrección; no sustituye una prueba de estrés de concurrencia del proceso Electron ni bloquea todas las demás operaciones contables ordinarias.
 
 - Se reforzó la prueba de rollback SQLite: ahora el trigger simulado falla en la inserción final `state_saved`, que ocurre después del `UPSERT` de `app_state`. La expectativa es que la transacción revierta tanto el snapshot ya actualizado como los eventos de auditoría insertados previamente. Prueba incorporada; ejecución pendiente.
+
+
+
+### Tesorería y conciliación: confirmación SQLite — revisión posterior
+
+- Se detectó la misma brecha de confirmación en operaciones bancarias: alta de cuenta/auxiliar, movimiento del extracto, ingreso/egreso/transferencia de tesorería y asiento de ajuste desde conciliación podían mostrar éxito antes de que el snapshot SQLite terminara.
+- Los formularios de alta bancaria y movimiento de extracto ahora esperan `waitForPersistence()` antes de limpiar/cerrar, bloquean doble envío y bloquean sus controles de cierre durante la confirmación.
+- Tesorería solo muestra “SQLite confirmó...” después de guardar el asiento; la conciliación bancaria muestra éxito del ajuste solo después de persistir conjuntamente asiento y vínculo de conciliación.
+- `addBankAccount` y `addBankStatementMovement` ahora rechazan operaciones si falta el puente de SQLite, la base no está lista o ya existe un fallo de persistencia.
+- Las operaciones se guardan como parte del snapshot contable transaccional. No se ejecutaron `npm test`, `npm run check:types` ni `npm run build` en esta sesión; la prueba automatizada sigue pendiente por la limitación del runner de GitHub Actions.
+
+
+### Tesorería y conciliación bancaria — confirmación SQLite
+
+- El alta de cuentas bancarias y de movimientos de extracto exige el puente SQLite local, estado listo y ausencia de fallo previo.
+- Los formularios de cuenta bancaria y movimiento de extracto esperan `waitForPersistence()` antes de cerrarse; bloquean doble envío y cierre mientras SQLite confirma.
+- El registro de movimientos contables de tesorería espera confirmación antes de informar el número del asiento como guardado.
+- La creación de ajustes desde la conciliación bancaria espera confirmación SQLite antes de mostrar éxito.
+- El cotejo manual, la desconciliación individual, la desconciliación masiva y la conciliación automática esperan la confirmación cuando realmente producen cambios.
+- Se evita esperar un snapshot cuando la conciliación automática no encuentra coincidencias y no modifica registros, para no dejar el formulario en espera indefinida.
+- Los métodos de dominio de tesorería y conciliación también rechazan operaciones si SQLite no está disponible, aunque se invoquen desde otro componente.
+- La interfaz serializa las operaciones de conciliación y evita dobles acciones durante el guardado.
+- Validación de esta continuación: revisión estática de los archivos y de los contratos de persistencia; no se ejecutó compilación ni pruebas automatizadas. La confirmación real en SQLite debe verificarse con la aplicación de escritorio y su archivo de base de datos.

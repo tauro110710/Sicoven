@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import {
   Landmark,
@@ -38,6 +38,7 @@ export const ConciliacionBancariaView: React.FC = () => {
     runAutoReconciliation,
     unreconcileAll,
     createAdjustingEntryForBankMovement,
+    waitForPersistence,
     displayCurrency
   } = useAccounting();
 
@@ -60,6 +61,10 @@ export const ConciliacionBancariaView: React.FC = () => {
   const [selectedBookEntryId, setSelectedBookEntryId] = useState<string | null>(null);
   const [selectedStatementId, setSelectedStatementId] = useState<string | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const adjustmentInFlightRef = useRef(false);
+  const reconciliationInFlightRef = useRef(false);
+  const [isCreatingAdjustment, setIsCreatingAdjustment] = useState(false);
+  const [isReconciling, setIsReconciling] = useState(false);
 
   const companyBanks = bankAccounts.filter(b => b.companyId === currentCompany.id);
   const activeBank =
@@ -179,27 +184,69 @@ export const ConciliacionBancariaView: React.FC = () => {
   const differenceBs = Math.abs(adjustedBankBalanceBs - adjustedBookBalanceBs);
   const isReconciledBalanced = differenceBs < 0.05;
 
-  // Handle Automatic Reconciliation execution
-  const handleRunAuto = () => {
-    const res = runAutoReconciliation(activeBank.id);
-    if (res.matchedCount > 0) {
-      setAutoReconcileFeedback(
-        `¡Conciliación automática exitosa! Se vincularon ${res.matchedCount} partidas coincidentes.`
-      );
-    } else {
-      setAutoReconcileFeedback(
-        'No se encontraron partidas automáticas pendientes por vincular (verifique referencias o montos).'
-      );
+  // Todas las modificaciones de conciliación esperan confirmación SQLite.
+  const runReconciliationWrite = async (action: () => void) => {
+    if (reconciliationInFlightRef.current) return false;
+    reconciliationInFlightRef.current = true;
+    setIsReconciling(true);
+    try {
+      action();
+      await waitForPersistence();
+      return true;
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'SQLite no confirmó la operación de conciliación.');
+      return false;
+    } finally {
+      reconciliationInFlightRef.current = false;
+      setIsReconciling(false);
     }
-    setTimeout(() => setAutoReconcileFeedback(null), 4000);
+  };
+
+  // Handle Automatic Reconciliation execution
+  const handleRunAuto = async () => {
+    if (reconciliationInFlightRef.current) return;
+    reconciliationInFlightRef.current = true;
+    setIsReconciling(true);
+    try {
+      const res = runAutoReconciliation(activeBank.id);
+      if (res.matchedCount > 0) {
+        await waitForPersistence();
+        setAutoReconcileFeedback(`SQLite confirmó ${res.matchedCount} partidas conciliadas automáticamente.`);
+      } else {
+        // Sin coincidencias no hay mutación ni snapshot nuevo que esperar.
+        setAutoReconcileFeedback('No se encontraron partidas automáticas pendientes por vincular; no se modificaron registros.');
+      }
+    } catch (error) {
+      setAutoReconcileFeedback(error instanceof Error ? error.message : 'SQLite no confirmó la conciliación automática.');
+    } finally {
+      reconciliationInFlightRef.current = false;
+      setIsReconciling(false);
+    }
   };
 
   // Handle manual pair matching
-  const handleLinkSelectedPair = () => {
+  const handleLinkMovementToSelectedBook = async (statementId: string, entryId: string) => {
+    if (!entryId) return;
+    const saved = await runReconciliationWrite(() => reconcileMovementManual(statementId, entryId));
+    if (saved) {
+      setSelectedStatementId(null);
+      setSelectedBookEntryId(null);
+    }
+  };
+
+  const handleLinkSelectedPair = async () => {
     if (!selectedStatementId || !selectedBookEntryId) return;
-    reconcileMovementManual(selectedStatementId, selectedBookEntryId);
-    setSelectedStatementId(null);
-    setSelectedBookEntryId(null);
+    await handleLinkMovementToSelectedBook(selectedStatementId, selectedBookEntryId);
+  };
+
+  const handleUnreconcileMovement = async (movementId: string) => {
+    await runReconciliationWrite(() => unreconcileMovement(movementId));
+  };
+
+  const handleUnreconcileAll = async () => {
+    const confirmed = window.confirm('¿Desea desconciliar todos los movimientos de esta cuenta bancaria?');
+    if (!confirmed) return;
+    await runReconciliationWrite(() => unreconcileAll(activeBank.id));
   };
 
   const handleExportPdf = async () => {
@@ -225,6 +272,26 @@ export const ConciliacionBancariaView: React.FC = () => {
       console.error('Error generating conciliation PDF:', err);
     } finally {
       setIsExportingPdf(false);
+    }
+  };
+
+  const handleCreateAdjustment = async (movement: BankStatementMovement, counterpartAccountCode: string) => {
+    if (adjustmentInFlightRef.current || reconciliationInFlightRef.current) return;
+    adjustmentInFlightRef.current = true;
+    reconciliationInFlightRef.current = true;
+    setIsCreatingAdjustment(true);
+    setIsReconciling(true);
+    try {
+      createAdjustingEntryForBankMovement(movement, counterpartAccountCode);
+      await waitForPersistence();
+      window.alert('SQLite confirmó el asiento de ajuste y la conciliación bancaria.');
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo confirmar el ajuste bancario en SQLite.');
+    } finally {
+      adjustmentInFlightRef.current = false;
+      reconciliationInFlightRef.current = false;
+      setIsCreatingAdjustment(false);
+      setIsReconciling(false);
     }
   };
 
@@ -319,11 +386,8 @@ export const ConciliacionBancariaView: React.FC = () => {
 
           <div className="flex items-center justify-end pt-5">
             <button
-              onClick={() => {
-                if (confirm('¿Desea desconciliar todos los movimientos de esta cuenta bancaria?')) {
-                  unreconcileAll(activeBank.id);
-                }
-              }}
+              onClick={() => { void handleUnreconcileAll(); }}
+              disabled={isReconciling}
               className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-rose-600 font-medium transition cursor-pointer"
               title="Restablecer estado de conciliación de todos los registros"
             >
@@ -467,8 +531,9 @@ export const ConciliacionBancariaView: React.FC = () => {
                   Limpiar Selección
                 </button>
                 <button
-                  onClick={handleLinkSelectedPair}
-                  className="px-4 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded shadow cursor-pointer"
+                  onClick={() => { void handleLinkSelectedPair(); }}
+                  disabled={!selectedStatementId || !selectedBookEntryId || isReconciling}
+                  className="px-4 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded shadow cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Vincular y Conciliar Selección
                 </button>
@@ -658,7 +723,8 @@ export const ConciliacionBancariaView: React.FC = () => {
                             <td className="py-2 px-2.5 text-center whitespace-nowrap">
                               {s.isReconciled ? (
                                 <button
-                                  onClick={() => unreconcileMovement(s.id)}
+                                  onClick={() => { void handleUnreconcileMovement(s.id); }}
+                                  disabled={isReconciling}
                                   className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 hover:bg-rose-100 hover:text-rose-700 px-2 py-0.5 rounded-full border border-emerald-300 transition cursor-pointer"
                                   title="Click para desconciliar"
                                 >
@@ -672,8 +738,8 @@ export const ConciliacionBancariaView: React.FC = () => {
                               ) : (
                                 <div className="flex items-center justify-center gap-1">
                                   <button
-                                    onClick={() => selectedBookEntryId && reconcileMovementManual(s.id, selectedBookEntryId)}
-                                    disabled={!selectedBookEntryId}
+                                    onClick={() => { if (selectedBookEntryId) void handleLinkMovementToSelectedBook(s.id, selectedBookEntryId); }}
+                                    disabled={!selectedBookEntryId || isReconciling}
                                     className="text-[10px] font-bold text-amber-800 bg-amber-100 hover:bg-emerald-100 hover:text-emerald-800 px-2 py-0.5 rounded-full border border-amber-300 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                     title="Seleccione primero el asiento coincidente del Libro Diario"
                                   >
@@ -683,12 +749,10 @@ export const ConciliacionBancariaView: React.FC = () => {
                                   <button
                                     onClick={() => {
                                       const defaultAcc = isDebit ? '6.1.1.07' : '4.2.1.02';
-                                      createAdjustingEntryForBankMovement(s, defaultAcc);
-                                      alert(
-                                        `Asiento de Ajuste generado automáticamente en el Libro Diario y partida conciliada.`
-                                      );
+                                      void handleCreateAdjustment(s, defaultAcc);
                                     }}
-                                    className="p-1 text-indigo-600 hover:bg-indigo-50 rounded"
+                                    disabled={isCreatingAdjustment || isReconciling}
+                                    className="p-1 text-indigo-600 hover:bg-indigo-50 rounded disabled:opacity-40"
                                     title={
                                       isDebit
                                         ? 'Crear asiento contable automático por gasto bancario'

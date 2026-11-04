@@ -9,7 +9,9 @@ interface NewBankAccountModalProps {
 }
 
 export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, addBankAccount } = useAccounting();
+  const { currentCompany, addBankAccount, waitForPersistence } = useAccounting();
+  const savingRef = React.useRef(false);
+  const [saving, setSaving] = useState(false);
 
   const [bankName, setBankName] = useState('');
   const [accountType, setAccountType] = useState<'CORRIENTE' | 'AHORRO'>('CORRIENTE');
@@ -25,7 +27,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
   const bcvRate = Number(currentCompany.bcvRate || 0);
   const openingBalanceBs = currency === 'USD' ? parsedOpeningBalance * bcvRate : parsedOpeningBalance;
   const openingBalanceUsd = currency === 'USD' ? parsedOpeningBalance : (bcvRate > 0 ? parsedOpeningBalance / bcvRate : 0);
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!bankName.trim()) return;
     if (normalizedAccountNumber.length !== 20) {
@@ -40,6 +42,9 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
       window.alert('Configure una tasa BCV válida antes de registrar el saldo inicial.');
       return;
     }
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     try {
       addBankAccount({
         bankName: bankName.trim(),
@@ -50,6 +55,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
         accountType,
         checkbookNumber: checkbookNumber.trim() || undefined
       });
+      await waitForPersistence();
       // Dejar el formulario limpio para la próxima alta, sin datos residuales.
       setBankName('');
       setAccountType('CORRIENTE');
@@ -60,6 +66,9 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
       onClose();
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'No se pudo registrar la cuenta bancaria.');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
 
@@ -78,7 +87,8 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white transition cursor-pointer"
+            disabled={saving}
+            className="p-1 rounded-lg text-slate-400 hover:text-white transition cursor-pointer disabled:opacity-40"
           >
             <X className="w-5 h-5" />
           </button>
@@ -158,17 +168,18 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer"
+              disabled={saving}
+              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer disabled:opacity-40"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              disabled={!bankName.trim() || normalizedAccountNumber.length !== 20 || (parsedOpeningBalance > 0 && bcvRate <= 0)}
+              disabled={saving || !bankName.trim() || normalizedAccountNumber.length !== 20 || (parsedOpeningBalance > 0 && bcvRate <= 0)}
               className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
             >
               <Check className="w-4 h-4" />
-              Guardar y Crear Auxiliar
+              {saving ? "Confirmando SQLite..." : "Guardar y Crear Auxiliar"}
             </button>
           </div>
         </form>
