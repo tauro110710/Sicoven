@@ -318,6 +318,7 @@ export interface SaleRecord {
   originalSaleId?: string;
   netReceivableAdjustmentBs?: number;
   netReceivableAdjustmentUsd?: number;
+  exemptAmountUsd?: number;
   correctionReason?: string;
   correctionWorkpaper?: string;
   notes?: string;
