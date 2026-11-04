@@ -265,7 +265,14 @@ export function buildCashFlowReport(
     }
   };
 
-  const periodEntries = companyEntries.filter(entry => entry.date >= start && !isAnnualOpening(entry, year, reversedEntryIds));
+  const linkedAnnualOpeningIds = new Set(companyEntries
+    .filter(isLinkedAnnualOpening)
+    .map(entry => entry.id));
+  const periodEntries = companyEntries.filter(entry =>
+    entry.date >= start &&
+    !isAnnualOpening(entry, year, reversedEntryIds) &&
+    !(entry.reversalOfEntryId && linkedAnnualOpeningIds.has(entry.reversalOfEntryId))
+  );
   for (const entry of periodEntries) {
     const net = cashNet(entry, cashCodes);
     netChangeBs += net.bs;
