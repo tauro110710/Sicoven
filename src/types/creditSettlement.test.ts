@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateCreditBalance, validateCreditSettlement, type CreditSettlement, type CreditSettlementDraft } from './creditSettlement';
+import { calculateCreditBalance, summarizeCreditDocumentAdjustments, validateCreditSettlement, type CreditSettlement, type CreditSettlementDraft } from './creditSettlement';
 
 const settlement = (overrides: Partial<CreditSettlement> = {}): CreditSettlement => ({
   id: 's-1', companyId: 'c-1', documentId: 'invoice-1', kind: 'SALE_COLLECTION',
@@ -14,6 +14,29 @@ const draft: CreditSettlementDraft = {
 };
 
 describe('credit settlement balances and validation', () => {
+  it('adds supplier debit notes to CxP using the complete note total and subtracts supplier credit notes', () => {
+    const adjustments = summarizeCreditDocumentAdjustments('PURCHASE_PAYMENT',
+      [{netPayableReductionUsd: 8, netPayableReductionBs: 800}],
+      [{documentType: '02', totalAmountUsd: 15, totalAmountBs: 1500}]
+    );
+    assert.deepEqual(adjustments, {
+      creditedByNotesUsd: 8, creditedByNotesBs: 800,
+      debitedByNotesUsd: 15, debitedByNotesBs: 1500
+    });
+    assert.equal(Math.round((100 - adjustments.creditedByNotesUsd + adjustments.debitedByNotesUsd) * 100) / 100, 107);
+  });
+
+  it('uses the net receivable adjustment for sales debit notes rather than gross total', () => {
+    const adjustments = summarizeCreditDocumentAdjustments('SALE_COLLECTION',
+      [{netReceivableAdjustmentUsd: 6, netReceivableAdjustmentBs: 600}],
+      [{netReceivableAdjustmentUsd: 12, netReceivableAdjustmentBs: 1200, totalAmountUsd: 14}]
+    );
+    assert.deepEqual(adjustments, {
+      creditedByNotesUsd: 6, creditedByNotesBs: 600,
+      debitedByNotesUsd: 12, debitedByNotesBs: 1200
+    });
+  });
+
   it('preserves invoice principal and values remaining Bs at the invoice rate', () => {
     const balance = calculateCreditBalance('invoice-1', 100, 8000, [
       settlement({ amountUsd: 25, amountBs: 3000, bcvRate: 120 })
