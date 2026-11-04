@@ -1589,6 +1589,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   // Registrar compra y generar asiento automático y comprobantes de retención
   const addPurchase = (purchaseData: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>): PurchaseRecord => {
+    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
+      throw new Error('SQLite local no está disponible o la persistencia falló. No se registró la compra.');
+    }
     const settlementModeError = validatePurchaseSettlementMode(
       purchaseData.paymentTerm, purchaseData.paymentAccountCode, accounts, purchaseData.paymentReference
     );
@@ -2516,6 +2519,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   // Registrar venta y generar asiento contable
   const addSale = (saleData: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>): SaleRecord => {
+    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
+      throw new Error('SQLite local no está disponible o la persistencia falló. No se registró la venta.');
+    }
     const settlementModeError = validateSaleSettlementMode(saleData.paymentTerm);
     if (settlementModeError) throw new Error(settlementModeError);
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la venta.');
