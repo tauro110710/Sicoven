@@ -28,7 +28,7 @@ function findLinkedCorrectionEvidence(state, item, reference) {
   if (!normalizedReference) return null;
   const referenceFields = ['id','documentNumber','invoiceNumber','voucherNumber','declarationNumber','entryNumber',
     'opNumber','documentRef','number','reference','referenceDoc','controlNumber','creditNoteNumber','debitNoteNumber'];
-  return candidates.find(candidate => {
+  const evidence = candidates.find(candidate => {
     if (String(candidate.companyId || '') !== String(item.company_id) || String(candidate.id) === String(item.entity_id)) return false;
     const linked = voucherCorrectionIds.length
       ? voucherCorrectionIds.includes(String(candidate.id))
