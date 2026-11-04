@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import { formatBs, formatUsd } from '../utils/formatters';
 
+declare const __SICOVEN_VERSION__: string;
+
 interface NavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -150,6 +152,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             />
             <span className="hidden lg:inline-block text-[9px] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
               VEN-NIF
+            </span>
+            <span className="inline-flex items-center rounded-md border border-sky-400/30 bg-sky-500/15 px-2 py-1 text-[10px] sm:text-xs font-bold tracking-wide text-sky-200 whitespace-nowrap" title="Versión instalada de SICOVEN" aria-label={`Versión ${__SICOVEN_VERSION__}`}>
+              v{__SICOVEN_VERSION__}
             </span>
           </div>
 
