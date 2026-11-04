@@ -16,6 +16,22 @@ function initializeCorrectionWorkflow(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_correction_cases_company_status
       ON accounting_correction_cases(company_id,status,created_at);
+    CREATE TRIGGER IF NOT EXISTS correction_cases_valid_transition BEFORE UPDATE ON accounting_correction_cases
+      WHEN NOT (
+        (OLD.status='PENDING_REVIEW' AND NEW.status IN ('APPROVED','REJECTED')) OR
+        (OLD.status='APPROVED' AND NEW.status='EXECUTED')
+      )
+      BEGIN SELECT RAISE(ABORT, 'invalid correction case transition'); END;
+    CREATE TRIGGER IF NOT EXISTS correction_cases_source_immutable BEFORE UPDATE ON accounting_correction_cases
+      WHEN NEW.id<>OLD.id OR NEW.company_id<>OLD.company_id OR NEW.entity_type<>OLD.entity_type OR
+        NEW.entity_id<>OLD.entity_id OR NEW.correction_type<>OLD.correction_type OR
+        NEW.source_ref<>OLD.source_ref OR NEW.correction_ref<>OLD.correction_ref OR
+        NEW.reason<>OLD.reason OR NEW.workpaper<>OLD.workpaper OR
+        NEW.requested_by<>OLD.requested_by OR NEW.requested_by_name<>OLD.requested_by_name OR
+        NEW.created_at<>OLD.created_at
+      BEGIN SELECT RAISE(ABORT, 'correction case source is immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS correction_cases_no_delete BEFORE DELETE ON accounting_correction_cases
+      BEGIN SELECT RAISE(ABORT, 'correction cases cannot be deleted'); END;
     CREATE TABLE IF NOT EXISTS accounting_correction_case_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL REFERENCES accounting_correction_cases(id),
       event_type TEXT NOT NULL CHECK(event_type IN ('REQUESTED','APPROVED','REJECTED','EXECUTED')),
