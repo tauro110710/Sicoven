@@ -132,7 +132,7 @@ export function buildCashFlowReport(
   // prior opening plus only the movements posted after it.
   const openingBoundary = companyEntries.filter(entry =>
     isLinkedAnnualOpening(entry) && entry.date <= start
-  ).at(-1);
+  ).sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber).at(-1);
   const openingEntries = openingBoundary
     ? [
         ...companyEntries.filter(entry => entry.date > openingBoundary.date && entry.date < start),
