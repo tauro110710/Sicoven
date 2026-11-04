@@ -21,8 +21,8 @@ test('workflow enforces preparer-reviewer-executor segregation and append-only e
   const executed=markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Se aplicó el documento correctivo.',evidenceRecordId:'credit-note-1',evidenceCollection:'sales'},admin(3,'ejecutor'));
   assert.equal(executed.status,'EXECUTED');
   assert.deepEqual(executed.events.map(e=>e.event_type),['REQUESTED','APPROVED','EXECUTION_STARTED','EXECUTED']);
-  assert.equal(executed.events[2].metadata.evidenceRecordId,'credit-note-1');
-  assert.equal(executed.events[2].metadata.evidenceCollection,'sales');
+  assert.equal(executed.events[3].metadata.evidenceRecordId,'credit-note-1');
+  assert.equal(executed.events[3].metadata.evidenceCollection,'sales');
   assert.equal(listCorrectionCases(db,'co-1').length,1);
   assert.throws(()=>db.prepare('UPDATE accounting_correction_case_events SET reason=? WHERE id=1').run('alterado'),/append-only/);
   assert.throws(()=>db.prepare('DELETE FROM accounting_correction_case_events WHERE id=1').run(),/append-only/);
@@ -77,7 +77,7 @@ test('execution transition rolls back when the general audit ledger rejects the 
   assert.throws(()=>markCorrectionExecuted(db,{caseId:requested.id,executionRef:'NC-001',reason:'Ejecución documentada con soporte persistido.',evidenceRecordId:'credit-note-1',evidenceCollection:'sales'},admin(3,'ejecutor')),/execution audit failure/);
   const current=getCorrectionCase(db,requested.id);
   assert.equal(current.status,'APPROVED');
-  assert.deepEqual(current.events.map(e=>e.event_type),['REQUESTED','APPROVED']);
+  assert.deepEqual(current.events.map(e=>e.event_type),['REQUESTED','APPROVED','EXECUTION_STARTED']);
  }finally{db.close();}
 });
 
