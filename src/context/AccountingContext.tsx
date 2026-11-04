@@ -415,7 +415,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   type CorrectionAuditInput = {
     eventType: 'accounting_correction_requested' | 'accounting_correction_executed';
     entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT';
-    entityId: string; correctionType: string; sourceDocumentRef: string;
+    companyId: string; entityId: string; correctionType: string; sourceDocumentRef: string;
     correctionDocumentRef: string; reason: string; workpaperNote: string; journalEntryId?: string;
   };
   const recordCorrectionAudit = async (input: CorrectionAuditInput): Promise<void> => {
@@ -2619,14 +2619,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (Math.abs(debitBs - creditBs) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.0001 || items.length < 2) {
       throw new Error('El asiento de NC de servicios no cuadra en Bs. y USD. No se registró.');
     }
-    await recordCorrectionAudit({
-      eventType: 'accounting_correction_requested', entityType: 'PURCHASE', entityId: source.id,
+    correctionWorkflowInFlightRef.current = true;
+    purchaseCreditNoteInFlightRef.current = true;
+    try { await recordCorrectionAudit({
+      eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id, entityId: source.id,
       correctionType: 'PURCHASE_SERVICE_CREDIT_NOTE',
       sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: String(draft.creditNoteNumber).trim(),
       reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote).trim()
-    });
-    correctionWorkflowInFlightRef.current = true;
-    purchaseCreditNoteInFlightRef.current = true;
+    }); } catch (auditError) { correctionWorkflowInFlightRef.current = false; purchaseCreditNoteInFlightRef.current = false; throw auditError; }
     try {
       return await runAtomicInvoiceImport(async () => {
         const journal = addJournalEntry({
@@ -2665,7 +2665,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         await waitForPersistence();
         try {
           await recordCorrectionAudit({
-            eventType: 'accounting_correction_executed', entityType: 'PURCHASE', entityId: source.id,
+            eventType: 'accounting_correction_executed', entityType: 'PURCHASE', companyId: currentCompany.id, entityId: source.id,
             correctionType: 'PURCHASE_SERVICE_CREDIT_NOTE',
             sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: String(draft.creditNoteNumber).trim(),
             reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote).trim(),
@@ -3022,13 +3022,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         debitBs: 0, creditBs: amounts.vatAmountBs, debitUsd: 0, creditUsd: amounts.vatAmountUsd,
         description: 'Incremento de débito fiscal IVA · ' + source.invoiceNumber });
     }
-    await recordCorrectionAudit({
-      eventType: 'accounting_correction_requested', entityType: 'SALE', entityId: source.id,
+    correctionWorkflowInFlightRef.current = true;
+    try { await recordCorrectionAudit({
+      eventType: 'accounting_correction_requested', entityType: 'SALE', companyId: currentCompany.id, entityId: source.id,
       correctionType: isCredit ? 'SALES_CREDIT_NOTE' : 'SALES_DEBIT_NOTE',
       sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: number,
       reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote).trim()
-    });
-    correctionWorkflowInFlightRef.current = true;
+    }); } catch (auditError) { correctionWorkflowInFlightRef.current = false; throw auditError; }
     try {
       return await runAtomicInvoiceImport(async () => {
         const journal = addJournalEntry({
@@ -3068,7 +3068,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         await waitForPersistence();
         try {
           await recordCorrectionAudit({
-            eventType: 'accounting_correction_executed', entityType: 'SALE', entityId: source.id,
+            eventType: 'accounting_correction_executed', entityType: 'SALE', companyId: currentCompany.id, entityId: source.id,
             correctionType: isCredit ? 'SALES_CREDIT_NOTE' : 'SALES_DEBIT_NOTE',
             sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: number,
             reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote).trim(),
