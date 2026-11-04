@@ -2589,6 +2589,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     await persistenceConfirmation;
     const affectedVatVoucher = vatVouchers.find(voucher =>
       voucher.companyId === currentCompany.id && voucher.purchaseRecordId === purchase.id);
+    let fiscalIncidentError: unknown = null;
     if (affectedVatVoucher) {
       const affectedDeclaration = vatWithholdingDeclarations.find(declaration =>
         declaration.companyId === currentCompany.id && declaration.voucherIds.includes(affectedVatVoucher.id));
@@ -2603,7 +2604,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           detectedAt: request.returnDate
         });
       } catch (incidentError) {
-        throw new Error('La NC y sus efectos contables/Kardex quedaron confirmados en SQLite, pero no se pudo abrir el expediente fiscal automático. No repita la NC; cree la incidencia desde el Centro de Correcciones. ' + (incidentError instanceof Error ? incidentError.message : 'Error de expediente fiscal.'));
+        fiscalIncidentError = incidentError;
       }
     }
     try {
@@ -2617,6 +2618,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
     } catch (auditError) {
       throw new Error('La devolución y NC quedaron guardadas en SQLite, pero falta el evento final de auditoría. No repita la operación. Asiento: ' + journal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
+    }
+    if (fiscalIncidentError) {
+      throw new Error('La NC, su Kardex, el asiento y la auditoría de ejecución quedaron confirmados en SQLite, pero no se pudo abrir el expediente fiscal automático. No repita la NC; cree la incidencia desde el Centro de Correcciones. ' + (fiscalIncidentError instanceof Error ? fiscalIncidentError.message : 'Error de expediente fiscal.'));
     }
     return note;
       });
