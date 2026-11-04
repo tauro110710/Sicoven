@@ -94,3 +94,27 @@ El Código Orgánico Tributario publicado en Gaceta Oficial N° 6.507 Extraordin
 
 ## 8. Criterio de aceptación
 No declarar completa esta capacidad hasta que cada tipo documental con efecto contable tenga ruta especializada, la cadena pueda reconstruirse desde origen hasta documento/contra-asiento y evidencia fiscal, las pruebas de integridad/persistencia estén verdes y la normativa haya sido cotejada con fuentes primarias. Esta entrega abre la reversión desde la UI, pero no afirma que todos los flujos de corrección fiscal/documental estén terminados.
+
+## 8. Revisión adicional de seguridad de auxiliares — 04/11/2026
+
+### Hallazgo corregido
+- El auxiliar de cobros/pagos ya bloqueaba en la capa de dominio una factura marcada como reversada mediante `getCreditBalance`, pero los Libros de Ventas y Compras todavía mostraban el botón Cobrar/Pagar en esas filas.
+- Al abrir el modal, el cálculo de saldo podía lanzar el bloqueo durante el renderizado, generando una experiencia inconsistente.
+- Se ocultó la acción de liquidación para facturas reversadas en ambos libros. La restricción del dominio permanece como defensa adicional; no se reactivan cobros ni pagos sobre documentos reversados.
+- Cambios en `LibroVentasView.tsx` y `LibroComprasView.tsx`.
+
+### Límites confirmados en código
+- `addSale` rechaza expresamente documentos de venta tipo 02/03; el formulario no constituye una implementación de notas de débito/crédito aunque exponga el tipo documental en su estado local.
+- `addPurchase` también rechaza documentos de compra tipo 02/03.
+- La nota de crédito de proveedor implementada exige líneas de inventario y conciliación completa factura → Kardex → asiento; por tanto, no cubre compras de servicios sin inventario.
+- El preflight de reversión bloquea facturas de compra con notas de crédito hijas y evita la reversión genérica de una nota de crédito de proveedor.
+- No se debe habilitar un selector de NC/ND hasta que exista un flujo que cree documento fiscal correlativo, valide referencia original, calcule base/IVA/retenciones/IGTF, actualice CxC/CxP, gestione devolución o reintegro y contabilice en ambas monedas de forma atómica.
+
+### Pendientes que siguen siendo bloqueantes
+1. Notas de crédito y débito de ventas, incluyendo servicios, ventas a crédito/contado, cobros previos, devolución de inventario y efecto sobre IVA/IGTF.
+2. Notas de crédito de compras de servicios sin inventario, con tratamiento separado para CxP, pagos ya ejecutados, retenciones y eventuales saldos a favor del proveedor.
+3. Expediente de rectificación fiscal enlazado a declaraciones, comprobantes, enteramientos, acuses y pagos; un indicador `requiresFiscalCorrection` no equivale a rectificación presentada.
+4. Segregación de funciones y doble aprobación aplicada en backend/SQLite, no solo en la interfaz.
+5. Pruebas automatizadas de persistencia atómica, fallo SQLite, restauración y reportes sobre documentos reversados.
+
+**Estado:** la reversión general y los controles de cobro/pago sobre documentos reversados tienen avances implementados, pero las correcciones fiscales parciales y las notas de venta/servicios no están terminadas. No declarar la Fase 5 completa ni aptitud SENIAT por esta entrega.
