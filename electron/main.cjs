@@ -666,7 +666,7 @@ app.whenReady().then(async () => {
                 WHERE w.case_id=d.entity_id AND w.event_type='OBSERVED'),'')
     `).get(item.company_id,item.id).total;
     if (!verifiedCaseSupport) {
-      throw new Error('El expediente requiere al menos un soporte adjunto y verificado por un revisor antes de cerrar la ejecución.');
+      throw new Error('El expediente requiere al menos un soporte adjunto y verificado por el contador antes de cerrar la ejecución.');
     }
     return markCorrectionExecuted(db,{...input,evidenceRecordId:evidence.id,evidenceCollection:evidence.__evidenceCollection},actor);
   });
