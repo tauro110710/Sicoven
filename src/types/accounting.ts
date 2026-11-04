@@ -252,6 +252,8 @@ export interface PurchaseRecord {
   bcvRate: number;
   totalAmountUsd: number;
   taxableBaseUsd: number;
+  /** Equivalente USD histórico del monto exento, cuando el documento lo conserva. */
+  exemptAmountUsd?: number;
   vatAmountUsd: number;
   vatWithheldUsd: number;
   islrWithheldUsd?: number;
