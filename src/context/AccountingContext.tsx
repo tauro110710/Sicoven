@@ -4191,7 +4191,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const resetToSampleData = async (): Promise<void> => {
     assertSQLitePersistenceReady('Restablecer datos de muestra');
-    // Mantiene el comportamiento anterior del restablecimiento de datos de muestra.
+    // El ledger protege los asientos históricos contra borrado por snapshots normales.
+    // El reinicio debe pasar por la transacción autorizada de Electron que limpia app_state
+    // y conserva usuarios, sesiones, licencia e historial de auditoría.
+    const reset = await window.sicovenStore!.resetAccounting(token);
+    if (!reset?.ok || !reset.cleared || reset.verified !== true) {
+      throw new Error('SQLite no confirmó y verificó el restablecimiento de datos de muestra.');
+    }
     setCompanies([]);
     setCurrentCompanyId('');
     setAccounts(DEFAULT_CHART_OF_ACCOUNTS);
