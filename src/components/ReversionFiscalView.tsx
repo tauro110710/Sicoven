@@ -549,7 +549,7 @@ export const ReversionFiscalView: React.FC = () => {
       </section>
       <section className="rounded-2xl border border-indigo-200 bg-white p-4 sm:p-6 space-y-3">
         <h2 className="font-bold">Expedientes integrales · revisión segregada ({correctionCases.length})</h2>
-        <p className="text-xs text-slate-600">La corrección material (NC/ND, asiento, ajuste de Kardex, banco o rectificación fiscal) debe ejecutarse primero en su módulo especializado. Aquí se aprueba el expediente y se verifica la referencia persistida; solicitante, revisor y ejecutor deben ser tres administradores diferentes.</p>
+        <p className="text-xs text-slate-600">La corrección material de ventas/compras, asientos y movimientos de Kardex debe ejecutarse en su módulo especializado después de esta autorización. Los expedientes formales solo admiten esos cuatro tipos; banco, BCV y rectificativas fiscales aún no están integrados. Solicitante, revisor y ejecutor deben ser tres administradores diferentes.</p>
         {correctionCases.map(item=><article key={item.id} className="rounded-lg border p-3 space-y-2 text-xs">
           <strong>{item.correction_type} · {item.entity_type} #{item.entity_id} · {item.status}</strong>
           <p>Origen: {item.source_ref} · Correctivo: {item.correction_ref||'Por asignar'}</p><p>Etapa del expediente: {item.workflow_stage==='READY_FOR_EXECUTION' && item.execution_started_at ? 'Aprobado · ejecución iniciada' : ({IN_REVIEW:'En revisión',OBSERVATION_REQUIRED:'Observado · requiere subsanación',READY_FOR_EXECUTION:'Aprobado · listo para ejecución',CLOSED:'Cerrado sin ejecución',COMPLETED:'Ejecutado',WITHDRAWN:'Retirado por el solicitante'})[item.workflow_stage] || item.workflow_stage}</p><p>{item.reason}</p><p>{item.workpaper}</p>
