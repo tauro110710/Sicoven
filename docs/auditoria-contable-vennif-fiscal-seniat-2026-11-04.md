@@ -117,7 +117,7 @@ No se introduce todavía un cambio de esquema ni un asiento automático: el sigu
 La interfaz `Company` se encuentra en `src/types/accounting.ts`. El estado completo de contabilidad se serializa como JSON en `app_state.state_json` mediante `electron/accounting-persistence.cjs` dentro de una transacción SQLite; el guardado agrega evento `state_saved` a la bitácora. No se encontró una tabla relacional independiente de empresas en esta ruta. Por ello, agregar campos opcionales a `Company` es técnicamente compatible con el modelo de snapshot, pero aún exige revisar restauración de respaldos, importación/migración y consumidores que construyen empresas.
  
 ### 7.2 Flujos de alta y edición
-El alta se ejecuta en `src/components/CompanyModal.tsx` y llama `addCompany`; la edición se ejecuta en `src/components/Configuracion/ConfiguracionView.tsx` y llama `updateCompany`. Ambos formularios construyen/actualizan explícitamente las propiedades de empresa. Para no perder una futura selección normativa, se debe incluir el campo en ambos y mantenerlo en el spread de edición. No se modificó código en esta pasada.
+El alta se ejecuta en `src/components/CompanyModal.tsx` y llama `addCompany`; la edición se ejecuta en `src/components/Configuracion/ConfiguracionView.tsx` y llama `updateCompany`. Ambos formularios construyen/actualizan explícitamente las propiedades de empresa. Para no perder una futura selección normativa, se debe incluir el campo en ambos y mantenerlo en el spread de edición. En una pasada posterior se implementaron los tres campos opcionales y los formularios de alta/edición; ver sección 8.
 
 ### 7.3 Datos iniciales y restauración
 `src/data/initialData.ts` declara `INITIAL_COMPANIES = []` en la configuración limpia de producción. La persistencia lee el snapshot previo con `JSON.parse` y guarda el nuevo snapshot íntegro. Los campos opcionales ausentes en empresas antiguas deben seguir ausentes y nunca convertirse silenciosamente en GE o PYME. La restauración de respaldo debe preservar valores conocidos y no inferir el marco por el tipo tributario, tamaño, RIF o nombre.
@@ -131,3 +131,23 @@ El generador heredado `generateSeniatIslrXml` interpola directamente RIF, perío
 3. Añadir pruebas para alta, edición, cambio de empresa, persistencia SQLite, exportación/restauración de respaldo y compatibilidad de snapshots sin marco.
 4. Rastrear consumidores ISLR en el checkout de la rama; si se mantiene el generador heredado, hacer que valide período explícito y escape XML sin alterar el formato aprobado, con pruebas de regresión.
 5. Bloquear la emisión de estados identificados como conformes VEN-NIF cuando no exista marco/version seleccionados y evidencia de adopción; no bloquear el registro contable diario solo por falta de metadatos históricos.
+
+## 8. Implementación inicial de trazabilidad VEN-NIF (04-11-2026)
+
+### 8.1 Cambios aplicados en rama de trabajo
+- `Company` incorpora `accountingFramework?: 'VEN_NIF_GE' | 'VEN_NIF_PYME'`, `accountingFrameworkVersion?: string` y `accountingFrameworkAdoptionDate?: string`.
+- `CompanyModal` solicita marco, referencia normativa y fecha documentada al crear una empresa. No preselecciona GE/PYME ni inventa la versión.
+- `ConfiguracionView` permite registrar o editar los tres campos. Si se inicia la edición de la adopción, exige completar el conjunto; también permite dejarla pendiente en empresas históricas.
+- No se cambió `addCompany` ni `updateCompany`: ambos conservan propiedades por spread/estado; el snapshot SQLite serializa el objeto completo. No se cambió esquema SQL.
+- El respaldo de escritorio usa una copia consistente de SQLite y verifica integridad; como el metadato vive dentro del snapshot `state_json`, no requiere migración de tablas. Aun así falta una prueba de restauración de un respaldo real legado.
+- La PR #95 se abrió como borrador para activar CI: https://github.com/fenixlife1978/Sicoven/pull/95. No se ha fusionado ni desplegado.
+
+### 8.2 Límites de validación
+- La ejecución de GitHub Actions `41859134391` (`SICOVEN Windows installer`) está en curso. Al último chequeo solo habían terminado checkout; instalación de Node, tests, TypeScript, build y prueba de actualización seguían pendientes. No declarar CI aprobado.
+- No se han ejecutado localmente `npm test`, `npm run check:types` ni `npm run build` en esta sesión.
+- No se han agregado todavía pruebas específicas para creación/edición/restauración de metadatos VEN-NIF.
+- La metadata permite registrar una versión indicada por el usuario/contador; no certifica por sí misma que esa versión sea la aplicable al ejercicio. Se requiere catálogo normativo versionado y revisión profesional antes de habilitar la etiqueta de estados conformes.
+
+### 8.3 Hallazgo normativo fiscal: Providencia SNAT/2025/000054
+La Providencia SNAT/2025/000054 fue publicada en Gaceta Oficial 43.171 del 16-07-2025 y entró en vigor el 01-08-2025 según alertas legales profesionales. Deroga la SNAT/2015/0049. Amplía el artículo 1 a personas naturales calificadas y notificadas como sujetos pasivos especiales que estén constituidas como firma personal; conserva retención general del 75%, supuestos de retención del 100%, oportunidad al pago o abono en cuenta (lo primero), declaración incluso sin operaciones y comprobante de 14 caracteres AAAAMMSSSSSSSS. El código ya incluye campos para firma personal, condición de agente y fecha del evento fiscal; debe contrastarse cada excepción con el texto íntegro de la Gaceta y comprobar la vigencia de la norma antes de cambiar reglas.
+Fuentes consultadas: IVECOFI con transcripción de la providencia (fuente secundaria) y alertas de Grant Thornton/Baker McKenzie; no se halló todavía una URL primaria SENIAT estable con el texto oficial.
