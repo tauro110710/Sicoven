@@ -22,7 +22,7 @@ import {
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 import { prepareAccountForCatalog } from '../types/chartOfAccounts';
 import { validateJournalEntryAccounts, isJournalEntryBalanced } from '../types/journalEntryValidation';
-import { matchesBankStatementLine, validateBankMovementFxSnapshot } from '../types/bankStatementMatching';
+import { matchesBankStatementLine, matchesBankStatementDualCurrency, validateBankMovementFxSnapshot } from '../types/bankStatementMatching';
 import { buildOpeningEntryItems } from '../types/accountingYearOpening';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
 import {
@@ -3798,23 +3798,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       );
       if (alreadyUsed) throw new Error('Ese asiento ya está vinculado a otro movimiento conciliado de esta cuenta bancaria.');
 
-      const isUsdAccount = statementBank.currency === 'USD';
-      const expectedAmount = isUsdAccount ? statement.amountUsd : statement.amountBs;
       if (linkedEntry.date !== statement.date) {
         throw new Error('El asiento seleccionado debe tener la misma fecha del movimiento del extracto bancario.');
       }
-      const hasExactBankLine = linkedEntry.items.some(item => {
-        if (item.accountCode !== statementBank.accountCode) return false;
-        const debit = isUsdAccount ? Number(item.debitUsd) : Number(item.debitBs);
-        const credit = isUsdAccount ? Number(item.creditUsd) : Number(item.creditBs);
-        return matchesBankStatementLine({
-          currency: statementBank.currency,
+      const hasExactBankLine = linkedEntry.items.some(item =>
+        item.accountCode === statementBank.accountCode && matchesBankStatementDualCurrency({
           movementType: statement.type,
-          statementAmount: Number(expectedAmount),
-          debit,
-          credit
-        });
-      });
+          amountBs: Number(statement.amountBs),
+          amountUsd: Number(statement.amountUsd),
+          debitBs: Number(item.debitBs),
+          creditBs: Number(item.creditBs),
+          debitUsd: Number(item.debitUsd),
+          creditUsd: Number(item.creditUsd)
+        })
+      );
       if (!hasExactBankLine) {
         throw new Error('El asiento no coincide con la cuenta, el importe y la naturaleza débito/crédito del movimiento bancario.');
       }
@@ -3891,21 +3888,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const updates = new Map<string, BankStatementMovement>();
     const matchedRefs: string[] = [];
     const now = new Date().toISOString();
-    const isUsdAccount = targetAccount.currency === 'USD';
     const matchesAmountAndNature = (stmt: BankStatementMovement, entry: JournalEntry) =>
-      entry.date === stmt.date && entry.items.some(item => {
-        if (item.accountCode !== bankCode) return false;
-        const amount = isUsdAccount ? stmt.amountUsd : stmt.amountBs;
-        const debit = isUsdAccount ? item.debitUsd : item.debitBs;
-        const credit = isUsdAccount ? item.creditUsd : item.creditBs;
-        return matchesBankStatementLine({
-          currency: targetAccount.currency,
+      entry.date === stmt.date && entry.items.some(item =>
+        item.accountCode === bankCode && matchesBankStatementDualCurrency({
           movementType: stmt.type,
-          statementAmount: Number(amount),
-          debit: Number(debit),
-          credit: Number(credit)
-        });
-      });
+          amountBs: Number(stmt.amountBs),
+          amountUsd: Number(stmt.amountUsd),
+          debitBs: Number(item.debitBs),
+          creditBs: Number(item.creditBs),
+          debitUsd: Number(item.debitUsd),
+          creditUsd: Number(item.creditUsd)
+        })
+      );
 
     for (const stmt of statementRows) {
       if (stmt.isReconciled) continue;
