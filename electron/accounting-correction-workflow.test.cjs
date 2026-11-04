@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
-const {initializeCorrectionWorkflow,registerCorrectionRequest,reviewCorrectionRequest,markCorrectionExecuted,observeCorrectionRequest,resubmitCorrectionRequest,getCorrectionCase,listCorrectionCases,findLinkedCorrectionEvidence}=require('./accounting-correction-workflow.cjs');
+const {initializeCorrectionWorkflow,registerCorrectionRequest,reviewCorrectionRequest,markCorrectionExecuted,observeCorrectionRequest,resubmitCorrectionRequest,withdrawCorrectionRequest,getCorrectionCase,listCorrectionCases,findLinkedCorrectionEvidence}=require('./accounting-correction-workflow.cjs');
 function setup(){const db=new Database(':memory:');db.exec('CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime(\'now\')));');initializeCorrectionWorkflow(db);return db;}
 const input={companyId:'co-1',entityType:'SALE',entityId:'sale-1',correctionType:'ANULACION',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001',reason:'Se detectó una duplicidad documental que debe corregirse.',workpaperNote:'Conciliación con libro de ventas, comprobante fiscal y asiento relacionado.'};
 const admin=(id,username)=>({id,username,role:'admin'});
@@ -216,5 +216,29 @@ test('legacy correction cases migrate to workflow stages without changing their 
   assert.deepEqual(rows.map(row=>[row.status,row.workflow_stage]),[
    ['PENDING_REVIEW','IN_REVIEW'],['APPROVED','READY_FOR_EXECUTION'],['REJECTED','CLOSED'],['EXECUTED','COMPLETED']
   ]);
+ }finally{db.close();}
+});
+
+test('requester can withdraw an unexecuted case and withdrawal is terminal and auditable',()=>{
+ const db=setup();try{
+  const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
+  assert.throws(()=>withdrawCorrectionRequest(db,{caseId:requested.id,reason:'Se decide retirar la solicitud por cambio de criterio.'},admin(2,'otro')),/solicitante original/);
+  const withdrawn=withdrawCorrectionRequest(db,{caseId:requested.id,reason:'Se decide retirar la solicitud por cambio de criterio.'},admin(1,'solicitante'));
+  assert.equal(withdrawn.workflow_stage,'WITHDRAWN');
+  assert.equal(withdrawn.status,'PENDING_REVIEW');
+  assert.equal(withdrawn.events.at(-1).event_type,'WITHDRAWN');
+  assert.throws(()=>reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Se revisa la solicitud retirada por el usuario.'},admin(2,'revisor')),/ya fue revisado|no está en revisión/);
+  assert.throws(()=>resubmitCorrectionRequest(db,{caseId:requested.id,reason:'Se desea volver a enviar la solicitud retirada.'},admin(1,'solicitante')),/no tiene observaciones pendientes/);
+  assert.throws(()=>withdrawCorrectionRequest(db,{caseId:requested.id,reason:'Se intenta retirar una segunda vez.'},admin(1,'solicitante')),/cerrado, ejecutado o retirado/);
+ }finally{db.close();}
+});
+test('requester may withdraw an approved case before any execution',()=>{
+ const db=setup();try{
+  const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
+  reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Se verificó la solicitud y sus documentos fuente.'},admin(2,'revisor'));
+  const withdrawn=withdrawCorrectionRequest(db,{caseId:requested.id,reason:'La empresa decide no continuar con esta corrección.'},admin(1,'solicitante'));
+  assert.equal(withdrawn.workflow_stage,'WITHDRAWN');
+  assert.equal(withdrawn.status,'PENDING_REVIEW');
+  assert.equal(withdrawn.events.map(e=>e.event_type).join(','),'REQUESTED,APPROVED,WITHDRAWN');
  }finally{db.close();}
 });
