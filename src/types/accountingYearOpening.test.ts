@@ -131,6 +131,31 @@ test('uses the latest linked annual opening as the balance carry-forward boundar
   assert.equal(items.find(item => item.accountCode === '3.1.1')?.creditUsd, 1.3);
 });
 
+test('preserva el saldo de apertura al preparar un cierre anterior a una reversión futura', () => {
+  const opening = entry('opening-2026', '2026-01-01', [
+    line('1.1.1', 150, 0, 1.5, 0), line('3.1.1', 0, 150, 0, 1.5)
+  ]);
+  opening.type = 'APERTURA';
+  opening.exerciseLink = {
+    priorPeriodStartDate: '2025-01-01', priorPeriodEndDate: '2025-12-31', nextPeriodStartDate: '2026-01-01'
+  };
+  const currentExpense = entry('expense-2026', '2026-06-01', [
+    line('6.1.1', 20, 0, 0.2, 0), line('1.1.1', 0, 20, 0, 0.2)
+  ]);
+  const futureReversal = entry('reversal-2027', '2027-02-01', [
+    line('3.1.1', 150, 0, 1.5, 0), line('1.1.1', 0, 150, 0, 1.5)
+  ]);
+  futureReversal.reversalOfEntryId = opening.id;
+  opening.reversedByEntryId = futureReversal.id;
+  const items = buildOpeningEntryItems({
+    companyId: 'co-1', periodStartDate: '2026-01-01', periodEndDate: '2026-12-31',
+    openingDate: '2027-01-01', accounts, journalEntries: [opening, currentExpense, futureReversal],
+    retainedEarningsAccountCode: '3.1.1'
+  });
+  assert.equal(items.find(item => item.accountCode === '1.1.1')?.debitBs, 130);
+  assert.equal(items.find(item => item.accountCode === '1.1.1')?.debitUsd, 1.3);
+});
+
 test('no vuelve a trasladar ingresos y gastos de ejercicios anteriores al resultado del nuevo período', () => {
   const journal = [
     entry('prior-income', '2025-12-30', [
