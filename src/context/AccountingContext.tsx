@@ -22,7 +22,7 @@ import {
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 import { prepareAccountForCatalog } from '../types/chartOfAccounts';
 import { validateJournalEntryAccounts, isJournalEntryBalanced } from '../types/journalEntryValidation';
-import { matchesBankStatementLine, matchesBankStatementDualCurrency, validateBankMovementFxSnapshot } from '../types/bankStatementMatching';
+import { matchesBankStatementDualCurrency, validateBankMovementFxSnapshot } from '../types/bankStatementMatching';
 import { buildOpeningEntryItems } from '../types/accountingYearOpening';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
 import {
