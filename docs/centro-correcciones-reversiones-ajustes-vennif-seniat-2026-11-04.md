@@ -140,3 +140,18 @@ No declarar completa esta capacidad hasta que cada tipo documental con efecto co
 - Antes, la condición permitía continuar si `window.sicovenStore` no existía; ese comportamiento no es aceptable para el producto de escritorio y podía aceptar cambios sin el almacén local.
 - La guarda se ejecuta antes de validar o mutar documentos y bloquea explícitamente si la instancia SQLite de escritorio no está lista.
 - Este cambio no acredita todavía atomicidad de toda la operación ni reemplaza pruebas de integración del puente Electron/SQLite. Deben verificarse rollback ante fallo intermedio, persistencia de documento+asiento+auxiliares y restauración de backup en una instalación de escritorio.
+
+
+
+### Confirmación de persistencia en formularios — revisión posterior a la fusión
+
+- Se comprobó que el proceso de guardado de escritorio no persiste documento, asiento y auxiliares en escrituras SQLite separadas: `persistAccountingSnapshot` valida el snapshot completo y escribe el estado contable y sus eventos de auditoría dentro de una única transacción `better-sqlite3`. Si falla la validación o una inserción de auditoría, la transacción revierte también la actualización de `app_state`.
+- `electron/accounting-integrity.test.cjs` ya contiene una prueba de integración que provoca deliberadamente un fallo de auditoría, comprueba que el snapshot anterior permanece intacto, luego guarda correctamente y reabre el archivo SQLite para verificar la nota de crédito, Kardex, asiento y correcciones de retención enlazadas. La prueba está en el repositorio; no se declara ejecutada en esta sesión.
+- Se detectó una brecha de interfaz: los formularios de compra, venta y asiento manual cerraban inmediatamente después de actualizar el estado React, sin esperar la respuesta de SQLite. Ahora esperan `waitForPersistence()` antes de cerrar y muestran el estado “Confirmando SQLite...”; también bloquean el doble envío y el cierre manual mientras la confirmación está pendiente.
+- El alta de asientos manuales ahora exige el puente `window.sicovenStore.save`, `storageReady` y ausencia de fallo previo, igual que las operaciones de factura y devolución.
+- Si SQLite rechaza un snapshot, el proveedor marca la persistencia como fallida y bloquea nuevas escrituras. El estado visual en memoria no se revierte automáticamente después de un fallo asíncrono; se requiere reiniciar SICOVEN para volver a hidratar el último snapshot confirmado. Esto evita seguir operando con datos no confirmados, pero sigue siendo un punto de mejora de experiencia y recuperación.
+- La atomicidad demostrada es la del snapshot completo y su ledger de auditoría en una transacción SQLite. No equivale todavía a una transacción por tablas relacionales independientes, ni demuestra concurrencia real de dos operaciones de negocio simultáneas.
+- Se añadió un cerrojo compartido en el proveedor para impedir que una nota de crédito de proveedor, una nota de débito de proveedor y una reversión genérica se ejecuten concurrentemente. El bloqueo se mantiene hasta que la promesa de persistencia SQLite finaliza y se libera en `finally`, incluso cuando la operación falla.
+- Este cerrojo evita carreras entre esos tres circuitos de corrección; no sustituye una prueba de estrés de concurrencia del proceso Electron ni bloquea todas las demás operaciones contables ordinarias.
+
+- Se reforzó la prueba de rollback SQLite: ahora el trigger simulado falla en la inserción final `state_saved`, que ocurre después del `UPSERT` de `app_state`. La expectativa es que la transacción revierta tanto el snapshot ya actualizado como los eventos de auditoría insertados previamente. Prueba incorporada; ejecución pendiente.
