@@ -16,7 +16,7 @@ const banks: BankAccount[] = [
 ];
 const movement = (id: string, bankAccountId: string, amountBs: number, amountUsd: number): BankStatementMovement => ({
   id, companyId: 'c1', bankAccountId, date: '2026-10-20', reference: id, description: 'Enteramiento SENIAT',
-  type: 'DEBIT', amountBs, amountUsd, bcvRate: amountBs / amountUsd, bcvRateEffectiveDate: '2026-10-20', isReconciled: false
+  type: 'DEBIT', amountBs, amountUsd, bcvRate: amountUsd > 0 ? amountBs / amountUsd : 250, bcvRateEffectiveDate: '2026-10-20', isReconciled: false
 });
 
 const declaration = (usd = 1, bs = 100): VatWithholdingDeclaration => ({
@@ -33,7 +33,7 @@ const build=(amountBs:number,bankUsd:number,d=declaration(),priorPaidBs=0,moves=
 test('rejects bank movement USD equivalents inconsistent with the stored BCV rate',()=>{ assert.throws(()=>build(100,1,declaration(),0,[{...movement('m1','b1',100,1),bcvRate:250}]),/no concilia en Bs. y USD/); });
 test('rejects bank payment movements without a BCV snapshot effective on the payment date',()=>{ assert.throws(()=>build(100,1,declaration(),0,[{...movement('m1','b1',100,1),bcvRateEffectiveDate:'2026-10-19'}]),/misma fecha del enteramiento/); });
 test('rejects bank movements dated differently from the VAT payment',()=>{ assert.throws(()=>build(100,1,declaration(),0,[{...movement('m1','b1',100,1),date:'2026-10-19'}]),/misma fecha del enteramiento/); });
-test('rejects mixed historical BCV rates in one VAT payment',()=>{ assert.throws(()=>build(100,1,declaration(),0,[movement('m1','b1',50,0.5),{...movement('m2','b2',50,0.5),bcvRate:251}]),/tasas BCV históricas distintas/); });
+test('rejects mixed historical BCV rates in one VAT payment',()=>{ assert.throws(()=>build(100,1,declaration(),0,[movement('m1','b1',50,0.5),{...movement('m2','b2',50,50/251),bcvRate:251}]),/tasas BCV históricas distintas/); });
 test('uses the historical BCV snapshot stored on the selected bank movement',()=>{ const p=build(100,0.9); assert.equal(p.bcvRate,100 / 0.9); });
 test('cancels liability at historical USD carrying value',()=>{
  const p=build(100,1);assert.equal(p.liabilityUsd,1);assert.equal(p.fxDifferenceUsd,0);
