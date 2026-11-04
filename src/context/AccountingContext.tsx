@@ -154,6 +154,7 @@ interface AccountingContextType {
   islrFiscalEvents: IslrFiscalEvent[];
   deleteVatVoucher: (id: string) => void;
   recordVatVoucherDelivery: (id: string, draft: { deliveryDate: string; deliveryMethod: 'PHYSICAL' | 'ELECTRONIC'; electronicDeliveryAgreed?: boolean }) => Promise<VatRetentionVoucher>;
+  recordIslrVoucherDelivery: (id: string, draft: { deliveryDate: string; deliveryMethod: 'PHYSICAL' | 'ELECTRONIC'; electronicDeliveryAgreed?: boolean }) => Promise<IslrRetentionVoucher>;
   deleteIslrVoucher: (id: string) => void;
 
   // Conciliación Bancaria
@@ -1981,6 +1982,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         supplierRif: purchaseData.supplierRif,
         supplierName: purchaseData.supplierName,
         supplierAddress: purchaseData.supplierAddress || 'Venezuela',
+        supplierEmailSnapshot: purchaseData.supplierEmail?.trim() || undefined,
         purchaseRecordId: purchaseId,
         invoiceDate: purchaseData.invoiceDate,
         invoiceNumber: purchaseData.invoiceNumber,
@@ -2017,6 +2019,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         supplierRif: purchaseData.supplierRif,
         supplierName: purchaseData.supplierName,
         supplierAddress: purchaseData.supplierAddress || 'Venezuela',
+        supplierEmailSnapshot: purchaseData.supplierEmail?.trim() || undefined,
+        agentNameSnapshot: currentCompany.name,
+        agentRifSnapshot: currentCompany.rif,
+        agentAddressSnapshot: currentCompany.address,
         isPersonNatural: purchaseData.islrBeneficiaryType === 'PN',
         isResident: purchaseData.islrResidency === 'RESIDENT' || purchaseData.islrResidency === 'DOMICILED',
         conceptCode: purchaseData.islrConceptCode as string,
@@ -3581,6 +3587,39 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (typeof window !== 'undefined') window.alert('El comprobante de retención de IVA es un soporte fiscal histórico y no puede eliminarse. Registre la corrección mediante el procedimiento fiscal correspondiente.');
   };
 
+  const recordIslrVoucherDelivery = async (
+    id: string,
+    draft: { deliveryDate: string; deliveryMethod: 'PHYSICAL' | 'ELECTRONIC'; electronicDeliveryAgreed?: boolean }
+  ): Promise<IslrRetentionVoucher> => {
+    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
+      throw new Error('SQLite no está disponible o todavía no está lista. No se registró la entrega.');
+    }
+    const voucher = islrVouchers.find(item => item.id === id && item.companyId === currentCompany.id);
+    if (!voucher) throw new Error('No se encontró el comprobante ISLR de la empresa activa.');
+    if (voucher.deliveryDate || voucher.deliveryMethod) {
+      throw new Error('La entrega de este comprobante ya fue registrada y no puede sobrescribirse.');
+    }
+    if (!isValidIsoDate(draft.deliveryDate) || draft.deliveryDate < voucher.date) {
+      throw new Error('La fecha de entrega debe ser válida y no puede ser anterior a la emisión del comprobante.');
+    }
+    if (draft.deliveryMethod !== 'PHYSICAL' && draft.deliveryMethod !== 'ELECTRONIC') {
+      throw new Error('Seleccione un medio de entrega válido.');
+    }
+    if (draft.deliveryMethod === 'ELECTRONIC' && draft.electronicDeliveryAgreed !== true) {
+      throw new Error('La entrega electrónica requiere acuerdo previo con el proveedor.');
+    }
+    const updated: IslrRetentionVoucher = {
+      ...voucher,
+      deliveryDate: draft.deliveryDate,
+      deliveryMethod: draft.deliveryMethod,
+      ...(draft.deliveryMethod === 'ELECTRONIC' ? { electronicDeliveryAgreed: true } : {})
+    };
+    const confirmation = waitForPersistence();
+    setIslrVouchers(prev => prev.map(item => item.id === id ? updated : item));
+    await confirmation;
+    return updated;
+  };
+
   const deleteIslrVoucher = (id: string) => {
     const voucher = islrVouchers.find(item => item.id === id && item.companyId === currentCompany.id);
     if (!voucher) return;
@@ -4566,6 +4605,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         saveFinancialDisclosure,
         deleteVatVoucher,
         recordVatVoucherDelivery,
+        recordIslrVoucherDelivery,
         deleteIslrVoucher,
         bankAccounts: bankAccounts.filter(b => b.companyId === currentCompany.id),
         bankStatementMovements: bankStatementMovements.filter(m => m.companyId === currentCompany.id),
