@@ -12,6 +12,8 @@ export interface SaleCorrectionNoteRequest {
   taxableBaseBs: number;
   exemptAmountBs: number;
   bcvRate: number;
+  fiscalEmissionMedium: 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY';
+  sameMediumAsOriginal: boolean;
   priorCreditNotes: SaleRecord[];
   closedThroughDate?: string;
 }
@@ -57,6 +59,9 @@ export function calculateSaleCorrectionNote(request: SaleCorrectionNoteRequest):
   }
   if (request.closedThroughDate && request.noteDate <= request.closedThroughDate) {
     throw new Error('La fecha de la nota pertenece a un período contable cerrado.');
+  }
+  if (!['DIGITAL', 'FISCAL_MACHINE', 'CONTINGENCY'].includes(request.fiscalEmissionMedium) || request.sameMediumAsOriginal !== true) {
+    throw new Error('La nota debe emitirse por el mismo medio de la factura original y esa condición debe confirmarse expresamente.');
   }
   if (!normalize(request.noteNumber) || !normalize(request.controlNumber) ||
       String(request.reason || '').trim().length < 10 ||
