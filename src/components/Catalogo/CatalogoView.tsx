@@ -229,7 +229,8 @@ export const CatalogoView: React.FC = () => {
               <h3 className="font-semibold text-base">Crear Cuenta Contable</h3>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white transition cursor-pointer"
+                disabled={saving}
+                className="p-1 rounded-lg text-slate-400 hover:text-white transition cursor-pointer disabled:opacity-40"
               >
                 <X className="w-5 h-5" />
               </button>
