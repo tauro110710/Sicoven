@@ -9,16 +9,26 @@ const micros = (n: number) => Math.round((n + Number.EPSILON) * 1000000) / 10000
 
 /** Cancela el pasivo a su costo histórico USD y reconoce la diferencia cambiaria realizada. */
 export function buildVatPaymentAccountingPlan(input: {
-  occurredAt: string; amountBs: number; priorPaidBs: number; bcvRate: number; bcvRateEffectiveDate: string; declaration: VatWithholdingDeclaration;
+  occurredAt: string; amountBs: number; priorPaidBs: number; declaration: VatWithholdingDeclaration;
   movements: BankStatementMovement[]; bankAccounts: BankAccount[]; accounts: Account[];
 }): VatPaymentAccountingPlan {
   const date = String(input.occurredAt || '').slice(0, 10);
   if (!isValidIsoDate(date)) throw new Error('La fecha del enteramiento no es válida para el asiento contable.');
   if (!input.movements.length) throw new Error('El enteramiento requiere débitos bancarios vinculados.');
   const d = input.declaration;
-  const bcvRate = Number(input.bcvRate);
-  if (!Number.isFinite(bcvRate) || bcvRate <= 0) throw new Error('La tasa BCV vigente en la fecha del enteramiento debe ser mayor que cero.');
-  if (input.bcvRateEffectiveDate !== date) throw new Error('La tasa BCV debe estar confirmada para la misma fecha del enteramiento. Actualice o registre la tasa histórica antes de contabilizar.');
+  const movementRates = input.movements.map(movement => Number(movement.bcvRate));
+  if (input.movements.some(movement =>
+    movement.date !== date ||
+    movement.bcvRateEffectiveDate !== date ||
+    !Number.isFinite(Number(movement.bcvRate)) ||
+    Number(movement.bcvRate) <= 0
+  )) {
+    throw new Error('Cada débito bancario debe conservar la tasa BCV histórica válida de la misma fecha del enteramiento.');
+  }
+  const bcvRate = movementRates[0];
+  if (movementRates.some(rate => Math.abs(rate - bcvRate) > 0.000001)) {
+    throw new Error('Los débitos bancarios seleccionados tienen tasas BCV históricas distintas; sepárelos por fecha o corrija sus soportes.');
+  }
   if (!Number.isFinite(d.totalWithheldUsd) || Number(d.totalWithheldUsd) <= 0 || d.totalWithheldBs <= 0 ||
       d.voucherSnapshots.some(v => !Number.isFinite(v.vatWithheldUsd) || Number(v.vatWithheldUsd) < 0 || !Number.isFinite(v.bcvRate) || Number(v.bcvRate) <= 0)) {
     throw new Error('La declaración no conserva la base USD histórica completa del pasivo; requiere revisión y no admite contabilización automática.');
