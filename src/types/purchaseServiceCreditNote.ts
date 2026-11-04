@@ -11,6 +11,8 @@ export interface PurchaseServiceCreditNoteRequest {
   taxableBaseBs: number;
   exemptAmountBs: number;
   bcvRate: number;
+  fiscalEmissionMedium: 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY';
+  sameMediumAsOriginal: boolean;
   priorCreditNotes: PurchaseRecord[];
   closedThroughDate?: string;
 }
@@ -51,6 +53,9 @@ export function calculatePurchaseServiceCreditNote(request: PurchaseServiceCredi
   }
   if (request.closedThroughDate && request.noteDate <= request.closedThroughDate) {
     throw new Error('La fecha de la NC pertenece a un período contable cerrado.');
+  }
+  if (!['DIGITAL', 'FISCAL_MACHINE', 'CONTINGENCY'].includes(request.fiscalEmissionMedium) || request.sameMediumAsOriginal !== true) {
+    throw new Error('La NC debe registrarse por el mismo medio de emisión de la factura original y esa condición debe confirmarse expresamente.');
   }
   if (!String(request.creditNoteNumber || '').trim() || !String(request.controlNumber || '').trim() ||
       String(request.reason || '').trim().length < 10 || String(request.workpaperNote || '').trim().length < 10) {
