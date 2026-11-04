@@ -424,19 +424,19 @@ test('IVA TXT covers reduced rate with 75% retention and general rate with 100% 
 
 test('IVA TXT rounds exported monetary amounts to integers without mutating source vouchers', () => {
   const sourceVoucher = ivaVoucher({
-    totalAmountBs: 1160.49,
+    totalAmountBs: 1161.07,
     taxableBaseBs: 1000.5,
     vatAmountBs: 160.08,
-    vatWithheldBs: 120.5,
+    vatWithheldBs: 120.06,
     exemptAmountBs: 0.49
   });
   // Las validaciones y cálculos fiscales conservan precisión decimal;
   // únicamente la representación del archivo se redondea a enteros.
   const fields = generateSeniatIvaTxt(company, [sourceVoucher], [purchase()]).split('\\t');
-  assert.deepEqual([fields[8], fields[9], fields[10], fields[13], fields[14]], ['1160', '1001', '121', '0', '16']);
-  assert.equal(sourceVoucher.totalAmountBs, 1160.49);
+  assert.deepEqual([fields[8], fields[9], fields[10], fields[13], fields[14]], ['1161', '1001', '120', '0', '16']);
+  assert.equal(sourceVoucher.totalAmountBs, 1161.07);
   assert.equal(sourceVoucher.taxableBaseBs, 1000.5);
-  assert.equal(sourceVoucher.vatWithheldBs, 120.5);
+  assert.equal(sourceVoucher.vatWithheldBs, 120.06);
   assert.ok(fields.every(value => !/\\d+\\.\\d+/.test(value)));
 });
 
