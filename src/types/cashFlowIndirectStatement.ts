@@ -63,8 +63,10 @@ const round = (value: number, places: number) => {
   const factor = 10 ** places;
   return Math.round((value + Number.EPSILON) * factor) / factor;
 };
+const isLinkedAnnualOpening = (entry: JournalEntry) =>
+  entry.type === 'APERTURA' && entry.exerciseLink?.nextPeriodStartDate === entry.date;
 const isOpening = (entry: JournalEntry, year: number) =>
-  entry.type === 'APERTURA' && entry.exerciseLink?.nextPeriodStartDate?.slice(0, 4) === String(year);
+  isLinkedAnnualOpening(entry) && entry.exerciseLink?.nextPeriodStartDate?.slice(0, 4) === String(year);
 const isExcludedFromIncome = (entry: JournalEntry) => entry.type === 'APERTURA' || entry.type === 'CIERRE';
 const balanceMovement = (entry: JournalEntry, code: string, normal: 'DEBIT' | 'CREDIT') =>
   entry.items.filter(item => item.accountCode === code).reduce((sum, item) => ({
@@ -107,14 +109,19 @@ export function buildCashFlowIndirectReport(
   const companyEntries = entries.filter(entry =>
     entry.companyId === companyId && /^\d{4}-\d{2}-\d{2}$/.test(entry.date) && entry.date <= end
   );
-  const annualOpening = companyEntries.filter(entry => isOpening(entry, year)).sort((a, b) =>
-    a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber
-  ).at(-1);
+  // Carry forward from the latest linked annual opening at or before the
+  // selected year's start, including movements posted after that opening.
+  const openingBoundary = companyEntries.filter(entry =>
+    isLinkedAnnualOpening(entry) && entry.date <= start
+  ).sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber).at(-1);
   const priorEntries = companyEntries.filter(entry => entry.date < start);
+  const openingBasis = openingBoundary
+    ? [openingBoundary, ...companyEntries.filter(entry =>
+        entry.date > openingBoundary.date && entry.date < start)]
+    : priorEntries;
   const periodEntries = companyEntries.filter(entry =>
     entry.date >= start && entry.date <= end && !isExcludedFromIncome(entry)
   );
-  const openingBasis = annualOpening ? [annualOpening] : priorEntries;
   const accountRows: CashFlowIndirectAdjustment[] = [];
   let netIncomeBs = 0;
   let netIncomeUsd = 0;
