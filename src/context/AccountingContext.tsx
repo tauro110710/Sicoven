@@ -81,6 +81,7 @@ interface AccountingContextType {
   getAuditEvents: (limit?: number) => Promise<AccountingAuditEvent[]>;
   requestAccountingCorrection: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'INVENTORY_PRODUCT'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason: string; workpaperNote: string }) => Promise<void>;
   createCorrectionCase: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'ISLR_EVENT'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason: string; workpaperNote: string }) => Promise<CorrectionCase>;
+  authorizeCorrectionCase: (input: { entityType: string; entityId: string; sourceDocumentRef: string; correctionDocumentRef: string }) => Promise<void>;
   listCorrectionCases: () => Promise<CorrectionCase[]>;
   reviewCorrectionCase: (input: { caseId: string; decision: 'APPROVE' | 'REJECT'; reason: string }) => Promise<CorrectionCase>;
   observeCorrectionCase: (input: { caseId: string; reason: string }) => Promise<CorrectionCase>;
@@ -449,6 +450,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       companyId:currentCompany.id,entityType,entityId,sourceDocumentRef,correctionDocumentRef
     });
     if (!result?.ok) throw new Error(result?.message || 'No existe autorización formal aprobada para esta corrección.');
+  };
+  const authorizeCorrectionCase = async (input: {entityType:string;entityId:string;sourceDocumentRef:string;correctionDocumentRef:string}): Promise<void> => {
+    await requireApprovedCorrectionCase(input.entityType,input.entityId,input.sourceDocumentRef,input.correctionDocumentRef);
   };
   const createCorrectionCase = async (input: {entityType:string;entityId:string;correctionType:string;sourceDocumentRef:string;correctionDocumentRef:string;reason:string;workpaperNote:string}): Promise<CorrectionCase> => {
     const store = window.sicovenStore as typeof window.sicovenStore & { createCorrectionCase?: (sessionToken:string,payload:Record<string,string>)=>Promise<CorrectionCase> };
@@ -5305,6 +5309,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         getAuditEvents,
         requestAccountingCorrection,
         createCorrectionCase,
+        authorizeCorrectionCase,
         listCorrectionCases,
         reviewCorrectionCase,
         observeCorrectionCase,
