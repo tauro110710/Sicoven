@@ -84,6 +84,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const [selectedId, setSelectedId] = useState('');
+  const [executionAssistantOpen, setExecutionAssistantOpen] = useState(!isAccountant);
   const [effectiveDate, setEffectiveDate] = useState(today);
   const [reason, setReason] = useState('');
   const [retainedEarningsCode, setRetainedEarningsCode] = useState('');
@@ -149,6 +150,11 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   const [correctionCases, setCorrectionCases] = useState<import('../context/AccountingContext').CorrectionCase[]>([]);
   const refreshCorrectionCases = useCallback(async () => { try { setCorrectionCases(await listCorrectionCases()); } catch (error) { setFeedback({kind:'error',message:error instanceof Error?error.message:'No se pudo consultar el historial de correcciones.'}); } },[listCorrectionCases]);
   useEffect(() => { void refreshCorrectionCases(); },[refreshCorrectionCases]);
+  useEffect(() => {
+    if (isAccountant && executionAssistantOpen) {
+      document.getElementById('correction-execution-assistant')?.scrollIntoView({behavior:'smooth',block:'start'});
+    }
+  },[isAccountant,executionAssistantOpen,selectedId]);
   const refreshAuditEvents = useCallback(async () => {
     setAuditLoading(true);
     try {
@@ -289,7 +295,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
     setSelectedId(selectedCorrectionJournalId);
     setEffectiveDate(today);
     setReason(requestReason);
-    document.getElementById('correction-execution-assistant')?.scrollIntoView({behavior:'smooth',block:'start'});
+    setExecutionAssistantOpen(true);
   };
 
   const submitDirectCorrection = async () => {
@@ -738,6 +744,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
       {isAccountant && <>
       <section className="rounded-2xl border border-indigo-200 bg-white p-4 sm:p-6 space-y-4">
         <div className="flex items-center gap-3"><ShieldCheck className="h-6 w-6 text-indigo-700"/><div><h2 className="font-bold text-slate-900">Centro de Correcciones</h2><p className="text-xs text-slate-500">Busque el asiento o documento original y ejecute aquí la corrección compatible. No se crea una solicitud ni un expediente previo.</p></div></div>
+        {feedback && <div role="status" className={`rounded-lg border p-3 text-sm ${feedback.kind === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-800'}`}>{feedback.message}</div>}
         <label className="block text-xs font-semibold text-slate-700">Buscar asiento, venta, compra, Kardex, banco o auxiliar
           <input value={requestSearch} onChange={e=>setRequestSearch(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal" placeholder="Factura, asiento, banco, cobro, pago, proveedor, cliente o artículo…"/>
         </label>
@@ -936,13 +943,14 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
         </article>)}
       </section>
       </>}
-      <section id="correction-execution-assistant" className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
+      {executionAssistantOpen && <section id="correction-execution-assistant" className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
         <div className="bg-slate-900 text-white px-5 py-4 flex items-center gap-3">
           <Undo2 className="h-6 w-6 text-emerald-300" />
           <div>
             <h1 className="text-lg font-bold">Ejecución de correcciones con efectos cruzados</h1>
             <p className="text-sm text-slate-300">Inmutabilidad del Libro Diario · validación de efectos cruzados</p>
           </div>
+          {isAccountant && <button type="button" onClick={()=>setExecutionAssistantOpen(false)} className="ml-auto rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800">Cerrar asistente</button>}
         </div>
         <div className="p-4 sm:p-6 space-y-5">
           {feedback && <div role="status" className={`rounded-lg border p-3 text-sm ${feedback.kind === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-800'}`}>{feedback.message}</div>}
@@ -1069,7 +1077,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
             </div>
           </div>
         </div>
-      </section>
+      </section>}
 
       {!isAccountant && <>
       <section className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 sm:p-6 space-y-4">
