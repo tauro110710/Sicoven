@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
-const {initializeCorrectionWorkflow,registerCorrectionRequest,reviewCorrectionRequest,markCorrectionExecuted,observeCorrectionRequest,resubmitCorrectionRequest,withdrawCorrectionRequest,getCorrectionCase,listCorrectionCases,findLinkedCorrectionEvidence}=require('./accounting-correction-workflow.cjs');
+const {initializeCorrectionWorkflow,registerCorrectionRequest,reviewCorrectionRequest,markCorrectionExecuted,observeCorrectionRequest,resubmitCorrectionRequest,withdrawCorrectionRequest,requireApprovedCorrectionCase,getCorrectionCase,listCorrectionCases,findLinkedCorrectionEvidence}=require('./accounting-correction-workflow.cjs');
 function setup(){const db=new Database(':memory:');db.exec('CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime(\'now\')));');initializeCorrectionWorkflow(db);return db;}
 const input={companyId:'co-1',entityType:'SALE',entityId:'sale-1',correctionType:'ANULACION',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001',reason:'Se detectó una duplicidad documental que debe corregirse.',workpaperNote:'Conciliación con libro de ventas, comprobante fiscal y asiento relacionado.'};
 const admin=(id,username)=>({id,username,role:'admin'});
@@ -278,4 +278,20 @@ test('ISLR fiscal event evidence must be a reversal linked to the exact source e
  ]};
  assert.equal(findLinkedCorrectionEvidence(state,item,'islr-reversal').id,'islr-reversal');
  assert.equal(findLinkedCorrectionEvidence(state,item,'islr-unrelated'),null);
+});
+
+test('correction generators require one matching approved case and an independent executor',()=>{
+ const db=setup();try{
+  const requested=registerCorrectionRequest(db,input,admin(1,'solicitante'));
+  const gateInput={companyId:'co-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'};
+  assert.throws(()=>requireApprovedCorrectionCase(db,gateInput,admin(3,'ejecutor')),/No existe un expediente formal aprobado/);
+  reviewCorrectionRequest(db,{caseId:requested.id,decision:'APPROVE',reason:'Se verificó la solicitud y los soportes.'},admin(2,'revisor'));
+  assert.throws(()=>requireApprovedCorrectionCase(db,gateInput,admin(1,'solicitante')),/distinto del solicitante y del aprobador/);
+  assert.throws(()=>requireApprovedCorrectionCase(db,gateInput,admin(2,'revisor')),/distinto del solicitante y del aprobador/);
+  assert.throws(()=>requireApprovedCorrectionCase(db,{...gateInput,correctionDocumentRef:'NC-999'},admin(3,'ejecutor')),/No existe un expediente formal aprobado/);
+  assert.deepEqual(requireApprovedCorrectionCase(db,gateInput,admin(3,'ejecutor')),{ok:true,caseId:requested.id,correctionType:'ANULACION'});
+  const duplicate=registerCorrectionRequest(db,input,admin(4,'solicitante-2'));
+  reviewCorrectionRequest(db,{caseId:duplicate.id,decision:'APPROVE',reason:'Segundo expediente duplicado aprobado.'},admin(5,'revisor-2'));
+  assert.throws(()=>requireApprovedCorrectionCase(db,gateInput,admin(6,'ejecutor')),/más de un expediente aprobado/);
+ }finally{db.close();}
 });
