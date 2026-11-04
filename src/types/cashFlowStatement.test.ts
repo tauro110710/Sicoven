@@ -176,6 +176,7 @@ describe('cash flow statement', () => {
       line('1.1.1.01', 'Caja principal', 0, 100, 0, 10)
     ]);
     reversal.reversalOfEntryId = opening.id;
+    opening.reversedByEntryId = reversal.id;
     const report = buildCashFlowReport([opening, reversal], accounts, banks, 'co-1', 2026);
     assert.equal(report.openingCashBs, 100);
     assert.equal(report.netChangeBs, -100);
