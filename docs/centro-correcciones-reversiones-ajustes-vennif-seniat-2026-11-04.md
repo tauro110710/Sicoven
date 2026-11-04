@@ -70,7 +70,7 @@ La Providencia SNAT/2026/00093 (Gaceta Oficial 43.484) establece en su artículo
 - Se incorpora JournalReversalModal en Libro Diario y acción contextual Reversar asiento para asientos fuente no reversados.
 - Solicita fecha efectiva, motivo y papel de trabajo; para asientos de períodos cerrados solicita cuenta de resultados acumulados y usa el flujo AIA existente.
 - Reutiliza reverseJournalEntry en AccountingContext: valida empresa, SQLite, duplicidad, fecha, período, dependencias, cuadre bimonetario y conciliación bancaria.
-- Contra-asiento conserva reversalOfEntryId, motivo y papel de trabajo; original recibe reversedByEntryId. UI muestra la relación.
+- Contra-asiento conserva reversalOfEntryId, motivo y papel de trabajo. El asiento original no se reescribe; la UI deriva la relación buscando el contra-asiento enlazado. Se reconocen vínculos reversedByEntryId heredados solo por compatibilidad.
 - Excluye contra-asientos y asientos ya reversados.
 
 ## 7. Pendientes antes de declarar completo
