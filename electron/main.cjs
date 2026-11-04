@@ -539,6 +539,12 @@ app.whenReady().then(async () => {
         sourceDocumentRef.length > 160 || correctionDocumentRef.length > 160 || journalEntryId.length > 160) {
       return { ok: false, message: 'Los datos del evento de auditoría están incompletos o no son válidos.' };
     }
+    const savedRow = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    let savedState = {};
+    try { savedState = savedRow ? JSON.parse(savedRow.state_json) : {}; } catch {}
+    if (!Array.isArray(savedState.companies) || !savedState.companies.some(company => String(company.id) === companyId)) {
+      return { ok: false, message: 'La empresa indicada no existe en el estado contable local.' };
+    }
     const occurredAt = new Date().toISOString();
     const details = {
       actorUserId: Number(actor.id), actorUsername: String(actor.username || ''),
