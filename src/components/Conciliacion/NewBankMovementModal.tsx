@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { BankAccount, BankMovementType } from '../../types/accounting';
 import { Landmark, X, Check } from 'lucide-react';
@@ -15,7 +15,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
   onClose,
   bankAccount
 }) => {
-  const { currentCompany, addBankStatementMovement, waitForPersistence } = useAccounting();
+  const { addBankStatementMovement, waitForPersistence } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
@@ -24,23 +24,14 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
   const [description, setDescription] = useState<string>('');
   const [type, setType] = useState<BankMovementType>('CREDIT');
   const [amountBs, setAmountBs] = useState<string>('');
-  const [bcvRateEffectiveDate, setBcvRateEffectiveDate] = useState<string>(() =>
-    currentCompany.lastRateUpdate && currentCompany.lastRateUpdate <= date ? currentCompany.lastRateUpdate : ''
-  );
-  const [movementBcvRate, setMovementBcvRate] = useState<string>(() =>
-    currentCompany.lastRateUpdate && currentCompany.lastRateUpdate <= date ? String(currentCompany.bcvRate || '') : ''
-  );
-
-  useEffect(() => {
-    const hasApplicableRate = Boolean(currentCompany.lastRateUpdate && currentCompany.lastRateUpdate <= date);
-    setBcvRateEffectiveDate(hasApplicableRate ? (currentCompany.lastRateUpdate || '') : '');
-    setMovementBcvRate(hasApplicableRate ? String(currentCompany.bcvRate || '') : '');
-  }, [currentCompany.id, currentCompany.lastRateUpdate, currentCompany.bcvRate, date]);
+  const [bcvRateEffectiveDate, setBcvRateEffectiveDate] = useState<string>('');
+  const [movementBcvRate, setMovementBcvRate] = useState<string>('');
 
   if (!isOpen) return null;
 
-  const bcvRate = Number(movementBcvRate) || 0;
-  const parsedAmount = Number(amountBs) || 0;
+  const parseDecimalInput = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\\./g, '').replace(',', '.') : raw); };
+  const bcvRate = parseDecimalInput(movementBcvRate) || 0;
+  const parsedAmount = parseDecimalInput(amountBs) || 0;
   const parsedAmountBs = bankAccount.currency === 'USD'
     ? (bcvRate > 0 ? Math.round(parsedAmount * bcvRate * 100) / 100 : 0)
     : Math.round(parsedAmount * 100) / 100;
@@ -119,7 +110,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
                 onChange={e => {
                   const nextDate = e.target.value;
                   setDate(nextDate);
-                  setMovementBcvRate(nextDate === currentCompany.lastRateUpdate ? String(currentCompany.bcvRate || '') : '');
+                  setMovementBcvRate('');
                 }}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               />
@@ -146,7 +137,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Tasa BCV (Bs/USD) *</label>
-              <input type="number" required min="0.000001" step="0.000001" value={movementBcvRate}
+              <input type="text" inputMode="decimal" required placeholder="Ej.: 889,67" value={movementBcvRate}
                 onChange={e => setMovementBcvRate(e.target.value)}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
             </div>
@@ -185,9 +176,8 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
             <div className="relative">
               <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">{bankAccount.currency === 'USD' ? 'USD' : 'Bs.'}</span>
               <input
-                type="number"
-                step="0.01"
-                min="0.01"
+                type="text"
+                inputMode="decimal"
                 required
                 placeholder="0.00"
                 value={amountBs}
