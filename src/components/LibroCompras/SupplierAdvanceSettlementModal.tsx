@@ -148,7 +148,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
               </div>}
           </section>}
           {kind === 'REFUND_RECEIVED' && <>
-            <label className="block text-xs font-semibold text-slate-700">Importe efectivamente recibido en Bs<input required type="number" min="0.01" step="0.01" value={cashReceivedBs} onChange={e => setCashReceivedBs(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
+            <label className="block text-xs font-semibold text-slate-700">Importe efectivamente recibido en Bs<input required type="text" inputMode="decimal" value={cashReceivedBs} onChange={e => setCashReceivedBs(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
             <label className="block text-xs font-semibold text-slate-700">Cuenta bancaria en Bs.
               <select required value={treasuryAccountCode} onChange={e => setTreasuryAccountCode(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="">Seleccione cuenta bancaria en Bs.</option>{accounts.map(a => <option key={a.id} value={a.accountCode}>{a.bankName} · {a.accountCode} · {a.currency}</option>)}</select>
             </label>
