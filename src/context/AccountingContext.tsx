@@ -64,7 +64,7 @@ import type { VatFiscalIncident, VatFiscalIncidentCreateInput, VatFiscalIncident
 import { buildSupplierDebitNoteAccountingPlan, type SupplierDebitNoteAccountingDraft } from '../types/supplierDebitNoteAccounting';
 import { calculatePurchaseServiceCreditNote, type PurchaseServiceCreditNoteRequest } from '../types/purchaseServiceCreditNote';
 import { calculateSaleCorrectionNote, type SaleCorrectionNoteRequest } from '../types/saleCorrectionNote';
-import { resolveNonInventoryPurchaseDebitAccount } from '../types/purchaseAccounting';
+import { resolveNonInventoryPurchaseDebitAccount, resolveTreasuryAccountCurrency } from '../types/purchaseAccounting';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -1354,7 +1354,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('El período está cerrado hasta ' + currentCompany.closedThroughDate + '. El anticipo no se registró.');
     }
     const bank = bankAccounts.find(item => item.companyId === currentCompany.id && item.accountCode === draft.treasuryAccountCode);
-    const accountCurrency = bank?.currency || (draft.treasuryAccountCode === '1.1.1.02' ? 'USD' : 'BS');
+    const accountCurrency = resolveTreasuryAccountCurrency(draft.treasuryAccountCode, bank?.currency);
     if (accountCurrency !== draft.paymentCurrency) {
       throw new Error('La moneda del desembolso no coincide con la moneda configurada para la cuenta de Caja/Banco.');
     }
@@ -2055,7 +2055,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const items: JournalEntryItem[] = [];
 
     // Debe: distribuir el costo de inventario por la cuenta auxiliar real de cada artículo.
-    // Las compras sin líneas de inventario estructuradas se registran como gasto operativo.
+    // Si no hay líneas de inventario, se exige una cuenta de débito explícita y validada.
     const hasInventoryLines = Array.isArray(purchaseData.inventoryLines) && purchaseData.inventoryLines.length > 0;
     if (hasInventoryLines) {
       const inventoryByAccount = new Map<string, { name: string; amountBs: number; productCodes: string[] }>();
@@ -2087,7 +2087,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         accountCode: debitAccount.code,
         accountName: debitAccount.name,
         debitBs: baseBs, creditBs: 0, debitUsd: baseBs / rate, creditUsd: 0,
-        description: `Compra ${debitAccount.type === 'GASTOS' ? 'no inventariable' : 'de activo'} Fac. ${purchaseData.invoiceNumber} - ${purchaseData.supplierName}`
+        description: `Compra ${debitAccount.type === 'GASTOS' ? 'no inventariable' : debitAccount.type === 'COSTOS' ? 'de costo de servicio' : 'de activo'} Fac. ${purchaseData.invoiceNumber} - ${purchaseData.supplierName}`
       });
     }
 
