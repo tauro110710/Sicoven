@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { FiscalZReportMetadata, JournalEntryItem } from '../../types/accounting';
+import { calculateFiscalZTaxBreakdown } from '../../types/fiscalZReport';
 
 type PaymentKey = 'cash' | 'foreignCash' | 'transfer' | 'card' | 'credit' | 'other';
 const PAYMENT_ROWS: Array<{ key: PaymentKey; label: string; defaultAccount: string }> = [
@@ -57,8 +58,8 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const rate = parseAmount(rateInput);
   const b16 = parseAmount(base16), b8 = parseAmount(base8), b31 = parseAmount(base31);
   const e = parseAmount(exempt), ig = parseAmount(igtf);
-  const v16 = money(b16 * 0.16), v8 = money(b8 * 0.08), v31 = money(b31 * 0.16), luxuryTax15 = money(b31 * 0.15);
-  const totalSales = money(b16 + b8 + b31 + e + v16 + v8 + v31 + luxuryTax15 + ig);
+  const taxBreakdown = calculateFiscalZTaxBreakdown({ taxableBase16Bs: b16, taxableBase8Bs: b8, taxableBase31Bs: b31, exemptSalesBs: e, igtfBs: ig });
+  const { vat16Bs: v16, vat8Bs: v8, vat31Bs: v31, additionalLuxuryTaxBs: luxuryTax15, totalSalesBs: totalSales } = taxBreakdown;
   const paymentTotal = money(PAYMENT_ROWS.reduce((sum, row) => sum + parseAmount(payments[row.key]), 0));
   const diff = money(totalSales - paymentTotal);
   const fmt = (value: number) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
