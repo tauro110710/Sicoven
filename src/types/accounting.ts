@@ -138,6 +138,30 @@ export type EntryType =
   | 'CIERRE'
   | 'ANTICIPO_PROVEEDOR';
 
+export interface FiscalZReportMetadata {
+  date: string;
+  zNumber: string;
+  machineBrand?: string;
+  machineModel?: string;
+  machineSerial: string;
+  invoiceStart: string;
+  invoiceEnd: string;
+  controlStart?: string;
+  controlEnd?: string;
+  taxableBase16Bs: number;
+  vat16Bs: number;
+  taxableBase8Bs: number;
+  vat8Bs: number;
+  taxableBase31Bs: number;
+  vat31Bs: number;
+  exemptSalesBs: number;
+  igtfBs: number;
+  totalSalesBs: number;
+  payments: Array<{ method: string; amountBs: number; accountCode: string }>;
+  observations?: string;
+  supportRequired: false;
+}
+
 export interface JournalEntry {
   id: string;
   companyId: string;
@@ -160,6 +184,7 @@ export interface JournalEntry {
   adjustmentForEntryId?: string;
   adjustmentReason?: string;
   /** Vínculo inmutable entre el ejercicio cerrado y el ejercicio que inicia con esta apertura. */
+  fiscalZReport?: FiscalZReportMetadata;
   exerciseLink?: {
     priorPeriodStartDate: string;
     priorPeriodEndDate: string;
