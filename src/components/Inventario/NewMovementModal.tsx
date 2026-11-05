@@ -73,7 +73,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if ((type !== 'AJUSTE' && quantity <= 0) || (type === 'AJUSTE' && quantity < 0) || !Number.isFinite(bcvRate) || bcvRate <= 0) { setError('Verifique que la cantidad y la tasa BCV sean válidas.'); return; }
+    if (!Number.isFinite(quantity) || !Number.isFinite(unitCostBs) || !Number.isFinite(additionalLandedCostsBs) || quantity < 0 || (type !== 'AJUSTE' && quantity <= 0) || unitCostBs < 0 || additionalLandedCostsBs < 0 || !Number.isFinite(bcvRate) || bcvRate <= 0) { setError('Verifique que la cantidad, los costos y la tasa BCV sean válidos.'); return; }
     if (type === 'SALIDA' && concept === 'DEVOLUCION_COMPRA') {
       if (!selectedReturnSource) { setError('Seleccione la entrada original de Kardex que se devuelve.'); return; }
       if (quantity > selectedReturnSource.remaining + 1e-8) { setError('La cantidad supera las unidades recibidas menos devoluciones previas (' + selectedReturnSource.remaining + ').'); return; }
@@ -298,9 +298,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
                 Cantidad ({selectedProduct.unit}) *
               </label>
               <input
-                type="number"
-                min={type === 'AJUSTE' ? 0 : 0.000001}
-                step="0.000001"
+                type="text"
+                inputMode="decimal"
                 required
                 value={quantity}
                 onChange={e => setQuantityInput(e.target.value)}
@@ -310,9 +309,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Costo Unitario (Bs.)</label>
               <input
-                type="number"
-                step="0.01"
-                min="0"
+                type="text"
+                inputMode="decimal"
                 required
                 value={unitCostBs || ''}
                 onChange={e => setUnitCostInput(e.target.value)}
