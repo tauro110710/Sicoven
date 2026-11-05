@@ -400,8 +400,9 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
               <span className="font-mono">{hasValidBcvRate ? `${bcvRate.toLocaleString('es-VE')} Bs./USD` : 'No configurada'}</span>
             </div>
             {!hasValidBcvRate && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-amber-200">No se puede registrar esta venta hasta configurar una tasa BCV válida en la empresa.</p>}
+            {additionalLuxuryTaxBs > 0 && <div className="flex justify-between items-center text-xs text-amber-300"><span>Impuesto adicional al consumo suntuario (15%):</span><span className="font-mono">{formatBs(additionalLuxuryTaxBs)} ({formatUsd(additionalLuxuryTaxUsd)})</span></div>}
             <div className="flex justify-between items-center text-xs">
-              <span className="text-slate-400">Total Factura (IVA e IGTF si aplica):</span>
+              <span className="text-slate-400">Total Factura (IVA, adicional e IGTF si aplica):</span>
               <span className="font-mono font-bold">{formatBs(totalAmountBs)} ({formatUsd(totalAmountUsd)})</span>
             </div>
             {clientIsSpecial && (
