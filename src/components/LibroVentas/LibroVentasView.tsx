@@ -83,13 +83,14 @@ export const LibroVentasView: React.FC = () => {
   const totalVentasConIvaBs = filteredSales.reduce((s, x) => s + signed(x, x.totalAmountBs), 0);
   const totalExentoBs = filteredSales.reduce((s, x) => s + signed(x, x.exemptAmountBs || 0), 0);
   const totalBaseBs = filteredSales.reduce((s, x) => s + signed(x, x.taxableBaseBs), 0);
-  const totalIvaDebitoBs = filteredSales.reduce((s, x) => s + signed(x, x.vatAmountBs), 0);
+  const totalIvaDebitoBs = filteredSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? x.taxableBaseBs * 0.16 : x.vatAmountBs), 0);
+  const totalLuxuryTaxBs = filteredSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? x.taxableBaseBs * 0.15 : 0), 0);
   const totalIvaRetenidoBs = filteredSales.reduce((s, x) => s + signed(x, x.vatWithheldBs || 0), 0);
   const totalIgtfBs = filteredSales.reduce((s, x) => s + signed(x, x.igtfAmountBs || 0), 0);
 
   const totalVentasConIvaUsd = filteredSales.reduce((s, x) => s + signed(x, x.totalAmountUsd), 0);
   const totalBaseUsd = filteredSales.reduce((s, x) => s + signed(x, x.taxableBaseUsd), 0);
-  const totalIvaDebitoUsd = filteredSales.reduce((s, x) => s + signed(x, x.vatAmountUsd), 0);
+  const totalIvaDebitoUsd = filteredSales.reduce((s, x) => s + signed(x, x.taxRate === 31 && x.bcvRate > 0 ? x.taxableBaseBs * 0.16 / x.bcvRate : x.vatAmountUsd), 0);
   const totalIvaRetenidoUsd = filteredSales.reduce((s, x) => s + signed(x, x.vatWithheldUsd || 0), 0);
 
   const zBaseBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.taxableBase16Bs || 0) + (entry.fiscalZReport?.taxableBase8Bs || 0) + (entry.fiscalZReport?.taxableBase31Bs || 0), 0);
@@ -205,6 +206,7 @@ export const LibroVentasView: React.FC = () => {
                 <th className="py-2.5 px-3 text-right w-32">Base Imponible</th>
                 <th className="py-2.5 px-2 text-center w-14">% Alíc.</th>
                 <th className="py-2.5 px-3 text-right w-28 text-emerald-800">IVA (Débito)</th>
+                <th className="py-2.5 px-3 text-right w-28 text-amber-800">Imp. adicional 15%</th>
                 <th className="py-2.5 px-3 text-right w-28 text-purple-800">IVA Retenido</th>
                 <th className="py-2.5 px-3 w-32">N° Comprobante Ret.</th>
                 <th className="py-2.5 px-3 w-28">Fecha Ret.</th>
@@ -215,7 +217,7 @@ export const LibroVentasView: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {filteredSales.length === 0 ? (
                 <tr>
-                  <td colSpan={17} className="py-12 text-center text-slate-400">
+                  <td colSpan={18} className="py-12 text-center text-slate-400">
                     <TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-40" />
                     No hay facturas de ventas emitidas en este período.
                   </td>
@@ -271,12 +273,15 @@ export const LibroVentasView: React.FC = () => {
                       {s.taxRate}%
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap bg-emerald-50/30">
-                      {formatBs(s.vatAmountBs)}
+                      {formatBs(s.taxRate === 31 ? s.taxableBaseBs * 0.16 : s.vatAmountBs)}
                       {displayCurrency !== 'BS' && (
                         <div className="text-[10px] text-emerald-600/70 font-normal">
-                          {formatUsd(s.vatAmountUsd)}
+                          {formatUsd(s.taxRate === 31 && s.bcvRate > 0 ? s.taxableBaseBs * 0.16 / s.bcvRate : s.vatAmountUsd)}
                         </div>
                       )}
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono font-bold text-amber-700 whitespace-nowrap bg-amber-50/30">
+                      {s.taxRate === 31 ? formatBs(s.taxableBaseBs * 0.15) : '-'}
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-purple-700 whitespace-nowrap bg-purple-50/30">
                       {s.vatWithheldBs > 0 ? (
@@ -348,6 +353,7 @@ export const LibroVentasView: React.FC = () => {
                     <div className="text-[10px] text-slate-400">{formatUsd(totalIvaDebitoUsd)}</div>
                   )}
                 </td>
+                <td className="py-3 px-3 text-right font-mono text-amber-300 bg-slate-850">{formatBs(totalLuxuryTaxBs)}</td>
                 <td className="py-3 px-3 text-right font-mono text-purple-300 bg-slate-850">
                   {formatBs(totalIvaRetenidoBs)}
                   {displayCurrency !== 'BS' && (
