@@ -86,6 +86,7 @@ export const LibroDiarioView: React.FC = () => {
       await exportDiarioPdf(currentCompany, filteredEntries, displayCurrency);
     } catch (err) {
       console.error('Error generating PDF:', err);
+      window.alert('No se pudo generar el PDF del Libro Diario: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsExportingPdf(false);
     }
