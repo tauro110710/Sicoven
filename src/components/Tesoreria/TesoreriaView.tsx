@@ -17,6 +17,10 @@ export const TesoreriaView: React.FC = () => {
   const [reference, setReference] = useState('');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
+  const [bcvRateInput, setBcvRateInput] = useState('');
+  const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\\./g, '').replace(',', '.') : raw); };
+  const parsedAmount = parseAmount(amount);
+  const parsedBcvRate = parseAmount(bcvRateInput);
   const [counterpartCode, setCounterpartCode] = useState('');
   const [destinationBankId, setDestinationBankId] = useState('');
   const [message, setMessage] = useState('');
@@ -54,7 +58,7 @@ export const TesoreriaView: React.FC = () => {
       });
       await waitForPersistence();
       setMessage('SQLite confirmó el movimiento contabilizado en el asiento #' + entry.entryNumber + '.');
-      setReference(''); setDescription(''); setAmount('');
+      setReference(''); setDescription(''); setAmount(''); setBcvRateInput('');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo registrar el movimiento.');
     } finally {
@@ -108,7 +112,8 @@ export const TesoreriaView: React.FC = () => {
           {kind === 'TRANSFER' ? <div><label className="mb-1 block text-xs font-semibold text-slate-700">Cuenta destino</label><select required value={destinationBankId} onChange={e=>setDestinationBankId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs"><option value="">Seleccione otra cuenta propia en la misma moneda</option>{companyBanks.filter(b=>b.id!==activeBank?.id && b.currency===activeBank?.currency).map(b=><option key={b.id} value={b.id}>{b.bankName} · {b.accountNumber.slice(-4)} ({b.currency})</option>)}</select>{!companyBanks.some(b=>b.id!==activeBank?.id && b.currency===activeBank?.currency) && <p className="mt-1 text-xs text-amber-700">No hay otra cuenta de la empresa en la misma moneda. La conversión entre Bs. y USD requiere un asiento cambiario específico y aún no se permite como transferencia directa.</p>}</div> : <div><label className="mb-1 block text-xs font-semibold text-slate-700">Contrapartida contable</label><select required value={counterpartCode} onChange={e=>setCounterpartCode(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs"><option value="">Seleccione una cuenta de movimiento</option>{counterpartAccounts.map(a=><option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}</select></div>}
           <div><label className="mb-1 block text-xs font-semibold text-slate-700">Referencia / cheque / transferencia</label><input required value={reference} onChange={e=>setReference(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs" placeholder="N.º de operación"/></div>
           <div><label className="mb-1 block text-xs font-semibold text-slate-700">Concepto</label><input required value={description} onChange={e=>setDescription(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs" placeholder="Descripción de la operación"/></div>
-          <div><label className="mb-1 block text-xs font-semibold text-slate-700">Importe ({activeBank?.currency === 'USD' ? '$ USD' : 'Bs.'})</label><input required type="text" inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm" placeholder="0.00"/></div>
+          <div><label className="mb-1 block text-xs font-semibold text-slate-700">Importe ({activeBank?.currency === 'USD' ? '$ USD' : 'Bs.'})</label><input required type="text" inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm" placeholder="0,00"/></div>
+          <div><label className="mb-1 block text-xs font-semibold text-slate-700">Tasa BCV aplicable a este movimiento (Bs./USD) *</label><input required type="text" inputMode="decimal" value={bcvRateInput} onChange={e=>setBcvRateInput(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm" placeholder="Ej.: 889,67"/></div>
           <button type="submit" disabled={saving} className="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-40">{saving ? "Confirmando SQLite..." : "Contabilizar movimiento"}</button>
           {message && <p role="status" className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700">{message}</p>}
         </form>
