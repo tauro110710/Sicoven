@@ -3,6 +3,17 @@ import { isPurchasePaymentAccount, type PurchasePaymentAccount } from './purchas
 
 export interface CompanyBankAccountRef { companyId: string; accountCode: string; }
 
+/** Resolve a treasury account's currency without assuming every unknown account is Bs. */
+export function resolveTreasuryAccountCurrency(
+  accountCode: string,
+  configuredBankCurrency?: 'BS' | 'USD'
+): 'BS' | 'USD' {
+  if (configuredBankCurrency) return configuredBankCurrency;
+  if (accountCode === '1.1.1.01' || ['1.1.1.03', '1.1.1.04'].includes(accountCode)) return 'BS';
+  if (accountCode === '1.1.1.02' || accountCode === '1.1.1.05') return 'USD';
+  throw new Error('La cuenta de tesorería no está asociada a una cuenta bancaria de la empresa ni tiene una moneda de caja conocida.');
+}
+
 /** Only cash drawers and bank auxiliaries belonging to the active company may settle its purchases. */
 export function getCompanyPurchasePaymentAccounts(
   accounts: PurchasePaymentAccount[],
