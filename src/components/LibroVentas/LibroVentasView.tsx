@@ -84,7 +84,8 @@ export const LibroVentasView: React.FC = () => {
   const totalExentoBs = filteredSales.reduce((s, x) => s + signed(x, x.exemptAmountBs || 0), 0);
   const totalBaseBs = filteredSales.reduce((s, x) => s + signed(x, x.taxableBaseBs), 0);
   const totalIvaDebitoBs = filteredSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? x.taxableBaseBs * 0.16 : x.vatAmountBs), 0);
-  const totalLuxuryTaxBs = filteredSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? x.taxableBaseBs * 0.15 : 0), 0);
+  const totalLuxuryTaxBs = filteredSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? (x.additionalLuxuryTaxBs ?? x.taxableBaseBs * 0.15) : 0), 0);
+  const totalLuxuryTaxUsd = filteredSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? (x.additionalLuxuryTaxUsd ?? (x.bcvRate > 0 ? x.taxableBaseBs * 0.15 / x.bcvRate : 0)) : 0), 0);
   const totalIvaRetenidoBs = filteredSales.reduce((s, x) => s + signed(x, x.vatWithheldBs || 0), 0);
   const totalIgtfBs = filteredSales.reduce((s, x) => s + signed(x, x.igtfAmountBs || 0), 0);
 
@@ -106,7 +107,9 @@ export const LibroVentasView: React.FC = () => {
   const totalFiscalBaseUsd = totalBaseUsd + zBaseUsd;
     const totalFiscalIvaBs = totalIvaDebitoBs - saleLuxuryTaxBs + zVatBs;
   const totalFiscalIvaUsd = totalIvaDebitoUsd - saleLuxuryTaxUsd + zVatUsd;
+  const zLuxuryTaxUsd = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.additionalLuxuryTaxBs || 0) / entry.bcvRate, 0);
   const totalFiscalLuxuryTaxBs = saleLuxuryTaxBs + zLuxuryTaxBs;
+  const totalFiscalLuxuryTaxUsd = totalLuxuryTaxUsd + zLuxuryTaxUsd;
   const totalFiscalExemptBs = totalExentoBs + zExemptBs;
   const totalFiscalIgtfBs = totalIgtfBs + zIgtfBs;
 
@@ -281,7 +284,8 @@ export const LibroVentasView: React.FC = () => {
                       )}
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-amber-700 whitespace-nowrap bg-amber-50/30">
-                      {s.taxRate === 31 ? formatBs(s.taxableBaseBs * 0.15) : '-'}
+                      {s.taxRate === 31 ? formatBs(s.additionalLuxuryTaxBs ?? s.taxableBaseBs * 0.15) : '-'}
+                      {displayCurrency !== 'BS' && s.taxRate === 31 && <div className="text-[10px] text-amber-600/70 font-normal">{formatUsd(s.additionalLuxuryTaxUsd ?? (s.bcvRate > 0 ? s.taxableBaseBs * 0.15 / s.bcvRate : 0))}</div>}
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-purple-700 whitespace-nowrap bg-purple-50/30">
                       {s.vatWithheldBs > 0 ? (
@@ -353,7 +357,7 @@ export const LibroVentasView: React.FC = () => {
                     <div className="text-[10px] text-slate-400">{formatUsd(totalIvaDebitoUsd)}</div>
                   )}
                 </td>
-                <td className="py-3 px-3 text-right font-mono text-amber-300 bg-slate-850">{formatBs(totalLuxuryTaxBs)}</td>
+                <td className="py-3 px-3 text-right font-mono text-amber-300 bg-slate-850">{formatBs(totalLuxuryTaxBs)}{displayCurrency !== 'BS' && <div className="text-[10px] text-slate-400">{formatUsd(totalLuxuryTaxUsd)}</div>}</td>
                 <td className="py-3 px-3 text-right font-mono text-purple-300 bg-slate-850">
                   {formatBs(totalIvaRetenidoBs)}
                   {displayCurrency !== 'BS' && (
@@ -428,7 +432,7 @@ export const LibroVentasView: React.FC = () => {
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Impuesto adicional al consumo suntuario (15%):</span>
-            <span className="text-base font-bold text-amber-300 mt-1 block">{formatBs(totalFiscalLuxuryTaxBs)}</span>
+            <span className="text-base font-bold text-amber-300 mt-1 block">{formatBs(totalFiscalLuxuryTaxBs)}</span><span className="text-[10px] text-slate-400">{formatUsd(totalFiscalLuxuryTaxUsd)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">IGTF percibido:</span>
