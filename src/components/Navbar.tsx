@@ -45,6 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const {
     companies,
+    currentCompany,
     setCurrentCompanyId,
     displayCurrency,
     setDisplayCurrency
