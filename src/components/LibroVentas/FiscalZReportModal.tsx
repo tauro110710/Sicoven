@@ -17,7 +17,6 @@ const parseAmount = (value: string) => {
   return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw);
 };
 const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
-const makeInput = (value: number) => value ? String(value).replace('.', ',') : '';
 
 interface Props { isOpen: boolean; onClose: () => void; }
 export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
@@ -44,7 +43,6 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [observations, setObservations] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [savedEntryId, setSavedEntryId] = useState('');
 
   const movementAccounts = useMemo(() => accounts.filter(account => account.isMovement), [accounts]);
   const assetAccounts = movementAccounts.filter(account => account.type === 'ACTIVO');
@@ -144,7 +142,6 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
         type: 'VENTA', bcvRate: rate, referenceDoc, items, fiscalZReport: metadata
       });
       await waitForPersistence();
-      setSavedEntryId(entry.id);
       onClose();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo guardar el Reporte Z.');
