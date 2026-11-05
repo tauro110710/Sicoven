@@ -46,6 +46,7 @@ export const LibroVentasView: React.FC = () => {
       await exportVentasPdf(currentCompany, filteredSales, monthFilter);
     } catch (err) {
       console.error('Error exporting Ventas PDF:', err);
+      window.alert('No se pudo generar el PDF del Libro de Ventas: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsExportingPdf(false);
     }
