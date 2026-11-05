@@ -284,7 +284,7 @@ function createWindow() {
   });
   win.webContents.on('unresponsive', () => logLoadFailure('unresponsive', 'Renderer did not respond'));
   win.webContents.session.on('will-download', async (_event, item) => {
-    if (!/\\.pdf$/i.test(item.getFilename())) return;
+    if (!/\.pdf$/i.test(item.getFilename())) return;
     item.pause();
     try {
       const result = await dialog.showSaveDialog(win, {
