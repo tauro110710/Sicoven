@@ -29,7 +29,6 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
   const [ivaRetentionAgentBasis, setIvaRetentionAgentBasis] = useState<IvaRetentionAgentBasis>('UNCONFIRMED');
   const [isPersonalFirm, setIsPersonalFirm] = useState(false);
   const [isIgtfPerceptionAgent, setIsIgtfPerceptionAgent] = useState(false);
-  const [bcvRate, setBcvRate] = useState<string>('');
   const [fiscalYear, setFiscalYear] = useState<string>(String(new Date().getFullYear()));
   const [accountingFramework, setAccountingFramework] = useState<AccountingFramework | ''>('');
   const [accountingFrameworkVersion, setAccountingFrameworkVersion] = useState('');
@@ -98,8 +97,6 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       isPersonalFirm,
       isIgtfPerceptionAgent,
       fiscalYear: Number(fiscalYear) || new Date().getFullYear(),
-      bcvRate: Number(bcvRate) || 0,
-      lastRateUpdate: new Date().toISOString().split('T')[0]
     });
     await waitForPersistence();
     onClose();
@@ -382,31 +379,15 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
               />
             </div>
           </div>
-
-          {/* Parámetros Financieros */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Tasa Oficial BCV Inicial (Bs/$)
-              </label>
+          {/* Ejercicio económico */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Ejercicio Económico (Año)
+            </label>
               <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                required
-                value={bcvRate}
-                onChange={e => setBcvRate(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Ejercicio Económico (Año)
-              </label>
-              <input
-                type="number"
-                min="2000"
-                max="2099"
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
                 required
                 value={fiscalYear}
                 onChange={e => setFiscalYear(e.target.value)}
