@@ -2,6 +2,22 @@
 
 /* Electron/Windows: keep native form controls focusable and text-editable
    even when surrounding layout/utility styles change. Disabled controls remain disabled. */
+/* Company registration modal: Electron must treat the whole form as a text-entry region. */
+.company-registration-modal,
+.company-registration-modal *,
+.company-registration-form,
+.company-registration-form * {
+  -webkit-app-region: no-drag !important;
+  pointer-events: auto !important;
+}
+.company-registration-form input,
+.company-registration-form textarea,
+.company-registration-form select {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  cursor: text;
+}
+
 @layer base {
   input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
   textarea,
