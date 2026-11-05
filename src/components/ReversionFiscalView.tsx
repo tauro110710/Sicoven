@@ -387,8 +387,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
           fiscalBreakdownReviewed: supplierDebitFiscalBreakdownReviewed,
           withholdingNotApplicableConfirmed: supplierDebitNoWithholdingConfirmed,
           igtfNotApplicableConfirmed: supplierDebitNoIgtfConfirmed,
-          fiscalReviewNote: requestReason.trim(),
-          closedThroughDate: currentCompany.closedThroughDate || undefined
+          fiscalReviewNote: requestReason.trim()
         });
         await waitForPersistence();
         setFeedback({kind:'success',message:'Nota de débito ' + (note.debitNoteNumber || note.invoiceNumber) + ' registrada con asiento correctivo y aumento trazable de CxP. La factura original permanece intacta.'});
@@ -640,6 +639,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
         if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('Cada cantidad devuelta debe ser mayor que cero.');
         return { productId: row.productId, originalMovementId: movement.id, quantity };
       });
+      if (!requestFiscalEmissionMedium || !requestSameMediumAsOriginal) throw new Error('Confirme el medio de emisión y que coincide con el documento original antes de registrar la nota de crédito.');
       const note = await addPurchaseCreditNote({
         purchaseId: linkedPurchase.id, lines, returnDate: supplierReturnDate,
         creditNoteNumber: supplierCreditNoteNumber, controlNumber: supplierCreditControlNumber,
