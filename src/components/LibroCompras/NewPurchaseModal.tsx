@@ -59,7 +59,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   // Clasificación explícita: mercancía al Kardex o cuenta específica de gasto/activo.
   const [linkInventory, setLinkInventory] = useState(true);
   const [purchaseDebitAccountCode, setPurchaseDebitAccountCode] = useState('');
-  const nonInventoryDebitAccounts = accounts.filter(account => account.isMovement && (account.type === 'GASTOS' || (account.type === 'ACTIVO' && account.code.startsWith('1.2.')))).sort((x,y)=>x.code.localeCompare(y.code,undefined,{numeric:true}));
+  const nonInventoryDebitAccounts = accounts.filter(account => account.isMovement && (account.type === 'GASTOS' || account.type === 'COSTOS' || (account.type === 'ACTIVO' && account.code.startsWith('1.2.')))).sort((x,y)=>x.code.localeCompare(y.code,undefined,{numeric:true}));
   const [inventoryLines, setInventoryLines] = useState<Array<{productId:string; quantity:string; unitCostBs:string}>>([{productId:'',quantity:'1',unitCostBs:''}]);
   const [paymentTerm, setPaymentTerm] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
   const [paymentAccountCode, setPaymentAccountCode] = useState<string>('');
