@@ -6,7 +6,7 @@ import { buildReversalItems, assessJournalReversal, validateBankStatementReversa
 import type { VatFiscalIncident } from '../types/vatFiscalIncidents';
 
 type CorrectionEmissionMedium = 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | '';
-const parseFiscalInput = (value: string) => { const raw = String(value ?? '').trim(); return Number(raw.includes(',') ? raw.replace(/\\./g, '').replace(',', '.') : raw); };
+const parseFiscalInput = (value: string) => { const raw = String(value ?? '').trim(); return Number(raw.includes(',') ? raw.split('.').join('').replace(',', '.') : raw); };
 
 interface CorrectionNoteFormFieldsProps {
   minDate: string;
@@ -52,7 +52,7 @@ const CorrectionNoteFormFields: React.FC<CorrectionNoteFormFieldsProps> = ({
         <input type="text" inputMode="decimal" value={taxableBase} onChange={event=>setTaxableBase(event.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
       </label>
       <label className="text-xs font-semibold text-slate-700">Monto exento (Bs.)
-        <input type="number" min="0" step="0.01" value={exemptAmount} onChange={event=>setExemptAmount(event.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+        <input type="text" inputMode="decimal" min="0" step="0.01" value={exemptAmount} onChange={event=>setExemptAmount(event.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
       </label>
       <label className="text-xs font-semibold text-slate-700">Medio de emisión de la nota
         <select value={medium} onChange={event=>setMedium(event.target.value as CorrectionEmissionMedium)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
@@ -891,10 +891,10 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
                   </select>
                 </label>
                 <label className="text-xs font-semibold text-slate-700">Base imponible (Bs.)
-                  <input type="number" min="0" step="0.01" value={requestTaxableBaseBs} onChange={e=>setRequestTaxableBaseBs(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+                  <input type="text" inputMode="decimal" min="0" step="0.01" value={requestTaxableBaseBs} onChange={e=>setRequestTaxableBaseBs(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
                 </label>
                 <label className="text-xs font-semibold text-slate-700">Monto exento (Bs.)
-                  <input type="number" min="0" step="0.01" value={requestExemptAmountBs} onChange={e=>setRequestExemptAmountBs(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+                  <input type="text" inputMode="decimal" min="0" step="0.01" value={requestExemptAmountBs} onChange={e=>setRequestExemptAmountBs(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
                 </label>
                 <label className="text-xs font-semibold text-slate-700">Alícuota IVA (%)
                   <input type="text" inputMode="decimal" value={supplierDebitTaxRate} onChange={e=>setSupplierDebitTaxRate(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
@@ -1193,7 +1193,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
           <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Motivo de la corrección
             <textarea value={bcvCorrectionReason} onChange={event=>setBcvCorrectionReason(event.target.value)} rows={2} placeholder="Explique por qué debe corregirse la tasa registrada…" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
           </label>
-          <div className="sm:col-span-2"><button type="button" disabled={bcvCorrectionSaving || Number(bcvCorrectionRate)<=0} onClick={()=>void submitBcvRateCorrection()} className="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{bcvCorrectionSaving ? 'Guardando corrección…' : 'Confirmar y auditar corrección'}</button></div>
+          <div className="sm:col-span-2"><button type="button" disabled={bcvCorrectionSaving || parseFiscalInput(bcvCorrectionRate)<=0} onClick={()=>void submitBcvRateCorrection()} className="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{bcvCorrectionSaving ? 'Guardando corrección…' : 'Confirmar y auditar corrección'}</button></div>
         </div>}
       </section>
       {!isAccountant && <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
