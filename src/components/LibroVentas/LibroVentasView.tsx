@@ -46,7 +46,7 @@ export const LibroVentasView: React.FC = () => {
   const handleExportPdf = async () => {
     try {
       setIsExportingPdf(true);
-      await exportVentasPdf(currentCompany, filteredSales, monthFilter);
+      await exportVentasPdf(currentCompany, filteredSales, monthFilter, filteredZReports);
     } catch (err) {
       console.error('Error exporting Ventas PDF:', err);
       window.alert('No se pudo generar el PDF del Libro de Ventas: ' + (err instanceof Error ? err.message : String(err)));
@@ -91,6 +91,17 @@ export const LibroVentasView: React.FC = () => {
   const totalBaseUsd = filteredSales.reduce((s, x) => s + signed(x, x.taxableBaseUsd), 0);
   const totalIvaDebitoUsd = filteredSales.reduce((s, x) => s + signed(x, x.vatAmountUsd), 0);
   const totalIvaRetenidoUsd = filteredSales.reduce((s, x) => s + signed(x, x.vatWithheldUsd || 0), 0);
+
+  const zBaseBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.taxableBase16Bs || 0) + (entry.fiscalZReport?.taxableBase8Bs || 0) + (entry.fiscalZReport?.taxableBase31Bs || 0), 0);
+  const zVatBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.vat16Bs || 0) + (entry.fiscalZReport?.vat8Bs || 0) + (entry.fiscalZReport?.vat31Bs || 0), 0);
+  const zLuxuryTaxBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.additionalLuxuryTaxBs || 0), 0);
+  const zExemptBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.exemptSalesBs || 0), 0);
+  const zIgtfBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.igtfBs || 0), 0);
+  const totalFiscalBaseBs = totalBaseBs + zBaseBs;
+  const totalFiscalIvaBs = totalIvaDebitoBs + zVatBs;
+  const totalFiscalLuxuryTaxBs = zLuxuryTaxBs;
+  const totalFiscalExemptBs = totalExentoBs + zExemptBs;
+  const totalFiscalIgtfBs = totalIgtfBs + zIgtfBs;
 
   return (
     <div className="space-y-6">
@@ -391,17 +402,18 @@ export const LibroVentasView: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono-nums">
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Total Ventas Internas Gravadas:</span>
-            <span className="text-base font-bold text-white mt-1 block">{formatBs(totalBaseBs)}</span>
-            <span className="text-[10px] text-slate-400">{formatUsd(totalBaseUsd)}</span>
+            <span className="text-base font-bold text-white mt-1 block">{formatBs(totalFiscalBaseBs)}</span>
+            <span className="text-[10px] text-slate-400">{formatUsd(totalFiscalBaseBs / (currentCompany.bcvRate || 1))}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">IGTF percibido (3%, si aplica):</span>
-            <span className="text-base font-bold text-sky-300 mt-1 block">{formatBs(totalIgtfBs)}</span>
+            <span className="text-base font-bold text-sky-300 mt-1 block">{formatBs(totalFiscalIgtfBs)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Débito Fiscal Generado (16%):</span>
-            <span className="text-base font-bold text-emerald-400 mt-1 block">{formatBs(totalIvaDebitoBs)}</span>
-            <span className="text-[10px] text-slate-400">{formatUsd(totalIvaDebitoUsd)}</span>
+            <span className="text-base font-bold text-emerald-400 mt-1 block">{formatBs(totalFiscalIvaBs)}</span>
+            <span className="text-[10px] text-slate-400">{formatUsd(totalFiscalIvaBs / (currentCompany.bcvRate || 1))}</span>
+            {totalFiscalLuxuryTaxBs > 0 && <span className="mt-1 block text-[10px] text-amber-300">Impuesto adicional 15%: {formatBs(totalFiscalLuxuryTaxBs)}</span>}
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Retenciones de IVA Recibidas por Compensar:</span>
