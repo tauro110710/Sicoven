@@ -333,6 +333,9 @@ export interface SaleRecord {
   taxableBaseBs: number;
   taxRate: number; // 16, 8, 31, 0
   vatAmountBs: number;
+  /** Componente adicional del 15% al consumo suntuario cuando la tasa combinada es 31%; no es IVA. */
+  additionalLuxuryTaxBs?: number;
+  additionalLuxuryTaxUsd?: number;
   vatWithheldBs: number; // Retenido por cliente si es contribuyente especial
   retentionRate?: number;
   retentionVoucherNumber?: string;
