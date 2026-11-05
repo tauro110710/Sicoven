@@ -385,8 +385,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
           fiscalBreakdownReviewed: supplierDebitFiscalBreakdownReviewed,
           withholdingNotApplicableConfirmed: supplierDebitNoWithholdingConfirmed,
           igtfNotApplicableConfirmed: supplierDebitNoIgtfConfirmed,
-          fiscalReviewNote: requestReason.trim(),
-          closedThroughDate: currentCompany.closedThroughDate || undefined
+          fiscalReviewNote: requestReason.trim()
         });
         await waitForPersistence();
         setFeedback({kind:'success',message:'Nota de débito ' + (note.debitNoteNumber || note.invoiceNumber) + ' registrada con asiento correctivo y aumento trazable de CxP. La factura original permanece intacta.'});
@@ -638,10 +637,14 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
         if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('Cada cantidad devuelta debe ser mayor que cero.');
         return { productId: row.productId, originalMovementId: movement.id, quantity };
       });
+      const fiscalEmissionMedium = linkedPurchase.fiscalEmissionMedium;
+      if (fiscalEmissionMedium !== 'CONTINGENCY' && fiscalEmissionMedium !== 'DIGITAL' && fiscalEmissionMedium !== 'FISCAL_MACHINE') {
+        throw new Error('La factura original no tiene un medio de emisión fiscal válido. Complete y verifique sus datos fiscales antes de emitir la nota de crédito.');
+      }
       const note = await addPurchaseCreditNote({
         purchaseId: linkedPurchase.id, lines, returnDate: supplierReturnDate,
         creditNoteNumber: supplierCreditNoteNumber, controlNumber: supplierCreditControlNumber,
-        reason: supplierCreditReason, fiscalEmissionMedium: requestFiscalEmissionMedium,
+        reason: supplierCreditReason, fiscalEmissionMedium,
         sameMediumAsOriginal: true
       });
       setFeedback({ kind: 'success', message: 'Nota de crédito ' + note.creditNoteNumber +
