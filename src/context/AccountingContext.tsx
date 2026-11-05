@@ -3718,13 +3718,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const immutableInventoryFields: Array<keyof InventoryProduct> = [
       'currentStock', 'avgCostBs', 'avgCostUsd', 'lastCostBs', 'lastCostUsd',
-      'inventoryAccountCode', 'costOfSalesAccountCode',
+      'vnrProvisionBs', 'inventoryAccountCode', 'costOfSalesAccountCode',
       'adjustmentAccountCode', 'openingBalanceAccountCode', 'costingMethod', 'itemType',
       'openingDate', 'openingBcvRate'
     ];
-    if (immutableInventoryFields.some(field => Number.isFinite(Number(original[field])) && Number.isFinite(Number(updated[field]))
+    const immutableFieldChanged = immutableInventoryFields.some(field => Number.isFinite(Number(original[field])) && Number.isFinite(Number(updated[field]))
       ? Number(original[field]) !== Number(updated[field])
-      : original[field] !== updated[field])) {
+      : original[field] !== updated[field]);
+    const vnrProvisionChanged = Number(original.vnrProvisionBs || 0) !== Number(updated.vnrProvisionBs || 0);
+    const isAuditedVnrAdjustment = String(reason || '').toLocaleLowerCase().includes('valor neto realizable');
+    if (immutableFieldChanged && !(vnrProvisionChanged && isAuditedVnrAdjustment && immutableInventoryFields.every(field => field === 'vnrProvisionBs' ||
+      (Number.isFinite(Number(original[field])) && Number.isFinite(Number(updated[field]))
+        ? Number(original[field]) === Number(updated[field])
+        : original[field] === updated[field])))) {
       throw new Error('No se pueden corregir existencias, costos históricos, método de costeo ni cuentas de inventario editando la ficha. Use movimientos y ajustes de Kardex con asiento correctivo.');
     }
     const normalizedReason = String(reason || '').trim() || 'Corrección de datos maestros del artículo';
