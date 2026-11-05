@@ -63,14 +63,14 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const diff = money(totalSales - paymentTotal);
   const fmt = (value: number) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
   const sameMachineReports = journalEntries.filter(entry => entry.companyId === currentCompany.id && entry.fiscalZReport && entry.fiscalZReport.machineSerial.trim().toUpperCase() === machineSerial.trim().toUpperCase());
-  const numericStart = /^\\d+$/.test(invoiceStart.trim()) ? Number(invoiceStart) : null;
-  const numericEnd = /^\\d+$/.test(invoiceEnd.trim()) ? Number(invoiceEnd) : null;
+  const numericStart = /^\d+$/.test(invoiceStart.trim()) ? Number(invoiceStart) : null;
+  const numericEnd = /^\d+$/.test(invoiceEnd.trim()) ? Number(invoiceEnd) : null;
   const sameDayRangeOverlap = numericStart !== null && numericEnd !== null && sameMachineReports.some(entry => {
     const z = entry.fiscalZReport!;
-    if (z.date !== date || !/^\\d+$/.test(z.invoiceStart) || !/^\\d+$/.test(z.invoiceEnd)) return false;
+    if (z.date !== date || !/^\d+$/.test(z.invoiceStart) || !/^\d+$/.test(z.invoiceEnd)) return false;
     return numericStart <= Number(z.invoiceEnd) && numericEnd >= Number(z.invoiceStart);
   });
-  const priorNumericReport = sameMachineReports.filter(entry => entry.date < date && /^\\d+$/.test(entry.fiscalZReport!.invoiceEnd))
+  const priorNumericReport = sameMachineReports.filter(entry => entry.date < date && /^\d+$/.test(entry.fiscalZReport!.invoiceEnd))
     .sort((a, b) => b.date.localeCompare(a.date))[0];
   const priorEnd = priorNumericReport ? Number(priorNumericReport.fiscalZReport!.invoiceEnd) : null;
   const invoiceRangeWarning = numericStart !== null && priorEnd !== null && numericStart > priorEnd + 1
