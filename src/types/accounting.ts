@@ -154,6 +154,7 @@ export interface FiscalZReportMetadata {
   vat8Bs: number;
   taxableBase31Bs: number;
   vat31Bs: number;
+  additionalLuxuryTaxBs: number;
   exemptSalesBs: number;
   igtfBs: number;
   totalSalesBs: number;
