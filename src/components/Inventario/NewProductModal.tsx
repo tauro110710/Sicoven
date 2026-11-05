@@ -47,9 +47,9 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       setOpeningDate(product.openingDate || new Date().toISOString().slice(0, 10));
       setOpeningBcvRateInput(String(product.openingBcvRate || currentCompany.bcvRate || ''));
       setAvgCostBs(product.avgCostBs); setSalesPriceBs(product.salesPriceBs);
-      setInventoryAccountCode(product.inventoryAccountCode); setCostOfSalesAccountCode(product.costOfSalesAccountCode);
-      setAdjustmentAccountCode(product.adjustmentAccountCode); setOpeningBalanceAccountCode(product.openingBalanceAccountCode);
-      setCostingMethod(product.costingMethod); setVatTreatment(product.vatTreatment); setItemType(product.itemType);
+      setInventoryAccountCode(product.inventoryAccountCode || '1.1.4.01'); setCostOfSalesAccountCode(product.costOfSalesAccountCode || '5.1.1.01');
+      setAdjustmentAccountCode(product.adjustmentAccountCode || '5.1.2.01'); setOpeningBalanceAccountCode(product.openingBalanceAccountCode || '3.3.1.01');
+      setCostingMethod(product.costingMethod || 'PROMEDIO_PONDERADO'); setVatTreatment(product.vatTreatment || 'GENERAL_16'); setItemType(product.itemType || 'MERCANCIA');
     } else {
       setCode(''); setName(''); setCategory('Mercancías Generales'); setUnit('Unidad');
       setMinStock(10); setCurrentStock(0); setOpeningDate(new Date().toISOString().slice(0, 10));
