@@ -64,6 +64,7 @@ import type { VatFiscalIncident, VatFiscalIncidentCreateInput, VatFiscalIncident
 import { buildSupplierDebitNoteAccountingPlan, type SupplierDebitNoteAccountingDraft } from '../types/supplierDebitNoteAccounting';
 import { calculatePurchaseServiceCreditNote, type PurchaseServiceCreditNoteRequest } from '../types/purchaseServiceCreditNote';
 import { calculateSaleCorrectionNote, type SaleCorrectionNoteRequest } from '../types/saleCorrectionNote';
+import { resolveNonInventoryPurchaseDebitAccount } from '../types/purchaseAccounting';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -2080,12 +2081,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         });
       }
     } else {
-      const debitAccountCode = String(purchaseData.purchaseDebitAccountCode || '').trim();
-      const debitAccount = accounts.find(item => item.code === debitAccountCode && item.isMovement && (item.type === 'GASTOS' || (item.type === 'ACTIVO' && item.code.startsWith('1.2.'))));
       const baseBs = Number(purchaseData.taxableBaseBs) + Number(purchaseData.exemptAmountBs);
-      if (baseBs > 0 && !debitAccount) {
-        throw new Error('La compra no tiene una clasificación contable válida. Seleccione una cuenta de gasto o activo; no se asignará Honorarios Profesionales automáticamente.');
-      }
+      const debitAccount = resolveNonInventoryPurchaseDebitAccount(accounts, purchaseData.purchaseDebitAccountCode, baseBs);
       if (baseBs > 0 && debitAccount) items.push({
         accountCode: debitAccount.code,
         accountName: debitAccount.name,
