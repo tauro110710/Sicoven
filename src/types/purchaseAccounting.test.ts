@@ -6,6 +6,7 @@ import { getCompanyPurchasePaymentAccounts, resolveNonInventoryPurchaseDebitAcco
 const accounts: Account[] = [
   { code: '6.1.1.04', name: 'Honorarios Profesionales', type: 'GASTOS', level: 4, isMovement: true },
   { code: '1.2.1.01', name: 'Mobiliario y Equipos', type: 'ACTIVO', level: 4, isMovement: true },
+  { code: '5.1.1.02', name: 'Costo de Servicios Prestados', type: 'COSTOS', level: 4, isMovement: true },
   { code: '1.1.4.01', name: 'Inventario de Mercancías', type: 'ACTIVO', level: 4, isMovement: true },
   { code: '1.1.1.06.01', name: 'Banco de la empresa', type: 'ACTIVO', level: 5, isMovement: true }
 ];
@@ -33,6 +34,9 @@ describe('purchase debit classification', () => {
   });
   it('allows an explicitly selected fixed-asset account', () => {
     assert.equal(resolveNonInventoryPurchaseDebitAccount(accounts, '1.2.1.01', 100)?.code, '1.2.1.01');
+  });
+  it('allows an explicitly selected direct service cost account', () => {
+    assert.equal(resolveNonInventoryPurchaseDebitAccount(accounts, '5.1.1.02', 100)?.code, '5.1.1.02');
   });
   it('does not allow inventory or bank accounts as a non-inventory debit account', () => {
     assert.throws(() => resolveNonInventoryPurchaseDebitAccount(accounts, '1.1.4.01', 100));
