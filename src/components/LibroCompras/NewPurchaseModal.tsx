@@ -71,7 +71,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
 
   if (!isOpen) return null;
 
-  function parseDecimalInput(value: string) { const raw = value.trim(); if (!raw) return 0; return Number(raw.includes(',') ? raw.replace(/\\./g, '').replace(',', '.') : raw); }
+  function parseDecimalInput(value: string) { const raw = value.trim(); if (!raw) return 0; return Number(raw.includes(',') ? raw.replace(/\./g/g, '').replace(',', '.') : raw); }
 
   // Real-time calculations
   const effectiveTaxableBaseBs = vatNotDiscriminated && taxRate > 0 ? Math.round((taxableGrossBs / (1 + taxRate / 100) + Number.EPSILON) * 100) / 100 : taxableBaseBs;
@@ -155,8 +155,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const inventoryLinesValid = !linkInventory || (
     inventoryLines.length > 0 &&
     inventoryLines.every(line => products.some(p => p.id === line.productId && p.companyId === currentCompany.id) &&
-      Number.isFinite(Number(line.quantity)) && Number(line.quantity) > 0 &&
-      Number.isFinite(Number(line.unitCostBs)) && Number(line.unitCostBs) > 0) &&
+      Number.isFinite(parseDecimalInput(line.quantity)) && Number(line.quantity) > 0 &&
+      Number.isFinite(parseDecimalInput(line.unitCostBs)) && Number(line.unitCostBs) > 0) &&
     Math.abs(inventoryLineTotal - (effectiveTaxableBaseBs + exemptAmountBs)) <= 0.02 &&
     new Set(inventoryLines.map(line=>line.productId)).size === inventoryLines.length
   );
@@ -477,7 +477,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                   required
                   placeholder="0.00"
                   value={vatNotDiscriminated ? taxableGrossInput : taxableBaseInput}
-                  onChange={e => { const value = parseFloat(e.target.value) || 0; if (vatNotDiscriminated) { setTaxableGrossInput(value); setTaxableBaseInput(String(taxRate > 0 ? Math.round((parseDecimalInput(value) / (1 + taxRate / 100) + Number.EPSILON) * 100) / 100 : 0)); } else setTaxableBaseInput(value); }}
+                  onChange={e => { const value = e.target.value; if (vatNotDiscriminated) { setTaxableGrossInput(value); setTaxableBaseInput(String(taxRate > 0 ? Math.round((parseDecimalInput(value) / (1 + taxRate / 100) + Number.EPSILON) * 100) / 100 : 0)); } else setTaxableBaseInput(value); }}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
                 <span className="text-[11px] text-slate-500 font-mono">
@@ -487,10 +487,9 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Monto Exento / Exonerado (Bs.)</label>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0,00"
                   value={exemptAmountInput}
                   onChange={e => setExemptAmountInput(e.target.value)}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
@@ -500,7 +499,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                 <label className="block font-semibold text-slate-700 mb-1">Alícuota IVA</label>
                 <select
                   value={taxRate}
-                  onChange={e => { const rate = Number(e.target.value); setTaxRate(rate); if (rate === 0 && vatNotDiscriminated) { setTaxableBaseBs(taxableGrossBs); setTaxableGrossBs(0); setVatNotDiscriminated(false); } }}
+                  onChange={e => { const rate = Number(e.target.value); setTaxRate(rate); if (rate === 0 && vatNotDiscriminated) { setTaxableBaseInput(String(taxableGrossBs)); setTaxableGrossInput(''); setVatNotDiscriminated(false); } }}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-semibold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 >
                   <option value={16}>16% (Alícuota General SENIAT)</option>
