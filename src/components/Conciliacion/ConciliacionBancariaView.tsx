@@ -270,6 +270,7 @@ export const ConciliacionBancariaView: React.FC = () => {
       );
     } catch (err) {
       console.error('Error generating conciliation PDF:', err);
+      window.alert('No se pudo generar el PDF de la conciliación bancaria: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsExportingPdf(false);
     }
