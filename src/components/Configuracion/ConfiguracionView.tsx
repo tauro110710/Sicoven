@@ -21,7 +21,6 @@ import { AccountingFramework, TaxpayerType, IvaRetentionAgentBasis, JournalEntry
 import { validateFunctionalCurrencyAssessment, validateExchangeabilityAssessment } from '../../types/functionalCurrency';
 import { buildOpeningEntryItems } from '../../types/accountingYearOpening';
 import { CompanyModal } from '../CompanyModal';
-import { BcvRateModal } from '../BcvRateModal';
 import { formatBs, validateVenezuelanRif } from '../../utils/formatters';
 import { MigracionInteligente } from './MigracionInteligente';
 
@@ -45,7 +44,6 @@ export const ConfiguracionView: React.FC = () => {
   } = useAccounting();
 
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
-  const [isBcvModalOpen, setIsBcvModalOpen] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [companySaveBusy, setCompanySaveBusy] = useState(false);
   const companySaveInFlightRef = React.useRef(false);
@@ -95,7 +93,6 @@ export const ConfiguracionView: React.FC = () => {
   const [phone, setPhone] = useState(currentCompany.phone);
   const [email, setEmail] = useState(currentCompany.email);
   const [fiscalYear, setFiscalYear] = useState(currentCompany.fiscalYear);
-  const [bcvRate, setBcvRate] = useState(String(currentCompany.bcvRate));
   const [accountingFramework, setAccountingFramework] = useState<AccountingFramework | ''>(currentCompany.accountingFramework || '');
   const [accountingFrameworkVersion, setAccountingFrameworkVersion] = useState(currentCompany.accountingFrameworkVersion || '');
   const [accountingFrameworkAdoptionDate, setAccountingFrameworkAdoptionDate] = useState(currentCompany.accountingFrameworkAdoptionDate || '');
@@ -138,7 +135,6 @@ export const ConfiguracionView: React.FC = () => {
     setPhone(currentCompany.phone);
     setEmail(currentCompany.email);
     setFiscalYear(currentCompany.fiscalYear);
-    setBcvRate(String(currentCompany.bcvRate));
     setAccountingFramework(currentCompany.accountingFramework || '');
     setAccountingFrameworkVersion(currentCompany.accountingFrameworkVersion || '');
     setAccountingFrameworkAdoptionDate(currentCompany.accountingFrameworkAdoptionDate || '');
@@ -380,7 +376,6 @@ export const ConfiguracionView: React.FC = () => {
         phone: phone.trim(),
         email: email.trim(),
         fiscalYear: Number(fiscalYear),
-        bcvRate: Number(bcvRate)
       });
       await waitForPersistence();
       setSaveSuccess(true);
@@ -776,22 +771,7 @@ export const ConfiguracionView: React.FC = () => {
                 <input type="checkbox" checked={isIgtfPerceptionAgent} onChange={e => setIsIgtfPerceptionAgent(e.target.checked)} className="mt-0.5" />
                 <span><strong>Empresa designada agente de percepción del IGTF</strong><span className="block text-xs text-slate-600 mt-1">Actívelo únicamente si la designación aplica legalmente a esta empresa. Este parámetro habilita el cálculo en las facturas elegibles.</span></span>
               </label>
-            </div>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Tasa Oficial BCV (Bs/$)</label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  required
-                  value={bcvRate}
-                  onChange={e => setBcvRate(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-                />
-              </div>
-            </div>
-          </div>
+            </div></div>
 
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Dirección Fiscal Completa</label>
@@ -1139,8 +1119,6 @@ export const ConfiguracionView: React.FC = () => {
         </div>
       </div>
 
-      <CompanyModal isOpen={isCompanyModalOpen} onClose={() => setIsCompanyModalOpen(false)} />
-      <BcvRateModal isOpen={isBcvModalOpen} onClose={() => setIsBcvModalOpen(false)} />
-    </div>
+      <CompanyModal isOpen={isCompanyModalOpen} onClose={() => setIsCompanyModalOpen(false)} /></div>
   );
 };
