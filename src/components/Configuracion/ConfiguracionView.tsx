@@ -72,6 +72,7 @@ export const ConfiguracionView: React.FC = () => {
     date.setUTCDate(date.getUTCDate() + 1);
     return date.toISOString().slice(0, 10);
   });
+  const [openingBcvRateInput, setOpeningBcvRateInput] = useState('');
   const [retainedEarningsAccountCode, setRetainedEarningsAccountCode] = useState('');
   const [openingPreview, setOpeningPreview] = useState<JournalEntryItem[] | null>(null);
   const [openingError, setOpeningError] = useState<string | null>(null);
@@ -210,6 +211,11 @@ export const ConfiguracionView: React.FC = () => {
   };
 
   const handlePostOpening = async () => {
+    const openingBcvRate = parseExchangeabilityNumber(openingBcvRateInput);
+    if (!Number.isFinite(openingBcvRate) || openingBcvRate <= 0) {
+      setOpeningError('Ingrese la tasa BCV histórica aplicable al asiento de apertura, por ejemplo 889,67.');
+      return;
+    }
     if (!openingPreview) {
       setOpeningError('Genere y revise la vista previa antes de registrar el asiento.');
       return;
@@ -221,6 +227,7 @@ export const ConfiguracionView: React.FC = () => {
     const confirmed = window.confirm(
       'REGISTRAR ASIENTO DE APERTURA\\n\\nEmpresa: ' + currentCompany.name +
       '\\nFecha: ' + openingDate +
+      '\\nTasa BCV: Bs. ' + openingBcvRateInput + ' por USD' +
       '\\nTotal debe: Bs. ' + totals.debitBs.toFixed(2) + ' / $ ' + totals.debitUsd.toFixed(6) +
       '\\nTotal haber: Bs. ' + totals.creditBs.toFixed(2) + ' / $ ' + totals.creditUsd.toFixed(6) +
       '\\n\\nEl asiento se guardará en SQLite y quedará registrado en la bitácora. Esta acción no se ejecuta automáticamente. ¿Confirma?'
@@ -233,6 +240,7 @@ export const ConfiguracionView: React.FC = () => {
         periodStartDate: openingPeriodStart,
         periodEndDate: openingPeriodEnd,
         openingDate,
+        bcvRate: openingBcvRate,
         retainedEarningsAccountCode: retainedEarningsAccountCode || undefined
       });
       setOpeningPreview(null);
@@ -923,7 +931,7 @@ export const ConfiguracionView: React.FC = () => {
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Inicio del ejercicio</label>
             <input type="date" value={openingPeriodStart} onChange={e => { setOpeningPeriodStart(e.target.value); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
@@ -935,6 +943,10 @@ export const ConfiguracionView: React.FC = () => {
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de apertura</label>
             <input type="date" value={openingDate} onChange={e => { setOpeningDate(e.target.value); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) *</label>
+            <input type="text" inputMode="decimal" value={openingBcvRateInput} onChange={e => { setOpeningBcvRateInput(e.target.value); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} placeholder="Ej.: 889,67" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Cuenta patrimonial para resultado</label>
@@ -956,7 +968,7 @@ export const ConfiguracionView: React.FC = () => {
           <button type="button" onClick={handlePreviewOpening} disabled={openingBusy || !isStorageReady || !currentCompany.closedThroughDate} className="rounded-lg bg-indigo-600 hover:bg-indigo-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
             Preparar vista previa
           </button>
-          <button type="button" onClick={handlePostOpening} disabled={openingBusy || !openingPreview || !isStorageReady} className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={handlePostOpening} disabled={openingBusy || !openingPreview || !isStorageReady || parseExchangeabilityNumber(openingBcvRateInput) <= 0} className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
             {openingBusy ? 'Guardando y verificando SQLite…' : 'Confirmar y registrar apertura'}
           </button>
         </div>
