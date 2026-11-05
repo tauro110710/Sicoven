@@ -95,15 +95,17 @@ export const LibroVentasView: React.FC = () => {
   const zBaseBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.taxableBase16Bs || 0) + (entry.fiscalZReport?.taxableBase8Bs || 0) + (entry.fiscalZReport?.taxableBase31Bs || 0), 0);
   const zVatBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.vat16Bs || 0) + (entry.fiscalZReport?.vat8Bs || 0) + (entry.fiscalZReport?.vat31Bs || 0), 0);
   const zLuxuryTaxBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.additionalLuxuryTaxBs || 0), 0);
+  const saleLuxuryTaxBs = filteredSales.reduce((sum, sale) => sum + (sale.taxRate === 31 ? sale.taxableBaseBs * 0.15 : 0), 0);
+  const saleLuxuryTaxUsd = filteredSales.reduce((sum, sale) => sum + (sale.taxRate === 31 && sale.bcvRate > 0 ? sale.taxableBaseBs * 0.15 / sale.bcvRate : 0), 0);
   const zBaseUsd = filteredZReports.reduce((sum, entry) => sum + ((entry.fiscalZReport?.taxableBase16Bs || 0) + (entry.fiscalZReport?.taxableBase8Bs || 0) + (entry.fiscalZReport?.taxableBase31Bs || 0)) / entry.bcvRate, 0);
   const zVatUsd = filteredZReports.reduce((sum, entry) => sum + ((entry.fiscalZReport?.vat16Bs || 0) + (entry.fiscalZReport?.vat8Bs || 0) + (entry.fiscalZReport?.vat31Bs || 0)) / entry.bcvRate, 0);
   const zExemptBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.exemptSalesBs || 0), 0);
   const zIgtfBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.igtfBs || 0), 0);
   const totalFiscalBaseBs = totalBaseBs + zBaseBs;
   const totalFiscalBaseUsd = totalBaseUsd + zBaseUsd;
-  const totalFiscalIvaUsd = totalIvaDebitoUsd + zVatUsd;
-  const totalFiscalIvaBs = totalIvaDebitoBs + zVatBs;
-  const totalFiscalLuxuryTaxBs = zLuxuryTaxBs;
+    const totalFiscalIvaBs = totalIvaDebitoBs - saleLuxuryTaxBs + zVatBs;
+  const totalFiscalIvaUsd = totalIvaDebitoUsd - saleLuxuryTaxUsd + zVatUsd;
+  const totalFiscalLuxuryTaxBs = saleLuxuryTaxBs + zLuxuryTaxBs;
   const totalFiscalExemptBs = totalExentoBs + zExemptBs;
   const totalFiscalIgtfBs = totalIgtfBs + zIgtfBs;
 
