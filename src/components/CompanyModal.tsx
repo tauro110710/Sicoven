@@ -111,7 +111,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 pointer-events-auto">
-      <div className="relative z-[1001] isolate pointer-events-auto bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative z-[1001] isolate pointer-events-auto company-registration-modal bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg">
@@ -131,7 +131,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto company-registration-form pointer-events-auto">
           {/* RIF & Razón Social */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
