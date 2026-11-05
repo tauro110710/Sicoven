@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { TrendingUp, X, Check } from 'lucide-react';
 import { formatBs, formatUsd, formatRif } from '../../utils/formatters';
-import { getValidBcvRate } from '../../types/saleBcvRate';
 
 interface NewSaleModalProps {
   isOpen: boolean;
@@ -24,8 +23,10 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const [affectedInvoiceNumber, setAffectedInvoiceNumber] = useState<string>('');
 
   // Amounts
-  const [taxableBaseBs, setTaxableBaseBs] = useState<number>(0);
-  const [exemptAmountBs, setExemptAmountBs] = useState<number>(0);
+  const [taxableBaseInput, setTaxableBaseInput] = useState('');
+  const taxableBaseBs = parseDecimalInput(taxableBaseInput);
+  const [exemptAmountInput, setExemptAmountInput] = useState('');
+  const exemptAmountBs = parseDecimalInput(exemptAmountInput);
   const [taxRate, setTaxRate] = useState<number>(16);
 
   // Client Withholding
@@ -37,8 +38,9 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const [applyIgtf, setApplyIgtf] = useState(false);
 
   // Currency
-  const bcvRate = getValidBcvRate(currentCompany.bcvRate) ?? 0;
-  const hasValidBcvRate = bcvRate > 0;
+  const [bcvRateInput, setBcvRateInput] = useState('');
+  const bcvRate = parseDecimalInput(bcvRateInput);
+  const hasValidBcvRate = Number.isFinite(bcvRate) && bcvRate > 0;
   const [notes, setNotes] = useState<string>('');
   const [paymentTerm, setPaymentTerm] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
   const [creditDays, setCreditDays] = useState<number>(7);
@@ -47,6 +49,8 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const dueDate = (() => { const d = new Date(invoiceDate + 'T12:00:00'); d.setDate(d.getDate() + creditDays); return d.toISOString().slice(0, 10); })();
 
   if (!isOpen) return null;
+
+  function parseDecimalInput(value: string) { const raw = value.trim(); if (!raw) return 0; return Number(raw.includes(',') ? raw.replace(/\\./g, '').replace(',', '.') : raw); }
 
   // La tasa de la empresa es la única fuente autorizada; nunca se inventa una tasa de respaldo.
   // Real-time calculations
@@ -68,7 +72,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hasValidBcvRate) {
-      window.alert('No hay una tasa BCV válida registrada para esta empresa. Actualice la tasa en Configuración antes de registrar la venta.');
+      window.alert('Ingrese la tasa BCV aplicable a esta factura, por ejemplo 889,67.');
       return;
     }
     if (!customerRif.trim() || !customerName.trim() || !invoiceNumber.trim()) return;
@@ -247,13 +251,12 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Base Imponible Gravada (Bs.) *</label>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   required
                   placeholder="0.00"
-                  value={taxableBaseBs || ''}
-                  onChange={e => setTaxableBaseBs(parseFloat(e.target.value) || 0)}
+                  value={taxableBaseInput}
+                  onChange={e => setTaxableBaseInput(e.target.value)}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
                 <span className="text-[11px] text-slate-500 font-mono">
@@ -267,8 +270,8 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                   step="0.01"
                   min="0"
                   placeholder="0.00"
-                  value={exemptAmountBs || ''}
-                  onChange={e => setExemptAmountBs(parseFloat(e.target.value) || 0)}
+                  value={exemptAmountInput}
+                  onChange={e => setExemptAmountInput(e.target.value)}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
