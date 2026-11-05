@@ -26,10 +26,10 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const [concept, setConcept] = useState<'COMPRA' | 'VENTA' | 'MERMA' | 'AJUSTE' | 'DEVOLUCION_COMPRA' | 'DEVOLUCION_CLIENTE' | 'AUTOCONSUMO' | 'INVENTARIO_INICIAL'>('COMPRA');
   const [correctionMovementId, setCorrectionMovementId] = useState('');
   const [documentRef, setDocumentRef] = useState<string>('');
-  const [quantity, setQuantity] = useState<number>(1);
-  const [unitCostBs, setUnitCostBs] = useState<number>(0);
-  const [additionalLandedCostsBs, setAdditionalLandedCostsBs] = useState<number>(0);
-  const [bcvRateInput, setBcvRateInput] = useState(String(currentCompany.bcvRate || ''));
+  const [quantityInput, setQuantityInput] = useState('1');
+  const [unitCostInput, setUnitCostInput] = useState('0');
+  const [additionalLandedCostsInput, setAdditionalLandedCostsInput] = useState('0');
+  const [bcvRateInput, setBcvRateInput] = useState('');
   const [documentType, setDocumentType] = useState('Factura de compra');
   const [counterpartyRif, setCounterpartyRif] = useState('');
   const [counterpartyName, setCounterpartyName] = useState('');
@@ -42,13 +42,17 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   // Auto-set cost when product changes
   React.useEffect(() => {
     if (selectedProduct) {
-      setUnitCostBs(selectedProduct.avgCostBs || 0);
+      setUnitCostInput(String(selectedProduct.avgCostBs || 0));
     }
   }, [productId, selectedProduct]);
 
   if (!isOpen || !selectedProduct) return null;
 
-  const bcvRate = Number(bcvRateInput);
+  const parseDecimalInput = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.split('.').join('').replace(',', '.') : raw); };
+  const quantity = parseDecimalInput(quantityInput);
+  const unitCostBs = parseDecimalInput(unitCostInput);
+  const additionalLandedCostsBs = parseDecimalInput(additionalLandedCostsInput);
+  const bcvRate = parseDecimalInput(bcvRateInput);
   const unitCostUsd = bcvRate > 0 ? unitCostBs / bcvRate : 0;
   const totalCostBs = type === 'ENTRADA'
     ? quantity * unitCostBs + additionalLandedCostsBs
@@ -253,7 +257,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) *</label>
-              <input type="number" min="0.000001" step="0.000001" required value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+              <input type="text" inputMode="decimal" required placeholder="Ej.: 889,67" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">RIF proveedor / cliente</label>
@@ -299,7 +303,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
                 step="0.000001"
                 required
                 value={quantity}
-                onChange={e => setQuantity(Number(e.target.value))}
+                onChange={e => setQuantityInput(e.target.value)}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               />
             </div>
@@ -311,14 +315,14 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
                 min="0"
                 required
                 value={unitCostBs || ''}
-                onChange={e => setUnitCostBs(parseFloat(e.target.value) || 0)}
+                onChange={e => setUnitCostInput(e.target.value)}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               />
             </div>
           </div>
           {type === 'ENTRADA' && <div>
             <label className="block font-semibold text-slate-700 mb-1">Fletes y gastos de nacionalización asignados a esta entrada (Bs.)</label>
-            <input type="number" min="0" step="0.01" value={additionalLandedCostsBs || ''} onChange={e => setAdditionalLandedCostsBs(parseFloat(e.target.value) || 0)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+            <input type="text" inputMode="decimal" value={additionalLandedCostsInput} onChange={e => setAdditionalLandedCostsInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
             <p className="mt-1 text-[11px] text-slate-500">Estos costos se distribuyen sobre la cantidad recibida y se capitalizan en el costo unitario del artículo.</p>
           </div>}
 
