@@ -70,7 +70,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
   const vatAccounts = accounts.filter(account =>
     account.isMovement && ['ACTIVO', 'COSTOS', 'GASTOS'].includes(account.type)
   );
-  const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\\./g, '').replace(',', '.') : raw); };
+  const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
   const taxableBaseBs = parseAmount(taxableBase || '0');
   const exemptAmountBs = parseAmount(exemptAmount || '0');
   const vatAmountBs = parseAmount(vatAmount || '0');
