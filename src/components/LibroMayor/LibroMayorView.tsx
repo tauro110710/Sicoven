@@ -55,6 +55,7 @@ export const LibroMayorView: React.FC = () => {
       await exportMayorPdf(currentCompany, displayedLedgers, displayCurrency);
     } catch (err) {
       console.error('Error exporting Mayor to PDF:', err);
+      window.alert('No se pudo generar el PDF del Libro Mayor: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsExportingPdf(false);
     }
