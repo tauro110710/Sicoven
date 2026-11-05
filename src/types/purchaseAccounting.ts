@@ -28,7 +28,7 @@ export function resolveNonInventoryPurchaseDebitAccount(
   if (baseAmountBs === 0) return undefined;
   const code = String(selectedAccountCode || '').trim();
   const account = accounts.find(item => item.code === code && item.isMovement && (
-    item.type === 'GASTOS' || (item.type === 'ACTIVO' && item.code.startsWith('1.2.'))
+    item.type === 'GASTOS' || item.type === 'COSTOS' || (item.type === 'ACTIVO' && item.code.startsWith('1.2.'))
   ));
   if (!account) {
     throw new Error('La compra no tiene una clasificación contable válida. Seleccione una cuenta de gasto o activo; no se asignará Honorarios Profesionales automáticamente.');
