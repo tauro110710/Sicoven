@@ -65,7 +65,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [paymentAccountCode, setPaymentAccountCode] = useState<string>('');
   const [paymentReference, setPaymentReference] = useState<string>('');
   const companyBankAccountCodes = new Set(bankAccounts.filter(bank => bank.companyId === currentCompany.id).map(bank => bank.accountCode));
-  const paymentAccounts = accounts.filter(account => isPurchasePaymentAccount(account) && (!/^1\\.1\\.1\\.0[3-9](?:\\.|$)/.test(account.code) || companyBankAccountCodes.has(account.code))).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+  const paymentAccounts = accounts.filter(account => isPurchasePaymentAccount(account) && (!/^1\.1\.1\.0[3-9](?:\.|$)/.test(account.code) || companyBankAccountCodes.has(account.code))).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
   const [creditDays, setCreditDays] = useState<number>(7);
   const [currencyPricingMode, setCurrencyPricingMode] = useState<'USD_FIJO' | 'BS_AJUSTABLE' | 'REVISION_MANUAL'>('USD_FIJO');
   const [fiscalAdjustmentMode, setFiscalAdjustmentMode] = useState<'IVA_ORIGINAL_DIF_CAMBIARIA' | 'AJUSTE_BASE_IVA' | 'REVISION_CONTADOR'>('REVISION_CONTADOR');
