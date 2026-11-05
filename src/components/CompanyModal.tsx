@@ -97,6 +97,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       isPersonalFirm,
       isIgtfPerceptionAgent,
       fiscalYear: Number(fiscalYear) || new Date().getFullYear(),
+      bcvRate: 0,
     });
     await waitForPersistence();
     onClose();
