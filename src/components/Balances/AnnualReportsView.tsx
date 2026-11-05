@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs, formatUsd } from '../../utils/formatters';
 import { buildEquityChangesReport } from '../../types/equityChanges';
@@ -26,6 +26,9 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
     return Array.from(new Set([...years, Number(currentCompany.fiscalYear) || new Date().getFullYear()])).sort((a, b) => b - a);
   }, [journalEntries, currentCompany.id, currentCompany.fiscalYear]);
   const [year, setYear] = useState(String(availableYears[0] ?? new Date().getFullYear()));
+  useEffect(() => {
+    if (!availableYears.includes(Number(year))) setYear(String(availableYears[0] ?? Number(currentCompany.fiscalYear) ?? new Date().getFullYear()));
+  }, [availableYears, currentCompany.fiscalYear, year]);
   const [showClosingChecklist, setShowClosingChecklist] = useState(false);
   const [disclosureTitle, setDisclosureTitle] = useState('');
   const [disclosureBody, setDisclosureBody] = useState('');
