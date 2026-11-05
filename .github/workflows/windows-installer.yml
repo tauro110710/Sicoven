@@ -5,6 +5,12 @@ name: SICOVEN Windows installer
 # deliberate installer/release builds to protect the GitHub Free allowance.
 on:
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publicar el instalador como GitHub prerelease (solo con autorización expresa)'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: read
@@ -118,7 +124,7 @@ jobs:
           Write-Host "SICOVEN 1.0.6 -> ${version}: instalación, arranque, actualización, relanzamiento y persistencia SQLite verificados."
           Get-Item $installer.FullName | Select-Object Name, Length
       - name: Publish installer as a GitHub Release asset
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && inputs.publish_release == true
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_SHA: ${{ github.sha }}
