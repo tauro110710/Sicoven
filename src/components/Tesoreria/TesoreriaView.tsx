@@ -46,6 +46,10 @@ export const TesoreriaView: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (savingRef.current) return;
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0 || !Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0) {
+      setMessage('Ingrese un monto positivo y la tasa BCV histórica aplicable (por ejemplo 889,67).');
+      return;
+    }
     savingRef.current = true;
     setSaving(true);
     setMessage('Guardando movimiento en SQLite...');
