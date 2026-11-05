@@ -14,7 +14,7 @@ interface NewPurchaseModalProps {
 }
 
 export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, accounts, products, movements, purchases, addPurchase, addMovement, runAtomicInvoiceImport, waitForPersistence } = useAccounting();
+  const { currentCompany, accounts, bankAccounts, products, movements, purchases, addPurchase, addMovement, runAtomicInvoiceImport, waitForPersistence } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
@@ -64,7 +64,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [paymentTerm, setPaymentTerm] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
   const [paymentAccountCode, setPaymentAccountCode] = useState<string>('');
   const [paymentReference, setPaymentReference] = useState<string>('');
-  const paymentAccounts = accounts.filter(isPurchasePaymentAccount).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+  const companyBankAccountCodes = new Set(bankAccounts.filter(bank => bank.companyId === currentCompany.id).map(bank => bank.accountCode));
+  const paymentAccounts = accounts.filter(account => isPurchasePaymentAccount(account) && (!/^1\\.1\\.1\\.0[3-9](?:\\.|$)/.test(account.code) || companyBankAccountCodes.has(account.code))).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
   const [creditDays, setCreditDays] = useState<number>(7);
   const [currencyPricingMode, setCurrencyPricingMode] = useState<'USD_FIJO' | 'BS_AJUSTABLE' | 'REVISION_MANUAL'>('USD_FIJO');
   const [fiscalAdjustmentMode, setFiscalAdjustmentMode] = useState<'IVA_ORIGINAL_DIF_CAMBIARIA' | 'AJUSTE_BASE_IVA' | 'REVISION_CONTADOR'>('REVISION_CONTADOR');
@@ -158,8 +159,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const inventoryLinesValid = !linkInventory || (
     inventoryLines.length > 0 &&
     inventoryLines.every(line => products.some(p => p.id === line.productId && p.companyId === currentCompany.id) &&
-      Number.isFinite(parseDecimalInput(line.quantity)) && Number(line.quantity) > 0 &&
-      Number.isFinite(parseDecimalInput(line.unitCostBs)) && Number(line.unitCostBs) > 0) &&
+      Number.isFinite(parseDecimalInput(line.quantity)) && parseDecimalInput(line.quantity) > 0 &&
+      Number.isFinite(parseDecimalInput(line.unitCostBs)) && parseDecimalInput(line.unitCostBs) > 0) &&
     Math.abs(inventoryLineTotal - (effectiveTaxableBaseBs + exemptAmountBs)) <= 0.02 &&
     new Set(inventoryLines.map(line=>line.productId)).size === inventoryLines.length
   );
@@ -288,13 +289,13 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       currencyPricingMode,
       fiscalAdjustmentMode,
       purchaseDebitAccountCode: linkInventory ? undefined : purchaseDebitAccountCode,
-      inventoryLines: linkInventory ? inventoryLines.map(line => ({productId:line.productId,quantity:Number(line.quantity),unitCostBs:Number(line.unitCostBs)})) : undefined
+      inventoryLines: linkInventory ? inventoryLines.map(line => ({productId:line.productId,quantity:parseDecimalInput(line.quantity),unitCostBs:parseDecimalInput(line.unitCostBs)})) : undefined
       });
       if (linkInventory) {
         for (const line of inventoryLines) {
           const product = products.find(p => p.id === line.productId && p.companyId === currentCompany.id)!;
-          const quantity = Number(line.quantity);
-          const unitCostBs = Number(line.unitCostBs);
+          const quantity = parseDecimalInput(line.quantity);
+          const unitCostBs = parseDecimalInput(line.unitCostBs);
           addMovement({
             productId: product.id, productName: product.name, productCode: product.code,
             date: invoiceDate, type: 'ENTRADA', concept: 'COMPRA',
@@ -609,7 +610,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
             <span className="font-bold text-slate-800 uppercase tracking-wider block">Vista previa del asiento contable</span>
             <div className="grid grid-cols-3 gap-2 font-semibold text-slate-600 border-b border-sky-200 pb-1"><span>Cuenta / concepto</span><span className="text-right">Debe (Bs.)</span><span className="text-right">Haber (Bs.)</span></div>
             {[
-              {name: linkInventory ? 'Inventario / mercancía' : (nonInventoryDebitAccounts.find(account=>account.code===purchaseDebitAccountCode)?.name || 'Cuenta de gasto/activo por seleccionar'), debit: effectiveTaxableBaseBs + exemptAmountBs, credit: 0},
+              {name: linkInventory ? 'Inventario / mercancía' : (nonInventoryDebitAccounts.find(account=>account.code===purchaseDebitAccountCode)?.name || 'Cuenta de gasto/activo por seleccionar'), debit: effectiveTaxableBaseBs, credit: 0},
               ...(exemptAmountBs > 0 ? [{name:'Monto exento', debit:exemptAmountBs, credit:0}] : []),
               ...(vatAmountBs > 0 ? [{name:'Crédito fiscal IVA', debit:vatAmountBs, credit:0}] : []),
               ...(igtfAmountBs > 0 ? [{name:'Gasto por IGTF', debit:igtfAmountBs, credit:0}] : []),
