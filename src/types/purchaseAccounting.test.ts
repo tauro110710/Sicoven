@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Account } from './accounting';
-import { resolveNonInventoryPurchaseDebitAccount } from './purchaseAccounting';
+import { getCompanyPurchasePaymentAccounts, resolveNonInventoryPurchaseDebitAccount } from './purchaseAccounting';
 
 const accounts: Account[] = [
   { code: '6.1.1.04', name: 'Honorarios Profesionales', type: 'GASTOS', level: 4, isMovement: true },
@@ -11,6 +11,20 @@ const accounts: Account[] = [
 ];
 
 describe('purchase debit classification', () => {
+  it('restricts bank payment accounts to the active company while keeping cash drawers available', () => {
+    const paymentAccounts: Account[] = [
+      { code: '1.1.1.01', name: 'Caja Principal', type: 'ACTIVO', level: 4, isMovement: true },
+      { code: '1.1.1.03', name: 'Banco legado', type: 'ACTIVO', level: 4, isMovement: true },
+      { code: '1.1.1.06.01', name: 'Banco Empresa A', type: 'ACTIVO', level: 5, isMovement: true },
+      { code: '1.1.1.06.02', name: 'Banco Empresa B', type: 'ACTIVO', level: 5, isMovement: true }
+    ];
+    const banks = [
+      { companyId: 'A', accountCode: '1.1.1.06.01' },
+      { companyId: 'B', accountCode: '1.1.1.06.02' }
+    ];
+    assert.deepEqual(getCompanyPurchasePaymentAccounts(paymentAccounts, banks, 'A').map(account => account.code), ['1.1.1.01', '1.1.1.06.01']);
+  });
+
   it('rejects an unclassified non-inventory purchase instead of defaulting to honorarios', () => {
     assert.throws(() => resolveNonInventoryPurchaseDebitAccount(accounts, undefined, 100), /no se asignará Honorarios/);
   });
