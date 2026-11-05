@@ -779,36 +779,6 @@ export async function exportComprasPdf(
     ];
   });
 
-  // Los cierres Z se incorporan como renglones consolidados; no se simulan facturas ni RIF individuales.
-  const fiscalZEntries = zReportEntries.filter(entry => entry.companyId === company.id && entry.fiscalZReport);
-  fiscalZEntries.forEach(entry => {
-    const z = entry.fiscalZReport!;
-    const base = z.taxableBase16Bs + z.taxableBase8Bs + z.taxableBase31Bs;
-    const vat = z.vat16Bs + z.vat8Bs + z.vat31Bs;
-    totalMonto += z.totalSalesBs;
-    totalExento += z.exemptSalesBs;
-    totalBase += base;
-    totalIva += vat;
-    totalLuxuryTax += z.additionalLuxuryTaxBs || 0;
-    totalIgtf += z.igtfBs;
-    tableBody.push([
-      'Z-' + entry.entryNumber,
-      formatDate(z.date),
-      '—',
-      'VENTAS CONSOLIDADAS · MÁQUINA FISCAL',
-      'Z ' + z.zNumber + ' · FAC. ' + z.invoiceStart + '–' + z.invoiceEnd,
-      z.controlStart ? z.controlStart + '–' + z.controlEnd : '—',
-      formatNumberVe(z.totalSalesBs),
-      z.exemptSalesBs > 0 ? formatNumberVe(z.exemptSalesBs) : '-',
-      formatNumberVe(base),
-      '16 / 8 / 31',
-      formatNumberVe(vat),
-      (z.additionalLuxuryTaxBs || 0) > 0 ? formatNumberVe(z.additionalLuxuryTaxBs) : '-',
-      '-', '-', '-',
-      z.igtfBs > 0 ? formatNumberVe(z.igtfBs) : '-'
-    ]);
-  });
-
   // Totals row
   tableBody.push([
     { content: hasCorrectionNotes ? 'TOTALES AJUSTADOS DEL PERÍODO:' : 'TOTALES DEL PERÍODO:', colSpan: 6, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
@@ -935,6 +905,38 @@ export async function exportVentasPdf(
       (s.igtfAmountBs || 0) > 0 ? formatNumberVe(sign * (s.igtfAmountBs || 0)) : '-'
     ];
   });
+
+  // Los cierres Z se incorporan como renglones consolidados; no se simulan facturas ni RIF individuales.
+  const fiscalZEntries = zReportEntries.filter(entry => entry.companyId === company.id && entry.fiscalZReport);
+  fiscalZEntries.forEach(entry => {
+    const z = entry.fiscalZReport!;
+    const base = z.taxableBase16Bs + z.taxableBase8Bs + z.taxableBase31Bs;
+    const vat = z.vat16Bs + z.vat8Bs + z.vat31Bs;
+    totalMonto += z.totalSalesBs;
+    totalExento += z.exemptSalesBs;
+    totalBase += base;
+    totalIva += vat;
+    totalLuxuryTax += z.additionalLuxuryTaxBs || 0;
+    totalIgtf += z.igtfBs;
+    tableBody.push([
+      'Z-' + entry.entryNumber,
+      formatDate(z.date),
+      '—',
+      'VENTAS CONSOLIDADAS · MÁQUINA FISCAL',
+      'Z ' + z.zNumber + ' · FAC. ' + z.invoiceStart + '–' + z.invoiceEnd,
+      z.controlStart ? z.controlStart + '–' + z.controlEnd : '—',
+      formatNumberVe(z.totalSalesBs),
+      z.exemptSalesBs > 0 ? formatNumberVe(z.exemptSalesBs) : '-',
+      formatNumberVe(base),
+      '16 / 8 / 31',
+      formatNumberVe(vat),
+      (z.additionalLuxuryTaxBs || 0) > 0 ? formatNumberVe(z.additionalLuxuryTaxBs) : '-',
+      '-', '-', '-',
+      z.igtfBs > 0 ? formatNumberVe(z.igtfBs) : '-'
+    ]);
+  });
+
+
 
   // Totals row
   tableBody.push([
