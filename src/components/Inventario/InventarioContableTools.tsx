@@ -298,18 +298,19 @@ export const InventarioContableTools: React.FC = () => {
         description: (delta > 0 ? 'Provisión' : 'Reversión') + ' por VNR de inventario · ' + selectedProduct.code,
         type: 'AJUSTE', bcvRate: rate, referenceDoc: 'VNR-' + selectedProduct.code + '-' + new Date().toISOString().slice(0,10), items
       });
-      updateProduct({
+      await updateProduct({
         ...selectedProduct, vnrProvisionBs: vnr.writeDownBs,
         vnrEstimatedSellingPriceBs: Number(sellingPrice), vnrCompletionCostBs: Number(completionCost),
         vnrSellingCostBs: Number(sellingCost), vnrLastTestDate: new Date().toISOString().slice(0,10)
-      });
+      }, 'Reconocimiento o actualización de provisión por valor neto realizable',
+      'Cálculo VNR: precio estimado ' + sellingPrice + ' Bs; costos de terminación ' + completionCost + ' Bs; costos de venta ' + sellingCost + ' Bs; provisión resultante ' + vnr.writeDownBs + ' Bs.');
       setMessage('Evaluación VNR registrada en el producto y en el Libro Diario.');
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo registrar la provisión VNR.'); }
   };
 
 
 
-  const saveRecipe = () => {
+  const saveRecipe = async () => {
     setError(''); setMessage('');
     if (!selectedFinishedProduct) { setError('Seleccione el producto terminado.'); return; }
     if (selectedFinishedProduct.itemType !== 'PRODUCTO_TERMINADO' && selectedFinishedProduct.itemType !== 'PRODUCTO_EN_PROCESO') { setError('Clasifique primero el artículo como Producto terminado o Producto en proceso en su ficha.'); return; }
@@ -318,7 +319,9 @@ export const InventarioContableTools: React.FC = () => {
       setError('La matriz contiene componentes inválidos. Use materias primas/productos en proceso y cantidades positivas.'); return;
     }
     try {
-      updateProduct({ ...selectedFinishedProduct, bomComponents: recipeLines });
+      await updateProduct({ ...selectedFinishedProduct, bomComponents: recipeLines },
+        'Actualización de matriz insumo-producto del producto terminado',
+        'Se registraron ' + recipeLines.length + ' componentes con sus cantidades estándar por unidad producida.');
       setMessage('Matriz insumo-producto guardada en el registro del producto terminado.');
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar la matriz.'); }
   };
