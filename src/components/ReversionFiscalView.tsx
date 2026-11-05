@@ -835,7 +835,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
             submitting={requestActionSubmitting}
             onSubmit={()=>void submitDirectCorrection()}
             submitLabel={requestCorrectionType === 'NOTA_DEBITO_VENTA' ? 'Registrar ND de venta' : 'Registrar NC de venta'}
-          />}
+          />
           </>}
           </>}
         </div>}
