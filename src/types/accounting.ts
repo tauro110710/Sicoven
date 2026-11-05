@@ -226,6 +226,8 @@ export interface SupplierDebitNoteReview {
 export interface PurchaseRecord {
   /** Líneas de mercancía vinculadas al Kardex; ausente en facturas históricas sin detalle. */
   inventoryLines?: PurchaseInventoryLine[];
+  /** Cuenta explícita de débito para compras no inventariables; nunca se infiere por defecto. */
+  purchaseDebitAccountCode?: string;
   /** Revisión profesional inmutable y trazable que autoriza el plan contable preliminar de una ND. */
   supplierDebitNoteReview?: SupplierDebitNoteReview;
   /** Enlace inmutable de una nota de crédito de proveedor a su factura y movimientos físicos. */
