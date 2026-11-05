@@ -223,6 +223,7 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
             </div>)}
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3"><span className="font-semibold">Total distribuido: Bs. {fmt(paymentTotal)}</span><span className={Math.abs(diff) <= 0.01 ? 'font-bold text-emerald-700' : 'font-bold text-rose-700'}>Diferencia: Bs. {fmt(diff)}</span></div>
+          <p className="mt-2 text-[11px] text-amber-800">La porción de ventas a crédito se contabiliza como saldo consolidado en Cuentas por Cobrar; este cierre no identifica deudores individuales. El seguimiento por cliente requiere su auxiliar documental correspondiente.</p>
         </section>
         <label className="block font-semibold text-slate-700">Observaciones del contador (opcional)<textarea value={observations} onChange={event => setObservations(event.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[11px] text-emerald-900"><strong>Soportes documentales opcionales.</strong> Puede registrar y contabilizar el cierre sin adjuntar PDF, fotografía ni otro archivo. La ausencia de soportes no bloquea el registro.</div>
