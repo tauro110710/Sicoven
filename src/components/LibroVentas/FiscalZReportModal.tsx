@@ -43,6 +43,7 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
   });
   const [observations, setObservations] = useState('');
   const [saving, setSaving] = useState(false);
+  const savingRef = React.useRef(false);
   const [error, setError] = useState('');
 
   const movementAccounts = useMemo(() => accounts.filter(account => account.isMovement), [accounts]);
@@ -130,6 +131,8 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
     }
     if (parseAmount(payments.credit) > 0 && !receivableAccount) { setError('El plan de cuentas no contiene una cuenta de movimiento válida para Cuentas por Cobrar.'); return; }
 
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       const items: JournalEntryItem[] = [];
@@ -168,6 +171,7 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo guardar el Reporte Z.');
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
