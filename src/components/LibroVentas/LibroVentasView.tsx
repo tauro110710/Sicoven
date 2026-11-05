@@ -19,6 +19,7 @@ import { exportVentasPdf } from '../../utils/pdfGenerator';
 import { SupportingDocumentsPanel } from '../shared/SupportingDocumentsPanel';
 import { JournalReversalModal } from '../LibroDiario/JournalReversalModal';
 import { SaleCorrectionNoteModal } from './SaleCorrectionNoteModal';
+import { FiscalZReportModal } from './FiscalZReportModal';
 
 export const LibroVentasView: React.FC = () => {
   const {
@@ -32,6 +33,8 @@ export const LibroVentasView: React.FC = () => {
 
   const sqliteAvailable = typeof window !== 'undefined' && Boolean(window.sicovenStore?.save);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isZModalOpen, setIsZModalOpen] = useState(false);
+  const [zDocumentTarget, setZDocumentTarget] = useState<import('../../types/accounting').JournalEntry | null>(null);
   const [documentTarget, setDocumentTarget] = useState<{ id: string; title: string } | null>(null);
   const [reversalTarget, setReversalTarget] = useState<import('../../types/accounting').JournalEntry | null>(null);
   const [settlementTarget, setSettlementTarget] = useState<{id:string; number:string; party:string} | null>(null);
@@ -68,6 +71,11 @@ export const LibroVentasView: React.FC = () => {
       return true;
     })
     .sort((a, b) => a.opNumber - b.opNumber);
+
+  const filteredZReports = journalEntries
+    .filter(entry => entry.companyId === currentCompany.id && entry.fiscalZReport)
+    .filter(entry => !monthFilter || entry.date.startsWith(monthFilter))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber);
 
   // NC reduce el libro; ND incrementa sus importes. El documento original permanece intacto.
   const signed = (document: import('../../types/accounting').SaleRecord, amount: number) =>
@@ -126,6 +134,9 @@ export const LibroVentasView: React.FC = () => {
             >
               <Plus className="w-4 h-4" />
               Registrar Venta
+            </button>
+            <button onClick={() => setIsZModalOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-emerald-700 bg-white px-4 py-2 text-xs font-semibold text-emerald-800 shadow-sm transition hover:bg-emerald-50">
+              <Receipt className="h-4 w-4" /> Registrar Reporte Z
             </button>
           </div>
         </div>
@@ -336,6 +347,40 @@ export const LibroVentasView: React.FC = () => {
         </div>
       </div>
 
+      {/* Cierres diarios consolidados por máquina fiscal */}
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <div><h3 className="text-sm font-bold text-slate-800">Reportes Z · Ventas consolidadas de máquinas fiscales</h3><p className="text-[11px] text-slate-500">Cada cierre conserva su rango de facturas, equipo fiscal, resumen tributario y asiento vinculado.</p></div>
+          <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-800">{filteredZReports.length} cierres registrados</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px] text-left text-xs">
+            <thead className="bg-slate-100 text-slate-700"><tr>
+              <th className="px-3 py-2">Fecha</th><th className="px-3 py-2">Reporte Z</th><th className="px-3 py-2">Máquina / Serial</th><th className="px-3 py-2">Facturas</th><th className="px-3 py-2 text-right">Base gravada</th><th className="px-3 py-2 text-right">IVA</th><th className="px-3 py-2 text-right">Exento</th><th className="px-3 py-2 text-right">IGTF</th><th className="px-3 py-2 text-right">Total cierre</th><th className="px-3 py-2">Asiento / Soportes</th>
+            </tr></thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredZReports.length === 0 ? <tr><td colSpan={10} className="px-3 py-8 text-center text-slate-400">Todavía no hay Reportes Z registrados para este período.</td></tr> : filteredZReports.map(entry => {
+                const z = entry.fiscalZReport!;
+                const taxable = z.taxableBase16Bs + z.taxableBase8Bs + z.taxableBase31Bs;
+                const vat = z.vat16Bs + z.vat8Bs + z.vat31Bs;
+                return <tr key={entry.id} className="hover:bg-slate-50">
+                  <td className="whitespace-nowrap px-3 py-2">{formatDate(z.date)}</td>
+                  <td className="px-3 py-2 font-mono font-bold">{z.zNumber}</td>
+                  <td className="px-3 py-2">{[z.machineBrand,z.machineModel].filter(Boolean).join(' ') || 'Máquina fiscal'}<span className="block font-mono text-[10px] text-slate-500">{z.machineSerial}</span></td>
+                  <td className="px-3 py-2 font-mono">{z.invoiceStart} – {z.invoiceEnd}</td>
+                  <td className="px-3 py-2 text-right font-mono">{formatBs(taxable)}</td>
+                  <td className="px-3 py-2 text-right font-mono">{formatBs(vat)}</td>
+                  <td className="px-3 py-2 text-right font-mono">{formatBs(z.exemptSalesBs)}</td>
+                  <td className="px-3 py-2 text-right font-mono">{formatBs(z.igtfBs)}</td>
+                  <td className="px-3 py-2 text-right font-mono font-bold text-emerald-700">{formatBs(z.totalSalesBs)}</td>
+                  <td className="px-3 py-2"><span className="block font-semibold">N.º {entry.entryNumber}</span><button type="button" onClick={() => setZDocumentTarget(entry)} className="mt-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes (opcional)</button></td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       {/* Forma 30 SENIAT Summary Card */}
       <div className="bg-gradient-to-r from-slate-900 to-slate-850 text-white p-5 rounded-2xl shadow-md border border-slate-800">
         <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-3 flex items-center gap-2">
@@ -382,6 +427,7 @@ export const LibroVentasView: React.FC = () => {
       </div>
 
       <NewSaleModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <FiscalZReportModal isOpen={isZModalOpen} onClose={() => setIsZModalOpen(false)} />
       {documentTarget && <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-label="Expediente documental">
         <div className="mx-auto mt-10 max-w-3xl rounded-2xl bg-white p-4 shadow-2xl">
           <div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-bold text-slate-800">{documentTarget.title}</h3><button type="button" onClick={() => setDocumentTarget(null)} className="rounded-lg px-3 py-1 text-xs text-slate-600 hover:bg-slate-100">Cerrar</button></div>
@@ -389,6 +435,13 @@ export const LibroVentasView: React.FC = () => {
         </div>
       </div>}
 
+      {zDocumentTarget && <div className="fixed inset-0 z-[65] overflow-y-auto bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-label="Soportes opcionales del Reporte Z">
+        <div className="mx-auto mt-10 max-w-3xl rounded-2xl bg-white p-4 shadow-2xl">
+          <div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-bold text-slate-800">Soportes opcionales · Reporte Z {zDocumentTarget.fiscalZReport?.zNumber}</h3><button type="button" onClick={() => setZDocumentTarget(null)} className="rounded-lg px-3 py-1 text-xs text-slate-600 hover:bg-slate-100">Cerrar</button></div>
+          <p className="mb-3 text-[11px] text-slate-500">Adjuntar documentos es opcional; el Reporte Z y su asiento ya están registrados.</p>
+          <SupportingDocumentsPanel entityType="JOURNAL_ENTRY" entityId={zDocumentTarget.id} documentType="REPORTE_Z" title={'Reporte Z ' + (zDocumentTarget.fiscalZReport?.zNumber || '')} />
+        </div>
+      </div>}
       {settlementTarget && <CreditSettlementModal documentId={settlementTarget.id} documentNumber={settlementTarget.number} partyName={settlementTarget.party} kind="SALE_COLLECTION" onClose={() => setSettlementTarget(null)} />}
       <JournalReversalModal source={reversalTarget} onClose={() => setReversalTarget(null)} />
       {correctionTarget && <SaleCorrectionNoteModal sourceSale={correctionTarget.sale} kind={correctionTarget.kind}
