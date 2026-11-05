@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { CreditSettlementModal } from '../shared/CreditSettlementModal';
 
+const parseAmountInput=(value:string)=>{const raw=value.trim();return Number(raw.includes(',')?raw.replace(/\./g,'').replace(',','.'):raw);};
 const money=(n:number,currency='Bs.')=>`${currency} ${Number(n||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 const settlementMethodLabel=(method:string)=>(({CASH_BS:'Efectivo Bs.',CASH_USD:'Efectivo USD',BANK_TRANSFER_BS:'Transferencia Bs.',BANK_TRANSFER_USD:'Transferencia USD',OTHER:'Otro'} as Record<string,string>)[method]||method);
 const today=()=>{const d=new Date();const y=d.getFullYear();const m=String(d.getMonth()+1).padStart(2,'0');const day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;};
@@ -12,7 +13,7 @@ export const CuentasPorPagarView: React.FC = () => {
  const [settlementKind,setSettlementKind]=useState<'REFUND_RECEIVED'|'APPLIED_TO_PURCHASE'>('APPLIED_TO_PURCHASE');
  const [settlementDate,setSettlementDate]=useState(today());
  const [settlementUsd,setSettlementUsd]=useState('');
- const [settlementRate,setSettlementRate]=useState(String(currentCompany.bcvRate||''));
+ const [settlementRate,setSettlementRate]=useState('');
  const [settlementBankCode,setSettlementBankCode]=useState('');
  const [settlementTargetId,setSettlementTargetId]=useState('');
  const [settlementCashBs,setSettlementCashBs]=useState('');
@@ -31,12 +32,12 @@ export const CuentasPorPagarView: React.FC = () => {
  const submitAdvanceSettlement=async(e:React.FormEvent)=>{
   e.preventDefault();if(settlementSaving)return;setSettlementSaving(true);setSettlementMessage('');
   try{
-   const amountUsd=Number(settlementUsd);const bcvRate=Number(settlementRate);
+   const amountUsd=parseAmountInput(settlementUsd);const bcvRate=parseAmountInput(settlementRate);
    const amountBs=Math.round(amountUsd*bcvRate*100)/100;
    if(settlementKind==='REFUND_RECEIVED'&&!settlementReference.trim())throw new Error('La referencia del reembolso es obligatoria.');
    const bank=refundBanks.find(a=>a.code===settlementBankCode);
    if(settlementKind==='REFUND_RECEIVED'&&!bank)throw new Error('Seleccione una cuenta real de Caja/Banco en Bs. para recibir el reembolso.');
-   const cashReceivedBs=settlementKind==='REFUND_RECEIVED'?Number(settlementCashBs||amountBs):undefined;
+   const cashReceivedBs=settlementKind==='REFUND_RECEIVED'?parseAmountInput(settlementCashBs||String(amountBs)):undefined;
    await addSupplierAdvanceSettlement({
     supplierRif:settlementSupplierRif,kind:settlementKind,date:settlementDate,amountUsd,amountBs,
     cashReceivedBs,bcvRate,treasuryAccountCode:settlementKind==='REFUND_RECEIVED'?settlementBankCode:undefined,
@@ -67,7 +68,7 @@ export const CuentasPorPagarView: React.FC = () => {
   if(advanceSaving)return;
   setAdvanceSaving(true);setAdvanceMessage('');
   try{
-   const amountUsd=Number(advanceUsd);const bcvRate=Number(advanceRate);
+   const amountUsd=parseAmountInput(advanceUsd);const bcvRate=parseAmountInput(advanceRate);
    const bank=bankAccounts.find(b=>b.accountCode===advanceAccount);
    const expectedCurrency=bank?.currency||(advanceAccount==='1.1.1.02'?'USD':'BS');
    if(expectedCurrency!==advanceCurrency)throw new Error('La moneda del desembolso no coincide con la moneda de la cuenta de Caja/Banco.');
@@ -100,8 +101,8 @@ export const CuentasPorPagarView: React.FC = () => {
     <label className="text-xs font-semibold text-slate-700">Razón social<input required value={advanceSupplierName} onChange={e=>setAdvanceSupplierName(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
     <label className="text-xs font-semibold text-slate-700">RIF proveedor<input required value={advanceSupplierRif} onChange={e=>setAdvanceSupplierRif(e.target.value.toUpperCase())} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
     <label className="text-xs font-semibold text-slate-700">Fecha efectiva<input required type="date" value={advanceDate} onChange={e=>setAdvanceDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
-    <label className="text-xs font-semibold text-slate-700">Anticipo USD<input required type="number" min="0.01" step="0.000001" value={advanceUsd} onChange={e=>setAdvanceUsd(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
-    <label className="text-xs font-semibold text-slate-700">Tasa BCV<input required type="number" min="0.000001" step="0.000001" value={advanceRate} onChange={e=>setAdvanceRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
+    <label className="text-xs font-semibold text-slate-700">Anticipo USD<input required type="text" inputMode="decimal" value={advanceUsd} onChange={e=>setAdvanceUsd(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
+    <label className="text-xs font-semibold text-slate-700">Tasa BCV<input required type="text" inputMode="decimal" value={advanceRate} onChange={e=>setAdvanceRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
     <label className="text-xs font-semibold text-slate-700">Cuenta Caja/Banco<select required value={advanceAccount} onChange={e=>setAdvanceAccount(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">{treasuryAccounts.map(a=><option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}</select></label>
     <label className="text-xs font-semibold text-slate-700">Moneda desembolsada<select value={advanceCurrency} onChange={e=>setAdvanceCurrency(e.target.value as 'BS'|'USD')} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="BS">Bolívares</option><option value="USD">Dólares</option></select></label>
     <label className="text-xs font-semibold text-slate-700">Referencia / operación<input required value={advanceReference} onChange={e=>setAdvanceReference(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
@@ -119,7 +120,7 @@ export const CuentasPorPagarView: React.FC = () => {
     <label className="text-xs font-semibold text-slate-700">Fecha efectiva<input required type="date" value={settlementDate} onChange={e=>setSettlementDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
     <label className="text-xs font-semibold text-slate-700">Importe a liquidar USD<input required type="number" min="0.01" step="0.000001" max={settlementBalance?.outstandingUsd||undefined} value={settlementUsd} onChange={e=>setSettlementUsd(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
     <label className="text-xs font-semibold text-slate-700">Tasa BCV de la operación<input required type="number" min="0.000001" step="0.000001" value={settlementRate} onChange={e=>setSettlementRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
-    {settlementKind==='APPLIED_TO_PURCHASE'?<label className="text-xs font-semibold text-slate-700 lg:col-span-2">Documento destino<select required value={settlementTargetId} onChange={e=>setSettlementTargetId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Seleccione factura o ND pendiente</option>{settlementTargets.map(p=><option key={p.id} value={p.id}>{p.documentType==='02'?'ND':'Factura'} {p.invoiceNumber} · {p.supplierName} · {money(getCreditBalance(p.id,'PURCHASE_PAYMENT').outstandingUsd,'USD')} pendiente</option>)}</select></label>:<><label className="text-xs font-semibold text-slate-700">Cuenta Caja/Banco receptora<select required value={settlementBankCode} onChange={e=>setSettlementBankCode(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Seleccione cuenta en Bs.</option>{refundBanks.map(a=><option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}</select></label><label className="text-xs font-semibold text-slate-700">Bs. efectivamente recibidos<input required type="number" min="0.01" step="0.01" value={settlementCashBs} onChange={e=>setSettlementCashBs(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label></>}
+    {settlementKind==='APPLIED_TO_PURCHASE'?<label className="text-xs font-semibold text-slate-700 lg:col-span-2">Documento destino<select required value={settlementTargetId} onChange={e=>setSettlementTargetId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Seleccione factura o ND pendiente</option>{settlementTargets.map(p=><option key={p.id} value={p.id}>{p.documentType==='02'?'ND':'Factura'} {p.invoiceNumber} · {p.supplierName} · {money(getCreditBalance(p.id,'PURCHASE_PAYMENT').outstandingUsd,'USD')} pendiente</option>)}</select></label>:<><label className="text-xs font-semibold text-slate-700">Cuenta Caja/Banco receptora<select required value={settlementBankCode} onChange={e=>setSettlementBankCode(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Seleccione cuenta en Bs.</option>{refundBanks.map(a=><option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}</select></label><label className="text-xs font-semibold text-slate-700">Bs. efectivamente recibidos<input required type="text" inputMode="decimal" value={settlementCashBs} onChange={e=>setSettlementCashBs(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label></>}
     <label className="text-xs font-semibold text-slate-700">Referencia / soporte<input required value={settlementReference} onChange={e=>setSettlementReference(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
    </div>
    <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-slate-600">Saldo disponible: {money(settlementBalance?.outstandingUsd||0,'USD')} · {money(settlementBalance?.outstandingBs||0)}</p><button disabled={settlementSaving||!settlementBalance||settlementBalance.outstandingUsd<=0} className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{settlementSaving?'Procesando…':'Confirmar liquidación'}</button></div>
