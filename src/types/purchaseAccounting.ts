@@ -42,7 +42,7 @@ export function resolveNonInventoryPurchaseDebitAccount(
     item.type === 'GASTOS' || item.type === 'COSTOS' || (item.type === 'ACTIVO' && item.code.startsWith('1.2.'))
   ));
   if (!account) {
-    throw new Error('La compra no tiene una clasificación contable válida. Seleccione una cuenta de gasto o activo; no se asignará Honorarios Profesionales automáticamente.');
+    throw new Error('La compra no tiene una clasificación contable válida. Seleccione una cuenta de gasto, costo o activo; no se asignará Honorarios Profesionales automáticamente.');
   }
   return account;
 }
