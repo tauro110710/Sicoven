@@ -28,7 +28,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState<string>('');
   const [type, setType] = useState<EntryType>('MANUAL');
-  const [bcvRate, setBcvRate] = useState<string>(currentCompany.bcvRate ? String(currentCompany.bcvRate).replace('.', ',') : '');
+  const [bcvRate, setBcvRate] = useState<string>('');
   const parsedBcvRate = (() => {
     const raw = bcvRate.trim();
     if (!raw) return 0;
