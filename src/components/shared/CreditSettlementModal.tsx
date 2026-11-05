@@ -11,7 +11,7 @@ type Props = {
   onClose: () => void;
 };
 
-const parseAmountInput = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\\./g, '').replace(',', '.') : raw); };
+const parseAmountInput = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g/g, '').replace(',', '.') : raw); };
 
 const today = () => {
   const d = new Date();
