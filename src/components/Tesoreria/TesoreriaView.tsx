@@ -56,7 +56,7 @@ export const TesoreriaView: React.FC = () => {
     try {
       const entry = registerTreasuryMovement({
         bankAccountId: activeBank?.id || selectedBankId,
-        date, reference, description, type: kind, amount: Number(amount.trim().includes(',') ? amount.trim().replace(/\./g, '').replace(',', '.') : amount),
+        date, reference, description, type: kind, amount: parsedAmount, bcvRate: parsedBcvRate,
         counterpartAccountCode: kind === 'TRANSFER' ? undefined : counterpartCode,
         destinationBankAccountId: kind === 'TRANSFER' ? destinationBankId : undefined
       });
