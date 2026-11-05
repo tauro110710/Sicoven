@@ -121,8 +121,12 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
     if (journalEntries.some(entry => entry.companyId === currentCompany.id && entry.referenceDoc?.toUpperCase() === referenceDoc.toUpperCase())) {
       setError('Ese Reporte Z ya fue registrado para esta máquina fiscal.'); return;
     }
-    if (PAYMENT_ROWS.some(row => parseAmount(payments[row.key]) > 0 && !assetAccounts.concat(receivableAccount ? [receivableAccount] : []).some(account => account.code === paymentAccounts[row.key]))) {
-      setError('Seleccione una cuenta de movimiento válida para cada medio de cobro utilizado.'); return;
+    if (PAYMENT_ROWS.some(row => parseAmount(payments[row.key]) > 0 && (
+      row.key === 'credit'
+        ? !receivableAccount || paymentAccounts[row.key] !== receivableAccount.code
+        : !assetAccounts.some(account => account.code === paymentAccounts[row.key])
+    ))) {
+      setError('Seleccione una cuenta de movimiento válida para cada medio de cobro. Las ventas a crédito deben ir a Cuentas por Cobrar.'); return;
     }
     if (parseAmount(payments.credit) > 0 && !receivableAccount) { setError('El plan de cuentas no contiene una cuenta de movimiento válida para Cuentas por Cobrar.'); return; }
 
@@ -214,7 +218,7 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
           <div className="space-y-3">
             {PAYMENT_ROWS.map(row => <div key={row.key} className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[1fr_150px_1.5fr]">
               <label className="font-medium text-slate-700">{row.label}<input inputMode="decimal" value={payments[row.key]} onChange={event => updatePayment(row.key, event.target.value)} placeholder="0,00" className="mt-1 w-full rounded-lg border border-slate-300 p-2"/></label>
-              <label className="font-semibold">Cuenta<select value={paymentAccounts[row.key]} onChange={event => setPaymentAccounts(prev => ({ ...prev, [row.key]: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 font-normal">{assetAccounts.concat(receivableAccount ? [receivableAccount] : []).map(account => <option key={account.code} value={account.code}>{account.code}</option>)}</select></label>
+              <label className="font-semibold">Cuenta<select value={paymentAccounts[row.key]} onChange={event => setPaymentAccounts(prev => ({ ...prev, [row.key]: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 font-normal">{(row.key === 'credit' ? (receivableAccount ? [receivableAccount] : []) : assetAccounts).map(account => <option key={account.code} value={account.code}>{account.code}</option>)}</select></label>
               <div className="rounded-lg bg-slate-50 p-2 text-right"><span className="text-slate-500">Cuenta seleccionada</span><strong className="block">{movementAccounts.find(account => account.code === paymentAccounts[row.key])?.name || 'No disponible'}</strong></div>
             </div>)}
           </div>
