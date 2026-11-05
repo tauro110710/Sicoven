@@ -81,7 +81,7 @@ interface AccountingContextType {
   getAuditEvents: (limit?: number) => Promise<AccountingAuditEvent[]>;
   requestAccountingCorrection: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'INVENTORY_PRODUCT'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason?: string; workpaperNote?: string }) => Promise<void>;
   createCorrectionCase: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'INVENTORY_MOVEMENT'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason?: string; workpaperNote?: string }) => Promise<CorrectionCase>;
-  authorizeCorrectionCase: (input: { entityType: string; entityId: string; sourceDocumentRef: string; correctionDocumentRef: string }) => Promise<void>;
+  authorizeCorrectionCase: (input: { entityType: string; entityId: string; sourceDocumentRef: string; correctionDocumentRef: string }) => Promise<string>;
   listCorrectionCases: () => Promise<CorrectionCase[]>;
   reviewCorrectionCase: (input: { caseId: string; decision: 'APPROVE' | 'REJECT'; reason: string }) => Promise<CorrectionCase>;
   observeCorrectionCase: (input: { caseId: string; reason: string }) => Promise<CorrectionCase>;
@@ -104,7 +104,7 @@ interface AccountingContextType {
   addCompany: (comp: Omit<Company, 'id'>) => Company;
   updateCompany: (comp: Company) => void;
   updateBcvRate: (newRate: number, effectiveDate?: string) => void;
-  correctBcvRate: (input: { newRate: number; effectiveDate: string; reason?: string; workpaperNote?: string }) => Promise<void>;
+  correctBcvRate: (input: { newRate: number; effectiveDate: string; reason: string; workpaperNote?: string }) => Promise<void>;
 
   // Cuentas
   accounts: Account[];
@@ -152,7 +152,7 @@ interface AccountingContextType {
   importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[]) => number;
   importInventoryMovements: (movements: Omit<InventoryMovement, 'id' | 'companyId'>[]) => number;
   executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => Promise<InventoryMovement[]>;
-  updateProduct: (product: InventoryProduct) => void;
+  updateProduct: (product: InventoryProduct, reason: string, workpaperNote: string) => Promise<void>;
   movements: InventoryMovement[];
   addMovement: (movement: Omit<InventoryMovement, 'id' | 'companyId'>) => InventoryMovement;
 
@@ -3712,7 +3712,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (![updated.minStock, updated.salesPriceBs, updated.salesPriceUsd].every(value => Number.isFinite(Number(value)) && Number(value) >= 0)) {
       throw new Error('Stock mínimo y precios deben ser importes numéricos no negativos.');
     }
-    if (!['GENERAL_16', 'REDUCIDA_8', 'EXENTO', 'EXONERADO'].includes(updated.vatTreatment)) {
+    if (!['GENERAL_16', 'REDUCIDA_8', 'EXENTO', 'EXONERADO'].includes(updated.vatTreatment || 'GENERAL_16')) {
       throw new Error('El tratamiento IVA del artículo no es válido.');
     }
     if (products.some(p => p.id !== updated.id && p.companyId === currentCompany.id && p.code.trim().toLocaleUpperCase() === updated.code.trim().toLocaleUpperCase())) {
@@ -3720,7 +3720,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const immutableInventoryFields: Array<keyof InventoryProduct> = [
       'currentStock', 'avgCostBs', 'avgCostUsd', 'lastCostBs', 'lastCostUsd',
-      'vnrProvisionBs', 'vnrProvisionUsd', 'inventoryAccountCode', 'costOfSalesAccountCode',
+      'vnrProvisionBs', 'inventoryAccountCode', 'costOfSalesAccountCode',
       'adjustmentAccountCode', 'openingBalanceAccountCode', 'costingMethod', 'itemType',
       'openingDate', 'openingBcvRate'
     ];
@@ -4394,7 +4394,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   // Tesorería: alta bancaria y creación automática del auxiliar contable.
-  const addBankAccount = (bankData: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'>): BankAccount => {
+  const addBankAccount = (bankData: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'> & { bcvRate?: number }): BankAccount => {
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('Registrar una cuenta bancaria requiere SQLite local de escritorio disponible y lista.');
     }
