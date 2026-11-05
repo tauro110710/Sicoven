@@ -3057,7 +3057,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const rate = Number(saleData.bcvRate);
     const saleAmounts = [
       saleData.totalAmountBs, saleData.taxableBaseBs, saleData.exemptAmountBs,
-      saleData.vatAmountBs, saleData.vatWithheldBs || 0, saleData.igtfAmountBs || 0
+      saleData.vatAmountBs, saleData.additionalLuxuryTaxBs || 0, saleData.vatWithheldBs || 0, saleData.igtfAmountBs || 0
     ];
     if (!Number.isFinite(rate) || rate <= 0) throw new Error('La venta requiere una tasa BCV válida mayor que cero.');
     if (saleAmounts.some(value => !Number.isFinite(value) || value < 0) || saleData.totalAmountBs <= 0) {
@@ -3076,7 +3076,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!Number.isFinite(saleData.taxRate) || saleData.taxRate < 0 || saleData.taxRate > 100) {
       throw new Error('La alícuota de IVA de la venta no es válida.');
     }
-    const expectedVat = Math.round(saleData.taxableBaseBs * saleData.taxRate) / 100;
+    const expectedVatRate = saleData.taxRate === 31 ? 16 : saleData.taxRate;
+    const expectedVat = Math.round(saleData.taxableBaseBs * expectedVatRate) / 100;
+    const expectedLuxuryTax = saleData.taxRate === 31 ? Math.round(saleData.taxableBaseBs * 15) / 100 : 0;
+    if (Math.abs(expectedLuxuryTax - Number(saleData.additionalLuxuryTaxBs || 0)) > 0.01) {
+      throw new Error('El impuesto adicional al consumo suntuario no coincide con la alícuota combinada declarada.');
+    }
     if (Math.abs(expectedVat - saleData.vatAmountBs) > 0.01) {
       throw new Error('El IVA de la venta no coincide con la base imponible y la alícuota declarada.');
     }
@@ -3094,14 +3099,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!eligibleSaleIgtf) {
         throw new Error('El IGTF en ventas requiere agente de percepción configurado y cobro de contado en un medio elegible.');
       }
-      const expectedIgtf = Math.round((saleData.taxableBaseBs + saleData.exemptAmountBs + saleData.vatAmountBs) * 3) / 100;
+      const expectedIgtf = Math.round((saleData.taxableBaseBs + saleData.exemptAmountBs + saleData.vatAmountBs + Number(saleData.additionalLuxuryTaxBs || 0)) * 3) / 100;
       if (Math.abs(saleIgtf - expectedIgtf) > 0.01 || Number(saleData.igtfRate || 0) !== 3) {
         throw new Error('El importe o la tasa del IGTF no coincide con el cálculo confirmado del 3%.');
       }
     } else if (saleIgtf !== 0) {
       throw new Error('No se permite registrar IGTF sin confirmación expresa.');
     }
-    const expectedSaleTotal = Math.round((saleData.taxableBaseBs + saleData.exemptAmountBs + saleData.vatAmountBs + saleIgtf) * 100) / 100;
+    const expectedSaleTotal = Math.round((saleData.taxableBaseBs + saleData.exemptAmountBs + saleData.vatAmountBs + Number(saleData.additionalLuxuryTaxBs || 0) + saleIgtf) * 100) / 100;
     if (Math.abs(expectedSaleTotal - saleData.totalAmountBs) > 0.01) {
       throw new Error('El total de la venta no coincide con base imponible, exento, IVA e IGTF.');
     }
@@ -3185,6 +3190,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
     }
 
+    // Haber: impuesto adicional al consumo suntuario (15%) separado del IVA.
+    if (Number(saleData.additionalLuxuryTaxBs || 0) > 0) {
+      const luxuryTaxBs = Number(saleData.additionalLuxuryTaxBs || 0);
+      const luxuryTaxAccount = accounts.find(account => account.code === '2.1.2.08' && account.isMovement && account.type === 'PASIVO');
+      if (!luxuryTaxAccount) throw new Error('El plan de cuentas no contiene la cuenta de impuesto adicional al consumo suntuario.');
+      items.push({ accountCode: luxuryTaxAccount.code, accountName: luxuryTaxAccount.name, debitBs: 0, creditBs: luxuryTaxBs, debitUsd: 0, creditUsd: luxuryTaxBs / rate, description: `Impuesto adicional al consumo suntuario 15% Fac. ${saleData.invoiceNumber}` });
+    }
+
     // Haber: Débito Fiscal IVA Ventas
     if (saleData.vatAmountBs > 0) {
       items.push({
@@ -3233,6 +3246,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       totalAmountUsd: saleData.totalAmountBs / rate,
       taxableBaseUsd: saleData.taxableBaseBs / rate,
       vatAmountUsd: saleData.vatAmountBs / rate,
+      additionalLuxuryTaxBs: Number(saleData.additionalLuxuryTaxBs || 0),
+      additionalLuxuryTaxUsd: Number(saleData.additionalLuxuryTaxBs || 0) / rate,
       vatWithheldUsd: (saleData.vatWithheldBs || 0) / rate,
       igtfAmountUsd: saleIgtf / rate,
       id: saleId,
