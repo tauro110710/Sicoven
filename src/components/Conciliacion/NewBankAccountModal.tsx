@@ -40,7 +40,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
       window.alert('El saldo inicial debe ser cero o positivo.');
       return;
     }
-    if (currency === 'USD' && parsedOpeningBalance > 0 && bcvRate <= 0) {
+    if (parsedOpeningBalance > 0 && bcvRate <= 0) {
       window.alert('Configure una tasa BCV válida antes de registrar el saldo inicial.');
       return;
     }
@@ -52,6 +52,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
         bankName: bankName.trim(),
         accountNumber: normalizedAccountNumber,
         currency,
+        bcvRate,
         initialBalanceBs: Math.round(openingBalanceBs * 100) / 100,
         initialBalanceUsd: Math.round(openingBalanceUsd * 1000000) / 1000000,
         accountType,
@@ -168,7 +169,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
 
           {parsedOpeningBalance > 0 && <div>
             <label className="block font-semibold text-slate-700 mb-1">Tasa BCV aplicable al saldo inicial (Bs./USD) {currency === 'USD' ? '*' : '(opcional)'}</label>
-            <input type="text" inputMode="decimal" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} placeholder="Ej.: 889,67" required={currency === 'USD'} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+            <input type="text" inputMode="decimal" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} placeholder="Ej.: 889,67" required className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
           </div>}
 
           <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">
@@ -182,7 +183,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
             </button>
             <button
               type="submit"
-              disabled={saving || !bankName.trim() || normalizedAccountNumber.length !== 20 || (currency === 'USD' && parsedOpeningBalance > 0 && bcvRate <= 0)}
+              disabled={saving || !bankName.trim() || normalizedAccountNumber.length !== 20 || (parsedOpeningBalance > 0 && bcvRate <= 0)}
               className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
             >
               <Check className="w-4 h-4" />
