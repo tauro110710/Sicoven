@@ -24,7 +24,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
   if (!isOpen) return null;
 
   const normalizedAccountNumber = accountNumber.replace(/\D/g, '');
-  const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\\./g, '').replace(',', '.') : raw); };
+  const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g/g, '').replace(',', '.') : raw); };
   const parsedOpeningBalance = parseAmount(initialBalanceBs) || 0;
   const bcvRate = parseAmount(bcvRateInput) || 0;
   const openingBalanceBs = currency === 'USD' ? parsedOpeningBalance * bcvRate : parsedOpeningBalance;
