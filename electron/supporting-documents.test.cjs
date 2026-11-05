@@ -126,6 +126,8 @@ test('the single accountant can verify their own correction-case evidence',()=>{
   const result=attachDocument(h.db,{storageDir:h.storageDir,input:{companyId:'co-1',entityType:'CORRECTION_CASE',entityId:'case-1',documentType:'EVIDENCIA',title:'Soporte',fileName:'soporte.pdf'},buffer:pdf,actor});
   const verified=reviewDocument(h.db,{documentId:result.document.id,decision:'VERIFIED',reason:'El contador cotejó el soporte con el registro fuente y el papel de trabajo.'},actor);
   assert.equal(verified.status,'VERIFIED');
-  assert.equal(verified.events.at(-1).actorUsername,actor.username);
+  const reviewEvent=h.db.prepare("SELECT actor_username,event_type FROM supporting_document_events WHERE document_id=? ORDER BY id DESC LIMIT 1").get(result.document.id);
+  assert.equal(reviewEvent.event_type,'REVIEWED');
+  assert.equal(reviewEvent.actor_username,actor.username);
  }finally{h.close();}
 });
