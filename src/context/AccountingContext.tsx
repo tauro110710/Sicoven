@@ -3718,7 +3718,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const immutableInventoryFields: Array<keyof InventoryProduct> = [
       'currentStock', 'avgCostBs', 'avgCostUsd', 'lastCostBs', 'lastCostUsd',
-      'vnrProvisionBs', 'inventoryAccountCode', 'costOfSalesAccountCode',
+      'inventoryAccountCode', 'costOfSalesAccountCode',
       'adjustmentAccountCode', 'openingBalanceAccountCode', 'costingMethod', 'itemType',
       'openingDate', 'openingBcvRate'
     ];
