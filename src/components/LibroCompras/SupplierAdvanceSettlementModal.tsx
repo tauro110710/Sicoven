@@ -40,7 +40,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
     p.paymentTerm === 'CREDITO' && String(p.supplierRif).trim().toUpperCase() === supplierRif &&
     p.companyId === currentCompany.id);
   const accounts = bankAccounts.filter(a => a.companyId === currentCompany.id && a.currency === 'BS');
-  const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\\./g, '').replace(',', '.') : raw); };
+  const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
   const rate = parseAmount(bcvRate);
   const usd = parseAmount(amountUsd);
   const validAmount = Number.isFinite(usd) && usd > 0 && Number.isFinite(rate) && rate > 0;
