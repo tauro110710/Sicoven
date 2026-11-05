@@ -130,7 +130,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   };
 
   const handleCreditChange = (index: number, val: number) => {
-    const rate = bcvRate > 0 ? bcvRate : 1;
+    const rate = parsedBcvRate > 0 ? parsedBcvRate : 1;
     setSubmitError(null);
     setItems(prev =>
       prev.map((item, i) =>
@@ -204,7 +204,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   // Función Inteligente: Auto-Cuadrar Asiento con un Clic
   const handleAutoBalance = () => {
     if (diffBs < 0.01) return;
-    const rate = bcvRate > 0 ? bcvRate : 1;
+    const rate = parsedBcvRate > 0 ? parsedBcvRate : 1;
     setSubmitError(null);
 
     if (totalDebitBs > totalCreditBs) {
@@ -513,9 +513,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                       </td>
                       <td className="p-2 text-right">
                         <input
-                          type="number"
-                          step="0.01"
-                          min="0"
+                          type="text"
                           value={amountDraft(`credit-${idx}`, item.creditBs)}
                           placeholder="0,00"
                           inputMode="decimal"
