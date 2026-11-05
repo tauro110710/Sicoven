@@ -71,6 +71,7 @@ export const BalancesView: React.FC = () => {
       }
     } catch (err) {
       console.error('Error generating Balances PDF:', err);
+      window.alert('No se pudo generar el PDF de Balances: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsExportingPdf(false);
     }
