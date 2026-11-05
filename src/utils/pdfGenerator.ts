@@ -98,8 +98,7 @@ async function addPdfHeader(
   doc.setTextColor(100, 116, 139);
   doc.text(subtitle, 14, currentY + 4.5);
 
-  const bcvText = `Tasa BCV: Bs. ${company.bcvRate.toFixed(2)}/$ • Moneda: Bs. y USD`;
-  doc.text(bcvText, pageWidth - 14, currentY + 4.5, { align: 'right' });
+  doc.text('Moneda: Bs. y USD', pageWidth - 14, currentY + 4.5, { align: 'right' });
 
   return currentY + 9;
 }
