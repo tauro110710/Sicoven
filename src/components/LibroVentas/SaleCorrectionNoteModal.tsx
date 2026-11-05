@@ -79,7 +79,7 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
             <input required type="text" inputMode="decimal" value={taxableBaseBs} onChange={e=>setTaxableBaseBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
           </label>
           <label className="text-xs font-semibold text-slate-700">Monto exento (Bs.)
-            <input required type="number" min="0" step="0.01" value={exemptAmountBs} onChange={e=>setExemptAmountBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
+            <input required type="text" inputMode="decimal" value={exemptAmountBs} onChange={e=>setExemptAmountBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
           </label>
         </div>
         <label className="block text-xs font-semibold text-slate-700">Medio de emisión utilizado por la factura original
