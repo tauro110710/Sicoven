@@ -1,4 +1,20 @@
 import type { Account } from './accounting';
+import { isPurchasePaymentAccount, type PurchasePaymentAccount } from './purchaseSettlement';
+
+export interface CompanyBankAccountRef { companyId: string; accountCode: string; }
+
+/** Only cash drawers and bank auxiliaries belonging to the active company may settle its purchases. */
+export function getCompanyPurchasePaymentAccounts(
+  accounts: PurchasePaymentAccount[],
+  bankAccounts: CompanyBankAccountRef[],
+  companyId: string
+): PurchasePaymentAccount[] {
+  const ownedBankCodes = new Set(bankAccounts.filter(bank => bank.companyId === companyId).map(bank => bank.accountCode));
+  return accounts.filter(account => isPurchasePaymentAccount(account) && (
+    !/^1\.1\.1\.0[3-9](?:\.|$)/.test(account.code) || ownedBankCodes.has(account.code)
+  ));
+}
+
 
 /** Resolve the explicitly selected debit account for a non-inventory purchase. */
 export function resolveNonInventoryPurchaseDebitAccount(
