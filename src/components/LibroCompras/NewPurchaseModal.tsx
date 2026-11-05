@@ -56,7 +56,10 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [bcvRateInput, setBcvRateInput] = useState('');
   const bcvRate = parseDecimalInput(bcvRateInput);
   const [notes, setNotes] = useState<string>('');
-  const [linkInventory, setLinkInventory] = useState(false);
+  // Clasificación explícita: mercancía al Kardex o cuenta específica de gasto/activo.
+  const [linkInventory, setLinkInventory] = useState(true);
+  const [purchaseDebitAccountCode, setPurchaseDebitAccountCode] = useState('');
+  const nonInventoryDebitAccounts = accounts.filter(account => account.isMovement && (account.type === 'GASTOS' || (account.type === 'ACTIVO' && account.code.startsWith('1.2.')))).sort((x,y)=>x.code.localeCompare(y.code,undefined,{numeric:true}));
   const [inventoryLines, setInventoryLines] = useState<Array<{productId:string; quantity:string; unitCostBs:string}>>([{productId:'',quantity:'1',unitCostBs:''}]);
   const [paymentTerm, setPaymentTerm] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
   const [paymentAccountCode, setPaymentAccountCode] = useState<string>('');
@@ -196,7 +199,11 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       return;
     }
     if (!inventoryLinesValid) {
-      window.alert('Las líneas deben usar artículos existentes, cantidades y costos válidos, sin repetir artículos, y conciliar con la base imponible más el monto exento. Si hay gastos no inventariables, no marques la vinculación total al Kardex.');
+      window.alert('Las líneas deben usar artículos existentes, cantidades y costos válidos, sin repetir artículos, y conciliar con la base imponible más el monto exento.');
+      return;
+    }
+    if (!linkInventory && !nonInventoryDebitAccounts.some(account => account.code === purchaseDebitAccountCode)) {
+      window.alert('Clasifica la compra y selecciona expresamente una cuenta de gasto o de activo. No se utilizará Honorarios Profesionales ni otra cuenta por defecto.');
       return;
     }
     if (linkInventory) {
@@ -280,6 +287,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       dueDate: paymentTerm === 'CREDITO' ? dueDate : invoiceDate,
       currencyPricingMode,
       fiscalAdjustmentMode,
+      purchaseDebitAccountCode: linkInventory ? undefined : purchaseDebitAccountCode,
       inventoryLines: linkInventory ? inventoryLines.map(line => ({productId:line.productId,quantity:Number(line.quantity),unitCostBs:Number(line.unitCostBs)})) : undefined
       });
       if (linkInventory) {
@@ -601,7 +609,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
             <span className="font-bold text-slate-800 uppercase tracking-wider block">Vista previa del asiento contable</span>
             <div className="grid grid-cols-3 gap-2 font-semibold text-slate-600 border-b border-sky-200 pb-1"><span>Cuenta / concepto</span><span className="text-right">Debe (Bs.)</span><span className="text-right">Haber (Bs.)</span></div>
             {[
-              {name: effectiveTaxableBaseBs > 0 ? 'Inventario / compra' : 'Gasto / operación', debit: effectiveTaxableBaseBs, credit: 0},
+              {name: linkInventory ? 'Inventario / mercancía' : (nonInventoryDebitAccounts.find(account=>account.code===purchaseDebitAccountCode)?.name || 'Cuenta de gasto/activo por seleccionar'), debit: effectiveTaxableBaseBs + exemptAmountBs, credit: 0},
               ...(exemptAmountBs > 0 ? [{name:'Monto exento', debit:exemptAmountBs, credit:0}] : []),
               ...(vatAmountBs > 0 ? [{name:'Crédito fiscal IVA', debit:vatAmountBs, credit:0}] : []),
               ...(igtfAmountBs > 0 ? [{name:'Gasto por IGTF', debit:igtfAmountBs, credit:0}] : []),
@@ -636,7 +644,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               <input id="linkInventory" type="checkbox" checked={linkInventory} onChange={e=>setLinkInventory(e.target.checked)} className="mt-1" />
               <label htmlFor="linkInventory" className="font-bold text-slate-800">Vincular mercancía de esta factura con artículos existentes del Kardex</label>
             </div>
-            <p className="text-[11px] text-slate-600">Actívalo solo si toda la base imponible y el monto exento corresponden a mercancía inventariable. Se crearán entradas de Kardex con referencia FAC-{invoiceNumber || 'número de factura'}; no se crearán artículos automáticamente.</p>
+            <p className="text-[11px] text-slate-600">Si la factura corresponde a mercancía para la venta, registra sus artículos y cantidades: el sistema debitará Inventario y actualizará el Kardex. Si corresponde a servicios, honorarios, gastos o activos, desmarca esta opción y selecciona la cuenta contable específica. No se asignará ninguna cuenta automáticamente.</p>
+            {!linkInventory && <div className="rounded-lg border border-amber-200 bg-white p-3"><label className="mb-1 block font-semibold text-slate-800">Cuenta de débito para servicio, gasto o activo *</label><select required value={purchaseDebitAccountCode} onChange={e=>setPurchaseDebitAccountCode(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2"><option value="">Selecciona la cuenta contable correspondiente…</option>{nonInventoryDebitAccounts.map(account=><option key={account.code} value={account.code}>{account.code} · {account.name}</option>)}</select><p className="mt-1 text-[10px] text-slate-500">Honorarios Profesionales solo se usará si lo seleccionas expresamente y corresponde a la naturaleza de la compra.</p></div>}
             {linkInventory && <>
               {inventoryLines.map((line,index)=><div key={index} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end rounded-lg bg-white border border-indigo-100 p-2">
                 <div className="sm:col-span-6"><label className="block font-semibold mb-1">Artículo existente</label><select required value={line.productId} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,productId:e.target.value,unitCostBs:item.unitCostBs || String(products.find(p=>p.id===e.target.value)?.avgCostBs || 0)}:item))} className="w-full rounded border border-slate-300 p-2"><option value="">Seleccionar artículo…</option>{products.filter(p=>p.companyId===currentCompany.id).map(p=><option key={p.id} value={p.id}>{p.code} · {p.name} · Existencia {p.currentStock}</option>)}</select></div>
