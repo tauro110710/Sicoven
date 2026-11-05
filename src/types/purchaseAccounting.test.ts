@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Account } from './accounting';
-import { getCompanyPurchasePaymentAccounts, resolveNonInventoryPurchaseDebitAccount } from './purchaseAccounting';
+import { getCompanyPurchasePaymentAccounts, resolveNonInventoryPurchaseDebitAccount, resolveTreasuryAccountCurrency } from './purchaseAccounting';
 
 const accounts: Account[] = [
   { code: '6.1.1.04', name: 'Honorarios Profesionales', type: 'GASTOS', level: 4, isMovement: true },
@@ -24,6 +24,13 @@ describe('purchase debit classification', () => {
       { companyId: 'B', accountCode: '1.1.1.06.02' }
     ];
     assert.deepEqual(getCompanyPurchasePaymentAccounts(paymentAccounts, banks, 'A').map(account => account.code), ['1.1.1.01', '1.1.1.06.01']);
+  });
+
+  it('resolves currency from the configured company bank, including dynamic auxiliaries', () => {
+    assert.equal(resolveTreasuryAccountCurrency('1.1.1.06.01', 'USD'), 'USD');
+    assert.equal(resolveTreasuryAccountCurrency('1.1.1.07.02', 'BS'), 'BS');
+    assert.throws(() => resolveTreasuryAccountCurrency('1.1.1.06.01'));
+    assert.equal(resolveTreasuryAccountCurrency('1.1.1.02'), 'USD');
   });
 
   it('rejects an unclassified non-inventory purchase instead of defaulting to honorarios', () => {
