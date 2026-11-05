@@ -28,7 +28,7 @@ export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack
     const years = journalEntries.filter(entry => /^\d{4}-\d{2}-\d{2}$/.test(entry.date))
       .map(entry => Number(entry.date.slice(0, 4)));
     return Array.from(new Set([...years, Number(currentCompany.fiscalYear)])).filter(Number.isInteger).sort((a, b) => b - a);
-  }, [journalEntries, currentCompany.fiscalYear]);
+  }, [journalEntries, currentCompany.id, currentCompany.fiscalYear]);
   const [year, setYear] = useState(String(availableYears[0] || currentCompany.fiscalYear));
   const [message, setMessage] = useState('');
   const report = useMemo(
@@ -41,8 +41,8 @@ export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack
   );
   const indirectCandidates = useMemo(() => accounts.filter(account =>
     account.isMovement && ['ACTIVO', 'PASIVO', 'INGRESOS', 'COSTOS', 'GASTOS'].includes(account.type) &&
-    journalEntries.some(entry => entry.date.startsWith(year) && entry.items.some(item => item.accountCode === account.code))
-  ).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })), [accounts, journalEntries, year]);
+    journalEntries.some(entry => entry.companyId === currentCompany.id && entry.date.startsWith(year) && entry.items.some(item => item.accountCode === account.code))
+  ).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })), [accounts, journalEntries, currentCompany.id, year]);
   const INDIRECT_TREATMENT_LABELS: Record<CashFlowIndirectTreatment, string> = {
     NON_CASH_EXPENSE_ADD_BACK: 'Gasto no monetario: sumar',
     NON_CASH_INCOME_DEDUCT: 'Ingreso no monetario: restar',
