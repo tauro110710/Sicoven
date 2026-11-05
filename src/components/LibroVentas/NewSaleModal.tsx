@@ -54,8 +54,10 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
 
   // La tasa de la empresa es la única fuente autorizada; nunca se inventa una tasa de respaldo.
   // Real-time calculations
-  const vatAmountBs = Math.round(taxableBaseBs * (taxRate / 100) * 100) / 100;
-  const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs) * 100) / 100;
+  const vatRate = taxRate === 31 ? 16 : taxRate;
+  const vatAmountBs = Math.round(taxableBaseBs * (vatRate / 100) * 100) / 100;
+  const additionalLuxuryTaxBs = taxRate === 31 ? Math.round(taxableBaseBs * 0.15 * 100) / 100 : 0;
+  const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs + additionalLuxuryTaxBs) * 100) / 100;
   const igtfEligible = currentCompany.isIgtfPerceptionAgent === true && paymentTerm === 'CONTADO' && (paymentCurrency === 'FOREIGN_CASH' || paymentCurrency === 'CRYPTO');
   const igtfApplicable = igtfEligible && applyIgtf;
   const igtfAmountBs = igtfApplicable ? Math.round(invoiceSubtotalBs * 0.03 * 100) / 100 : 0;
@@ -67,6 +69,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const totalAmountUsd = bcvRate > 0 ? totalAmountBs / bcvRate : 0;
   const taxableBaseUsd = bcvRate > 0 ? taxableBaseBs / bcvRate : 0;
   const vatAmountUsd = bcvRate > 0 ? vatAmountBs / bcvRate : 0;
+  const additionalLuxuryTaxUsd = bcvRate > 0 ? additionalLuxuryTaxBs / bcvRate : 0;
   const vatWithheldUsd = bcvRate > 0 ? vatWithheldBs / bcvRate : 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -108,6 +111,8 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
       taxableBaseBs,
       taxRate,
       vatAmountBs,
+      additionalLuxuryTaxBs,
+      additionalLuxuryTaxUsd,
       vatWithheldBs,
       retentionRate: clientIsSpecial ? retentionRate : 0,
       retentionVoucherNumber: clientIsSpecial ? retentionVoucherNumber.trim() : undefined,
