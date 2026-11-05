@@ -25,7 +25,7 @@ const SECTION_LABELS: Record<CashFlowSection, string> = {
 export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const { currentCompany, accounts, bankAccounts, journalEntries, setAccountCashFlowActivity, setAccountCashFlowIndirectTreatment, isStorageReady, waitForPersistence } = useAccounting();
   const availableYears = useMemo(() => {
-    const years = journalEntries.filter(entry => entry.companyId === currentCompany.id && /^\\d{4}-\\d{2}-\\d{2}$/.test(entry.date))
+    const years = journalEntries.filter(entry => entry.companyId === currentCompany.id && /^\d{4}-\d{2}-\d{2}$/.test(entry.date))
       .map(entry => Number(entry.date.slice(0, 4)));
     return Array.from(new Set([...years, Number(currentCompany.fiscalYear)])).filter(Number.isInteger).sort((a, b) => b - a);
   }, [journalEntries, currentCompany.id, currentCompany.fiscalYear]);
