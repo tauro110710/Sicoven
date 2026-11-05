@@ -52,12 +52,13 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const vat16Account = movementAccounts.find(account => account.code === '2.1.2.01' && account.type === 'PASIVO');
   const vat8Account = movementAccounts.find(account => account.code === '2.1.2.02' && account.type === 'PASIVO');
   const igtfAccount = movementAccounts.find(account => account.code === '2.1.2.06' && account.type === 'PASIVO');
+  const luxuryTaxAccount = movementAccounts.find(account => account.code === '2.1.2.08' && account.type === 'PASIVO');
 
   const rate = parseAmount(rateInput);
   const b16 = parseAmount(base16), b8 = parseAmount(base8), b31 = parseAmount(base31);
   const e = parseAmount(exempt), ig = parseAmount(igtf);
-  const v16 = money(b16 * 0.16), v8 = money(b8 * 0.08), v31 = money(b31 * 0.31);
-  const totalSales = money(b16 + b8 + b31 + e + v16 + v8 + v31 + ig);
+  const v16 = money(b16 * 0.16), v8 = money(b8 * 0.08), v31 = money(b31 * 0.16), luxuryTax15 = money(b31 * 0.15);
+  const totalSales = money(b16 + b8 + b31 + e + v16 + v8 + v31 + luxuryTax15 + ig);
   const paymentTotal = money(PAYMENT_ROWS.reduce((sum, row) => sum + parseAmount(payments[row.key]), 0));
   const diff = money(totalSales - paymentTotal);
   const fmt = (value: number) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
@@ -120,7 +121,8 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
       });
       addLine(items, revenueTaxable, b16 + b8 + b31, 'credit', 'Ventas gravadas consolidadas · Reporte Z ' + zNumber.trim());
       addLine(items, revenueExempt, e, 'credit', 'Ventas exentas / exoneradas · Reporte Z ' + zNumber.trim());
-      addLine(items, vat16Account, v16 + v31, 'credit', 'IVA débito fiscal alícuotas 16% y 31% · Reporte Z ' + zNumber.trim());
+      addLine(items, vat16Account, v16 + v31, 'credit', 'IVA débito fiscal 16% sobre ventas gravadas generales y suntuarias · Reporte Z ' + zNumber.trim());
+      addLine(items, luxuryTaxAccount, luxuryTax15, 'credit', 'Impuesto adicional al consumo suntuario 15% · Reporte Z ' + zNumber.trim());
       addLine(items, vat8Account, v8, 'credit', 'IVA débito fiscal alícuota 8% · Reporte Z ' + zNumber.trim());
       addLine(items, igtfAccount, ig, 'credit', 'IGTF percibido informado en Reporte Z ' + zNumber.trim());
 
@@ -130,7 +132,7 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
         invoiceStart: invoiceStart.trim(), invoiceEnd: invoiceEnd.trim(),
         controlStart: controlStart.trim() || undefined, controlEnd: controlEnd.trim() || undefined,
         taxableBase16Bs: b16, vat16Bs: v16, taxableBase8Bs: b8, vat8Bs: v8,
-        taxableBase31Bs: b31, vat31Bs: v31, exemptSalesBs: e, igtfBs: ig, totalSalesBs: totalSales,
+        taxableBase31Bs: b31, vat31Bs: v31, additionalLuxuryTaxBs: luxuryTax15, exemptSalesBs: e, igtfBs: ig, totalSalesBs: totalSales,
         payments: PAYMENT_ROWS.filter(row => parseAmount(payments[row.key]) > 0).map(row => ({
           method: row.label, amountBs: parseAmount(payments[row.key]), accountCode: paymentAccounts[row.key]
         })),
@@ -180,12 +182,12 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="font-semibold">Base gravada 16%<input inputMode="decimal" value={base16} onChange={event => setBase16(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal" placeholder="0,00"/></label>
             <label className="font-semibold">Base gravada 8%<input inputMode="decimal" value={base8} onChange={event => setBase8(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal" placeholder="0,00"/></label>
-            <label className="font-semibold">Base gravada 31%<input inputMode="decimal" value={base31} onChange={event => setBase31(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal" placeholder="0,00"/></label>
+            <label className="font-semibold">Base gravada 31% combinado (16% IVA + 15% adicional)<input inputMode="decimal" value={base31} onChange={event => setBase31(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal" placeholder="0,00"/></label>
             <label className="font-semibold">Ventas exentas / exoneradas<input inputMode="decimal" value={exempt} onChange={event => setExempt(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal" placeholder="0,00"/></label>
             <label className="font-semibold">IGTF percibido (si aplica)<input inputMode="decimal" value={igtf} onChange={event => setIgtf(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal" placeholder="0,00"/></label>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-3 sm:grid-cols-4">
-            <div>IVA 16%<strong className="block text-sm">{fmt(v16)}</strong></div><div>IVA 8%<strong className="block text-sm">{fmt(v8)}</strong></div><div>IVA 31%<strong className="block text-sm">{fmt(v31)}</strong></div><div>Total cierre<strong className="block text-sm text-emerald-700">{fmt(totalSales)}</strong></div>
+            <div>IVA 16%<strong className="block text-sm">{fmt(v16)}</strong></div><div>IVA 8%<strong className="block text-sm">{fmt(v8)}</strong></div><div>IVA base suntuaria (16%)<strong className="block text-sm">{fmt(v31)}</strong></div><div>Adicional lujo (15%)<strong className="block text-sm">{fmt(luxuryTax15)}</strong></div><div>Total cierre<strong className="block text-sm text-emerald-700">{fmt(totalSales)}</strong></div>
           </div>
         </section>
         <section className="rounded-xl border border-slate-200 p-4">
