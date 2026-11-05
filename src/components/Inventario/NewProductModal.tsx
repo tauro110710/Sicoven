@@ -48,14 +48,14 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
     setCorrectionReason('');
     setCorrectionWorkpaper('');
     if (product) {
-      setCode(product.code); setName(product.name); setCategory(product.category); setUnit(product.unit);
+      setCode(product.code || ''); setName(product.name || ''); setCategory(product.category || 'Mercancías Generales'); setUnit(product.unit || 'Unidad');
       setMinStockInput(String(product.minStock)); setCurrentStockInput(String(product.currentStock));
       setOpeningDate(product.openingDate || new Date().toISOString().slice(0, 10));
       setOpeningBcvRateInput(String(product.openingBcvRate || ''));
       setAvgCostInput(String(product.avgCostBs)); setSalesPriceInput(String(product.salesPriceBs));
-      setInventoryAccountCode(product.inventoryAccountCode); setCostOfSalesAccountCode(product.costOfSalesAccountCode);
-      setAdjustmentAccountCode(product.adjustmentAccountCode); setOpeningBalanceAccountCode(product.openingBalanceAccountCode);
-      setCostingMethod(product.costingMethod); setVatTreatment(product.vatTreatment); setItemType(product.itemType);
+      setInventoryAccountCode(product.inventoryAccountCode || '1.1.4.01'); setCostOfSalesAccountCode(product.costOfSalesAccountCode || '5.1.1.01');
+      setAdjustmentAccountCode(product.adjustmentAccountCode || '5.1.2.01'); setOpeningBalanceAccountCode(product.openingBalanceAccountCode || '3.3.1.01');
+      setCostingMethod(product.costingMethod || 'PROMEDIO_PONDERADO'); setVatTreatment(product.vatTreatment || 'GENERAL_16'); setItemType(product.itemType || 'MERCANCIA');
     } else {
       setCode(''); setName(''); setCategory('Mercancías Generales'); setUnit('Unidad');
       setMinStockInput('10'); setCurrentStockInput('0'); setOpeningDate(new Date().toISOString().slice(0, 10));
