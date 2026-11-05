@@ -36,8 +36,8 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
   const [disclosureError, setDisclosureError] = useState('');
   const [disclosureSaving, setDisclosureSaving] = useState(false);
   const yearDisclosures = useMemo(
-    () => financialDisclosures.filter(note => note.fiscalYear === Number(year)).sort((a, b) => a.noteNumber - b.noteNumber),
-    [financialDisclosures, year]
+    () => financialDisclosures.filter(note => note.companyId === currentCompany.id && note.fiscalYear === Number(year)).sort((a, b) => a.noteNumber - b.noteNumber),
+    [financialDisclosures, currentCompany.id, year]
   );
   const disclosureMovements = useMemo(
     () => buildDisclosureAccountMovements(journalEntries, accounts, currentCompany.id, Number(year)),
