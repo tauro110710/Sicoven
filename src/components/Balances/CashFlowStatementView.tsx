@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { buildCashFlowReport, CashFlowSection } from '../../types/cashFlowStatement';
 import { CashFlowActivity, CashFlowIndirectTreatment } from '../../types/accounting';
@@ -30,6 +30,9 @@ export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack
     return Array.from(new Set([...years, Number(currentCompany.fiscalYear)])).filter(Number.isInteger).sort((a, b) => b - a);
   }, [journalEntries, currentCompany.id, currentCompany.fiscalYear]);
   const [year, setYear] = useState(String(availableYears[0] || currentCompany.fiscalYear));
+  useEffect(() => {
+    if (!availableYears.includes(Number(year))) setYear(String(availableYears[0] || currentCompany.fiscalYear));
+  }, [availableYears, currentCompany.fiscalYear, year]);
   const [message, setMessage] = useState('');
   const report = useMemo(
     () => buildCashFlowReport(journalEntries, accounts, bankAccounts, currentCompany.id, Number(year)),
