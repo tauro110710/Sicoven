@@ -176,8 +176,8 @@ interface AccountingContextType {
   // Conciliación Bancaria
   bankAccounts: BankAccount[];
   bankStatementMovements: BankStatementMovement[];
-  addBankAccount: (bank: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'>) => BankAccount;
-  registerTreasuryMovement: (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; counterpartAccountCode?: string; destinationBankAccountId?: string }) => JournalEntry;
+  addBankAccount: (bank: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'> & { bcvRate?: number }) => BankAccount;
+  registerTreasuryMovement: (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; bcvRate: number; counterpartAccountCode?: string; destinationBankAccountId?: string }) => JournalEntry;
   addBankStatementMovement: (movement: Omit<BankStatementMovement, 'id' | 'companyId'>) => BankStatementMovement;
   deleteBankStatementMovement: (id: string) => void;
   reconcileMovementManual: (statementMovementId: string, journalEntryId: string) => void;
@@ -4412,8 +4412,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('El saldo inicial debe ser un importe numérico, finito y no negativo.');
     }
     const hasOpeningBalance = bankData.currency === 'USD' ? rawUsd > 0 : rawBs > 0;
-    const rate = Number(currentCompany.bcvRate);
-    if (hasOpeningBalance && (!Number.isFinite(rate) || rate <= 0)) throw new Error('Configure una tasa BCV válida antes de registrar un saldo inicial.');
+    const rate = Number(bankData.bcvRate);
+    if (hasOpeningBalance && (!Number.isFinite(rate) || rate <= 0)) throw new Error('Ingrese la tasa BCV aplicable al saldo inicial de esta cuenta.');
 
     // El importe introducido en la moneda de la cuenta es la autoridad; la otra
     // moneda se calcula con la tasa BCV para evitar saldos de apertura incoherentes.
@@ -4439,7 +4439,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const equity = hasOpeningBalance ? accounts.find(a => a.code === '3.3.1.01' && a.isMovement) : undefined;
     if (hasOpeningBalance && !equity) throw new Error('No existe la cuenta de contrapartida de apertura 3.3.1.01.');
 
-    const newBank: BankAccount = { ...bankData, accountType, accountCode, accountNumber: digits, initialBalanceBs: bs, initialBalanceUsd: usd, id: `bank-acc-${Date.now()}-${Math.floor(Math.random()*100000)}`, companyId: currentCompany.id };
+    const { bcvRate: _openingBcvRate, ...bankFields } = bankData;
+    const newBank: BankAccount = { ...bankFields, accountType, accountCode, accountNumber: digits, initialBalanceBs: bs, initialBalanceUsd: usd, id: `bank-acc-${Date.now()}-${Math.floor(Math.random()*100000)}`, companyId: currentCompany.id };
     // Registrar primero el asiento: si falla la partida doble, no deja una cuenta
     // bancaria ni un auxiliar huérfanos en el estado de la aplicación.
     if (hasOpeningBalance && equity) {
@@ -4458,7 +4459,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return newBank;
   };
 
-  const registerTreasuryMovement = (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; counterpartAccountCode?: string; destinationBankAccountId?: string }): JournalEntry => {
+  const registerTreasuryMovement = (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; bcvRate: number; counterpartAccountCode?: string; destinationBankAccountId?: string }): JournalEntry => {
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('La operación bancaria requiere SQLite local de escritorio disponible y lista.');
     }
@@ -4482,8 +4483,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       )
     );
     if (duplicatedReference) throw new Error('Ya existe un movimiento contabilizado con esa referencia para una de las cuentas bancarias involucradas.');
-    const rate = Number(currentCompany.bcvRate);
-    if (!Number.isFinite(rate) || rate <= 0) throw new Error('Configure una tasa BCV válida para registrar movimientos.');
+    const rate = Number(draft.bcvRate);
+    if (!Number.isFinite(rate) || rate <= 0) throw new Error('Ingrese la tasa BCV aplicable a este movimiento bancario.');
     const amountBs = source.currency === 'USD' ? Math.round(draft.amount * rate * 100) / 100 : Math.round(draft.amount * 100) / 100;
     const amountUsd = source.currency === 'USD' ? Math.round(draft.amount * 1000000) / 1000000 : Math.round(amountBs / rate * 1000000) / 1000000;
     if (amountBs <= 0 || amountUsd <= 0) throw new Error('El importe es demasiado pequeño para contabilizarse en ambas monedas.');
