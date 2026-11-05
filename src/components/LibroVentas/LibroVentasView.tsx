@@ -403,24 +403,31 @@ export const LibroVentasView: React.FC = () => {
           <CheckCircle2 className="w-4 h-4" />
           Resumen de Ventas para Declaración de IVA (Forma 30 SENIAT)
         </h4>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono-nums">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 text-xs font-mono-nums">
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
-            <span className="text-[11px] text-slate-400 block">Total Ventas Internas Gravadas:</span>
+            <span className="text-[11px] text-slate-400 block">Bases imponibles gravadas:</span>
             <span className="text-base font-bold text-white mt-1 block">{formatBs(totalFiscalBaseBs)}</span>
             <span className="text-[10px] text-slate-400">{formatUsd(totalFiscalBaseUsd)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
-            <span className="text-[11px] text-slate-400 block">IGTF percibido (3%, si aplica):</span>
+            <span className="text-[11px] text-slate-400 block">Ventas exentas / exoneradas:</span>
+            <span className="text-base font-bold text-white mt-1 block">{formatBs(totalFiscalExemptBs)}</span>
+          </div>
+          <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+            <span className="text-[11px] text-slate-400 block">Débito fiscal IVA:</span>
+            <span className="text-base font-bold text-emerald-400 mt-1 block">{formatBs(totalFiscalIvaBs)}</span>
+            <span className="text-[10px] text-slate-400">{formatUsd(totalFiscalIvaUsd)}</span>
+          </div>
+          <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+            <span className="text-[11px] text-slate-400 block">Impuesto adicional al consumo suntuario (15%):</span>
+            <span className="text-base font-bold text-amber-300 mt-1 block">{formatBs(totalFiscalLuxuryTaxBs)}</span>
+          </div>
+          <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+            <span className="text-[11px] text-slate-400 block">IGTF percibido:</span>
             <span className="text-base font-bold text-sky-300 mt-1 block">{formatBs(totalFiscalIgtfBs)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
-            <span className="text-[11px] text-slate-400 block">Débito Fiscal Generado (16%):</span>
-            <span className="text-base font-bold text-emerald-400 mt-1 block">{formatBs(totalFiscalIvaBs)}</span>
-            <span className="text-[10px] text-slate-400">{formatUsd(totalFiscalIvaUsd)}</span>
-            {totalFiscalLuxuryTaxBs > 0 && <span className="mt-1 block text-[10px] text-amber-300">Impuesto adicional 15%: {formatBs(totalFiscalLuxuryTaxBs)}</span>}
-          </div>
-          <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
-            <span className="text-[11px] text-slate-400 block">Retenciones de IVA Recibidas por Compensar:</span>
+            <span className="text-[11px] text-slate-400 block">IVA retenido por clientes:</span>
             <span className="text-base font-bold text-purple-300 mt-1 block">{formatBs(totalIvaRetenidoBs)}</span>
             <span className="text-[10px] text-slate-400">{formatUsd(totalIvaRetenidoUsd)}</span>
           </div>
