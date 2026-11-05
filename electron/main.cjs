@@ -283,6 +283,29 @@ function createWindow() {
     if (details.level >= 2) logLoadFailure('renderer-console', `line=${details.lineNumber} ${details.message}`);
   });
   win.webContents.on('unresponsive', () => logLoadFailure('unresponsive', 'Renderer did not respond'));
+  win.webContents.session.on('will-download', async (_event, item) => {
+    if (!/\\.pdf$/i.test(item.getFilename())) return;
+    item.pause();
+    try {
+      const result = await dialog.showSaveDialog(win, {
+        title: 'Guardar PDF oficial de SICOVEN',
+        defaultPath: path.join(app.getPath('documents'), path.basename(item.getFilename())),
+        filters: [{ name: 'Documento PDF', extensions: ['pdf'] }]
+      });
+      if (result.canceled || !result.filePath) {
+        item.cancel();
+        return;
+      }
+      item.setSavePath(result.filePath);
+      item.once('done', (_downloadEvent, state) => {
+        if (state === 'completed') shell.showItemInFolder(result.filePath);
+      });
+      item.resume();
+    } catch (error) {
+      item.cancel();
+      logLoadFailure('pdf-download', error instanceof Error ? error.message : String(error));
+    }
+  });
   const loadPromise = app.isPackaged
     ? win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
     : win.loadURL('http://localhost:3000');
