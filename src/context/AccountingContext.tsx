@@ -75,13 +75,13 @@ export interface AccountingAuditEvent {
 export type CorrectionCase = { id: string; company_id: string; entity_type: string; entity_id: string; correction_type: string; source_ref: string; correction_ref: string; reason: string; workpaper: string; status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'EXECUTED'; workflow_stage: 'IN_REVIEW' | 'OBSERVATION_REQUIRED' | 'READY_FOR_EXECUTION' | 'CLOSED' | 'COMPLETED' | 'WITHDRAWN'; requested_by: number; requested_by_name: string; reviewed_by?: number; reviewed_by_name?: string; review_reason?: string; executed_by?: number; executed_by_name?: string; execution_ref?: string; created_at: string; reviewed_at?: string; executed_at?: string; execution_started_by?: number; execution_started_at?: string; execution_started_ref?: string; events: Array<{ id: number | string; event_type: string; actor_id: number; actor_name: string; reason: string; created_at: string; metadata: Record<string, unknown> }> };
 type SupportingDocumentEntityType = 'PURCHASE' | 'SALE' | 'JOURNAL_ENTRY' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'INVENTORY_MOVEMENT' | 'BANK_STATEMENT_MOVEMENT' | 'CORRECTION_CASE';
 type SupportingDocument = { id: string; companyId: string; entityType: string; entityId: string; documentType: string; title: string; description?: string | null; fileName: string; mimeType: string; sha256: string; byteSize: number; uploadedBy: string; createdAt: string; status: string };
-type SupportingDocumentDraft = { entityType: SupportingDocumentEntityType; entityId: string; documentType: string; title: string; description?: string; replacesDocumentId?: string };
+type SupportingDocumentDraft = { entityType: Exclude<SupportingDocumentEntityType, 'CORRECTION_CASE'>; entityId: string; documentType: string; title: string; description?: string; replacesDocumentId?: string };
 
 interface AccountingContextType {
   getAuditEvents: (limit?: number) => Promise<AccountingAuditEvent[]>;
   requestAccountingCorrection: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'INVENTORY_PRODUCT'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason?: string; workpaperNote?: string }) => Promise<void>;
   createCorrectionCase: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'INVENTORY_MOVEMENT'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason?: string; workpaperNote?: string }) => Promise<CorrectionCase>;
-  authorizeCorrectionCase: (input: { entityType: string; entityId: string; sourceDocumentRef: string; correctionDocumentRef: string }) => Promise<void>;
+  authorizeCorrectionCase: (input: { entityType: string; entityId: string; sourceDocumentRef: string; correctionDocumentRef: string }) => Promise<string>;
   listCorrectionCases: () => Promise<CorrectionCase[]>;
   reviewCorrectionCase: (input: { caseId: string; decision: 'APPROVE' | 'REJECT'; reason: string }) => Promise<CorrectionCase>;
   observeCorrectionCase: (input: { caseId: string; reason: string }) => Promise<CorrectionCase>;
@@ -152,7 +152,7 @@ interface AccountingContextType {
   importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[]) => number;
   importInventoryMovements: (movements: Omit<InventoryMovement, 'id' | 'companyId'>[]) => number;
   executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => Promise<InventoryMovement[]>;
-  updateProduct: (product: InventoryProduct) => void;
+  updateProduct: (product: InventoryProduct, reason: string, workpaperNote: string) => Promise<void>;
   movements: InventoryMovement[];
   addMovement: (movement: Omit<InventoryMovement, 'id' | 'companyId'>) => InventoryMovement;
 
@@ -1125,7 +1125,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const correctBcvRate = async (input: {
-    newRate: number; effectiveDate: string; reason: string; workpaperNote?: string;
+    newRate: number; effectiveDate: string; reason?: string; workpaperNote?: string;
   }): Promise<void> => {
     assertSQLitePersistenceReady('Corregir la tasa BCV');
     if (!currentCompany.id) throw new Error('Seleccione una empresa antes de corregir la tasa BCV.');
@@ -3709,7 +3709,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (![updated.minStock, updated.salesPriceBs, updated.salesPriceUsd].every(value => Number.isFinite(Number(value)) && Number(value) >= 0)) {
       throw new Error('Stock mínimo y precios deben ser importes numéricos no negativos.');
     }
-    if (!['GENERAL_16', 'REDUCIDA_8', 'EXENTO', 'EXONERADO'].includes(updated.vatTreatment)) {
+    const normalizedVatTreatment = updated.vatTreatment || original.vatTreatment || 'GENERAL_16';
+    if (!['GENERAL_16', 'REDUCIDA_8', 'EXENTO', 'EXONERADO'].includes(normalizedVatTreatment)) {
       throw new Error('El tratamiento IVA del artículo no es válido.');
     }
     if (products.some(p => p.id !== updated.id && p.companyId === currentCompany.id && p.code.trim().toLocaleUpperCase() === updated.code.trim().toLocaleUpperCase())) {
@@ -3717,7 +3718,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const immutableInventoryFields: Array<keyof InventoryProduct> = [
       'currentStock', 'avgCostBs', 'avgCostUsd', 'lastCostBs', 'lastCostUsd',
-      'vnrProvisionBs', 'vnrProvisionUsd', 'inventoryAccountCode', 'costOfSalesAccountCode',
+      'vnrProvisionBs', 'inventoryAccountCode', 'costOfSalesAccountCode',
       'adjustmentAccountCode', 'openingBalanceAccountCode', 'costingMethod', 'itemType',
       'openingDate', 'openingBcvRate'
     ];
@@ -3738,7 +3739,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       correctionDocumentRef: updated.code + ' · ' + updated.name,
       reason: normalizedReason, workpaperNote: normalizedWorkpaper
     });
-    setProducts(prev => prev.map(p => (p.id === updated.id && p.companyId === currentCompany.id ? updated : p)));
+    setProducts(prev => prev.map(p => (p.id === updated.id && p.companyId === currentCompany.id ? { ...updated, vatTreatment: normalizedVatTreatment } : p)));
     try {
       await waitForPersistence();
     } catch (error) {
