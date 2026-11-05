@@ -18,7 +18,7 @@ export const TesoreriaView: React.FC = () => {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [bcvRateInput, setBcvRateInput] = useState('');
-  const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\\./g, '').replace(',', '.') : raw); };
+  const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
   const parsedAmount = parseAmount(amount);
   const parsedBcvRate = parseAmount(bcvRateInput);
   const [counterpartCode, setCounterpartCode] = useState('');
