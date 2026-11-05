@@ -29,7 +29,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
 
   if (!isOpen) return null;
 
-  const parseDecimalInput = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\\./g, '').replace(',', '.') : raw); };
+  const parseDecimalInput = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
   const bcvRate = parseDecimalInput(movementBcvRate) || 0;
   const parsedAmount = parseDecimalInput(amountBs) || 0;
   const parsedAmountBs = bankAccount.currency === 'USD'
