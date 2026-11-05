@@ -251,12 +251,6 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   const selectedSupplierAdvanceSettlementForCorrection = requestEntityType === 'SUPPLIER_ADVANCE_SETTLEMENT' ? supplierAdvanceSettlements.find(item => item.id === requestEntityId && item.companyId === currentCompany.id) : undefined;
   const selectedSupplierDirectAdvanceForCorrection = requestEntityType === 'SUPPLIER_DIRECT_ADVANCE' ? supplierDirectAdvances.find(item => item.id === requestEntityId && item.companyId === currentCompany.id) : undefined;
   const selectedJournalForCorrection = requestEntityType === 'JOURNAL_ENTRY' ? journalEntries.find(item => item.id === requestEntityId && item.companyId === currentCompany.id) : undefined;
-  const selectedPurchaseHasInventory = Boolean(selectedPurchaseForCorrection && (
-    selectedPurchaseForCorrection.inventoryLines?.length ||
-    movements.some(item => item.companyId === currentCompany.id &&
-      (item.journalEntryId === selectedPurchaseForCorrection.journalEntryId ||
-       item.documentRef.trim().toUpperCase() === ('FAC-' + selectedPurchaseForCorrection.invoiceNumber).trim().toUpperCase()))
-  ));
   const selectedSaleEntryForCorrection = selectedSaleForCorrection?.journalEntryId
     ? journalEntries.find(item=>item.id===selectedSaleForCorrection.journalEntryId && item.companyId===currentCompany.id)
     : undefined;
@@ -370,7 +364,6 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
           throw new Error('Complete la cuenta de débito, las cuentas fiscales que correspondan y las confirmaciones profesionales de IVA, retenciones e IGTF.');
         }
         const note = await addSupplierDebitNote({
-          companyId: currentCompany.id,
           sourcePurchaseId: selectedPurchaseForCorrection.id,
           debitNoteNumber: requestTargetRef.trim(),
           controlNumber: requestControlNumber.trim(),
@@ -650,7 +643,8 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
       const note = await addPurchaseCreditNote({
         purchaseId: linkedPurchase.id, lines, returnDate: supplierReturnDate,
         creditNoteNumber: supplierCreditNoteNumber, controlNumber: supplierCreditControlNumber,
-        reason: supplierCreditReason
+        reason: supplierCreditReason, fiscalEmissionMedium: requestFiscalEmissionMedium,
+        sameMediumAsOriginal: requestSameMediumAsOriginal
       });
       setFeedback({ kind: 'success', message: 'Nota de crédito ' + note.creditNoteNumber +
         ' registrada con ' + note.creditNoteLines?.length + ' línea(s). CxP disminuyó ' +
