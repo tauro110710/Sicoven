@@ -302,7 +302,7 @@ export const InventarioContableTools: React.FC = () => {
         ...selectedProduct, vnrProvisionBs: vnr.writeDownBs,
         vnrEstimatedSellingPriceBs: Number(sellingPrice), vnrCompletionCostBs: Number(completionCost),
         vnrSellingCostBs: Number(sellingCost), vnrLastTestDate: new Date().toISOString().slice(0,10)
-      });
+      }, 'Actualización de la provisión por valor neto realizable (VNR).', 'Cálculo VNR revisado y respaldado por precio estimado de venta, costos de terminación y costos de venta.');
       setMessage('Evaluación VNR registrada en el producto y en el Libro Diario.');
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo registrar la provisión VNR.'); }
   };
@@ -318,7 +318,7 @@ export const InventarioContableTools: React.FC = () => {
       setError('La matriz contiene componentes inválidos. Use materias primas/productos en proceso y cantidades positivas.'); return;
     }
     try {
-      updateProduct({ ...selectedFinishedProduct, bomComponents: recipeLines });
+      updateProduct({ ...selectedFinishedProduct, bomComponents: recipeLines }, 'Actualización de la matriz insumo-producto.', 'Componentes y cantidades por unidad revisados contra la ficha de producción.');
       setMessage('Matriz insumo-producto guardada en el registro del producto terminado.');
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar la matriz.'); }
   };
