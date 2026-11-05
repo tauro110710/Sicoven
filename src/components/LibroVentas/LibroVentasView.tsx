@@ -135,7 +135,7 @@ export const LibroVentasView: React.FC = () => {
           <div className="flex items-center gap-2.5">
             <button
               onClick={handleExportPdf}
-              disabled={isExportingPdf || filteredSales.length === 0}
+              disabled={isExportingPdf || (filteredSales.length === 0 && filteredZReports.length === 0)}
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer border border-slate-300 shadow-sm"
               title="Descargar archivo PDF oficial del Libro de Ventas con logo y márgenes SENIAT"
             >
