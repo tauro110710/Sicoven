@@ -95,9 +95,13 @@ export const LibroVentasView: React.FC = () => {
   const zBaseBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.taxableBase16Bs || 0) + (entry.fiscalZReport?.taxableBase8Bs || 0) + (entry.fiscalZReport?.taxableBase31Bs || 0), 0);
   const zVatBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.vat16Bs || 0) + (entry.fiscalZReport?.vat8Bs || 0) + (entry.fiscalZReport?.vat31Bs || 0), 0);
   const zLuxuryTaxBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.additionalLuxuryTaxBs || 0), 0);
+  const zBaseUsd = filteredZReports.reduce((sum, entry) => sum + ((entry.fiscalZReport?.taxableBase16Bs || 0) + (entry.fiscalZReport?.taxableBase8Bs || 0) + (entry.fiscalZReport?.taxableBase31Bs || 0)) / entry.bcvRate, 0);
+  const zVatUsd = filteredZReports.reduce((sum, entry) => sum + ((entry.fiscalZReport?.vat16Bs || 0) + (entry.fiscalZReport?.vat8Bs || 0) + (entry.fiscalZReport?.vat31Bs || 0)) / entry.bcvRate, 0);
   const zExemptBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.exemptSalesBs || 0), 0);
   const zIgtfBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.igtfBs || 0), 0);
   const totalFiscalBaseBs = totalBaseBs + zBaseBs;
+  const totalFiscalBaseUsd = totalBaseUsd + zBaseUsd;
+  const totalFiscalIvaUsd = totalIvaDebitoUsd + zVatUsd;
   const totalFiscalIvaBs = totalIvaDebitoBs + zVatBs;
   const totalFiscalLuxuryTaxBs = zLuxuryTaxBs;
   const totalFiscalExemptBs = totalExentoBs + zExemptBs;
@@ -403,7 +407,7 @@ export const LibroVentasView: React.FC = () => {
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Total Ventas Internas Gravadas:</span>
             <span className="text-base font-bold text-white mt-1 block">{formatBs(totalFiscalBaseBs)}</span>
-            <span className="text-[10px] text-slate-400">{formatUsd(totalFiscalBaseBs / (currentCompany.bcvRate || 1))}</span>
+            <span className="text-[10px] text-slate-400">{formatUsd(totalFiscalBaseUsd)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">IGTF percibido (3%, si aplica):</span>
@@ -412,7 +416,7 @@ export const LibroVentasView: React.FC = () => {
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Débito Fiscal Generado (16%):</span>
             <span className="text-base font-bold text-emerald-400 mt-1 block">{formatBs(totalFiscalIvaBs)}</span>
-            <span className="text-[10px] text-slate-400">{formatUsd(totalFiscalIvaBs / (currentCompany.bcvRate || 1))}</span>
+            <span className="text-[10px] text-slate-400">{formatUsd(totalFiscalIvaUsd)}</span>
             {totalFiscalLuxuryTaxBs > 0 && <span className="mt-1 block text-[10px] text-amber-300">Impuesto adicional 15%: {formatBs(totalFiscalLuxuryTaxBs)}</span>}
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
