@@ -31,7 +31,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [article2Transaction, setArticle2Transaction] = useState(false);
   const [invoiceFormalDefect, setInvoiceFormalDefect] = useState(false);
   const [vatNotDiscriminated, setVatNotDiscriminated] = useState(false);
-  const [taxableGrossBs, setTaxableGrossBs] = useState<number>(0);
+  const [taxableGrossInput, setTaxableGrossInput] = useState('');
+  const taxableGrossBs = parseDecimalInput(taxableGrossInput);
   const [portalRetentionRate, setPortalRetentionRate] = useState<'' | '75' | '100'>('');
   const [invoiceNumber, setInvoiceNumber] = useState<string>('');
   const [controlNumber, setControlNumber] = useState<string>('');
@@ -39,8 +40,10 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [affectedInvoiceNumber, setAffectedInvoiceNumber] = useState<string>('');
 
   // Amounts
-  const [taxableBaseBs, setTaxableBaseBs] = useState<number>(0);
-  const [exemptAmountBs, setExemptAmountBs] = useState<number>(0);
+  const [taxableBaseInput, setTaxableBaseInput] = useState('');
+  const taxableBaseBs = parseDecimalInput(taxableBaseInput);
+  const [exemptAmountInput, setExemptAmountInput] = useState('');
+  const exemptAmountBs = parseDecimalInput(exemptAmountInput);
   const [taxRate, setTaxRate] = useState<number>(16);
 
   // IVA Withholding: tasa determinada por Providencia 000054.
@@ -50,7 +53,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [islrConceptCode, setIslrConceptCode] = useState<string>('');
 
   // Currency
-  const [bcvRate, setBcvRate] = useState<number>(currentCompany.bcvRate || 0);
+  const [bcvRateInput, setBcvRateInput] = useState('');
+  const bcvRate = parseDecimalInput(bcvRateInput);
   const [notes, setNotes] = useState<string>('');
   const [linkInventory, setLinkInventory] = useState(false);
   const [inventoryLines, setInventoryLines] = useState<Array<{productId:string; quantity:string; unitCostBs:string}>>([{productId:'',quantity:'1',unitCostBs:''}]);
@@ -66,6 +70,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const dueDate = (() => { const d = new Date(invoiceDate + 'T12:00:00'); d.setDate(d.getDate() + creditDays); return d.toISOString().slice(0, 10); })();
 
   if (!isOpen) return null;
+
+  function parseDecimalInput(value: string) { const raw = value.trim(); if (!raw) return 0; return Number(raw.includes(',') ? raw.replace(/\\./g, '').replace(',', '.') : raw); }
 
   // Real-time calculations
   const effectiveTaxableBaseBs = vatNotDiscriminated && taxRate > 0 ? Math.round((taxableGrossBs / (1 + taxRate / 100) + Number.EPSILON) * 100) / 100 : taxableBaseBs;
@@ -145,7 +151,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const vatWithheldUsd = bcvRate > 0 ? vatWithheldBs / bcvRate : 0;
   const islrWithheldUsd = bcvRate > 0 ? islrWithheldBs / bcvRate : 0;
 
-  const inventoryLineTotal = inventoryLines.reduce((sum,line) => sum + Math.max(0,Number(line.quantity)||0) * Math.max(0,Number(line.unitCostBs)||0),0);
+  const inventoryLineTotal = inventoryLines.reduce((sum,line) => sum + Math.max(0,parseDecimalInput(line.quantity)||0) * Math.max(0,parseDecimalInput(line.unitCostBs)||0),0);
   const inventoryLinesValid = !linkInventory || (
     inventoryLines.length > 0 &&
     inventoryLines.every(line => products.some(p => p.id === line.productId && p.companyId === currentCompany.id) &&
@@ -457,7 +463,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                 2. Montos e Impuesto al Valor Agregado (IVA)
               </span>
               <div className="text-slate-500 font-mono-nums">
-                Tasa BCV: <strong>Bs. {bcvRate.toFixed(2)}</strong>
+                Tasa BCV aplicable a la factura
+                <input required type="text" inputMode="decimal" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} placeholder="Ej.: 889,67" className="ml-2 w-36 rounded-lg border border-slate-300 bg-white px-2 py-1 font-mono" />
               </div>
             </div>
 
@@ -465,13 +472,12 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">{vatNotDiscriminated ? 'Precio gravado con IVA incluido (Bs.) *' : 'Base Imponible (Bs.) *'}</label>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   required
                   placeholder="0.00"
-                  value={(vatNotDiscriminated ? taxableGrossBs : taxableBaseBs) || ''}
-                  onChange={e => { const value = parseFloat(e.target.value) || 0; if (vatNotDiscriminated) { setTaxableGrossBs(value); setTaxableBaseBs(taxRate > 0 ? Math.round((value / (1 + taxRate / 100) + Number.EPSILON) * 100) / 100 : 0); } else setTaxableBaseBs(value); }}
+                  value={vatNotDiscriminated ? taxableGrossInput : taxableBaseInput}
+                  onChange={e => { const value = parseFloat(e.target.value) || 0; if (vatNotDiscriminated) { setTaxableGrossInput(value); setTaxableBaseInput(String(taxRate > 0 ? Math.round((parseDecimalInput(value) / (1 + taxRate / 100) + Number.EPSILON) * 100) / 100 : 0)); } else setTaxableBaseInput(value); }}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
                 <span className="text-[11px] text-slate-500 font-mono">
@@ -485,8 +491,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                   step="0.01"
                   min="0"
                   placeholder="0.00"
-                  value={exemptAmountBs || ''}
-                  onChange={e => setExemptAmountBs(parseFloat(e.target.value) || 0)}
+                  value={exemptAmountInput}
+                  onChange={e => setExemptAmountInput(e.target.value)}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
@@ -635,8 +641,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
             {linkInventory && <>
               {inventoryLines.map((line,index)=><div key={index} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end rounded-lg bg-white border border-indigo-100 p-2">
                 <div className="sm:col-span-6"><label className="block font-semibold mb-1">Artículo existente</label><select required value={line.productId} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,productId:e.target.value,unitCostBs:item.unitCostBs || String(products.find(p=>p.id===e.target.value)?.avgCostBs || 0)}:item))} className="w-full rounded border border-slate-300 p-2"><option value="">Seleccionar artículo…</option>{products.filter(p=>p.companyId===currentCompany.id).map(p=><option key={p.id} value={p.id}>{p.code} · {p.name} · Existencia {p.currentStock}</option>)}</select></div>
-                <div className="sm:col-span-2"><label className="block font-semibold mb-1">Cantidad</label><input required type="number" min="0.000001" step="0.000001" value={line.quantity} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,quantity:e.target.value}:item))} className="w-full rounded border border-slate-300 p-2"/></div>
-                <div className="sm:col-span-3"><label className="block font-semibold mb-1">Costo unitario Bs.</label><input required type="number" min="0.000001" step="0.01" value={line.unitCostBs} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,unitCostBs:e.target.value}:item))} className="w-full rounded border border-slate-300 p-2"/></div>
+                <div className="sm:col-span-2"><label className="block font-semibold mb-1">Cantidad</label><input required type="text" inputMode="decimal" value={line.quantity} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,quantity:e.target.value}:item))} className="w-full rounded border border-slate-300 p-2"/></div>
+                <div className="sm:col-span-3"><label className="block font-semibold mb-1">Costo unitario Bs.</label><input required type="text" inputMode="decimal" value={line.unitCostBs} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,unitCostBs:e.target.value}:item))} className="w-full rounded border border-slate-300 p-2"/></div>
                 <div className="sm:col-span-1"><button type="button" disabled={inventoryLines.length===1} onClick={()=>setInventoryLines(prev=>prev.filter((_,i)=>i!==index))} className="w-full rounded border border-red-200 px-2 py-2 text-red-700 disabled:opacity-30" aria-label="Eliminar línea">×</button></div>
               </div>)}
               <button type="button" onClick={()=>setInventoryLines(prev=>[...prev,{productId:'',quantity:'1',unitCostBs:''}])} className="rounded-lg border border-indigo-300 bg-white px-3 py-2 font-semibold text-indigo-800">+ Añadir artículo</button>
