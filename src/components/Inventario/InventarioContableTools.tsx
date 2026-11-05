@@ -266,7 +266,7 @@ export const InventarioContableTools: React.FC = () => {
     doc.save('SICOVEN_Libro_Inventario_' + safeName + '.pdf');
   };
 
-  const recordVnr = () => {
+  const recordVnr = async () => {
     setError(''); setMessage('');
     if (!selectedProduct || !vnr) {
       setError('Seleccione un artículo e introduzca valores válidos para evaluar el VNR.');
