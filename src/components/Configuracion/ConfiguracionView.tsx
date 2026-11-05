@@ -511,7 +511,7 @@ export const ConfiguracionView: React.FC = () => {
               Configuración del Sistema Contable
             </h1>
             <p className="text-xs text-slate-500 max-w-2xl mt-0.5">
-              Gestión de empresas independientes, tasa oficial del BCV, calificación SENIAT y respaldos de datos.
+              Gestión de empresas independientes, calificación SENIAT y respaldos de datos.
             </p>
           </div>
 
@@ -561,9 +561,6 @@ export const ConfiguracionView: React.FC = () => {
                       c.taxpayerType === 'ESPECIAL' ? 'bg-purple-100 text-purple-800' : 'bg-sky-100 text-sky-800'
                     }`}>
                       {c.taxpayerType === 'ESPECIAL' ? 'Contribuyente Especial' : 'Contribuyente Ordinario'}
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-mono">
-                      BCV: Bs. {c.bcvRate.toFixed(2)}
                     </span>
                   </div>
                 </div>
