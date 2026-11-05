@@ -2080,17 +2080,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         });
       }
     } else {
-      const expenseAccountCode = '6.1.1.04';
-      const expenseAccount = accounts.find(item => item.code === expenseAccountCode && item.isMovement);
-      if (!expenseAccount && purchaseData.taxableBaseBs + purchaseData.exemptAmountBs > 0) {
-        throw new Error('Falta la cuenta de gasto operativo ' + expenseAccountCode + '.');
-      }
+      const debitAccountCode = String(purchaseData.purchaseDebitAccountCode || '').trim();
+      const debitAccount = accounts.find(item => item.code === debitAccountCode && item.isMovement && (item.type === 'GASTOS' || (item.type === 'ACTIVO' && item.code.startsWith('1.2.'))));
       const baseBs = Number(purchaseData.taxableBaseBs) + Number(purchaseData.exemptAmountBs);
-      if (baseBs > 0) items.push({
-        accountCode: expenseAccountCode,
-        accountName: expenseAccount?.name || 'Gastos operativos',
+      if (baseBs > 0 && !debitAccount) {
+        throw new Error('La compra no tiene una clasificación contable válida. Seleccione una cuenta de gasto o activo; no se asignará Honorarios Profesionales automáticamente.');
+      }
+      if (baseBs > 0 && debitAccount) items.push({
+        accountCode: debitAccount.code,
+        accountName: debitAccount.name,
         debitBs: baseBs, creditBs: 0, debitUsd: baseBs / rate, creditUsd: 0,
-        description: `Compra operativa Fac. ${purchaseData.invoiceNumber} - ${purchaseData.supplierName}`
+        description: `Compra ${debitAccount.type === 'GASTOS' ? 'no inventariable' : 'de activo'} Fac. ${purchaseData.invoiceNumber} - ${purchaseData.supplierName}`
       });
     }
 
