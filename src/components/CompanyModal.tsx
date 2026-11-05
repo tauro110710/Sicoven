@@ -394,7 +394,6 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
                 onChange={e => setFiscalYear(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
               />
-            </div>
           </div>
 
           <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">
