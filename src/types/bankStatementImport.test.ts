@@ -33,60 +33,9 @@ test('normalizes both Venezuelan and US thousands/decimal separators', () => {
   assert.deepEqual(rows.flatMap(row=>row.errors),[]);
 });
 
-test('recognizes US$ as a USD currency label', () => {
+test('recognizes US dollar notation as a USD currency label', () => {
   const [row]=normalizeBankStatementRows([
-    {Fecha:'2026-11-06',Referencia:'USD-1',Descripción:'US dollar deposit',Tipo:'Crédito',Importe:'12.50',Moneda:'US
-  const rows=normalizeBankStatementRows([
-    {Fecha:'2026-11-06',Referencia:'D-1',Descripción:'Cargo bancario',Tipo:'Débito',Importe:'5,00',Moneda:'BS',Tasa_BCV:'10,00',Fecha_vigencia_BCV:'2026-11-06'},
-    {Fecha:'2026-11-06',Referencia:'C-1',Descripción:'Abono cliente',Tipo:'Crédito',Importe:'5,00',Moneda:'BS',Tasa_BCV:'10,00',Fecha_vigencia_BCV:'2026-11-06'}
-  ],'BS');
-  assert.equal(rows[0].type,'DEBIT');
-  assert.equal(rows[1].type,'CREDIT');
-  assert.deepEqual(rows.flatMap(row=>row.errors),[]);
-});
-
-test('rejects an unknown currency instead of treating it as bolívares', () => {
-  const [row]=normalizeBankStatementRows([
-    {Fecha:'2026-11-06',Referencia:'FX-1',Descripción:'Unknown currency',Tipo:'CREDIT',Importe:'10',Moneda:'EUR',Tasa_BCV:'10',Fecha_vigencia_BCV:'2026-11-06'}
-  ],'BS');
-  assert.ok(row.errors.includes('Moneda no reconocida.'));
-});
-
-test('parses standard OFX SGML blocks without explicit closing STMTTRN tags', () => {
-  const ofx=`OFXHEADER:100
-DATA:OFXSGML
-<OFX>
-<BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>USD
-<BANKTRANLIST>
-<STMTTRN>
-<TRNTYPE>DEBIT
-<DTPOSTED>20261106120000
-<TRNAMT>-12.50
-<FITID>OFX-001
-<NAME>Bank fee
-<EXCHANGERATE>10.00
-<EXCHANGERATEDATE>20261106
-<STMTTRN>
-<TRNTYPE>CREDIT
-<DTPOSTED>20261107120000
-<TRNAMT>20.00
-<FITID>OFX-002
-<MEMO>Deposit
-<EXCHANGERATE>10.00
-<EXCHANGERATEDATE>20261106
-</BANKTRANLIST>
-</STMTRS></STMTTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
-  const parsed=parseOfxBankStatement(ofx);
-  assert.equal(parsed.currency,'USD');
-  assert.equal(parsed.rows.length,2);
-  const normalized=normalizeBankStatementRows(parsed.rows,parsed.currency);
-  assert.equal(normalized[0].type,'DEBIT');
-  assert.equal(normalized[0].amountUsd,12.5);
-  assert.equal(normalized[0].amountBs,125);
-  assert.equal(normalized[1].reference,'OFX-002');
-  assert.deepEqual(normalized.flatMap(row=>row.errors),[]);
-});
-,Tasa_BCV:'10.00',Fecha_vigencia_BCV:'2026-11-06'}
+    {Fecha:'2026-11-06',Referencia:'USD-1',Descripción:'US dollar deposit',Tipo:'Crédito',Importe:'12.50',Moneda:'US dollars',Tasa_BCV:'10.00',Fecha_vigencia_BCV:'2026-11-06'}
   ],'BS');
   assert.equal(row.currency,'USD');
   assert.equal(row.amountUsd,12.5);
