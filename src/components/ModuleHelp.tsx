@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, BookOpenCheck, ChevronDown, HelpCircle, Search } from 'lucide-react';
 
 type HelpItem = {
@@ -153,6 +153,11 @@ export const ModuleHelp: React.FC<{ moduleId: string }> = ({ moduleId }) => {
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<number | null>(0);
   const module = MODULE_HELP[moduleId];
+
+  useEffect(() => {
+    setQuery('');
+    setExpanded(0);
+  }, [moduleId]);
   const items = module?.items ?? FALLBACK_HELP;
   const title = module?.title ?? 'Ayuda del módulo';
   const intro = module?.intro ?? 'Orientación práctica para trabajar en esta sección de SICOVEN.';
@@ -185,10 +190,10 @@ export const ModuleHelp: React.FC<{ moduleId: string }> = ({ moduleId }) => {
         </label>
         <div className="mt-3 space-y-2">
           {filtered.map(({ item, index }) => {
-            const isOpen = expanded === index || query.trim().length > 0;
+            const isOpen = expanded === index;
             return (
               <article key={item.question} className="overflow-hidden rounded-xl border border-slate-200">
-                <button type="button" onClick={() => setExpanded(isOpen && !query.trim() ? null : index)} aria-expanded={isOpen} className="flex w-full items-start justify-between gap-3 p-3.5 text-left transition hover:bg-slate-50">
+                <button type="button" onClick={() => setExpanded(isOpen ? null : index)} aria-expanded={isOpen} className="flex w-full items-start justify-between gap-3 p-3.5 text-left transition hover:bg-slate-50">
                   <span className="min-w-0">
                     <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-sky-700">{kindLabel(item.kind)}</span>
                     <span className="block text-sm font-semibold text-slate-800">{item.question}</span>
