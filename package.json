@@ -1,7 +1,7 @@
 {
   "name": "sicoven-desktop",
   "private": true,
-  "version": "1.0.14",
+  "version": "1.0.15",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -30,7 +30,8 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "vite": "^8.3.0",
-    "exceljs": "^4.4.0"
+    "exceljs": "^4.4.0",
+    "electron-updater": "^6.6.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -86,6 +87,14 @@
       "installerIcon": "build/sicoven.ico",
       "uninstallerIcon": "build/sicoven.ico",
       "installerHeaderIcon": "build/sicoven.ico"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "fenixlife1978",
+        "repo": "sicoven-descargas",
+        "releaseType": "release"
+      }
+    ]
   }
 }
