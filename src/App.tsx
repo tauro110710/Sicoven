@@ -22,6 +22,7 @@ import { ShieldCheck, Building2 } from 'lucide-react';
 import { LoginScreen, AuthUser } from './components/LoginScreen';
 import { AdminUsers } from './components/AdminUsers';
 import { LicenseGate } from './components/LicenseGate';
+import { ModuleHelp } from './components/ModuleHelp';
 
 const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => Promise<void> }> = ({ auth, logout }) => {
   const [showAdmins, setShowAdmins] = useState(false);
@@ -101,6 +102,7 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-2.5 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-x-hidden">
         {renderActiveTab()}
+        <ModuleHelp moduleId={activeTab} />
       </main>
 
       {/* Footer (hidden on print) */}
