@@ -18,7 +18,7 @@ interface Props {
 }
 
 export const BankStatementImportModal: React.FC<Props> = ({ isOpen, onClose, bankAccount }) => {
-  const { bankStatementMovements, addBankStatementMovements, waitForPersistence } = useAccounting();
+  const { bankStatementMovements, addBankStatementMovements } = useAccounting();
   const [fileName,setFileName]=useState('');
   const [candidates,setCandidates]=useState<BankStatementImportCandidate[]>([]);
   const [loading,setLoading]=useState(false);
@@ -65,12 +65,11 @@ export const BankStatementImportModal: React.FC<Props> = ({ isOpen, onClose, ban
     if(saving||!candidates.length||invalidCount>0)return;
     setSaving(true);setFeedback('');
     try{
-      addBankStatementMovements(candidates.map(row=>({
+      await addBankStatementMovements(candidates.map(row=>({
         bankAccountId:bankAccount.id,date:row.date,reference:row.reference,description:row.description,
         type:row.type,amountBs:row.amountBs,amountUsd:row.amountUsd,bcvRate:row.bcvRate,
         bcvRateEffectiveDate:row.bcvRateEffectiveDate
       })));
-      await waitForPersistence();
       setFeedback(`SQLite confirmó la importación de ${candidates.length} movimiento(s).`);
       setCandidates([]);
       setFileName('');
