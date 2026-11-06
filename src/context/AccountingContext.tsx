@@ -1370,6 +1370,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (accountCurrency !== draft.paymentCurrency) {
       throw new Error('La moneda del desembolso no coincide con la moneda configurada para la cuenta de Caja/Banco.');
     }
+    if (bank) {
+      const availableBalance = calculateBankAvailableBalance({
+        bankAccount: bank, companyId: currentCompany.id, asOfDate: draft.date, journalEntries
+      });
+      validateBankOutgoingAvailability({
+        availableBalance, requestedAmount: draft.paidAmount, currency: bank.currency
+      });
+    }
     const operationKey = [currentCompany.id, rif, draft.date, draft.treasuryAccountCode,
       draft.paymentCurrency, draft.paidAmount, draft.reference.trim().toUpperCase()].join('|');
     if (supplierDirectAdvanceInFlightRef.current.has(operationKey)) {
@@ -1658,6 +1666,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!draft.reference?.trim()) throw new Error('La referencia o comprobante de la transferencia es obligatorio.');
       const linkedAux = accounts.find(account => account.code === settlementBank.accountCode && account.isMovement);
       if (!linkedAux) throw new Error('El auxiliar contable de la cuenta bancaria no existe o no admite movimientos.');
+      if (kind === 'PURCHASE_PAYMENT') {
+        const availableBalance = calculateBankAvailableBalance({
+          bankAccount: settlementBank, companyId: currentCompany.id,
+          asOfDate: draft.settlementDate, journalEntries
+        });
+        validateBankOutgoingAvailability({
+          availableBalance,
+          requestedAmount: settlementBank.currency === 'USD' ? draft.amountUsd : draft.amountBs,
+          currency: settlementBank.currency
+        });
+      }
     }
     const normalizedReference = draft.reference?.trim().toLocaleLowerCase();
     const prior = creditSettlements.filter(item => item.companyId === currentCompany.id &&
@@ -2155,6 +2174,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ? accounts.find(account => account.code === purchaseData.paymentAccountCode && account.isMovement)
       : undefined;
     if (cashPurchase && !paymentAccount) throw new Error('La cuenta contable de pago de contado ya no está disponible en el Plan de Cuentas.');
+    const bankPaymentAccount = cashPurchase
+      ? bankAccounts.find(bank => bank.companyId === currentCompany.id && bank.accountCode === paymentAccount!.code)
+      : undefined;
+    if (bankPaymentAccount) {
+      const availableBalance = calculateBankAvailableBalance({
+        bankAccount: bankPaymentAccount, companyId: currentCompany.id,
+        asOfDate: purchaseData.accountCreditDate!, journalEntries
+      });
+      validateBankOutgoingAvailability({
+        availableBalance,
+        requestedAmount: bankPaymentAccount.currency === 'USD' ? netPayableBs / rate : netPayableBs,
+        currency: bankPaymentAccount.currency
+      });
+    }
     items.push({
       accountCode: cashPurchase ? paymentAccount!.code : '2.1.1.01',
       accountName: cashPurchase ? paymentAccount!.name : 'Cuentas por Pagar Proveedores Nacionales',
