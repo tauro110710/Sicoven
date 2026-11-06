@@ -23,6 +23,23 @@ test('flags missing historical rate, invalid date and incomplete reference witho
   assert.ok(result[0].errors.some(error=>error.includes('vigencia BCV')));
 });
 
+test('normalizes both Venezuelan and US thousands/decimal separators', () => {
+  const rows=normalizeBankStatementRows([
+    {Fecha:'2026-11-06',Referencia:'BS-1',Descripción:'Importe local',Tipo:'Crédito',Importe:'1.234,56',Moneda:'BS',Tasa_BCV:'10,00',Fecha_vigencia_BCV:'2026-11-06'},
+    {Fecha:'2026-11-06',Referencia:'US-1',Descripción:'US amount',Tipo:'Crédito',Importe:'1,234.56',Moneda:'USD',Tasa_BCV:'10.00',Fecha_vigencia_BCV:'2026-11-06'}
+  ],'BS');
+  assert.equal(rows[0].amountBs,1234.56);
+  assert.equal(rows[1].amountUsd,1234.56);
+  assert.deepEqual(rows.flatMap(row=>row.errors),[]);
+});
+
+test('rejects an unknown currency instead of treating it as bolívares', () => {
+  const [row]=normalizeBankStatementRows([
+    {Fecha:'2026-11-06',Referencia:'FX-1',Descripción:'Unknown currency',Tipo:'CREDIT',Importe:'10',Moneda:'EUR',Tasa_BCV:'10',Fecha_vigencia_BCV:'2026-11-06'}
+  ],'BS');
+  assert.ok(row.errors.includes('Moneda no reconocida.'));
+});
+
 test('parses standard OFX SGML blocks without explicit closing STMTTRN tags', () => {
   const ofx=`OFXHEADER:100
 DATA:OFXSGML
