@@ -4679,9 +4679,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const addBankStatementMovement = (movData: Omit<BankStatementMovement, 'id' | 'companyId'>): BankStatementMovement => {
+    if (bankStatementImportInFlightRef.current) {
+      throw new Error('Hay otra operación de extracto bancario pendiente de confirmación SQLite. Espere antes de agregar otro movimiento.');
+    }
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('Registrar movimientos de extracto requiere SQLite local de escritorio disponible y lista.');
     }
+    bankStatementImportInFlightRef.current = true;
+    try {
     const bank = bankAccounts.find(item =>
       item.id === movData.bankAccountId && item.companyId === currentCompany.id
     );
@@ -4738,8 +4743,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       reconciledWithJournalEntryId: undefined,
       reconciledAt: undefined
     };
+    const releaseStatementMutation = (): void => { bankStatementImportInFlightRef.current = false; };
+    persistenceWaitersRef.current.push({ resolve: releaseStatementMutation, reject: releaseStatementMutation });
     setBankStatementMovements(prev => [...prev, newMov]);
     return newMov;
+    } catch (error) {
+      bankStatementImportInFlightRef.current = false;
+      throw error;
+    }
   };
 
   const addBankStatementMovements = async (movements: Array<{ bankAccountId: string; date: string; reference: string; description: string; type: 'DEBIT' | 'CREDIT'; amountBs: number; amountUsd: number; bcvRate: number; bcvRateEffectiveDate: string }>): Promise<BankStatementMovement[]> => {
