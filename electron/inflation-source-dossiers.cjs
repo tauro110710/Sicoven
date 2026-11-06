@@ -202,7 +202,7 @@ function initializeInflationSourceDossierSchema(db) {
   `);
 }
 function createInflationSourceDossier(db, input, actor) {
-  if (!actor?.username || !hasFullSystemAccess(actor)) throw new Error('Solo un administrador autenticado puede registrar expedientes.');
+  if (!actor?.username || !hasFullSystemAccess(actor)) throw new Error('Se requiere una sesión autenticada de admin o contador para registrar expedientes.');
   const seriesId = requiredText(input?.seriesId, 'Serie vinculada', 80);
   const series = db.prepare(`SELECT s.id,s.series_code,s.first_period,s.last_period,s.imported_by,
     src.source_sha256 FROM inflation_index_series s JOIN inflation_index_sources src ON src.id=s.source_id WHERE s.id=?`).get(seriesId);
@@ -245,7 +245,7 @@ function createInflationSourceDossier(db, input, actor) {
     missingEvidence: data.missingEvidence, status: 'DRAFT', eligibleForReview: data.missingEvidence.length === 0 };
 }
 function reviewInflationSourceDossier(db, input, actor) {
-  if (!actor?.username || !hasFullSystemAccess(actor)) throw new Error('Solo un administrador autenticado puede revisar expedientes.');
+  if (!actor?.username || !hasFullSystemAccess(actor)) throw new Error('Se requiere una sesión autenticada de admin o contador para revisar expedientes.');
   const dossierId = requiredText(input?.dossierId, 'Expediente', 80);
   const dossier = db.prepare('SELECT * FROM inflation_source_dossiers WHERE id=?').get(dossierId);
   if (!dossier) throw new Error('El expediente no existe.');
@@ -327,7 +327,7 @@ function listInflationSourceDossiers(db, filters = {}) {
     status: row.decision || 'DRAFT', evidenceManifest: JSON.parse(row.evidence_manifest_json || '[]') }));
 }
 function getInflationSourceDossierEvidence(db, evidenceId, actor) {
-  if (!actor?.username || !hasFullSystemAccess(actor)) throw new Error('Solo un administrador autenticado puede consultar evidencia de expedientes.');
+  if (!actor?.username || !hasFullSystemAccess(actor)) throw new Error('Se requiere una sesión autenticada de admin o contador para consultar evidencia de expedientes.');
   const id = requiredText(evidenceId, 'Evidencia', 80);
   const row = db.prepare(`SELECT e.id,e.dossier_id AS dossierId,e.title,e.file_name AS fileName,e.mime_type AS mimeType,
     e.source_url AS sourceUrl,e.sha256,e.bytes,e.content_base64 AS contentBase64
