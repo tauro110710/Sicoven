@@ -8,7 +8,7 @@ const RELEASES_API = 'https://api.github.com/repos/fenixlife1978/sicoven-descarg
 const CHECK_INTERVAL_MS = 15 * 60 * 1000;
 
 function parseVersion(value) {
-  const match = String(value || '').trim().replace(/^v/i, '').match(/^(\\d+)\\.(\\d+)\\.(\\d+)(?:[-+].*)?$/);
+  const match = String(value || '').trim().replace(/^v/i, '').match(/^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/);
   return match ? match.slice(1, 4).map(Number) : null;
 }
 
@@ -47,7 +47,7 @@ async function checkForUpdate({
     });
     if (!response.ok) return { status: 'offline-or-unavailable', httpStatus: response.status };
     const release = await response.json();
-    if (!release || release.draft || release.prerelease || !/^v?\\d+\\.\\d+\\.\\d+$/.test(String(release.tag_name || ''))) {
+    if (!release || release.draft || release.prerelease || !/^v?\d+\.\d+\.\d+$/.test(String(release.tag_name || ''))) {
       return { status: 'invalid-release' };
     }
     const availableVersion = String(release.tag_name).replace(/^v/i, '');
