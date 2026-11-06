@@ -4,6 +4,18 @@
 **Base inspeccionada:** `main` — `721c481d99d1ef1cc898f07c4cdd87a6362a17cb`  
 **Versión:** 1.0.17
 
+## Control de ejecución — marcas de terminación
+
+Las marcas solo se colocan cuando la corrección está integrada en `main` y las validaciones requeridas han terminado correctamente. Esta lista es un registro de avance; no cambia ni reordena el Plan Maestro.
+
+- [x] Validación estructural de cuentas: códigos, padres, niveles y cuentas imputables.
+- [x] Aislamiento multiempresa del Libro Diario y Centro de Correcciones (PR #10 integrada; CI y Windows SUCCESS).
+- [x] Aislamiento multiempresa de Inventario, Kardex, herramientas y asistente de migración (PR #13 integrada; CI y Windows SUCCESS).
+- [ ] Protección contra duplicados al registrar movimientos de extractos bancarios (PR #15; CI SUCCESS, Windows pendiente).
+- [ ] Antigüedad de saldos CxC/CxP por tramos (PR #16; validaciones pendientes).
+- [ ] Importación de extractos bancarios con previsualización y confirmación.
+- [ ] Cierre integral de conciliación bancaria con extractos reales y prueba de persistencia tras reinicio.
+
 ## Alcance de esta pasada
 Primera pasada del Bloque 1 (núcleo de Contabilidad General). No se modificó código funcional, datos SQLite, autenticación semilla ni instaladores. La hoja de ruta conserva su estructura, numeración y alcance; solo se tachó una sub-tarea cuya implementación y pruebas ya existen.
 
@@ -104,7 +116,7 @@ Estado: **parcial / pendiente de auditoría normativa y de exportación**. No se
 
 ### Brechas confirmadas
 1. **Importación de extractos ausente:** la pantalla ofrece alta manual de movimiento («Nuevo Movimiento Extracto»); no se encontró selector de archivo ni parser TXT/CSV/Excel, plantillas configurables o vista previa de importación.
-2. **Duplicados al cargar extractos:** `addBankStatementMovement` valida cuenta, fecha, tipo, referencia, descripción y snapshot Bs./USD, pero agrega la fila sin comprobar si ya existe el mismo movimiento en esa cuenta/empresa. La conciliación evita reutilizar un asiento ya vinculado, pero eso no evita duplicar una fila de extracto.
+2. **Duplicados al cargar extractos:** detectado en `addBankStatementMovement`; corrección candidata en PR #15 añade huella por cuenta, fecha, referencia normalizada, naturaleza e importes Bs./USD, con pruebas. CI run `42256479262`: SUCCESS; Windows run `42256479491`: pendiente. No se marca terminado hasta completar Windows y fusionar.
 3. **Flujo proyectado:** la tesorería muestra saldos y movimientos existentes; no se encontró en esta pasada una proyección de caja/bancos futura con vencimientos y escenarios.
 4. **Cierre de conciliación:** se observan operaciones de cotejo y exportación PDF; falta probar la secuencia completa con extracto real, saldos inicial/final, partidas pendientes, reanudación tras reinicio y persistencia de la cédula.
 
@@ -122,7 +134,7 @@ Estado del Bloque 5: **parcial**. No se tacha ningún requisito del bloque ni se
 - CxP contempla facturas y ND tipo 02 como obligaciones separadas; anticipos directos, aplicaciones y reembolsos tienen circuitos especializados y pruebas existentes. Los frentes de anticipos y liquidaciones ya aprobados no se reabren sin defecto concreto.
 
 ### Brechas confirmadas
-1. **Antigüedad por tramos:** las vistas muestran saldo abierto y vencido, pero no se observó una clasificación de cartera por rangos de días (por ejemplo, no vencido, 1–30, 31–60, 61–90 y más de 90).
+1. **Antigüedad por tramos:** implementada en candidata PR #16 para ambas vistas, con clasificación no vencido, 1–30, 31–60, 61–90, más de 90 y sin vencimiento; presenta USD y cantidad de documentos. Pruebas CI y Windows aún pendientes; no marcar hasta SUCCESS y fusión.
 2. **Exposición cambiaria:** el saldo en USD y el equivalente Bs. a tasa original se presentan; no se encontró en estas vistas un reporte de exposición con comparación sistemática entre tasa histórica, tasa de cierre y diferencia de cambio por tercero/documento.
 3. **Alertas:** el vencimiento se identifica dentro de las vistas, pero no se encontró un motor de alertas/notificaciones por vencimiento o mora ni un panel de tareas.
 4. **Reportes por moneda/período:** la vista operativa es útil para consultar pendientes, pero falta verificar un estado de cuenta formal exportable por tercero, documento, moneda y período, con conciliación contra cuentas de control.
@@ -150,7 +162,13 @@ En `InventarioView.tsx` de `main`:
 - El selector de producto de `NewMovementModal.tsx` y sus valores iniciales usan `products` global; `InventarioContableTools.tsx` también consume `products`, `movements`, `accounts` y `journalEntries` sin normalizar todos los arreglos a la empresa activa.
 - El tipo de datos sí guarda empresa y las funciones de dominio validan empresa activa, por lo que el defecto es de presentación/consulta; puede mostrar inventario y movimientos de otra empresa en la pantalla activa y exponer artículos ajenos en selectores/herramientas.
 
-Estado: **parcial con defecto prioritario**. Corrección candidata en PR #13: filtra existencias, Kardex, valorización, mínimos, selectores, importación/exportación y herramientas contables por la empresa activa; añade prueba de aislamiento entre dos empresas. CI y Windows Installer sobre SHA `fe79ad263087215eb2790c5bb0d6a05f9b412732` están pendientes; no se tacha el requisito hasta ambos SUCCESS y fusión verificada. No modificar registros históricos ni abrir devoluciones a proveedor hasta completar el circuito fiscal y contable.
+Corrección integrada mediante PR #13 en `main`, commit `d08a860c3d3cc58f2b74f723c333d2d4d0fb6094`:
+- Filtra existencias, Kardex, valorización, mínimos, selectores, importación/exportación y herramientas contables por la empresa activa.
+- El asistente de migración comprueba duplicados solo contra los documentos de la empresa activa.
+- Añade prueba de aislamiento de productos y movimientos entre dos empresas.
+- CI run `42256068142`: SUCCESS; Windows run `42256068152`: SUCCESS. El instalador se generó solo para validación de PR; no se publicó release.
+
+Estado: **corrección de aislamiento de Inventario terminada**. El Bloque 7 sigue parcial por las demás brechas del módulo; no abrir devoluciones a proveedor hasta completar el circuito fiscal y contable.
 
 
 
