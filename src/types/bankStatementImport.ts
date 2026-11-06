@@ -103,10 +103,16 @@ export function parseOfxBankStatement(source: string): { currency: BankStatement
   const currencyTag=source.match(/<CURDEF>\s*([A-Z]{3})/i)?.[1]?.toUpperCase()||'';
   if(!['USD','VES','VEF'].includes(currencyTag))throw new Error('El OFX debe declarar CURDEF USD, VES o VEF.');
   const currency:BankStatementCurrency=currencyTag==='USD'?'USD':'BS';
-  const blocks=[...source.matchAll(/<STMTTRN>([\s\S]*?)<\/STMTTRN>/gi)];
-  if(!blocks.length)throw new Error('El OFX no contiene movimientos STMTTRN.');
-  const rows=blocks.map(match=>{
-    const block=match[1];
+  const startTags=[...source.matchAll(/<STMTTRN>/gi)];
+  if(!startTags.length)throw new Error('El OFX no contiene movimientos STMTTRN.');
+  const blocks=startTags.map((match,index)=>{
+    const blockStart=(match.index||0)+match[0].length;
+    const nextStart=startTags[index+1]?.index??source.length;
+    const closing=source.toUpperCase().indexOf('</BANKTRANLIST>',blockStart);
+    const blockEnd=closing>=0&&closing<nextStart?closing:nextStart;
+    return source.slice(blockStart,blockEnd);
+  });
+  const rows=blocks.map(block=>{
     const tag=(name:string)=>block.match(new RegExp('<'+name+'>([^\\r\\n<]+)','i'))?.[1]?.trim()||'';
     const amount=Number(tag('TRNAMT'));
     const type=tag('TRNTYPE').toUpperCase();
