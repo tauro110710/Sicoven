@@ -623,6 +623,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
               {currentCompany.name} ({currentCompany.rif})
             </p>
             <p className="mt-1 max-w-3xl text-[11px] text-slate-600">Puede rectificar la razón social, RIF, nombre comercial y datos de contacto de esta empresa. Los cambios de identidad requieren confirmación y quedan registrados en la auditoría con los valores anteriores y nuevos.</p>
+            <p className="mt-1 max-w-3xl text-[11px] text-amber-800">Esta edición solo modifica la ficha interna de SICOVEN; no actualiza el registro oficial del SENIAT. Si cambió la información registral real, actualícela también ante el SENIAT. El RIF es único, permanente y personal: no debe usarse esta opción para sustituir una entidad por otra.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => setShowCompanyAudit(value => !value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
