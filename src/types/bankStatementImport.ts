@@ -55,7 +55,7 @@ const validDate=(value:string)=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFini
 
 export function parseBankStatementCsv(source: string): BankStatementRawRow[] {
   const firstLine=source.split(/\r?\n/).find(line=>line.trim())||'';
-  const delimiters=[',',';','\t'];
+  const delimiters=['\t',';','|',','];
   const delimiter=delimiters.sort((a,b)=>firstLine.split(b).length-firstLine.split(a).length)[0];
   const rows:string[][]=[];let row:string[]=[],cell='',quoted=false;
   for(let i=0;i<source.length;i++){
@@ -70,8 +70,13 @@ export function parseBankStatementCsv(source: string): BankStatementRawRow[] {
   if(cell.length||row.length){row.push(cell);rows.push(row);}
   if(rows.length<2)throw new Error('El archivo CSV no contiene encabezado y movimientos.');
   const headers=rows[0].map(normalizeHeader);
-  if(!headers.some(h=>aliases.date.includes(h))||!headers.some(h=>aliases.amount.includes(h)))throw new Error('El CSV debe incluir columnas de fecha e importe.');
+  if(!headers.some(h=>aliases.date.includes(h))||!headers.some(h=>aliases.amount.includes(h)))throw new Error('El archivo delimitado debe incluir columnas de fecha e importe.');
   return rows.slice(1).map(values=>Object.fromEntries(headers.map((header,index)=>[header,values[index]??''])));
+}
+
+/** TXT delimitado: admite tabulador, punto y coma, barra vertical o coma, con encabezados. */
+export function parseBankStatementTxt(source: string): BankStatementRawRow[] {
+  return parseBankStatementCsv(source.replace(/^\\uFEFF/, ''));
 }
 
 export function normalizeBankStatementRows(rows: BankStatementRawRow[], defaultCurrency: BankStatementCurrency): BankStatementImportCandidate[] {
