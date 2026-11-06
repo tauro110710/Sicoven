@@ -633,7 +633,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('sicoven:audit-record-correction', (_event, token, input) => {
     const actor = getActiveSession(token);
     if (!hasFullSystemAccess(actor)) {
-      return { ok: false, message: 'El Centro de Correcciones requiere una sesión autenticada del contador.' };
+      return { ok: false, message: 'El Centro de Correcciones requiere una sesión autenticada con rol contable (admin o contador).' };
     }
     const eventType = String(input?.eventType || '');
     const allowedEvents = new Set(['accounting_correction_requested', 'accounting_correction_executed']);
