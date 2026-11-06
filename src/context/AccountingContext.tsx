@@ -52,6 +52,7 @@ import { calculateFifoIssue, calculateWeightedAverageCost, calculateWeightedAver
 import { isValidIsoDate } from '../types/migrationParsing';
 import { buildBankAuxiliaryAccounts } from '../types/bankAccountAccounting';
 import { calculateBankAvailableBalance, validateBankOutgoingAvailability } from '../types/bankAccountAvailability';
+import { createBankOutgoingLock } from '../types/bankOutgoingLock';
 import { removeUnusedLegacyDefaultBanks } from '../types/legacyBankAccountCleanup';
 import { resolvePurchaseVatFiscalEvent } from '../types/vatFiscalEvent';
 import { hasConsistentFiscalDocumentAmounts } from '../types/fiscalDocumentAmounts';
@@ -427,6 +428,37 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (persistenceFaultRef.current) return Promise.reject(new Error('La persistencia SQLite falló. SICOVEN bloqueó las operaciones; cierre y vuelva a abrir la aplicación.'));
     if (window.sicovenStore && !storageReady) return Promise.reject(new Error('SQLite todavía no está lista.'));
     return new Promise<void>((resolve, reject) => persistenceWaitersRef.current.push({ resolve, reject }));
+  };
+
+  // Reserva las cuentas bancarias acreditadas por el asiento hasta que el snapshot
+  // completo reciba confirmación (o rechazo) de SQLite. La reserva es síncrona:
+  // evita que dos eventos del renderer validen el mismo saldo desactualizado.
+  const reserveBankOutgoingAccounts = (companyId: string, items: JournalEntryItem[]): void => {
+    const creditedAccountCodes = new Set(items
+      .filter(item => Number(item.creditBs || 0) > 0 || Number(item.creditUsd || 0) > 0)
+      .map(item => item.accountCode));
+    const lockKeys = [...new Set(bankAccounts
+      .filter(bank => bank.companyId === companyId && creditedAccountCodes.has(bank.accountCode))
+      .map(bank => `${companyId}:${bank.id}`))];
+    if (!lockKeys.length) return;
+
+    const releases: Array<() => void> = [];
+    try {
+      for (const key of lockKeys) releases.push(bankOutgoingLockRef.current.acquire(key));
+    } catch (error) {
+      releases.forEach(release => release());
+      throw error;
+    }
+
+    let released = false;
+    const releaseAll = (): void => {
+      if (released) return;
+      released = true;
+      releases.forEach(release => release());
+    };
+    // El efecto de persistencia resuelve o rechaza este waiter solo después de
+    // finalizar la transacción SQLite del snapshot que contiene el movimiento.
+    persistenceWaitersRef.current.push({ resolve: releaseAll, reject: releaseAll });
   };
 
   type CorrectionAuditInput = {
@@ -912,6 +944,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const periodReopeningInFlightRef = useRef(false);
   const yearOpeningInFlightRef = useRef(false);
   const persistenceWaitersRef = useRef<Array<{ resolve: () => void; reject: (error: Error) => void }>>([]);
+  // Una cuenta bancaria solo puede tener un egreso pendiente de confirmación SQLite.
+  const bankOutgoingLockRef = useRef(createBankOutgoingLock());
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
     vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency
@@ -1282,6 +1316,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       entryNumber: nextEntryNum,
       createdAt: new Date().toISOString()
     };
+    reserveBankOutgoingAccounts(newEntry.companyId, newEntry.items);
     setJournalEntries(prev => [...prev, newEntry]);
     return newEntry;
   };
@@ -2222,6 +2257,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       createdAt: new Date().toISOString()
     };
 
+    reserveBankOutgoingAccounts(createdJournalEntry.companyId, createdJournalEntry.items);
     setJournalEntries(prev => [...prev, createdJournalEntry]);
 
     const finalPurchase: PurchaseRecord = {
@@ -2693,6 +2729,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // Publica mutaciones funcionales para combinar la nota con cualquier otra
     // operación que se procese en el mismo ciclo; el efecto serializado guarda
     // el snapshot completo y SQLite valida todo dentro de una sola transacción.
+    reserveBankOutgoingAccounts(journal.companyId, journal.items);
     setJournalEntries(prev => [...prev, journal]);
     setMovements(prev => [...prev, ...stampMovements.map(item => item.movement)]);
     setProducts(prev => prev.map(item => {
@@ -3278,6 +3315,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       createdAt: new Date().toISOString()
     };
 
+    reserveBankOutgoingAccounts(createdJournalEntry.companyId, createdJournalEntry.items);
     setJournalEntries(prev => [...prev, createdJournalEntry]);
 
     const finalSale: SaleRecord = {
@@ -3548,7 +3586,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     setProducts(prev => [...prev, newProd]);
     if (opening) setMovements(prev => [...prev, opening!]);
-    if (openingEntry) setJournalEntries(prev => [...prev, openingEntry!]);
+    if (openingEntry) {
+      reserveBankOutgoingAccounts(openingEntry.companyId, openingEntry.items);
+      setJournalEntries(prev => [...prev, openingEntry!]);
+    }
     return newProd;
   };
 
@@ -3619,6 +3660,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       prepared.push(product);
     }
+    openingEntries.forEach(entry => reserveBankOutgoingAccounts(entry.companyId, entry.items));
     setProducts(prev => [...prev, ...prepared]);
     if (openingMovements.length) setMovements(prev => [...prev, ...openingMovements]);
     if (openingEntries.length) setJournalEntries(prev => [...prev, ...openingEntries]);
@@ -3753,6 +3795,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         lastCostUsd: row.type === 'ENTRADA' ? effectiveUnitCost / rate : product.lastCostUsd
       });
     }
+    importedEntries.forEach(entry => reserveBankOutgoingAccounts(entry.companyId, entry.items));
     setProducts(prev => prev.map(product => virtualProducts.get(product.id) || product));
     setMovements(prev => [...prev, ...importedMovements]);
     if (importedEntries.length) setJournalEntries(prev => [...prev, ...importedEntries]);
@@ -4083,6 +4126,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
     }
     if (generatedEntries.length > 0) newMov.journalEntryId = generatedEntries[0].id;
+    generatedEntries.forEach(entry => reserveBankOutgoingAccounts(entry.companyId, entry.items));
     setMovements(prev => [...prev, newMov]);
     setProducts(prev => prev.map(p => p.id === prod.id ? {
       ...p, currentStock: newStock, avgCostBs: newAverageBs, avgCostUsd: newAverageUsd,
