@@ -161,7 +161,16 @@ function persistAccountingSnapshot(db, state, actor = null) {
       .map(item => [String(item.id), item]));
     for (const row of (Array.isArray(state.bankStatementMovements) ? state.bankStatementMovements : [])) {
       const oldRow = oldBankRows.get(String(row.id));
-      if (!oldRow) continue;
+      if (!oldRow) {
+        auditInsert.run('bank_statement_imported', JSON.stringify({
+          statementMovementId: row.id, companyId: row.companyId, bankAccountId: row.bankAccountId,
+          date: row.date, reference: row.reference, description: row.description,
+          type: row.type, amountBs: row.amountBs, amountUsd: row.amountUsd,
+          bcvRate: row.bcvRate ?? null, bcvRateEffectiveDate: row.bcvRateEffectiveDate || null,
+          actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null
+        }));
+        continue;
+      }
       if (oldRow.isReconciled && !row.isReconciled) {
         auditInsert.run('bank_statement_unreconciled', JSON.stringify({
           statementMovementId: row.id, companyId: row.companyId, bankAccountId: row.bankAccountId,

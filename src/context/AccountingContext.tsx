@@ -51,6 +51,8 @@ import { buildReversalItems, assessJournalReversal, validateBankStatementReversa
 import { calculateFifoIssue, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 import { buildBankAuxiliaryAccounts } from '../types/bankAccountAccounting';
+import { calculateBankAvailableBalance, validateBankOutgoingAvailability } from '../types/bankAccountAvailability';
+import { createBankOutgoingLock } from '../types/bankOutgoingLock';
 import { removeUnusedLegacyDefaultBanks } from '../types/legacyBankAccountCleanup';
 import { resolvePurchaseVatFiscalEvent } from '../types/vatFiscalEvent';
 import { hasConsistentFiscalDocumentAmounts } from '../types/fiscalDocumentAmounts';
@@ -182,6 +184,7 @@ interface AccountingContextType {
   addBankAccount: (bank: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'> & { bcvRate?: number }) => BankAccount;
   registerTreasuryMovement: (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; bcvRate: number; counterpartAccountCode?: string; destinationBankAccountId?: string }) => JournalEntry;
   addBankStatementMovement: (movement: Omit<BankStatementMovement, 'id' | 'companyId'>) => BankStatementMovement;
+  addBankStatementMovements: (movements: Array<{ bankAccountId: string; date: string; reference: string; description: string; type: 'DEBIT' | 'CREDIT'; amountBs: number; amountUsd: number; bcvRate: number; bcvRateEffectiveDate: string }>) => Promise<BankStatementMovement[]>;
   deleteBankStatementMovement: (id: string) => void;
   reconcileMovementManual: (statementMovementId: string, journalEntryId: string) => void;
   unreconcileMovement: (statementMovementId: string) => void;
@@ -343,6 +346,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [financialDisclosures, setFinancialDisclosures] = useState<FinancialDisclosure[]>([]);
   const [supplierAdvanceSettlements, setSupplierAdvanceSettlements] = useState<SupplierAdvanceSettlement[]>([]);
   const [supplierDirectAdvances, setSupplierDirectAdvances] = useState<SupplierDirectAdvance[]>([]);
+  const bankStatementImportInFlightRef = useRef(false);
+  type PendingBankOutgoingReservation = { release: () => void; waiter: { resolve: () => void; reject: (error: Error) => void } };
+  const bankOutgoingReservationsRef = useRef<PendingBankOutgoingReservation[]>([]);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
   const supplierAdvanceSettlementInFlightRef = useRef<Set<string>>(new Set());
   const supplierDirectAdvanceInFlightRef = useRef<Set<string>>(new Set());
@@ -352,6 +358,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // Los importadores pueden registrar varias facturas en el mismo ciclo de React;
   // estos contadores evitan reutilizar correlativos e identificadores por estado obsoleto.
   const runAtomicInvoiceImport = <T,>(operation: () => T): T => {
+    const reservationsBefore = new Set(bankOutgoingReservationsRef.current);
     // React setters are queued synchronously; capture every collection touched by
     // addSale/addPurchase and restore the complete batch if any operation throws.
     const before = {
@@ -363,6 +370,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       islrSequence: { ...islrVoucherSequenceRef.current }
     };
     const rollback = (error: unknown): never => {
+      // If the batch is rolled back before its state reaches the persistence effect,
+      // release only reservations created by this batch and remove their waiters.
+      bankOutgoingReservationsRef.current
+        .filter(reservation => !reservationsBefore.has(reservation))
+        .forEach(reservation => {
+          persistenceWaitersRef.current = persistenceWaitersRef.current.filter(waiter => waiter !== reservation.waiter);
+          reservation.release();
+        });
       setJournalEntries(before.journalEntries);
       setPurchases(before.purchases);
       setSales(before.sales);
@@ -424,6 +439,42 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (persistenceFaultRef.current) return Promise.reject(new Error('La persistencia SQLite falló. SICOVEN bloqueó las operaciones; cierre y vuelva a abrir la aplicación.'));
     if (window.sicovenStore && !storageReady) return Promise.reject(new Error('SQLite todavía no está lista.'));
     return new Promise<void>((resolve, reject) => persistenceWaitersRef.current.push({ resolve, reject }));
+  };
+
+  // Reserva las cuentas bancarias acreditadas por el asiento hasta que el snapshot
+  // completo reciba confirmación (o rechazo) de SQLite. La reserva es síncrona:
+  // evita que dos eventos del renderer validen el mismo saldo desactualizado.
+  const reserveBankOutgoingAccounts = (companyId: string, items: JournalEntryItem[]): void => {
+    const creditedAccountCodes = new Set(items
+      .filter(item => Number(item.creditBs || 0) > 0 || Number(item.creditUsd || 0) > 0)
+      .map(item => item.accountCode));
+    const lockKeys = [...new Set(bankAccounts
+      .filter(bank => bank.companyId === companyId && creditedAccountCodes.has(bank.accountCode))
+      .map(bank => `${companyId}:${bank.id}`))];
+    if (!lockKeys.length) return;
+
+    const releases: Array<() => void> = [];
+    try {
+      for (const key of lockKeys) releases.push(bankOutgoingLockRef.current.acquire(key));
+    } catch (error) {
+      releases.forEach(release => release());
+      throw error;
+    }
+
+    let released = false;
+    let reservation: PendingBankOutgoingReservation;
+    const releaseAll = (): void => {
+      if (released) return;
+      released = true;
+      releases.forEach(release => release());
+      bankOutgoingReservationsRef.current = bankOutgoingReservationsRef.current.filter(item => item !== reservation);
+    };
+    const waiter = { resolve: releaseAll, reject: releaseAll };
+    reservation = { release: releaseAll, waiter };
+    bankOutgoingReservationsRef.current.push(reservation);
+    // El efecto de persistencia resuelve o rechaza este waiter solo después de
+    // finalizar la transacción SQLite del snapshot que contiene el movimiento.
+    persistenceWaitersRef.current.push(waiter);
   };
 
   type CorrectionAuditInput = {
@@ -909,6 +960,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const periodReopeningInFlightRef = useRef(false);
   const yearOpeningInFlightRef = useRef(false);
   const persistenceWaitersRef = useRef<Array<{ resolve: () => void; reject: (error: Error) => void }>>([]);
+  // Una cuenta bancaria solo puede tener un egreso pendiente de confirmación SQLite.
+  const bankOutgoingLockRef = useRef(createBankOutgoingLock());
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
     vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency
@@ -1266,6 +1319,29 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       journalCorrectionAuthorizationRef.current=null;
     }
+    // Domain-level backstop: every newly posted credit to a bank auxiliary is
+    // an outgoing movement and must fit the available balance at its effective date.
+    // Reconciliation adjustments are excluded because they record bank facts that
+    // have already occurred, not new payment instructions.
+    if (!entry.isAdjusted) {
+      const creditedBankAccounts = bankAccounts.filter(bank =>
+        bank.companyId === currentCompany.id &&
+        entry.items.some(item => item.accountCode === bank.accountCode &&
+          (Number(item.creditBs || 0) > 0 || Number(item.creditUsd || 0) > 0))
+      );
+      for (const bank of creditedBankAccounts) {
+        const requestedAmount = entry.items
+          .filter(item => item.accountCode === bank.accountCode)
+          .reduce((sum, item) => sum + Number(bank.currency === 'USD' ? item.creditUsd || 0 : item.creditBs || 0), 0);
+        const availableBalance = calculateBankAvailableBalance({
+          bankAccount: bank, companyId: currentCompany.id, asOfDate: entry.date, journalEntries
+        });
+        validateBankOutgoingAvailability({
+          availableBalance, requestedAmount, currency: bank.currency
+        });
+      }
+    }
+
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
     const maxEntryNum = companyEntries.reduce((max, e) => (e.entryNumber > max ? e.entryNumber : max), 0);
     const sequenceKey = currentCompany.id;
@@ -1279,6 +1355,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       entryNumber: nextEntryNum,
       createdAt: new Date().toISOString()
     };
+    reserveBankOutgoingAccounts(newEntry.companyId, newEntry.items);
     setJournalEntries(prev => [...prev, newEntry]);
     return newEntry;
   };
@@ -1366,6 +1443,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const accountCurrency = resolveTreasuryAccountCurrency(draft.treasuryAccountCode, bank?.currency);
     if (accountCurrency !== draft.paymentCurrency) {
       throw new Error('La moneda del desembolso no coincide con la moneda configurada para la cuenta de Caja/Banco.');
+    }
+    if (bank) {
+      const availableBalance = calculateBankAvailableBalance({
+        bankAccount: bank, companyId: currentCompany.id, asOfDate: draft.date, journalEntries
+      });
+      validateBankOutgoingAvailability({
+        availableBalance, requestedAmount: draft.paidAmount, currency: bank.currency
+      });
     }
     const operationKey = [currentCompany.id, rif, draft.date, draft.treasuryAccountCode,
       draft.paymentCurrency, draft.paidAmount, draft.reference.trim().toUpperCase()].join('|');
@@ -1655,6 +1740,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!draft.reference?.trim()) throw new Error('La referencia o comprobante de la transferencia es obligatorio.');
       const linkedAux = accounts.find(account => account.code === settlementBank.accountCode && account.isMovement);
       if (!linkedAux) throw new Error('El auxiliar contable de la cuenta bancaria no existe o no admite movimientos.');
+      if (kind === 'PURCHASE_PAYMENT') {
+        const availableBalance = calculateBankAvailableBalance({
+          bankAccount: settlementBank, companyId: currentCompany.id,
+          asOfDate: draft.settlementDate, journalEntries
+        });
+        validateBankOutgoingAvailability({
+          availableBalance,
+          requestedAmount: settlementBank.currency === 'USD' ? draft.amountUsd : draft.amountBs,
+          currency: settlementBank.currency
+        });
+      }
     }
     const normalizedReference = draft.reference?.trim().toLocaleLowerCase();
     const prior = creditSettlements.filter(item => item.companyId === currentCompany.id &&
@@ -2152,6 +2248,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ? accounts.find(account => account.code === purchaseData.paymentAccountCode && account.isMovement)
       : undefined;
     if (cashPurchase && !paymentAccount) throw new Error('La cuenta contable de pago de contado ya no está disponible en el Plan de Cuentas.');
+    const bankPaymentAccount = cashPurchase
+      ? bankAccounts.find(bank => bank.companyId === currentCompany.id && bank.accountCode === paymentAccount!.code)
+      : undefined;
+    if (bankPaymentAccount) {
+      const availableBalance = calculateBankAvailableBalance({
+        bankAccount: bankPaymentAccount, companyId: currentCompany.id,
+        asOfDate: purchaseData.accountCreditDate!, journalEntries
+      });
+      validateBankOutgoingAvailability({
+        availableBalance,
+        requestedAmount: bankPaymentAccount.currency === 'USD' ? netPayableBs / rate : netPayableBs,
+        currency: bankPaymentAccount.currency
+      });
+    }
     items.push({
       accountCode: cashPurchase ? paymentAccount!.code : '2.1.1.01',
       accountName: cashPurchase ? paymentAccount!.name : 'Cuentas por Pagar Proveedores Nacionales',
@@ -2186,6 +2296,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       createdAt: new Date().toISOString()
     };
 
+    reserveBankOutgoingAccounts(createdJournalEntry.companyId, createdJournalEntry.items);
     setJournalEntries(prev => [...prev, createdJournalEntry]);
 
     const finalPurchase: PurchaseRecord = {
@@ -2657,6 +2768,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // Publica mutaciones funcionales para combinar la nota con cualquier otra
     // operación que se procese en el mismo ciclo; el efecto serializado guarda
     // el snapshot completo y SQLite valida todo dentro de una sola transacción.
+    reserveBankOutgoingAccounts(journal.companyId, journal.items);
     setJournalEntries(prev => [...prev, journal]);
     setMovements(prev => [...prev, ...stampMovements.map(item => item.movement)]);
     setProducts(prev => prev.map(item => {
@@ -3242,6 +3354,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       createdAt: new Date().toISOString()
     };
 
+    reserveBankOutgoingAccounts(createdJournalEntry.companyId, createdJournalEntry.items);
     setJournalEntries(prev => [...prev, createdJournalEntry]);
 
     const finalSale: SaleRecord = {
@@ -3512,7 +3625,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     setProducts(prev => [...prev, newProd]);
     if (opening) setMovements(prev => [...prev, opening!]);
-    if (openingEntry) setJournalEntries(prev => [...prev, openingEntry!]);
+    if (openingEntry) {
+      reserveBankOutgoingAccounts(openingEntry.companyId, openingEntry.items);
+      setJournalEntries(prev => [...prev, openingEntry!]);
+    }
     return newProd;
   };
 
@@ -3583,6 +3699,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       prepared.push(product);
     }
+    openingEntries.forEach(entry => reserveBankOutgoingAccounts(entry.companyId, entry.items));
     setProducts(prev => [...prev, ...prepared]);
     if (openingMovements.length) setMovements(prev => [...prev, ...openingMovements]);
     if (openingEntries.length) setJournalEntries(prev => [...prev, ...openingEntries]);
@@ -3717,6 +3834,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         lastCostUsd: row.type === 'ENTRADA' ? effectiveUnitCost / rate : product.lastCostUsd
       });
     }
+    importedEntries.forEach(entry => reserveBankOutgoingAccounts(entry.companyId, entry.items));
     setProducts(prev => prev.map(product => virtualProducts.get(product.id) || product));
     setMovements(prev => [...prev, ...importedMovements]);
     if (importedEntries.length) setJournalEntries(prev => [...prev, ...importedEntries]);
@@ -4047,6 +4165,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
     }
     if (generatedEntries.length > 0) newMov.journalEntryId = generatedEntries[0].id;
+    generatedEntries.forEach(entry => reserveBankOutgoingAccounts(entry.companyId, entry.items));
     setMovements(prev => [...prev, newMov]);
     setProducts(prev => prev.map(p => p.id === prod.id ? {
       ...p, currentStock: newStock, avgCostBs: newAverageBs, avgCostUsd: newAverageUsd,
@@ -4507,6 +4626,22 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (amountBs <= 0 || amountUsd <= 0) throw new Error('El importe es demasiado pequeño para contabilizarse en ambas monedas.');
     const bankAccount = accounts.find(a => a.code === source.accountCode && a.isMovement);
     if (!bankAccount) throw new Error('La cuenta auxiliar del banco no existe o no admite movimientos.');
+    if (draft.type === 'EXPENSE' || draft.type === 'TRANSFER') {
+      const availableBalance = calculateBankAvailableBalance({
+        bankAccount: source,
+        companyId: currentCompany.id,
+        asOfDate: draft.date,
+        journalEntries
+      });
+      const requestedAmount = source.currency === 'USD'
+        ? Math.round(draft.amount * 1000000) / 1000000
+        : Math.round(draft.amount * 100) / 100;
+      validateBankOutgoingAvailability({
+        availableBalance,
+        requestedAmount,
+        currency: source.currency
+      });
+    }
     let items: JournalEntryItem[];
     if (draft.type === 'TRANSFER') {
       const destination = destinationForTransfer;
@@ -4544,9 +4679,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const addBankStatementMovement = (movData: Omit<BankStatementMovement, 'id' | 'companyId'>): BankStatementMovement => {
+    if (bankStatementImportInFlightRef.current) {
+      throw new Error('Hay otra operación de extracto bancario pendiente de confirmación SQLite. Espere antes de agregar otro movimiento.');
+    }
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('Registrar movimientos de extracto requiere SQLite local de escritorio disponible y lista.');
     }
+    bankStatementImportInFlightRef.current = true;
+    try {
     const bank = bankAccounts.find(item =>
       item.id === movData.bankAccountId && item.companyId === currentCompany.id
     );
@@ -4603,8 +4743,72 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       reconciledWithJournalEntryId: undefined,
       reconciledAt: undefined
     };
+    const releaseStatementMutation = (): void => { bankStatementImportInFlightRef.current = false; };
+    persistenceWaitersRef.current.push({ resolve: releaseStatementMutation, reject: releaseStatementMutation });
     setBankStatementMovements(prev => [...prev, newMov]);
     return newMov;
+    } catch (error) {
+      bankStatementImportInFlightRef.current = false;
+      throw error;
+    }
+  };
+
+  const addBankStatementMovements = async (movements: Array<{ bankAccountId: string; date: string; reference: string; description: string; type: 'DEBIT' | 'CREDIT'; amountBs: number; amountUsd: number; bcvRate: number; bcvRateEffectiveDate: string }>): Promise<BankStatementMovement[]> => {
+    if (bankStatementImportInFlightRef.current) throw new Error('Ya hay una importación bancaria en curso. Espere su confirmación SQLite.');
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('Importar movimientos requiere SQLite local de escritorio disponible y lista.');
+    }
+    if (!Array.isArray(movements) || movements.length === 0) throw new Error('No hay movimientos válidos para importar.');
+    bankStatementImportInFlightRef.current = true;
+    try {
+    const bankAccountId = movements[0].bankAccountId;
+    const bank = bankAccounts.find(item => item.id === bankAccountId && item.companyId === currentCompany.id);
+    if (!bank || movements.some(item => item.bankAccountId !== bankAccountId)) {
+      throw new Error('La importación debe pertenecer a una sola cuenta bancaria de la empresa activa.');
+    }
+    const staged: BankStatementMovement[] = [];
+    for (const item of movements) {
+      if (!isValidIsoDate(item.date) || !['DEBIT', 'CREDIT'].includes(item.type) ||
+          !item.reference?.trim() || !item.description?.trim()) {
+        throw new Error('La importación contiene fecha, naturaleza, referencia o descripción inválida.');
+      }
+      const amountBs = Number(item.amountBs), amountUsd = Number(item.amountUsd), bcvRate = Number(item.bcvRate);
+      validateBankMovementFxSnapshot({
+        date: item.date, amountBs, amountUsd, bcvRate,
+        bcvRateEffectiveDate: item.bcvRateEffectiveDate
+      });
+      const candidate = {
+        bankAccountId: bank.id, date: item.date, reference: item.reference,
+        type: item.type, amountBs, amountUsd
+      };
+      if (isDuplicateBankStatementMovement({
+        existing: [
+          ...bankStatementMovements.filter(row => row.companyId === currentCompany.id && row.bankAccountId === bank.id),
+          ...staged
+        ],
+        candidate
+      })) {
+        throw new Error(`La fila ${item.reference} está duplicada en el extracto existente o en el archivo. No se importó ninguna fila.`);
+      }
+      staged.push({
+        ...item,
+        bcvRate,
+        amountBs: Math.round(amountBs * 100) / 100,
+        amountUsd: Math.round(amountUsd * 1_000_000) / 1_000_000,
+        id: `stmt-import-${Date.now()}-${staged.length}-${Math.floor(Math.random() * 1000000)}`,
+        companyId: currentCompany.id,
+        isReconciled: false,
+        matchedBy: undefined,
+        reconciledWithJournalEntryId: undefined,
+        reconciledAt: undefined
+      });
+    }
+    setBankStatementMovements(previous => [...previous, ...staged]);
+    await waitForPersistence();
+    return staged;
+    } finally {
+      bankStatementImportInFlightRef.current = false;
+    }
   };
 
   const deleteBankStatementMovement = (id: string) => {
@@ -5487,6 +5691,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         addBankAccount,
         registerTreasuryMovement,
         addBankStatementMovement,
+        addBankStatementMovements,
         deleteBankStatementMovement,
         reconcileMovementManual,
         unreconcileMovement,

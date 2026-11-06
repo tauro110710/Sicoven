@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import { NewBankMovementModal } from './NewBankMovementModal';
+import { BankStatementImportModal } from './BankStatementImportModal';
 import { BankStatementMovement } from '../../types/accounting';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportConciliacionPdf } from '../../utils/pdfGenerator';
@@ -56,6 +57,7 @@ export const ConciliacionBancariaView: React.FC = () => {
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [isNewMovementModalOpen, setIsNewMovementModalOpen] = useState(false);
+  const [isStatementImportOpen, setIsStatementImportOpen] = useState(false);
   const [autoReconcileFeedback, setAutoReconcileFeedback] = useState<string | null>(null);
 
   // Manual pair selection state
@@ -324,6 +326,14 @@ export const ConciliacionBancariaView: React.FC = () => {
             >
               <Plus className="w-3.5 h-3.5" />
               Nuevo Movimiento Extracto
+            </button>
+            <button
+              onClick={() => setIsStatementImportOpen(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition cursor-pointer border border-indigo-200"
+              title="Importar CSV, Excel u OFX con previsualización y confirmación atómica"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              Importar Extracto
             </button>
             <button
               onClick={handleRunAuto}
@@ -929,6 +939,11 @@ export const ConciliacionBancariaView: React.FC = () => {
       <NewBankMovementModal
         isOpen={isNewMovementModalOpen}
         onClose={() => setIsNewMovementModalOpen(false)}
+        bankAccount={activeBank}
+      />
+      <BankStatementImportModal
+        isOpen={isStatementImportOpen}
+        onClose={() => setIsStatementImportOpen(false)}
         bankAccount={activeBank}
       />
     </div>

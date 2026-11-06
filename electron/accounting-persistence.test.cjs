@@ -93,3 +93,52 @@ test('BCV rate corrections retain prior/new rate, effective date and authenticat
     db.close();
   }
 });
+
+
+test('bank statement import batch persists together and leaves no imported rows after SQLite rollback', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE app_state (
+      state_key TEXT PRIMARY KEY, state_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL,
+      details_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  try {
+    const prior = emptyState();
+    prior.bankAccounts = [{
+      id: 'bank-1', companyId: 'company-1', bankName: 'Banco de prueba',
+      accountNumber: '00000000000000000001', currency: 'BS', accountCode: '1.1.1.01'
+    }];
+    persistAccountingSnapshot(db, prior, { id: 1, username: 'admin', role: 'admin' });
+    const importedRows = [
+      { id: 'stmt-1', companyId: 'company-1', bankAccountId: 'bank-1', date: '2026-11-05', reference: 'EXT-001', description: 'Depósito', type: 'CREDIT', amountBs: 100, amountUsd: 10, bcvRate: 10, bcvRateEffectiveDate: '2026-11-05', isReconciled: false },
+      { id: 'stmt-2', companyId: 'company-1', bankAccountId: 'bank-1', date: '2026-11-05', reference: 'EXT-002', description: 'Comisión', type: 'DEBIT', amountBs: 5, amountUsd: 0.5, bcvRate: 10, bcvRateEffectiveDate: '2026-11-05', isReconciled: false }
+    ];
+    const next = { ...prior, bankStatementMovements: importedRows };
+    assert.equal(persistAccountingSnapshot(db, next, { id: 1, username: 'admin', role: 'admin' }).ok, true);
+    let saved = JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
+    assert.deepEqual(saved.bankStatementMovements.map(row => row.id), ['stmt-1', 'stmt-2']);
+    const importEvents = db.prepare("SELECT details_json FROM audit_events WHERE event_type='bank_statement_imported' ORDER BY id").all();
+    assert.equal(importEvents.length, 2);
+    assert.deepEqual(importEvents.map(event => JSON.parse(event.details_json).statementMovementId), ['stmt-1', 'stmt-2']);
+    assert.equal(JSON.parse(importEvents[0].details_json).actor.username, 'admin');
+
+    const beforeFailure = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json;
+    db.exec(`CREATE TRIGGER reject_bank_import_update BEFORE UPDATE ON app_state
+      BEGIN SELECT RAISE(ABORT, 'injected bank import failure'); END;`);
+    const attempted = { ...next, bankStatementMovements: [...importedRows,
+      { ...importedRows[0], id: 'stmt-3', reference: 'EXT-003' }] };
+    assert.throws(() => persistAccountingSnapshot(db, attempted, { id: 1, username: 'admin', role: 'admin' }), /injected bank import failure/);
+    saved = JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
+    assert.equal(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json, beforeFailure);
+    assert.deepEqual(saved.bankStatementMovements.map(row => row.id), ['stmt-1', 'stmt-2']);
+    assert.equal(saved.bankStatementMovements.some(row => row.id === 'stmt-3'), false);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='bank_statement_imported'").get().count, 2);
+  } finally {
+    db.close();
+  }
+});
