@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeBankStatementRows, parseBankStatementCsv, parseBankStatementXlsx, parseOfxBankStatement } from './bankStatementImport';
+import { normalizeBankStatementRows, parseBankStatementCsv, parseBankStatementTxt, parseBankStatementXlsx, parseOfxBankStatement } from './bankStatementImport';
 
 test('parses quoted CSV and validates historical dual-currency snapshots', () => {
   const rows=parseBankStatementCsv('Fecha;Referencia;Descripción;Tipo;Importe;Moneda;Tasa BCV;Fecha vigencia BCV\n06/11/2026;TR-001;"Depósito, cliente";Crédito;100,00;BS;10,00;06/11/2026');
@@ -12,6 +12,16 @@ test('parses quoted CSV and validates historical dual-currency snapshots', () =>
   assert.equal(result[0].amountBs,100);
   assert.equal(result[0].amountUsd,10);
   assert.deepEqual(result[0].errors,[]);
+});
+
+test('parses pipe-delimited TXT statements and normalizes them like CSV', () => {
+  const rows=parseBankStatementTxt('Fecha|Referencia|Descripción|Tipo|Importe|Moneda|Tasa BCV|Fecha vigencia BCV\\n06/11/2026|TXT-001|Depósito nómina|Crédito|250,00|BS|10,00|06/11/2026');
+  const [row]=normalizeBankStatementRows(rows,'BS');
+  assert.equal(row.reference,'TXT-001');
+  assert.equal(row.type,'CREDIT');
+  assert.equal(row.amountBs,250);
+  assert.equal(row.amountUsd,25);
+  assert.deepEqual(row.errors,[]);
 });
 
 test('flags missing historical rate, invalid date and incomplete reference without inventing values', () => {
