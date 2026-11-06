@@ -34,7 +34,8 @@ export const TesoreriaView: React.FC = () => {
   const balanceFor = (bankId: string) => {
     const bank = companyBanks.find(b => b.id === bankId);
     if (!bank) return { bs: 0, usd: 0 };
-    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     return {
       bs: calculateBankAvailableBalance({ bankAccount: bank, companyId: currentCompany.id, asOfDate: today, journalEntries: companyEntries }),
       usd: calculateBankAvailableBalance({ bankAccount: { ...bank, currency: 'USD' }, companyId: currentCompany.id, asOfDate: today, journalEntries: companyEntries })
