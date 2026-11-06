@@ -40,6 +40,13 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const [counterpartyName, setCounterpartyName] = useState('');
   const [error, setError] = useState('');
 
+  React.useEffect(() => {
+    const validCurrent = companyProducts.some(product => product.id === productId);
+    const validDefault = defaultProductId ? companyProducts.some(product => product.id === defaultProductId) : false;
+    if (!validCurrent) setProductId(validDefault ? defaultProductId! : (companyProducts[0]?.id || ''));
+    setCorrectionMovementId('');
+  }, [currentCompany.id]);
+
   const selectedProduct = companyProducts.find(p => p.id === productId) || companyProducts[0];
   const supplierReturnSources = companyMovements.filter(m => m.companyId === currentCompany.id && m.productId === productId && m.type === 'ENTRADA' && m.concept === 'COMPRA' && !m.correctionForMovementId).map(m => ({...m, remaining: m.quantity - companyMovements.filter(x => x.companyId === currentCompany.id && x.correctionForMovementId === m.id).reduce((sum,x)=>sum+Number(x.quantity||0),0)})).filter(m=>m.remaining>1e-8);
   const selectedReturnSource = supplierReturnSources.find(m=>m.id===correctionMovementId);
@@ -181,7 +188,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Producto / Artículo *</label>
             <select
-              value={productId}
+              value={selectedProduct?.id || ''}
               onChange={e => { setProductId(e.target.value); setCorrectionMovementId(''); }}
               className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
             >
