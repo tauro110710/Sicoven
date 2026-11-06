@@ -80,20 +80,44 @@ export function matchesBankStatementDualCurrency(input: {
   });
 }
 
-/** Detects an already imported bank-statement row using stable bank identity fields. */
-export function isDuplicateBankStatementMovement(input: {
-  existing: Pick<BankStatementMovement, 'bankAccountId' | 'date' | 'reference' | 'type' | 'amountBs' | 'amountUsd'>[];
-  candidate: Pick<BankStatementMovement, 'bankAccountId' | 'date' | 'reference' | 'type' | 'amountBs' | 'amountUsd'>;
-}): boolean {
-  const normalizeReference = (value: string) => String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
-  const candidateReference = normalizeReference(input.candidate.reference);
-  if (!candidateReference) return false;
-  return input.existing.some(row =>
-    row.bankAccountId === input.candidate.bankAccountId &&
-    row.date === input.candidate.date &&
-    row.type === input.candidate.type &&
-    normalizeReference(row.reference) === candidateReference &&
-    Math.round(Number(row.amountBs) * 100) === Math.round(Number(input.candidate.amountBs) * 100) &&
-    Math.round(Number(row.amountUsd) * 1_000_000) === Math.round(Number(input.candidate.amountUsd) * 1_000_000)
+export function calculateBankReconciliationBalances(input: {
+  bookMovements: {
+    debitBs: number; creditBs: number; debitUsd: number; creditUsd: number; isReconciled: boolean;
+  }[];
+  statementMovements: {
+    type: 'DEBIT' | 'CREDIT'; amountBs: number; amountUsd: number; isReconciled: boolean;
+  }[];
+}) {
+  const roundBs = (value: number) => Math.round(value * 100) / 100;
+  const roundUsd = (value: number) => Math.round(value * 1_000_000) / 1_000_000;
+  const sum = (values: number[]) => values.reduce((total, value) => total + Number(value || 0), 0);
+
+  const bookBalanceBs = roundBs(sum(input.bookMovements.map(row => row.debitBs)) - sum(input.bookMovements.map(row => row.creditBs)));
+  const bookBalanceUsd = roundUsd(sum(input.bookMovements.map(row => row.debitUsd)) - sum(input.bookMovements.map(row => row.creditUsd)));
+  const bankStatementBalanceBs = roundBs(
+    sum(input.statementMovements.filter(row => row.type === 'CREDIT').map(row => row.amountBs)) -
+    sum(input.statementMovements.filter(row => row.type === 'DEBIT').map(row => row.amountBs))
   );
+  const bankStatementBalanceUsd = roundUsd(
+    sum(input.statementMovements.filter(row => row.type === 'CREDIT').map(row => row.amountUsd)) -
+    sum(input.statementMovements.filter(row => row.type === 'DEBIT').map(row => row.amountUsd))
+  );
+
+  const depositsInTransit = input.bookMovements.filter(row => !row.isReconciled && row.debitBs > 0);
+  const checksInTransit = input.bookMovements.filter(row => !row.isReconciled && row.creditBs > 0);
+  const bankDebitsNotInBooks = input.statementMovements.filter(row => !row.isReconciled && row.type === 'DEBIT');
+  const bankCreditsNotInBooks = input.statementMovements.filter(row => !row.isReconciled && row.type === 'CREDIT');
+
+  const adjustedBankBalanceBs = roundBs(bankStatementBalanceBs + sum(depositsInTransit.map(row => row.debitBs)) - sum(checksInTransit.map(row => row.creditBs)));
+  const adjustedBookBalanceBs = roundBs(bookBalanceBs + sum(bankCreditsNotInBooks.map(row => row.amountBs)) - sum(bankDebitsNotInBooks.map(row => row.amountBs)));
+  const adjustedBankBalanceUsd = roundUsd(bankStatementBalanceUsd + sum(depositsInTransit.map(row => row.debitUsd)) - sum(checksInTransit.map(row => row.creditUsd)));
+  const adjustedBookBalanceUsd = roundUsd(bookBalanceUsd + sum(bankCreditsNotInBooks.map(row => row.amountUsd)) - sum(bankDebitsNotInBooks.map(row => row.amountUsd)));
+  const differenceBs = roundBs(Math.abs(adjustedBankBalanceBs - adjustedBookBalanceBs));
+  const differenceUsd = roundUsd(Math.abs(adjustedBankBalanceUsd - adjustedBookBalanceUsd));
+
+  return {
+    bookBalanceBs, bankStatementBalanceBs, adjustedBankBalanceBs, adjustedBookBalanceBs, differenceBs,
+    bookBalanceUsd, bankStatementBalanceUsd, adjustedBankBalanceUsd, adjustedBookBalanceUsd, differenceUsd,
+    isBalanced: differenceBs < 0.05 && differenceUsd <= 0.000001
+  };
 }
