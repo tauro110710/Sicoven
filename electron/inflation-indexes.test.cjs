@@ -106,7 +106,7 @@ test('index import rejects unknown roles and permits both full-access roles', ()
     const accountant = importInflationIndexSeries(db, importerInput({ sourceTitle: 'Serie importada por contador' }), { id: 2, username: 'contador', role: 'contador' });
     assert.equal(accountant.ok, true);
     assert.throws(() => importInflationIndexSeries(db, importerInput({ sourceUrl: 'javascript:alert(1)' }), admin), /URL HTTP\/HTTPS/);
-    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM inflation_index_series').get().n, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM inflation_index_series').get().n, 1);
   } finally { db.close(); }
 });
 
@@ -156,14 +156,6 @@ test('IPC requires a valid session and permits administrator and accountant impo
       seriesId: imported.seriesId, decision: 'APPROVED', reason: 'Verificado por administración.'
     });
     assert.equal(reviewed.ok, true);
-    const accountantImport = handlers.get('sicoven:inflation-index-import')({}, 'contador-token', importerInput({ sourceTitle: 'Serie importada por contador' }));
-    assert.equal(accountantImport.ok, true);
-    const accountantReview = handlers.get('sicoven:inflation-index-review')({}, 'contador-token', { seriesId: accountantImport.seriesId, decision: 'APPROVED', reason: 'Verificado por el contador responsable.' });
-    assert.equal(accountantReview.ok, true);
-    const accountantImport = handlers.get('sicoven:inflation-index-import')({}, 'contador-token', importerInput({ sourceTitle: 'Serie importada por contador' }));
-    assert.equal(accountantImport.ok, true);
-    const accountantReview = handlers.get('sicoven:inflation-index-review')({}, 'contador-token', { seriesId: accountantImport.seriesId, decision: 'APPROVED', reason: 'Verificado por el contador responsable.' });
-    assert.equal(accountantReview.ok, true);
     const accountantImport = handlers.get('sicoven:inflation-index-import')({}, 'contador-token', importerInput({ sourceTitle: 'Serie importada por contador' }));
     assert.equal(accountantImport.ok, true);
     const accountantReview = handlers.get('sicoven:inflation-index-review')({}, 'contador-token', { seriesId: accountantImport.seriesId, decision: 'APPROVED', reason: 'Verificado por el contador responsable.' });
