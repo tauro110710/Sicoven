@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const { hasFullSystemAccess } = require('./auth-roles.cjs');
 const CLASSIFICATIONS = new Set(['MONETARY','NON_MONETARY','MIXED','NOT_APPLICABLE']);
 const BASES = new Set(['CASH_OR_FIXED_CURRENCY','INDEX_LINKED','GOODS_OR_SERVICES','HISTORICAL_COST','FAIR_VALUE','NET_REALIZABLE_VALUE','REVALUED','MIXED','FLOW']);
 const BALANCE_TYPES = new Set(['ACTIVO','PASIVO','PATRIMONIO']);
@@ -91,11 +92,11 @@ function requireAdmin(licenseView,getActiveSession,token) {
   if(!licenseView().authorized) throw new Error('Licencia no autorizada.');
   const actor=getActiveSession(token);
   if(!actor) throw new Error('Sesión no válida. Inicie sesión para gestionar clasificaciones.');
-  if(actor.role!=='admin') throw new Error('Permiso insuficiente: solo un administrador puede gestionar clasificaciones.');
+  if(!hasFullSystemAccess(actor)) throw new Error('Permiso insuficiente: solo un administrador puede gestionar clasificaciones.');
   return actor;
 }
 function saveInflationClassification(db,input,actor) {
-  if(!actor||actor.role!=='admin'||!actor.username||!Number.isInteger(Number(actor.id))) throw new Error('Solo un administrador autenticado puede registrar clasificaciones.');
+  if(!actor||!hasFullSystemAccess(actor)||!actor.username||!Number.isInteger(Number(actor.id))) throw new Error('Solo un administrador autenticado puede registrar clasificaciones.');
   const x=validateDecision(db,input);
   const latest=db.prepare('SELECT d.id,d.version,r.decision AS reviewDecision FROM inflation_classification_decisions d LEFT JOIN inflation_classification_reviews r ON r.decision_id=d.id WHERE d.company_id=? AND d.fiscal_year=? AND d.account_code=? AND d.scope=? AND d.component_ref=? ORDER BY d.version DESC LIMIT 1').get(x.companyId,x.fiscalYear,x.accountCode,x.scope,x.componentRef);
   if(!latest) { if(x.version!==1||x.supersedesDecisionId) throw new Error('La primera clasificación debe iniciar en versión 1.'); }
@@ -109,7 +110,7 @@ function saveInflationClassification(db,input,actor) {
   return {ok:true,decisionId:x.id,version:x.version,status:'PENDING_REVIEW',treatment:x.treatment};
 }
 function reviewInflationClassification(db,input,actor) {
-  if(!actor||actor.role!=='admin'||!actor.username||!Number.isInteger(Number(actor.id))) throw new Error('Solo un administrador autenticado puede revisar clasificaciones.');
+  if(!actor||!hasFullSystemAccess(actor)||!actor.username||!Number.isInteger(Number(actor.id))) throw new Error('Solo un administrador autenticado puede revisar clasificaciones.');
   const decisionId=String(input?.decisionId||'').trim(),decision=String(input?.decision||''),reason=String(input?.reason||'').trim();
   if(!decisionId||!['APPROVED','REJECTED'].includes(decision)) throw new Error('Identificador o decisión de revisión inválidos.');
   if(reason.length<10||reason.length>1000) throw new Error('La justificación de revisión debe tener entre 10 y 1000 caracteres.');
