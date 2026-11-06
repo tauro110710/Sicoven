@@ -1,4 +1,4 @@
-export type CreditDueAlertKey = 'OVERDUE' | 'DUE_TODAY' | 'DUE_1_7' | 'DUE_8_30';
+export type CreditDueAlertKey = 'OVERDUE' | 'DUE_TODAY' | 'DUE_1_7' | 'DUE_8_30' | 'INVALID_DUE_DATE';
 
 export interface CreditDueAlert {
   key: CreditDueAlertKey;
@@ -11,7 +11,8 @@ const BUCKETS: { key: CreditDueAlertKey; label: string }[] = [
   { key: 'OVERDUE', label: 'Vencidos' },
   { key: 'DUE_TODAY', label: 'Vencen hoy' },
   { key: 'DUE_1_7', label: 'Próximos 7 días' },
-  { key: 'DUE_8_30', label: 'Próximos 8–30 días' }
+  { key: 'DUE_8_30', label: 'Vencimiento por revisar' },
+  { key: 'INVALID_DUE_DATE', label: 'Fecha no válida' }
 ];
 
 const isoDay = (value: string): number | null => {
@@ -35,7 +36,12 @@ export function summarizeCreditDueAlerts(
     if (!Number.isFinite(amount) || amount < 0) throw new Error('La cartera contiene un saldo pendiente no válido.');
     if (amount <= 0.005 || !document.dueDate) continue;
     const dueDay = isoDay(document.dueDate);
-    if (dueDay === null) throw new Error('La cartera contiene una fecha de vencimiento no válida.');
+    if (dueDay === null) {
+      const total = totals.get('INVALID_DUE_DATE')!;
+      total.documentCount += 1;
+      total.outstandingUsd += amount;
+      continue;
+    }
     const daysUntilDue = dueDay - asOfDay;
     const key: CreditDueAlertKey | null = daysUntilDue < 0 ? 'OVERDUE'
       : daysUntilDue === 0 ? 'DUE_TODAY'
