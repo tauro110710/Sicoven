@@ -9,7 +9,7 @@ import {
   parseBankStatementXlsx,
   parseOfxBankStatement
 } from '../../types/bankStatementImport';
-import { X, Upload, FileSpreadsheet, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { X, Upload, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
