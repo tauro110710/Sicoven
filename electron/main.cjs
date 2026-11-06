@@ -31,7 +31,7 @@ const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
 
-const { migrateAuthUserRoles } = require('./auth-roles.cjs');
+const { migrateAuthUserRoles, hasAccountingRole } = require('./auth-roles.cjs');
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
 const { reconcileRestoreAudit } = require('./restore-audit-ledger.cjs');
 const { registerBackupIpc } = require('./backup-restore.cjs');
@@ -615,8 +615,8 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('sicoven:audit-record-correction', (_event, token, input) => {
     const actor = getActiveSession(token);
-    if (!actor || actor.role !== 'contador') {
-      return { ok: false, message: 'El Centro de Correcciones requiere una sesión autenticada del contador.' };
+    if (!hasAccountingRole(actor)) {
+      return { ok: false, message: 'El Centro de Correcciones requiere una sesión autenticada con rol contable.' };
     }
     const eventType = String(input?.eventType || '');
     const allowedEvents = new Set(['accounting_correction_requested', 'accounting_correction_executed']);
@@ -681,7 +681,7 @@ app.whenReady().then(async () => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const actor = getActiveSession(token);
-    if (!actor || actor.role !== 'contador') throw new Error('El Centro de Correcciones requiere una sesión autenticada del contador.');
+    if (!hasAccountingRole(actor)) throw new Error('El Centro de Correcciones requiere una sesión autenticada con rol contable.');
     return actor;
   };
   ipcMain.handle('sicoven:correction-case-create', (_event, token, input) => {
