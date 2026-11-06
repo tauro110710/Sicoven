@@ -170,7 +170,7 @@ jobs:
           Write-Host 'Instalación, app.asar, módulo SQLite nativo, creación de sicoven.sqlite y arranque verificados.'
           Get-Item $installer.FullName | Select-Object Name, Length
 
-      - name: Verify upgrade from v1.0.14 preserves SQLite user data
+      - name: Verify upgrade from v1.0.17 preserves SQLite user data
         if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
         shell: pwsh
         run: |
@@ -182,28 +182,28 @@ jobs:
           $env:SICOVEN_UPGRADE_MARKER = 'SICOVEN-UPGRADE-PRESERVATION-' + [guid]::NewGuid().ToString('N')
 
           $installDir = Join-Path $env:RUNNER_TEMP 'SICOVEN-Upgrade-Install'
-          $oldInstaller = Join-Path $env:RUNNER_TEMP 'SICOVEN-Setup-1.0.14-x64.exe'
-          $oldUrl = 'https://github.com/fenixlife1978/sicoven-descargas/releases/download/v1.0.14/SICOVEN-Setup-1.0.14-x64.exe'
+          $oldInstaller = Join-Path $env:RUNNER_TEMP 'SICOVEN-Setup-1.0.17-x64.exe'
+          $oldUrl = 'https://github.com/fenixlife1978/sicoven-descargas/releases/download/v1.0.17/SICOVEN-Setup-1.0.17-x64.exe'
           Invoke-WebRequest -Uri $oldUrl -OutFile $oldInstaller
           if (-not (Test-Path $oldInstaller -PathType Leaf) -or (Get-Item $oldInstaller).Length -lt 1000000) {
-            throw 'No se pudo descargar el instalador anterior v1.0.14.'
+            throw 'No se pudo descargar el instalador anterior v1.0.17.'
           }
           if (Test-Path $installDir) { Remove-Item -Path $installDir -Recurse -Force }
           $oldInstall = Start-Process -FilePath $oldInstaller -ArgumentList @('/S', "/D=$installDir") -PassThru
-          if (-not $oldInstall.WaitForExit(180000)) { throw 'La instalación de SICOVEN v1.0.14 excedió el tiempo permitido.' }
+          if (-not $oldInstall.WaitForExit(180000)) { throw 'La instalación de SICOVEN v1.0.17 excedió el tiempo permitido.' }
           $oldInstall.Refresh()
-          if ($oldInstall.ExitCode -ne 0) { throw "El instalador v1.0.14 terminó con código $($oldInstall.ExitCode)." }
+          if ($oldInstall.ExitCode -ne 0) { throw "El instalador v1.0.17 terminó con código $($oldInstall.ExitCode)." }
 
           if (-not (Test-Path $env:SICOVEN_UPGRADE_DB)) {
             python -c "import os,sqlite3; db=sqlite3.connect(os.environ['SICOVEN_UPGRADE_DB']); db.execute('CREATE TABLE upgrade_test_marker(value TEXT NOT NULL)'); db.execute('INSERT INTO upgrade_test_marker(value) VALUES(?)',(os.environ['SICOVEN_UPGRADE_MARKER'],)); db.commit(); db.close()"
             if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar la base SQLite aislada.' }
           }
           $app = Join-Path $installDir 'SICOVEN.exe'
-          if (-not (Test-Path $app -PathType Leaf)) { throw 'No se encontró SICOVEN.exe después de instalar v1.0.14.' }
+          if (-not (Test-Path $app -PathType Leaf)) { throw 'No se encontró SICOVEN.exe después de instalar v1.0.17.' }
           $oldApp = Start-Process -FilePath $app -ArgumentList @('--disable-gpu') -PassThru
           Start-Sleep -Seconds 12
           $oldApp.Refresh()
-          if ($oldApp.HasExited) { throw "SICOVEN v1.0.14 no arrancó. Código: $($oldApp.ExitCode)" }
+          if ($oldApp.HasExited) { throw "SICOVEN v1.0.17 no arrancó. Código: $($oldApp.ExitCode)" }
           $null = $oldApp.CloseMainWindow()
           if (-not $oldApp.WaitForExit(15000)) { & taskkill.exe /PID $oldApp.Id /T /F | Out-Null; Start-Sleep -Seconds 2 }
 
@@ -223,7 +223,7 @@ jobs:
           if ($updatedApp.HasExited) { throw "SICOVEN actualizado no arrancó. Código: $($updatedApp.ExitCode)" }
           $null = $updatedApp.CloseMainWindow()
           if (-not $updatedApp.WaitForExit(15000)) { & taskkill.exe /PID $updatedApp.Id /T /F | Out-Null }
-          Write-Host 'Actualización desde v1.0.14 verificada: perfil SQLite preservado e integridad correcta.'
+          Write-Host 'Actualización desde v1.0.17 verificada: perfil SQLite preservado e integridad correcta.'
 
       - name: Publish installer and updater metadata to the existing download release
         if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
