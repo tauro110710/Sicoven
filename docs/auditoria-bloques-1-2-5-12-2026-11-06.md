@@ -51,14 +51,15 @@ Defecto comprobado en `src/components/LibroDiario/LibroDiarioView.tsx` de `main`
 - El listado principal tomaba `journalEntries` global, mientras los totales y la exportación se derivan de ese listado.
 - Los contadores del Centro de Correcciones utilizaban compras y ventas globales, aunque la búsqueda de reversos comprobaba `companyId`.
 
-Corrección candidata en PR #10 (no integrada todavía):
-- El listado y sus totales/exportación se derivan de asientos filtrados por `currentCompany.id`.
+Corrección integrada mediante PR #10:
+- El listado, sus totales y exportación se derivan de asientos filtrados por `currentCompany.id`.
 - El Centro de Correcciones limita asientos, compras y ventas a la empresa activa.
 - Se reutiliza `filterEntriesByCompany`, función existente con pruebas unitarias.
-- Primer intento CI falló por orden de declaración de una variable; se corrigió. CI posterior sobre SHA `45af1b63319cf183594d21c74f25683f8c85e223` terminó SUCCESS. Se añadió después un refactor al helper en SHA `d3139ac75458fd03dd4954c0fd5a7cd5061f5121`; los nuevos checks deben validar ese SHA antes de integrar.
-- Windows Release de la primera corrección fue cancelado al cerrar/reabrir PR durante la comprobación del repositorio; no se considera éxito. La nueva ejecución debe completarse y confirmar que no publica release desde un evento pull_request.
+- Commit de integración en `main`: `068143d53b25f38b0d42f57df3a3ccc045903269`.
+- CI run `42254099996`: SUCCESS sobre SHA `d3139ac75458fd03dd4954c0fd5a7cd5061f5121`.
+- Windows run `42254099909`: SUCCESS sobre el mismo SHA; pruebas, TypeScript, build, instalador PR-validation, smoke test y checksums terminaron correctamente. Los pasos de publicación de release y actualización desde v1.0.14 fueron SKIPPED por tratarse de un evento pull_request; no se publicó instalador ni release.
 
-Estado: **corrección en revisión**. No tachar el aislamiento del Diario hasta CI y Windows del SHA final y fusión verificada.
+Estado: **aislamiento del Libro Diario y Centro de Correcciones terminado**.
 
 ### Multimoneda y moneda funcional — parcial
 Evidencia:
