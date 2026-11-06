@@ -151,6 +151,20 @@ En `InventarioView.tsx` de `main`:
 Estado: **parcial con defecto prioritario**. Antes de tachar el aislamiento del Bloque 7 hay que filtrar existencias, Kardex, valorización, mínimos, selección de producto y herramientas contables por la empresa activa; agregar pruebas de aislamiento y validar UI/SQLite. No modificar registros históricos ni abrir devoluciones a proveedor hasta completar el circuito fiscal y contable.
 
 
+
+## Bloque 8 — Activos fijos: primera pasada
+
+No se encontró módulo, tipos de dominio ni pruebas específicas para registro de activos fijos, clases, ubicación/responsable, valor residual, vida útil, depreciación, bajas, ventas o roll-forward por activo. La búsqueda de archivos y modelos en `src` no arrojó componentes/tipos de activos fijos; `accounting.ts` tampoco contiene estructuras de activos o depreciación.
+
+Estado: **no implementado / pendiente**. No se tacha ningún requisito. Se requiere diseñar el submódulo y su persistencia SQLite antes de generar asientos automáticos.
+
+## Bloque 9 — Nómina y RR. HH. (LOTTT): primera pasada
+
+No se encontraron componentes, modelos ni pruebas de empleados, contratos, asistencia, novedades, nómina, deducciones/aportes, prestaciones, vacaciones, utilidades o liquidaciones. La búsqueda de rutas de nómina/empleados/LOTTT en el repositorio no devolvió un módulo funcional.
+
+Estado: **no implementado / pendiente**. No se tacha ningún requisito. Los parámetros legales deben documentarse y versionarse con fuente oficial antes de implementar cálculos.
+
+
 ## Control de alcance y estado
 - Se conserva REME y ajuste por inflación dentro del plan; no se elimina código ni se cambia su alcance en esta auditoría.
 - No se modifica el administrador semilla.
