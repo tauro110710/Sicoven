@@ -73,7 +73,6 @@ export const BankStatementImportModal: React.FC<Props> = ({ isOpen, onClose, ban
       setFeedback(`SQLite confirmó la importación de ${candidates.length} movimiento(s).`);
       setCandidates([]);
       setFileName('');
-      onClose();
     }catch(error){setFeedback(error instanceof Error?error.message:'No se pudo confirmar la importación. No se guardó el lote.');}
     finally{setSaving(false);}
   };
