@@ -12,7 +12,7 @@ Las marcas solo se colocan cuando la corrección está integrada en `main` y las
 - [x] Aislamiento multiempresa del Libro Diario y Centro de Correcciones (PR #10 integrada; CI y Windows SUCCESS).
 - [x] Aislamiento multiempresa de Inventario, Kardex, herramientas y asistente de migración (PR #13 integrada; CI y Windows SUCCESS).
 - [x] Protección contra duplicados al registrar movimientos de extractos bancarios (PR #15 integrada en `main`, commit `40837c97d74fdb246085b6085b799d8154c0f27a`; CI y Windows SUCCESS).
-- [ ] Antigüedad de saldos CxC/CxP por tramos (PR #16; CI SUCCESS, Windows en validación).
+- [x] Antigüedad de saldos CxC/CxP por tramos (PR #16 integrada en `main`, commit `31b53a5c7914fa56e14d032788893c7f7d57879b`; CI y Windows SUCCESS).
 - [ ] Conciliación bancaria agregada en doble moneda (PR #18; CI y Windows en validación).
 - [ ] Importación de extractos bancarios con previsualización y confirmación.
 - [ ] Cierre integral de conciliación bancaria con extractos reales y prueba de persistencia tras reinicio.
@@ -136,7 +136,7 @@ Estado del Bloque 5: **parcial**. No se tacha ningún requisito del bloque ni se
 - CxP contempla facturas y ND tipo 02 como obligaciones separadas; anticipos directos, aplicaciones y reembolsos tienen circuitos especializados y pruebas existentes. Los frentes de anticipos y liquidaciones ya aprobados no se reabren sin defecto concreto.
 
 ### Brechas confirmadas
-1. **Antigüedad por tramos:** implementada en candidata PR #16 para ambas vistas, con clasificación no vencido, 1–30, 31–60, 61–90, más de 90 y sin vencimiento; presenta USD y cantidad de documentos. Pruebas CI y Windows aún pendientes; no marcar hasta SUCCESS y fusión.
+1. **Antigüedad por tramos:** implementada e integrada mediante PR #16 en `main`, commit `31b53a5c7914fa56e14d032788893c7f7d57879b`. Ambas vistas clasifican no vencido, 1–30, 31–60, 61–90, más de 90 y sin vencimiento; muestran importes USD y cantidad de documentos. CI run `42256992693` y Windows run `42256992927`: SUCCESS.
 2. **Exposición cambiaria:** el saldo en USD y el equivalente Bs. a tasa original se presentan; no se encontró en estas vistas un reporte de exposición con comparación sistemática entre tasa histórica, tasa de cierre y diferencia de cambio por tercero/documento.
 3. **Alertas:** el vencimiento se identifica dentro de las vistas, pero no se encontró un motor de alertas/notificaciones por vencimiento o mora ni un panel de tareas.
 4. **Reportes por moneda/período:** la vista operativa es útil para consultar pendientes, pero falta verificar un estado de cuenta formal exportable por tercero, documento, moneda y período, con conciliación contra cuentas de control.
