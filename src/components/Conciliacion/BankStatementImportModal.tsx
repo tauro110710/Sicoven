@@ -6,6 +6,7 @@ import {
   type BankStatementImportCandidate,
   normalizeBankStatementRows,
   parseBankStatementCsv,
+  parseBankStatementTxt,
   parseBankStatementXlsx,
   parseOfxBankStatement
 } from '../../types/bankStatementImport';
@@ -35,11 +36,12 @@ export const BankStatementImportModal: React.FC<Props> = ({ isOpen, onClose, ban
       const extension=file.name.toLowerCase().split('.').pop();
       let rows:Record<string,unknown>[]=[],currency=bankAccount.currency;
       if(extension==='csv')rows=parseBankStatementCsv(await file.text());
+      else if(extension==='txt')rows=parseBankStatementTxt(await file.text());
       else if(extension==='xlsx')rows=await parseBankStatementXlsx(await file.arrayBuffer());
       else if(extension==='ofx'){
         const parsed=parseOfxBankStatement(await file.text());
         rows=parsed.rows;currency=parsed.currency;
-      }else throw new Error('Formato no admitido. Seleccione CSV, Excel .xlsx u OFX.');
+      }else throw new Error('Formato no admitido. Seleccione TXT delimitado, CSV, Excel .xlsx u OFX.');
       const normalized=normalizeBankStatementRows(rows,currency);
       const existing=bankStatementMovements.filter(row=>row.bankAccountId===bankAccount.id);
       const seen=[...existing];
@@ -85,13 +87,13 @@ export const BankStatementImportModal: React.FC<Props> = ({ isOpen, onClose, ban
       </header>
       <div className="space-y-4 overflow-y-auto p-5">
         <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
-          Cargue un archivo CSV, Excel (.xlsx) u OFX. Cada movimiento debe contener fecha, referencia, descripción, naturaleza, importe, tasa BCV histórica y fecha de vigencia de esa tasa. En OFX se leen las extensiones EXCHANGERATE y EXCHANGERATEDATE. No se inventan tasas faltantes.
+          Cargue un archivo TXT delimitado, CSV, Excel (.xlsx) u OFX. Cada movimiento debe contener fecha, referencia, descripción, naturaleza, importe, tasa BCV histórica y fecha de vigencia de esa tasa. En OFX se leen las extensiones EXCHANGERATE y EXCHANGERATEDATE. No se inventan tasas faltantes.
         </div>
         <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center hover:border-sky-400">
           <Upload className="h-7 w-7 text-slate-500"/>
           <span className="text-sm font-semibold text-slate-800">{loading?'Leyendo archivo…':fileName||'Seleccionar archivo de extracto'}</span>
-          <span className="text-xs text-slate-500">CSV · XLSX · OFX · máximo 10 MB</span>
-          <input type="file" accept=".csv,.xlsx,.ofx" disabled={loading||saving} className="sr-only" onChange={e=>{void handleFile(e.target.files?.[0]);e.currentTarget.value='';}}/>
+          <span className="text-xs text-slate-500">TXT · CSV · XLSX · OFX · máximo 10 MB</span>
+          <input type="file" accept=".txt,.csv,.xlsx,.ofx" disabled={loading||saving} className="sr-only" onChange={e=>{void handleFile(e.target.files?.[0]);e.currentTarget.value='';}}/>
         </label>
         {candidates.length>0&&<div className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold text-slate-900">Previsualización · {candidates.length} movimientos</h3><div className="flex items-center gap-2 text-xs"><span className="text-emerald-700">{candidates.length-invalidCount} válidos</span><span className="text-rose-700">{invalidCount} con errores</span></div></div>
