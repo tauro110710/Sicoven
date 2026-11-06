@@ -63,7 +63,7 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
       case 'catalogo':
         return <CatalogoView />;
       case 'config':
-        return <ConfiguracionView />;
+        return <ConfiguracionView token={auth.token} />;
       case 'reversiones':
         return <ReversionFiscalView userRole={auth.user.role} />;
       case 'inflacion':
