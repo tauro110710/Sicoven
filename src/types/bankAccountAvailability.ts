@@ -2,6 +2,8 @@ import type { BankAccount, JournalEntry } from './accounting';
 
 type BankBalanceInput = {
   bankAccount: BankAccount;
+  /** Optional ledger currency for dual-currency presentation; defaults to the account's native currency. */
+  currency?: BankAccount['currency'];
   companyId: string;
   asOfDate: string;
   journalEntries: Pick<JournalEntry, 'companyId' | 'date' | 'referenceDoc' | 'items'>[];
@@ -15,6 +17,7 @@ type BankBalanceInput = {
  */
 export function calculateBankAvailableBalance(input: BankBalanceInput): number {
   const { bankAccount, companyId, asOfDate, journalEntries } = input;
+  const currency = input.currency || bankAccount.currency;
   const parsedDate = new Date(String(asOfDate || '') + 'T00:00:00.000Z');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(asOfDate || '')) ||
       !Number.isFinite(parsedDate.getTime()) ||
@@ -28,19 +31,19 @@ export function calculateBankAvailableBalance(input: BankBalanceInput): number {
     entry.referenceDoc === openingReference &&
     entry.items.some(item => item.accountCode === bankAccount.accountCode)
   );
-  const initialBalance = bankAccount.currency === 'USD'
+  const initialBalance = currency === 'USD'
     ? Number(bankAccount.initialBalanceUsd || 0)
     : Number(bankAccount.initialBalanceBs || 0);
   const baseline = hasOpeningEntry ? 0 : initialBalance;
-  const decimals = bankAccount.currency === 'USD' ? 6 : 2;
+  const decimals = currency === 'USD' ? 6 : 2;
   const scale = 10 ** decimals;
 
   const ledgerBalance = journalEntries.reduce((balance, entry) => {
     if (entry.companyId !== companyId || entry.date > asOfDate) return balance;
     for (const item of entry.items) {
       if (item.accountCode !== bankAccount.accountCode) continue;
-      const debit = bankAccount.currency === 'USD' ? Number(item.debitUsd || 0) : Number(item.debitBs || 0);
-      const credit = bankAccount.currency === 'USD' ? Number(item.creditUsd || 0) : Number(item.creditBs || 0);
+      const debit = currency === 'USD' ? Number(item.debitUsd || 0) : Number(item.debitBs || 0);
+      const credit = currency === 'USD' ? Number(item.creditUsd || 0) : Number(item.creditBs || 0);
       balance += debit - credit;
     }
     return balance;
