@@ -85,6 +85,28 @@ test('rejects an unknown currency instead of treating it as bolívares', () => {
   assert.ok(row.errors.includes('Moneda no reconocida.'));
 });
 
+
+test('rejects OFX transactions with missing or unknown TRNTYPE', () => {
+  const build = (transactionType: string) => `OFXHEADER:100
+DATA:OFXSGML
+<OFX><CURDEF>USD
+<BANKTRANLIST>
+<STMTTRN>
+${transactionType}
+<DTPOSTED>20261106120000
+<TRNAMT>-12.50
+<FITID>OFX-NATURE
+<NAME>Movement without reliable nature
+<EXCHANGERATE>10.00
+<EXCHANGERATEDATE>20261106
+</BANKTRANLIST></OFX>`;
+  for (const transactionType of ['', '<TRNTYPE>OTHER']) {
+    const parsed = parseOfxBankStatement(build(transactionType));
+    const [row] = normalizeBankStatementRows(parsed.rows, parsed.currency);
+    assert.ok(row.errors.some(error => error.includes('naturaleza') || error.includes('Naturaleza')));
+  }
+});
+
 test('reads the first Excel worksheet and normalizes real date cells', async () => {
   const ExcelJS = (await import('exceljs')).default;
   const workbook = new ExcelJS.Workbook();
