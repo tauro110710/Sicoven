@@ -13,7 +13,8 @@ Las marcas solo se colocan cuando la corrección está integrada en `main` y las
 - [x] Aislamiento multiempresa de Inventario, Kardex, herramientas y asistente de migración (PR #13 integrada; CI y Windows SUCCESS).
 - [x] Protección contra duplicados al registrar movimientos de extractos bancarios (PR #15 integrada; CI y Windows SUCCESS).
 - [x] Antigüedad de saldos CxC/CxP por tramos (PR #16 integrada; CI y Windows SUCCESS).
-- [ ] Cuadre agregado de conciliación bancaria en Bs. y USD (PR #19; CI SUCCESS en la revisión anterior; nueva validación CI/Windows tras ajuste de movimientos USD-only en curso).
+- [x] Cuadre agregado de conciliación bancaria en Bs. y USD (PR #19 integrada en `main`, commit `821fe490418ddac7ece8201c7244ed4495211069`; CI y Windows SUCCESS, incluido caso USD-only).
+- [ ] Panel de alertas operativas de vencimiento CxC/CxP (PR #21; nueva CI/Windows en validación tras corregir el parser de fechas).
 - [ ] Importación de extractos bancarios con previsualización y confirmación.
 - [ ] Cierre integral de conciliación con extractos reales y prueba de persistencia tras reinicio.
 
@@ -119,7 +120,7 @@ Estado: **parcial / pendiente de auditoría normativa y de exportación**. No se
 1. **Importación de extractos ausente:** la pantalla ofrece alta manual de movimiento («Nuevo Movimiento Extracto»); no se encontró selector de archivo ni parser TXT/CSV/Excel, plantillas configurables o vista previa de importación.
 2. **Duplicados al cargar extractos:** corregido e integrado mediante PR #15 en `main`. La huella usa empresa/cuenta, fecha, referencia normalizada, naturaleza e importes Bs./USD; rechaza la segunda fila antes de persistir y conserva filas históricas. CI run `42256479262` y Windows run `42256479491`: SUCCESS. La importación de archivos CSV/Excel/OFX con previsualización sigue pendiente.
 3. **Flujo proyectado:** la tesorería muestra saldos y movimientos existentes; no se encontró en esta pasada una proyección de caja/bancos futura con vencimientos y escenarios.
-4. **Cuadre agregado en doble moneda:** PR #19 incorpora el cálculo de saldos según libros, extracto, partidas en tránsito, ajustes y diferencias en Bs. y USD; muestra los importes históricos USD en la cédula y PDF. Se detectó y corrigió además el caso de movimientos en USD sin importe Bs. La nueva CI/Windows está en validación; no marcar hasta SUCCESS y fusión.
+4. **Cuadre agregado en doble moneda:** corregido e integrado mediante PR #19 en `main`, commit `821fe490418ddac7ece8201c7244ed4495211069`. Calcula saldos según libros, extracto, partidas en tránsito, ajustes y diferencias en ambas monedas; presenta valores históricos USD en la cédula y PDF; incluye movimientos USD-only. CI run `42258999045` y Windows run `42258999043`: SUCCESS.
 5. **Cierre de conciliación:** falta probar la secuencia completa con extracto real, saldos inicial/final, partidas pendientes, reanudación tras reinicio y persistencia de la cédula.
 
 Estado del Bloque 5: **parcial**. No se tacha ningún requisito del bloque ni se declara conciliación integral terminada. La próxima implementación focalizada debe ser importación repetible con huella de duplicidad, previsualización y confirmación antes de persistir; no debe alterar movimientos ya conciliados ni historial.
@@ -245,8 +246,8 @@ Estado del Bloque 12: **parcial / pendiente de desarrollo**. No se tacha ningún
 - Validación estructural de códigos, padres, niveles e imputabilidad: **terminada**.
 - Plan de cuentas configurable por empresa: **pendiente**.
 - Auditoría integral de Diario, Mayor, balance de comprobación, moneda funcional, cierres y reversión del Bloque 1: **pendiente**.
-- Bloque 5: duplicados de extracto corregidos e integrados; cuadre agregado en doble moneda en validación; importador de extractos y cierre integral pendientes.
-- Bloque 6: antigüedad de saldos CxC/CxP corregida e integrada; exposición cambiaria, alertas y estados de cuenta formales pendientes.
+- Bloque 5: duplicados de extracto y cuadre agregado en doble moneda corregidos e integrados; importador de extractos y cierre integral pendientes.
+- Bloque 6: antigüedad de saldos CxC/CxP corregida e integrada; panel de alertas operativas en validación; exposición cambiaria y estados de cuenta formales pendientes.
 - Bloque 7: aislamiento de inventario corregido e integrado; resto de brechas pendientes.
 - Bloques 2, 8, 9, 10 y 12: **pendientes de auditoría/desarrollo**; Bloque 11 continúa parcial.
 
