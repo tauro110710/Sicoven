@@ -26,7 +26,7 @@ const aliases: Record<string,string[]> = {
   amount:['monto','amount','importe','valor','transaction_amount'],
   currency:['moneda','currency','divisa','curdef'],
   bcvRate:['tasa_bcv','bcv_rate','tasa','exchange_rate','bcvrate'],
-  bcvRateEffectiveDate:['fecha_vigencia_bcv','bcv_rate_date','exchange_rate_date','fecha_tasa','bcvrate_effective_date']
+  bcvRateEffectiveDate:['fecha_vigencia_bcv','bcv_rate_date','exchange_rate_date','fecha_tasa','bcvrate_effective_date','bcvrateeffectivedate']
 };
 const pick = (row: BankStatementRawRow, field: string): unknown => {
   const entries = Object.entries(row);
