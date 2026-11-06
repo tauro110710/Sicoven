@@ -33,6 +33,16 @@ test('normalizes both Venezuelan and US thousands/decimal separators', () => {
   assert.deepEqual(rows.flatMap(row=>row.errors),[]);
 });
 
+test('recognizes accented debit and credit labels in Spanish bank files', () => {
+  const rows=normalizeBankStatementRows([
+    {Fecha:'2026-11-06',Referencia:'D-1',Descripción:'Cargo bancario',Tipo:'Débito',Importe:'5,00',Moneda:'BS',Tasa_BCV:'10,00',Fecha_vigencia_BCV:'2026-11-06'},
+    {Fecha:'2026-11-06',Referencia:'C-1',Descripción:'Abono cliente',Tipo:'Crédito',Importe:'5,00',Moneda:'BS',Tasa_BCV:'10,00',Fecha_vigencia_BCV:'2026-11-06'}
+  ],'BS');
+  assert.equal(rows[0].type,'DEBIT');
+  assert.equal(rows[1].type,'CREDIT');
+  assert.deepEqual(rows.flatMap(row=>row.errors),[]);
+});
+
 test('rejects an unknown currency instead of treating it as bolívares', () => {
   const [row]=normalizeBankStatementRows([
     {Fecha:'2026-11-06',Referencia:'FX-1',Descripción:'Unknown currency',Tipo:'CREDIT',Importe:'10',Moneda:'EUR',Tasa_BCV:'10',Fecha_vigencia_BCV:'2026-11-06'}
