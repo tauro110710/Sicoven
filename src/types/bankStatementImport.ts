@@ -17,7 +17,7 @@ export interface BankStatementImportCandidate {
 }
 export type BankStatementRawRow = Record<string, unknown>;
 
-const normalizeHeader = (value: unknown) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+const normalizeHeader = (value: unknown) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/^\\uFEFF/,'').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 const aliases: Record<string,string[]> = {
   date:['fecha','date','fecha_movimiento','transaction_date','dtposted'],
   reference:['referencia','reference','ref','numero_referencia','nro_referencia','fitid','checknum'],
