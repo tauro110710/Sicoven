@@ -164,7 +164,13 @@ En `InventarioView.tsx` de `main`:
 - El selector de producto de `NewMovementModal.tsx` y sus valores iniciales usan `products` global; `InventarioContableTools.tsx` también consume `products`, `movements`, `accounts` y `journalEntries` sin normalizar todos los arreglos a la empresa activa.
 - El tipo de datos sí guarda empresa y las funciones de dominio validan empresa activa, por lo que el defecto es de presentación/consulta; puede mostrar inventario y movimientos de otra empresa en la pantalla activa y exponer artículos ajenos en selectores/herramientas.
 
-Estado: **parcial con defecto prioritario**. Corrección candidata en PR #13: filtra existencias, Kardex, valorización, mínimos, selectores, importación/exportación y herramientas contables por la empresa activa; añade prueba de aislamiento entre dos empresas. CI y Windows Installer sobre SHA `fe79ad263087215eb2790c5bb0d6a05f9b412732` están pendientes; no se tacha el requisito hasta ambos SUCCESS y fusión verificada. No modificar registros históricos ni abrir devoluciones a proveedor hasta completar el circuito fiscal y contable.
+Corrección integrada mediante PR #13 en `main`, commit `d08a860c3d3cc58f2b74f723c333d2d4d0fb6094`:
+- Filtra existencias, Kardex, valorización, mínimos, selectores, importación/exportación y herramientas contables por la empresa activa.
+- El asistente de migración comprueba duplicados solo contra los documentos de la empresa activa.
+- Añade prueba de aislamiento de productos y movimientos entre dos empresas.
+- CI run `42256068142` y Windows run `42256068152`: SUCCESS.
+
+Estado: **corrección de aislamiento de Inventario terminada**. El Bloque 7 continúa parcial por las demás brechas del módulo; no abrir devoluciones a proveedor hasta completar el circuito fiscal y contable.
 
 
 
@@ -206,11 +212,12 @@ Estado del Bloque 10: **parcial**. Se conserva la facturación documental y los 
 
 ### Brechas confirmadas
 - Catálogo de cuentas (`Account`) global y sin `companyId`; configuraciones de clasificación contable/cash flow se comparten.
-- El Libro Diario en `main` no filtraba el listado y el Centro de Correcciones por empresa; corrección candidata en PR #10 pendiente de integración.
-- La vista de Inventario en `main` muestra productos, movimientos, valorización y alertas desde arreglos globales; requiere filtro por empresa antes de cerrar el aislamiento.
+- El aislamiento del Libro Diario y Centro de Correcciones se corrigió e integró mediante PR #10; CI y Windows Installer finalizaron SUCCESS.
+- El aislamiento de Inventario, Kardex, valorización, selectores y herramientas se corrigió e integró mediante PR #13; CI y Windows Installer finalizaron SUCCESS.
+- El catálogo de cuentas sigue global y sin `companyId`; el diseño/migración por empresa continúa pendiente.
 - No se encontró un panel de despacho contable con tareas, vencimientos y estado de clientes/contribuyentes ni una consolidación multiempresa con reglas explícitas.
 
-Estado del Bloque 11: **parcial con defectos de aislamiento prioritarios**. No se tacha. Se requieren pruebas cruzadas de lectura, edición, exportación, inventario y reportes con dos empresas, además de un diseño seguro del catálogo contable por empresa.
+Estado del Bloque 11: **parcial**. Los defectos de aislamiento del Libro Diario, Centro de Correcciones e Inventario señalados en esta pasada ya fueron corregidos; siguen pendientes el catálogo de cuentas por empresa, configuraciones compartidas y despacho/consolidación multiempresa.
 
 ## Bloque 12 — Reportes, análisis e IA asistiva: primera pasada
 
@@ -238,6 +245,9 @@ Estado del Bloque 12: **parcial / pendiente de desarrollo**. No se tacha ningún
 - Validación estructural de códigos, padres, niveles e imputabilidad: **terminada**.
 - Plan de cuentas configurable por empresa: **pendiente**.
 - Auditoría integral de Diario, Mayor, balance de comprobación, moneda funcional, cierres y reversión del Bloque 1: **pendiente**.
-- Bloques 2 y 5–12: **pendientes de esta secuencia de auditoría**.
+- Bloque 5: duplicados de extracto corregidos e integrados; cuadre agregado en doble moneda en validación; importador de extractos y cierre integral pendientes.
+- Bloque 6: antigüedad de saldos CxC/CxP corregida e integrada; exposición cambiaria, alertas y estados de cuenta formales pendientes.
+- Bloque 7: aislamiento de inventario corregido e integrado; resto de brechas pendientes.
+- Bloques 2, 8, 9, 10 y 12: **pendientes de auditoría/desarrollo**; Bloque 11 continúa parcial.
 
 No se marca como terminado ningún bloque completo ni se declara certificación VEN-NIF.
