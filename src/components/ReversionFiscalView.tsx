@@ -77,7 +77,8 @@ const CorrectionNoteFormFields: React.FC<CorrectionNoteFormFieldsProps> = ({
 );
 
 export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole = 'admin' }) => {
-  const isAccountant = userRole === 'contador';
+  const hasFullSystemAccess = userRole === 'admin' || userRole === 'contador';
+  const isAccountant = hasFullSystemAccess;
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, addMovement, addPurchaseCreditNote, addPurchaseServiceCreditNote, addSaleCorrectionNote, addSupplierDebitNote,
     bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrVouchers, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, authorizeCorrectionCase, listCorrectionCases, executeCorrectionCase
@@ -85,7 +86,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const [selectedId, setSelectedId] = useState('');
-  const [executionAssistantOpen, setExecutionAssistantOpen] = useState(!isAccountant);
+  const [executionAssistantOpen, setExecutionAssistantOpen] = useState(true);
   const [effectiveDate, setEffectiveDate] = useState(today);
   const [reason, setReason] = useState('');
   const [retainedEarningsCode, setRetainedEarningsCode] = useState('');
@@ -1109,7 +1110,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
         </div>
       </section>}
 
-      {!isAccountant && <>
+      {hasFullSystemAccess && <>
       <section className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 sm:p-6 space-y-4">
         <div className="flex items-center gap-3"><LockKeyhole className="w-6 h-6 text-indigo-700" /><div><h2 className="font-bold text-slate-900">Candado de períodos fiscales</h2><p className="text-sm text-slate-500">Bloquea nuevos asientos y facturas con fecha igual o anterior al corte.</p></div></div>
         <div className="rounded-lg bg-slate-50 border p-3 text-sm">Estado actual: {currentCompany.closedThroughDate ? <strong>cerrado hasta {currentCompany.closedThroughDate}</strong> : <strong>sin período cerrado</strong>}</div>
@@ -1190,7 +1191,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
           <div className="sm:col-span-2"><button type="button" disabled={bcvCorrectionSaving || parseFiscalInput(bcvCorrectionRate)<=0} onClick={()=>void submitBcvRateCorrection()} className="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{bcvCorrectionSaving ? 'Guardando corrección…' : 'Confirmar y auditar corrección'}</button></div>
         </div>}
       </section>
-      {!isAccountant && <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      {hasFullSystemAccess && <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div><h2 className="text-base font-bold text-slate-900">Expedientes de rectificación fiscal</h2><p className="text-xs text-slate-500">Incidencias append-only vinculadas a comprobantes, declaraciones y acciones documentadas</p></div>
           <button type="button" onClick={() => void refreshFiscalIncidents()} disabled={incidentsLoading} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold disabled:opacity-50">{incidentsLoading ? 'Actualizando…' : 'Actualizar expedientes'}</button>

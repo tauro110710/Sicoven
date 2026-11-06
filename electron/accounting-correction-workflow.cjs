@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { hasFullSystemAccess } = require('./auth-roles.cjs');
 
 
 const CORRECTION_EVIDENCE_RULES = Object.freeze({
@@ -167,8 +168,8 @@ function initializeCorrectionWorkflow(db) {
   }
 }
 function requireCorrectionActor(actor) {
-  if (!actor || actor.role !== 'contador' || !Number.isSafeInteger(Number(actor.id)) || Number(actor.id) <= 0 || !String(actor.username || '').trim()) {
-    throw new Error('El Centro de Correcciones requiere una sesión autenticada del contador con identidad válida.');
+  if (!hasFullSystemAccess(actor) || !Number.isSafeInteger(Number(actor.id)) || Number(actor.id) <= 0 || !String(actor.username || '').trim()) {
+    throw new Error('El Centro de Correcciones requiere una sesión autenticada con identidad válida y rol contable.');
   }
 }
 function nextCorrectionEventAt(db, caseId) {

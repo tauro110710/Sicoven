@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
-const { migrateAuthUserRoles } = require('./auth-roles.cjs');
+const { migrateAuthUserRoles, hasFullSystemAccess } = require('./auth-roles.cjs');
 
 function makeLegacyDatabase() {
   const db = new Database(':memory:');
@@ -56,4 +56,12 @@ test('does not rebuild a database that already supports accountant users', () =>
   migrateAuthUserRoles(db);
   assert.equal(migrateAuthUserRoles(db), false);
   db.close();
+});
+
+
+test('administrator and accountant have identical full system access while unknown roles are denied', () => {
+  assert.equal(hasFullSystemAccess({ id: 1, username: 'admin', role: 'admin' }), true);
+  assert.equal(hasFullSystemAccess({ id: 2, username: 'contador', role: 'contador' }), true);
+  assert.equal(hasFullSystemAccess({ id: 3, username: 'viewer', role: 'viewer' }), false);
+  assert.equal(hasFullSystemAccess(null), false);
 });

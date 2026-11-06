@@ -47,7 +47,7 @@ if (!hasSingleInstanceLock) {
   });
 }
 
-const { migrateAuthUserRoles } = require('./auth-roles.cjs');
+const { migrateAuthUserRoles, hasFullSystemAccess } = require('./auth-roles.cjs');
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
 const { reconcileRestoreAudit } = require('./restore-audit-ledger.cjs');
 const { registerBackupIpc } = require('./backup-restore.cjs');
@@ -560,7 +560,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('sicoven:auth-list-admins', (_event, token) => {
     const actor = getActiveSession(token);
-    if (!actor || actor.role !== 'admin') return { ok: false, message: 'Permisos insuficientes o sesión no válida.' };
+    if (!hasFullSystemAccess(actor)) return { ok: false, message: 'Permisos insuficientes o sesión no válida.' };
     return {
       ok: true,
       admins: db.prepare('SELECT id,username,role,is_seed AS isSeed,created_at AS createdAt FROM auth_users ORDER BY id').all().map(u => ({ ...u, isSeed: Boolean(u.isSeed) }))
@@ -569,7 +569,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('sicoven:auth-create-admin', (_event, token, input) => {
     const actor = getActiveSession(token);
-    if (!actor || actor.role !== 'admin') return { ok: false, message: 'Permisos insuficientes o sesión no válida. Cierre sesión e ingrese nuevamente.' };
+    if (!hasFullSystemAccess(actor)) return { ok: false, message: 'Permisos insuficientes o sesión no válida. Cierre sesión e ingrese nuevamente.' };
     const rawUsername = String(input?.username || '').trim();
     const username = rawUsername.replace(/\s+/g, '_');
     const password = String(input?.password || '');
@@ -596,7 +596,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('sicoven:auth-delete-seed', (_event, token) => {
     const actor = getActiveSession(token);
-    if (!actor || actor.role !== 'admin') return { ok: false, message: 'Permisos insuficientes o sesión no válida.' };
+    if (!hasFullSystemAccess(actor)) return { ok: false, message: 'Permisos insuficientes o sesión no válida.' };
     const total = db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count;
     const seed = db.prepare('SELECT id FROM auth_users WHERE username=? AND is_seed=1').get('admin');
     if (total < 2 || !seed) return { ok: false, message: 'El administrador semilla solo puede eliminarse después de crear otro administrador.' };
@@ -632,7 +632,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('sicoven:audit-record-correction', (_event, token, input) => {
     const actor = getActiveSession(token);
-    if (!actor || actor.role !== 'contador') {
+    if (!hasFullSystemAccess(actor)) {
       return { ok: false, message: 'El Centro de Correcciones requiere una sesión autenticada del contador.' };
     }
     const eventType = String(input?.eventType || '');
@@ -698,7 +698,7 @@ app.whenReady().then(async () => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const actor = getActiveSession(token);
-    if (!actor || actor.role !== 'contador') throw new Error('El Centro de Correcciones requiere una sesión autenticada del contador.');
+    if (!hasFullSystemAccess(actor)) throw new Error('Se requiere una sesión autenticada para acceder al Centro de Correcciones.');
     return actor;
   };
   ipcMain.handle('sicoven:correction-case-create', (_event, token, input) => {
