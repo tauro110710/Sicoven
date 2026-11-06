@@ -95,7 +95,7 @@ jobs:
           if (-not $installer) {
             throw 'No se generó el instalador completo .exe de SICOVEN.'
           }
-          if (github.event_name -ne 'pull_request') {
+          if ($env:GITHUB_EVENT_NAME -ne 'pull_request') {
             $metadata = Join-Path $env:GITHUB_WORKSPACE 'release/latest.yml'
             if (-not (Test-Path $metadata -PathType Leaf)) {
               throw 'No se generó latest.yml; se cancela la publicación para evitar una actualización incompleta.'
@@ -181,10 +181,11 @@ jobs:
           if ($metadataFiles.Count -ne 1) {
             throw 'Debe existir exactamente un latest.yml para publicar.'
           }
-          $tag = if ($env:GITHUB_REF -eq 'refs/heads/main') {
-            "v$(node -p "require('./package.json').version")"
+          if ($env:GITHUB_REF -eq 'refs/heads/main') {
+            $version = node -p "require('./package.json').version"
+            $tag = "v$version"
           } else {
-            $env:REF_NAME
+            $tag = $env:REF_NAME
           }
           gh release view $tag --repo fenixlife1978/sicoven-descargas
           if ($LASTEXITCODE -ne 0) {
