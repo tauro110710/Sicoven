@@ -91,7 +91,8 @@ export function normalizeBankStatementRows(rows: BankStatementRawRow[], defaultC
     const rateDate=isoDate(pick(row,'bcvRateEffectiveDate'));
     const debitType=/^(DEBIT|DEBITO|D|DB|PAYMENT|WITHDRAWAL|CARGO|EGRESO|SALIDA|CHECK|FEE)$/.test(rawType);
     const creditType=/^(CREDIT|CREDITO|C|CR|DEPOSITO|ABONO|INGRESO|DIRECTDEP)$/.test(rawType);
-    if(rawType&&!debitType&&!creditType)errors.push('Naturaleza no reconocida; use Débito o Crédito.');
+    if(!rawType)errors.push('Falta la naturaleza del movimiento; indique Débito o Crédito.');
+    else if(!debitType&&!creditType)errors.push('Naturaleza no reconocida; use Débito o Crédito.');
     const type:BankMovementType=debitType||(!rawType&&rawAmount<0)?'DEBIT':'CREDIT';
     const amount=Math.abs(rawAmount);
     if(!validDate(date))errors.push('Fecha inválida.');
