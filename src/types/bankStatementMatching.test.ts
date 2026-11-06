@@ -41,6 +41,22 @@ test('verifies the bank reconciliation schedule balances in both Bs and USD', ()
   assert.equal(usdMismatch.isBalanced, false);
 });
 
+test('includes USD-only deposits and payments in transit when Bs is zero', () => {
+  const result = calculateBankReconciliationBalances({
+    bookMovements: [
+      { debitBs: 0, creditBs: 0, debitUsd: 5, creditUsd: 0, isReconciled: false },
+      { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 2, isReconciled: false }
+    ],
+    statementMovements: []
+  });
+  assert.equal(result.bookBalanceBs, 0);
+  assert.equal(result.bookBalanceUsd, 3);
+  assert.equal(result.adjustedBankBalanceUsd, 3);
+  assert.equal(result.adjustedBookBalanceUsd, 3);
+  assert.equal(result.differenceUsd, 0);
+  assert.equal(result.isBalanced, true);
+});
+
 test('matches Bs bank lines at cent precision and rejects fuzzy five-cent differences', () => {
   assert.equal(matchesBankStatementLine({
     currency: 'BS', movementType: 'DEBIT', statementAmount: 100.25, debit: 0, credit: 100.25
