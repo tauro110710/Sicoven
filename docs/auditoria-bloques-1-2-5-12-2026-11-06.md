@@ -11,8 +11,9 @@ Las marcas solo se colocan cuando la corrección está integrada en `main` y las
 - [x] Validación estructural de cuentas: códigos, padres, niveles y cuentas imputables.
 - [x] Aislamiento multiempresa del Libro Diario y Centro de Correcciones (PR #10 integrada; CI y Windows SUCCESS).
 - [x] Aislamiento multiempresa de Inventario, Kardex, herramientas y asistente de migración (PR #13 integrada; CI y Windows SUCCESS).
-- [ ] Protección contra duplicados al registrar movimientos de extractos bancarios (PR #15; CI SUCCESS, Windows en validación).
+- [x] Protección contra duplicados al registrar movimientos de extractos bancarios (PR #15 integrada en `main`, commit `40837c97d74fdb246085b6085b799d8154c0f27a`; CI y Windows SUCCESS).
 - [ ] Antigüedad de saldos CxC/CxP por tramos (PR #16; CI SUCCESS, Windows en validación).
+- [ ] Conciliación bancaria agregada en doble moneda (PR #18; CI y Windows en validación).
 - [ ] Importación de extractos bancarios con previsualización y confirmación.
 - [ ] Cierre integral de conciliación bancaria con extractos reales y prueba de persistencia tras reinicio.
 
@@ -116,9 +117,10 @@ Estado: **parcial / pendiente de auditoría normativa y de exportación**. No se
 
 ### Brechas confirmadas
 1. **Importación de extractos ausente:** la pantalla ofrece alta manual de movimiento («Nuevo Movimiento Extracto»); no se encontró selector de archivo ni parser TXT/CSV/Excel, plantillas configurables o vista previa de importación.
-2. **Duplicados al cargar extractos:** detectado en `addBankStatementMovement`; corrección candidata en PR #15 añade huella por cuenta, fecha, referencia normalizada, naturaleza e importes Bs./USD, con pruebas. CI run `42256479262`: SUCCESS; Windows run `42256479491`: pendiente. No se marca terminado hasta completar Windows y fusionar.
+2. **Duplicados al cargar extractos:** corregido e integrado mediante PR #15 en `main`, commit `40837c97d74fdb246085b6085b799d8154c0f27a`. La huella usa empresa/cuenta, fecha, referencia normalizada, naturaleza e importes Bs./USD; rechaza la segunda fila antes de persistir y conserva filas históricas. CI run `42256479262` y Windows run `42256479491`: SUCCESS. El importador de archivos sigue pendiente.
 3. **Flujo proyectado:** la tesorería muestra saldos y movimientos existentes; no se encontró en esta pasada una proyección de caja/bancos futura con vencimientos y escenarios.
-4. **Cierre de conciliación:** se observan operaciones de cotejo y exportación PDF; falta probar la secuencia completa con extracto real, saldos inicial/final, partidas pendientes, reanudación tras reinicio y persistencia de la cédula.
+4. **Cuadre agregado en doble moneda:** la vista y el PDF calculaban la cédula y el estado final solo en Bs., aunque el cotejo individual exigía Bs. y USD. Corrección candidata PR #18 calcula y compara ambos saldos, presenta valores USD históricos y agrega prueba donde Bs. cuadra pero USD no. CI y Windows pendientes.
+5. **Cierre de conciliación:** se observan operaciones de cotejo y exportación PDF; falta probar la secuencia completa con extracto real, saldos inicial/final, partidas pendientes, reanudación tras reinicio y persistencia de la cédula.
 
 Estado del Bloque 5: **parcial**. No se tacha ningún requisito del bloque ni se declara conciliación integral terminada. La próxima implementación focalizada debe ser importación repetible con huella de duplicidad, previsualización y confirmación antes de persistir; no debe alterar movimientos ya conciliados ni historial.
 
