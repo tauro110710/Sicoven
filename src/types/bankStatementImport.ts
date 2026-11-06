@@ -136,7 +136,7 @@ export function parseOfxBankStatement(source: string): { currency: BankStatement
 
 /** Reads the first worksheet; row one is the header row. */
 export async function parseBankStatementXlsx(buffer: ArrayBuffer): Promise<BankStatementRawRow[]> {
-  const ExcelJS = await import('exceljs');
+  const ExcelJS = (await import('exceljs')).default;
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer as never);
   const worksheet = workbook.worksheets[0];
