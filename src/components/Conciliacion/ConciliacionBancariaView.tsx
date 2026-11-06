@@ -450,7 +450,7 @@ export const ConciliacionBancariaView: React.FC = () => {
               {isReconciledBalanced ? (
                 <>
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Conciliación Cuadrada</span>
+                  <span>Conciliación cuadrada en Bs. y USD</span>
                 </>
               ) : (
                 <>
