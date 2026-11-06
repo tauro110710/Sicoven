@@ -43,6 +43,21 @@ test('recognizes US dollar notation as a USD currency label', () => {
   assert.deepEqual(row.errors,[]);
 });
 
+test('rejects missing transaction nature instead of inferring it from the amount sign', () => {
+  const rows=normalizeBankStatementRows([
+    {Fecha:'2026-11-06',Referencia:'NO-TYPE-1',Descripción:'Positive amount without type',Importe:'5,00',Moneda:'BS',Tasa_BCV:'10,00',Fecha_vigencia_BCV:'2026-11-06'},
+    {Fecha:'2026-11-06',Referencia:'NO-TYPE-2',Descripción:'Negative amount without type',Importe:'-5,00',Moneda:'BS',Tasa_BCV:'10,00',Fecha_vigencia_BCV:'2026-11-06'}
+  ],'BS');
+  assert.ok(rows.every(row=>row.errors.includes('Falta la naturaleza del movimiento; indique Débito o Crédito.')));
+});
+
+test('rejects unrecognized transaction nature', () => {
+  const [row]=normalizeBankStatementRows([
+    {Fecha:'2026-11-06',Referencia:'BAD-TYPE',Descripción:'Unknown movement',Tipo:'TRANSFER',Importe:'5,00',Moneda:'BS',Tasa_BCV:'10,00',Fecha_vigencia_BCV:'2026-11-06'}
+  ],'BS');
+  assert.ok(row.errors.some(error=>error.includes('Naturaleza no reconocida')));
+});
+
 test('recognizes accented debit and credit labels in Spanish bank files', () => {
   const rows=normalizeBankStatementRows([
     {Fecha:'2026-11-06',Referencia:'D-1',Descripción:'Cargo bancario',Tipo:'Débito',Importe:'5,00',Moneda:'BS',Tasa_BCV:'10,00',Fecha_vigencia_BCV:'2026-11-06'},
