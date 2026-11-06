@@ -121,14 +121,14 @@ test('approval requires independent reviewer, complete evidence, and exact appro
   const db = database();
   try {
     const series = makeSeries(db);
-    const created = createInflationSourceDossier(db, dossierInput(series.seriesId), accountant);
+    const created = createInflationSourceDossier(db, dossierInput(series.seriesId), admin);
     const base = { dossierId: created.dossierId, decision: 'APPROVED_FOR_DOCUMENTED_USE',
       reason: 'Se verificó la documentación, el alcance y la metodología para el uso indicado.',
       reviewerProfessionalName: 'Contador revisor', reviewerCredential: 'Credencial profesional verificada',
       approvedCompanyId: 'company-001', approvedFiscalYear: 2025, approvedPeriodFrom: '2025-01',
       approvedPeriodTo: '2025-02', approvedFramework: 'VEN_NIF_PYMES', approvedPurpose: 'REME_FINANCIAL_STATEMENTS' };
     assert.throws(() => reviewInflationSourceDossier(db, base, admin), /importador no puede revisar/);
-    const result = reviewInflationSourceDossier(db, base, reviewer);
+    const result = reviewInflationSourceDossier(db, base, accountant);
     assert.equal(result.decision, 'APPROVED_FOR_DOCUMENTED_USE');
     assert.throws(() => reviewInflationSourceDossier(db, base, reviewer), /ya tiene una decisión/);
     assert.equal(listInflationSourceDossiers(db)[0].status, 'APPROVED_FOR_DOCUMENTED_USE');
