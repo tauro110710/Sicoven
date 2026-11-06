@@ -176,7 +176,6 @@ export const InflationSourceDossierView: React.FC<{ token: string; userRole: str
     } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo registrar la revisión.'); }
     finally { setBusy(false); }
   };
-  if (userRole !== 'admin') return <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950">La creación y revisión de expedientes de fuentes alternativas requiere una sesión administradora. La consulta del expediente debe realizarse con autorización administrativa.</div>;
   const field = 'mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900';
   const label = 'block text-xs font-semibold text-slate-700';
   return <div className="space-y-5">
