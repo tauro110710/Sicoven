@@ -365,6 +365,11 @@ export const ConfiguracionView: React.FC = () => {
       newExchangeabilityAssessment = assessment;
     }
 
+    const legalIdentityChanged = rifValidation.formattedRif !== currentCompany.rif || name.trim().toUpperCase() !== currentCompany.name;
+    if (legalIdentityChanged && !window.confirm(
+      'RECTIFICACIÓN DE IDENTIDAD DE LA EMPRESA\\n\\nSe cambiará la razón social o el RIF de la empresa activa. El cambio quedará registrado en la auditoría con los valores anteriores y nuevos, el usuario y la fecha. Verifique que la rectificación corresponda a la misma entidad jurídica y cuente con soporte documental.\\n\\n¿Desea continuar?'
+    )) return;
+
     if (companySaveInFlightRef.current) return;
     companySaveInFlightRef.current = true;
     setCompanySaveBusy(true);
@@ -591,6 +596,7 @@ export const ConfiguracionView: React.FC = () => {
             <p className="text-xs text-slate-500">
               {currentCompany.name} ({currentCompany.rif})
             </p>
+            <p className="mt-1 max-w-3xl text-[11px] text-slate-600">Puede rectificar la razón social, RIF, nombre comercial y datos de contacto de esta empresa. Los cambios de identidad requieren confirmación y quedan registrados en la auditoría con los valores anteriores y nuevos.</p>
           </div>
           {saveSuccess && (
             <span className="flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-300">
@@ -719,6 +725,16 @@ export const ConfiguracionView: React.FC = () => {
             </div>
           </div>
 
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Nombre Comercial</label>
+            <input
+              type="text"
+              value={tradeName}
+              onChange={e => setTradeName(e.target.value)}
+              className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+            />
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Calificación SENIAT</label>
@@ -819,7 +835,7 @@ export const ConfiguracionView: React.FC = () => {
               className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 disabled:opacity-40 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
             >
               <Save className="w-4 h-4" />
-              {companySaveBusy ? "Confirmando SQLite..." : "Guardar Parámetros de Empresa"}
+              {companySaveBusy ? "Confirmando SQLite..." : "Guardar Datos y Parámetros de Empresa"}
             </button>
           </div>
         </form>
