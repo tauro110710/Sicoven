@@ -26,6 +26,7 @@ import { NewBankMovementModal } from './NewBankMovementModal';
 import { BankStatementMovement } from '../../types/accounting';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportConciliacionPdf } from '../../utils/pdfGenerator';
+import { calculateBankReconciliationBalances } from '../../types/bankStatementMatching';
 
 export const ConciliacionBancariaView: React.FC = () => {
   const {
@@ -138,51 +139,29 @@ export const ConciliacionBancariaView: React.FC = () => {
     .filter(m => m.companyId === currentCompany.id && m.bankAccountId === activeBank.id && m.date <= cutoffDate)
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  // Calculations for Conciliation
-  // Saldo según Libros (Debe - Haber)
-  const totalBookDebitsBs = bookMovements.reduce((sum, m) => sum + m.debitBs, 0);
-  const totalBookCreditsBs = bookMovements.reduce((sum, m) => sum + m.creditBs, 0);
-  const bookBalanceBs = totalBookDebitsBs - totalBookCreditsBs;
-
-  // Saldo según Extracto Bancario (Créditos - Débitos)
-  const totalBankCreditsBs = statementMovements.reduce(
-    (sum, m) => sum + (m.type === 'CREDIT' ? m.amountBs : 0),
-    0
-  );
-  const totalBankDebitsBs = statementMovements.reduce(
-    (sum, m) => sum + (m.type === 'DEBIT' ? m.amountBs : 0),
-    0
-  );
-  const bankStatementBalanceBs = totalBankCreditsBs - totalBankDebitsBs;
-
-  // Partidas en tránsito y pendientes
-  // A. Depósitos en tránsito: Cargos en libros (Debe > 0) que NO están conciliados en el extracto bancario
+  // Cotejo y cédula: se calculan y validan los saldos en ambas monedas.
   const depositsInTransit = bookMovements.filter(m => !m.isReconciled && m.debitBs > 0);
   const totalDepositsInTransitBs = depositsInTransit.reduce((sum, m) => sum + m.debitBs, 0);
+  const totalDepositsInTransitUsd = depositsInTransit.reduce((sum, m) => sum + m.debitUsd, 0);
 
-  // B. Cheques y transferencias en tránsito: Abonos en libros (Haber > 0) que NO han sido cobrados en banco
   const checksInTransit = bookMovements.filter(m => !m.isReconciled && m.creditBs > 0);
   const totalChecksInTransitBs = checksInTransit.reduce((sum, m) => sum + m.creditBs, 0);
+  const totalChecksInTransitUsd = checksInTransit.reduce((sum, m) => sum + m.creditUsd, 0);
 
-  // C. Notas de Débito del banco no registradas en libros (comisiones, IGTF, etc.)
   const bankDebitsNotInBooks = statementMovements.filter(m => !m.isReconciled && m.type === 'DEBIT');
   const totalBankDebitsNotInBooksBs = bankDebitsNotInBooks.reduce((sum, m) => sum + m.amountBs, 0);
+  const totalBankDebitsNotInBooksUsd = bankDebitsNotInBooks.reduce((sum, m) => sum + m.amountUsd, 0);
 
-  // D. Notas de Crédito del banco no registradas en libros (intereses ganados, abonos directos)
   const bankCreditsNotInBooks = statementMovements.filter(m => !m.isReconciled && m.type === 'CREDIT');
   const totalBankCreditsNotInBooksBs = bankCreditsNotInBooks.reduce((sum, m) => sum + m.amountBs, 0);
+  const totalBankCreditsNotInBooksUsd = bankCreditsNotInBooks.reduce((sum, m) => sum + m.amountUsd, 0);
 
-  // Cédula: Saldos ajustados
-  // Saldo Bancario Ajustado = Saldo Banco + Depósitos en Tránsito - Cheques en Tránsito
-  const adjustedBankBalanceBs =
-    bankStatementBalanceBs + totalDepositsInTransitBs - totalChecksInTransitBs;
-
-  // Saldo en Libros Ajustado = Saldo Libros + Notas de Crédito Banco - Notas de Débito Banco
-  const adjustedBookBalanceBs =
-    bookBalanceBs + totalBankCreditsNotInBooksBs - totalBankDebitsNotInBooksBs;
-
-  const differenceBs = Math.abs(adjustedBankBalanceBs - adjustedBookBalanceBs);
-  const isReconciledBalanced = differenceBs < 0.05;
+  const reconciliationBalances = calculateBankReconciliationBalances({ bookMovements, statementMovements });
+  const {
+    bookBalanceBs, bankStatementBalanceBs, adjustedBankBalanceBs, adjustedBookBalanceBs, differenceBs,
+    bookBalanceUsd, bankStatementBalanceUsd, adjustedBankBalanceUsd, adjustedBookBalanceUsd, differenceUsd
+  } = reconciliationBalances;
+  const isReconciledBalanced = reconciliationBalances.isBalanced;
 
   // Todas las modificaciones de conciliación esperan confirmación SQLite.
   const runReconciliationWrite = async (action: () => void) => {
@@ -258,14 +237,19 @@ export const ConciliacionBancariaView: React.FC = () => {
         cutoffDate,
         {
           bankStatementBalanceBs,
+          bankStatementBalanceUsd,
           depositsInTransit,
           checksInTransit,
           adjustedBankBalanceBs,
+          adjustedBankBalanceUsd,
           bookBalanceBs,
+          bookBalanceUsd,
           bankCreditsNotInBooks,
           bankDebitsNotInBooks,
           adjustedBookBalanceBs,
-          differenceBs
+          adjustedBookBalanceUsd,
+          differenceBs,
+          differenceUsd
         }
       );
     } catch (err) {
@@ -313,7 +297,7 @@ export const ConciliacionBancariaView: React.FC = () => {
             <span>Cuenta: <strong className="text-slate-900">{activeBank.bankName}</strong> ({activeBank.accountNumber})</span>
             <span>•</span>
             <span className={isReconciledBalanced ? 'text-emerald-700 font-medium' : 'text-amber-700 font-medium'}>
-              {isReconciledBalanced ? 'Conciliación Cuadrada (Diferencia: Bs. 0,00)' : `Diferencia: ${formatBs(differenceBs)}`}
+              {isReconciledBalanced ? 'Conciliación cuadrada en Bs. y USD' : `Diferencia: ${formatBs(differenceBs)} · ${formatUsd(differenceUsd)}`}
             </span>
           </div>
 
@@ -421,6 +405,7 @@ export const ConciliacionBancariaView: React.FC = () => {
             </span>
             <div className="text-base font-bold font-mono text-slate-900 mt-1">
               {formatBs(bookBalanceBs)}
+            <div className="text-xs text-slate-500">{formatUsd(bookBalanceUsd)}</div>
             </div>
             <div className="text-[10px] font-mono text-slate-500">
               Cuenta: {activeBank.accountCode}
@@ -433,6 +418,7 @@ export const ConciliacionBancariaView: React.FC = () => {
             </span>
             <div className="text-base font-bold font-mono text-slate-900 mt-1">
               {formatBs(bankStatementBalanceBs)}
+            <div className="text-xs text-slate-500">{formatUsd(bankStatementBalanceUsd)}</div>
             </div>
             <div className="text-[10px] font-mono text-slate-500">
               {statementMovements.length} movimientos
@@ -445,6 +431,7 @@ export const ConciliacionBancariaView: React.FC = () => {
             </span>
             <div className="text-base font-bold font-mono text-emerald-700 mt-1">
               {formatBs(adjustedBankBalanceBs)}
+            <div className="text-xs text-slate-500">{formatUsd(adjustedBankBalanceUsd)}</div>
             </div>
             <div className="text-[10px] font-mono text-slate-500">
               Con partidas en tránsito
@@ -468,7 +455,7 @@ export const ConciliacionBancariaView: React.FC = () => {
               ) : (
                 <>
                   <AlertCircle className="w-4 h-4 text-rose-600" />
-                  <span>Diferencia: {formatBs(differenceBs)}</span>
+                  <span>Diferencia: {formatBs(differenceBs)} · {formatUsd(differenceUsd)}</span>
                 </>
               )}
             </div>
@@ -557,7 +544,7 @@ export const ConciliacionBancariaView: React.FC = () => {
                 </div>
                 <div className="text-right font-mono-nums">
                   <span className="text-[10px] text-slate-400 uppercase block">Saldo en Libros</span>
-                  <span className="font-bold text-emerald-400 text-xs">{formatBs(bookBalanceBs)}</span>
+                  <span className="font-bold text-emerald-400 text-xs">{formatBs(bookBalanceBs)} · {formatUsd(bookBalanceUsd)}</span>
                 </div>
               </div>
 
@@ -655,7 +642,7 @@ export const ConciliacionBancariaView: React.FC = () => {
                 </div>
                 <div className="text-right font-mono-nums">
                   <span className="text-[10px] text-slate-400 uppercase block">Saldo Extracto</span>
-                  <span className="font-bold text-sky-400 text-xs">{formatBs(bankStatementBalanceBs)}</span>
+                  <span className="font-bold text-sky-400 text-xs">{formatBs(bankStatementBalanceBs)} · {formatUsd(bankStatementBalanceUsd)}</span>
                 </div>
               </div>
 
@@ -792,7 +779,7 @@ export const ConciliacionBancariaView: React.FC = () => {
               BANCO: {activeBank.bankName} • CUENTA N°: {activeBank.accountNumber} • CUENTA CONTABLE: {activeBank.accountCode}
             </p>
             <p className="text-[11px] text-slate-600 font-mono">
-              Al {formatDate(cutoffDate)} • Expresado en Bolívares (Bs.) y referencia en Dólares ($ USD)
+              Al {formatDate(cutoffDate)} • Valores contables históricos en Bs. y USD
             </p>
           </div>
 
@@ -808,7 +795,7 @@ export const ConciliacionBancariaView: React.FC = () => {
             <div className="p-3 border-b border-slate-200">
               <div className="font-bold text-slate-800 flex justify-between">
                 <span>(+) DEPÓSITOS EN TRÁNSITO (Registrados en libros, no acreditados por el banco):</span>
-                <span className="font-mono">{formatBs(totalDepositsInTransitBs)}</span>
+                <span className="font-mono">{formatBs(totalDepositsInTransitBs)} · {formatUsd(totalDepositsInTransitUsd)}</span>
               </div>
               {depositsInTransit.length === 0 ? (
                 <div className="text-[11px] text-slate-400 pl-4 py-1 italic">Sin depósitos en tránsito</div>
@@ -817,7 +804,7 @@ export const ConciliacionBancariaView: React.FC = () => {
                   {depositsInTransit.map((d, i) => (
                     <div key={i} className="flex justify-between text-[11px] text-slate-600">
                       <span>• {formatDate(d.date)} - {d.description} {d.referenceDoc ? `(Ref: ${d.referenceDoc})` : ''}</span>
-                      <span className="font-mono">{formatBs(d.debitBs)}</span>
+                      <span className="font-mono">{formatBs(d.debitBs)} · {formatUsd(d.debitUsd)}</span>
                     </div>
                   ))}
                 </div>
@@ -828,7 +815,7 @@ export const ConciliacionBancariaView: React.FC = () => {
             <div className="p-3 border-b border-black">
               <div className="font-bold text-slate-800 flex justify-between">
                 <span>(-) CHEQUES Y TRANSFERENCIAS PENDIENTES DE COBRO (Emitidos en libros, no cargados en banco):</span>
-                <span className="font-mono">-{formatBs(totalChecksInTransitBs)}</span>
+                <span className="font-mono">-{formatBs(totalChecksInTransitBs)} · -{formatUsd(totalChecksInTransitUsd)}</span>
               </div>
               {checksInTransit.length === 0 ? (
                 <div className="text-[11px] text-slate-400 pl-4 py-1 italic">Sin cheques o transferencias pendientes</div>
@@ -837,7 +824,7 @@ export const ConciliacionBancariaView: React.FC = () => {
                   {checksInTransit.map((c, i) => (
                     <div key={i} className="flex justify-between text-[11px] text-slate-600">
                       <span>• {formatDate(c.date)} - {c.description} {c.referenceDoc ? `(Ref: ${c.referenceDoc})` : ''}</span>
-                      <span className="font-mono">-{formatBs(c.creditBs)}</span>
+                      <span className="font-mono">-{formatBs(c.creditBs)} · -{formatUsd(c.creditUsd)}</span>
                     </div>
                   ))}
                 </div>
@@ -847,7 +834,7 @@ export const ConciliacionBancariaView: React.FC = () => {
             {/* (=) Saldo Bancario Ajustado */}
             <div className="p-3 bg-emerald-50 border-b-2 border-black font-black flex justify-between items-center text-emerald-950">
               <span>(=) SALDO BANCARIO AJUSTADO:</span>
-              <span className="font-mono text-sm">{formatBs(adjustedBankBalanceBs)}</span>
+              <span className="font-mono text-sm">{formatBs(adjustedBankBalanceBs)} · {formatUsd(adjustedBankBalanceUsd)}</span>
             </div>
 
             {/* PART 2: SALDO SEGÚN LIBROS CONTABLES */}
@@ -860,7 +847,7 @@ export const ConciliacionBancariaView: React.FC = () => {
             <div className="p-3 border-b border-slate-200">
               <div className="font-bold text-slate-800 flex justify-between">
                 <span>(+) NOTAS DE CRÉDITO BANCARIAS (Abonos en banco no registrados en contabilidad):</span>
-                <span className="font-mono">{formatBs(totalBankCreditsNotInBooksBs)}</span>
+                <span className="font-mono">{formatBs(totalBankCreditsNotInBooksBs)} · {formatUsd(totalBankCreditsNotInBooksUsd)}</span>
               </div>
               {bankCreditsNotInBooks.length === 0 ? (
                 <div className="text-[11px] text-slate-400 pl-4 py-1 italic">Sin notas de crédito pendientes</div>
@@ -869,7 +856,7 @@ export const ConciliacionBancariaView: React.FC = () => {
                   {bankCreditsNotInBooks.map((nc, i) => (
                     <div key={i} className="flex justify-between text-[11px] text-slate-600">
                       <span>• {formatDate(nc.date)} - {nc.description} (Ref: {nc.reference})</span>
-                      <span className="font-mono">+{formatBs(nc.amountBs)}</span>
+                      <span className="font-mono">+{formatBs(nc.amountBs)} · +{formatUsd(nc.amountUsd)}</span>
                     </div>
                   ))}
                 </div>
@@ -880,7 +867,7 @@ export const ConciliacionBancariaView: React.FC = () => {
             <div className="p-3 border-b border-black">
               <div className="font-bold text-slate-800 flex justify-between">
                 <span>(-) NOTAS DE DÉBITO BANCARIAS (Cargos por comisiones, mantenimiento, IGTF no contabilizados):</span>
-                <span className="font-mono">-{formatBs(totalBankDebitsNotInBooksBs)}</span>
+                <span className="font-mono">-{formatBs(totalBankDebitsNotInBooksBs)} · -{formatUsd(totalBankDebitsNotInBooksUsd)}</span>
               </div>
               {bankDebitsNotInBooks.length === 0 ? (
                 <div className="text-[11px] text-slate-400 pl-4 py-1 italic">Sin notas de débito pendientes</div>
@@ -889,7 +876,7 @@ export const ConciliacionBancariaView: React.FC = () => {
                   {bankDebitsNotInBooks.map((nd, i) => (
                     <div key={i} className="flex justify-between text-[11px] text-slate-600">
                       <span>• {formatDate(nd.date)} - {nd.description} (Ref: {nd.reference})</span>
-                      <span className="font-mono">-{formatBs(nd.amountBs)}</span>
+                      <span className="font-mono">-{formatBs(nd.amountBs)} · -{formatUsd(nd.amountUsd)}</span>
                     </div>
                   ))}
                 </div>
@@ -899,7 +886,7 @@ export const ConciliacionBancariaView: React.FC = () => {
             {/* (=) Saldo en Libros Ajustado */}
             <div className="p-3 bg-emerald-50 border-b border-black font-black flex justify-between items-center text-emerald-950">
               <span>(=) SALDO EN LIBROS AJUSTADO:</span>
-              <span className="font-mono text-sm">{formatBs(adjustedBookBalanceBs)}</span>
+              <span className="font-mono text-sm">{formatBs(adjustedBookBalanceBs)} · {formatUsd(adjustedBookBalanceUsd)}</span>
             </div>
 
             {/* Verificación de Cuadre */}
@@ -913,11 +900,11 @@ export const ConciliacionBancariaView: React.FC = () => {
                 <span>
                   {isReconciledBalanced
                     ? 'ESTADO: CONCILIACIÓN BANCARIA EXACTA Y CUADRADA'
-                    : `ESTADO: DESCUADRE DE BS. ${formatBs(differenceBs)}`}
+                    : `ESTADO: DESCUADRE Bs. ${formatBs(differenceBs)} · USD ${formatUsd(differenceUsd)}`}
                 </span>
               </div>
               <div className="text-right font-mono text-xs">
-                Equivalente BCV: {formatUsd(adjustedBankBalanceBs / (currentCompany.bcvRate || 1))}
+                Diferencia: {formatBs(differenceBs)} · {formatUsd(differenceUsd)}
               </div>
             </div>
           </div>
