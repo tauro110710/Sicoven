@@ -11,7 +11,7 @@ const BUCKETS: { key: CreditDueAlertKey; label: string }[] = [
   { key: 'OVERDUE', label: 'Vencidos' },
   { key: 'DUE_TODAY', label: 'Vencen hoy' },
   { key: 'DUE_1_7', label: 'Próximos 7 días' },
-  { key: 'DUE_8_30', label: 'Vencimiento por revisar' },
+  { key: 'DUE_8_30', label: 'Próximos 8–30 días' },
   { key: 'INVALID_DUE_DATE', label: 'Fecha no válida' }
 ];
 
