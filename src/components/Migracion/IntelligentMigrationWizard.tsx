@@ -67,6 +67,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  const [backupPayload,setBackupPayload]=useState<string|null>(null);
  const [backupCounts,setBackupCounts]=useState<Record<string,number>|null>(null);
  const [posvenBackup,setPosvenBackup]=useState(false);
+ const [nativeBackup,setNativeBackup]=useState(false);
  const [posvenInventorySummary,setPosvenInventorySummary]=useState<{sourceCount:number;importedCount:number;inactiveCount:number;kitCount:number;openingDate:string;openingBcvRate:number}|null>(null);
  const [posvenQuality,setPosvenQuality]=useState({collections:0,objectRows:0,invalidRows:0,emptyCollections:0});
  const [activeCollection,setActiveCollection]=useState('');
@@ -207,7 +208,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   return detected;
  },[rows]);
  const readFiles=async(list:File[])=>{
-  setError('');setNotice('');setRows([]);setHeaders([]);setSelected([]);setConfirmed(false);setBackupPayload(null);setBackupCounts(null);setPosvenBackup(false);setPosvenInventorySummary(null);setPosvenQuality({collections:0,objectRows:0,invalidRows:0,emptyCollections:0});setActiveCollection('');setSelectedCollections([]);setSelectedInventoryIndexes([]);setSelectedRecordIndexes({});setFiles(list);
+  setError('');setNotice('');setRows([]);setHeaders([]);setSelected([]);setConfirmed(false);setBackupPayload(null);setBackupCounts(null);setPosvenBackup(false);setNativeBackup(false);setPosvenInventorySummary(null);setPosvenQuality({collections:0,objectRows:0,invalidRows:0,emptyCollections:0});setActiveCollection('');setSelectedCollections([]);setSelectedInventoryIndexes([]);setSelectedRecordIndexes({});setFiles(list);
   if(!list.length)return;
   try{
    if(list.length===1 && list[0].name.toLowerCase().endsWith('.json')){
@@ -236,7 +237,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      if(!(data as Record<string,unknown>).companies || ((data as {companies:unknown[]}).companies.length===0)) throw new Error('El respaldo no contiene empresas. No se modificó la información actual.');
      setBackupPayload(raw);
      setBackupCounts(Object.fromEntries(collections.map(key=>[key,((data as Record<string,unknown>)[key] as unknown[]).length])));
-     setPosvenBackup(true);
+     setPosvenBackup(true);setNativeBackup(true);
      setPosvenQuality({collections:collections.length,objectRows:collections.reduce((sum,key)=>sum+((data as Record<string,unknown>)[key] as unknown[]).filter(value=>!!value&&typeof value==='object'&&!Array.isArray(value)).length,0),invalidRows:0,emptyCollections:collections.filter(key=>((data as Record<string,unknown>)[key] as unknown[]).length===0).length});
      setSelectedCollections([]);
      setNotice('Respaldo SICOVEN analizado en modo de selección. La restauración completa sigue separada; no se modificó la base de datos.');
@@ -307,7 +308,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  const runBackupImport=async()=>{
   setError('');setNotice('');
   if(!backupPayload){setError('No hay un respaldo válido seleccionado.');return;}
-  if(posvenBackup){setError('La selección por colecciones no restaura ni reemplaza el respaldo completo. Elige un módulo con adaptador compatible para importar solo esos registros.');return;}
+  if(posvenBackup&&!nativeBackup){setError('La selección por colecciones no restaura ni reemplaza el respaldo completo. Elige un módulo con adaptador compatible para importar solo esos registros.');return;}
   if(!confirmed){setError('Confirma que deseas reemplazar los datos actuales por el contenido del respaldo.');return;}
   setBusy(true);
   try{
@@ -538,9 +539,9 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"><div className="mb-1 flex items-center gap-2 font-semibold"><ShieldCheck size={17}/> Controles de seguridad</div>Se rechazan códigos duplicados y campos numéricos inválidos; no se sobrescriben artículos existentes. Ventas, compras, plan de cuentas y asientos disponen de importadores con validaciones contables específicas. CxC y CxP se derivan de facturas de crédito; clientes y proveedores no se importan como maestros separados porque el modelo actual los conserva dentro de sus documentos. Revisa la vista previa y confirma antes de importar.</div>
     {error&&<div role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800"><AlertTriangle className="mr-2 inline" size={17}/>{error}</div>}
     {notice&&<div role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 className="mr-2 inline" size={17}/>{notice}</div>}
-    {(rows.length>0||(backupPayload&&!posvenBackup))&&<label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} className="mt-1"/><span>{backupPayload?'Confirmo que revisé el respaldo y autorizo reemplazar los datos actuales por los contenidos en este archivo.':'Confirmo que revisé los archivos y la vista previa, y autorizo la importación del módulo seleccionado. Entiendo que los códigos existentes no serán sobrescritos.'}</span></label>}
+    {(rows.length>0||(backupPayload&&nativeBackup))&&<label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} className="mt-1"/><span>{nativeBackup?'Confirmo expresamente que deseo reemplazar todos los datos actuales de SICOVEN con este respaldo nativo completo.':'Confirmo que revisé los archivos y la vista previa, y autorizo la importación del módulo seleccionado. Entiendo que los códigos existentes no serán sobrescritos.'}</span></label>}
    </div>
-   <footer className="flex flex-wrap justify-between gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Cerrar</button><button disabled={busy||posvenBackup||(!backupPayload&&(!rows.length||!confirmed||selected.length<1||!['inventory','accounts','journal','sales','purchases'].includes(selected[0])))||(!!backupPayload&&!confirmed)} onClick={backupPayload&&!posvenBackup?runBackupImport:runMigration} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy?'Validando e importando…':posvenBackup?'Adaptador contable pendiente':backupPayload?'Restaurar respaldo completo':'Importar siguiente módulo'}</button></footer>
+   <footer className="flex flex-wrap justify-between gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Cerrar</button><button disabled={busy||posvenBackup||(!backupPayload&&(!rows.length||!confirmed||selected.length<1||!['inventory','accounts','journal','sales','purchases'].includes(selected[0])))||(!!backupPayload&&!confirmed)} onClick={backupPayload&&!posvenBackup?runBackupImport:runMigration} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy?'Validando e importando…':posvenBackup?'Adaptador contable pendiente':backupPayload?'Restaurar respaldo completo':'Importar siguiente módulo'}</button>{nativeBackup&&<button disabled={busy||!confirmed} onClick={runBackupImport} className="rounded-lg border border-amber-400 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 disabled:opacity-50">Restaurar respaldo completo (reemplaza datos)</button>}</footer>
   </div>
  </div>;
 };
