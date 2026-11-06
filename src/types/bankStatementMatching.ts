@@ -85,7 +85,7 @@ export function isDuplicateBankStatementMovement(input: {
   existing: Pick<BankStatementMovement, 'bankAccountId' | 'date' | 'reference' | 'type' | 'amountBs' | 'amountUsd'>[];
   candidate: Pick<BankStatementMovement, 'bankAccountId' | 'date' | 'reference' | 'type' | 'amountBs' | 'amountUsd'>;
 }): boolean {
-  const normalizeReference = (value: string) => String(value || '').trim().replace(/\\s+/g, ' ').toUpperCase();
+  const normalizeReference = (value: string) => String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
   const candidateReference = normalizeReference(input.candidate.reference);
   if (!candidateReference) return false;
   return input.existing.some(row =>
