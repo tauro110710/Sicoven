@@ -35,7 +35,7 @@ test('normalizes both Venezuelan and US thousands/decimal separators', () => {
 
 test('recognizes US dollar notation as a USD currency label', () => {
   const [row]=normalizeBankStatementRows([
-    {Fecha:'2026-11-06',Referencia:'USD-1',Descripción:'US dollar deposit',Tipo:'Crédito',Importe:'12.50',Moneda:'US dollars',Tasa_BCV:'10.00',Fecha_vigencia_BCV:'2026-11-06'}
+    {Fecha:'2026-11-06',Referencia:'USD-1',Descripción:'US dollar deposit',Tipo:'Crédito',Importe:'12.50',Moneda:'US',Tasa_BCV:'10.00',Fecha_vigencia_BCV:'2026-11-06'}
   ],'BS');
   assert.equal(row.currency,'USD');
   assert.equal(row.amountUsd,12.5);
