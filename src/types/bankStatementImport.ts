@@ -76,7 +76,7 @@ export function parseBankStatementCsv(source: string): BankStatementRawRow[] {
 
 /** TXT delimitado: admite tabulador, punto y coma, barra vertical o coma, con encabezados. */
 export function parseBankStatementTxt(source: string): BankStatementRawRow[] {
-  return parseBankStatementCsv(source.replace(/^\\uFEFF/, ''));
+  return parseBankStatementCsv(source.replace(/^\uFEFF/, ''));
 }
 
 export function normalizeBankStatementRows(rows: BankStatementRawRow[], defaultCurrency: BankStatementCurrency): BankStatementImportCandidate[] {
