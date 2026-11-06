@@ -380,6 +380,31 @@ app.whenReady().then(async () => {
     return;
   }
 
+  ipcMain.handle('sicoven:pdf-save', async (event, input) => {
+    const senderUrl = event.sender.getURL();
+    if (!senderUrl.startsWith('file://') && !senderUrl.startsWith('http://localhost:') && !senderUrl.startsWith('http://127.0.0.1:')) {
+      throw new Error('Origen no autorizado para guardar documentos.');
+    }
+    const fileName = path.basename(String(input?.fileName || 'SICOVEN.pdf')).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const encoded = String(input?.base64 || '');
+    if (!encoded || encoded.length > 70 * 1024 * 1024 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+      throw new Error('El contenido PDF está vacío o excede el tamaño permitido.');
+    }
+    const buffer = Buffer.from(encoded, 'base64');
+    if (buffer.length < 8 || buffer.length > 50 * 1024 * 1024 || buffer.subarray(0, 5).toString('ascii') !== '%PDF-') {
+      throw new Error('El documento generado no tiene una estructura PDF válida.');
+    }
+    const result = await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender), {
+      title: 'Guardar PDF oficial de SICOVEN',
+      defaultPath: path.join(app.getPath('documents'), fileName),
+      filters: [{ name: 'Documento PDF', extensions: ['pdf'] }]
+    });
+    if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+    await fs.promises.writeFile(result.filePath, buffer, { flag: 'wx' });
+    shell.showItemInFolder(result.filePath);
+    return { ok: true, filePath: result.filePath, bytes: buffer.length };
+  });
+
   ipcMain.handle('sicoven:improvement-consent:get', () => {
     const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='improvement_consent'").get();
     if (!row) return { decision: null, decidedAt: null };
