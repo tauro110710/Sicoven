@@ -101,8 +101,9 @@ jobs:
               throw 'No se generó latest.yml; se cancela la publicación para evitar una actualización incompleta.'
             }
             $metadataText = Get-Content -Raw $metadata
-            if ($metadataText -notmatch '(?m)^version:\s*1\.0\.15\s*$') {
-              throw 'latest.yml no corresponde a la versión 1.0.15 esperada.'
+            $expectedVersion = node -p "require('./package.json').version"
+            if ($metadataText -notmatch "(?m)^version:\s*$([regex]::Escape($expectedVersion))\s*$") {
+              throw "latest.yml no corresponde a la versión $expectedVersion esperada."
             }
             if ($metadataText -notmatch '(?m)^sha512:\s*\S+') {
               throw 'latest.yml no contiene el SHA-512 del instalador.'
