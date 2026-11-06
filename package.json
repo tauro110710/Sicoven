@@ -96,5 +96,6 @@
         "releaseType": "release"
       }
     ]
-  }
+  },
+  "description": "SICOVEN - Sistema Integrado de Control y Operaciones para Windows."
 }
