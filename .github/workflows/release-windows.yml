@@ -224,13 +224,19 @@ jobs:
         shell: pwsh
         run: |
           $files = @(Get-ChildItem -Path release -Filter '*.exe' -File)
-          if (-not $files) {
+          if ($files.Count -eq 0) {
             throw 'No hay instaladores para generar checksums.'
           }
-          'SHA256  Archivo' | Out-File -FilePath checksums-sha256.txt -Encoding utf8
+          $lines = @('SHA256  Archivo')
           foreach ($file in $files) {
-            $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLower()
-            "$hash  $($file.Name)" | Out-File -FilePath checksums-sha256.txt -Append -Encoding utf8
+            $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            $lines += ('{0}  {1}' -f $hash, $file.Name)
+          }
+          $outputPath = Join-Path $env:GITHUB_WORKSPACE 'checksums-sha256.txt'
+          [IO.File]::WriteAllLines($outputPath, [string[]]$lines, [Text.UTF8Encoding]::new($false))
+          if (-not (Test-Path $outputPath -PathType Leaf)) {
+            throw 'No se pudo crear el archivo de checksums.'
+          }
 
       - name: Upload installer checksums
         if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || github.event_name == 'pull_request'
