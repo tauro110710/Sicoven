@@ -61,7 +61,7 @@ test('rejects an unknown currency instead of treating it as bolívares', () => {
 });
 
 test('reads the first Excel worksheet and normalizes real date cells', async () => {
-  const ExcelJS = await import('exceljs');
+  const ExcelJS = (await import('exceljs')).default;
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Extracto');
   sheet.addRow(['Fecha','Referencia','Descripción','Tipo','Importe','Moneda','Tasa BCV','Fecha vigencia BCV']);
