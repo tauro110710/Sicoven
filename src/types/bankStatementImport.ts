@@ -25,8 +25,8 @@ const aliases: Record<string,string[]> = {
   type:['tipo','type','naturaleza','debit_credit','trntype'],
   amount:['monto','amount','importe','valor','transaction_amount'],
   currency:['moneda','currency','divisa','curdef'],
-  bcvRate:['tasa_bcv','bcv_rate','tasa','exchange_rate'],
-  bcvRateEffectiveDate:['fecha_vigencia_bcv','bcv_rate_date','exchange_rate_date','fecha_tasa']
+  bcvRate:['tasa_bcv','bcv_rate','tasa','exchange_rate','bcvrate'],
+  bcvRateEffectiveDate:['fecha_vigencia_bcv','bcv_rate_date','exchange_rate_date','fecha_tasa','bcvrate_effective_date']
 };
 const pick = (row: BankStatementRawRow, field: string): unknown => {
   const entries = Object.entries(row);
