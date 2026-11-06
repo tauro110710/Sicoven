@@ -7,3 +7,4 @@ test('rechaza formato y colección incompatible',()=>{assert.throws(()=>mapPosve
 test('rechaza importación parcial ante costo inválido',()=>{const b=makeBackup();b.data.productos[0].costoUSD=0;assert.throws(()=>mapPosvenV3Inventory(b),/costoUSD/);});
 test('rechaza códigos duplicados activos',()=>{const b=makeBackup();b.data.productos.push({...b.data.productos[0]});assert.throws(()=>mapPosvenV3Inventory(b),/está duplicado/);});
 test('no incorpora kits ni productos inactivos como mercancía',()=>{assert.deepEqual(mapPosvenV3Inventory(makeBackup()).rows.map(x=>x.code),['A1']);});
+test('acepta costo y precios cero cuando el artículo no tiene existencias',()=>{const b=makeBackup();b.data.productos[0].stock=0;b.data.productos[0].costoUSD=0;b.data.productos[0].precioUSD=0;b.data.productos[0].precioBS=0;const r=mapPosvenV3Inventory(b);assert.equal(r.rows[0].currentStock,0);assert.equal(r.rows[0].avgCostBs,0);assert.equal(r.rows[0].salesPriceBs,0);});
