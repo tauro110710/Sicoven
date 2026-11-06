@@ -271,7 +271,18 @@ jobs:
           if (-not ($assetNames -contains 'latest.yml')) {
             throw 'La Release no contiene latest.yml después de la carga.'
           }
-          if (-not ($assetNames | Where-Object { $_ -match '\.exe
+          if (-not ($assetNames | Where-Object { $_ -match '\.exe$' })) {
+            throw 'La Release no contiene el instalador .exe después de la carga.'
+          }
+          gh release edit $tag --draft=false --repo $releaseRepo
+          if ($LASTEXITCODE -ne 0) {
+            throw "Los archivos se cargaron, pero no se pudo publicar la Release $tag."
+          }
+          $releaseState = gh release view $tag --repo $releaseRepo --json isDraft --jq '.isDraft'
+          if ($LASTEXITCODE -ne 0 -or $releaseState -ne 'false') {
+            throw "No se pudo confirmar que la Release $tag quedó publicada."
+          }
+          Write-Host "Release $tag publicada y verificada con instalador y latest.yml."
 
       - name: Upload complete edition installer artifact
         if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || github.event_name == 'pull_request'
