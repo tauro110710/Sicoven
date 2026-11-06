@@ -56,6 +56,17 @@ testCase('calculates availability in the bank account currency, including USD le
   }), 7.876544);
 });
 
+testCase('calculates both Bs and USD book balances for a USD-denominated bank account', () => {
+  const usdBank = { ...bank, currency: 'USD' as const, initialBalanceBs: 1000, initialBalanceUsd: 10 };
+  const movement = entry({
+    companyId: 'company-a', date: '2026-11-02',
+    items: [{ accountCode: bank.accountCode, accountName: 'Banco', debitBs: 0, creditBs: 250, debitUsd: 0, creditUsd: 1.25 }]
+  });
+  const input = { bankAccount: usdBank, companyId: 'company-a', asOfDate: '2026-11-02', journalEntries: [movement] };
+  assert.equal(calculateBankAvailableBalance({ ...input, currency: 'BS' }), 750);
+  assert.equal(calculateBankAvailableBalance({ ...input, currency: 'USD' }), 8.75);
+});
+
 testCase('allows an outgoing amount up to the exact available balance and rejects any excess', () => {
   assert.doesNotThrow(() => validateBankOutgoingAvailability({
     availableBalance: 100, requestedAmount: 100, currency: 'BS'
