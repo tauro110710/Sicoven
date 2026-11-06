@@ -3,6 +3,7 @@ import { useAccounting } from '../../context/AccountingContext';
 import { NewBankAccountModal } from '../Conciliacion/NewBankAccountModal';
 import { Landmark, Plus, ArrowDownLeft, ArrowUpRight, ArrowRightLeft, Wallet, ReceiptText } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import { calculateBankAvailableBalance } from '../../types/bankAccountAvailability';
 
 type MovementKind = 'INCOME' | 'EXPENSE' | 'TRANSFER';
 
@@ -33,15 +34,11 @@ export const TesoreriaView: React.FC = () => {
   const balanceFor = (bankId: string) => {
     const bank = companyBanks.find(b => b.id === bankId);
     if (!bank) return { bs: 0, usd: 0 };
-    const hasOpeningEntry = companyEntries.some(entry => entry.referenceDoc === `APERTURA-${bank.accountNumber}`);
-    return companyEntries.reduce((total, entry) => {
-      for (const item of entry.items) {
-        if (item.accountCode !== bank.accountCode) continue;
-        total.bs += (item.debitBs || 0) - (item.creditBs || 0);
-        total.usd += (item.debitUsd || 0) - (item.creditUsd || 0);
-      }
-      return total;
-    }, hasOpeningEntry ? { bs: 0, usd: 0 } : { bs: bank.initialBalanceBs, usd: bank.initialBalanceUsd });
+    const today = new Date().toISOString().slice(0, 10);
+    return {
+      bs: calculateBankAvailableBalance({ bankAccount: bank, companyId: currentCompany.id, asOfDate: today, journalEntries: companyEntries }),
+      usd: calculateBankAvailableBalance({ bankAccount: { ...bank, currency: 'USD' }, companyId: currentCompany.id, asOfDate: today, journalEntries: companyEntries })
+    };
   };
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
