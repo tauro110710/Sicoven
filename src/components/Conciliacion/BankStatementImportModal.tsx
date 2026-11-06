@@ -68,7 +68,7 @@ export const BankStatementImportModal: React.FC<Props> = ({ isOpen, onClose, ban
       addBankStatementMovements(candidates.map(row=>({
         bankAccountId:bankAccount.id,date:row.date,reference:row.reference,description:row.description,
         type:row.type,amountBs:row.amountBs,amountUsd:row.amountUsd,bcvRate:row.bcvRate,
-        bcvRateEffectiveDate:row.bcvRateEffectiveDate,isReconciled:false
+        bcvRateEffectiveDate:row.bcvRateEffectiveDate
       })));
       await waitForPersistence();
       setFeedback(`SQLite confirmó la importación de ${candidates.length} movimiento(s).`);
