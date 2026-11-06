@@ -101,6 +101,14 @@ test('company profile corrections keep before/after values and actor in append-o
 
     persistAccountingSnapshot(db, next, { id: 9, username: 'contador', role: 'contador' });
     assert.equal(db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='company_profile_updated'").get().count, 1);
+
+    const savedBeforeFailure = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json;
+    db.exec(`CREATE TRIGGER reject_company_profile_update BEFORE UPDATE ON app_state
+      BEGIN SELECT RAISE(ABORT, 'injected company profile failure'); END;`);
+    const attemptedCorrection = { ...next, companies: [{ ...next.companies[0], rif: 'J-11111111-1' }] };
+    assert.throws(() => persistAccountingSnapshot(db, attemptedCorrection, { id: 9, username: 'contador', role: 'contador' }), /injected company profile failure/);
+    assert.equal(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json, savedBeforeFailure);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='company_profile_updated'").get().count, 1);
   } finally {
     db.close();
   }
