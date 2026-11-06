@@ -400,7 +400,7 @@ app.whenReady().then(async () => {
       filters: [{ name: 'Documento PDF', extensions: ['pdf'] }]
     });
     if (result.canceled || !result.filePath) return { ok: false, canceled: true };
-    await fs.promises.writeFile(result.filePath, buffer, { flag: 'wx' });
+    await fs.promises.writeFile(result.filePath, buffer);
     shell.showItemInFolder(result.filePath);
     return { ok: true, filePath: result.filePath, bytes: buffer.length };
   });
