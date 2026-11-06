@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { isJournalEntryBalanced } from '../../types/journalEntryValidation';
+import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import {
   BookOpen,
   Plus,
@@ -37,9 +38,9 @@ export const LibroDiarioView: React.FC = () => {
   const [endDate, setEndDate] = useState('');
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
-  const companyJournalEntries = journalEntries.filter(entry => entry.companyId === currentCompany.id);
-  const companyPurchases = purchases.filter(purchase => purchase.companyId === currentCompany.id);
-  const companySales = sales.filter(sale => sale.companyId === currentCompany.id);
+  const companyJournalEntries = filterEntriesByCompany(journalEntries, currentCompany.id);
+  const companyPurchases = filterEntriesByCompany(purchases, currentCompany.id);
+  const companySales = filterEntriesByCompany(sales, currentCompany.id);
 
   // Filter entries
   const filteredEntries = companyJournalEntries
