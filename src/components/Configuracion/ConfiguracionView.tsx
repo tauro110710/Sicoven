@@ -225,12 +225,12 @@ export const ConfiguracionView: React.FC = () => {
       debitUsd: sum.debitUsd + item.debitUsd, creditUsd: sum.creditUsd + item.creditUsd
     }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
     const confirmed = window.confirm(
-      'REGISTRAR ASIENTO DE APERTURA\\n\\nEmpresa: ' + currentCompany.name +
-      '\\nFecha: ' + openingDate +
-      '\\nTasa BCV: Bs. ' + openingBcvRateInput + ' por USD' +
-      '\\nTotal debe: Bs. ' + totals.debitBs.toFixed(2) + ' / $ ' + totals.debitUsd.toFixed(6) +
-      '\\nTotal haber: Bs. ' + totals.creditBs.toFixed(2) + ' / $ ' + totals.creditUsd.toFixed(6) +
-      '\\n\\nEl asiento se guardará en SQLite y quedará registrado en la bitácora. Esta acción no se ejecuta automáticamente. ¿Confirma?'
+      'REGISTRAR ASIENTO DE APERTURA\n\nEmpresa: ' + currentCompany.name +
+      '\nFecha: ' + openingDate +
+      '\nTasa BCV: Bs. ' + openingBcvRateInput + ' por USD' +
+      '\nTotal debe: Bs. ' + totals.debitBs.toFixed(2) + ' / $ ' + totals.debitUsd.toFixed(6) +
+      '\nTotal haber: Bs. ' + totals.creditBs.toFixed(2) + ' / $ ' + totals.creditUsd.toFixed(6) +
+      '\n\nEl asiento se guardará en SQLite y quedará registrado en la bitácora. Esta acción no se ejecuta automáticamente. ¿Confirma?'
     );
     if (!confirmed) return;
     setOpeningBusy(true);
@@ -367,7 +367,7 @@ export const ConfiguracionView: React.FC = () => {
 
     const legalIdentityChanged = rifValidation.formattedRif !== currentCompany.rif || name.trim().toUpperCase() !== currentCompany.name;
     if (legalIdentityChanged && !window.confirm(
-      'RECTIFICACIÓN DE IDENTIDAD DE LA EMPRESA\\n\\nSe cambiará la razón social o el RIF de la empresa activa. El cambio quedará registrado en la auditoría con los valores anteriores y nuevos, el usuario y la fecha. Verifique que la rectificación corresponda a la misma entidad jurídica y cuente con soporte documental.\\n\\n¿Desea continuar?'
+      'RECTIFICACIÓN DE IDENTIDAD DE LA EMPRESA\n\nSe cambiará la razón social o el RIF de la empresa activa. El cambio quedará registrado en la auditoría con los valores anteriores y nuevos, el usuario y la fecha. Verifique que la rectificación corresponda a la misma entidad jurídica y cuente con soporte documental.\n\n¿Desea continuar?'
     )) return;
 
     if (companySaveInFlightRef.current) return;
@@ -464,9 +464,9 @@ export const ConfiguracionView: React.FC = () => {
       return;
     }
     const confirmed = window.confirm(
-      'CIERRE CONTABLE DEL PERÍODO\\n\\nSe bloquearán en SQLite las nuevas operaciones retroactivas con fecha igual o anterior a ' +
+      'CIERRE CONTABLE DEL PERÍODO\n\nSe bloquearán en SQLite las nuevas operaciones retroactivas con fecha igual o anterior a ' +
       periodCloseDate +
-      '. El cierre no puede retrocederse desde esta pantalla; una reapertura requerirá un procedimiento formal y auditado.\\n\\n¿Confirma el cierre?'
+      '. El cierre no puede retrocederse desde esta pantalla; una reapertura requerirá un procedimiento formal y auditado.\n\n¿Confirma el cierre?'
     );
     if (!confirmed) return;
     setPeriodCloseBusy(true);
@@ -1112,7 +1112,7 @@ export const ConfiguracionView: React.FC = () => {
             <button
               disabled={factoryResetBusy}
               onClick={async () => {
-                const first = window.confirm('RESET DE FÁBRICA SICOVEN\\n\\nSe eliminarán los registros operativos: asientos, compras, ventas, inventario, movimientos, retenciones, conciliaciones, liquidaciones y cuentas bancarias operativas. Se eliminarán todas las empresas registradas y sus parámetros, junto con todos los registros operativos. Se conservarán el acceso administrativo y la licencia/prueba actual. Esta acción no se puede deshacer. ¿Deseas continuar?');
+                const first = window.confirm('RESET DE FÁBRICA SICOVEN\n\nSe eliminarán los registros operativos: asientos, compras, ventas, inventario, movimientos, retenciones, conciliaciones, liquidaciones y cuentas bancarias operativas. Se eliminarán todas las empresas registradas y sus parámetros, junto con todos los registros operativos. Se conservarán el acceso administrativo y la licencia/prueba actual. Esta acción no se puede deshacer. ¿Deseas continuar?');
                 if (!first) return;
                 setFactoryResetBusy(true);
                 setFactoryResetStage('Verificando sesión y preparando el reinicio…');
