@@ -214,10 +214,12 @@ test('does not allow adding a declaration to an incident created without one', (
   db.close();
 });
 
-test('requires a documented decision and an authorized administrator', () => {
+test('requires a documented decision and permits either full-access role', () => {
   const { db } = fixture();
   assert.throws(() => createVatFiscalIncident(db, createInput({ reason: 'corto' }), actor), /Motivo/);
-  assert.throws(() => createVatFiscalIncident(db, createInput(), { username: 'operator', role: 'user' }), /administrador/);
+  assert.throws(() => createVatFiscalIncident(db, createInput(), { username: 'operator', role: 'user' }), /rol contable/);
+  const accountant = createVatFiscalIncident(db, createInput({ documentNumber: 'FACT-002' }), { id: 8, username: 'contador', role: 'contador' });
+  assert.ok(accountant.id);
   db.close();
 });
 
