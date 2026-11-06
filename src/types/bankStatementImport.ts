@@ -37,7 +37,11 @@ const decimal = (value: unknown): number => {
   if (typeof value === 'number') return value;
   const raw = String(value ?? '').trim().replace(/\s/g,'');
   if (!raw) return NaN;
-  const normalized = raw.includes(',') ? raw.replace(/\./g,'').replace(',','.') : raw;
+  const comma=raw.lastIndexOf(','),dot=raw.lastIndexOf('.');
+  const normalized=comma>=0&&dot>=0
+    ? (comma>dot?raw.replace(/\./g,'').replace(',','.'):raw.replace(/,/g,''))
+    : comma>=0?raw.replace(/\./g,'').replace(',','.')
+    : raw;
   return Number(normalized);
 };
 const isoDate = (value: unknown): string => {
@@ -80,6 +84,8 @@ export function normalizeBankStatementRows(rows: BankStatementRawRow[], defaultC
     const rawAmount=decimal(pick(row,'amount'));
     const currencyRaw=String(pick(row,'currency')??defaultCurrency).trim().toUpperCase();
     const currency:BankStatementCurrency=/^(USD|US\$|DOLAR|DOLARES)$/.test(currencyRaw)?'USD':'BS';
+    const hasCurrency=pick(row,'currency')!==undefined&&String(pick(row,'currency')).trim()!=='';
+    if(hasCurrency&&!/^(USD|US\\$|DOLAR|DOLARES|BS|VES|VEF|BOLIVAR|BOLIVARES)$/.test(currencyRaw))errors.push('Moneda no reconocida.');
     const rate=decimal(pick(row,'bcvRate'));
     const rateDate=isoDate(pick(row,'bcvRateEffectiveDate'));
     const type:BankMovementType=/^(DEBIT|DEBITO|D|DB|PAYMENT|WITHDRAWAL)$/.test(rawType)||rawAmount<0?'DEBIT':'CREDIT';
