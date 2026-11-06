@@ -15,7 +15,7 @@ interface Props {
 export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcvRate, onClose, onSubmit }) => {
   const today = new Date().toISOString().slice(0, 10);
   const [noteDate, setNoteDate] = useState(today);
-  const [noteBcvRate, setNoteBcvRate] = useState(String(bcvRate));
+  const [noteBcvRate, setNoteBcvRate] = useState('');
   const [fiscalEmissionMedium, setFiscalEmissionMedium] = useState<'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | ''>('');
   const [sameMediumAsOriginal, setSameMediumAsOriginal] = useState(false);
   const [noteNumber, setNoteNumber] = useState('');
@@ -26,6 +26,7 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
   const [workpaperNote, setWorkpaperNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -35,8 +36,8 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
     try {
       await onSubmit({
         kind, sourceSaleId: sourceSale.id, noteDate, noteNumber, controlNumber,
-        taxableBaseBs: Number(taxableBaseBs), exemptAmountBs: Number(exemptAmountBs),
-        bcvRate: Number(noteBcvRate), reason, workpaperNote,
+        taxableBaseBs: parseAmount(taxableBaseBs), exemptAmountBs: parseAmount(exemptAmountBs),
+        bcvRate: parseAmount(noteBcvRate), reason, workpaperNote,
         fiscalEmissionMedium: fiscalEmissionMedium as 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY', sameMediumAsOriginal
       });
       onClose();
@@ -72,13 +73,13 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
             <input required value={controlNumber} onChange={e=>setControlNumber(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
           </label>
           <label className="text-xs font-semibold text-slate-700">Tasa BCV vigente en la fecha de emisión
-            <input required type="number" min="0.000001" step="0.000001" value={noteBcvRate} onChange={e=>setNoteBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
+            <input required type="text" inputMode="decimal" value={noteBcvRate} onChange={e=>setNoteBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
           </label>
           <label className="text-xs font-semibold text-slate-700">Base imponible (Bs.)
-            <input required type="number" min="0" step="0.01" value={taxableBaseBs} onChange={e=>setTaxableBaseBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
+            <input required type="text" inputMode="decimal" value={taxableBaseBs} onChange={e=>setTaxableBaseBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
           </label>
           <label className="text-xs font-semibold text-slate-700">Monto exento (Bs.)
-            <input required type="number" min="0" step="0.01" value={exemptAmountBs} onChange={e=>setExemptAmountBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
+            <input required type="text" inputMode="decimal" value={exemptAmountBs} onChange={e=>setExemptAmountBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
           </label>
         </div>
         <label className="block text-xs font-semibold text-slate-700">Medio de emisión utilizado por la factura original

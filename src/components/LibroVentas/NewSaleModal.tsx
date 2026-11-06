@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { TrendingUp, X, Check } from 'lucide-react';
 import { formatBs, formatUsd, formatRif } from '../../utils/formatters';
-import { getValidBcvRate } from '../../types/saleBcvRate';
 
 interface NewSaleModalProps {
   isOpen: boolean;
@@ -24,8 +23,10 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const [affectedInvoiceNumber, setAffectedInvoiceNumber] = useState<string>('');
 
   // Amounts
-  const [taxableBaseBs, setTaxableBaseBs] = useState<number>(0);
-  const [exemptAmountBs, setExemptAmountBs] = useState<number>(0);
+  const [taxableBaseInput, setTaxableBaseInput] = useState('');
+  const taxableBaseBs = parseDecimalInput(taxableBaseInput);
+  const [exemptAmountInput, setExemptAmountInput] = useState('');
+  const exemptAmountBs = parseDecimalInput(exemptAmountInput);
   const [taxRate, setTaxRate] = useState<number>(16);
 
   // Client Withholding
@@ -37,8 +38,9 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const [applyIgtf, setApplyIgtf] = useState(false);
 
   // Currency
-  const bcvRate = getValidBcvRate(currentCompany.bcvRate) ?? 0;
-  const hasValidBcvRate = bcvRate > 0;
+  const [bcvRateInput, setBcvRateInput] = useState('');
+  const bcvRate = parseDecimalInput(bcvRateInput);
+  const hasValidBcvRate = Number.isFinite(bcvRate) && bcvRate > 0;
   const [notes, setNotes] = useState<string>('');
   const [paymentTerm, setPaymentTerm] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
   const [creditDays, setCreditDays] = useState<number>(7);
@@ -48,10 +50,14 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
 
   if (!isOpen) return null;
 
+  function parseDecimalInput(value: string) { const raw = value.trim(); if (!raw) return 0; return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); }
+
   // La tasa de la empresa es la única fuente autorizada; nunca se inventa una tasa de respaldo.
   // Real-time calculations
-  const vatAmountBs = Math.round(taxableBaseBs * (taxRate / 100) * 100) / 100;
-  const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs) * 100) / 100;
+  const vatRate = taxRate === 31 ? 16 : taxRate;
+  const vatAmountBs = Math.round(taxableBaseBs * (vatRate / 100) * 100) / 100;
+  const additionalLuxuryTaxBs = taxRate === 31 ? Math.round(taxableBaseBs * 0.15 * 100) / 100 : 0;
+  const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs + additionalLuxuryTaxBs) * 100) / 100;
   const igtfEligible = currentCompany.isIgtfPerceptionAgent === true && paymentTerm === 'CONTADO' && (paymentCurrency === 'FOREIGN_CASH' || paymentCurrency === 'CRYPTO');
   const igtfApplicable = igtfEligible && applyIgtf;
   const igtfAmountBs = igtfApplicable ? Math.round(invoiceSubtotalBs * 0.03 * 100) / 100 : 0;
@@ -63,12 +69,13 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const totalAmountUsd = bcvRate > 0 ? totalAmountBs / bcvRate : 0;
   const taxableBaseUsd = bcvRate > 0 ? taxableBaseBs / bcvRate : 0;
   const vatAmountUsd = bcvRate > 0 ? vatAmountBs / bcvRate : 0;
+  const additionalLuxuryTaxUsd = bcvRate > 0 ? additionalLuxuryTaxBs / bcvRate : 0;
   const vatWithheldUsd = bcvRate > 0 ? vatWithheldBs / bcvRate : 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hasValidBcvRate) {
-      window.alert('No hay una tasa BCV válida registrada para esta empresa. Actualice la tasa en Configuración antes de registrar la venta.');
+      window.alert('Ingrese la tasa BCV aplicable a esta factura, por ejemplo 889,67.');
       return;
     }
     if (!customerRif.trim() || !customerName.trim() || !invoiceNumber.trim()) return;
@@ -104,6 +111,8 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
       taxableBaseBs,
       taxRate,
       vatAmountBs,
+      additionalLuxuryTaxBs,
+      additionalLuxuryTaxUsd,
       vatWithheldBs,
       retentionRate: clientIsSpecial ? retentionRate : 0,
       retentionVoucherNumber: clientIsSpecial ? retentionVoucherNumber.trim() : undefined,
@@ -247,13 +256,12 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Base Imponible Gravada (Bs.) *</label>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   required
                   placeholder="0.00"
-                  value={taxableBaseBs || ''}
-                  onChange={e => setTaxableBaseBs(parseFloat(e.target.value) || 0)}
+                  value={taxableBaseInput}
+                  onChange={e => setTaxableBaseInput(e.target.value)}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
                 <span className="text-[11px] text-slate-500 font-mono">
@@ -263,12 +271,11 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Monto Exento / Exonerado (Bs.)</label>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  value={exemptAmountBs || ''}
-                  onChange={e => setExemptAmountBs(parseFloat(e.target.value) || 0)}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0,00"
+                  value={exemptAmountInput}
+                  onChange={e => setExemptAmountInput(e.target.value)}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
@@ -393,8 +400,9 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
               <span className="font-mono">{hasValidBcvRate ? `${bcvRate.toLocaleString('es-VE')} Bs./USD` : 'No configurada'}</span>
             </div>
             {!hasValidBcvRate && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-amber-200">No se puede registrar esta venta hasta configurar una tasa BCV válida en la empresa.</p>}
+            {additionalLuxuryTaxBs > 0 && <div className="flex justify-between items-center text-xs text-amber-300"><span>Impuesto adicional al consumo suntuario (15%):</span><span className="font-mono">{formatBs(additionalLuxuryTaxBs)} ({formatUsd(additionalLuxuryTaxUsd)})</span></div>}
             <div className="flex justify-between items-center text-xs">
-              <span className="text-slate-400">Total Factura (IVA e IGTF si aplica):</span>
+              <span className="text-slate-400">Total Factura (IVA, adicional e IGTF si aplica):</span>
               <span className="font-mono font-bold">{formatBs(totalAmountBs)} ({formatUsd(totalAmountUsd)})</span>
             </div>
             {clientIsSpecial && (

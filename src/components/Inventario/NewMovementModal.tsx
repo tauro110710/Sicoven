@@ -26,10 +26,10 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const [concept, setConcept] = useState<'COMPRA' | 'VENTA' | 'MERMA' | 'AJUSTE' | 'DEVOLUCION_COMPRA' | 'DEVOLUCION_CLIENTE' | 'AUTOCONSUMO' | 'INVENTARIO_INICIAL'>('COMPRA');
   const [correctionMovementId, setCorrectionMovementId] = useState('');
   const [documentRef, setDocumentRef] = useState<string>('');
-  const [quantity, setQuantity] = useState<number>(1);
-  const [unitCostBs, setUnitCostBs] = useState<number>(0);
-  const [additionalLandedCostsBs, setAdditionalLandedCostsBs] = useState<number>(0);
-  const [bcvRateInput, setBcvRateInput] = useState(String(currentCompany.bcvRate || ''));
+  const [quantityInput, setQuantityInput] = useState('1');
+  const [unitCostInput, setUnitCostInput] = useState('0');
+  const [additionalLandedCostsInput, setAdditionalLandedCostsInput] = useState('0');
+  const [bcvRateInput, setBcvRateInput] = useState('');
   const [documentType, setDocumentType] = useState('Factura de compra');
   const [counterpartyRif, setCounterpartyRif] = useState('');
   const [counterpartyName, setCounterpartyName] = useState('');
@@ -42,13 +42,17 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   // Auto-set cost when product changes
   React.useEffect(() => {
     if (selectedProduct) {
-      setUnitCostBs(selectedProduct.avgCostBs || 0);
+      setUnitCostInput(String(selectedProduct.avgCostBs || 0));
     }
   }, [productId, selectedProduct]);
 
   if (!isOpen || !selectedProduct) return null;
 
-  const bcvRate = Number(bcvRateInput);
+  const parseDecimalInput = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.split('.').join('').replace(',', '.') : raw); };
+  const quantity = parseDecimalInput(quantityInput);
+  const unitCostBs = parseDecimalInput(unitCostInput);
+  const additionalLandedCostsBs = parseDecimalInput(additionalLandedCostsInput);
+  const bcvRate = parseDecimalInput(bcvRateInput);
   const unitCostUsd = bcvRate > 0 ? unitCostBs / bcvRate : 0;
   const totalCostBs = type === 'ENTRADA'
     ? quantity * unitCostBs + additionalLandedCostsBs
@@ -69,7 +73,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if ((type !== 'AJUSTE' && quantity <= 0) || (type === 'AJUSTE' && quantity < 0) || !Number.isFinite(bcvRate) || bcvRate <= 0) { setError('Verifique que la cantidad y la tasa BCV sean válidas.'); return; }
+    if (!Number.isFinite(quantity) || !Number.isFinite(unitCostBs) || !Number.isFinite(additionalLandedCostsBs) || quantity < 0 || (type !== 'AJUSTE' && quantity <= 0) || unitCostBs < 0 || additionalLandedCostsBs < 0 || !Number.isFinite(bcvRate) || bcvRate <= 0) { setError('Verifique que la cantidad, los costos y la tasa BCV sean válidos.'); return; }
     if (type === 'SALIDA' && concept === 'DEVOLUCION_COMPRA') {
       if (!selectedReturnSource) { setError('Seleccione la entrada original de Kardex que se devuelve.'); return; }
       if (quantity > selectedReturnSource.remaining + 1e-8) { setError('La cantidad supera las unidades recibidas menos devoluciones previas (' + selectedReturnSource.remaining + ').'); return; }
@@ -238,7 +242,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
           {type === 'SALIDA' && concept === 'DEVOLUCION_COMPRA' && <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-3">
             <div className="font-bold text-amber-950">Conciliación obligatoria de devolución a proveedor</div>
             <p className="text-amber-900">Seleccione la entrada original del Kardex y registre la referencia de la nota de crédito del proveedor. La cantidad se limita a las unidades recibidas menos devoluciones previas; el asiento de salida afecta CxP e inventario. Esto no sustituye el documento fiscal válido.</p>
-            <div><label className="block font-semibold text-slate-700 mb-1">Entrada original de compra *</label><select required value={correctionMovementId} onChange={e=>{setCorrectionMovementId(e.target.value);const source=supplierReturnSources.find(m=>m.id===e.target.value);if(source){setUnitCostBs(source.unitCostBs);setCounterpartyRif(source.counterpartyRif||'');setCounterpartyName(source.counterpartyName||'');setDocumentType('Nota de crédito proveedor');}}} className="w-full rounded-lg border border-slate-300 p-2"><option value="">Seleccionar factura / entrada de Kardex…</option>{supplierReturnSources.map(m=><option key={m.id} value={m.id}>{m.date} · {m.documentRef} · {m.productCode} · recibidas {m.quantity} · pendientes {m.remaining}</option>)}</select></div>
+            <div><label className="block font-semibold text-slate-700 mb-1">Entrada original de compra *</label><select required value={correctionMovementId} onChange={e=>{setCorrectionMovementId(e.target.value);const source=supplierReturnSources.find(m=>m.id===e.target.value);if(source){setUnitCostInput(String(source.unitCostBs));setCounterpartyRif(source.counterpartyRif||'');setCounterpartyName(source.counterpartyName||'');setDocumentType('Nota de crédito proveedor');}}} className="w-full rounded-lg border border-slate-300 p-2"><option value="">Seleccionar factura / entrada de Kardex…</option>{supplierReturnSources.map(m=><option key={m.id} value={m.id}>{m.date} · {m.documentRef} · {m.productCode} · recibidas {m.quantity} · pendientes {m.remaining}</option>)}</select></div>
             {selectedReturnSource && <p className="text-xs text-slate-700">Pendiente máximo: <strong>{selectedReturnSource.remaining}</strong> unidades · costo original: <strong>{formatBs(selectedReturnSource.unitCostBs)}</strong> por unidad.</p>}
             <div><label className="block font-semibold text-slate-700 mb-1">N.º nota de crédito / soporte autorizado *</label><input required minLength={4} value={documentRef} onChange={e=>setDocumentRef(e.target.value)} placeholder="NC proveedor / documento real" className="w-full rounded-lg border border-slate-300 p-2"/></div>
             {selectedProduct.costingMethod === 'PEPS' && <p className="text-rose-700 font-semibold">PEPS: bloqueado hasta identificar el lote de origen.</p>}
@@ -253,7 +257,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) *</label>
-              <input type="number" min="0.000001" step="0.000001" required value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+              <input type="text" inputMode="decimal" required placeholder="Ej.: 889,67" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">RIF proveedor / cliente</label>
@@ -294,31 +298,29 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
                 Cantidad ({selectedProduct.unit}) *
               </label>
               <input
-                type="number"
-                min={type === 'AJUSTE' ? 0 : 0.000001}
-                step="0.000001"
+                type="text"
+                inputMode="decimal"
                 required
                 value={quantity}
-                onChange={e => setQuantity(Number(e.target.value))}
+                onChange={e => setQuantityInput(e.target.value)}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               />
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Costo Unitario (Bs.)</label>
               <input
-                type="number"
-                step="0.01"
-                min="0"
+                type="text"
+                inputMode="decimal"
                 required
                 value={unitCostBs || ''}
-                onChange={e => setUnitCostBs(parseFloat(e.target.value) || 0)}
+                onChange={e => setUnitCostInput(e.target.value)}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               />
             </div>
           </div>
           {type === 'ENTRADA' && <div>
             <label className="block font-semibold text-slate-700 mb-1">Fletes y gastos de nacionalización asignados a esta entrada (Bs.)</label>
-            <input type="number" min="0" step="0.01" value={additionalLandedCostsBs || ''} onChange={e => setAdditionalLandedCostsBs(parseFloat(e.target.value) || 0)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+            <input type="text" inputMode="decimal" value={additionalLandedCostsInput} onChange={e => setAdditionalLandedCostsInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
             <p className="mt-1 text-[11px] text-slate-500">Estos costos se distribuyen sobre la cantidad recibida y se capitalizan en el costo unitario del artículo.</p>
           </div>}
 

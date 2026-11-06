@@ -37,7 +37,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
   const [exemptAmount, setExemptAmount] = useState('');
   const [vatAmount, setVatAmount] = useState('');
   const [taxRate, setTaxRate] = useState('');
-  const [bcvRate, setBcvRate] = useState(String(currentCompany.bcvRate || purchase.bcvRate || ''));
+  const [bcvRate, setBcvRate] = useState('');
   const [fiscalBreakdownReviewed, setFiscalBreakdownReviewed] = useState(false);
   const [withholdingNotApplicableConfirmed, setWithholdingNotApplicableConfirmed] = useState(false);
   const [igtfNotApplicableConfirmed, setIgtfNotApplicableConfirmed] = useState(false);
@@ -70,10 +70,11 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
   const vatAccounts = accounts.filter(account =>
     account.isMovement && ['ACTIVO', 'COSTOS', 'GASTOS'].includes(account.type)
   );
-  const taxableBaseBs = Number(taxableBase || 0);
-  const exemptAmountBs = Number(exemptAmount || 0);
-  const vatAmountBs = Number(vatAmount || 0);
-  const taxRateValue = Number(taxRate);
+  const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
+  const taxableBaseBs = parseAmount(taxableBase || '0');
+  const exemptAmountBs = parseAmount(exemptAmount || '0');
+  const vatAmountBs = parseAmount(vatAmount || '0');
+  const taxRateValue = parseAmount(taxRate || '0');
   const totalAmountBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs + Number.EPSILON) * 100) / 100;
   const isInventoryCause = economicCause === 'ADDITIONAL_GOODS_RECEIVED' || economicCause === 'INVENTORY_COST_ADJUSTMENT';
 
@@ -98,7 +99,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
       setError('Describa la clasificación económica de la causa Otra con al menos 10 caracteres.');
       return;
     }
-    if (!debitAccountCode || !payableAccountCode || !Number.isFinite(Number(bcvRate)) || Number(bcvRate) <= 0) {
+    if (!debitAccountCode || !payableAccountCode || !Number.isFinite(parseAmount(bcvRate)) || parseAmount(bcvRate) <= 0) {
       setError('Seleccione las cuentas contables y una tasa BCV válida.');
       return;
     }
@@ -132,7 +133,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
         debitAccountCode, payableAccountCode: payableAccountCode || suggestedPayableCode,
         vatAccountCode: vatAccountCode || undefined,
         taxableBaseBs, exemptAmountBs, vatAmountBs, totalAmountBs, taxRate: taxRateValue,
-        bcvRate: Number(bcvRate), fiscalBreakdownReviewed,
+        bcvRate: parseAmount(bcvRate), fiscalBreakdownReviewed,
         withholdingNotApplicableConfirmed, igtfNotApplicableConfirmed,
         fiscalReviewNote: fiscalReviewNote.trim()
       });
@@ -165,7 +166,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
             <label className="text-xs font-semibold text-slate-700">Factura afectada<input readOnly value={purchase.invoiceNumber} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm" /></label>
             <label className="text-xs font-semibold text-slate-700">Fecha de emisión<input required type="date" value={issueDate} onChange={e=>setIssueDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
             <label className="text-xs font-semibold text-slate-700">Fecha de reconocimiento / abono<input required type="date" value={recognitionDate} onChange={e=>setRecognitionDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-            <label className="text-xs font-semibold text-slate-700">Tasa BCV de la ND<input required type="number" min="0.000001" step="0.000001" value={bcvRate} onChange={e=>setBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+            <label className="text-xs font-semibold text-slate-700">Tasa BCV de la ND<input required type="text" inputMode="decimal" value={bcvRate} onChange={e=>setBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
           </div>
             <label className="text-xs font-semibold text-slate-700">Medio de emisión de la factura original
           <select required value={fiscalEmissionMedium} onChange={event => setFiscalEmissionMedium(event.target.value as 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | '')} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal">
@@ -189,10 +190,10 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
           <div>
             <h3 className="mb-2 text-sm font-bold text-slate-900">Desglose manual del documento</h3><p className="mb-2 text-xs text-slate-500">Este flujo admite una sola alícuota de IVA por ND. Si el documento contiene alícuotas mixtas, no lo registre aquí.</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              <label className="text-xs font-semibold text-slate-700">Base imponible Bs.<input required type="number" min="0" step="0.01" value={taxableBase} onChange={e=>setTaxableBase(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-              <label className="text-xs font-semibold text-slate-700">Exento Bs.<input required type="number" min="0" step="0.01" value={exemptAmount} onChange={e=>setExemptAmount(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-              <label className="text-xs font-semibold text-slate-700">Alícuota única IVA %<input required type="number" min="0" max="100" step="0.01" value={taxRate} onChange={e=>setTaxRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-              <label className="text-xs font-semibold text-slate-700">IVA del documento Bs.<input required type="number" min="0" step="0.01" value={vatAmount} onChange={e=>setVatAmount(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+              <label className="text-xs font-semibold text-slate-700">Base imponible Bs.<input required type="text" inputMode="decimal" value={taxableBase} onChange={e=>setTaxableBase(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+              <label className="text-xs font-semibold text-slate-700">Exento Bs.<input required type="text" inputMode="decimal" value={exemptAmount} onChange={e=>setExemptAmount(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+              <label className="text-xs font-semibold text-slate-700">Alícuota única IVA %<input required type="text" inputMode="decimal" value={taxRate} onChange={e=>setTaxRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+              <label className="text-xs font-semibold text-slate-700">IVA del documento Bs.<input required type="text" inputMode="decimal" value={vatAmount} onChange={e=>setVatAmount(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
               <div className="rounded-lg border bg-slate-50 p-3"><p className="text-xs text-slate-500">Total calculado Bs.</p><p className="mt-1 text-lg font-bold text-slate-900">{money(totalAmountBs)}</p></div>
             </div>
             {vatAmountBs > 0 && <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">

@@ -19,6 +19,7 @@ import { exportVentasPdf } from '../../utils/pdfGenerator';
 import { SupportingDocumentsPanel } from '../shared/SupportingDocumentsPanel';
 import { JournalReversalModal } from '../LibroDiario/JournalReversalModal';
 import { SaleCorrectionNoteModal } from './SaleCorrectionNoteModal';
+import { FiscalZReportModal } from './FiscalZReportModal';
 
 export const LibroVentasView: React.FC = () => {
   const {
@@ -32,6 +33,8 @@ export const LibroVentasView: React.FC = () => {
 
   const sqliteAvailable = typeof window !== 'undefined' && Boolean(window.sicovenStore?.save);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isZModalOpen, setIsZModalOpen] = useState(false);
+  const [zDocumentTarget, setZDocumentTarget] = useState<import('../../types/accounting').JournalEntry | null>(null);
   const [documentTarget, setDocumentTarget] = useState<{ id: string; title: string } | null>(null);
   const [reversalTarget, setReversalTarget] = useState<import('../../types/accounting').JournalEntry | null>(null);
   const [settlementTarget, setSettlementTarget] = useState<{id:string; number:string; party:string} | null>(null);
@@ -43,9 +46,10 @@ export const LibroVentasView: React.FC = () => {
   const handleExportPdf = async () => {
     try {
       setIsExportingPdf(true);
-      await exportVentasPdf(currentCompany, filteredSales, monthFilter);
+      await exportVentasPdf(currentCompany, filteredSales, monthFilter, filteredZReports);
     } catch (err) {
       console.error('Error exporting Ventas PDF:', err);
+      window.alert('No se pudo generar el PDF del Libro de Ventas: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsExportingPdf(false);
     }
@@ -68,20 +72,45 @@ export const LibroVentasView: React.FC = () => {
     })
     .sort((a, b) => a.opNumber - b.opNumber);
 
+  const filteredZReports = journalEntries
+    .filter(entry => entry.companyId === currentCompany.id && entry.fiscalZReport)
+    .filter(entry => !monthFilter || entry.date.startsWith(monthFilter))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber);
+
   // NC reduce el libro; ND incrementa sus importes. El documento original permanece intacto.
   const signed = (document: import('../../types/accounting').SaleRecord, amount: number) =>
     (document.documentType === '03' ? -1 : 1) * Number(amount || 0);
   const totalVentasConIvaBs = filteredSales.reduce((s, x) => s + signed(x, x.totalAmountBs), 0);
   const totalExentoBs = filteredSales.reduce((s, x) => s + signed(x, x.exemptAmountBs || 0), 0);
   const totalBaseBs = filteredSales.reduce((s, x) => s + signed(x, x.taxableBaseBs), 0);
-  const totalIvaDebitoBs = filteredSales.reduce((s, x) => s + signed(x, x.vatAmountBs), 0);
+  const totalIvaDebitoBs = filteredSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? x.taxableBaseBs * 0.16 : x.vatAmountBs), 0);
+  const totalLuxuryTaxBs = filteredSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? (x.additionalLuxuryTaxBs ?? x.taxableBaseBs * 0.15) : 0), 0);
+  const totalLuxuryTaxUsd = filteredSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? (x.additionalLuxuryTaxUsd ?? (x.bcvRate > 0 ? x.taxableBaseBs * 0.15 / x.bcvRate : 0)) : 0), 0);
   const totalIvaRetenidoBs = filteredSales.reduce((s, x) => s + signed(x, x.vatWithheldBs || 0), 0);
   const totalIgtfBs = filteredSales.reduce((s, x) => s + signed(x, x.igtfAmountBs || 0), 0);
 
   const totalVentasConIvaUsd = filteredSales.reduce((s, x) => s + signed(x, x.totalAmountUsd), 0);
   const totalBaseUsd = filteredSales.reduce((s, x) => s + signed(x, x.taxableBaseUsd), 0);
-  const totalIvaDebitoUsd = filteredSales.reduce((s, x) => s + signed(x, x.vatAmountUsd), 0);
+  const totalIvaDebitoUsd = filteredSales.reduce((s, x) => s + signed(x, x.taxRate === 31 && x.bcvRate > 0 ? x.taxableBaseBs * 0.16 / x.bcvRate : x.vatAmountUsd), 0);
   const totalIvaRetenidoUsd = filteredSales.reduce((s, x) => s + signed(x, x.vatWithheldUsd || 0), 0);
+
+  const zBaseBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.taxableBase16Bs || 0) + (entry.fiscalZReport?.taxableBase8Bs || 0) + (entry.fiscalZReport?.taxableBase31Bs || 0), 0);
+  const zVatBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.vat16Bs || 0) + (entry.fiscalZReport?.vat8Bs || 0) + (entry.fiscalZReport?.vat31Bs || 0), 0);
+  const zLuxuryTaxBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.additionalLuxuryTaxBs || 0), 0);
+  const saleLuxuryTaxBs = filteredSales.reduce((sum, sale) => sum + (sale.taxRate === 31 ? sale.taxableBaseBs * 0.15 : 0), 0);
+  const zBaseUsd = filteredZReports.reduce((sum, entry) => sum + ((entry.fiscalZReport?.taxableBase16Bs || 0) + (entry.fiscalZReport?.taxableBase8Bs || 0) + (entry.fiscalZReport?.taxableBase31Bs || 0)) / entry.bcvRate, 0);
+  const zVatUsd = filteredZReports.reduce((sum, entry) => sum + ((entry.fiscalZReport?.vat16Bs || 0) + (entry.fiscalZReport?.vat8Bs || 0) + (entry.fiscalZReport?.vat31Bs || 0)) / entry.bcvRate, 0);
+  const zExemptBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.exemptSalesBs || 0), 0);
+  const zIgtfBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.igtfBs || 0), 0);
+  const totalFiscalBaseBs = totalBaseBs + zBaseBs;
+  const totalFiscalBaseUsd = totalBaseUsd + zBaseUsd;
+  const totalFiscalIvaBs = totalIvaDebitoBs + zVatBs;
+  const totalFiscalIvaUsd = totalIvaDebitoUsd + zVatUsd;
+  const zLuxuryTaxUsd = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.additionalLuxuryTaxBs || 0) / entry.bcvRate, 0);
+  const totalFiscalLuxuryTaxBs = saleLuxuryTaxBs + zLuxuryTaxBs;
+  const totalFiscalLuxuryTaxUsd = totalLuxuryTaxUsd + zLuxuryTaxUsd;
+  const totalFiscalExemptBs = totalExentoBs + zExemptBs;
+  const totalFiscalIgtfBs = totalIgtfBs + zIgtfBs;
 
   return (
     <div className="space-y-6">
@@ -105,7 +134,7 @@ export const LibroVentasView: React.FC = () => {
           <div className="flex items-center gap-2.5">
             <button
               onClick={handleExportPdf}
-              disabled={isExportingPdf || filteredSales.length === 0}
+              disabled={isExportingPdf || (filteredSales.length === 0 && filteredZReports.length === 0)}
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer border border-slate-300 shadow-sm"
               title="Descargar archivo PDF oficial del Libro de Ventas con logo y márgenes SENIAT"
             >
@@ -125,6 +154,9 @@ export const LibroVentasView: React.FC = () => {
             >
               <Plus className="w-4 h-4" />
               Registrar Venta
+            </button>
+            <button onClick={() => setIsZModalOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-emerald-700 bg-white px-4 py-2 text-xs font-semibold text-emerald-800 shadow-sm transition hover:bg-emerald-50">
+              <Receipt className="h-4 w-4" /> Registrar Reporte Z
             </button>
           </div>
         </div>
@@ -176,6 +208,7 @@ export const LibroVentasView: React.FC = () => {
                 <th className="py-2.5 px-3 text-right w-32">Base Imponible</th>
                 <th className="py-2.5 px-2 text-center w-14">% Alíc.</th>
                 <th className="py-2.5 px-3 text-right w-28 text-emerald-800">IVA (Débito)</th>
+                <th className="py-2.5 px-3 text-right w-28 text-amber-800">Imp. adicional 15%</th>
                 <th className="py-2.5 px-3 text-right w-28 text-purple-800">IVA Retenido</th>
                 <th className="py-2.5 px-3 w-32">N° Comprobante Ret.</th>
                 <th className="py-2.5 px-3 w-28">Fecha Ret.</th>
@@ -186,7 +219,7 @@ export const LibroVentasView: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {filteredSales.length === 0 ? (
                 <tr>
-                  <td colSpan={17} className="py-12 text-center text-slate-400">
+                  <td colSpan={18} className="py-12 text-center text-slate-400">
                     <TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-40" />
                     No hay facturas de ventas emitidas en este período.
                   </td>
@@ -242,12 +275,16 @@ export const LibroVentasView: React.FC = () => {
                       {s.taxRate}%
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap bg-emerald-50/30">
-                      {formatBs(s.vatAmountBs)}
+                      {formatBs(s.taxRate === 31 ? s.taxableBaseBs * 0.16 : s.vatAmountBs)}
                       {displayCurrency !== 'BS' && (
                         <div className="text-[10px] text-emerald-600/70 font-normal">
-                          {formatUsd(s.vatAmountUsd)}
+                          {formatUsd(s.taxRate === 31 && s.bcvRate > 0 ? s.taxableBaseBs * 0.16 / s.bcvRate : s.vatAmountUsd)}
                         </div>
                       )}
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono font-bold text-amber-700 whitespace-nowrap bg-amber-50/30">
+                      {s.taxRate === 31 ? formatBs(s.additionalLuxuryTaxBs ?? s.taxableBaseBs * 0.15) : '-'}
+                      {displayCurrency !== 'BS' && s.taxRate === 31 && <div className="text-[10px] text-amber-600/70 font-normal">{formatUsd(s.additionalLuxuryTaxUsd ?? (s.bcvRate > 0 ? s.taxableBaseBs * 0.15 / s.bcvRate : 0))}</div>}
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-purple-700 whitespace-nowrap bg-purple-50/30">
                       {s.vatWithheldBs > 0 ? (
@@ -319,6 +356,7 @@ export const LibroVentasView: React.FC = () => {
                     <div className="text-[10px] text-slate-400">{formatUsd(totalIvaDebitoUsd)}</div>
                   )}
                 </td>
+                <td className="py-3 px-3 text-right font-mono text-amber-300 bg-slate-850">{formatBs(totalLuxuryTaxBs)}{displayCurrency !== 'BS' && <div className="text-[10px] text-slate-400">{formatUsd(totalLuxuryTaxUsd)}</div>}</td>
                 <td className="py-3 px-3 text-right font-mono text-purple-300 bg-slate-850">
                   {formatBs(totalIvaRetenidoBs)}
                   {displayCurrency !== 'BS' && (
@@ -335,29 +373,73 @@ export const LibroVentasView: React.FC = () => {
         </div>
       </div>
 
+      {/* Cierres diarios consolidados por máquina fiscal */}
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <div><h3 className="text-sm font-bold text-slate-800">Reportes Z · Ventas consolidadas de máquinas fiscales</h3><p className="text-[11px] text-slate-500">Cada cierre conserva su rango de facturas, equipo fiscal, resumen tributario y asiento vinculado.</p></div>
+          <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-800">{filteredZReports.length} cierres registrados</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px] text-left text-xs">
+            <thead className="bg-slate-100 text-slate-700"><tr>
+              <th className="px-3 py-2">Fecha</th><th className="px-3 py-2">Reporte Z</th><th className="px-3 py-2">Máquina / Serial</th><th className="px-3 py-2">Facturas</th><th className="px-3 py-2">N.º control (si aplica)</th><th className="px-3 py-2 text-right">Base gravada</th><th className="px-3 py-2 text-right">IVA</th><th className="px-3 py-2 text-right">Imp. lujo</th><th className="px-3 py-2 text-right">Exento</th><th className="px-3 py-2 text-right">IGTF</th><th className="px-3 py-2 text-right">Total cierre</th><th className="px-3 py-2">Asiento / Soportes</th>
+            </tr></thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredZReports.length === 0 ? <tr><td colSpan={12} className="px-3 py-8 text-center text-slate-400">Todavía no hay Reportes Z registrados para este período.</td></tr> : filteredZReports.map(entry => {
+                const z = entry.fiscalZReport!;
+                const taxable = z.taxableBase16Bs + z.taxableBase8Bs + z.taxableBase31Bs;
+                const vat = z.vat16Bs + z.vat8Bs + z.vat31Bs;
+                return <tr key={entry.id} className="hover:bg-slate-50">
+                  <td className="whitespace-nowrap px-3 py-2">{formatDate(z.date)}</td>
+                  <td className="px-3 py-2 font-mono font-bold">{z.zNumber}</td>
+                  <td className="px-3 py-2">{[z.machineBrand,z.machineModel].filter(Boolean).join(' ') || 'Máquina fiscal'}<span className="block font-mono text-[10px] text-slate-500">{z.machineSerial}</span></td>
+                  <td className="px-3 py-2 font-mono">{z.invoiceStart} – {z.invoiceEnd}</td>
+                  <td className="px-3 py-2 font-mono">{z.controlStart ? z.controlStart + ' – ' + z.controlEnd : '—'}</td>
+                  <td className="px-3 py-2 text-right font-mono">{formatBs(taxable)}</td>
+                  <td className="px-3 py-2 text-right font-mono">{formatBs(vat)}</td>
+                  <td className="px-3 py-2 text-right font-mono">{formatBs(z.additionalLuxuryTaxBs || 0)}</td>
+                  <td className="px-3 py-2 text-right font-mono">{formatBs(z.exemptSalesBs)}</td>
+                  <td className="px-3 py-2 text-right font-mono">{formatBs(z.igtfBs)}</td>
+                  <td className="px-3 py-2 text-right font-mono font-bold text-emerald-700">{formatBs(z.totalSalesBs)}</td>
+                  <td className="px-3 py-2"><span className="block font-semibold">N.º {entry.entryNumber}</span><button type="button" onClick={() => setZDocumentTarget(entry)} className="mt-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes (opcional)</button></td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       {/* Forma 30 SENIAT Summary Card */}
       <div className="bg-gradient-to-r from-slate-900 to-slate-850 text-white p-5 rounded-2xl shadow-md border border-slate-800">
         <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-3 flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4" />
           Resumen de Ventas para Declaración de IVA (Forma 30 SENIAT)
         </h4>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono-nums">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 text-xs font-mono-nums">
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
-            <span className="text-[11px] text-slate-400 block">Total Ventas Internas Gravadas:</span>
-            <span className="text-base font-bold text-white mt-1 block">{formatBs(totalBaseBs)}</span>
-            <span className="text-[10px] text-slate-400">{formatUsd(totalBaseUsd)}</span>
+            <span className="text-[11px] text-slate-400 block">Bases imponibles gravadas:</span>
+            <span className="text-base font-bold text-white mt-1 block">{formatBs(totalFiscalBaseBs)}</span>
+            <span className="text-[10px] text-slate-400">{formatUsd(totalFiscalBaseUsd)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
-            <span className="text-[11px] text-slate-400 block">IGTF percibido (3%, si aplica):</span>
-            <span className="text-base font-bold text-sky-300 mt-1 block">{formatBs(totalIgtfBs)}</span>
+            <span className="text-[11px] text-slate-400 block">Ventas exentas / exoneradas:</span>
+            <span className="text-base font-bold text-white mt-1 block">{formatBs(totalFiscalExemptBs)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
-            <span className="text-[11px] text-slate-400 block">Débito Fiscal Generado (16%):</span>
-            <span className="text-base font-bold text-emerald-400 mt-1 block">{formatBs(totalIvaDebitoBs)}</span>
-            <span className="text-[10px] text-slate-400">{formatUsd(totalIvaDebitoUsd)}</span>
+            <span className="text-[11px] text-slate-400 block">Débito fiscal IVA:</span>
+            <span className="text-base font-bold text-emerald-400 mt-1 block">{formatBs(totalFiscalIvaBs)}</span>
+            <span className="text-[10px] text-slate-400">{formatUsd(totalFiscalIvaUsd)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
-            <span className="text-[11px] text-slate-400 block">Retenciones de IVA Recibidas por Compensar:</span>
+            <span className="text-[11px] text-slate-400 block">Impuesto adicional al consumo suntuario (15%):</span>
+            <span className="text-base font-bold text-amber-300 mt-1 block">{formatBs(totalFiscalLuxuryTaxBs)}</span><span className="text-[10px] text-slate-400">{formatUsd(totalFiscalLuxuryTaxUsd)}</span>
+          </div>
+          <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+            <span className="text-[11px] text-slate-400 block">IGTF percibido:</span>
+            <span className="text-base font-bold text-sky-300 mt-1 block">{formatBs(totalFiscalIgtfBs)}</span>
+          </div>
+          <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+            <span className="text-[11px] text-slate-400 block">IVA retenido por clientes:</span>
             <span className="text-base font-bold text-purple-300 mt-1 block">{formatBs(totalIvaRetenidoBs)}</span>
             <span className="text-[10px] text-slate-400">{formatUsd(totalIvaRetenidoUsd)}</span>
           </div>
@@ -381,6 +463,7 @@ export const LibroVentasView: React.FC = () => {
       </div>
 
       <NewSaleModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <FiscalZReportModal isOpen={isZModalOpen} onClose={() => setIsZModalOpen(false)} />
       {documentTarget && <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-label="Expediente documental">
         <div className="mx-auto mt-10 max-w-3xl rounded-2xl bg-white p-4 shadow-2xl">
           <div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-bold text-slate-800">{documentTarget.title}</h3><button type="button" onClick={() => setDocumentTarget(null)} className="rounded-lg px-3 py-1 text-xs text-slate-600 hover:bg-slate-100">Cerrar</button></div>
@@ -388,6 +471,13 @@ export const LibroVentasView: React.FC = () => {
         </div>
       </div>}
 
+      {zDocumentTarget && <div className="fixed inset-0 z-[65] overflow-y-auto bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-label="Soportes opcionales del Reporte Z">
+        <div className="mx-auto mt-10 max-w-3xl rounded-2xl bg-white p-4 shadow-2xl">
+          <div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-bold text-slate-800">Soportes opcionales · Reporte Z {zDocumentTarget.fiscalZReport?.zNumber}</h3><button type="button" onClick={() => setZDocumentTarget(null)} className="rounded-lg px-3 py-1 text-xs text-slate-600 hover:bg-slate-100">Cerrar</button></div>
+          <p className="mb-3 text-[11px] text-slate-500">Adjuntar documentos es opcional; el Reporte Z y su asiento ya están registrados.</p>
+          <SupportingDocumentsPanel entityType="JOURNAL_ENTRY" entityId={zDocumentTarget.id} documentType="REPORTE_Z" title={'Reporte Z ' + (zDocumentTarget.fiscalZReport?.zNumber || '')} />
+        </div>
+      </div>}
       {settlementTarget && <CreditSettlementModal documentId={settlementTarget.id} documentNumber={settlementTarget.number} partyName={settlementTarget.party} kind="SALE_COLLECTION" onClose={() => setSettlementTarget(null)} />}
       <JournalReversalModal source={reversalTarget} onClose={() => setReversalTarget(null)} />
       {correctionTarget && <SaleCorrectionNoteModal sourceSale={correctionTarget.sale} kind={correctionTarget.kind}

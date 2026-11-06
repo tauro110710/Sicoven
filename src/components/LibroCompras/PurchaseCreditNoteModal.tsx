@@ -57,7 +57,8 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
     ['CREDITO', 'CONTADO'].includes(purchase.paymentTerm || '') && Boolean(purchase.inventoryLines?.length);
   const invalidRows = rows.filter(row => !row.product || !row.originalMovement);
   const selectedLines = rows.flatMap(row => {
-    const quantity = Number(quantities[row.line.productId] || 0);
+    const rawQuantity = String(quantities[row.line.productId] || '').trim();
+    const quantity = Number(rawQuantity.includes(',') ? rawQuantity.replace(/\\./g, '').replace(',', '.') : rawQuantity);
     if (!row.originalMovement || !Number.isFinite(quantity) || quantity <= 0) return [];
     return [{ productId: row.line.productId, originalMovementId: row.originalMovement.id, quantity }];
   });
@@ -159,7 +160,7 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
                       <td className="px-3 py-2 text-right font-mono">{Number(row.line.quantity).toLocaleString('es-VE')}</td>
                       <td className="px-3 py-2 text-right font-mono">{row.returned.toLocaleString('es-VE')}</td>
                       <td className="px-3 py-2 text-right font-mono font-semibold">{row.available.toLocaleString('es-VE')}</td>
-                      <td className="px-3 py-2 text-right"><input type="number" min="0" max={row.available} step="0.0001" disabled={!row.originalMovement || row.available <= 0 || submitting} value={quantities[row.line.productId] || ''} onChange={event => setQuantities(prev => ({ ...prev, [row.line.productId]: event.target.value }))} className="w-28 rounded border border-slate-300 px-2 py-1 text-right font-mono" placeholder="0" /></td>
+                      <td className="px-3 py-2 text-right"><input type="text" inputMode="decimal" disabled={!row.originalMovement || row.available <= 0 || submitting} value={quantities[row.line.productId] || ''} onChange={event => setQuantities(prev => ({ ...prev, [row.line.productId]: event.target.value }))} className="w-28 rounded border border-slate-300 px-2 py-1 text-right font-mono" placeholder="0" /></td>
                     </tr>)}
                   </tbody>
                 </table>

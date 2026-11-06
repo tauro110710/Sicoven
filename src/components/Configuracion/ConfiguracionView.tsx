@@ -21,7 +21,6 @@ import { AccountingFramework, TaxpayerType, IvaRetentionAgentBasis, JournalEntry
 import { validateFunctionalCurrencyAssessment, validateExchangeabilityAssessment } from '../../types/functionalCurrency';
 import { buildOpeningEntryItems } from '../../types/accountingYearOpening';
 import { CompanyModal } from '../CompanyModal';
-import { BcvRateModal } from '../BcvRateModal';
 import { formatBs, validateVenezuelanRif } from '../../utils/formatters';
 import { MigracionInteligente } from './MigracionInteligente';
 
@@ -45,7 +44,6 @@ export const ConfiguracionView: React.FC = () => {
   } = useAccounting();
 
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
-  const [isBcvModalOpen, setIsBcvModalOpen] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [companySaveBusy, setCompanySaveBusy] = useState(false);
   const companySaveInFlightRef = React.useRef(false);
@@ -74,6 +72,7 @@ export const ConfiguracionView: React.FC = () => {
     date.setUTCDate(date.getUTCDate() + 1);
     return date.toISOString().slice(0, 10);
   });
+  const [openingBcvRateInput, setOpeningBcvRateInput] = useState('');
   const [retainedEarningsAccountCode, setRetainedEarningsAccountCode] = useState('');
   const [openingPreview, setOpeningPreview] = useState<JournalEntryItem[] | null>(null);
   const [openingError, setOpeningError] = useState<string | null>(null);
@@ -95,7 +94,6 @@ export const ConfiguracionView: React.FC = () => {
   const [phone, setPhone] = useState(currentCompany.phone);
   const [email, setEmail] = useState(currentCompany.email);
   const [fiscalYear, setFiscalYear] = useState(currentCompany.fiscalYear);
-  const [bcvRate, setBcvRate] = useState(String(currentCompany.bcvRate));
   const [accountingFramework, setAccountingFramework] = useState<AccountingFramework | ''>(currentCompany.accountingFramework || '');
   const [accountingFrameworkVersion, setAccountingFrameworkVersion] = useState(currentCompany.accountingFrameworkVersion || '');
   const [accountingFrameworkAdoptionDate, setAccountingFrameworkAdoptionDate] = useState(currentCompany.accountingFrameworkAdoptionDate || '');
@@ -122,6 +120,8 @@ export const ConfiguracionView: React.FC = () => {
     legallyAccessible: false, actuallyAccessible: false, conclusion: 'NOT_CONVERTIBLE'
   });
   const [exchangeabilityEvidence, setExchangeabilityEvidence] = useState('');
+  const [exchangeabilityInputs, setExchangeabilityInputs] = useState({ amountRequired: '', expectedDelayDays: '', amountAvailable: '', accessibleSpotRate: '', estimatedSpotRate: '' });
+  const parseExchangeabilityNumber = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
 
   // Sync state if currentCompany switches
   React.useEffect(() => {
@@ -138,7 +138,6 @@ export const ConfiguracionView: React.FC = () => {
     setPhone(currentCompany.phone);
     setEmail(currentCompany.email);
     setFiscalYear(currentCompany.fiscalYear);
-    setBcvRate(String(currentCompany.bcvRate));
     setAccountingFramework(currentCompany.accountingFramework || '');
     setAccountingFrameworkVersion(currentCompany.accountingFrameworkVersion || '');
     setAccountingFrameworkAdoptionDate(currentCompany.accountingFrameworkAdoptionDate || '');
@@ -212,6 +211,11 @@ export const ConfiguracionView: React.FC = () => {
   };
 
   const handlePostOpening = async () => {
+    const openingBcvRate = parseExchangeabilityNumber(openingBcvRateInput);
+    if (!Number.isFinite(openingBcvRate) || openingBcvRate <= 0) {
+      setOpeningError('Ingrese la tasa BCV histórica aplicable al asiento de apertura, por ejemplo 889,67.');
+      return;
+    }
     if (!openingPreview) {
       setOpeningError('Genere y revise la vista previa antes de registrar el asiento.');
       return;
@@ -223,6 +227,7 @@ export const ConfiguracionView: React.FC = () => {
     const confirmed = window.confirm(
       'REGISTRAR ASIENTO DE APERTURA\\n\\nEmpresa: ' + currentCompany.name +
       '\\nFecha: ' + openingDate +
+      '\\nTasa BCV: Bs. ' + openingBcvRateInput + ' por USD' +
       '\\nTotal debe: Bs. ' + totals.debitBs.toFixed(2) + ' / $ ' + totals.debitUsd.toFixed(6) +
       '\\nTotal haber: Bs. ' + totals.creditBs.toFixed(2) + ' / $ ' + totals.creditUsd.toFixed(6) +
       '\\n\\nEl asiento se guardará en SQLite y quedará registrado en la bitácora. Esta acción no se ejecuta automáticamente. ¿Confirma?'
@@ -235,6 +240,7 @@ export const ConfiguracionView: React.FC = () => {
         periodStartDate: openingPeriodStart,
         periodEndDate: openingPeriodEnd,
         openingDate,
+        bcvRate: openingBcvRate,
         retainedEarningsAccountCode: retainedEarningsAccountCode || undefined
       });
       setOpeningPreview(null);
@@ -322,8 +328,9 @@ export const ConfiguracionView: React.FC = () => {
     const x = exchangeabilityDraft;
     const hasExchangeabilityInput = Boolean(
       x.measurementDate || x.purpose || x.currency || x.amountRequired || x.legalMechanism ||
-      x.expectedDelayDays !== undefined || x.amountAvailable !== undefined || x.accessibleSpotRate !== undefined ||
-      x.estimatedSpotRate !== undefined || x.estimationMethod || x.estimationEvidence ||
+      exchangeabilityInputs.amountRequired.trim() || exchangeabilityInputs.expectedDelayDays.trim() ||
+      exchangeabilityInputs.amountAvailable.trim() || exchangeabilityInputs.accessibleSpotRate.trim() ||
+      exchangeabilityInputs.estimatedSpotRate.trim() || x.estimationMethod || x.estimationEvidence ||
       x.preparedBy || x.approvedBy || x.approvedAt || exchangeabilityEvidence.trim()
     );
     let newExchangeabilityAssessment: ExchangeabilityAssessment | undefined;
@@ -334,16 +341,16 @@ export const ConfiguracionView: React.FC = () => {
         purpose: String(x.purpose || ''),
         currency: (x.currency || '') as AccountingCurrencyCode,
         ...(x.currency === 'OTHER' ? { currencyOther: String(x.currencyOther || '') } : {}),
-        amountRequired: Number(x.amountRequired || 0),
+        amountRequired: parseExchangeabilityNumber(exchangeabilityInputs.amountRequired || '0'),
         legalMechanism: String(x.legalMechanism || ''),
         legallyAccessible: x.legallyAccessible === true,
         actuallyAccessible: x.actuallyAccessible === true,
-        ...(x.expectedDelayDays !== undefined ? { expectedDelayDays: Number(x.expectedDelayDays) } : {}),
-        ...(x.amountAvailable !== undefined ? { amountAvailable: Number(x.amountAvailable) } : {}),
-        ...(x.accessibleSpotRate !== undefined ? { accessibleSpotRate: Number(x.accessibleSpotRate) } : {}),
+        ...(exchangeabilityInputs.expectedDelayDays.trim() ? { expectedDelayDays: Number(exchangeabilityInputs.expectedDelayDays) } : {}),
+        ...(exchangeabilityInputs.amountAvailable.trim() ? { amountAvailable: parseExchangeabilityNumber(exchangeabilityInputs.amountAvailable) } : {}),
+        ...(exchangeabilityInputs.accessibleSpotRate.trim() ? { accessibleSpotRate: parseExchangeabilityNumber(exchangeabilityInputs.accessibleSpotRate) } : {}),
         evidenceReferences: exchangeabilityEvidence.split(String.fromCharCode(10)).map(item => item.trim()).filter(Boolean),
         conclusion: (x.conclusion || 'NOT_CONVERTIBLE') as 'CONVERTIBLE' | 'NOT_CONVERTIBLE',
-        ...(x.estimatedSpotRate !== undefined ? { estimatedSpotRate: Number(x.estimatedSpotRate) } : {}),
+        ...(exchangeabilityInputs.estimatedSpotRate.trim() ? { estimatedSpotRate: parseExchangeabilityNumber(exchangeabilityInputs.estimatedSpotRate) } : {}),
         ...(x.estimationMethod ? { estimationMethod: String(x.estimationMethod) } : {}),
         ...(x.estimationEvidence ? { estimationEvidence: String(x.estimationEvidence) } : {}),
         preparedBy: String(x.preparedBy || ''),
@@ -380,7 +387,6 @@ export const ConfiguracionView: React.FC = () => {
         phone: phone.trim(),
         email: email.trim(),
         fiscalYear: Number(fiscalYear),
-        bcvRate: Number(bcvRate)
       });
       await waitForPersistence();
       setSaveSuccess(true);
@@ -516,7 +522,7 @@ export const ConfiguracionView: React.FC = () => {
               Configuración del Sistema Contable
             </h1>
             <p className="text-xs text-slate-500 max-w-2xl mt-0.5">
-              Gestión de empresas independientes, tasa oficial del BCV, calificación SENIAT y respaldos de datos.
+              Gestión de empresas independientes, calificación SENIAT y respaldos de datos.
             </p>
           </div>
 
@@ -566,9 +572,6 @@ export const ConfiguracionView: React.FC = () => {
                       c.taxpayerType === 'ESPECIAL' ? 'bg-purple-100 text-purple-800' : 'bg-sky-100 text-sky-800'
                     }`}>
                       {c.taxpayerType === 'ESPECIAL' ? 'Contribuyente Especial' : 'Contribuyente Ordinario'}
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-mono">
-                      BCV: Bs. {c.bcvRate.toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -656,17 +659,17 @@ export const ConfiguracionView: React.FC = () => {
               <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Fecha de medición</label><input type="date" value={String(exchangeabilityDraft.measurementDate || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, measurementDate: e.target.value }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
               <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Propósito concreto</label><input value={String(exchangeabilityDraft.purpose || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, purpose: e.target.value }))} placeholder="Ej. pagar proveedor extranjero" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
               <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Moneda requerida</label><select value={String(exchangeabilityDraft.currency || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, currency: e.target.value as AccountingCurrencyCode }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="">Seleccione</option><option value="VES">VES</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="OTHER">Otra</option></select>{exchangeabilityDraft.currency === 'OTHER' && <input value={String(exchangeabilityDraft.currencyOther || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, currencyOther: e.target.value }))} placeholder="Código de moneda" className="mt-1 w-full px-3 py-1.5 border border-slate-300 rounded-lg" />}</div>
-              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Monto que se necesita convertir</label><input type="number" min="0" step="0.01" value={String(exchangeabilityDraft.amountRequired ?? '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, amountRequired: e.target.value === '' ? undefined : Number(e.target.value) }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Monto que se necesita convertir</label><input type="text" inputMode="decimal" value={exchangeabilityInputs.amountRequired} onChange={e => setExchangeabilityInputs(p => ({ ...p, amountRequired: e.target.value }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
               <div className="sm:col-span-2"><label className="block text-[11px] font-semibold text-slate-700 mb-1">Mecanismo legal evaluado</label><textarea value={String(exchangeabilityDraft.legalMechanism || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, legalMechanism: e.target.value }))} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
               <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">¿Legalmente accesible?</label><select value={String(exchangeabilityDraft.legallyAccessible)} onChange={e => setExchangeabilityDraft(p => ({ ...p, legallyAccessible: e.target.value === 'true' }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="false">No / no acreditado</option><option value="true">Sí, con evidencia</option></select></div>
               <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">¿Acceso efectivo para la entidad?</label><select value={String(exchangeabilityDraft.actuallyAccessible)} onChange={e => setExchangeabilityDraft(p => ({ ...p, actuallyAccessible: e.target.value === 'true' }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="false">No / no acreditado</option><option value="true">Sí, probado</option></select></div>
-              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Plazo estimado (días)</label><input type="number" min="0" step="1" value={String(exchangeabilityDraft.expectedDelayDays ?? '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, expectedDelayDays: e.target.value === '' ? undefined : Number(e.target.value) }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Plazo estimado (días)</label><input type="text" inputMode="numeric" value={exchangeabilityInputs.expectedDelayDays} onChange={e => setExchangeabilityInputs(p => ({ ...p, expectedDelayDays: e.target.value }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
               <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Conclusión</label><select value={String(exchangeabilityDraft.conclusion || 'NOT_CONVERTIBLE')} onChange={e => setExchangeabilityDraft(p => ({ ...p, conclusion: e.target.value as 'CONVERTIBLE' | 'NOT_CONVERTIBLE' }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="CONVERTIBLE">Convertible</option><option value="NOT_CONVERTIBLE">No convertible</option></select></div>
               {exchangeabilityDraft.conclusion === 'CONVERTIBLE' ? <>
-                <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Monto realmente disponible</label><input type="number" min="0" step="0.01" value={String(exchangeabilityDraft.amountAvailable ?? '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, amountAvailable: e.target.value === '' ? undefined : Number(e.target.value) }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
-                <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Tasa spot accesible</label><input type="number" min="0" step="0.000001" value={String(exchangeabilityDraft.accessibleSpotRate ?? '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, accessibleSpotRate: e.target.value === '' ? undefined : Number(e.target.value) }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+                <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Monto realmente disponible</label><input type="text" inputMode="decimal" value={exchangeabilityInputs.amountAvailable} onChange={e => setExchangeabilityInputs(p => ({ ...p, amountAvailable: e.target.value }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+                <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Tasa spot accesible</label><input type="text" inputMode="decimal" value={exchangeabilityInputs.accessibleSpotRate} onChange={e => setExchangeabilityInputs(p => ({ ...p, accessibleSpotRate: e.target.value }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
               </> : <>
-                <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Tasa spot estimada</label><input type="number" min="0" step="0.000001" value={String(exchangeabilityDraft.estimatedSpotRate ?? '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, estimatedSpotRate: e.target.value === '' ? undefined : Number(e.target.value) }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
+                <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Tasa spot estimada</label><input type="text" inputMode="decimal" value={exchangeabilityInputs.estimatedSpotRate} onChange={e => setExchangeabilityInputs(p => ({ ...p, estimatedSpotRate: e.target.value }))} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
                 <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">Metodología de estimación</label><textarea value={String(exchangeabilityDraft.estimationMethod || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, estimationMethod: e.target.value }))} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
                 <div className="sm:col-span-2"><label className="block text-[11px] font-semibold text-slate-700 mb-1">Evidencia de la estimación</label><textarea value={String(exchangeabilityDraft.estimationEvidence || '')} onChange={e => setExchangeabilityDraft(p => ({ ...p, estimationEvidence: e.target.value }))} rows={2} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" /></div>
               </>}
@@ -776,22 +779,7 @@ export const ConfiguracionView: React.FC = () => {
                 <input type="checkbox" checked={isIgtfPerceptionAgent} onChange={e => setIsIgtfPerceptionAgent(e.target.checked)} className="mt-0.5" />
                 <span><strong>Empresa designada agente de percepción del IGTF</strong><span className="block text-xs text-slate-600 mt-1">Actívelo únicamente si la designación aplica legalmente a esta empresa. Este parámetro habilita el cálculo en las facturas elegibles.</span></span>
               </label>
-            </div>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Tasa Oficial BCV (Bs/$)</label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  required
-                  value={bcvRate}
-                  onChange={e => setBcvRate(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-                />
-              </div>
-            </div>
-          </div>
+            </div></div>
 
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Dirección Fiscal Completa</label>
@@ -943,7 +931,7 @@ export const ConfiguracionView: React.FC = () => {
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Inicio del ejercicio</label>
             <input type="date" value={openingPeriodStart} onChange={e => { setOpeningPeriodStart(e.target.value); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
@@ -955,6 +943,10 @@ export const ConfiguracionView: React.FC = () => {
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de apertura</label>
             <input type="date" value={openingDate} onChange={e => { setOpeningDate(e.target.value); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) *</label>
+            <input type="text" inputMode="decimal" value={openingBcvRateInput} onChange={e => { setOpeningBcvRateInput(e.target.value); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} placeholder="Ej.: 889,67" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Cuenta patrimonial para resultado</label>
@@ -976,7 +968,7 @@ export const ConfiguracionView: React.FC = () => {
           <button type="button" onClick={handlePreviewOpening} disabled={openingBusy || !isStorageReady || !currentCompany.closedThroughDate} className="rounded-lg bg-indigo-600 hover:bg-indigo-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
             Preparar vista previa
           </button>
-          <button type="button" onClick={handlePostOpening} disabled={openingBusy || !openingPreview || !isStorageReady} className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={handlePostOpening} disabled={openingBusy || !openingPreview || !isStorageReady || parseExchangeabilityNumber(openingBcvRateInput) <= 0} className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
             {openingBusy ? 'Guardando y verificando SQLite…' : 'Confirmar y registrar apertura'}
           </button>
         </div>
@@ -1139,8 +1131,6 @@ export const ConfiguracionView: React.FC = () => {
         </div>
       </div>
 
-      <CompanyModal isOpen={isCompanyModalOpen} onClose={() => setIsCompanyModalOpen(false)} />
-      <BcvRateModal isOpen={isBcvModalOpen} onClose={() => setIsBcvModalOpen(false)} />
-    </div>
+      <CompanyModal isOpen={isCompanyModalOpen} onClose={() => setIsCompanyModalOpen(false)} /></div>
   );
 };

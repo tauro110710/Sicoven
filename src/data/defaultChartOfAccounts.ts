@@ -7,9 +7,8 @@ export const DEFAULT_CHART_OF_ACCOUNTS: Account[] = [
   { code: '1.1.1', name: 'Efectivo y Equivalentes de Efectivo', type: 'ACTIVO', level: 3, isMovement: false, parentCode: '1.1' },
   { code: '1.1.1.01', name: 'Caja Principal (Moneda Nacional Bs.)', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.1' },
   { code: '1.1.1.02', name: 'Caja Moneda Extranjera (USD)', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.1' },
-  { code: '1.1.1.03', name: 'Banco Nacional de Crédito - Cta. Corriente Bs.', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.1' },
-  { code: '1.1.1.04', name: 'Banesco Banco Universal - Cta. Corriente Bs.', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.1' },
-  { code: '1.1.1.05', name: 'Banco Mercantil - Cta. Moneda Extranjera ($)', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.1' },
+  // Las cuentas bancarias reales se crean por empresa desde Tesorería.
+  // Los códigos .03–.05 quedan reservados y no se reasignan para preservar históricos.
 
   { code: '1.1.2', name: 'Cuentas y Documentos por Cobrar', type: 'ACTIVO', level: 3, isMovement: false, parentCode: '1.1' },
   { code: '1.1.2.01', name: 'Cuentas por Cobrar Clientes Comerciales', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.2' },
@@ -55,6 +54,7 @@ export const DEFAULT_CHART_OF_ACCOUNTS: Account[] = [
   { code: '2.1.2.05', name: 'Impuesto Sobre la Renta (ISLR) por Pagar', type: 'PASIVO', level: 4, isMovement: true, parentCode: '2.1.2' },
   { code: '2.1.2.06', name: 'Impuesto a las Grandes Transacciones Financieras (IGTF)', type: 'PASIVO', level: 4, isMovement: true, parentCode: '2.1.2' },
   { code: '2.1.2.07', name: 'Impuestos Municipales por Pagar (Alcaldía)', type: 'PASIVO', level: 4, isMovement: true, parentCode: '2.1.2' },
+  { code: '2.1.2.08', name: 'Impuesto Adicional al Consumo Suntuario (15%)', type: 'PASIVO', level: 4, isMovement: true, parentCode: '2.1.2' },
 
   { code: '2.1.3', name: 'Obligaciones Laborales y Parafiscales', type: 'PASIVO', level: 3, isMovement: false, parentCode: '2.1' },
   { code: '2.1.3.01', name: 'Sueldos y Salarios por Pagar', type: 'PASIVO', level: 4, isMovement: true, parentCode: '2.1.3' },

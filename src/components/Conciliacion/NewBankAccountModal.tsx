@@ -9,7 +9,7 @@ interface NewBankAccountModalProps {
 }
 
 export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, addBankAccount, waitForPersistence } = useAccounting();
+  const { addBankAccount, waitForPersistence } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
@@ -19,12 +19,14 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
   const [accountNumber, setAccountNumber] = useState('');
   const [currency, setCurrency] = useState<'BS' | 'USD'>('BS');
   const [initialBalanceBs, setInitialBalanceBs] = useState<string>('');
+  const [bcvRateInput, setBcvRateInput] = useState<string>('');
 
   if (!isOpen) return null;
 
   const normalizedAccountNumber = accountNumber.replace(/\D/g, '');
-  const parsedOpeningBalance = Number(initialBalanceBs) || 0;
-  const bcvRate = Number(currentCompany.bcvRate || 0);
+  const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
+  const parsedOpeningBalance = parseAmount(initialBalanceBs) || 0;
+  const bcvRate = parseAmount(bcvRateInput) || 0;
   const openingBalanceBs = currency === 'USD' ? parsedOpeningBalance * bcvRate : parsedOpeningBalance;
   const openingBalanceUsd = currency === 'USD' ? parsedOpeningBalance : (bcvRate > 0 ? parsedOpeningBalance / bcvRate : 0);
   const handleSubmit = async (e: React.FormEvent) => {
@@ -50,6 +52,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
         bankName: bankName.trim(),
         accountNumber: normalizedAccountNumber,
         currency,
+        bcvRate,
         initialBalanceBs: Math.round(openingBalanceBs * 100) / 100,
         initialBalanceUsd: Math.round(openingBalanceUsd * 1000000) / 1000000,
         accountType,
@@ -63,6 +66,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
       setAccountNumber('');
       setCurrency('BS');
       setInitialBalanceBs('');
+      setBcvRateInput('');
       onClose();
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'No se pudo registrar la cuenta bancaria.');
@@ -153,9 +157,8 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Saldo Inicial en {currency === 'USD' ? '$ USD' : 'Bs.'}</label>
               <input
-                type="number"
-                step="0.01"
-                min="0"
+                type="text"
+                inputMode="decimal"
                 value={initialBalanceBs}
                 placeholder="0.00"
                 onChange={e => setInitialBalanceBs(e.target.value)}
@@ -163,6 +166,11 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
               />
             </div>
           </div>
+
+          {parsedOpeningBalance > 0 && <div>
+            <label className="block font-semibold text-slate-700 mb-1">Tasa BCV aplicable al saldo inicial (Bs./USD) {currency === 'USD' ? '*' : '(opcional)'}</label>
+            <input type="text" inputMode="decimal" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} placeholder="Ej.: 889,67" required className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+          </div>}
 
           <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">
             <button

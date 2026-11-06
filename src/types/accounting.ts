@@ -138,6 +138,31 @@ export type EntryType =
   | 'CIERRE'
   | 'ANTICIPO_PROVEEDOR';
 
+export interface FiscalZReportMetadata {
+  date: string;
+  zNumber: string;
+  machineBrand?: string;
+  machineModel?: string;
+  machineSerial: string;
+  invoiceStart: string;
+  invoiceEnd: string;
+  controlStart?: string;
+  controlEnd?: string;
+  taxableBase16Bs: number;
+  vat16Bs: number;
+  taxableBase8Bs: number;
+  vat8Bs: number;
+  taxableBase31Bs: number;
+  vat31Bs: number;
+  additionalLuxuryTaxBs: number;
+  exemptSalesBs: number;
+  igtfBs: number;
+  totalSalesBs: number;
+  payments: Array<{ method: string; amountBs: number; accountCode: string }>;
+  observations?: string;
+  supportRequired: false;
+}
+
 export interface JournalEntry {
   id: string;
   companyId: string;
@@ -160,6 +185,7 @@ export interface JournalEntry {
   adjustmentForEntryId?: string;
   adjustmentReason?: string;
   /** Vínculo inmutable entre el ejercicio cerrado y el ejercicio que inicia con esta apertura. */
+  fiscalZReport?: FiscalZReportMetadata;
   exerciseLink?: {
     priorPeriodStartDate: string;
     priorPeriodEndDate: string;
@@ -200,6 +226,8 @@ export interface SupplierDebitNoteReview {
 export interface PurchaseRecord {
   /** Líneas de mercancía vinculadas al Kardex; ausente en facturas históricas sin detalle. */
   inventoryLines?: PurchaseInventoryLine[];
+  /** Cuenta explícita de débito para compras no inventariables; nunca se infiere por defecto. */
+  purchaseDebitAccountCode?: string;
   /** Revisión profesional inmutable y trazable que autoriza el plan contable preliminar de una ND. */
   supplierDebitNoteReview?: SupplierDebitNoteReview;
   /** Enlace inmutable de una nota de crédito de proveedor a su factura y movimientos físicos. */
@@ -307,6 +335,9 @@ export interface SaleRecord {
   taxableBaseBs: number;
   taxRate: number; // 16, 8, 31, 0
   vatAmountBs: number;
+  /** Componente adicional del 15% al consumo suntuario cuando la tasa combinada es 31%; no es IVA. */
+  additionalLuxuryTaxBs?: number;
+  additionalLuxuryTaxUsd?: number;
   vatWithheldBs: number; // Retenido por cliente si es contribuyente especial
   retentionRate?: number;
   retentionVoucherNumber?: string;

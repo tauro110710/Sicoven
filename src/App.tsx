@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { AccountingProvider, useAccounting } from './context/AccountingContext';
 import { Navbar } from './components/Navbar';
 import { CompanyModal } from './components/CompanyModal';
-import { BcvRateModal } from './components/BcvRateModal';
 import { LibroDiarioView } from './components/LibroDiario/LibroDiarioView';
 import { LibroMayorView } from './components/LibroMayor/LibroMayorView';
 import { BalancesView } from './components/Balances/BalancesView';
@@ -28,7 +27,6 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
   const [showAdmins, setShowAdmins] = useState(false);
   const [activeTab, setActiveTab] = useState<string>(auth.user.role === 'contador' ? 'reversiones' : 'diario');
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
-  const [isBcvModalOpen, setIsBcvModalOpen] = useState(false);
   const { currentCompany, companies, isStorageReady, storageError } = useAccounting();
 
   useEffect(() => {
@@ -97,7 +95,6 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenCompanyModal={() => setIsCompanyModalOpen(true)}
-        onOpenBcvModal={() => setIsBcvModalOpen(true)}
         userRole={auth.user.role}
       />
 
@@ -131,11 +128,7 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
         isOpen={isCompanyModalOpen}
         onClose={() => setIsCompanyModalOpen(false)}
       />
-      <BcvRateModal
-        isOpen={isBcvModalOpen}
-        onClose={() => setIsBcvModalOpen(false)}
-      />
-    </div>
+</div>
   );
 };
 

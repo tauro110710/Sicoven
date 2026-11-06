@@ -6,6 +6,7 @@ import { buildReversalItems, assessJournalReversal, validateBankStatementReversa
 import type { VatFiscalIncident } from '../types/vatFiscalIncidents';
 
 type CorrectionEmissionMedium = 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | '';
+const parseFiscalInput = (value: string) => { const raw = String(value ?? '').trim(); return Number(raw.includes(',') ? raw.split('.').join('').replace(',', '.') : raw); };
 
 interface CorrectionNoteFormFieldsProps {
   minDate: string;
@@ -48,10 +49,10 @@ const CorrectionNoteFormFields: React.FC<CorrectionNoteFormFieldsProps> = ({
         <input value={controlNumber} onChange={event=>setControlNumber(event.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
       </label>
       <label className="text-xs font-semibold text-slate-700">Base imponible (Bs.)
-        <input type="number" min="0" step="0.01" value={taxableBase} onChange={event=>setTaxableBase(event.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+        <input type="text" inputMode="decimal" value={taxableBase} onChange={event=>setTaxableBase(event.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
       </label>
       <label className="text-xs font-semibold text-slate-700">Monto exento (Bs.)
-        <input type="number" min="0" step="0.01" value={exemptAmount} onChange={event=>setExemptAmount(event.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+        <input type="text" inputMode="decimal" min="0" step="0.01" value={exemptAmount} onChange={event=>setExemptAmount(event.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
       </label>
       <label className="text-xs font-semibold text-slate-700">Medio de emisión de la nota
         <select value={medium} onChange={event=>setMedium(event.target.value as CorrectionEmissionMedium)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
@@ -69,7 +70,7 @@ const CorrectionNoteFormFields: React.FC<CorrectionNoteFormFieldsProps> = ({
       <input type="checkbox" checked={sameMedium} onChange={event=>setSameMedium(event.target.checked)} className="mt-0.5"/>
       Confirmo que la nota será emitida por el mismo medio de la factura original.
     </label>
-    <button type="button" onClick={onSubmit} disabled={submitting || !noteDate || !noteNumber.trim() || !controlNumber.trim() || reason.trim().length<10 || !medium || !sameMedium || Number(taxableBase)<0 || Number(exemptAmount)<0 || Number(taxableBase)+Number(exemptAmount)<=0} className="rounded bg-indigo-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
+    <button type="button" onClick={onSubmit} disabled={submitting || !noteDate || !noteNumber.trim() || !controlNumber.trim() || reason.trim().length<10 || !medium || !sameMedium || parseFiscalInput(taxableBase)<0 || parseFiscalInput(exemptAmount)<0 || parseFiscalInput(taxableBase)+parseFiscalInput(exemptAmount)<=0} className="rounded bg-indigo-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
       {submitting ? 'Registrando y validando…' : submitLabel}
     </button>
   </div>
@@ -90,6 +91,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   const [retainedEarningsCode, setRetainedEarningsCode] = useState('');
   const [correctionMovementId, setCorrectionMovementId] = useState('');
   const [correctionQuantity, setCorrectionQuantity] = useState('1');
+  const [correctionBcvRate, setCorrectionBcvRate] = useState('');
   const [correctionDate, setCorrectionDate] = useState(today);
   const [correctionDocumentRef, setCorrectionDocumentRef] = useState('');
   const [supplierReturnLines, setSupplierReturnLines] = useState<Array<{productId:string;quantity:string}>>([{productId:'',quantity:'1'}]);
@@ -120,7 +122,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   const [incidentCreateReason, setIncidentCreateReason] = useState('');
   const [incidentCreating, setIncidentCreating] = useState(false);
   const [bcvCorrectionOpen, setBcvCorrectionOpen] = useState(false);
-  const [bcvCorrectionRate, setBcvCorrectionRate] = useState(String(currentCompany.bcvRate || ''));
+  const [bcvCorrectionRate, setBcvCorrectionRate] = useState('');
   const [bcvCorrectionDate, setBcvCorrectionDate] = useState(today);
   const [bcvCorrectionReason, setBcvCorrectionReason] = useState('');
   const [bcvCorrectionSaving, setBcvCorrectionSaving] = useState(false);
@@ -249,12 +251,6 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   const selectedSupplierAdvanceSettlementForCorrection = requestEntityType === 'SUPPLIER_ADVANCE_SETTLEMENT' ? supplierAdvanceSettlements.find(item => item.id === requestEntityId && item.companyId === currentCompany.id) : undefined;
   const selectedSupplierDirectAdvanceForCorrection = requestEntityType === 'SUPPLIER_DIRECT_ADVANCE' ? supplierDirectAdvances.find(item => item.id === requestEntityId && item.companyId === currentCompany.id) : undefined;
   const selectedJournalForCorrection = requestEntityType === 'JOURNAL_ENTRY' ? journalEntries.find(item => item.id === requestEntityId && item.companyId === currentCompany.id) : undefined;
-  const selectedPurchaseHasInventory = Boolean(selectedPurchaseForCorrection && (
-    selectedPurchaseForCorrection.inventoryLines?.length ||
-    movements.some(item => item.companyId === currentCompany.id &&
-      (item.journalEntryId === selectedPurchaseForCorrection.journalEntryId ||
-       item.documentRef.trim().toUpperCase() === ('FAC-' + selectedPurchaseForCorrection.invoiceNumber).trim().toUpperCase()))
-  ));
   const selectedSaleEntryForCorrection = selectedSaleForCorrection?.journalEntryId
     ? journalEntries.find(item=>item.id===selectedSaleForCorrection.journalEntryId && item.companyId===currentCompany.id)
     : undefined;
@@ -329,7 +325,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
     if (requestActionSubmitting) return;
     if (!requestTargetRef.trim() || !requestControlNumber.trim() || requestReason.trim().length < 10 ||
         !requestCorrectionDate || !requestFiscalEmissionMedium || !requestSameMediumAsOriginal ||
-        Number(requestTaxableBaseBs) < 0 || Number(requestExemptAmountBs) < 0 ||
+        parseFiscalInput(requestTaxableBaseBs) < 0 || parseFiscalInput(requestExemptAmountBs) < 0 ||
         Number(requestTaxableBaseBs) + Number(requestExemptAmountBs) <= 0) {
       setFeedback({kind:'error',message:'Complete número y control de la nota, fecha, motivo, bases y confirme el mismo medio de emisión de la factura original.'});
       return;
@@ -345,8 +341,8 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
           controlNumber: requestControlNumber.trim(),
           reason: requestReason.trim(),
           workpaperNote: '',
-          taxableBaseBs: Number(requestTaxableBaseBs),
-          exemptAmountBs: Number(requestExemptAmountBs),
+          taxableBaseBs: parseFiscalInput(requestTaxableBaseBs),
+          exemptAmountBs: parseFiscalInput(requestExemptAmountBs),
           bcvRate: Number(selectedSaleForCorrection.bcvRate),
           fiscalEmissionMedium: requestFiscalEmissionMedium,
           sameMediumAsOriginal: true
@@ -355,9 +351,9 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
         setFeedback({kind:'success',message:(note.documentType === '03' ? 'Nota de crédito ' : 'Nota de débito ') +
           note.invoiceNumber + ' registrada. El asiento correctivo y el auxiliar CxC quedaron vinculados; la factura original permanece intacta.'});
       } else if (selectedPurchaseForCorrection && requestCorrectionType === 'NOTA_DEBITO_PROVEEDOR') {
-        const taxableBase = Number(requestTaxableBaseBs);
-        const exemptAmount = Number(requestExemptAmountBs);
-        const taxRate = Number(supplierDebitTaxRate);
+        const taxableBase = parseFiscalInput(requestTaxableBaseBs);
+        const exemptAmount = parseFiscalInput(requestExemptAmountBs);
+        const taxRate = parseFiscalInput(supplierDebitTaxRate);
         const vatAmount = Math.round((taxableBase * taxRate / 100 + Number.EPSILON) * 100) / 100;
         const totalAmount = Math.round((taxableBase + exemptAmount + vatAmount + Number.EPSILON) * 100) / 100;
         if (!supplierDebitAccountCode || (vatAmount > 0 && !supplierDebitVatAccountCode) ||
@@ -368,7 +364,6 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
           throw new Error('Complete la cuenta de débito, las cuentas fiscales que correspondan y las confirmaciones profesionales de IVA, retenciones e IGTF.');
         }
         const note = await addSupplierDebitNote({
-          companyId: currentCompany.id,
           sourcePurchaseId: selectedPurchaseForCorrection.id,
           debitNoteNumber: requestTargetRef.trim(),
           controlNumber: requestControlNumber.trim(),
@@ -392,8 +387,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
           fiscalBreakdownReviewed: supplierDebitFiscalBreakdownReviewed,
           withholdingNotApplicableConfirmed: supplierDebitNoWithholdingConfirmed,
           igtfNotApplicableConfirmed: supplierDebitNoIgtfConfirmed,
-          fiscalReviewNote: requestReason.trim(),
-          closedThroughDate: currentCompany.closedThroughDate || undefined
+          fiscalReviewNote: requestReason.trim()
         });
         await waitForPersistence();
         setFeedback({kind:'success',message:'Nota de débito ' + (note.debitNoteNumber || note.invoiceNumber) + ' registrada con asiento correctivo y aumento trazable de CxP. La factura original permanece intacta.'});
@@ -436,7 +430,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
     if (bcvCorrectionSaving) return;
     setBcvCorrectionSaving(true);
     try {
-      await correctBcvRate({newRate:Number(bcvCorrectionRate),effectiveDate:bcvCorrectionDate,reason:bcvCorrectionReason,workpaperNote:''});
+      await correctBcvRate({newRate:parseFiscalInput(bcvCorrectionRate),effectiveDate:bcvCorrectionDate,reason:bcvCorrectionReason,workpaperNote:''});
       setBcvCorrectionOpen(false);
       setBcvCorrectionReason('');
       setFeedback({kind:'success', message:'La tasa BCV quedó corregida en SQLite y la solicitud/ejecución quedó registrada en auditoría.'});
@@ -641,14 +635,16 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
         const movement = linkedInventoryMovements.find(item => item.productId === row.productId &&
           item.type === 'ENTRADA' && item.concept === 'COMPRA' && !item.correctionForMovementId);
         if (!movement) throw new Error('Seleccione un artículo con entrada original de Kardex.');
-        const quantity = Number(row.quantity);
+        const quantity = parseFiscalInput(row.quantity);
         if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('Cada cantidad devuelta debe ser mayor que cero.');
         return { productId: row.productId, originalMovementId: movement.id, quantity };
       });
+      if (!requestFiscalEmissionMedium || !requestSameMediumAsOriginal) throw new Error('Confirme el medio de emisión y que coincide con el documento original antes de registrar la nota de crédito.');
       const note = await addPurchaseCreditNote({
         purchaseId: linkedPurchase.id, lines, returnDate: supplierReturnDate,
         creditNoteNumber: supplierCreditNoteNumber, controlNumber: supplierCreditControlNumber,
-        reason: supplierCreditReason
+        reason: supplierCreditReason, fiscalEmissionMedium: requestFiscalEmissionMedium,
+        sameMediumAsOriginal: requestSameMediumAsOriginal
       });
       setFeedback({ kind: 'success', message: 'Nota de crédito ' + note.creditNoteNumber +
         ' registrada con ' + note.creditNoteLines?.length + ' línea(s). CxP disminuyó ' +
@@ -677,7 +673,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
       setFeedback({kind:'error', message:'Seleccione un movimiento original de Kardex que admita devolución.'});
       return;
     }
-    const quantity = Number(correctionQuantity);
+    const quantity = parseFiscalInput(correctionQuantity);
     if (!Number.isFinite(quantity) || quantity <= 0 || quantity > remainingCorrectionQuantity + 1e-8) {
       setFeedback({kind:'error', message:'La cantidad debe ser positiva y no superar las unidades pendientes del movimiento original (' + remainingCorrectionQuantity + ').'});
       return;
@@ -701,7 +697,8 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
     }
     setCorrectionSubmitting(true);
     try {
-      const rate = Number(original.bcvRate || currentCompany.bcvRate);
+      const rate = parseFiscalInput(correctionBcvRate);
+      if (!Number.isFinite(rate) || rate <= 0) throw new Error('Ingrese la tasa BCV aplicable a la fecha de la devolución, por ejemplo 889,67.');
       const correctionCaseId = await authorizeCorrectionCase({entityType:'INVENTORY_MOVEMENT',entityId:original.id,sourceDocumentRef:original.documentRef,correctionDocumentRef:correctionDocumentRef.trim()});
       addMovement({
         productId: original.productId, productName: original.productName, productCode: original.productCode,
@@ -720,6 +717,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
       await executeCorrectionCase({caseId:correctionCaseId,executionRef:correctionDocumentRef.trim(),reason:'Devolución física registrada y vinculada al movimiento original del Kardex.'});
       setFeedback({kind:'success', message:'Devolución física registrada, vinculada al movimiento original del Kardex y corrección cerrada automáticamente con trazabilidad. El asistente comprobará si todas las cantidades de la factura fueron devueltas y si cada asiento de costo concilia; una devolución parcial no habilita la reversión total.'});
       setCorrectionQuantity('1');
+      setCorrectionBcvRate('');
       setCorrectionMovementId('');
       setCorrectionDocumentRef('');
     } catch (error) {
@@ -835,7 +833,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
             submitting={requestActionSubmitting}
             onSubmit={()=>void submitDirectCorrection()}
             submitLabel={requestCorrectionType === 'NOTA_DEBITO_VENTA' ? 'Registrar ND de venta' : 'Registrar NC de venta'}
-          />}
+          />
           </>}
           </>}
         </div>}
@@ -887,13 +885,13 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
                   </select>
                 </label>
                 <label className="text-xs font-semibold text-slate-700">Base imponible (Bs.)
-                  <input type="number" min="0" step="0.01" value={requestTaxableBaseBs} onChange={e=>setRequestTaxableBaseBs(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+                  <input type="text" inputMode="decimal" min="0" step="0.01" value={requestTaxableBaseBs} onChange={e=>setRequestTaxableBaseBs(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
                 </label>
                 <label className="text-xs font-semibold text-slate-700">Monto exento (Bs.)
-                  <input type="number" min="0" step="0.01" value={requestExemptAmountBs} onChange={e=>setRequestExemptAmountBs(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+                  <input type="text" inputMode="decimal" min="0" step="0.01" value={requestExemptAmountBs} onChange={e=>setRequestExemptAmountBs(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
                 </label>
                 <label className="text-xs font-semibold text-slate-700">Alícuota IVA (%)
-                  <input type="number" min="0" max="100" step="0.01" value={supplierDebitTaxRate} onChange={e=>setSupplierDebitTaxRate(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
+                  <input type="text" inputMode="decimal" value={supplierDebitTaxRate} onChange={e=>setSupplierDebitTaxRate(e.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 font-normal"/>
                 </label>
                 <label className="text-xs font-semibold text-slate-700">Cuenta de débito
                   <select value={supplierDebitAccountCode} onChange={e=>setSupplierDebitAccountCode(e.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal">
@@ -1037,7 +1035,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
                               return <option key={item.id} value={item.productId}>{item.productCode} · {item.productName} · disponible {Math.max(0,item.quantity-returned)}</option>;
                             })}
                           </select>
-                          <input aria-label={'Cantidad artículo '+(index+1)} type="number" min="0.000001" step="0.000001" value={row.quantity} onChange={event=>setSupplierReturnLines(prev=>prev.map((item,i)=>i===index?{...item,quantity:event.target.value}:item))} className="w-full rounded-lg border border-slate-300 p-2 text-sm" />
+                          <input aria-label={'Cantidad artículo '+(index+1)} type="text" inputMode="decimal" value={row.quantity} onChange={event=>setSupplierReturnLines(prev=>prev.map((item,i)=>i===index?{...item,quantity:event.target.value}:item))} className="w-full rounded-lg border border-slate-300 p-2 text-sm" />
                           <button type="button" disabled={supplierReturnLines.length===1} onClick={()=>setSupplierReturnLines(prev=>prev.filter((_,i)=>i!==index))} className="rounded-lg border px-2 py-1 text-xs disabled:opacity-30">Quitar</button>
                         </div>)}
                       </div>
@@ -1058,7 +1056,8 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
                       })}
                     </select>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div><label className="block text-xs font-semibold mb-1">Cantidad devuelta</label><input type="number" min="0.000001" max={remainingCorrectionQuantity || undefined} step="0.000001" value={correctionQuantity} onChange={event=>setCorrectionQuantity(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm" /></div>
+                      <div><label className="block text-xs font-semibold mb-1">Cantidad devuelta</label><input type="text" inputMode="decimal" value={correctionQuantity} onChange={event=>setCorrectionQuantity(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm" /></div>
+                      <div><label className="block text-xs font-semibold mb-1">Tasa BCV de la devolución (Bs./USD) *</label><input required type="text" inputMode="decimal" placeholder="Ej.: 889,67" value={correctionBcvRate} onChange={event=>setCorrectionBcvRate(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm" /></div>
                       <div><label className="block text-xs font-semibold mb-1">Fecha del movimiento</label><input type="date" min={selectedCorrectionSource?.date} value={correctionDate} onChange={event=>setCorrectionDate(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm" /></div>
                       <div><label className="block text-xs font-semibold mb-1">Ref. nota/soporte</label><input value={correctionDocumentRef} onChange={event=>setCorrectionDocumentRef(event.target.value)} maxLength={120} placeholder="NC-000123" className="w-full rounded-lg border border-slate-300 p-2 text-sm" /></div>
                     </div>
@@ -1175,12 +1174,12 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
       </>}
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div><h2 className="text-base font-bold text-slate-900">Corrección de tasa BCV</h2><p className="text-xs text-slate-500">Tasa vigente: {formatBs(currentCompany.bcvRate)} Bs/USD · última fecha: {currentCompany.lastRateUpdate || 'sin fecha registrada'}</p></div>
-          <button type="button" onClick={()=>{setBcvCorrectionRate(String(currentCompany.bcvRate || ''));setBcvCorrectionDate(today);setBcvCorrectionOpen(value=>!value);}} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold">{bcvCorrectionOpen ? 'Cerrar' : 'Corregir tasa BCV'}</button>
+          <div><h2 className="text-base font-bold text-slate-900">Corrección de tasa BCV</h2><p className="text-xs text-slate-500">La corrección se registra con la tasa y fecha que introduzca el contador; no se usa una tasa global de empresa.</p></div>
+          <button type="button" onClick={()=>{setBcvCorrectionRate('');setBcvCorrectionDate(today);setBcvCorrectionOpen(value=>!value);}} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold">{bcvCorrectionOpen ? 'Cerrar' : 'Corregir tasa BCV'}</button>
         </div>
         {bcvCorrectionOpen && <div className="mt-3 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
           <label className="text-xs font-semibold text-slate-700">Nueva tasa Bs/USD
-            <input type="number" min="0.000001" step="0.000001" value={bcvCorrectionRate} onChange={event=>setBcvCorrectionRate(event.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
+            <input type="text" inputMode="decimal" value={bcvCorrectionRate} onChange={event=>setBcvCorrectionRate(event.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
           </label>
           <label className="text-xs font-semibold text-slate-700">Fecha de vigencia
             <input type="date" value={bcvCorrectionDate} onChange={event=>setBcvCorrectionDate(event.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
@@ -1188,7 +1187,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
           <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Motivo de la corrección
             <textarea value={bcvCorrectionReason} onChange={event=>setBcvCorrectionReason(event.target.value)} rows={2} placeholder="Explique por qué debe corregirse la tasa registrada…" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
           </label>
-          <div className="sm:col-span-2"><button type="button" disabled={bcvCorrectionSaving || Number(bcvCorrectionRate)<=0} onClick={()=>void submitBcvRateCorrection()} className="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{bcvCorrectionSaving ? 'Guardando corrección…' : 'Confirmar y auditar corrección'}</button></div>
+          <div className="sm:col-span-2"><button type="button" disabled={bcvCorrectionSaving || parseFiscalInput(bcvCorrectionRate)<=0} onClick={()=>void submitBcvRateCorrection()} className="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{bcvCorrectionSaving ? 'Guardando corrección…' : 'Confirmar y auditar corrección'}</button></div>
         </div>}
       </section>
       {!isAccountant && <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

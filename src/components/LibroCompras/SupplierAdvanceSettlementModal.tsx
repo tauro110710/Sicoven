@@ -28,7 +28,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
   const [date, setDate] = useState(today);
   const [amountUsd, setAmountUsd] = useState('');
   const [cashReceivedBs, setCashReceivedBs] = useState('');
-  const [bcvRate, setBcvRate] = useState(String(currentCompany.bcvRate || ''));
+  const [bcvRate, setBcvRate] = useState('');
   const [treasuryAccountCode, setTreasuryAccountCode] = useState('');
   const [targetPurchaseId, setTargetPurchaseId] = useState('');
   const [reference, setReference] = useState('');
@@ -40,8 +40,9 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
     p.paymentTerm === 'CREDITO' && String(p.supplierRif).trim().toUpperCase() === supplierRif &&
     p.companyId === currentCompany.id);
   const accounts = bankAccounts.filter(a => a.companyId === currentCompany.id && a.currency === 'BS');
-  const rate = Number(bcvRate);
-  const usd = Number(amountUsd);
+  const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
+  const rate = parseAmount(bcvRate);
+  const usd = parseAmount(amountUsd);
   const validAmount = Number.isFinite(usd) && usd > 0 && Number.isFinite(rate) && rate > 0;
   const allocationPreview = useMemo(() => {
     if (!supplierRif || !Number.isFinite(usd) || usd <= 0) return { rows: [], error: '' };
@@ -83,7 +84,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
     try {
       await addSupplierAdvanceSettlement({
         supplierRif, kind, date, amountUsd: usd,
-        amountBs: kind === 'REFUND_RECEIVED' ? Number(cashReceivedBs) : Math.round(usd * rate * 100) / 100,
+        amountBs: kind === 'REFUND_RECEIVED' ? parseAmount(cashReceivedBs) : Math.round(usd * rate * 100) / 100,
         cashReceivedBs: kind === 'REFUND_RECEIVED' ? Number(cashReceivedBs) : undefined,
         bcvRate: rate,
         treasuryAccountCode: kind === 'REFUND_RECEIVED' ? treasuryAccountCode : undefined,
@@ -127,8 +128,8 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
           </label>}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="text-xs font-semibold text-slate-700">Fecha<input required type="date" value={date} onChange={e => setDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
-            <label className="text-xs font-semibold text-slate-700">Importe USD<input required type="number" min="0.01" step="0.01" value={amountUsd} onChange={e => setAmountUsd(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
-            <label className="text-xs font-semibold text-slate-700">Tasa BCV<input required type="number" min="0.000001" step="0.000001" value={bcvRate} onChange={e => setBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
+            <label className="text-xs font-semibold text-slate-700">Importe USD<input required type="text" inputMode="decimal" value={amountUsd} onChange={e => setAmountUsd(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
+            <label className="text-xs font-semibold text-slate-700">Tasa BCV<input required type="text" inputMode="decimal" value={bcvRate} onChange={e => setBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
           </div>
           {validAmount && amountUsd.trim() !== '' && <section className="rounded-xl border border-slate-200 p-3">
             <h3 className="text-xs font-bold text-slate-800">Previsualización FIFO por nota de crédito</h3>
@@ -147,7 +148,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
               </div>}
           </section>}
           {kind === 'REFUND_RECEIVED' && <>
-            <label className="block text-xs font-semibold text-slate-700">Importe efectivamente recibido en Bs<input required type="number" min="0.01" step="0.01" value={cashReceivedBs} onChange={e => setCashReceivedBs(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
+            <label className="block text-xs font-semibold text-slate-700">Importe efectivamente recibido en Bs<input required type="text" inputMode="decimal" value={cashReceivedBs} onChange={e => setCashReceivedBs(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
             <label className="block text-xs font-semibold text-slate-700">Cuenta bancaria en Bs.
               <select required value={treasuryAccountCode} onChange={e => setTreasuryAccountCode(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="">Seleccione cuenta bancaria en Bs.</option>{accounts.map(a => <option key={a.id} value={a.accountCode}>{a.bankName} · {a.accountCode} · {a.currency}</option>)}</select>
             </label>

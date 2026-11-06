@@ -98,8 +98,7 @@ async function addPdfHeader(
   doc.setTextColor(100, 116, 139);
   doc.text(subtitle, 14, currentY + 4.5);
 
-  const bcvText = `Tasa BCV: Bs. ${company.bcvRate.toFixed(2)}/$ • Moneda: Bs. y USD`;
-  doc.text(bcvText, pageWidth - 14, currentY + 4.5, { align: 'right' });
+  doc.text('Moneda: Bs. y USD', pageWidth - 14, currentY + 4.5, { align: 'right' });
 
   return currentY + 9;
 }
@@ -851,7 +850,8 @@ export async function exportComprasPdf(
 export async function exportVentasPdf(
   company: Company,
   sales: SaleRecord[],
-  monthFilter?: string
+  monthFilter?: string,
+  zReportEntries: JournalEntry[] = []
 ) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
 
@@ -872,6 +872,7 @@ export async function exportVentasPdf(
   let totalIva = 0;
   let totalRetenido = 0;
   let totalIgtf = 0;
+  let totalLuxuryTax = 0;
 
   const hasSalesCorrectionNotes = sales.some(s => s.documentType === '02' || s.documentType === '03');
   const tableBody: any[] = sales.map(s => {
@@ -879,7 +880,9 @@ export async function exportVentasPdf(
     totalMonto += sign * (s.totalAmountBs || 0);
     totalExento += sign * (s.exemptAmountBs || 0);
     totalBase += sign * (s.taxableBaseBs || 0);
-    totalIva += sign * (s.vatAmountBs || 0);
+    const saleLuxuryTax = s.taxRate === 31 ? (s.taxableBaseBs || 0) * 0.15 : 0;
+    totalLuxuryTax += sign * saleLuxuryTax;
+    totalIva += sign * (s.taxRate === 31 ? Math.max(0, (s.taxableBaseBs || 0) * 0.16) : (s.vatAmountBs || 0));
     totalRetenido += sign * (s.vatWithheldBs || 0);
     totalIgtf += sign * (s.igtfAmountBs || 0);
 
@@ -894,7 +897,8 @@ export async function exportVentasPdf(
       s.exemptAmountBs > 0 ? formatNumberVe(sign * s.exemptAmountBs) : '-',
       formatNumberVe(sign * s.taxableBaseBs),
       `${s.taxRate}%`,
-      formatNumberVe(sign * s.vatAmountBs),
+      formatNumberVe(sign * (s.taxRate === 31 ? Math.max(0, (s.taxableBaseBs || 0) * 0.16) : s.vatAmountBs)),
+      saleLuxuryTax > 0 ? formatNumberVe(sign * saleLuxuryTax) : '-',
       s.vatWithheldBs > 0 ? formatNumberVe(sign * s.vatWithheldBs) : '-',
       s.retentionVoucherNumber || '-',
       s.retentionVoucherDate ? formatDate(s.retentionVoucherDate) : '-',
@@ -902,14 +906,47 @@ export async function exportVentasPdf(
     ];
   });
 
+  // Los cierres Z se incorporan como renglones consolidados; no se simulan facturas ni RIF individuales.
+  const fiscalZEntries = zReportEntries.filter(entry => entry.companyId === company.id && entry.fiscalZReport);
+  fiscalZEntries.forEach(entry => {
+    const z = entry.fiscalZReport!;
+    const base = z.taxableBase16Bs + z.taxableBase8Bs + z.taxableBase31Bs;
+    const vat = z.vat16Bs + z.vat8Bs + z.vat31Bs;
+    totalMonto += z.totalSalesBs;
+    totalExento += z.exemptSalesBs;
+    totalBase += base;
+    totalIva += vat;
+    totalLuxuryTax += z.additionalLuxuryTaxBs || 0;
+    totalIgtf += z.igtfBs;
+    tableBody.push([
+      'Z-' + entry.entryNumber,
+      formatDate(z.date),
+      '—',
+      'VENTAS CONSOLIDADAS · MÁQUINA FISCAL',
+      'Z ' + z.zNumber + ' · FAC. ' + z.invoiceStart + '–' + z.invoiceEnd,
+      z.controlStart ? z.controlStart + '–' + z.controlEnd : '—',
+      formatNumberVe(z.totalSalesBs),
+      z.exemptSalesBs > 0 ? formatNumberVe(z.exemptSalesBs) : '-',
+      formatNumberVe(base),
+      '16 / 8 / 31',
+      formatNumberVe(vat),
+      (z.additionalLuxuryTaxBs || 0) > 0 ? formatNumberVe(z.additionalLuxuryTaxBs) : '-',
+      '-', '-', '-',
+      z.igtfBs > 0 ? formatNumberVe(z.igtfBs) : '-'
+    ]);
+  });
+
+
+
   // Totals row
   tableBody.push([
-    { content: hasSalesCorrectionNotes ? 'TOTALES AJUSTADOS DEL PERÍODO:' : 'TOTALES DEL PERÍODO:', colSpan: 6, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+    { content: (hasSalesCorrectionNotes ? 'TOTALES AJUSTADOS' : 'TOTALES') + (fiscalZEntries.length ? ' · INCLUYE REPORTES Z:' : ' DEL PERÍODO:'), colSpan: 6, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: formatNumberVe(totalMonto), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: formatNumberVe(totalExento), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: formatNumberVe(totalBase), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: '', styles: { fillColor: [15, 23, 42] } },
     { content: formatNumberVe(totalIva), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [52, 211, 153] } },
+    { content: formatNumberVe(totalLuxuryTax), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [251, 191, 36] } },
     { content: formatNumberVe(totalRetenido), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [192, 132, 252] } },
     { content: '', styles: { fillColor: [15, 23, 42] } },
     { content: '', styles: { fillColor: [15, 23, 42] } },
@@ -930,6 +967,7 @@ export async function exportVentasPdf(
       'Base Imp. (Bs.)',
       '% Alíc.',
       'IVA Débito (Bs.)',
+      'Imp. Adicional 15%',
       'IVA Retenido (Bs.)',
       'Comprobante Ret.',
       'Fecha Ret.',
@@ -951,10 +989,11 @@ export async function exportVentasPdf(
       8: { cellWidth: 22, halign: 'right', font: 'courier' },
       9: { cellWidth: 12, halign: 'center' },
       10: { cellWidth: 22, halign: 'right', font: 'courier' },
-      11: { cellWidth: 22, halign: 'right', font: 'courier' },
-      12: { cellWidth: 24, font: 'courier' },
-      13: { cellWidth: 18, font: 'courier' },
-      14: { cellWidth: 18, halign: 'right', font: 'courier' }
+      11: { cellWidth: 20, halign: 'right', font: 'courier' },
+      12: { cellWidth: 22, halign: 'right', font: 'courier' },
+      13: { cellWidth: 24, font: 'courier' },
+      14: { cellWidth: 18, font: 'courier' },
+      15: { cellWidth: 18, halign: 'right', font: 'courier' }
     },
     margin: { left: 14, right: 14, bottom: 20 }
   });

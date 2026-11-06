@@ -20,6 +20,7 @@ import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { HistoricalBalancesView } from './HistoricalBalancesView';
 import { AnnualReportsView } from './AnnualReportsView';
 import { CashFlowStatementView } from './CashFlowStatementView';
+import { ReportErrorBoundary } from './ReportErrorBoundary';
 import {
   exportBalanceComprobacionPdf,
   exportBalanceAjustadoPdf,
@@ -71,6 +72,7 @@ export const BalancesView: React.FC = () => {
       }
     } catch (err) {
       console.error('Error generating Balances PDF:', err);
+      window.alert('No se pudo generar el PDF de Balances: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsExportingPdf(false);
     }
@@ -347,11 +349,11 @@ export const BalancesView: React.FC = () => {
   }
 
   if (activeReport === "ANUAL") {
-    return <AnnualReportsView onBack={() => setActiveReport("GENERAL")} />;
+    return <ReportErrorBoundary title="Reportes Anuales" onBack={() => setActiveReport("GENERAL")}><AnnualReportsView onBack={() => setActiveReport("GENERAL")} /></ReportErrorBoundary>;
   }
 
   if (activeReport === "FLUJO") {
-    return <CashFlowStatementView onBack={() => setActiveReport("GENERAL")} />;
+    return <ReportErrorBoundary title="Flujo de Efectivo" onBack={() => setActiveReport("GENERAL")}><CashFlowStatementView onBack={() => setActiveReport("GENERAL")} /></ReportErrorBoundary>;
   }
 
   return (

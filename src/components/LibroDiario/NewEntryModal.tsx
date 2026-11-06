@@ -28,7 +28,40 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState<string>('');
   const [type, setType] = useState<EntryType>('MANUAL');
-  const [bcvRate, setBcvRate] = useState<number>(currentCompany.bcvRate || 68.50);
+  const [bcvRate, setBcvRate] = useState<string>('');
+  const parsedBcvRate = (() => {
+    const raw = bcvRate.trim();
+    if (!raw) return 0;
+    return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw);
+  })();
+  const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
+  const parseAmount = (raw: string) => {
+    const value = raw.trim();
+    if (!value) return 0;
+    return Number(value.includes(',') ? value.replace(/\./g, '').replace(',', '.') : value);
+  };
+  const amountDraft = (key: string, value: number) => amountDrafts[key] ?? (value ? String(value).replace('.', ',') : '');
+  const updateAmountDraft = (key: string, raw: string, index: number, side: 'debit' | 'credit') => {
+    setAmountDrafts(prev => ({ ...prev, [key]: raw }));
+    const parsed = parseAmount(raw);
+    if (raw.trim() === '' || Number.isFinite(parsed)) {
+      if (raw.trim() !== '' && /[,\.]$/.test(raw.trim())) return;
+      if (side === 'debit') handleDebitChange(index, parsed);
+      else handleCreditChange(index, parsed);
+    }
+    setSubmitError(null);
+  };
+  const commitAmountDraft = (key: string, index: number, side: 'debit' | 'credit') => {
+    const raw = amountDrafts[key];
+    if (raw !== undefined) {
+      const parsed = parseAmount(raw);
+      if (Number.isFinite(parsed)) {
+        if (side === 'debit') handleDebitChange(index, parsed);
+        else handleCreditChange(index, parsed);
+      }
+      setAmountDrafts(prev => { const next = { ...prev }; delete next[key]; return next; });
+    }
+  };
   const [referenceDoc, setReferenceDoc] = useState<string>('');
   const [adjustmentForEntryId, setAdjustmentForEntryId] = useState<string>('');
   const [adjustmentReason, setAdjustmentReason] = useState<string>('');
@@ -79,7 +112,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   };
 
   const handleDebitChange = (index: number, val: number) => {
-    const rate = bcvRate > 0 ? bcvRate : 1;
+    const rate = parsedBcvRate > 0 ? parsedBcvRate : 1;
     setSubmitError(null);
     setItems(prev =>
       prev.map((item, i) =>
@@ -97,7 +130,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   };
 
   const handleCreditChange = (index: number, val: number) => {
-    const rate = bcvRate > 0 ? bcvRate : 1;
+    const rate = parsedBcvRate > 0 ? parsedBcvRate : 1;
     setSubmitError(null);
     setItems(prev =>
       prev.map((item, i) =>
@@ -171,7 +204,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   // Función Inteligente: Auto-Cuadrar Asiento con un Clic
   const handleAutoBalance = () => {
     if (diffBs < 0.01) return;
-    const rate = bcvRate > 0 ? bcvRate : 1;
+    const rate = parsedBcvRate > 0 ? parsedBcvRate : 1;
     setSubmitError(null);
 
     if (totalDebitBs > totalCreditBs) {
@@ -222,6 +255,12 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // La tasa es obligatoria para este asiento, pero se valida después de permitir la edición libre.
+    if (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0) {
+      setSubmitError('Ingrese la tasa BCV aplicable al asiento, por ejemplo 889,67.');
+      return;
+    }
+
     // Verificación estricta de cuadre antes de guardar
     if (!isBalanced) {
       setSubmitError(
@@ -256,7 +295,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
         date,
         description: description.trim(),
         type,
-        bcvRate,
+        bcvRate: parsedBcvRate,
         items,
         isAdjusted: type === 'AJUSTE' || isAdjusted,
         referenceDoc: referenceDoc.trim() || undefined,
@@ -361,12 +400,12 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                 Tasa Oficial BCV ($)
               </label>
               <input
-                type="number"
-                step="0.01"
-                min="0.01"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
                 required
                 value={bcvRate}
-                onChange={e => setBcvRate(parseFloat(e.target.value) || 0)}
+                onChange={e => setBcvRate(e.target.value)}
                 className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
               />
             </div>
@@ -459,12 +498,12 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                       </td>
                       <td className="p-2 text-right">
                         <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={item.debitBs || ''}
+                          type="text"
+                          value={amountDraft(`debit-${idx}`, item.debitBs)}
                           placeholder="0,00"
-                          onChange={e => handleDebitChange(idx, parseFloat(e.target.value) || 0)}
+                          inputMode="decimal"
+                          onChange={e => updateAmountDraft(`debit-${idx}`, e.target.value, idx, 'debit')}
+                          onBlur={() => commitAmountDraft(`debit-${idx}`, idx, 'debit')}
                           className={`w-full text-right p-1.5 border rounded text-xs font-mono font-medium focus:ring-1 focus:outline-none ${
                             item.debitBs > 0
                               ? 'border-emerald-400 bg-emerald-50/20 text-emerald-900 font-bold focus:ring-emerald-500'
@@ -474,12 +513,12 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                       </td>
                       <td className="p-2 text-right">
                         <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={item.creditBs || ''}
+                          type="text"
+                          value={amountDraft(`credit-${idx}`, item.creditBs)}
                           placeholder="0,00"
-                          onChange={e => handleCreditChange(idx, parseFloat(e.target.value) || 0)}
+                          inputMode="decimal"
+                          onChange={e => updateAmountDraft(`credit-${idx}`, e.target.value, idx, 'credit')}
+                          onBlur={() => commitAmountDraft(`credit-${idx}`, idx, 'credit')}
                           className={`w-full text-right p-1.5 border rounded text-xs font-mono font-medium focus:ring-1 focus:outline-none ${
                             item.creditBs > 0
                               ? 'border-emerald-400 bg-emerald-50/20 text-emerald-900 font-bold focus:ring-emerald-500'
@@ -519,10 +558,10 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                       {formatBs(totalCreditBs)}
                     </td>
                     <td className="p-3 text-right font-mono text-slate-600">
-                      {formatUsd(totalDebitBs / (bcvRate || 1))}
+                      {formatUsd(totalDebitBs / (parsedBcvRate || 1))}
                     </td>
                     <td className="p-3 text-right font-mono text-slate-600">
-                      {formatUsd(totalCreditBs / (bcvRate || 1))}
+                      {formatUsd(totalCreditBs / (parsedBcvRate || 1))}
                     </td>
                     <td></td>
                   </tr>
@@ -605,7 +644,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                       ? 'Los débitos y créditos son idénticos. La partida doble se cumple rigurosamente.'
                       : isZeroTotal
                       ? 'Ingrese los montos en los renglones correspondientes para validar la partida doble.'
-                      : `Diferencia pendiente por cuadrar: ${formatBs(diffBs)} (${formatUsd(diffBs / (bcvRate || 1))}). El guardado está bloqueado hasta que la diferencia sea cero.`}
+                      : `Diferencia pendiente por cuadrar: ${formatBs(diffBs)} (${formatUsd(diffBs / (parsedBcvRate || 1))}). El guardado está bloqueado hasta que la diferencia sea cero.`}
                   </p>
                 </div>
               </div>

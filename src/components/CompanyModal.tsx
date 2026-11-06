@@ -29,7 +29,6 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
   const [ivaRetentionAgentBasis, setIvaRetentionAgentBasis] = useState<IvaRetentionAgentBasis>('UNCONFIRMED');
   const [isPersonalFirm, setIsPersonalFirm] = useState(false);
   const [isIgtfPerceptionAgent, setIsIgtfPerceptionAgent] = useState(false);
-  const [bcvRate, setBcvRate] = useState<string>('');
   const [fiscalYear, setFiscalYear] = useState<string>(String(new Date().getFullYear()));
   const [accountingFramework, setAccountingFramework] = useState<AccountingFramework | ''>('');
   const [accountingFrameworkVersion, setAccountingFrameworkVersion] = useState('');
@@ -98,8 +97,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       isPersonalFirm,
       isIgtfPerceptionAgent,
       fiscalYear: Number(fiscalYear) || new Date().getFullYear(),
-      bcvRate: Number(bcvRate) || 0,
-      lastRateUpdate: new Date().toISOString().split('T')[0]
+      bcvRate: 0,
     });
     await waitForPersistence();
     onClose();
@@ -113,7 +111,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 pointer-events-auto">
-      <div className="relative z-[1001] isolate pointer-events-auto bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative z-[1001] isolate pointer-events-auto company-registration-modal bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg">
@@ -133,7 +131,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto company-registration-form pointer-events-auto">
           {/* RIF & Razón Social */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
@@ -382,37 +380,20 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
               />
             </div>
           </div>
-
-          {/* Parámetros Financieros */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Tasa Oficial BCV Inicial (Bs/$)
-              </label>
+          {/* Ejercicio económico */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Ejercicio Económico (Año)
+            </label>
               <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                required
-                value={bcvRate}
-                onChange={e => setBcvRate(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Ejercicio Económico (Año)
-              </label>
-              <input
-                type="number"
-                min="2000"
-                max="2099"
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
                 required
                 value={fiscalYear}
                 onChange={e => setFiscalYear(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
               />
-            </div>
           </div>
 
           <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">

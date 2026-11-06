@@ -86,6 +86,7 @@ export const LibroDiarioView: React.FC = () => {
       await exportDiarioPdf(currentCompany, filteredEntries, displayCurrency);
     } catch (err) {
       console.error('Error generating PDF:', err);
+      window.alert('No se pudo generar el PDF del Libro Diario: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsExportingPdf(false);
     }
@@ -350,7 +351,7 @@ export const LibroDiarioView: React.FC = () => {
                       <Calendar className="w-3.5 h-3.5 text-slate-400" />
                       {formatDate(entry.date)}
                     </span>
-                    {getTypeBadge(entry.type, entry.isAdjusted)}
+                    {entry.fiscalZReport ? <span className="rounded border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">Reporte Z · Máquina fiscal</span> : getTypeBadge(entry.type, entry.isAdjusted)}
                     {/* Verificación de Partida Doble en Asiento */}
                     {isEntrySquare ? (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">

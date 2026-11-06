@@ -63,9 +63,6 @@ export const CompanyLogoHeader: React.FC<CompanyLogoHeaderProps> = ({
           {periodText && (
             <div className="font-semibold text-slate-800">{periodText}</div>
           )}
-          <div className="text-slate-500 text-[10px]">
-            Tasa Oficial BCV: <span className="font-bold text-slate-700">Bs. {company.bcvRate.toFixed(2)}/$</span>
-          </div>
         </div>
       </div>
     </div>

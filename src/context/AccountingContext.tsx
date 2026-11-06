@@ -64,6 +64,7 @@ import type { VatFiscalIncident, VatFiscalIncidentCreateInput, VatFiscalIncident
 import { buildSupplierDebitNoteAccountingPlan, type SupplierDebitNoteAccountingDraft } from '../types/supplierDebitNoteAccounting';
 import { calculatePurchaseServiceCreditNote, type PurchaseServiceCreditNoteRequest } from '../types/purchaseServiceCreditNote';
 import { calculateSaleCorrectionNote, type SaleCorrectionNoteRequest } from '../types/saleCorrectionNote';
+import { resolveNonInventoryPurchaseDebitAccount, resolveTreasuryAccountCurrency } from '../types/purchaseAccounting';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -81,7 +82,7 @@ interface AccountingContextType {
   getAuditEvents: (limit?: number) => Promise<AccountingAuditEvent[]>;
   requestAccountingCorrection: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'BANK_MOVEMENT' | 'INVENTORY_MOVEMENT' | 'VAT_VOUCHER' | 'ISLR_VOUCHER' | 'VAT_DECLARATION' | 'ISLR_EVENT' | 'INVENTORY_PRODUCT'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason?: string; workpaperNote?: string }) => Promise<void>;
   createCorrectionCase: (input: { entityType: 'SALE' | 'PURCHASE' | 'JOURNAL_ENTRY' | 'INVENTORY_MOVEMENT'; entityId: string; correctionType: string; sourceDocumentRef: string; correctionDocumentRef: string; reason?: string; workpaperNote?: string }) => Promise<CorrectionCase>;
-  authorizeCorrectionCase: (input: { entityType: string; entityId: string; sourceDocumentRef: string; correctionDocumentRef: string }) => Promise<void>;
+  authorizeCorrectionCase: (input: { entityType: string; entityId: string; sourceDocumentRef: string; correctionDocumentRef: string }) => Promise<string>;
   listCorrectionCases: () => Promise<CorrectionCase[]>;
   reviewCorrectionCase: (input: { caseId: string; decision: 'APPROVE' | 'REJECT'; reason: string }) => Promise<CorrectionCase>;
   observeCorrectionCase: (input: { caseId: string; reason: string }) => Promise<CorrectionCase>;
@@ -104,7 +105,7 @@ interface AccountingContextType {
   addCompany: (comp: Omit<Company, 'id'>) => Company;
   updateCompany: (comp: Company) => void;
   updateBcvRate: (newRate: number, effectiveDate?: string) => void;
-  correctBcvRate: (input: { newRate: number; effectiveDate: string; reason?: string; workpaperNote?: string }) => Promise<void>;
+  correctBcvRate: (input: { newRate: number; effectiveDate: string; reason: string; workpaperNote?: string }) => Promise<void>;
 
   // Cuentas
   accounts: Account[];
@@ -119,7 +120,7 @@ interface AccountingContextType {
   reverseJournalEntry: (id: string, effectiveDate: string, reason: string, workpaperNote?: string, priorPeriodAdjustment?: boolean, retainedEarningsAccountCode?: string) => Promise<JournalEntry>;
   closeAccountingPeriod: (closedThroughDate: string) => Promise<void>;
   reopenAccountingPeriod: (reopenedThroughDate: string | null, reason: string) => Promise<void>;
-  createAccountingYearOpening: (input: { periodStartDate: string; periodEndDate: string; openingDate: string; retainedEarningsAccountCode?: string }) => Promise<JournalEntry>;
+  createAccountingYearOpening: (input: { periodStartDate: string; periodEndDate: string; openingDate: string; bcvRate: number; retainedEarningsAccountCode?: string }) => Promise<JournalEntry>;
 
   // Liquidaciones de crédito
   creditSettlements: CreditSettlement[];
@@ -152,7 +153,7 @@ interface AccountingContextType {
   importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[]) => number;
   importInventoryMovements: (movements: Omit<InventoryMovement, 'id' | 'companyId'>[]) => number;
   executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => Promise<InventoryMovement[]>;
-  updateProduct: (product: InventoryProduct) => void;
+  updateProduct: (product: InventoryProduct, reason: string, workpaperNote: string) => Promise<void>;
   movements: InventoryMovement[];
   addMovement: (movement: Omit<InventoryMovement, 'id' | 'companyId'>) => InventoryMovement;
 
@@ -176,8 +177,8 @@ interface AccountingContextType {
   // Conciliación Bancaria
   bankAccounts: BankAccount[];
   bankStatementMovements: BankStatementMovement[];
-  addBankAccount: (bank: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'>) => BankAccount;
-  registerTreasuryMovement: (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; counterpartAccountCode?: string; destinationBankAccountId?: string }) => JournalEntry;
+  addBankAccount: (bank: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'> & { bcvRate?: number }) => BankAccount;
+  registerTreasuryMovement: (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; bcvRate: number; counterpartAccountCode?: string; destinationBankAccountId?: string }) => JournalEntry;
   addBankStatementMovement: (movement: Omit<BankStatementMovement, 'id' | 'companyId'>) => BankStatementMovement;
   deleteBankStatementMovement: (id: string) => void;
   reconcileMovementManual: (statementMovementId: string, journalEntryId: string) => void;
@@ -570,6 +571,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     periodStartDate: string;
     periodEndDate: string;
     openingDate: string;
+    bcvRate: number;
     retainedEarningsAccountCode?: string;
   }): Promise<JournalEntry> => {
     assertSQLitePersistenceReady('Crear asiento de apertura');
@@ -577,6 +579,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (persistenceFaultRef.current) throw new Error('La persistencia SQLite falló. Reinicie SICOVEN antes de continuar.');
     if (!window.sicovenStore || !storageReady) throw new Error('La apertura contable solo puede registrarse cuando SQLite de escritorio esté disponible.');
     if (!currentCompany.id) throw new Error('Seleccione una empresa antes de preparar la apertura.');
+    if (!Number.isFinite(Number(input.bcvRate)) || Number(input.bcvRate) <= 0) throw new Error('Ingrese la tasa BCV aplicable al asiento de apertura.');
     if (!currentCompany.closedThroughDate || currentCompany.closedThroughDate !== input.periodEndDate) {
       throw new Error('El ejercicio debe estar cerrado exactamente hasta la fecha final indicada antes de registrar su apertura.');
     }
@@ -607,7 +610,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         date: input.openingDate,
         description: 'Asiento de apertura del ejercicio iniciado el ' + input.openingDate,
         type: 'APERTURA',
-        bcvRate: currentCompany.bcvRate,
+        bcvRate: Number(input.bcvRate),
         items,
         referenceDoc,
         exerciseLink: {
@@ -719,6 +722,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!window.sicovenStore?.save || !storageReady) throw new Error('La reversión requiere SQLite local disponible y confirmada. No se permite registrar contra-asientos usando únicamente caché del navegador.');
     const source = journalEntries.find(entry => entry.id === id && entry.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró el asiento original en la empresa activa.');
+    if (!Number.isFinite(Number(source.bcvRate)) || Number(source.bcvRate) <= 0) throw new Error('El asiento original no conserva una tasa BCV histórica válida. Corrija primero la tasa del documento antes de reversarlo.');
     const vatPaymentReversalBlocker = getVatPaymentJournalReversalBlocker(
       vatWithholdingDeclarationEvents, source.id
     );
@@ -799,7 +803,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       date: effectiveDate,
       description: (priorPeriodAdjustment ? 'AIA / ' : 'REVERSIÓN / ') + source.description + ' · ' + correctionReason,
       type: 'AJUSTE',
-      bcvRate: Number(source.bcvRate) > 0 ? source.bcvRate : currentCompany.bcvRate,
+      bcvRate: Number(source.bcvRate),
       items: reversedItems,
       referenceDoc: 'REV-' + source.entryNumber,
       reversalOfEntryId: source.id,
@@ -1350,7 +1354,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('El período está cerrado hasta ' + currentCompany.closedThroughDate + '. El anticipo no se registró.');
     }
     const bank = bankAccounts.find(item => item.companyId === currentCompany.id && item.accountCode === draft.treasuryAccountCode);
-    const accountCurrency = bank?.currency || (draft.treasuryAccountCode === '1.1.1.02' ? 'USD' : 'BS');
+    const accountCurrency = resolveTreasuryAccountCurrency(draft.treasuryAccountCode, bank?.currency);
     if (accountCurrency !== draft.paymentCurrency) {
       throw new Error('La moneda del desembolso no coincide con la moneda configurada para la cuenta de Caja/Banco.');
     }
@@ -2051,7 +2055,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const items: JournalEntryItem[] = [];
 
     // Debe: distribuir el costo de inventario por la cuenta auxiliar real de cada artículo.
-    // Las compras sin líneas de inventario estructuradas se registran como gasto operativo.
+    // Si no hay líneas de inventario, se exige una cuenta de débito explícita y validada.
     const hasInventoryLines = Array.isArray(purchaseData.inventoryLines) && purchaseData.inventoryLines.length > 0;
     if (hasInventoryLines) {
       const inventoryByAccount = new Map<string, { name: string; amountBs: number; productCodes: string[] }>();
@@ -2077,17 +2081,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         });
       }
     } else {
-      const expenseAccountCode = '6.1.1.04';
-      const expenseAccount = accounts.find(item => item.code === expenseAccountCode && item.isMovement);
-      if (!expenseAccount && purchaseData.taxableBaseBs + purchaseData.exemptAmountBs > 0) {
-        throw new Error('Falta la cuenta de gasto operativo ' + expenseAccountCode + '.');
-      }
       const baseBs = Number(purchaseData.taxableBaseBs) + Number(purchaseData.exemptAmountBs);
-      if (baseBs > 0) items.push({
-        accountCode: expenseAccountCode,
-        accountName: expenseAccount?.name || 'Gastos operativos',
+      const debitAccount = resolveNonInventoryPurchaseDebitAccount(accounts, purchaseData.purchaseDebitAccountCode, baseBs);
+      if (baseBs > 0 && debitAccount) items.push({
+        accountCode: debitAccount.code,
+        accountName: debitAccount.name,
         debitBs: baseBs, creditBs: 0, debitUsd: baseBs / rate, creditUsd: 0,
-        description: `Compra operativa Fac. ${purchaseData.invoiceNumber} - ${purchaseData.supplierName}`
+        description: `Compra ${debitAccount.type === 'GASTOS' ? 'no inventariable' : debitAccount.type === 'COSTOS' ? 'de costo de servicio' : 'de activo'} Fac. ${purchaseData.invoiceNumber} - ${purchaseData.supplierName}`
       });
     }
 
@@ -3054,7 +3054,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const rate = Number(saleData.bcvRate);
     const saleAmounts = [
       saleData.totalAmountBs, saleData.taxableBaseBs, saleData.exemptAmountBs,
-      saleData.vatAmountBs, saleData.vatWithheldBs || 0, saleData.igtfAmountBs || 0
+      saleData.vatAmountBs, saleData.additionalLuxuryTaxBs || 0, saleData.vatWithheldBs || 0, saleData.igtfAmountBs || 0
     ];
     if (!Number.isFinite(rate) || rate <= 0) throw new Error('La venta requiere una tasa BCV válida mayor que cero.');
     if (saleAmounts.some(value => !Number.isFinite(value) || value < 0) || saleData.totalAmountBs <= 0) {
@@ -3073,7 +3073,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!Number.isFinite(saleData.taxRate) || saleData.taxRate < 0 || saleData.taxRate > 100) {
       throw new Error('La alícuota de IVA de la venta no es válida.');
     }
-    const expectedVat = Math.round(saleData.taxableBaseBs * saleData.taxRate) / 100;
+    const expectedVatRate = saleData.taxRate === 31 ? 16 : saleData.taxRate;
+    const expectedVat = Math.round(saleData.taxableBaseBs * expectedVatRate) / 100;
+    const expectedLuxuryTax = saleData.taxRate === 31 ? Math.round(saleData.taxableBaseBs * 15) / 100 : 0;
+    if (Math.abs(expectedLuxuryTax - Number(saleData.additionalLuxuryTaxBs || 0)) > 0.01) {
+      throw new Error('El impuesto adicional al consumo suntuario no coincide con la alícuota combinada declarada.');
+    }
     if (Math.abs(expectedVat - saleData.vatAmountBs) > 0.01) {
       throw new Error('El IVA de la venta no coincide con la base imponible y la alícuota declarada.');
     }
@@ -3091,14 +3096,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!eligibleSaleIgtf) {
         throw new Error('El IGTF en ventas requiere agente de percepción configurado y cobro de contado en un medio elegible.');
       }
-      const expectedIgtf = Math.round((saleData.taxableBaseBs + saleData.exemptAmountBs + saleData.vatAmountBs) * 3) / 100;
+      const expectedIgtf = Math.round((saleData.taxableBaseBs + saleData.exemptAmountBs + saleData.vatAmountBs + Number(saleData.additionalLuxuryTaxBs || 0)) * 3) / 100;
       if (Math.abs(saleIgtf - expectedIgtf) > 0.01 || Number(saleData.igtfRate || 0) !== 3) {
         throw new Error('El importe o la tasa del IGTF no coincide con el cálculo confirmado del 3%.');
       }
     } else if (saleIgtf !== 0) {
       throw new Error('No se permite registrar IGTF sin confirmación expresa.');
     }
-    const expectedSaleTotal = Math.round((saleData.taxableBaseBs + saleData.exemptAmountBs + saleData.vatAmountBs + saleIgtf) * 100) / 100;
+    const expectedSaleTotal = Math.round((saleData.taxableBaseBs + saleData.exemptAmountBs + saleData.vatAmountBs + Number(saleData.additionalLuxuryTaxBs || 0) + saleIgtf) * 100) / 100;
     if (Math.abs(expectedSaleTotal - saleData.totalAmountBs) > 0.01) {
       throw new Error('El total de la venta no coincide con base imponible, exento, IVA e IGTF.');
     }
@@ -3182,6 +3187,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
     }
 
+    // Haber: impuesto adicional al consumo suntuario (15%) separado del IVA.
+    if (Number(saleData.additionalLuxuryTaxBs || 0) > 0) {
+      const luxuryTaxBs = Number(saleData.additionalLuxuryTaxBs || 0);
+      const luxuryTaxAccount = accounts.find(account => account.code === '2.1.2.08' && account.isMovement && account.type === 'PASIVO');
+      if (!luxuryTaxAccount) throw new Error('El plan de cuentas no contiene la cuenta de impuesto adicional al consumo suntuario.');
+      items.push({ accountCode: luxuryTaxAccount.code, accountName: luxuryTaxAccount.name, debitBs: 0, creditBs: luxuryTaxBs, debitUsd: 0, creditUsd: luxuryTaxBs / rate, description: `Impuesto adicional al consumo suntuario 15% Fac. ${saleData.invoiceNumber}` });
+    }
+
     // Haber: Débito Fiscal IVA Ventas
     if (saleData.vatAmountBs > 0) {
       items.push({
@@ -3230,6 +3243,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       totalAmountUsd: saleData.totalAmountBs / rate,
       taxableBaseUsd: saleData.taxableBaseBs / rate,
       vatAmountUsd: saleData.vatAmountBs / rate,
+      additionalLuxuryTaxBs: Number(saleData.additionalLuxuryTaxBs || 0),
+      additionalLuxuryTaxUsd: Number(saleData.additionalLuxuryTaxBs || 0) / rate,
       vatWithheldUsd: (saleData.vatWithheldBs || 0) / rate,
       igtfAmountUsd: saleIgtf / rate,
       id: saleId,
@@ -3419,10 +3434,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (products.some(p => p.companyId === currentCompany.id && p.code.trim().toLocaleUpperCase() === code)) {
       throw new Error(`Ya existe un artículo con el código ${code} en la empresa activa.`);
     }
-    const rate = Number(prodData.openingBcvRate ?? currentCompany.bcvRate);
-    if (!Number.isFinite(rate) || rate <= 0) throw new Error('Configure la tasa BCV histórica válida antes de crear artículos con valoración.');
+    const rate = Number(prodData.openingBcvRate ?? 0);
     const initialQuantity = Number(prodData.currentStock || 0);
     const initialCostBs = Number(prodData.avgCostBs || 0);
+    if (!Number.isFinite(rate) || rate < 0 || ((initialQuantity > 0 || initialCostBs > 0) && rate <= 0)) throw new Error('Ingrese la tasa BCV histórica aplicable a la valoración inicial del artículo.');
     const openingDateValue = prodData.openingDate || new Date().toISOString().slice(0, 10);
     const openingDateParsed = new Date(openingDateValue + 'T00:00:00Z');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(openingDateValue) || !Number.isFinite(openingDateParsed.getTime()) || openingDateParsed.toISOString().slice(0,10) !== openingDateValue) throw new Error('La fecha del inventario inicial no es válida.');
@@ -3435,9 +3450,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       code,
       currentStock: initialQuantity,
       avgCostBs: initialCostBs,
-      avgCostUsd: initialCostBs / rate,
+      avgCostUsd: rate > 0 ? initialCostBs / rate : 0,
       lastCostBs: initialCostBs,
-      lastCostUsd: initialCostBs / rate,
+      lastCostUsd: rate > 0 ? initialCostBs / rate : 0,
       inventoryAccountCode: prodData.inventoryAccountCode || getDefaultInventoryAccountCode(prodData.itemType),
       costOfSalesAccountCode: prodData.costOfSalesAccountCode || '5.1.1.01',
       adjustmentAccountCode: prodData.adjustmentAccountCode || '5.1.2.01',
@@ -3508,18 +3523,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!code || !name) throw new Error('Cada artículo debe incluir código y descripción.');
       if (existingCodes.has(code) || batchCodes.has(code)) throw new Error('Código duplicado en la empresa o archivo: ' + code + '.');
       batchCodes.add(code);
-      const rate = Number(row.openingBcvRate ?? currentCompany.bcvRate);
+      const rate = Number(row.openingBcvRate ?? 0);
       const quantity = Number(row.currentStock || 0);
       const unitCostBs = Number(row.avgCostBs || 0);
       const date = row.openingDate || today;
       const parsedOpeningDate = new Date(date + 'T00:00:00Z');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(parsedOpeningDate.getTime()) || parsedOpeningDate.toISOString().slice(0,10) !== date) throw new Error('Fecha de apertura inválida para ' + code + '.');
-      if (!Number.isFinite(rate) || rate <= 0 || !Number.isFinite(quantity) || quantity < 0 ||
+      if (!Number.isFinite(rate) || rate < 0 || ((quantity > 0 || unitCostBs > 0) && rate <= 0) || !Number.isFinite(quantity) || quantity < 0 ||
           !Number.isFinite(unitCostBs) || unitCostBs < 0 || (quantity > 0 && unitCostBs <= 0)) throw new Error('Tasa, cantidad o costo inválidos para ' + code + '.');
       const product: InventoryProduct = {
         ...row, id: 'prod-import-' + Date.now() + '-' + prepared.length + '-' + Math.floor(Math.random() * 100000),
         companyId: currentCompany.id, code, name, currentStock: quantity, avgCostBs: unitCostBs,
-        avgCostUsd: unitCostBs / rate, lastCostBs: unitCostBs, lastCostUsd: unitCostBs / rate,
+        avgCostUsd: rate > 0 ? unitCostBs / rate : 0, lastCostBs: unitCostBs, lastCostUsd: rate > 0 ? unitCostBs / rate : 0,
         inventoryAccountCode: row.inventoryAccountCode || getDefaultInventoryAccountCode(row.itemType),
         costOfSalesAccountCode: row.costOfSalesAccountCode || '5.1.1.01',
         adjustmentAccountCode: row.adjustmentAccountCode || '5.1.2.01',
@@ -3589,7 +3604,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       keys.add(key);
       const priorProductMovements = virtualMovements.filter(m => m.productId === product.id).slice().sort((a,b) => a.date.localeCompare(b.date));
       if (priorProductMovements.length && row.date < priorProductMovements[priorProductMovements.length - 1].date) throw new Error('Fila ' + (index + 2) + ': importe los períodos históricos en orden cronológico; esta fecha es anterior al último movimiento de ' + product.code + '.');
-      const rate = Number(row.bcvRate ?? currentCompany.bcvRate);
+      const rate = Number(row.bcvRate ?? 0);
       const requestedCost = Number(row.unitCostBs);
       const landedCostsBs = Number(row.additionalLandedCostsBs || 0);
       if (!Number.isFinite(landedCostsBs) || landedCostsBs < 0) throw new Error('Fila ' + (index + 2) + ': los fletes/gastos asociados no pueden ser negativos.');
@@ -3709,7 +3724,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (![updated.minStock, updated.salesPriceBs, updated.salesPriceUsd].every(value => Number.isFinite(Number(value)) && Number(value) >= 0)) {
       throw new Error('Stock mínimo y precios deben ser importes numéricos no negativos.');
     }
-    if (!['GENERAL_16', 'REDUCIDA_8', 'EXENTO', 'EXONERADO'].includes(updated.vatTreatment)) {
+    if (!['GENERAL_16', 'REDUCIDA_8', 'EXENTO', 'EXONERADO'].includes(updated.vatTreatment || 'GENERAL_16')) {
       throw new Error('El tratamiento IVA del artículo no es válido.');
     }
     if (products.some(p => p.id !== updated.id && p.companyId === currentCompany.id && p.code.trim().toLocaleUpperCase() === updated.code.trim().toLocaleUpperCase())) {
@@ -3717,7 +3732,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const immutableInventoryFields: Array<keyof InventoryProduct> = [
       'currentStock', 'avgCostBs', 'avgCostUsd', 'lastCostBs', 'lastCostUsd',
-      'vnrProvisionBs', 'vnrProvisionUsd', 'inventoryAccountCode', 'costOfSalesAccountCode',
+      'vnrProvisionBs', 'inventoryAccountCode', 'costOfSalesAccountCode',
       'adjustmentAccountCode', 'openingBalanceAccountCode', 'costingMethod', 'itemType',
       'openingDate', 'openingBcvRate'
     ];
@@ -3886,7 +3901,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           throw new Error('Devolución bloqueada: la factura no tiene un saldo de CxP de crédito conciliable. Debe implementarse primero el tratamiento de anticipos o saldos a favor del proveedor.');
         }
         const payableBalance = getCreditBalance(purchase.id, 'PURCHASE_PAYMENT');
-        const returnValueUsd = Number(movData.quantity) * Number(original.unitCostBs) / Number(purchase.bcvRate || currentCompany.bcvRate);
+        const returnValueUsd = Number(movData.quantity) * Number(original.unitCostBs) / Number(purchase.bcvRate);
         if (!Number.isFinite(returnValueUsd) || returnValueUsd > payableBalance.outstandingUsd + 0.005) {
           throw new Error('Devolución bloqueada: el valor de la mercancía supera el saldo pendiente de CxP de la factura. Requiere tratamiento de saldo a favor del proveedor.');
         }
@@ -3894,7 +3909,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     } else if (supplierReturn) {
       throw new Error('La devolución a proveedor debe conservar el vínculo con su entrada original.');
     }
-    const rate = Number(movData.bcvRate ?? currentCompany.bcvRate);
+    const rate = Number(movData.bcvRate ?? 0);
     const isAdjustment = movData.type === 'AJUSTE';
     const actualQuantity = isAdjustment ? Math.abs(Number(movData.balanceQty) - prod.currentStock) : Number(movData.quantity);
     const requestedCost = Number(movData.unitCostBs);
@@ -4391,7 +4406,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   // Tesorería: alta bancaria y creación automática del auxiliar contable.
-  const addBankAccount = (bankData: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'>): BankAccount => {
+  const addBankAccount = (bankData: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'> & { bcvRate?: number }): BankAccount => {
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('Registrar una cuenta bancaria requiere SQLite local de escritorio disponible y lista.');
     }
@@ -4412,8 +4427,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('El saldo inicial debe ser un importe numérico, finito y no negativo.');
     }
     const hasOpeningBalance = bankData.currency === 'USD' ? rawUsd > 0 : rawBs > 0;
-    const rate = Number(currentCompany.bcvRate);
-    if (hasOpeningBalance && (!Number.isFinite(rate) || rate <= 0)) throw new Error('Configure una tasa BCV válida antes de registrar un saldo inicial.');
+    const rate = Number(bankData.bcvRate);
+    if (hasOpeningBalance && (!Number.isFinite(rate) || rate <= 0)) throw new Error('Ingrese la tasa BCV aplicable al saldo inicial de esta cuenta.');
 
     // El importe introducido en la moneda de la cuenta es la autoridad; la otra
     // moneda se calcula con la tasa BCV para evitar saldos de apertura incoherentes.
@@ -4439,7 +4454,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const equity = hasOpeningBalance ? accounts.find(a => a.code === '3.3.1.01' && a.isMovement) : undefined;
     if (hasOpeningBalance && !equity) throw new Error('No existe la cuenta de contrapartida de apertura 3.3.1.01.');
 
-    const newBank: BankAccount = { ...bankData, accountType, accountCode, accountNumber: digits, initialBalanceBs: bs, initialBalanceUsd: usd, id: `bank-acc-${Date.now()}-${Math.floor(Math.random()*100000)}`, companyId: currentCompany.id };
+    const { bcvRate: _openingBcvRate, ...bankFields } = bankData;
+    const newBank: BankAccount = { ...bankFields, accountType, accountCode, accountNumber: digits, initialBalanceBs: bs, initialBalanceUsd: usd, id: `bank-acc-${Date.now()}-${Math.floor(Math.random()*100000)}`, companyId: currentCompany.id };
     // Registrar primero el asiento: si falla la partida doble, no deja una cuenta
     // bancaria ni un auxiliar huérfanos en el estado de la aplicación.
     if (hasOpeningBalance && equity) {
@@ -4458,7 +4474,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return newBank;
   };
 
-  const registerTreasuryMovement = (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; counterpartAccountCode?: string; destinationBankAccountId?: string }): JournalEntry => {
+  const registerTreasuryMovement = (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; bcvRate: number; counterpartAccountCode?: string; destinationBankAccountId?: string }): JournalEntry => {
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('La operación bancaria requiere SQLite local de escritorio disponible y lista.');
     }
@@ -4482,8 +4498,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       )
     );
     if (duplicatedReference) throw new Error('Ya existe un movimiento contabilizado con esa referencia para una de las cuentas bancarias involucradas.');
-    const rate = Number(currentCompany.bcvRate);
-    if (!Number.isFinite(rate) || rate <= 0) throw new Error('Configure una tasa BCV válida para registrar movimientos.');
+    const rate = Number(draft.bcvRate);
+    if (!Number.isFinite(rate) || rate <= 0) throw new Error('Ingrese la tasa BCV aplicable a este movimiento bancario.');
     const amountBs = source.currency === 'USD' ? Math.round(draft.amount * rate * 100) / 100 : Math.round(draft.amount * 100) / 100;
     const amountUsd = source.currency === 'USD' ? Math.round(draft.amount * 1000000) / 1000000 : Math.round(amountBs / rate * 1000000) / 1000000;
     if (amountBs <= 0 || amountUsd <= 0) throw new Error('El importe es demasiado pequeño para contabilizarse en ambas monedas.');
