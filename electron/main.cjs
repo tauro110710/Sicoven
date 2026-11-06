@@ -599,7 +599,7 @@ app.whenReady().then(async () => {
     if (!hasFullSystemAccess(actor)) return { ok: false, message: 'Permisos insuficientes o sesión no válida.' };
     const total = db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count;
     const seed = db.prepare('SELECT id FROM auth_users WHERE username=? AND is_seed=1').get('admin');
-    if (total < 2 || !seed) return { ok: false, message: 'El administrador semilla solo puede eliminarse después de crear otro administrador.' };
+    if (total < 2 || !seed) return { ok: false, message: 'El usuario semilla solo puede eliminarse después de crear otro usuario autorizado.' };
     db.prepare('DELETE FROM auth_users WHERE id=?').run(seed.id);
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('seed_admin_deleted', JSON.stringify({ by: actor.username }));
     for (const [k, v] of sessions.entries()) if (v.id === seed.id) sessions.delete(k);
