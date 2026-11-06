@@ -298,7 +298,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const seen=new Set<string>();
     const seenControls=new Set<string>();
     const existingDocs=new Set((kind==='sales'?companySales.map(d=>documentKey(d.invoiceNumber||'',d.customerRif||'')):companyPurchases.map(d=>documentKey(d.invoiceNumber||'',d.supplierRif||''))));
-    const existingControls=new Set((kind==='sales'?sales.map(d=>controlKey(d.controlNumber||'',d.customerRif||'')):purchases.map(d=>controlKey(d.controlNumber||'',d.supplierRif||''))).filter(key=>!key.startsWith('|')));
+    const existingControls=new Set((kind==='sales'?companySales.map(d=>controlKey(d.controlNumber||'',d.customerRif||'')):companyPurchases.map(d=>controlKey(d.controlNumber||'',d.supplierRif||''))).filter(key=>!key.startsWith('|')));
     const prepared=sourceRows.map((r,i)=>{
      const invoiceNumber=String(pick(r,'invoiceNumber','numeroFactura','numero de factura','factura','documento')??'').trim();
      const partyName=String(pick(r,kind==='sales'?'customerName':'supplierName',kind==='sales'?'cliente':'proveedor',kind==='sales'?'nombreCliente':'nombreProveedor')??'').trim();
