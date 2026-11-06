@@ -69,6 +69,9 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  const [posvenBackup,setPosvenBackup]=useState(false);
  const [posvenInventorySummary,setPosvenInventorySummary]=useState<{sourceCount:number;importedCount:number;inactiveCount:number;kitCount:number;openingDate:string;openingBcvRate:number}|null>(null);
  const [posvenQuality,setPosvenQuality]=useState({collections:0,objectRows:0,invalidRows:0,emptyCollections:0});
+ const [activeCollection,setActiveCollection]=useState('');
+ const [selectedCollections,setSelectedCollections]=useState<string[]>([]);
+ const [selectedInventoryIndexes,setSelectedInventoryIndexes]=useState<number[]>([]);
  const posvenPreview = useMemo(()=>{
   if(!posvenBackup||!backupPayload)return [] as Array<{name:string;count:number;objects:number;invalid:number;fields:string[];identityField:string;missingIdentity:number;duplicateIdentity:number;numericSummaries:Array<{field:string;count:number;sum:number}>;referenceFields:string[];relationshipHints:Array<{field:string;targetCollection:string}>;target:string;mode:string;reason:string}>;
   try{
@@ -182,7 +185,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   return detected;
  },[rows]);
  const readFiles=async(list:File[])=>{
-  setError('');setNotice('');setRows([]);setHeaders([]);setSelected([]);setConfirmed(false);setBackupPayload(null);setBackupCounts(null);setPosvenBackup(false);setPosvenInventorySummary(null);setPosvenQuality({collections:0,objectRows:0,invalidRows:0,emptyCollections:0});setFiles(list);
+  setError('');setNotice('');setRows([]);setHeaders([]);setSelected([]);setConfirmed(false);setBackupPayload(null);setBackupCounts(null);setPosvenBackup(false);setPosvenInventorySummary(null);setPosvenQuality({collections:0,objectRows:0,invalidRows:0,emptyCollections:0});setActiveCollection('');setSelectedCollections([]);setSelectedInventoryIndexes([]);setFiles(list);
   if(!list.length)return;
   try{
    if(list.length===1 && list[0].name.toLowerCase().endsWith('.json')){
@@ -193,9 +196,17 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     if(data && typeof data==='object' && !Array.isArray(data) && String((data as Record<string,unknown>).app??'').toLowerCase()==='posven-pro' && (data as Record<string,unknown>).data && typeof (data as Record<string,unknown>).data==='object' && !Array.isArray((data as Record<string,unknown>).data)){
      const mapped=mapPosvenV3Inventory(data);
      const mappedRows=mapped.rows.map(row=>({...row,migrationsource:list[0].name}));
+     const payloadData=(data as Record<string,unknown>).data as Record<string,unknown>;
+     const counts=Object.fromEntries(Object.entries(payloadData).filter(([,value])=>Array.isArray(value)).map(([key,value])=>[key,(value as unknown[]).length]));
+     const collections=Object.entries(payloadData).filter(([,value])=>Array.isArray(value));
+     const allRows=collections.flatMap(([,value])=>value as unknown[]);
+     const objectRows=allRows.filter(value=>!!value&&typeof value==='object'&&!Array.isArray(value)).length;
+     setBackupPayload(raw);setBackupCounts(counts);setPosvenBackup(true);
+     setPosvenQuality({collections:collections.length,objectRows,invalidRows:allRows.length-objectRows,emptyCollections:collections.filter(([,value])=>(value as unknown[]).length===0).length});
      setPosvenInventorySummary({sourceCount:mapped.sourceCount,importedCount:mapped.importedCount,inactiveCount:mapped.inactiveCount,kitCount:mapped.kitCount,openingDate:mapped.openingDate,openingBcvRate:mapped.openingBcvRate});
-     setRows(mappedRows);setHeaders(Object.keys(mapped.rows[0]??{}));setSelected(['inventory']);setPosvenBackup(false);
-     setNotice('Respaldo POSVEN v3 reconocido: '+mapped.importedCount+' artículos activos no-kit preparados para revisión. Todavía no se ha escrito ningún dato en SICOVEN.');
+     setRows(mappedRows);setHeaders(Object.keys(mapped.rows[0]??{}));setSelected(['inventory']);
+     setSelectedCollections(['productos']);setActiveCollection('productos');setSelectedInventoryIndexes(mapped.rows.map(row=>row.sourceIndex));
+     setNotice('Respaldo POSVEN v3 analizado. Selecciona las colecciones y los registros que deseas trasladar; no se ha escrito ningún dato en SICOVEN.');
      return;
     }
     const collections=['companies','accounts','journalEntries','purchases','sales','products','movements','vatVouchers','islrVouchers','bankAccounts','bankStatementMovements'];
@@ -203,6 +214,10 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      if(!(data as Record<string,unknown>).companies || ((data as {companies:unknown[]}).companies.length===0)) throw new Error('El respaldo no contiene empresas. No se modificó la información actual.');
      setBackupPayload(raw);
      setBackupCounts(Object.fromEntries(collections.map(key=>[key,((data as Record<string,unknown>)[key] as unknown[]).length])));
+     setPosvenBackup(true);
+     setPosvenQuality({collections:collections.length,objectRows:collections.reduce((sum,key)=>sum+((data as Record<string,unknown>)[key] as unknown[]).filter(value=>!!value&&typeof value==='object'&&!Array.isArray(value)).length,0),invalidRows:0,emptyCollections:collections.filter(key=>((data as Record<string,unknown>)[key] as unknown[]).length===0).length});
+     setSelectedCollections([]);
+     setNotice('Respaldo SICOVEN analizado en modo de selección. La restauración completa sigue separada; no se modificó la base de datos.');
      return;
     }
    }
@@ -251,6 +266,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  const runBackupImport=async()=>{
   setError('');setNotice('');
   if(!backupPayload){setError('No hay un respaldo válido seleccionado.');return;}
+  if(posvenBackup){setError('La selección por colecciones no restaura ni reemplaza el respaldo completo. Elige un módulo con adaptador compatible para importar solo esos registros.');return;}
   if(!confirmed){setError('Confirma que deseas reemplazar los datos actuales por el contenido del respaldo.');return;}
   setBusy(true);
   try{
@@ -263,6 +279,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  const runMigration=()=>{
   setError('');setNotice('');
   if(!confirmed){setError('Marca la confirmación final antes de ejecutar la migración.');return;}
+  const migrationRows=posvenInventorySummary?rows.filter(row=>selectedInventoryIndexes.includes(Number(row.sourceIndex))):rows;
+  if(posvenInventorySummary&&migrationRows.length===0){setError('Selecciona al menos un artículo válido para importar.');return;}
   const available = new Set(headers.map(norm));
   const requiredInventoryFields = [['code','codigo','sku','productCode'],['name','nombre','productName','producto'],['currentStock','existencia','stock','quantity','cantidad'],['avgCostBs','costoPromedioBs','costBs','costoBs','costObs','costo','costoUnitario','unitCost'],['salesPriceBs','precioVentaBs','priceBs','salesPrice','precioVenta']];
   if(selected.includes('inventory')){
@@ -275,7 +293,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
    if(selected[0]==='sales'||selected[0]==='purchases'){
     const kind=selected[0];
     const rowsBySource=new Map<string,Row[]>();
-    rows.forEach(row=>{const source=String(row.migrationsource??'archivo sin nombre');const group=rowsBySource.get(source)??[];group.push(row);rowsBySource.set(source,group);});
+    migrationRows.forEach(row=>{const source=String(row.migrationsource??'archivo sin nombre');const group=rowsBySource.get(source)??[];group.push(row);rowsBySource.set(source,group);});
     const sourceGroups=[...rowsBySource.entries()].map(([source,group])=>{
      const sourceKeys=new Set(group.flatMap(row=>Object.keys(row).filter(key=>key!=='migrationsource').map(norm)));
      const hasPartySignal=kind==='sales'
@@ -460,7 +478,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     return {code,name,category:String(pick(r,'category','categoria')??'General'),unit:String(pick(r,'unit','unidad')??'Unidad'),minStock:number('minStock','stockMinimo'),currentStock:stock,avgCostBs:cost,avgCostUsd:number('avgCostUsd','costoPromedioUsd'),lastCostBs:number('lastCostBs')||cost,lastCostUsd:number('lastCostUsd'),salesPriceBs:priceBs,salesPriceUsd:priceUsd,costingMethod:'PROMEDIO_PONDERADO' as const,vatTreatment:'GENERAL_16' as const,itemType:'MERCANCIA' as const,openingDate:String(pick(r,'openingDate','fechaApertura')??new Date().toISOString().slice(0,10)),openingBcvRate:pick(r,'openingBcvRate','bcvRate')===undefined?undefined:number('openingBcvRate','bcvRate')};
    });
    const count=importInventoryProducts(prepared);
-   setNotice('Migración completada: '+count+' artículos incorporados. SICOVEN no sobrescribió códigos existentes. Revisa el Kardex y la valoración inicial antes de continuar.');
+   setNotice('Migración completada: '+count+' artículos incorporados de '+migrationRows.length+' seleccionados. SICOVEN no sobrescribió códigos existentes. Revisa el Kardex y la valoración inicial antes de continuar.');
    setSelected(old=>old.filter(id=>id!=='inventory'));setConfirmed(false);
     setBusy(false);
   }catch(e){setError(e instanceof Error?e.message:'La validación falló. No se completó la migración.');setBusy(false);}
@@ -481,7 +499,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     {notice&&<div role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 className="mr-2 inline" size={17}/>{notice}</div>}
     {(rows.length>0||(backupPayload&&!posvenBackup))&&<label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} className="mt-1"/><span>{backupPayload?'Confirmo que revisé el respaldo y autorizo reemplazar los datos actuales por los contenidos en este archivo.':'Confirmo que revisé los archivos y la vista previa, y autorizo la importación del módulo seleccionado. Entiendo que los códigos existentes no serán sobrescritos.'}</span></label>}
    </div>
-   <footer className="flex flex-wrap justify-between gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Cerrar</button><button disabled={busy||posvenBackup||(!backupPayload&&(!rows.length||!confirmed||selected.length<1||!['inventory','accounts','journal','sales','purchases'].includes(selected[0])))||(!!backupPayload&&!confirmed)} onClick={backupPayload?runBackupImport:runMigration} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy?'Validando e importando…':posvenBackup?'Adaptador contable pendiente':backupPayload?'Restaurar respaldo completo':'Importar siguiente módulo'}</button></footer>
+   <footer className="flex flex-wrap justify-between gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Cerrar</button><button disabled={busy||posvenBackup||(!backupPayload&&(!rows.length||!confirmed||selected.length<1||!['inventory','accounts','journal','sales','purchases'].includes(selected[0])))||(!!backupPayload&&!confirmed)} onClick={backupPayload&&!posvenBackup?runBackupImport:runMigration} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy?'Validando e importando…':posvenBackup?'Adaptador contable pendiente':backupPayload?'Restaurar respaldo completo':'Importar siguiente módulo'}</button></footer>
   </div>
  </div>;
 };
