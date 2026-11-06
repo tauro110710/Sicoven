@@ -76,8 +76,9 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  const posvenPreview = useMemo(()=>{
   if(!posvenBackup||!backupPayload)return [] as Array<{name:string;count:number;objects:number;invalid:number;fields:string[];identityField:string;missingIdentity:number;duplicateIdentity:number;numericSummaries:Array<{field:string;count:number;sum:number}>;referenceFields:string[];relationshipHints:Array<{field:string;targetCollection:string}>;target:string;mode:string;reason:string}>;
   try{
-   const root=JSON.parse(backupPayload) as {data?:Record<string,unknown>};
-   return Object.entries(root.data??{}).filter(([,value])=>Array.isArray(value)).map(([name,value])=>{
+   const root=JSON.parse(backupPayload) as Record<string,unknown>;
+   const collectionRoot=root.data&&typeof root.data==='object'&&!Array.isArray(root.data)?root.data as Record<string,unknown>:root;
+   return Object.entries(collectionRoot).filter(([,value])=>Array.isArray(value)).map(([name,value])=>{
     const list=value as unknown[];const objects=list.filter(row=>!!row&&typeof row==='object'&&!Array.isArray(row)) as Row[];
     const fields=Array.from(new Set(objects.slice(0,5).flatMap(row=>Object.keys(row)))).slice(0,12);
     // Diagnóstico preventivo: la clave candidata no se considera validada.
@@ -238,6 +239,25 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      return;
     }
    }
+   if(list.length===1 && list[0].name.toLowerCase().endsWith('.json')){
+    const raw=await list[0].text();
+    const parsed=JSON.parse(raw);
+    if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed)){
+     const root=parsed as Record<string,unknown>;
+     const collectionRoot=root.data&&typeof root.data==='object'&&!Array.isArray(root.data)?root.data as Record<string,unknown>:root;
+     const entries=Object.entries(collectionRoot).filter(([,value])=>Array.isArray(value));
+     if(entries.length){
+      const counts=Object.fromEntries(entries.map(([key,value])=>[key,(value as unknown[]).length]));
+      const all=entries.flatMap(([,value])=>value as unknown[]);
+      setBackupPayload(raw);setBackupCounts(counts);setPosvenBackup(true);
+      setPosvenQuality({collections:entries.length,objectRows:all.filter(value=>!!value&&typeof value==='object'&&!Array.isArray(value)).length,invalidRows:all.filter(value=>!value||typeof value!=='object'||Array.isArray(value)).length,emptyCollections:entries.filter(([,value])=>(value as unknown[]).length===0).length});
+      setSelectedCollections([]);setActiveCollection(entries[0][0]);
+      setNotice('JSON estructurado analizado: se detectaron '+entries.length+' colecciones. Selecciona los módulos y registros que deseas migrar. No se ha escrito ningún dato.');
+      return;
+     }
+    }
+   }
+
    const combined:Row[]=[]; const allHeaders = new Set<string>();
    for(const file of list){
     const ext=file.name.toLowerCase().split('.').pop();
