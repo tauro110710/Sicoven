@@ -19,11 +19,14 @@ import type { InventoryProduct } from '../../types/accounting';
 import { NewProductModal } from './NewProductModal';
 import { NewMovementModal } from './NewMovementModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
+import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { InventarioContableTools } from './InventarioContableTools';
 import { IntelligentMigrationWizard } from '../Migracion/IntelligentMigrationWizard';
 
 export const InventarioView: React.FC = () => {
-  const { currentCompany, products, movements } = useAccounting();
+  const { currentCompany, products: allProducts, movements: allMovements } = useAccounting();
+  const companyProducts = filterEntriesByCompany(allProducts, currentCompany.id);
+  const companyMovements = filterEntriesByCompany(allMovements, currentCompany.id);
 
   const [activeTab, setActiveTab] = useState<'EXISTENCIAS' | 'KARDEX' | 'CONTABILIDAD'>('EXISTENCIAS');
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -32,9 +35,10 @@ export const InventarioView: React.FC = () => {
   const [isMigrationWizardOpen, setIsMigrationWizardOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProductId, setSelectedProductId] = useState<string>('ALL');
+  const effectiveSelectedProductId = companyProducts.some(product => product.id === selectedProductId) ? selectedProductId : 'ALL';
 
-  // Filter products
-  const filteredProducts = products.filter(p => {
+  // Filter companyProducts
+  const filteredProducts = companyProducts.filter(p => {
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       return (
@@ -46,10 +50,10 @@ export const InventarioView: React.FC = () => {
     return true;
   });
 
-  // Filter movements
-  const filteredMovements = movements
+  // Filter companyMovements
+  const filteredMovements = companyMovements
     .filter(m => {
-      if (selectedProductId !== 'ALL' && m.productId !== selectedProductId) return false;
+      if (effectiveSelectedProductId !== 'ALL' && m.productId !== effectiveSelectedProductId) return false;
       if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase();
         return (
@@ -63,15 +67,15 @@ export const InventarioView: React.FC = () => {
     .sort((a, b) => b.date.localeCompare(a.date));
 
   // Valuations
-  const totalInventoryValueBs = products.reduce(
+  const totalInventoryValueBs = companyProducts.reduce(
     (sum, p) => sum + Math.max(0, p.currentStock * p.avgCostBs - Number(p.vnrProvisionBs || 0)),
     0
   );
-  const totalInventoryValueUsd = products.reduce(
+  const totalInventoryValueUsd = companyProducts.reduce(
     (sum, p) => sum + Math.max(0, p.currentStock * p.avgCostUsd - Number(p.vnrProvisionBs || 0) / Math.max(Number(currentCompany.bcvRate || 0), 0.000001)),
     0
   );
-  const lowStockCount = products.filter(p => p.currentStock <= p.minStock).length;
+  const lowStockCount = companyProducts.filter(p => p.currentStock <= p.minStock).length;
 
   return (
     <div className="space-y-6">
@@ -87,7 +91,7 @@ export const InventarioView: React.FC = () => {
         {/* Action buttons (hidden on print) */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2 no-print border-t border-slate-100">
           <div className="flex items-center gap-2 text-xs text-slate-600">
-            <span>Artículos: <strong className="text-slate-900">{products.length}</strong></span>
+            <span>Artículos: <strong className="text-slate-900">{companyProducts.length}</strong></span>
             <span>•</span>
             <span className="text-emerald-700 font-medium">Kardex Perpetuo Activo</span>
           </div>
@@ -137,10 +141,10 @@ export const InventarioView: React.FC = () => {
               Artículos en Catálogo
             </span>
             <div className="text-lg font-bold text-slate-900 mt-1">
-              {products.length} productos
+              {companyProducts.length} productos
             </div>
             <div className="text-xs text-slate-500">
-              {movements.length} movimientos registrados en Kardex
+              {companyMovements.length} movimientos registrados en Kardex
             </div>
           </div>
 
@@ -180,7 +184,7 @@ export const InventarioView: React.FC = () => {
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              Catálogo de Existencias ({products.length})
+              Catálogo de Existencias ({companyProducts.length})
             </button>
             <button
               onClick={() => setActiveTab('KARDEX')}
@@ -190,7 +194,7 @@ export const InventarioView: React.FC = () => {
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              Kardex de Movimientos ({movements.length})
+              Kardex de Movimientos ({companyMovements.length})
             </button>
           </div>
 
@@ -210,12 +214,12 @@ export const InventarioView: React.FC = () => {
 
             {activeTab === 'KARDEX' && (
               <select
-                value={selectedProductId}
+                value={effectiveSelectedProductId}
                 onChange={e => setSelectedProductId(e.target.value)}
                 className="px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               >
                 <option value="ALL">Todos los Artículos</option>
-                {products.map(p => (
+                {companyProducts.map(p => (
                   <option key={p.id} value={p.id}>
                     {p.code} - {p.name}
                   </option>

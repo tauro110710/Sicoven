@@ -21,6 +21,19 @@ describe('accounting report integrity', () => {
     assert.deepEqual(filterEntriesByCompany(entries, 'company-b').map(entry => entry.id), ['b-1']);
   });
 
+  it('isolates inventory products and Kardex movements by company', () => {
+    const products = [
+      { id: 'product-a', companyId: 'company-a', code: 'A-01' },
+      { id: 'product-b', companyId: 'company-b', code: 'B-01' }
+    ];
+    const movements = [
+      { id: 'movement-a', companyId: 'company-a', productId: 'product-a' },
+      { id: 'movement-b', companyId: 'company-b', productId: 'product-b' }
+    ];
+    assert.deepEqual(filterEntriesByCompany(products, 'company-a').map(item => item.id), ['product-a']);
+    assert.deepEqual(filterEntriesByCompany(movements, 'company-b').map(item => item.id), ['movement-b']);
+  });
+
   it('requires the statement of financial position to balance in Bs and USD', () => {
     const balanced = {
       totalAssetsBs: 1000,

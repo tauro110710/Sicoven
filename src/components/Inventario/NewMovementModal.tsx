@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { ArrowLeftRight, X, Check } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
+import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 
 interface NewMovementModalProps {
   isOpen: boolean;
@@ -14,12 +15,16 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   onClose,
   defaultProductId
 }) => {
-  const { currentCompany, products, movements, purchases, journalEntries, addMovement, waitForPersistence } = useAccounting();
+  const { currentCompany, products: allProducts, movements: allMovements, purchases: allPurchases, journalEntries: allJournalEntries, addMovement, waitForPersistence } = useAccounting();
+  const companyProducts = filterEntriesByCompany(allProducts, currentCompany.id);
+  const companyMovements = filterEntriesByCompany(allMovements, currentCompany.id);
+  const companyPurchases = filterEntriesByCompany(allPurchases, currentCompany.id);
+  const companyJournalEntries = filterEntriesByCompany(allJournalEntries, currentCompany.id);
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
   const [productId, setProductId] = useState<string>(
-    defaultProductId || products[0]?.id || ''
+    defaultProductId || companyProducts[0]?.id || ''
   );
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [type, setType] = useState<'ENTRADA' | 'SALIDA' | 'AJUSTE'>('ENTRADA');
@@ -35,8 +40,15 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const [counterpartyName, setCounterpartyName] = useState('');
   const [error, setError] = useState('');
 
-  const selectedProduct = products.find(p => p.id === productId) || products[0];
-  const supplierReturnSources = movements.filter(m => m.companyId === currentCompany.id && m.productId === productId && m.type === 'ENTRADA' && m.concept === 'COMPRA' && !m.correctionForMovementId).map(m => ({...m, remaining: m.quantity - movements.filter(x => x.companyId === currentCompany.id && x.correctionForMovementId === m.id).reduce((sum,x)=>sum+Number(x.quantity||0),0)})).filter(m=>m.remaining>1e-8);
+  React.useEffect(() => {
+    const validCurrent = companyProducts.some(product => product.id === productId);
+    const validDefault = defaultProductId ? companyProducts.some(product => product.id === defaultProductId) : false;
+    if (!validCurrent) setProductId(validDefault ? defaultProductId! : (companyProducts[0]?.id || ''));
+    setCorrectionMovementId('');
+  }, [currentCompany.id]);
+
+  const selectedProduct = companyProducts.find(p => p.id === productId) || companyProducts[0];
+  const supplierReturnSources = companyMovements.filter(m => m.companyId === currentCompany.id && m.productId === productId && m.type === 'ENTRADA' && m.concept === 'COMPRA' && !m.correctionForMovementId).map(m => ({...m, remaining: m.quantity - companyMovements.filter(x => x.companyId === currentCompany.id && x.correctionForMovementId === m.id).reduce((sum,x)=>sum+Number(x.quantity||0),0)})).filter(m=>m.remaining>1e-8);
   const selectedReturnSource = supplierReturnSources.find(m=>m.id===correctionMovementId);
 
   // Auto-set cost when product changes
@@ -81,20 +93,20 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
       if (selectedProduct.costingMethod === 'PEPS') { setError('La devolución con PEPS requiere identificar el lote de origen; permanece bloqueada hasta disponer de ese dato.'); return; }
       if (selectedProduct.currentStock + 1e-8 < quantity) { setError('No hay existencia suficiente para descargar la devolución física al proveedor.'); return; }
       if (Math.abs(Number(selectedProduct.avgCostBs || 0) - Number(selectedReturnSource.unitCostBs || 0)) > 0.01) { setError('El costo promedio actual difiere del costo de la entrada original. No se registró la devolución porque la contrapartida CxP podría no coincidir con la nota de crédito; requiere conciliación contable manual.'); return; }
-      const linkedPurchase = purchases.find(p => p.companyId === currentCompany.id &&
+      const linkedPurchase = companyPurchases.find(p => p.companyId === currentCompany.id &&
         ('FAC-' + p.invoiceNumber).trim().toUpperCase() === selectedReturnSource.documentRef.trim().toUpperCase());
       const purchaseLines = linkedPurchase?.inventoryLines || [];
       const purchaseLine = purchaseLines.find(line => line.productId === selectedProduct.id &&
         Math.abs(Number(line.quantity)-Number(selectedReturnSource.quantity)) <= 1e-8 &&
         Math.abs(Number(line.unitCostBs)-Number(selectedReturnSource.unitCostBs)) <= 0.02);
       const purchaseJournal = linkedPurchase?.journalEntryId
-        ? journalEntries.find(entry => entry.id === linkedPurchase.journalEntryId) : undefined;
+        ? companyJournalEntries.find(entry => entry.id === linkedPurchase.journalEntryId) : undefined;
       const journalInventoryDebit = purchaseJournal?.items.filter(item=>item.accountCode==='1.1.4.01')
         .reduce((sum,item)=>sum+Number(item.debitBs||0)-Number(item.creditBs||0),0);
       const expectedInventoryDebit = linkedPurchase
         ? Number(linkedPurchase.taxableBaseBs||0)+Number(linkedPurchase.exemptAmountBs||0) : 0;
       const lineTotal = purchaseLines.reduce((sum,line)=>sum+Number(line.quantity||0)*Number(line.unitCostBs||0),0);
-      const invoiceMovements = linkedPurchase ? movements.filter(m=>m.companyId===currentCompany.id &&
+      const invoiceMovements = linkedPurchase ? companyMovements.filter(m=>m.companyId===currentCompany.id &&
         m.type==='ENTRADA' && m.concept==='COMPRA' &&
         m.documentRef.trim().toUpperCase()===('FAC-'+linkedPurchase.invoiceNumber).trim().toUpperCase() &&
         !m.correctionForMovementId) : [];
@@ -176,11 +188,11 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Producto / Artículo *</label>
             <select
-              value={productId}
+              value={selectedProduct?.id || ''}
               onChange={e => { setProductId(e.target.value); setCorrectionMovementId(''); }}
               className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
             >
-              {products.map(p => (
+              {companyProducts.map(p => (
                 <option key={p.id} value={p.id}>
                   {p.code} - {p.name} (Stock: {p.currentStock} {p.unit})
                 </option>

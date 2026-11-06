@@ -3,6 +3,7 @@ import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } 
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
 import { useAccounting } from '../../context/AccountingContext';
+import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 
 type Row = Record<string, unknown>;
 type ModuleId = 'inventory' | 'customers' | 'receivables' | 'payables' | 'sales' | 'purchases' | 'accounts' | 'journal';
@@ -48,7 +49,11 @@ const pick = (row:Row, ...keys:string[]) => {
 };
 
 export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClose}) => {
- const { products, importInventoryProducts, restoreBackupJson, accounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales, purchases, journalEntries, currentCompany } = useAccounting();
+ const { products: allProducts, importInventoryProducts, restoreBackupJson, accounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, currentCompany } = useAccounting();
+ const companyProducts = filterEntriesByCompany(allProducts, currentCompany.id);
+ const companySales = filterEntriesByCompany(allSales, currentCompany.id);
+ const companyPurchases = filterEntriesByCompany(allPurchases, currentCompany.id);
+ const companyJournalEntries = filterEntriesByCompany(allJournalEntries, currentCompany.id);
  const [files,setFiles]=useState<File[]>([]);
  const [rows,setRows]=useState<Row[]>([]);
  const [headers,setHeaders]=useState<string[]>([]);
@@ -292,8 +297,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const controlKey=(controlNumber:string,partyRif:string)=>norm(controlNumber)+'|'+norm(partyRif);
     const seen=new Set<string>();
     const seenControls=new Set<string>();
-    const existingDocs=new Set((kind==='sales'?sales.map(d=>documentKey(d.invoiceNumber||'',d.customerRif||'')):purchases.map(d=>documentKey(d.invoiceNumber||'',d.supplierRif||''))));
-    const existingControls=new Set((kind==='sales'?sales.map(d=>controlKey(d.controlNumber||'',d.customerRif||'')):purchases.map(d=>controlKey(d.controlNumber||'',d.supplierRif||''))).filter(key=>!key.startsWith('|')));
+    const existingDocs=new Set((kind==='sales'?companySales.map(d=>documentKey(d.invoiceNumber||'',d.customerRif||'')):companyPurchases.map(d=>documentKey(d.invoiceNumber||'',d.supplierRif||''))));
+    const existingControls=new Set((kind==='sales'?companySales.map(d=>controlKey(d.controlNumber||'',d.customerRif||'')):companyPurchases.map(d=>controlKey(d.controlNumber||'',d.supplierRif||''))).filter(key=>!key.startsWith('|')));
     const prepared=sourceRows.map((r,i)=>{
      const invoiceNumber=String(pick(r,'invoiceNumber','numeroFactura','numero de factura','factura','documento')??'').trim();
      const partyName=String(pick(r,kind==='sales'?'customerName':'supplierName',kind==='sales'?'cliente':'proveedor',kind==='sales'?'nombreCliente':'nombreProveedor')??'').trim();
@@ -397,7 +402,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     });
     const prepared=[...groups.entries()].map(([key,items])=>{
      const [date,ref]=key.split('|');
-     const existingEntry=journalEntries.some(entry=>entry.date===date&&String(entry.referenceDoc??'').trim().toLowerCase()===ref.trim().toLowerCase());
+     const existingEntry=companyJournalEntries.some(entry=>entry.date===date&&String(entry.referenceDoc??'').trim().toLowerCase()===ref.trim().toLowerCase());
      if(existingEntry)throw new Error('Ya existe un asiento con fecha '+date+' y referencia '+ref+'. No se importaron los asientos de este archivo para evitar duplicar contabilidad.');
      const lines=items.map(r=>{
       const code=String(pick(r,'accountCode','codigoCuenta','cuenta')??'').trim();
@@ -438,7 +443,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
    }).flatMap(([, sourceRows]) => sourceRows);
    if (!inventoryRows.length) throw new Error('No se identificaron archivos u hojas con encabezados de inventario (código y nombre). No se importó ningún registro.');
    const normalized=inventoryRows.map((r,i)=>({r,i}));
-   const seen=new Set<string>();const existing=new Set(products.map(p=>p.code.trim().toLowerCase()));
+   const seen=new Set<string>();const existing=new Set(companyProducts.map(p=>p.code.trim().toLowerCase()));
    const prepared=normalized.map(({r,i})=>{
     const code=String(pick(r,'code','codigo','sku','productCode')??'').trim();
     const name=String(pick(r,'name','nombre','productName','producto')??'').trim();
