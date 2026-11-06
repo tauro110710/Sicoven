@@ -20,7 +20,7 @@ test('requires the bank reconciliation schedule to balance in both Bs and USD', 
 
   const usdMismatch = calculateBankReconciliationBalances({
     bookMovements,
-    statementMovements: statementMovements.map((row, index) => index === 2 ? { ...row, amountUsd: 0.07 } : row)
+    statementMovements: statementMovements.map((row, index) => index === 0 ? { ...row, amountUsd: 3.99 } : row)
   });
   assert.equal(usdMismatch.differenceBs, 0);
   assert.equal(usdMismatch.differenceUsd, 0.01);
