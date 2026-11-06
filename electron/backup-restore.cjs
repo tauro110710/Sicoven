@@ -212,7 +212,7 @@ function registerBackupIpc({ ipcMain, db, licenseView, getActiveSession, dialog,
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const actor = getActiveSession(token);
-    if (!hasFullSystemAccess(actor)) throw new Error('Solo un administrador autenticado puede crear respaldos.');
+    if (!hasFullSystemAccess(actor)) throw new Error('Se requiere una sesión autenticada con rol contable (admin o contador) para crear respaldos.');
     const parentWindow = getWindow?.();
     const options = { title: 'Seleccionar carpeta para el respaldo completo de SICOVEN', properties: ['openDirectory', 'createDirectory'] };
     const selection = parentWindow ? await dialog.showOpenDialog(parentWindow, options) : await dialog.showOpenDialog(options);
