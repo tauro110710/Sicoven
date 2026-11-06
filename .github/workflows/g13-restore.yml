@@ -38,6 +38,6 @@ jobs:
           node-version: 22
           cache: npm
       - name: Install locked dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
       - name: Run G13 restore and recovery tests
         run: npx tsx --test electron/restore-engine.test.cjs electron/restore-journal.test.cjs electron/restore-audit-ledger.test.cjs

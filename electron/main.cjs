@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain, shell, safeStorage, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, safeStorage, dialog, Notification } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
@@ -9,6 +10,9 @@ const TRIAL_DURATION_HOURS = 120;
 const TRIAL_DURATION_MS = TRIAL_DURATION_HOURS * 60 * 60 * 1000;
 let licenseRecheckTimer = null;
 let trialExpiryTimer = null;
+let updateCheckTimer = null;
+let updateCheckRunning = false;
+let updateInstallPromptOpen = false;
 
 const hashPassword = (password, salt = crypto.randomBytes(16).toString('hex')) => ({
   salt,
@@ -26,6 +30,7 @@ const verifyPassword = (password, salt, expected) => {
 const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
+
 const { migrateAuthUserRoles } = require('./auth-roles.cjs');
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
 const { reconcileRestoreAudit } = require('./restore-audit-ledger.cjs');
@@ -251,6 +256,45 @@ async function revalidateLicense() {
     if (current.status === 'revoked') return licenseView(current);
     return licenseView(current);
   }
+}
+
+function startAutomaticUpdates() {
+  if (!app.isPackaged) return;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.allowDowngrade = false;
+  autoUpdater.allowPrerelease = false;
+  autoUpdater.on('update-available', info => {
+    if (Notification.isSupported()) new Notification({ title: 'SICOVEN: actualización disponible', body: 'Se descargará SICOVEN v' + info.version + ' en segundo plano.' }).show();
+  });
+  autoUpdater.on('download-progress', progress => console.info('[SICOVEN updater] Descarga:', Math.round(progress.percent) + '%'));
+  autoUpdater.on('update-downloaded', async info => {
+    if (updateInstallPromptOpen) return;
+    updateInstallPromptOpen = true;
+    const window = BrowserWindow.getAllWindows().find(item => !item.isDestroyed());
+    const result = await dialog.showMessageBox(window || undefined, {
+      type: 'info', title: 'Actualización de SICOVEN lista',
+      message: 'SICOVEN v' + info.version + ' se descargó correctamente.',
+      detail: 'Guarda tus operaciones y asegúrate de que no haya procesos contables abiertos antes de reiniciar. Puedes instalar ahora o continuar trabajando y hacerlo más tarde.',
+      buttons: ['Reiniciar e instalar ahora', 'Más tarde'], defaultId: 1, cancelId: 1, noLink: true
+    });
+    updateInstallPromptOpen = false;
+    if (result.response === 0) {
+      app.isQuitting = true;
+      autoUpdater.quitAndInstall(false, true);
+    }
+  });
+  autoUpdater.on('error', error => console.warn('[SICOVEN updater] Actualización pendiente:', error?.message || error));
+  const check = async () => {
+    if (updateCheckRunning) return;
+    updateCheckRunning = true;
+    try { await autoUpdater.checkForUpdates(); }
+    catch (error) { console.warn('[SICOVEN updater] Comprobación pendiente:', error?.message || error); }
+    finally { updateCheckRunning = false; }
+  };
+  setTimeout(check, 12000).unref?.();
+  updateCheckTimer = setInterval(check, 15 * 60 * 1000);
+  updateCheckTimer.unref?.();
 }
 
 function createWindow() {
@@ -755,6 +799,9 @@ app.whenReady().then(async () => {
 
   await revalidateLicense();
   createWindow();
+  // Consulta publicaciones estables al iniciar y reintenta periódicamente si no hay Internet.
+  // La notificación abre la página pública; nunca descarga ni instala sin intervención del usuario.
+  startAutomaticUpdates();
 
   const initialLicenseStatus = licenseView();
   if (initialLicenseStatus.status === 'trial' && initialLicenseStatus.trialExpiresAt) {
@@ -783,6 +830,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', () => {
+  if (updateCheckTimer) clearInterval(updateCheckTimer);
   if (licenseRecheckTimer) clearInterval(licenseRecheckTimer);
   if (trialExpiryTimer) clearTimeout(trialExpiryTimer);
   if (db) {
