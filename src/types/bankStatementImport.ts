@@ -85,7 +85,7 @@ export function normalizeBankStatementRows(rows: BankStatementRawRow[], defaultC
     const rawCurrencyValue=String(pick(row,'currency')??'').trim();
     const hasCurrency=rawCurrencyValue!=='';
     const currencyRaw=normalizeHeader(hasCurrency?rawCurrencyValue:defaultCurrency).toUpperCase();
-    const currency:BankStatementCurrency=/^(USD|US\$|DOLAR|DOLARES)$/.test(currencyRaw)?'USD':'BS';
+    const currency:BankStatementCurrency=/^(USD|US|DOLAR|DOLARES)$/.test(currencyRaw)?'USD':'BS';
     if(hasCurrency&&!/^(USD|US|DOLAR|DOLARES|BS|VES|VEF|BOLIVAR|BOLIVARES)$/.test(currencyRaw))errors.push('Moneda no reconocida.');
     const rate=decimal(pick(row,'bcvRate'));
     const rateDate=isoDate(pick(row,'bcvRateEffectiveDate'));
