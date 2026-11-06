@@ -1319,6 +1319,29 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       journalCorrectionAuthorizationRef.current=null;
     }
+    // Domain-level backstop: every newly posted credit to a bank auxiliary is
+    // an outgoing movement and must fit the available balance at its effective date.
+    // Reconciliation adjustments are excluded because they record bank facts that
+    // have already occurred, not new payment instructions.
+    if (!entry.isAdjusted) {
+      const creditedBankAccounts = bankAccounts.filter(bank =>
+        bank.companyId === currentCompany.id &&
+        entry.items.some(item => item.accountCode === bank.accountCode &&
+          (Number(item.creditBs || 0) > 0 || Number(item.creditUsd || 0) > 0))
+      );
+      for (const bank of creditedBankAccounts) {
+        const requestedAmount = entry.items
+          .filter(item => item.accountCode === bank.accountCode)
+          .reduce((sum, item) => sum + Number(bank.currency === 'USD' ? item.creditUsd || 0 : item.creditBs || 0), 0);
+        const availableBalance = calculateBankAvailableBalance({
+          bankAccount: bank, companyId: currentCompany.id, asOfDate: entry.date, journalEntries
+        });
+        validateBankOutgoingAvailability({
+          availableBalance, requestedAmount, currency: bank.currency
+        });
+      }
+    }
+
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
     const maxEntryNum = companyEntries.reduce((max, e) => (e.entryNumber > max ? e.entryNumber : max), 0);
     const sequenceKey = currentCompany.id;
