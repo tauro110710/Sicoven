@@ -122,3 +122,32 @@ export function parseOfxBankStatement(source: string): { currency: BankStatement
   });
   return {currency,rows};
 }
+
+/** Reads the first worksheet; row one is the header row. */
+export async function parseBankStatementXlsx(buffer: ArrayBuffer): Promise<BankStatementRawRow[]> {
+  const ExcelJS = await import('exceljs');
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer as never);
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet || worksheet.rowCount < 2) throw new Error('El Excel no contiene encabezado y movimientos.');
+  const headerRow = worksheet.getRow(1);
+  const headers: string[] = [];
+  headerRow.eachCell({ includeEmpty: true }, (cell, column) => { headers[column - 1] = normalizeHeader(cell.text || cell.value); });
+  if (!headers.some(h => aliases.date.includes(h)) || !headers.some(h => aliases.amount.includes(h))) {
+    throw new Error('El Excel debe incluir columnas de fecha e importe en la primera hoja.');
+  }
+  const rows: BankStatementRawRow[] = [];
+  for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
+    const row = worksheet.getRow(rowNumber);
+    const record: BankStatementRawRow = {};
+    row.eachCell({ includeEmpty: true }, (cell, column) => {
+      const value = cell.value;
+      record[headers[column - 1] || String(column)] =
+        value && typeof value === 'object' && 'text' in value ? String((value as { text: string }).text) :
+        value && typeof value === 'object' && 'result' in value ? (value as { result: unknown }).result :
+        value;
+    });
+    if (Object.values(record).some(value => String(value ?? '').trim() !== '')) rows.push(record);
+  }
+  return rows;
+}
