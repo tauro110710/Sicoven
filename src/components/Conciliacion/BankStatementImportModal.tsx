@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { BankAccount } from '../../types/accounting';
+import type { BankAccount } from '../../types/accounting';
 import { useAccounting } from '../../context/AccountingContext';
 import { isDuplicateBankStatementMovement } from '../../types/bankStatementMatching';
 import {
-  BankStatementImportCandidate,
+  type BankStatementImportCandidate,
   normalizeBankStatementRows,
   parseBankStatementCsv,
   parseBankStatementXlsx,
