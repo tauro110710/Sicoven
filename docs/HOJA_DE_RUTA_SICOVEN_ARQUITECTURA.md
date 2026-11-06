@@ -251,6 +251,7 @@ La validación del producto se realiza mediante:
 
 - Requisito incorporado: permitir corregir desde Configuración los datos de una empresa ya registrada (razón social, RIF, nombre comercial, dirección, teléfono y correo), cuando se trate de una rectificación de la misma entidad jurídica.
 - La rectificación de razón social o RIF debe exigir confirmación explícita; no debe confundirse con sustituir una entidad jurídica por otra.
+- La edición de SICOVEN solo corrige su ficha interna; no actualiza el registro oficial del SENIAT. La Providencia SNAT/2026/00080, arts. 3, 4 y 6, exige tramitar las actualizaciones registrales ante los medios electrónicos del SENIAT y establece que el RIF es único, permanente y personal.
 - Cada cambio debe conservar en la auditoría los valores anteriores y nuevos, la empresa, el usuario autenticado, el rol y la fecha/hora; el evento debe guardarse en la misma transacción SQLite que el estado contable.
 - No se deben reescribir asientos, facturas, compras, ventas, saldos ni movimientos históricos como efecto colateral de corregir el maestro de empresa.
 - Estado: en desarrollo en la rama `feature/company-profile-corrections-audit`; no marcar terminado hasta aprobar pruebas automatizadas y validación de persistencia SQLite.
