@@ -37,6 +37,10 @@ export const LibroDiarioView: React.FC = () => {
   const [endDate, setEndDate] = useState('');
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
+  const companyJournalEntries = journalEntries.filter(entry => entry.companyId === currentCompany.id);
+  const companyPurchases = purchases.filter(purchase => purchase.companyId === currentCompany.id);
+  const companySales = sales.filter(sale => sale.companyId === currentCompany.id);
+
   // Filter entries
   const filteredEntries = companyJournalEntries
     .filter(entry => {
@@ -140,9 +144,6 @@ export const LibroDiarioView: React.FC = () => {
     }
   };
 
-  const companyJournalEntries = journalEntries.filter(entry => entry.companyId === currentCompany.id);
-  const companyPurchases = purchases.filter(purchase => purchase.companyId === currentCompany.id);
-  const companySales = sales.filter(sale => sale.companyId === currentCompany.id);
   const reversalFor = (entryId: string) => companyJournalEntries.find(candidate =>
     candidate.reversalOfEntryId === entryId
   );
