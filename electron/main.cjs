@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, safeStorage, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, safeStorage, dialog, Notification } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
@@ -9,6 +9,7 @@ const TRIAL_DURATION_HOURS = 120;
 const TRIAL_DURATION_MS = TRIAL_DURATION_HOURS * 60 * 60 * 1000;
 let licenseRecheckTimer = null;
 let trialExpiryTimer = null;
+let stopUpdateChecks = null;
 
 const hashPassword = (password, salt = crypto.randomBytes(16).toString('hex')) => ({
   salt,
@@ -26,6 +27,7 @@ const verifyPassword = (password, salt, expected) => {
 const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
+const { startUpdateChecks } = require('./update-checker.cjs');
 const { migrateAuthUserRoles } = require('./auth-roles.cjs');
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
 const { reconcileRestoreAudit } = require('./restore-audit-ledger.cjs');
@@ -755,6 +757,14 @@ app.whenReady().then(async () => {
 
   await revalidateLicense();
   createWindow();
+  // Consulta publicaciones estables al iniciar y reintenta periódicamente si no hay Internet.
+  // La notificación abre la página pública; nunca descarga ni instala sin intervención del usuario.
+  stopUpdateChecks = startUpdateChecks({
+    currentVersion: app.getVersion(),
+    userDataPath: app.getPath('userData'),
+    NotificationImpl: Notification,
+    shellImpl: shell
+  });
 
   const initialLicenseStatus = licenseView();
   if (initialLicenseStatus.status === 'trial' && initialLicenseStatus.trialExpiresAt) {
@@ -783,6 +793,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', () => {
+  if (stopUpdateChecks) stopUpdateChecks();
   if (licenseRecheckTimer) clearInterval(licenseRecheckTimer);
   if (trialExpiryTimer) clearTimeout(trialExpiryTimer);
   if (db) {
