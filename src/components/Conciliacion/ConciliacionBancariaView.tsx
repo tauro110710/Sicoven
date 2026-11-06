@@ -788,7 +788,7 @@ export const ConciliacionBancariaView: React.FC = () => {
             {/* PART 1: SALDO SEGÚN ESTADO DE CUENTA BANCARIO */}
             <div className="p-3 bg-slate-100 border-b border-black font-bold flex justify-between items-center">
               <span>1. SALDO SEGÚN EXTRACTO BANCARIO AL {formatDate(cutoffDate)}:</span>
-              <span className="font-mono text-sm">{formatBs(bankStatementBalanceBs)}</span>
+              <span className="font-mono text-sm">{formatBs(bankStatementBalanceBs)} · {formatUsd(bankStatementBalanceUsd)}</span>
             </div>
 
             {/* (+) Depósitos en Tránsito */}
@@ -840,7 +840,7 @@ export const ConciliacionBancariaView: React.FC = () => {
             {/* PART 2: SALDO SEGÚN LIBROS CONTABLES */}
             <div className="p-3 bg-slate-100 border-b border-black font-bold flex justify-between items-center">
               <span>2. SALDO SEGÚN LIBROS CONTABLES DE LA EMPRESA AL {formatDate(cutoffDate)}:</span>
-              <span className="font-mono text-sm">{formatBs(bookBalanceBs)}</span>
+              <span className="font-mono text-sm">{formatBs(bookBalanceBs)} · {formatUsd(bookBalanceUsd)}</span>
             </div>
 
             {/* (+) Notas de Crédito del Banco no en libros */}
@@ -899,7 +899,7 @@ export const ConciliacionBancariaView: React.FC = () => {
                 <CheckCircle2 className="w-5 h-5" />
                 <span>
                   {isReconciledBalanced
-                    ? 'ESTADO: CONCILIACIÓN BANCARIA EXACTA Y CUADRADA'
+                    ? 'ESTADO: CONCILIACIÓN BANCARIA EXACTA Y CUADRADA EN Bs. Y USD'
                     : `ESTADO: DESCUADRE Bs. ${formatBs(differenceBs)} · USD ${formatUsd(differenceUsd)}`}
                 </span>
               </div>
