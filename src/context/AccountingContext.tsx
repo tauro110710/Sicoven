@@ -182,7 +182,7 @@ interface AccountingContextType {
   addBankAccount: (bank: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'> & { bcvRate?: number }) => BankAccount;
   registerTreasuryMovement: (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; bcvRate: number; counterpartAccountCode?: string; destinationBankAccountId?: string }) => JournalEntry;
   addBankStatementMovement: (movement: Omit<BankStatementMovement, 'id' | 'companyId'>) => BankStatementMovement;
-  addBankStatementMovements: (movements: Array<{ bankAccountId: string; date: string; reference: string; description: string; type: 'DEBIT' | 'CREDIT'; amountBs: number; amountUsd: number; bcvRate: number; bcvRateEffectiveDate: string }>) => BankStatementMovement[];
+  addBankStatementMovements: (movements: Array<{ bankAccountId: string; date: string; reference: string; description: string; type: 'DEBIT' | 'CREDIT'; amountBs: number; amountUsd: number; bcvRate: number; bcvRateEffectiveDate: string }>) => Promise<BankStatementMovement[]>;
   deleteBankStatementMovement: (id: string) => void;
   reconcileMovementManual: (statementMovementId: string, journalEntryId: string) => void;
   unreconcileMovement: (statementMovementId: string) => void;
@@ -344,6 +344,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [financialDisclosures, setFinancialDisclosures] = useState<FinancialDisclosure[]>([]);
   const [supplierAdvanceSettlements, setSupplierAdvanceSettlements] = useState<SupplierAdvanceSettlement[]>([]);
   const [supplierDirectAdvances, setSupplierDirectAdvances] = useState<SupplierDirectAdvance[]>([]);
+  const bankStatementImportInFlightRef = useRef(false);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
   const supplierAdvanceSettlementInFlightRef = useRef<Set<string>>(new Set());
   const supplierDirectAdvanceInFlightRef = useRef<Set<string>>(new Set());
@@ -4608,11 +4609,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return newMov;
   };
 
-  const addBankStatementMovements = (movements: Array<{ bankAccountId: string; date: string; reference: string; description: string; type: 'DEBIT' | 'CREDIT'; amountBs: number; amountUsd: number; bcvRate: number; bcvRateEffectiveDate: string }>): BankStatementMovement[] => {
+  const addBankStatementMovements = async (movements: Array<{ bankAccountId: string; date: string; reference: string; description: string; type: 'DEBIT' | 'CREDIT'; amountBs: number; amountUsd: number; bcvRate: number; bcvRateEffectiveDate: string }>): Promise<BankStatementMovement[]> => {
+    if (bankStatementImportInFlightRef.current) throw new Error('Ya hay una importación bancaria en curso. Espere su confirmación SQLite.');
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('Importar movimientos requiere SQLite local de escritorio disponible y lista.');
     }
     if (!Array.isArray(movements) || movements.length === 0) throw new Error('No hay movimientos válidos para importar.');
+    bankStatementImportInFlightRef.current = true;
+    try {
     const bankAccountId = movements[0].bankAccountId;
     const bank = bankAccounts.find(item => item.id === bankAccountId && item.companyId === currentCompany.id);
     if (!bank || movements.some(item => item.bankAccountId !== bankAccountId)) {
@@ -4656,7 +4660,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
     }
     setBankStatementMovements(previous => [...previous, ...staged]);
+    await waitForPersistence();
     return staged;
+    } finally {
+      bankStatementImportInFlightRef.current = false;
+    }
   };
 
   const deleteBankStatementMovement = (id: string) => {
