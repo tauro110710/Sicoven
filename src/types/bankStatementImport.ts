@@ -8,6 +8,7 @@ export interface BankStatementImportCandidate {
   reference: string;
   description: string;
   type: BankMovementType;
+  currency: BankStatementCurrency;
   amountBs: number;
   amountUsd: number;
   bcvRate: number;
@@ -95,7 +96,7 @@ export function normalizeBankStatementRows(rows: BankStatementRawRow[], defaultC
       try{validateBankMovementFxSnapshot({date,amountBs,amountUsd,bcvRate:rate,bcvRateEffectiveDate:rateDate});}
       catch(error){errors.push(error instanceof Error?error.message:'Snapshot cambiario inválido.');}
     }
-    return {rowNumber:index+2,date,reference,description,type,amountBs,amountUsd,bcvRate:rate,bcvRateEffectiveDate:rateDate,errors};
+    return {rowNumber:index+2,date,reference,description,type,currency,amountBs,amountUsd,bcvRate:rate,bcvRateEffectiveDate:rateDate,errors};
   });
 }
 
