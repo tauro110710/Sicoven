@@ -58,6 +58,7 @@ declare global {
       createVatFiscalIncident: (token: string, input: { companyId: string; purchaseId: string; vatVoucherId?: string; declarationId?: string; declarationEventIds?: string[]; bankMovementIds?: string[]; reason: string; detectedAt: string }) => Promise<import('./types/vatFiscalIncidents').VatFiscalIncident>;
       listVatFiscalIncidents: (token: string, filters: { companyId: string }) => Promise<import('./types/vatFiscalIncidents').VatFiscalIncident[]>;
       recordVatFiscalIncidentEvent: (token: string, input: import('./types/vatFiscalIncidents').VatFiscalIncidentEventInput) => Promise<import('./types/vatFiscalIncidents').VatFiscalIncident>;
+      savePdf: (input: { fileName: string; base64: string }) => Promise<{ ok: boolean; canceled?: boolean; filePath?: string; bytes?: number }>;
       getDemoUsage: () => Record<string, number>;
       consumeDemoAction: (moduleKey: string) => {
         ok: boolean;

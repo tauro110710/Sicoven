@@ -50,6 +50,8 @@ import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
+import { buildBankAuxiliaryAccounts } from '../types/bankAccountAccounting';
+import { removeUnusedLegacyDefaultBanks } from '../types/legacyBankAccountCleanup';
 import { resolvePurchaseVatFiscalEvent } from '../types/vatFiscalEvent';
 import { hasConsistentFiscalDocumentAmounts } from '../types/fiscalDocumentAmounts';
 import { calculatePurchaseCreditNote, type PurchaseCreditNoteRequest } from '../types/purchaseCreditNote';
@@ -929,8 +931,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               const savedAccounts = saved.accounts as Account[];
               const savedCodes = new Set(savedAccounts.map(account => account.code));
               // Migración compatible: incorpora cuentas nuevas de inventario sin sobrescribir el plan personalizado.
-              setAccounts([...savedAccounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !savedCodes.has(account.code))]
-                .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })));
+              setAccounts(removeUnusedLegacyDefaultBanks(
+                [...savedAccounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !savedCodes.has(account.code))],
+                Array.isArray(saved.journalEntries) ? saved.journalEntries as JournalEntry[] : [],
+                Array.isArray(saved.bankAccounts) ? saved.bankAccounts as BankAccount[] : []
+              ).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })));
             }
             if (Array.isArray(saved.journalEntries)) setJournalEntries(saved.journalEntries as JournalEntry[]);
             if (Array.isArray(saved.purchases)) setPurchases(saved.purchases as PurchaseRecord[]);
@@ -1044,7 +1049,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             setCurrentCompanyId(confirmed.currentCompanyId || confirmed.companies?.[0]?.id || '');
             const confirmedAccounts = Array.isArray(confirmed.accounts) ? confirmed.accounts : DEFAULT_CHART_OF_ACCOUNTS;
             const confirmedCodes = new Set(confirmedAccounts.map((account: Account) => account.code));
-            setAccounts([...confirmedAccounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !confirmedCodes.has(account.code))]);
+            setAccounts(removeUnusedLegacyDefaultBanks(
+              [...confirmedAccounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !confirmedCodes.has(account.code))],
+              confirmed.journalEntries || [],
+              confirmed.bankAccounts || []
+            ));
             setJournalEntries(confirmed.journalEntries || []);
             setPurchases(confirmed.purchases || []);
             setSales(confirmed.sales || []);
@@ -1217,7 +1226,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     ));
   };
 
-  const addJournalEntry = (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>): JournalEntry => {
+  const addJournalEntry = (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>, accountCatalog: Account[] = accounts): JournalEntry => {
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('El asiento requiere SQLite local de escritorio disponible y lista. No se registró.');
     }
@@ -1226,7 +1235,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('No se pueden registrar asientos en un período cerrado hasta ' + currentCompany.closedThroughDate + '.');
     }
     if (!Array.isArray(entry.items)) throw new Error('El asiento debe contener líneas contables válidas.');
-    validateJournalEntryAccounts(entry.items, accounts);
+    validateJournalEntryAccounts(entry.items, accountCatalog);
     // Verificación de Asientos: Validación estricta de Partida Doble (Débito = Crédito)
     const totalDebitBs = entry.items.reduce((sum, item) => sum + (Number(item.debitBs) || 0), 0);
     const totalCreditBs = entry.items.reduce((sum, item) => sum + (Number(item.creditBs) || 0), 0);
@@ -4439,25 +4448,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ? Math.round(rawUsd * 1000000) / 1000000
       : (rate > 0 ? Math.round((bs / rate) * 1000000) / 1000000 : 0);
 
-    const parentCode = bankData.currency === 'USD' ? '1.1.1.07' : '1.1.1.06';
-    const controlName = bankData.currency === 'USD' ? 'Bancos Moneda Extranjera (control)' : 'Bancos Moneda Nacional (control)';
-    const existingParent = accounts.find(a => a.code === parentCode);
-    const parent: Account = existingParent
-      ? { ...existingParent, name: controlName, isMovement: false, level: 4, parentCode: '1.1.1' }
-      : { code: parentCode, name: controlName, type: 'ACTIVO', level: 4, isMovement: false, parentCode: '1.1.1' };
-    const children = accounts.filter(a => a.parentCode === parentCode && /^\d+$/.test(a.code.split('.').at(-1) || ''));
-    const nextAux = children.reduce((max, a) => Math.max(max, Number(a.code.split('.').at(-1) || 0)), 0) + 1;
-    const accountCode = parentCode + '.' + String(nextAux).padStart(2, '0');
-    const auxName = `${bankData.bankName.trim()} - Cta. ${accountType === 'AHORRO' ? 'Ahorro' : 'Corriente'} ${bankData.currency === 'USD' ? 'USD' : 'Bs.'}`;
-    const newAux: Account = { code: accountCode, name: auxName, type: 'ACTIVO', level: 5, isMovement: true, parentCode };
-    if (accounts.some(a => a.code === accountCode)) throw new Error('No se pudo generar un código auxiliar único. Actualice el catálogo e intente nuevamente.');
+    const { parent, auxiliary: newAux, accounts: accountsWithAux } = buildBankAuxiliaryAccounts(
+      accounts, bankData.currency, bankData.bankName.trim(), accountType
+    );
+    const accountCode = newAux.code;
+    const auxName = newAux.name;
     const equity = hasOpeningBalance ? accounts.find(a => a.code === '3.3.1.01' && a.isMovement) : undefined;
     if (hasOpeningBalance && !equity) throw new Error('No existe la cuenta de contrapartida de apertura 3.3.1.01.');
 
     const { bcvRate: _openingBcvRate, ...bankFields } = bankData;
     const newBank: BankAccount = { ...bankFields, accountType, accountCode, accountNumber: digits, initialBalanceBs: bs, initialBalanceUsd: usd, id: `bank-acc-${Date.now()}-${Math.floor(Math.random()*100000)}`, companyId: currentCompany.id };
-    // Registrar primero el asiento: si falla la partida doble, no deja una cuenta
-    // bancaria ni un auxiliar huérfanos en el estado de la aplicación.
+    // La validación del asiento debe reconocer el auxiliar recién generado.
+    // Se valida contra el catálogo proyectado y luego se guardan ambos estados juntos.
     if (hasOpeningBalance && equity) {
       addJournalEntry({
         entryNumber: 0, date: (() => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); })(),
@@ -4467,9 +4469,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           { accountCode, accountName: auxName, debitBs: bs, creditBs: 0, debitUsd: usd, creditUsd: 0, description: 'Saldo inicial de tesorería' },
           { accountCode: equity.code, accountName: equity.name, debitBs: 0, creditBs: bs, debitUsd: 0, creditUsd: usd, description: 'Contrapartida saldo inicial de tesorería' }
         ]
-      });
+      }, accountsWithAux);
     }
-    setAccounts(prev => [...prev.filter(a => a.code !== parentCode), parent, newAux].sort((a,b)=>a.code.localeCompare(b.code,undefined,{numeric:true})));
+    setAccounts(prev => [...prev.filter(a => a.code !== parent.code && a.code !== newAux.code), parent, newAux].sort((a,b)=>a.code.localeCompare(b.code,undefined,{numeric:true})));
     setBankAccounts(prev => [...prev, newBank]);
     return newBank;
   };
@@ -5354,7 +5356,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setCompanies(data.companies);
       // Migración aditiva del plan contable: incorpora cuentas nuevas sin alterar códigos ni saldos existentes.
       const loadedAccountCodes = new Set(data.accounts.map((account: Account) => account.code));
-      setAccounts([...data.accounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !loadedAccountCodes.has(account.code))]);
+      setAccounts(removeUnusedLegacyDefaultBanks(
+        [...data.accounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !loadedAccountCodes.has(account.code))],
+        data.journalEntries,
+        data.bankAccounts
+      ));
       setJournalEntries(data.journalEntries);
       setPurchases(data.purchases);
       setSales(data.sales);
