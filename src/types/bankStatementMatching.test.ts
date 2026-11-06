@@ -1,6 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { matchesBankStatementLine, matchesBankStatementDualCurrency, validateBankMovementFxSnapshot } from './bankStatementMatching';
+import { matchesBankStatementLine, matchesBankStatementDualCurrency, validateBankMovementFxSnapshot, calculateBankReconciliationBalances } from './bankStatementMatching';
+
+test('requires the bank reconciliation schedule to balance in both Bs and USD', () => {
+  const bookMovements = [
+    { debitBs: 1000, creditBs: 0, debitUsd: 4, creditUsd: 0, isReconciled: true },
+    { debitBs: 100, creditBs: 0, debitUsd: 0.4, creditUsd: 0, isReconciled: false },
+    { debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 0.2, isReconciled: false }
+  ];
+  const statementMovements = [
+    { type: 'CREDIT' as const, amountBs: 1000, amountUsd: 4, isReconciled: true },
+    { type: 'DEBIT' as const, amountBs: 20, amountUsd: 0.08, isReconciled: false },
+    { type: 'CREDIT' as const, amountBs: 20, amountUsd: 0.08, isReconciled: false }
+  ];
+  const balanced = calculateBankReconciliationBalances({ bookMovements, statementMovements });
+  assert.equal(balanced.differenceBs, 0);
+  assert.equal(balanced.differenceUsd, 0);
+  assert.equal(balanced.isBalanced, true);
+
+  const usdMismatch = calculateBankReconciliationBalances({
+    bookMovements,
+    statementMovements: statementMovements.map((row, index) => index === 2 ? { ...row, amountUsd: 0.07 } : row)
+  });
+  assert.equal(usdMismatch.differenceBs, 0);
+  assert.equal(usdMismatch.differenceUsd, 0.01);
+  assert.equal(usdMismatch.isBalanced, false);
+});
 
 test('matches Bs bank lines at cent precision and rejects fuzzy five-cent differences', () => {
   assert.equal(matchesBankStatementLine({
