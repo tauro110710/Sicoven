@@ -74,6 +74,22 @@ Estado: **parcial**. La evaluación documental y convertibilidad están implemen
 ## Bloque 2 — estados financieros
 La línea base incluye vistas de estados, comparativos y revelaciones, y la hoja de ruta conserva el Bloque 2 abierto. Esta pasada no acredita una revisión normativa completa de clasificación, presentación, comparativos, notas ni conciliaciones del marco adoptado por cada empresa. El bloque permanece pendiente de auditoría detallada; no se marca completo por la mera existencia de pantallas y cálculos.
 
+
+### Hallazgos adicionales — Mayor, balance y auxiliares
+- `LibroMayorView.tsx` usa `filterEntriesByCompany` para limitar movimientos a la empresa activa.
+- `BalancesView.tsx`, `HistoricalBalancesView.tsx` y `CashFlowStatementView.tsx` invocan cálculos o selecciones que reciben el identificador de empresa; los históricos y flujos filtran también por empresa.
+- La clasificación de cuentas para flujo de efectivo permanece asociada al catálogo `accounts` compartido; al no existir `companyId` en `Account`, una clasificación configurada para una cuenta puede ser común a las empresas que comparten ese código. Requiere diseño por empresa antes de considerar completo el aislamiento de configuración.
+
+## Bloque 2 — estados financieros: revisión focalizada
+Evidencia de presencia:
+- `BalancesView.tsx` contiene presentación de estados de situación y resultados con selección de empresa/período y cálculos de doble moneda.
+- `CashFlowStatementView.tsx` integra los métodos directo e indirecto mediante funciones de dominio que reciben `companyId`.
+- `AnnualReportsView.tsx` conserva notas/revelaciones vinculadas a empresa y ejercicio, y valida referencias a asientos de la misma empresa y período.
+- La exportación anual observada genera CSV (`exportCsv`) y ofrece imprimir/PDF mediante `window.print()`. No se encontró exportación Excel nativa en esta vista.
+- La existencia de reportes y revelaciones no prueba por sí sola cumplimiento VEN-NIF: faltan revisar clasificación, contenido obligatorio, notas aplicables por marco adoptado, comparativos y conciliaciones completas. Tampoco se encontró el motor de conversión NIC 21 descrito en el apartado anterior.
+
+Estado: **parcial / pendiente de auditoría normativa y de exportación**. No se tacha el Bloque 2 ni sus requisitos de cierre.
+
 ## Control de alcance y estado
 - Se conserva REME y ajuste por inflación dentro del plan; no se elimina código ni se cambia su alcance en esta auditoría.
 - No se modifica el administrador semilla.
