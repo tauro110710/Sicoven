@@ -121,8 +121,8 @@ export function calculateBankReconciliationBalances(input: {
     sum(input.statementMovements.filter(row => row.type === 'DEBIT').map(row => row.amountUsd))
   );
 
-  const depositsInTransit = input.bookMovements.filter(row => !row.isReconciled && row.debitBs > 0);
-  const checksInTransit = input.bookMovements.filter(row => !row.isReconciled && row.creditBs > 0);
+  const depositsInTransit = input.bookMovements.filter(row => !row.isReconciled && (row.debitBs > 0 || row.debitUsd > 0));
+  const checksInTransit = input.bookMovements.filter(row => !row.isReconciled && (row.creditBs > 0 || row.creditUsd > 0));
   const bankDebitsNotInBooks = input.statementMovements.filter(row => !row.isReconciled && row.type === 'DEBIT');
   const bankCreditsNotInBooks = input.statementMovements.filter(row => !row.isReconciled && row.type === 'CREDIT');
 
