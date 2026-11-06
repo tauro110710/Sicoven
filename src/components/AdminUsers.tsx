@@ -187,7 +187,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
               Administración de usuarios
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Administración de usuarios autorizados con acceso al sistema y base de datos local.
+              Administración de todos los usuarios autorizados. Ambos roles tienen acceso completo a SICOVEN.
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm self-start sm:self-auto">
@@ -248,8 +248,8 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
                   Rol del usuario
                 </label>
                 <select value={role} onChange={e => setRole(e.target.value as 'admin' | 'contador')} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm">
-                  <option value="contador">Contador · acceso a operaciones contables</option>
-                  <option value="admin">Administrador · operaciones contables y administración</option>
+                  <option value="contador">Contador · acceso completo a SICOVEN</option>
+                  <option value="admin">Administrador · acceso completo a SICOVEN</option>
                 </select>
               </div>
               <div>
@@ -355,7 +355,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
           </div>
 
           <p className="text-[11px] text-slate-400 mt-4 pt-3 border-t border-slate-100">
-            * El usuario semilla «admin» solo puede eliminarse una vez que se haya creado al menos otro administrador para no bloquear el acceso al sistema.
+            * El usuario semilla «admin» solo puede eliminarse cuando exista al menos otro usuario registrado para no bloquear el acceso al sistema.
           </p>
         </section>
       </main>
