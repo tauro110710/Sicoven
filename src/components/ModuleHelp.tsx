@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { AlertCircle, BookOpenCheck, ChevronDown, HelpCircle, Search } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertCircle, BookOpenCheck, ChevronDown, HelpCircle } from 'lucide-react';
 
 type HelpItem = {
   question: string;
@@ -150,19 +150,11 @@ const kindLabel = (kind?: HelpItem['kind']) => kind === 'normative'
   : kind === 'warning' ? 'Precaución' : 'Cómo hacerlo';
 
 export const ModuleHelp: React.FC<{ moduleId: string }> = ({ moduleId }) => {
-  const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<number | null>(0);
   const module = MODULE_HELP[moduleId];
   const items = module?.items ?? FALLBACK_HELP;
   const title = module?.title ?? 'Ayuda del módulo';
   const intro = module?.intro ?? 'Orientación práctica para trabajar en esta sección de SICOVEN.';
-  const filtered = useMemo(() => {
-    const term = query.trim().toLocaleLowerCase('es');
-    if (!term) return items.map((item, index) => ({ item, index }));
-    return items.map((item, index) => ({ item, index })).filter(({ item }) =>
-      (item.question + ' ' + item.answer + ' ' + kindLabel(item.kind)).toLocaleLowerCase('es').includes(term)
-    );
-  }, [items, query]);
 
   return (
     <section className="mt-6 overflow-hidden rounded-2xl border border-sky-200 bg-white shadow-sm no-print" aria-labelledby="module-help-title">
@@ -179,16 +171,12 @@ export const ModuleHelp: React.FC<{ moduleId: string }> = ({ moduleId }) => {
         </span>
       </div>
       <div className="p-4 sm:p-5">
-        <label className="relative block">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input value={query} onChange={event => { setQuery(event.target.value); setExpanded(null); }} placeholder="Buscar una pregunta o tema..." className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-800 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100" />
-        </label>
         <div className="mt-3 space-y-2">
-          {filtered.map(({ item, index }) => {
-            const isOpen = expanded === index || query.trim().length > 0;
+          {items.map((item, index) => {
+            const isOpen = expanded === index;
             return (
               <article key={item.question} className="overflow-hidden rounded-xl border border-slate-200">
-                <button type="button" onClick={() => setExpanded(isOpen && !query.trim() ? null : index)} aria-expanded={isOpen} className="flex w-full items-start justify-between gap-3 p-3.5 text-left transition hover:bg-slate-50">
+                <button type="button" onClick={() => setExpanded(isOpen ? null : index)} aria-expanded={isOpen} className="flex w-full items-start justify-between gap-3 p-3.5 text-left transition hover:bg-slate-50">
                   <span className="min-w-0">
                     <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-sky-700">{kindLabel(item.kind)}</span>
                     <span className="block text-sm font-semibold text-slate-800">{item.question}</span>
@@ -203,7 +191,6 @@ export const ModuleHelp: React.FC<{ moduleId: string }> = ({ moduleId }) => {
               </article>
             );
           })}
-          {filtered.length === 0 && <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">No se encontraron preguntas con ese término. Pruebe con otra palabra.</p>}
         </div>
         <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
