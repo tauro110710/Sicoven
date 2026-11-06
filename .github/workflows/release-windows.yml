@@ -48,6 +48,11 @@ jobs:
         with:
           node-version: 22
 
+      - name: Setup Python for SQLite upgrade verification
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
@@ -190,7 +195,7 @@ jobs:
           if ($oldInstall.ExitCode -ne 0) { throw "El instalador v1.0.14 terminó con código $($oldInstall.ExitCode)." }
 
           if (-not (Test-Path $env:SICOVEN_UPGRADE_DB)) {
-            node -e "const Database=require('better-sqlite3'); const db=new Database(process.env.SICOVEN_UPGRADE_DB); db.exec('CREATE TABLE upgrade_test_marker(value TEXT NOT NULL)'); db.prepare('INSERT INTO upgrade_test_marker(value) VALUES(?)').run(process.env.SICOVEN_UPGRADE_MARKER); db.close();"
+            python -c "import os,sqlite3; db=sqlite3.connect(os.environ['SICOVEN_UPGRADE_DB']); db.execute('CREATE TABLE upgrade_test_marker(value TEXT NOT NULL)'); db.execute('INSERT INTO upgrade_test_marker(value) VALUES(?)',(os.environ['SICOVEN_UPGRADE_MARKER'],)); db.commit(); db.close()"
             if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar la base SQLite aislada.' }
           }
           $app = Join-Path $installDir 'SICOVEN.exe'
@@ -209,7 +214,7 @@ jobs:
           $newInstall.Refresh()
           if ($newInstall.ExitCode -ne 0) { throw "El instalador nuevo terminó con código $($newInstall.ExitCode)." }
 
-          node -e "const Database=require('better-sqlite3'); const db=new Database(process.env.SICOVEN_UPGRADE_DB,{readonly:true,fileMustExist:true}); const marker=db.prepare('SELECT value FROM upgrade_test_marker LIMIT 1').get()?.value; const integrity=db.pragma('integrity_check',{simple:true}); db.close(); if(marker!==process.env.SICOVEN_UPGRADE_MARKER) throw new Error('El marcador de usuario no se conservó.'); if(integrity!=='ok') throw new Error('SQLite integrity_check: '+integrity); console.log('Marcador SQLite preservado; integrity_check:',integrity);"
+          python -c "import os,sqlite3; db=sqlite3.connect('file:'+os.environ['SICOVEN_UPGRADE_DB']+'?mode=ro',uri=True); marker=db.execute('SELECT value FROM upgrade_test_marker LIMIT 1').fetchone()[0]; integrity=db.execute('PRAGMA integrity_check').fetchone()[0]; db.close(); assert marker==os.environ['SICOVEN_UPGRADE_MARKER'], 'El marcador de usuario no se conservó.'; assert integrity=='ok', 'SQLite integrity_check: '+integrity; print('Marcador SQLite preservado; integrity_check:',integrity)"
           if ($LASTEXITCODE -ne 0) { throw 'La actualización no conservó íntegramente el marcador SQLite.' }
 
           $updatedApp = Start-Process -FilePath $app -ArgumentList @('--disable-gpu') -PassThru
