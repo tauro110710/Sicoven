@@ -35,6 +35,7 @@ export const InventarioView: React.FC = () => {
   const [isMigrationWizardOpen, setIsMigrationWizardOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProductId, setSelectedProductId] = useState<string>('ALL');
+  const effectiveSelectedProductId = companyProducts.some(product => product.id === selectedProductId) ? selectedProductId : 'ALL';
 
   // Filter companyProducts
   const filteredProducts = companyProducts.filter(p => {
@@ -52,7 +53,7 @@ export const InventarioView: React.FC = () => {
   // Filter companyMovements
   const filteredMovements = companyMovements
     .filter(m => {
-      if (selectedProductId !== 'ALL' && m.productId !== selectedProductId) return false;
+      if (effectiveSelectedProductId !== 'ALL' && m.productId !== effectiveSelectedProductId) return false;
       if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase();
         return (
@@ -213,7 +214,7 @@ export const InventarioView: React.FC = () => {
 
             {activeTab === 'KARDEX' && (
               <select
-                value={selectedProductId}
+                value={effectiveSelectedProductId}
                 onChange={e => setSelectedProductId(e.target.value)}
                 className="px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               >
