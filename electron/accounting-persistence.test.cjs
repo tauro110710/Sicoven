@@ -60,6 +60,52 @@ test('accounting snapshot and its audit events commit or roll back as one SQLite
   }
 });
 
+test('company profile corrections keep before/after values and actor in append-only audit', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE app_state (
+      state_key TEXT PRIMARY KEY, state_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL,
+      details_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  try {
+    const prior = emptyState();
+    prior.companies[0] = {
+      ...prior.companies[0], tradeName: 'Comercial Anterior', address: 'Dirección anterior',
+      phone: '0212-0000000', email: 'anterior@example.com'
+    };
+    persistAccountingSnapshot(db, prior, { id: 9, username: 'contador', role: 'contador' });
+    const next = {
+      ...prior,
+      companies: [{ ...prior.companies[0], name: 'Empresa Corregida', rif: 'J-98765432-1',
+        tradeName: 'Comercial Corregido', address: 'Dirección nueva', phone: '0212-1111111',
+        email: 'nuevo@example.com' }]
+    };
+    assert.equal(persistAccountingSnapshot(db, next, { id: 9, username: 'contador', role: 'contador' }).ok, true);
+    const row = db.prepare("SELECT details_json FROM audit_events WHERE event_type='company_profile_updated'").get();
+    assert.ok(row);
+    const details = JSON.parse(row.details_json);
+    assert.equal(details.companyId, 'company-1');
+    assert.equal(details.actor.username, 'contador');
+    assert.equal(details.actor.role, 'contador');
+    assert.equal(details.reason, 'Rectificación de datos maestros desde Configuración');
+    const rifChange = details.changedFields.find(field => field.field === 'rif');
+    assert.deepEqual(rifChange, { field: 'rif', previousValue: 'J-12345678-9', newValue: 'J-98765432-1' });
+    assert.ok(details.changedFields.some(field => field.field === 'name' && field.previousValue === 'Empresa de prueba' && field.newValue === 'Empresa Corregida'));
+    assert.ok(details.changedFields.some(field => field.field === 'tradeName' && field.previousValue === 'Comercial Anterior' && field.newValue === 'Comercial Corregido'));
+    assert.ok(details.occurredAt);
+
+    persistAccountingSnapshot(db, next, { id: 9, username: 'contador', role: 'contador' });
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='company_profile_updated'").get().count, 1);
+  } finally {
+    db.close();
+  }
+});
+
 test('BCV rate corrections retain prior/new rate, effective date and authenticated actor', () => {
   const db = new Database(':memory:');
   db.exec(`
