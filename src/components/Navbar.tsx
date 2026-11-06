@@ -93,7 +93,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'config', label: 'Configuración', icon: Settings },
   ];
 
-  const visibleTabs = userRole === 'contador' ? tabs.filter(tab => tab.id === 'reversiones') : tabs;
+  const visibleTabs = tabs;
 
   const navContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
