@@ -51,6 +51,7 @@ import { buildReversalItems, assessJournalReversal, validateBankStatementReversa
 import { calculateFifoIssue, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 import { buildBankAuxiliaryAccounts } from '../types/bankAccountAccounting';
+import { removeUnusedLegacyDefaultBanks } from '../types/legacyBankAccountCleanup';
 import { resolvePurchaseVatFiscalEvent } from '../types/vatFiscalEvent';
 import { hasConsistentFiscalDocumentAmounts } from '../types/fiscalDocumentAmounts';
 import { calculatePurchaseCreditNote, type PurchaseCreditNoteRequest } from '../types/purchaseCreditNote';
@@ -930,8 +931,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               const savedAccounts = saved.accounts as Account[];
               const savedCodes = new Set(savedAccounts.map(account => account.code));
               // Migración compatible: incorpora cuentas nuevas de inventario sin sobrescribir el plan personalizado.
-              setAccounts([...savedAccounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !savedCodes.has(account.code))]
-                .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })));
+              setAccounts(removeUnusedLegacyDefaultBanks(
+                [...savedAccounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !savedCodes.has(account.code))],
+                Array.isArray(saved.journalEntries) ? saved.journalEntries as JournalEntry[] : [],
+                Array.isArray(saved.bankAccounts) ? saved.bankAccounts as BankAccount[] : []
+              ).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })));
             }
             if (Array.isArray(saved.journalEntries)) setJournalEntries(saved.journalEntries as JournalEntry[]);
             if (Array.isArray(saved.purchases)) setPurchases(saved.purchases as PurchaseRecord[]);
@@ -1045,7 +1049,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             setCurrentCompanyId(confirmed.currentCompanyId || confirmed.companies?.[0]?.id || '');
             const confirmedAccounts = Array.isArray(confirmed.accounts) ? confirmed.accounts : DEFAULT_CHART_OF_ACCOUNTS;
             const confirmedCodes = new Set(confirmedAccounts.map((account: Account) => account.code));
-            setAccounts([...confirmedAccounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !confirmedCodes.has(account.code))]);
+            setAccounts(removeUnusedLegacyDefaultBanks(
+              [...confirmedAccounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !confirmedCodes.has(account.code))],
+              confirmed.journalEntries || [],
+              confirmed.bankAccounts || []
+            ));
             setJournalEntries(confirmed.journalEntries || []);
             setPurchases(confirmed.purchases || []);
             setSales(confirmed.sales || []);
@@ -5348,7 +5356,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setCompanies(data.companies);
       // Migración aditiva del plan contable: incorpora cuentas nuevas sin alterar códigos ni saldos existentes.
       const loadedAccountCodes = new Set(data.accounts.map((account: Account) => account.code));
-      setAccounts([...data.accounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !loadedAccountCodes.has(account.code))]);
+      setAccounts(removeUnusedLegacyDefaultBanks(
+        [...data.accounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !loadedAccountCodes.has(account.code))],
+        data.journalEntries,
+        data.bankAccounts
+      ));
       setJournalEntries(data.journalEntries);
       setPurchases(data.purchases);
       setSales(data.sales);
