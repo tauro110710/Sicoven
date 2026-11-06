@@ -151,7 +151,7 @@ Estas evidencias prueban presencia de componentes y modelos, no por sí solas el
 **Cierre:** inventario trazable a archivos y funciones, dependencias documentadas, riesgos priorizados y pruebas focalizadas definidas.
 
 ### Bloque 1 — Núcleo de Contabilidad General VEN-NIF
-- Plan de cuentas jerárquico configurable por empresa, validación de códigos, padres, niveles y cuentas imputables.
+- Plan de cuentas jerárquico configurable por empresa, ~~validación de códigos, padres, niveles y cuentas imputables~~.
 - Libro Diario con comprobantes manuales y automáticos, plantillas, asientos recurrentes y ajustes.
 - Libro Mayor por cuenta y período, saldo inicial, movimientos, saldo final y referencias al asiento fuente.
 - Balance de comprobación con débitos/créditos, saldos y validación de cuadre.
