@@ -22,7 +22,7 @@ import {
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 import { prepareAccountForCatalog } from '../types/chartOfAccounts';
 import { validateJournalEntryAccounts, isJournalEntryBalanced } from '../types/journalEntryValidation';
-import { matchesBankStatementDualCurrency, validateBankMovementFxSnapshot } from '../types/bankStatementMatching';
+import { matchesBankStatementDualCurrency, validateBankMovementFxSnapshot, isDuplicateBankStatementMovement } from '../types/bankStatementMatching';
 import { buildOpeningEntryItems } from '../types/accountingYearOpening';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
 import {
@@ -4575,6 +4575,21 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       bcvRate: Number(movData.bcvRate),
       bcvRateEffectiveDate: movData.bcvRateEffectiveDate
     });
+    if (isDuplicateBankStatementMovement({
+      existing: bankStatementMovements.filter(item =>
+        item.companyId === currentCompany.id && item.bankAccountId === bank.id
+      ),
+      candidate: {
+        bankAccountId: bank.id,
+        date: movData.date,
+        reference: movData.reference,
+        type: movData.type,
+        amountBs,
+        amountUsd
+      }
+    })) {
+      throw new Error('Este movimiento ya existe en el extracto de esta cuenta (misma fecha, referencia, naturaleza e importes). No se agregó otra fila.');
+    }
     const newMov: BankStatementMovement = {
       ...movData,
       bcvRate: Number(movData.bcvRate),
