@@ -11,8 +11,8 @@ Las marcas solo se colocan cuando la corrección está integrada en `main` y las
 - [x] Validación estructural de cuentas: códigos, padres, niveles y cuentas imputables.
 - [x] Aislamiento multiempresa del Libro Diario y Centro de Correcciones (PR #10 integrada; CI y Windows SUCCESS).
 - [x] Aislamiento multiempresa de Inventario, Kardex, herramientas y asistente de migración (PR #13 integrada; CI y Windows SUCCESS).
-- [ ] Protección contra duplicados al registrar movimientos de extractos bancarios (PR #15; CI SUCCESS, Windows pendiente).
-- [ ] Antigüedad de saldos CxC/CxP por tramos (PR #16; validaciones pendientes).
+- [ ] Protección contra duplicados al registrar movimientos de extractos bancarios (PR #15; CI SUCCESS, Windows en validación).
+- [ ] Antigüedad de saldos CxC/CxP por tramos (PR #16; CI SUCCESS, Windows en validación).
 - [ ] Importación de extractos bancarios con previsualización y confirmación.
 - [ ] Cierre integral de conciliación bancaria con extractos reales y prueba de persistencia tras reinicio.
 
