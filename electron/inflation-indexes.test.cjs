@@ -160,5 +160,9 @@ test('IPC requires a valid session and permits administrator and accountant impo
     assert.equal(accountantImport.ok, true);
     const accountantReview = handlers.get('sicoven:inflation-index-review')({}, 'contador-token', { seriesId: accountantImport.seriesId, decision: 'APPROVED', reason: 'Verificado por el contador responsable.' });
     assert.equal(accountantReview.ok, true);
+    const accountantImport = handlers.get('sicoven:inflation-index-import')({}, 'contador-token', importerInput({ sourceTitle: 'Serie importada por contador' }));
+    assert.equal(accountantImport.ok, true);
+    const accountantReview = handlers.get('sicoven:inflation-index-review')({}, 'contador-token', { seriesId: accountantImport.seriesId, decision: 'APPROVED', reason: 'Verificado por el contador responsable.' });
+    assert.equal(accountantReview.ok, true);
   } finally { db.close(); }
 });
