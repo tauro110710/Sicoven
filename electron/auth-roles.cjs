@@ -46,8 +46,8 @@ function migrateAuthUserRoles(db) {
   return true;
 }
 
-function hasAccountingRole(actor) {
+function hasFullSystemAccess(actor) {
   return Boolean(actor && ['admin', 'contador'].includes(String(actor.role || '')));
 }
 
-module.exports = { migrateAuthUserRoles, hasAccountingRole };
+module.exports = { migrateAuthUserRoles, hasFullSystemAccess };
