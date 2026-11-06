@@ -129,6 +129,28 @@ Estado del Bloque 5: **parcial**. No se tacha ningún requisito del bloque ni se
 Estado del Bloque 6: **parcial**. Se conservan los circuitos históricos de anticipos, notas y liquidaciones; no se tacha el bloque. La próxima auditoría debe comprobar auxiliares contra cuentas de control y desarrollar antigüedad/exposición/alertas sin recalcular ni modificar liquidaciones ya registradas.
 
 
+
+## Bloque 7 — Inventario, compras y costos: primera pasada
+
+### Capacidades verificadas
+- `InventoryProduct` y `InventoryMovement` conservan `companyId`; el contexto valida que los movimientos afecten artículos de la empresa activa y exige SQLite local.
+- El Kardex registra entradas, salidas y ajustes con referencia documental, cantidad, costos Bs./USD, tasa y saldos.
+- El dominio `inventoryAccounting.ts` implementa costo promedio ponderado y PEPS por capas reconstruidas desde movimientos reales; rechaza reconstrucciones que no concilien con la existencia actual y no inventa capas de apertura.
+- Hay importación CSV de artículos y movimientos con validación de columnas y datos; las existencias iniciales se integran al Kardex y al Libro Diario.
+- Se observan gastos atribuibles/costos de llegada, provisión por VNR, clasificación de mercancías/materias primas/productos en proceso/terminados y una matriz de producción de materiales.
+- La salida valida disponibilidad y bloquea stock negativo; el comportamiento actual es bloqueo fijo, no una política configurable por empresa.
+- Las devoluciones de cliente tienen validaciones; la devolución a proveedor está bloqueada de forma segura cuando no puede garantizarse la reversión fiscal, CxP e inventario completa.
+
+### Defecto crítico confirmado — aislamiento de inventario en la interfaz
+En `InventarioView.tsx` de `main`:
+- `filteredProducts` parte del arreglo global `products` sin filtrar `companyId`.
+- `filteredMovements` parte del arreglo global `movements` sin filtrar `companyId`.
+- Los totales de valorización y el conteo de bajo mínimo usan también todos los productos.
+- El tipo de datos sí guarda empresa y las funciones de dominio validan empresa activa, por lo que el defecto es de presentación/consulta; puede mostrar inventario y movimientos de otra empresa en la pantalla activa.
+
+Estado: **parcial con defecto prioritario**. Antes de tachar el aislamiento del Bloque 7 hay que filtrar existencias, Kardex, valorización, mínimos, selección de producto y herramientas contables por la empresa activa; agregar pruebas de aislamiento y validar UI/SQLite. No modificar registros históricos ni abrir devoluciones a proveedor hasta completar el circuito fiscal y contable.
+
+
 ## Control de alcance y estado
 - Se conserva REME y ajuste por inflación dentro del plan; no se elimina código ni se cambia su alcance en esta auditoría.
 - No se modifica el administrador semilla.
