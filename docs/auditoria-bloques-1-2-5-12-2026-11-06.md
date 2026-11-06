@@ -90,6 +90,26 @@ Evidencia de presencia:
 
 Estado: **parcial / pendiente de auditoría normativa y de exportación**. No se tacha el Bloque 2 ni sus requisitos de cierre.
 
+
+## Bloque 5 — Bancos y tesorería: primera pasada
+
+### Capacidades verificadas
+- `BankAccount` incluye `companyId`, cuenta contable, banco, número, moneda Bs./USD y saldos iniciales.
+- `addBankAccount` valida empresa activa, número venezolano de 20 dígitos, banco, moneda, tipo, duplicidad del número dentro de la empresa y saldo inicial; calcula el equivalente con la tasa aplicable.
+- `TesoreriaView.tsx` filtra bancos y asientos por empresa y permite operaciones de tesorería/transferencia entre cuentas.
+- `ConciliacionBancariaView.tsx` separa extracto y mayor, presenta partidas en tránsito/diferencias, permite cotejo manual, conciliación automática y desconciliación controlada.
+- `bankStatementMatching.ts` valida cotejo exacto por naturaleza, fecha y doble moneda; no usa tolerancia difusa. Las pruebas correspondientes existen.
+- Las operaciones de alta, conciliación y ajuste exigen SQLite local disponible; no se tratan datos de caché como autoridad.
+
+### Brechas confirmadas
+1. **Importación de extractos ausente:** la pantalla ofrece alta manual de movimiento («Nuevo Movimiento Extracto»); no se encontró selector de archivo ni parser TXT/CSV/Excel, plantillas configurables o vista previa de importación.
+2. **Duplicados al cargar extractos:** `addBankStatementMovement` valida cuenta, fecha, tipo, referencia, descripción y snapshot Bs./USD, pero agrega la fila sin comprobar si ya existe el mismo movimiento en esa cuenta/empresa. La conciliación evita reutilizar un asiento ya vinculado, pero eso no evita duplicar una fila de extracto.
+3. **Flujo proyectado:** la tesorería muestra saldos y movimientos existentes; no se encontró en esta pasada una proyección de caja/bancos futura con vencimientos y escenarios.
+4. **Cierre de conciliación:** se observan operaciones de cotejo y exportación PDF; falta probar la secuencia completa con extracto real, saldos inicial/final, partidas pendientes, reanudación tras reinicio y persistencia de la cédula.
+
+Estado del Bloque 5: **parcial**. No se tacha ningún requisito del bloque ni se declara conciliación integral terminada. La próxima implementación focalizada debe ser importación repetible con huella de duplicidad, previsualización y confirmación antes de persistir; no debe alterar movimientos ya conciliados ni historial.
+
+
 ## Control de alcance y estado
 - Se conserva REME y ajuste por inflación dentro del plan; no se elimina código ni se cambia su alcance en esta auditoría.
 - No se modifica el administrador semilla.
