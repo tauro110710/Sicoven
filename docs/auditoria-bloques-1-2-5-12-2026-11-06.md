@@ -110,6 +110,25 @@ Estado: **parcial / pendiente de auditoría normativa y de exportación**. No se
 Estado del Bloque 5: **parcial**. No se tacha ningún requisito del bloque ni se declara conciliación integral terminada. La próxima implementación focalizada debe ser importación repetible con huella de duplicidad, previsualización y confirmación antes de persistir; no debe alterar movimientos ya conciliados ni historial.
 
 
+
+## Bloque 6 — Cuentas por cobrar y pagar: primera pasada
+
+### Capacidades verificadas
+- CxC y CxP filtran documentos por empresa, excluyen anulados y calculan saldos pendientes desde documentos y liquidaciones.
+- Ambas vistas muestran vencimientos, facturas pendientes y conteo de documentos vencidos; permiten buscar por tercero/RIF/documento.
+- CxC y CxP conservan historial de cobros/pagos con fecha, importe Bs./USD, tasa, medio, referencia y asiento.
+- El dominio `creditSettlement.ts` conserva la tasa del pago separada de la tasa histórica de la factura, calcula el saldo nominal y su equivalente a tasa original, y valida liquidaciones.
+- CxP contempla facturas y ND tipo 02 como obligaciones separadas; anticipos directos, aplicaciones y reembolsos tienen circuitos especializados y pruebas existentes. Los frentes de anticipos y liquidaciones ya aprobados no se reabren sin defecto concreto.
+
+### Brechas confirmadas
+1. **Antigüedad por tramos:** las vistas muestran saldo abierto y vencido, pero no se observó una clasificación de cartera por rangos de días (por ejemplo, no vencido, 1–30, 31–60, 61–90 y más de 90).
+2. **Exposición cambiaria:** el saldo en USD y el equivalente Bs. a tasa original se presentan; no se encontró en estas vistas un reporte de exposición con comparación sistemática entre tasa histórica, tasa de cierre y diferencia de cambio por tercero/documento.
+3. **Alertas:** el vencimiento se identifica dentro de las vistas, pero no se encontró un motor de alertas/notificaciones por vencimiento o mora ni un panel de tareas.
+4. **Reportes por moneda/período:** la vista operativa es útil para consultar pendientes, pero falta verificar un estado de cuenta formal exportable por tercero, documento, moneda y período, con conciliación contra cuentas de control.
+
+Estado del Bloque 6: **parcial**. Se conservan los circuitos históricos de anticipos, notas y liquidaciones; no se tacha el bloque. La próxima auditoría debe comprobar auxiliares contra cuentas de control y desarrollar antigüedad/exposición/alertas sin recalcular ni modificar liquidaciones ya registradas.
+
+
 ## Control de alcance y estado
 - Se conserva REME y ajuste por inflación dentro del plan; no se elimina código ni se cambia su alcance en esta auditoría.
 - No se modifica el administrador semilla.
