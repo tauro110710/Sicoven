@@ -122,6 +122,10 @@ test('bank statement import batch persists together and leaves no imported rows 
     assert.equal(persistAccountingSnapshot(db, next, { id: 1, username: 'admin', role: 'admin' }).ok, true);
     let saved = JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
     assert.deepEqual(saved.bankStatementMovements.map(row => row.id), ['stmt-1', 'stmt-2']);
+    const importEvents = db.prepare("SELECT details_json FROM audit_events WHERE event_type='bank_statement_imported' ORDER BY id").all();
+    assert.equal(importEvents.length, 2);
+    assert.deepEqual(importEvents.map(event => JSON.parse(event.details_json).statementMovementId), ['stmt-1', 'stmt-2']);
+    assert.equal(JSON.parse(importEvents[0].details_json).actor.username, 'admin');
 
     const beforeFailure = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json;
     db.exec(`CREATE TRIGGER reject_bank_import_update BEFORE UPDATE ON app_state
@@ -133,6 +137,7 @@ test('bank statement import batch persists together and leaves no imported rows 
     assert.equal(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json, beforeFailure);
     assert.deepEqual(saved.bankStatementMovements.map(row => row.id), ['stmt-1', 'stmt-2']);
     assert.equal(saved.bankStatementMovements.some(row => row.id === 'stmt-3'), false);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='bank_statement_imported'").get().count, 2);
   } finally {
     db.close();
   }
