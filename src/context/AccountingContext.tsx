@@ -182,6 +182,7 @@ interface AccountingContextType {
   addBankAccount: (bank: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'> & { bcvRate?: number }) => BankAccount;
   registerTreasuryMovement: (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; bcvRate: number; counterpartAccountCode?: string; destinationBankAccountId?: string }) => JournalEntry;
   addBankStatementMovement: (movement: Omit<BankStatementMovement, 'id' | 'companyId'>) => BankStatementMovement;
+  addBankStatementMovements: (movements: Array<{ bankAccountId: string; date: string; reference: string; description: string; type: 'DEBIT' | 'CREDIT'; amountBs: number; amountUsd: number; bcvRate: number; bcvRateEffectiveDate: string }>) => BankStatementMovement[];
   deleteBankStatementMovement: (id: string) => void;
   reconcileMovementManual: (statementMovementId: string, journalEntryId: string) => void;
   unreconcileMovement: (statementMovementId: string) => void;
@@ -4607,6 +4608,57 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return newMov;
   };
 
+  const addBankStatementMovements = (movements: Array<{ bankAccountId: string; date: string; reference: string; description: string; type: 'DEBIT' | 'CREDIT'; amountBs: number; amountUsd: number; bcvRate: number; bcvRateEffectiveDate: string }>): BankStatementMovement[] => {
+    if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
+      throw new Error('Importar movimientos requiere SQLite local de escritorio disponible y lista.');
+    }
+    if (!Array.isArray(movements) || movements.length === 0) throw new Error('No hay movimientos válidos para importar.');
+    const bankAccountId = movements[0].bankAccountId;
+    const bank = bankAccounts.find(item => item.id === bankAccountId && item.companyId === currentCompany.id);
+    if (!bank || movements.some(item => item.bankAccountId !== bankAccountId)) {
+      throw new Error('La importación debe pertenecer a una sola cuenta bancaria de la empresa activa.');
+    }
+    const staged: BankStatementMovement[] = [];
+    for (const item of movements) {
+      if (!isValidIsoDate(item.date) || !['DEBIT', 'CREDIT'].includes(item.type) ||
+          !item.reference?.trim() || !item.description?.trim()) {
+        throw new Error('La importación contiene fecha, naturaleza, referencia o descripción inválida.');
+      }
+      const amountBs = Number(item.amountBs), amountUsd = Number(item.amountUsd), bcvRate = Number(item.bcvRate);
+      validateBankMovementFxSnapshot({
+        date: item.date, amountBs, amountUsd, bcvRate,
+        bcvRateEffectiveDate: item.bcvRateEffectiveDate
+      });
+      const candidate = {
+        bankAccountId: bank.id, date: item.date, reference: item.reference,
+        type: item.type, amountBs, amountUsd
+      };
+      if (isDuplicateBankStatementMovement({
+        existing: [
+          ...bankStatementMovements.filter(row => row.companyId === currentCompany.id && row.bankAccountId === bank.id),
+          ...staged
+        ],
+        candidate
+      })) {
+        throw new Error(`La fila ${item.reference} está duplicada en el extracto existente o en el archivo. No se importó ninguna fila.`);
+      }
+      staged.push({
+        ...item,
+        bcvRate,
+        amountBs: Math.round(amountBs * 100) / 100,
+        amountUsd: Math.round(amountUsd * 1_000_000) / 1_000_000,
+        id: `stmt-import-${Date.now()}-${staged.length}-${Math.floor(Math.random() * 1000000)}`,
+        companyId: currentCompany.id,
+        isReconciled: false,
+        matchedBy: undefined,
+        reconciledWithJournalEntryId: undefined,
+        reconciledAt: undefined
+      });
+    }
+    setBankStatementMovements(previous => [...previous, ...staged]);
+    return staged;
+  };
+
   const deleteBankStatementMovement = (id: string) => {
     const movement = bankStatementMovements.find(item => item.id === id && item.companyId === currentCompany.id);
     if (!movement) return;
@@ -5487,6 +5539,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         addBankAccount,
         registerTreasuryMovement,
         addBankStatementMovement,
+        addBankStatementMovements,
         deleteBankStatementMovement,
         reconcileMovementManual,
         unreconcileMovement,
