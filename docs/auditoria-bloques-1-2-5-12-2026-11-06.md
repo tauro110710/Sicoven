@@ -165,6 +165,53 @@ No se encontraron componentes, modelos ni pruebas de empleados, contratos, asist
 Estado: **no implementado / pendiente**. No se tacha ningún requisito. Los parámetros legales deben documentarse y versionarse con fuente oficial antes de implementar cálculos.
 
 
+
+## Bloque 10 — Facturación fiscal y documentos electrónicos: primera pasada
+
+### Capacidades verificadas
+- Los modelos de venta/compra conservan número de factura, número de control, fechas, RIF, empresa, alícuotas, condición de pago, notas vinculadas y estado de anulación.
+- El Libro de Ventas filtra por empresa, integra datos de facturas y reportes Z y dispone de exportación PDF; los formularios calculan importes fiscales y conservan decisiones/soportes.
+- Los tipos contemplan medios de emisión digital, máquina fiscal y contingencia, pero la presencia del campo no acredita integración real con equipos o proveedor autorizado.
+
+### Brechas confirmadas
+- En venta, el número de factura se captura manualmente y el número de control puede derivarse de un valor por defecto formado por «00-» más el número de factura; no se acreditó un motor central de correlativos/series por empresa y dispositivo.
+- `addSale` bloquea notas de débito/crédito genéricas de clientes; no se verificó un circuito fiscal especializado completo para todas las notas y contingencias.
+- No se encontró integración técnica/documentada con impresoras fiscales, equipos, proveedor de facturación electrónica o Portal Fiscal que permita declarar homologación.
+- No se afirma aceptación de archivos TXT ni homologación SENIAT por la sola generación de libros/PDF.
+
+Estado del Bloque 10: **parcial**. Se conserva la facturación documental y los libros existentes; el bloque sigue pendiente de correlativos controlados, contingencias, circuitos de notas e integración acreditada cuando aplique.
+
+## Bloque 11 — Multiempresa y despacho contable: primera pasada
+
+### Capacidades verificadas
+- `Company` y la mayoría de documentos operativos guardan identificador de empresa.
+- Configuración permite registrar y cambiar empresa activa; CxC, CxP, bancos, conciliación y varios reportes filtran por `companyId`.
+- Los asientos y movimientos de inventario/banco conservan el vínculo empresarial en el dominio y la persistencia.
+
+### Brechas confirmadas
+- Catálogo de cuentas (`Account`) global y sin `companyId`; configuraciones de clasificación contable/cash flow se comparten.
+- El Libro Diario en `main` no filtraba el listado y el Centro de Correcciones por empresa; corrección candidata en PR #10 pendiente de integración.
+- La vista de Inventario en `main` muestra productos, movimientos, valorización y alertas desde arreglos globales; requiere filtro por empresa antes de cerrar el aislamiento.
+- No se encontró un panel de despacho contable con tareas, vencimientos y estado de clientes/contribuyentes ni una consolidación multiempresa con reglas explícitas.
+
+Estado del Bloque 11: **parcial con defectos de aislamiento prioritarios**. No se tacha. Se requieren pruebas cruzadas de lectura, edición, exportación, inventario y reportes con dos empresas, además de un diseño seguro del catálogo contable por empresa.
+
+## Bloque 12 — Reportes, análisis e IA asistiva: primera pasada
+
+### Capacidades verificadas
+- Existen reportes de estados financieros, Libro de Ventas, conciliación bancaria, inventario/Kardex y reportes fiscales.
+- Algunas vistas permiten PDF/impresión y CSV; los reportes deben seguir auditándose por empresa, período y conciliación.
+- Las alertas observadas se limitan principalmente a stock bajo, documentos vencidos y validaciones puntuales.
+
+### Brechas confirmadas
+- No se identificó un Centro de Reportes unificado con catálogo de informes, filtros comunes y exportación PDF/Excel.
+- En la vista anual se encontró CSV y `window.print()`; no se acreditó Excel nativo para estados financieros.
+- No se identificó implementación de asistente IA en los componentes/código fuente revisados, pese a que `@google/genai` aparece como dependencia en `package.json`. La dependencia instalada no demuestra una función IA operativa.
+- No se acreditaron ratios financieros, alertas analíticas transversales ni recomendaciones con datos de origen y límites.
+
+Estado del Bloque 12: **parcial / pendiente de desarrollo**. No se tacha ningún requisito de cierre.
+
+
 ## Control de alcance y estado
 - Se conserva REME y ajuste por inflación dentro del plan; no se elimina código ni se cambia su alcance en esta auditoría.
 - No se modifica el administrador semilla.
