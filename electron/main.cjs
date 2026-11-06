@@ -31,7 +31,7 @@ const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
 
-const { migrateAuthUserRoles } = require('./auth-roles.cjs');
+const { migrateAuthUserRoles, hasFullSystemAccess } = require('./auth-roles.cjs');
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
 const { reconcileRestoreAudit } = require('./restore-audit-ledger.cjs');
 const { registerBackupIpc } = require('./backup-restore.cjs');
