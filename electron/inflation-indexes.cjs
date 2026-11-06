@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
+const { hasFullSystemAccess } = require('./auth-roles.cjs');
 
 const MAX_SOURCE_BYTES = 5 * 1024 * 1024;
 const MAX_OBSERVATIONS = 600;
@@ -183,7 +184,7 @@ function importInflationIndexSeries(db, input, actor) {
     missingMonths: data.missingMonths, statusCounts: data.statusCounts, sourceSha256: data.sourceSha256, approvalStatus: 'PENDING_REVIEW' };
 }
 function approveInflationIndexSeries(db, seriesId, decision, reason, actor) {
-  if (!actor || actor.role !== 'admin' || !actor.username) throw new Error('Se requiere un rol contable autenticado para revisar una serie de índices.');
+  if (!actor || !hasFullSystemAccess(actor) || !actor.username) throw new Error('Se requiere un rol contable autenticado para revisar una serie de índices.');
   const id = String(seriesId || '').trim(); const choice = String(decision || ''); const note = String(reason || '').trim();
   if (!id) throw new Error('Identificador de serie requerido.');
   if (!['APPROVED','REJECTED'].includes(choice)) throw new Error('Decisión de revisión inválida.');
