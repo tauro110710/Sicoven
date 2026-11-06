@@ -12,6 +12,7 @@ const {
 const { initializeInflationIndexSchema, importInflationIndexSeries } = require('./inflation-indexes.cjs');
 
 const admin = { username: 'admin-a', role: 'admin' };
+const accountant = { username: 'contador-a', role: 'contador' };
 const reviewer = { username: 'reviewer-b', role: 'admin' };
 function database() {
   const db = new Database(':memory:');
@@ -61,7 +62,7 @@ test('creates a source dossier with immutable evidence and exact entity/year/per
   const db = database();
   try {
     const series = makeSeries(db);
-    const result = createInflationSourceDossier(db, dossierInput(series.seriesId), admin);
+    const result = createInflationSourceDossier(db, dossierInput(series.seriesId), accountant);
     assert.equal(result.status, 'DRAFT');
     assert.equal(result.eligibleForReview, true);
     const rows = listInflationSourceDossiers(db, { companyId: 'company-001', fiscalYear: 2025 });
@@ -120,7 +121,7 @@ test('approval requires independent reviewer, complete evidence, and exact appro
   const db = database();
   try {
     const series = makeSeries(db);
-    const created = createInflationSourceDossier(db, dossierInput(series.seriesId), admin);
+    const created = createInflationSourceDossier(db, dossierInput(series.seriesId), accountant);
     const base = { dossierId: created.dossierId, decision: 'APPROVED_FOR_DOCUMENTED_USE',
       reason: 'Se verificó la documentación, el alcance y la metodología para el uso indicado.',
       reviewerProfessionalName: 'Contador revisor', reviewerCredential: 'Credencial profesional verificada',
@@ -177,14 +178,14 @@ test('reviewer can retrieve original evidence only through audited administrator
     const series = makeSeries(db);
     const created = createInflationSourceDossier(db, dossierInput(series.seriesId), admin);
     const dossier = listInflationSourceDossiers(db, { companyId: 'company-001' })[0];
-    const item = getInflationSourceDossierEvidence(db, dossier.evidence[0].id, reviewer);
+    const item = getInflationSourceDossierEvidence(db, dossier.evidence[0].id, accountant);
     assert.equal(item.dossierId, created.dossierId);
     assert.ok(item.contentBase64);
     assert.equal(item.sha256, dossier.evidence[0].sha256);
     const audit = db.prepare("SELECT event_type,details_json FROM audit_events WHERE event_type='inflation_source_dossier_evidence_accessed'").get();
     assert.equal(audit.event_type, 'inflation_source_dossier_evidence_accessed');
-    assert.equal(JSON.parse(audit.details_json).actor, reviewer.username);
-    assert.throws(() => getInflationSourceDossierEvidence(db, item.id, { username: 'viewer', role: 'user' }), /Solo un administrador/);
+    assert.equal(JSON.parse(audit.details_json).actor, accountant.username);
+    assert.throws(() => getInflationSourceDossierEvidence(db, item.id, { username: 'viewer', role: 'user' }), /rol contable/);
   } finally { db.close(); }
 });
 test('dossier cannot be bound to a company absent from local SQLite accounting state', () => {
