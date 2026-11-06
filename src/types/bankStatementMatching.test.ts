@@ -1,6 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { matchesBankStatementLine, matchesBankStatementDualCurrency, validateBankMovementFxSnapshot, calculateBankReconciliationBalances } from './bankStatementMatching';
+import { matchesBankStatementLine, matchesBankStatementDualCurrency, validateBankMovementFxSnapshot, isDuplicateBankStatementMovement, calculateBankReconciliationBalances } from './bankStatementMatching';
+
+test('detects repeated statement rows without rejecting distinct movements', () => {
+  const existing = [{
+    bankAccountId: 'bank-a', date: '2026-11-01', reference: 'TRF 001',
+    type: 'DEBIT' as const, amountBs: 250, amountUsd: 1
+  }];
+  const base = { bankAccountId: 'bank-a', date: '2026-11-01', reference: ' trf   001 ',
+    type: 'DEBIT' as const, amountBs: 250, amountUsd: 1 };
+  assert.equal(isDuplicateBankStatementMovement({ existing, candidate: base }), true);
+  assert.equal(isDuplicateBankStatementMovement({ existing, candidate: { ...base, amountBs: 251 } }), false);
+  assert.equal(isDuplicateBankStatementMovement({ existing, candidate: { ...base, type: 'CREDIT' } }), false);
+  assert.equal(isDuplicateBankStatementMovement({ existing, candidate: { ...base, date: '2026-11-02' } }), false);
+  assert.equal(isDuplicateBankStatementMovement({ existing, candidate: { ...base, bankAccountId: 'bank-b' } }), false);
+});
 
 test('verifies the bank reconciliation schedule balances in both Bs and USD', () => {
   const bookMovements = [
