@@ -96,7 +96,7 @@ function requireAdmin(licenseView,getActiveSession,token) {
   return actor;
 }
 function saveInflationClassification(db,input,actor) {
-  if(!actor||!hasFullSystemAccess(actor)||!actor.username||!Number.isInteger(Number(actor.id))) throw new Error('Se requiere una sesión autenticada de admin o contador para registrar clasificaciones.');
+  if(!actor||!hasFullSystemAccess(actor)||!actor.username||!Number.isInteger(Number(actor.id))) throw new Error('Se requiere una sesión autenticada con rol contable (admin o contador) para registrar clasificaciones.');
   const x=validateDecision(db,input);
   const latest=db.prepare('SELECT d.id,d.version,r.decision AS reviewDecision FROM inflation_classification_decisions d LEFT JOIN inflation_classification_reviews r ON r.decision_id=d.id WHERE d.company_id=? AND d.fiscal_year=? AND d.account_code=? AND d.scope=? AND d.component_ref=? ORDER BY d.version DESC LIMIT 1').get(x.companyId,x.fiscalYear,x.accountCode,x.scope,x.componentRef);
   if(!latest) { if(x.version!==1||x.supersedesDecisionId) throw new Error('La primera clasificación debe iniciar en versión 1.'); }
@@ -110,7 +110,7 @@ function saveInflationClassification(db,input,actor) {
   return {ok:true,decisionId:x.id,version:x.version,status:'PENDING_REVIEW',treatment:x.treatment};
 }
 function reviewInflationClassification(db,input,actor) {
-  if(!actor||!hasFullSystemAccess(actor)||!actor.username||!Number.isInteger(Number(actor.id))) throw new Error('Se requiere una sesión autenticada de admin o contador para revisar clasificaciones.');
+  if(!actor||!hasFullSystemAccess(actor)||!actor.username||!Number.isInteger(Number(actor.id))) throw new Error('Se requiere una sesión autenticada con rol contable (admin o contador) para revisar clasificaciones.');
   const decisionId=String(input?.decisionId||'').trim(),decision=String(input?.decision||''),reason=String(input?.reason||'').trim();
   if(!decisionId||!['APPROVED','REJECTED'].includes(decision)) throw new Error('Identificador o decisión de revisión inválidos.');
   if(reason.length<10||reason.length>1000) throw new Error('La justificación de revisión debe tener entre 10 y 1000 caracteres.');
