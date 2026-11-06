@@ -4,6 +4,7 @@ import { useAccounting } from '../../context/AccountingContext';
 import { calculateVnrWriteDown, calculatePeriodicCostOfSales } from '../../types/inventoryAccounting';
 import type { InventoryProduct } from '../../types/accounting';
 import { validateOpeningInventoryRow, validateMovementImportRow } from '../../types/inventoryImport';
+import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
@@ -33,12 +34,15 @@ const downloadCsv = (filename: string, headers: string[], rows: unknown[][]) => 
 };
 
 export const InventarioContableTools: React.FC = () => {
-  const { currentCompany, products, movements, accounts, journalEntries, importInventoryProducts, importInventoryMovements, updateProduct, addJournalEntry, executeProduction, waitForPersistence, isStorageReady, storageError } = useAccounting();
+  const { currentCompany, products: allProducts, movements: allMovements, accounts, journalEntries: allJournalEntries, importInventoryProducts, importInventoryMovements, updateProduct, addJournalEntry, executeProduction, waitForPersistence, isStorageReady, storageError } = useAccounting();
+  const companyProducts = filterEntriesByCompany(allProducts, currentCompany.id);
+  const companyMovements = filterEntriesByCompany(allMovements, currentCompany.id);
+  const companyJournalEntries = filterEntriesByCompany(allJournalEntries, currentCompany.id);
   const [importing, setImporting] = useState(false);
   const [importMode, setImportMode] = useState<'INVENTARIO_INICIAL' | 'MOVIMIENTOS'>('INVENTARIO_INICIAL');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [productId, setProductId] = useState(products[0]?.id || '');
+  const [productId, setProductId] = useState(companyProducts[0]?.id || '');
   const [sellingPrice, setSellingPrice] = useState('0');
   const [completionCost, setCompletionCost] = useState('0');
   const [sellingCost, setSellingCost] = useState('0');
@@ -47,7 +51,7 @@ export const InventarioContableTools: React.FC = () => {
   const [closingRate, setClosingRate] = useState(String(currentCompany.bcvRate || ''));
   const [closingBusy, setClosingBusy] = useState(false);
   const [productionBusy, setProductionBusy] = useState(false);
-  const [finishedProductId, setFinishedProductId] = useState(products.find(p => p.itemType === 'PRODUCTO_TERMINADO')?.id || '');
+  const [finishedProductId, setFinishedProductId] = useState(companyProducts.find(p => p.itemType === 'PRODUCTO_TERMINADO')?.id || '');
   const [recipeLines, setRecipeLines] = useState<Array<{productId:string;quantityPerUnit:number}>>([]);
   const [componentId, setComponentId] = useState('');
   const [componentQty, setComponentQty] = useState('1');
@@ -56,8 +60,8 @@ export const InventarioContableTools: React.FC = () => {
   const [productionRate, setProductionRate] = useState(String(currentCompany.bcvRate || ''));
   const [productionRef, setProductionRef] = useState('');
 
-  const selectedProduct = products.find(product => product.id === productId);
-  const selectedFinishedProduct = products.find(product => product.id === finishedProductId);
+  const selectedProduct = companyProducts.find(product => product.id === productId);
+  const selectedFinishedProduct = companyProducts.find(product => product.id === finishedProductId);
   useEffect(() => { setRecipeLines(selectedFinishedProduct?.bomComponents || []); }, [finishedProductId]);
   const vnr = useMemo(() => {
     if (!selectedProduct) return null;
@@ -139,7 +143,7 @@ export const InventarioContableTools: React.FC = () => {
         const required = ['date','type','concept','productcode','quantity','unitcostbs','bcvrate','documentref'];
         if (required.some(h => !headers.includes(h))) throw new Error('Faltan columnas obligatorias para movimientos: date,type,concept,productCode,quantity,unitCostBs,bcvRate,documentRef.');
         const rows = records.map(({row,sourceLine}) => {
-          const product = products.find(p => p.code.trim().toUpperCase() === String(row.productcode || '').trim().toUpperCase());
+          const product = companyProducts.find(p => p.code.trim().toUpperCase() === String(row.productcode || '').trim().toUpperCase());
           if (!product) throw new Error('Fila ' + sourceLine + ': no existe el artículo ' + row.productcode + ' en SICOVEN.');
           const validated = validateMovementImportRow(row, sourceLine);
           return {
@@ -176,7 +180,7 @@ export const InventarioContableTools: React.FC = () => {
   const exportInventory = () => downloadCsv('SICOVEN_Inventario_Valorado.csv', [
     'codigo','descripcion','tipo','unidad','existencia','metodo_costeo','costo_promedio_bs','provision_vnr_bs','valor_neto_bs',
     'costo_promedio_usd','valor_neto_usd','cuenta_inventario','cuenta_costo_ventas','iva','tasa_apertura_bcv'
-  ], products.map(p => [
+  ], companyProducts.map(p => [
     p.code,p.name,p.itemType || 'MERCANCIA',p.unit,p.currentStock,p.costingMethod || 'PROMEDIO_PONDERADO',
     p.avgCostBs,p.vnrProvisionBs || 0,Math.max(0,p.currentStock*p.avgCostBs-(p.vnrProvisionBs || 0)),
     p.avgCostUsd,Math.max(0,p.currentStock*p.avgCostUsd-((p.vnrProvisionBs || 0)/(p.openingBcvRate || currentCompany.bcvRate))),
@@ -193,7 +197,7 @@ export const InventarioContableTools: React.FC = () => {
     doc.text('RESUMEN CONSOLIDADO DE INVENTARIO PARA LIBRO DE INVENTARIOS Y BALANCES', 14, 25);
     doc.setFontSize(7);
     doc.text('Valores en libros antes de provisión y valor neto luego de la provisión VNR registrada. Verificar conciliación con el Libro Mayor.', 14, 30);
-    const rows = products.slice().sort((a,b) => String(a.inventoryAccountCode || '').localeCompare(String(b.inventoryAccountCode || '')) || a.code.localeCompare(b.code)).map(p => [
+    const rows = companyProducts.slice().sort((a,b) => String(a.inventoryAccountCode || '').localeCompare(String(b.inventoryAccountCode || '')) || a.code.localeCompare(b.code)).map(p => [
       p.inventoryAccountCode || '1.1.4.01', p.code, p.name, p.itemType || 'MERCANCIA', p.unit,
       Number(p.currentStock).toFixed(3), Number(p.avgCostBs).toFixed(2),
       Number(p.currentStock * p.avgCostBs).toFixed(2), Number(p.vnrProvisionBs || 0).toFixed(2),
@@ -204,7 +208,7 @@ export const InventarioContableTools: React.FC = () => {
       startY: 34,
       head: [['Cuenta inventario','Código','Descripción','Clasificación','Unidad','Cantidad','Costo unit. Bs.','Valor bruto Bs.','Provisión VNR Bs.','Valor neto Bs.','Valor neto USD']],
       body: rows,
-      foot: [['TOTAL','','','','','','',products.reduce((sum,p)=>sum+p.currentStock*p.avgCostBs,0).toFixed(2),products.reduce((sum,p)=>sum+Number(p.vnrProvisionBs || 0),0).toFixed(2),products.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostBs-Number(p.vnrProvisionBs || 0)),0).toFixed(2),products.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostUsd-Number(p.vnrProvisionBs || 0)/Math.max(Number(currentCompany.bcvRate || 0),0.000001)),0).toFixed(6)]],
+      foot: [['TOTAL','','','','','','',companyProducts.reduce((sum,p)=>sum+p.currentStock*p.avgCostBs,0).toFixed(2),companyProducts.reduce((sum,p)=>sum+Number(p.vnrProvisionBs || 0),0).toFixed(2),companyProducts.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostBs-Number(p.vnrProvisionBs || 0)),0).toFixed(2),companyProducts.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostUsd-Number(p.vnrProvisionBs || 0)/Math.max(Number(currentCompany.bcvRate || 0),0.000001)),0).toFixed(6)]],
       styles: { fontSize: 7, cellPadding: 1, overflow: 'linebreak' },
       headStyles: { fontSize: 7 },
       footStyles: { fontStyle: 'bold' },
@@ -222,12 +226,12 @@ export const InventarioContableTools: React.FC = () => {
     'fecha','tipo_documento','documento','rif_contraparte','contraparte','codigo','descripcion','concepto','tipo_movimiento',
     'entrada_cantidad','entrada_costo_unitario_bs','salida_cantidad','salida_costo_unitario_bs','existencia_final','valor_final_bs',
     'tasa_bcv_historica','entrada_usd','salida_usd','saldo_usd','cuenta_inventario'
-  ], movements.slice().sort((a,b) => a.date.localeCompare(b.date)).map(m => [
+  ], companyMovements.slice().sort((a,b) => a.date.localeCompare(b.date)).map(m => [
     m.date,m.documentType || '',m.documentRef,m.counterpartyRif || '',m.counterpartyName || '',m.productCode,m.productName,m.concept,m.type,
     m.type === 'ENTRADA' ? m.quantity : 0,m.type === 'ENTRADA' ? m.unitCostBs : 0,
     m.type === 'SALIDA' ? m.quantity : 0,m.type === 'SALIDA' ? m.unitCostBs : 0,m.balanceQty,m.balanceTotalBs,
     m.bcvRate || currentCompany.bcvRate,m.type === 'ENTRADA' ? m.totalCostUsd : 0,m.type === 'SALIDA' ? m.totalCostUsd : 0,m.balanceTotalUsd,
-    products.find(p => p.id === m.productId)?.inventoryAccountCode || '1.1.4.01'
+    companyProducts.find(p => p.id === m.productId)?.inventoryAccountCode || '1.1.4.01'
   ]));
 
   const exportBookPdf = () => {
@@ -235,12 +239,12 @@ export const InventarioContableTools: React.FC = () => {
     doc.setFontSize(13);
     doc.text(currentCompany.name || 'Empresa', 14, 12);
     doc.setFontSize(8);
-    doc.text('RIF: ' + currentCompany.rif + ' · Período de movimientos: ' + (movements.length ? movements.slice().sort((a,b) => a.date.localeCompare(b.date))[0].date + ' a ' + movements.slice().sort((a,b) => b.date.localeCompare(a.date))[0].date : 'Sin movimientos'), 14, 18);
+    doc.text('RIF: ' + currentCompany.rif + ' · Período de movimientos: ' + (companyMovements.length ? companyMovements.slice().sort((a,b) => a.date.localeCompare(b.date))[0].date + ' a ' + companyMovements.slice().sort((a,b) => b.date.localeCompare(a.date))[0].date : 'Sin movimientos'), 14, 18);
     doc.setFontSize(11);
     doc.text('LIBRO DE ENTRADAS Y SALIDAS DE INVENTARIO', 14, 25);
     doc.setFontSize(7);
     doc.text('Libro contable valorizado en bolívares y referencia USD a la tasa BCV histórica de cada operación. Revisar requisitos de foliado/autorización aplicables antes de su presentación oficial.', 14, 30);
-    const rows = movements.slice().sort((a,b) => a.date.localeCompare(b.date)).map(m => [
+    const rows = companyMovements.slice().sort((a,b) => a.date.localeCompare(b.date)).map(m => [
       m.date, m.documentType || '', m.documentRef, m.counterpartyRif || '', m.counterpartyName || '',
       m.productCode, m.productName, m.concept, m.type,
       m.type === 'ENTRADA' ? String(m.quantity) : '—',
@@ -314,7 +318,7 @@ export const InventarioContableTools: React.FC = () => {
     if (!selectedFinishedProduct) { setError('Seleccione el producto terminado.'); return; }
     if (selectedFinishedProduct.itemType !== 'PRODUCTO_TERMINADO' && selectedFinishedProduct.itemType !== 'PRODUCTO_EN_PROCESO') { setError('Clasifique primero el artículo como Producto terminado o Producto en proceso en su ficha.'); return; }
     if (!recipeLines.length) { setError('Agregue al menos una materia prima o componente en proceso a la matriz.'); return; }
-    if (recipeLines.some(line => !products.some(p => p.id === line.productId && (p.itemType === 'MATERIA_PRIMA' || p.itemType === 'PRODUCTO_EN_PROCESO')) || line.productId === finishedProductId || !Number.isFinite(line.quantityPerUnit) || line.quantityPerUnit <= 0)) {
+    if (recipeLines.some(line => !companyProducts.some(p => p.id === line.productId && (p.itemType === 'MATERIA_PRIMA' || p.itemType === 'PRODUCTO_EN_PROCESO')) || line.productId === finishedProductId || !Number.isFinite(line.quantityPerUnit) || line.quantityPerUnit <= 0)) {
       setError('La matriz contiene componentes inválidos. Use materias primas/productos en proceso y cantidades positivas.'); return;
     }
     try {
@@ -346,12 +350,12 @@ export const InventarioContableTools: React.FC = () => {
       const rate = Number(closingRate);
       if (!Number.isFinite(rate) || rate <= 0) throw new Error('Introduzca la tasa BCV histórica correspondiente al cierre.');
       const reference = 'CIERRE-INVENTARIO-' + periodStart + '-' + periodEnd;
-      if (journalEntries.some(entry => entry.companyId === currentCompany.id && entry.referenceDoc === reference)) throw new Error('Este período ya tiene un asiento de cierre con esa referencia.');
+      if (companyJournalEntries.some(entry => entry.companyId === currentCompany.id && entry.referenceDoc === reference)) throw new Error('Este período ya tiene un asiento de cierre con esa referencia.');
       const groups = new Map<string, { inventoryCode: string; costCode: string; opening: number; purchases: number; closing: number; nonSaleReductions: number }>();
-      const entriesInPeriod = journalEntries.filter(entry => entry.companyId === currentCompany.id && entry.date >= periodStart && entry.date <= periodEnd);
-      const companyProducts = products.filter(product => product.companyId === currentCompany.id);
-      for (const product of companyProducts) {
-        const history = movements.filter(m => m.companyId === currentCompany.id && m.productId === product.id).slice().sort((a,b) => a.date.localeCompare(b.date));
+      const entriesInPeriod = companyJournalEntries.filter(entry => entry.companyId === currentCompany.id && entry.date >= periodStart && entry.date <= periodEnd);
+      const productsForPeriod = companyProducts;
+      for (const product of productsForPeriod) {
+        const history = companyMovements.filter(m => m.companyId === currentCompany.id && m.productId === product.id).slice().sort((a,b) => a.date.localeCompare(b.date));
         if (product.currentStock > 0 && history.length === 0) throw new Error('El artículo ' + product.code + ' tiene existencia sin Kardex. Registre o importe su inventario inicial antes del cierre.');
         const before = history.filter(m => m.date < periodStart);
         const atEnd = history.filter(m => m.date <= periodEnd);
@@ -454,7 +458,7 @@ export const InventarioContableTools: React.FC = () => {
           <input type="number" min="0.000001" step="0.000001" value={closingRate} onChange={e => setClosingRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
         </label>
       </div>
-      <button disabled={closingBusy || !products.length} onClick={closeInventoryPeriod} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{closingBusy ? 'Procesando cierre…' : 'Calcular, conciliar y registrar cierre'}</button>
+      <button disabled={closingBusy || !companyProducts.length} onClick={closeInventoryPeriod} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{closingBusy ? 'Procesando cierre…' : 'Calcular, conciliar y registrar cierre'}</button>
       <p className="text-xs text-amber-800">El cálculo depende de que las compras, devoluciones, ajustes y salidas estén importados o registrados en el Kardex con fecha y costo correctos. El sistema no inventa movimientos faltantes.</p>
     </section>
 
@@ -466,12 +470,12 @@ export const InventarioContableTools: React.FC = () => {
       <label className="block text-sm font-medium text-slate-700">Producto terminado
         <select value={finishedProductId} onChange={e => setFinishedProductId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
           <option value="">Seleccione…</option>
-          {products.filter(p => p.itemType === 'PRODUCTO_TERMINADO' || p.itemType === 'PRODUCTO_EN_PROCESO').map(p => <option key={p.id} value={p.id}>{p.code} · {p.name} ({p.itemType === 'PRODUCTO_EN_PROCESO' ? 'En proceso' : 'Terminado'})</option>)}
+          {companyProducts.filter(p => p.itemType === 'PRODUCTO_TERMINADO' || p.itemType === 'PRODUCTO_EN_PROCESO').map(p => <option key={p.id} value={p.id}>{p.code} · {p.name} ({p.itemType === 'PRODUCTO_EN_PROCESO' ? 'En proceso' : 'Terminado'})</option>)}
         </select>
       </label>
       <div className="space-y-2">
         {recipeLines.map((line,index) => {
-          const component = products.find(p => p.id === line.productId);
+          const component = companyProducts.find(p => p.id === line.productId);
           return <div key={line.productId} className="grid grid-cols-[1fr_110px_auto] items-center gap-2">
             <span className="text-sm text-slate-700">{component ? component.code + ' · ' + component.name : 'Componente no encontrado'}</span>
             <input aria-label="Cantidad por unidad" type="number" min="0.000001" step="0.000001" value={line.quantityPerUnit} onChange={e => setRecipeLines(prev => prev.map((x,i) => i === index ? { ...x, quantityPerUnit: Number(e.target.value) } : x))} className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
@@ -482,7 +486,7 @@ export const InventarioContableTools: React.FC = () => {
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_140px_auto]">
         <select value={componentId} onChange={e => setComponentId(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
           <option value="">Añadir materia prima / producto en proceso…</option>
-          {products.filter(p => p.id !== finishedProductId && (p.itemType === 'MATERIA_PRIMA' || p.itemType === 'PRODUCTO_EN_PROCESO')).map(p => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}
+          {companyProducts.filter(p => p.id !== finishedProductId && (p.itemType === 'MATERIA_PRIMA' || p.itemType === 'PRODUCTO_EN_PROCESO')).map(p => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}
         </select>
         <input aria-label="Cantidad por unidad" type="number" min="0.000001" step="0.000001" value={componentQty} onChange={e => setComponentQty(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
         <button onClick={() => {
@@ -514,7 +518,7 @@ export const InventarioContableTools: React.FC = () => {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="text-sm font-medium text-slate-700">Artículo
           <select value={productId} onChange={e => setProductId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
-            {products.map(p => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}
+            {companyProducts.map(p => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}
           </select>
         </label>
         <label className="text-sm font-medium text-slate-700">Precio de venta estimado por unidad (Bs.)
