@@ -31,6 +31,22 @@ const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
 
+// SICOVEN keeps one renderer connected to its local accounting database.
+// A second process could otherwise validate an outgoing payment against a stale
+// snapshot while the first process is still committing to the same SQLite file.
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const existingWindow = BrowserWindow.getAllWindows().find(window => !window.isDestroyed());
+    if (!existingWindow) return;
+    if (existingWindow.isMinimized()) existingWindow.restore();
+    existingWindow.show();
+    existingWindow.focus();
+  });
+}
+
 const { migrateAuthUserRoles, hasFullSystemAccess } = require('./auth-roles.cjs');
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
 const { reconcileRestoreAudit } = require('./restore-audit-ledger.cjs');
@@ -361,6 +377,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  if (!hasSingleInstanceLock) return;
   try {
     const dataDir = app.getPath('userData');
     fs.mkdirSync(dataDir, { recursive: true });
@@ -579,7 +596,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('sicoven:auth-delete-seed', (_event, token) => {
     const actor = getActiveSession(token);
-    if (!hasFullSystemAccess(actor)) return { ok: false, message: 'Permisos insuficientes o sesión no válida.' };
+    if (!actor || actor.role !== 'admin') return { ok: false, message: 'Permisos insuficientes o sesión no válida.' };
     const total = db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count;
     const seed = db.prepare('SELECT id FROM auth_users WHERE username=? AND is_seed=1').get('admin');
     if (total < 2 || !seed) return { ok: false, message: 'El administrador semilla solo puede eliminarse después de crear otro administrador.' };
