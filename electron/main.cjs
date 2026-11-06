@@ -31,6 +31,22 @@ const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
 
+// SICOVEN keeps one renderer connected to its local accounting database.
+// A second process could otherwise validate an outgoing payment against a stale
+// snapshot while the first process is still committing to the same SQLite file.
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const existingWindow = BrowserWindow.getAllWindows().find(window => !window.isDestroyed());
+    if (!existingWindow) return;
+    if (existingWindow.isMinimized()) existingWindow.restore();
+    existingWindow.show();
+    existingWindow.focus();
+  });
+}
+
 const { migrateAuthUserRoles } = require('./auth-roles.cjs');
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
 const { reconcileRestoreAudit } = require('./restore-audit-ledger.cjs');
@@ -361,6 +377,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  if (!hasSingleInstanceLock) return;
   try {
     const dataDir = app.getPath('userData');
     fs.mkdirSync(dataDir, { recursive: true });
