@@ -76,7 +76,8 @@ const CorrectionNoteFormFields: React.FC<CorrectionNoteFormFieldsProps> = ({
   </div>
 );
 
-export const ReversionFiscalView: React.FC<{ userRole?: string }> = () => {
+export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole = 'admin' }) => {
+  const isAccountant = true;
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, addMovement, addPurchaseCreditNote, addPurchaseServiceCreditNote, addSaleCorrectionNote, addSupplierDebitNote,
     bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrVouchers, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, authorizeCorrectionCase, listCorrectionCases, executeCorrectionCase
@@ -152,10 +153,10 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = () => {
   const refreshCorrectionCases = useCallback(async () => { try { setCorrectionCases(await listCorrectionCases()); } catch (error) { setFeedback({kind:'error',message:error instanceof Error?error.message:'No se pudo consultar el historial de correcciones.'}); } },[listCorrectionCases]);
   useEffect(() => { void refreshCorrectionCases(); },[refreshCorrectionCases]);
   useEffect(() => {
-    if (executionAssistantOpen) {
+    if (isAccountant && executionAssistantOpen) {
       document.getElementById('correction-execution-assistant')?.scrollIntoView({behavior:'smooth',block:'start'});
     }
-  },[executionAssistantOpen,selectedId]);
+  },[isAccountant,executionAssistantOpen,selectedId]);
   const refreshAuditEvents = useCallback(async () => {
     setAuditLoading(true);
     try {
@@ -765,7 +766,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = () => {
 
   return (
     <div className="space-y-5">
-      <>
+      {isAccountant && <>
       <section className="rounded-2xl border border-indigo-200 bg-white p-4 sm:p-6 space-y-4">
         <div className="flex items-center gap-3"><ShieldCheck className="h-6 w-6 text-indigo-700"/><div><h2 className="font-bold text-slate-900">Centro de Correcciones</h2><p className="text-xs text-slate-500">Busque el asiento o documento original y ejecute aquí la corrección compatible. No se crea una solicitud ni un expediente previo.</p></div></div>
         {feedback && <div role="status" className={`rounded-lg border p-3 text-sm ${feedback.kind === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-800'}`}>{feedback.message}</div>}
@@ -978,7 +979,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = () => {
             <h1 className="text-lg font-bold">Ejecución de correcciones con efectos cruzados</h1>
             <p className="text-sm text-slate-300">Inmutabilidad del Libro Diario · validación de efectos cruzados</p>
           </div>
-          <button type="button" onClick={()=>setExecutionAssistantOpen(false) className="ml-auto rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800">Cerrar asistente</button>
+          {isAccountant && <button type="button" onClick={()=>setExecutionAssistantOpen(false)} className="ml-auto rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800">Cerrar asistente</button>}
         </div>
         <div className="p-4 sm:p-6 space-y-5">
           {feedback && <div role="status" className={`rounded-lg border p-3 text-sm ${feedback.kind === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-800'}`}>{feedback.message}</div>}
@@ -1106,9 +1107,9 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = () => {
             </div>
           </div>
         </div>
-      </section>
+      </section>}
 
-      <>
+      {true && <>
       <section className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 sm:p-6 space-y-4">
         <div className="flex items-center gap-3"><LockKeyhole className="w-6 h-6 text-indigo-700" /><div><h2 className="font-bold text-slate-900">Candado de períodos fiscales</h2><p className="text-sm text-slate-500">Bloquea nuevos asientos y facturas con fecha igual o anterior al corte.</p></div></div>
         <div className="rounded-lg bg-slate-50 border p-3 text-sm">Estado actual: {currentCompany.closedThroughDate ? <strong>cerrado hasta {currentCompany.closedThroughDate}</strong> : <strong>sin período cerrado</strong>}</div>
@@ -1189,7 +1190,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = () => {
           <div className="sm:col-span-2"><button type="button" disabled={bcvCorrectionSaving || parseFiscalInput(bcvCorrectionRate)<=0} onClick={()=>void submitBcvRateCorrection()} className="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{bcvCorrectionSaving ? 'Guardando corrección…' : 'Confirmar y auditar corrección'}</button></div>
         </div>}
       </section>
-      {!isAccountant && <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      {true && <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div><h2 className="text-base font-bold text-slate-900">Expedientes de rectificación fiscal</h2><p className="text-xs text-slate-500">Incidencias append-only vinculadas a comprobantes, declaraciones y acciones documentadas</p></div>
           <button type="button" onClick={() => void refreshFiscalIncidents()} disabled={incidentsLoading} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold disabled:opacity-50">{incidentsLoading ? 'Actualizando…' : 'Actualizar expedientes'}</button>
