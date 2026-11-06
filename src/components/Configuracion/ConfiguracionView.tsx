@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import {
   Settings,
@@ -24,7 +24,7 @@ import { CompanyModal } from '../CompanyModal';
 import { formatBs, validateVenezuelanRif } from '../../utils/formatters';
 import { MigracionInteligente } from './MigracionInteligente';
 
-export const ConfiguracionView: React.FC = () => {
+export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
   const {
     companies,
     currentCompany,
@@ -47,6 +47,32 @@ export const ConfiguracionView: React.FC = () => {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [companySaveBusy, setCompanySaveBusy] = useState(false);
   const companySaveInFlightRef = React.useRef(false);
+  const [showCompanyAudit, setShowCompanyAudit] = useState(false);
+  const [companyAuditEvents, setCompanyAuditEvents] = useState<Array<{ id: number; eventType: string; details: Record<string, unknown>; createdAt: string }>>([]);
+  const [companyAuditLoading, setCompanyAuditLoading] = useState(false);
+  const [companyAuditError, setCompanyAuditError] = useState('');
+
+  useEffect(() => {
+    if (!showCompanyAudit || !token || !currentCompany.id || !window.sicovenStore?.listAuditEvents) return;
+    let active = true;
+    setCompanyAuditLoading(true);
+    void window.sicovenStore.listAuditEvents(token, 500)
+      .then(result => {
+        if (!active) return;
+        if (!result.ok) throw new Error(result.message || 'No se pudo consultar la auditoría local.');
+        const events = (result.events || []).filter(event =>
+          event.eventType === 'company_profile_updated' && String(event.details.companyId || '') === currentCompany.id
+        );
+        setCompanyAuditEvents(events);
+        setCompanyAuditError('');
+      })
+      .catch(error => {
+        if (!active) return;
+        setCompanyAuditError(error instanceof Error ? error.message : 'No se pudo consultar la auditoría local.');
+      })
+      .finally(() => { if (active) setCompanyAuditLoading(false); });
+    return () => { active = false; };
+  }, [showCompanyAudit, token, currentCompany.id, saveSuccess]);
   const [factoryResetBusy, setFactoryResetBusy] = useState(false);
   const [factoryResetStage, setFactoryResetStage] = useState('');
   const [backupRestoreBusy, setBackupRestoreBusy] = useState(false);
@@ -598,12 +624,52 @@ export const ConfiguracionView: React.FC = () => {
             </p>
             <p className="mt-1 max-w-3xl text-[11px] text-slate-600">Puede rectificar la razón social, RIF, nombre comercial y datos de contacto de esta empresa. Los cambios de identidad requieren confirmación y quedan registrados en la auditoría con los valores anteriores y nuevos.</p>
           </div>
-          {saveSuccess && (
-            <span className="flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-300">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Cambios Guardados
-            </span>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setShowCompanyAudit(value => !value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+              {showCompanyAudit ? 'Ocultar historial' : 'Ver historial de rectificaciones'}
+            </button>
+              {saveSuccess && (
+              <span className="flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-300">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Cambios Guardados
+              </span>
+            )}
+          </div>
         </div>
+
+        {showCompanyAudit && (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-xs font-bold text-slate-800">Historial de rectificaciones de esta empresa</h4>
+              <button type="button" onClick={() => setShowCompanyAudit(false)} className="text-xs text-slate-500 hover:text-slate-800">Cerrar</button>
+            </div>
+            {companyAuditLoading ? <p className="text-xs text-slate-500">Consultando auditoría SQLite...</p> : null}
+            {companyAuditError ? <p role="alert" className="text-xs text-rose-700">{companyAuditError}</p> : null}
+            {!companyAuditLoading && !companyAuditError && companyAuditEvents.length === 0 ? <p className="text-xs text-slate-500">No hay rectificaciones de datos maestros registradas para esta empresa.</p> : null}
+            {companyAuditEvents.map(event => {
+              const details = event.details || {};
+              const actor = details.actor && typeof details.actor === 'object' ? details.actor as Record<string, unknown> : {};
+              const changedFields = Array.isArray(details.changedFields) ? details.changedFields as Array<{ field: string; previousValue?: unknown; newValue?: unknown }> : [];
+              const labels: Record<string, string> = { name: 'Razón social', tradeName: 'Nombre comercial', rif: 'RIF', address: 'Dirección fiscal', phone: 'Teléfono', email: 'Correo electrónico' };
+              const showValue = (value: unknown) => value === null || value === undefined || value === '' ? '—' : String(value);
+              return (
+                <div key={event.id} className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+                  <div className="flex flex-wrap justify-between gap-2 text-[11px] text-slate-500">
+                    <span>{new Date(event.createdAt).toLocaleString()}</span>
+                    <span>Usuario: <strong className="text-slate-700">{showValue(actor.username)}</strong> · Rol: {showValue(actor.role)}</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {changedFields.map((field, index) => (
+                      <div key={field.field + '-' + index} className="grid grid-cols-1 sm:grid-cols-[130px_1fr] gap-1 text-[11px]">
+                        <strong className="text-slate-700">{labels[field.field] || field.field}</strong>
+                        <span className="break-words text-slate-600"><span className="text-rose-700">{showValue(field.previousValue)}</span><span className="px-2 text-slate-400">→</span><span className="font-semibold text-emerald-700">{showValue(field.newValue)}</span></span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         <form onSubmit={handleSaveCompany} className="pt-6 space-y-4 text-xs">
           <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 space-y-2">
