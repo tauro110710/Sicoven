@@ -15,7 +15,7 @@ test('parses quoted CSV and validates historical dual-currency snapshots', () =>
 });
 
 test('parses pipe-delimited TXT statements and normalizes them like CSV', () => {
-  const rows=parseBankStatementTxt('\\uFEFFFecha|Referencia|Descripción|Tipo|Importe|Moneda|Tasa BCV|Fecha vigencia BCV\\n06/11/2026|TXT-001|Depósito nómina|Crédito|250,00|BS|10,00|06/11/2026');
+  const rows=parseBankStatementTxt('\uFEFFFecha|Referencia|Descripción|Tipo|Importe|Moneda|Tasa BCV|Fecha vigencia BCV\n06/11/2026|TXT-001|Depósito nómina|Crédito|250,00|BS|10,00|06/11/2026');
   const [row]=normalizeBankStatementRows(rows,'BS');
   assert.equal(row.reference,'TXT-001');
   assert.equal(row.type,'CREDIT');
