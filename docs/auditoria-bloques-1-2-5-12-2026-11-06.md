@@ -149,7 +149,7 @@ En `InventarioView.tsx` de `main`:
 - El selector de producto de `NewMovementModal.tsx` y sus valores iniciales usan `products` global; `InventarioContableTools.tsx` también consume `products`, `movements`, `accounts` y `journalEntries` sin normalizar todos los arreglos a la empresa activa.
 - El tipo de datos sí guarda empresa y las funciones de dominio validan empresa activa, por lo que el defecto es de presentación/consulta; puede mostrar inventario y movimientos de otra empresa en la pantalla activa y exponer artículos ajenos en selectores/herramientas.
 
-Estado: **parcial con defecto prioritario**. Antes de tachar el aislamiento del Bloque 7 hay que filtrar existencias, Kardex, valorización, mínimos, selección de producto y herramientas contables por la empresa activa; agregar pruebas de aislamiento y validar UI/SQLite. No modificar registros históricos ni abrir devoluciones a proveedor hasta completar el circuito fiscal y contable.
+Estado: **parcial con defecto prioritario**. Corrección candidata en PR #13: filtra existencias, Kardex, valorización, mínimos, selectores, importación/exportación y herramientas contables por la empresa activa; añade prueba de aislamiento entre dos empresas. CI y Windows Installer sobre SHA `fe79ad263087215eb2790c5bb0d6a05f9b412732` están pendientes; no se tacha el requisito hasta ambos SUCCESS y fusión verificada. No modificar registros históricos ni abrir devoluciones a proveedor hasta completar el circuito fiscal y contable.
 
 
 
