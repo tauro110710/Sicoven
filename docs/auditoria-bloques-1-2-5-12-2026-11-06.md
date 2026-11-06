@@ -146,7 +146,8 @@ En `InventarioView.tsx` de `main`:
 - `filteredProducts` parte del arreglo global `products` sin filtrar `companyId`.
 - `filteredMovements` parte del arreglo global `movements` sin filtrar `companyId`.
 - Los totales de valorización y el conteo de bajo mínimo usan también todos los productos.
-- El tipo de datos sí guarda empresa y las funciones de dominio validan empresa activa, por lo que el defecto es de presentación/consulta; puede mostrar inventario y movimientos de otra empresa en la pantalla activa.
+- El selector de producto de `NewMovementModal.tsx` y sus valores iniciales usan `products` global; `InventarioContableTools.tsx` también consume `products`, `movements`, `accounts` y `journalEntries` sin normalizar todos los arreglos a la empresa activa.
+- El tipo de datos sí guarda empresa y las funciones de dominio validan empresa activa, por lo que el defecto es de presentación/consulta; puede mostrar inventario y movimientos de otra empresa en la pantalla activa y exponer artículos ajenos en selectores/herramientas.
 
 Estado: **parcial con defecto prioritario**. Antes de tachar el aislamiento del Bloque 7 hay que filtrar existencias, Kardex, valorización, mínimos, selección de producto y herramientas contables por la empresa activa; agregar pruebas de aislamiento y validar UI/SQLite. No modificar registros históricos ni abrir devoluciones a proveedor hasta completar el circuito fiscal y contable.
 
