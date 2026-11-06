@@ -1,5 +1,6 @@
 'use strict';
 const crypto = require('node:crypto');
+const { hasFullSystemAccess } = require('./auth-roles.cjs');
 
 function requiredText(value, label, max = 2000, min = 1) {
   const result = String(value ?? '').trim();
@@ -132,7 +133,7 @@ function initializeVatFiscalIncidentSchema(db) {
   `);
 }
 function requireAdmin(actor) {
-  if (!actor?.username || actor.role !== 'admin') throw new Error('Solo un administrador autenticado puede gestionar incidencias fiscales.');
+  if (!actor?.username || !hasFullSystemAccess(actor)) throw new Error('Se requiere una sesión autenticada con rol contable (admin o contador) para gestionar incidencias fiscales.');
 }
 function mapIncident(row) {
   return {

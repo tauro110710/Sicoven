@@ -99,12 +99,14 @@ test('index import stores source evidence, observations and audit event in one t
   } finally { db.close(); }
 });
 
-test('index import rejects non-admin actors and unsupported source URLs without writing', () => {
+test('index import rejects unknown roles and permits both full-access roles', () => {
   const db = database();
   try {
-    assert.throws(() => importInflationIndexSeries(db, importerInput(), { username: 'operator', role: 'user' }), /Solo un administrador/);
+    assert.throws(() => importInflationIndexSeries(db, importerInput(), { username: 'operator', role: 'user' }), /rol contable/);
+    const accountant = importInflationIndexSeries(db, importerInput({ sourceTitle: 'Serie importada por contador' }), { id: 2, username: 'contador', role: 'contador' });
+    assert.equal(accountant.ok, true);
     assert.throws(() => importInflationIndexSeries(db, importerInput({ sourceUrl: 'javascript:alert(1)' }), admin), /URL HTTP\/HTTPS/);
-    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM inflation_index_series').get().n, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM inflation_index_series').get().n, 1);
   } finally { db.close(); }
 });
 
@@ -135,14 +137,14 @@ test('a rejected series cannot be re-approved without importing a new evidence v
   } finally { db.close(); }
 });
 
-test('IPC requires a valid session and uses administrator-only import and review', () => {
+test('IPC requires a valid session and permits administrator and accountant import and review', () => {
   const db = database();
   const handlers = new Map();
   registerInflationIndexIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
     db,
     licenseView: () => ({ authorized: true }),
-    getActiveSession: token => token === 'admin-token' ? admin : null
+    getActiveSession: token => token === 'admin-token' ? admin : token === 'contador-token' ? { id: 2, username: 'contador', role: 'contador' } : null
   });
   try {
     assert.throws(() => handlers.get('sicoven:inflation-index-list')({}, 'bad-token'), /Sesión no válida/);
@@ -154,5 +156,9 @@ test('IPC requires a valid session and uses administrator-only import and review
       seriesId: imported.seriesId, decision: 'APPROVED', reason: 'Verificado por administración.'
     });
     assert.equal(reviewed.ok, true);
+    const accountantImport = handlers.get('sicoven:inflation-index-import')({}, 'contador-token', importerInput({ sourceTitle: 'Serie importada por contador' }));
+    assert.equal(accountantImport.ok, true);
+    const accountantReview = handlers.get('sicoven:inflation-index-review')({}, 'contador-token', { seriesId: accountantImport.seriesId, decision: 'APPROVED', reason: 'Verificado por el contador responsable.' });
+    assert.equal(accountantReview.ok, true);
   } finally { db.close(); }
 });

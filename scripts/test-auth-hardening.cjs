@@ -32,7 +32,7 @@ assert.match(main, /ADMIN_PERSISTENCE_VERIFICATION_FAILED/);
 assert.match(main, /DELETE FROM auth_sessions WHERE user_id=\?/);
 assert.match(main, /sicoven:auth-restore/);
 assert.match(main, /DELETE FROM auth_sessions WHERE token_hash=\?/);
-assert.match(main, /actor\.role !== 'admin'/);
+assert.match(main, /hasFullSystemAccess\(actor\)/);
 assert.match(main, /sicoven:load-state', \(_event, token\)/);
 const persistence = read('electron/accounting-persistence.cjs');
 assert.match(main, /registerAccountingPersistenceHandler\(\{ ipcMain, db, licenseView, getActiveSession \}\)/);

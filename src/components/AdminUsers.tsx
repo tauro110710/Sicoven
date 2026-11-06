@@ -187,7 +187,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
               Administración de usuarios
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Administración de usuarios autorizados con acceso al sistema y base de datos local.
+              Administración de todos los usuarios autorizados. Ambos roles tienen acceso completo a SICOVEN.
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm self-start sm:self-auto">
@@ -215,7 +215,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
           </div>
         )}
 
-        {/* Form: Create New Administrator */}
+        {/* Form: Create New User */}
         <section className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm">
           <div className="flex items-center gap-2 text-slate-900 font-bold text-base mb-4 pb-2 border-b border-slate-100">
             <UserPlus className="w-5 h-5 text-emerald-600" />
@@ -248,8 +248,8 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
                   Rol del usuario
                 </label>
                 <select value={role} onChange={e => setRole(e.target.value as 'admin' | 'contador')} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm">
-                  <option value="contador">Contador · acceso exclusivo al Centro de Correcciones</option>
-                  <option value="admin">Administrador · acceso completo</option>
+                  <option value="contador">Contador · acceso completo a SICOVEN</option>
+                  <option value="admin">Administrador · acceso completo a SICOVEN</option>
                 </select>
               </div>
               <div>
@@ -285,7 +285,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
           </form>
         </section>
 
-        {/* Existing Administrators List */}
+        {/* Existing Users List */}
         <section className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
             <div className="flex items-center gap-2 text-slate-900 font-bold text-base">
@@ -355,7 +355,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
           </div>
 
           <p className="text-[11px] text-slate-400 mt-4 pt-3 border-t border-slate-100">
-            * El usuario semilla «admin» solo puede eliminarse una vez que se haya creado al menos otro administrador para no bloquear el acceso al sistema.
+            * El usuario semilla «admin» solo puede eliminarse cuando exista al menos otro usuario registrado para no bloquear el acceso al sistema.
           </p>
         </section>
       </main>

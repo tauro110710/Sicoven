@@ -94,14 +94,16 @@ test('corrective evidence requires exact source linkage and company',()=>{
   }finally{db.close();}
 });
 
-test('the administrator role cannot enter, authorize or execute correction cases',()=>{
+test('administrator and accountant can both create, authorize and execute correction cases',()=>{
   const db=setup();
   const administrator={id:8,username:'admin',role:'admin'};
   try {
-    const item=registerCorrectionRequest(db,input,actor);
-    assert.throws(()=>registerCorrectionRequest(db,input,administrator),/requiere una sesión autenticada del contador/);
-    assert.throws(()=>requireApprovedCorrectionCase(db,{companyId:'company-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},administrator),/requiere una sesión autenticada del contador/);
-    assert.throws(()=>markCorrectionExecuted(db,{caseId:item.id,executionRef:'NC-001',evidenceRecordId:'nc-1',evidenceCollection:'sales'},administrator),/requiere una sesión autenticada del contador/);
+    const item=registerCorrectionRequest(db,input,administrator);
+    const auth=requireApprovedCorrectionCase(db,{companyId:'company-1',entityType:'SALE',entityId:'sale-1',sourceDocumentRef:'FAC-001',correctionDocumentRef:'NC-001'},administrator);
+    assert.equal(auth.ok,true);
+    const done=markCorrectionExecuted(db,{caseId:item.id,executionRef:'NC-001',evidenceRecordId:'nc-1',evidenceCollection:'sales'},administrator);
+    assert.equal(done.status,'EXECUTED');
     assert.equal(db.prepare('SELECT COUNT(*) n FROM accounting_correction_cases').get().n,1);
+    assert.throws(()=>registerCorrectionRequest(db,input,{id:9,username:'viewer',role:'viewer'}),/rol contable/);
   } finally { db.close(); }
 });

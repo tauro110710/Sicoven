@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const { validateAccountingSnapshot } = require('./accounting-integrity.cjs');
+const { hasFullSystemAccess } = require('./auth-roles.cjs');
 
 function persistAccountingSnapshot(db, state, actor = null) {
   const json = JSON.stringify(state);
@@ -404,7 +405,7 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const actor = getActiveSession(token);
     if (!actor) throw new Error('Sesión no válida. Inicie sesión para reabrir un período.');
-    if (actor.role !== 'admin') throw new Error('Permiso insuficiente: solo un administrador puede reabrir períodos contables.');
+    if (!hasFullSystemAccess(actor)) throw new Error('Permiso insuficiente: se requiere rol contable (admin o contador) para reabrir períodos contables.');
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Solicitud de reapertura inválida.');
     const companyId = String(input.companyId || '').trim();
     const reason = String(input.reason || '').trim();

@@ -235,7 +235,7 @@ function persistClosedCompanyFixture(db) {
   persistAccountingSnapshot(db, state);
 }
 
-test('period reopening IPC requires an authenticated active administrator', () => {
+test('period reopening IPC permits both full-access roles and rejects unknown roles', () => {
   const unauthorized = createHarness({ validSession: false });
   try {
     persistClosedCompanyFixture(unauthorized.db);
@@ -252,16 +252,21 @@ test('period reopening IPC requires an authenticated active administrator', () =
     CREATE TABLE audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime('now')));
   `);
   const handlers = new Map();
+  let actor = { id: 3, username: 'operator', role: 'operator' };
   registerAccountingPersistenceHandler({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
     db: nonAdminDb, licenseView: () => ({ authorized: true }),
-    getActiveSession: () => ({ id: 2, username: 'operator', role: 'operator' })
+    getActiveSession: () => actor
   });
   try {
     persistClosedCompanyFixture(nonAdminDb);
-    assert.throws(() => handlers.get('sicoven:reopen-accounting-period')({}, 'valid', {
-      companyId: 'company-1', reopenedThroughDate: '2026-09-30', reason: 'Corrección documentada del período.'
-    }), /solo un administrador/);
+    const request = { companyId: 'company-1', reopenedThroughDate: '2026-09-30', reason: 'Corrección documentada del período.' };
+    assert.throws(() => handlers.get('sicoven:reopen-accounting-period')({}, 'valid', request), /rol contable/);
+    actor = { id: 4, username: 'contador', role: 'contador' };
+    const result = handlers.get('sicoven:reopen-accounting-period')({}, 'valid', request);
+    assert.equal(result.ok, true);
+    assert.equal(JSON.parse(nonAdminDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json)
+      .companies[0].closedThroughDate, '2026-09-30');
   } finally { nonAdminDb.close(); }
 });
 

@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Database = require('better-sqlite3');
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
+const { hasFullSystemAccess } = require('./auth-roles.cjs');
 
 const FORMAT = 'SICOVEN_BACKUP_V1';
 const DB_FILE = 'sicoven.sqlite';
@@ -211,7 +212,7 @@ function registerBackupIpc({ ipcMain, db, licenseView, getActiveSession, dialog,
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const actor = getActiveSession(token);
-    if (!actor || String(actor.role || '').toLowerCase() !== 'admin') throw new Error('Solo un administrador autenticado puede crear respaldos.');
+    if (!hasFullSystemAccess(actor)) throw new Error('Se requiere una sesión autenticada con rol contable (admin o contador) para crear respaldos.');
     const parentWindow = getWindow?.();
     const options = { title: 'Seleccionar carpeta para el respaldo completo de SICOVEN', properties: ['openDirectory', 'createDirectory'] };
     const selection = parentWindow ? await dialog.showOpenDialog(parentWindow, options) : await dialog.showOpenDialog(options);
