@@ -8,6 +8,7 @@ on:
     paths:
       - 'package.json'
       - 'package-lock.json'
+      - '.github/workflows/release-windows.yml'
     tags:
       - 'v*'
   workflow_dispatch:
