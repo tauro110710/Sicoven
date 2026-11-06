@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeBankStatementRows, parseBankStatementCsv, parseOfxBankStatement } from './bankStatementImport';
+import { normalizeBankStatementRows, parseBankStatementCsv, parseBankStatementXlsx, parseOfxBankStatement } from './bankStatementImport';
 
 test('parses quoted CSV and validates historical dual-currency snapshots', () => {
   const rows=parseBankStatementCsv('Fecha;Referencia;Descripción;Tipo;Importe;Moneda;Tasa BCV;Fecha vigencia BCV\n06/11/2026;TR-001;"Depósito, cliente";Crédito;100,00;BS;10,00;06/11/2026');
@@ -58,6 +58,22 @@ test('rejects an unknown currency instead of treating it as bolívares', () => {
     {Fecha:'2026-11-06',Referencia:'FX-1',Descripción:'Unknown currency',Tipo:'CREDIT',Importe:'10',Moneda:'EUR',Tasa_BCV:'10',Fecha_vigencia_BCV:'2026-11-06'}
   ],'BS');
   assert.ok(row.errors.includes('Moneda no reconocida.'));
+});
+
+test('reads the first Excel worksheet and normalizes real date cells', async () => {
+  const ExcelJS = await import('exceljs');
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Extracto');
+  sheet.addRow(['Fecha','Referencia','Descripción','Tipo','Importe','Moneda','Tasa BCV','Fecha vigencia BCV']);
+  sheet.addRow([new Date('2026-11-06T00:00:00.000Z'),'XLS-001','Transferencia','Crédito',100,'BS',10,new Date('2026-11-06T00:00:00.000Z')]);
+  const bytes = await workbook.xlsx.writeBuffer();
+  const raw = await parseBankStatementXlsx(bytes as ArrayBuffer);
+  const [row] = normalizeBankStatementRows(raw,'BS');
+  assert.equal(row.date,'2026-11-06');
+  assert.equal(row.reference,'XLS-001');
+  assert.equal(row.amountBs,100);
+  assert.equal(row.amountUsd,10);
+  assert.deepEqual(row.errors,[]);
 });
 
 test('parses standard OFX SGML blocks without explicit closing STMTTRN tags', () => {
