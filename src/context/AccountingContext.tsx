@@ -51,6 +51,7 @@ import { buildReversalItems, assessJournalReversal, validateBankStatementReversa
 import { calculateFifoIssue, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 import { buildBankAuxiliaryAccounts } from '../types/bankAccountAccounting';
+import { calculateBankAvailableBalance, validateBankOutgoingAvailability } from '../types/bankAccountAvailability';
 import { removeUnusedLegacyDefaultBanks } from '../types/legacyBankAccountCleanup';
 import { resolvePurchaseVatFiscalEvent } from '../types/vatFiscalEvent';
 import { hasConsistentFiscalDocumentAmounts } from '../types/fiscalDocumentAmounts';
@@ -4509,6 +4510,22 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (amountBs <= 0 || amountUsd <= 0) throw new Error('El importe es demasiado pequeño para contabilizarse en ambas monedas.');
     const bankAccount = accounts.find(a => a.code === source.accountCode && a.isMovement);
     if (!bankAccount) throw new Error('La cuenta auxiliar del banco no existe o no admite movimientos.');
+    if (draft.type === 'EXPENSE' || draft.type === 'TRANSFER') {
+      const availableBalance = calculateBankAvailableBalance({
+        bankAccount: source,
+        companyId: currentCompany.id,
+        asOfDate: draft.date,
+        journalEntries
+      });
+      const requestedAmount = source.currency === 'USD'
+        ? Math.round(draft.amount * 1000000) / 1000000
+        : Math.round(draft.amount * 100) / 100;
+      validateBankOutgoingAvailability({
+        availableBalance,
+        requestedAmount,
+        currency: source.currency
+      });
+    }
     let items: JournalEntryItem[];
     if (draft.type === 'TRANSFER') {
       const destination = destinationForTransfer;
