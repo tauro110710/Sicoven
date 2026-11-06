@@ -1,6 +1,6 @@
 import { isValidIsoDate, parseMigrationNumber } from './migrationParsing';
 
-export type PosvenInventoryRow = { code:string; name:string; category:string; unit:string; minStock:number; currentStock:number; avgCostBs:number; avgCostUsd:number; lastCostBs:number; lastCostUsd:number; salesPriceBs:number; salesPriceUsd:number; openingDate:string; openingBcvRate:number };
+export type PosvenInventoryRow = { sourceIndex:number; code:string; name:string; category:string; unit:string; minStock:number; currentStock:number; avgCostBs:number; avgCostUsd:number; lastCostBs:number; lastCostUsd:number; salesPriceBs:number; salesPriceUsd:number; openingDate:string; openingBcvRate:number };
 export type PosvenInventoryImportResult = { rows:PosvenInventoryRow[]; sourceCount:number; importedCount:number; inactiveCount:number; kitCount:number; openingDate:string; openingBcvRate:number };
 const obj=(v:unknown):Record<string,unknown>|null=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:null;
 const num=(v:unknown,label:string,zero=false)=>{const n=parseMigrationNumber(v);if(!Number.isFinite(n)||(zero?n<0:n<=0))throw new Error('POSVEN: valor inválido en '+label+'. No se importó ningún artículo.');return n;};
@@ -13,7 +13,7 @@ export const mapPosvenV3Inventory=(input:unknown):PosvenInventoryImportResult=>{
  const inactiveCount=products.filter(p=>p!.activo===false).length;const kitCount=products.filter(p=>p!.isKit===true).length;const eligible=products.filter(p=>p!.activo!==false&&p!.isKit!==true);const codes=new Set<string>();
  const rows=eligible.map((p,i)=>{const code=txt(p!.codigo,'código del artículo '+(i+1));const name=txt(p!.nombre,'nombre del artículo '+(i+1));const key=code.toLocaleLowerCase();if(codes.has(key))throw new Error('POSVEN: el código '+code+' está duplicado entre los artículos activos. Corrige el respaldo; no se escribió ningún dato.');codes.add(key);
  const cost=num(p!.costoUSD,'costoUSD de '+code);const priceUsd=num(p!.precioUSD,'precioUSD de '+code);const priceBs=num(p!.precioBS,'precioBS de '+code);const stock=num(p!.stock,'existencia de '+code,true);const minStock=num(p!.stockMinimo??0,'stockMinimo de '+code,true);
- return {code,name,category:[p!.categoria,p!.departamento].map(v=>String(v??'').trim()).filter(Boolean).join(' / ')||'General',unit:String(p!.cantidad??'Unidad').trim()||'Unidad',minStock,currentStock:stock,avgCostBs:cost*rate,avgCostUsd:cost,lastCostBs:cost*rate,lastCostUsd:cost,salesPriceBs:priceBs,salesPriceUsd:priceUsd,openingDate:date,openingBcvRate:rate};});
+ return {sourceIndex:sourceProducts.indexOf(p),code,name,category:[p!.categoria,p!.departamento].map(v=>String(v??'').trim()).filter(Boolean).join(' / ')||'General',unit:String(p!.cantidad??'Unidad').trim()||'Unidad',minStock,currentStock:stock,avgCostBs:cost*rate,avgCostUsd:cost,lastCostBs:cost*rate,lastCostUsd:cost,salesPriceBs:priceBs,salesPriceUsd:priceUsd,openingDate:date,openingBcvRate:rate};});
  if(!rows.length)throw new Error('El respaldo no contiene artículos activos no-kit que puedan importarse.');
  return {rows,sourceCount:data.productos.length,importedCount:rows.length,inactiveCount,kitCount,openingDate:date,openingBcvRate:rate};
 };
