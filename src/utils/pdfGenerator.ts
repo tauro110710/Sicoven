@@ -640,14 +640,19 @@ export async function exportConciliacionPdf(
   cutoffDate: string,
   data: {
     bankStatementBalanceBs: number;
+    bankStatementBalanceUsd: number;
     depositsInTransit: any[];
     checksInTransit: any[];
     adjustedBankBalanceBs: number;
+    adjustedBankBalanceUsd: number;
     bookBalanceBs: number;
+    bookBalanceUsd: number;
     bankCreditsNotInBooks: any[];
     bankDebitsNotInBooks: any[];
     adjustedBookBalanceBs: number;
+    adjustedBookBalanceUsd: number;
     differenceBs: number;
+    differenceUsd: number;
   }
 ) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
@@ -728,11 +733,20 @@ export async function exportConciliacionPdf(
   ]);
 
   // DIFERENCIA DE CONCILIACIÓN
-  const isSquare = data.differenceBs < 0.05;
+  const isSquare = data.differenceBs < 0.05 && data.differenceUsd <= 0.000001;
   tableBody.push([
-    { content: isSquare ? 'ESTADO: CONCILIACIÓN CUADRADA CON ÉXITO' : 'DIFERENCIA PENDIENTE POR CONCILIAR:', colSpan: 2, styles: { fontStyle: 'bold', fillColor: isSquare ? [220, 252, 231] : [254, 226, 226], textColor: isSquare ? [22, 101, 52] : [153, 27, 27], halign: 'right' } },
+    { content: isSquare ? 'ESTADO: CONCILIACIÓN CUADRADA EN Bs. Y USD' : 'DIFERENCIA PENDIENTE EN UNA O AMBAS MONEDAS:', colSpan: 2, styles: { fontStyle: 'bold', fillColor: isSquare ? [220, 252, 231] : [254, 226, 226], textColor: isSquare ? [22, 101, 52] : [153, 27, 27], halign: 'right' } },
     { content: formatBs(data.differenceBs), styles: { fontStyle: 'bold', fillColor: isSquare ? [220, 252, 231] : [254, 226, 226], textColor: isSquare ? [22, 101, 52] : [153, 27, 27], halign: 'right' } }
   ]);
+
+  tableBody.push([
+    { content: 'RESUMEN DE CONCILIACIÓN EN DOBLE MONEDA (VALORES HISTÓRICOS)', colSpan: 3, styles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' } }
+  ]);
+  tableBody.push(['USD', 'Saldo según extracto', formatUsd(data.bankStatementBalanceUsd)]);
+  tableBody.push(['USD', 'Saldo según libros', formatUsd(data.bookBalanceUsd)]);
+  tableBody.push(['USD', 'Saldo bancario ajustado', formatUsd(data.adjustedBankBalanceUsd)]);
+  tableBody.push(['USD', 'Saldo en libros ajustado', formatUsd(data.adjustedBookBalanceUsd)]);
+  tableBody.push(['USD', 'Diferencia de conciliación', formatUsd(data.differenceUsd)]);
 
   autoTable(doc, {
     startY,
