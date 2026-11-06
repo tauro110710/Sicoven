@@ -265,7 +265,7 @@ function registerRestoreIpc({ipcMain,app,dialog,licenseView,getActiveSession,get
     const licensing=licenseView();
     if(!licensing.authorized) throw new Error(licensing.message||'Licencia no autorizada.');
     const actor=getActiveSession(token);
-    if(!hasFullSystemAccess(actor)) throw new Error('Solo un administrador autenticado puede restaurar respaldos.');
+    if(!hasFullSystemAccess(actor)) throw new Error('Se requiere una sesión autenticada con rol contable (admin o contador) para restaurar respaldos.');
     const parent=getWindow?.();
     const selection=parent
       ? await dialog.showOpenDialog(parent,{title:'Seleccionar respaldo verificado de SICOVEN',properties:['openDirectory']})
