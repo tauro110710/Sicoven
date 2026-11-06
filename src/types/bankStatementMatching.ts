@@ -80,6 +80,24 @@ export function matchesBankStatementDualCurrency(input: {
   });
 }
 
+/** Detects an already imported bank-statement row using stable bank identity fields. */
+export function isDuplicateBankStatementMovement(input: {
+  existing: Pick<BankStatementMovement, 'bankAccountId' | 'date' | 'reference' | 'type' | 'amountBs' | 'amountUsd'>[];
+  candidate: Pick<BankStatementMovement, 'bankAccountId' | 'date' | 'reference' | 'type' | 'amountBs' | 'amountUsd'>;
+}): boolean {
+  const normalizeReference = (value: string) => String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
+  const candidateReference = normalizeReference(input.candidate.reference);
+  if (!candidateReference) return false;
+  return input.existing.some(row =>
+    row.bankAccountId === input.candidate.bankAccountId &&
+    row.date === input.candidate.date &&
+    row.type === input.candidate.type &&
+    normalizeReference(row.reference) === candidateReference &&
+    Math.round(Number(row.amountBs) * 100) === Math.round(Number(input.candidate.amountBs) * 100) &&
+    Math.round(Number(row.amountUsd) * 1_000_000) === Math.round(Number(input.candidate.amountUsd) * 1_000_000)
+  );
+}
+
 export function calculateBankReconciliationBalances(input: {
   bookMovements: {
     debitBs: number; creditBs: number; debitUsd: number; creditUsd: number; isReconciled: boolean;
