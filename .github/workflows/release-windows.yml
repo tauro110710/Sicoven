@@ -165,6 +165,97 @@ jobs:
           Write-Host 'Instalación, app.asar, módulo SQLite nativo, creación de sicoven.sqlite y arranque verificados.'
           Get-Item $installer.FullName | Select-Object Name, Length
 
+      - name: Verify upgrade from v1.0.14 preserves SQLite user data
+        if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+        shell: pwsh
+        run: |
+          $profileRoot = Join-Path $env:RUNNER_TEMP 'SICOVEN-Upgrade-Profile'
+          $env:APPDATA = Join-Path $profileRoot 'AppData\Roaming'
+          New-Item -ItemType Directory -Path $env:APPDATA -Force | Out-Null
+
+          $installDir = Join-Path $env:RUNNER_TEMP 'SICOVEN-Upgrade-Install'
+          $oldInstaller = Join-Path $env:RUNNER_TEMP 'SICOVEN-Setup-1.0.14-x64.exe'
+          $oldUrl = 'https://github.com/fenixlife1978/sicoven-descargas/releases/download/v1.0.14/SICOVEN-Setup-1.0.14-x64.exe'
+          Invoke-WebRequest -Uri $oldUrl -OutFile $oldInstaller
+          if (-not (Test-Path $oldInstaller -PathType Leaf) -or (Get-Item $oldInstaller).Length -lt 1000000) {
+            throw 'No se pudo descargar el instalador anterior v1.0.14.'
+          }
+
+          if (Test-Path $installDir) {
+            Remove-Item -Path $installDir -Recurse -Force
+          }
+          $oldInstall = Start-Process -FilePath $oldInstaller -ArgumentList @('/S', "/D=$installDir") -PassThru
+          if (-not $oldInstall.WaitForExit(180000)) {
+            throw 'La instalación de SICOVEN v1.0.14 excedió el tiempo permitido.'
+          }
+          $oldInstall.Refresh()
+          if ($oldInstall.ExitCode -ne 0) {
+            throw "El instalador v1.0.14 terminó con código $($oldInstall.ExitCode)."
+          }
+
+          $app = Join-Path $installDir 'SICOVEN.exe'
+          if (-not (Test-Path $app -PathType Leaf)) {
+            throw 'No se encontró SICOVEN.exe después de instalar v1.0.14.'
+          }
+          $oldApp = Start-Process -FilePath $app -ArgumentList @('--disable-gpu') -PassThru
+          Start-Sleep -Seconds 12
+          $oldApp.Refresh()
+          if ($oldApp.HasExited) {
+            throw "SICOVEN v1.0.14 no arrancó. Código: $($oldApp.ExitCode)"
+          }
+
+          $database = Get-ChildItem -Path $env:APPDATA -Filter 'sicoven.sqlite' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $database -or $database.Length -le 0) {
+            throw 'La versión 1.0.14 no creó una base SQLite en el perfil aislado.'
+          }
+          $marker = Join-Path $database.DirectoryName 'upgrade-preservation-marker.txt'
+          $markerValue = 'SICOVEN-UPGRADE-PRESERVATION-' + [guid]::NewGuid().ToString('N')
+          [IO.File]::WriteAllText($marker, $markerValue, [Text.UTF8Encoding]::new($false))
+
+          $null = $oldApp.CloseMainWindow()
+          if (-not $oldApp.WaitForExit(15000)) {
+            & taskkill.exe /PID $oldApp.Id /T /F | Out-Null
+            Start-Sleep -Seconds 2
+          }
+
+          $newInstaller = Get-ChildItem -Path release -Filter 'SICOVEN-Setup-*-x64.exe' -File | Select-Object -First 1
+          if (-not $newInstaller) {
+            throw 'No se encontró el instalador nuevo para probar la actualización.'
+          }
+          $newInstall = Start-Process -FilePath $newInstaller.FullName -ArgumentList @('/S', "/D=$installDir") -PassThru
+          if (-not $newInstall.WaitForExit(180000)) {
+            throw 'La actualización de SICOVEN excedió el tiempo permitido.'
+          }
+          $newInstall.Refresh()
+          if ($newInstall.ExitCode -ne 0) {
+            throw "El instalador nuevo terminó con código $($newInstall.ExitCode)."
+          }
+
+          if (-not (Test-Path $database.FullName -PathType Leaf) -or (Get-Item $database.FullName).Length -le 0) {
+            throw 'La actualización eliminó o vació sicoven.sqlite; se considera fallo crítico.'
+          }
+          if (-not (Test-Path $marker -PathType Leaf) -or (Get-Content -Raw $marker) -ne $markerValue) {
+            throw 'La actualización no conservó los archivos del perfil de usuario.'
+          }
+
+          $env:SICOVEN_UPGRADE_DB = $database.FullName
+          node -e "const Database=require('better-sqlite3'); const db=new Database(process.env.SICOVEN_UPGRADE_DB,{readonly:true,fileMustExist:true}); const result=db.pragma('integrity_check',{simple:true}); db.close(); if(result!=='ok') throw new Error('SQLite integrity_check: '+result); console.log('SQLite integrity_check:',result);"
+          if ($LASTEXITCODE -ne 0) {
+            throw 'La base SQLite no superó integrity_check después de la actualización.'
+          }
+
+          $updatedApp = Start-Process -FilePath $app -ArgumentList @('--disable-gpu') -PassThru
+          Start-Sleep -Seconds 12
+          $updatedApp.Refresh()
+          if ($updatedApp.HasExited) {
+            throw "SICOVEN actualizado no arrancó. Código: $($updatedApp.ExitCode)"
+          }
+          $null = $updatedApp.CloseMainWindow()
+          if (-not $updatedApp.WaitForExit(15000)) {
+            & taskkill.exe /PID $updatedApp.Id /T /F | Out-Null
+          }
+          Write-Host 'Actualización v1.0.14 -> versión actual verificada: SQLite íntegra, perfil preservado y aplicación actualizada iniciada.'
+
       - name: Publish installer and updater metadata to the existing download release
         if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
         env:
