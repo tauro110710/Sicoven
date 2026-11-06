@@ -347,6 +347,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [supplierAdvanceSettlements, setSupplierAdvanceSettlements] = useState<SupplierAdvanceSettlement[]>([]);
   const [supplierDirectAdvances, setSupplierDirectAdvances] = useState<SupplierDirectAdvance[]>([]);
   const bankStatementImportInFlightRef = useRef(false);
+  type PendingBankOutgoingReservation = { release: () => void; waiter: { resolve: () => void; reject: (error: Error) => void } };
+  const bankOutgoingReservationsRef = useRef<PendingBankOutgoingReservation[]>([]);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
   const supplierAdvanceSettlementInFlightRef = useRef<Set<string>>(new Set());
   const supplierDirectAdvanceInFlightRef = useRef<Set<string>>(new Set());
@@ -356,6 +358,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // Los importadores pueden registrar varias facturas en el mismo ciclo de React;
   // estos contadores evitan reutilizar correlativos e identificadores por estado obsoleto.
   const runAtomicInvoiceImport = <T,>(operation: () => T): T => {
+    const reservationsBefore = new Set(bankOutgoingReservationsRef.current);
     // React setters are queued synchronously; capture every collection touched by
     // addSale/addPurchase and restore the complete batch if any operation throws.
     const before = {
@@ -367,6 +370,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       islrSequence: { ...islrVoucherSequenceRef.current }
     };
     const rollback = (error: unknown): never => {
+      // If the batch is rolled back before its state reaches the persistence effect,
+      // release only reservations created by this batch and remove their waiters.
+      bankOutgoingReservationsRef.current
+        .filter(reservation => !reservationsBefore.has(reservation))
+        .forEach(reservation => {
+          persistenceWaitersRef.current = persistenceWaitersRef.current.filter(waiter => waiter !== reservation.waiter);
+          reservation.release();
+        });
       setJournalEntries(before.journalEntries);
       setPurchases(before.purchases);
       setSales(before.sales);
@@ -451,14 +462,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
 
     let released = false;
+    let reservation: PendingBankOutgoingReservation;
     const releaseAll = (): void => {
       if (released) return;
       released = true;
       releases.forEach(release => release());
+      bankOutgoingReservationsRef.current = bankOutgoingReservationsRef.current.filter(item => item !== reservation);
     };
+    const waiter = { resolve: releaseAll, reject: releaseAll };
+    reservation = { release: releaseAll, waiter };
+    bankOutgoingReservationsRef.current.push(reservation);
     // El efecto de persistencia resuelve o rechaza este waiter solo después de
     // finalizar la transacción SQLite del snapshot que contiene el movimiento.
-    persistenceWaitersRef.current.push({ resolve: releaseAll, reject: releaseAll });
+    persistenceWaitersRef.current.push(waiter);
   };
 
   type CorrectionAuditInput = {
