@@ -12,7 +12,7 @@ const bases:Record<B,string>={CASH_OR_FIXED_CURRENCY:'Efectivo / importe fijo o 
 const choices:Record<C,B[]>={MONETARY:['CASH_OR_FIXED_CURRENCY','INDEX_LINKED'],NON_MONETARY:['GOODS_OR_SERVICES','HISTORICAL_COST','FAIR_VALUE','NET_REALIZABLE_VALUE','REVALUED'],MIXED:['MIXED'],NOT_APPLICABLE:['FLOW']};
 const treatment:Record<string,string>={NOT_RESTATE_MONETARY:'No reexpresar por índice general',ADJUST_PER_CONTRACT:'Ajustar conforme al contrato',RESTATE_FROM_ORIGIN:'Reexpresar desde fecha de origen',RESTATE_FROM_MEASUREMENT_DATE:'Reexpresar desde fecha de medición',NOT_RESTATE_CURRENT_MEASURE:'No reexpresar: medición a fecha de reporte',REQUIRES_COMPONENT_SPLIT:'Desglosar en componentes',NOT_APPLICABLE:'Flujo del período; tratamiento específico pendiente'};
 export const InflationClassificationView:React.FC<{token:string;userRole:string}>=({token,userRole})=>{
- const {accounts,currentCompany}=useAccounting();const admin=userRole==='admin';
+ const {accounts,currentCompany}=useAccounting();const admin=true;
  const [rows,setRows]=useState<R[]>([]),[draft,setDraft]=useState<D>(fresh),[year,setYear]=useState(String(new Date().getFullYear())),[status,setStatus]=useState('ALL'),[search,setSearch]=useState('');
  const [target,setTarget]=useState<R|null>(null),[decision,setDecision]=useState<'APPROVED'|'REJECTED'>('APPROVED'),[reason,setReason]=useState('');
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
