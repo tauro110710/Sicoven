@@ -27,7 +27,7 @@ La validación del producto se realiza mediante:
 
 ## Reglas de trabajo
 
-- Trabajar exclusivamente en el repositorio `fenixlife1978/Sicoven`.
+- Trabajar exclusivamente en el repositorio canónico `freelancer1978/Sicoven`, rama `main` como base de integración. El repositorio antiguo `fenixlife1978/Sicoven` fue retirado y no debe utilizarse.
 - No mezclar cambios con CRM-SICOVEN ni con otros proyectos.
 - Mantener `main` intacta y trabajar en la rama/PR autorizada; no fusionar sin autorización expresa.
 - No modificar el flujo del administrador semilla salvo solicitud expresa.
@@ -245,3 +245,12 @@ La validación del producto se realiza mediante:
 - El instructivo describe el uso de Retención IVA (prueba carga de archivo) en el Portal Fiscal. La aceptación efectiva de un archivo concreto debe verificarse en esa herramienta; no se afirma que ya se haya ejecutado.
 - La guía no detalla expresamente cómo serializar en una o varias filas una factura con bases sujetas a distintas alícuotas. Este punto queda acotado a la cardinalidad y distribución de importes para facturas mixtas; no cuestiona la vigencia operativa del formato de 16 columnas ni autoriza cambiarlo.
 - La declaración cero se mantiene fuera del TXT de operaciones ordinarias hasta verificar en el portal el procedimiento aplicable; no se inventará una fila no descrita expresamente por la guía.
+
+
+## Rectificación de datos maestros de empresa — seguimiento
+
+- Requisito incorporado: permitir corregir desde Configuración los datos de una empresa ya registrada (razón social, RIF, nombre comercial, dirección, teléfono y correo), cuando se trate de una rectificación de la misma entidad jurídica.
+- La rectificación de razón social o RIF debe exigir confirmación explícita; no debe confundirse con sustituir una entidad jurídica por otra.
+- Cada cambio debe conservar en la auditoría los valores anteriores y nuevos, la empresa, el usuario autenticado, el rol y la fecha/hora; el evento debe guardarse en la misma transacción SQLite que el estado contable.
+- No se deben reescribir asientos, facturas, compras, ventas, saldos ni movimientos históricos como efecto colateral de corregir el maestro de empresa.
+- Estado: en desarrollo en la rama `feature/company-profile-corrections-audit`; no marcar terminado hasta aprobar pruebas automatizadas y validación de persistencia SQLite.
