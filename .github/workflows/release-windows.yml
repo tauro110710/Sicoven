@@ -39,7 +39,7 @@ jobs:
         with:
           node-version: 22
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        run: npm install --no-audit --no-fund
       - name: Test authentication and session security guards
         run: node scripts/test-auth-hardening.cjs
       - name: Test accounting and credit settlement calculations
@@ -60,9 +60,11 @@ jobs:
           if (Select-String -Path $bundles.FullName -SimpleMatch -Pattern 'administracion@losandesdist.com.ve' -Quiet) {
             throw 'El bundle completo contiene datos de ejemplo; no se publicará este instalador.'
           }
-      - name: Package full Windows installer
+      - name: Package and publish updater metadata and installer
         if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
-        run: npm run dist
+        env:
+          GH_TOKEN: ${{ secrets.SICOVEN_RELEASE_TOKEN }}
+        run: npm run dist -- --publish always
       - name: Verify full installer
         if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
         shell: pwsh
@@ -122,10 +124,10 @@ jobs:
           & taskkill.exe /PID $application.Id /T /F | Out-Null
           Write-Host "Instalación, app.asar, módulo SQLite nativo, creación de sicoven.sqlite y arranque verificados."
           Get-Item $installer.FullName | Select-Object Name, Length
-      - name: Publish GitHub Release
+      - name: Publish release notes and installer fallback
         if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push')
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.SICOVEN_RELEASE_TOKEN }}
           REF_NAME: ${{ github.ref_name }}
           GITHUB_SHA: ${{ github.sha }}
         shell: pwsh
