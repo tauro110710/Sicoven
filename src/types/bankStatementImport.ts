@@ -80,12 +80,12 @@ export function normalizeBankStatementRows(rows: BankStatementRawRow[], defaultC
     const date=isoDate(pick(row,'date'));
     const reference=String(pick(row,'reference')??'').trim();
     const description=String(pick(row,'description')??'').trim();
-    const rawType=String(pick(row,'type')??'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim().toUpperCase();
+    const rawType=normalizeHeader(pick(row,'type')).toUpperCase();
     const rawAmount=decimal(pick(row,'amount'));
-    const currencyRaw=String(pick(row,'currency')??defaultCurrency).normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim().toUpperCase();
+    const currencyRaw=normalizeHeader(pick(row,'currency')??defaultCurrency).toUpperCase();
     const currency:BankStatementCurrency=/^(USD|US\$|DOLAR|DOLARES)$/.test(currencyRaw)?'USD':'BS';
     const hasCurrency=pick(row,'currency')!==undefined&&String(pick(row,'currency')).trim()!=='';
-    if(hasCurrency&&!/^(USD|US\\$|DOLAR|DOLARES|BS|VES|VEF|BOLIVAR|BOLIVARES)$/.test(currencyRaw))errors.push('Moneda no reconocida.');
+    if(hasCurrency&&!/^(USD|DOLAR|DOLARES|BS|VES|VEF|BOLIVAR|BOLIVARES)$/.test(currencyRaw))errors.push('Moneda no reconocida.');
     const rate=decimal(pick(row,'bcvRate'));
     const rateDate=isoDate(pick(row,'bcvRateEffectiveDate'));
     const debitType=/^(DEBIT|DEBITO|D|DB|PAYMENT|WITHDRAWAL|CARGO|EGRESO|SALIDA|CHECK|FEE)$/.test(rawType);
