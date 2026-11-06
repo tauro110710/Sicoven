@@ -98,7 +98,8 @@ export function normalizeBankStatementRows(rows: BankStatementRawRow[], defaultC
     const creditType=/^(CREDIT|CREDITO|C|CR|DEPOSITO|ABONO|INGRESO|DIRECTDEP)$/.test(rawType);
     if(!rawType)errors.push('Falta la naturaleza del movimiento; indique Débito o Crédito.');
     else if(!debitType&&!creditType)errors.push('Naturaleza no reconocida; use Débito o Crédito.');
-    const type:BankMovementType=debitType||(!rawType&&rawAmount<0)?'DEBIT':'CREDIT';
+    // The sign is not a reliable substitute for TRNTYPE/nature; invalid or missing labels remain rejected below.
+    const type:BankMovementType=debitType?'DEBIT':'CREDIT';
     const amount=Math.abs(rawAmount);
     if(!validDate(date))errors.push('Fecha inválida.');
     if(!reference)errors.push('Falta la referencia.');
