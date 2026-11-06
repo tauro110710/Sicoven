@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { isJournalEntryBalanced } from '../../types/journalEntryValidation';
+import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import {
   BookOpen,
   Plus,
@@ -37,8 +38,12 @@ export const LibroDiarioView: React.FC = () => {
   const [endDate, setEndDate] = useState('');
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
+  const companyJournalEntries = filterEntriesByCompany(journalEntries, currentCompany.id);
+  const companyPurchases = filterEntriesByCompany(purchases, currentCompany.id);
+  const companySales = filterEntriesByCompany(sales, currentCompany.id);
+
   // Filter entries
-  const filteredEntries = journalEntries
+  const filteredEntries = companyJournalEntries
     .filter(entry => {
       if (typeFilter !== 'ALL' && entry.type !== typeFilter) return false;
       if (startDate && entry.date < startDate) return false;
@@ -140,16 +145,16 @@ export const LibroDiarioView: React.FC = () => {
     }
   };
 
-  const reversalFor = (entryId: string) => journalEntries.find(candidate =>
-    candidate.companyId === currentCompany.id && candidate.reversalOfEntryId === entryId
+  const reversalFor = (entryId: string) => companyJournalEntries.find(candidate =>
+    candidate.reversalOfEntryId === entryId
   );
-  const sourceEntries = journalEntries.filter(entry => !entry.reversalOfEntryId);
+  const sourceEntries = companyJournalEntries.filter(entry => !entry.reversalOfEntryId);
   const pendingReversals = sourceEntries.filter(entry => !entry.reversedByEntryId && !reversalFor(entry.id));
   const reversedEntries = sourceEntries.filter(entry => entry.reversedByEntryId || reversalFor(entry.id));
-  const purchaseNotes = purchases.filter(purchase => purchase.documentType === '02' || purchase.documentType === '03');
-  const purchaseCorrectionsPending = purchases.filter(purchase => purchase.documentType === '01' && !purchase.isCancelled &&
+  const purchaseNotes = companyPurchases.filter(purchase => purchase.documentType === '02' || purchase.documentType === '03');
+  const purchaseCorrectionsPending = companyPurchases.filter(purchase => purchase.documentType === '01' && !purchase.isCancelled &&
     !purchaseNotes.some(note => note.originalPurchaseId === purchase.id));
-  const salesWithManualCorrectionNeed = sales.filter(sale => sale.documentType === '01' && !sale.isCancelled);
+  const salesWithManualCorrectionNeed = companySales.filter(sale => sale.documentType === '01' && !sale.isCancelled);
 
   return (
     <div className="space-y-6">
