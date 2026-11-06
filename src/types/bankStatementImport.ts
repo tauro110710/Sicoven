@@ -135,7 +135,7 @@ export function parseOfxBankStatement(source: string): { currency: BankStatement
     const type=tag('TRNTYPE').toUpperCase();
     const rate=Number(tag('EXCHANGERATE'));
     const rateDate=tag('EXCHANGERATEDATE');
-    return {date:tag('DTPOSTED').slice(0,8).replace(/^(\d{4})(\d{2})(\d{2})$/,'$1-$2-$3'),reference:tag('FITID')||tag('CHECKNUM'),description:tag('NAME')||tag('MEMO'),type:/DEBIT|PAYMENT|CHECK|FEE|WITHDRAWAL/.test(type)||amount<0?'DEBIT':'CREDIT',amount:Math.abs(amount),currency,bcvRate:rate,bcvRateEffectiveDate:rateDate.slice(0,10).replace(/^(\d{4})(\d{2})(\d{2})$/,'$1-$2-$3')};
+    return {date:tag('DTPOSTED').slice(0,8).replace(/^(\d{4})(\d{2})(\d{2})$/,'$1-$2-$3'),reference:tag('FITID')||tag('CHECKNUM'),description:tag('NAME')||tag('MEMO'),type,amount:Math.abs(amount),currency,bcvRate:rate,bcvRateEffectiveDate:rateDate.slice(0,10).replace(/^(\d{4})(\d{2})(\d{2})$/,'$1-$2-$3')};
   });
   return {currency,rows};
 }
