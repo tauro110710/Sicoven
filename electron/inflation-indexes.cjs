@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const { hasFullSystemAccess } = require('./auth-roles.cjs');
 
 const MAX_SOURCE_BYTES = 5 * 1024 * 1024;
 const MAX_OBSERVATIONS = 600;
@@ -153,7 +154,7 @@ function validateImportInput(input) {
 }
 function importInflationIndexSeries(db, input, actor) {
   if (!actor || !actor.username) throw new Error('Sesión de usuario requerida.');
-  if (actor.role !== 'admin') throw new Error('Solo un administrador puede importar series de índices.');
+  if (!hasFullSystemAccess(actor)) throw new Error('Se requiere un rol contable autenticado para importar series de índices.');
   const data = validateImportInput(input); const sourceId = crypto.randomUUID(); const seriesId = crypto.randomUUID();
   const now = new Date().toISOString();
   let seriesVersion = 0;
@@ -182,7 +183,7 @@ function importInflationIndexSeries(db, input, actor) {
     missingMonths: data.missingMonths, statusCounts: data.statusCounts, sourceSha256: data.sourceSha256, approvalStatus: 'PENDING_REVIEW' };
 }
 function approveInflationIndexSeries(db, seriesId, decision, reason, actor) {
-  if (!actor || actor.role !== 'admin' || !actor.username) throw new Error('Solo un administrador puede revisar una serie de índices.');
+  if (!actor || actor.role !== 'admin' || !actor.username) throw new Error('Se requiere un rol contable autenticado para revisar una serie de índices.');
   const id = String(seriesId || '').trim(); const choice = String(decision || ''); const note = String(reason || '').trim();
   if (!id) throw new Error('Identificador de serie requerido.');
   if (!['APPROVED','REJECTED'].includes(choice)) throw new Error('Decisión de revisión inválida.');
