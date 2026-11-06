@@ -9,10 +9,24 @@ import { DEFAULT_LOGO_LOS_ANDES } from '../data/defaultLogos';
  * jsPDF.save() puede no iniciar la descarga en algunos contextos de escritorio;
  * se genera el Blob y se dispara un enlace temporal con nombre de archivo.
  */
-function downloadPdf(doc: jsPDF, filename: string): void {
+async function downloadPdf(doc: jsPDF, filename: string): Promise<void> {
   const blob = doc.output('blob');
-  if (!(blob instanceof Blob) || blob.size === 0) {
-    throw new Error('El documento PDF generado está vacío.');
+  if (!(blob instanceof Blob) || blob.size === 0) throw new Error('El documento PDF generado está vacío.');
+  if (window.sicovenStore?.savePdf) {
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('No se pudo preparar el PDF para guardarlo.'));
+      reader.onload = () => {
+        const result = String(reader.result || '');
+        const comma = result.indexOf(',');
+        if (comma < 0) reject(new Error('No se pudo codificar el documento PDF.'));
+        else resolve(result.slice(comma + 1));
+      };
+      reader.readAsDataURL(blob);
+    });
+    const result = await window.sicovenStore.savePdf({ fileName: filename, base64 });
+    if (!result.ok && !result.canceled) throw new Error('No se pudo guardar el documento PDF.');
+    return;
   }
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -20,9 +34,7 @@ function downloadPdf(doc: jsPDF, filename: string): void {
   link.download = filename;
   link.style.display = 'none';
   document.body.appendChild(link);
-  try {
-    link.click();
-  } finally {
+  try { link.click(); } finally {
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1500);
   }
@@ -288,7 +300,7 @@ export async function exportDiarioPdf(
   addPdfFooter(doc);
 
   const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
-  downloadPdf(doc, `Libro_Diario_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  await downloadPdf(doc, `Libro_Diario_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 /**
@@ -360,7 +372,7 @@ export async function exportMayorPdf(
   addPdfFooter(doc);
 
   const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
-  downloadPdf(doc, `Libro_Mayor_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  await downloadPdf(doc, `Libro_Mayor_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 /**
@@ -440,7 +452,7 @@ export async function exportBalanceComprobacionPdf(company: Company, accounts: a
   addPdfFooter(doc);
 
   const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
-  downloadPdf(doc, `Balance_Comprobacion_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  await downloadPdf(doc, `Balance_Comprobacion_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 /**
@@ -525,7 +537,7 @@ export async function exportBalanceGeneralPdf(
   addPdfFooter(doc);
 
   const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
-  downloadPdf(doc, `Balance_General_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  await downloadPdf(doc, `Balance_General_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 /**
@@ -616,7 +628,7 @@ export async function exportBalanceAjustadoPdf(company: Company, accounts: any[]
   addPdfFooter(doc);
 
   const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
-  downloadPdf(doc, `Balance_Comprobacion_Ajustado_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  await downloadPdf(doc, `Balance_Comprobacion_Ajustado_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 /**
@@ -742,7 +754,7 @@ export async function exportConciliacionPdf(
   addPdfFooter(doc);
 
   const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
-  downloadPdf(doc, `Conciliacion_Bancaria_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  await downloadPdf(doc, `Conciliacion_Bancaria_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 /**
@@ -866,7 +878,7 @@ export async function exportComprasPdf(
   addPdfFooter(doc);
 
   const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
-  downloadPdf(doc, `Libro_Compras_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  await downloadPdf(doc, `Libro_Compras_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 /**
@@ -1028,7 +1040,7 @@ export async function exportVentasPdf(
   addPdfFooter(doc);
 
   const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
-  downloadPdf(doc, `Libro_Ventas_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  await downloadPdf(doc, `Libro_Ventas_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 
