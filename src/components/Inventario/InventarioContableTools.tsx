@@ -60,6 +60,14 @@ export const InventarioContableTools: React.FC = () => {
   const [productionRate, setProductionRate] = useState(String(currentCompany.bcvRate || ''));
   const [productionRef, setProductionRef] = useState('');
 
+  useEffect(() => {
+    if (!companyProducts.some(product => product.id === productId)) setProductId(companyProducts[0]?.id || '');
+    if (!companyProducts.some(product => product.id === finishedProductId)) {
+      setFinishedProductId(companyProducts.find(product => product.itemType === 'PRODUCTO_TERMINADO')?.id || '');
+    }
+    setComponentId('');
+  }, [currentCompany.id]);
+
   const selectedProduct = companyProducts.find(product => product.id === productId);
   const selectedFinishedProduct = companyProducts.find(product => product.id === finishedProductId);
   useEffect(() => { setRecipeLines(selectedFinishedProduct?.bomComponents || []); }, [finishedProductId]);
