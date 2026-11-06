@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { matchesBankStatementLine, matchesBankStatementDualCurrency, validateBankMovementFxSnapshot, calculateBankReconciliationBalances } from './bankStatementMatching';
 
-test('requires the bank reconciliation schedule to balance in both Bs and USD', () => {
+test('verifies the bank reconciliation schedule balances in both Bs and USD', () => {
   const bookMovements = [
     { debitBs: 1000, creditBs: 0, debitUsd: 4, creditUsd: 0, isReconciled: true },
     { debitBs: 100, creditBs: 0, debitUsd: 0.4, creditUsd: 0, isReconciled: false },
