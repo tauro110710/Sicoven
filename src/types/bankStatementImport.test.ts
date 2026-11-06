@@ -104,6 +104,8 @@ ${transactionType}
     const parsed = parseOfxBankStatement(build(transactionType));
     const [row] = normalizeBankStatementRows(parsed.rows, parsed.currency);
     assert.ok(row.errors.some(error => error.includes('naturaleza') || error.includes('Naturaleza')));
+    // Negative TRNAMT must not silently turn a missing/unknown TRNTYPE into DEBIT.
+    assert.equal(row.type, 'CREDIT');
   }
 });
 
