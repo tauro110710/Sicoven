@@ -14,7 +14,7 @@ Las marcas solo se colocan cuando la corrección está integrada en `main` y las
 - [x] Protección contra duplicados al registrar movimientos de extractos bancarios (PR #15 integrada; CI y Windows SUCCESS).
 - [x] Antigüedad de saldos CxC/CxP por tramos (PR #16 integrada; CI y Windows SUCCESS).
 - [x] Cuadre agregado de conciliación bancaria en Bs. y USD (PR #19 integrada en `main`, commit `821fe490418ddac7ece8201c7244ed4495211069`; CI y Windows SUCCESS, incluido caso USD-only).
-- [ ] Panel de alertas operativas de vencimiento CxC/CxP (PR #21; nueva CI/Windows en validación tras corregir el parser de fechas).
+- [x] Panel de alertas operativas de vencimiento CxC/CxP (PR #21 integrada en `main`, commit `b5a03b235d28aa6076183c14cc466d5bf54b89ec`; CI y Windows SUCCESS).
 - [ ] Importación de extractos bancarios con previsualización y confirmación.
 - [ ] Cierre integral de conciliación con extractos reales y prueba de persistencia tras reinicio.
 
@@ -142,7 +142,7 @@ Estado del Bloque 5: **parcial**. No se tacha ningún requisito del bloque ni se
 3. **Alertas:** el vencimiento se identifica dentro de las vistas, pero no se encontró un motor de alertas/notificaciones por vencimiento o mora ni un panel de tareas.
 4. **Reportes por moneda/período:** la vista operativa es útil para consultar pendientes, pero falta verificar un estado de cuenta formal exportable por tercero, documento, moneda y período, con conciliación contra cuentas de control.
 
-Estado del Bloque 6: **parcial**. Se conservan los circuitos históricos de anticipos, notas y liquidaciones; no se tacha el bloque. La próxima auditoría debe comprobar auxiliares contra cuentas de control y desarrollar antigüedad/exposición/alertas sin recalcular ni modificar liquidaciones ya registradas.
+Estado del Bloque 6: **parcial**. Antigüedad por tramos y alertas de vencimiento están implementadas como consultas de solo lectura. Permanecen pendientes la exposición cambiaria por tercero/documento y el estado de cuenta formal exportable por moneda y período, además de conciliar auxiliares contra cuentas de control. Se conservan los circuitos históricos de anticipos, notas y liquidaciones.
 
 
 
@@ -247,7 +247,7 @@ Estado del Bloque 12: **parcial / pendiente de desarrollo**. No se tacha ningún
 - Plan de cuentas configurable por empresa: **pendiente**.
 - Auditoría integral de Diario, Mayor, balance de comprobación, moneda funcional, cierres y reversión del Bloque 1: **pendiente**.
 - Bloque 5: duplicados de extracto y cuadre agregado en doble moneda corregidos e integrados; importador de extractos y cierre integral pendientes.
-- Bloque 6: antigüedad de saldos CxC/CxP corregida e integrada; panel de alertas operativas en validación; exposición cambiaria y estados de cuenta formales pendientes.
+- Bloque 6: antigüedad de saldos CxC/CxP y alertas operativas de vencimiento corregidas e integradas; exposición cambiaria, estados de cuenta formales y conciliación con cuentas de control pendientes.
 - Bloque 7: aislamiento de inventario corregido e integrado; resto de brechas pendientes.
 - Bloques 2, 8, 9, 10 y 12: **pendientes de auditoría/desarrollo**; Bloque 11 continúa parcial.
 
