@@ -101,6 +101,64 @@ test('rechaza liquidaciones sin identificador estable de fila', () => {
   assert.throws(() => mapUniversalSettlementPreview(payment({ migrationrowid: '' })), /identificador estable/);
 });
 
+
+test('rechaza cobros que superan CxC neta después de retención IVA del cliente', () => {
+  const sourceInvoice = {
+    ...invoice('invoice-vat', 10), bcvRate: 100,
+    vatWithheldUsd: 2, vatWithheldBs: 200
+  };
+  const first = payment({
+    invoiceId: 'invoice-vat', settlementAmountBs: 500, settlementAmountUsd: 5,
+    reference: 'VAT-001'
+  });
+  const second = payment({
+    id: 'payment-vat-2', migrationrowid: 'legacy.json|payments|vat-2',
+    invoiceId: 'invoice-vat', settlementAmountBs: 400, settlementAmountUsd: 4,
+    reference: 'VAT-002'
+  });
+  assert.throws(
+    () => planUniversalInvoiceSettlements([sourceInvoice], [sourceInvoice, first, second], 'sales'),
+    /saldo neto exigible después de retenciones/
+  );
+});
+
+test('rechaza pagos que superan CxP neta después de retenciones IVA e ISLR', () => {
+  const sourceInvoice = {
+    ...invoice('purchase-net', 10), bcvRate: 100,
+    supplierRif: 'J-12345678-9', customerRif: undefined,
+    vatWithheldUsd: 1, vatWithheldBs: 100,
+    islrWithheldUsd: 2, islrWithheldBs: 200
+  };
+  const first = payment({
+    invoiceId: 'purchase-net', settlementAmountBs: 500, settlementAmountUsd: 5,
+    reference: 'PAY-NET-001', transactionType: 'pago'
+  });
+  const second = payment({
+    id: 'payment-net-2', migrationrowid: 'legacy.json|payments|net-2',
+    invoiceId: 'purchase-net', settlementAmountBs: 300, settlementAmountUsd: 3,
+    reference: 'PAY-NET-002', transactionType: 'pago'
+  });
+  assert.throws(
+    () => planUniversalInvoiceSettlements([sourceInvoice], [sourceInvoice, first, second], 'purchases'),
+    /saldo neto exigible después de retenciones/
+  );
+});
+
+test('acepta liquidaciones exactamente iguales al saldo neto después de retenciones', () => {
+  const sourceInvoice = {
+    ...invoice('purchase-exact', 10), bcvRate: 100,
+    supplierRif: 'J-12345678-9', customerRif: undefined,
+    vatWithheldUsd: 1, vatWithheldBs: 100,
+    islrWithheldUsd: 2, islrWithheldBs: 200
+  };
+  const row = payment({
+    invoiceId: 'purchase-exact', settlementAmountBs: 700, settlementAmountUsd: 7,
+    reference: 'PAY-EXACT-001', transactionType: 'pago'
+  });
+  const result = planUniversalInvoiceSettlements([sourceInvoice], [sourceInvoice, row], 'purchases');
+  assert.equal(result[0].settlements.reduce((sum, item) => sum + item.amountUsd, 0), 7);
+});
+
 test('rechaza un lote que liquida por encima del total de la factura', () => {
   const sourceInvoice = invoice('invoice-1', 10);
   const first = payment({ settlementAmountBs: 700, settlementAmountUsd: 7 });

@@ -786,15 +786,59 @@ export const planUniversalInvoiceSettlements = (
       else raw = raw.replace(',', '.');
       return Number(raw);
     };
-    const totalUsd = totalUsdRaw !== undefined ? parseAmount(totalUsdRaw)
-      : totalBsRaw !== undefined && invoiceRateRaw !== undefined
-        ? parseAmount(totalBsRaw) / parseAmount(invoiceRateRaw) : NaN;
-    if (settlements.length && (!Number.isFinite(totalUsd) || totalUsd <= 0)) {
-      throw new Error('La factura ' + invoiceRowId + ' tiene liquidaciones relacionadas, pero no declara un total y una tasa que permitan verificar que no esté sobrepagada.');
+    const invoiceRate = invoiceRateRaw !== undefined ? parseAmount(invoiceRateRaw) : NaN;
+    const grossTotalUsd = totalUsdRaw !== undefined ? parseAmount(totalUsdRaw)
+      : totalBsRaw !== undefined && Number.isFinite(invoiceRate) && invoiceRate > 0
+        ? parseAmount(totalBsRaw) / invoiceRate : NaN;
+    if (settlements.length && (!Number.isFinite(grossTotalUsd) || grossTotalUsd <= 0)) {
+      throw new Error('La factura ' + invoiceRowId + ' tiene liquidaciones relacionadas, pero no declara un total y una tasa que permitan verificar su saldo exigible.');
     }
+    const optionalAmount = (keys: string[]): number => {
+      const raw = pick(invoice, keys);
+      if (raw === undefined) return 0;
+      const value = parseAmount(raw);
+      if (!Number.isFinite(value) || value < 0) {
+        throw new Error('La factura ' + invoiceRowId + ' contiene una retención inválida que impide calcular su saldo exigible.');
+      }
+      return value;
+    };
+    const vatWithheldUsdRaw = pick(invoice, ['vatWithheldUsd','ivaRetenidoUsd','retencionIvaUsd']);
+    const vatWithheldBsRaw = pick(invoice, ['vatWithheldBs','ivaRetenidoBs','retencionIvaBs']);
+    const islrWithheldUsdRaw = invoiceKind === 'purchases'
+      ? pick(invoice, ['islrWithheldUsd','islrRetenidoUsd','withheldIslrUsd']) : undefined;
+    const islrWithheldBsRaw = invoiceKind === 'purchases'
+      ? pick(invoice, ['islrWithheldBs','islrRetenidoBs','withheldIslrBs']) : undefined;
+    const vatWithheldUsd = vatWithheldUsdRaw !== undefined
+      ? optionalAmount(['vatWithheldUsd','ivaRetenidoUsd','retencionIvaUsd'])
+      : vatWithheldBsRaw !== undefined && Number.isFinite(invoiceRate) && invoiceRate > 0
+        ? optionalAmount(['vatWithheldBs','ivaRetenidoBs','retencionIvaBs']) / invoiceRate : 0;
+    const vatWithheldBs = optionalAmount(['vatWithheldBs','ivaRetenidoBs','retencionIvaBs']);
+    const islrWithheldUsd = islrWithheldUsdRaw !== undefined
+      ? optionalAmount(['islrWithheldUsd','islrRetenidoUsd','withheldIslrUsd'])
+      : islrWithheldBsRaw !== undefined && Number.isFinite(invoiceRate) && invoiceRate > 0
+        ? optionalAmount(['islrWithheldBs','islrRetenidoBs','withheldIslrBs']) / invoiceRate : 0;
+    const islrWithheldBs = invoiceKind === 'purchases'
+      ? optionalAmount(['islrWithheldBs','islrRetenidoBs','withheldIslrBs']) : 0;
+    if (settlements.length && ((vatWithheldBsRaw !== undefined && vatWithheldUsdRaw === undefined && !(invoiceRate > 0)) ||
+        (islrWithheldBsRaw !== undefined && islrWithheldUsdRaw === undefined && !(invoiceRate > 0)))) {
+      throw new Error('La factura ' + invoiceRowId + ' declara retenciones en Bs sin tasa histórica para convertirlas a USD y calcular CxC/CxP.');
+    }
+    if (Number.isFinite(invoiceRate) && invoiceRate > 0 &&
+        ((vatWithheldUsdRaw !== undefined && vatWithheldBsRaw !== undefined && Math.abs(vatWithheldBs / invoiceRate - vatWithheldUsd) > 0.02) ||
+         (islrWithheldUsdRaw !== undefined && islrWithheldBsRaw !== undefined && Math.abs(islrWithheldBs / invoiceRate - islrWithheldUsd) > 0.02))) {
+      throw new Error('Las retenciones de la factura ' + invoiceRowId + ' no concilian entre Bs y USD a su tasa BCV histórica.');
+    }
+    const totalWithheldUsd = vatWithheldUsd + islrWithheldUsd;
+    if (totalWithheldUsd > grossTotalUsd + 0.00001) {
+      throw new Error('Las retenciones de la factura ' + invoiceRowId + ' superan el total del documento.');
+    }
+    const netTotalUsd = Math.max(0, grossTotalUsd - totalWithheldUsd);
     const settledUsd = settlements.reduce((sum, item) => sum + item.amountUsd, 0);
-    if (settledUsd - totalUsd > 0.00001) {
-      throw new Error('Las liquidaciones vinculadas a la factura ' + invoiceRowId + ' superan su total. No se importó el lote.');
+    if (settlements.length && netTotalUsd <= 0) {
+      throw new Error('La factura ' + invoiceRowId + ' no tiene saldo exigible positivo después de retenciones.');
+    }
+    if (settledUsd - netTotalUsd > 0.00001) {
+      throw new Error('Las liquidaciones vinculadas a la factura ' + invoiceRowId + ' superan su saldo neto exigible después de retenciones. No se importó el lote.');
     }
     return { invoiceRowId, invoiceKind, settlements };
   });
