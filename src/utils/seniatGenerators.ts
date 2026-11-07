@@ -346,7 +346,7 @@ export function encodeIso88591(content: string): Uint8Array {
 }
 
 /**
- * Descarga un archivo de texto en el navegador del usuario.
+ * Guarda un archivo de texto en el escritorio Electron o inicia su descarga en navegador.
  * UTF-8 es el valor predeterminado; ISO-8859-1 debe solicitarse explícitamente.
  */
 export async function downloadFile(
