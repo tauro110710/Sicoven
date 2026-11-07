@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { normalizeMigrationValue, parseDelimitedRecords, parseMigrationNumber } from '../../types/migrationParsing';
+import { detectUniversalImportFormat, extractUniversalJsonCollections } from '../../types/universalImport';
 import ExcelJS from 'exceljs';
 import { FileUp, Search, ShieldCheck, AlertTriangle, CheckCircle2, XCircle, Files, ArrowRightLeft, Building2 } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
@@ -26,24 +27,23 @@ const MODULES: { key: ModuleKey; name: string; aliases: Record<string, string[]>
 ];
 
 const normalize = normalizeMigrationValue;
-const asRows = (data: unknown): Row[] => {
-  if (Array.isArray(data)) return data.filter(x => x && typeof x === 'object' && !Array.isArray(x)) as Row[];
-  if (data && typeof data === 'object') {
-    const obj = data as Record<string, unknown>;
-    for (const key of ['rows','data','items','records','productos','products','clientes','customers','proveedores','suppliers']) {
-      if (Array.isArray(obj[key])) return (obj[key] as unknown[]).filter(x => x && typeof x === 'object' && !Array.isArray(x)) as Row[];
-    }
-  }
-  return [];
-};
 const csvRows = (text: string): Row[] => parseDelimitedRecords(text);
 
 async function parseFile(file: File): Promise<ParsedFile[]> {
   try {
-    const ext = file.name.toLowerCase().split('.').pop();
+    const ext = detectUniversalImportFormat(file.name);
     if (ext === 'json') {
-      const rows = asRows(JSON.parse(await file.text()));
-      return [{ name: file.name, rows, ...(rows.length ? {} : { error: 'El JSON no contiene registros en un arreglo reconocido.' }) }];
+      const data = JSON.parse(await file.text());
+      const collections = extractUniversalJsonCollections(data);
+      if (!collections.length || !collections.some(collection => collection.rows.length)) {
+        return [{ name: file.name, rows: [], error: 'El JSON no contiene colecciones con registros tipo objeto.' }];
+      }
+      return collections.map(collection => ({
+        name: file.name + ' — colección: ' + collection.path,
+        rows: collection.rows,
+        ...(!collection.rows.length ? { error: 'La colección está vacía.' } :
+          collection.invalidItems ? { error: collection.invalidItems + ' elemento(s) no son registros objeto; no se deben descartar silenciosamente.' } : {})
+      }));
     }
     if (ext === 'csv' || ext === 'tsv' || ext === 'txt') {
       const rows = csvRows(await file.text());
@@ -222,7 +222,7 @@ export const MigracionInteligente: React.FC = () => {
   return <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 space-y-5">
     <div className="flex gap-3 items-start">
       <div className="rounded-xl bg-indigo-50 p-3 text-indigo-700"><ArrowRightLeft className="w-6 h-6" /></div>
-      <div className="min-w-0 flex-1"><h2 className="text-lg font-bold text-slate-900">Asistente Inteligente de Migración</h2><p className="text-sm text-slate-600 mt-1">Analiza varios archivos, detecta módulos compatibles y prepara un plan antes de importar.</p></div>
+      <div className="min-w-0 flex-1"><h2 className="text-lg font-bold text-slate-900">Importador Inteligente Universal de SICOVEN</h2><p className="text-sm text-slate-600 mt-1">Analiza archivos de distintos formatos y sistemas de origen, detecta sus colecciones y prepara un plan de importación.</p></div>
     </div>
     <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4 space-y-3">
       <div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><Building2 className="w-4 h-4 text-indigo-700"/> Empresa destino de la migración <span className="text-rose-600">*</span></div>
@@ -240,7 +240,7 @@ export const MigracionInteligente: React.FC = () => {
         <FileUp className="w-4 h-4" /> {busy ? 'Analizando archivos…' : 'Seleccionar varios archivos'}
         <input type="file" multiple accept=".json,.csv,.tsv,.txt,.xlsx,.xlsm" className="hidden" disabled={busy} onChange={e => { void processFiles(e.target.files); e.currentTarget.value=''; }} />
       </label>
-      <p className="text-xs text-slate-500 mt-2">JSON · CSV · TSV · TXT · Excel XLSX/XLSM. El análisis se realiza localmente.</p>
+      <p className="text-xs text-slate-500 mt-2">JSON · CSV · TSV · TXT · Excel XLSX/XLSM. El formato no determina el sistema de origen; el análisis se realiza localmente.</p>
     </div>
     {error && <p className="text-sm text-rose-700">{error}</p>}
     {files.length > 0 && <div className="space-y-2"><h3 className="font-semibold text-slate-800">Archivos analizados ({files.length})</h3>{files.map((f,i) => <div key={f.name + i} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-slate-50 border border-slate-200"><div className="min-w-0"><p className="text-sm font-medium truncate">{f.name}</p><p className="text-xs text-slate-500">{f.error ? f.error : f.rows.length + ' filas interpretadas'}</p></div><button className="text-xs text-rose-700 font-semibold" onClick={() => {setFiles(prev=>prev.filter((_,j)=>j!==i));setConfirmed(false);}}>Quitar</button></div>)}</div>}
