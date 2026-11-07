@@ -96,10 +96,11 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  },[inventoryCandidateRows,inventoryFilter]);
  const moduleRecordCandidates=useMemo(()=>{
   const result:Record<string,Row[]>={sales:[],purchases:[],journal:[],movements:[]};
-  const classified=classifyUniversalInvoiceRows(rows);
+  const candidateRows=posvenBackup&&selectedPosvenCollections.length?rows.filter(row=>norm(String(row.migrationcollection??''))===norm(selectedPosvenCollections[0])):rows;
+  const classified=classifyUniversalInvoiceRows(candidateRows);
   result.sales.push(...classified.sales as Row[]);
   result.purchases.push(...classified.purchases as Row[]);
-  rows.forEach(row=>{
+  candidateRows.forEach(row=>{
    const hasAccount=['accountCode','codigoCuenta','cuenta'].some(key=>pick(row,key)!==undefined);
    const hasDate=['date','fecha'].some(key=>pick(row,key)!==undefined);
    const hasReference=['entryNumber','numeroAsiento','asiento','referenceDoc','referencia','documento'].some(key=>pick(row,key)!==undefined);
@@ -110,7 +111,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
    if(hasProduct&&hasDate&&hasMovementType&&hasMovementReference)result.movements.push(row);
   });
   return result;
- },[rows]);
+ },[rows,posvenBackup,selectedPosvenCollections]);
  const filteredPosvenProducts=useMemo(()=>{const q=norm(posvenProductFilter);return posvenProducts.filter(row=>!q||norm([row.codigo,row.nombre,row.categoria,row.departamento].map(value=>String(value??'')).join(' ')).includes(q));},[posvenProducts,posvenProductFilter]);
  const posvenPreview = useMemo(()=>{
   if(!posvenBackup||!backupPayload)return [] as Array<{name:string;count:number;objects:number;invalid:number;fields:string[];identityField:string;missingIdentity:number;duplicateIdentity:number;numericSummaries:Array<{field:string;count:number;sum:number}>;referenceFields:string[];relationshipHints:Array<{field:string;targetCollection:string}>;target:string;mode:string;reason:string;canImport:boolean}>;
