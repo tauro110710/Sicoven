@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference } from '../../types/universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, hasUniversalNestedMerchandiseDetails } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 
@@ -454,13 +454,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const common={invoiceDate,invoiceNumber,controlNumber:String(pick(r,'controlNumber','numeroControl','numero de control')??'').trim(),documentType:documentTypeRaw as '01'|'02'|'03',totalAmountBs,exemptAmountBs,taxableBaseBs,taxRate,vatAmountBs,vatWithheldBs,bcvRate:rate,totalAmountUsd,taxableBaseUsd,vatAmountUsd,vatWithheldUsd,notes:String(pick(r,'notes','observaciones')??''),paymentTerm,creditDays,dueDate,currencyPricingMode:'REVISION_MANUAL' as const,fiscalAdjustmentMode:'REVISION_CONTADOR' as const};
      if(!common.controlNumber)throw new Error('Fila '+(i+1)+': número de control obligatorio.');
      if(kind==='sales'){
-      const nestedSaleDetails=pick(r,'saleLines','items','lines','details','detalles','detalle');
-      const hasNestedMerchandise=Array.isArray(nestedSaleDetails)&&nestedSaleDetails.some((line)=>{
-       if(!line||typeof line!=='object'||Array.isArray(line))return false;
-       const detail=line as Row;
-       return Boolean(pick(detail,'productCode','codigoProducto','productSku','sku','itemCode','codigo','code'))&&
-        pick(detail,'quantity','cantidad','qty')!==undefined;
-      });
+      const hasNestedMerchandise=hasUniversalNestedMerchandiseDetails(r);
       const relatedSaleDetails=resolveUniversalPurchaseDetailRows(rows,r);
       if(hasNestedMerchandise||relatedSaleDetails.length){
        throw new Error('Fila '+(i+1)+': esta factura de venta contiene renglones de mercancía. El modelo de ventas actual de SICOVEN aún no conserva líneas comerciales ni sus salidas de Kardex en la importación universal. No se importó esta factura para evitar perder el detalle o alterar inventario. Use una exportación de ventas resumida sin renglones o espere el adaptador de ventas detalladas.');
