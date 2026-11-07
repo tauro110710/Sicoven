@@ -1280,7 +1280,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     ));
   };
 
-  const addJournalEntry = (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>, accountCatalog: Account[] = accounts, targetCompanyId: string = targetCompany.id): JournalEntry => {
+  const addJournalEntry = (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>, accountCatalog: Account[] = accounts, targetCompanyId: string = currentCompany.id): JournalEntry => {
     const targetCompany = companies.find(company => company.id === targetCompanyId);
     if (!targetCompany) throw new Error('La empresa destino del asiento no existe en SICOVEN.');
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
@@ -1930,7 +1930,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   // Registrar compra y generar asiento automático y comprobantes de retención
-  const addPurchase = (purchaseData: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>, targetCompanyId: string = targetCompany.id): PurchaseRecord => {
+  const addPurchase = (purchaseData: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>, targetCompanyId: string = currentCompany.id): PurchaseRecord => {
     const targetCompany = companies.find(company => company.id === targetCompanyId);
     if (!targetCompany) throw new Error('La empresa destino de la compra no existe en SICOVEN.');
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
@@ -3170,7 +3170,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   // Registrar venta y generar asiento contable
-  const addSale = (saleData: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>, targetCompanyId: string = targetCompany.id): SaleRecord => {
+  const addSale = (saleData: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>, targetCompanyId: string = currentCompany.id): SaleRecord => {
     const targetCompany = companies.find(company => company.id === targetCompanyId);
     if (!targetCompany) throw new Error('La empresa destino de la venta no existe en SICOVEN.');
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
