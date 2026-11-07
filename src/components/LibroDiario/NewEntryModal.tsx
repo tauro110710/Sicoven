@@ -451,7 +451,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                 <select value={adjustmentForEntryId} onChange={e => setAdjustmentForEntryId(e.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs">
                   <option value="">Ajuste general / sin asiento origen</option>
                   {journalEntries.filter(entry => entry.companyId === currentCompany.id && !entry.reversalOfEntryId).map(entry => (
-                    <option key={entry.id} value={entry.id}>#{entry.entryNumber} · {entry.date} · {entry.description.slice(0, 90)}</option>
+                    <option key={entry.id} value={entry.id}>#{entry.entryNumber} · {entry.date} · <strong className="font-extrabold">{entry.description.slice(0, 90)}</strong></option>
                   ))}
                 </select>
               </div>
