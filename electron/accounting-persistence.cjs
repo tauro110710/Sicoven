@@ -331,6 +331,12 @@ function persistAccountingSnapshot(db, state, actor = null) {
       }));
     }
     const previousCompaniesForInventoryRates = new Map((Array.isArray(priorState.companies) ? priorState.companies : []).map(company => [String(company.id), company]));
+    const nextCompanyIdsForInventoryRates = new Set((Array.isArray(state.companies) ? state.companies : []).map(company => String(company.id)));
+    for (const [companyId, previousCompany] of previousCompaniesForInventoryRates) {
+      if ((Array.isArray(previousCompany.inventoryBcvRateHistory) ? previousCompany.inventoryBcvRateHistory.length : 0) > 0 && !nextCompanyIdsForInventoryRates.has(companyId)) {
+        throw new Error('No se puede eliminar una empresa que conserva historial diario de tasas BCV de Inventario.');
+      }
+    }
     for (const company of (Array.isArray(state.companies) ? state.companies : [])) {
       const previousCompany = previousCompaniesForInventoryRates.get(String(company.id));
       const previousHistory = Array.isArray(previousCompany?.inventoryBcvRateHistory) ? previousCompany.inventoryBcvRateHistory : [];
