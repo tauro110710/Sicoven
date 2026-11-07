@@ -567,6 +567,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const rawSupplierTaxStatus=norm(String(pick(r,'supplierTaxStatus','condicionFiscalProveedor')??resolvedParty.taxStatus??''));const supplierTaxStatus=({'ordinary':'ORDINARY','ordinario':'ORDINARY','contribuyenteordinario':'ORDINARY','formal':'FORMAL','contribuyenteformal':'FORMAL','special':'SPECIAL','especial':'SPECIAL','contribuyenteespecial':'SPECIAL','nonregistered':'NON_REGISTERED','notregistered':'NON_REGISTERED','noregistrado':'NON_REGISTERED','nocontribuyente':'NON_REGISTERED','unknown':'UNKNOWN','desconocido':'UNKNOWN'} as Record<string,string>)[rawSupplierTaxStatus];if(resolvedParty.taxStatus&&!supplierTaxStatus)throw new Error('Fila '+(i+1)+': la condición fiscal del proveedor no se reconoce; debe revisarse antes de importar retenciones.');return {...common,accountCreditDate,paymentAccountCode:paymentAccountCode||undefined,paymentReference:paymentReference||undefined,purchaseDebitAccountCode:purchaseDebitAccountCode||undefined,inventoryLines,supplierRif:partyRif,supplierName:partyName,supplierAddress:String(pick(r,'supplierAddress','direccionProveedor')??resolvedParty.address??''),supplierEmail:String(pick(r,'supplierEmail','correoProveedor')??resolvedParty.email??'')||undefined,supplierTaxStatus:supplierTaxStatus as any,ivaRetentionDecision:pick(r,'ivaRetentionDecision','retentionDecisionSnapshot') as any,islrConceptCode:islrWithheldBs>0?String(pick(r,'islrConceptCode')??''):undefined,islrConceptName:islrWithheldBs>0?String(pick(r,'islrConceptName')??''):undefined,islrRate:islrWithheldBs>0?num(r,i,true,'islrRate'):undefined,islrSubtrahendBs:islrWithheldBs>0?num(r,i,false,'islrSubtrahendBs'):undefined,islrBeneficiaryType:islrWithheldBs>0?pick(r,'islrBeneficiaryType') as any:undefined,islrResidency:islrWithheldBs>0?pick(r,'islrResidency') as any:undefined,islrBasePercentage:islrWithheldBs>0?num(r,i,true,'islrBasePercentage'):undefined,islrUnitTaxValueBs:islrWithheldBs>0?num(r,i,true,'islrUnitTaxValueBs'):undefined,islrFormulaFactor:islrWithheldBs>0?num(r,i,true,'islrFormulaFactor'):undefined,islrWithheldBs,islrWithheldUsd,retentionRate,voucherNumber:String(pick(r,'voucherNumber','comprobanteRetencion')??'')||undefined,vatWithheldBs,vatWithheldUsd};
     });
     let importedSettlementCount=0;
+    let skippedSettlementCount=0;
     const createdDocuments: Array<ReturnType<typeof addSale> | ReturnType<typeof addPurchase>>=[];
     const createdDocumentIds: Record<string,string>={};
     await runAtomicInvoiceImportAndWait(()=>{
@@ -618,10 +619,12 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      }
      const selectedSettlementPlans=selectUniversalInvoiceSettlements(settlementPlans,selectedSettlementIdsForBatch);
      const settlementDrafts=mapUniversalInvoiceSettlementDrafts(selectedSettlementPlans,createdDocumentIds);
+     const detectedSettlementCount=settlementPlans.reduce((sum,plan)=>sum+plan.settlements.length,0);
+     skippedSettlementCount=detectedSettlementCount-settlementDrafts.length;
      importedSettlementCount=addImportedCreditSettlements(settlementDrafts,createdDocuments,targetCompany.id).length;
     });
     setSettlementPreview([]);setSelectedSettlementSourceRowIds([]);
-    setNotice((kind==='sales'?'Ventas':'Compras')+' importadas: '+prepared.length+' facturas. Liquidaciones históricas contabilizadas: '+importedSettlementCount+'. SICOVEN generó los asientos, actualizó CxC/CxP y SQLite confirmó el lote completo en una sola transacción.');
+    setNotice((kind==='sales'?'Ventas':'Compras')+' importadas: '+prepared.length+' facturas. Liquidaciones contabilizadas: '+importedSettlementCount+'; omitidas por selección: '+skippedSettlementCount+'. SICOVEN generó los asientos seleccionados, actualizó CxC/CxP y SQLite confirmó el lote completo en una sola transacción.');
     setSelected(old=>old.filter(id=>id!==kind));setConfirmed(false);
      setBusy(false);return;
    }
