@@ -30,7 +30,7 @@ test('no cruza liquidaciones entre archivos', () => {
 test('rechaza liquidaciones que exceden el total de la factura', () => {
   assert.throws(
     () => planUniversalInvoiceSettlements([invoice()], [invoice(), settlement('pay-1', 150), { ...settlement('pay-2', 100), migrationrowid: 'origen.json|pagos|1' }], 'sales'),
-    /superan su total/
+    /superan su saldo neto exigible/
   );
 });
 

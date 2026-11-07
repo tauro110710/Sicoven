@@ -171,7 +171,7 @@ test('rechaza un lote que liquida por encima del total de la factura', () => {
   });
   assert.throws(
     () => planUniversalInvoiceSettlements([sourceInvoice], [sourceInvoice, first, second], 'sales'),
-    /superan su total/
+    /superan su saldo neto exigible/
   );
 });
 
