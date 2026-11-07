@@ -106,6 +106,24 @@ export const resolveUniversalPartyReference = (
   };
 };
 
+export const hasUniversalNestedMerchandiseDetails = (invoice: Record<string, unknown>): boolean => {
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const wanted = new Set(['saleLines','inventoryLines','items','lines','details','detalles','detalle'].map(normalize));
+  let nested: unknown;
+  for (const [key, value] of Object.entries(invoice)) {
+    if (wanted.has(normalize(key)) && value !== undefined && value !== null) { nested = value; break; }
+  }
+  if (!Array.isArray(nested)) return false;
+  return nested.some((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const line = value as Record<string, unknown>;
+    const lineKeys = new Set(Object.keys(line).map(normalize));
+    const hasCode = ['productCode','codigoProducto','productSku','sku','itemCode','codigo','code'].some(key => lineKeys.has(normalize(key)));
+    const hasQuantity = ['quantity','cantidad','qty'].some(key => lineKeys.has(normalize(key)));
+    return hasCode && hasQuantity;
+  });
+};
+
 export type UniversalImportFormat = 'json' | 'csv' | 'tsv' | 'txt' | 'xlsx' | 'xlsm' | 'unsupported';
 
 export const detectUniversalImportFormat = (fileName: string): UniversalImportFormat => {
