@@ -465,7 +465,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      if(Array.isArray(rawInventoryLines)&&rawInventoryLines.length){
       inventoryLines=rawInventoryLines.map((rawLine,lineIndex)=>{
        if(!rawLine||typeof rawLine!=='object'||Array.isArray(rawLine))throw new Error('Fila '+(i+1)+', detalle '+(lineIndex+1)+': la línea de compra no es un objeto válido.');
-       const line=rawLine as Row;
+       const line=Object.fromEntries(Object.entries(rawLine as Row).map(([key,value])=>[norm(key),scalar(value)])) as Row;
        const code=String(pick(line,'productCode','codigoProducto','sku','code','codigo')??'').trim();
        const product=companyProducts.find(item=>item.code.trim().toLowerCase()===code.toLowerCase());
        const quantityRaw=pick(line,'quantity','cantidad','qty');
