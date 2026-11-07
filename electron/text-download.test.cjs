@@ -10,7 +10,7 @@ test('text download prepares UTF-8 TXT bytes and keeps the requested filename', 
 });
 
 test('text download strips directory components and encodes explicit ISO-8859-1', () => {
-  const result = prepareTextDownload({ fileName: 'C:\\private\\retenciones.xml', content: 'áéñ', contentType: 'application/xml', encoding: 'iso-8859-1' });
+  const result = prepareTextDownload({ fileName: 'C:\\private\\retenciones.xml', content: 'áéñ', contentType: 'application/xml;charset=iso-8859-1', encoding: 'iso-8859-1' });
   assert.equal(result.fileName, 'retenciones.xml');
   assert.deepEqual([...result.buffer], [0xe1, 0xe9, 0xf1]);
 });
