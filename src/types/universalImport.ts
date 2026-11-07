@@ -386,7 +386,8 @@ export const isUniversalMovementTypeConceptValid = (
 
 export const normalizeUniversalDocumentReference = (value: unknown): string => {
   const normalized = String(value ?? '').trim().normalize('NFD').replace(/\p{Diacritic}/gu, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const withoutPrefix = normalized.replace(/^(?:(?:FACTURA|FAC))+/, '');\n  return withoutPrefix || normalized;
+  const withoutPrefix = normalized.replace(/^(?:(?:FACTURA|FAC))+/, '');
+  return withoutPrefix || normalized;
 };
 
 export const buildUniversalInvoiceIdentity = (
