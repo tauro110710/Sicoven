@@ -154,7 +154,8 @@ interface AccountingContextType {
   // Inventario
   products: InventoryProduct[];
   addProduct: (product: Omit<InventoryProduct, 'id' | 'companyId'>) => InventoryProduct;
-  importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[]) => Promise<number>;
+  getCompanyInventoryProducts: (companyId: string) => InventoryProduct[];
+  importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[], targetCompanyId?: string) => Promise<number>;
   importInventoryMovements: (movements: Omit<InventoryMovement, 'id' | 'companyId'>[]) => number;
   executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => Promise<InventoryMovement[]>;
   updateProduct: (product: InventoryProduct, reason: string, workpaperNote: string) => Promise<void>;
@@ -3633,15 +3634,21 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
 
-  const importInventoryProducts = async (rows: Omit<InventoryProduct, 'id' | 'companyId'>[]): Promise<number> => {
+  const getCompanyInventoryProducts = (companyId: string): InventoryProduct[] => {
+    if (!companies.some(company => company.id === companyId)) throw new Error('La empresa destino no existe en SICOVEN.');
+    return products.filter(product => product.companyId === companyId);
+  };
+
+  const importInventoryProducts = async (rows: Omit<InventoryProduct, 'id' | 'companyId'>[], targetCompanyId: string = currentCompany.id): Promise<number> => {
     assertSQLitePersistenceReady('Importar inventario');
+    if (!companies.some(company => company.id === targetCompanyId)) throw new Error('La empresa destino no existe en SICOVEN.');
     if (!Array.isArray(rows) || rows.length === 0) throw new Error('El archivo no contiene artículos para importar.');
-    const existingCodes = new Set(products.filter(p => p.companyId === currentCompany.id).map(p => p.code.trim().toLocaleUpperCase()));
+    const existingCodes = new Set(products.filter(p => p.companyId === targetCompanyId).map(p => p.code.trim().toLocaleUpperCase()));
     const batchCodes = new Set<string>();
     const prepared: InventoryProduct[] = [];
     const openingMovements: InventoryMovement[] = [];
     const openingEntries: JournalEntry[] = [];
-    let nextEntryNumber = journalEntries.filter(e => e.companyId === currentCompany.id).reduce((max,e) => Math.max(max,e.entryNumber),0) + 1;
+    let nextEntryNumber = journalEntries.filter(e => e.companyId === targetCompanyId).reduce((max,e) => Math.max(max,e.entryNumber),0) + 1;
     const today = new Date().toISOString().slice(0, 10);
     for (const row of rows) {
       const code = String(row.code || '').trim().toLocaleUpperCase();
@@ -3659,7 +3666,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           !Number.isFinite(unitCostBs) || unitCostBs < 0 || (quantity > 0 && unitCostBs <= 0)) throw new Error('Tasa, cantidad o costo inválidos para ' + code + '.');
       const product: InventoryProduct = {
         ...row, id: 'prod-import-' + Date.now() + '-' + prepared.length + '-' + Math.floor(Math.random() * 100000),
-        companyId: currentCompany.id, code, name, currentStock: quantity, avgCostBs: unitCostBs,
+        companyId: targetCompanyId, code, name, currentStock: quantity, avgCostBs: unitCostBs,
         avgCostUsd: rate > 0 ? unitCostBs / rate : 0, lastCostBs: unitCostBs, lastCostUsd: rate > 0 ? unitCostBs / rate : 0,
         inventoryAccountCode: row.inventoryAccountCode || getDefaultInventoryAccountCode(row.itemType),
         costOfSalesAccountCode: row.costOfSalesAccountCode || '5.1.1.01',
@@ -3680,7 +3687,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const totalBs = Math.round(quantity * unitCostBs * 100) / 100;
         const totalUsd = Math.round(totalBs / rate * 1000000) / 1000000;
         const entry: JournalEntry = {
-          id: 'entry-inventory-opening-' + product.id, companyId: currentCompany.id, entryNumber: nextEntryNumber++,
+          id: 'entry-inventory-opening-' + product.id, companyId: targetCompanyId, entryNumber: nextEntryNumber++,
           date, description: 'Asiento de apertura de inventario · ' + code + ' · ' + name, type: 'APERTURA',
           bcvRate: rate, referenceDoc: 'APERTURA-' + code,
           items: [
@@ -5671,6 +5678,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         runAtomicInvoiceImport,
         products: products.filter(p => p.companyId === currentCompany.id),
         addProduct,
+        getCompanyInventoryProducts,
         importInventoryProducts,
         importInventoryMovements,
         executeProduction,
