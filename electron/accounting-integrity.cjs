@@ -2160,8 +2160,11 @@ function validateAccountingSnapshot(previousState, nextState) {
       }
     } else {
       const target = purchaseById.get(String(settlement.targetPurchaseId || ''));
+      // The target invoice may be part of this same atomic import batch.
+      // Resolve its immutable journal from the complete next snapshot, not only
+      // from the previously persisted state.
       const originalPurchaseJournal = target?.journalEntryId
-        ? priorById.get(String(target.journalEntryId))
+        ? nextById.get(String(target.journalEntryId))
         : undefined;
       const payableCandidates = originalPurchaseJournal && originalPurchaseJournal.companyId === companyId &&
         originalPurchaseJournal.type === (target?.documentType === '02' ? 'AJUSTE' : 'COMPRA') && Array.isArray(originalPurchaseJournal.items)

@@ -992,6 +992,91 @@ test('SQLite rejects a retention correction flag linked to an unrelated entry', 
   assert.throws(() => validateAccountingSnapshot(prior, next), /corrección de retención IVA/);
 });
 
+
+test('SQLite accepts a supplier advance application to a purchase invoice created in the same atomic batch', () => {
+  const { prior: fixturePrior, next: fixtureNext } = supplierCreditFixture();
+  const originalPurchase = structuredClone(fixturePrior.purchases[0]);
+  const originalEntry = structuredClone(fixturePrior.journalEntries[0]);
+  const originalMovement = structuredClone(fixturePrior.movements[0]);
+  const product = structuredClone(fixturePrior.products[0]);
+  const vatVoucher = structuredClone(fixturePrior.vatVouchers[0]);
+  const islrVoucher = structuredClone(fixturePrior.islrVouchers[0]);
+  originalPurchase.id = 'purchase-created-in-batch';
+  originalPurchase.invoiceNumber = '101';
+  originalPurchase.controlNumber = '00-101';
+  originalPurchase.journalEntryId = 'purchase-created-in-batch-entry';
+  originalEntry.id = 'purchase-created-in-batch-entry';
+  originalEntry.entryNumber = 1;
+  originalEntry.referenceDoc = 'FAC-101';
+  originalMovement.id = 'purchase-created-in-batch-movement';
+  originalMovement.documentRef = 'FAC-101';
+  originalPurchase.inventoryLines = [];
+  originalMovement.quantity = 0;
+  originalMovement.totalCostBs = 0;
+  originalMovement.totalCostUsd = 0;
+  originalPurchase.paymentTerm = 'CREDITO';
+
+  const accounts = [
+    { code: '1.1.2.03', name: 'Anticipos a proveedores', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.1.01', name: 'Caja principal', type: 'ACTIVO', isMovement: true },
+    { code: '2.1.1.01', name: 'Proveedores', type: 'PASIVO', isMovement: true }
+  ];
+  const directJournal = {
+    id: 'batch-direct-source-journal', companyId: 'company-1', entryNumber: 2,
+    date: '2026-10-10', description: 'Anticipo directo', type: 'ANTICIPO_PROVEEDOR',
+    bcvRate: 100, referenceDoc: 'DIRECT-BATCH-1',
+    items: [
+      { accountCode: '1.1.2.03', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+    ], createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const applicationJournal = {
+    id: 'batch-application-journal', companyId: 'company-1', entryNumber: 3,
+    date: '2026-10-11', description: 'Aplicación anticipo a factura 101',
+    type: 'ANTICIPO_PROVEEDOR', bcvRate: 100, referenceDoc: '101',
+    items: [
+      { accountCode: '2.1.1.01', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+    ], createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const source = {
+    id: 'batch-direct-source', companyId: 'company-1', supplierRif: originalPurchase.supplierRif,
+    supplierName: originalPurchase.supplierName, date: '2026-10-10', amountUsd: 1,
+    bookValueBs: 100, bcvRate: 100, treasuryAccountCode: '1.1.1.01',
+    paymentCurrency: 'BS', paidAmount: 100, reference: 'DIRECT-BATCH-1',
+    support: 'REC-DIRECT-BATCH-1', journalEntryId: directJournal.id,
+    createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const settlement = {
+    id: 'batch-advance-application', companyId: 'company-1',
+    supplierRif: originalPurchase.supplierRif, supplierName: originalPurchase.supplierName,
+    sourceCreditNoteIds: [], sourceCreditNoteAllocations: [],
+    sourceDirectAdvanceIds: [source.id],
+    sourceDirectAdvanceAllocations: [{ directAdvanceId: source.id, amountUsd: 1, bookValueBs: 100 }],
+    kind: 'APPLIED_TO_PURCHASE', date: '2026-10-11', amountUsd: 1, amountBs: 100,
+    advanceBookValueBs: 100, bcvRate: 100, targetPurchaseId: originalPurchase.id,
+    journalEntryId: applicationJournal.id, reference: 'APPLY-BATCH-1',
+    createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const prior = {
+    ...emptyState(), accounts, purchases: [], journalEntries: [], movements: [],
+    products: [], vatVouchers: [], islrVouchers: [],
+    supplierDirectAdvances: [], supplierAdvanceSettlements: []
+  };
+  const next = {
+    ...prior,
+    purchases: [originalPurchase],
+    journalEntries: [originalEntry, directJournal, applicationJournal],
+    movements: [],
+    products: [product],
+    vatVouchers: [{ ...vatVoucher, purchaseRecordId: originalPurchase.id, invoiceNumber: originalPurchase.invoiceNumber }],
+    islrVouchers: [{ ...islrVoucher, invoiceNumber: originalPurchase.invoiceNumber }],
+    supplierDirectAdvances: [source],
+    supplierAdvanceSettlements: [settlement]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
+});
+
 test('SQLite applies a direct supplier advance to a future payable and reduces the remaining AP ceiling', () => {
   const { prior: basePrior } = supplierCreditFixture();
   const originalPurchase = basePrior.purchases[0];
