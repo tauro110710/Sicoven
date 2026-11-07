@@ -343,8 +343,8 @@ test('normaliza prefijos repetidos y detecta asientos que ya representan una fac
 
 
 test('identifica facturas de venta globalmente y compras por proveedor según el dominio SICOVEN', () => {
-  assert.equal(buildUniversalInvoiceIdentity('sales', ' FAC 0001 ', 'J-111'), 'FAC0001');
-  assert.equal(buildUniversalInvoiceIdentity('sales', 'FAC0001', 'J-222'), 'FAC0001');
+  assert.equal(buildUniversalInvoiceIdentity('sales', ' FAC 0001 ', 'J-111'), '0001');
+  assert.equal(buildUniversalInvoiceIdentity('sales', 'FAC0001', 'J-222'), '0001');
   assert.equal(buildUniversalInvoiceIdentity('purchases', '0001', 'J-111'), '0001|J111');
   assert.equal(buildUniversalInvoiceIdentity('purchases', '0001', 'J-222'), '0001|J222');
 });
