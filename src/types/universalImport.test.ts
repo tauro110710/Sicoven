@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, hasUniversalNestedMerchandiseDetails, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -162,4 +162,40 @@ test('normaliza conceptos de movimientos históricos y rechaza conceptos descono
   assert.equal(mapUniversalInventoryMovementConcept('Autoconsumo'), 'AUTOCONSUMO');
   assert.equal(mapUniversalInventoryMovementConcept('Devolución a proveedor'), 'DEVOLUCION_COMPRA');
   assert.equal(mapUniversalInventoryMovementConcept('consignación'), null);
+});
+
+
+test('detecta detalles de mercancía anidados en facturas de venta', () => {
+  assert.equal(hasUniversalNestedMerchandiseDetails({ items: [{ sku: 'A-1', cantidad: 2 }] }), true);
+  assert.equal(hasUniversalNestedMerchandiseDetails({ detalles: [{ codigoProducto: 'A-1', quantity: 1 }] }), true);
+  assert.equal(hasUniversalNestedMerchandiseDetails({ artículos: [{ códigoProducto: 'A-2', cantidad: 3 }] }), true);
+  assert.equal(hasUniversalNestedMerchandiseDetails({ payments: [{ paymentReference: 'P-1', amount: 10 }] }), false);
+  assert.equal(hasUniversalNestedMerchandiseDetails({ items: [{ paymentReference: 'P-1', amount: 10 }], lines: [{ sku: 'A-3', qty: 1 }] }), true);
+});
+
+test('detecta liquidaciones relacionadas por ID, factura/RIF y sin cruzar archivos', () => {
+  const invoice = { migrationfile: 'archivo-a', id: 'F-1' };
+  const rows = [
+    invoice,
+    { migrationfile: 'archivo-a', invoiceId: 'F-1', settlementDate: '2026-01-10', amountBs: 50, method: 'BANK_TRANSFER_BS', reference: 'TR-1' },
+    { migrationfile: 'archivo-a', invoiceId: 'F-1', productCode: 'SKU-1', quantity: 2, amountBs: 50 },
+    { migrationfile: 'archivo-b', invoiceId: 'F-1', settlementDate: '2026-01-10', amountBs: 50, method: 'CASH_BS' }
+  ];
+  assert.equal(resolveUniversalInvoiceSettlementRows(rows, invoice).length, 1);
+  const invoiceWithoutId = { migrationfile: 'archivo-a', invoiceNumber: 'F-20', customerRif: 'J-12345678-9' };
+  const related = [
+    invoiceWithoutId,
+    { migrationfile: 'archivo-a', invoiceNumber: 'F-20', customerRif: 'J-12345678-9', fechaCobro: '2026-02-01', monto: 25, medioPago: 'CASH_BS' },
+    { migrationfile: 'archivo-a', invoiceNumber: 'F-20', customerRif: 'J-99999999-9', fechaCobro: '2026-02-01', monto: 25, medioPago: 'CASH_BS' },
+    { migrationfile: 'archivo-b', invoiceNumber: 'F-20', customerRif: 'J-12345678-9', fechaCobro: '2026-02-01', monto: 25, medioPago: 'CASH_BS' }
+  ];
+  assert.equal(resolveUniversalInvoiceSettlementRows(related, invoiceWithoutId).length, 1);
+});
+
+test('detecta pagos embebidos en importes localizados y no confunde saldo cero', () => {
+  assert.equal(hasUniversalInlineSettlementAmount({ paidAmountBs: 25 }), true);
+  assert.equal(hasUniversalInlineSettlementAmount({ montoCobradoBs: '1.250,00' }), true);
+  assert.equal(hasUniversalInlineSettlementAmount({ amountPaid: '75,50' }), true);
+  assert.equal(hasUniversalInlineSettlementAmount({ paidAmountBs: 0, amountCollectedUsd: '0.00', totalPaid: 0 }), false);
+  assert.equal(hasUniversalInlineSettlementAmount({ outstandingBalanceBs: 25 }), false);
 });
