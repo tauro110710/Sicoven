@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { normalizeMigrationValue, parseDelimitedRecords, parseMigrationNumber } from '../../types/migrationParsing';
-import { extractUniversalJsonCollections } from '../../types/universalImport';
+import { detectUniversalImportFormat, extractUniversalJsonCollections } from '../../types/universalImport';
 import ExcelJS from 'exceljs';
 import { FileUp, Search, ShieldCheck, AlertTriangle, CheckCircle2, XCircle, Files, ArrowRightLeft, Building2 } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
@@ -27,21 +27,11 @@ const MODULES: { key: ModuleKey; name: string; aliases: Record<string, string[]>
 ];
 
 const normalize = normalizeMigrationValue;
-const asRows = (data: unknown): Row[] => {
-  if (Array.isArray(data)) return data.filter(x => x && typeof x === 'object' && !Array.isArray(x)) as Row[];
-  if (data && typeof data === 'object') {
-    const obj = data as Record<string, unknown>;
-    for (const key of ['rows','data','items','records','productos','products','clientes','customers','proveedores','suppliers']) {
-      if (Array.isArray(obj[key])) return (obj[key] as unknown[]).filter(x => x && typeof x === 'object' && !Array.isArray(x)) as Row[];
-    }
-  }
-  return [];
-};
 const csvRows = (text: string): Row[] => parseDelimitedRecords(text);
 
 async function parseFile(file: File): Promise<ParsedFile[]> {
   try {
-    const ext = file.name.toLowerCase().split('.').pop();
+    const ext = detectUniversalImportFormat(file.name);
     if (ext === 'json') {
       const data = JSON.parse(await file.text());
       const collections = extractUniversalJsonCollections(data);
