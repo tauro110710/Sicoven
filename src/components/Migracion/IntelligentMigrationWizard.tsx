@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference } from '../../types/universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 
@@ -460,9 +460,10 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const paymentReference=String(pick(r,'paymentReference','referenciaPago','comprobantePago')??'').trim();
      if(paymentTerm==='CONTADO'&&(!paymentAccountCode||!paymentReference))throw new Error('Fila '+(i+1)+': la compra de contado requiere cuenta contable de pago y referencia del desembolso.');
      const purchaseDebitAccountCode=String(pick(r,'purchaseDebitAccountCode','debitAccountCode','cuentaDebitoCompra','cuentaGasto','codigoCuentaGasto')??'').trim();
-     const rawInventoryLines=pick(r,'inventoryLines','items','lines','detalles','detalle');
+     const nestedInventoryLines=pick(r,'inventoryLines','items','lines','detalles','detalle');
+     const rawInventoryLines=Array.isArray(nestedInventoryLines)&&nestedInventoryLines.length?nestedInventoryLines:resolveUniversalPurchaseDetailRows(rows,r);
      let inventoryLines: Array<{productId:string;quantity:number;unitCostBs:number}>|undefined;
-     if(Array.isArray(rawInventoryLines)&&rawInventoryLines.length){
+     if(rawInventoryLines.length){
       inventoryLines=rawInventoryLines.map((rawLine,lineIndex)=>{
        if(!rawLine||typeof rawLine!=='object'||Array.isArray(rawLine))throw new Error('Fila '+(i+1)+', detalle '+(lineIndex+1)+': la línea de compra no es un objeto válido.');
        const line=Object.fromEntries(Object.entries(rawLine as Row).map(([key,value])=>[norm(key),scalar(value)])) as Row;
