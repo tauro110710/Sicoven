@@ -178,10 +178,11 @@ test('detecta liquidaciones relacionadas por ID, factura/RIF y sin cruzar archiv
   const rows = [
     invoice,
     { migrationfile: 'archivo-a', invoiceId: 'F-1', settlementDate: '2026-01-10', amountBs: 50, method: 'BANK_TRANSFER_BS', reference: 'TR-1' },
+    { migrationfile: 'archivo-a', invoiceId: 'F-1', paymentDate: '2026-01-11', amountBs: 10 },
     { migrationfile: 'archivo-a', invoiceId: 'F-1', productCode: 'SKU-1', quantity: 2, amountBs: 50 },
     { migrationfile: 'archivo-b', invoiceId: 'F-1', settlementDate: '2026-01-10', amountBs: 50, method: 'CASH_BS' }
   ];
-  assert.equal(resolveUniversalInvoiceSettlementRows(rows, invoice).length, 1);
+  assert.equal(resolveUniversalInvoiceSettlementRows(rows, invoice).length, 2);
   const invoiceWithoutId = { migrationfile: 'archivo-a', invoiceNumber: 'F-20', customerRif: 'J-12345678-9' };
   const related = [
     invoiceWithoutId,
