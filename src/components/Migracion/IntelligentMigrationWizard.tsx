@@ -727,11 +727,11 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     if(!isValidIsoDate(openingDate))throw new Error('Registro '+(i+1)+': declare una fecha de apertura válida AAAA-MM-DD; no se usará la fecha actual.');
     if((stock>0||cost>0)&&openingBcvRate<=0)throw new Error('Registro '+(i+1)+': la existencia o costo inicial requiere una tasa BCV histórica positiva declarada en el archivo.');
     const avgCostUsdRaw=pick(r,'avgCostUsd','costoPromedioUsd');
-    if(avgCostUsdRaw!==undefined&&openingBcvRate>0&&Math.abs(parseMigrationNumber(avgCostUsdRaw)-cost/openingBcvRate)>0.0001)throw new Error('Registro '+(i+1)+': el costo promedio USD no concilia con costo Bs y tasa BCV de apertura.');
+    if(avgCostUsdRaw!==undefined){const value=parseMigrationNumber(avgCostUsdRaw);if(!Number.isFinite(value)||value<0||openingBcvRate<=0||Math.abs(value-cost/openingBcvRate)>0.0001)throw new Error('Registro '+(i+1)+': el costo promedio USD es inválido o no concilia con costo Bs y tasa BCV de apertura.');}
     const lastCostBsRaw=pick(r,'lastCostBs','ultimoCostoBs');
-    if(lastCostBsRaw!==undefined&&Math.abs(parseMigrationNumber(lastCostBsRaw)-cost)>0.02)throw new Error('Registro '+(i+1)+': el último costo es distinto al costo promedio; este adaptador no puede conservar ambos valores sin pérdida.');
+    if(lastCostBsRaw!==undefined){const value=parseMigrationNumber(lastCostBsRaw);if(!Number.isFinite(value)||value<0||Math.abs(value-cost)>0.02)throw new Error('Registro '+(i+1)+': el último costo es inválido o distinto al costo promedio; este adaptador no puede conservar ambos valores sin pérdida.');}
     const lastCostUsdRaw=pick(r,'lastCostUsd','ultimoCostoUsd');
-    if(lastCostUsdRaw!==undefined&&openingBcvRate>0&&Math.abs(parseMigrationNumber(lastCostUsdRaw)-cost/openingBcvRate)>0.0001)throw new Error('Registro '+(i+1)+': el último costo USD no concilia con la valoración inicial soportada.');
+    if(lastCostUsdRaw!==undefined){const value=parseMigrationNumber(lastCostUsdRaw);if(!Number.isFinite(value)||value<0||openingBcvRate<=0||Math.abs(value-cost/openingBcvRate)>0.0001)throw new Error('Registro '+(i+1)+': el último costo USD es inválido o no concilia con la valoración inicial soportada.');}
     return {code,name,category,unit,minStock:pick(r,'minStock','stockMinimo')===undefined?0:number('minStock','stockMinimo'),currentStock:stock,avgCostBs:cost,avgCostUsd:openingBcvRate>0?cost/openingBcvRate:0,lastCostBs:cost,lastCostUsd:openingBcvRate>0?cost/openingBcvRate:0,salesPriceBs:priceBs,salesPriceUsd:priceUsd,costingMethod,vatTreatment,itemType,inventoryAccountCode,costOfSalesAccountCode,adjustmentAccountCode,openingBalanceAccountCode,openingDate,openingBcvRate};
    });
    const count=await importInventoryProducts(prepared,targetCompany.id);
