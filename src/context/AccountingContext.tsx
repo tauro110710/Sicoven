@@ -3680,10 +3680,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(parsedOpeningDate.getTime()) || parsedOpeningDate.toISOString().slice(0,10) !== date) throw new Error('Fecha de apertura inválida para ' + code + '.');
       if (!Number.isFinite(rate) || rate < 0 || ((quantity > 0 || unitCostBs > 0) && rate <= 0) || !Number.isFinite(quantity) || quantity < 0 ||
           !Number.isFinite(unitCostBs) || unitCostBs < 0 || (quantity > 0 && unitCostBs <= 0)) throw new Error('Tasa, cantidad o costo inválidos para ' + code + '.');
+      const lastCostBs = Number(row.lastCostBs ?? unitCostBs);
+      const lastCostUsd = Number(row.lastCostUsd ?? (rate > 0 ? lastCostBs / rate : 0));
+      if (!Number.isFinite(lastCostBs) || lastCostBs < 0 || !Number.isFinite(lastCostUsd) || lastCostUsd < 0 ||
+          (quantity > 0 && (lastCostBs <= 0 || lastCostUsd <= 0))) {
+        throw new Error('Último costo Bs/USD inválido para ' + code + '. Declare ambos valores cuando importe inventario universal.');
+      }
       const product: InventoryProduct = {
         ...row, id: 'prod-import-' + Date.now() + '-' + prepared.length + '-' + Math.floor(Math.random() * 100000),
         companyId: targetCompanyId, code, name, currentStock: quantity, avgCostBs: unitCostBs,
-        avgCostUsd: rate > 0 ? unitCostBs / rate : 0, lastCostBs: unitCostBs, lastCostUsd: rate > 0 ? unitCostBs / rate : 0,
+        avgCostUsd: rate > 0 ? unitCostBs / rate : 0, lastCostBs, lastCostUsd,
         inventoryAccountCode: row.inventoryAccountCode || getDefaultInventoryAccountCode(row.itemType),
         costOfSalesAccountCode: row.costOfSalesAccountCode || '5.1.1.01',
         adjustmentAccountCode: row.adjustmentAccountCode || '5.1.2.01',
