@@ -248,10 +248,11 @@ export const CatalogoView: React.FC = () => {
                 <input
                   type="text"
                   required
-                  placeholder="Ej: 1.1.1.06 o 6.1.1.11"
+                  placeholder="Ej: 1.1.1.03 o 6.1.1.11"
                   value={code}
                   onChange={e => setCode(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  disabled={!!editingAccount}
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-500"
                 />
               </div>
 
