@@ -136,7 +136,7 @@ export const InventarioView: React.FC = () => {
     0
   );
   const totalInventoryValueUsd = companyProducts.reduce(
-    (sum, p) => sum + Math.max(0, p.currentStock * p.avgCostUsd - Number(p.vnrProvisionBs || 0) / Math.max(Number(currentCompany.bcvRate || 0), 0.000001)),
+    (sum, p) => sum + Math.max(0, p.currentStock * p.avgCostUsd - Number(p.vnrProvisionBs || 0) / Math.max(Number(currentCompany.inventoryBcvRate || 0), 0.000001)),
     0
   );
   const lowStockCount = companyProducts.filter(p => p.currentStock <= p.minStock).length;
