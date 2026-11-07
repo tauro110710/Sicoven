@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, hasUniversalNestedMerchandiseDetails, resolveUniversalPurchaseDetailRows } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -100,4 +100,22 @@ test('prefiere la contraparte explícita cuando nombre y RIF están presentes', 
   assert.deepEqual(resolveUniversalPartyReference([invoice], invoice, 'customer'), {
     name: 'Cliente directo', rif: 'J-12345678-9', source: 'inline'
   });
+});
+
+
+test('detecta detalles de mercancía anidados en una factura de venta', () => {
+  assert.equal(hasUniversalNestedMerchandiseDetails({ items: [{ sku: 'A-1', cantidad: 2 }] }), true);
+  assert.equal(hasUniversalNestedMerchandiseDetails({ detalles: [{ codigoProducto: 'A-1', quantity: 1 }] }), true);
+  assert.equal(hasUniversalNestedMerchandiseDetails({ payments: [{ paymentReference: 'P-1', amount: 10 }] }), false);
+  assert.equal(hasUniversalNestedMerchandiseDetails({ items: [] }), false);
+});
+
+test('detecta renglones de mercancía relacionados por referencia explícita sin cruzar archivos', () => {
+  const invoice = { migrationfile: 'archivo-a', id: 'F-1' };
+  const rows = [
+    invoice,
+    { migrationfile: 'archivo-a', invoiceId: 'F-1', productCode: 'SKU-1', quantity: 2 },
+    { migrationfile: 'archivo-b', invoiceId: 'F-1', productCode: 'SKU-2', quantity: 1 }
+  ];
+  assert.equal(resolveUniversalPurchaseDetailRows(rows, invoice).length, 1);
 });
