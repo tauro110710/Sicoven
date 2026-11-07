@@ -228,7 +228,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
 
    }
    const combined:Row[]=[]; const allHeaders = new Set<string>();
-   for(const file of list){
+   for(const [fileIndex,file] of list.entries()){
     const ext=detectUniversalImportFormat(file.name);
     let parsed:Row[]=[];
     if(ext==='json'){
@@ -242,7 +242,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
       const details=invalidCollections.map(collection=>collection.path+': '+collection.invalidItems+' elemento(s) no son registros objeto').join('; ');
       throw new Error(file.name+': el análisis encontró elementos incompatibles ('+details+'). No se descartaron silenciosamente; corrige el archivo antes de importar.');
      }
-     parsed=collections.flatMap(collection=>collection.rows.map(row=>({...row,__sicovenImportSource:file.name+' — colección: '+collection.path})));
+     parsed=collections.flatMap(collection=>collection.rows.map(row=>({...row,__sicovenImportSource:'Archivo '+(fileIndex+1)+' · '+file.name+' — colección: '+collection.path})));
     }else if(ext==='csv'||ext==='tsv'||ext==='txt'){
      parsed=parseCsv(await file.text());
     }else if(ext==='xlsx'||ext==='xlsm'){
@@ -252,12 +252,12 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      for(const sheet of wb.worksheets){
       const matrix:unknown[][]=[];
       sheet.eachRow({includeEmpty:false},row=>{const vals:unknown[]=[];for(let c=1;c<=row.cellCount;c++)vals.push(scalar(row.getCell(c).value));matrix.push(vals);});
-      const parsedSheet=toRows(matrix).map(row => ({ ...row, __sicovenImportSource: file.name + ' — hoja: ' + sheet.name }));
+      const parsedSheet=toRows(matrix).map(row => ({ ...row, __sicovenImportSource: 'Archivo ' + (fileIndex+1) + ' · ' + file.name + ' — hoja: ' + sheet.name }));
       if(parsedSheet.length) sheetRows.push(...parsedSheet);
      }
      parsed=sheetRows;
     }else throw new Error(file.name+': formato no admitido. Use JSON, CSV, TSV, TXT o Excel XLSX/XLSM.');
-    parsed=parsed.map((row,rowIndex)=>{const normalized:Row={};const seenKeys=new Set<string>();let sourceLabel=file.name;for(const [key,value] of Object.entries(row)){if(norm(key)==='sicovenimportsource'){if(norm(key)==='sicovenimportsource'&&String(value??'').trim())sourceLabel=String(value);continue;}const normalizedKey=norm(key);if(!normalizedKey)continue;if(seenKeys.has(normalizedKey))throw new Error(file.name+', registro '+(rowIndex+1)+': hay claves duplicadas tras normalizar acentos, mayúsculas o signos ('+key+').');seenKeys.add(normalizedKey);normalized[normalizedKey]=scalar(value);}return {...normalized,migrationsource:sourceLabel,migrationrowid:sourceLabel+'|'+rowIndex};});
+    parsed=parsed.map((row,rowIndex)=>{const normalized:Row={};const seenKeys=new Set<string>();let sourceLabel='Archivo '+(fileIndex+1)+' · '+file.name;for(const [key,value] of Object.entries(row)){if(norm(key)==='sicovenimportsource'){if(norm(key)==='sicovenimportsource'&&String(value??'').trim())sourceLabel=String(value);continue;}const normalizedKey=norm(key);if(!normalizedKey)continue;if(seenKeys.has(normalizedKey))throw new Error(file.name+', registro '+(rowIndex+1)+': hay claves duplicadas tras normalizar acentos, mayúsculas o signos ('+key+').');seenKeys.add(normalizedKey);normalized[normalizedKey]=scalar(value);}return {...normalized,migrationsource:sourceLabel,migrationrowid:sourceLabel+'|'+rowIndex};});
     if(!parsed.length)throw new Error(file.name+': no se detectaron filas de datos.');
     for (const row of parsed) for (const key of Object.keys(row)) allHeaders.add(norm(key));
     combined.push(...parsed);
