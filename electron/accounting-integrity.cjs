@@ -699,7 +699,7 @@ function saleInventoryLinesMatchKardex(sale, nextState, previousState) {
         movement.costingMethod !== (product.costingMethod || 'PROMEDIO_PONDERADO') ||
         !movement.journalEntryId) return false;
 
-    const inventoryCode = product.inventoryAccountCode || '1.1.4.01';
+    const inventoryCode = product.inventoryAccountCode || (product.itemType === 'MATERIA_PRIMA' ? '1.1.4.02' : product.itemType === 'PRODUCTO_EN_PROCESO' ? '1.1.4.04' : '1.1.4.01');
     const costCode = product.costOfSalesAccountCode || '5.1.1.01';
     const costEntry = entries.find(entry => String(entry.id) === String(movement.journalEntryId));
     if (!costEntry || costEntry.companyId !== sale.companyId || costEntry.type !== 'INVENTARIO' ||
