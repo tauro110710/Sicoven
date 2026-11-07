@@ -450,17 +450,44 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      if(vatWithheldBs>totalAmountBs||vatWithheldUsd>totalAmountUsd)throw new Error('Fila '+(i+1)+': la retención supera el total de la factura.');
      const documentTypeRaw=String(pick(r,'documentType','tipoDocumento')??'01').trim();
      if(!['01','02','03'].includes(documentTypeRaw))throw new Error('Fila '+(i+1)+': tipo de documento inválido; use 01, 02 o 03.');
+     if(documentTypeRaw!=='01')throw new Error('Fila '+(i+1)+': las notas de débito/crédito requieren flujos de corrección fiscal y contable enlazados a su factura original. Este adaptador solo importa facturas (01).');
      const common={invoiceDate,invoiceNumber,controlNumber:String(pick(r,'controlNumber','numeroControl','numero de control')??'').trim(),documentType:documentTypeRaw as '01'|'02'|'03',totalAmountBs,exemptAmountBs,taxableBaseBs,taxRate,vatAmountBs,vatWithheldBs,bcvRate:rate,totalAmountUsd,taxableBaseUsd,vatAmountUsd,vatWithheldUsd,notes:String(pick(r,'notes','observaciones')??''),paymentTerm,creditDays,dueDate,currencyPricingMode:'REVISION_MANUAL' as const,fiscalAdjustmentMode:'REVISION_CONTADOR' as const};
      if(!common.controlNumber)throw new Error('Fila '+(i+1)+': número de control obligatorio.');
      if(kind==='sales')return {...common,customerRif:partyRif,customerName:partyName,customerAddress:String(pick(r,'customerAddress','direccionCliente')??''),retentionRate:num(r,i,false,'retentionRate','tasaRetencion'),retentionVoucherNumber:String(pick(r,'retentionVoucherNumber','comprobanteRetencion')??'')||undefined};
+     const accountCreditDate=String(pick(r,'accountCreditDate','fechaAbonoCuenta','fechaReconocimiento','fechaPago')??'').slice(0,10);
+     if(!isValidIsoDate(accountCreditDate))throw new Error('Fila '+(i+1)+': las compras requieren la fecha efectiva de abono en cuenta/pago (accountCreditDate). No se inferirá desde la fecha de factura.');
+     const paymentAccountCode=String(pick(r,'paymentAccountCode','cuentaPago','codigoCuentaPago')??'').trim();
+     const paymentReference=String(pick(r,'paymentReference','referenciaPago','comprobantePago')??'').trim();
+     if(paymentTerm==='CONTADO'&&(!paymentAccountCode||!paymentReference))throw new Error('Fila '+(i+1)+': la compra de contado requiere cuenta contable de pago y referencia del desembolso.');
+     const purchaseDebitAccountCode=String(pick(r,'purchaseDebitAccountCode','debitAccountCode','cuentaDebitoCompra','cuentaGasto','codigoCuentaGasto')??'').trim();
+     const rawInventoryLines=pick(r,'inventoryLines','items','lines','detalles','detalle');
+     let inventoryLines: Array<{productId:string;quantity:number;unitCostBs:number}>|undefined;
+     if(Array.isArray(rawInventoryLines)&&rawInventoryLines.length){
+      inventoryLines=rawInventoryLines.map((rawLine,lineIndex)=>{
+       if(!rawLine||typeof rawLine!=='object'||Array.isArray(rawLine))throw new Error('Fila '+(i+1)+', detalle '+(lineIndex+1)+': la línea de compra no es un objeto válido.');
+       const line=Object.fromEntries(Object.entries(rawLine as Row).map(([key,value])=>[norm(key),scalar(value)])) as Row;
+       const code=String(pick(line,'productCode','codigoProducto','sku','code','codigo')??'').trim();
+       const product=companyProducts.find(item=>item.code.trim().toLowerCase()===code.toLowerCase());
+       const quantityRaw=pick(line,'quantity','cantidad','qty');
+       const costRaw=pick(line,'unitCostBs','costoUnitarioBs','unitCost','costoUnitario','costBs');
+       const quantity=quantityRaw===undefined?NaN:parseMigrationNumber(quantityRaw);
+       const unitCostBs=costRaw===undefined?NaN:parseMigrationNumber(costRaw);
+       if(!product||!Number.isFinite(quantity)||quantity<=0||!Number.isFinite(unitCostBs)||unitCostBs<=0)throw new Error('Fila '+(i+1)+', detalle '+(lineIndex+1)+': debe identificar un artículo existente de la empresa destino mediante código/SKU y declarar cantidad y costo unitario Bs positivos. No se asociará por descripción.');
+       return {productId:product.id,quantity,unitCostBs};
+      });
+      if(new Set(inventoryLines.map(line=>line.productId)).size!==inventoryLines.length)throw new Error('Fila '+(i+1)+': el detalle repite un mismo producto; consolida sus líneas antes de importar.');
+      if(Math.abs(inventoryLines.reduce((sum,line)=>sum+line.quantity*line.unitCostBs,0)-(taxableBaseBs+exemptAmountBs))>0.02)throw new Error('Fila '+(i+1)+': el detalle de inventario no concilia con la base imponible más el monto exento.');
+     }else if(!purchaseDebitAccountCode)throw new Error('Fila '+(i+1)+': compra sin detalle de mercancía requiere una cuenta de débito explícita (purchaseDebitAccountCode). No se asignará una cuenta predeterminada.');
      const retentionRate=num(r,i,true,'retentionRate','tasaRetencion');
      const islrWithheldBs=num(r,i,true,'islrWithheldBs','islrRetenidoBs');
      const islrWithheldUsd=num(r,i,true,'islrWithheldUsd','islrRetenidoUsd');
      if(Math.abs(islrWithheldBs/rate-islrWithheldUsd)>0.02)throw new Error('Fila '+(i+1)+': la retención ISLR en USD no corresponde al importe en Bs dividido por la tasa BCV.');
+     if(vatWithheldBs>0&&!pick(r,'ivaRetentionDecision','retentionDecisionSnapshot'))throw new Error('Fila '+(i+1)+': la retención IVA requiere su evaluación fiscal completa y trazable (ivaRetentionDecision). No se recreará a partir de un porcentaje.');
+     if(islrWithheldBs>0&&!['islrConceptCode','islrRate','islrBeneficiaryType','islrResidency','islrBasePercentage','islrUnitTaxValueBs','islrFormulaFactor'].every(key=>pick(r,key)!==undefined))throw new Error('Fila '+(i+1)+': la retención ISLR requiere concepto, condición del beneficiario, residencia, porcentaje de base, UT y factor de cálculo. La importación se detuvo para no emitir un comprobante incompleto.');
      const netPayableBs=totalAmountBs-vatWithheldBs-islrWithheldBs;
      const netPayableUsd=totalAmountUsd-vatWithheldUsd-islrWithheldUsd;
      if(vatWithheldBs+islrWithheldBs>totalAmountBs+0.02||vatWithheldUsd+islrWithheldUsd>totalAmountUsd+0.02||netPayableBs < -0.02||netPayableUsd < -0.02)throw new Error('Fila '+(i+1)+': la suma de las retenciones IVA e ISLR supera el total de la factura.');
-     return {...common,supplierRif:partyRif,supplierName:partyName,supplierAddress:String(pick(r,'supplierAddress','direccionProveedor')??''),islrWithheldBs,islrWithheldUsd,retentionRate,voucherNumber:String(pick(r,'voucherNumber','comprobanteRetencion')??'')||undefined,vatWithheldBs,vatWithheldUsd};
+     return {...common,accountCreditDate,paymentAccountCode:paymentAccountCode||undefined,paymentReference:paymentReference||undefined,purchaseDebitAccountCode:purchaseDebitAccountCode||undefined,inventoryLines,supplierRif:partyRif,supplierName:partyName,supplierAddress:String(pick(r,'supplierAddress','direccionProveedor')??''),supplierTaxStatus:pick(r,'supplierTaxStatus','condicionFiscalProveedor') as any,ivaRetentionDecision:pick(r,'ivaRetentionDecision','retentionDecisionSnapshot') as any,islrConceptCode:islrWithheldBs>0?String(pick(r,'islrConceptCode')??''):undefined,islrConceptName:islrWithheldBs>0?String(pick(r,'islrConceptName')??''):undefined,islrRate:islrWithheldBs>0?num(r,i,true,'islrRate'):undefined,islrSubtrahendBs:islrWithheldBs>0?num(r,i,false,'islrSubtrahendBs'):undefined,islrBeneficiaryType:islrWithheldBs>0?pick(r,'islrBeneficiaryType') as any:undefined,islrResidency:islrWithheldBs>0?pick(r,'islrResidency') as any:undefined,islrBasePercentage:islrWithheldBs>0?num(r,i,true,'islrBasePercentage'):undefined,islrUnitTaxValueBs:islrWithheldBs>0?num(r,i,true,'islrUnitTaxValueBs'):undefined,islrFormulaFactor:islrWithheldBs>0?num(r,i,true,'islrFormulaFactor'):undefined,islrWithheldBs,islrWithheldUsd,retentionRate,voucherNumber:String(pick(r,'voucherNumber','comprobanteRetencion')??'')||undefined,vatWithheldBs,vatWithheldUsd};
     });
     runAtomicInvoiceImport(()=>{
      if(kind==='sales')prepared.forEach(s=>addSale(s as Parameters<typeof addSale>[0],targetCompany.id));
