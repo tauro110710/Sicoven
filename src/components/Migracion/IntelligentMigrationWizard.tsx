@@ -236,7 +236,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
       const details=invalidCollections.map(collection=>collection.path+': '+collection.invalidItems+' elemento(s) no son registros objeto').join('; ');
       throw new Error(file.name+': el análisis encontró elementos incompatibles ('+details+'). No se descartaron silenciosamente; corrige el archivo antes de importar.');
      }
-     parsed=collections.flatMap(collection=>collection.rows.map(row=>({...row,migrationsource:file.name+' — colección: '+collection.path})));
+     parsed=collections.flatMap(collection=>collection.rows.map(row=>({...row,_migrationSource:file.name+' — colección: '+collection.path})));
     }else if(ext==='csv'||ext==='tsv'||ext==='txt'){
      parsed=parseCsv(await file.text());
     }else if(ext==='xlsx'||ext==='xlsm'){
@@ -251,7 +251,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      }
      parsed=sheetRows;
     }else throw new Error(file.name+': formato no admitido. Use JSON, CSV, TSV, TXT o Excel XLSX/XLSM.');
-    parsed=parsed.map((row,rowIndex)=>{const normalized:Row={};const seenKeys=new Set<string>();for(const [key,value] of Object.entries(row)){const normalizedKey=norm(key);if(!normalizedKey)continue;if(seenKeys.has(normalizedKey))throw new Error(file.name+', registro '+(rowIndex+1)+': hay claves duplicadas tras normalizar acentos, mayúsculas o signos ('+key+').');seenKeys.add(normalizedKey);normalized[normalizedKey]=scalar(value);}return {...normalized,migrationsource:String(normalized.migrationsource??file.name)};});
+    parsed=parsed.map((row,rowIndex)=>{const normalized:Row={};const seenKeys=new Set<string>();let sourceLabel=file.name;for(const [key,value] of Object.entries(row)){if(norm(key)==='migrationsource'||norm(key)==='_migrationsource'){if(norm(key)==='_migrationsource'&&String(value??'').trim())sourceLabel=String(value);continue;}const normalizedKey=norm(key);if(!normalizedKey)continue;if(seenKeys.has(normalizedKey))throw new Error(file.name+', registro '+(rowIndex+1)+': hay claves duplicadas tras normalizar acentos, mayúsculas o signos ('+key+').');seenKeys.add(normalizedKey);normalized[normalizedKey]=scalar(value);}return {...normalized,migrationsource:sourceLabel};});
     if(!parsed.length)throw new Error(file.name+': no se detectaron filas de datos.');
     for (const row of parsed) for (const key of Object.keys(row)) allHeaders.add(norm(key));
     combined.push(...parsed);
