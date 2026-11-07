@@ -26,9 +26,13 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   const [openingDate, setOpeningDate] = useState(new Date().toISOString().slice(0, 10));
   const [openingBcvRateInput, setOpeningBcvRateInput] = useState('');
   const [avgCostInput, setAvgCostInput] = useState('');
-  const avgCostBs = parseDecimalInput(avgCostInput);
+  const avgCostUsd = parseDecimalInput(avgCostInput);
+  const [marginInput, setMarginInput] = useState('30');
+  const marginPercent = parseDecimalInput(marginInput);
+  const suggestedSalesPriceUsd = avgCostUsd > 0 && marginPercent >= 0 && marginPercent < 100
+    ? avgCostUsd / (1 - marginPercent / 100) : 0;
   const [salesPriceInput, setSalesPriceInput] = useState('');
-  const salesPriceBs = parseDecimalInput(salesPriceInput);
+  const salesPriceUsd = parseDecimalInput(salesPriceInput);
   const [inventoryAccountCode, setInventoryAccountCode] = useState('1.1.4.01');
   const [costOfSalesAccountCode, setCostOfSalesAccountCode] = useState('5.1.1.01');
   const [adjustmentAccountCode, setAdjustmentAccountCode] = useState('5.1.2.01');
@@ -52,14 +56,14 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       setMinStockInput(String(product.minStock)); setCurrentStockInput(String(product.currentStock));
       setOpeningDate(product.openingDate || new Date().toISOString().slice(0, 10));
       setOpeningBcvRateInput(String(product.openingBcvRate || ''));
-      setAvgCostInput(String(product.avgCostBs)); setSalesPriceInput(String(product.salesPriceBs));
+      setAvgCostInput(String(product.avgCostUsd || (product.openingBcvRate ? product.avgCostBs / product.openingBcvRate : 0))); setSalesPriceInput(String(product.salesPriceUsd || (currentCompany.inventoryBcvRate ? product.salesPriceBs / currentCompany.inventoryBcvRate : 0))); setMarginInput('30');
       setInventoryAccountCode(product.inventoryAccountCode || '1.1.4.01'); setCostOfSalesAccountCode(product.costOfSalesAccountCode || '5.1.1.01');
       setAdjustmentAccountCode(product.adjustmentAccountCode || '5.1.2.01'); setOpeningBalanceAccountCode(product.openingBalanceAccountCode || '3.3.1.01');
       setCostingMethod(product.costingMethod || 'PROMEDIO_PONDERADO'); setVatTreatment(product.vatTreatment || 'GENERAL_16'); setItemType(product.itemType || 'MERCANCIA');
     } else {
       setCode(''); setName(''); setCategory('Mercancías Generales'); setUnit('Unidad');
       setMinStockInput('10'); setCurrentStockInput('0'); setOpeningDate(new Date().toISOString().slice(0, 10));
-      setOpeningBcvRateInput(''); setAvgCostInput(''); setSalesPriceInput('');
+      setOpeningBcvRateInput(String(currentCompany.inventoryBcvRate || '')); setAvgCostInput(''); setSalesPriceInput(''); setMarginInput('30');
       setInventoryAccountCode('1.1.4.01'); setCostOfSalesAccountCode('5.1.1.01');
       setAdjustmentAccountCode('5.1.2.01'); setOpeningBalanceAccountCode('3.3.1.01');
       setCostingMethod('PROMEDIO_PONDERADO'); setVatTreatment('GENERAL_16'); setItemType('MERCANCIA');
@@ -69,8 +73,9 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   if (!isOpen) return null;
 
   const bcvRate = parseDecimalInput(openingBcvRateInput);
-  const avgCostUsd = bcvRate > 0 ? avgCostBs / bcvRate : 0;
-  const salesPriceUsd = bcvRate > 0 ? salesPriceBs / bcvRate : (product?.salesPriceUsd || 0);
+  const currentBcvRate = Number(currentCompany.inventoryBcvRate || 0);
+  const avgCostBs = avgCostUsd * bcvRate;
+  const salesPriceBs = salesPriceUsd * (currentBcvRate > 0 ? currentBcvRate : bcvRate);
 
   const movementAccounts = accounts.filter(account => account.isMovement);
   const inventoryAccounts = movementAccounts.filter(account => account.type === 'ACTIVO');
@@ -81,7 +86,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
     e.preventDefault();
     setError('');
     if (!code.trim() || !name.trim()) { setError('El código y la descripción son obligatorios.'); return; }
-    if (!product && (currentStock > 0 || avgCostBs > 0 || salesPriceBs > 0) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('Ingrese la tasa BCV histórica aplicable al inventario inicial, por ejemplo 889,67.'); return; }
+    if (!product && (currentStock > 0 || avgCostUsd > 0) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('Ingrese la tasa BCV histórica aplicable al inventario inicial, por ejemplo 889,67.'); return; }
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
@@ -95,7 +100,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
         code: code.trim().toUpperCase(), name: name.trim().toUpperCase(),
         category: category.trim(), unit: unit.trim(), minStock: Number(minStock) || 0,
         salesPriceBs: Number(salesPriceBs) || 0,
-        salesPriceUsd: bcvRate > 0 ? salesPriceBs / bcvRate : product.salesPriceUsd,
+        salesPriceUsd: Number(salesPriceUsd) || 0,
         vatTreatment
       }, correctionReason, correctionWorkpaper);
     } else {
@@ -111,7 +116,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
         lastCostBs: Number(avgCostBs) || 0,
         lastCostUsd: avgCostUsd,
         salesPriceBs: Number(salesPriceBs) || 0,
-        salesPriceUsd,
+        salesPriceUsd: Number(salesPriceUsd) || 0,
         inventoryAccountCode, costOfSalesAccountCode, adjustmentAccountCode, openingBalanceAccountCode,
         costingMethod, vatTreatment, itemType, openingDate, openingBcvRate: bcvRate
       });
@@ -288,7 +293,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
 
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Costo Unitario (Bs.)</label>
+              <label className="block font-semibold text-slate-700 mb-1">Costo unitario de referencia (USD)</label>
               <input
                 type="text"
                 inputMode="decimal"
@@ -299,11 +304,23 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               />
               <span className="text-[11px] text-slate-500 font-mono">
-                Equivalente: {formatUsd(avgCostUsd)}
+                Equivalente histórico: {formatBs(avgCostBs)} · {bcvRate > 0 ? formatUsd(avgCostUsd) : 'Seleccione tasa'}
               </span>
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Precio de Venta Sugerido (Bs.)</label>
+              <label className="block font-semibold text-slate-700 mb-1">Margen bruto objetivo (%)</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={marginInput}
+                onChange={e => setMarginInput(e.target.value)}
+                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+              />
+              <span className="text-[11px] text-slate-500 font-mono">Precio sugerido: {formatUsd(suggestedSalesPriceUsd)}</span>
+              <button type="button" disabled={!suggestedSalesPriceUsd || Boolean(product)} onClick={() => setSalesPriceInput(suggestedSalesPriceUsd.toFixed(2))} className="mt-1 text-[11px] font-semibold text-emerald-700 underline disabled:opacity-40">Usar precio sugerido</button>
+            </div>
+            <div className="col-span-2">
+              <label className="block font-semibold text-slate-700 mb-1">Precio de venta final (USD)</label>
               <input
                 type="text"
                 inputMode="decimal"
@@ -313,7 +330,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               />
               <span className="text-[11px] text-slate-500 font-mono">
-                Equivalente: {formatUsd(salesPriceUsd)}
+                Equivalente a la tasa vigente de Inventario: {formatBs(salesPriceBs)} · {currentBcvRate > 0 ? currentBcvRate.toLocaleString('es-VE',{minimumFractionDigits:4,maximumFractionDigits:4}) : 'Tasa no disponible'} Bs./USD
               </span>
             </div>
           </div>
