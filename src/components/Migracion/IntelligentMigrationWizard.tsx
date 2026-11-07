@@ -245,6 +245,13 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const productRows=Array.isArray(payload.productos)?payload.productos.filter((row):row is Record<string,unknown>=>!!row&&typeof row==='object'&&!Array.isArray(row)):[];
      const eligibleProductRows=productRows.filter(row=>row.activo===true&&row.isKit!==true);
      setPosvenProducts(eligibleProductRows as Row[]);setPosvenExcludedProducts(productRows.filter(row=>row.activo!==true||row.isKit===true) as Row[]);setSelectedPosvenProductCodes([]);
+     const universalRows:Row[]=arrayCollections.flatMap(([collection,value])=>(value as unknown[]).flatMap((item,index)=>{
+      if(!item||typeof item!=='object'||Array.isArray(item))return [];
+      const normalized:Row={};for(const [key,cell] of Object.entries(item as Row)){const normalizedKey=norm(key);if(normalizedKey)normalized[normalizedKey]=scalar(cell);}
+      return [{...normalized,migrationsource:'POSVEN-Pro · colección: '+collection,migrationfile:file.name,migrationcollection:collection,migrationrowid:'POSVEN|'+collection+'|'+index}];
+     }));
+     setRows(universalRows);setHeaders(Array.from(new Set(universalRows.flatMap(row=>Object.keys(row)))));
+     setJsonCollectionDiagnostics(arrayCollections.map(([path,value])=>({source:'Archivo '+(fileIndex+1)+' · '+file.name,path:String(path),totalItems:(value as unknown[]).length,validRecords:(value as unknown[]).filter(item=>!!item&&typeof item==='object'&&!Array.isArray(item)).length,invalidItems:(value as unknown[]).filter(item=>!item||typeof item!=='object'||Array.isArray(item)).length})));
      setPosvenQuality({collections:arrayCollections.length,objectRows,invalidRows:allRows.length-objectRows,emptyCollections:arrayCollections.filter(([,value])=>(value as unknown[]).length===0).length,eligibleProducts:productRows.filter(row=>row.activo===true&&row.isKit!==true).length,inactiveProducts:productRows.filter(row=>row.activo!==true).length,kitProducts:productRows.filter(row=>row.isKit===true).length,inactiveKits:productRows.filter(row=>row.activo!==true&&row.isKit===true).length});
      setBackupPayload(raw);setBackupCounts(counts);setPosvenBcvRate(String(payload.tasa??''));setPosvenOpeningDate(String((data as Record<string,unknown>).createdAt??'').slice(0,10));setPosvenVatTreatment('');setSelectedPosvenCollections([]);setPosvenBackup(true);
      return;
