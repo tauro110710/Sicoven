@@ -32,9 +32,12 @@ test('cuenta elementos inválidos sin descartarlos silenciosamente', () => {
   assert.equal(result[0].invalidItems, 2);
 });
 
-test('no interpreta arreglos de escalares como colecciones de registros', () => {
+test('conserva arreglos de escalares para explicar por qué no son importables', () => {
   const result = extractUniversalJsonCollections({ etiquetas: ['uno', 'dos'], productos: [{ id: 1 }] });
-  assert.deepEqual(result.map(item => item.path), ['productos']);
+  assert.deepEqual(result.map(item => item.path), ['etiquetas', 'productos']);
+  assert.equal(result[0].totalItems, 2);
+  assert.equal(result[0].rows.length, 0);
+  assert.equal(result[0].invalidItems, 2);
 });
 
 test('separa formato del archivo y software que lo generó', () => {
