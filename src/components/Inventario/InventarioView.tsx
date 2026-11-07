@@ -48,6 +48,10 @@ export const InventarioView: React.FC = () => {
         if (!active) return;
         const company = currentCompanyRef.current;
         const history = company.inventoryBcvRateHistory || [];
+        const latestSavedDate = history.reduce((latest, entry) => entry.effectiveDate > latest ? entry.effectiveDate : latest, company.inventoryBcvRateEffectiveDate || '');
+        if (latestSavedDate && result.effectiveDate < latestSavedDate) {
+          throw new Error('La fuente BCV devolvió una fecha anterior a la última tasa guardada. Se conserva el valor vigente y no se altera el historial.');
+        }
         const savedForDate = history.find(entry => entry.effectiveDate === result.effectiveDate);
         const nextHistory = savedForDate ? history : appendDailyInventoryBcvRate(history, {
           rate: result.rate,
@@ -136,10 +140,11 @@ export const InventarioView: React.FC = () => {
     (sum, p) => sum + Math.max(0, p.currentStock * p.avgCostBs - Number(p.vnrProvisionBs || 0)),
     0
   );
-  const totalInventoryValueUsd = companyProducts.reduce(
-    (sum, p) => sum + Math.max(0, p.currentStock * p.avgCostUsd - Number(p.vnrProvisionBs || 0) / Math.max(Number(currentCompany.inventoryBcvRate || 0), 0.000001)),
+  const inventoryBcvRate = Number(currentCompany.inventoryBcvRate || 0);
+  const totalInventoryValueUsd = inventoryBcvRate > 0 ? companyProducts.reduce(
+    (sum, p) => sum + Math.max(0, p.currentStock * p.avgCostUsd - Number(p.vnrProvisionBs || 0) / inventoryBcvRate),
     0
-  );
+  ) : null;
   const lowStockCount = companyProducts.filter(p => p.currentStock <= p.minStock).length;
 
   return (
@@ -226,7 +231,7 @@ export const InventarioView: React.FC = () => {
               {formatBs(totalInventoryValueBs)}
             </div>
             <div className="text-xs font-mono text-slate-500">
-              {formatUsd(totalInventoryValueUsd)}
+              {totalInventoryValueUsd === null ? 'Equivalente USD no disponible: falta tasa de Inventario' : formatUsd(totalInventoryValueUsd)}
             </div>
           </div>
 
