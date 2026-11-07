@@ -314,9 +314,12 @@ export type UniversalInvoiceClassification = {
 /** Clasifica cada factura por las señales de su propia fila, nunca por campos de otra factura del archivo. */
 export const classifyUniversalInvoiceRows = (rows: Record<string, unknown>[]): UniversalInvoiceClassification => {
   const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const has = (row: Record<string, unknown>, keys: string[]) => Object.entries(row).some(([key, value]) =>
-    keys.includes(normalize(key)) && value !== undefined && value !== null && String(value).trim() !== ''
-  );
+  const has = (row: Record<string, unknown>, keys: string[]) => {
+    const normalizedKeys = new Set(keys.map(normalize));
+    return Object.entries(row).some(([key, value]) =>
+      normalizedKeys.has(normalize(key)) && value !== undefined && value !== null && String(value).trim() !== ''
+    );
+  };
   const invoiceRows = rows.filter(row =>
     has(row, ['invoicenumber','numerofactura','numerofactura','factura','documento','documentnumber','numero','nrofactura','numfactura']) &&
     has(row, ['invoicedate','fechafactura','fechadefactura','fechaemision','fecha','date']) &&
