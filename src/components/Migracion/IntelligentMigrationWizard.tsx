@@ -488,7 +488,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      setBusy(false);return;
    }
    const groupedBySource = new Map<string, Row[]>();
-   rows.forEach(row => {
+   migrationRows.forEach(row => {
     const source = String(row.migrationsource ?? 'archivo sin nombre');
     const group = groupedBySource.get(source) ?? [];
     group.push(row);
