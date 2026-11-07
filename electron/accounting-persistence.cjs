@@ -195,7 +195,17 @@ function persistAccountingSnapshot(db, state, actor = null) {
       .map(item => [String(item.id), item]));
     for (const settlement of (Array.isArray(state.creditSettlements) ? state.creditSettlements : [])) {
       const oldSettlement = oldSettlements.get(String(settlement.id));
-      if (oldSettlement && !oldSettlement.isReversed && settlement.isReversed) {
+      if (!oldSettlement) {
+        auditInsert.run('credit_settlement_posted', JSON.stringify({
+          settlementId: settlement.id, companyId: settlement.companyId,
+          documentId: settlement.documentId, kind: settlement.kind,
+          settlementDate: settlement.settlementDate,
+          amountBs: settlement.amountBs, amountUsd: settlement.amountUsd,
+          method: settlement.method, bankAccountId: settlement.bankAccountId || null,
+          reference: settlement.reference || null, bcvRate: settlement.bcvRate,
+          journalEntryId: settlement.journalEntryId
+        }));
+      } else if (!oldSettlement.isReversed && settlement.isReversed) {
         auditInsert.run('credit_settlement_reversed', JSON.stringify({
           settlementId: settlement.id, companyId: settlement.companyId,
           documentId: settlement.documentId, journalEntryId: settlement.journalEntryId,
