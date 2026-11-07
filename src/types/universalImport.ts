@@ -249,7 +249,7 @@ export const prepareUniversalPurchaseInventoryLines = (
   invoice: { taxableBaseBs: number; exemptAmountBs: number; bcvRate: number }
 ): Array<{ productId: string; quantity: number; unitCostBs: number }> => {
   if (!Array.isArray(rawLines) || rawLines.length === 0) throw new Error('La factura no contiene renglones de mercancía importables.');
-  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\p{Diacritic}]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const pickValue = (row: Record<string, unknown>, keys: string[]) => {
     const wanted = new Set(keys.map(normalize));
     return Object.entries(row).find(([key, value]) => wanted.has(normalize(key)) && value !== undefined && value !== null && String(value).trim() !== '')?.[1];
@@ -313,7 +313,7 @@ export type UniversalInvoiceClassification = {
 
 /** Clasifica cada factura por las señales de su propia fila, nunca por campos de otra factura del archivo. */
 export const classifyUniversalInvoiceRows = (rows: Record<string, unknown>[]): UniversalInvoiceClassification => {
-  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\p{Diacritic}]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const has = (row: Record<string, unknown>, keys: string[]) => {
     const normalizedKeys = new Set(keys.map(normalize));
     return Object.entries(row).some(([key, value]) =>
@@ -350,7 +350,7 @@ export type UniversalJournalGroup = {
 /** Agrupa líneas por archivo + fecha + referencia para no mezclar asientos de archivos distintos. */
 export const groupUniversalJournalRows = (rows: Record<string, unknown>[]): UniversalJournalGroup[] => {
   const normalize = (value: unknown) => String(value ?? '').trim();
-  const normalizedKey = (value: string) => value.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalizedKey = (value: string) => value.normalize('NFD').replace(/[\p{Diacritic}]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const pick = (row: Record<string, unknown>, keys: string[]) => {
     const wanted = new Set(keys.map(normalizedKey));
     return Object.entries(row).find(([key, value]) => wanted.has(normalizedKey(key)) && value !== undefined && value !== null && String(value).trim() !== '')?.[1];
@@ -385,7 +385,7 @@ export const isUniversalMovementTypeConceptValid = (
 };
 
 export const normalizeUniversalDocumentReference = (value: unknown): string => {
-  const normalized = String(value ?? '').trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const normalized = String(value ?? '').trim().normalize('NFD').replace(/[\p{Diacritic}]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   return normalized.replace(/^(FACTURA|FAC)/, '');
 };
 
