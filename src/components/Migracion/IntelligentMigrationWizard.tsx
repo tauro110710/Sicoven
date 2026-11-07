@@ -96,7 +96,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  },[inventoryCandidateRows,inventoryFilter]);
  const moduleRecordCandidates=useMemo(()=>{
   const result:Record<string,Row[]>={sales:[],purchases:[],journal:[],movements:[]};
-  const candidateRows=posvenBackup&&selectedPosvenCollections.length?rows.filter(row=>norm(String(row.migrationcollection??''))===norm(selectedPosvenCollections[0])):rows;
+  const candidateRows=posvenBackup&&selectedPosvenCollections.length?rows.filter(row=>selectedPosvenCollections.some(collection=>norm(String(row.migrationcollection??''))===norm(collection))):rows;
   const classified=classifyUniversalInvoiceRows(candidateRows);
   result.sales.push(...classified.sales as Row[]);
   result.purchases.push(...classified.purchases as Row[]);
