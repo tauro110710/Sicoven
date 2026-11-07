@@ -6,6 +6,7 @@ const MIME_TYPES = new Map([
   ['text/csv;charset=utf-8', 'Archivo CSV'],
   ['text/csv', 'Archivo CSV'],
   ['application/xml;charset=utf-8', 'Archivo XML'],
+  ['application/xml;charset=iso-8859-1', 'Archivo XML'],
   ['application/xml', 'Archivo XML'],
   ['application/json;charset=utf-8', 'Archivo JSON'],
   ['application/json', 'Archivo JSON']
