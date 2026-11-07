@@ -1080,55 +1080,53 @@ test('SQLite accepts a supplier advance application to a purchase invoice create
 
 
 test('SQLite validates a purchase invoice and its credit payment created in the same atomic batch', () => {
-  const purchase = {
-    id: 'purchase-batch-payment', companyId: 'company-1', opNumber: 1,
-    invoiceDate: '2026-10-10', accountCreditDate: '2026-10-10',
-    supplierRif: 'J-12345678-9', supplierName: 'Proveedor',
-    invoiceNumber: '101', controlNumber: '00-101', documentType: '01',
-    totalAmountBs: 100, taxableBaseBs: 100, exemptAmountBs: 0,
-    taxRate: 0, vatAmountBs: 0, vatWithheldBs: 0, vatWithheldUsd: 0,
-    islrWithheldBs: 0, islrWithheldUsd: 0, retentionRate: 0,
-    bcvRate: 100, totalAmountUsd: 1, taxableBaseUsd: 1,
-    paymentTerm: 'CREDITO', creditDays: 30, dueDate: '2026-11-09',
-    purchaseDebitAccountCode: '1.1.4.01', inventoryLines: [],
-    journalEntryId: 'purchase-batch-entry'
-  };
-  const purchaseJournal = {
-    id: 'purchase-batch-entry', companyId: 'company-1', entryNumber: 1,
-    date: '2026-10-10', description: 'Compra 101', type: 'COMPRA',
-    bcvRate: 100, referenceDoc: 'FAC-101',
-    items: [
-      { accountCode: '1.1.4.01', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
-      { accountCode: '2.1.1.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1, description: 'Cuenta por pagar proveedor' }
-    ], createdAt: '2026-10-10T10:00:00.000Z'
-  };
+  const { prior: basePrior } = supplierCreditFixture();
+  const purchase = structuredClone(basePrior.purchases[0]);
+  const purchaseJournal = structuredClone(basePrior.journalEntries[0]);
+  const movement = structuredClone(basePrior.movements[0]);
+  const product = { ...basePrior.products[0], currentStock: 2 };
+  const vatVoucher = structuredClone(basePrior.vatVouchers[0]);
+  const islrVoucher = structuredClone(basePrior.islrVouchers[0]);
+  const settlementRate = 110;
+  const amountUsd = 0.5;
+  const amountBs = 55;
+  const expectedPayableBs = 50;
   const paymentJournal = {
     id: 'purchase-batch-payment-entry', companyId: 'company-1', entryNumber: 2,
-    date: '2026-10-11', description: 'Pago factura 101', type: 'AJUSTE',
-    bcvRate: 110, referenceDoc: '101',
+    date: '2026-10-11', description: 'Pago parcial factura 100', type: 'AJUSTE',
+    bcvRate: settlementRate, referenceDoc: purchase.invoiceNumber,
     items: [
-      { accountCode: '2.1.1.01', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
-      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 110, debitUsd: 0, creditUsd: 1 },
-      { accountCode: '6.1.1.08', debitBs: 10, creditBs: 0, debitUsd: 0, creditUsd: 0 }
+      { accountCode: '2.1.1.01', debitBs: expectedPayableBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd },
+      { accountCode: '6.1.1.08', debitBs: 5, creditBs: 0, debitUsd: 0, creditUsd: 0 }
     ], createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const settlement = {
+    id: 'purchase-batch-payment', companyId: 'company-1',
+    documentId: purchase.id, kind: 'PURCHASE_PAYMENT',
+    settlementDate: '2026-10-11', bcvRate: settlementRate,
+    amountUsd, amountBs, method: 'CASH_BS',
+    journalEntryId: paymentJournal.id, createdAt: '2026-10-11T10:00:00.000Z'
   };
   const accounts = [
     { code: '1.1.4.01', name: 'Inventario', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.3.01', name: 'IVA crédito fiscal', type: 'ACTIVO', isMovement: true },
+    { code: '6.1.1.11', name: 'IGTF', type: 'GASTOS', isMovement: true },
+    { code: '2.1.2.03', name: 'IVA retenido por pagar', type: 'PASIVO', isMovement: true },
+    { code: '2.1.2.04', name: 'ISLR retenido por pagar', type: 'PASIVO', isMovement: true },
     { code: '2.1.1.01', name: 'Proveedores', type: 'PASIVO', isMovement: true },
     { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', isMovement: true },
     { code: '6.1.1.08', name: 'Pérdida cambiaria', type: 'GASTOS', isMovement: true }
   ];
-  const settlement = {
-    id: 'purchase-batch-payment', companyId: 'company-1',
-    documentId: purchase.id, kind: 'PURCHASE_PAYMENT',
-    settlementDate: '2026-10-11', bcvRate: 110,
-    amountUsd: 1, amountBs: 110, method: 'CASH_BS',
-    journalEntryId: paymentJournal.id, createdAt: '2026-10-11T10:00:00.000Z'
+  const prior = {
+    ...basePrior, purchases: [], journalEntries: [], movements: [], products: [],
+    vatVouchers: [], islrVouchers: [], creditSettlements: [], accounts
   };
-  const prior = { ...emptyState(), accounts, purchases: [], journalEntries: [], creditSettlements: [] };
   const next = {
     ...prior, purchases: [purchase],
     journalEntries: [purchaseJournal, paymentJournal],
+    movements: [movement], products: [product],
+    vatVouchers: [vatVoucher], islrVouchers: [islrVoucher],
     creditSettlements: [settlement]
   };
   assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
@@ -1139,7 +1137,7 @@ test('SQLite validates a purchase invoice and its credit payment created in the 
       items: paymentJournal.items.map(line => line.accountCode === '2.1.1.01'
         ? { ...line, accountCode: '2.1.1.99' } : line)
     }]
-  }), /pago de una factura\/ND de proveedor/);
+  }), /pago de una factura.*ND de proveedor/);
 });
 
 test('SQLite applies a direct supplier advance to a future payable and reduces the remaining AP ceiling', () => {
