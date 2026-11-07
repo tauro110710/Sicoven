@@ -256,10 +256,10 @@ export const prepareUniversalPurchaseInventoryLines = (
   };
   const parseNumber = (value: unknown): number => {
     if (typeof value === 'number') return value;
-    const raw = String(value ?? '').trim().replace(/\\s/g, '');
+    const raw = String(value ?? '').trim().replace(/\s/g, '');
     if (!raw) return NaN;
     const normalized = raw.includes(',') && raw.includes('.')
-      ? (raw.lastIndexOf(',') > raw.lastIndexOf('.') ? raw.replace(/\\./g, '').replace(',', '.') : raw.replace(/,/g, ''))
+      ? (raw.lastIndexOf(',') > raw.lastIndexOf('.') ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/,/g, ''))
       : raw.replace(',', '.');
     return Number(normalized);
   };
