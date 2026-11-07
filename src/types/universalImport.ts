@@ -71,8 +71,14 @@ export const detectImportSourceSystem = (value: unknown): ImportSourceSystem => 
     return { id: 'unknown', label: 'Sistema de origen no identificado', confidence: 'unknown' };
   }
   const record = value as Record<string, unknown>;
-  const declared = String(record.app ?? record.application ?? record.system ?? record.software ?? '').trim().toLowerCase();
-  if (declared === 'posven-pro' || declared === 'posven' || declared === 'posvenpro') {
+  const metadataCandidates = [record, record.metadata, record.meta]
+    .filter(candidate => candidate && typeof candidate === 'object' && !Array.isArray(candidate)) as Record<string, unknown>[];
+  const declaredValues = metadataCandidates.flatMap(candidate =>
+    Object.entries(candidate)
+      .filter(([key]) => ['app','application','system','software','sourcesystem'].includes(key.toLowerCase().replace(/[^a-z]/g, '')))
+      .map(([, declared]) => String(declared ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, ''))
+  );
+  if (declaredValues.some(declared => ['posvenpro','posven'].includes(declared))) {
     return { id: 'posven-pro', label: 'POSVEN-Pro', confidence: 'explicit' };
   }
   return { id: 'unknown', label: 'Sistema de origen no identificado', confidence: 'unknown' };
