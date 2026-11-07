@@ -545,10 +545,17 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      if(!type)throw new Error('Fila '+(index+1)+': tipo de movimiento no reconocido. Usa ENTRADA, SALIDA o AJUSTE.');
      const concept=mapUniversalInventoryMovementConcept(pick(row,'concept','concepto','movementConcept'));
      if(!concept)throw new Error('Fila '+(index+1)+': concepto de movimiento no reconocido. No se inferirá por el tipo de movimiento.');
+     if(!isUniversalMovementTypeConceptValid(type,concept))throw new Error('Fila '+(index+1)+': el tipo de movimiento y su concepto no son compatibles. Revise la clasificación antes de importar.');
      if(concept==='DEVOLUCION_COMPRA'||concept==='DEVOLUCION_CLIENTE')throw new Error('Fila '+(index+1)+': las devoluciones requieren el flujo de nota de crédito enlazado a factura y Kardex; no se importan como movimientos aislados.');
-     const documentRef=String(pick(row,'documentRef','referencia','documento','invoiceNumber','numeroDocumento')??'').trim();
+     if(type==='ENTRADA'&&concept==='INVENTARIO_INICIAL')throw new Error('Fila '+(index+1)+': el saldo inicial se importa con el módulo Inventario, que genera el Kardex y su asiento de apertura. No lo duplique como movimiento histórico.');
+     if(type==='ENTRADA'&&concept==='COMPRA')throw new Error('Fila '+(index+1)+': las entradas por compra se generan desde la factura importada en Compras, que debe conservar detalle de mercancía, asiento y Kardex. No se importan entradas de compra aisladas.');
+     let documentRef=String(pick(row,'documentRef','referencia','documento','invoiceNumber','numeroDocumento')??'').trim();
      if(!documentRef)throw new Error('Fila '+(index+1)+': referencia documental obligatoria.');
-     if(type==='SALIDA'&&concept==='VENTA'&&!companySales.some(sale=>norm(sale.invoiceNumber)===norm(documentRef)))throw new Error('Fila '+(index+1)+': la salida por venta debe enlazarse a una factura de venta ya importada en la empresa destino.');
+     if(type==='SALIDA'&&concept==='VENTA'){
+      const linkedSale=companySales.find(sale=>normalizeUniversalDocumentReference(sale.invoiceNumber)===normalizeUniversalDocumentReference(documentRef));
+      if(!linkedSale)throw new Error('Fila '+(index+1)+': la salida por venta debe enlazarse a una factura de venta ya importada en la empresa destino.');
+      documentRef='FAC-'+linkedSale.invoiceNumber;
+     }
      const bcvRaw=pick(row,'bcvRate','tasaBcv');
      const bcvRate=bcvRaw===undefined?NaN:parseMigrationNumber(bcvRaw);
      if(!Number.isFinite(bcvRate)||bcvRate<=0)throw new Error('Fila '+(index+1)+': tasa BCV positiva obligatoria.');
@@ -574,17 +581,14 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     if(!(selectedModuleRowKeys.journal??[]).length)throw new Error('Selecciona individualmente las líneas de asientos que deseas importar. No se importó ningún asiento.');
     if(!sourceRows.length)throw new Error('No hay líneas de asientos con código de cuenta.');
     const accountMap=new Map(accounts.map(a=>[a.code.toLowerCase(),a]));
-    const groups=new Map<string,Row[]>();
-    sourceRows.forEach((r,i)=>{
-     const date=String(pick(r,'date','fecha')??'').slice(0,10);
-     if(!isValidIsoDate(date))throw new Error('Fila '+(i+1)+': fecha obligatoria en formato AAAA-MM-DD.');
-     const ref=String(pick(r,'entryNumber','numeroAsiento','asiento','referenceDoc','referencia','documento')??'').trim();
-     if(!ref)throw new Error('Fila '+(i+1)+': indique entryNumber/asiento/referencia para agrupar las líneas del mismo asiento.');
-     const key=date+'|'+ref;const arr=groups.get(key)??[];arr.push(r);groups.set(key,arr);
-    });
-    const prepared=[...groups.entries()].map(([key,items])=>{
-     const [date,ref]=key.split('|');
-     const existingEntry=companyJournalEntries.some(entry=>entry.date===date&&String(entry.referenceDoc??'').trim().toLowerCase()===ref.trim().toLowerCase());
+    const groups=groupUniversalJournalRows(sourceRows);
+    const seenJournalIdentities=new Set<string>();
+    const prepared=groups.map(({date,reference:ref,rows:items})=>{
+     if(!isValidIsoDate(date))throw new Error('Asiento '+ref+': fecha obligatoria en formato AAAA-MM-DD.');
+     const identity=date+'|'+norm(ref);
+     if(seenJournalIdentities.has(identity))throw new Error('Hay asientos con la misma fecha y referencia en más de un archivo. Separe o concilie las fuentes; no se mezclarán líneas de archivos distintos.');
+     seenJournalIdentities.add(identity);
+     const existingEntry=companyJournalEntries.some(entry=>entry.date===date&&norm(String(entry.referenceDoc??''))===norm(ref));
      if(existingEntry)throw new Error('Ya existe un asiento con fecha '+date+' y referencia '+ref+'. No se importaron los asientos de este archivo para evitar duplicar contabilidad.');
      const lines=items.map(r=>{
       const code=String(pick(r,'accountCode','codigoCuenta','cuenta')??'').trim();
