@@ -590,6 +590,56 @@ export const mapUniversalSettlementPreview = (row: Record<string, unknown>): Uni
   return {settlementDate:date,bcvRate,amountUsd,amountBs,method,...(bankAccountId?{bankAccountId}:{}),...(reference?{reference}:{}),sourceRowId};
 };
 
+
+export type UniversalSettlementBankDestination = {
+  id: string;
+  companyId: string;
+  accountCode: string;
+  currency?: 'BS' | 'USD';
+};
+
+export type UniversalSettlementLedgerAccount = {
+  code: string;
+  type: string;
+  isMovement: boolean;
+};
+
+/**
+ * Validates the real destination before a historical settlement can be posted.
+ * Bank transfers must match an existing bank account in the target company and
+ * its declared currency; cash methods must resolve to the corresponding cash auxiliary.
+ */
+export const validateUniversalSettlementDestination = (
+  settlement: UniversalSettlementPreview,
+  companyId: string,
+  bankAccounts: UniversalSettlementBankDestination[],
+  accounts: UniversalSettlementLedgerAccount[]
+): string | null => {
+  if (!companyId.trim()) return 'Debe seleccionar la empresa destino de la liquidación.';
+  if (settlement.method === 'BANK_TRANSFER_BS' || settlement.method === 'BANK_TRANSFER_USD') {
+    const bank = bankAccounts.find(item => item.id === settlement.bankAccountId && item.companyId === companyId);
+    if (!bank) return 'La liquidación referencia una cuenta bancaria inexistente o perteneciente a otra empresa.';
+    const expectedCurrency = settlement.method === 'BANK_TRANSFER_USD' ? 'USD' : 'BS';
+    if ((bank.currency || 'BS') !== expectedCurrency) {
+      return 'La moneda de la transferencia no coincide con la moneda de la cuenta bancaria destino.';
+    }
+    const auxiliary = accounts.find(item => item.code === bank.accountCode);
+    if (!auxiliary || auxiliary.type !== 'ACTIVO' || auxiliary.isMovement !== true) {
+      return 'La cuenta bancaria destino no tiene un auxiliar contable de activo válido para movimientos.';
+    }
+    return null;
+  }
+  if (settlement.bankAccountId) {
+    return 'Una liquidación en efectivo no puede identificar una cuenta bancaria de destino.';
+  }
+  const cashCode = settlement.method === 'CASH_USD' ? '1.1.1.02' : '1.1.1.01';
+  const cash = accounts.find(item => item.code === cashCode);
+  if (!cash || cash.type !== 'ACTIVO' || cash.isMovement !== true) {
+    return 'No existe el auxiliar de caja correspondiente a la moneda de la liquidación.';
+  }
+  return null;
+};
+
 export type UniversalImportFormat = 'json' | 'csv' | 'tsv' | 'txt' | 'xlsx' | 'xlsm' | 'unsupported';
 
 export const detectUniversalImportFormat = (fileName: string): UniversalImportFormat => {

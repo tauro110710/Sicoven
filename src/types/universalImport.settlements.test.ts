@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   mapUniversalSettlementPreview,
-  planUniversalInvoiceSettlements
+  planUniversalInvoiceSettlements,
+  validateUniversalSettlementDestination
 } from './universalImport';
 
 const invoice = (id = 'invoice-1', totalUsd = 10) => ({
@@ -27,6 +28,47 @@ const payment = (overrides: Record<string, unknown> = {}) => ({
   bankAccountId: 'bank-1',
   reference: 'TRX-001',
   ...overrides
+});
+
+
+const destinationBanks = [
+  { id: 'bank-bs', companyId: 'company-1', accountCode: '1.1.1.03', currency: 'BS' as const },
+  { id: 'bank-usd', companyId: 'company-1', accountCode: '1.1.1.04', currency: 'USD' as const }
+];
+const destinationAccounts = [
+  { code: '1.1.1.01', type: 'ACTIVO', isMovement: true },
+  { code: '1.1.1.02', type: 'ACTIVO', isMovement: true },
+  { code: '1.1.1.03', type: 'ACTIVO', isMovement: true },
+  { code: '1.1.1.04', type: 'ACTIVO', isMovement: true }
+];
+
+test('valida que una transferencia Bs use una cuenta bancaria real de la empresa destino', () => {
+  const settlement = mapUniversalSettlementPreview(payment({ bankAccountId: 'bank-bs' }));
+  assert.equal(validateUniversalSettlementDestination(settlement, 'company-1', destinationBanks, destinationAccounts), null);
+  assert.match(validateUniversalSettlementDestination(settlement, 'company-2', destinationBanks, destinationAccounts) || '', /otra empresa/);
+});
+
+test('rechaza transferencias cuya moneda no coincide con la cuenta bancaria', () => {
+  const { validateUniversalSettlementDestination } = require('./universalImport') as typeof import('./universalImport');
+  const bsTransfer = mapUniversalSettlementPreview(payment({ bankAccountId: 'bank-usd' }));
+  assert.match(validateUniversalSettlementDestination(bsTransfer, 'company-1', destinationBanks, destinationAccounts) || '', /moneda/);
+  const usdTransfer = mapUniversalSettlementPreview(payment({
+    method: 'transferencia USD', bankAccountId: 'bank-bs',
+    settlementAmountBs: 1000, settlementAmountUsd: 10
+  }));
+  assert.match(validateUniversalSettlementDestination(usdTransfer, 'company-1', destinationBanks, destinationAccounts) || '', /moneda/);
+});
+
+test('valida auxiliares de caja Bs/USD y rechaza cuentas bancarias en efectivo', () => {
+  const { validateUniversalSettlementDestination } = require('./universalImport') as typeof import('./universalImport');
+  const cashBs = mapUniversalSettlementPreview(payment({ method: 'efectivo', bankAccountId: '' }));
+  assert.equal(validateUniversalSettlementDestination(cashBs, 'company-1', [], destinationAccounts), null);
+  const cashUsd = mapUniversalSettlementPreview(payment({
+    method: 'efectivo USD', bankAccountId: '', settlementAmountBs: 1000, settlementAmountUsd: 10
+  }));
+  assert.equal(validateUniversalSettlementDestination(cashUsd, 'company-1', [], destinationAccounts), null);
+  assert.match(validateUniversalSettlementDestination({ ...cashBs, bankAccountId: 'bank-bs' }, 'company-1', destinationBanks, destinationAccounts) || '', /efectivo/);
+  assert.match(validateUniversalSettlementDestination(cashUsd, 'company-1', [], destinationAccounts.filter(item => item.code !== '1.1.1.02')) || '', /auxiliar de caja/);
 });
 
 test('previsualiza una transferencia con fecha, tasa, importes y referencia explícitos', () => {
