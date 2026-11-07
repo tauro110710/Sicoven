@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, mapUniversalInventoryItemType } from '../../types/universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, selectUniversalRowsByStableKeys, mapUniversalInventoryItemType } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 
@@ -418,7 +418,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const kind=selected[0];
     const classified=classifyUniversalInvoiceRows(rows);
     const classifiedRows=(kind==='sales'?classified.sales:classified.purchases) as Row[];
-    const sourceRows=classifiedRows.filter(row=>(selectedModuleRowKeys[kind]??[]).includes(String(row.migrationrowid??'')));
+    const sourceRows=selectUniversalRowsByStableKeys(classifiedRows,selectedModuleRowKeys[kind]??[]);
     if(!(selectedModuleRowKeys[kind]??[]).length)throw new Error('Selecciona individualmente las facturas que deseas importar. No se importó ningún documento.');
     if(sourceRows.length===0)throw new Error('No se identificaron archivos con encabezados de '+(kind==='sales'?'ventas y cliente':'compras y proveedor')+'. Verifica número de factura y datos de la contraparte.');
     const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha de factura','fechaEmision','fecha')??'').slice(0,10);if(!isValidIsoDate(value))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};

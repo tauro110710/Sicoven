@@ -531,6 +531,30 @@ export const hasUniversalInlineSettlementAmount = (invoice: Record<string, unkno
   return false;
 };
 
+
+
+/**
+ * Aplica la selección explícita del asistente mediante claves estables de fila.
+ * Rechaza claves ausentes o ambiguas para impedir importaciones parciales distintas
+ * de las que el usuario marcó en la vista previa.
+ */
+export const selectUniversalRowsByStableKeys = (
+  rows: Array<Record<string, unknown>>,
+  selectedKeys: string[]
+): Array<Record<string, unknown>> => {
+  const keys = selectedKeys.map(key => String(key ?? '').trim());
+  if (keys.some(key => !key)) throw new Error('La selección contiene una clave de registro vacía.');
+  if (new Set(keys).size !== keys.length) throw new Error('La selección contiene claves de registro duplicadas.');
+  const selected = new Set(keys);
+  const matches = rows.filter(row => selected.has(String(row.migrationrowid ?? '').trim()));
+  for (const key of keys) {
+    const count = matches.filter(row => String(row.migrationrowid ?? '').trim() === key).length;
+    if (count === 0) throw new Error('El registro seleccionado ya no está disponible: ' + key + '. Vuelve a analizar el archivo.');
+    if (count > 1) throw new Error('La clave del registro seleccionado no es única: ' + key + '. No se importó ningún registro.');
+  }
+  return matches;
+};
+
 export type UniversalImportFormat = 'json' | 'csv' | 'tsv' | 'txt' | 'xlsx' | 'xlsm' | 'unsupported';
 
 export const detectUniversalImportFormat = (fileName: string): UniversalImportFormat => {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, mapUniversalInventoryItemType } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, selectUniversalRowsByStableKeys, mapUniversalInventoryItemType } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -422,4 +422,33 @@ test('detecta importes pagados positivos embebidos y permite campos de pago en c
 test('rechaza identificadores contradictorios en la factura al buscar liquidaciones', () => {
   const invoice = { migrationfile: 'origen.json', id: 'sale-1', invoiceId: 'sale-2', invoiceNumber: 'F-001', customerRif: 'J-123' };
   assert.throws(() => resolveUniversalInvoiceSettlementRows([invoice], invoice), /identificadores incompatibles/);
+});
+
+
+test('la selección individual importa exclusivamente las claves estables marcadas', () => {
+  const collections = extractUniversalJsonCollections({
+    ventas: [
+      { invoiceNumber: 'F-001', customerName: 'Cliente 1', customerRif: 'J-1' },
+      { invoiceNumber: 'F-002', customerName: 'Cliente 2', customerRif: 'J-2' }
+    ]
+  });
+  const rows = collections.flatMap(collection => collection.rows.map((row, index) => ({
+    ...row,
+    migrationfile: 'ventas.json',
+    migrationcollection: collection.path,
+    migrationrowid: 'ventas.json|' + collection.path + '|' + index
+  })));
+  const selected = selectUniversalRowsByStableKeys(rows, ['ventas.json|ventas|1']);
+  assert.deepEqual(selected.map(row => row.invoiceNumber), ['F-002']);
+  assert.equal(selectUniversalRowsByStableKeys(rows, []).length, 0);
+});
+
+test('la selección individual rechaza claves ausentes, duplicadas y ambiguas', () => {
+  const rows = [
+    { migrationrowid: 'file.json|ventas|0', invoiceNumber: 'F-001' },
+    { migrationrowid: 'file.json|ventas|1', invoiceNumber: 'F-002' }
+  ];
+  assert.throws(() => selectUniversalRowsByStableKeys(rows, ['file.json|ventas|9']), /ya no está disponible/);
+  assert.throws(() => selectUniversalRowsByStableKeys(rows, ['file.json|ventas|0', 'file.json|ventas|0']), /claves de registro duplicadas/);
+  assert.throws(() => selectUniversalRowsByStableKeys([...rows, { ...rows[0], invoiceNumber: 'F-003' }], ['file.json|ventas|0']), /no es única/);
 });
