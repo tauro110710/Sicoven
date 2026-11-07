@@ -306,7 +306,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
    const duplicates=prepared.filter(product=>existing.has(product.code.toLocaleUpperCase()));
    const toImport=prepared.filter(product=>!existing.has(product.code.toLocaleUpperCase()));
    if(!toImport.length)throw new Error('Todos los códigos de productos activos no-kit ya existen en SICOVEN. No se sobrescribió ningún artículo.');
-   const imported=importInventoryProducts(toImport);
+   const imported=await importInventoryProducts(toImport);
    setNotice('Inventario POSVEN importado: '+imported+' artículos nuevos. De los '+eligible.length+' activos no-kit se seleccionaron '+selectedRows.length+'; quedaron sin seleccionar '+(eligible.length-selectedRows.length)+'. Excluidos automáticamente: '+posvenQuality.inactiveProducts+' inactivos y '+posvenQuality.kitProducts+' kits ('+posvenQuality.inactiveKits+' pertenecen a ambas categorías). Se omitieron '+duplicates.length+' códigos que ya existían en SICOVEN. Se creó la apertura con fecha '+posvenOpeningDate+' y tasa BCV '+rate.toLocaleString('es-VE')+'. No se importaron ventas, movimientos ni saldos CxC/CxP en esta operación.');
    setSelectedPosvenCollections([]);setConfirmed(false);
   }catch(e){setError(e instanceof Error?e.message:'No se pudo adaptar el inventario POSVEN.');}
