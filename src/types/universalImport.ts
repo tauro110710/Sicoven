@@ -305,8 +305,81 @@ export const prepareUniversalPurchaseInventoryLines = (
   return result;
 };
 
+export type UniversalInvoiceClassification = {
+  sales: Record<string, unknown>[];
+  purchases: Record<string, unknown>[];
+  ambiguous: Record<string, unknown>[];
+};
+
+/** Clasifica cada factura por las señales de su propia fila, nunca por campos de otra factura del archivo. */
+export const classifyUniversalInvoiceRows = (rows: Record<string, unknown>[]): UniversalInvoiceClassification => {
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const has = (row: Record<string, unknown>, keys: string[]) => Object.entries(row).some(([key, value]) =>
+    keys.includes(normalize(key)) && value !== undefined && value !== null && String(value).trim() !== ''
+  );
+  const invoiceRows = rows.filter(row =>
+    has(row, ['invoicenumber','numerofactura','numerofactura','factura','documento','documentnumber','numero','nrofactura','numfactura']) &&
+    has(row, ['invoicedate','fechafactura','fechadefactura','fechaemision','fecha','date']) &&
+    has(row, ['totalamountbs','totalbs','total','montototal','importetotal','monto','importe','vatamountbs','iva'])
+  );
+  const sales: Record<string, unknown>[] = [];
+  const purchases: Record<string, unknown>[] = [];
+  const ambiguous: Record<string, unknown>[] = [];
+  const customerKeys = ['customername','clientname','cliente','nombrecliente','customerrif','clienterif','rifcliente','customerid','clientid','clienteid','idcliente','customer_id','client_id','cliente_id','idcliente'];
+  const supplierKeys = ['suppliername','vendorname','proveedor','nombreproveedor','supplierrif','vendorrif','rifproveedor','supplierid','vendorid','proveedorid','idproveedor','supplier_id','vendor_id','proveedor_id','idproveedor'];
+  for (const row of invoiceRows) {
+    const customer = has(row, customerKeys);
+    const supplier = has(row, supplierKeys);
+    if (customer && supplier) ambiguous.push(row);
+    else if (customer) sales.push(row);
+    else if (supplier) purchases.push(row);
+  }
+  return { sales, purchases, ambiguous };
+};
+
+export type UniversalJournalGroup = {
+  sourceFile: string;
+  date: string;
+  reference: string;
+  rows: Record<string, unknown>[];
+};
+
+/** Agrupa líneas por archivo + fecha + referencia para no mezclar asientos de archivos distintos. */
+export const groupUniversalJournalRows = (rows: Record<string, unknown>[]): UniversalJournalGroup[] => {
+  const normalize = (value: unknown) => String(value ?? '').trim();
+  const groups = new Map<string, UniversalJournalGroup>();
+  for (const row of rows) {
+    const sourceFile = normalize(row.migrationfile ?? row.migrationsource ?? 'archivo sin nombre');
+    const date = normalize(row.date ?? row.fecha);
+    const reference = normalize(row.entryNumber ?? row.numeroAsiento ?? row.asiento ?? row.referenceDoc ?? row.referencia ?? row.documento);
+    if (!date || !reference) continue;
+    const key = JSON.stringify([sourceFile, date, reference]);
+    const group = groups.get(key) ?? { sourceFile, date, reference, rows: [] };
+    group.rows.push(row);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+};
+
 export type UniversalInventoryMovementType = 'ENTRADA' | 'SALIDA' | 'AJUSTE';
 export type UniversalInventoryMovementConcept = 'COMPRA' | 'INVENTARIO_INICIAL' | 'VENTA' | 'MERMA' | 'AUTOCONSUMO' | 'AJUSTE' | 'DEVOLUCION_CLIENTE' | 'DEVOLUCION_COMPRA';
+
+export const isUniversalMovementTypeConceptValid = (
+  type: UniversalInventoryMovementType,
+  concept: UniversalInventoryMovementConcept
+): boolean => {
+  const valid: Record<UniversalInventoryMovementType, UniversalInventoryMovementConcept[]> = {
+    ENTRADA: ['COMPRA','INVENTARIO_INICIAL','DEVOLUCION_CLIENTE'],
+    SALIDA: ['VENTA','MERMA','AUTOCONSUMO','DEVOLUCION_COMPRA'],
+    AJUSTE: ['AJUSTE']
+  };
+  return valid[type]?.includes(concept) ?? false;
+};
+
+export const normalizeUniversalDocumentReference = (value: unknown): string => {
+  const normalized = String(value ?? '').trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return normalized.replace(/^(FACTURA|FAC)/, '');
+};
 
 const normalizeUniversalValue = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
