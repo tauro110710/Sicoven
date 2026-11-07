@@ -349,23 +349,27 @@ function persistAccountingSnapshot(db, state, actor = null) {
         }
       }
       const previousIds = new Set(previousHistory.map(entry => String(entry.id)));
-      const effectiveDates = new Set(previousHistory.map(entry => String(entry.effectiveDate)));
+      const nextIds = new Set();
       for (const entry of nextHistory) {
-        if (previousIds.has(String(entry.id))) continue;
+        const entryId = String(entry.id || '');
+        if (!entryId || nextIds.has(entryId)) {
+          throw new Error('El historial BCV de Inventario contiene identificadores vacíos o duplicados.');
+        }
+        nextIds.add(entryId);
+        if (previousIds.has(entryId)) continue;
         const effectiveDate = String(entry.effectiveDate || '');
         const rate = Number(entry.rate);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) ||
+        if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(effectiveDate) ||
             !Number.isFinite(new Date(effectiveDate + 'T00:00:00.000Z').getTime()) ||
             new Date(effectiveDate + 'T00:00:00.000Z').toISOString().slice(0, 10) !== effectiveDate ||
             !Number.isFinite(rate) || rate <= 0 ||
             !['AUTOMATIC', 'MANUAL'].includes(String(entry.mode)) ||
-            typeof entry.source !== 'string' || !entry.source.trim()) {
+            !['bcv.today', 'manual'].includes(String(entry.provider)) ||
+            typeof entry.source !== 'string' || !entry.source.trim() ||
+            (entry.mode === 'MANUAL' && entry.provider !== 'manual') ||
+            (entry.mode === 'AUTOMATIC' && entry.provider !== 'bcv.today')) {
           throw new Error('El registro histórico de tasa BCV de Inventario contiene datos inválidos.');
         }
-        if (effectiveDates.has(effectiveDate)) {
-          throw new Error('Ya existe una tasa BCV de Inventario para esa fecha valor; el historial diario no admite duplicados.');
-        }
-        effectiveDates.add(effectiveDate);
         auditInsert.run('inventory_bcv_rate_recorded', JSON.stringify({
           companyId: company.id,
           companyName: company.name || null,
@@ -375,6 +379,8 @@ function persistAccountingSnapshot(db, state, actor = null) {
           source: entry.source,
           provider: entry.provider || null,
           mode: entry.mode,
+          note: entry.note || null,
+          correctionOfId: entry.correctionOfId || null,
           actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null
         }));
       }
