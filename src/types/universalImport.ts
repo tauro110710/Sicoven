@@ -204,7 +204,7 @@ export const prepareUniversalSaleInventoryLines = (
     const productRate = rateForTreatment(product.vatTreatment);
     const declaredRateRaw = pickValue(row, ['taxRate','alicuota','tasaIva','vatRate']);
     const declaredRate = declaredRateRaw === undefined ? productRate : parseNumber(declaredRateRaw);
-    if (declaredRate !== productRate || productRate !== invoice.taxRate || productRate === 31) {
+    if (declaredRate !== productRate || (productRate !== 0 && productRate !== invoice.taxRate) || invoice.taxRate === 31) {
       throw new Error('Detalle '+(index+1)+': la alícuota del artículo no coincide con la factura o requiere tratamiento fiscal por línea no soportado. No se mezclan tasas ni se infiere impuesto suntuario.');
     }
     const netAmountBs = Math.round(quantity * unitPriceBs * 100) / 100;
