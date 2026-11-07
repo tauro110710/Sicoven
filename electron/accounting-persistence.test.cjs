@@ -425,14 +425,32 @@ test('una venta universal con líneas requiere salidas de Kardex y asientos de c
     assert.equal(saved.journalEntries.length, 2);
     assert.equal(saved.products[0].currentStock, 4);
 
-    const invalid = {
-      ...imported, movements: [], journalEntries: [saleEntry]
-    };
-    assert.throws(() => persistAccountingSnapshot(db, invalid, { id: 1, username: 'admin', role: 'admin' }),
-      /salidas de Kardex y los asientos de costo de ventas vinculados/);
-    const afterRejectedWrite = JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
-    assert.equal(afterRejectedWrite.movements.length, 1);
-    assert.equal(afterRejectedWrite.journalEntries.length, 2);
+    const rejectedDb = new Database(':memory:');
+    rejectedDb.exec(`
+      CREATE TABLE app_state (
+        state_key TEXT PRIMARY KEY, state_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE audit_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL,
+        details_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    try {
+      persistAccountingSnapshot(rejectedDb, prior, { id: 1, username: 'admin', role: 'admin' });
+      const invalid = {
+        ...prior, sales: [sale], products: [nextProduct],
+        movements: [], journalEntries: [saleEntry]
+      };
+      assert.throws(() => persistAccountingSnapshot(rejectedDb, invalid, { id: 1, username: 'admin', role: 'admin' }),
+        /salidas de Kardex y los asientos de costo de ventas vinculados/);
+      const afterRejectedWrite = JSON.parse(rejectedDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
+      assert.equal(afterRejectedWrite.sales.length, 0);
+      assert.equal(afterRejectedWrite.movements.length, 0);
+      assert.equal(afterRejectedWrite.journalEntries.length, 0);
+    } finally {
+      rejectedDb.close();
+    }
   } finally {
     db.close();
   }
