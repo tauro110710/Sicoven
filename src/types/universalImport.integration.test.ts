@@ -114,7 +114,8 @@ test('integración: análisis JSON, selección individual, empresa destino, dupl
     assert.ok(findUniversalInvoiceJournalCollision('ANTERIOR', initial.journalEntries, 'VENTA'));
 
     const sourceSaleEntry = {
-      ...journalEntry('sale-source-company-2', 'company-2', 1, 'F-002'),
+      ...journalEntry('sale-source-company-2', 'company-2', 1, 'FAC-F-002'),
+      date: '2026-11-06',
       type: 'VENTA',
       items: [
         { accountCode: '1.1.2.01', accountName: 'Cuentas por cobrar', debitBs: 1000, creditBs: 0, debitUsd: 10, creditUsd: 0, description: 'CxC factura F-002' },
@@ -135,10 +136,24 @@ test('integración: análisis JSON, selección individual, empresa destino, dupl
       companyId: 'company-2',
       documentType: '01',
       paymentTerm: 'CREDITO',
+      paymentCurrency: 'BS',
       invoiceDate: '2026-11-06',
       invoiceNumber: 'F-002',
+      controlNumber: 'CTRL-F-002',
+      customerName: 'Cliente Dos',
+      customerRif: 'J-44444444-4',
       totalAmountBs: 1000,
+      taxableBaseBs: 1000,
+      exemptAmountBs: 0,
+      vatAmountBs: 0,
+      vatWithheldBs: 0,
+      igtfAmountBs: 0,
       totalAmountUsd: 10,
+      taxableBaseUsd: 10,
+      vatAmountUsd: 0,
+      vatWithheldUsd: 0,
+      igtfAmountUsd: 0,
+      taxRate: 0,
       bcvRate: 100,
       journalEntryId: sourceSaleEntry.id,
       isCancelled: false
