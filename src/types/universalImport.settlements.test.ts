@@ -68,7 +68,8 @@ test('rechaza un lote que liquida por encima del total de la factura', () => {
     id: 'payment-2',
     migrationrowid: 'legacy.json|payments|1',
     settlementAmountBs: 400,
-    settlementAmountUsd: 4
+    settlementAmountUsd: 4,
+    reference: 'TRX-002'
   });
   assert.throws(
     () => planUniversalInvoiceSettlements([sourceInvoice], [sourceInvoice, first, second], 'sales'),
