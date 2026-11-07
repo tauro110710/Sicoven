@@ -380,6 +380,7 @@ test('la clasificación de inventario universal exige valores de origen reconoci
   assert.equal(mapUniversalInventoryVatTreatment('Exonerado'), 'EXONERADO');
   assert.equal(mapUniversalInventoryVatTreatment(''), null);
   assert.equal(mapUniversalInventoryVatTreatment('31%'), null);
+  assert.equal(mapUniversalInventoryVatTreatment('General'), null);
 
   assert.equal(mapUniversalInventoryItemType('Mercancía'), 'MERCANCIA');
   assert.equal(mapUniversalInventoryItemType('Materia prima'), 'MATERIA_PRIMA');
@@ -387,5 +388,6 @@ test('la clasificación de inventario universal exige valores de origen reconoci
   assert.equal(mapUniversalInventoryItemType('Producto terminado'), 'PRODUCTO_TERMINADO');
   assert.equal(mapUniversalInventoryItemType('Subproducto'), 'SUBPRODUCTO');
   assert.equal(mapUniversalInventoryItemType(''), null);
+  assert.equal(mapUniversalInventoryItemType('Producto'), null);
   assert.equal(mapUniversalInventoryItemType('servicio'), null);
 });
