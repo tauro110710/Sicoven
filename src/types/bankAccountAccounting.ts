@@ -9,17 +9,21 @@ export function buildBankAuxiliaryAccounts(
   bankName: string,
   accountType: BankAccountKind
 ): { parent: Account; auxiliary: Account; accounts: Account[] } {
-  const parentCode = currency === 'USD' ? '1.1.1.07' : '1.1.1.06';
-  const controlName = currency === 'USD'
-    ? 'Bancos Moneda Extranjera (control)'
-    : 'Bancos Moneda Nacional (control)';
+  // Una sola cuenta matriz para todos los bancos; la moneda se conserva en la ficha bancaria.
+  const parentCode = '1.1.1.03';
   const existingParent = currentAccounts.find(account => account.code === parentCode);
-  const parent: Account = existingParent
-    ? { ...existingParent, name: controlName, type: 'ACTIVO', isMovement: false, level: 4, parentCode: '1.1.1' }
-    : { code: parentCode, name: controlName, type: 'ACTIVO', level: 4, isMovement: false, parentCode: '1.1.1' };
+  if (!existingParent) {
+    throw new Error('No existe la cuenta matriz 1.1.1.03 – BANCOS. Cree o restaure primero esta cuenta totalizadora en el Catálogo de Cuentas.');
+  }
+  if (existingParent.isMovement) {
+    throw new Error('La cuenta matriz de Bancos (1.1.1.03) debe ser de tipo Totalizadora / Grupo; no puede recibir movimientos directos.');
+  }
+  if (existingParent.type !== 'ACTIVO' || existingParent.level !== 4 || existingParent.parentCode !== '1.1.1') {
+    throw new Error('La cuenta matriz 1.1.1.03 debe pertenecer a Efectivo y Equivalentes, ser de Activo y estar en el nivel 4.');
+  }
 
   const children = currentAccounts.filter(account =>
-    account.parentCode === parentCode && /^\d+$/.test(account.code.split('.').at(-1) || '')
+    account.parentCode === parentCode && /^\\d+$/.test(account.code.split('.').at(-1) || '')
   );
   const nextAux = children.reduce(
     (maximum, account) => Math.max(maximum, Number(account.code.split('.').at(-1) || 0)),
@@ -39,10 +43,9 @@ export function buildBankAuxiliaryAccounts(
     parentCode
   };
   const accounts = [
-    ...currentAccounts.filter(account => account.code !== parentCode && account.code !== code),
-    parent,
+    ...currentAccounts.filter(account => account.code !== code),
     auxiliary
   ].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
 
-  return { parent, auxiliary, accounts };
+  return { parent: existingParent, auxiliary, accounts };
 }
