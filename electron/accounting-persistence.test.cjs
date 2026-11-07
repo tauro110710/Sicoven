@@ -142,3 +142,88 @@ test('bank statement import batch persists together and leaves no imported rows 
     db.close();
   }
 });
+
+
+test('POSVEN-style inventory opening persists product, Kardex and balanced opening entry atomically', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE app_state (
+      state_key TEXT PRIMARY KEY, state_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL,
+      details_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  try {
+    const prior = emptyState();
+    prior.accounts.push(
+      { code: '1.1.4.01', name: 'Inventario de mercancías', type: 'ACTIVO', level: 4, isMovement: true },
+      { code: '5.1.1.01', name: 'Costo de ventas', type: 'COSTOS', level: 4, isMovement: true },
+      { code: '5.1.2.01', name: 'Ajustes de inventario', type: 'GASTOS', level: 4, isMovement: true },
+      { code: '3.3.1.01', name: 'Aportes de apertura', type: 'PATRIMONIO', level: 4, isMovement: true }
+    );
+    persistAccountingSnapshot(db, prior, { id: 1, username: 'admin', role: 'admin' });
+
+    const product = {
+      id: 'prod-import-1', companyId: 'company-1', code: 'SKU-1', name: 'Artículo de prueba',
+      currentStock: 2, avgCostBs: 100, avgCostUsd: 10, lastCostBs: 100, lastCostUsd: 10,
+      inventoryAccountCode: '1.1.4.01', costOfSalesAccountCode: '5.1.1.01',
+      adjustmentAccountCode: '5.1.2.01', openingBalanceAccountCode: '3.3.1.01',
+      costingMethod: 'PROMEDIO_PONDERADO', vatTreatment: 'GENERAL_16',
+      itemType: 'MERCANCIA', unit: 'Unidad', openingDate: '2026-11-04', openingBcvRate: 10
+    };
+    const entry = {
+      id: 'entry-inventory-opening-1', companyId: 'company-1', entryNumber: 1,
+      date: '2026-11-04', description: 'Asiento de apertura de inventario · SKU-1',
+      type: 'APERTURA', bcvRate: 10, referenceDoc: 'APERTURA-SKU-1',
+      items: [
+        { accountCode: '1.1.4.01', accountName: 'Inventario de mercancías', debitBs: 200, creditBs: 0, debitUsd: 20, creditUsd: 0 },
+        { accountCode: '3.3.1.01', accountName: 'Aportes de apertura', debitBs: 0, creditBs: 200, debitUsd: 0, creditUsd: 20 }
+      ],
+      createdAt: '2026-11-04T10:00:00.000Z'
+    };
+    const movement = {
+      id: 'mov-opening-1', companyId: 'company-1', productId: product.id,
+      productName: product.name, productCode: product.code, date: '2026-11-04',
+      type: 'ENTRADA', concept: 'INVENTARIO_INICIAL', documentRef: 'APERTURA-SKU-1',
+      quantity: 2, unitCostBs: 100, unitCostUsd: 10, totalCostBs: 200, totalCostUsd: 20,
+      balanceQty: 2, balanceTotalBs: 200, balanceTotalUsd: 20,
+      bcvRate: 10, costingMethod: 'PROMEDIO_PONDERADO', journalEntryId: entry.id
+    };
+    const imported = {
+      ...prior, products: [product], movements: [movement], journalEntries: [entry]
+    };
+    assert.equal(persistAccountingSnapshot(db, imported, { id: 1, username: 'admin', role: 'admin' }).ok, true);
+
+    const readState = () => JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
+    let saved = readState();
+    assert.deepEqual(saved.products.map(row => row.code), ['SKU-1']);
+    assert.deepEqual(saved.movements.map(row => row.id), ['mov-opening-1']);
+    assert.deepEqual(saved.journalEntries.map(row => row.id), ['entry-inventory-opening-1']);
+    const auditTypes = db.prepare('SELECT event_type FROM audit_events ORDER BY id').all().map(row => row.event_type);
+    assert.ok(auditTypes.includes('inventory_movement_posted'));
+    assert.ok(auditTypes.includes('journal_entry_posted'));
+    assert.ok(auditTypes.includes('accounting_year_opening_posted'));
+
+    const beforeFailure = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json;
+    const beforeAuditCount = db.prepare('SELECT COUNT(*) AS n FROM audit_events').get().n;
+    db.exec(`CREATE TRIGGER reject_inventory_opening BEFORE UPDATE ON app_state
+      BEGIN SELECT RAISE(ABORT, 'injected inventory opening failure'); END;`);
+    const attempted = {
+      ...imported,
+      products: [...imported.products, { ...product, id: 'prod-import-2', code: 'SKU-2' }],
+      movements: [...imported.movements, { ...movement, id: 'mov-opening-2', productId: 'prod-import-2', productCode: 'SKU-2' }]
+    };
+    assert.throws(() => persistAccountingSnapshot(db, attempted, { id: 1, username: 'admin', role: 'admin' }), /injected inventory opening failure/);
+    saved = readState();
+    assert.equal(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json, beforeFailure);
+    assert.deepEqual(saved.products.map(row => row.code), ['SKU-1']);
+    assert.deepEqual(saved.movements.map(row => row.id), ['mov-opening-1']);
+    assert.deepEqual(saved.journalEntries.map(row => row.id), ['entry-inventory-opening-1']);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM audit_events').get().n, beforeAuditCount);
+  } finally {
+    db.close();
+  }
+});
