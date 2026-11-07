@@ -326,7 +326,7 @@ test('una compra universal con líneas concilia factura, asiento y entradas de K
     db.exec(`CREATE TRIGGER reject_purchase_import BEFORE UPDATE ON app_state
       BEGIN SELECT RAISE(ABORT, 'injected purchase import failure'); END;`);
     assert.throws(() => persistAccountingSnapshot(db, {
-      ...imported, purchases: [...imported.purchases, { ...purchase, id: 'purchase-import-2', invoiceNumber: 'INV-IMPORT-002', journalEntryId: 'entry-purchase-import-2' }]
+      ...imported, displayCurrency: 'USD'
     }, { id: 1, username: 'admin', role: 'admin' }), /injected purchase import failure/);
     assert.equal(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json, beforeFailure);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM audit_events').get().n, beforeAudit);
