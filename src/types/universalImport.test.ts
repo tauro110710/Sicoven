@@ -130,3 +130,20 @@ test('rechaza identificadores de factura contradictorios', () => {
   const invoice = { migrationfile: 'archivo-a', id: 'P-100', purchaseId: 'P-200' };
   assert.throws(() => resolveUniversalPurchaseDetailRows([invoice], invoice), /identificadores incompatibles/);
 });
+
+
+test('preserva dirección, correo y condición fiscal de la contraparte relacionada', () => {
+  const invoice = { migrationfile: 'archivo-a', invoiceNumber: 'C-9', supplierId: 'S-9' };
+  const rows = [
+    invoice,
+    { migrationfile: 'archivo-a', id: 'S-9', name: 'Proveedor Uno', rif: 'J-12345678-9', address: 'Av. Principal', email: 'ventas@example.test', taxStatus: 'ORDINARY' }
+  ];
+  assert.deepEqual(resolveUniversalPartyReference(rows, invoice, 'supplier'), {
+    name: 'Proveedor Uno',
+    rif: 'J-12345678-9',
+    address: 'Av. Principal',
+    email: 'ventas@example.test',
+    taxStatus: 'ORDINARY',
+    source: 'related-record'
+  });
+});
