@@ -237,3 +237,100 @@ test('POSVEN-style inventory opening persists product, Kardex and balanced openi
     db.close();
   }
 });
+
+
+test('una compra universal con líneas concilia factura, asiento y entradas de Kardex en una sola transacción SQLite', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE app_state (
+      state_key TEXT PRIMARY KEY, state_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL,
+      details_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  try {
+    const prior = emptyState();
+    prior.accounts.push(
+      { code: '1.1.4.01', name: 'Inventario de mercancías', type: 'ACTIVO', level: 4, isMovement: true },
+      { code: '1.1.3.01', name: 'Crédito Fiscal IVA', type: 'ACTIVO', level: 4, isMovement: true },
+      { code: '2.1.1.01', name: 'Cuentas por pagar proveedores', type: 'PASIVO', level: 4, isMovement: true }
+    );
+    persistAccountingSnapshot(db, prior, { id: 1, username: 'admin', role: 'admin' });
+
+    const product = {
+      id: 'prod-purchase-import-1', companyId: 'company-1', code: 'SKU-PUR-1',
+      name: 'Mercancía de prueba', currentStock: 1, avgCostBs: 100, avgCostUsd: 10,
+      lastCostBs: 100, lastCostUsd: 10, inventoryAccountCode: '1.1.4.01',
+      costOfSalesAccountCode: '5.1.1.01', adjustmentAccountCode: '5.1.2.01',
+      costingMethod: 'PROMEDIO_PONDERADO', vatTreatment: 'GENERAL_16',
+      itemType: 'MERCANCIA', unit: 'Unidad'
+    };
+    const purchase = {
+      id: 'purchase-import-1', companyId: 'company-1', opNumber: 1,
+      documentType: '01', invoiceNumber: 'INV-IMPORT-001', controlNumber: 'CTRL-001',
+      invoiceDate: '2026-11-05', accountCreditDate: '2026-11-05',
+      supplierRif: 'J-12345678-9', supplierName: 'Proveedor de prueba',
+      paymentTerm: 'CREDITO', bcvRate: 10,
+      totalAmountBs: 116, taxableBaseBs: 100, exemptAmountBs: 0,
+      taxRate: 16, vatAmountBs: 16, vatWithheldBs: 0, islrWithheldBs: 0,
+      igtfAmountBs: 0, totalAmountUsd: 11.6, taxableBaseUsd: 10,
+      vatAmountUsd: 1.6, vatWithheldUsd: 0, islrWithheldUsd: 0,
+      igtfAmountUsd: 0, inventoryLines: [
+        { productId: product.id, quantity: 1, unitCostBs: 100 }
+      ], journalEntryId: 'entry-purchase-import-1'
+    };
+    const entry = {
+      id: purchase.journalEntryId, companyId: 'company-1', entryNumber: 1,
+      date: purchase.accountCreditDate,
+      description: 'Compra universal INV-IMPORT-001', type: 'COMPRA',
+      bcvRate: 10, referenceDoc: 'FAC-INV-IMPORT-001',
+      items: [
+        { accountCode: '1.1.4.01', accountName: 'Inventario de mercancías', debitBs: 100, creditBs: 0, debitUsd: 10, creditUsd: 0 },
+        { accountCode: '1.1.3.01', accountName: 'Crédito Fiscal IVA', debitBs: 16, creditBs: 0, debitUsd: 1.6, creditUsd: 0 },
+        { accountCode: '2.1.1.01', accountName: 'Cuentas por pagar proveedores', debitBs: 0, creditBs: 116, debitUsd: 0, creditUsd: 11.6 }
+      ], createdAt: '2026-11-05T10:00:00.000Z'
+    };
+    const movement = {
+      id: 'movement-purchase-import-1', companyId: 'company-1',
+      productId: product.id, productName: product.name, productCode: product.code,
+      date: purchase.invoiceDate, type: 'ENTRADA', concept: 'COMPRA',
+      documentRef: 'FAC-INV-IMPORT-001', quantity: 1, unitCostBs: 100,
+      unitCostUsd: 10, totalCostBs: 100, totalCostUsd: 10,
+      balanceQty: 1, balanceTotalBs: 100, balanceTotalUsd: 10,
+      bcvRate: 10, costingMethod: 'PROMEDIO_PONDERADO',
+      counterpartyRif: purchase.supplierRif, counterpartyName: purchase.supplierName
+    };
+    const imported = {
+      ...prior, purchases: [purchase], products: [product],
+      movements: [movement], journalEntries: [entry]
+    };
+    assert.equal(persistAccountingSnapshot(db, imported, { id: 1, username: 'admin', role: 'admin' }).ok, true);
+
+    const saved = JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
+    assert.equal(saved.purchases[0].invoiceNumber, 'INV-IMPORT-001');
+    assert.equal(saved.products[0].currentStock, 1);
+    assert.equal(saved.movements[0].documentRef, 'FAC-INV-IMPORT-001');
+    assert.equal(saved.journalEntries[0].type, 'COMPRA');
+    const totals = saved.journalEntries[0].items.reduce((sum, item) => ({
+      debitBs: sum.debitBs + item.debitBs, creditBs: sum.creditBs + item.creditBs,
+      debitUsd: sum.debitUsd + item.debitUsd, creditUsd: sum.creditUsd + item.creditUsd
+    }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
+    assert.equal(totals.debitBs, totals.creditBs);
+    assert.equal(totals.debitUsd, totals.creditUsd);
+
+    const beforeFailure = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json;
+    const beforeAudit = db.prepare('SELECT COUNT(*) AS n FROM audit_events').get().n;
+    db.exec(`CREATE TRIGGER reject_purchase_import BEFORE UPDATE ON app_state
+      BEGIN SELECT RAISE(ABORT, 'injected purchase import failure'); END;`);
+    assert.throws(() => persistAccountingSnapshot(db, {
+      ...imported, displayCurrency: 'USD'
+    }, { id: 1, username: 'admin', role: 'admin' }), /injected purchase import failure/);
+    assert.equal(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json, beforeFailure);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM audit_events').get().n, beforeAudit);
+  } finally {
+    db.close();
+  }
+});

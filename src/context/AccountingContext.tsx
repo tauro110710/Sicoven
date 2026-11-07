@@ -365,12 +365,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // React setters are queued synchronously; capture every collection touched by
     // addSale/addPurchase and restore the complete batch if any operation throws.
     const before = {
-      journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers,
+      journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, islrFiscalEvents,
       saleSequence: { ...saleSequenceRef.current },
       purchaseSequence: { ...purchaseSequenceRef.current },
       journalSequence: { ...journalSequenceRef.current },
       vatSequence: { ...vatVoucherSequenceRef.current },
-      islrSequence: { ...islrVoucherSequenceRef.current }
+      islrSequence: { ...islrVoucherSequenceRef.current },
+      islrEventSequence: { ...islrEventSequenceRef.current }
     };
     const rollback = (error: unknown): never => {
       // If the batch is rolled back before its state reaches the persistence effect,
@@ -388,11 +389,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setMovements(before.movements);
       setVatVouchers(before.vatVouchers);
       setIslrVouchers(before.islrVouchers);
+      setIslrFiscalEvents(before.islrFiscalEvents);
       saleSequenceRef.current = before.saleSequence;
       purchaseSequenceRef.current = before.purchaseSequence;
       journalSequenceRef.current = before.journalSequence;
       vatVoucherSequenceRef.current = before.vatSequence;
       islrVoucherSequenceRef.current = before.islrSequence;
+      islrEventSequenceRef.current = before.islrEventSequence;
       throw error;
     };
     try {

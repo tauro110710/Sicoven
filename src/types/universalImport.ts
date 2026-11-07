@@ -256,10 +256,10 @@ export const prepareUniversalPurchaseInventoryLines = (
   };
   const parseNumber = (value: unknown): number => {
     if (typeof value === 'number') return value;
-    const raw = String(value ?? '').trim().replace(/\\s/g, '');
+    const raw = String(value ?? '').trim().replace(/\s/g, '');
     if (!raw) return NaN;
     const normalized = raw.includes(',') && raw.includes('.')
-      ? (raw.lastIndexOf(',') > raw.lastIndexOf('.') ? raw.replace(/\\./g, '').replace(',', '.') : raw.replace(/,/g, ''))
+      ? (raw.lastIndexOf(',') > raw.lastIndexOf('.') ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/,/g, ''))
       : raw.replace(',', '.');
     return Number(normalized);
   };
@@ -386,7 +386,31 @@ export const isUniversalMovementTypeConceptValid = (
 
 export const normalizeUniversalDocumentReference = (value: unknown): string => {
   const normalized = String(value ?? '').trim().normalize('NFD').replace(/\p{Diacritic}/gu, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  return normalized.replace(/^(FACTURA|FAC)/, '');
+  const withoutPrefix = normalized.replace(/^(?:(?:FACTURA|FAC))+/, '');
+  return withoutPrefix || normalized;
+};
+
+export const buildUniversalInvoiceIdentity = (
+  kind: 'sales' | 'purchases',
+  invoiceNumber: unknown,
+  partyRif: unknown
+): string => {
+  const invoice = normalizeUniversalDocumentReference(invoiceNumber);
+  const rif = String(partyRif ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return kind === 'sales' ? invoice : invoice + '|' + rif;
+};
+
+export const findUniversalInvoiceJournalCollision = (
+  invoiceNumber: unknown,
+  entries: Array<{ referenceDoc?: string | null; type?: string }>,
+  expectedType?: 'VENTA' | 'COMPRA'
+): { referenceDoc?: string | null; type?: string } | undefined => {
+  const normalizedInvoice = normalizeUniversalDocumentReference(invoiceNumber);
+  if (!normalizedInvoice) return undefined;
+  return entries.find(entry =>
+    (!expectedType || entry.type === expectedType || entry.type === 'MANUAL' || !entry.type) &&
+    normalizeUniversalDocumentReference(entry.referenceDoc) === normalizedInvoice
+  );
 };
 
 const normalizeUniversalValue = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '');

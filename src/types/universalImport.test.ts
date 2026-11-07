@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -315,4 +315,53 @@ test('agrupa diarios desde encabezados normalizados por el lector universal', ()
   ]);
   assert.equal(groups.length, 1);
   assert.equal(groups[0].rows.length, 2);
+});
+
+
+test('normaliza prefijos repetidos y detecta asientos que ya representan una factura', () => {
+  assert.equal(normalizeUniversalDocumentReference('FAC-000123'), '000123');
+  assert.equal(normalizeUniversalDocumentReference('Factura 000123'), '000123');
+  assert.equal(normalizeUniversalDocumentReference('FAC-FAC-000123'), '000123');
+  assert.equal(normalizeUniversalDocumentReference('FAC'), 'FAC');
+  const entries = [
+    { referenceDoc: 'FAC-000123' },
+    { referenceDoc: 'FAC-000124' }
+  ];
+  assert.equal(findUniversalInvoiceJournalCollision('000123', entries)?.referenceDoc, 'FAC-000123');
+  assert.equal(findUniversalInvoiceJournalCollision('Factura 000124', entries)?.referenceDoc, 'FAC-000124');
+  assert.equal(findUniversalInvoiceJournalCollision('000125', entries), undefined);
+  const typedEntries = [
+    { referenceDoc: 'FAC-000123', type: 'VENTA' },
+    { referenceDoc: 'FAC-000123', type: 'COMPRA' }
+  ];
+  assert.equal(findUniversalInvoiceJournalCollision('000123', typedEntries, 'VENTA')?.type, 'VENTA');
+  assert.equal(findUniversalInvoiceJournalCollision('000123', typedEntries, 'COMPRA')?.type, 'COMPRA');
+  assert.equal(findUniversalInvoiceJournalCollision('000123', [typedEntries[0]], 'COMPRA'), undefined);
+  assert.equal(findUniversalInvoiceJournalCollision('000123', [{ referenceDoc: 'FAC-000123', type: 'MANUAL' }], 'VENTA')?.type, 'MANUAL');
+  assert.equal(findUniversalInvoiceJournalCollision('000123', [{ referenceDoc: 'FAC-000123', type: 'MANUAL' }], 'COMPRA')?.type, 'MANUAL');
+});
+
+
+test('identifica facturas de venta globalmente y compras por proveedor según el dominio SICOVEN', () => {
+  assert.equal(buildUniversalInvoiceIdentity('sales', ' FAC 0001 ', 'J-111'), '0001');
+  assert.equal(buildUniversalInvoiceIdentity('sales', 'FAC0001', 'J-222'), '0001');
+  assert.equal(buildUniversalInvoiceIdentity('purchases', '0001', 'J-111'), '0001|J111');
+  assert.equal(buildUniversalInvoiceIdentity('purchases', '0001', 'J-222'), '0001|J222');
+});
+
+
+test('interpreta costos de compra con espacios, miles y decimales en formatos locales', () => {
+  const products = [
+    { id: 'p1', code: 'SKU-1' },
+    { id: 'p2', code: 'SKU-2' }
+  ];
+  const bsLines = prepareUniversalPurchaseInventoryLines([
+    { codigo: 'SKU-1', cantidad: '2', costoUnitarioBs: '1.234,50' }
+  ], products, { taxableBaseBs: 2469, exemptAmountBs: 0, bcvRate: 100 });
+  assert.deepEqual(bsLines, [{ productId: 'p1', quantity: 2, unitCostBs: 1234.5 }]);
+
+  const usdLines = prepareUniversalPurchaseInventoryLines([
+    { sku: 'SKU-2', qty: '2', cost: ' 2,50 ', currency: 'USD' }
+  ], products, { taxableBaseBs: 500, exemptAmountBs: 0, bcvRate: 100 });
+  assert.deepEqual(usdLines, [{ productId: 'p2', quantity: 2, unitCostBs: 250 }]);
 });
