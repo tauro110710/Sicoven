@@ -330,6 +330,13 @@ test('normaliza prefijos repetidos y detecta asientos que ya representan una fac
   assert.equal(findUniversalInvoiceJournalCollision('000123', entries)?.referenceDoc, 'FAC-000123');
   assert.equal(findUniversalInvoiceJournalCollision('Factura 000124', entries)?.referenceDoc, 'FAC-000124');
   assert.equal(findUniversalInvoiceJournalCollision('000125', entries), undefined);
+  const typedEntries = [
+    { referenceDoc: 'FAC-000123', type: 'VENTA' },
+    { referenceDoc: 'FAC-000123', type: 'COMPRA' }
+  ];
+  assert.equal(findUniversalInvoiceJournalCollision('000123', typedEntries, 'VENTA')?.type, 'VENTA');
+  assert.equal(findUniversalInvoiceJournalCollision('000123', typedEntries, 'COMPRA')?.type, 'COMPRA');
+  assert.equal(findUniversalInvoiceJournalCollision('000123', [typedEntries[0]], 'COMPRA'), undefined);
 });
 
 
