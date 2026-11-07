@@ -135,7 +135,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     else if(/^(terminales|terminals|cajas|registers)$/.test(key)){target='Configuración operativa';mode='No importar';reason='Requiere una política explícita de equivalencia con las cajas/terminales de SICOVEN.';}
     return {name,count:list.length,objects:objects.length,invalid:list.length-objects.length,fields,identityField,missingIdentity,duplicateIdentity,numericSummaries,referenceFields,relationshipHints,target,mode,reason,canImport};
    });
-  }catch{return [] as Array<{name:string;count:number;objects:number;invalid:number;fields:string[];identityField:string;missingIdentity:number;duplicateIdentity:number;numericSummaries:Array<{field:string;count:number;sum:number}>;referenceFields:string[];relationshipHints:Array<{field:string;targetCollection:string}>;target:string;mode:string;reason:string}>;}
+  }catch{return [] as Array<{name:string;count:number;objects:number;invalid:number;fields:string[];identityField:string;missingIdentity:number;duplicateIdentity:number;numericSummaries:Array<{field:string;count:number;sum:number}>;referenceFields:string[];relationshipHints:Array<{field:string;targetCollection:string}>;target:string;mode:string;reason:string;canImport:boolean}>;}
  },[posvenBackup,backupPayload]);
  const analysis = useMemo(()=>{
   const sources = new Map<string, Row[]>();
