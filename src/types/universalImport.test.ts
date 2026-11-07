@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, selectUniversalRowsByStableKeys, mapUniversalSettlementPreview, mapUniversalInventoryItemType, planUniversalInvoiceSettlements, selectUniversalInvoiceSettlements } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, selectUniversalRowsByStableKeys, mapUniversalSettlementPreview, mapUniversalInventoryItemType, planUniversalInvoiceSettlements, selectUniversalInvoiceSettlements, validateUniversalSettlementDestination } from './universalImport';
 
 
 
@@ -520,4 +520,29 @@ test('el plan de liquidaciones conserva referencias iguales en cuentas bancarias
   const plan = planUniversalInvoiceSettlements(invoices, [...invoices, ...settlements], 'sales');
   assert.equal(plan.length, 2);
   assert.equal(plan.reduce((sum, item) => sum + item.settlements.length, 0), 2);
+});
+
+
+test('valida destinos bancarios históricos por empresa, moneda y auxiliar de movimiento', () => {
+  const settlement = {
+    settlementDate: '2026-11-05', bcvRate: 100, amountUsd: 10, amountBs: 1000,
+    method: 'BANK_TRANSFER_BS' as const, bankAccountId: 'bank-bs', reference: 'TRX-1', sourceRowId: 'payment-1'
+  };
+  const bankAccounts = [{ id: 'bank-bs', companyId: 'company-1', accountCode: '1.1.1.03', currency: 'BS' as const }];
+  const accounts = [{ code: '1.1.1.03', type: 'ACTIVO', isMovement: true }];
+  assert.equal(validateUniversalSettlementDestination(settlement, 'company-1', bankAccounts, accounts), null);
+  assert.match(validateUniversalSettlementDestination(settlement, 'company-2', bankAccounts, accounts) || '', /inexistente o perteneciente a otra empresa/);
+  assert.match(validateUniversalSettlementDestination(settlement, 'company-1', [{ ...bankAccounts[0], currency: 'USD' as const }], accounts) || '', /moneda/);
+  assert.match(validateUniversalSettlementDestination(settlement, 'company-1', bankAccounts, [{ ...accounts[0], isMovement: false }]) || '', /auxiliar contable/);
+});
+
+test('valida transferencia USD y no permite vincular caja a una cuenta bancaria', () => {
+  const usd = {
+    settlementDate: '2026-11-05', bcvRate: 100, amountUsd: 10, amountBs: 1000,
+    method: 'BANK_TRANSFER_USD' as const, bankAccountId: 'bank-usd', reference: 'TRX-USD', sourceRowId: 'payment-usd'
+  };
+  const banks = [{ id: 'bank-usd', companyId: 'company-1', accountCode: '1.1.1.07.01', currency: 'USD' as const }];
+  const accounts = [{ code: '1.1.1.07.01', type: 'ACTIVO', isMovement: true }];
+  assert.equal(validateUniversalSettlementDestination(usd, 'company-1', banks, accounts), null);
+  assert.match(validateUniversalSettlementDestination({ ...usd, method: 'CASH_BS' as const }, 'company-1', banks, accounts) || '', /efectivo no puede identificar/);
 });
