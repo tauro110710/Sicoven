@@ -255,3 +255,14 @@ La validación del producto se realiza mediante:
 - **Validación automatizada:** CI, pruebas unitarias, TypeScript, build, empaquetado Windows, instalación/arranque y actualización desde v1.0.17 con marcador SQLite e `integrity_check` pasaron sobre el SHA de la PR.
 - **Prueba manual pendiente:** el usuario no dispone por ahora de un equipo para ejecutar la comprobación visual del diálogo y del contenido exportado desde Retenciones IVA/ISLR. Esta limitación queda documentada; no se afirma que esa prueba manual se haya realizado.
 - **Versión objetivo:** v1.0.19. La publicación se ejecuta mediante el flujo Windows y se distribuye exclusivamente en `fenixlife1978/sicoven-descargas`; Vercel no participa en la compilación ni publicación del instalador.
+
+
+## Adaptador de respaldo POSVEN-Pro para inventario — 2026-11-06
+
+- Rama de trabajo: `feature/posven-backup-inventory-adapter`; `main` permanece intacta.
+- Archivo de referencia analizado: respaldo POSVEN-Pro v3, creado el 2026-11-04. Contiene 28 colecciones en arreglos y 28.077 elementos: 27.936 objetos, 141 valores escalares de catálogos y 6 colecciones vacías.
+- La colección `productos` contiene 402 artículos: 374 activos no-kit aptos para revisión, 11 inactivos y 18 kits (un registro coincide en ambas exclusiones).
+- Se implementa selección visible por colección. En esta etapa solo se habilita el adaptador de productos; las demás colecciones quedan visibles pero no importables porque requieren conciliación y adaptadores propios. CxC/CxP no se importan por separado de sus documentos; ventas, compras, movimientos y libro diario no se contabilizan automáticamente.
+- El adaptador de productos exige fecha de apertura, tasa BCV positiva y elección expresa del tratamiento IVA. No infiere EXENTO/EXONERADO desde `aplicaIVA=false`. Calcula costo de apertura Bs como `costoUSD × tasa BCV`, conserva los precios USD/Bs del respaldo, excluye inactivos y kits, omite códigos ya existentes y no sobrescribe artículos.
+- La importación usa el método nativo de SICOVEN `importInventoryProducts`, que genera movimientos de inventario inicial y asientos de apertura en SQLite. No se escribe nada al analizar o seleccionar; la escritura solo ocurre tras validación y confirmación explícita.
+- Pendiente: ejecutar CI, TypeScript, build y pruebas Windows sobre el SHA de esta rama; probar con un archivo de respaldo POSVEN de muestra en una base de prueba y comprobar apertura, Kardex, asientos, exclusiones y duplicados. No fusionar a `main` ni publicar instalador hasta que las validaciones terminen.
