@@ -10,6 +10,7 @@ import {
   SaleRecord,
   InventoryProduct,
   InventoryMovement,
+  InventoryMovementImportDraft,
   VatRetentionVoucher,
   VatWithholdingDeclaration,
   VatWithholdingDeclarationEvent,
@@ -156,7 +157,7 @@ interface AccountingContextType {
   addProduct: (product: Omit<InventoryProduct, 'id' | 'companyId'>) => InventoryProduct;
   getCompanyInventoryProducts: (companyId: string) => InventoryProduct[];
   importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[], targetCompanyId?: string) => Promise<number>;
-  importInventoryMovements: (movements: Omit<InventoryMovement, 'id' | 'companyId'>[]) => number;
+  importInventoryMovements: (movements: InventoryMovementImportDraft[], targetCompanyId?: string) => number;
   executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => Promise<InventoryMovement[]>;
   updateProduct: (product: InventoryProduct, reason: string, workpaperNote: string) => Promise<void>;
   movements: InventoryMovement[];
@@ -3725,21 +3726,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
 
-  const importInventoryMovements = (rows: Omit<InventoryMovement, 'id' | 'companyId'>[]): number => {
+  const importInventoryMovements = (rows: InventoryMovementImportDraft[], targetCompanyId: string = currentCompany.id): number => {
+    const targetCompany = companies.find(company => company.id === targetCompanyId);
+    if (!targetCompany) throw new Error('La empresa destino de los movimientos no existe en SICOVEN.');
     if (!Array.isArray(rows) || rows.length === 0) throw new Error('El archivo no contiene movimientos para importar.');
-    const virtualProducts = new Map(products.filter(p => p.companyId === currentCompany.id).map(p => [p.id, p]));
-    const virtualMovements = movements.filter(m => m.companyId === currentCompany.id).slice();
+    const virtualProducts = new Map(products.filter(p => p.companyId === targetCompany.id).map(p => [p.id, p]));
+    const virtualMovements = movements.filter(m => m.companyId === targetCompany.id).slice();
     const importedMovements: InventoryMovement[] = [];
     const importedEntries: JournalEntry[] = [];
     const keys = new Set<string>();
-    let nextEntryNumber = journalEntries.filter(e => e.companyId === currentCompany.id).reduce((max,e) => Math.max(max,e.entryNumber),0) + 1;
+    let nextEntryNumber = journalEntries.filter(e => e.companyId === targetCompany.id).reduce((max,e) => Math.max(max,e.entryNumber),0) + 1;
     for (let index = 0; index < rows.length; index++) {
       const row = rows[index];
       if (row.type === 'SALIDA' && row.concept === 'DEVOLUCION_COMPRA') {
         throw new Error('Importación bloqueada en fila ' + (index + 2) + ': las devoluciones a proveedor requieren una nota de crédito conciliada con factura, Kardex, CxP e impuestos. No se importó ningún movimiento.');
       }
+      if (targetCompany.closedThroughDate && row.date <= targetCompany.closedThroughDate) throw new Error('Fila ' + (index + 2) + ': la fecha está dentro del período cerrado hasta ' + targetCompany.closedThroughDate + '.');
       const product = virtualProducts.get(row.productId);
-      if (!product) throw new Error('Fila ' + (index + 2) + ': artículo no encontrado en la empresa activa.');
+      if (!product) throw new Error('Fila ' + (index + 2) + ': artículo no encontrado en la empresa destino.');
       if (!row.documentRef || !String(row.documentRef).trim()) throw new Error('Fila ' + (index + 2) + ': la referencia documental es obligatoria.');
       const key = [row.productId,row.date,row.type,String(row.documentRef).trim().toLowerCase()].join('|');
       if (keys.has(key) || virtualMovements.some(m => m.productId === row.productId && m.date === row.date && m.type === row.type && m.documentRef.trim().toLowerCase() === String(row.documentRef).trim().toLowerCase())) {
@@ -3777,7 +3781,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         totalCostBs = Math.round(Number(row.quantity) * effectiveUnitCost * 100) / 100;
       } else if (row.type === 'SALIDA') {
         if (product.costingMethod === 'PEPS') {
-          const history = virtualMovements.filter(m => m.companyId === currentCompany.id && m.productId === product.id);
+          const history = virtualMovements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
           const layers = reconstructFifoLayers(history, product.currentStock);
           const fifoLayerValue = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0);
           totalCostBs = calculateFifoIssue(layers, Number(row.quantity)).totalCostBs;
@@ -3800,7 +3804,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const newAverageUsd = newAverageBs / rate;
       const movement: InventoryMovement = {
         ...row, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
-        companyId: currentCompany.id, quantity: movementQuantity, unitCostBs, unitCostUsd: unitCostBs / rate, additionalLandedCostsBs: landedCostsBs,
+        companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: unitCostBs / rate, additionalLandedCostsBs: landedCostsBs,
         totalCostBs, totalCostUsd, balanceQty: newStock,
         balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
         balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
@@ -3837,7 +3841,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               ? [makeLine('2.1.1.01',totalCostBs,0,amountUsd,0,'Devolución de mercancía al proveedor'),makeLine(inventoryCode,0,totalCostBs,0,amountUsd,'Salida por devolución de compra')]
               : [makeLine(debitCode,totalCostBs,0,amountUsd,0,isSale?'Costo de ventas por movimiento importado':'Merma/ajuste de inventario importado'),makeLine(inventoryCode,0,totalCostBs,0,amountUsd,'Descargo de inventario importado')];
         const entry: JournalEntry = {
-          id: 'entry-inventory-import-' + Date.now() + '-' + index, companyId: currentCompany.id, entryNumber: nextEntryNumber++,
+          id: 'entry-inventory-import-' + Date.now() + '-' + index, companyId: targetCompany.id, entryNumber: nextEntryNumber++,
           date: row.date, description: (isSale?'Costo de venta':isCustomerReturn?'Devolución de cliente':isSupplierReturn?'Devolución a proveedor':positiveAdjustment?'Sobrante':'Merma/ajuste') + ' importado · ' + product.code + ' · ' + row.documentRef,
           type: 'INVENTARIO', bcvRate: rate, referenceDoc: row.documentRef, items: lines, createdAt: new Date().toISOString()
         };

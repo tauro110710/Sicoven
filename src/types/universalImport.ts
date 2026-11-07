@@ -159,6 +159,37 @@ export const resolveUniversalPurchaseDetailRows = (
   return matches;
 };
 
+
+export type UniversalInventoryMovementType = 'ENTRADA' | 'SALIDA' | 'AJUSTE';
+export type UniversalInventoryMovementConcept = 'COMPRA' | 'INVENTARIO_INICIAL' | 'VENTA' | 'MERMA' | 'AUTOCONSUMO' | 'AJUSTE' | 'DEVOLUCION_CLIENTE' | 'DEVOLUCION_COMPRA';
+
+const normalizeUniversalValue = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+export const mapUniversalInventoryMovementType = (value: unknown): UniversalInventoryMovementType | null => {
+  const key = normalizeUniversalValue(value);
+  const map: Record<string, UniversalInventoryMovementType> = {
+    entrada: 'ENTRADA', in: 'ENTRADA', purchase: 'ENTRADA', compra: 'ENTRADA', opening: 'ENTRADA',
+    salida: 'SALIDA', out: 'SALIDA', sale: 'SALIDA', venta: 'SALIDA',
+    ajuste: 'AJUSTE', adjustment: 'AJUSTE'
+  };
+  return map[key] ?? null;
+};
+
+export const mapUniversalInventoryMovementConcept = (value: unknown): UniversalInventoryMovementConcept | null => {
+  const key = normalizeUniversalValue(value);
+  const map: Record<string, UniversalInventoryMovementConcept> = {
+    compra: 'COMPRA', purchase: 'COMPRA',
+    inventarioinicial: 'INVENTARIO_INICIAL', openinginventory: 'INVENTARIO_INICIAL',
+    venta: 'VENTA', sale: 'VENTA',
+    merma: 'MERMA', loss: 'MERMA',
+    autoconsumo: 'AUTOCONSUMO', selfconsumption: 'AUTOCONSUMO',
+    ajuste: 'AJUSTE', adjustment: 'AJUSTE',
+    devolucioncliente: 'DEVOLUCION_CLIENTE', devoluciondecliente: 'DEVOLUCION_CLIENTE', customerreturn: 'DEVOLUCION_CLIENTE',
+    devolucioncompra: 'DEVOLUCION_COMPRA', devoluciondecompra: 'DEVOLUCION_COMPRA', devolucionaproveedor: 'DEVOLUCION_COMPRA', supplierreturn: 'DEVOLUCION_COMPRA'
+  };
+  return map[key] ?? null;
+};
+
 export type UniversalImportFormat = 'json' | 'csv' | 'tsv' | 'txt' | 'xlsx' | 'xlsm' | 'unsupported';
 
 export const detectUniversalImportFormat = (fileName: string): UniversalImportFormat => {

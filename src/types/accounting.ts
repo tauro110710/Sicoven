@@ -423,6 +423,10 @@ export interface InventoryProduct {
   bomComponents?: InventoryBomComponent[];
 }
 
+export type InventoryMovementImportDraft =
+  Pick<InventoryMovement, 'productId' | 'date' | 'type' | 'concept' | 'documentRef' | 'quantity' | 'unitCostBs'> &
+  Partial<Omit<InventoryMovement, 'id' | 'companyId' | 'productId' | 'date' | 'type' | 'concept' | 'documentRef' | 'quantity' | 'unitCostBs'>>;
+
 export interface InventoryMovement {
   id: string;
   companyId: string;
