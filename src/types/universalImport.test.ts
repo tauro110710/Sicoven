@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -100,4 +100,33 @@ test('prefiere la contraparte explícita cuando nombre y RIF están presentes', 
   assert.deepEqual(resolveUniversalPartyReference([invoice], invoice, 'customer'), {
     name: 'Cliente directo', rif: 'J-12345678-9', source: 'inline'
   });
+});
+
+
+test('resuelve líneas de compra desde una colección relacionada del mismo archivo', () => {
+  const invoice = { migrationfile: 'archivo-a', id: 'P-100', invoiceNumber: 'FC-100' };
+  const rows = [
+    invoice,
+    { migrationfile: 'archivo-a', migrationcollection: 'purchaseLines', purchaseId: 'P-100', productCode: 'SKU-1', quantity: 2, unitCostBs: 10 },
+    { migrationfile: 'archivo-a', migrationcollection: 'purchaseLines', invoice_id: 'P-100', sku: 'SKU-2', qty: 3, unitCostBs: 5 },
+    { migrationfile: 'archivo-b', purchaseId: 'P-100', productCode: 'SKU-3', quantity: 1, unitCostBs: 1 },
+    { migrationfile: 'archivo-a', purchaseId: 'P-100', note: 'no es línea de mercancía' }
+  ];
+  const result = resolveUniversalPurchaseDetailRows(rows, invoice);
+  assert.equal(result.length, 2);
+  assert.deepEqual(result.map(row => row.productCode ?? row.sku), ['SKU-1', 'SKU-2']);
+});
+
+test('no enlaza líneas si la factura no tiene identificador explícito', () => {
+  const invoice = { migrationfile: 'archivo-a', invoiceNumber: 'FC-100' };
+  const rows = [
+    invoice,
+    { migrationfile: 'archivo-a', purchaseId: 'P-100', productCode: 'SKU-1', quantity: 2 }
+  ];
+  assert.deepEqual(resolveUniversalPurchaseDetailRows(rows, invoice), []);
+});
+
+test('rechaza identificadores de factura contradictorios', () => {
+  const invoice = { migrationfile: 'archivo-a', id: 'P-100', purchaseId: 'P-200' };
+  assert.throws(() => resolveUniversalPurchaseDetailRows([invoice], invoice), /identificadores incompatibles/);
 });

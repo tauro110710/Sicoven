@@ -106,6 +106,44 @@ export const resolveUniversalPartyReference = (
   };
 };
 
+
+/**
+ * Obtiene renglones de compra guardados en otra colección del mismo archivo.
+ * Solo usa claves foráneas explícitas y un identificador inequívoco de factura.
+ */
+export const resolveUniversalPurchaseDetailRows = (
+  rows: Array<Record<string, unknown>>,
+  invoice: Record<string, unknown>
+): Array<Record<string, unknown>> => {
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const pickValue = (record: Record<string, unknown>, keys: string[]) => {
+    const wanted = new Set(keys.map(normalize));
+    for (const [key, value] of Object.entries(record)) {
+      if (wanted.has(normalize(key)) && value !== undefined && value !== null && String(value).trim() !== '') return value;
+    }
+    return undefined;
+  };
+  const invoiceIds = ['id','invoiceId','purchaseId','documentId','uuid','idFactura','idCompra']
+    .map(key => pickValue(invoice, [key]))
+    .filter(value => value !== undefined)
+    .map(normalize);
+  const uniqueIds = [...new Set(invoiceIds)];
+  if (uniqueIds.length > 1) throw new Error('La factura contiene identificadores incompatibles; no se pueden enlazar sus renglones con seguridad.');
+  if (!uniqueIds.length) return [];
+  const fileId = String(invoice.migrationfile ?? '');
+  const foreignKeys = ['invoiceId','purchaseId','documentId','facturaId','compraId','idFactura','idCompra','invoice_id','purchase_id','document_id','factura_id','compra_id'];
+  const matches = rows.filter(candidate => {
+    if (candidate === invoice || String(candidate.migrationfile ?? '') !== fileId) return false;
+    const reference = pickValue(candidate, foreignKeys);
+    if (reference === undefined || normalize(reference) !== uniqueIds[0]) return false;
+    const productCode = pickValue(candidate, ['productCode','codigoProducto','productSku','sku','itemCode','codigo','code']);
+    const quantity = pickValue(candidate, ['quantity','cantidad','qty']);
+    const unitCost = pickValue(candidate, ['unitCostBs','costoUnitarioBs','unitCost','costoUnitario','costBs']);
+    return productCode !== undefined || quantity !== undefined || unitCost !== undefined;
+  });
+  return matches;
+};
+
 export type UniversalImportFormat = 'json' | 'csv' | 'tsv' | 'txt' | 'xlsx' | 'xlsm' | 'unsupported';
 
 export const detectUniversalImportFormat = (fileName: string): UniversalImportFormat => {
