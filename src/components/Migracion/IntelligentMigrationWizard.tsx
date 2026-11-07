@@ -633,7 +633,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const seenJournalIdentities=new Set<string>();
     const prepared=groups.map(({date,reference:ref,rows:items})=>{
      if(!isValidIsoDate(date))throw new Error('Asiento '+ref+': fecha obligatoria en formato AAAA-MM-DD.');
-     const normalizedReference=normalizeUniversalDocumentReference(ref);\n     const identity=date+'|'+normalizedReference;
+     const normalizedReference=normalizeUniversalDocumentReference(ref);
+     const identity=date+'|'+normalizedReference;
      if(seenJournalIdentities.has(identity))throw new Error('Hay asientos con la misma fecha y referencia en más de un archivo. Separe o concilie las fuentes; no se mezclarán líneas de archivos distintos.');
      seenJournalIdentities.add(identity);
      const existingEntry=companyJournalEntries.some(entry=>entry.date===date&&normalizeUniversalDocumentReference(entry.referenceDoc)===normalizedReference);
