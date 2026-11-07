@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -330,4 +330,12 @@ test('normaliza prefijos repetidos y detecta asientos que ya representan una fac
   assert.equal(findUniversalInvoiceJournalCollision('000123', entries)?.referenceDoc, 'FAC-000123');
   assert.equal(findUniversalInvoiceJournalCollision('Factura 000124', entries)?.referenceDoc, 'FAC-000124');
   assert.equal(findUniversalInvoiceJournalCollision('000125', entries), undefined);
+});
+
+
+test('identifica facturas de venta globalmente y compras por proveedor según el dominio SICOVEN', () => {
+  assert.equal(buildUniversalInvoiceIdentity('sales', ' FAC 0001 ', 'J-111'), 'FAC0001');
+  assert.equal(buildUniversalInvoiceIdentity('sales', 'FAC0001', 'J-222'), 'FAC0001');
+  assert.equal(buildUniversalInvoiceIdentity('purchases', '0001', 'J-111'), '0001|J111');
+  assert.equal(buildUniversalInvoiceIdentity('purchases', '0001', 'J-222'), '0001|J222');
 });
