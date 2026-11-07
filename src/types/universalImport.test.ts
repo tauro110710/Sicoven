@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, selectUniversalRowsByStableKeys, mapUniversalSettlementPreview, mapUniversalInventoryItemType } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, selectUniversalRowsByStableKeys, mapUniversalSettlementPreview, mapUniversalInventoryItemType, planUniversalInvoiceSettlements } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -465,4 +465,31 @@ test('rechaza liquidaciones sin tasa, fecha inválida, diferencias cambiarias o 
  assert.throws(()=>mapUniversalSettlementPreview({...b,montoUsd:20}),/no concilian/);
  assert.throws(()=>mapUniversalSettlementPreview({...b,medioPago:'transferencia',referencia:'TR-1'}),/ID de una cuenta bancaria real/);
  assert.throws(()=>mapUniversalSettlementPreview({...b,medioPago:'transferencia',bankAccountId:'BANK-1'}),/referencia o comprobante/);
+});
+
+ 
+test('el plan de liquidaciones bloquea referencias bancarias repetidas ignorando espacios y mayúsculas en todo el lote', () => {
+  const invoices = [
+    { migrationfile: 'origen.json', migrationrowid: 'ventas|0', id: 'V-1', invoiceNumber: 'F-1', customerRif: 'J-1', totalAmountUsd: 100 },
+    { migrationfile: 'origen.json', migrationrowid: 'ventas|1', id: 'V-2', invoiceNumber: 'F-2', customerRif: 'J-2', totalAmountUsd: 100 }
+  ];
+  const settlements = [
+    { migrationfile: 'origen.json', migrationrowid: 'cobros|0', invoiceId: 'V-1', settlementDate: '2026-11-06', bcvRate: 100, amountBs: 1000, amountUsd: 10, method: 'TRANSFERENCIA', bankAccountId: 'BANK-01', reference: 'AB 123' },
+    { migrationfile: 'origen.json', migrationrowid: 'cobros|1', invoiceId: 'V-2', settlementDate: '2026-11-06', bcvRate: 100, amountBs: 500, amountUsd: 5, method: 'TRANSFERENCIA', bankAccountId: ' bank-01 ', reference: 'ab123' }
+  ];
+  assert.throws(() => planUniversalInvoiceSettlements(invoices, [...invoices, ...settlements], 'sales'), /referencia bancaria .*repetida en la misma cuenta/);
+});
+
+test('el plan de liquidaciones conserva referencias iguales en cuentas bancarias distintas', () => {
+  const invoices = [
+    { migrationfile: 'origen.json', migrationrowid: 'ventas|0', id: 'V-1', invoiceNumber: 'F-1', customerRif: 'J-1', totalAmountUsd: 100 },
+    { migrationfile: 'origen.json', migrationrowid: 'ventas|1', id: 'V-2', invoiceNumber: 'F-2', customerRif: 'J-2', totalAmountUsd: 100 }
+  ];
+  const settlements = [
+    { migrationfile: 'origen.json', migrationrowid: 'cobros|0', invoiceId: 'V-1', settlementDate: '2026-11-06', bcvRate: 100, amountBs: 1000, amountUsd: 10, method: 'TRANSFERENCIA', bankAccountId: 'BANK-01', reference: 'AB-123' },
+    { migrationfile: 'origen.json', migrationrowid: 'cobros|1', invoiceId: 'V-2', settlementDate: '2026-11-06', bcvRate: 100, amountBs: 500, amountUsd: 5, method: 'TRANSFERENCIA', bankAccountId: 'BANK-02', reference: 'AB-123' }
+  ];
+  const plan = planUniversalInvoiceSettlements(invoices, [...invoices, ...settlements], 'sales');
+  assert.equal(plan.length, 2);
+  assert.equal(plan.reduce((sum, item) => sum + item.settlements.length, 0), 2);
 });

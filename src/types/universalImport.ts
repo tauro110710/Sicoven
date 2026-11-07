@@ -703,8 +703,11 @@ export const planUniversalInvoiceSettlements = (
       }
       seenSettlements.add(preview.sourceRowId);
       if (preview.method.startsWith('BANK_TRANSFER')) {
-        const bankReferenceKey = String(preview.bankAccountId || '').trim().toLowerCase() + '|' +
-          String(preview.reference || '').trim().toLowerCase();
+        // Las referencias bancarias se comparan sin distinguir mayúsculas ni espacios,
+        // pero se conserva la puntuación porque puede formar parte del identificador.
+        const normalizeBankToken = (value: string) => value.trim().replace(/\s+/g, '').toUpperCase();
+        const bankReferenceKey = normalizeBankToken(String(preview.bankAccountId || '')) + '|' +
+          normalizeBankToken(String(preview.reference || ''));
         if (seenBankReferences.has(bankReferenceKey)) {
           throw new Error('La referencia bancaria ' + preview.reference + ' está repetida en la misma cuenta dentro del lote. Revise el archivo antes de importar.');
         }
