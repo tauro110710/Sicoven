@@ -1214,7 +1214,7 @@ test('SQLite validates a purchase invoice and its credit payment created in the 
     bcvRate: settlementRate, referenceDoc: purchase.invoiceNumber,
     items: [
       { accountCode: '2.1.1.01', debitBs: expectedPayableBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0 },
-      { accountCode: '1.1.1.01', debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd },
+      { accountCode: '1.1.1.03', debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd },
       { accountCode: '6.1.1.08', debitBs: 5, creditBs: 0, debitUsd: 0, creditUsd: 0 }
     ], createdAt: '2026-10-11T10:00:00.000Z'
   };
@@ -1222,7 +1222,7 @@ test('SQLite validates a purchase invoice and its credit payment created in the 
     id: 'purchase-batch-payment', companyId: 'company-1',
     documentId: purchase.id, kind: 'PURCHASE_PAYMENT',
     settlementDate: '2026-10-11', bcvRate: settlementRate,
-    amountUsd, amountBs, method: 'CASH_BS',
+    amountUsd, amountBs, method: 'BANK_TRANSFER_BS', bankAccountId: 'bank-1', reference: 'BANK-100',
     journalEntryId: paymentJournal.id, createdAt: '2026-10-11T10:00:00.000Z'
   };
   const accounts = [
@@ -1232,12 +1232,13 @@ test('SQLite validates a purchase invoice and its credit payment created in the 
     { code: '2.1.2.03', name: 'IVA retenido por pagar', type: 'PASIVO', isMovement: true },
     { code: '2.1.2.04', name: 'ISLR retenido por pagar', type: 'PASIVO', isMovement: true },
     { code: '2.1.1.01', name: 'Proveedores', type: 'PASIVO', isMovement: true },
-    { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.1.03', name: 'Banco', type: 'ACTIVO', isMovement: true },
     { code: '6.1.1.08', name: 'Pérdida cambiaria', type: 'GASTOS', isMovement: true }
   ];
   const prior = {
     ...basePrior, purchases: [], journalEntries: [], movements: [], products: [],
-    vatVouchers: [], islrVouchers: [], creditSettlements: [], accounts
+    vatVouchers: [], islrVouchers: [], creditSettlements: [], accounts,
+    bankAccounts: [{ id: 'bank-1', companyId: 'company-1', accountCode: '1.1.1.03', currency: 'BS' }]
   };
   const next = {
     ...prior, purchases: [purchase],
@@ -1255,6 +1256,17 @@ test('SQLite validates a purchase invoice and its credit payment created in the 
         ? { ...line, accountCode: '2.1.1.99' } : line)
     }]
   }), /pago de una factura.*ND de proveedor/);
+  const priorDuplicate = {
+    ...prior,
+    creditSettlements: [{
+      id: 'prior-bank-payment', companyId: 'company-1', documentId: 'other-purchase',
+      kind: 'PURCHASE_PAYMENT', bankAccountId: 'bank-1', reference: 'BANK 100', isReversed: false
+    }]
+  };
+  assert.throws(() => validateAccountingSnapshot(priorDuplicate, {
+    ...next,
+    creditSettlements: [...priorDuplicate.creditSettlements, settlement]
+  }), /referencia duplicada/);
 });
 
 test('SQLite applies a direct supplier advance to a future payable and reduces the remaining AP ceiling', () => {

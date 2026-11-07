@@ -1988,6 +1988,20 @@ function validateAccountingSnapshot(previousState, nextState) {
       debitUsd: acc.debitUsd + Number(line.debitUsd || 0),
       creditUsd: acc.creditUsd + Number(line.creditUsd || 0)
     }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
+    const normalizedReference = String(settlement.reference || '').trim().replace(/\\s+/g, '').toUpperCase();
+    const duplicateBankReference = bankTransfer && normalizedReference && asArray(nextState.creditSettlements).some(item =>
+      item.id !== settlement.id && item.companyId === target.companyId &&
+      item.bankAccountId === settlement.bankAccountId && !item.isReversed &&
+      String(item.reference || '').trim().replace(/\\s+/g, '').toUpperCase() === normalizedReference
+    );
+    const duplicateWithoutReference = !normalizedReference && asArray(nextState.creditSettlements).some(item =>
+      item.id !== settlement.id && item.companyId === target.companyId &&
+      item.documentId === settlement.documentId && item.kind === 'PURCHASE_PAYMENT' && !item.isReversed &&
+      !String(item.reference || '').trim() && item.settlementDate === settlement.settlementDate &&
+      Math.round(Number(item.amountUsd || 0) * 100) === Math.round(amountUsd * 100) &&
+      item.method === settlement.method && item.bankAccountId === settlement.bankAccountId &&
+      Math.round(Number(item.bcvRate || 0) * 1000000) === Math.round(settlementRate * 1000000)
+    );
     if (target.isCancelled || target.paymentTerm !== 'CREDITO' ||
         !isValidIsoDate(settlement.settlementDate) ||
         settlement.settlementDate < String(target.accountCreditDate || target.invoiceDate) ||
@@ -2014,8 +2028,9 @@ function validateAccountingSnapshot(previousState, nextState) {
         Math.abs(fxLineAmount - fxAmount) > 0.02 ||
         asArray(journal.items).some(line => !allowedCodes.has(line.accountCode)) ||
         Math.abs(totals.debitBs - totals.creditBs) > 0.02 ||
-        Math.abs(totals.debitUsd - totals.creditUsd) > 0.0001) {
-      throw new Error('SQLite rechazó el pago de una factura/ND de proveedor: documento, cuenta CxP propia, tesorería, diferencial cambiario o asiento no concilian.');
+        Math.abs(totals.debitUsd - totals.creditUsd) > 0.0001 ||
+        duplicateBankReference || duplicateWithoutReference) {
+      throw new Error('SQLite rechazó el pago de una factura/ND de proveedor: documento, cuenta CxP propia, tesorería, referencia duplicada, diferencial cambiario o asiento no concilian.');
     }
   }
 
