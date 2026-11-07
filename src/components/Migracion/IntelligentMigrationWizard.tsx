@@ -465,7 +465,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
       const nestedSaleLines=pick(r,'inventoryLines','saleLines','productLines','items','lines','details','detalles','detalle','articulos','productos');
       const relatedSaleDetails=resolveUniversalPurchaseDetailRows(rows,r);
       const rawSaleLines=Array.isArray(nestedSaleLines)&&nestedSaleLines.length?nestedSaleLines:relatedSaleDetails;
-      const inventoryLines=rawSaleLines.length?prepareUniversalSaleInventoryLines(rawSaleLines,companyProducts,{taxRate,taxableBaseBs,exemptAmountBs,vatAmountBs}):undefined;
+      const inventoryLines=rawSaleLines.length?prepareUniversalSaleInventoryLines(rawSaleLines,companyProducts,{taxRate,taxableBaseBs,exemptAmountBs,vatAmountBs,bcvRate:rate}):undefined;
       return {...common,customerRif:partyRif,customerName:partyName,customerAddress:String(pick(r,'customerAddress','direccionCliente')??resolvedParty.address??''),retentionRate:num(r,i,false,'retentionRate','tasaRetencion'),retentionVoucherNumber:String(pick(r,'retentionVoucherNumber','comprobanteRetencion')??'')||undefined,inventoryLines};
      }
      const accountCreditDate=String(pick(r,'accountCreditDate','fechaAbonoCuenta','fechaReconocimiento','fechaPago')??'').slice(0,10);
