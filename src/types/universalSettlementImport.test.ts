@@ -58,3 +58,11 @@ test('rechaza tipos declarados desconocidos en una liquidación', () => {
     /tipo de operación no reconocido/
   );
 });
+
+
+test('reconoce transferencia bancaria en USD escrita en español', () => {
+  const row = { ...settlement(), method: 'transferencia USD', bankAccountId: 'bank-usd', reference: 'TRX-009' };
+  const result = planUniversalInvoiceSettlements([invoice()], [invoice(), row], 'sales');
+  assert.equal(result[0].settlements[0].method, 'BANK_TRANSFER_USD');
+  assert.equal(result[0].settlements[0].bankAccountId, 'bank-usd');
+});
