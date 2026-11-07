@@ -507,7 +507,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     });
     runAtomicInvoiceImport(()=>{
      if(kind==='sales'){
-      const movementRows: Array<Record<string,unknown>>=[];
+      const movementRows: Parameters<typeof importInventoryMovements>[0]=[];
       prepared.forEach(s=>{
        const sale=s as Parameters<typeof addSale>[0];
        addSale(sale,targetCompany.id);
@@ -527,7 +527,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
       });
       // Una sola llamada mantiene un Kardex virtual secuencial para todas las
       // facturas del lote: saldo, promedio ponderado/PEPS y validación de stock.
-      if(movementRows.length)importInventoryMovements(movementRows as Parameters<typeof importInventoryMovements>[0],targetCompany.id);
+      if(movementRows.length)importInventoryMovements(movementRows,targetCompany.id);
      }else{
       const movementRows: Array<Record<string,unknown>>=[];
       prepared.forEach(p=>{
