@@ -441,6 +441,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      setSettlementPreview(linkedSettlementPreview);
      const unresolved=linkedSettlementPreview.filter(item=>item.destinationError).length;
      setNotice('Se detectaron '+linkedSettlementPreview.length+' liquidaciones vinculadas a las facturas seleccionadas. '+(unresolved?unresolved+' requieren corregir o asignar su cuenta destino. ':'Los destinos contables se verificaron. ')+'No se importó ningún documento: las liquidaciones seguirán bloqueadas hasta que el lote completo pueda confirmarse en una sola transacción SQLite.');
+     setBusy(false);
      return;
     }
     const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha de factura','fechaEmision','fecha')??'').slice(0,10);if(!isValidIsoDate(value))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
