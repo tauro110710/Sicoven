@@ -51,7 +51,7 @@ const pick = (row:Row, ...keys:string[]) => {
 };
 
 export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClose}) => {
- const { companies, products: allProducts, getCompanyInventoryProducts, importInventoryProducts, importInventoryMovements, accounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, currentCompany } = useAccounting();
+ const { companies, products: allProducts, getCompanyInventoryProducts, importInventoryProducts, importInventoryMovements, accounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, movements: allMovements, currentCompany } = useAccounting();
  const [targetCompanyId, setTargetCompanyId] = useState('');
  const targetCompany = companies.find(company => company.id === targetCompanyId) || null;
  const companyProducts = targetCompany ? getCompanyInventoryProducts(targetCompany.id) : [];
@@ -508,6 +508,12 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
       const sale=s as Parameters<typeof addSale>[0];
       addSale(sale,targetCompany.id);
       if(sale.inventoryLines?.length){
+       const companyMovementHistory=allMovements.filter(movement=>movement.companyId===targetCompany.id);
+       const unanchoredLine=sale.inventoryLines.find(line=>{
+        const product=companyProducts.find(item=>item.id===line.productId);
+        return Boolean(product&&Number(product.currentStock)>0&&!companyMovementHistory.some(movement=>movement.productId===product.id));
+       });
+       if(unanchoredLine)throw new Error('La factura '+sale.invoiceNumber+' no se puede descargar del inventario porque '+unanchoredLine.productCode+' tiene existencia actual sin historial de apertura/Kardex verificable. Importe primero el saldo inicial y su historial cronológico; no se descontará dos veces una existencia que podría ser un saldo final.');
        const movementRows=sale.inventoryLines.map(line=>({
         productId:line.productId,date:sale.invoiceDate,type:'SALIDA' as const,concept:'VENTA',
         documentRef:'FAC-'+sale.invoiceNumber,quantity:line.quantity,
