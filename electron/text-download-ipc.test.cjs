@@ -22,7 +22,7 @@ function setup(options = {}) {
 
 test('guarda el contenido exacto y muestra la carpeta', async () => {
   const ctx = setup();
-  const payload = 'RIF;Monto\\nJ-123;25,00';
+  const payload = 'RIF;Monto\nJ-123;25,00';
   const result = await ctx.invoke({ fileName: 'retenciones.txt', content: payload });
   assert.deepEqual(result, { ok: true, filePath: 'C:/Users/Test/Documents/retenciones.txt', bytes: Buffer.byteLength(payload) });
   assert.equal(ctx.writes.length, 1);
