@@ -165,7 +165,7 @@ export const resolveUniversalPurchaseDetailRows = (
 export const prepareUniversalSaleInventoryLines = (
   rawLines: unknown[],
   products: Pick<InventoryProduct, 'id' | 'code' | 'name' | 'vatTreatment'>[],
-  invoice: { taxRate: number; taxableBaseBs: number; exemptAmountBs: number; vatAmountBs: number }
+  invoice: { taxRate: number; taxableBaseBs: number; exemptAmountBs: number; vatAmountBs: number; bcvRate: number }
 ): SaleInventoryLine[] => {
   if (!Array.isArray(rawLines) || rawLines.length === 0) throw new Error('La factura no contiene renglones de mercancía importables.');
   const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -195,7 +195,24 @@ export const prepareUniversalSaleInventoryLines = (
     const code = String(pickValue(row, ['productCode','codigoProducto','sku','code','codigo','itemCode']) ?? '').trim();
     const product = products.find(item => item.code.trim().toLowerCase() === code.toLowerCase());
     const quantity = parseNumber(pickValue(row, ['quantity','cantidad','qty']));
-    const unitPriceBs = parseNumber(pickValue(row, ['unitPriceBs','precioUnitarioBs','unitPrice','precioUnitario','priceBs','precio']));
+    const explicitPriceBs = pickValue(row, ['unitPriceBs','precioUnitarioBs','priceBs','precioBs']);
+    const explicitPriceUsd = pickValue(row, ['unitPriceUsd','precioUnitarioUsd','priceUsd','precioUsd']);
+    const genericPrice = pickValue(row, ['unitPrice','precioUnitario','price','precio']);
+    const currency = normalize(pickValue(row, ['currency','moneda','currencyCode']));
+    const genericIsBs = ['bs','ves','bolivar','bolivares'].includes(currency);
+    const genericIsUsd = ['usd','us','dolar','dolares'].includes(currency);
+    const genericBsValue = genericIsBs ? genericPrice : undefined;
+    const genericUsdValue = genericIsUsd ? genericPrice : undefined;
+    const priceUsdRaw = explicitPriceUsd ?? genericUsdValue;
+    const unitPriceUsd = priceUsdRaw === undefined ? undefined : parseNumber(priceUsdRaw);
+    const bcvRate = Number(invoice.bcvRate);
+    const unitPriceBs = explicitPriceBs !== undefined || genericBsValue !== undefined
+      ? parseNumber(explicitPriceBs ?? genericBsValue)
+      : unitPriceUsd !== undefined && Number.isFinite(bcvRate) && bcvRate > 0 ? unitPriceUsd * bcvRate : NaN;
+    if (explicitPriceBs !== undefined && unitPriceUsd !== undefined &&
+        Math.abs(parseNumber(explicitPriceBs) / bcvRate - unitPriceUsd) > 0.02) {
+      throw new Error('Detalle '+(index+1)+': el precio unitario Bs/USD no concilia con la tasa BCV declarada.');
+    }
     if (!product || !code || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPriceBs) || unitPriceBs <= 0) {
       throw new Error('Detalle '+(index+1)+': identifique un artículo existente de la empresa destino por código/SKU y declare cantidad y precio unitario Bs positivos. No se asociará por descripción.');
     }
@@ -215,7 +232,7 @@ export const prepareUniversalSaleInventoryLines = (
     const taxable = productRate === 0 ? 0 : netAmountBs;
     const exempt = productRate === 0 ? netAmountBs : 0;
     const vatAmountBs = Math.round(taxable * productRate) / 100;
-    return { productId: product.id, productCode: product.code, productName: product.name, quantity, unitPriceBs, netAmountBs, taxRate: productRate, vatAmountBs, exemptAmountBs: exempt, totalBs: netAmountBs + vatAmountBs };
+    return { productId: product.id, productCode: product.code, productName: product.name, quantity, unitPriceBs, unitPriceUsd, netAmountBs, taxRate: productRate, vatAmountBs, exemptAmountBs: exempt, totalBs: netAmountBs + vatAmountBs };
   });
   const sum = (key: 'netAmountBs' | 'vatAmountBs' | 'exemptAmountBs') => Math.round(result.reduce((total, line) => total + line[key], 0) * 100) / 100;
   if (Math.abs(sum('netAmountBs') - (invoice.taxableBaseBs + invoice.exemptAmountBs)) > 0.02 ||
