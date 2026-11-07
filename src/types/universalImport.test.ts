@@ -348,3 +348,20 @@ test('identifica facturas de venta globalmente y compras por proveedor según el
   assert.equal(buildUniversalInvoiceIdentity('purchases', '0001', 'J-111'), '0001|J111');
   assert.equal(buildUniversalInvoiceIdentity('purchases', '0001', 'J-222'), '0001|J222');
 });
+
+
+test('interpreta costos de compra con espacios, miles y decimales en formatos locales', () => {
+  const products = [
+    { id: 'p1', code: 'SKU-1' },
+    { id: 'p2', code: 'SKU-2' }
+  ];
+  const bsLines = prepareUniversalPurchaseInventoryLines([
+    { codigo: 'SKU-1', cantidad: '2', costoUnitarioBs: '1.234,50' }
+  ], products, { taxableBaseBs: 2469, exemptAmountBs: 0, bcvRate: 100 });
+  assert.deepEqual(bsLines, [{ productId: 'p1', quantity: 2, unitCostBs: 1234.5 }]);
+
+  const usdLines = prepareUniversalPurchaseInventoryLines([
+    { sku: 'SKU-2', qty: '2', cost: ' 2,50 ', currency: 'USD' }
+  ], products, { taxableBaseBs: 500, exemptAmountBs: 0, bcvRate: 100 });
+  assert.deepEqual(usdLines, [{ productId: 'p2', quantity: 2, unitCostBs: 250 }]);
+});
