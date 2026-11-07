@@ -492,3 +492,33 @@ export const detectImportSourceSystem = (value: unknown): ImportSourceSystem => 
   }
   return { id: 'unknown', label: 'Sistema de origen no identificado', confidence: 'unknown' };
 };
+
+
+const normalizeUniversalInventoryToken = (value: unknown): string =>
+  String(value ?? '').trim().normalize('NFD').replace(/\\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+export const mapUniversalInventoryCostingMethod = (value: unknown): 'PROMEDIO_PONDERADO' | 'PEPS' | null => {
+  const token = normalizeUniversalInventoryToken(value);
+  if (['promedioponderado', 'promedio', 'averageweighted', 'weightedaverage', 'movingaverage'].includes(token)) return 'PROMEDIO_PONDERADO';
+  if (['peps', 'fifo', 'firstinfirstout'].includes(token)) return 'PEPS';
+  return null;
+};
+
+export const mapUniversalInventoryVatTreatment = (value: unknown): 'GENERAL_16' | 'REDUCIDA_8' | 'EXENTO' | 'EXONERADO' | null => {
+  const token = normalizeUniversalInventoryToken(value);
+  if (['general16', '16', '16porciento', 'iva16', 'general'].includes(token)) return 'GENERAL_16';
+  if (['reducida8', '8', '8porciento', 'iva8', 'reducido'].includes(token)) return 'REDUCIDA_8';
+  if (['exento', 'exempt'].includes(token)) return 'EXENTO';
+  if (['exonerado', 'exonerated'].includes(token)) return 'EXONERADO';
+  return null;
+};
+
+export const mapUniversalInventoryItemType = (value: unknown): 'MERCANCIA' | 'MATERIA_PRIMA' | 'PRODUCTO_EN_PROCESO' | 'PRODUCTO_TERMINADO' | 'SUBPRODUCTO' | null => {
+  const token = normalizeUniversalInventoryToken(value);
+  if (['mercancia', 'merchandise', 'goods', 'producto'].includes(token)) return 'MERCANCIA';
+  if (['materiaprima', 'rawmaterial', 'rawmaterials'].includes(token)) return 'MATERIA_PRIMA';
+  if (['productoenproceso', 'workinprocess', 'wip'].includes(token)) return 'PRODUCTO_EN_PROCESO';
+  if (['productoterminado', 'finishedproduct', 'finishedgoods'].includes(token)) return 'PRODUCTO_TERMINADO';
+  if (['subproducto', 'byproduct'].includes(token)) return 'SUBPRODUCTO';
+  return null;
+};
