@@ -394,7 +394,7 @@ export const buildUniversalInvoiceIdentity = (
   invoiceNumber: unknown,
   partyRif: unknown
 ): string => {
-  const invoice = String(invoiceNumber ?? '').trim().toUpperCase().replace(/\\s+/g, '');
+  const invoice = String(invoiceNumber ?? '').trim().toUpperCase().replace(/\s+/g, '');
   const rif = String(partyRif ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   return kind === 'sales' ? invoice : invoice + '|' + rif;
 };
