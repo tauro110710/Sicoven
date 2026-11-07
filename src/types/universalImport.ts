@@ -683,6 +683,7 @@ export const planUniversalInvoiceSettlements = (
   };
   const seenInvoices = new Set<string>();
   const seenSettlements = new Set<string>();
+  const seenBankReferences = new Set<string>();
   return invoices.map(invoice => {
     const invoiceRowId = String(invoice.migrationrowid ?? '').trim();
     if (!invoiceRowId || seenInvoices.has(invoiceRowId)) {
@@ -701,6 +702,14 @@ export const planUniversalInvoiceSettlements = (
         throw new Error('La liquidación ' + preview.sourceRowId + ' está vinculada más de una vez. No se importó el lote.');
       }
       seenSettlements.add(preview.sourceRowId);
+      if (preview.method.startsWith('BANK_TRANSFER')) {
+        const bankReferenceKey = String(preview.bankAccountId || '').trim().toLowerCase() + '|' +
+          String(preview.reference || '').trim().toLowerCase();
+        if (seenBankReferences.has(bankReferenceKey)) {
+          throw new Error('La referencia bancaria ' + preview.reference + ' está repetida en la misma cuenta dentro del lote. Revise el archivo antes de importar.');
+        }
+        seenBankReferences.add(bankReferenceKey);
+      }
       const declaredKind = normalize(pick(row, ['transactionType','tipoOperacion','documentType','tipoDocumento']));
       if (declaredKind) {
         const salesTokens = ['sale','sales','venta','cobro','collection','receivable','cxc'];

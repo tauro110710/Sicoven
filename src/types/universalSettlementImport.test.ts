@@ -66,3 +66,15 @@ test('reconoce transferencia bancaria en USD escrita en español', () => {
   assert.equal(result[0].settlements[0].method, 'BANK_TRANSFER_USD');
   assert.equal(result[0].settlements[0].bankAccountId, 'bank-usd');
 });
+
+
+test('rechaza referencias bancarias repetidas en una misma cuenta dentro del lote', () => {
+  const firstInvoice = invoice();
+  const secondInvoice = { ...invoice(), id: 'inv-2', migrationrowid: 'origen.json|ventas|1', invoiceNumber: 'F-002' };
+  const firstPayment = { ...settlement(), method: 'transferencia', bankAccountId: 'bank-1', reference: 'TRX-100' };
+  const secondPayment = { ...settlement('pay-2'), migrationrowid: 'origen.json|pagos|1', invoiceId: 'inv-2', method: 'transferencia', bankAccountId: 'bank-1', reference: ' trx-100 ' };
+  assert.throws(
+    () => planUniversalInvoiceSettlements([firstInvoice, secondInvoice], [firstInvoice, secondInvoice, firstPayment, secondPayment], 'sales'),
+    /referencia bancaria.*repetida/
+  );
+});
