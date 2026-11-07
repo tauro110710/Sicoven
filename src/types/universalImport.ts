@@ -179,7 +179,7 @@ export const resolveUniversalInvoiceSettlementRows = (
   rows: Array<Record<string, unknown>>,
   invoice: Record<string, unknown>
 ): Array<Record<string, unknown>> => {
-  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const pickValue = (record: Record<string, unknown>, keys: string[]) => {
     const wanted = new Set(keys.map(normalize));
     for (const [key, value] of Object.entries(record)) {
@@ -211,7 +211,7 @@ export const resolveUniversalInvoiceSettlementRows = (
 };
 
 export const hasUniversalInlineSettlementAmount = (invoice: Record<string, unknown>): boolean => {
-  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const keys = new Set([
     'paidAmountBs','amountPaidBs','collectedAmountBs','amountCollectedBs','settledAmountBs','amountSettledBs',
     'totalPaidBs','totalCollectedBs','paymentsTotalBs','montoPagadoBs','montoCobradoBs','abonosBs',
@@ -220,7 +220,7 @@ export const hasUniversalInlineSettlementAmount = (invoice: Record<string, unkno
   for (const [key, value] of Object.entries(invoice)) {
     if (!keys.has(normalize(key)) || value === undefined || value === null || String(value).trim() === '') continue;
     let raw = String(value).trim().replace(/[^0-9,.-]/g, '');
-    if (raw.includes(',') && raw.includes('.')) raw = raw.replace(/\\./g, '').replace(',', '.');
+    if (raw.includes(',') && raw.includes('.')) raw = raw.replace(/\./g, '').replace(',', '.');
     else raw = raw.replace(',', '.');
     const amount = Number(raw);
     if (!Number.isFinite(amount) || amount > 0.000001) return true;
