@@ -3,6 +3,7 @@ import { useAccounting } from '../../context/AccountingContext';
 import { Package, X, Check } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
 import type { InventoryProduct } from '../../types/accounting';
+import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
 
 interface NewProductModalProps {
   isOpen: boolean;
@@ -56,7 +57,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       setMinStockInput(String(product.minStock)); setCurrentStockInput(String(product.currentStock));
       setOpeningDate(product.openingDate || new Date().toISOString().slice(0, 10));
       setOpeningBcvRateInput(String(product.openingBcvRate || ''));
-      setAvgCostInput(String(product.avgCostUsd || (product.openingBcvRate ? product.avgCostBs / product.openingBcvRate : 0))); setSalesPriceInput(String(product.salesPriceUsd || (currentCompany.inventoryBcvRate ? product.salesPriceBs / currentCompany.inventoryBcvRate : 0))); setMarginInput('30');
+      setAvgCostInput(String(product.avgCostUsd || (product.openingBcvRate ? product.avgCostBs / product.openingBcvRate : 0))); setSalesPriceInput(String(product.salesPriceUsd || (currentCompany.inventoryBcvRate ? product.salesPriceBs / currentCompany.inventoryBcvRate : 0))); setMarginInput(String(product.targetMarginPercent ?? 30));
       setInventoryAccountCode(product.inventoryAccountCode || '1.1.4.01'); setCostOfSalesAccountCode(product.costOfSalesAccountCode || '5.1.1.01');
       setAdjustmentAccountCode(product.adjustmentAccountCode || '5.1.2.01'); setOpeningBalanceAccountCode(product.openingBalanceAccountCode || '3.3.1.01');
       setCostingMethod(product.costingMethod || 'PROMEDIO_PONDERADO'); setVatTreatment(product.vatTreatment || 'GENERAL_16'); setItemType(product.itemType || 'MERCANCIA');
@@ -68,7 +69,13 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       setAdjustmentAccountCode('5.1.2.01'); setOpeningBalanceAccountCode('3.3.1.01');
       setCostingMethod('PROMEDIO_PONDERADO'); setVatTreatment('GENERAL_16'); setItemType('MERCANCIA');
     }
-  }, [isOpen, product]);
+  }, [isOpen, product, currentCompany.inventoryBcvRate]);
+
+  useEffect(() => {
+    if (!isOpen || product) return;
+    const historicalRate = resolveInventoryBcvRate(currentCompany.inventoryBcvRateHistory || [], openingDate);
+    if (historicalRate) setOpeningBcvRateInput(String(historicalRate.rate));
+  }, [isOpen, product, openingDate, currentCompany.inventoryBcvRateHistory]);
 
   if (!isOpen) return null;
 
@@ -101,7 +108,8 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
         category: category.trim(), unit: unit.trim(), minStock: Number(minStock) || 0,
         salesPriceBs: Number(salesPriceBs) || 0,
         salesPriceUsd: Number(salesPriceUsd) || 0,
-        vatTreatment
+        vatTreatment,
+        targetMarginPercent: marginPercent
       }, correctionReason, correctionWorkpaper);
     } else {
       addProduct({
@@ -118,7 +126,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
         salesPriceBs: Number(salesPriceBs) || 0,
         salesPriceUsd: Number(salesPriceUsd) || 0,
         inventoryAccountCode, costOfSalesAccountCode, adjustmentAccountCode, openingBalanceAccountCode,
-        costingMethod, vatTreatment, itemType, openingDate, openingBcvRate: bcvRate
+        costingMethod, vatTreatment, itemType, openingDate, openingBcvRate: bcvRate, targetMarginPercent: marginPercent
       });
       await waitForPersistence();
     }
