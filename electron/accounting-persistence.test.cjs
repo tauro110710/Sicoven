@@ -211,10 +211,20 @@ test('POSVEN-style inventory opening persists product, Kardex and balanced openi
     const beforeAuditCount = db.prepare('SELECT COUNT(*) AS n FROM audit_events').get().n;
     db.exec(`CREATE TRIGGER reject_inventory_opening BEFORE UPDATE ON app_state
       BEGIN SELECT RAISE(ABORT, 'injected inventory opening failure'); END;`);
+    const secondProduct = { ...product, id: 'prod-import-2', code: 'SKU-2' };
+    const secondEntry = {
+      ...entry, id: 'entry-inventory-opening-2', entryNumber: 2,
+      description: 'Asiento de apertura de inventario · SKU-2', referenceDoc: 'APERTURA-SKU-2'
+    };
+    const secondMovement = {
+      ...movement, id: 'mov-opening-2', productId: secondProduct.id, productCode: secondProduct.code,
+      journalEntryId: secondEntry.id, documentRef: secondEntry.referenceDoc
+    };
     const attempted = {
       ...imported,
-      products: [...imported.products, { ...product, id: 'prod-import-2', code: 'SKU-2' }],
-      movements: [...imported.movements, { ...movement, id: 'mov-opening-2', productId: 'prod-import-2', productCode: 'SKU-2' }]
+      products: [...imported.products, secondProduct],
+      movements: [...imported.movements, secondMovement],
+      journalEntries: [...imported.journalEntries, secondEntry]
     };
     assert.throws(() => persistAccountingSnapshot(db, attempted, { id: 1, username: 'admin', role: 'admin' }), /injected inventory opening failure/);
     saved = readState();
