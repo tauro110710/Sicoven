@@ -616,6 +616,111 @@ function saleJournalMatchesInvoice(sale, entry, company) {
   return true;
 }
 
+function saleInventoryLinesMatchKardex(sale, nextState, previousState) {
+  const lines = asArray(sale.inventoryLines);
+  if (lines.length === 0) return true;
+  const normalizeDocument = value => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
+  const normalizeRif = value => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const round2 = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+  const rate = Number(sale.bcvRate);
+  if (!Number.isFinite(rate) || rate <= 0) return false;
+  const expectedReference = normalizeDocument('FAC-' + sale.invoiceNumber);
+  const linkedMovements = asArray(nextState.movements).filter(movement =>
+    movement.companyId === sale.companyId &&
+    movement.type === 'SALIDA' && movement.concept === 'VENTA' &&
+    normalizeDocument(movement.documentRef) === expectedReference
+  );
+  if (linkedMovements.length !== lines.length) return false;
+  const priorMovementIds = new Set(asArray(previousState.movements).map(item => String(item.id)));
+  const products = asArray(nextState.products);
+  const entries = asArray(nextState.journalEntries);
+  const seenProducts = new Set();
+  let taxableBase = 0, exemptBase = 0, vatTotal = 0, lineTotal = 0;
+  for (const line of lines) {
+    const productId = String(line.productId || '');
+    const product = products.find(item => String(item.id) === productId &&
+      String(item.companyId) === String(sale.companyId));
+    const quantity = Number(line.quantity);
+    const unitPriceBs = Number(line.unitPriceBs);
+    const netAmountBs = Number(line.netAmountBs);
+    const taxRate = Number(line.taxRate);
+    const vatAmountBs = Number(line.vatAmountBs);
+    const exemptAmountBs = Number(line.exemptAmountBs);
+    const totalBs = Number(line.totalBs);
+    const productRate = product?.vatTreatment === 'GENERAL_16' ? 16 :
+      product?.vatTreatment === 'REDUCIDA_8' ? 8 :
+      ['EXENTO', 'EXONERADO'].includes(product?.vatTreatment) ? 0 : NaN;
+    if (!product || !productId || seenProducts.has(productId) ||
+        String(line.productCode || '') !== String(product.code || '') ||
+        !Number.isFinite(quantity) || quantity <= 0 ||
+        !Number.isFinite(unitPriceBs) || unitPriceBs <= 0 ||
+        !Number.isFinite(netAmountBs) || Math.abs(netAmountBs - round2(quantity * unitPriceBs)) > 0.02 ||
+        !Number.isFinite(taxRate) || taxRate !== productRate ||
+        (taxRate > 0 && taxRate !== Number(sale.taxRate)) ||
+        !Number.isFinite(vatAmountBs) ||
+        Math.abs(vatAmountBs - round2(netAmountBs * taxRate / 100)) > 0.02 ||
+        !Number.isFinite(exemptAmountBs) ||
+        Math.abs(exemptAmountBs - (taxRate === 0 ? netAmountBs : 0)) > 0.02 ||
+        !Number.isFinite(totalBs) || Math.abs(totalBs - netAmountBs - vatAmountBs) > 0.02 ||
+        (line.unitPriceUsd != null &&
+          (!Number.isFinite(Number(line.unitPriceUsd)) ||
+           Math.abs(Number(line.unitPriceUsd) - unitPriceBs / rate) > 0.02))) return false;
+    seenProducts.add(productId);
+    taxableBase += taxRate > 0 ? netAmountBs : 0;
+    exemptBase += exemptAmountBs;
+    vatTotal += vatAmountBs;
+    lineTotal += totalBs;
+
+    const matches = linkedMovements.filter(movement => String(movement.productId) === productId);
+    if (matches.length !== 1) return false;
+    const movement = matches[0];
+    const movementQuantity = Number(movement.quantity);
+    const unitCostBs = Number(movement.unitCostBs);
+    const unitCostUsd = Number(movement.unitCostUsd);
+    const totalCostBs = Number(movement.totalCostBs);
+    const totalCostUsd = Number(movement.totalCostUsd);
+    const movementRate = Number(movement.bcvRate);
+    const balanceQty = Number(movement.balanceQty);
+    const balanceTotalBs = Number(movement.balanceTotalBs);
+    const balanceTotalUsd = Number(movement.balanceTotalUsd);
+    const customerRif = normalizeRif(sale.customerRif);
+    if (priorMovementIds.has(String(movement.id)) ||
+        movement.date !== sale.invoiceDate ||
+        !Number.isFinite(movementQuantity) || Math.abs(movementQuantity - quantity) > 0.000001 ||
+        !Number.isFinite(unitCostBs) || unitCostBs <= 0 ||
+        !Number.isFinite(unitCostUsd) || Math.abs(unitCostUsd - unitCostBs / rate) > 0.0001 ||
+        !Number.isFinite(totalCostBs) || Math.abs(totalCostBs - round2(quantity * unitCostBs)) > 0.02 ||
+        !Number.isFinite(totalCostUsd) || Math.abs(totalCostUsd - totalCostBs / rate) > 0.0001 ||
+        !Number.isFinite(movementRate) || Math.abs(movementRate - rate) > 0.000001 ||
+        !Number.isFinite(balanceQty) || balanceQty < 0 ||
+        !Number.isFinite(balanceTotalBs) || balanceTotalBs < 0 ||
+        !Number.isFinite(balanceTotalUsd) || balanceTotalUsd < 0 ||
+        !customerRif || normalizeRif(movement.counterpartyRif) !== customerRif ||
+        movement.costingMethod !== (product.costingMethod || 'PROMEDIO_PONDERADO') ||
+        !movement.journalEntryId) return false;
+
+    const inventoryCode = product.inventoryAccountCode || '1.1.4.01';
+    const costCode = product.costOfSalesAccountCode || '5.1.1.01';
+    const costEntry = entries.find(entry => String(entry.id) === String(movement.journalEntryId));
+    if (!costEntry || costEntry.companyId !== sale.companyId || costEntry.type !== 'INVENTARIO' ||
+        costEntry.date !== sale.invoiceDate ||
+        normalizeDocument(costEntry.referenceDoc) !== expectedReference ||
+        Math.abs(Number(costEntry.bcvRate) - rate) > 0.000001 ||
+        !Array.isArray(costEntry.items) || costEntry.items.length !== 2) return false;
+    const debit = costEntry.items.find(item => item.accountCode === costCode);
+    const credit = costEntry.items.find(item => item.accountCode === inventoryCode);
+    if (!debit || !credit ||
+        Math.abs(Number(debit.debitBs) - totalCostBs) > 0.02 || Number(debit.creditBs || 0) !== 0 ||
+        Math.abs(Number(debit.debitUsd) - totalCostUsd) > 0.0001 || Number(debit.creditUsd || 0) !== 0 ||
+        Math.abs(Number(credit.creditBs) - totalCostBs) > 0.02 || Number(credit.debitBs || 0) !== 0 ||
+        Math.abs(Number(credit.creditUsd) - totalCostUsd) > 0.0001 || Number(credit.debitUsd || 0) !== 0) return false;
+  }
+  return Math.abs(round2(taxableBase) - Number(sale.taxableBaseBs)) <= 0.02 &&
+    Math.abs(round2(exemptBase) - Number(sale.exemptAmountBs)) <= 0.02 &&
+    Math.abs(round2(vatTotal) - Number(sale.vatAmountBs)) <= 0.02 &&
+    Math.abs(round2(lineTotal) - (Number(sale.totalAmountBs) - Number(sale.igtfAmountBs || 0))) <= 0.02;
+}
+
 function validateSaleCorrectionNotes(previousState, nextState) {
   const priorSales = asArray(previousState?.sales);
   const nextSales = asArray(nextState?.sales);
