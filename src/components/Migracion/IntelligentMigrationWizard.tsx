@@ -439,15 +439,24 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      reference:settlement.reference,
      destinationError:validateUniversalSettlementDestination(settlement,targetCompany.id,bankAccounts,accounts)
     })));
+    let selectedSettlementIdsForBatch:string[]=[];
     if(linkedSettlementPreview.length){
+     const samePreview=settlementPreview.length===linkedSettlementPreview.length&&
+      linkedSettlementPreview.every((item,index)=>settlementPreview[index]?.sourceRowId===item.sourceRowId);
+     selectedSettlementIdsForBatch=samePreview
+      ?selectedSettlementSourceRowIds.filter(id=>linkedSettlementPreview.some(item=>item.sourceRowId===id))
+      :linkedSettlementPreview.map(item=>item.sourceRowId);
      setSettlementPreview(linkedSettlementPreview);
-     setSelectedSettlementSourceRowIds(linkedSettlementPreview.map(item=>item.sourceRowId));
-     const unresolved=linkedSettlementPreview.filter(item=>item.destinationError).length;
+     setSelectedSettlementSourceRowIds(selectedSettlementIdsForBatch);
+     const unresolved=linkedSettlementPreview.filter(item=>selectedSettlementIdsForBatch.includes(item.sourceRowId)&&item.destinationError).length;
      if(unresolved){
-      setNotice('Se detectaron '+linkedSettlementPreview.length+' liquidaciones vinculadas. '+unresolved+' requieren corregir o asignar su cuenta destino. No se importó ningún documento ni se alteraron saldos.');
+      setNotice('Se detectaron '+linkedSettlementPreview.length+' liquidaciones vinculadas. '+unresolved+' seleccionadas requieren una cuenta destino válida. Desmarca las que no deseas importar o corrige sus datos; las demás pueden contabilizarse.');
       setBusy(false);
       return;
      }
+    }else{
+     setSettlementPreview([]);
+     setSelectedSettlementSourceRowIds([]);
     }
     const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha de factura','fechaEmision','fecha')??'').slice(0,10);if(!isValidIsoDate(value))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
     const num=(r:Row,i:number,required:boolean,...keys:string[])=>{const raw=pick(r,...keys);if((raw===undefined||raw==='')&&required)throw new Error('Fila '+(i+1)+': falta el campo obligatorio '+keys[0]+'.');const value=raw===undefined||raw===''?0:parseMigrationNumber(raw);if(!Number.isFinite(value)||value<0)throw new Error('Fila '+(i+1)+': importe inválido en '+keys[0]+'.');return value;};
@@ -607,7 +616,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
       });
       if(movementRows.length)importInventoryMovements(movementRows as Parameters<typeof importInventoryMovements>[0],targetCompany.id);
      }
-     const selectedSettlementPlans=selectUniversalInvoiceSettlements(settlementPlans,selectedSettlementSourceRowIds);
+     const selectedSettlementPlans=selectUniversalInvoiceSettlements(settlementPlans,selectedSettlementIdsForBatch);
      const settlementDrafts=mapUniversalInvoiceSettlementDrafts(selectedSettlementPlans,createdDocumentIds);
      importedSettlementCount=addImportedCreditSettlements(settlementDrafts,createdDocuments,targetCompany.id).length;
     });
