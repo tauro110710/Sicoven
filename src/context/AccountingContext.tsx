@@ -43,6 +43,7 @@ import { formatIslrVoucherNumber, getMaxIslrVoucherSequence } from '../utils/isl
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus } from '../types/ivaRetentionEligibility';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, summarizeCreditDocumentAdjustments, validateCreditSettlement } from '../types/creditSettlement';
 import { buildCreditSettlementJournalItems } from '../types/creditSettlementAccounting';
+import { buildSupplierAdvanceSettlementJournalItems } from '../types/supplierAdvanceSettlementAccounting';
 import { FinancialDisclosure, validateFinancialDisclosure } from '../types/financialDisclosures';
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
@@ -1671,29 +1672,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('Faltan las cuentas de ganancia/pérdida por diferencial cambiario. No se registró la liquidación.');
     }
 
-    const debitItems: JournalEntryItem[] = [{
-      accountCode: counterpart.code, accountName: counterpart.name,
-      debitBs: settlementValueBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0,
-      description: draft.kind === 'REFUND_RECEIVED' ? 'Reembolso de anticipo de proveedor' : 'Aplicación de anticipo a cuenta por pagar'
-    }];
-    const creditItems: JournalEntryItem[] = [{
-      accountCode: advance.code, accountName: advance.name,
-      debitBs: 0, creditBs: advanceBookValueBs, debitUsd: 0, creditUsd: amountUsd,
-      description: 'Descarga del anticipo a su valor histórico FIFO'
-    }];
-    if (differenceBs > 0.009) {
-      creditItems.push({
-        accountCode: gain!.code, accountName: gain!.name,
-        debitBs: 0, creditBs: differenceBs, debitUsd: 0, creditUsd: 0,
-        description: 'Ganancia por diferencial cambiario en liquidación de anticipo'
-      });
-    } else if (differenceBs < -0.009) {
-      debitItems.push({
-        accountCode: loss!.code, accountName: loss!.name,
-        debitBs: Math.abs(differenceBs), creditBs: 0, debitUsd: 0, creditUsd: 0,
-        description: 'Pérdida por diferencial cambiario en liquidación de anticipo'
-      });
-    }
+    const settlementJournalItems = buildSupplierAdvanceSettlementJournalItems({
+      kind: draft.kind,
+      amountUsd,
+      settlementValueBs,
+      advanceBookValueBs,
+      exchangeDifferenceBs: differenceBs,
+      counterpartAccount: counterpart,
+      advanceAccount: advance,
+      fxGainAccount: gain,
+      fxLossAccount: loss
+    });
     let resolvePersistence!: () => void;
     let rejectPersistence!: (error: Error) => void;
     const persistenceConfirmation = new Promise<void>((resolve, reject) => {
