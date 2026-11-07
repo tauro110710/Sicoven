@@ -174,9 +174,16 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || github.event_name == 'pull_request'
         shell: pwsh
         run: |
-          $profileRoot = Join-Path $env:RUNNER_TEMP 'SICOVEN-Upgrade-Profile'
-          $env:APPDATA = Join-Path $profileRoot 'AppData\Roaming'
-          New-Item -ItemType Directory -Path $env:APPDATA -Force | Out-Null
+          # Electron resuelve app.getPath('userData') mediante las carpetas conocidas de Windows;
+          # cambiar APPDATA en este proceso PowerShell no garantiza que el proceso Electron lo herede.
+          # El runner es efímero: limpiamos únicamente los archivos SQLite de la app creados por
+          # el smoke test anterior y dejamos que v1.0.17 cree su base en la ruta real predeterminada.
+          $existingDatabases = @(Get-ChildItem -Path $env:APPDATA -Filter 'sicoven.sqlite' -Recurse -File -ErrorAction SilentlyContinue)
+          foreach ($existing in $existingDatabases) {
+            Remove-Item -LiteralPath $existing.FullName -Force
+            Remove-Item -LiteralPath ($existing.FullName + '-wal') -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath ($existing.FullName + '-shm') -Force -ErrorAction SilentlyContinue
+          }
           $env:SICOVEN_UPGRADE_MARKER = 'SICOVEN-UPGRADE-PRESERVATION-' + [guid]::NewGuid().ToString('N')
 
           $installDir = Join-Path $env:RUNNER_TEMP 'SICOVEN-Upgrade-Install'
