@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows } from '../../types/universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 
@@ -537,19 +537,15 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     if(!selectedKeys.length)throw new Error('Selecciona individualmente los movimientos históricos que deseas importar.');
     const sourceRows=rows.filter(row=>selectedKeys.includes(String(row.migrationrowid??'')));
     if(!sourceRows.length)throw new Error('No se encontraron movimientos seleccionados.');
-    const typeMap:Record<string,'ENTRADA'|'SALIDA'|'AJUSTE'>={entrada:'ENTRADA',in:'ENTRADA',purchase:'ENTRADA',compra:'ENTRADA',opening:'ENTRADA',salida:'SALIDA',out:'SALIDA',sale:'SALIDA',venta:'SALIDA',ajuste:'AJUSTE',adjustment:'AJUSTE'};
-    const conceptMap:Record<string,string>={compra:'COMPRA',purchase:'COMPRA',inventarioinicial:'INVENTARIO_INICIAL',openinginventory:'INVENTARIO_INICIAL',venta:'VENTA',sale:'VENTA',merma:'MERMA',loss:'MERMA',autoconsumo:'AUTOCONSUMO',selfconsumption:'AUTOCONSUMO',ajuste:'AJUSTE',adjustment:'AJUSTE',devolucioncliente:'DEVOLUCION_CLIENTE',customerreturn:'DEVOLUCION_CLIENTE',devolucioncompra:'DEVOLUCION_COMPRA',supplierreturn:'DEVOLUCION_COMPRA'};
     const prepared=sourceRows.map((row,index)=>{
      const code=String(pick(row,'productCode','codigoProducto','sku','code','codigo')??'').trim();
      const product=companyProducts.find(item=>item.code.trim().toLowerCase()===code.toLowerCase());
      if(!product)throw new Error('Fila '+(index+1)+': el artículo '+(code||'(sin código)')+' no existe en la empresa destino. Importa primero el maestro de inventario; no se crearán productos automáticamente.');
      const date=String(pick(row,'date','fecha','movementDate','fechaMovimiento')??'').slice(0,10);
      if(!isValidIsoDate(date))throw new Error('Fila '+(index+1)+': fecha de movimiento inválida.');
-     const typeKey=norm(String(pick(row,'type','movementType','tipoMovimiento','tipo')??''));
-     const type=typeMap[typeKey];
+     const type=mapUniversalInventoryMovementType(pick(row,'type','movementType','tipoMovimiento','tipo'));
      if(!type)throw new Error('Fila '+(index+1)+': tipo de movimiento no reconocido. Usa ENTRADA, SALIDA o AJUSTE.');
-     const conceptKey=norm(String(pick(row,'concept','concepto','movementConcept')??''));
-     const concept=conceptMap[conceptKey];
+     const concept=mapUniversalInventoryMovementConcept(pick(row,'concept','concepto','movementConcept'));
      if(!concept)throw new Error('Fila '+(index+1)+': concepto de movimiento no reconocido. No se inferirá por el tipo de movimiento.');
      if(concept==='DEVOLUCION_COMPRA'||concept==='DEVOLUCION_CLIENTE')throw new Error('Fila '+(index+1)+': las devoluciones requieren el flujo de nota de crédito enlazado a factura y Kardex; no se importan como movimientos aislados.');
      const documentRef=String(pick(row,'documentRef','referencia','documento','invoiceNumber','numeroDocumento')??'').trim();
