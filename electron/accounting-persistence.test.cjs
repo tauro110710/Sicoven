@@ -186,6 +186,37 @@ test('inventory BCV daily history is append-only and audited atomically', () => 
     assert.equal(details.provider, 'bcv.today');
     assert.equal(details.actor.username, 'contador');
 
+    const manualCorrection = {
+      id: 'inventory-bcv-2026-11-06-manual-20261106150000',
+      rate: 891.5,
+      effectiveDate: '2026-11-06',
+      fetchedAt: '2026-11-06T15:00:00.000Z',
+      source: 'Registro manual en SICOVEN de escritorio',
+      provider: 'manual',
+      mode: 'MANUAL',
+      note: 'Tasa verificada durante interrupción de internet',
+      correctionOfId: rateEntry.id
+    };
+    const corrected = {
+      ...next,
+      companies: [{ ...next.companies[0],
+        inventoryBcvRate: manualCorrection.rate,
+        inventoryBcvRateFetchedAt: manualCorrection.fetchedAt,
+        inventoryBcvRateHistory: [rateEntry, manualCorrection]
+      }]
+    };
+    assert.equal(persistAccountingSnapshot(db, corrected, { id: 9, username: 'contador', role: 'admin' }).ok, true);
+    const manualEvent = db.prepare("SELECT details_json FROM audit_events WHERE event_type='inventory_bcv_rate_recorded' ORDER BY id DESC LIMIT 1").get();
+    const manualDetails = JSON.parse(manualEvent.details_json);
+    assert.equal(manualDetails.mode, 'MANUAL');
+    assert.equal(manualDetails.provider, 'manual');
+    assert.equal(manualDetails.note, manualCorrection.note);
+    assert.equal(manualDetails.correctionOfId, rateEntry.id);
+    assert.equal(manualDetails.actor.username, 'contador');
+    const persisted = JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
+    assert.equal(persisted.companies[0].inventoryBcvRateHistory.length, 2);
+    assert.equal(persisted.companies[0].inventoryBcvRate, 891.5);
+
     const before = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json;
     const tampered = {
       ...next,
