@@ -456,6 +456,81 @@ export const hasUniversalNestedMerchandiseDetails = (invoice: Record<string, unk
   }));
 };
 
+
+
+/**
+ * Detecta liquidaciones relacionadas con una factura dentro del mismo archivo.
+ * Nunca enlaza por similitud ni cruza colecciones de archivos diferentes.
+ */
+export const resolveUniversalInvoiceSettlementRows = (
+  rows: Array<Record<string, unknown>>,
+  invoice: Record<string, unknown>
+): Array<Record<string, unknown>> => {
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const pickValue = (record: Record<string, unknown>, keys: string[]) => {
+    const wanted = new Set(keys.map(normalize));
+    for (const [key, value] of Object.entries(record)) {
+      if (wanted.has(normalize(key)) && value !== undefined && value !== null && String(value).trim() !== '') return value;
+    }
+    return undefined;
+  };
+  const ids = ['id','invoiceId','saleId','purchaseId','documentId','uuid','idFactura','idVenta','idCompra']
+    .map(key => pickValue(invoice, [key])).filter(value => value !== undefined).map(normalize);
+  const uniqueIds = [...new Set(ids)];
+  if (uniqueIds.length > 1) throw new Error('La factura contiene identificadores incompatibles; no se pueden enlazar sus cobros/pagos con seguridad.');
+  const invoiceNumber = pickValue(invoice, ['invoiceNumber','numeroFactura','factura','documento','documentNumber']);
+  const partyRif = pickValue(invoice, ['customerRif','clientRif','supplierRif','vendorRif','rifCliente','rifProveedor','rif']);
+  if (!uniqueIds.length && (invoiceNumber === undefined || partyRif === undefined)) return [];
+  const fileId = String(invoice.migrationfile ?? '');
+  const foreignKeys = ['invoiceId','saleId','purchaseId','documentId','facturaId','ventaId','compraId','idFactura','idVenta','idCompra','invoice_id','sale_id','purchase_id','document_id'];
+  const invoiceNumberKeys = ['invoiceNumber','numeroFactura','factura','documentNumber','referencedInvoiceNumber','affectedInvoiceNumber','facturaAfectada'];
+  const partyRifKeys = ['customerRif','clientRif','supplierRif','vendorRif','rifCliente','rifProveedor','partyRif','rif'];
+  const dateKeys = ['settlementDate','paymentDate','collectionDate','fechaPago','fechaCobro','date','fecha'];
+  const amountKeys = ['settlementAmountBs','paymentAmountBs','collectionAmountBs','amountBs','amountUsd','amount','importe','monto','montoBs','montoUsd','paidAmount','amountPaid','collectedAmount','amountCollected','paymentAmount','collectionAmount'];
+  const evidenceKeys = ['method','paymentMethod','settlementMethod','collectionMethod','medioPago','formaPago','reference','paymentReference','collectionReference','referenceNumber','comprobante','bankAccountId','transactionId','transactionType','type','tipoMovimiento','tipoOperacion'];
+  return rows.filter(candidate => {
+    if (candidate === invoice || String(candidate.migrationfile ?? '') !== fileId) return false;
+    const reference = pickValue(candidate, foreignKeys);
+    const idMatch = uniqueIds.length === 1 && reference !== undefined && normalize(reference) === uniqueIds[0];
+    const numberMatch = reference === undefined && invoiceNumber !== undefined && partyRif !== undefined &&
+      pickValue(candidate, invoiceNumberKeys) !== undefined &&
+      normalize(pickValue(candidate, invoiceNumberKeys)) === normalize(invoiceNumber) &&
+      pickValue(candidate, partyRifKeys) !== undefined &&
+      normalize(pickValue(candidate, partyRifKeys)) === normalize(partyRif);
+    if (!idMatch && !numberMatch) return false;
+    const productCode = pickValue(candidate, ['productCode','codigoProducto','productSku','sku','itemCode','codigo','code']);
+    const quantity = pickValue(candidate, ['quantity','cantidad','qty']);
+    if (productCode !== undefined && quantity !== undefined) return false;
+    const hasDate = pickValue(candidate, dateKeys) !== undefined;
+    const hasAmount = pickValue(candidate, amountKeys) !== undefined;
+    const hasEvidence = pickValue(candidate, evidenceKeys) !== undefined;
+    return hasDate && hasAmount && (idMatch || hasEvidence);
+  });
+};
+
+/** Detecta pagos/cobros embebidos sin confundir importes de IVA o retenciones. */
+export const hasUniversalInlineSettlementAmount = (invoice: Record<string, unknown>): boolean => {
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const keys = new Set([
+    'paidAmountBs','amountPaidBs','collectedAmountBs','amountCollectedBs','settledAmountBs','amountSettledBs',
+    'totalPaidBs','totalCollectedBs','paymentsTotalBs','montoPagadoBs','montoCobradoBs','abonosBs',
+    'paidAmountUsd','amountPaidUsd','collectedAmountUsd','amountCollectedUsd','settledAmountUsd','amountSettledUsd',
+    'paidAmount','amountPaid','collectedAmount','amountCollected','settledAmount','amountSettled',
+    'totalPaid','totalCollected','montoPagado','montoCobrado','abono'
+  ].map(normalize));
+  for (const [key, value] of Object.entries(invoice)) {
+    if (!keys.has(normalize(key)) || value === undefined || value === null || String(value).trim() === '') continue;
+    let raw = String(value).trim().replace(/[^0-9,.-]/g, '');
+    if (raw.includes(',') && raw.includes('.')) raw = raw.replace(/\./g, '').replace(',', '.');
+    else raw = raw.replace(',', '.');
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount > 0.000001) return true;
+  }
+  return false;
+};
+
 export type UniversalImportFormat = 'json' | 'csv' | 'tsv' | 'txt' | 'xlsx' | 'xlsm' | 'unsupported';
 
 export const detectUniversalImportFormat = (fileName: string): UniversalImportFormat => {

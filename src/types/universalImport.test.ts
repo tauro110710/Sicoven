@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, mapUniversalInventoryItemType } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, mapUniversalInventoryItemType } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -390,4 +390,36 @@ test('la clasificación de inventario universal exige valores de origen reconoci
   assert.equal(mapUniversalInventoryItemType(''), null);
   assert.equal(mapUniversalInventoryItemType('Producto'), null);
   assert.equal(mapUniversalInventoryItemType('servicio'), null);
+});
+
+
+test('detecta liquidaciones por identificador explícito solo dentro del mismo archivo', () => {
+  const invoice = { migrationfile: 'ventas.json', id: 'sale-1', invoiceNumber: 'F-001', customerRif: 'J-123' };
+  const linked = { migrationfile: 'ventas.json', invoiceId: 'sale-1', date: '2026-11-05', amountBs: 40, method: 'TRANSFERENCIA' };
+  const foreignFile = { migrationfile: 'pagos.json', invoiceId: 'sale-1', date: '2026-11-05', amountBs: 40, method: 'TRANSFERENCIA' };
+  assert.deepEqual(resolveUniversalInvoiceSettlementRows([invoice, linked, foreignFile], invoice), [linked]);
+});
+
+test('detecta liquidaciones por factura y RIF exactos cuando no existe ID', () => {
+  const invoice = { migrationfile: 'origen.json', invoiceNumber: 'FAC-77', customerRif: 'J-12345678-9' };
+  const linked = { migrationfile: 'origen.json', invoiceNumber: 'FAC-77', partyRif: 'J-12345678-9', fechaPago: '2026-11-05', montoBs: '125,00', medioPago: 'Banco' };
+  const wrongParty = { migrationfile: 'origen.json', invoiceNumber: 'FAC-77', partyRif: 'J-99999999-9', fechaPago: '2026-11-05', montoBs: 125, medioPago: 'Banco' };
+  assert.deepEqual(resolveUniversalInvoiceSettlementRows([invoice, linked, wrongParty], invoice), [linked]);
+});
+
+test('no confunde renglones de mercancía con liquidaciones', () => {
+  const invoice = { migrationfile: 'origen.json', id: 'sale-1' };
+  const line = { migrationfile: 'origen.json', saleId: 'sale-1', productCode: 'SKU-1', quantity: 2, date: '2026-11-05', amountBs: 50 };
+  assert.deepEqual(resolveUniversalInvoiceSettlementRows([invoice, line], invoice), []);
+});
+
+test('detecta importes pagados positivos embebidos y permite campos de pago en cero', () => {
+  assert.equal(hasUniversalInlineSettlementAmount({ montoPagado: '1.250,00' }), true);
+  assert.equal(hasUniversalInlineSettlementAmount({ amountCollectedUsd: '0.00' }), false);
+  assert.equal(hasUniversalInlineSettlementAmount({ totalPaidBs: 0 }), false);
+});
+
+test('rechaza identificadores contradictorios en la factura al buscar liquidaciones', () => {
+  const invoice = { migrationfile: 'origen.json', id: 'sale-1', invoiceId: 'sale-2', invoiceNumber: 'F-001', customerRif: 'J-123' };
+  assert.throws(() => resolveUniversalInvoiceSettlementRows([invoice], invoice), /identificadores incompatibles/);
 });
