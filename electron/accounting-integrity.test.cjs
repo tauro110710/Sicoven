@@ -1260,7 +1260,7 @@ test('SQLite validates a purchase invoice and its credit payment created in the 
     ...prior,
     creditSettlements: [{
       id: 'prior-bank-payment', companyId: 'company-1', documentId: 'other-purchase',
-      kind: 'PURCHASE_PAYMENT', bankAccountId: 'bank-1', reference: 'BANK 100', isReversed: false
+      kind: 'PURCHASE_PAYMENT', bankAccountId: 'bank-1', reference: 'BANK   100', isReversed: false
     }]
   };
   assert.throws(() => validateAccountingSnapshot(priorDuplicate, {
