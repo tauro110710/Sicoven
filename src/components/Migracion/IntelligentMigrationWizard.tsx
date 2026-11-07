@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept } from '../../types/universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 
@@ -437,6 +437,9 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const incomingControl=String(pick(r,'controlNumber','numeroControl','numero de control','nroControl','control')??'').trim();
      const key=documentKey(invoiceNumber,partyRif);
      if(!invoiceNumber||!partyName||!partyRif)throw new Error('Fila '+(i+1)+': número de factura, nombre y RIF de cliente/proveedor son obligatorios.');
+     const existingLedgerEntry=findUniversalInvoiceJournalCollision(invoiceNumber,companyJournalEntries);
+     if(existingLedgerEntry)throw new Error('Fila '+(i+1)+': ya existe un asiento contable con la referencia '+String(existingLedgerEntry.referenceDoc??invoiceNumber)+'. No se importará la factura para evitar duplicar su contabilización. Importe el documento desde Ventas o Compras, no desde el Libro Diario.');
+
      if(seen.has(key)||existingDocs.has(key))throw new Error('Factura duplicada para el mismo cliente/proveedor o ya existente: '+invoiceNumber+' ('+partyRif+'). No se sobrescribieron documentos.');seen.add(key);
      if(!incomingControl)throw new Error('Fila '+(i+1)+': número de control obligatorio.');
      const controlIdentity=controlKey(incomingControl,partyRif);
@@ -630,11 +633,14 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const seenJournalIdentities=new Set<string>();
     const prepared=groups.map(({date,reference:ref,rows:items})=>{
      if(!isValidIsoDate(date))throw new Error('Asiento '+ref+': fecha obligatoria en formato AAAA-MM-DD.');
-     const identity=date+'|'+norm(ref);
+     const normalizedReference=normalizeUniversalDocumentReference(ref);\n     const identity=date+'|'+normalizedReference;
      if(seenJournalIdentities.has(identity))throw new Error('Hay asientos con la misma fecha y referencia en más de un archivo. Separe o concilie las fuentes; no se mezclarán líneas de archivos distintos.');
      seenJournalIdentities.add(identity);
-     const existingEntry=companyJournalEntries.some(entry=>entry.date===date&&norm(String(entry.referenceDoc??''))===norm(ref));
+     const existingEntry=companyJournalEntries.some(entry=>entry.date===date&&normalizeUniversalDocumentReference(entry.referenceDoc)===normalizedReference);
      if(existingEntry)throw new Error('Ya existe un asiento con fecha '+date+' y referencia '+ref+'. No se importaron los asientos de este archivo para evitar duplicar contabilidad.');
+     const linkedSale=companySales.find(sale=>normalizeUniversalDocumentReference(sale.invoiceNumber)===normalizedReference);
+     const linkedPurchase=companyPurchases.find(purchase=>normalizeUniversalDocumentReference(purchase.invoiceNumber)===normalizedReference);
+     if(linkedSale||linkedPurchase)throw new Error('El asiento '+ref+' corresponde a una factura ya importada de '+(linkedSale?'Ventas':'Compras')+'. SICOVEN ya generó su contabilización automática; no se importarán líneas duplicadas desde el Libro Diario.');
      const lines=items.map(r=>{
       const code=String(pick(r,'accountCode','codigoCuenta','cuenta')??'').trim();
       const account=accountMap.get(code.toLowerCase());
