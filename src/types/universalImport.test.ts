@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, hasUniversalNestedMerchandiseDetails } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, hasUniversalNestedMerchandiseDetails, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -166,4 +166,23 @@ test('detecta renglones de mercancía relacionados por referencia explícita sin
     { migrationfile: 'archivo-b', invoiceId: 'F-1', productCode: 'SKU-2', quantity: 1 }
   ];
   assert.equal(resolveUniversalPurchaseDetailRows(rows, invoice).length, 1);
+});
+
+
+test('detecta cobros o pagos vinculados explícitamente a una factura', () => {
+  const invoice = { migrationfile: 'archivo-a', id: 'F-1' };
+  const rows = [
+    invoice,
+    { migrationfile: 'archivo-a', invoiceId: 'F-1', settlementDate: '2026-01-10', amountBs: 50, method: 'BANK_TRANSFER_BS', reference: 'TR-1' },
+    { migrationfile: 'archivo-a', invoiceId: 'F-1', productCode: 'SKU-1', quantity: 2, amountBs: 50 },
+    { migrationfile: 'archivo-b', invoiceId: 'F-1', settlementDate: '2026-01-10', amountBs: 50, method: 'CASH_BS' }
+  ];
+  assert.equal(resolveUniversalInvoiceSettlementRows(rows, invoice).length, 1);
+});
+
+test('detecta importes pagados embebidos y no confunde saldos cero', () => {
+  assert.equal(hasUniversalInlineSettlementAmount({ paidAmountBs: 25 }), true);
+  assert.equal(hasUniversalInlineSettlementAmount({ montoCobradoBs: '1.250,00' }), true);
+  assert.equal(hasUniversalInlineSettlementAmount({ paidAmountBs: 0, amountCollectedUsd: '0.00' }), false);
+  assert.equal(hasUniversalInlineSettlementAmount({ outstandingBalanceBs: 25 }), false);
 });
