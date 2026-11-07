@@ -201,6 +201,8 @@ test('bloquea ventas con tasas mezcladas, artículo ajeno o totales que no conci
     { id: 'p2', code: 'B-1', name: 'Artículo 8%', vatTreatment: 'REDUCIDA_8' as const }
   ];
   assert.throws(() => prepareUniversalSaleInventoryLines([{ sku: 'B-1', quantity: 1, unitPriceBs: 10 }], products, { taxRate: 16, taxableBaseBs: 10, exemptAmountBs: 0, vatAmountBs: 1.6 }));
+  assert.throws(() => prepareUniversalSaleInventoryLines([{ sku: 'A-1', quantity: 1, unitPriceBs: 10, taxRate: 31 }], products, { taxRate: 31, taxableBaseBs: 10, exemptAmountBs: 0, vatAmountBs: 4.6 }));
+  assert.throws(() => prepareUniversalSaleInventoryLines([{ sku: 'A-1', quantity: 1, unitPriceBs: 10 }, { sku: 'A-1', quantity: 1, unitPriceBs: 5 }], products, { taxRate: 16, taxableBaseBs: 15, exemptAmountBs: 0, vatAmountBs: 2.4 }));
   assert.throws(() => prepareUniversalSaleInventoryLines([{ sku: 'NO-EXISTE', quantity: 1, unitPriceBs: 10 }], products, { taxRate: 16, taxableBaseBs: 10, exemptAmountBs: 0, vatAmountBs: 1.6 }));
   assert.throws(() => prepareUniversalSaleInventoryLines([{ sku: 'A-1', quantity: 1, unitPriceBs: 10 }], products, { taxRate: 16, taxableBaseBs: 11, exemptAmountBs: 0, vatAmountBs: 1.76 }));
 });
