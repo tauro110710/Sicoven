@@ -142,3 +142,61 @@ test('bank statement import batch persists together and leaves no imported rows 
     db.close();
   }
 });
+
+
+test('inventory BCV daily history is append-only and audited atomically', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE app_state (
+      state_key TEXT PRIMARY KEY, state_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL,
+      details_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  try {
+    const prior = emptyState();
+    persistAccountingSnapshot(db, prior, { id: 9, username: 'contador', role: 'admin' });
+    const rateEntry = {
+      id: 'inventory-bcv-2026-11-06',
+      rate: 890.25,
+      effectiveDate: '2026-11-06',
+      fetchedAt: '2026-11-06T14:00:00.000Z',
+      source: 'https://bcv.today/api/rate.json',
+      provider: 'bcv.today',
+      mode: 'AUTOMATIC'
+    };
+    const next = {
+      ...prior,
+      companies: [{ ...prior.companies[0],
+        inventoryBcvRate: 890.25,
+        inventoryBcvRateEffectiveDate: '2026-11-06',
+        inventoryBcvRateFetchedAt: rateEntry.fetchedAt,
+        inventoryBcvRateHistory: [rateEntry]
+      }]
+    };
+    assert.equal(persistAccountingSnapshot(db, next, { id: 9, username: 'contador', role: 'admin' }).ok, true);
+    const event = db.prepare("SELECT details_json FROM audit_events WHERE event_type='inventory_bcv_rate_recorded'").get();
+    assert.ok(event);
+    const details = JSON.parse(event.details_json);
+    assert.equal(details.rate, 890.25);
+    assert.equal(details.effectiveDate, '2026-11-06');
+    assert.equal(details.provider, 'bcv.today');
+    assert.equal(details.actor.username, 'contador');
+
+    const before = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json;
+    const tampered = {
+      ...next,
+      companies: [{ ...next.companies[0],
+        inventoryBcvRateHistory: [{ ...rateEntry, rate: 999 }]
+      }]
+    };
+    assert.throws(() => persistAccountingSnapshot(db, tampered, { id: 9, username: 'contador', role: 'admin' }), /historial diario.*inmutable/i);
+    assert.equal(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json, before);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE event_type='inventory_bcv_rate_recorded'").get().n, 1);
+  } finally {
+    db.close();
+  }
+});
