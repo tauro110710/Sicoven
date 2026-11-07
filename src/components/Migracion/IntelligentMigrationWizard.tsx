@@ -324,7 +324,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   }catch(e){setError(e instanceof Error?e.message:'No se pudo restaurar el respaldo.');}
   finally{setBusy(false);}
  };
- const runMigration=()=>{
+ const runMigration=async()=>{
   setError('');setNotice('');
   if(!confirmed){setError('Marca la confirmación final antes de ejecutar la migración.');return;}
   const available = new Set(headers.map(norm));
@@ -523,7 +523,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const priceUsd=number('salesPriceUsd','precioVentaUsd','priceUsd');
     return {code,name,category:String(pick(r,'category','categoria')??'General'),unit:String(pick(r,'unit','unidad')??'Unidad'),minStock:number('minStock','stockMinimo'),currentStock:stock,avgCostBs:cost,avgCostUsd:number('avgCostUsd','costoPromedioUsd'),lastCostBs:number('lastCostBs')||cost,lastCostUsd:number('lastCostUsd'),salesPriceBs:priceBs,salesPriceUsd:priceUsd,costingMethod:'PROMEDIO_PONDERADO' as const,vatTreatment:'GENERAL_16' as const,itemType:'MERCANCIA' as const,openingDate:String(pick(r,'openingDate','fechaApertura')??new Date().toISOString().slice(0,10)),openingBcvRate:pick(r,'openingBcvRate','bcvRate')===undefined?undefined:number('openingBcvRate','bcvRate')};
    });
-   const count=importInventoryProducts(prepared);
+   const count=await importInventoryProducts(prepared);
    setNotice('Migración completada: '+count+' artículos incorporados. SICOVEN no sobrescribió códigos existentes. Revisa el Kardex y la valoración inicial antes de continuar.');
    setSelected(old=>old.filter(id=>id!=='inventory'));setConfirmed(false);
     setBusy(false);
