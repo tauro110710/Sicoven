@@ -1,7 +1,7 @@
 import { isValidIsoDate, parseMigrationNumber } from './migrationParsing';
 
 export type PosvenInventoryRow = { sourceIndex:number; code:string; name:string; category:string; unit:string; minStock:number; currentStock:number; avgCostBs:number; avgCostUsd:number; lastCostBs:number; lastCostUsd:number; salesPriceBs:number; salesPriceUsd:number; openingDate:string; openingBcvRate:number };
-export type PosvenInventoryImportResult = { rows:PosvenInventoryRow[]; sourceCount:number; importedCount:number; inactiveCount:number; kitCount:number; openingDate:string; openingBcvRate:number };
+export type PosvenInventoryImportResult = { rows:PosvenInventoryRow[]; sourceCount:number; importedCount:number; inactiveCount:number; kitCount:number; overlapKitInactiveCount:number; openingDate:string; openingBcvRate:number };
 const obj=(v:unknown):Record<string,unknown>|null=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:null;
 const num=(v:unknown,label:string,zero=false)=>{const n=parseMigrationNumber(v);if(!Number.isFinite(n)||(zero?n<0:n<=0))throw new Error('POSVEN: valor inválido en '+label+'. No se importó ningún artículo.');return n;};
 const txt=(v:unknown,label:string)=>{const s=String(v??'').trim();if(!s)throw new Error('POSVEN: falta '+label+'. No se importó ningún artículo.');return s;};
@@ -10,10 +10,10 @@ export const mapPosvenV3Inventory=(input:unknown):PosvenInventoryImportResult=>{
  const data=obj(root.data);if(!data||!Array.isArray(data.productos))throw new Error('El respaldo POSVEN no contiene la colección data.productos.');
  const date=String(root.createdAt??'').slice(0,10);if(!isValidIsoDate(date))throw new Error('El respaldo POSVEN no contiene una fecha de corte válida (createdAt).');
  const rate=num(data.tasa,'tasa BCV del respaldo');const sourceProducts=data.productos;const products=sourceProducts.map(obj);if(products.some(p=>!p))throw new Error('La colección data.productos contiene filas que no son objetos. No se importó ningún artículo.');
- const inactiveCount=products.filter(p=>p!.activo===false).length;const kitCount=products.filter(p=>p!.isKit===true).length;const eligible=products.filter(p=>p!.activo!==false&&p!.isKit!==true);const codes=new Set<string>();
+ const inactiveCount=products.filter(p=>p!.activo===false).length;const kitCount=products.filter(p=>p!.isKit===true).length;const overlapKitInactiveCount=products.filter(p=>p!.activo===false&&p!.isKit===true).length;const eligible=products.filter(p=>p!.activo!==false&&p!.isKit!==true);const codes=new Set<string>();
  const rows=eligible.map((p,i)=>{const code=txt(p!.codigo,'código del artículo '+(i+1));const name=txt(p!.nombre,'nombre del artículo '+(i+1));const key=code.toLocaleLowerCase();if(codes.has(key))throw new Error('POSVEN: el código '+code+' está duplicado entre los artículos activos. Corrige el respaldo; no se escribió ningún dato.');codes.add(key);
  const stock=num(p!.stock,'existencia de '+code,true);const cost=num(p!.costoUSD,'costoUSD de '+code,stock===0);const priceUsd=num(p!.precioUSD,'precioUSD de '+code,true);const priceBs=num(p!.precioBS,'precioBS de '+code,true);const minStock=num(p!.stockMinimo??0,'stockMinimo de '+code,true);
  return {sourceIndex:sourceProducts.indexOf(p),code,name,category:[p!.categoria,p!.departamento].map(v=>String(v??'').trim()).filter(Boolean).join(' / ')||'General',unit:String(p!.cantidad??'Unidad').trim()||'Unidad',minStock,currentStock:stock,avgCostBs:cost*rate,avgCostUsd:cost,lastCostBs:cost*rate,lastCostUsd:cost,salesPriceBs:priceBs,salesPriceUsd:priceUsd,openingDate:date,openingBcvRate:rate};});
  if(!rows.length)throw new Error('El respaldo no contiene artículos activos no-kit que puedan importarse.');
- return {rows,sourceCount:data.productos.length,importedCount:rows.length,inactiveCount,kitCount,openingDate:date,openingBcvRate:rate};
+ return {rows,sourceCount:data.productos.length,importedCount:rows.length,inactiveCount,kitCount,overlapKitInactiveCount,openingDate:date,openingBcvRate:rate};
 };
