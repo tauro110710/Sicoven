@@ -402,11 +402,15 @@ export const buildUniversalInvoiceIdentity = (
 
 export const findUniversalInvoiceJournalCollision = (
   invoiceNumber: unknown,
-  entries: Array<{ referenceDoc?: string | null }>
-): { referenceDoc?: string | null } | undefined => {
+  entries: Array<{ referenceDoc?: string | null; type?: string }>,
+  expectedType?: 'VENTA' | 'COMPRA'
+): { referenceDoc?: string | null; type?: string } | undefined => {
   const normalizedInvoice = normalizeUniversalDocumentReference(invoiceNumber);
   if (!normalizedInvoice) return undefined;
-  return entries.find(entry => normalizeUniversalDocumentReference(entry.referenceDoc) === normalizedInvoice);
+  return entries.find(entry =>
+    (!expectedType || entry.type === expectedType) &&
+    normalizeUniversalDocumentReference(entry.referenceDoc) === normalizedInvoice
+  );
 };
 
 const normalizeUniversalValue = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '');
