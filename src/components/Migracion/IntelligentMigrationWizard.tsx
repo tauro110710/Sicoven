@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept } from '../../types/universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 
@@ -478,20 +478,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const rawInventoryLines=Array.isArray(nestedInventoryLines)&&nestedInventoryLines.length?nestedInventoryLines:resolveUniversalPurchaseDetailRows(rows,r);
      let inventoryLines: Array<{productId:string;quantity:number;unitCostBs:number}>|undefined;
      if(rawInventoryLines.length){
-      inventoryLines=rawInventoryLines.map((rawLine,lineIndex)=>{
-       if(!rawLine||typeof rawLine!=='object'||Array.isArray(rawLine))throw new Error('Fila '+(i+1)+', detalle '+(lineIndex+1)+': la línea de compra no es un objeto válido.');
-       const line=Object.fromEntries(Object.entries(rawLine as Row).map(([key,value])=>[norm(key),scalar(value)])) as Row;
-       const code=String(pick(line,'productCode','codigoProducto','sku','code','codigo')??'').trim();
-       const product=companyProducts.find(item=>item.code.trim().toLowerCase()===code.toLowerCase());
-       const quantityRaw=pick(line,'quantity','cantidad','qty');
-       const costRaw=pick(line,'unitCostBs','costoUnitarioBs','unitCost','costoUnitario','costBs');
-       const quantity=quantityRaw===undefined?NaN:parseMigrationNumber(quantityRaw);
-       const unitCostBs=costRaw===undefined?NaN:parseMigrationNumber(costRaw);
-       if(!product||!Number.isFinite(quantity)||quantity<=0||!Number.isFinite(unitCostBs)||unitCostBs<=0)throw new Error('Fila '+(i+1)+', detalle '+(lineIndex+1)+': debe identificar un artículo existente de la empresa destino mediante código/SKU y declarar cantidad y costo unitario Bs positivos. No se asociará por descripción.');
-       return {productId:product.id,quantity,unitCostBs};
-      });
-      if(new Set(inventoryLines.map(line=>line.productId)).size!==inventoryLines.length)throw new Error('Fila '+(i+1)+': el detalle repite un mismo producto; consolida sus líneas antes de importar.');
-      if(Math.abs(inventoryLines.reduce((sum,line)=>sum+line.quantity*line.unitCostBs,0)-(taxableBaseBs+exemptAmountBs))>0.02)throw new Error('Fila '+(i+1)+': el detalle de inventario no concilia con la base imponible más el monto exento.');
+      inventoryLines=prepareUniversalPurchaseInventoryLines(rawInventoryLines,companyProducts,{taxableBaseBs,exemptAmountBs,bcvRate:rate});
      }else if(!purchaseDebitAccountCode)throw new Error('Fila '+(i+1)+': compra sin detalle de mercancía requiere una cuenta de débito explícita (purchaseDebitAccountCode). No se asignará una cuenta predeterminada.');
      const retentionRate=num(r,i,true,'retentionRate','tasaRetencion');
      const islrWithheldBs=num(r,i,true,'islrWithheldBs','islrRetenidoBs');

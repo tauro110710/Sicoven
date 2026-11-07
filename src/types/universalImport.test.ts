@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -209,4 +209,41 @@ test('bloquea ventas con tasas mezcladas, artículo ajeno o totales que no conci
   const usdLine = prepareUniversalSaleInventoryLines([{ sku: 'A-1', quantity: 1, unitPriceUsd: 2 }], products, { taxRate: 16, taxableBaseBs: 20, exemptAmountBs: 0, vatAmountBs: 3.2, bcvRate: 10 });
   assert.equal(usdLine[0].unitPriceBs, 20);
   assert.equal(usdLine[0].unitPriceUsd, 2);
+});
+
+
+test('prepara líneas de compra por SKU y concilia costo, cantidad y base imponible', () => {
+  const products = [{ id: 'p1', code: 'A-1' }, { id: 'p2', code: 'B-1' }];
+  const lines = prepareUniversalPurchaseInventoryLines([
+    { sku: 'A-1', quantity: 2, unitCostBs: 50 },
+    { sku: 'B-1', cantidad: 1, costoUnitarioBs: 20 }
+  ], products, { taxableBaseBs: 100, exemptAmountBs: 20, bcvRate: 10 });
+  assert.deepEqual(lines, [
+    { productId: 'p1', quantity: 2, unitCostBs: 50 },
+    { productId: 'p2', quantity: 1, unitCostBs: 20 }
+  ]);
+});
+
+test('convierte costos USD explícitos y valida conciliación Bs/USD', () => {
+  const products = [{ id: 'p1', code: 'A-1' }];
+  const converted = prepareUniversalPurchaseInventoryLines([
+    { sku: 'A-1', quantity: 2, unitCostUsd: 5 }
+  ], products, { taxableBaseBs: 100, exemptAmountBs: 0, bcvRate: 10 });
+  assert.equal(converted[0].unitCostBs, 50);
+  assert.deepEqual(prepareUniversalPurchaseInventoryLines([
+    { sku: 'A-1', quantity: 2, unitCostBs: 50, unitCostUsd: 5 }
+  ], products, { taxableBaseBs: 100, exemptAmountBs: 0, bcvRate: 10 }), converted);
+  assert.throws(() => prepareUniversalPurchaseInventoryLines([
+    { sku: 'A-1', quantity: 2, unitCostBs: 50, unitCostUsd: 7 }
+  ], products, { taxableBaseBs: 100, exemptAmountBs: 0, bcvRate: 10 }), /no concilia/);
+});
+
+test('bloquea líneas de compra ambiguas, duplicadas, ajenas o sin conciliación', () => {
+  const products = [{ id: 'p1', code: 'A-1' }];
+  assert.throws(() => prepareUniversalPurchaseInventoryLines([{ sku: 'A-1', quantity: 1, cost: 10 }], products, { taxableBaseBs: 10, exemptAmountBs: 0, bcvRate: 1 }), /No se asociará por descripción/);
+  assert.throws(() => prepareUniversalPurchaseInventoryLines([{ sku: 'A-1', quantity: 1, price: 10 }], products, { taxableBaseBs: 10, exemptAmountBs: 0, bcvRate: 1 }), /No se asociará por descripción/);
+  assert.throws(() => prepareUniversalPurchaseInventoryLines([{ sku: 'A-1', quantity: 1, unitCostBs: 10 }, { sku: 'A-1', quantity: 1, unitCostBs: 5 }], products, { taxableBaseBs: 15, exemptAmountBs: 0, bcvRate: 1 }), /aparece más de una vez/);
+  assert.throws(() => prepareUniversalPurchaseInventoryLines([{ sku: 'NO-EXISTE', quantity: 1, unitCostBs: 10 }], products, { taxableBaseBs: 10, exemptAmountBs: 0, bcvRate: 1 }), /No se asociará por descripción/);
+  assert.throws(() => prepareUniversalPurchaseInventoryLines([{ sku: 'A-1', quantity: 1, unitCostBs: 10 }], products, { taxableBaseBs: 11, exemptAmountBs: 0, bcvRate: 1 }), /no concilian/);
+  assert.throws(() => prepareUniversalPurchaseInventoryLines([{ sku: 'A-1', quantity: 1, unitCostUsd: 10 }], products, { taxableBaseBs: 10, exemptAmountBs: 0, bcvRate: 0 }), /tasa BCV positiva/);
 });
