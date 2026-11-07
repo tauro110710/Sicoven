@@ -73,9 +73,10 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  const [notice,setNotice]=useState('');
  const [settlementPreview,setSettlementPreview]=useState<Array<{
   invoiceRowId:string;sourceRowId:string;settlementDate:string;bcvRate:number;amountUsd:number;amountBs:number;
-  method:string;reference?:string;destinationError:string|null;
+  method:string;bankAccountId?:string;reference?:string;destinationError:string|null;
  }>>([]);
  const [selectedSettlementSourceRowIds,setSelectedSettlementSourceRowIds]=useState<string[]>([]);
+ const [settlementBankOverrides,setSettlementBankOverrides]=useState<Record<string,string>>({});
  const [confirmed,setConfirmed]=useState(false);
  const [backupPayload,setBackupPayload]=useState<string|null>(null);
  const [backupCounts,setBackupCounts]=useState<Record<string,number>|null>(null);
@@ -426,7 +427,14 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const sourceRows=selectUniversalRowsByStableKeys(classifiedRows,selectedModuleRowKeys[kind]??[]);
     if(!(selectedModuleRowKeys[kind]??[]).length)throw new Error('Selecciona individualmente las facturas que deseas importar. No se importó ningún documento.');
     if(sourceRows.length===0)throw new Error('No se identificaron archivos con encabezados de '+(kind==='sales'?'ventas y cliente':'compras y proveedor')+'. Verifica número de factura y datos de la contraparte.');
-    const settlementPlans=planUniversalInvoiceSettlements(sourceRows,rows,kind);
+    const detectedSettlementPlans=planUniversalInvoiceSettlements(sourceRows,rows,kind);
+    const sameSettlementRows=settlementPreview.length===detectedSettlementPlans.reduce((sum,plan)=>sum+plan.settlements.length,0)&&
+     detectedSettlementPlans.flatMap(plan=>plan.settlements).every((item,index)=>settlementPreview[index]?.sourceRowId===item.sourceRowId);
+    const activeSettlementBankOverrides=sameSettlementRows?settlementBankOverrides:{};
+    if(!sameSettlementRows)setSettlementBankOverrides({});
+    const settlementPlans=detectedSettlementPlans.map(plan=>({...plan,settlements:plan.settlements.map(item=>({
+     ...item,bankAccountId:activeSettlementBankOverrides[item.sourceRowId]||item.bankAccountId
+    }))}));
     const settlementPlanByInvoice=new Map(settlementPlans.map(plan=>[plan.invoiceRowId,plan]));
     const linkedSettlementPreview=settlementPlans.flatMap(plan=>plan.settlements.map(settlement=>({
      invoiceRowId:plan.invoiceRowId,
@@ -436,6 +444,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      amountUsd:settlement.amountUsd,
      amountBs:settlement.amountBs,
      method:settlement.method,
+     bankAccountId:settlement.bankAccountId,
      reference:settlement.reference,
      destinationError:validateUniversalSettlementDestination(settlement,targetCompany.id,bankAccounts,accounts)
     })));
@@ -877,7 +886,19 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
         <td className="px-2 py-2 text-right tabular-nums">{item.bcvRate.toFixed(4)}</td>
         <td className="px-2 py-2 text-right tabular-nums">{item.amountUsd.toFixed(2)}</td><td className="px-2 py-2 text-right tabular-nums">{item.amountBs.toFixed(2)}</td>
         <td className="px-2 py-2">{item.reference||'—'}</td>
-        <td className="px-2 py-2">{item.destinationError?<span className="font-medium text-rose-700">{item.destinationError}</span>:<span className="font-medium text-emerald-700">Verificado</span>}</td>
+        <td className="px-2 py-2">
+         {(item.method==='BANK_TRANSFER_BS'||item.method==='BANK_TRANSFER_USD')&&<div className="mb-2 min-w-52">
+          <select className="w-full rounded border border-slate-300 bg-white px-2 py-1" value={settlementBankOverrides[item.sourceRowId]??item.bankAccountId??''} onChange={event=>{
+           const bankAccountId=event.target.value;
+           setSettlementBankOverrides(current=>({...current,[item.sourceRowId]:bankAccountId}));
+           setSettlementPreview(current=>current.map(row=>row.sourceRowId===item.sourceRowId?{...row,bankAccountId,destinationError:'Cuenta destino modificada; vuelve a confirmar para validar.'}:row));
+          }}>
+           <option value="">Seleccionar cuenta bancaria…</option>
+           {bankAccounts.filter(bank=>bank.companyId===targetCompanyId&&bank.currency===(item.method==='BANK_TRANSFER_USD'?'USD':'BS')).map(bank=><option key={bank.id} value={bank.id}>{bank.bankName} •••{String(bank.accountNumber||'').slice(-4)} — {bank.accountCode}</option>)}
+          </select>
+         </div>}
+         {item.destinationError?<span className="font-medium text-rose-700">{item.destinationError}</span>:<span className="font-medium text-emerald-700">Verificado</span>}
+        </td>
        </tr>)}</tbody>
       </table>
      </div>
