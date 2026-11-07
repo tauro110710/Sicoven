@@ -640,6 +640,8 @@ export interface BankAccount {
   initialBalanceUsd: number;
   accountType?: 'CORRIENTE' | 'AHORRO';
   checkbookNumber?: string;
+  accountHolderName?: string;
+  accountHolderRif?: string;
 }
 
 export type BankMovementType = 'DEBIT' | 'CREDIT';
