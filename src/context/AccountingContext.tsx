@@ -5673,6 +5673,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         correctBcvRate,
         accounts,
         addAccount,
+        updateAccount,
+        deleteAccount,
         setAccountCashFlowActivity,
         setAccountCashFlowIndirectTreatment,
         journalEntries: journalEntries.filter(e => e.companyId === currentCompany.id),
