@@ -49,8 +49,11 @@ export function buildSupplierAdvanceSettlementJournalItems(input: SupplierAdvanc
     }
   ];
   if (Math.abs(expectedDifference) >= 0.01) {
-    if (!validAccount(input.fxGainAccount) || !validAccount(input.fxLossAccount)) {
-      throw new Error('Faltan las cuentas de ganancia/pérdida por diferencial cambiario.');
+    if (expectedDifference > 0 && !validAccount(input.fxGainAccount)) {
+      throw new Error('Falta la cuenta de ganancia por diferencial cambiario.');
+    }
+    if (expectedDifference < 0 && !validAccount(input.fxLossAccount)) {
+      throw new Error('Falta la cuenta de pérdida por diferencial cambiario.');
     }
     if (expectedDifference > 0) {
       items.push({

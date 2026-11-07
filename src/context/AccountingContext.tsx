@@ -1668,8 +1668,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const differenceBs = fxAmounts.exchangeDifferenceBs;
     const gain = accounts.find(item => item.code === '4.2.1.01' && item.isMovement);
     const loss = accounts.find(item => item.code === '6.1.1.08' && item.isMovement);
-    if (Math.abs(differenceBs) >= 0.01 && !(gain && loss)) {
-      throw new Error('Faltan las cuentas de ganancia/pérdida por diferencial cambiario. No se registró la liquidación.');
+    if (differenceBs >= 0.01 && !gain) {
+      throw new Error('Falta la cuenta de ganancia por diferencial cambiario. No se registró la liquidación.');
+    }
+    if (differenceBs <= -0.01 && !loss) {
+      throw new Error('Falta la cuenta de pérdida por diferencial cambiario. No se registró la liquidación.');
     }
 
     const settlementJournalItems = buildSupplierAdvanceSettlementJournalItems({
