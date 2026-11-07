@@ -48,7 +48,7 @@ export const InventarioContableTools: React.FC = () => {
   const [sellingCost, setSellingCost] = useState('0');
   const [periodStart, setPeriodStart] = useState(new Date().getFullYear() + '-01-01');
   const [periodEnd, setPeriodEnd] = useState(new Date().toISOString().slice(0, 10));
-  const [closingRate, setClosingRate] = useState(String(currentCompany.bcvRate || ''));
+  const [closingRate, setClosingRate] = useState(String(currentCompany.inventoryBcvRate || ''));
   const [closingBusy, setClosingBusy] = useState(false);
   const [productionBusy, setProductionBusy] = useState(false);
   const [finishedProductId, setFinishedProductId] = useState(companyProducts.find(p => p.itemType === 'PRODUCTO_TERMINADO')?.id || '');
@@ -57,7 +57,7 @@ export const InventarioContableTools: React.FC = () => {
   const [componentQty, setComponentQty] = useState('1');
   const [productionQty, setProductionQty] = useState('1');
   const [productionDate, setProductionDate] = useState(new Date().toISOString().slice(0,10));
-  const [productionRate, setProductionRate] = useState(String(currentCompany.bcvRate || ''));
+  const [productionRate, setProductionRate] = useState(String(currentCompany.inventoryBcvRate || ''));
   const [productionRef, setProductionRef] = useState('');
 
   useEffect(() => {
@@ -126,7 +126,7 @@ export const InventarioContableTools: React.FC = () => {
         if (required.some(h => !headers.includes(h))) throw new Error('Faltan columnas obligatorias: code, name, currentStock y avgCostBs. Descargue la plantilla CSV.');
         const seenCodes = new Set<string>();
         const rows = records.map(({row,sourceLine}) => {
-          const validated = validateOpeningInventoryRow(row, sourceLine, Number(currentCompany.bcvRate));
+          const validated = validateOpeningInventoryRow(row, sourceLine, Number(currentCompany.inventoryBcvRate));
           const normalizedCode = row.code!.trim().toUpperCase();
           if (seenCodes.has(normalizedCode)) throw new Error('Fila ' + sourceLine + ': código duplicado en el archivo: ' + row.code);
           seenCodes.add(normalizedCode);
@@ -191,8 +191,8 @@ export const InventarioContableTools: React.FC = () => {
   ], companyProducts.map(p => [
     p.code,p.name,p.itemType || 'MERCANCIA',p.unit,p.currentStock,p.costingMethod || 'PROMEDIO_PONDERADO',
     p.avgCostBs,p.vnrProvisionBs || 0,Math.max(0,p.currentStock*p.avgCostBs-(p.vnrProvisionBs || 0)),
-    p.avgCostUsd,Math.max(0,p.currentStock*p.avgCostUsd-((p.vnrProvisionBs || 0)/(p.openingBcvRate || currentCompany.bcvRate))),
-    p.inventoryAccountCode || '1.1.4.01',p.costOfSalesAccountCode || '5.1.1.01',p.vatTreatment || 'GENERAL_16',p.openingBcvRate || currentCompany.bcvRate
+    p.avgCostUsd,Math.max(0,p.currentStock*p.avgCostUsd-((p.vnrProvisionBs || 0)/(p.openingBcvRate || currentCompany.inventoryBcvRate))),
+    p.inventoryAccountCode || '1.1.4.01',p.costOfSalesAccountCode || '5.1.1.01',p.vatTreatment || 'GENERAL_16',p.openingBcvRate || currentCompany.inventoryBcvRate
   ]));
 
   const exportInventoryBalancePdf = () => {
@@ -210,13 +210,13 @@ export const InventarioContableTools: React.FC = () => {
       Number(p.currentStock).toFixed(3), Number(p.avgCostBs).toFixed(2),
       Number(p.currentStock * p.avgCostBs).toFixed(2), Number(p.vnrProvisionBs || 0).toFixed(2),
       Math.max(0,p.currentStock*p.avgCostBs-Number(p.vnrProvisionBs || 0)).toFixed(2),
-      Math.max(0,p.currentStock*p.avgCostUsd-Number(p.vnrProvisionBs || 0)/Math.max(Number(currentCompany.bcvRate || 0),0.000001)).toFixed(6)
+      Math.max(0,p.currentStock*p.avgCostUsd-Number(p.vnrProvisionBs || 0)/Math.max(Number(currentCompany.inventoryBcvRate || 0),0.000001)).toFixed(6)
     ]);
     autoTable(doc, {
       startY: 34,
       head: [['Cuenta inventario','Código','Descripción','Clasificación','Unidad','Cantidad','Costo unit. Bs.','Valor bruto Bs.','Provisión VNR Bs.','Valor neto Bs.','Valor neto USD']],
       body: rows,
-      foot: [['TOTAL','','','','','','',companyProducts.reduce((sum,p)=>sum+p.currentStock*p.avgCostBs,0).toFixed(2),companyProducts.reduce((sum,p)=>sum+Number(p.vnrProvisionBs || 0),0).toFixed(2),companyProducts.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostBs-Number(p.vnrProvisionBs || 0)),0).toFixed(2),companyProducts.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostUsd-Number(p.vnrProvisionBs || 0)/Math.max(Number(currentCompany.bcvRate || 0),0.000001)),0).toFixed(6)]],
+      foot: [['TOTAL','','','','','','',companyProducts.reduce((sum,p)=>sum+p.currentStock*p.avgCostBs,0).toFixed(2),companyProducts.reduce((sum,p)=>sum+Number(p.vnrProvisionBs || 0),0).toFixed(2),companyProducts.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostBs-Number(p.vnrProvisionBs || 0)),0).toFixed(2),companyProducts.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostUsd-Number(p.vnrProvisionBs || 0)/Math.max(Number(currentCompany.inventoryBcvRate || 0),0.000001)),0).toFixed(6)]],
       styles: { fontSize: 7, cellPadding: 1, overflow: 'linebreak' },
       headStyles: { fontSize: 7 },
       footStyles: { fontStyle: 'bold' },
@@ -238,7 +238,7 @@ export const InventarioContableTools: React.FC = () => {
     m.date,m.documentType || '',m.documentRef,m.counterpartyRif || '',m.counterpartyName || '',m.productCode,m.productName,m.concept,m.type,
     m.type === 'ENTRADA' ? m.quantity : 0,m.type === 'ENTRADA' ? m.unitCostBs : 0,
     m.type === 'SALIDA' ? m.quantity : 0,m.type === 'SALIDA' ? m.unitCostBs : 0,m.balanceQty,m.balanceTotalBs,
-    m.bcvRate || currentCompany.bcvRate,m.type === 'ENTRADA' ? m.totalCostUsd : 0,m.type === 'SALIDA' ? m.totalCostUsd : 0,m.balanceTotalUsd,
+    m.bcvRate || currentCompany.inventoryBcvRate,m.type === 'ENTRADA' ? m.totalCostUsd : 0,m.type === 'SALIDA' ? m.totalCostUsd : 0,m.balanceTotalUsd,
     companyProducts.find(p => p.id === m.productId)?.inventoryAccountCode || '1.1.4.01'
   ]));
 
@@ -260,7 +260,7 @@ export const InventarioContableTools: React.FC = () => {
       m.type === 'SALIDA' ? String(m.quantity) : '—',
       m.type === 'SALIDA' ? Number(m.unitCostBs).toFixed(2) : '—',
       Number(m.balanceQty).toFixed(3), Number(m.balanceTotalBs).toFixed(2),
-      Number(m.bcvRate || currentCompany.bcvRate).toFixed(6), Number(m.balanceTotalUsd).toFixed(6)
+      Number(m.bcvRate || currentCompany.inventoryBcvRate).toFixed(6), Number(m.balanceTotalUsd).toFixed(6)
     ]);
     autoTable(doc, {
       startY: 34,
@@ -285,7 +285,7 @@ export const InventarioContableTools: React.FC = () => {
       return;
     }
     try {
-      const rate = Number(currentCompany.bcvRate);
+      const rate = Number(currentCompany.inventoryBcvRate);
       if (!Number.isFinite(rate) || rate <= 0) throw new Error('La empresa no tiene una tasa BCV válida.');
       const oldProvision = Number(selectedProduct.vnrProvisionBs || 0);
       const delta = Math.round((vnr.writeDownBs - oldProvision) * 100) / 100;
