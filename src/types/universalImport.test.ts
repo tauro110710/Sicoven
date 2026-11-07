@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -178,4 +178,29 @@ test('detecta renglones de mercancía relacionados por referencia explícita sin
   const invoice = { migrationfile: 'archivo-a', id: 'F-1' };
   const rows = [invoice, { migrationfile: 'archivo-a', invoiceId: 'F-1', productCode: 'SKU-1', quantity: 2 }, { migrationfile: 'archivo-b', invoiceId: 'F-1', productCode: 'SKU-2', quantity: 1 }];
   assert.equal(resolveUniversalPurchaseDetailRows(rows, invoice).length, 1);
+});
+
+
+test('prepara líneas de venta y concilia mercancía, IVA y exento con la factura', () => {
+  const products = [
+    { id: 'p1', code: 'A-1', name: 'Artículo 16%', vatTreatment: 'GENERAL_16' as const },
+    { id: 'p2', code: 'B-1', name: 'Artículo exento', vatTreatment: 'EXENTO' as const }
+  ];
+  const lines = prepareUniversalSaleInventoryLines([
+    { sku: 'A-1', quantity: 2, unitPriceBs: 50 },
+    { sku: 'B-1', quantity: 1, unitPriceBs: 20 }
+  ], products, { taxRate: 16, taxableBaseBs: 100, exemptAmountBs: 20, vatAmountBs: 16 });
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0].totalBs, 116);
+  assert.equal(lines[1].exemptAmountBs, 20);
+});
+
+test('bloquea ventas con tasas mezcladas, artículo ajeno o totales que no concilian', () => {
+  const products = [
+    { id: 'p1', code: 'A-1', name: 'Artículo 16%', vatTreatment: 'GENERAL_16' as const },
+    { id: 'p2', code: 'B-1', name: 'Artículo 8%', vatTreatment: 'REDUCIDA_8' as const }
+  ];
+  assert.throws(() => prepareUniversalSaleInventoryLines([{ sku: 'B-1', quantity: 1, unitPriceBs: 10 }], products, { taxRate: 16, taxableBaseBs: 10, exemptAmountBs: 0, vatAmountBs: 1.6 }));
+  assert.throws(() => prepareUniversalSaleInventoryLines([{ sku: 'NO-EXISTE', quantity: 1, unitPriceBs: 10 }], products, { taxRate: 16, taxableBaseBs: 10, exemptAmountBs: 0, vatAmountBs: 1.6 }));
+  assert.throws(() => prepareUniversalSaleInventoryLines([{ sku: 'A-1', quantity: 1, unitPriceBs: 10 }], products, { taxRate: 16, taxableBaseBs: 11, exemptAmountBs: 0, vatAmountBs: 1.76 }));
 });
