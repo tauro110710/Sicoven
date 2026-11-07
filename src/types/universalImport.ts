@@ -165,7 +165,7 @@ export const resolveUniversalPurchaseDetailRows = (
 export const prepareUniversalSaleInventoryLines = (
   rawLines: unknown[],
   products: Pick<InventoryProduct, 'id' | 'code' | 'name' | 'vatTreatment'>[],
-  invoice: { taxRate: number; taxableBaseBs: number; exemptAmountBs: number; vatAmountBs: number; bcvRate: number }
+  invoice: { taxRate: number; taxableBaseBs: number; exemptAmountBs: number; vatAmountBs: number; bcvRate?: number }
 ): SaleInventoryLine[] => {
   if (!Array.isArray(rawLines) || rawLines.length === 0) throw new Error('La factura no contiene renglones de mercancía importables.');
   const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
