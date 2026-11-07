@@ -245,9 +245,10 @@ export const resolveUniversalInvoiceSettlementRows = (
     const productCode = pickValue(candidate, ['productCode','codigoProducto','productSku','sku','itemCode','codigo','code']);
     const quantity = pickValue(candidate, ['quantity','cantidad','qty']);
     if (productCode !== undefined && quantity !== undefined) return false;
-    return pickValue(candidate, dateKeys) !== undefined &&
-      pickValue(candidate, amountKeys) !== undefined &&
-      pickValue(candidate, evidenceKeys) !== undefined;
+    const hasDate = pickValue(candidate, dateKeys) !== undefined;
+    const hasAmount = pickValue(candidate, amountKeys) !== undefined;
+    const hasEvidence = pickValue(candidate, evidenceKeys) !== undefined;
+    return hasDate && hasAmount && (idMatch || hasEvidence);
   });
 };
 
