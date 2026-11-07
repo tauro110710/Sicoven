@@ -10,6 +10,7 @@ import {
   SaleRecord,
   InventoryProduct,
   InventoryMovement,
+  InventoryMovementImportDraft,
   VatRetentionVoucher,
   VatWithholdingDeclaration,
   VatWithholdingDeclarationEvent,
@@ -156,7 +157,7 @@ interface AccountingContextType {
   addProduct: (product: Omit<InventoryProduct, 'id' | 'companyId'>) => InventoryProduct;
   getCompanyInventoryProducts: (companyId: string) => InventoryProduct[];
   importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[], targetCompanyId?: string) => Promise<number>;
-  importInventoryMovements: (movements: Omit<InventoryMovement, 'id' | 'companyId'>[], targetCompanyId?: string) => number;
+  importInventoryMovements: (movements: InventoryMovementImportDraft[], targetCompanyId?: string) => number;
   executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => Promise<InventoryMovement[]>;
   updateProduct: (product: InventoryProduct, reason: string, workpaperNote: string) => Promise<void>;
   movements: InventoryMovement[];
@@ -3725,7 +3726,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
 
-  const importInventoryMovements = (rows: Omit<InventoryMovement, 'id' | 'companyId'>[], targetCompanyId: string = currentCompany.id): number => {
+  const importInventoryMovements = (rows: InventoryMovementImportDraft[], targetCompanyId: string = currentCompany.id): number => {
     const targetCompany = companies.find(company => company.id === targetCompanyId);
     if (!targetCompany) throw new Error('La empresa destino de los movimientos no existe en SICOVEN.');
     if (!Array.isArray(rows) || rows.length === 0) throw new Error('El archivo no contiene movimientos para importar.');
@@ -3803,7 +3804,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const newAverageUsd = newAverageBs / rate;
       const movement: InventoryMovement = {
         ...row, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
-        companyId: targetCompany.id, quantity: movementQuantity, unitCostBs, unitCostUsd: unitCostBs / rate, additionalLandedCostsBs: landedCostsBs,
+        companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: unitCostBs / rate, additionalLandedCostsBs: landedCostsBs,
         totalCostBs, totalCostUsd, balanceQty: newStock,
         balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
         balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
