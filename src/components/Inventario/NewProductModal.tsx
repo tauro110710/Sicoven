@@ -82,7 +82,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   const bcvRate = parseDecimalInput(openingBcvRateInput);
   const currentBcvRate = Number(currentCompany.inventoryBcvRate || 0);
   const avgCostBs = avgCostUsd * bcvRate;
-  const salesPriceBs = salesPriceUsd * (currentBcvRate > 0 ? currentBcvRate : bcvRate);
+  const salesPriceBs = salesPriceUsd * currentBcvRate;
 
   const movementAccounts = accounts.filter(account => account.isMovement);
   const inventoryAccounts = movementAccounts.filter(account => account.type === 'ACTIVO');
@@ -93,6 +93,8 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
     e.preventDefault();
     setError('');
     if (!code.trim() || !name.trim()) { setError('El código y la descripción son obligatorios.'); return; }
+    if (!Number.isFinite(marginPercent) || marginPercent < 0 || marginPercent >= 100) { setError('El margen bruto debe estar entre 0% y menos de 100%.'); return; }
+    if (salesPriceUsd > 0 && currentBcvRate <= 0 && (!product || salesPriceUsd !== Number(product.salesPriceUsd || 0))) { setError('No hay una tasa BCV vigente disponible para calcular el precio en bolívares. No se guardó un equivalente desactualizado.'); return; }
     if (!product && (currentStock > 0 || avgCostUsd > 0) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('Ingrese la tasa BCV histórica aplicable al inventario inicial, por ejemplo 889,67.'); return; }
     if (savingRef.current) return;
     savingRef.current = true;
@@ -106,7 +108,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
         ...product,
         code: code.trim().toUpperCase(), name: name.trim().toUpperCase(),
         category: category.trim(), unit: unit.trim(), minStock: Number(minStock) || 0,
-        salesPriceBs: Number(salesPriceBs) || 0,
+        salesPriceBs: currentBcvRate > 0 ? (Number(salesPriceBs) || 0) : product.salesPriceBs,
         salesPriceUsd: Number(salesPriceUsd) || 0,
         vatTreatment,
         targetMarginPercent: marginPercent
