@@ -230,8 +230,8 @@ export const resolveUniversalInvoiceSettlementRows = (
   const invoiceNumberKeys = ['invoiceNumber','numeroFactura','factura','documentNumber','referencedInvoiceNumber','affectedInvoiceNumber','facturaAfectada'];
   const partyRifKeys = ['customerRif','clientRif','supplierRif','vendorRif','rifCliente','rifProveedor','partyRif','rif'];
   const dateKeys = ['settlementDate','paymentDate','collectionDate','fechaPago','fechaCobro','date','fecha'];
-  const amountKeys = ['settlementAmountBs','paymentAmountBs','collectionAmountBs','amountBs','amountUsd','amount','importe','monto','montoBs','montoUsd'];
-  const evidenceKeys = ['method','paymentMethod','settlementMethod','collectionMethod','medioPago','formaPago','reference','paymentReference','collectionReference','referenceNumber','comprobante','bankAccountId','transactionId'];
+  const amountKeys = ['settlementAmountBs','paymentAmountBs','collectionAmountBs','amountBs','amountUsd','amount','importe','monto','montoBs','montoUsd','paidAmount','amountPaid','collectedAmount','amountCollected','paymentAmount','collectionAmount'];
+  const evidenceKeys = ['method','paymentMethod','settlementMethod','collectionMethod','medioPago','formaPago','reference','paymentReference','collectionReference','referenceNumber','comprobante','bankAccountId','transactionId','transactionType','type','tipoMovimiento','tipoOperacion'];
   return rows.filter(candidate => {
     if (candidate === invoice || String(candidate.migrationfile ?? '') !== fileId) return false;
     const reference = pickValue(candidate, foreignKeys);
