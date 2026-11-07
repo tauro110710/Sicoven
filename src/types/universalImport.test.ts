@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -146,4 +146,20 @@ test('preserva dirección, correo y condición fiscal de la contraparte relacion
     taxStatus: 'ORDINARY',
     source: 'related-record'
   });
+});
+
+
+test('normaliza tipos de movimientos históricos sin inferir valores desconocidos', () => {
+  assert.equal(mapUniversalInventoryMovementType('Entrada'), 'ENTRADA');
+  assert.equal(mapUniversalInventoryMovementType('OUT'), 'SALIDA');
+  assert.equal(mapUniversalInventoryMovementType('adjustment'), 'AJUSTE');
+  assert.equal(mapUniversalInventoryMovementType('transfer'), null);
+});
+
+test('normaliza conceptos de movimientos históricos y rechaza conceptos desconocidos', () => {
+  assert.equal(mapUniversalInventoryMovementConcept('Compra'), 'COMPRA');
+  assert.equal(mapUniversalInventoryMovementConcept('Inventario inicial'), 'INVENTARIO_INICIAL');
+  assert.equal(mapUniversalInventoryMovementConcept('Autoconsumo'), 'AUTOCONSUMO');
+  assert.equal(mapUniversalInventoryMovementConcept('Devolución a proveedor'), 'DEVOLUCION_COMPRA');
+  assert.equal(mapUniversalInventoryMovementConcept('consignación'), null);
 });
