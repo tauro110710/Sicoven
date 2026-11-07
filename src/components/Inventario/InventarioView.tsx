@@ -57,7 +57,6 @@ export const InventarioView: React.FC = () => {
         }
         let nextHistory = history;
         for (const dailyRate of providerHistory) {
-          if (latestSavedDate && dailyRate.effectiveDate < latestSavedDate) continue;
           nextHistory = appendDailyInventoryBcvRate(nextHistory, {
             rate: dailyRate.rate,
             effectiveDate: dailyRate.effectiveDate,
