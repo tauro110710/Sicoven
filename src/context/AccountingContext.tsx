@@ -154,7 +154,7 @@ interface AccountingContextType {
   // Inventario
   products: InventoryProduct[];
   addProduct: (product: Omit<InventoryProduct, 'id' | 'companyId'>) => InventoryProduct;
-  importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[]) => number;
+  importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[]) => Promise<number>;
   importInventoryMovements: (movements: Omit<InventoryMovement, 'id' | 'companyId'>[]) => number;
   executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => Promise<InventoryMovement[]>;
   updateProduct: (product: InventoryProduct, reason: string, workpaperNote: string) => Promise<void>;
@@ -3633,7 +3633,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
 
-  const importInventoryProducts = (rows: Omit<InventoryProduct, 'id' | 'companyId'>[]): number => {
+  const importInventoryProducts = async (rows: Omit<InventoryProduct, 'id' | 'companyId'>[]): Promise<number> => {
+    assertSQLitePersistenceReady('Importar inventario');
     if (!Array.isArray(rows) || rows.length === 0) throw new Error('El archivo no contiene artículos para importar.');
     const existingCodes = new Set(products.filter(p => p.companyId === currentCompany.id).map(p => p.code.trim().toLocaleUpperCase()));
     const batchCodes = new Set<string>();
@@ -3700,9 +3701,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       prepared.push(product);
     }
     openingEntries.forEach(entry => reserveBankOutgoingAccounts(entry.companyId, entry.items));
+    // Confirmar la escritura del snapshot completo (productos, Kardex y asientos)
+    // en SQLite antes de informar éxito al asistente de importación.
+    const persistenceConfirmation = waitForPersistence();
     setProducts(prev => [...prev, ...prepared]);
     if (openingMovements.length) setMovements(prev => [...prev, ...openingMovements]);
     if (openingEntries.length) setJournalEntries(prev => [...prev, ...openingEntries]);
+    await persistenceConfirmation;
     return prepared.length;
   };
 
