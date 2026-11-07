@@ -1874,6 +1874,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const amountUsd = Math.round(draft.amountUsd * 100) / 100;
     const fxGain = accounts.find(account => account.code === '4.2.1.01' && account.isMovement);
     const fxLoss = accounts.find(account => account.code === '6.1.1.08' && account.isMovement);
+    let entry: JournalEntry;
+    try {
       entry = addJournalEntry({
         entryNumber: 0,
         date: draft.settlementDate,
