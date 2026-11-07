@@ -383,6 +383,6 @@ export async function downloadFile(
   } catch (error) {
     const message = error instanceof Error ? error.message : 'No fue posible guardar el archivo.';
     window.alert(`No se pudo descargar el archivo: ${message}`);
-    throw error;
+    return;
   }
 }
