@@ -334,3 +334,106 @@ test('una compra universal con líneas concilia factura, asiento y entradas de K
     db.close();
   }
 });
+
+
+test('una venta universal con líneas requiere salidas de Kardex y asientos de costo vinculados en SQLite', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE app_state (
+      state_key TEXT PRIMARY KEY, state_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL,
+      details_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  try {
+    const prior = emptyState();
+    prior.accounts.push(
+      { code: '1.1.2.01', name: 'Cuentas por cobrar clientes', type: 'ACTIVO', level: 4, isMovement: true },
+      { code: '1.1.4.01', name: 'Inventario de mercancías', type: 'ACTIVO', level: 4, isMovement: true },
+      { code: '2.1.2.01', name: 'IVA débito fiscal', type: 'PASIVO', level: 4, isMovement: true },
+      { code: '5.1.1.01', name: 'Costo de ventas', type: 'COSTOS', level: 4, isMovement: true }
+    );
+    const product = {
+      id: 'prod-sale-import-1', companyId: 'company-1', code: 'SKU-SALE-1',
+      name: 'Mercancía vendida', currentStock: 5, avgCostBs: 50, avgCostUsd: 5,
+      lastCostBs: 50, lastCostUsd: 5, inventoryAccountCode: '1.1.4.01',
+      costOfSalesAccountCode: '5.1.1.01', costingMethod: 'PROMEDIO_PONDERADO',
+      vatTreatment: 'GENERAL_16', itemType: 'MERCANCIA', unit: 'Unidad'
+    };
+    prior.products = [product];
+    persistAccountingSnapshot(db, prior, { id: 1, username: 'admin', role: 'admin' });
+
+    const sale = {
+      id: 'sale-import-1', companyId: 'company-1', opNumber: 1,
+      documentType: '01', invoiceNumber: 'SALE-IMPORT-001', controlNumber: 'CTRL-SALE-001',
+      invoiceDate: '2026-11-06', customerRif: 'J-12345678-9',
+      customerName: 'Cliente de prueba', paymentTerm: 'CREDITO',
+      bcvRate: 10, totalAmountBs: 116, taxableBaseBs: 100,
+      exemptAmountBs: 0, taxRate: 16, vatAmountBs: 16, vatWithheldBs: 0,
+      igtfAmountBs: 0, totalAmountUsd: 11.6, taxableBaseUsd: 10,
+      vatAmountUsd: 1.6, vatWithheldUsd: 0, igtfAmountUsd: 0,
+      journalEntryId: 'entry-sale-invoice-1',
+      inventoryLines: [{
+        productId: product.id, productCode: product.code, productName: product.name,
+        quantity: 1, unitPriceBs: 100, unitPriceUsd: 10,
+        netAmountBs: 100, taxRate: 16, vatAmountBs: 16,
+        exemptAmountBs: 0, totalBs: 116
+      }]
+    };
+    const saleEntry = {
+      id: sale.journalEntryId, companyId: 'company-1', entryNumber: 1,
+      date: sale.invoiceDate, description: 'Venta universal SALE-IMPORT-001',
+      type: 'VENTA', bcvRate: 10, referenceDoc: 'FAC-SALE-IMPORT-001',
+      items: [
+        { accountCode: '1.1.2.01', debitBs: 116, creditBs: 0, debitUsd: 11.6, creditUsd: 0 },
+        { accountCode: '4.1.1.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 10 },
+        { accountCode: '2.1.2.01', debitBs: 0, creditBs: 16, debitUsd: 0, creditUsd: 1.6 }
+      ], createdAt: '2026-11-06T10:00:00.000Z'
+    };
+    const costEntry = {
+      id: 'entry-sale-cost-1', companyId: 'company-1', entryNumber: 2,
+      date: sale.invoiceDate, description: 'Costo de venta SKU-SALE-1',
+      type: 'INVENTARIO', bcvRate: 10, referenceDoc: 'FAC-SALE-IMPORT-001',
+      items: [
+        { accountCode: '5.1.1.01', debitBs: 50, creditBs: 0, debitUsd: 5, creditUsd: 0 },
+        { accountCode: '1.1.4.01', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 5 }
+      ], createdAt: '2026-11-06T10:00:01.000Z'
+    };
+    const movement = {
+      id: 'movement-sale-import-1', companyId: 'company-1',
+      productId: product.id, productName: product.name, productCode: product.code,
+      date: sale.invoiceDate, type: 'SALIDA', concept: 'VENTA',
+      documentRef: 'FAC-SALE-IMPORT-001', quantity: 1,
+      unitCostBs: 50, unitCostUsd: 5, totalCostBs: 50, totalCostUsd: 5,
+      balanceQty: 4, balanceTotalBs: 200, balanceTotalUsd: 20,
+      bcvRate: 10, costingMethod: 'PROMEDIO_PONDERADO',
+      counterpartyRif: sale.customerRif, counterpartyName: sale.customerName,
+      journalEntryId: costEntry.id
+    };
+    const nextProduct = { ...product, currentStock: 4 };
+    const imported = {
+      ...prior, sales: [sale], products: [nextProduct], movements: [movement],
+      journalEntries: [saleEntry, costEntry]
+    };
+    assert.equal(persistAccountingSnapshot(db, imported, { id: 1, username: 'admin', role: 'admin' }).ok, true);
+    const saved = JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
+    assert.equal(saved.sales[0].invoiceNumber, 'SALE-IMPORT-001');
+    assert.equal(saved.movements[0].concept, 'VENTA');
+    assert.equal(saved.journalEntries.length, 2);
+    assert.equal(saved.products[0].currentStock, 4);
+
+    const invalid = {
+      ...imported, movements: [], journalEntries: [saleEntry]
+    };
+    assert.throws(() => persistAccountingSnapshot(db, invalid, { id: 1, username: 'admin', role: 'admin' }),
+      /salidas de Kardex y los asientos de costo de ventas vinculados/);
+    const afterRejectedWrite = JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
+    assert.equal(afterRejectedWrite.movements.length, 1);
+    assert.equal(afterRejectedWrite.journalEntries.length, 2);
+  } finally {
+    db.close();
+  }
+});
