@@ -136,6 +136,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const isPosvenV3=String(root.app??'').toLowerCase()==='posven-pro'&&Number(root.version)===3;
     const hasSafeInventoryAdapter=isPosvenV3&&/^(productos|products|inventario|inventory)$/.test(key);
     if(hasSafeInventoryAdapter){mode='Importador disponible';reason='Existe un adaptador específico para artículos activos no-kit. Cada registro se revisa por separado y los kits/inactivos se explican y excluyen en este adaptador.';}
+    else if(/^(users|usuarios|terminales|terminals)$/.test(key)){mode='No importar';reason='Contiene usuarios, credenciales o configuración de terminales del sistema de origen. No se trasladan automáticamente porque SICOVEN debe mantener sus propios usuarios, permisos, sesiones, cajas y controles de seguridad.';}
+    else if(/^(cxc|cxp|cuentasporcobrar|cuentasporpagar|receivables|payables|librodiario|journalentries|journal|asientos|reportesz|zreports|devoluciones|returns|anulaciones|voids)$/.test(key)){mode='Conciliación / auditoría';reason+=' No se importa directamente: debe enlazarse con sus facturas, pagos, operaciones originales y asientos para evitar duplicar saldos o reversos.';}
     else {mode='Análisis solamente';reason+=' No hay todavía un adaptador de importación validado para esta colección; se puede revisar y seleccionar para planificar, pero no se escribirá en SICOVEN.';}
     return {name,count:list.length,objects:objects.length,primitive,invalid:list.filter(row=>row===null||row===undefined).length,fields,identityField,missingIdentity,duplicateIdentity,numericSummaries,referenceFields,relationshipHints,target,mode,reason};
    });
