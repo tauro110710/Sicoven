@@ -107,7 +107,7 @@ export const resolveUniversalPartyReference = (
 };
 
 export const hasUniversalNestedMerchandiseDetails = (invoice: Record<string, unknown>): boolean => {
-  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const wanted = new Set(['saleLines','inventoryLines','items','lines','details','detalles','detalle'].map(normalize));
   let nested: unknown;
   for (const [key, value] of Object.entries(invoice)) {
