@@ -296,3 +296,23 @@ test('valida correspondencia entre tipo y concepto de movimiento y normaliza ref
   assert.equal(normalizeUniversalDocumentReference('FAC-000123'), '000123');
   assert.equal(normalizeUniversalDocumentReference('Factura 000123'), '000123');
 });
+
+
+test('resuelve detalles de venta POSVEN por ventaId dentro del mismo archivo', () => {
+  const invoice = { migrationfile: 'posven.json', id: 'SALE-9', numero: 'V-9' };
+  const rows = [
+    invoice,
+    { migrationfile: 'posven.json', ventaId: 'SALE-9', codigoProducto: 'SKU-9', cantidad: 2, precioUnitarioBs: 15 },
+    { migrationfile: 'otro.json', ventaId: 'SALE-9', codigoProducto: 'SKU-10', cantidad: 1, precioUnitarioBs: 10 }
+  ];
+  assert.equal(resolveUniversalPurchaseDetailRows(rows, invoice).length, 1);
+});
+
+test('agrupa diarios desde encabezados normalizados por el lector universal', () => {
+  const groups = groupUniversalJournalRows([
+    { migrationfile: 'a.json', fecha: '2026-01-01', numeroasiento: '1', cuenta: '1.1' },
+    { migrationfile: 'a.json', fecha: '2026-01-01', numeroasiento: '1', cuenta: '3.1' }
+  ]);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].rows.length, 2);
+});
