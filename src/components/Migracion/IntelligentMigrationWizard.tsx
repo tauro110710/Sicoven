@@ -204,7 +204,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      sales:[['invoiceDate','fecha','date'],['invoiceNumber','factura','documento'],['totalAmountBs','total','totalbs','monto']],
      purchases:[['invoiceDate','fecha','date'],['invoiceNumber','factura','documento'],['totalAmountBs','total','totalbs','monto']],
      accounts:[['accountCode','codigo','code','cuenta'],['accountName','nombre','descripcion','name']],
-     journal:[['fecha','date'],['accountCode','cuenta','codigocuenta'],['debitBs','debito','debe','debit'],['creditBs','credito','haber','credit']]
+     journal:[['fecha','date'],['accountCode','cuenta','codigocuenta'],['debitBs','debito','debe','debit'],['creditBs','credito','haber','credit']],
+     movements:[['productCode','codigoProducto','sku','code','codigo'],['date','fecha','movementDate'],['type','movementType','tipoMovimiento','tipo'],['documentRef','referencia','documento'],['quantity','cantidad','qty','balanceQty','existenciaFinal'],['unitCostBs','costoUnitarioBs','unitCost','costoUnitario']]
     };
     const groups=groupsByModule[m.id]??[m.fields];
     const matchedGroups=groups.filter(group=>group.some(key=>keys.has(norm(key)))).length;
@@ -216,7 +217,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      sales:['invoicenumber','numerofactura','customerrif'],
      purchases:['invoicenumber','numerofactura','supplierrif'],
      accounts:['accountcode','accountname','clasificacion'],
-     journal:['accountcode','codigocuenta','debitbs','creditbs','debe','haber']
+     journal:['accountcode','codigocuenta','debitbs','creditbs','debe','haber'],
+     movements:['productcode','codigoproducto','sku','documentref','movementtype','tipomovimiento']
     };
     const hasSpecific=(specificSignals[m.id]??[]).some(key=>keys.has(norm(key)));
     if(matchedGroups<2&&!hasSpecific) continue;
@@ -229,7 +231,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const journalReady=m.id==='journal'&&['date','fecha'].some(k=>keys.has(norm(k)))&&['accountcode','codigocuenta','cuenta'].some(k=>keys.has(norm(k)))&&['debitbs','debe','debito'].some(k=>keys.has(norm(k)))&&['creditbs','haber','credito'].some(k=>keys.has(norm(k)));
     const salesReady=m.id==='sales'&&['invoicedate','fecha'].some(k=>keys.has(norm(k)))&&['invoicenumber','factura','documento'].some(k=>keys.has(norm(k)))&&['customerrif','rifcliente','rif'].some(k=>keys.has(norm(k)))&&['customername','cliente','nombrecliente'].some(k=>keys.has(norm(k)))&&['totalamountbs','totalbs','total'].some(k=>keys.has(norm(k)));
     const purchasesReady=m.id==='purchases'&&['invoicedate','fecha'].some(k=>keys.has(norm(k)))&&['invoicenumber','factura','documento'].some(k=>keys.has(norm(k)))&&['supplierrif','rifproveedor','rif'].some(k=>keys.has(norm(k)))&&['suppliername','proveedor','nombreproveedor'].some(k=>keys.has(norm(k)))&&['totalamountbs','totalbs','total'].some(k=>keys.has(norm(k)));
-    const readyFinal=ready||accountReady||journalReady||salesReady||purchasesReady;
+    const movementsReady=m.id==='movements'&&['productcode','codigoproducto','sku','code','codigo'].some(k=>keys.has(norm(k)))&&['date','fecha','movementdate'].some(k=>keys.has(norm(k)))&&['type','movementtype','tipomovimiento','tipo'].some(k=>keys.has(norm(k)))&&['concept','concepto','movementconcept'].some(k=>keys.has(norm(k)))&&['documentref','referencia','documento','invoicenumber'].some(k=>keys.has(norm(k)))&&['unitcostbs','costobs','costounitario','unitcost'].some(k=>keys.has(norm(k)))&&['bcvrate','tasabcv'].some(k=>keys.has(norm(k)))&&(['quantity','cantidad','qty'].some(k=>keys.has(norm(k)))||['balanceqty','existenciafinal','stockfinal'].some(k=>keys.has(norm(k))));
+    const readyFinal=ready||accountReady||journalReady||salesReady||purchasesReady||movementsReady;
     detected.push({...m,source,matched,missing,detected:true,ready:readyFinal});
    }
   }
