@@ -408,7 +408,7 @@ export const findUniversalInvoiceJournalCollision = (
   const normalizedInvoice = normalizeUniversalDocumentReference(invoiceNumber);
   if (!normalizedInvoice) return undefined;
   return entries.find(entry =>
-    (!expectedType || entry.type === expectedType) &&
+    (!expectedType || entry.type === expectedType || entry.type === 'MANUAL' || !entry.type) &&
     normalizeUniversalDocumentReference(entry.referenceDoc) === normalizedInvoice
   );
 };
