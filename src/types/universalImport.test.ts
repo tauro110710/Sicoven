@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -246,4 +246,53 @@ test('bloquea líneas de compra ambiguas, duplicadas, ajenas o sin conciliación
   assert.throws(() => prepareUniversalPurchaseInventoryLines([{ sku: 'NO-EXISTE', quantity: 1, unitCostBs: 10 }], products, { taxableBaseBs: 10, exemptAmountBs: 0, bcvRate: 1 }), /No se asociará por descripción/);
   assert.throws(() => prepareUniversalPurchaseInventoryLines([{ sku: 'A-1', quantity: 1, unitCostBs: 10 }], products, { taxableBaseBs: 11, exemptAmountBs: 0, bcvRate: 1 }), /no concilian/);
   assert.throws(() => prepareUniversalPurchaseInventoryLines([{ sku: 'A-1', quantity: 1, unitCostUsd: 10 }], products, { taxableBaseBs: 10, exemptAmountBs: 0, bcvRate: 0 }), /tasa BCV positiva/);
+});
+
+
+test('clasifica ventas y compras por los campos de cada factura sin cruzar colecciones del mismo archivo', () => {
+  const rows = [
+    { migrationfile: 'respaldo.json', migrationcollection: 'ventas', migrationrowid: 'ventas|0', invoiceNumber: 'V-1', fecha: '2026-01-02', total: 116, clienteId: 'C-1' },
+    { migrationfile: 'respaldo.json', migrationcollection: 'compras', migrationrowid: 'compras|0', invoiceNumber: 'C-1', fecha: '2026-01-03', total: 232, proveedorId: 'P-1' },
+    { migrationfile: 'respaldo.json', migrationcollection: 'otros', migrationrowid: 'otros|0', invoiceNumber: 'X-1', fecha: '2026-01-04', total: 50, clienteId: 'C-1', proveedorId: 'P-1' },
+    { migrationfile: 'otro.json', migrationcollection: 'ventas', migrationrowid: 'ventas|0', invoiceNumber: 'V-2', fecha: '2026-01-05', total: 80, customerName: 'Cliente' }
+  ];
+  const result = classifyUniversalInvoiceRows(rows);
+  assert.deepEqual(result.sales.map(row => row.invoiceNumber), ['V-1','V-2']);
+  assert.deepEqual(result.purchases.map(row => row.invoiceNumber), ['C-1']);
+  assert.deepEqual(result.ambiguous.map(row => row.invoiceNumber), ['X-1']);
+});
+
+test('no clasifica una fila como factura si carece de fecha, total o contraparte explícita', () => {
+  const rows = [
+    { invoiceNumber: 'V-1', customerName: 'Cliente' },
+    { invoiceNumber: 'V-2', fecha: '2026-01-02', customerName: 'Cliente' },
+    { invoiceNumber: 'V-3', fecha: '2026-01-02', total: 10 }
+  ];
+  const result = classifyUniversalInvoiceRows(rows);
+  assert.equal(result.sales.length, 0);
+  assert.equal(result.purchases.length, 0);
+  assert.equal(result.ambiguous.length, 0);
+});
+
+test('agrupa asientos por archivo, fecha y referencia sin mezclar fuentes', () => {
+  const groups = groupUniversalJournalRows([
+    { migrationfile: 'a.json', date: '2026-01-01', referenceDoc: 'AS-1', accountCode: '1.1' },
+    { migrationfile: 'a.json', date: '2026-01-01', referenceDoc: 'AS-1', accountCode: '3.1' },
+    { migrationfile: 'b.json', date: '2026-01-01', referenceDoc: 'AS-1', accountCode: '1.1' },
+    { migrationfile: 'a.json', date: '2026-01-02', referenceDoc: 'AS-1', accountCode: '1.1' }
+  ]);
+  assert.equal(groups.length, 3);
+  assert.deepEqual(groups.map(group => group.rows.length), [2,1,1]);
+  assert.deepEqual(groups.map(group => group.sourceFile), ['a.json','b.json','a.json']);
+});
+
+test('valida correspondencia entre tipo y concepto de movimiento y normaliza referencias FAC', () => {
+  assert.equal(isUniversalMovementTypeConceptValid('ENTRADA','COMPRA'), true);
+  assert.equal(isUniversalMovementTypeConceptValid('SALIDA','VENTA'), true);
+  assert.equal(isUniversalMovementTypeConceptValid('SALIDA','MERMA'), true);
+  assert.equal(isUniversalMovementTypeConceptValid('AJUSTE','AJUSTE'), true);
+  assert.equal(isUniversalMovementTypeConceptValid('ENTRADA','VENTA'), false);
+  assert.equal(isUniversalMovementTypeConceptValid('SALIDA','COMPRA'), false);
+  assert.equal(normalizeUniversalDocumentReference('FAC-000123'), '000123');
+  assert.equal(normalizeUniversalDocumentReference('Factura 000123'), '000123');
 });
