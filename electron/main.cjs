@@ -30,6 +30,8 @@ const verifyPassword = (password, salt, expected) => {
 const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
+const { prepareTextDownload } = require('./text-download.cjs');
+const { registerTextDownloadHandler } = require('./text-download-ipc.cjs');
 
 // SICOVEN keeps one renderer connected to its local accounting database.
 // A second process could otherwise validate an outgoing payment against a stale
@@ -396,6 +398,10 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
+
+  registerTextDownloadHandler({
+    ipcMain, BrowserWindow, dialog, app, fs, shell, prepareTextDownload
+  });
 
   ipcMain.handle('sicoven:pdf-save', async (event, input) => {
     const senderUrl = event.sender.getURL();

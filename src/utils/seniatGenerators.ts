@@ -346,31 +346,43 @@ export function encodeIso88591(content: string): Uint8Array {
 }
 
 /**
- * Descarga un archivo de texto en el navegador del usuario.
+ * Guarda un archivo de texto en el escritorio Electron o inicia su descarga en navegador.
  * UTF-8 es el valor predeterminado; ISO-8859-1 debe solicitarse explícitamente.
  */
-export function downloadFile(
+export async function downloadFile(
   content: string,
   fileName: string,
   contentType: string = 'text/plain;charset=utf-8',
   encoding: 'utf-8' | 'iso-8859-1' = 'utf-8'
-) {
-  const blob = encoding === 'iso-8859-1'
-    ? (() => {
-        const bytes = encodeIso88591(content);
-        // BlobPart requires an ArrayBuffer here; copy the exact ISO-8859-1
-        // bytes so TypeScript 7 does not widen the view to ArrayBufferLike.
-        const buffer = new ArrayBuffer(bytes.byteLength);
-        new Uint8Array(buffer).set(bytes);
-        return new Blob([buffer as BlobPart], { type: contentType });
-      })()
-    : new Blob([content], { type: contentType });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.setAttribute('download', fileName);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+): Promise<{ ok?: boolean; canceled?: boolean; filePath?: string; bytes?: number } | void> {
+  try {
+    // En Electron, guardar por IPC abre el diálogo nativo de Windows y evita
+    // depender de la vida útil de una URL Blob temporal del renderer.
+    if (window.sicovenStore?.saveTextFile) {
+      return await window.sicovenStore.saveTextFile({ fileName, content, contentType, encoding });
+    }
+
+    const blob = encoding === 'iso-8859-1'
+      ? (() => {
+          const bytes = encodeIso88591(content);
+          const buffer = new ArrayBuffer(bytes.byteLength);
+          new Uint8Array(buffer).set(bytes);
+          return new Blob([buffer as BlobPart], { type: contentType });
+        })()
+      : new Blob([content], { type: contentType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    // No revocar inmediatamente: algunos motores aún no han iniciado la descarga.
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'No fue posible guardar el archivo.';
+    window.alert(`No se pudo descargar el archivo: ${message}`);
+    return;
+  }
 }

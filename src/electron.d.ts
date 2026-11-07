@@ -59,6 +59,7 @@ declare global {
       listVatFiscalIncidents: (token: string, filters: { companyId: string }) => Promise<import('./types/vatFiscalIncidents').VatFiscalIncident[]>;
       recordVatFiscalIncidentEvent: (token: string, input: import('./types/vatFiscalIncidents').VatFiscalIncidentEventInput) => Promise<import('./types/vatFiscalIncidents').VatFiscalIncident>;
       savePdf: (input: { fileName: string; base64: string }) => Promise<{ ok: boolean; canceled?: boolean; filePath?: string; bytes?: number }>;
+      saveTextFile: (input: { fileName: string; content: string; contentType?: string; encoding?: 'utf-8' | 'iso-8859-1' }) => Promise<{ ok: boolean; canceled?: boolean; filePath?: string; bytes?: number }>;
       getDemoUsage: () => Record<string, number>;
       consumeDemoAction: (moduleKey: string) => {
         ok: boolean;
