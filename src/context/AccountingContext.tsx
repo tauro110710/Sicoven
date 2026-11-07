@@ -1521,7 +1521,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const sourceEntry = batch.journalEntries.find(entry =>
         entry.id === document.journalEntryId && entry.companyId === targetCompanyId
       );
-      const expectedSourceType = kind === 'SALE_COLLECTION' ? 'VENTA' : 'COMPRA';
+      const expectedSourceType = document.documentType === '02'
+        ? 'AJUSTE'
+        : (kind === 'SALE_COLLECTION' ? 'VENTA' : 'COMPRA');
       const controlLines = (sourceEntry?.items || []).filter(item =>
         kind === 'SALE_COLLECTION'
           ? item.accountCode === '1.1.2.01' && Number(item.debitBs || 0) > 0
