@@ -138,7 +138,8 @@ export const resolveUniversalPurchaseDetailRows = (
     if (reference === undefined || normalize(reference) !== uniqueIds[0]) return false;
     const productCode = pickValue(candidate, ['productCode','codigoProducto','productSku','sku','itemCode','codigo','code']);
     const quantity = pickValue(candidate, ['quantity','cantidad','qty']);
-    return productCode !== undefined && quantity !== undefined;
+    const unitCost = pickValue(candidate, ['unitCostBs','costoUnitarioBs','unitCost','costoUnitario','costBs']);
+    return productCode !== undefined || quantity !== undefined || unitCost !== undefined;
   });
   return matches;
 };
