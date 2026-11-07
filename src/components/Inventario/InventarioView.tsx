@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import {
   Package,
@@ -30,6 +30,10 @@ export const InventarioView: React.FC = () => {
   const [bcvSyncStatus, setBcvSyncStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [bcvSyncMessage, setBcvSyncMessage] = useState('Consultando tasa BCV para Inventario…');
   const [showBcvHistory, setShowBcvHistory] = useState(false);
+  const currentCompanyRef = useRef(currentCompany);
+  const updateCompanyRef = useRef(updateCompany);
+  const waitForPersistenceRef = useRef(waitForPersistence);
+  useEffect(() => { currentCompanyRef.current = currentCompany; updateCompanyRef.current = updateCompany; waitForPersistenceRef.current = waitForPersistence; }, [currentCompany, updateCompany, waitForPersistence]);
   const bcvHistory = useMemo(() => [...(currentCompany.inventoryBcvRateHistory || [])].sort((a,b) => b.effectiveDate.localeCompare(a.effectiveDate)), [currentCompany.inventoryBcvRateHistory]);
 
   useEffect(() => {
@@ -41,30 +45,36 @@ export const InventarioView: React.FC = () => {
       try {
         const result = await fetchInventoryBcvRate();
         if (!active) return;
-        const history = currentCompany.inventoryBcvRateHistory || [];
-        const alreadyRecorded = history.some(entry => entry.effectiveDate === result.effectiveDate);
-        if (!alreadyRecorded) {
+        const company = currentCompanyRef.current;
+        const history = company.inventoryBcvRateHistory || [];
+        const savedForDate = history.find(entry => entry.effectiveDate === result.effectiveDate);
+        const nextHistory = savedForDate ? history : appendDailyInventoryBcvRate(history, {
+          rate: result.rate,
+          effectiveDate: result.effectiveDate,
+          fetchedAt: result.updatedAt,
+          source: result.sourceUrl,
+          provider: result.provider,
+          mode: 'AUTOMATIC'
+        });
+        const effectiveRate = savedForDate?.rate ?? result.rate;
+        const effectiveFetchedAt = savedForDate?.fetchedAt ?? result.updatedAt;
+        const needsSave = company.inventoryBcvRate !== effectiveRate ||
+          company.inventoryBcvRateEffectiveDate !== result.effectiveDate ||
+          !savedForDate;
+        if (needsSave) {
           if (!window.sicovenStore?.save) throw new Error('La actualización automática requiere SICOVEN de escritorio con SQLite disponible.');
-          const nextHistory = appendDailyInventoryBcvRate(history, {
-            rate: result.rate,
-            effectiveDate: result.effectiveDate,
-            fetchedAt: result.updatedAt,
-            source: result.sourceUrl,
-            provider: result.provider,
-            mode: 'AUTOMATIC'
-          });
-          updateCompany({
-            ...currentCompany,
-            inventoryBcvRate: result.rate,
+          updateCompanyRef.current({
+            ...company,
+            inventoryBcvRate: effectiveRate,
             inventoryBcvRateEffectiveDate: result.effectiveDate,
-            inventoryBcvRateFetchedAt: result.updatedAt,
+            inventoryBcvRateFetchedAt: effectiveFetchedAt,
             inventoryBcvRateHistory: nextHistory
           });
-          await waitForPersistence();
+          await waitForPersistenceRef.current();
         }
         if (active) {
           setBcvSyncStatus('ready');
-          setBcvSyncMessage(alreadyRecorded
+          setBcvSyncMessage(savedForDate
             ? 'Tasa diaria ya registrada; se conserva el historial.'
             : 'Tasa consultada y guardada en el historial de Inventario.');
         }
