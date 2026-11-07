@@ -49,7 +49,7 @@ export const extractUniversalJsonCollections = (value: unknown): UniversalJsonCo
 
 
 export type UniversalPartyKind = 'customer' | 'supplier';
-export type UniversalPartyResolution = { name: string; rif: string; source: 'inline' | 'related-record' };
+export type UniversalPartyResolution = { name: string; rif: string; address?: string; email?: string; taxStatus?: string; source: 'inline' | 'related-record' };
 
 /**
  * Resuelve la contraparte solo mediante una clave explícita dentro del mismo
@@ -78,9 +78,29 @@ export const resolveUniversalPartyReference = (
   const referenceKeys = customer
     ? ['customerId','clientId','clienteId','idCliente','customer_id','client_id','cliente_id','idcliente']
     : ['supplierId','vendorId','proveedorId','idProveedor','supplier_id','vendor_id','proveedor_id','idproveedor'];
+  const addressKeys = customer
+    ? ['customerAddress','clientAddress','direccionCliente','address','direccion']
+    : ['supplierAddress','vendorAddress','direccionProveedor','address','direccion'];
+  const emailKeys = customer
+    ? ['customerEmail','clientEmail','correoCliente','email','correo']
+    : ['supplierEmail','vendorEmail','correoProveedor','email','correo'];
+  const taxStatusKeys = ['supplierTaxStatus','taxStatus','condicionFiscal','tipoContribuyente','supplierType'];
+  const resolution = (record: Record<string, unknown>, source: 'inline' | 'related-record'): UniversalPartyResolution => {
+    const address = pickValue(record, addressKeys);
+    const email = customer ? undefined : pickValue(record, emailKeys);
+    const taxStatus = customer ? undefined : pickValue(record, taxStatusKeys);
+    return {
+      name: String(pickValue(record, nameKeys)).trim(),
+      rif: String(pickValue(record, rifKeys)).trim(),
+      ...(address === undefined ? {} : { address: String(address).trim() }),
+      ...(email === undefined ? {} : { email: String(email).trim() }),
+      ...(taxStatus === undefined ? {} : { taxStatus: String(taxStatus).trim() }),
+      source
+    };
+  };
   const inlineName = pickValue(invoice, nameKeys);
   const inlineRif = pickValue(invoice, rifKeys);
-  if (inlineName && inlineRif) return { name: String(inlineName).trim(), rif: String(inlineRif).trim(), source: 'inline' };
+  if (inlineName && inlineRif) return resolution(invoice, 'inline');
 
   const reference = pickValue(invoice, referenceKeys);
   if (reference === undefined) {
@@ -98,12 +118,7 @@ export const resolveUniversalPartyReference = (
   });
   if (matches.length === 0) throw new Error('No se pudo resolver la referencia '+String(reference)+' de '+(customer?'cliente':'proveedor')+' dentro del mismo archivo. No se importó la factura.');
   if (matches.length > 1) throw new Error('La referencia '+String(reference)+' de '+(customer?'cliente':'proveedor')+' coincide con varios registros del mismo archivo. Corrige la ambigüedad antes de importar.');
-  const match = matches[0];
-  return {
-    name: String(pickValue(match, nameKeys)).trim(),
-    rif: String(pickValue(match, rifKeys)).trim(),
-    source: 'related-record'
-  };
+  return resolution(matches[0], 'related-record');
 };
 
 
