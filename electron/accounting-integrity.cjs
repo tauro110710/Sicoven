@@ -1321,6 +1321,11 @@ function validateAccountingSnapshot(previousState, nextState) {
             asArray(nextState.companies).find(company => String(company.id) === String(document.companyId)))) {
         throw new Error('SQLite rechazó la venta: el asiento no concilia fecha, tasa BCV, CxC, retención recibida, IGTF, ingresos e IVA en Bs. y USD con la factura.');
       }
+      if (collectionName === 'sales' && !oldDocument &&
+          Array.isArray(document.inventoryLines) && document.inventoryLines.length > 0 &&
+          !saleInventoryLinesMatchKardex(document, nextState, previousState)) {
+        throw new Error('SQLite rechazó la venta: sus líneas de mercancía no concilian con las salidas de Kardex y los asientos de costo de ventas vinculados.');
+      }
     }
     for (const document of newDocuments) {
       const oldDocument = oldById.get(String(document.id));
