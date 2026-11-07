@@ -410,6 +410,8 @@ export interface InventoryProduct {
   lastCostUsd: number;
   salesPriceBs: number;
   salesPriceUsd: number;
+  /** Margen bruto objetivo utilizado para sugerir el precio; no es un asiento ni un costo contable. */
+  targetMarginPercent?: number;
   /** Cuenta de movimiento asociada al valor del inventario. */
   inventoryAccountCode?: string;
   /** Cuenta de costo de ventas o consumo asociada al artículo. */
