@@ -23,7 +23,8 @@ import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { InventarioContableTools } from './InventarioContableTools';
 import { IntelligentMigrationWizard } from '../Migracion/IntelligentMigrationWizard';
 import { fetchInventoryBcvHistory, fetchInventoryBcvRate } from '../../services/inventoryBcvService';
-import { appendDailyInventoryBcvRate } from '../../types/inventoryBcvRate';
+import { appendDailyInventoryBcvRate, resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
+import { InventoryBcvManualEditor } from './InventoryBcvManualEditor';
 
 export const InventarioView: React.FC = () => {
   const { currentCompany, products: allProducts, movements: allMovements, updateCompany, waitForPersistence, isStorageReady } = useAccounting();
@@ -34,7 +35,7 @@ export const InventarioView: React.FC = () => {
   const updateCompanyRef = useRef(updateCompany);
   const waitForPersistenceRef = useRef(waitForPersistence);
   useEffect(() => { currentCompanyRef.current = currentCompany; updateCompanyRef.current = updateCompany; waitForPersistenceRef.current = waitForPersistence; }, [currentCompany, updateCompany, waitForPersistence]);
-  const bcvHistory = useMemo(() => [...(currentCompany.inventoryBcvRateHistory || [])].sort((a,b) => b.effectiveDate.localeCompare(a.effectiveDate)), [currentCompany.inventoryBcvRateHistory]);
+  const bcvHistory = useMemo(() => [...(currentCompany.inventoryBcvRateHistory || [])].sort((a,b) => b.effectiveDate.localeCompare(a.effectiveDate) || b.fetchedAt.localeCompare(a.fetchedAt)), [currentCompany.inventoryBcvRateHistory]);
 
   useEffect(() => {
     if (!isStorageReady) return;
@@ -74,7 +75,7 @@ export const InventarioView: React.FC = () => {
           provider: result.provider,
           mode: 'AUTOMATIC'
         });
-        const savedForDate = nextHistory.find(entry => entry.effectiveDate === result.effectiveDate);
+        const savedForDate = resolveInventoryBcvRate(nextHistory, result.effectiveDate);
         const effectiveRate = savedForDate?.rate ?? result.rate;
         const effectiveFetchedAt = savedForDate?.fetchedAt ?? result.updatedAt;
         const needsSave = company.inventoryBcvRate !== effectiveRate ||
@@ -105,8 +106,10 @@ export const InventarioView: React.FC = () => {
       } finally { running = false; }
     };
     void syncInventoryRate();
+    const handleOnline = () => { void syncInventoryRate(); };
+    window.addEventListener('online', handleOnline);
     const interval = window.setInterval(() => { void syncInventoryRate(); }, 60 * 60 * 1000);
-    return () => { active = false; window.clearInterval(interval); };
+    return () => { active = false; window.removeEventListener('online', handleOnline); window.clearInterval(interval); };
   }, [currentCompany.id, isStorageReady]);
   const companyProducts = filterEntriesByCompany(allProducts, currentCompany.id);
   const companyMovements = filterEntriesByCompany(allMovements, currentCompany.id);
@@ -215,7 +218,7 @@ export const InventarioView: React.FC = () => {
                 <span className="ml-2 text-xs font-semibold text-slate-500">por USD</span>
               </div>
               <div className="mt-1 text-[11px] text-slate-600">
-                Vigencia: {currentCompany.inventoryBcvRateEffectiveDate || 'Pendiente'} · Fuente: bcv.today
+                Vigencia: {currentCompany.inventoryBcvRateEffectiveDate || 'Pendiente'} · Fuente: {resolveInventoryBcvRate(currentCompany.inventoryBcvRateHistory || [], currentCompany.inventoryBcvRateEffectiveDate || '9999-12-31')?.provider === 'manual' ? 'Registro manual' : 'bcv.today'}
               </div>
               <div className={`mt-1 text-[11px] ${bcvSyncStatus === 'error' ? 'text-amber-800' : 'text-sky-800'}`}>
                 {bcvSyncMessage}
@@ -225,6 +228,7 @@ export const InventarioView: React.FC = () => {
               {showBcvHistory ? 'Ocultar historial' : `Historial diario (${bcvHistory.length})`}
             </button>
           </div>
+          <InventoryBcvManualEditor />
           {showBcvHistory && (
             <div className="mt-3 overflow-x-auto rounded-lg border border-sky-100 bg-white">
               <table className="w-full text-xs">
