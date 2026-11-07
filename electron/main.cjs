@@ -30,6 +30,7 @@ const verifyPassword = (password, salt, expected) => {
 const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
+const { prepareTextDownload } = require('./text-download.cjs');
 
 // SICOVEN keeps one renderer connected to its local accounting database.
 // A second process could otherwise validate an outgoing payment against a stale
@@ -396,6 +397,26 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
+
+  ipcMain.handle('sicoven:text-save', async (event, input) => {
+    const senderUrl = event.sender.getURL();
+    if (!senderUrl.startsWith('file://') && !senderUrl.startsWith('http://localhost:') && !senderUrl.startsWith('http://127.0.0.1:')) {
+      throw new Error('Origen no autorizado para guardar archivos.');
+    }
+    const prepared = prepareTextDownload(input);
+    const result = await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender), {
+      title: 'Guardar archivo de SICOVEN',
+      defaultPath: path.join(app.getPath('documents'), prepared.fileName),
+      filters: [{ name: prepared.filterName, extensions: [prepared.extension] }]
+    });
+    if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+    await fs.promises.writeFile(result.filePath, prepared.buffer, { flag: 'wx' }).catch(async error => {
+      if (error && error.code === 'EEXIST') throw new Error('El archivo ya existe. Elige otro nombre para conservar el archivo anterior.');
+      throw error;
+    });
+    shell.showItemInFolder(result.filePath);
+    return { ok: true, filePath: result.filePath, bytes: prepared.buffer.length };
+  });
 
   ipcMain.handle('sicoven:pdf-save', async (event, input) => {
     const senderUrl = event.sender.getURL();
