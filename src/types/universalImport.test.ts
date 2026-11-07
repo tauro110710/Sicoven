@@ -106,6 +106,7 @@ test('prefiere la contraparte explícita cuando nombre y RIF están presentes', 
 test('detecta detalles de mercancía anidados en una factura de venta', () => {
   assert.equal(hasUniversalNestedMerchandiseDetails({ items: [{ sku: 'A-1', cantidad: 2 }] }), true);
   assert.equal(hasUniversalNestedMerchandiseDetails({ detalles: [{ codigoProducto: 'A-1', quantity: 1 }] }), true);
+  assert.equal(hasUniversalNestedMerchandiseDetails({ artículos: [{ códigoProducto: 'A-2', cantidad: 3 }] }), true);
   assert.equal(hasUniversalNestedMerchandiseDetails({ payments: [{ paymentReference: 'P-1', amount: 10 }] }), false);
   assert.equal(hasUniversalNestedMerchandiseDetails({ items: [] }), false);
 });
