@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, selectUniversalRowsByStableKeys, mapUniversalInventoryItemType } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, selectUniversalRowsByStableKeys, mapUniversalSettlementPreview, mapUniversalInventoryItemType } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -451,4 +451,18 @@ test('la selección individual rechaza claves ausentes, duplicadas y ambiguas', 
   assert.throws(() => selectUniversalRowsByStableKeys(rows, ['file.json|ventas|9']), /ya no está disponible/);
   assert.throws(() => selectUniversalRowsByStableKeys(rows, ['file.json|ventas|0', 'file.json|ventas|0']), /claves de registro duplicadas/);
   assert.throws(() => selectUniversalRowsByStableKeys([...rows, { ...rows[0], invoiceNumber: 'F-003' }], ['file.json|ventas|0']), /no es única/);
+});
+
+
+test('normaliza cobros en efectivo con fecha, BCV y equivalencia Bs/USD explícitos', () => {
+ const r=mapUniversalSettlementPreview({migrationrowid:'origen.json|cobros|0',fechaCobro:'2026-10-15',tasaBcv:250,montoBs:2500,medioPago:'efectivo'});
+ assert.equal(r.amountUsd,10);assert.equal(r.method,'CASH_BS');assert.equal(r.settlementDate,'2026-10-15');
+});
+test('rechaza liquidaciones sin tasa, fecha inválida, diferencias cambiarias o banco no identificado', () => {
+ const b={migrationrowid:'f|pagos|0',fechaPago:'2026-10-15',tasaBcv:250,montoBs:2500,medioPago:'efectivo'};
+ assert.throws(()=>mapUniversalSettlementPreview({...b,tasaBcv:undefined}),/tasa BCV histórica/);
+ assert.throws(()=>mapUniversalSettlementPreview({...b,fechaPago:'2026-02-30'}),/fecha válida/);
+ assert.throws(()=>mapUniversalSettlementPreview({...b,montoUsd:20}),/no concilian/);
+ assert.throws(()=>mapUniversalSettlementPreview({...b,medioPago:'transferencia',referencia:'TR-1'}),/ID de una cuenta bancaria real/);
+ assert.throws(()=>mapUniversalSettlementPreview({...b,medioPago:'transferencia',bankAccountId:'BANK-1'}),/referencia o comprobante/);
 });

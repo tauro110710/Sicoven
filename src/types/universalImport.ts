@@ -555,6 +555,41 @@ export const selectUniversalRowsByStableKeys = (
   return matches;
 };
 
+
+
+export type UniversalSettlementPreview = {
+  settlementDate: string; bcvRate: number; amountUsd: number; amountBs: number;
+  method: 'CASH_BS' | 'CASH_USD' | 'BANK_TRANSFER_BS' | 'BANK_TRANSFER_USD';
+  bankAccountId?: string; reference?: string; sourceRowId: string;
+};
+
+/** Normaliza liquidaciones sin crear asientos ni inferir cuentas de tesorería. */
+export const mapUniversalSettlementPreview = (row: Record<string, unknown>): UniversalSettlementPreview => {
+  const normalize=(value:unknown)=>String(value??'').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const pick=(keys:string[])=>{const wanted=new Set(keys.map(normalize));return Object.entries(row).find(([key,value])=>wanted.has(normalize(key))&&value!==undefined&&value!==null&&String(value).trim()!=='')?.[1];};
+  const number=(value:unknown)=>{let raw=String(value??'').trim().replace(/[^0-9,.-]/g,'');if(raw.includes(',')&&raw.includes('.'))raw=raw.replace(/\./g,'').replace(',','.');else raw=raw.replace(',','.');return Number(raw);};
+  const date=String(pick(['settlementDate','paymentDate','collectionDate','fechaPago','fechaCobro','date','fecha'])??'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new Error('La liquidación no declara una fecha válida.');
+  const [y,m,d]=date.split('-').map(Number),parsed=new Date(Date.UTC(y,m-1,d));
+  if(parsed.getUTCFullYear()!==y||parsed.getUTCMonth()!==m-1||parsed.getUTCDate()!==d)throw new Error('La liquidación no declara una fecha válida.');
+  const bcvRate=number(pick(['settlementBcvRate','bcvRate','tasaBcv','tasaBcvHistorica','exchangeRate']));
+  if(!Number.isFinite(bcvRate)||bcvRate<=0)throw new Error('La liquidación requiere su propia tasa BCV histórica.');
+  const bsRaw=pick(['settlementAmountBs','paymentAmountBs','collectionAmountBs','amountBs','montoBs','importeBs','monto']);
+  const usdRaw=pick(['settlementAmountUsd','paymentAmountUsd','collectionAmountUsd','amountUsd','montoUsd','importeUsd']);
+  const amountBs=bsRaw===undefined?NaN:number(bsRaw),amountUsd=usdRaw===undefined?amountBs/bcvRate:number(usdRaw);
+  if(!Number.isFinite(amountBs)||amountBs<=0||!Number.isFinite(amountUsd)||amountUsd<=0)throw new Error('La liquidación requiere importes positivos en Bs y USD; USD solo puede calcularse desde Bs usando la tasa histórica declarada.');
+  if(Math.abs(amountBs/bcvRate-amountUsd)>0.02)throw new Error('Los importes Bs/USD de la liquidación no concilian con su tasa BCV histórica.');
+  const raw=normalize(pick(['method','paymentMethod','settlementMethod','collectionMethod','medioPago','formaPago']));
+  const methods:Record<string,UniversalSettlementPreview['method']>={efectivo:'CASH_BS',cash:'CASH_BS',efectivobs:'CASH_BS',cashbs:'CASH_BS',efectivousd:'CASH_USD',cashusd:'CASH_USD',divisas:'CASH_USD',transferenciabs:'BANK_TRANSFER_BS',transferencia:'BANK_TRANSFER_BS',transfer:'BANK_TRANSFER_BS',banktransfer:'BANK_TRANSFER_BS',transferenciusd:'BANK_TRANSFER_USD',transferusd:'BANK_TRANSFER_USD',banktransferusd:'BANK_TRANSFER_USD'};
+  const method=methods[raw];if(!method)throw new Error('El medio de liquidación no está identificado de forma compatible; requiere revisión manual.');
+  const bankAccountId=String(pick(['bankAccountId','bankId','cuentaBancariaId','idCuentaBancaria'])??'').trim();
+  if(method.startsWith('BANK_TRANSFER')&&!bankAccountId)throw new Error('La transferencia requiere el ID de una cuenta bancaria real de la empresa destino.');
+  const reference=String(pick(['reference','paymentReference','collectionReference','referenceNumber','comprobante','referencia'])??'').trim();
+  if(method.startsWith('BANK_TRANSFER')&&!reference)throw new Error('La transferencia requiere su referencia o comprobante.');
+  const sourceRowId=String(row.migrationrowid??'').trim();if(!sourceRowId)throw new Error('La liquidación no tiene identificador estable de fila de origen.');
+  return {settlementDate:date,bcvRate,amountUsd,amountBs,method,...(bankAccountId?{bankAccountId}:{}),...(reference?{reference}:{}),sourceRowId};
+};
+
 export type UniversalImportFormat = 'json' | 'csv' | 'tsv' | 'txt' | 'xlsx' | 'xlsm' | 'unsupported';
 
 export const detectUniversalImportFormat = (fileName: string): UniversalImportFormat => {
