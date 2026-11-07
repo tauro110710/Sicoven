@@ -119,7 +119,7 @@ interface AccountingContextType {
 
   // Asientos
   journalEntries: JournalEntry[];
-  addJournalEntry: (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>) => JournalEntry;
+  addJournalEntry: (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>, accountCatalog?: Account[], targetCompanyId?: string) => JournalEntry;
   deleteJournalEntry: (id: string) => void;
   reverseJournalEntry: (id: string, effectiveDate: string, reason: string, workpaperNote?: string, priorPeriodAdjustment?: boolean, retainedEarningsAccountCode?: string) => Promise<JournalEntry>;
   closeAccountingPeriod: (closedThroughDate: string) => Promise<void>;
@@ -138,7 +138,7 @@ interface AccountingContextType {
 
   // Compras
   purchases: PurchaseRecord[];
-  addPurchase: (purchase: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>) => PurchaseRecord;
+  addPurchase: (purchase: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>, targetCompanyId?: string) => PurchaseRecord;
   addPurchaseCreditNote: (request: PurchaseCreditNoteRequest) => Promise<PurchaseRecord>;
   addPurchaseServiceCreditNote: (draft: Omit<PurchaseServiceCreditNoteRequest, 'purchase' | 'priorCreditNotes' | 'closedThroughDate'> & { purchaseId: string }) => Promise<PurchaseRecord>;
   addSupplierDebitNote: (draft: Omit<SupplierDebitNoteAccountingDraft, 'companyId' | 'closedThroughDate'>) => Promise<PurchaseRecord>;
@@ -146,7 +146,7 @@ interface AccountingContextType {
 
   // Ventas
   sales: SaleRecord[];
-  addSale: (sale: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>) => SaleRecord;
+  addSale: (sale: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>, targetCompanyId?: string) => SaleRecord;
   addSaleCorrectionNote: (draft: Omit<SaleCorrectionNoteRequest, 'sourceSale' | 'priorCreditNotes' | 'closedThroughDate'> & { sourceSaleId: string }) => Promise<SaleRecord>;
   deleteSale: (id: string) => void;
   runAtomicInvoiceImport: <T>(operation: () => T) => T;
@@ -1280,13 +1280,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     ));
   };
 
-  const addJournalEntry = (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>, accountCatalog: Account[] = accounts): JournalEntry => {
+  const addJournalEntry = (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>, accountCatalog: Account[] = accounts, targetCompanyId: string = targetCompany.id): JournalEntry => {
+    const targetCompany = companies.find(company => company.id === targetCompanyId);
+    if (!targetCompany) throw new Error('La empresa destino del asiento no existe en SICOVEN.');
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('El asiento requiere SQLite local de escritorio disponible y lista. No se registró.');
     }
     if (!isValidIsoDate(entry.date)) throw new Error('El asiento requiere una fecha válida.');
-    if (currentCompany.closedThroughDate && entry.date <= currentCompany.closedThroughDate) {
-      throw new Error('No se pueden registrar asientos en un período cerrado hasta ' + currentCompany.closedThroughDate + '.');
+    if (targetCompany.closedThroughDate && entry.date <= targetCompany.closedThroughDate) {
+      throw new Error('No se pueden registrar asientos en un período cerrado hasta ' + targetCompany.closedThroughDate + '.');
     }
     if (!Array.isArray(entry.items)) throw new Error('El asiento debe contener líneas contables válidas.');
     validateJournalEntryAccounts(entry.items, accountCatalog);
@@ -1326,7 +1328,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // have already occurred, not new payment instructions.
     if (!entry.isAdjusted) {
       const creditedBankAccounts = bankAccounts.filter(bank =>
-        bank.companyId === currentCompany.id &&
+        bank.companyId === targetCompany.id &&
         entry.items.some(item => item.accountCode === bank.accountCode &&
           (Number(item.creditBs || 0) > 0 || Number(item.creditUsd || 0) > 0))
       );
@@ -1335,7 +1337,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           .filter(item => item.accountCode === bank.accountCode)
           .reduce((sum, item) => sum + Number(bank.currency === 'USD' ? item.creditUsd || 0 : item.creditBs || 0), 0);
         const availableBalance = calculateBankAvailableBalance({
-          bankAccount: bank, companyId: currentCompany.id, asOfDate: entry.date, journalEntries
+          bankAccount: bank, companyId: targetCompany.id, asOfDate: entry.date, journalEntries
         });
         validateBankOutgoingAvailability({
           availableBalance, requestedAmount, currency: bank.currency
@@ -1343,16 +1345,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
     }
 
-    const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
+    const companyEntries = journalEntries.filter(e => e.companyId === targetCompany.id);
     const maxEntryNum = companyEntries.reduce((max, e) => (e.entryNumber > max ? e.entryNumber : max), 0);
-    const sequenceKey = currentCompany.id;
+    const sequenceKey = targetCompany.id;
     const currentSequence = Math.max(maxEntryNum, journalSequenceRef.current[sequenceKey] || 0);
     const nextEntryNum = entry.entryNumber && entry.entryNumber > currentSequence ? entry.entryNumber : currentSequence + 1;
     journalSequenceRef.current[sequenceKey] = Math.max(journalSequenceRef.current[sequenceKey] || 0, nextEntryNum);
     const newEntry: JournalEntry = {
       ...entry,
       id: `entry-${sequenceKey}-${nextEntryNum}-${Date.now()}`,
-      companyId: currentCompany.id,
+      companyId: targetCompany.id,
       entryNumber: nextEntryNum,
       createdAt: new Date().toISOString()
     };
@@ -1928,7 +1930,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   // Registrar compra y generar asiento automático y comprobantes de retención
-  const addPurchase = (purchaseData: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>): PurchaseRecord => {
+  const addPurchase = (purchaseData: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>, targetCompanyId: string = targetCompany.id): PurchaseRecord => {
+    const targetCompany = companies.find(company => company.id === targetCompanyId);
+    if (!targetCompany) throw new Error('La empresa destino de la compra no existe en SICOVEN.');
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('La edición de escritorio requiere SQLite local disponible y lista. No se registró la compra.');
     }
@@ -1937,7 +1941,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     );
     if (settlementModeError) throw new Error(settlementModeError);
     // Defensa de dominio: las compras nunca deben crear asientos con tasa o importes inválidos.
-    if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la compra.');
+    if (!targetCompany) throw new Error('Selecciona una empresa antes de registrar la compra.');
     const rate = Number(purchaseData.bcvRate);
     if (!Number.isFinite(rate) || rate <= 0) throw new Error('La tasa BCV manual debe ser mayor que cero.');
     const amounts = [
@@ -1958,7 +1962,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         for (const line of purchaseData.inventoryLines) {
           const quantity = Number(line.quantity);
           const unitCost = Number(line.unitCostBs);
-          const product = products.find(item => item.id === line.productId && item.companyId === currentCompany.id);
+          const product = products.find(item => item.id === line.productId && item.companyId === targetCompany.id);
           if (!product || seenProducts.has(String(line.productId)) ||
               !Number.isFinite(quantity) || quantity <= 0 ||
               !Number.isFinite(unitCost) || unitCost <= 0) {
@@ -1967,7 +1971,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           seenProducts.add(String(line.productId));
           inventoryLineTotal += quantity * unitCost;
           const latestMovementDate = movements
-            .filter(movement => movement.companyId === currentCompany.id && movement.productId === product.id)
+            .filter(movement => movement.companyId === targetCompany.id && movement.productId === product.id)
             .reduce((latest, movement) => movement.date > latest ? movement.date : latest, '');
           if (latestMovementDate && purchaseData.invoiceDate < latestMovementDate) {
             throw new Error('La fecha de compra es anterior al último movimiento del Kardex de ' + product.code + '. Registre las operaciones en orden cronológico.');
@@ -1980,8 +1984,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
     }
     // Validación de documento en la capa de dominio: no confiar solo en required del formulario.
-    if (currentCompany.closedThroughDate && (purchaseData.invoiceDate <= currentCompany.closedThroughDate || purchaseData.accountCreditDate! <= currentCompany.closedThroughDate)) {
-      throw new Error('El período está cerrado hasta ' + currentCompany.closedThroughDate + '. Registre el documento en el período abierto o solicite una corrección formal.');
+    if (targetCompany.closedThroughDate && (purchaseData.invoiceDate <= targetCompany.closedThroughDate || purchaseData.accountCreditDate! <= targetCompany.closedThroughDate)) {
+      throw new Error('El período está cerrado hasta ' + targetCompany.closedThroughDate + '. Registre el documento en el período abierto o solicite una corrección formal.');
     }
     if (!isValidIsoDate(purchaseData.invoiceDate) || !isValidIsoDate(purchaseData.accountCreditDate || '') ||
         !String(purchaseData.invoiceNumber || '').trim() ||
@@ -2009,7 +2013,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     if (purchaseData.ivaRetentionDecision) {
       const snapshot = purchaseData.ivaRetentionDecision;
-      const expectedBuyerAgentStatus = resolveIvaBuyerAgentStatus({ agentBasis: currentCompany.ivaRetentionAgentBasis, taxpayerType: currentCompany.taxpayerType, rif: currentCompany.rif, isPersonalFirm: currentCompany.isPersonalFirm });
+      const expectedBuyerAgentStatus = resolveIvaBuyerAgentStatus({ agentBasis: targetCompany.ivaRetentionAgentBasis, taxpayerType: targetCompany.taxpayerType, rif: targetCompany.rif, isPersonalFirm: targetCompany.isPersonalFirm });
       if (snapshot.buyerAgentStatus !== expectedBuyerAgentStatus) throw new Error('La condición de agente de retención de la empresa cambió o no coincide. Actualice la evaluación antes de registrar.');
       const expectedOperationAmountBs = Math.round((Number(purchaseData.taxableBaseBs) + Number(purchaseData.exemptAmountBs) + Number(purchaseData.vatAmountBs) + Number.EPSILON) * 100) / 100;
       const fiscalPeriodStart = getPurchaseAccountCreditDate(purchaseData).slice(0, 7);
@@ -2036,7 +2040,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const normalizeDocument = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '');
     const normalizeRif = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, '');
     const duplicateInvoice = purchases.some(existing =>
-      existing.companyId === currentCompany.id &&
+      existing.companyId === targetCompany.id &&
       existing.documentType === purchaseData.documentType &&
       normalizeDocument(existing.invoiceNumber) === normalizeDocument(purchaseData.invoiceNumber) &&
       normalizeRif(existing.supplierRif) === normalizeRif(purchaseData.supplierRif)
@@ -2091,7 +2095,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         throw new Error('Los parámetros históricos de cálculo ISLR no coinciden con el concepto fiscal seleccionado.');
       }
       const matchingMonthlyOperations = purchases.filter(item =>
-        item.companyId === currentCompany.id &&
+        item.companyId === targetCompany.id &&
         item.documentType === '01' &&
         String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierKey &&
         item.islrConceptCode === concept.code &&
@@ -2128,8 +2132,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
     }
 
-    const companyPurchases = purchases.filter(p => p.companyId === currentCompany.id);
-    const companyKey = currentCompany.id;
+    const companyPurchases = purchases.filter(p => p.companyId === targetCompany.id);
+    const companyKey = targetCompany.id;
     const nextOp = Math.max(companyPurchases.reduce((max, p) => Math.max(max, p.opNumber || 0), 0), purchaseSequenceRef.current[companyKey] || 0) + 1;
     purchaseSequenceRef.current[companyKey] = nextOp;
     const purchaseId = `pur-${companyKey}-${nextOp}-${Date.now()}`;
@@ -2147,7 +2151,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const year = Number(vatFiscalEvent.fiscalDate.slice(0, 4));
       const month = Number(vatFiscalEvent.fiscalDate.slice(5, 7));
       const voucherKey = `${companyKey}:${vatPeriod}`;
-      const companyVouchersCount = vatVouchers.filter(v => v.companyId === currentCompany.id && v.period === vatPeriod).length;
+      const companyVouchersCount = vatVouchers.filter(v => v.companyId === targetCompany.id && v.period === vatPeriod).length;
       const voucherSequence = Math.max(companyVouchersCount, vatVoucherSequenceRef.current[voucherKey] || 0) + 1;
       vatVoucherSequenceRef.current[voucherKey] = voucherSequence;
       voucherNum = formatVoucherNumber(year, month, voucherSequence);
@@ -2166,7 +2170,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (hasInventoryLines) {
       const inventoryByAccount = new Map<string, { name: string; amountBs: number; productCodes: string[] }>();
       for (const purchaseLine of purchaseData.inventoryLines || []) {
-        const product = products.find(item => item.id === purchaseLine.productId && item.companyId === currentCompany.id);
+        const product = products.find(item => item.id === purchaseLine.productId && item.companyId === targetCompany.id);
         if (!product) throw new Error('No se puede contabilizar una línea de compra sin artículo válido.');
         const accountCode = product.inventoryAccountCode || '1.1.4.01';
         const account = accounts.find(item => item.code === accountCode && item.isMovement);
@@ -2250,11 +2254,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       : undefined;
     if (cashPurchase && !paymentAccount) throw new Error('La cuenta contable de pago de contado ya no está disponible en el Plan de Cuentas.');
     const bankPaymentAccount = cashPurchase
-      ? bankAccounts.find(bank => bank.companyId === currentCompany.id && bank.accountCode === paymentAccount!.code)
+      ? bankAccounts.find(bank => bank.companyId === targetCompany.id && bank.accountCode === paymentAccount!.code)
       : undefined;
     if (bankPaymentAccount) {
       const availableBalance = calculateBankAvailableBalance({
-        bankAccount: bankPaymentAccount, companyId: currentCompany.id,
+        bankAccount: bankPaymentAccount, companyId: targetCompany.id,
         asOfDate: purchaseData.accountCreditDate!, journalEntries
       });
       validateBankOutgoingAvailability({
@@ -2280,13 +2284,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('El asiento automático de la compra no cuadra en Bs. y USD; la operación no se guardó.');
     }
 
-    const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
+    const companyEntries = journalEntries.filter(e => e.companyId === targetCompany.id);
     const nextEntryNum = Math.max(companyEntries.reduce((max, entry) => Math.max(max, entry.entryNumber || 0), 0), journalSequenceRef.current[companyKey] || 0) + 1;
     journalSequenceRef.current[companyKey] = nextEntryNum;
 
     const createdJournalEntry: JournalEntry = {
       id: `entry-pur-${companyKey}-${nextEntryNum}-${Date.now()}`,
-      companyId: currentCompany.id,
+      companyId: targetCompany.id,
       entryNumber: nextEntryNum,
       date: purchaseData.accountCreditDate!,
       description: `Registro Factura de Compra N° ${purchaseData.invoiceNumber} - ${purchaseData.supplierName}`,
@@ -2311,7 +2315,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       islrWithheldUsd: (purchaseData.islrWithheldBs || 0) / rate,
       igtfAmountUsd: igtfAmount / rate,
       id: purchaseId,
-      companyId: currentCompany.id,
+      companyId: targetCompany.id,
       opNumber: nextOp,
       voucherNumber: voucherNum,
       journalEntryId: createdJournalEntry.id
@@ -2323,16 +2327,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (purchaseData.vatWithheldBs > 0 && voucherNum) {
       const vatVoucher: VatRetentionVoucher = {
         id: `vouch-iva-${purchaseId}`,
-        companyId: currentCompany.id,
+        companyId: targetCompany.id,
         voucherNumber: voucherNum,
         date: new Date().toISOString().slice(0, 10),
         period: vatFiscalEvent!.period,
         fiscalTrigger: vatFiscalEvent!.trigger,
         fiscalDate: vatFiscalEvent!.fiscalDate,
         paymentReference: vatFiscalEvent!.trigger === 'PAYMENT' ? purchaseData.paymentReference : undefined,
-        agentNameSnapshot: currentCompany.name,
-        agentRifSnapshot: currentCompany.rif,
-        agentAddressSnapshot: currentCompany.address,
+        agentNameSnapshot: targetCompany.name,
+        agentRifSnapshot: targetCompany.rif,
+        agentAddressSnapshot: targetCompany.address,
         supplierRif: purchaseData.supplierRif,
         supplierName: purchaseData.supplierName,
         supplierAddress: purchaseData.supplierAddress || 'Venezuela',
@@ -2360,12 +2364,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (purchaseData.islrWithheldBs && purchaseData.islrWithheldBs > 0) {
       const islrVoucher: IslrRetentionVoucher = {
         id: `vouch-islr-${purchaseId}`,
-        companyId: currentCompany.id,
+        companyId: targetCompany.id,
         voucherNumber: (() => {
           const voucherKey = `${companyKey}:${islrPeriod}`;
           const existingSequence = getMaxIslrVoucherSequence(
             islrPeriod,
-            islrVouchers.filter(v => v.companyId === currentCompany.id && v.period === islrPeriod).map(v => v.voucherNumber)
+            islrVouchers.filter(v => v.companyId === targetCompany.id && v.period === islrPeriod).map(v => v.voucherNumber)
           );
           const sequence = Math.max(existingSequence, islrVoucherSequenceRef.current[voucherKey] || 0) + 1;
           const number = formatIslrVoucherNumber(islrPeriod, sequence, purchaseData.accountCreditDate!);
@@ -2378,9 +2382,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         supplierName: purchaseData.supplierName,
         supplierAddress: purchaseData.supplierAddress || 'Venezuela',
         supplierEmailSnapshot: purchaseData.supplierEmail?.trim() || undefined,
-        agentNameSnapshot: currentCompany.name,
-        agentRifSnapshot: currentCompany.rif,
-        agentAddressSnapshot: currentCompany.address,
+        agentNameSnapshot: targetCompany.name,
+        agentRifSnapshot: targetCompany.rif,
+        agentAddressSnapshot: targetCompany.address,
         isPersonNatural: purchaseData.islrBeneficiaryType === 'PN',
         isResident: purchaseData.islrResidency === 'RESIDENT' || purchaseData.islrResidency === 'DOMICILED',
         conceptCode: purchaseData.islrConceptCode as string,
@@ -2409,7 +2413,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const fiscalDate = purchaseData.accountCreditDate!;
       const eventKey = `${companyKey}:${fiscalDate}`;
       const existingDayEvents = islrFiscalEvents.filter(event =>
-        event.companyId === currentCompany.id && event.fiscalDate === fiscalDate
+        event.companyId === targetCompany.id && event.fiscalDate === fiscalDate
       );
       const nextEventSequence = Math.max(
         existingDayEvents.reduce((max, event) => Math.max(max, Number(event.sequence) || 0), 0),
@@ -2417,8 +2421,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ) + 1;
       islrEventSequenceRef.current[eventKey] = nextEventSequence;
       const fiscalEvent: IslrFiscalEvent = {
-        id: `islr-event-${currentCompany.id}-${purchaseId}`,
-        companyId: currentCompany.id,
+        id: `islr-event-${targetCompany.id}-${purchaseId}`,
+        companyId: targetCompany.id,
         supplierRif: purchaseData.supplierRif,
         conceptCode: purchaseData.islrConceptCode,
         fiscalDate,
@@ -3166,13 +3170,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   // Registrar venta y generar asiento contable
-  const addSale = (saleData: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>): SaleRecord => {
+  const addSale = (saleData: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>, targetCompanyId: string = targetCompany.id): SaleRecord => {
+    const targetCompany = companies.find(company => company.id === targetCompanyId);
+    if (!targetCompany) throw new Error('La empresa destino de la venta no existe en SICOVEN.');
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('La edición de escritorio requiere SQLite local disponible y lista. No se registró la venta.');
     }
     const settlementModeError = validateSaleSettlementMode(saleData.paymentTerm);
     if (settlementModeError) throw new Error(settlementModeError);
-    if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la venta.');
+    if (!targetCompany) throw new Error('Selecciona una empresa antes de registrar la venta.');
     const rate = Number(saleData.bcvRate);
     const saleAmounts = [
       saleData.totalAmountBs, saleData.taxableBaseBs, saleData.exemptAmountBs,
@@ -3182,8 +3188,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (saleAmounts.some(value => !Number.isFinite(value) || value < 0) || saleData.totalAmountBs <= 0) {
       throw new Error('La venta contiene importes inválidos o negativos.');
     }
-    if (currentCompany.closedThroughDate && saleData.invoiceDate <= currentCompany.closedThroughDate) {
-      throw new Error('El período está cerrado hasta ' + currentCompany.closedThroughDate + '. Registre el documento en el período abierto o solicite una corrección formal.');
+    if (targetCompany.closedThroughDate && saleData.invoiceDate <= targetCompany.closedThroughDate) {
+      throw new Error('El período está cerrado hasta ' + targetCompany.closedThroughDate + '. Registre el documento en el período abierto o solicite una corrección formal.');
     }
     if (!isValidIsoDate(saleData.invoiceDate) || !String(saleData.invoiceNumber || '').trim() ||
         !String(saleData.customerName || '').trim()) {
@@ -3212,7 +3218,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('No se permite registrar IGTF en una venta sin confirmación expresa.');
     }
     if (saleData.igtfApplicable) {
-      const eligibleSaleIgtf = currentCompany.isIgtfPerceptionAgent === true &&
+      const eligibleSaleIgtf = targetCompany.isIgtfPerceptionAgent === true &&
         saleData.paymentTerm === 'CONTADO' &&
         (saleData.paymentCurrency === 'FOREIGN_CASH' || saleData.paymentCurrency === 'CRYPTO');
       if (!eligibleSaleIgtf) {
@@ -3231,14 +3237,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const normalizeSaleDocument = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '');
     const duplicateSale = sales.some(existing =>
-      existing.companyId === currentCompany.id &&
+      existing.companyId === targetCompany.id &&
       existing.documentType === saleData.documentType &&
       normalizeSaleDocument(existing.invoiceNumber) === normalizeSaleDocument(saleData.invoiceNumber)
     );
     if (duplicateSale) throw new Error('Ya existe una venta registrada con ese tipo de documento y número de factura.');
 
-    const companySales = sales.filter(s => s.companyId === currentCompany.id);
-    const companyKey = currentCompany.id;
+    const companySales = sales.filter(s => s.companyId === targetCompany.id);
+    const companyKey = targetCompany.id;
     const nextOp = Math.max(companySales.reduce((max, sale) => Math.max(max, sale.opNumber || 0), 0), saleSequenceRef.current[companyKey] || 0) + 1;
     saleSequenceRef.current[companyKey] = nextOp;
     const saleId = `sale-${companyKey}-${nextOp}-${Date.now()}`;
@@ -3338,13 +3344,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('El asiento automático de la venta no cuadra en Bs. y USD; la operación no se guardó.');
     }
 
-    const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
+    const companyEntries = journalEntries.filter(e => e.companyId === targetCompany.id);
     const nextEntryNum = Math.max(companyEntries.reduce((max, entry) => Math.max(max, entry.entryNumber || 0), 0), journalSequenceRef.current[companyKey] || 0) + 1;
     journalSequenceRef.current[companyKey] = nextEntryNum;
 
     const createdJournalEntry: JournalEntry = {
       id: `entry-sale-${companyKey}-${nextEntryNum}-${Date.now()}`,
-      companyId: currentCompany.id,
+      companyId: targetCompany.id,
       entryNumber: nextEntryNum,
       date: saleData.invoiceDate,
       description: `Factura de Venta N° ${saleData.invoiceNumber} - ${saleData.customerName}`,
@@ -3371,7 +3377,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       vatWithheldUsd: (saleData.vatWithheldBs || 0) / rate,
       igtfAmountUsd: saleIgtf / rate,
       id: saleId,
-      companyId: currentCompany.id,
+      companyId: targetCompany.id,
       opNumber: nextOp,
       journalEntryId: createdJournalEntry.id
     };
