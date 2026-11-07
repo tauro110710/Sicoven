@@ -75,6 +75,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   invoiceRowId:string;sourceRowId:string;settlementDate:string;bcvRate:number;amountUsd:number;amountBs:number;
   method:string;reference?:string;destinationError:string|null;
  }>>([]);
+ const [selectedSettlementSourceRowIds,setSelectedSettlementSourceRowIds]=useState<string[]>([]);
  const [confirmed,setConfirmed]=useState(false);
  const [backupPayload,setBackupPayload]=useState<string|null>(null);
  const [backupCounts,setBackupCounts]=useState<Record<string,number>|null>(null);
@@ -440,6 +441,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     })));
     if(linkedSettlementPreview.length){
      setSettlementPreview(linkedSettlementPreview);
+     setSelectedSettlementSourceRowIds(linkedSettlementPreview.map(item=>item.sourceRowId));
      const unresolved=linkedSettlementPreview.filter(item=>item.destinationError).length;
      if(unresolved){
       setNotice('Se detectaron '+linkedSettlementPreview.length+' liquidaciones vinculadas. '+unresolved+' requieren corregir o asignar su cuenta destino. No se importó ningún documento ni se alteraron saldos.');
@@ -605,10 +607,11 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
       });
       if(movementRows.length)importInventoryMovements(movementRows as Parameters<typeof importInventoryMovements>[0],targetCompany.id);
      }
-     const settlementDrafts=mapUniversalInvoiceSettlementDrafts(settlementPlans,createdDocumentIds);
+     const selectedSettlementPlans=settlementPlans.map(plan=>({...plan,settlements:plan.settlements.filter(item=>selectedSettlementSourceRowIds.includes(item.sourceRowId))}));
+     const settlementDrafts=mapUniversalInvoiceSettlementDrafts(selectedSettlementPlans,createdDocumentIds);
      importedSettlementCount=addImportedCreditSettlements(settlementDrafts,createdDocuments,targetCompany.id).length;
     });
-    setSettlementPreview([]);
+    setSettlementPreview([]);setSelectedSettlementSourceRowIds([]);
     setNotice((kind==='sales'?'Ventas':'Compras')+' importadas: '+prepared.length+' facturas. Liquidaciones históricas contabilizadas: '+importedSettlementCount+'. SICOVEN generó los asientos, actualizó CxC/CxP y SQLite confirmó el lote completo en una sola transacción.');
     setSelected(old=>old.filter(id=>id!==kind));setConfirmed(false);
      setBusy(false);return;
@@ -845,12 +848,18 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     {error&&<div role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800"><AlertTriangle className="mr-2 inline" size={17}/>{error}</div>}
     {notice&&<div role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 className="mr-2 inline" size={17}/>{notice}</div>}
     {settlementPreview.length>0&&<section className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-     <h3 className="text-sm font-semibold text-amber-900">Liquidaciones históricas detectadas — solo vista previa</h3>
-     <p className="mt-1 text-xs text-amber-900">Cada liquidación se muestra con su factura de origen, tasa, importe, referencia y destino. Esta pantalla no registra cobros ni pagos.</p>
+     <h3 className="text-sm font-semibold text-amber-900">Liquidaciones históricas vinculadas</h3>
+     <p className="mt-1 text-xs text-amber-900">Marca los cobros y pagos que deseas contabilizar junto con las facturas seleccionadas. Los registros desmarcados no se importarán ni modificarán sus saldos.</p>
+     <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+      <button type="button" className="font-medium underline" onClick={()=>setSelectedSettlementSourceRowIds(settlementPreview.map(item=>item.sourceRowId))}>Seleccionar todas</button>
+      <button type="button" className="font-medium underline" onClick={()=>setSelectedSettlementSourceRowIds([])}>Desmarcar todas</button>
+      <span>{selectedSettlementSourceRowIds.length} de {settlementPreview.length} liquidaciones seleccionadas</span>
+     </div>
      <div className="mt-3 max-h-64 overflow-auto">
       <table className="min-w-full text-xs">
-       <thead><tr className="border-b border-amber-200 text-left"><th className="px-2 py-2">Factura origen</th><th className="px-2 py-2">Liquidación</th><th className="px-2 py-2">Fecha</th><th className="px-2 py-2">Medio</th><th className="px-2 py-2 text-right">Tasa BCV</th><th className="px-2 py-2 text-right">USD</th><th className="px-2 py-2 text-right">Bs</th><th className="px-2 py-2">Referencia</th><th className="px-2 py-2">Destino</th></tr></thead>
+       <thead><tr className="border-b border-amber-200 text-left"><th className="px-2 py-2">Importar</th><th className="px-2 py-2">Factura origen</th><th className="px-2 py-2">Liquidación</th><th className="px-2 py-2">Fecha</th><th className="px-2 py-2">Medio</th><th className="px-2 py-2 text-right">Tasa BCV</th><th className="px-2 py-2 text-right">USD</th><th className="px-2 py-2 text-right">Bs</th><th className="px-2 py-2">Referencia</th><th className="px-2 py-2">Destino</th></tr></thead>
        <tbody>{settlementPreview.map(item=><tr key={item.sourceRowId} className="border-b border-amber-100 align-top">
+        <td className="px-2 py-2"><input type="checkbox" checked={selectedSettlementSourceRowIds.includes(item.sourceRowId)} onChange={event=>setSelectedSettlementSourceRowIds(current=>event.target.checked?[...current,item.sourceRowId]:current.filter(id=>id!==item.sourceRowId))} aria-label={'Importar liquidación '+item.sourceRowId}/></td>
         <td className="px-2 py-2 font-mono">{item.invoiceRowId}</td><td className="px-2 py-2 font-mono">{item.sourceRowId}</td>
         <td className="px-2 py-2">{item.settlementDate}</td><td className="px-2 py-2">{item.method==='CASH_BS'?'Efectivo Bs':item.method==='CASH_USD'?'Efectivo USD':item.method==='BANK_TRANSFER_BS'?'Transferencia Bs':'Transferencia USD'}</td>
         <td className="px-2 py-2 text-right tabular-nums">{item.bcvRate.toFixed(4)}</td>
