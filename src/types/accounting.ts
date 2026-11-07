@@ -56,6 +56,8 @@ export interface ExchangeabilityAssessment {
   approvedAt: string;
 }
 
+import type { InventoryBcvHistoryEntry } from './inventoryBcvRate';
+
 export interface Company {
   id: string;
   rif: string; // e.g., "J-40892182-3"
@@ -84,6 +86,11 @@ export interface Company {
   fiscalYear: number; // e.g. 2026
   bcvRate: number; // Tasa oficial BCV Bs/$
   lastRateUpdate?: string;
+  /** Tasa BCV aislada del módulo Inventario; no modifica la tasa contable usada por otros módulos. */
+  inventoryBcvRate?: number;
+  inventoryBcvRateEffectiveDate?: string;
+  inventoryBcvRateFetchedAt?: string;
+  inventoryBcvRateHistory?: InventoryBcvHistoryEntry[];
   /** Último día incluido en un período contable bloqueado. */
   closedThroughDate?: string;
   /** Historial de evaluaciones NIC 21; ausencia = pendiente, nunca se asigna moneda por defecto. */
