@@ -1008,6 +1008,7 @@ test('SQLite accepts a supplier advance application to a purchase invoice create
   originalEntry.id = 'purchase-created-in-batch-entry';
   originalEntry.entryNumber = 1;
   originalEntry.referenceDoc = 'FAC-101';
+  originalEntry.items.find(item => item.accountCode === '2.1.1.01').description = 'Cuenta por pagar proveedor';
   originalMovement.id = 'purchase-created-in-batch-movement';
   originalMovement.documentRef = 'FAC-101';
   originalPurchase.inventoryLines = [];
