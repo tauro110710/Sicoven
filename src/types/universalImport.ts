@@ -656,3 +656,77 @@ export const mapUniversalInventoryItemType = (value: unknown): 'MERCANCIA' | 'MA
   if (['subproducto', 'byproduct'].includes(token)) return 'SUBPRODUCTO';
   return null;
 };
+
+
+export type UniversalInvoiceSettlementPlan = {
+  invoiceRowId: string;
+  invoiceKind: 'sales' | 'purchases';
+  settlements: UniversalSettlementPreview[];
+};
+
+/**
+ * Construye el lote de liquidaciones únicamente para las facturas seleccionadas.
+ * Las relaciones deben venir de una FK explícita o del par número+RIF dentro
+ * del mismo archivo. No asigna pagos a documentos por orden ni por similitud.
+ */
+export const planUniversalInvoiceSettlements = (
+  invoices: Array<Record<string, unknown>>,
+  allSourceRows: Array<Record<string, unknown>>,
+  invoiceKind: 'sales' | 'purchases'
+): UniversalInvoiceSettlementPlan[] => {
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const pick = (row: Record<string, unknown>, keys: string[]) => {
+    const wanted = new Set(keys.map(normalize));
+    return Object.entries(row).find(([key, value]) => wanted.has(normalize(key)) &&
+      value !== undefined && value !== null && String(value).trim() !== '')?.[1];
+  };
+  const seenInvoices = new Set<string>();
+  const seenSettlements = new Set<string>();
+  return invoices.map(invoice => {
+    const invoiceRowId = String(invoice.migrationrowid ?? '').trim();
+    if (!invoiceRowId || seenInvoices.has(invoiceRowId)) {
+      throw new Error('La selección de facturas contiene una clave de origen vacía o duplicada.');
+    }
+    seenInvoices.add(invoiceRowId);
+    const matches = resolveUniversalInvoiceSettlementRows(allSourceRows, invoice);
+    const settlements = matches.map(row => {
+      const preview = mapUniversalSettlementPreview(row);
+      if (seenSettlements.has(preview.sourceRowId)) {
+        throw new Error('La liquidación ' + preview.sourceRowId + ' está vinculada más de una vez. No se importó el lote.');
+      }
+      seenSettlements.add(preview.sourceRowId);
+      const declaredKind = normalize(pick(row, ['transactionType','tipoOperacion','documentType','tipoDocumento']));
+      if (declaredKind) {
+        const salesTokens = ['sale','sales','venta','cobro','collection','receivable','cxc'];
+        const purchaseTokens = ['purchase','purchases','compra','pago','payment','payable','cxp'];
+        const allowed = invoiceKind === 'sales' ? salesTokens : purchaseTokens;
+        const opposite = invoiceKind === 'sales' ? purchaseTokens : salesTokens;
+        if (opposite.includes(declaredKind) && !allowed.includes(declaredKind)) {
+          throw new Error('La liquidación ' + preview.sourceRowId + ' declara un tipo incompatible con la factura seleccionada.');
+        }
+      }
+      return preview;
+    });
+    const totalUsdRaw = pick(invoice, ['totalAmountUsd','totalUsd','montoTotalUsd','importeTotalUsd']);
+    const totalBsRaw = pick(invoice, ['totalAmountBs','totalBs','montoTotalBs','importeTotalBs','total','montoTotal']);
+    const invoiceRateRaw = pick(invoice, ['bcvRate','tasaBcv','exchangeRate']);
+    const parseAmount = (value: unknown) => {
+      let raw = String(value ?? '').trim().replace(/[^0-9,.-]/g, '');
+      if (raw.includes(',') && raw.includes('.')) raw = raw.replace(/\./g, '').replace(',', '.');
+      else raw = raw.replace(',', '.');
+      return Number(raw);
+    };
+    const totalUsd = totalUsdRaw !== undefined ? parseAmount(totalUsdRaw)
+      : totalBsRaw !== undefined && invoiceRateRaw !== undefined
+        ? parseAmount(totalBsRaw) / parseAmount(invoiceRateRaw) : NaN;
+    if (settlements.length && (!Number.isFinite(totalUsd) || totalUsd <= 0)) {
+      throw new Error('La factura ' + invoiceRowId + ' tiene liquidaciones relacionadas, pero no declara un total y una tasa que permitan verificar que no esté sobrepagada.');
+    }
+    const settledUsd = settlements.reduce((sum, item) => sum + item.amountUsd, 0);
+    if (settledUsd - totalUsd > 0.00001) {
+      throw new Error('Las liquidaciones vinculadas a la factura ' + invoiceRowId + ' superan su total. No se importó el lote.');
+    }
+    return { invoiceRowId, invoiceKind, settlements };
+  });
+};
