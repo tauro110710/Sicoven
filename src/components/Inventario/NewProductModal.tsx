@@ -69,7 +69,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       setAdjustmentAccountCode('5.1.2.01'); setOpeningBalanceAccountCode('3.3.1.01');
       setCostingMethod('PROMEDIO_PONDERADO'); setVatTreatment('GENERAL_16'); setItemType('MERCANCIA');
     }
-  }, [isOpen, product, currentCompany.inventoryBcvRate]);
+  }, [isOpen, product]);
 
   useEffect(() => {
     if (!isOpen || product) return;
