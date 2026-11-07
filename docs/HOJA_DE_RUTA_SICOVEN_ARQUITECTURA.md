@@ -245,3 +245,12 @@ La validación del producto se realiza mediante:
 - El instructivo describe el uso de Retención IVA (prueba carga de archivo) en el Portal Fiscal. La aceptación efectiva de un archivo concreto debe verificarse en esa herramienta; no se afirma que ya se haya ejecutado.
 - La guía no detalla expresamente cómo serializar en una o varias filas una factura con bases sujetas a distintas alícuotas. Este punto queda acotado a la cardinalidad y distribución de importes para facturas mixtas; no cuestiona la vigencia operativa del formato de 16 columnas ni autoriza cambiarlo.
 - La declaración cero se mantiene fuera del TXT de operaciones ordinarias hasta verificar en el portal el procedimiento aplicable; no se inventará una fila no descrita expresamente por la guía.
+
+
+## Incidencia de descarga TXT en SICOVEN v1.0.18 — 2026-11-06
+
+- **Hallazgo:** la descarga de archivos de texto dependía de un enlace `Blob` temporal del renderer, revocado inmediatamente después del clic. El proceso Electron no disponía de un guardado nativo genérico para TXT/CSV/XML/JSON; solo se configuraba diálogo de guardado para PDF.
+- **Corrección en curso:** rama `fix/electron-text-file-downloads` sobre `main`. Se incorpora IPC validado para abrir el diálogo nativo de Windows, validar nombre/extensión/MIME/codificación/tamaño, escribir el archivo elegido y mostrarlo en su carpeta. El navegador conserva una ruta alternativa con revocación diferida del `Blob`.
+- **Cobertura:** exportaciones de texto que utilizan `downloadFile`, incluyendo el TXT de Retenciones IVA e ISLR. La cadena fiscal generada y su estructura (16 campos, tabuladores, CRLF y codificación definida) no se modifican.
+- **Criterio de cierre:** pruebas unitarias de validación/codificación, `npm test`, TypeScript, build, prueba del flujo de guardado en Windows y verificación de que el TXT se crea con el nombre y contenido esperados. No publicar ni sustituir v1.0.18 hasta que exista una nueva versión autorizada y validada.
+- **Estado:** corrección en rama; pendiente CI y prueba funcional de escritorio. No afirmar aún que el defecto está resuelto en el instalador publicado.
