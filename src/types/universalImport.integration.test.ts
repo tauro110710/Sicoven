@@ -78,7 +78,7 @@ test('integración: análisis JSON, selección individual, empresa destino, dupl
       );
     `);
 
-    const initial = emptyState();
+    const initial: any = emptyState();
     initial.journalEntries.push(journalEntry('prior-company-1', 'company-1', 1, 'FAC-ANTERIOR'));
     assert.equal(persistAccountingSnapshot(db, initial, { id: 1, username: 'admin', role: 'admin' }).ok, true);
 
