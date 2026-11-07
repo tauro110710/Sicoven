@@ -318,7 +318,7 @@ export const LibroMayorView: React.FC = () => {
                           </span>
                         </td>
                         <td className="py-2 px-3 text-slate-800 font-medium max-w-md truncate">
-                          {mov.description}
+                          <strong className="font-bold">{mov.description}</strong>
                         </td>
                         {displayCurrency !== 'USD' && (
                           <>
