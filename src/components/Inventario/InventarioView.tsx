@@ -26,7 +26,7 @@ import { fetchInventoryBcvRate } from '../../services/inventoryBcvService';
 import { appendDailyInventoryBcvRate } from '../../types/inventoryBcvRate';
 
 export const InventarioView: React.FC = () => {
-  const { currentCompany, products: allProducts, movements: allMovements, updateCompany, waitForPersistence } = useAccounting();
+  const { currentCompany, products: allProducts, movements: allMovements, updateCompany, waitForPersistence, isStorageReady } = useAccounting();
   const [bcvSyncStatus, setBcvSyncStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [bcvSyncMessage, setBcvSyncMessage] = useState('Consultando tasa BCV para Inventario…');
   const [showBcvHistory, setShowBcvHistory] = useState(false);
@@ -37,6 +37,7 @@ export const InventarioView: React.FC = () => {
   const bcvHistory = useMemo(() => [...(currentCompany.inventoryBcvRateHistory || [])].sort((a,b) => b.effectiveDate.localeCompare(a.effectiveDate)), [currentCompany.inventoryBcvRateHistory]);
 
   useEffect(() => {
+    if (!isStorageReady) return;
     let active = true;
     let running = false;
     const syncInventoryRate = async () => {
@@ -88,7 +89,7 @@ export const InventarioView: React.FC = () => {
     void syncInventoryRate();
     const interval = window.setInterval(() => { void syncInventoryRate(); }, 60 * 60 * 1000);
     return () => { active = false; window.clearInterval(interval); };
-  }, [currentCompany.id]);
+  }, [currentCompany.id, isStorageReady]);
   const companyProducts = filterEntriesByCompany(allProducts, currentCompany.id);
   const companyMovements = filterEntriesByCompany(allMovements, currentCompany.id);
 
