@@ -386,7 +386,16 @@ export const isUniversalMovementTypeConceptValid = (
 
 export const normalizeUniversalDocumentReference = (value: unknown): string => {
   const normalized = String(value ?? '').trim().normalize('NFD').replace(/\p{Diacritic}/gu, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  return normalized.replace(/^(FACTURA|FAC)/, '');
+  return normalized.replace(/^(?:(?:FACTURA|FAC))+/, '');
+};
+
+export const findUniversalInvoiceJournalCollision = (
+  invoiceNumber: unknown,
+  entries: Array<{ referenceDoc?: string | null }>
+): { referenceDoc?: string | null } | undefined => {
+  const normalizedInvoice = normalizeUniversalDocumentReference(invoiceNumber);
+  if (!normalizedInvoice) return undefined;
+  return entries.find(entry => normalizeUniversalDocumentReference(entry.referenceDoc) === normalizedInvoice);
 };
 
 const normalizeUniversalValue = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '');
