@@ -161,7 +161,7 @@ export const resolveUniversalPurchaseDetailRows = (
 
 export const hasUniversalNestedMerchandiseDetails = (invoice: Record<string, unknown>): boolean => {
   const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const wanted = new Set(['saleLines','inventoryLines','items','lines','details','detalles','detalle'].map(normalize));
+  const wanted = new Set(['saleLines','inventoryLines','productLines','items','lines','details','detalles','detalle','articulos','productos'].map(normalize));
   let nested: unknown;
   for (const [key, value] of Object.entries(invoice)) {
     if (wanted.has(normalize(key)) && value !== undefined && value !== null) { nested = value; break; }
