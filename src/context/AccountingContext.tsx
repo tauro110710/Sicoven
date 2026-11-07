@@ -114,6 +114,8 @@ interface AccountingContextType {
   // Cuentas
   accounts: Account[];
   addAccount: (account: Account) => void;
+  updateAccount: (account: Account) => void;
+  deleteAccount: (accountCode: string) => void;
   setAccountCashFlowActivity: (accountCode: string, activity: CashFlowActivity) => void;
   setAccountCashFlowIndirectTreatment: (accountCode: string, treatment: CashFlowIndirectTreatment) => void;
 
@@ -1233,6 +1235,41 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     assertSQLitePersistenceReady('Registrar la cuenta contable');
     const validatedAccount = prepareAccountForCatalog(account, accounts);
     setAccounts(prev => [...prev, validatedAccount].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })));
+  };
+
+  const updateAccount = (draft: Account) => {
+    assertSQLitePersistenceReady('Editar la cuenta contable');
+    const current = accounts.find(item => item.code === draft.code) || accounts.find(item => item.code === (draft as Account & { originalCode?: string }).originalCode);
+    if (!current) throw new Error('La cuenta que intenta editar ya no existe.');
+    const hasChildren = accounts.some(item => item.parentCode === current.code);
+    const hasJournalHistory = journalEntries.some(entry => entry.items.some(item => item.accountCode === current.code));
+    const hasBankLink = bankAccounts.some(bank => bank.accountCode === current.code);
+    if (draft.isMovement !== current.isMovement && (hasChildren || hasJournalHistory || hasBankLink)) {
+      throw new Error('No se puede cambiar entre Grupo y Movimiento: la cuenta tiene subcuentas o relaciones/movimientos históricos.');
+    }
+    if (draft.code !== current.code) {
+      if (hasChildren || hasJournalHistory || hasBankLink) {
+        throw new Error('No se puede cambiar el código de una cuenta con subcuentas, asientos históricos o instrumentos bancarios vinculados.');
+      }
+      const validated = prepareAccountForCatalog(draft, accounts.filter(item => item.code !== current.code));
+      setAccounts(prev => prev.map(item => item.code === current.code ? validated : item).sort((a,b)=>a.code.localeCompare(b.code,undefined,{numeric:true})));
+      return;
+    }
+    const nextName = String(draft.name || '').trim();
+    if (!nextName) throw new Error('La denominación de la cuenta no puede quedar vacía.');
+    setAccounts(prev => prev.map(item => item.code === current.code ? { ...current, ...draft, name: nextName.toUpperCase() } : item));
+  };
+
+  const deleteAccount = (accountCode: string) => {
+    assertSQLitePersistenceReady('Eliminar la cuenta contable');
+    const current = accounts.find(item => item.code === accountCode);
+    if (!current) throw new Error('La cuenta ya no existe.');
+    if (accounts.some(item => item.parentCode === accountCode)) throw new Error('No se puede eliminar una cuenta totalizadora que tenga cuentas hijas.');
+    if (journalEntries.some(entry => entry.items.some(item => item.accountCode === accountCode))) {
+      throw new Error('No se puede eliminar la cuenta porque posee movimientos históricos. Puede cambiar su estado a Inactiva.');
+    }
+    if (bankAccounts.some(bank => bank.accountCode === accountCode)) throw new Error('No se puede eliminar: la cuenta está vinculada a un instrumento bancario.');
+    setAccounts(prev => prev.filter(item => item.code !== accountCode));
   };
 
   const setAccountCashFlowActivity = (accountCode: string, activity: CashFlowActivity) => {
