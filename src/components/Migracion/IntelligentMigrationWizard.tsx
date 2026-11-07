@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept } from '../../types/universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, hasUniversalNestedMerchandiseDetails, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 
@@ -445,6 +445,20 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const paymentTermRaw=norm(String(pick(r,'paymentTerm','condicionPago','condicion')??''));
      if(!['contado','credito','cash','credit'].includes(paymentTermRaw))throw new Error('Fila '+(i+1)+': indique expresamente paymentTerm CONTADO o CREDITO; no se supondrá la condición de pago.');
      const paymentTerm=(paymentTermRaw==='contado'||paymentTermRaw==='cash'?'CONTADO':'CREDITO') as 'CONTADO'|'CREDITO';
+     const linkedSettlements=resolveUniversalInvoiceSettlementRows(rows,r);
+     if(linkedSettlements.length||(paymentTerm==='CREDITO'&&hasUniversalInlineSettlementAmount(r))){
+      throw new Error('Fila '+(i+1)+': la factura tiene cobros/pagos o importes ya liquidados en el archivo. Esta etapa importa facturas de crédito sin liquidaciones; no se importará para evitar inflar CxC/CxP. Primero debe habilitarse el adaptador de liquidaciones con su fecha, tasa BCV, medio, referencia y cuenta bancaria.');
+     }
+     if(kind==='sales'&&paymentTerm==='CONTADO'){
+      throw new Error('Fila '+(i+1)+': SICOVEN aún no habilita la importación de ventas de contado porque el registro de venta requiere identificar y contabilizar la tesorería receptora. No se registrará como CxC ficticia.');
+     }
+     const outstandingBsRaw=pick(r,'outstandingBalanceBs','balanceDueBs','saldoPendienteBs','saldoActualBs','saldoPendiente','saldo');
+     if(paymentTerm==='CREDITO'&&outstandingBsRaw!==undefined){
+      const outstandingBs=parseMigrationNumber(outstandingBsRaw);
+      if(!Number.isFinite(outstandingBs)||outstandingBs<0||Math.abs(outstandingBs-num(r,i,true,'totalAmountBs','totalBs','total'))>0.02){
+       throw new Error('Fila '+(i+1)+': el saldo pendiente informado no coincide con el total de la factura. Se requiere importar las liquidaciones asociadas para reconstruir CxC/CxP sin diferencias.');
+      }
+     }
      const creditDays=paymentTerm==='CREDITO'?num(r,i,true,'creditDays','diasCredito'):0;
      const dueDate=paymentTerm==='CREDITO'?String(pick(r,'dueDate','fechaVencimiento','vencimiento')??'').slice(0,10):undefined;
      if(paymentTerm==='CREDITO'&&(!Number.isInteger(creditDays)||creditDays<1||!isValidIsoDate(dueDate)))throw new Error('Fila '+(i+1)+': las facturas a crédito requieren días de crédito y vencimiento válidos.');
@@ -460,7 +474,14 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      if(documentTypeRaw!=='01')throw new Error('Fila '+(i+1)+': las notas de débito/crédito requieren flujos de corrección fiscal y contable enlazados a su factura original. Este adaptador solo importa facturas (01).');
      const common={invoiceDate,invoiceNumber,controlNumber:String(pick(r,'controlNumber','numeroControl','numero de control')??'').trim(),documentType:documentTypeRaw as '01'|'02'|'03',totalAmountBs,exemptAmountBs,taxableBaseBs,taxRate,vatAmountBs,vatWithheldBs,bcvRate:rate,totalAmountUsd,taxableBaseUsd,vatAmountUsd,vatWithheldUsd,notes:String(pick(r,'notes','observaciones')??''),paymentTerm,creditDays,dueDate,currencyPricingMode:'REVISION_MANUAL' as const,fiscalAdjustmentMode:'REVISION_CONTADOR' as const};
      if(!common.controlNumber)throw new Error('Fila '+(i+1)+': número de control obligatorio.');
-     if(kind==='sales')return {...common,customerRif:partyRif,customerName:partyName,customerAddress:String(pick(r,'customerAddress','direccionCliente')??resolvedParty.address??''),retentionRate:num(r,i,false,'retentionRate','tasaRetencion'),retentionVoucherNumber:String(pick(r,'retentionVoucherNumber','comprobanteRetencion')??'')||undefined};
+     if(kind==='sales'){
+      const hasNestedMerchandise=hasUniversalNestedMerchandiseDetails(r);
+      const relatedSaleDetails=resolveUniversalPurchaseDetailRows(rows,r);
+      if(hasNestedMerchandise||relatedSaleDetails.length){
+       throw new Error('Fila '+(i+1)+': esta factura de venta contiene renglones de mercancía. El modelo de ventas actual de SICOVEN aún no conserva líneas comerciales ni sus salidas de Kardex en la importación universal. No se importó esta factura para evitar perder el detalle o alterar inventario. Use una exportación de ventas resumida sin renglones o espere el adaptador de ventas detalladas.');
+      }
+      return {...common,customerRif:partyRif,customerName:partyName,customerAddress:String(pick(r,'customerAddress','direccionCliente')??resolvedParty.address??''),retentionRate:num(r,i,false,'retentionRate','tasaRetencion'),retentionVoucherNumber:String(pick(r,'retentionVoucherNumber','comprobanteRetencion')??'')||undefined};
+     }
      const accountCreditDate=String(pick(r,'accountCreditDate','fechaAbonoCuenta','fechaReconocimiento','fechaPago')??'').slice(0,10);
      if(!isValidIsoDate(accountCreditDate))throw new Error('Fila '+(i+1)+': las compras requieren la fecha efectiva de abono en cuenta/pago (accountCreditDate). No se inferirá desde la fecha de factura.');
      const paymentAccountCode=String(pick(r,'paymentAccountCode','cuentaPago','codigoCuentaPago')??'').trim();
