@@ -42,6 +42,7 @@ import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters'
 import { formatIslrVoucherNumber, getMaxIslrVoucherSequence } from '../utils/islrVoucherNumber';
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus } from '../types/ivaRetentionEligibility';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, summarizeCreditDocumentAdjustments, validateCreditSettlement } from '../types/creditSettlement';
+import { buildCreditSettlementJournalItems } from '../types/creditSettlementAccounting';
 import { FinancialDisclosure, validateFinancialDisclosure } from '../types/financialDisclosures';
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
@@ -1873,42 +1874,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const amountUsd = Math.round(draft.amountUsd * 100) / 100;
     const fxGain = accounts.find(account => account.code === '4.2.1.01' && account.isMovement);
     const fxLoss = accounts.find(account => account.code === '6.1.1.08' && account.isMovement);
-    const fxLines = (): JournalEntryItem[] => {
-      if (Math.abs(fxDifferenceBs) < 0.01) return [];
-      if (kind === 'SALE_COLLECTION') {
-        // Cobro superior al valor contable: ganancia (Haber); inferior: pérdida (Debe).
-        if (fxDifferenceBs > 0) {
-          if (!fxGain) throw new Error('Falta la cuenta Ganancia por Diferencial Cambiario (4.2.1.01).');
-          return [{ accountCode: fxGain.code, accountName: fxGain.name, debitBs: 0, creditBs: fxDifferenceBs, debitUsd: 0, creditUsd: 0, description: 'Ganancia cambiaria por cobro a tasa posterior' }];
-        }
-        if (!fxLoss) throw new Error('Falta la cuenta Pérdida en Diferencial Cambiario (6.1.1.08).');
-        return [{ accountCode: fxLoss.code, accountName: fxLoss.name, debitBs: Math.abs(fxDifferenceBs), creditBs: 0, debitUsd: 0, creditUsd: 0, description: 'Pérdida cambiaria por cobro a tasa posterior' }];
-      }
-      // Pago superior al pasivo contable: pérdida (Debe); inferior: ganancia (Haber).
-      if (fxDifferenceBs > 0) {
-        if (!fxLoss) throw new Error('Falta la cuenta Pérdida en Diferencial Cambiario (6.1.1.08).');
-        return [{ accountCode: fxLoss.code, accountName: fxLoss.name, debitBs: fxDifferenceBs, creditBs: 0, debitUsd: 0, creditUsd: 0, description: 'Pérdida cambiaria por pago a tasa posterior' }];
-      }
-      if (!fxGain) throw new Error('Falta la cuenta Ganancia por Diferencial Cambiario (4.2.1.01).');
-      return [{ accountCode: fxGain.code, accountName: fxGain.name, debitBs: 0, creditBs: Math.abs(fxDifferenceBs), debitUsd: 0, creditUsd: 0, description: 'Ganancia cambiaria por pago a tasa posterior' }];
-    };
-    let entry: JournalEntry;
-    try {
-      const baseItems: JournalEntryItem[] = kind === 'SALE_COLLECTION' ? [
-        { accountCode: cashCode, accountName: cashAccount.name, debitBs: amountBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: isBankTransfer ? 'Cobro de factura de crédito por transferencia bancaria' : 'Cobro de factura de crédito' },
-        { accountCode: controlCode, accountName: controlAccount.name, debitBs: 0, creditBs: amountAtInvoiceRate, debitUsd: 0, creditUsd: amountUsd, description: 'Cancelación parcial de cuenta por cobrar al valor contable original' }
-      ] : [
-        { accountCode: controlCode, accountName: controlAccount.name, debitBs: amountAtInvoiceRate, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: 'Cancelación parcial de cuenta por pagar al valor contable original' },
-        { accountCode: cashCode, accountName: cashAccount.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: isBankTransfer ? 'Pago de factura de crédito por transferencia bancaria' : 'Pago de factura de crédito' }
-      ];
-      entry = addJournalEntry({
-        entryNumber: 0,
-        date: draft.settlementDate,
-        description: (kind === 'SALE_COLLECTION' ? 'Cobro de cuenta por cobrar' : 'Pago de cuenta por pagar') + ' - ' + document.invoiceNumber + (Math.abs(fxDifferenceBs) >= 0.01 ? ' (incluye diferencia cambiaria)' : ''),
-        type: 'AJUSTE',
-        bcvRate: draft.bcvRate,
-        referenceDoc: document.invoiceNumber,
-        items: [...baseItems, ...fxLines()]
+        items: buildCreditSettlementJournalItems({
+          kind, method: draft.method, amountBs, amountUsd, invoiceRate,
+          settlementRate: draft.bcvRate,
+          cashAccount, controlAccount, fxGainAccount: fxGain, fxLossAccount: fxLoss
+        })
+
       });
     } catch (error) {
       settlementInFlightRef.current.delete(operationKey);
