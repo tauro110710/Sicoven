@@ -204,5 +204,9 @@ test('bloquea ventas con tasas mezcladas, artículo ajeno o totales que no conci
   assert.throws(() => prepareUniversalSaleInventoryLines([{ sku: 'A-1', quantity: 1, unitPriceBs: 10, taxRate: 31 }], products, { taxRate: 31, taxableBaseBs: 10, exemptAmountBs: 0, vatAmountBs: 4.6 }));
   assert.throws(() => prepareUniversalSaleInventoryLines([{ sku: 'A-1', quantity: 1, unitPriceBs: 10 }, { sku: 'A-1', quantity: 1, unitPriceBs: 5 }], products, { taxRate: 16, taxableBaseBs: 15, exemptAmountBs: 0, vatAmountBs: 2.4 }));
   assert.throws(() => prepareUniversalSaleInventoryLines([{ sku: 'NO-EXISTE', quantity: 1, unitPriceBs: 10 }], products, { taxRate: 16, taxableBaseBs: 10, exemptAmountBs: 0, vatAmountBs: 1.6 }));
-  assert.throws(() => prepareUniversalSaleInventoryLines([{ sku: 'A-1', quantity: 1, unitPriceBs: 10 }], products, { taxRate: 16, taxableBaseBs: 11, exemptAmountBs: 0, vatAmountBs: 1.76 }));
+  assert.throws(() => prepareUniversalSaleInventoryLines([{ sku: 'A-1', quantity: 1, unitPriceBs: 10 }], products, { taxRate: 16, taxableBaseBs: 11, exemptAmountBs: 0, vatAmountBs: 1.76, bcvRate: 10 }));
+  assert.throws(() => prepareUniversalSaleInventoryLines([{ sku: 'A-1', quantity: 1, price: 10 }], products, { taxRate: 16, taxableBaseBs: 10, exemptAmountBs: 0, vatAmountBs: 1.6, bcvRate: 10 }));
+  const usdLine = prepareUniversalSaleInventoryLines([{ sku: 'A-1', quantity: 1, unitPriceUsd: 2 }], products, { taxRate: 16, taxableBaseBs: 20, exemptAmountBs: 0, vatAmountBs: 3.2, bcvRate: 10 });
+  assert.equal(usdLine[0].unitPriceBs, 20);
+  assert.equal(usdLine[0].unitPriceUsd, 2);
 });
