@@ -505,13 +505,14 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     });
     runAtomicInvoiceImport(()=>{
      if(kind==='sales')prepared.forEach(s=>{
-      addSale(s as Parameters<typeof addSale>[0],targetCompany.id);
-      if(s.inventoryLines?.length){
-       const movementRows=s.inventoryLines.map(line=>({
-        productId:line.productId,date:s.invoiceDate,type:'SALIDA' as const,concept:'VENTA',
-        documentRef:'FAC-'+s.invoiceNumber,quantity:line.quantity,
+      const sale=s as Parameters<typeof addSale>[0];
+      addSale(sale,targetCompany.id);
+      if(sale.inventoryLines?.length){
+       const movementRows=sale.inventoryLines.map(line=>({
+        productId:line.productId,date:sale.invoiceDate,type:'SALIDA' as const,concept:'VENTA',
+        documentRef:'FAC-'+sale.invoiceNumber,quantity:line.quantity,
         unitCostBs:companyProducts.find(product=>product.id===line.productId)?.avgCostBs??0,
-        bcvRate:s.bcvRate,counterpartyRif:s.customerRif,counterpartyName:s.customerName
+        bcvRate:sale.bcvRate,counterpartyRif:sale.customerRif,counterpartyName:sale.customerName
        }));
        importInventoryMovements(movementRows,targetCompany.id);
       }
