@@ -614,6 +614,11 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const sourceRows=rows.filter(r=>['accountCode','codigoCuenta','cuenta'].some(k=>pick(r,k)!==undefined)&&(selectedModuleRowKeys.journal??[]).includes(String(r.migrationrowid??'')));
     if(!(selectedModuleRowKeys.journal??[]).length)throw new Error('Selecciona individualmente las líneas de asientos que deseas importar. No se importó ningún asiento.');
     if(!sourceRows.length)throw new Error('No hay líneas de asientos con código de cuenta.');
+    sourceRows.forEach((row,index)=>{
+     const date=String(pick(row,'date','fecha')??'').slice(0,10);
+     const reference=String(pick(row,'entryNumber','numeroAsiento','asiento','referenceDoc','referencia','documento')??'').trim();
+     if(!isValidIsoDate(date)||!reference)throw new Error('Fila '+(index+1)+': cada línea de asiento seleccionada requiere fecha válida y referencia documental. No se descartarán líneas incompletas.');
+    });
     const accountMap=new Map(accounts.map(a=>[a.code.toLowerCase(),a]));
     const groups=groupUniversalJournalRows(sourceRows);
     const seenJournalIdentities=new Set<string>();
