@@ -247,10 +247,11 @@ La validación del producto se realiza mediante:
 - La declaración cero se mantiene fuera del TXT de operaciones ordinarias hasta verificar en el portal el procedimiento aplicable; no se inventará una fila no descrita expresamente por la guía.
 
 
-## Incidencia de descarga TXT en SICOVEN v1.0.18 — 2026-11-06
+## Incidencia de descarga TXT en SICOVEN v1.0.18 — cierre de corrección para v1.0.19 (2026-11-06)
 
-- **Hallazgo:** la descarga de archivos de texto dependía de un enlace `Blob` temporal del renderer, revocado inmediatamente después del clic. El proceso Electron no disponía de un guardado nativo genérico para TXT/CSV/XML/JSON; solo se configuraba diálogo de guardado para PDF.
-- **Corrección en curso:** rama `fix/electron-text-file-downloads` sobre `main`. Se incorpora IPC validado para abrir el diálogo nativo de Windows, validar nombre/extensión/MIME/codificación/tamaño, escribir el archivo elegido y mostrarlo en su carpeta. El navegador conserva una ruta alternativa con revocación diferida del `Blob`.
-- **Cobertura:** exportaciones de texto que utilizan `downloadFile`, incluyendo el TXT de Retenciones IVA e ISLR. La cadena fiscal generada y su estructura (16 campos, tabuladores, CRLF y codificación definida) no se modifican.
-- **Criterio de cierre:** pruebas unitarias de validación/codificación, `npm test`, TypeScript, build, prueba del flujo de guardado en Windows y verificación de que el TXT se crea con el nombre y contenido esperados. No publicar ni sustituir v1.0.18 hasta que exista una nueva versión autorizada y validada.
-- **Estado:** corrección en rama; pendiente CI y prueba funcional de escritorio. No afirmar aún que el defecto está resuelto en el instalador publicado.
+- **Hallazgo:** la descarga de archivos de texto dependía de un enlace `Blob` temporal del renderer, revocado inmediatamente después del clic. Electron no disponía de un guardado nativo genérico para TXT/CSV/XML/JSON.
+- **Corrección integrada:** PR #29, rama `fix/electron-text-file-downloads`, fusionada en `main` mediante squash (commit `fcea4422db8a17a0172da5431528d0baafd5b4ae`). Se incorpora IPC con validación de origen, nombre/extensión/MIME/codificación/tamaño, diálogo nativo de Windows, escritura del archivo y apertura de su carpeta. El navegador conserva una ruta alternativa con revocación diferida del `Blob`.
+- **Cobertura:** exportaciones que utilizan `downloadFile`, incluyendo TXT de Retenciones IVA e ISLR y formatos TXT/CSV/XML/JSON admitidos. La estructura fiscal generada no se altera.
+- **Validación automatizada:** CI, pruebas unitarias, TypeScript, build, empaquetado Windows, instalación/arranque y actualización desde v1.0.17 con marcador SQLite e `integrity_check` pasaron sobre el SHA de la PR.
+- **Prueba manual pendiente:** el usuario no dispone por ahora de un equipo para ejecutar la comprobación visual del diálogo y del contenido exportado desde Retenciones IVA/ISLR. Esta limitación queda documentada; no se afirma que esa prueba manual se haya realizado.
+- **Versión objetivo:** v1.0.19. La publicación se ejecuta mediante el flujo Windows y se distribuye exclusivamente en `fenixlife1978/sicoven-descargas`; Vercel no participa en la compilación ni publicación del instalador.
