@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -54,4 +54,50 @@ test('limita la profundidad de exploración para evitar estructuras JSON patoló
   let nested: Record<string, unknown> = { records: [{ id: 1 }] };
   for (let depth = 0; depth < 10; depth++) nested = { child: nested };
   assert.deepEqual(extractUniversalJsonCollections(nested), []);
+});
+
+
+test('resuelve cliente desde una colección relacionada del mismo archivo', () => {
+  const rows = [
+    { migrationfile: 'archivo-a', migrationrowid: 'facturas|0', invoiceNumber: 'F-1', customerId: 'C-7' },
+    { migrationfile: 'archivo-a', migrationrowid: 'clientes|0', id: 'C-7', name: 'Comercial Uno', rif: 'J-12345678-9' },
+    { migrationfile: 'archivo-b', migrationrowid: 'clientes|0', id: 'C-7', name: 'Otra empresa', rif: 'J-98765432-1' }
+  ];
+  const result = resolveUniversalPartyReference(rows, rows[0], 'customer');
+  assert.deepEqual(result, { name: 'Comercial Uno', rif: 'J-12345678-9', source: 'related-record' });
+});
+
+test('resuelve proveedor mediante identificadores alternativos', () => {
+  const rows = [
+    { migrationfile: 'archivo-a', migrationrowid: 'compras|0', invoiceNumber: 'C-1', supplier_id: 42 },
+    { migrationfile: 'archivo-a', migrationrowid: 'proveedores|0', proveedorId: 42, razonSocial: 'Suministros Uno', rif: 'J-11111111-1' }
+  ];
+  const result = resolveUniversalPartyReference(rows, rows[0], 'supplier');
+  assert.equal(result.name, 'Suministros Uno');
+  assert.equal(result.rif, 'J-11111111-1');
+  assert.equal(result.source, 'related-record');
+});
+
+test('no resuelve referencias entre archivos distintos', () => {
+  const rows = [
+    { migrationfile: 'archivo-a', invoiceNumber: 'F-1', customerId: 'C-7' },
+    { migrationfile: 'archivo-b', id: 'C-7', name: 'Cliente', rif: 'J-12345678-9' }
+  ];
+  assert.throws(() => resolveUniversalPartyReference(rows, rows[0], 'customer'), /mismo archivo/);
+});
+
+test('rechaza referencias de contraparte ambiguas', () => {
+  const rows = [
+    { migrationfile: 'archivo-a', invoiceNumber: 'F-1', customerId: 'C-7' },
+    { migrationfile: 'archivo-a', id: 'C-7', name: 'Cliente A', rif: 'J-12345678-9' },
+    { migrationfile: 'archivo-a', id: 'C-7', name: 'Cliente B', rif: 'J-98765432-1' }
+  ];
+  assert.throws(() => resolveUniversalPartyReference(rows, rows[0], 'customer'), /varios registros/);
+});
+
+test('prefiere la contraparte explícita cuando nombre y RIF están presentes', () => {
+  const invoice = { migrationfile: 'archivo-a', customerName: 'Cliente directo', customerRif: 'J-12345678-9' };
+  assert.deepEqual(resolveUniversalPartyReference([invoice], invoice, 'customer'), {
+    name: 'Cliente directo', rif: 'J-12345678-9', source: 'inline'
+  });
 });

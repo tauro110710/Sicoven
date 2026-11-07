@@ -47,6 +47,65 @@ export const extractUniversalJsonCollections = (value: unknown): UniversalJsonCo
   return collections;
 };
 
+
+export type UniversalPartyKind = 'customer' | 'supplier';
+export type UniversalPartyResolution = { name: string; rif: string; source: 'inline' | 'related-record' };
+
+/**
+ * Resuelve la contraparte solo mediante una clave explícita dentro del mismo
+ * archivo de origen. Nunca cruza archivos ni elige coincidencias ambiguas.
+ */
+export const resolveUniversalPartyReference = (
+  rows: Array<Record<string, unknown>>,
+  invoice: Record<string, unknown>,
+  kind: UniversalPartyKind
+): UniversalPartyResolution => {
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const pickValue = (record: Record<string, unknown>, keys: string[]) => {
+    const wanted = new Set(keys.map(normalize));
+    for (const [key, value] of Object.entries(record)) {
+      if (wanted.has(normalize(key)) && value !== undefined && value !== null && String(value).trim() !== '') return value;
+    }
+    return undefined;
+  };
+  const customer = kind === 'customer';
+  const nameKeys = customer
+    ? ['customerName','clientName','cliente','nombreCliente','name','nombre','razonSocial','businessName']
+    : ['supplierName','vendorName','proveedor','nombreProveedor','name','nombre','razonSocial','businessName'];
+  const rifKeys = customer
+    ? ['customerRif','clientRif','rifCliente','rif','taxId','identificacion']
+    : ['supplierRif','vendorRif','rifProveedor','rif','taxId','identificacion'];
+  const referenceKeys = customer
+    ? ['customerId','clientId','clienteId','idCliente','customer_id','client_id','cliente_id','idcliente']
+    : ['supplierId','vendorId','proveedorId','idProveedor','supplier_id','vendor_id','proveedor_id','idproveedor'];
+  const inlineName = pickValue(invoice, nameKeys);
+  const inlineRif = pickValue(invoice, rifKeys);
+  if (inlineName && inlineRif) return { name: String(inlineName).trim(), rif: String(inlineRif).trim(), source: 'inline' };
+
+  const reference = pickValue(invoice, referenceKeys);
+  if (reference === undefined) {
+    throw new Error('La factura no contiene nombre y RIF de la contraparte ni una referencia explícita para resolverla.');
+  }
+  const fileId = String(invoice.migrationfile ?? '');
+  const candidateIdKeys = customer
+    ? ['id','customerId','clientId','clienteId','idCliente','customer_id','client_id','cliente_id']
+    : ['id','supplierId','vendorId','proveedorId','idProveedor','supplier_id','vendor_id','proveedor_id'];
+  const matches = rows.filter(candidate => {
+    if (String(candidate.migrationfile ?? '') !== fileId) return false;
+    const candidateId = pickValue(candidate, candidateIdKeys);
+    return candidateId !== undefined && normalize(candidateId) === normalize(reference) &&
+      Boolean(pickValue(candidate, nameKeys)) && Boolean(pickValue(candidate, rifKeys));
+  });
+  if (matches.length === 0) throw new Error('No se pudo resolver la referencia '+String(reference)+' de '+(customer?'cliente':'proveedor')+' dentro del mismo archivo. No se importó la factura.');
+  if (matches.length > 1) throw new Error('La referencia '+String(reference)+' de '+(customer?'cliente':'proveedor')+' coincide con varios registros del mismo archivo. Corrige la ambigüedad antes de importar.');
+  const match = matches[0];
+  return {
+    name: String(pickValue(match, nameKeys)).trim(),
+    rif: String(pickValue(match, rifKeys)).trim(),
+    source: 'related-record'
+  };
+};
+
 export type UniversalImportFormat = 'json' | 'csv' | 'tsv' | 'txt' | 'xlsx' | 'xlsm' | 'unsupported';
 
 export const detectUniversalImportFormat = (fileName: string): UniversalImportFormat => {
