@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept } from '../../types/universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 
@@ -96,31 +96,19 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  },[inventoryCandidateRows,inventoryFilter]);
  const moduleRecordCandidates=useMemo(()=>{
   const result:Record<string,Row[]>={sales:[],purchases:[],journal:[],movements:[]};
-  const byFile=new Map<string,Row[]>();
-  rows.forEach(row=>{const file=String(row.migrationfile??row.migrationsource??'archivo sin nombre');const group=byFile.get(file)??[];group.push(row);byFile.set(file,group);});
-  for(const group of byFile.values()){
-   const keys=new Set(group.flatMap(row=>Object.keys(row).filter(key=>!['migrationsource','migrationfile','migrationcollection','migrationrowid'].includes(key)).map(norm)));
-   const hasDocument=['invoicenumber','factura','documento','numerofactura'].some(key=>keys.has(norm(key)));
-   const hasDate=['invoicedate','fechafactura','fecha'].some(key=>keys.has(norm(key)));
-   const hasAmount=['totalamountbs','totalbs','total','vatamountbs','iva'].some(key=>keys.has(norm(key)));
-   const hasCustomerMaster=group.some(row=>Boolean(pick(row,'name','nombre','razonSocial','businessName','customerName','clientName'))&&Boolean(pick(row,'rif','taxId','identificacion','customerRif','clientRif')));
-   const hasSupplierMaster=group.some(row=>Boolean(pick(row,'name','nombre','razonSocial','businessName','supplierName','vendorName'))&&Boolean(pick(row,'rif','taxId','identificacion','supplierRif','vendorRif')));
-   const hasCustomerReference=group.some(row=>['customerId','clientId','clienteId','idCliente','customer_id','client_id','cliente_id'].some(key=>pick(row,key)!==undefined));
-   const hasSupplierReference=group.some(row=>['supplierId','vendorId','proveedorId','idProveedor','supplier_id','vendor_id','proveedor_id'].some(key=>pick(row,key)!==undefined));
-   const hasCustomer=keys.has('customername')||keys.has('cliente')||keys.has('nombrecliente')||keys.has('customerrif')||keys.has('rifcliente')||hasCustomerReference&&hasCustomerMaster;
-   const hasSupplier=keys.has('suppliername')||keys.has('proveedor')||keys.has('nombreproveedor')||keys.has('supplierrif')||keys.has('rifproveedor')||hasSupplierReference&&hasSupplierMaster;
-   if(hasDocument&&hasDate&&hasAmount){
-    const invoiceRows=group.filter(row=>['invoiceNumber','numeroFactura','numero de factura','factura','documento'].some(key=>pick(row,key)!==undefined));
-    if(hasCustomer)result.sales.push(...invoiceRows);
-    if(hasSupplier)result.purchases.push(...invoiceRows);
-   }
-   if(['accountcode','codigocuenta','cuenta'].some(key=>keys.has(norm(key)))&&['date','fecha'].some(key=>keys.has(norm(key)))&&['entrynumber','numeroasiento','asiento','referencedoc','referencia','documento'].some(key=>keys.has(norm(key)))){
-    result.journal.push(...group.filter(row=>['accountCode','codigoCuenta','cuenta'].some(key=>pick(row,key)!==undefined)));
-   }
-   if(['productcode','codigoproducto','sku','codigo','code'].some(key=>keys.has(norm(key)))&&['date','fecha','movementdate','fechamovimiento'].some(key=>keys.has(norm(key)))&&['type','movementtype','tipomovimiento','tipo'].some(key=>keys.has(norm(key)))&&['documentref','referencia','documento','invoicenumber','numerodocumento'].some(key=>keys.has(norm(key)))){
-    result.movements.push(...group.filter(row=>['productCode','codigoProducto','sku','code','codigo'].some(key=>pick(row,key)!==undefined)&&['type','movementType','tipoMovimiento','tipo'].some(key=>pick(row,key)!==undefined)&&['documentRef','referencia','documento','invoiceNumber','numeroDocumento'].some(key=>pick(row,key)!==undefined)));
-   }
-  }
+  const classified=classifyUniversalInvoiceRows(rows);
+  result.sales.push(...classified.sales as Row[]);
+  result.purchases.push(...classified.purchases as Row[]);
+  rows.forEach(row=>{
+   const hasAccount=['accountCode','codigoCuenta','cuenta'].some(key=>pick(row,key)!==undefined);
+   const hasDate=['date','fecha'].some(key=>pick(row,key)!==undefined);
+   const hasReference=['entryNumber','numeroAsiento','asiento','referenceDoc','referencia','documento'].some(key=>pick(row,key)!==undefined);
+   if(hasAccount&&hasDate&&hasReference)result.journal.push(row);
+   const hasProduct=['productCode','codigoProducto','sku','code','codigo'].some(key=>pick(row,key)!==undefined);
+   const hasMovementType=['type','movementType','tipoMovimiento','tipo'].some(key=>pick(row,key)!==undefined);
+   const hasMovementReference=['documentRef','referencia','documento','invoiceNumber','numeroDocumento'].some(key=>pick(row,key)!==undefined);
+   if(hasProduct&&hasDate&&hasMovementType&&hasMovementReference)result.movements.push(row);
+  });
   return result;
  },[rows]);
  const filteredPosvenProducts=useMemo(()=>{const q=norm(posvenProductFilter);return posvenProducts.filter(row=>!q||norm([row.codigo,row.nombre,row.categoria,row.departamento].map(value=>String(value??'')).join(' ')).includes(q));},[posvenProducts,posvenProductFilter]);
@@ -388,29 +376,12 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   try{
    if(selected[0]==='sales'||selected[0]==='purchases'){
     const kind=selected[0];
-    const rowsBySource=new Map<string,Row[]>();
-    rows.forEach(row=>{const source=String(row.migrationfile??row.migrationsource??'archivo sin nombre');const group=rowsBySource.get(source)??[];group.push(row);rowsBySource.set(source,group);});
-    const sourceGroups=[...rowsBySource.entries()].map(([source,group])=>{
-     const sourceKeys=new Set(group.flatMap(row=>Object.keys(row).filter(key=>!['migrationsource','migrationfile','migrationcollection','migrationrowid'].includes(key)).map(norm)));
-     const hasInlineParty=kind==='sales'
-      ? ['customername','cliente','nombrecliente','customerrif','rifcliente','clienterif'].some(key=>sourceKeys.has(norm(key)))
-      : ['suppliername','proveedor','nombreproveedor','supplierrif','rifproveedor','proveedorrif'].some(key=>sourceKeys.has(norm(key)));
-     const hasPartyMaster=group.some(row=>Boolean(pick(row,kind==='sales'?'customerName':'supplierName','name','nombre','razonSocial','businessName'))&&Boolean(pick(row,kind==='sales'?'customerRif':'supplierRif','rif','taxId','identificacion')));
-     const referenceKeys=kind==='sales'?['customerId','clientId','clienteId','idCliente','customer_id','client_id','cliente_id']:['supplierId','vendorId','proveedorId','idProveedor','supplier_id','vendor_id','proveedor_id'];
-     const hasRelatedParty=hasPartyMaster&&group.some(row=>referenceKeys.some(key=>pick(row,key)!==undefined));
-     const hasPartySignal=hasInlineParty||hasRelatedParty;
-     const hasDocumentSignal=['invoicenumber','factura','documento','numerofactura'].some(key=>sourceKeys.has(norm(key)));
-     const hasDateSignal=['invoicedate','fechafactura','fecha'].some(key=>sourceKeys.has(norm(key)));
-     const hasAmountSignal=['totalamountbs','totalbs','total','vatamountbs','iva'].some(key=>sourceKeys.has(norm(key)));
-     return {source,group,hasPartySignal,hasDocumentSignal,hasDateSignal,hasAmountSignal};
-    });
-    // No descartar silenciosamente un archivo que parece contener facturas pero carece de campos para identificarlo.
-    const ambiguousSources=sourceGroups.filter(item=>item.hasDateSignal&&item.hasAmountSignal&&(!item.hasPartySignal||!item.hasDocumentSignal));
-    if(ambiguousSources.length)throw new Error('Hay archivos que parecen contener '+(kind==='sales'?'ventas':'compras')+' pero no tienen encabezados suficientes de '+(kind==='sales'?'cliente':'proveedor')+' y número de factura: '+ambiguousSources.map(item=>item.source).join(', ')+'. No se importó nada. Separa los módulos o corrige los encabezados antes de continuar.');
-    const sourceRows=sourceGroups.filter(item=>item.hasPartySignal&&item.hasDocumentSignal).flatMap(item=>item.group).filter(row=>['invoiceNumber','numeroFactura','numero de factura','factura','documento'].some(key=>pick(row,key)!==undefined)&&(selectedModuleRowKeys[kind]??[]).includes(String(row.migrationrowid??'')));
+    const classified=classifyUniversalInvoiceRows(rows);
+    const classifiedRows=(kind==='sales'?classified.sales:classified.purchases) as Row[];
+    const sourceRows=classifiedRows.filter(row=>(selectedModuleRowKeys[kind]??[]).includes(String(row.migrationrowid??'')));
     if(!(selectedModuleRowKeys[kind]??[]).length)throw new Error('Selecciona individualmente las facturas que deseas importar. No se importó ningún documento.');
     if(sourceRows.length===0)throw new Error('No se identificaron archivos con encabezados de '+(kind==='sales'?'ventas y cliente':'compras y proveedor')+'. Verifica número de factura y datos de la contraparte.');
-    const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha de factura','fecha')??'').slice(0,10);if(!isValidIsoDate(value))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
+    const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha de factura','fechaEmision','fecha')??'').slice(0,10);if(!isValidIsoDate(value))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
     const num=(r:Row,i:number,required:boolean,...keys:string[])=>{const raw=pick(r,...keys);if((raw===undefined||raw==='')&&required)throw new Error('Fila '+(i+1)+': falta el campo obligatorio '+keys[0]+'.');const value=raw===undefined||raw===''?0:parseMigrationNumber(raw);if(!Number.isFinite(value)||value<0)throw new Error('Fila '+(i+1)+': importe inválido en '+keys[0]+'.');return value;};
     const documentKey=(invoiceNumber:string,partyRif:string)=>norm(invoiceNumber)+'|'+norm(partyRif);
     const controlKey=(controlNumber:string,partyRif:string)=>norm(controlNumber)+'|'+norm(partyRif);
@@ -419,11 +390,11 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const existingDocs=new Set((kind==='sales'?companySales.map(d=>documentKey(d.invoiceNumber||'',d.customerRif||'')):companyPurchases.map(d=>documentKey(d.invoiceNumber||'',d.supplierRif||''))));
     const existingControls=new Set((kind==='sales'?companySales.map(d=>controlKey(d.controlNumber||'',d.customerRif||'')):companyPurchases.map(d=>controlKey(d.controlNumber||'',d.supplierRif||''))).filter(key=>!key.startsWith('|')));
     const prepared=sourceRows.map((r,i)=>{
-     const invoiceNumber=String(pick(r,'invoiceNumber','numeroFactura','numero de factura','factura','documento')??'').trim();
+     const invoiceNumber=String(pick(r,'invoiceNumber','numeroFactura','numero de factura','factura','documento','numeroDocumento','nroFactura','numFactura','numero')??'').trim();
      const resolvedParty=resolveUniversalPartyReference(rows,r,kind==='sales'?'customer':'supplier');
      const partyName=resolvedParty.name;
      const partyRif=resolvedParty.rif;
-     const incomingControl=String(pick(r,'controlNumber','numeroControl','numero de control')??'').trim();
+     const incomingControl=String(pick(r,'controlNumber','numeroControl','numero de control','nroControl','control')??'').trim();
      const key=documentKey(invoiceNumber,partyRif);
      if(!invoiceNumber||!partyName||!partyRif)throw new Error('Fila '+(i+1)+': número de factura, nombre y RIF de cliente/proveedor son obligatorios.');
      if(seen.has(key)||existingDocs.has(key))throw new Error('Factura duplicada para el mismo cliente/proveedor o ya existente: '+invoiceNumber+' ('+partyRif+'). No se sobrescribieron documentos.');seen.add(key);
@@ -432,7 +403,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      if(seenControls.has(controlIdentity)||existingControls.has(controlIdentity))throw new Error('Número de control duplicado para el mismo cliente/proveedor o ya existente: '+incomingControl+' ('+partyRif+'). No se importó ningún documento.');
      seenControls.add(controlIdentity);
      const invoiceDate=dateValue(r,i);
-     const totalAmountBs=num(r,i,true,'totalAmountBs','totalBs','total');
+     const totalAmountBs=num(r,i,true,'totalAmountBs','totalBs','total','montoTotal','importeTotal','monto','importe');
      const exemptAmountBs=num(r,i,true,'exemptAmountBs','montoExentoBs','exentoBs');
      const taxableBaseBs=num(r,i,true,'taxableBaseBs','baseImponibleBs','baseBs');
      const taxRate=num(r,i,true,'taxRate','alicuota','tasaIva');
@@ -443,7 +414,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const taxableBaseUsd=num(r,i,true,'taxableBaseUsd','baseImponibleUsd','baseUsd');
      const vatAmountUsd=num(r,i,true,'vatAmountUsd','ivaUsd');
      const vatWithheldUsd=num(r,i,true,'vatWithheldUsd','ivaRetenidoUsd');
-     const paymentTermRaw=norm(String(pick(r,'paymentTerm','condicionPago','condicion')??''));
+     const paymentTermRaw=norm(String(pick(r,'paymentTerm','condicionPago','condicion','tipoPago','formaPago')??''));
      if(!['contado','credito','cash','credit'].includes(paymentTermRaw))throw new Error('Fila '+(i+1)+': indique expresamente paymentTerm CONTADO o CREDITO; no se supondrá la condición de pago.');
      const paymentTerm=(paymentTermRaw==='contado'||paymentTermRaw==='cash'?'CONTADO':'CREDITO') as 'CONTADO'|'CREDITO';
      const creditDays=paymentTerm==='CREDITO'?num(r,i,true,'creditDays','diasCredito'):0;
