@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, selectUniversalRowsByStableKeys, mapUniversalInventoryItemType } from '../../types/universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, planUniversalInvoiceSettlements, validateUniversalSettlementDestination, selectUniversalRowsByStableKeys, mapUniversalInventoryItemType } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 
@@ -51,7 +51,7 @@ const pick = (row:Row, ...keys:string[]) => {
 };
 
 export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClose}) => {
- const { companies, products: allProducts, getCompanyInventoryProducts, getCompanyInventoryMovements, importInventoryProducts, importInventoryMovements, accounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, currentCompany } = useAccounting();
+ const { companies, products: allProducts, getCompanyInventoryProducts, getCompanyInventoryMovements, importInventoryProducts, importInventoryMovements, accounts, bankAccounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, currentCompany } = useAccounting();
  const [targetCompanyId, setTargetCompanyId] = useState('');
  const targetCompany = companies.find(company => company.id === targetCompanyId) || null;
  const companyProducts = targetCompany ? getCompanyInventoryProducts(targetCompany.id) : [];
@@ -71,6 +71,10 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
  const [notice,setNotice]=useState('');
+ const [settlementPreview,setSettlementPreview]=useState<Array<{
+  invoiceRowId:string;sourceRowId:string;settlementDate:string;amountUsd:number;amountBs:number;
+  method:string;reference?:string;destinationError:string|null;
+ }>>([]);
  const [confirmed,setConfirmed]=useState(false);
  const [backupPayload,setBackupPayload]=useState<string|null>(null);
  const [backupCounts,setBackupCounts]=useState<Record<string,number>|null>(null);
@@ -401,7 +405,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   setError('El Importador Inteligente Universal no restaura respaldos completos ni reemplaza los datos actuales. Los archivos se deben analizar por colecciones y cada módulo debe importarse mediante su adaptador con la empresa destino explícita. No se modificó ningún dato.');
  };
  const runMigration=async()=>{
-  setError('');setNotice('');
+  setError('');setNotice('');setSettlementPreview([]);
   if(!confirmed){setError('Marca la confirmación final antes de ejecutar la migración.');return;}
   if(!targetCompany){setError('Selecciona una empresa destino válida.');return;}
   if(selected.includes('accounts')){setError('El plan de cuentas de SICOVEN es actualmente un catálogo compartido por todas las empresas, no un catálogo separado por empresa. Para evitar mezclar planes contables, esta colección queda en análisis y conciliación; no se importará hasta que SICOVEN disponga de planes de cuentas por empresa.');return;}
@@ -421,6 +425,23 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const sourceRows=selectUniversalRowsByStableKeys(classifiedRows,selectedModuleRowKeys[kind]??[]);
     if(!(selectedModuleRowKeys[kind]??[]).length)throw new Error('Selecciona individualmente las facturas que deseas importar. No se importó ningún documento.');
     if(sourceRows.length===0)throw new Error('No se identificaron archivos con encabezados de '+(kind==='sales'?'ventas y cliente':'compras y proveedor')+'. Verifica número de factura y datos de la contraparte.');
+    const settlementPlans=planUniversalInvoiceSettlements(sourceRows,rows,kind);
+    const linkedSettlementPreview=settlementPlans.flatMap(plan=>plan.settlements.map(settlement=>({
+     invoiceRowId:plan.invoiceRowId,
+     sourceRowId:settlement.sourceRowId,
+     settlementDate:settlement.settlementDate,
+     amountUsd:settlement.amountUsd,
+     amountBs:settlement.amountBs,
+     method:settlement.method,
+     reference:settlement.reference,
+     destinationError:validateUniversalSettlementDestination(settlement,targetCompany.id,bankAccounts,accounts)
+    })));
+    if(linkedSettlementPreview.length){
+     setSettlementPreview(linkedSettlementPreview);
+     const unresolved=linkedSettlementPreview.filter(item=>item.destinationError).length;
+     setNotice('Se detectaron '+linkedSettlementPreview.length+' liquidaciones vinculadas a las facturas seleccionadas. '+(unresolved?unresolved+' requieren corregir o asignar su cuenta destino. ':'Los destinos contables se verificaron. ')+'No se importó ningún documento: las liquidaciones seguirán bloqueadas hasta que el lote completo pueda confirmarse en una sola transacción SQLite.');
+     return;
+    }
     const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha de factura','fechaEmision','fecha')??'').slice(0,10);if(!isValidIsoDate(value))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
     const num=(r:Row,i:number,required:boolean,...keys:string[])=>{const raw=pick(r,...keys);if((raw===undefined||raw==='')&&required)throw new Error('Fila '+(i+1)+': falta el campo obligatorio '+keys[0]+'.');const value=raw===undefined||raw===''?0:parseMigrationNumber(raw);if(!Number.isFinite(value)||value<0)throw new Error('Fila '+(i+1)+': importe inválido en '+keys[0]+'.');return value;};
     const documentKey=(invoiceNumber:string,partyRif:string)=>buildUniversalInvoiceIdentity(kind,invoiceNumber,partyRif);
@@ -798,6 +819,22 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"><div className="mb-1 flex items-center gap-2 font-semibold"><ShieldCheck size={17}/> Controles de seguridad</div>Se rechazan códigos duplicados y campos numéricos inválidos; no se sobrescriben artículos existentes. Ventas, compras, asientos y movimientos históricos de inventario disponen de importadores con validaciones específicas. El plan de cuentas compartido no se modifica desde este flujo. CxC y CxP se derivan de facturas de crédito; clientes y proveedores no se importan como maestros separados porque el modelo actual los conserva dentro de sus documentos. Revisa la vista previa y confirma antes de importar.</div>
     {error&&<div role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800"><AlertTriangle className="mr-2 inline" size={17}/>{error}</div>}
     {notice&&<div role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 className="mr-2 inline" size={17}/>{notice}</div>}
+    {settlementPreview.length>0&&<section className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+     <h3 className="text-sm font-semibold text-amber-900">Liquidaciones históricas detectadas — solo vista previa</h3>
+     <p className="mt-1 text-xs text-amber-900">Cada liquidación se muestra con su factura de origen, tasa, importe, referencia y destino. Esta pantalla no registra cobros ni pagos.</p>
+     <div className="mt-3 max-h-64 overflow-auto">
+      <table className="min-w-full text-xs">
+       <thead><tr className="border-b border-amber-200 text-left"><th className="px-2 py-2">Factura origen</th><th className="px-2 py-2">Liquidación</th><th className="px-2 py-2">Fecha</th><th className="px-2 py-2">Medio</th><th className="px-2 py-2 text-right">USD</th><th className="px-2 py-2 text-right">Bs</th><th className="px-2 py-2">Referencia</th><th className="px-2 py-2">Destino</th></tr></thead>
+       <tbody>{settlementPreview.map(item=><tr key={item.sourceRowId} className="border-b border-amber-100 align-top">
+        <td className="px-2 py-2 font-mono">{item.invoiceRowId}</td><td className="px-2 py-2 font-mono">{item.sourceRowId}</td>
+        <td className="px-2 py-2">{item.settlementDate}</td><td className="px-2 py-2">{item.method}</td>
+        <td className="px-2 py-2 text-right tabular-nums">{item.amountUsd.toFixed(2)}</td><td className="px-2 py-2 text-right tabular-nums">{item.amountBs.toFixed(2)}</td>
+        <td className="px-2 py-2">{item.reference||'—'}</td>
+        <td className="px-2 py-2">{item.destinationError?<span className="font-medium text-rose-700">{item.destinationError}</span>:<span className="font-medium text-emerald-700">Verificado</span>}</td>
+       </tr>)}</tbody>
+      </table>
+     </div>
+    </section>}
     {(rows.length>0||(posvenBackup&&selectedPosvenCollections.includes('productos')))&&<label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} className="mt-1"/><span>{posvenBackup&&selectedPosvenCollections.includes('productos')?'Confirmo la importación de los productos activos no-kit seleccionados. Entiendo que no se sobrescribirán códigos existentes, que el costo Bs se calculará con la tasa BCV indicada y que el tratamiento IVA elegido se aplicará a los artículos importados.':'Confirmo que revisé las colecciones y los registros seleccionados. Autorizo únicamente el módulo y las filas marcadas, con la empresa destino indicada; no autorizo restaurar respaldos completos ni reemplazar datos existentes.'}</span></label>}
    </div>
    <footer className="flex flex-wrap justify-between gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Cerrar</button><button disabled={posvenBackup?(busy||selectedPosvenCollections.length!==1||!confirmed||(selectedPosvenCollections.includes('productos')?(selectedPosvenProductCodes.length===0||!posvenVatTreatment||!posvenOpeningDate||!posvenBcvRate.trim()):(!selected.length||!['sales','purchases','journal','movements'].includes(selected[0])||!(selectedModuleRowKeys[selected[0]]??[]).length))):(busy||(!backupPayload&&(!rows.length||!confirmed||selected.length<1||!['inventory','journal','sales','purchases','movements'].includes(selected[0])))||!!backupPayload)} onClick={posvenBackup?(selectedPosvenCollections.includes('productos')?runPosvenImport:runMigration):backupPayload?runBackupImport:runMigration} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy?'Validando e importando…':posvenBackup?(selectedPosvenCollections.includes('productos')?'Importar productos POSVEN':'Importar módulo POSVEN seleccionado'):backupPayload?'Respaldo completo no importable':'Importar siguiente módulo'}</button></footer>
