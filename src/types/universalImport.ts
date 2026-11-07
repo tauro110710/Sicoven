@@ -1,3 +1,5 @@
+import type { InventoryProduct, SaleInventoryLine } from './accounting';
+
 export type UniversalJsonCollection = {
   path: string;
   rows: Record<string, unknown>[];
@@ -159,6 +161,70 @@ export const resolveUniversalPurchaseDetailRows = (
   return matches;
 };
 
+
+export const prepareUniversalSaleInventoryLines = (
+  rawLines: unknown[],
+  products: Pick<InventoryProduct, 'id' | 'code' | 'name' | 'vatTreatment'>[],
+  invoice: { taxRate: number; taxableBaseBs: number; exemptAmountBs: number; vatAmountBs: number }
+): SaleInventoryLine[] => {
+  if (!Array.isArray(rawLines) || rawLines.length === 0) throw new Error('La factura no contiene renglones de mercancía importables.');
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const pickValue = (row: Record<string, unknown>, keys: string[]) => {
+    const wanted = new Set(keys.map(normalize));
+    return Object.entries(row).find(([key, value]) => wanted.has(normalize(key)) && value !== undefined && value !== null && String(value).trim() !== '')?.[1];
+  };
+  const parseNumber = (value: unknown): number => {
+    if (typeof value === 'number') return value;
+    const raw = String(value ?? '').trim().replace(/\s/g, '');
+    if (!raw) return NaN;
+    const normalized = raw.includes(',') && raw.includes('.')
+      ? (raw.lastIndexOf(',') > raw.lastIndexOf('.') ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/,/g, ''))
+      : raw.replace(',', '.');
+    return Number(normalized);
+  };
+  const rateForTreatment = (treatment: InventoryProduct['vatTreatment']): number => {
+    if (treatment === 'GENERAL_16') return 16;
+    if (treatment === 'REDUCIDA_8') return 8;
+    if (treatment === 'EXENTO' || treatment === 'EXONERADO') return 0;
+    throw new Error('El artículo no tiene un tratamiento IVA explícito compatible con la factura.');
+  };
+  const seen = new Set<string>();
+  const result = rawLines.map((raw, index) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Detalle '+(index+1)+': el renglón no es un objeto válido.');
+    const row = raw as Record<string, unknown>;
+    const code = String(pickValue(row, ['productCode','codigoProducto','sku','code','codigo','itemCode']) ?? '').trim();
+    const product = products.find(item => item.code.trim().toLowerCase() === code.toLowerCase());
+    const quantity = parseNumber(pickValue(row, ['quantity','cantidad','qty']));
+    const unitPriceBs = parseNumber(pickValue(row, ['unitPriceBs','precioUnitarioBs','unitPrice','precioUnitario','priceBs','precio']));
+    if (!product || !code || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPriceBs) || unitPriceBs <= 0) {
+      throw new Error('Detalle '+(index+1)+': identifique un artículo existente de la empresa destino por código/SKU y declare cantidad y precio unitario Bs positivos. No se asociará por descripción.');
+    }
+    if (seen.has(product.id)) throw new Error('Detalle '+(index+1)+': el mismo artículo aparece más de una vez. Consolide sus renglones antes de importar.');
+    seen.add(product.id);
+    const productRate = rateForTreatment(product.vatTreatment);
+    const declaredRateRaw = pickValue(row, ['taxRate','alicuota','tasaIva','vatRate']);
+    const declaredRate = declaredRateRaw === undefined ? productRate : parseNumber(declaredRateRaw);
+    if (declaredRate !== productRate || productRate !== invoice.taxRate || productRate === 31) {
+      throw new Error('Detalle '+(index+1)+': la alícuota del artículo no coincide con la factura o requiere tratamiento fiscal por línea no soportado. No se mezclan tasas ni se infiere impuesto suntuario.');
+    }
+    const netAmountBs = Math.round(quantity * unitPriceBs * 100) / 100;
+    const declaredNet = pickValue(row, ['netAmountBs','lineTotalBs','subtotalBs','baseImponibleBs','totalLineaBs']);
+    if (declaredNet !== undefined && Math.abs(parseNumber(declaredNet) - netAmountBs) > 0.02) {
+      throw new Error('Detalle '+(index+1)+': el subtotal declarado no coincide con cantidad por precio unitario. Descuentos o cargos por línea requieren un adaptador explícito.');
+    }
+    const taxable = productRate === 0 ? 0 : netAmountBs;
+    const exempt = productRate === 0 ? netAmountBs : 0;
+    const vatAmountBs = Math.round(taxable * productRate) / 100;
+    return { productId: product.id, productCode: product.code, productName: product.name, quantity, unitPriceBs, netAmountBs, taxRate: productRate, vatAmountBs, exemptAmountBs: exempt, totalBs: netAmountBs + vatAmountBs };
+  });
+  const sum = (key: 'netAmountBs' | 'vatAmountBs' | 'exemptAmountBs') => Math.round(result.reduce((total, line) => total + line[key], 0) * 100) / 100;
+  if (Math.abs(sum('netAmountBs') - (invoice.taxableBaseBs + invoice.exemptAmountBs)) > 0.02 ||
+      Math.abs(sum('vatAmountBs') - invoice.vatAmountBs) > 0.02 ||
+      Math.abs(sum('exemptAmountBs') - invoice.exemptAmountBs) > 0.02) {
+    throw new Error('Los renglones de mercancía no concilian con base imponible, exento e IVA de la factura. No se importó ningún documento.');
+  }
+  return result;
+};
 
 export type UniversalInventoryMovementType = 'ENTRADA' | 'SALIDA' | 'AJUSTE';
 export type UniversalInventoryMovementConcept = 'COMPRA' | 'INVENTARIO_INICIAL' | 'VENTA' | 'MERMA' | 'AUTOCONSUMO' | 'AJUSTE' | 'DEVOLUCION_CLIENTE' | 'DEVOLUCION_COMPRA';
