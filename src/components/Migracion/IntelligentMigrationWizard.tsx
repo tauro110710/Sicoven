@@ -158,14 +158,40 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     }).slice(0,10);
     let target='Sin destino identificado';let mode='No importar automáticamente';let reason='La colección requiere revisión de esquema y significado antes de asignar datos contables.';let canImport=false;
     if(/^(productos|products|inventory|inventario)$/.test(key)){target='Inventario / productos';mode='Adaptador disponible';canImport=true;reason='Importa únicamente artículos activos que no sean kits. El costo Bs se calcula con costoUSD × tasa BCV indicada; exige tratamiento IVA explícito y fecha de corte.';}
-    else if(/^(ventas|sales|facturas|invoices)$/.test(key)){target='Ventas / facturas';mode='Candidato a adaptación';reason='Validar encabezados y detalles, impuestos, pagos, cliente, anulaciones y evitar duplicar asientos/CxC.';}
-    else if(/^(compras|purchases)$/.test(key)){target='Compras / facturas';mode='Candidato a adaptación';reason='Validar proveedor, detalles, impuestos, pagos, inventario y evitar duplicar asientos/CxP.';}
+    else if(/^(ventas|sales|facturas|invoices)$/.test(key)){
+     target='Ventas / facturas';
+     const ready=classifyUniversalInvoiceRows(objects).sales.length>0;
+     mode=ready?'Adaptador universal disponible':'Revisión de encabezados';
+     reason=ready?'Las facturas candidatas se importan una por una mediante el adaptador universal, que valida cliente/RIF, fechas, control, moneda, impuestos, pagos y detalles.':'No se encontraron filas de factura con fecha, total y referencia explícita de cliente. No se importará por semejanza de nombres.';
+     canImport=ready;
+    }
+    else if(/^(compras|purchases)$/.test(key)){
+     target='Compras / facturas';
+     const ready=classifyUniversalInvoiceRows(objects).purchases.length>0;
+     mode=ready?'Adaptador universal disponible':'Revisión de encabezados';
+     reason=ready?'Las facturas candidatas se importan una por una mediante el adaptador universal, que valida proveedor/RIF, fecha de abono en cuenta, pago, impuestos, detalle y Kardex.':'No se encontraron filas de factura con fecha, total y referencia explícita de proveedor. No se importará por semejanza de nombres.';
+     canImport=ready;
+    }
     else if(/^(clientes|customers|clients)$/.test(key)){target='Referencias de clientes';mode='Solo referencia';reason='Cruzar contra facturas; SICOVEN no ofrece importación independiente de este maestro en este flujo.';}
     else if(/^(proveedores|suppliers|vendors)$/.test(key)){target='Referencias de proveedores';mode='Solo referencia';reason='Cruzar contra compras; SICOVEN no ofrece importación independiente de este maestro en este flujo.';}
     else if(/^(cxc|receivables|cuentasporcobrar)$/.test(key)){target='Cuentas por cobrar';mode='Solo conciliación';reason='No contabilizar por separado sin conciliar facturas y pagos; SICOVEN deriva saldos desde ventas a crédito.';}
     else if(/^(cxp|payables|cuentasporpagar)$/.test(key)){target='Cuentas por pagar';mode='Solo conciliación';reason='No contabilizar por separado sin conciliar compras y pagos; SICOVEN deriva saldos desde compras a crédito.';}
-    else if(/^(librodiario|journalentries|journal|asientos)$/.test(key)){target='Libro diario';mode='Solo conciliación';reason='Requiere validar cuentas, asiento completo, cuadre en Bs/USD, tasa BCV y duplicidad con operaciones importadas.';}
-    else if(/^(movimientos|movements|stockmovements|inventorymovements)$/.test(key)){target='Movimientos (semántica por confirmar)';mode='Revisión manual';reason='Puede representar Kardex, caja u otros movimientos; no asignar hasta inspeccionar campos y referencias.';}
+    else if(/^(librodiario|journalentries|journal|asientos)$/.test(key)){
+     target='Libro diario';
+     const has=(keys:string[])=>objects.some(row=>Object.entries(row).some(([field,value])=>keys.includes(norm(field))&&value!==undefined&&value!==null&&String(value).trim()!==''));
+     const ready=has(['accountcode','codigocuenta','cuenta'])&&has(['date','fecha'])&&has(['entrynumber','numeroasiento','asiento','referencedoc','referencia','documento'])&&has(['debitbs','debe','debito'])&&has(['creditbs','haber','credito'])&&has(['bcvrate','tasabcv']);
+     mode=ready?'Adaptador universal disponible':'Solo conciliación';
+     reason=ready?'Las líneas se agrupan por archivo, fecha y referencia; se validan cuentas de movimiento, tasa BCV y cuadre en Bs/USD.':'El libro diario debe entregar líneas con cuenta, fecha, referencia, debe, haber y BCV; no se importa un resumen ni un asiento incompleto.';
+     canImport=ready;
+    }
+    else if(/^(movimientos|movements|stockmovements|inventorymovements)$/.test(key)){
+     target='Movimientos de inventario';
+     const has=(keys:string[])=>objects.some(row=>Object.entries(row).some(([field,value])=>keys.includes(norm(field))&&value!==undefined&&value!==null&&String(value).trim()!==''));
+     const ready=has(['productcode','codigoproducto','sku','codigo','code'])&&has(['date','fecha','movementdate'])&&has(['type','movementtype','tipomovimiento','tipo'])&&has(['concept','concepto','movementconcept'])&&has(['documentref','referencia','documento','invoicenumber'])&&has(['unitcostbs','costobs','costounitario','unitcost'])&&has(['bcvrate','tasabcv'])&&has(['quantity','cantidad','qty']);
+     mode=ready?'Adaptador universal disponible':'Revisión de esquema';
+     reason=ready?'Solo se importarán movimientos con artículo existente, tipo/concepto compatibles, documento enlazado y fecha/costo/BCV válidos. Saldos iniciales, compras aisladas y devoluciones quedan bloqueados.':'El Kardex requiere código de producto, fecha, tipo, concepto, documento, cantidad, costo Bs y BCV explícitos.';
+     canImport=ready;
+    }
     else if(/^(devoluciones|returns|anulaciones|voids|cancelaciones)$/.test(key)){target='Devoluciones / anulaciones';mode='Solo conciliación';reason='Requiere enlazar la operación original y validar reversos de inventario, caja, impuestos y contabilidad.';}
     else if(/^(reportesz|zreports|cierresz|cierres)$/.test(key)){target='Reportes Z / cierres';mode='Evidencia de auditoría';reason='No son facturas importables; usar para conciliar totales de ventas, impuestos, medios de pago y caja.';}
     else if(/^(terminales|terminals|cajas|registers)$/.test(key)){target='Configuración operativa';mode='No importar';reason='Requiere una política explícita de equivalencia con las cajas/terminales de SICOVEN.';}
@@ -251,7 +277,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
       return [{...normalized,migrationsource:'POSVEN-Pro · colección: '+collection,migrationfile:file.name,migrationcollection:collection,migrationrowid:'POSVEN|'+collection+'|'+index}];
      }));
      setRows(universalRows);setHeaders(Array.from(new Set(universalRows.flatMap(row=>Object.keys(row)))));
-     setJsonCollectionDiagnostics(arrayCollections.map(([path,value])=>({source:'Archivo '+(fileIndex+1)+' · '+file.name,path:String(path),totalItems:(value as unknown[]).length,validRecords:(value as unknown[]).filter(item=>!!item&&typeof item==='object'&&!Array.isArray(item)).length,invalidItems:(value as unknown[]).filter(item=>!item||typeof item!=='object'||Array.isArray(item)).length})));
+     setJsonCollectionDiagnostics(arrayCollections.map(([path,value])=>({source:'Archivo 1 · '+file.name,path:String(path),totalItems:(value as unknown[]).length,validRecords:(value as unknown[]).filter(item=>!!item&&typeof item==='object'&&!Array.isArray(item)).length,invalidItems:(value as unknown[]).filter(item=>!item||typeof item!=='object'||Array.isArray(item)).length})));
      setPosvenQuality({collections:arrayCollections.length,objectRows,invalidRows:allRows.length-objectRows,emptyCollections:arrayCollections.filter(([,value])=>(value as unknown[]).length===0).length,eligibleProducts:productRows.filter(row=>row.activo===true&&row.isKit!==true).length,inactiveProducts:productRows.filter(row=>row.activo!==true).length,kitProducts:productRows.filter(row=>row.isKit===true).length,inactiveKits:productRows.filter(row=>row.activo!==true&&row.isKit===true).length});
      setBackupPayload(raw);setBackupCounts(counts);setPosvenBcvRate(String(payload.tasa??''));setPosvenOpeningDate(String((data as Record<string,unknown>).createdAt??'').slice(0,10));setPosvenVatTreatment('');setSelectedPosvenCollections([]);setPosvenBackup(true);
      return;
