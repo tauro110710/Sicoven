@@ -102,7 +102,7 @@ test('integración: análisis JSON, selección individual, empresa destino, dupl
     assert.deepEqual(selected.map(row => row.invoiceNumber), ['F-002']);
 
     const selectedIdentity = buildUniversalInvoiceIdentity('sales', selected[0].invoiceNumber, selected[0].customerRif);
-    const alreadyImported = new Set(initial.sales.map(row => buildUniversalInvoiceIdentity('sales', row.invoiceNumber, row.customerRif)));
+    const alreadyImported = new Set(initial.sales.map((row: any) => buildUniversalInvoiceIdentity('sales', row.invoiceNumber, row.customerRif)));
     assert.equal(alreadyImported.has(selectedIdentity), false);
     assert.equal(
       findUniversalInvoiceJournalCollision('F-002', initial.journalEntries, 'VENTA'),
