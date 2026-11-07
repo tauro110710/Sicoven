@@ -243,6 +243,68 @@ export const prepareUniversalSaleInventoryLines = (
   return result;
 };
 
+export const prepareUniversalPurchaseInventoryLines = (
+  rawLines: unknown[],
+  products: Pick<InventoryProduct, 'id' | 'code'>[],
+  invoice: { taxableBaseBs: number; exemptAmountBs: number; bcvRate: number }
+): Array<{ productId: string; quantity: number; unitCostBs: number }> => {
+  if (!Array.isArray(rawLines) || rawLines.length === 0) throw new Error('La factura no contiene renglones de mercancía importables.');
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const pickValue = (row: Record<string, unknown>, keys: string[]) => {
+    const wanted = new Set(keys.map(normalize));
+    return Object.entries(row).find(([key, value]) => wanted.has(normalize(key)) && value !== undefined && value !== null && String(value).trim() !== '')?.[1];
+  };
+  const parseNumber = (value: unknown): number => {
+    if (typeof value === 'number') return value;
+    const raw = String(value ?? '').trim().replace(/\\s/g, '');
+    if (!raw) return NaN;
+    const normalized = raw.includes(',') && raw.includes('.')
+      ? (raw.lastIndexOf(',') > raw.lastIndexOf('.') ? raw.replace(/\\./g, '').replace(',', '.') : raw.replace(/,/g, ''))
+      : raw.replace(',', '.');
+    return Number(normalized);
+  };
+  const rate = Number(invoice.bcvRate);
+  if (!Number.isFinite(rate) || rate <= 0) throw new Error('La compra requiere una tasa BCV positiva para valorar sus líneas de inventario.');
+  const seen = new Set<string>();
+  const result = rawLines.map((raw, index) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Detalle '+(index+1)+': el renglón no es un objeto válido.');
+    const row = raw as Record<string, unknown>;
+    const code = String(pickValue(row, ['productCode','codigoProducto','sku','code','codigo','itemCode']) ?? '').trim();
+    const product = products.find(item => item.code.trim().toLowerCase() === code.toLowerCase());
+    const quantity = parseNumber(pickValue(row, ['quantity','cantidad','qty']));
+    const explicitBs = pickValue(row, ['unitCostBs','costoUnitarioBs','costBs','costoBs']);
+    const explicitUsd = pickValue(row, ['unitCostUsd','costoUnitarioUsd','costUsd','costoUsd']);
+    const genericCost = pickValue(row, ['unitCost','costoUnitario','cost','costo','price','precio']);
+    const currency = normalize(pickValue(row, ['currency','moneda','currencyCode']));
+    const genericBs = ['bs','ves','bolivar','bolivares'].includes(currency) ? genericCost : undefined;
+    const genericUsd = ['usd','us','dolar','dolares'].includes(currency) ? genericCost : undefined;
+    const usdValue = explicitUsd ?? genericUsd;
+    const unitCostUsd = usdValue === undefined ? undefined : parseNumber(usdValue);
+    const bsValue = explicitBs ?? genericBs;
+    const unitCostBs = bsValue !== undefined ? parseNumber(bsValue)
+      : unitCostUsd !== undefined ? unitCostUsd * rate : NaN;
+    if (bsValue !== undefined && unitCostUsd !== undefined && Math.abs(unitCostBs / rate - unitCostUsd) > 0.02) {
+      throw new Error('Detalle '+(index+1)+': el costo unitario Bs/USD no concilia con la tasa BCV declarada.');
+    }
+    if (!product || !code || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitCostBs) || unitCostBs <= 0) {
+      throw new Error('Detalle '+(index+1)+': identifique un artículo existente de la empresa destino por código/SKU y declare cantidad y costo unitario Bs positivo, o costo USD con moneda/tasa BCV explícita. No se asociará por descripción.');
+    }
+    if (seen.has(product.id)) throw new Error('Detalle '+(index+1)+': el mismo artículo aparece más de una vez. Consolide sus renglones antes de importar.');
+    seen.add(product.id);
+    const declaredTotal = pickValue(row, ['lineTotalBs','subtotalBs','totalLineaBs','totalCostBs','importeBs']);
+    if (declaredTotal !== undefined && Math.abs(parseNumber(declaredTotal) - quantity * unitCostBs) > 0.02) {
+      throw new Error('Detalle '+(index+1)+': el total declarado no coincide con cantidad por costo unitario. Descuentos, fletes o cargos por línea requieren un adaptador explícito.');
+    }
+    return { productId: product.id, quantity, unitCostBs };
+  });
+  const expected = Number(invoice.taxableBaseBs) + Number(invoice.exemptAmountBs);
+  const actual = result.reduce((sum, line) => sum + line.quantity * line.unitCostBs, 0);
+  if (!Number.isFinite(expected) || expected < 0 || Math.abs(Math.round(actual * 100) / 100 - Math.round(expected * 100) / 100) > 0.02) {
+    throw new Error('Los renglones de mercancía no concilian con la base imponible más el monto exento de la factura.');
+  }
+  return result;
+};
+
 export type UniversalInventoryMovementType = 'ENTRADA' | 'SALIDA' | 'AJUSTE';
 export type UniversalInventoryMovementConcept = 'COMPRA' | 'INVENTARIO_INICIAL' | 'VENTA' | 'MERMA' | 'AUTOCONSUMO' | 'AJUSTE' | 'DEVOLUCION_CLIENTE' | 'DEVOLUCION_COMPRA';
 
