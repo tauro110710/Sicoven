@@ -114,7 +114,7 @@ interface AccountingContextType {
   // Cuentas
   accounts: Account[];
   addAccount: (account: Account) => void;
-  updateAccount: (account: Account) => void;
+  updateAccount: (originalCode: string, account: Account) => void;
   deleteAccount: (accountCode: string) => void;
   setAccountCashFlowActivity: (accountCode: string, activity: CashFlowActivity) => void;
   setAccountCashFlowIndirectTreatment: (accountCode: string, treatment: CashFlowIndirectTreatment) => void;
@@ -1237,9 +1237,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setAccounts(prev => [...prev, validatedAccount].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })));
   };
 
-  const updateAccount = (draft: Account) => {
+  const updateAccount = (originalCode: string, draft: Account) => {
     assertSQLitePersistenceReady('Editar la cuenta contable');
-    const current = accounts.find(item => item.code === draft.code) || accounts.find(item => item.code === (draft as Account & { originalCode?: string }).originalCode);
+    const current = accounts.find(item => item.code === originalCode);
     if (!current) throw new Error('La cuenta que intenta editar ya no existe.');
     const hasChildren = accounts.some(item => item.parentCode === current.code);
     const hasJournalHistory = journalEntries.some(entry => entry.items.some(item => item.accountCode === current.code));
