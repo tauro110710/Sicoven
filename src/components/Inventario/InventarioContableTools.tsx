@@ -208,8 +208,8 @@ export const InventarioContableTools: React.FC = () => {
   ], companyProducts.map(p => [
     p.code,p.name,p.itemType || 'MERCANCIA',p.unit,p.currentStock,p.costingMethod || 'PROMEDIO_PONDERADO',
     p.avgCostBs,p.vnrProvisionBs || 0,Math.max(0,p.currentStock*p.avgCostBs-(p.vnrProvisionBs || 0)),
-    p.avgCostUsd,Math.max(0,p.currentStock*p.avgCostUsd-((p.vnrProvisionBs || 0)/(p.openingBcvRate || currentCompany.inventoryBcvRate))),
-    p.inventoryAccountCode || '1.1.4.01',p.costOfSalesAccountCode || '5.1.1.01',p.vatTreatment || 'GENERAL_16',p.openingBcvRate || currentCompany.inventoryBcvRate
+    p.avgCostUsd,Math.max(0,p.currentStock*p.avgCostUsd-(Number(p.openingBcvRate || currentCompany.inventoryBcvRate || 0) > 0 ? (p.vnrProvisionBs || 0) / Number(p.openingBcvRate || currentCompany.inventoryBcvRate) : 0)),
+    p.inventoryAccountCode || '1.1.4.01',p.costOfSalesAccountCode || '5.1.1.01',p.vatTreatment || 'GENERAL_16',p.openingBcvRate || currentCompany.inventoryBcvRate || 0
   ]));
 
   const exportInventoryBalancePdf = () => {
