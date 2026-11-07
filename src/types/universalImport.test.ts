@@ -186,3 +186,19 @@ test('detecta importes pagados embebidos y no confunde saldos cero', () => {
   assert.equal(hasUniversalInlineSettlementAmount({ paidAmountBs: 0, amountCollectedUsd: '0.00' }), false);
   assert.equal(hasUniversalInlineSettlementAmount({ outstandingBalanceBs: 25 }), false);
 });
+
+test('resuelve liquidaciones sin ID mediante número de factura y RIF exactos', () => {
+  const invoice = { migrationfile: 'archivo-a', invoiceNumber: 'F-20', customerRif: 'J-12345678-9' };
+  const rows = [
+    invoice,
+    { migrationfile: 'archivo-a', invoiceNumber: 'F-20', customerRif: 'J-12345678-9', fechaCobro: '2026-02-01', monto: 25, medioPago: 'CASH_BS' },
+    { migrationfile: 'archivo-a', invoiceNumber: 'F-20', customerRif: 'J-99999999-9', fechaCobro: '2026-02-01', monto: 25, medioPago: 'CASH_BS' },
+    { migrationfile: 'archivo-b', invoiceNumber: 'F-20', customerRif: 'J-12345678-9', fechaCobro: '2026-02-01', monto: 25, medioPago: 'CASH_BS' }
+  ];
+  assert.equal(resolveUniversalInvoiceSettlementRows(rows, invoice).length, 1);
+});
+
+test('detecta importes liquidados genéricos y localizados', () => {
+  assert.equal(hasUniversalInlineSettlementAmount({ amountPaid: '75,50' }), true);
+  assert.equal(hasUniversalInlineSettlementAmount({ totalPaid: 0 }), false);
+});
