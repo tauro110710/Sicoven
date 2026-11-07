@@ -1556,19 +1556,26 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         referenceDoc: document.invoiceNumber,
         items
       }, accounts, targetCompanyId);
-      const fxFiscalAdjustmentProposal = calculateFxFiscalAdjustment({
-        companyId: targetCompanyId,
-        documentId: document.id,
-        sourceDocumentRef: document.invoiceNumber,
-        documentDate: document.invoiceDate,
-        settlementDate: draft.settlementDate,
-        originalRate: invoiceRate,
-        settlementRate,
-        originalAmountUsd: amountUsd,
-        originalAmountBs: amountUsd * invoiceRate,
-        settlementAmountBs: amountBs,
-        sourceKind: kind === 'SALE_COLLECTION' ? 'SALE_RECEIVABLE' : 'PURCHASE_PAYABLE'
-      });
+      const fiscalMode = document.fiscalAdjustmentMode || 'REVISION_CONTADOR';
+      let fxFiscalAdjustmentProposal: CreditSettlement['fxFiscalAdjustmentProposal'];
+      try {
+        fxFiscalAdjustmentProposal = calculateFxFiscalAdjustment({
+          totalAmountUsd: Number(document.totalAmountUsd || 0),
+          taxableBaseUsd: Number(document.taxableBaseUsd || 0),
+          vatAmountUsd: Number(document.vatAmountUsd || 0),
+          exemptAmountUsd: Math.max(0, Number(document.totalAmountUsd || 0) - Number(document.taxableBaseUsd || 0) - Number(document.vatAmountUsd || 0) - Number(document.igtfAmountUsd || 0)),
+          invoiceRate,
+          settlementRate,
+          settledAmountUsd: amountUsd,
+          mode: fiscalMode
+        });
+      } catch {
+        fxFiscalAdjustmentProposal = {
+          direction: 'REVIEW_REQUIRED', deltaBaseBs: 0, deltaVatBs: 0,
+          deltaExemptBs: 0, deltaTotalBs: 0,
+          explanation: 'No se pudo calcular la propuesta con los datos fiscales disponibles; requiere revisión manual.'
+        };
+      }
       const settlement: CreditSettlement = {
         id: 'credit-settlement-' + targetCompanyId + '-' + Date.now() + '-' + index,
         companyId: targetCompanyId,
