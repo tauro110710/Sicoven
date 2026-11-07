@@ -725,7 +725,7 @@ function validateSaleCorrectionNotes(previousState, nextState) {
   const priorSales = asArray(previousState?.sales);
   const nextSales = asArray(nextState?.sales);
   const priorIds = new Set(priorSales.map(item => String(item.id)));
-  const normalize = value => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
+  const normalize = value => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
   const round2 = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
   const round6 = value => Math.round((Number(value) + Number.EPSILON) * 1000000) / 1000000;
   const close = (a, b, tolerance = 0.02) => Number.isFinite(Number(a)) && Number.isFinite(Number(b)) && Math.abs(Number(a) - Number(b)) <= tolerance;
@@ -1988,11 +1988,11 @@ function validateAccountingSnapshot(previousState, nextState) {
       debitUsd: acc.debitUsd + Number(line.debitUsd || 0),
       creditUsd: acc.creditUsd + Number(line.creditUsd || 0)
     }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
-    const normalizedReference = String(settlement.reference || '').trim().replace(/\\s+/g, '').toUpperCase();
+    const normalizedReference = String(settlement.reference || '').trim().replace(/\s+/g, '').toUpperCase();
     const duplicateBankReference = bankTransfer && normalizedReference && asArray(nextState.creditSettlements).some(item =>
       item.id !== settlement.id && item.companyId === target.companyId &&
       item.bankAccountId === settlement.bankAccountId && !item.isReversed &&
-      String(item.reference || '').trim().replace(/\\s+/g, '').toUpperCase() === normalizedReference
+      String(item.reference || '').trim().replace(/\s+/g, '').toUpperCase() === normalizedReference
     );
     const duplicateWithoutReference = !normalizedReference && asArray(nextState.creditSettlements).some(item =>
       item.id !== settlement.id && item.companyId === target.companyId &&
