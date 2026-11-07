@@ -34,12 +34,10 @@ test('rechaza liquidaciones que exceden el total de la factura', () => {
   );
 });
 
-test('rechaza una misma liquidación asociada a más de una factura', () => {
-  const second = { ...invoice('inv-2'), migrationrowid: 'origen.json|ventas|1', invoiceNumber: 'F-002' };
-  const shared = settlement();
-  const duplicated = { ...shared, migrationrowid: 'origen.json|pagos|1', invoiceId: 'inv-2' };
+test('rechaza una factura seleccionada dos veces para impedir duplicar sus liquidaciones', () => {
+  const selected = invoice();
   assert.throws(
-    () => planUniversalInvoiceSettlements([invoice(), second], [invoice(), second, shared, duplicated], 'sales'),
-    /vinculada más de una vez/
+    () => planUniversalInvoiceSettlements([selected, selected], [selected, settlement()], 'sales'),
+    /clave de origen vacía o duplicada/
   );
 });
