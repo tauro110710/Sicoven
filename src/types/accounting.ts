@@ -316,7 +316,22 @@ export interface PurchaseRecord {
   cancellationNote?: string;
 }
 
+export interface SaleInventoryLine {
+  productId: string;
+  productCode: string;
+  productName: string;
+  quantity: number;
+  unitPriceBs: number;
+  netAmountBs: number;
+  taxRate: number;
+  vatAmountBs: number;
+  exemptAmountBs: number;
+  totalBs: number;
+}
+
 export interface SaleRecord {
+  /** Detalle comercial histórico importado; sus salidas de Kardex se conservan como movimientos enlazados por factura. */
+  inventoryLines?: SaleInventoryLine[];
   id: string;
   companyId: string;
   opNumber: number;
