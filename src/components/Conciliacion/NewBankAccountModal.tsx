@@ -27,6 +27,16 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
   if (!isOpen) return null;
 
   const normalizedAccountNumber = accountNumber.replace(/\D/g, '');
+  const effectiveBankName = selectedBank === '__OTHER__' ? bankName.trim() : selectedBank.trim();
+  const bankControlAccount = accounts.find(account => account.code === '1.1.1.03');
+  const bankControlError = !bankControlAccount
+    ? 'No existe la cuenta matriz 1.1.1.03 – BANCOS. Debe crearla o restaurarla en el Catálogo de Cuentas antes de registrar un banco.'
+    : bankControlAccount.isMovement
+      ? 'La cuenta matriz de Bancos debe ser de tipo Totalizadora / Grupo.'
+      : bankControlAccount.type !== 'ACTIVO' || bankControlAccount.level !== 4 || bankControlAccount.parentCode !== '1.1.1'
+        ? 'La cuenta matriz 1.1.1.03 debe ser una cuenta de Activo de nivel 4, hija de Efectivo y Equivalentes.'
+        : '';
+
   const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
   const parsedOpeningBalance = parseAmount(initialBalanceBs) || 0;
   const bcvRate = parseAmount(bcvRateInput) || 0;
