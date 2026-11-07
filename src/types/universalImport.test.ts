@@ -2,6 +2,34 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, selectUniversalRowsByStableKeys, mapUniversalSettlementPreview, mapUniversalInventoryItemType, planUniversalInvoiceSettlements } from './universalImport';
 
+
+
+test('la selección individual de liquidaciones conserva solo las claves marcadas y sus facturas', () => {
+  const plans = [
+    { invoiceRowId: 'invoice-1', invoiceKind: 'sales' as const, settlements: [
+      { sourceRowId: 'payment-1', settlementDate: '2026-11-01', bcvRate: 100, amountUsd: 5, amountBs: 500, method: 'CASH_BS' as const },
+      { sourceRowId: 'payment-2', settlementDate: '2026-11-02', bcvRate: 100, amountUsd: 3, amountBs: 300, method: 'CASH_BS' as const }
+    ] },
+    { invoiceRowId: 'invoice-2', invoiceKind: 'purchases' as const, settlements: [
+      { sourceRowId: 'payment-3', settlementDate: '2026-11-03', bcvRate: 100, amountUsd: 2, amountBs: 200, method: 'CASH_BS' as const }
+    ] }
+  ];
+  const selected = selectUniversalInvoiceSettlements(plans, ['payment-2', 'payment-3']);
+  assert.deepEqual(selected.map(plan => [plan.invoiceRowId, plan.settlements.map(item => item.sourceRowId)]), [
+    ['invoice-1', ['payment-2']], ['invoice-2', ['payment-3']]
+  ]);
+  assert.equal(selectUniversalInvoiceSettlements(plans, []).reduce((sum, plan) => sum + plan.settlements.length, 0), 0);
+});
+
+test('la selección individual rechaza claves ausentes o duplicadas', () => {
+  const plans = [{ invoiceRowId: 'invoice-1', invoiceKind: 'sales' as const, settlements: [
+    { sourceRowId: 'payment-1', settlementDate: '2026-11-01', bcvRate: 100, amountUsd: 5, amountBs: 500, method: 'CASH_BS' as const }
+  ] }];
+  assert.throws(() => selectUniversalInvoiceSettlements(plans, ['missing']), /ya no está disponible/);
+  assert.throws(() => selectUniversalInvoiceSettlements(plans, ['payment-1', 'payment-1']), /vacías o duplicadas/);
+  assert.throws(() => selectUniversalInvoiceSettlements([{ ...plans[0], settlements: [...plans[0].settlements, ...plans[0].settlements] }], ['payment-1']), /vacía o duplicada/);
+});
+
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
   assert.equal(result.length, 1);

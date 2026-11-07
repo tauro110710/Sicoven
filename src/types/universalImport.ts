@@ -691,6 +691,27 @@ export const mapUniversalInvoiceSettlementDrafts = (
   });
 };
 
+/** Filters the detected settlement plan to individually selected stable source-row keys. */
+export const selectUniversalInvoiceSettlements = (
+  plans: UniversalInvoiceSettlementPlan[], selectedSourceRowIds: string[]
+): UniversalInvoiceSettlementPlan[] => {
+  const selected = new Set(selectedSourceRowIds.map(value => String(value || '').trim()));
+  if (selected.size !== selectedSourceRowIds.length || selected.has('')) {
+    throw new Error('La selección de liquidaciones contiene claves vacías o duplicadas.');
+  }
+  const available = new Set<string>();
+  for (const plan of plans) for (const settlement of plan.settlements) {
+    if (!settlement.sourceRowId || available.has(settlement.sourceRowId)) {
+      throw new Error('El plan contiene una clave de liquidación vacía o duplicada.');
+    }
+    available.add(settlement.sourceRowId);
+  }
+  for (const key of selected) if (!available.has(key)) {
+    throw new Error('La liquidación seleccionada ya no está disponible: ' + key + '.');
+  }
+  return plans.map(plan => ({ ...plan, settlements: plan.settlements.filter(item => selected.has(item.sourceRowId)) }));
+};
+
 export type UniversalImportFormat = 'json' | 'csv' | 'tsv' | 'txt' | 'xlsx' | 'xlsm' | 'unsupported';
 
 export const detectUniversalImportFormat = (fileName: string): UniversalImportFormat => {
