@@ -1698,7 +1698,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         description: draft.kind === 'REFUND_RECEIVED' ? `Reembolso de anticipo de proveedor ${rif}` : `Aplicación de anticipo a factura ${target!.invoiceNumber}`,
         type: 'ANTICIPO_PROVEEDOR', bcvRate: draft.bcvRate,
         referenceDoc: draft.reference?.trim() || target?.invoiceNumber,
-        items: [...debitItems, ...creditItems]
+        items: settlementJournalItems
       });
     } catch (cause) {
       persistenceWaitersRef.current = persistenceWaitersRef.current.filter(waiter => waiter !== persistenceWaiter);
