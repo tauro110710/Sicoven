@@ -635,24 +635,26 @@ test('SQLite validates a sales invoice and its collection created in the same at
     date: '2026-10-11', description: 'Cobro factura S-100', type: 'AJUSTE',
     bcvRate: 110, referenceDoc: 'S-100',
     items: [
-      { accountCode: '1.1.1.01', debitBs: 55, creditBs: 0, debitUsd: 0.5, creditUsd: 0 },
+      { accountCode: '1.1.1.03', debitBs: 55, creditBs: 0, debitUsd: 0.5, creditUsd: 0 },
       { accountCode: '1.1.2.01', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 0.5 },
       { accountCode: '4.2.1.01', debitBs: 0, creditBs: 5, debitUsd: 0, creditUsd: 0 }
     ], createdAt: '2026-10-11T10:00:00.000Z'
   };
   const accounts = [
     { code: '1.1.2.01', name: 'Cuentas por cobrar clientes', type: 'ACTIVO', isMovement: true },
-    { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.1.03', name: 'Banco', type: 'ACTIVO', isMovement: true },
     { code: '4.2.1.01', name: 'Ganancia cambiaria', type: 'INGRESOS', isMovement: true }
   ];
   const settlement = {
     id: 'sale-batch-collection', companyId: 'company-1',
     documentId: sale.id, kind: 'SALE_COLLECTION',
     settlementDate: '2026-10-11', bcvRate: 110,
-    amountUsd: 0.5, amountBs: 55, method: 'CASH_BS',
+    amountUsd: 0.5, amountBs: 55, method: 'BANK_TRANSFER_BS',
+    bankAccountId: 'bank-1', reference: 'SALE TRX 100',
     journalEntryId: paymentJournal.id, createdAt: '2026-10-11T10:00:00.000Z'
   };
-  const prior = { ...emptyState(), accounts, sales: [], journalEntries: [], creditSettlements: [] };
+  const prior = { ...emptyState(), accounts, sales: [], journalEntries: [], creditSettlements: [],
+    bankAccounts: [{ id: 'bank-1', companyId: 'company-1', accountCode: '1.1.1.03', currency: 'BS' }] };
   const next = {
     ...prior, sales: [sale],
     journalEntries: [saleJournal, paymentJournal],
@@ -667,6 +669,17 @@ test('SQLite validates a sales invoice and its collection created in the same at
         ? { ...line, accountCode: '1.1.2.99' } : line)
     }]
   }), /cobro de una factura.*ND de venta/);
+  const priorDuplicate = {
+    ...prior,
+    creditSettlements: [{
+      id: 'prior-sale-bank-payment', companyId: 'company-1', documentId: 'other-sale',
+      kind: 'SALE_COLLECTION', bankAccountId: 'bank-1', reference: 'SALE   TRX 100', isReversed: false
+    }]
+  };
+  assert.throws(() => validateAccountingSnapshot(priorDuplicate, {
+    ...next,
+    creditSettlements: [...priorDuplicate.creditSettlements, settlement]
+  }), /referencia/);
 });
 
 test('SQLite rejects sales collections that exceed net receivable after withholding', () => {
