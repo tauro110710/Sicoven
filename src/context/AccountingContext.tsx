@@ -354,7 +354,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [supplierDirectAdvances, setSupplierDirectAdvances] = useState<SupplierDirectAdvance[]>([]);
   const bankStatementImportInFlightRef = useRef(false);
   type PendingBankOutgoingReservation = { release: () => void; waiter: { resolve: () => void; reject: (error: Error) => void } };
-  type ActiveAccountingImportBatch = { journalEntries: JournalEntry[]; reservedBankLockKeys: Set<string> };
+  type ActiveAccountingImportBatch = { journalEntries: JournalEntry[]; sales: SaleRecord[]; purchases: PurchaseRecord[]; reservedBankLockKeys: Set<string> };
   const bankOutgoingReservationsRef = useRef<PendingBankOutgoingReservation[]>([]);
   const activeImportBatchRef = useRef<ActiveAccountingImportBatch | null>(null);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
@@ -424,7 +424,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('No se permiten importaciones contables anidadas.');
     }
     const previousBatch = activeImportBatchRef.current;
-    activeImportBatchRef.current = { journalEntries: [], reservedBankLockKeys: new Set<string>() };
+    activeImportBatchRef.current = { journalEntries: [], sales: [], purchases: [], reservedBankLockKeys: new Set<string>() };
     try {
       const result = operation();
       activeImportBatchRef.current = previousBatch;
@@ -2060,7 +2060,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const normalizeDocument = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '');
     const normalizeRif = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const duplicateInvoice = purchases.some(existing =>
+    const duplicateInvoice = [...purchases, ...(activeImportBatchRef.current?.purchases || [])].some(existing =>
       existing.companyId === targetCompany.id &&
       existing.documentType === purchaseData.documentType &&
       normalizeDocument(existing.invoiceNumber) === normalizeDocument(purchaseData.invoiceNumber) &&
@@ -2115,7 +2115,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           purchaseData.islrBasePercentage !== concept.basePercentage) {
         throw new Error('Los parámetros históricos de cálculo ISLR no coinciden con el concepto fiscal seleccionado.');
       }
-      const matchingMonthlyOperations = purchases.filter(item =>
+      const matchingMonthlyOperations = [...purchases, ...(activeImportBatchRef.current?.purchases || [])].filter(item =>
         item.companyId === targetCompany.id &&
         item.documentType === '01' &&
         String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierKey &&
@@ -2278,9 +2278,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ? bankAccounts.find(bank => bank.companyId === targetCompany.id && bank.accountCode === paymentAccount!.code)
       : undefined;
     if (bankPaymentAccount) {
+      const balanceEntries = activeImportBatchRef.current
+        ? [...journalEntries, ...activeImportBatchRef.current.journalEntries]
+        : journalEntries;
       const availableBalance = calculateBankAvailableBalance({
         bankAccount: bankPaymentAccount, companyId: targetCompany.id,
-        asOfDate: purchaseData.accountCreditDate!, journalEntries
+        asOfDate: purchaseData.accountCreditDate!, journalEntries: balanceEntries
       });
       validateBankOutgoingAvailability({
         availableBalance,
@@ -2323,6 +2326,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     };
 
     reserveBankOutgoingAccounts(createdJournalEntry.companyId, createdJournalEntry.items);
+    activeImportBatchRef.current?.journalEntries.push(createdJournalEntry);
     setJournalEntries(prev => [...prev, createdJournalEntry]);
 
     const finalPurchase: PurchaseRecord = {
@@ -2342,6 +2346,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       journalEntryId: createdJournalEntry.id
     };
 
+    activeImportBatchRef.current?.purchases.push(finalPurchase);
     setPurchases(prev => [...prev, finalPurchase]);
 
     // 2. Si retuvo IVA, crear el comprobante oficial de retención de IVA
@@ -3257,7 +3262,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('El total de la venta no coincide con base imponible, exento, IVA e IGTF.');
     }
     const normalizeSaleDocument = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '');
-    const duplicateSale = sales.some(existing =>
+    const duplicateSale = [...sales, ...(activeImportBatchRef.current?.sales || [])].some(existing =>
       existing.companyId === targetCompany.id &&
       existing.documentType === saleData.documentType &&
       normalizeSaleDocument(existing.invoiceNumber) === normalizeSaleDocument(saleData.invoiceNumber)
@@ -3383,6 +3388,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     };
 
     reserveBankOutgoingAccounts(createdJournalEntry.companyId, createdJournalEntry.items);
+    activeImportBatchRef.current?.journalEntries.push(createdJournalEntry);
     setJournalEntries(prev => [...prev, createdJournalEntry]);
 
     const finalSale: SaleRecord = {
@@ -3403,6 +3409,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       journalEntryId: createdJournalEntry.id
     };
 
+    activeImportBatchRef.current?.sales.push(finalSale);
     setSales(prev => [...prev, finalSale]);
     return finalSale;
   };
