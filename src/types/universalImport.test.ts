@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -315,4 +315,18 @@ test('agrupa diarios desde encabezados normalizados por el lector universal', ()
   ]);
   assert.equal(groups.length, 1);
   assert.equal(groups[0].rows.length, 2);
+});
+
+
+test('normaliza prefijos repetidos y detecta asientos que ya representan una factura', () => {
+  assert.equal(normalizeUniversalDocumentReference('FAC-000123'), '000123');
+  assert.equal(normalizeUniversalDocumentReference('Factura 000123'), '000123');
+  assert.equal(normalizeUniversalDocumentReference('FAC-FAC-000123'), '000123');
+  const entries = [
+    { referenceDoc: 'FAC-000123' },
+    { referenceDoc: 'FAC-000124' }
+  ];
+  assert.equal(findUniversalInvoiceJournalCollision('000123', entries)?.referenceDoc, 'FAC-000123');
+  assert.equal(findUniversalInvoiceJournalCollision('Factura 000124', entries)?.referenceDoc, 'FAC-000124');
+  assert.equal(findUniversalInvoiceJournalCollision('000125', entries), undefined);
 });
