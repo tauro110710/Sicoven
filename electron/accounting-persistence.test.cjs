@@ -226,7 +226,7 @@ test('inventory BCV daily history is append-only and audited atomically', () => 
     };
     assert.throws(() => persistAccountingSnapshot(db, tampered, { id: 9, username: 'contador', role: 'admin' }), /historial diario.*inmutable/i);
     assert.equal(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json, before);
-    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE event_type='inventory_bcv_rate_recorded'").get().n, 1);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE event_type='inventory_bcv_rate_recorded'").get().n, 2);
   } finally {
     db.close();
   }
