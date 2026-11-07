@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { normalizeMigrationValue, parseDelimitedRecords, parseMigrationNumber } from '../../types/migrationParsing';
 import ExcelJS from 'exceljs';
-import { FileUp, Search, ShieldCheck, AlertTriangle, CheckCircle2, XCircle, Files, ArrowRightLeft } from 'lucide-react';
+import { FileUp, Search, ShieldCheck, AlertTriangle, CheckCircle2, XCircle, Files, ArrowRightLeft, Building2 } from 'lucide-react';
+import { useAccounting } from '../../context/AccountingContext';
 
 type Row = Record<string, unknown>;
 type Status = 'complete' | 'partial' | 'blocked';
@@ -82,6 +83,10 @@ async function parseFile(file: File): Promise<ParsedFile[]> {
 }
 
 export const MigracionInteligente: React.FC = () => {
+  const { companies, currentCompany } = useAccounting();
+  // La empresa destino debe elegirse expresamente; no se asume la empresa activa del contexto.
+  const [targetCompanyId, setTargetCompanyId] = useState('');
+  const targetCompany = companies.find(company => company.id === targetCompanyId) || null;
   const [files, setFiles] = useState<ParsedFile[]>([]);
   const [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -207,17 +212,27 @@ export const MigracionInteligente: React.FC = () => {
   };
   const toggle = (id: string) => { setSelected(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); setConfirmed(false); };
   const selectedDetections = detections.filter(d => selected.has(d.key + '|' + d.source));
-  const canPlan = selectedDetections.length > 0 && selectedDetections.every(d => d.status === 'complete' && !d.notes.some(n => n.includes('BLOQUEO:') || n.includes('no cuadran') || n.includes('no numéricos')));
+  const canPlan = Boolean(targetCompany) && selectedDetections.length > 0 && selectedDetections.every(d => d.status === 'complete' && !d.notes.some(n => n.includes('BLOQUEO:') || n.includes('no cuadran') || n.includes('no numéricos')));
   const finalizePlan = () => {
     if (!canPlan) { setConfirmed(false); setPlanNote('No se puede preparar el plan: hay módulos incompletos, posibles duplicados o errores de balance. Corrige los archivos o desmarca esos módulos.'); return; }
     setConfirmed(true);
-    setPlanNote('Plan revisado localmente. No se han escrito datos ni modificado registros. La ejecución queda bloqueada hasta disponer de adaptadores transaccionales que validen referencias, duplicados y saldos por módulo.');
+    setPlanNote('Destino seleccionado: ' + targetCompany!.name + ' · RIF ' + targetCompany!.rif + '. Plan revisado localmente. No se han escrito datos ni modificado registros. La ejecución queda bloqueada hasta disponer de adaptadores transaccionales que reciban y validen explícitamente esta empresa destino, sus referencias, duplicados y saldos por módulo.');
   };
 
   return <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 space-y-5">
     <div className="flex gap-3 items-start">
       <div className="rounded-xl bg-indigo-50 p-3 text-indigo-700"><ArrowRightLeft className="w-6 h-6" /></div>
       <div className="min-w-0 flex-1"><h2 className="text-lg font-bold text-slate-900">Asistente Inteligente de Migración</h2><p className="text-sm text-slate-600 mt-1">Analiza varios archivos, detecta módulos compatibles y prepara un plan antes de importar.</p></div>
+    </div>
+    <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4 space-y-3">
+      <div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><Building2 className="w-4 h-4 text-indigo-700"/> Empresa destino de la migración <span className="text-rose-600">*</span></div>
+      <p className="text-xs text-slate-600">Selecciona expresamente la empresa a la que pertenecerán los datos. Esta elección no cambia la empresa activa de SICOVEN.</p>
+      <select value={targetCompanyId} onChange={e => { setTargetCompanyId(e.target.value); setConfirmed(false); setPlanNote(''); }} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" aria-label="Empresa destino de la migración">
+        <option value="">Seleccionar empresa destino…</option>
+        {companies.map(company => <option key={company.id} value={company.id}>{company.name} · {company.rif}{company.id === currentCompany.id ? ' · actualmente seleccionada' : ''}</option>)}
+      </select>
+      {targetCompany ? <div className="rounded-lg border border-emerald-200 bg-white p-3 text-left text-xs"><strong className="block text-emerald-900">Destino confirmado para este plan: {targetCompany.name}</strong><span className="text-slate-600">RIF: {targetCompany.rif} · Ejercicio fiscal: {targetCompany.fiscalYear}</span></div> : <p className="text-xs text-amber-800">No se podrá validar ni preparar el plan hasta elegir una empresa.</p>}
+      <p className="text-[11px] text-slate-500">SICOVEN todavía no administra un estado activo/inactivo por empresa; por ahora se muestran todas las empresas registradas. La selección de destino se exige para el plan y no ejecuta escrituras.</p>
     </div>
     <div className="rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-5 text-center">
       <Files className="w-8 h-8 mx-auto text-slate-500 mb-2" />
@@ -249,7 +264,7 @@ export const MigracionInteligente: React.FC = () => {
         <div className="overflow-x-auto"><table className="min-w-full text-left text-xs"><thead><tr>{Object.keys(d.rows[0] || {}).slice(0, 8).map(header => <th key={header} className="border-b p-2 whitespace-nowrap">{header}</th>)}</tr></thead><tbody>{d.rows.slice(0, 5).map((row, rowIndex) => <tr key={rowIndex}>{Object.keys(d.rows[0] || {}).slice(0, 8).map(header => <td key={header} className="max-w-48 truncate border-b p-2" title={String(row[header] ?? '')}>{String(row[header] ?? '')}</td>)}</tr>)}</tbody></table></div>
       </div>)}
       <div className="flex gap-2 items-start text-xs text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0"/><p>Protección activa: el análisis no modifica la base de datos. Los posibles duplicados y los descuadres contables bloquean el plan. Cada asiento debe cuadrar individualmente y las relaciones entre módulos deben validarse antes de cualquier escritura.</p></div>
-      <button onClick={finalizePlan} disabled={!selectedDetections.length} className="w-full sm:w-auto px-4 py-2 rounded-lg bg-slate-900 text-white font-semibold text-sm disabled:opacity-40">Validar selección y preparar plan</button>
+      <button onClick={finalizePlan} disabled={!canPlan} className="w-full sm:w-auto px-4 py-2 rounded-lg bg-slate-900 text-white font-semibold text-sm disabled:opacity-40">Validar selección y preparar plan</button>
       {confirmed && <p className="text-sm text-emerald-800 flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>{planNote}</p>}
       {!confirmed && planNote && <p className="text-sm text-amber-800">{planNote}</p>}
       <p className="text-xs text-slate-500">Esta fase prepara el plan, no ejecuta escrituras. La migración definitiva solo debe habilitarse cuando los adaptadores transaccionales puedan confirmar todos los módulos juntos o revertirlos íntegramente.</p>
