@@ -349,6 +349,7 @@ function persistAccountingSnapshot(db, state, actor = null) {
         }
       }
       const previousIds = new Set(previousHistory.map(entry => String(entry.id)));
+      const knownEntriesById = new Map(previousHistory.map(entry => [String(entry.id), entry]));
       const nextIds = new Set();
       for (const entry of nextHistory) {
         const entryId = String(entry.id || '');
@@ -370,6 +371,14 @@ function persistAccountingSnapshot(db, state, actor = null) {
             (entry.mode === 'AUTOMATIC' && entry.provider !== 'bcv.today')) {
           throw new Error('El registro histórico de tasa BCV de Inventario contiene datos inválidos.');
         }
+        if (entry.correctionOfId) {
+          const correctedEntry = knownEntriesById.get(String(entry.correctionOfId));
+          if (entry.mode !== 'MANUAL' || !correctedEntry ||
+              String(correctedEntry.effectiveDate) !== effectiveDate ||
+              String(entry.note || '').trim().length < 5) {
+            throw new Error('La corrección manual BCV debe vincularse a una tasa previa de la misma fecha e indicar un motivo de al menos 5 caracteres.');
+          }
+        }
         auditInsert.run('inventory_bcv_rate_recorded', JSON.stringify({
           companyId: company.id,
           companyName: company.name || null,
@@ -383,6 +392,7 @@ function persistAccountingSnapshot(db, state, actor = null) {
           correctionOfId: entry.correctionOfId || null,
           actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null
         }));
+        knownEntriesById.set(entryId, entry);
       }
     }
     const oldCompanies = new Map((Array.isArray(priorState.companies) ? priorState.companies : []).map(company => [String(company.id), company]));
