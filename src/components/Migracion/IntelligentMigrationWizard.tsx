@@ -452,9 +452,10 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const taxRate=num(r,i,true,'taxRate','alicuota','tasaIva');
      const vatAmountBs=num(r,i,true,'vatAmountBs','ivaBs','montoIvaBs');
      const vatWithheldBs=num(r,i,true,'vatWithheldBs','ivaRetenidoBs','retencionIvaBs');
-     const bcvRate=num(r,i,false,'bcvRate','tasaBcv');
+     const bcvRate=num(r,i,true,'bcvRate','tasaBcv','tasaBcvHistorica');
      const totalAmountUsd=num(r,i,true,'totalAmountUsd','totalUsd');
      const taxableBaseUsd=num(r,i,true,'taxableBaseUsd','baseImponibleUsd','baseUsd');
+     const exemptAmountUsd=num(r,i,true,'exemptAmountUsd','montoExentoUsd','exentoUsd');
      const vatAmountUsd=num(r,i,true,'vatAmountUsd','ivaUsd');
      const vatWithheldUsd=num(r,i,true,'vatWithheldUsd','ivaRetenidoUsd');
      const paymentTermRaw=norm(String(pick(r,'paymentTerm','condicionPago','condicion','tipoPago','formaPago')??''));
@@ -463,17 +464,19 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const creditDays=paymentTerm==='CREDITO'?num(r,i,true,'creditDays','diasCredito'):0;
      const dueDate=paymentTerm==='CREDITO'?String(pick(r,'dueDate','fechaVencimiento','vencimiento')??'').slice(0,10):undefined;
      if(paymentTerm==='CREDITO'&&(!Number.isInteger(creditDays)||creditDays<1||!isValidIsoDate(dueDate)))throw new Error('Fila '+(i+1)+': las facturas a crédito requieren días de crédito y vencimiento válidos.');
-     const rate=bcvRate||targetCompany.bcvRate;
-     if(rate<=0)throw new Error('Fila '+(i+1)+': la tasa BCV debe ser positiva.');
+     const rate=bcvRate;
+     if(rate<=0)throw new Error('Fila '+(i+1)+': declare la tasa BCV histórica de la factura. No se utilizará la tasa actual de la empresa destino para valorar documentos antiguos.');
      const expectedBs=taxableBaseBs+exemptAmountBs+vatAmountBs;
-     const expectedUsd=taxableBaseUsd+(rate>0?exemptAmountBs/rate:0)+vatAmountUsd;
+     const expectedUsd=taxableBaseUsd+exemptAmountUsd+vatAmountUsd;
      if(Math.abs(expectedBs-totalAmountBs)>0.02||Math.abs(expectedUsd-totalAmountUsd)>0.02)throw new Error('Fila '+(i+1)+': el total no cuadra con base imponible, exento e IVA en Bs/USD.');
-     if(Math.abs(totalAmountBs/rate-totalAmountUsd)>0.02||Math.abs(taxableBaseBs/rate-taxableBaseUsd)>0.02||Math.abs(vatAmountBs/rate-vatAmountUsd)>0.02||Math.abs(vatWithheldBs/rate-vatWithheldUsd)>0.02)throw new Error('Fila '+(i+1)+': los importes en USD no corresponden a los importes en Bs divididos por la tasa BCV. El asiento nativo de SICOVEN usa esa conversión; corrija los datos antes de importar.');
+     if(Math.abs(totalAmountBs/rate-totalAmountUsd)>0.02||Math.abs(taxableBaseBs/rate-taxableBaseUsd)>0.02||Math.abs(exemptAmountBs/rate-exemptAmountUsd)>0.02||Math.abs(vatAmountBs/rate-vatAmountUsd)>0.02||Math.abs(vatWithheldBs/rate-vatWithheldUsd)>0.02)throw new Error('Fila '+(i+1)+': los importes en USD no corresponden a los importes en Bs divididos por la tasa BCV histórica declarada. Corrija los datos antes de importar.');
      if(vatWithheldBs>totalAmountBs||vatWithheldUsd>totalAmountUsd)throw new Error('Fila '+(i+1)+': la retención supera el total de la factura.');
-     const documentTypeRaw=String(pick(r,'documentType','tipoDocumento')??'01').trim();
+     const documentTypeValue=pick(r,'documentType','tipoDocumento','codigoTipoDocumento');
+     if(documentTypeValue===undefined||String(documentTypeValue).trim()==='')throw new Error('Fila '+(i+1)+': declare expresamente el tipo de documento. No se supondrá que una fila sin clasificación es una factura (01).');
+     const documentTypeRaw=String(documentTypeValue).trim();
      if(!['01','02','03'].includes(documentTypeRaw))throw new Error('Fila '+(i+1)+': tipo de documento inválido; use 01, 02 o 03.');
      if(documentTypeRaw!=='01')throw new Error('Fila '+(i+1)+': las notas de débito/crédito requieren flujos de corrección fiscal y contable enlazados a su factura original. Este adaptador solo importa facturas (01).');
-     const common={invoiceDate,invoiceNumber,controlNumber:String(pick(r,'controlNumber','numeroControl','numero de control')??'').trim(),documentType:documentTypeRaw as '01'|'02'|'03',totalAmountBs,exemptAmountBs,taxableBaseBs,taxRate,vatAmountBs,vatWithheldBs,bcvRate:rate,totalAmountUsd,taxableBaseUsd,vatAmountUsd,vatWithheldUsd,notes:String(pick(r,'notes','observaciones')??''),paymentTerm,creditDays,dueDate,currencyPricingMode:'REVISION_MANUAL' as const,fiscalAdjustmentMode:'REVISION_CONTADOR' as const};
+     const common={invoiceDate,invoiceNumber,controlNumber:String(pick(r,'controlNumber','numeroControl','numero de control')??'').trim(),documentType:documentTypeRaw as '01'|'02'|'03',totalAmountBs,exemptAmountBs,exemptAmountUsd,taxableBaseBs,taxRate,vatAmountBs,vatWithheldBs,bcvRate:rate,totalAmountUsd,taxableBaseUsd,vatAmountUsd,vatWithheldUsd,notes:String(pick(r,'notes','observaciones')??''),paymentTerm,creditDays,dueDate,currencyPricingMode:'REVISION_MANUAL' as const,fiscalAdjustmentMode:'REVISION_CONTADOR' as const};
      if(!common.controlNumber)throw new Error('Fila '+(i+1)+': número de control obligatorio.');
      if(kind==='sales'){
       const nestedSaleLines=pick(r,'inventoryLines','saleLines','productLines','items','lines','details','detalles','detalle','articulos','productos');
