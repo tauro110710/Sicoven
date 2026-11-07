@@ -9,11 +9,14 @@ interface NewBankAccountModalProps {
 }
 
 export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen, onClose }) => {
-  const { addBankAccount, waitForPersistence } = useAccounting();
+  const { addBankAccount, waitForPersistence, accounts } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
+  const [selectedBank, setSelectedBank] = useState('');
   const [bankName, setBankName] = useState('');
+  const [accountHolderName, setAccountHolderName] = useState('');
+  const [accountHolderRif, setAccountHolderRif] = useState('');
   const [accountType, setAccountType] = useState<'CORRIENTE' | 'AHORRO'>('CORRIENTE');
   const [checkbookNumber, setCheckbookNumber] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
@@ -31,7 +34,8 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
   const openingBalanceUsd = currency === 'USD' ? parsedOpeningBalance : (bcvRate > 0 ? parsedOpeningBalance / bcvRate : 0);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bankName.trim()) return;
+    if (!effectiveBankName) return;
+    if (bankControlError) { window.alert(bankControlError); return; }
     if (normalizedAccountNumber.length !== 20) {
       window.alert('El número de cuenta debe contener exactamente 20 dígitos.');
       return;
@@ -49,7 +53,9 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
     setSaving(true);
     try {
       addBankAccount({
-        bankName: bankName.trim(),
+        bankName: effectiveBankName,
+        accountHolderName: accountHolderName.trim() || undefined,
+        accountHolderRif: accountHolderRif.trim().toUpperCase() || undefined,
         accountNumber: normalizedAccountNumber,
         currency,
         bcvRate,
@@ -60,7 +66,10 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
       });
       await waitForPersistence();
       // Dejar el formulario limpio para la próxima alta, sin datos residuales.
+      setSelectedBank('');
       setBankName('');
+      setAccountHolderName('');
+      setAccountHolderRif('');
       setAccountType('CORRIENTE');
       setCheckbookNumber('');
       setAccountNumber('');
@@ -101,16 +110,18 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Nombre de la Institución Bancaria *</label>
-            <input
-              type="text"
-              required
-              autoFocus
-              autoComplete="organization"
-              placeholder="Ej: Banco Provincial BBVA, Banco de Venezuela..."
-              value={bankName}
-              onChange={e => setBankName(e.target.value)}
-              className="pointer-events-auto select-text w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-            />
+            <select value={selectedBank} onChange={e => setSelectedBank(e.target.value)} required className="w-full px-3 py-1.5 border border-slate-300 rounded-lg">
+              <option value="">Seleccione una institución bancaria</option>
+              {['Banco de Venezuela (BDV)','Banesco','Banco Mercantil','BBVA Provincial','Banco Nacional de Crédito (BNC)','Bancaribe','Banco Exterior','Banco del Tesoro','Banco Bicentenario','BANDES','Banfanb','Banco Activo','Banco Plaza','Bancamiga','100% Banco','Banco Caroní','Banco Sofitasa','Banco Fondo Común (BFC)','Banco Agrícola de Venezuela','Banco Internacional de Desarrollo (BID)'].map(name=><option key={name} value={name}>{name}</option>)}
+              <option value="__OTHER__">Otro banco / institución</option>
+            </select>
+            {selectedBank === '__OTHER__' && <input type="text" required autoFocus autoComplete="organization" placeholder="Nombre de la institución bancaria" value={bankName} onChange={e=>setBankName(e.target.value)} className="mt-2 w-full px-3 py-1.5 border border-slate-300 rounded-lg" />}
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div><label className="block font-semibold text-slate-700 mb-1">Titular de la cuenta</label><input value={accountHolderName} onChange={e=>setAccountHolderName(e.target.value)} placeholder="Nombre o razón social" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"/></div>
+              <div><label className="block font-semibold text-slate-700 mb-1">RIF del titular</label><input value={accountHolderRif} onChange={e=>setAccountHolderRif(e.target.value.toUpperCase())} placeholder="J-12345678-9" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"/></div>
+            </div>
+            <p className="mt-2 text-[11px] text-slate-500">Cuenta contable auxiliar: {bankControlAccount ? '1.1.1.03.' + String(accounts.filter(account=>account.parentCode==='1.1.1.03').length+1).padStart(2,'0') : 'Pendiente de matriz bancaria'}</p>
+            {bankControlError && <p role="alert" className="mt-2 text-xs text-rose-700">{bankControlError}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -183,7 +194,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
             </button>
             <button
               type="submit"
-              disabled={saving || !bankName.trim() || normalizedAccountNumber.length !== 20 || (parsedOpeningBalance > 0 && bcvRate <= 0)}
+              disabled={saving || !effectiveBankName || !!bankControlError || normalizedAccountNumber.length !== 20 || (parsedOpeningBalance > 0 && bcvRate <= 0)}
               className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
             >
               <Check className="w-4 h-4" />
