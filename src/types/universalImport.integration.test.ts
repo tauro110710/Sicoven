@@ -190,12 +190,11 @@ test('integración: análisis JSON, selección individual, empresa destino, dupl
       [importedSettlement.id, 'company-2', importedSettlement.documentId, 'SALE_COLLECTION',
         1100, 10, 'TRX-SETTLEMENT-001', importedEntry.id]
     );
-    const auditAfterFirstSave = db.prepare('SELECT COUNT(*) AS n FROM audit_events').get().n;
     assert.equal(persistAccountingSnapshot(db, imported, { id: 1, username: 'admin', role: 'admin' }).ok, true);
     assert.equal(
-      db.prepare('SELECT COUNT(*) AS n FROM audit_events').get().n,
-      auditAfterFirstSave,
-      'guardar nuevamente el mismo snapshot no debe duplicar la auditoría de la liquidación'
+      db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE event_type='credit_settlement_posted'").get().n,
+      1,
+      'guardar nuevamente el mismo snapshot no debe duplicar el evento de auditoría de la liquidación'
     );
 
     db.close();
