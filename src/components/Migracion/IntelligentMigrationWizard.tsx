@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
-import { extractUniversalJsonCollections } from '../../types/universalImport';
+import { detectImportSourceSystem, extractUniversalJsonCollections } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 
@@ -200,7 +200,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const data=JSON.parse(raw);
     // Detectar respaldos POSVEN versionados cuyo contenido vive dentro de data.
     // No se deben tratar como respaldo nativo de SICOVEN ni restaurar a ciegas.
-    if(data && typeof data==='object' && !Array.isArray(data) && String((data as Record<string,unknown>).app??'').toLowerCase()==='posven-pro' && (data as Record<string,unknown>).data && typeof (data as Record<string,unknown>).data==='object' && !Array.isArray((data as Record<string,unknown>).data)){
+    if(detectImportSourceSystem(data).id==='posven-pro' && (data as Record<string,unknown>).data && typeof (data as Record<string,unknown>).data==='object' && !Array.isArray((data as Record<string,unknown>).data)){
      const payload=(data as {data:Record<string,unknown>}).data;
      const arrayCollections=Object.entries(payload).filter(([,value])=>Array.isArray(value));
      const counts=Object.fromEntries(arrayCollections.map(([key,value])=>[key,(value as unknown[]).length]));
