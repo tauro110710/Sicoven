@@ -330,6 +330,49 @@ function persistAccountingSnapshot(db, state, actor = null) {
         actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null
       }));
     }
+    const previousCompaniesForInventoryRates = new Map((Array.isArray(priorState.companies) ? priorState.companies : []).map(company => [String(company.id), company]));
+    for (const company of (Array.isArray(state.companies) ? state.companies : [])) {
+      const previousCompany = previousCompaniesForInventoryRates.get(String(company.id));
+      const previousHistory = Array.isArray(previousCompany?.inventoryBcvRateHistory) ? previousCompany.inventoryBcvRateHistory : [];
+      const nextHistory = Array.isArray(company.inventoryBcvRateHistory) ? company.inventoryBcvRateHistory : [];
+      const nextById = new Map(nextHistory.map(entry => [String(entry.id), entry]));
+      for (const oldEntry of previousHistory) {
+        const retained = nextById.get(String(oldEntry.id));
+        if (!retained || JSON.stringify(retained) !== JSON.stringify(oldEntry)) {
+          throw new Error('El historial diario de tasas BCV de Inventario es inmutable; no se permite modificar ni eliminar registros anteriores.');
+        }
+      }
+      const previousIds = new Set(previousHistory.map(entry => String(entry.id)));
+      const effectiveDates = new Set(previousHistory.map(entry => String(entry.effectiveDate)));
+      for (const entry of nextHistory) {
+        if (previousIds.has(String(entry.id))) continue;
+        const effectiveDate = String(entry.effectiveDate || '');
+        const rate = Number(entry.rate);
+        if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(effectiveDate) ||
+            !Number.isFinite(new Date(effectiveDate + 'T00:00:00.000Z').getTime()) ||
+            new Date(effectiveDate + 'T00:00:00.000Z').toISOString().slice(0, 10) !== effectiveDate ||
+            !Number.isFinite(rate) || rate <= 0 ||
+            !['AUTOMATIC', 'MANUAL'].includes(String(entry.mode)) ||
+            typeof entry.source !== 'string' || !entry.source.trim()) {
+          throw new Error('El registro histórico de tasa BCV de Inventario contiene datos inválidos.');
+        }
+        if (effectiveDates.has(effectiveDate)) {
+          throw new Error('Ya existe una tasa BCV de Inventario para esa fecha valor; el historial diario no admite duplicados.');
+        }
+        effectiveDates.add(effectiveDate);
+        auditInsert.run('inventory_bcv_rate_recorded', JSON.stringify({
+          companyId: company.id,
+          companyName: company.name || null,
+          rate,
+          effectiveDate,
+          fetchedAt: entry.fetchedAt || null,
+          source: entry.source,
+          provider: entry.provider || null,
+          mode: entry.mode,
+          actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null
+        }));
+      }
+    }
     const oldCompanies = new Map((Array.isArray(priorState.companies) ? priorState.companies : []).map(company => [String(company.id), company]));
     for (const company of (Array.isArray(state.companies) ? state.companies : [])) {
       const oldCompany = oldCompanies.get(String(company.id));
