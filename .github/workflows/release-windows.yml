@@ -176,9 +176,7 @@ jobs:
         run: |
           $profileRoot = Join-Path $env:RUNNER_TEMP 'SICOVEN-Upgrade-Profile'
           $env:APPDATA = Join-Path $profileRoot 'AppData\Roaming'
-          $userData = Join-Path $env:APPDATA 'sicoven-desktop'
-          New-Item -ItemType Directory -Path $userData -Force | Out-Null
-          $env:SICOVEN_UPGRADE_DB = Join-Path $userData 'sicoven.sqlite'
+          New-Item -ItemType Directory -Path $env:APPDATA -Force | Out-Null
           $env:SICOVEN_UPGRADE_MARKER = 'SICOVEN-UPGRADE-PRESERVATION-' + [guid]::NewGuid().ToString('N')
 
           $installDir = Join-Path $env:RUNNER_TEMP 'SICOVEN-Upgrade-Install'
@@ -194,10 +192,6 @@ jobs:
           $oldInstall.Refresh()
           if ($oldInstall.ExitCode -ne 0) { throw "El instalador v1.0.17 terminó con código $($oldInstall.ExitCode)." }
 
-          if (-not (Test-Path $env:SICOVEN_UPGRADE_DB)) {
-            python -c "import os,sqlite3; db=sqlite3.connect(os.environ['SICOVEN_UPGRADE_DB']); db.execute('CREATE TABLE upgrade_test_marker(value TEXT NOT NULL)'); db.execute('INSERT INTO upgrade_test_marker(value) VALUES(?)',(os.environ['SICOVEN_UPGRADE_MARKER'],)); db.commit(); db.close()"
-            if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar la base SQLite aislada.' }
-          }
           $app = Join-Path $installDir 'SICOVEN.exe'
           if (-not (Test-Path $app -PathType Leaf)) { throw 'No se encontró SICOVEN.exe después de instalar v1.0.17.' }
           $oldApp = Start-Process -FilePath $app -ArgumentList @('--disable-gpu') -PassThru
@@ -207,6 +201,12 @@ jobs:
           $null = $oldApp.CloseMainWindow()
           if (-not $oldApp.WaitForExit(15000)) { & taskkill.exe /PID $oldApp.Id /T /F | Out-Null; Start-Sleep -Seconds 2 }
 
+          $database = Get-ChildItem -Path $env:APPDATA -Filter 'sicoven.sqlite' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $database) { throw 'SICOVEN v1.0.17 no creó sicoven.sqlite en el perfil aislado; no se puede verificar la actualización.' }
+          $env:SICOVEN_UPGRADE_DB = $database.FullName
+          python -c "import os,sqlite3; db=sqlite3.connect(os.environ['SICOVEN_UPGRADE_DB']); db.execute('CREATE TABLE IF NOT EXISTS upgrade_test_marker(value TEXT NOT NULL)'); db.execute('DELETE FROM upgrade_test_marker'); db.execute('INSERT INTO upgrade_test_marker(value) VALUES(?)',(os.environ['SICOVEN_UPGRADE_MARKER'],)); db.commit(); db.close()"
+          if ($LASTEXITCODE -ne 0) { throw 'No se pudo insertar el marcador en la base real utilizada por SICOVEN v1.0.17.' }
+
           $newInstaller = Get-ChildItem -Path release -Filter 'SICOVEN-Setup-*-x64.exe' -File | Select-Object -First 1
           if (-not $newInstaller) { throw 'No se encontró el instalador nuevo para probar la actualización.' }
           $newInstall = Start-Process -FilePath $newInstaller.FullName -ArgumentList @('/S', "/D=$installDir") -PassThru
@@ -215,7 +215,7 @@ jobs:
           if ($newInstall.ExitCode -ne 0) { throw "El instalador nuevo terminó con código $($newInstall.ExitCode)." }
 
           python -c "import os,sqlite3; db=sqlite3.connect('file:'+os.environ['SICOVEN_UPGRADE_DB']+'?mode=ro',uri=True); marker=db.execute('SELECT value FROM upgrade_test_marker LIMIT 1').fetchone()[0]; integrity=db.execute('PRAGMA integrity_check').fetchone()[0]; db.close(); assert marker==os.environ['SICOVEN_UPGRADE_MARKER'], 'El marcador de usuario no se conservó.'; assert integrity=='ok', 'SQLite integrity_check: '+integrity; print('Marcador SQLite preservado; integrity_check:',integrity)"
-          if ($LASTEXITCODE -ne 0) { throw 'La actualización no conservó íntegramente el marcador SQLite.' }
+          if ($LASTEXITCODE -ne 0) { throw 'La actualización no conservó íntegramente la base SQLite real de SICOVEN.' }
 
           $updatedApp = Start-Process -FilePath $app -ArgumentList @('--disable-gpu') -PassThru
           Start-Sleep -Seconds 12
@@ -223,7 +223,7 @@ jobs:
           if ($updatedApp.HasExited) { throw "SICOVEN actualizado no arrancó. Código: $($updatedApp.ExitCode)" }
           $null = $updatedApp.CloseMainWindow()
           if (-not $updatedApp.WaitForExit(15000)) { & taskkill.exe /PID $updatedApp.Id /T /F | Out-Null }
-          Write-Host 'Actualización desde v1.0.17 verificada: perfil SQLite preservado e integridad correcta.'
+          Write-Host "Actualización desde v1.0.17 verificada sobre $($database.FullName): marcador preservado e integridad correcta."
 
       - name: Publish installer and updater metadata to the existing download release
         if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
