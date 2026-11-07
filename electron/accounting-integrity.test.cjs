@@ -1222,7 +1222,7 @@ test('SQLite validates a purchase invoice and its credit payment created in the 
     id: 'purchase-batch-payment', companyId: 'company-1',
     documentId: purchase.id, kind: 'PURCHASE_PAYMENT',
     settlementDate: '2026-10-11', bcvRate: settlementRate,
-    amountUsd, amountBs, method: 'BANK_TRANSFER_BS', bankAccountId: 'bank-1', reference: 'BANK-100',
+    amountUsd, amountBs, method: 'BANK_TRANSFER_BS', bankAccountId: 'bank-1', reference: 'BANK 100',
     journalEntryId: paymentJournal.id, createdAt: '2026-10-11T10:00:00.000Z'
   };
   const accounts = [
