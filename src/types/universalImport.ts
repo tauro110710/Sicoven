@@ -495,7 +495,7 @@ export const detectImportSourceSystem = (value: unknown): ImportSourceSystem => 
 
 
 const normalizeUniversalInventoryToken = (value: unknown): string =>
-  String(value ?? '').trim().normalize('NFD').replace(/\\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  String(value ?? '').trim().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 export const mapUniversalInventoryCostingMethod = (value: unknown): 'PROMEDIO_PONDERADO' | 'PEPS' | null => {
   const token = normalizeUniversalInventoryToken(value);
