@@ -49,7 +49,6 @@ test('valida que una transferencia Bs use una cuenta bancaria real de la empresa
 });
 
 test('rechaza transferencias cuya moneda no coincide con la cuenta bancaria', () => {
-  const { validateUniversalSettlementDestination } = require('./universalImport') as typeof import('./universalImport');
   const bsTransfer = mapUniversalSettlementPreview(payment({ bankAccountId: 'bank-usd' }));
   assert.match(validateUniversalSettlementDestination(bsTransfer, 'company-1', destinationBanks, destinationAccounts) || '', /moneda/);
   const usdTransfer = mapUniversalSettlementPreview(payment({
@@ -60,7 +59,6 @@ test('rechaza transferencias cuya moneda no coincide con la cuenta bancaria', ()
 });
 
 test('valida auxiliares de caja Bs/USD y rechaza cuentas bancarias en efectivo', () => {
-  const { validateUniversalSettlementDestination } = require('./universalImport') as typeof import('./universalImport');
   const cashBs = mapUniversalSettlementPreview(payment({ method: 'efectivo', bankAccountId: '' }));
   assert.equal(validateUniversalSettlementDestination(cashBs, 'company-1', [], destinationAccounts), null);
   const cashUsd = mapUniversalSettlementPreview(payment({
