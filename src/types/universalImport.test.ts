@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, mapUniversalInventoryItemType } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -364,4 +364,28 @@ test('interpreta costos de compra con espacios, miles y decimales en formatos lo
     { sku: 'SKU-2', qty: '2', cost: ' 2,50 ', currency: 'USD' }
   ], products, { taxableBaseBs: 500, exemptAmountBs: 0, bcvRate: 100 });
   assert.deepEqual(usdLines, [{ productId: 'p2', quantity: 2, unitCostBs: 250 }]);
+});
+
+
+test('la clasificación de inventario universal exige valores de origen reconocibles y nunca asigna defaults', () => {
+  assert.equal(mapUniversalInventoryCostingMethod('PEPS'), 'PEPS');
+  assert.equal(mapUniversalInventoryCostingMethod('FIFO'), 'PEPS');
+  assert.equal(mapUniversalInventoryCostingMethod('Promedio ponderado'), 'PROMEDIO_PONDERADO');
+  assert.equal(mapUniversalInventoryCostingMethod(''), null);
+  assert.equal(mapUniversalInventoryCostingMethod('LIFO'), null);
+
+  assert.equal(mapUniversalInventoryVatTreatment('16%'), 'GENERAL_16');
+  assert.equal(mapUniversalInventoryVatTreatment('IVA 8'), 'REDUCIDA_8');
+  assert.equal(mapUniversalInventoryVatTreatment('Exento'), 'EXENTO');
+  assert.equal(mapUniversalInventoryVatTreatment('Exonerado'), 'EXONERADO');
+  assert.equal(mapUniversalInventoryVatTreatment(''), null);
+  assert.equal(mapUniversalInventoryVatTreatment('31%'), null);
+
+  assert.equal(mapUniversalInventoryItemType('Mercancía'), 'MERCANCIA');
+  assert.equal(mapUniversalInventoryItemType('Materia prima'), 'MATERIA_PRIMA');
+  assert.equal(mapUniversalInventoryItemType('Producto en proceso'), 'PRODUCTO_EN_PROCESO');
+  assert.equal(mapUniversalInventoryItemType('Producto terminado'), 'PRODUCTO_TERMINADO');
+  assert.equal(mapUniversalInventoryItemType('Subproducto'), 'SUBPRODUCTO');
+  assert.equal(mapUniversalInventoryItemType(''), null);
+  assert.equal(mapUniversalInventoryItemType('servicio'), null);
 });
