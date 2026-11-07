@@ -153,6 +153,7 @@ interface AccountingContextType {
   addSaleCorrectionNote: (draft: Omit<SaleCorrectionNoteRequest, 'sourceSale' | 'priorCreditNotes' | 'closedThroughDate'> & { sourceSaleId: string }) => Promise<SaleRecord>;
   deleteSale: (id: string) => void;
   runAtomicInvoiceImport: <T>(operation: () => T) => T;
+  runAtomicInvoiceImportAndWait: <T>(operation: () => T) => Promise<T>;
 
   // Inventario
   products: InventoryProduct[];
@@ -353,7 +354,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [supplierDirectAdvances, setSupplierDirectAdvances] = useState<SupplierDirectAdvance[]>([]);
   const bankStatementImportInFlightRef = useRef(false);
   type PendingBankOutgoingReservation = { release: () => void; waiter: { resolve: () => void; reject: (error: Error) => void } };
+  type ActiveAccountingImportBatch = { journalEntries: JournalEntry[]; reservedBankLockKeys: Set<string> };
   const bankOutgoingReservationsRef = useRef<PendingBankOutgoingReservation[]>([]);
+  const activeImportBatchRef = useRef<ActiveAccountingImportBatch | null>(null);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
   const supplierAdvanceSettlementInFlightRef = useRef<Set<string>>(new Set());
   const supplierDirectAdvanceInFlightRef = useRef<Set<string>>(new Set());
@@ -417,8 +420,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       islrEventSequenceRef.current = before.islrEventSequence;
       throw error;
     };
+    if (activeImportBatchRef.current) {
+      throw new Error('No se permiten importaciones contables anidadas.');
+    }
+    const previousBatch = activeImportBatchRef.current;
+    activeImportBatchRef.current = { journalEntries: [], reservedBankLockKeys: new Set<string>() };
     try {
       const result = operation();
+      activeImportBatchRef.current = previousBatch;
       if (result && typeof (result as any).then === 'function') {
         // Async operations may publish functional React updates while the shared
         // SQLite snapshot queue is pending. If persistence rejects, the provider
@@ -430,6 +439,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       return result;
     } catch (error) {
+      activeImportBatchRef.current = previousBatch;
       return rollback(error);
     }
   };
@@ -466,6 +476,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return new Promise<void>((resolve, reject) => persistenceWaitersRef.current.push({ resolve, reject }));
   };
 
+  const runAtomicInvoiceImportAndWait = async <T,>(operation: () => T): Promise<T> => {
+    const result = runAtomicInvoiceImport(operation);
+    if (result && typeof (result as any).then === 'function') {
+      throw new Error('El lote de importación debe ser síncrono; las operaciones asíncronas no pueden compartir una confirmación atómica.');
+    }
+    await waitForPersistence();
+    return result;
+  };
+
   // Reserva las cuentas bancarias acreditadas por el asiento hasta que el snapshot
   // completo reciba confirmación (o rechazo) de SQLite. La reserva es síncrona:
   // evita que dos eventos del renderer validen el mismo saldo desactualizado.
@@ -477,14 +496,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       .filter(bank => bank.companyId === companyId && creditedAccountCodes.has(bank.accountCode))
       .map(bank => `${companyId}:${bank.id}`))];
     if (!lockKeys.length) return;
+    const activeBatch = activeImportBatchRef.current;
+    const lockKeysToAcquire = lockKeys.filter(key => !activeBatch?.reservedBankLockKeys.has(key));
+    if (!lockKeysToAcquire.length) return;
 
     const releases: Array<() => void> = [];
     try {
-      for (const key of lockKeys) releases.push(bankOutgoingLockRef.current.acquire(key));
+      for (const key of lockKeysToAcquire) releases.push(bankOutgoingLockRef.current.acquire(key));
     } catch (error) {
       releases.forEach(release => release());
       throw error;
     }
+    if (activeBatch) lockKeysToAcquire.forEach(key => activeBatch.reservedBankLockKeys.add(key));
 
     let released = false;
     let reservation: PendingBankOutgoingReservation;
@@ -1360,8 +1383,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const requestedAmount = entry.items
           .filter(item => item.accountCode === bank.accountCode)
           .reduce((sum, item) => sum + Number(bank.currency === 'USD' ? item.creditUsd || 0 : item.creditBs || 0), 0);
+        const balanceEntries = activeImportBatchRef.current
+          ? [...journalEntries, ...activeImportBatchRef.current.journalEntries]
+          : journalEntries;
         const availableBalance = calculateBankAvailableBalance({
-          bankAccount: bank, companyId: targetCompany.id, asOfDate: entry.date, journalEntries
+          bankAccount: bank, companyId: targetCompany.id, asOfDate: entry.date, journalEntries: balanceEntries
         });
         validateBankOutgoingAvailability({
           availableBalance, requestedAmount, currency: bank.currency
@@ -1383,6 +1409,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       createdAt: new Date().toISOString()
     };
     reserveBankOutgoingAccounts(newEntry.companyId, newEntry.items);
+    activeImportBatchRef.current?.journalEntries.push(newEntry);
     setJournalEntries(prev => [...prev, newEntry]);
     return newEntry;
   };
@@ -5690,6 +5717,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         addSaleCorrectionNote,
         deleteSale,
         runAtomicInvoiceImport,
+        runAtomicInvoiceImportAndWait,
         products: products.filter(p => p.companyId === currentCompany.id),
         addProduct,
         getCompanyInventoryProducts,
