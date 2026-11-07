@@ -1924,11 +1924,17 @@ function validateAccountingSnapshot(previousState, nextState) {
   for (const settlement of asArray(nextState.creditSettlements)) {
     if (priorCreditSettlementIds.has(String(settlement.id)) || settlement.kind !== 'PURCHASE_PAYMENT') continue;
     const target = asArray(nextState.purchases).find(item =>
-      item.id === settlement.documentId && item.companyId === settlement.companyId && item.documentType === '02');
-    if (!target) continue;
-    const sourceJournal = target.journalEntryId ? priorById.get(String(target.journalEntryId)) : undefined;
+      item.id === settlement.documentId && item.companyId === settlement.companyId &&
+      ['01', '02'].includes(item.documentType));
+    if (!target) {
+      throw new Error('SQLite rechazó un pago de proveedor sin factura de compra o ND destino en la empresa indicada.');
+    }
+    // A newly imported invoice and its payment may be committed in one SQLite
+    // snapshot. Resolve the immutable source journal from that complete snapshot.
+    const sourceJournal = target.journalEntryId ? nextById.get(String(target.journalEntryId)) : undefined;
+    const expectedSourceType = target.documentType === '02' ? 'AJUSTE' : 'COMPRA';
     const payableCodes = sourceJournal && sourceJournal.companyId === target.companyId &&
-      sourceJournal.type === 'AJUSTE' && Array.isArray(sourceJournal.items)
+      sourceJournal.type === expectedSourceType && Array.isArray(sourceJournal.items)
       ? [...new Set(sourceJournal.items.filter(line =>
           String(line.accountCode || '').startsWith('2.1.1.') && Number(line.creditBs || 0) > 0
         ).map(line => String(line.accountCode)))]
@@ -1957,10 +1963,14 @@ function validateAccountingSnapshot(previousState, nextState) {
       .reduce((sum, line) => sum + Number(line.creditBs || 0), 0);
     const payableDebitUsd = asArray(journal?.items).filter(line => line.accountCode === payableCode)
       .reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
+    const payableCreditUsd = asArray(journal?.items).filter(line => line.accountCode === payableCode)
+      .reduce((sum, line) => sum + Number(line.creditUsd || 0), 0);
     const cashCredit = asArray(journal?.items).filter(line => line.accountCode === cashCode)
       .reduce((sum, line) => sum + Number(line.creditBs || 0), 0);
     const cashDebit = asArray(journal?.items).filter(line => line.accountCode === cashCode)
       .reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
+    const cashDebitUsd = asArray(journal?.items).filter(line => line.accountCode === cashCode)
+      .reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
     const cashCreditUsd = asArray(journal?.items).filter(line => line.accountCode === cashCode)
       .reduce((sum, line) => sum + Number(line.creditUsd || 0), 0);
     const fxCode = fxDifferenceBs > 0.009 ? '6.1.1.08' : fxDifferenceBs < -0.009 ? '4.2.1.01' : '';
@@ -1978,9 +1988,11 @@ function validateAccountingSnapshot(previousState, nextState) {
       debitUsd: acc.debitUsd + Number(line.debitUsd || 0),
       creditUsd: acc.creditUsd + Number(line.creditUsd || 0)
     }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
-    if (!target || target.isCancelled || target.paymentTerm !== 'CREDITO' ||
+    if (target.isCancelled || target.paymentTerm !== 'CREDITO' ||
         !isValidIsoDate(settlement.settlementDate) ||
         settlement.settlementDate < String(target.accountCreditDate || target.invoiceDate) ||
+        !['CASH_BS', 'CASH_USD', 'BANK_TRANSFER_BS', 'BANK_TRANSFER_USD'].includes(settlement.method) ||
+        (bankTransfer && !String(settlement.reference || '').trim()) ||
         !Number.isFinite(amountUsd) || amountUsd <= 0 ||
         !Number.isFinite(amountBs) || amountBs <= 0 ||
         !Number.isFinite(settlementRate) || settlementRate <= 0 ||
@@ -1994,14 +2006,16 @@ function validateAccountingSnapshot(previousState, nextState) {
         Math.abs(payableDebit - expectedPayableBs) > 0.02 ||
         Math.abs(payableCredit) > 0.01 ||
         Math.abs(payableDebitUsd - amountUsd) > 0.0001 ||
+        Math.abs(payableCreditUsd) > 0.0001 ||
         Math.abs(cashCredit - amountBs) > 0.02 ||
         Math.abs(cashDebit) > 0.01 ||
+        Math.abs(cashDebitUsd) > 0.0001 ||
         Math.abs(cashCreditUsd - amountUsd) > 0.0001 ||
         Math.abs(fxLineAmount - fxAmount) > 0.02 ||
         asArray(journal.items).some(line => !allowedCodes.has(line.accountCode)) ||
         Math.abs(totals.debitBs - totals.creditBs) > 0.02 ||
         Math.abs(totals.debitUsd - totals.creditUsd) > 0.0001) {
-      throw new Error('SQLite rechazó el pago de una ND: documento, cuenta CxP propia, tesorería, diferencial cambiario o asiento no concilian.');
+      throw new Error('SQLite rechazó el pago de una factura/ND de proveedor: documento, cuenta CxP propia, tesorería, diferencial cambiario o asiento no concilian.');
     }
   }
 
