@@ -619,7 +619,7 @@ function saleJournalMatchesInvoice(sale, entry, company) {
 function saleInventoryLinesMatchKardex(sale, nextState, previousState) {
   const lines = asArray(sale.inventoryLines);
   if (lines.length === 0) return true;
-  const normalizeDocument = value => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
+  const normalizeDocument = value => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
   const normalizeRif = value => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const round2 = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
   const rate = Number(sale.bcvRate);
