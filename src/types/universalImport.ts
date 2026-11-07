@@ -184,8 +184,8 @@ export const mapUniversalInventoryMovementConcept = (value: unknown): UniversalI
     merma: 'MERMA', loss: 'MERMA',
     autoconsumo: 'AUTOCONSUMO', selfconsumption: 'AUTOCONSUMO',
     ajuste: 'AJUSTE', adjustment: 'AJUSTE',
-    devolucioncliente: 'DEVOLUCION_CLIENTE', customerreturn: 'DEVOLUCION_CLIENTE',
-    devolucioncompra: 'DEVOLUCION_COMPRA', supplierreturn: 'DEVOLUCION_COMPRA'
+    devolucioncliente: 'DEVOLUCION_CLIENTE', devoluciondecliente: 'DEVOLUCION_CLIENTE', customerreturn: 'DEVOLUCION_CLIENTE',
+    devolucioncompra: 'DEVOLUCION_COMPRA', devoluciondecompra: 'DEVOLUCION_COMPRA', devolucionaproveedor: 'DEVOLUCION_COMPRA', supplierreturn: 'DEVOLUCION_COMPRA'
   };
   return map[key] ?? null;
 };
