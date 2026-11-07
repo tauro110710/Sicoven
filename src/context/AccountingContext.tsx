@@ -3697,7 +3697,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         };
         openingEntries.push(entry);
         openingMovements.push({
-          id: 'mov-opening-' + product.id, companyId: currentCompany.id, productId: product.id,
+          id: 'mov-opening-' + product.id, companyId: targetCompanyId, productId: product.id,
           productName: name, productCode: code, date, type: 'ENTRADA', concept: 'INVENTARIO_INICIAL',
           documentRef: entry.referenceDoc || 'APERTURA-INVENTARIO', quantity, unitCostBs,
           unitCostUsd: unitCostBs / rate, totalCostBs: totalBs, totalCostUsd: totalUsd,
