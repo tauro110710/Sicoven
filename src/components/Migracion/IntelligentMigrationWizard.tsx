@@ -532,10 +532,10 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const cost=number('avgCostBs','costoPromedioBs','costBs','costoBs','costObs','costo','costoUnitario','unitCost');
     const priceBs=number('salesPriceBs','precioVentaBs','priceBs','salesPrice','precioVenta');
     const priceUsd=number('salesPriceUsd','precioVentaUsd','priceUsd');
-    return {code,name,category:String(pick(r,'category','categoria')??'General'),unit:String(pick(r,'unit','unidad')??'Unidad'),minStock:number('minStock','stockMinimo'),currentStock:stock,avgCostBs:cost,avgCostUsd:number('avgCostUsd','costoPromedioUsd'),lastCostBs:number('lastCostBs')||cost,lastCostUsd:number('lastCostUsd'),salesPriceBs:priceBs,salesPriceUsd:priceUsd,costingMethod:'PROMEDIO_PONDERADO' as const,vatTreatment:'GENERAL_16' as const,itemType:'MERCANCIA' as const,openingDate:String(pick(r,'openingDate','fechaApertura')??new Date().toISOString().slice(0,10)),openingBcvRate:pick(r,'openingBcvRate','bcvRate')===undefined?undefined:number('openingBcvRate','bcvRate')};
+    return {code,name,category:String(pick(r,'category','categoria')??'General'),unit:String(pick(r,'unit','unidad')??'Unidad'),minStock:number('minStock','stockMinimo'),currentStock:stock,avgCostBs:cost,avgCostUsd:number('avgCostUsd','costoPromedioUsd'),lastCostBs:number('lastCostBs')||cost,lastCostUsd:number('lastCostUsd'),salesPriceBs:priceBs,salesPriceUsd:priceUsd,costingMethod:'PROMEDIO_PONDERADO' as const,vatTreatment:'GENERAL_16' as const,itemType:'MERCANCIA' as const,openingDate:String(pick(r,'openingDate','fechaApertura')??new Date().toISOString().slice(0,10)),openingBcvRate:pick(r,'openingBcvRate','bcvRate')===undefined?targetCompany.bcvRate:number('openingBcvRate','bcvRate')};
    });
-   const count=await importInventoryProducts(prepared);
-   setNotice('Migración completada: '+count+' artículos incorporados. SICOVEN no sobrescribió códigos existentes. Revisa el Kardex y la valoración inicial antes de continuar.');
+   const count=await importInventoryProducts(prepared,targetCompany.id);
+   setNotice('Inventario importado en '+targetCompany.name+' (RIF '+targetCompany.rif+'): '+count+' artículos incorporados. SICOVEN no sobrescribió códigos existentes. Revisa el Kardex y la valoración inicial antes de continuar.');
    setSelected(old=>old.filter(id=>id!=='inventory'));setConfirmed(false);
     setBusy(false);
   }catch(e){setError(e instanceof Error?e.message:'La validación falló. No se completó la migración.');setBusy(false);}
