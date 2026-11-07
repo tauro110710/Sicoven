@@ -47,3 +47,34 @@ export const extractUniversalJsonCollections = (value: unknown): UniversalJsonCo
 
   return collections;
 };
+
+export type UniversalImportFormat = 'json' | 'csv' | 'tsv' | 'txt' | 'xlsx' | 'xlsm' | 'unsupported';
+
+export const detectUniversalImportFormat = (fileName: string): UniversalImportFormat => {
+  const extension = fileName.toLowerCase().split('.').pop() || '';
+  return ['json', 'csv', 'tsv', 'txt', 'xlsx', 'xlsm'].includes(extension)
+    ? extension as UniversalImportFormat
+    : 'unsupported';
+};
+
+export type ImportSourceSystem = {
+  id: 'posven-pro' | 'unknown';
+  label: string;
+  confidence: 'explicit' | 'unknown';
+};
+
+/**
+ * Identifica el software de origen solo cuando el propio contenido lo declara.
+ * La extensión del archivo nunca se usa para inferir qué sistema lo generó.
+ */
+export const detectImportSourceSystem = (value: unknown): ImportSourceSystem => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { id: 'unknown', label: 'Sistema de origen no identificado', confidence: 'unknown' };
+  }
+  const record = value as Record<string, unknown>;
+  const declared = String(record.app ?? record.application ?? record.system ?? record.software ?? '').trim().toLowerCase();
+  if (declared === 'posven-pro' || declared === 'posven' || declared === 'posvenpro') {
+    return { id: 'posven-pro', label: 'POSVEN-Pro', confidence: 'explicit' };
+  }
+  return { id: 'unknown', label: 'Sistema de origen no identificado', confidence: 'unknown' };
+};
