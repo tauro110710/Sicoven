@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, planUniversalInvoiceSettlements, validateUniversalSettlementDestination, selectUniversalRowsByStableKeys, mapUniversalInventoryItemType } from '../../types/universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, planUniversalInvoiceSettlements, validateUniversalSettlementDestination, mapUniversalInvoiceSettlementDrafts, selectUniversalRowsByStableKeys, mapUniversalInventoryItemType } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 
@@ -51,7 +51,7 @@ const pick = (row:Row, ...keys:string[]) => {
 };
 
 export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClose}) => {
- const { companies, products: allProducts, getCompanyInventoryProducts, getCompanyInventoryMovements, importInventoryProducts, importInventoryMovements, accounts, bankAccounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, currentCompany } = useAccounting();
+ const { companies, products: allProducts, getCompanyInventoryProducts, getCompanyInventoryMovements, importInventoryProducts, importInventoryMovements, accounts, bankAccounts, addAccount, addJournalEntry, addSale, addPurchase, addImportedCreditSettlements, runAtomicInvoiceImportAndWait, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, currentCompany } = useAccounting();
  const [targetCompanyId, setTargetCompanyId] = useState('');
  const targetCompany = companies.find(company => company.id === targetCompanyId) || null;
  const companyProducts = targetCompany ? getCompanyInventoryProducts(targetCompany.id) : [];
@@ -440,9 +440,11 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     if(linkedSettlementPreview.length){
      setSettlementPreview(linkedSettlementPreview);
      const unresolved=linkedSettlementPreview.filter(item=>item.destinationError).length;
-     setNotice('Se detectaron '+linkedSettlementPreview.length+' liquidaciones vinculadas a las facturas seleccionadas. '+(unresolved?unresolved+' requieren corregir o asignar su cuenta destino. ':'Los destinos contables se verificaron. ')+'No se importó ningún documento: las liquidaciones seguirán bloqueadas hasta que el lote completo pueda confirmarse en una sola transacción SQLite.');
-     setBusy(false);
-     return;
+     if(unresolved){
+      setNotice('Se detectaron '+linkedSettlementPreview.length+' liquidaciones vinculadas. '+unresolved+' requieren corregir o asignar su cuenta destino. No se importó ningún documento ni se alteraron saldos.');
+      setBusy(false);
+      return;
+     }
     }
     const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha de factura','fechaEmision','fecha')??'').slice(0,10);if(!isValidIsoDate(value))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
     const num=(r:Row,i:number,required:boolean,...keys:string[])=>{const raw=pick(r,...keys);if((raw===undefined||raw==='')&&required)throw new Error('Fila '+(i+1)+': falta el campo obligatorio '+keys[0]+'.');const value=raw===undefined||raw===''?0:parseMigrationNumber(raw);if(!Number.isFinite(value)||value<0)throw new Error('Fila '+(i+1)+': importe inválido en '+keys[0]+'.');return value;};
@@ -484,10 +486,6 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const paymentTermRaw=norm(String(pick(r,'paymentTerm','condicionPago','condicion','tipoPago','formaPago')??''));
      if(!['contado','credito','cash','credit'].includes(paymentTermRaw))throw new Error('Fila '+(i+1)+': indique expresamente paymentTerm CONTADO o CREDITO; no se supondrá la condición de pago.');
      const paymentTerm=(paymentTermRaw==='contado'||paymentTermRaw==='cash'?'CONTADO':'CREDITO') as 'CONTADO'|'CREDITO';
-     const linkedSettlements=resolveUniversalInvoiceSettlementRows(rows,r);
-     if(linkedSettlements.length||hasUniversalInlineSettlementAmount(r)){
-      throw new Error('Fila '+(i+1)+': la factura contiene cobros/pagos o importes ya liquidados en el archivo. Esta etapa aún no importa liquidaciones; no se registrará como saldo totalmente pendiente. Primero debe habilitarse el adaptador de liquidaciones con fecha, tasa BCV, medio, referencia y cuenta de tesorería.');
-     }
      const outstandingRaw=pick(r,'outstandingBalanceBs','balanceDueBs','saldoPendienteBs','saldoActualBs','saldoPendiente','saldo');
      if(paymentTerm==='CREDITO'&&outstandingRaw!==undefined){
       const outstanding=parseMigrationNumber(outstandingRaw);
@@ -514,7 +512,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const documentTypeRaw=String(documentTypeValue).trim();
      if(!['01','02','03'].includes(documentTypeRaw))throw new Error('Fila '+(i+1)+': tipo de documento inválido; use 01, 02 o 03.');
      if(documentTypeRaw!=='01')throw new Error('Fila '+(i+1)+': las notas de débito/crédito requieren flujos de corrección fiscal y contable enlazados a su factura original. Este adaptador solo importa facturas (01).');
-     const common={invoiceDate,invoiceNumber,controlNumber:String(pick(r,'controlNumber','numeroControl','numero de control')??'').trim(),documentType:documentTypeRaw as '01'|'02'|'03',totalAmountBs,exemptAmountBs,exemptAmountUsd,taxableBaseBs,taxRate,vatAmountBs,vatWithheldBs,bcvRate:rate,totalAmountUsd,taxableBaseUsd,vatAmountUsd,vatWithheldUsd,notes:String(pick(r,'notes','observaciones')??''),paymentTerm,creditDays,dueDate,currencyPricingMode:'REVISION_MANUAL' as const,fiscalAdjustmentMode:'REVISION_CONTADOR' as const};
+     const common={sourceRowId:String(r.migrationrowid??'').trim(),invoiceDate,invoiceNumber,controlNumber:String(pick(r,'controlNumber','numeroControl','numero de control')??'').trim(),documentType:documentTypeRaw as '01'|'02'|'03',totalAmountBs,exemptAmountBs,exemptAmountUsd,taxableBaseBs,taxRate,vatAmountBs,vatWithheldBs,bcvRate:rate,totalAmountUsd,taxableBaseUsd,vatAmountUsd,vatWithheldUsd,notes:String(pick(r,'notes','observaciones')??''),paymentTerm,creditDays,dueDate,currencyPricingMode:'REVISION_MANUAL' as const,fiscalAdjustmentMode:'REVISION_CONTADOR' as const};
      if(!common.controlNumber)throw new Error('Fila '+(i+1)+': número de control obligatorio.');
      if(kind==='sales'){
       const nestedSaleLines=pick(r,'inventoryLines','saleLines','productLines','items','lines','details','detalles','detalle','articulos','productos');
@@ -546,12 +544,19 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      if(vatWithheldBs+islrWithheldBs>totalAmountBs+0.02||vatWithheldUsd+islrWithheldUsd>totalAmountUsd+0.02||netPayableBs < -0.02||netPayableUsd < -0.02)throw new Error('Fila '+(i+1)+': la suma de las retenciones IVA e ISLR supera el total de la factura.');
      const rawSupplierTaxStatus=norm(String(pick(r,'supplierTaxStatus','condicionFiscalProveedor')??resolvedParty.taxStatus??''));const supplierTaxStatus=({'ordinary':'ORDINARY','ordinario':'ORDINARY','contribuyenteordinario':'ORDINARY','formal':'FORMAL','contribuyenteformal':'FORMAL','special':'SPECIAL','especial':'SPECIAL','contribuyenteespecial':'SPECIAL','nonregistered':'NON_REGISTERED','notregistered':'NON_REGISTERED','noregistrado':'NON_REGISTERED','nocontribuyente':'NON_REGISTERED','unknown':'UNKNOWN','desconocido':'UNKNOWN'} as Record<string,string>)[rawSupplierTaxStatus];if(resolvedParty.taxStatus&&!supplierTaxStatus)throw new Error('Fila '+(i+1)+': la condición fiscal del proveedor no se reconoce; debe revisarse antes de importar retenciones.');return {...common,accountCreditDate,paymentAccountCode:paymentAccountCode||undefined,paymentReference:paymentReference||undefined,purchaseDebitAccountCode:purchaseDebitAccountCode||undefined,inventoryLines,supplierRif:partyRif,supplierName:partyName,supplierAddress:String(pick(r,'supplierAddress','direccionProveedor')??resolvedParty.address??''),supplierEmail:String(pick(r,'supplierEmail','correoProveedor')??resolvedParty.email??'')||undefined,supplierTaxStatus:supplierTaxStatus as any,ivaRetentionDecision:pick(r,'ivaRetentionDecision','retentionDecisionSnapshot') as any,islrConceptCode:islrWithheldBs>0?String(pick(r,'islrConceptCode')??''):undefined,islrConceptName:islrWithheldBs>0?String(pick(r,'islrConceptName')??''):undefined,islrRate:islrWithheldBs>0?num(r,i,true,'islrRate'):undefined,islrSubtrahendBs:islrWithheldBs>0?num(r,i,false,'islrSubtrahendBs'):undefined,islrBeneficiaryType:islrWithheldBs>0?pick(r,'islrBeneficiaryType') as any:undefined,islrResidency:islrWithheldBs>0?pick(r,'islrResidency') as any:undefined,islrBasePercentage:islrWithheldBs>0?num(r,i,true,'islrBasePercentage'):undefined,islrUnitTaxValueBs:islrWithheldBs>0?num(r,i,true,'islrUnitTaxValueBs'):undefined,islrFormulaFactor:islrWithheldBs>0?num(r,i,true,'islrFormulaFactor'):undefined,islrWithheldBs,islrWithheldUsd,retentionRate,voucherNumber:String(pick(r,'voucherNumber','comprobanteRetencion')??'')||undefined,vatWithheldBs,vatWithheldUsd};
     });
-    runAtomicInvoiceImport(()=>{
+    let importedSettlementCount=0;
+    const createdDocuments: Array<ReturnType<typeof addSale> | ReturnType<typeof addPurchase>>=[];
+    const createdDocumentIds: Record<string,string>={};
+    await runAtomicInvoiceImportAndWait(()=>{
      if(kind==='sales'){
       const movementRows: Parameters<typeof importInventoryMovements>[0]=[];
       prepared.forEach(s=>{
-       const sale=s as Parameters<typeof addSale>[0];
-       addSale(sale,targetCompany.id);
+       const {sourceRowId,...saleData}=s;
+       if(!sourceRowId)throw new Error('Una factura de venta no conserva su clave estable de origen.');
+       const sale=saleData as Parameters<typeof addSale>[0];
+       const created=addSale(sale,targetCompany.id);
+       createdDocuments.push(created);
+       createdDocumentIds[sourceRowId]=created.id;
        if(sale.inventoryLines?.length){
         const unanchoredLine=sale.inventoryLines.find(line=>{
          const product=companyProducts.find(item=>item.id===line.productId);
@@ -572,8 +577,12 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      }else{
       const movementRows: Array<Record<string,unknown>>=[];
       prepared.forEach(p=>{
-       const purchase=p as Parameters<typeof addPurchase>[0];
-       addPurchase({...purchase,documentType:purchase.documentType,retentionRate:purchase.retentionRate,vatWithheldBs:purchase.vatWithheldBs,vatWithheldUsd:purchase.vatWithheldUsd},targetCompany.id);
+       const {sourceRowId,...purchaseData}=p;
+       if(!sourceRowId)throw new Error('Una factura de compra no conserva su clave estable de origen.');
+       const purchase=purchaseData as Parameters<typeof addPurchase>[0];
+       const created=addPurchase({...purchase,documentType:purchase.documentType,retentionRate:purchase.retentionRate,vatWithheldBs:purchase.vatWithheldBs,vatWithheldUsd:purchase.vatWithheldUsd},targetCompany.id);
+       createdDocuments.push(created);
+       createdDocumentIds[sourceRowId]=created.id;
        if(purchase.inventoryLines?.length){
         movementRows.push(...purchase.inventoryLines.map(line=>({
          productId:line.productId,date:purchase.invoiceDate,type:'ENTRADA' as const,concept:'COMPRA',
@@ -585,8 +594,11 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
       });
       if(movementRows.length)importInventoryMovements(movementRows as Parameters<typeof importInventoryMovements>[0],targetCompany.id);
      }
+     const settlementDrafts=mapUniversalInvoiceSettlementDrafts(settlementPlans,createdDocumentIds);
+     importedSettlementCount=addImportedCreditSettlements(settlementDrafts,createdDocuments,targetCompany.id).length;
     });
-    setNotice((kind==='sales'?'Ventas':'Compras')+' importadas: '+prepared.length+' facturas. SICOVEN generó los asientos y derivó CxC/CxP según la condición de pago. Revisa documentos, impuestos y saldos; confirma por separado el siguiente módulo.');
+    setSettlementPreview([]);
+    setNotice((kind==='sales'?'Ventas':'Compras')+' importadas: '+prepared.length+' facturas. Liquidaciones históricas contabilizadas: '+importedSettlementCount+'. SICOVEN generó los asientos, actualizó CxC/CxP y SQLite confirmó el lote completo en una sola transacción.');
     setSelected(old=>old.filter(id=>id!==kind));setConfirmed(false);
      setBusy(false);return;
    }
