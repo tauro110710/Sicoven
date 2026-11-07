@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, hasUniversalNestedMerchandiseDetails } from '../../types/universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, hasUniversalNestedMerchandiseDetails, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 
@@ -438,6 +438,20 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const paymentTermRaw=norm(String(pick(r,'paymentTerm','condicionPago','condicion')??''));
      if(!['contado','credito','cash','credit'].includes(paymentTermRaw))throw new Error('Fila '+(i+1)+': indique expresamente paymentTerm CONTADO o CREDITO; no se supondrá la condición de pago.');
      const paymentTerm=(paymentTermRaw==='contado'||paymentTermRaw==='cash'?'CONTADO':'CREDITO') as 'CONTADO'|'CREDITO';
+     const linkedSettlements=resolveUniversalInvoiceSettlementRows(rows,r);
+     if(linkedSettlements.length||(paymentTerm==='CREDITO'&&hasUniversalInlineSettlementAmount(r))){
+      throw new Error('Fila '+(i+1)+': la factura tiene cobros/pagos o importes ya liquidados en el archivo. Esta etapa importa facturas de crédito sin liquidaciones; no se importará para evitar inflar CxC/CxP. Primero debe habilitarse el adaptador de liquidaciones con su fecha, tasa BCV, medio, referencia y cuenta bancaria.');
+     }
+     if(kind==='sales'&&paymentTerm==='CONTADO'){
+      throw new Error('Fila '+(i+1)+': SICOVEN aún no habilita la importación de ventas de contado porque el registro de venta requiere identificar y contabilizar la tesorería receptora. No se registrará como CxC ficticia.');
+     }
+     const outstandingBsRaw=pick(r,'outstandingBalanceBs','balanceDueBs','saldoPendienteBs','saldoActualBs','saldoPendiente','saldo');
+     if(paymentTerm==='CREDITO'&&outstandingBsRaw!==undefined){
+      const outstandingBs=parseMigrationNumber(outstandingBsRaw);
+      if(!Number.isFinite(outstandingBs)||outstandingBs<0||Math.abs(outstandingBs-num(r,i,true,'totalAmountBs','totalBs','total'))>0.02){
+       throw new Error('Fila '+(i+1)+': el saldo pendiente informado no coincide con el total de la factura. Se requiere importar las liquidaciones asociadas para reconstruir CxC/CxP sin diferencias.');
+      }
+     }
      const creditDays=paymentTerm==='CREDITO'?num(r,i,true,'creditDays','diasCredito'):0;
      const dueDate=paymentTerm==='CREDITO'?String(pick(r,'dueDate','fechaVencimiento','vencimiento')??'').slice(0,10):undefined;
      if(paymentTerm==='CREDITO'&&(!Number.isInteger(creditDays)||creditDays<1||!isValidIsoDate(dueDate)))throw new Error('Fila '+(i+1)+': las facturas a crédito requieren días de crédito y vencimiento válidos.');
