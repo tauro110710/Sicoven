@@ -18,15 +18,14 @@ export const extractUniversalJsonCollections = (value: unknown): UniversalJsonCo
     const rows = items.filter((item): item is Record<string, unknown> =>
       Boolean(item) && typeof item === 'object' && !Array.isArray(item)
     );
-    // Los arreglos de escalares no son registros empresariales.
-    if (rows.length > 0 || items.length === 0) {
-      collections.push({
-        path,
-        rows,
-        totalItems: items.length,
-        invalidItems: items.length - rows.length
-      });
-    }
+    // También se conservan arreglos escalares o mixtos para explicar
+    // cuántos elementos no pueden tratarse como registros importables.
+    collections.push({
+      path,
+      rows,
+      totalItems: items.length,
+      invalidItems: items.length - rows.length
+    });
   };
 
   const visit = (node: unknown, path: string, depth: number) => {
