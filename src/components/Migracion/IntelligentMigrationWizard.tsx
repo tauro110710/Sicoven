@@ -429,7 +429,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const creditDays=paymentTerm==='CREDITO'?num(r,i,true,'creditDays','diasCredito'):0;
      const dueDate=paymentTerm==='CREDITO'?String(pick(r,'dueDate','fechaVencimiento','vencimiento')??'').slice(0,10):undefined;
      if(paymentTerm==='CREDITO'&&(!Number.isInteger(creditDays)||creditDays<1||!isValidIsoDate(dueDate)))throw new Error('Fila '+(i+1)+': las facturas a crédito requieren días de crédito y vencimiento válidos.');
-     const rate=bcvRate||currentCompany.bcvRate;
+     const rate=bcvRate||targetCompany.bcvRate;
      if(rate<=0)throw new Error('Fila '+(i+1)+': la tasa BCV debe ser positiva.');
      const expectedBs=taxableBaseBs+exemptAmountBs+vatAmountBs;
      const expectedUsd=taxableBaseUsd+(rate>0?exemptAmountBs/rate:0)+vatAmountUsd;
