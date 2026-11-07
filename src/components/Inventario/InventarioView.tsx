@@ -361,6 +361,7 @@ export const InventarioView: React.FC = () => {
                   filteredProducts.map(prod => {
                     const totalValBs = Math.max(0, prod.currentStock * prod.avgCostBs - Number(prod.vnrProvisionBs || 0));
                     const totalValUsd = inventoryBcvRate > 0 ? Math.max(0, prod.currentStock * prod.avgCostUsd - Number(prod.vnrProvisionBs || 0) / inventoryBcvRate) : null;
+                    const displaySalesPriceBs = inventoryBcvRate > 0 ? prod.salesPriceUsd * inventoryBcvRate : null;
                     const isLow = prod.currentStock <= prod.minStock;
 
                     return (
@@ -387,7 +388,7 @@ export const InventarioView: React.FC = () => {
                           )}
                         </td>
                         <td className="py-2.5 px-4 text-right font-mono font-semibold text-emerald-700">
-                          {formatBs(prod.salesPriceBs)}
+                          {displaySalesPriceBs === null ? 'Tasa no disponible' : formatBs(displaySalesPriceBs)}
                           {true && (
                             <span className="block text-[10px] text-emerald-600/70">{formatUsd(prod.salesPriceUsd)}</span>
                           )}
