@@ -45,5 +45,7 @@ test('separa formato del archivo y software que lo generó', () => {
   assert.equal(detectUniversalImportFormat('libro.xlsx'), 'xlsx');
   assert.equal(detectUniversalImportFormat('exportacion.xls'), 'unsupported');
   assert.equal(detectImportSourceSystem({ app: 'POSVEN-Pro', data: {} }).id, 'posven-pro');
+  assert.equal(detectImportSourceSystem({ metadata: { Source_System: 'POSVEN Pro' } }).id, 'posven-pro');
+  assert.equal(detectImportSourceSystem({ meta: { SOFTWARE: 'POSVEN' } }).id, 'posven-pro');
   assert.equal(detectImportSourceSystem({ app: 'ERP de otra empresa', data: {} }).id, 'unknown');
 });
