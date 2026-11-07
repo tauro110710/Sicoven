@@ -437,7 +437,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const incomingControl=String(pick(r,'controlNumber','numeroControl','numero de control','nroControl','control')??'').trim();
      const key=documentKey(invoiceNumber,partyRif);
      if(!invoiceNumber||!partyName||!partyRif)throw new Error('Fila '+(i+1)+': número de factura, nombre y RIF de cliente/proveedor son obligatorios.');
-     const existingLedgerEntry=findUniversalInvoiceJournalCollision(invoiceNumber,companyJournalEntries);
+     const existingLedgerEntry=findUniversalInvoiceJournalCollision(invoiceNumber,companyJournalEntries,kind==='sales'?'VENTA':'COMPRA');
      if(existingLedgerEntry)throw new Error('Fila '+(i+1)+': ya existe un asiento contable con la referencia '+String(existingLedgerEntry.referenceDoc??invoiceNumber)+'. No se importará la factura para evitar duplicar su contabilización. Importe el documento desde Ventas o Compras, no desde el Libro Diario.');
 
      if(seen.has(key)||existingDocs.has(key))throw new Error('Factura duplicada para el mismo cliente/proveedor o ya existente: '+invoiceNumber+' ('+partyRif+'). No se sobrescribieron documentos.');seen.add(key);
