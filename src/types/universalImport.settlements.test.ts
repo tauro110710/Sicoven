@@ -69,6 +69,45 @@ test('valida auxiliares de caja Bs/USD y rechaza cuentas bancarias en efectivo',
   assert.match(validateUniversalSettlementDestination(cashUsd, 'company-1', [], destinationAccounts.filter(item => item.code !== '1.1.1.02')) || '', /auxiliar de caja/);
 });
 
+
+test('mapea liquidaciones de venta a borradores de cobro con el ID SICOVEN destino', () => {
+  const sourceInvoice = invoice('invoice-map');
+  const paymentRow = payment({
+    invoiceId: 'invoice-map',
+    migrationrowid: 'legacy.json|payments|map',
+    reference: 'MAP-001'
+  });
+  const plans = planUniversalInvoiceSettlements([sourceInvoice], [sourceInvoice, paymentRow], 'sales');
+  const mapped = mapUniversalInvoiceSettlementDrafts(plans, {
+    [sourceInvoice.migrationrowid]: 'sale-company-1-101'
+  });
+  assert.equal(mapped.length, 1);
+  assert.equal(mapped[0].documentId, 'sale-company-1-101');
+  assert.equal(mapped[0].kind, 'SALE_COLLECTION');
+  assert.equal(mapped[0].sourceRowId, 'legacy.json|payments|map');
+  assert.equal(mapped[0].reference, 'MAP-001');
+});
+
+test('mapea liquidaciones de compra a borradores de pago y exige documento destino', () => {
+  const sourceInvoice = {
+    ...invoice('invoice-purchase-map'),
+    customerRif: undefined,
+    supplierRif: 'J-12345678-9'
+  };
+  const paymentRow = payment({
+    invoiceId: 'invoice-purchase-map',
+    migrationrowid: 'legacy.json|payments|purchase-map',
+    transactionType: 'pago'
+  });
+  const plans = planUniversalInvoiceSettlements([sourceInvoice], [sourceInvoice, paymentRow], 'purchases');
+  assert.throws(() => mapUniversalInvoiceSettlementDrafts(plans, {}), /no tiene un documento SICOVEN destino/);
+  const mapped = mapUniversalInvoiceSettlementDrafts(plans, {
+    [sourceInvoice.migrationrowid]: 'purchase-company-1-202'
+  });
+  assert.equal(mapped[0].kind, 'PURCHASE_PAYMENT');
+  assert.equal(mapped[0].documentId, 'purchase-company-1-202');
+});
+
 test('previsualiza una transferencia con fecha, tasa, importes y referencia explícitos', () => {
   const result = mapUniversalSettlementPreview(payment());
   assert.equal(result.settlementDate, '2026-11-06');

@@ -640,6 +640,57 @@ export const validateUniversalSettlementDestination = (
   return null;
 };
 
+
+export type UniversalCreditSettlementDraft = {
+  invoiceRowId: string;
+  sourceRowId: string;
+  documentId: string;
+  kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT';
+  settlementDate: string;
+  bcvRate: number;
+  amountUsd: number;
+  amountBs: number;
+  method: UniversalSettlementPreview['method'];
+  bankAccountId?: string;
+  reference?: string;
+};
+
+/**
+ * Resolves source invoice row keys to the newly created SICOVEN document IDs.
+ * This is only a mapping step; it never creates journal entries or persists data.
+ */
+export const mapUniversalInvoiceSettlementDrafts = (
+  plans: UniversalInvoiceSettlementPlan[],
+  targetDocumentIds: Record<string, string>
+): UniversalCreditSettlementDraft[] => {
+  const seenSourceRows = new Set<string>();
+  return plans.flatMap(plan => {
+    const documentId = String(targetDocumentIds[plan.invoiceRowId] ?? '').trim();
+    if (plan.settlements.length && !documentId) {
+      throw new Error('La factura de origen ' + plan.invoiceRowId + ' no tiene un documento SICOVEN destino enlazado.');
+    }
+    return plan.settlements.map(settlement => {
+      if (!settlement.sourceRowId || seenSourceRows.has(settlement.sourceRowId)) {
+        throw new Error('Una liquidación de origen está vacía o se intentó aplicar más de una vez.');
+      }
+      seenSourceRows.add(settlement.sourceRowId);
+      return {
+        invoiceRowId: plan.invoiceRowId,
+        sourceRowId: settlement.sourceRowId,
+        documentId,
+        kind: plan.invoiceKind === 'sales' ? 'SALE_COLLECTION' as const : 'PURCHASE_PAYMENT' as const,
+        settlementDate: settlement.settlementDate,
+        bcvRate: settlement.bcvRate,
+        amountUsd: settlement.amountUsd,
+        amountBs: settlement.amountBs,
+        method: settlement.method,
+        ...(settlement.bankAccountId ? { bankAccountId: settlement.bankAccountId } : {}),
+        ...(settlement.reference ? { reference: settlement.reference } : {})
+      };
+    });
+  });
+};
+
 export type UniversalImportFormat = 'json' | 'csv' | 'tsv' | 'txt' | 'xlsx' | 'xlsm' | 'unsupported';
 
 export const detectUniversalImportFormat = (fileName: string): UniversalImportFormat => {
