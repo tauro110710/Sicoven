@@ -51,10 +51,11 @@ const pick = (row:Row, ...keys:string[]) => {
 };
 
 export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClose}) => {
- const { companies, products: allProducts, getCompanyInventoryProducts, importInventoryProducts, importInventoryMovements, accounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, movements: allMovements, currentCompany } = useAccounting();
+ const { companies, products: allProducts, getCompanyInventoryProducts, getCompanyInventoryMovements, importInventoryProducts, importInventoryMovements, accounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, currentCompany } = useAccounting();
  const [targetCompanyId, setTargetCompanyId] = useState('');
  const targetCompany = companies.find(company => company.id === targetCompanyId) || null;
  const companyProducts = targetCompany ? getCompanyInventoryProducts(targetCompany.id) : [];
+ const companyMovements = targetCompany ? getCompanyInventoryMovements(targetCompany.id) : [];
  const companySales = targetCompany ? filterEntriesByCompany(allSales, targetCompany.id) : [];
  const companyPurchases = targetCompany ? filterEntriesByCompany(allPurchases, targetCompany.id) : [];
  const companyJournalEntries = targetCompany ? filterEntriesByCompany(allJournalEntries, targetCompany.id) : [];
@@ -508,7 +509,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
       const sale=s as Parameters<typeof addSale>[0];
       addSale(sale,targetCompany.id);
       if(sale.inventoryLines?.length){
-       const companyMovementHistory=allMovements.filter(movement=>movement.companyId===targetCompany.id);
+       const companyMovementHistory=companyMovements;
        const unanchoredLine=sale.inventoryLines.find(line=>{
         const product=companyProducts.find(item=>item.id===line.productId);
         return Boolean(product&&Number(product.currentStock)>0&&!companyMovementHistory.some(movement=>movement.productId===product.id));
