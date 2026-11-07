@@ -426,6 +426,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     if(!(selectedModuleRowKeys[kind]??[]).length)throw new Error('Selecciona individualmente las facturas que deseas importar. No se importó ningún documento.');
     if(sourceRows.length===0)throw new Error('No se identificaron archivos con encabezados de '+(kind==='sales'?'ventas y cliente':'compras y proveedor')+'. Verifica número de factura y datos de la contraparte.');
     const settlementPlans=planUniversalInvoiceSettlements(sourceRows,rows,kind);
+    const settlementPlanByInvoice=new Map(settlementPlans.map(plan=>[plan.invoiceRowId,plan]));
     const linkedSettlementPreview=settlementPlans.flatMap(plan=>plan.settlements.map(settlement=>({
      invoiceRowId:plan.invoiceRowId,
      sourceRowId:settlement.sourceRowId,
@@ -486,14 +487,6 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const paymentTermRaw=norm(String(pick(r,'paymentTerm','condicionPago','condicion','tipoPago','formaPago')??''));
      if(!['contado','credito','cash','credit'].includes(paymentTermRaw))throw new Error('Fila '+(i+1)+': indique expresamente paymentTerm CONTADO o CREDITO; no se supondrá la condición de pago.');
      const paymentTerm=(paymentTermRaw==='contado'||paymentTermRaw==='cash'?'CONTADO':'CREDITO') as 'CONTADO'|'CREDITO';
-     const outstandingRaw=pick(r,'outstandingBalanceBs','balanceDueBs','saldoPendienteBs','saldoActualBs','saldoPendiente','saldo');
-     if(paymentTerm==='CREDITO'&&outstandingRaw!==undefined){
-      const outstanding=parseMigrationNumber(outstandingRaw);
-      const invoiceTotal=num(r,i,true,'totalAmountBs','totalBs','total');
-      if(!Number.isFinite(outstanding)||outstanding<0||Math.abs(outstanding-invoiceTotal)>0.02){
-       throw new Error('Fila '+(i+1)+': el saldo pendiente informado no coincide con el total de la factura. Se requiere importar sus liquidaciones para reconstruir CxC/CxP sin diferencias.');
-      }
-     }
      if(kind==='sales'&&paymentTerm==='CONTADO'){
       throw new Error('Fila '+(i+1)+': esta etapa no importa ventas de contado porque el archivo debe identificar y contabilizar la tesorería receptora. No se registrará como CxC ficticia.');
      }
@@ -519,6 +512,15 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
       const relatedSaleDetails=resolveUniversalPurchaseDetailRows(rows,r);
       const rawSaleLines=Array.isArray(nestedSaleLines)&&nestedSaleLines.length?nestedSaleLines:relatedSaleDetails;
       const inventoryLines=rawSaleLines.length?prepareUniversalSaleInventoryLines(rawSaleLines,companyProducts,{taxRate,taxableBaseBs,exemptAmountBs,vatAmountBs,bcvRate:rate}):undefined;
+      const outstandingRaw=pick(r,'outstandingBalanceBs','balanceDueBs','saldoPendienteBs','saldoActualBs','saldoPendiente','saldo');
+      const outstandingUsdRaw=pick(r,'outstandingBalanceUsd','balanceDueUsd','saldoPendienteUsd');
+      if(paymentTerm==='CREDITO'&&(outstandingRaw!==undefined||outstandingUsdRaw!==undefined)){
+       const settledUsd=(settlementPlanByInvoice.get(String(r.migrationrowid))?.settlements||[]).reduce((sum,item)=>sum+Math.round((item.amountUsd+Number.EPSILON)*100)/100,0);
+       const expectedOutstandingBs=Math.max(0,totalAmountBs-vatWithheldBs-settledUsd*rate);
+       const expectedOutstandingUsd=Math.max(0,totalAmountUsd-vatWithheldUsd-settledUsd);
+       if(outstandingRaw!==undefined&&(!Number.isFinite(parseMigrationNumber(outstandingRaw))||parseMigrationNumber(outstandingRaw)<0||Math.abs(parseMigrationNumber(outstandingRaw)-expectedOutstandingBs)>0.02))throw new Error('Fila '+(i+1)+': el saldo pendiente en Bs no coincide con CxC neta después de retenciones y liquidaciones detalladas.');
+       if(outstandingUsdRaw!==undefined&&(!Number.isFinite(parseMigrationNumber(outstandingUsdRaw))||parseMigrationNumber(outstandingUsdRaw)<0||Math.abs(parseMigrationNumber(outstandingUsdRaw)-expectedOutstandingUsd)>0.02))throw new Error('Fila '+(i+1)+': el saldo pendiente en USD no coincide con CxC neta después de retenciones y liquidaciones detalladas.');
+      }
       return {...common,customerRif:partyRif,customerName:partyName,customerAddress:String(pick(r,'customerAddress','direccionCliente')??resolvedParty.address??''),retentionRate:num(r,i,false,'retentionRate','tasaRetencion'),retentionVoucherNumber:String(pick(r,'retentionVoucherNumber','comprobanteRetencion')??'')||undefined,inventoryLines};
      }
      const accountCreditDate=String(pick(r,'accountCreditDate','fechaAbonoCuenta','fechaReconocimiento','fechaPago')??'').slice(0,10);
@@ -542,6 +544,15 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const netPayableBs=totalAmountBs-vatWithheldBs-islrWithheldBs;
      const netPayableUsd=totalAmountUsd-vatWithheldUsd-islrWithheldUsd;
      if(vatWithheldBs+islrWithheldBs>totalAmountBs+0.02||vatWithheldUsd+islrWithheldUsd>totalAmountUsd+0.02||netPayableBs < -0.02||netPayableUsd < -0.02)throw new Error('Fila '+(i+1)+': la suma de las retenciones IVA e ISLR supera el total de la factura.');
+     const outstandingRaw=pick(r,'outstandingBalanceBs','balanceDueBs','saldoPendienteBs','saldoActualBs','saldoPendiente','saldo');
+     const outstandingUsdRaw=pick(r,'outstandingBalanceUsd','balanceDueUsd','saldoPendienteUsd');
+     if(paymentTerm==='CREDITO'&&(outstandingRaw!==undefined||outstandingUsdRaw!==undefined)){
+      const settledUsd=(settlementPlanByInvoice.get(String(r.migrationrowid))?.settlements||[]).reduce((sum,item)=>sum+Math.round((item.amountUsd+Number.EPSILON)*100)/100,0);
+      const expectedOutstandingBs=Math.max(0,netPayableBs-settledUsd*rate);
+      const expectedOutstandingUsd=Math.max(0,netPayableUsd-settledUsd);
+      if(outstandingRaw!==undefined&&(!Number.isFinite(parseMigrationNumber(outstandingRaw))||parseMigrationNumber(outstandingRaw)<0||Math.abs(parseMigrationNumber(outstandingRaw)-expectedOutstandingBs)>0.02))throw new Error('Fila '+(i+1)+': el saldo pendiente en Bs no coincide con CxP neta después de retenciones y liquidaciones detalladas.');
+      if(outstandingUsdRaw!==undefined&&(!Number.isFinite(parseMigrationNumber(outstandingUsdRaw))||parseMigrationNumber(outstandingUsdRaw)<0||Math.abs(parseMigrationNumber(outstandingUsdRaw)-expectedOutstandingUsd)>0.02))throw new Error('Fila '+(i+1)+': el saldo pendiente en USD no coincide con CxP neta después de retenciones y liquidaciones detalladas.');
+     }
      const rawSupplierTaxStatus=norm(String(pick(r,'supplierTaxStatus','condicionFiscalProveedor')??resolvedParty.taxStatus??''));const supplierTaxStatus=({'ordinary':'ORDINARY','ordinario':'ORDINARY','contribuyenteordinario':'ORDINARY','formal':'FORMAL','contribuyenteformal':'FORMAL','special':'SPECIAL','especial':'SPECIAL','contribuyenteespecial':'SPECIAL','nonregistered':'NON_REGISTERED','notregistered':'NON_REGISTERED','noregistrado':'NON_REGISTERED','nocontribuyente':'NON_REGISTERED','unknown':'UNKNOWN','desconocido':'UNKNOWN'} as Record<string,string>)[rawSupplierTaxStatus];if(resolvedParty.taxStatus&&!supplierTaxStatus)throw new Error('Fila '+(i+1)+': la condición fiscal del proveedor no se reconoce; debe revisarse antes de importar retenciones.');return {...common,accountCreditDate,paymentAccountCode:paymentAccountCode||undefined,paymentReference:paymentReference||undefined,purchaseDebitAccountCode:purchaseDebitAccountCode||undefined,inventoryLines,supplierRif:partyRif,supplierName:partyName,supplierAddress:String(pick(r,'supplierAddress','direccionProveedor')??resolvedParty.address??''),supplierEmail:String(pick(r,'supplierEmail','correoProveedor')??resolvedParty.email??'')||undefined,supplierTaxStatus:supplierTaxStatus as any,ivaRetentionDecision:pick(r,'ivaRetentionDecision','retentionDecisionSnapshot') as any,islrConceptCode:islrWithheldBs>0?String(pick(r,'islrConceptCode')??''):undefined,islrConceptName:islrWithheldBs>0?String(pick(r,'islrConceptName')??''):undefined,islrRate:islrWithheldBs>0?num(r,i,true,'islrRate'):undefined,islrSubtrahendBs:islrWithheldBs>0?num(r,i,false,'islrSubtrahendBs'):undefined,islrBeneficiaryType:islrWithheldBs>0?pick(r,'islrBeneficiaryType') as any:undefined,islrResidency:islrWithheldBs>0?pick(r,'islrResidency') as any:undefined,islrBasePercentage:islrWithheldBs>0?num(r,i,true,'islrBasePercentage'):undefined,islrUnitTaxValueBs:islrWithheldBs>0?num(r,i,true,'islrUnitTaxValueBs'):undefined,islrFormulaFactor:islrWithheldBs>0?num(r,i,true,'islrFormulaFactor'):undefined,islrWithheldBs,islrWithheldUsd,retentionRate,voucherNumber:String(pick(r,'voucherNumber','comprobanteRetencion')??'')||undefined,vatWithheldBs,vatWithheldUsd};
     });
     let importedSettlementCount=0;
