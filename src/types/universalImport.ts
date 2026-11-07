@@ -347,11 +347,16 @@ export type UniversalJournalGroup = {
 /** Agrupa líneas por archivo + fecha + referencia para no mezclar asientos de archivos distintos. */
 export const groupUniversalJournalRows = (rows: Record<string, unknown>[]): UniversalJournalGroup[] => {
   const normalize = (value: unknown) => String(value ?? '').trim();
+  const normalizedKey = (value: string) => value.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const pick = (row: Record<string, unknown>, keys: string[]) => {
+    const wanted = new Set(keys.map(normalizedKey));
+    return Object.entries(row).find(([key, value]) => wanted.has(normalizedKey(key)) && value !== undefined && value !== null && String(value).trim() !== '')?.[1];
+  };
   const groups = new Map<string, UniversalJournalGroup>();
   for (const row of rows) {
-    const sourceFile = normalize(row.migrationfile ?? row.migrationsource ?? 'archivo sin nombre');
-    const date = normalize(row.date ?? row.fecha);
-    const reference = normalize(row.entryNumber ?? row.numeroAsiento ?? row.asiento ?? row.referenceDoc ?? row.referencia ?? row.documento);
+    const sourceFile = normalize(pick(row, ['migrationfile','migrationsource']) ?? 'archivo sin nombre');
+    const date = normalize(pick(row, ['date','fecha']));
+    const reference = normalize(pick(row, ['entryNumber','numeroAsiento','asiento','referenceDoc','referencia','documento']));
     if (!date || !reference) continue;
     const key = JSON.stringify([sourceFile, date, reference]);
     const group = groups.get(key) ?? { sourceFile, date, reference, rows: [] };
