@@ -2472,7 +2472,7 @@ test('SQLite accepts and constrains a cash payment against the ND own payable an
       items: paymentJournal.items.map(line => line.accountCode === '2.1.1.01'
         ? { ...line, accountCode: '2.1.1.99' } : line)
     }]
-  }), /pago de una factura\\/ND de proveedor/);
+  }), /pago de una factura.*ND de proveedor/);
 });
 
 
