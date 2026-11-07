@@ -22,7 +22,7 @@ import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { InventarioContableTools } from './InventarioContableTools';
 import { IntelligentMigrationWizard } from '../Migracion/IntelligentMigrationWizard';
-import { fetchInventoryBcvRate } from '../../services/inventoryBcvService';
+import { fetchInventoryBcvHistory, fetchInventoryBcvRate } from '../../services/inventoryBcvService';
 import { appendDailyInventoryBcvRate } from '../../types/inventoryBcvRate';
 
 export const InventarioView: React.FC = () => {
@@ -44,7 +44,10 @@ export const InventarioView: React.FC = () => {
       if (running) return;
       running = true;
       try {
-        const result = await fetchInventoryBcvRate();
+        const [result, providerHistory] = await Promise.all([
+          fetchInventoryBcvRate(),
+          fetchInventoryBcvHistory()
+        ]);
         if (!active) return;
         const company = currentCompanyRef.current;
         const history = company.inventoryBcvRateHistory || [];
@@ -52,8 +55,19 @@ export const InventarioView: React.FC = () => {
         if (latestSavedDate && result.effectiveDate < latestSavedDate) {
           throw new Error('La fuente BCV devolvió una fecha anterior a la última tasa guardada. Se conserva el valor vigente y no se altera el historial.');
         }
-        const savedForDate = history.find(entry => entry.effectiveDate === result.effectiveDate);
-        const nextHistory = savedForDate ? history : appendDailyInventoryBcvRate(history, {
+        let nextHistory = history;
+        for (const dailyRate of providerHistory) {
+          if (latestSavedDate && dailyRate.effectiveDate < latestSavedDate) continue;
+          nextHistory = appendDailyInventoryBcvRate(nextHistory, {
+            rate: dailyRate.rate,
+            effectiveDate: dailyRate.effectiveDate,
+            fetchedAt: dailyRate.updatedAt,
+            source: dailyRate.sourceUrl,
+            provider: dailyRate.provider,
+            mode: 'AUTOMATIC'
+          });
+        }
+        nextHistory = appendDailyInventoryBcvRate(nextHistory, {
           rate: result.rate,
           effectiveDate: result.effectiveDate,
           fetchedAt: result.updatedAt,
@@ -61,11 +75,12 @@ export const InventarioView: React.FC = () => {
           provider: result.provider,
           mode: 'AUTOMATIC'
         });
+        const savedForDate = nextHistory.find(entry => entry.effectiveDate === result.effectiveDate);
         const effectiveRate = savedForDate?.rate ?? result.rate;
         const effectiveFetchedAt = savedForDate?.fetchedAt ?? result.updatedAt;
         const needsSave = company.inventoryBcvRate !== effectiveRate ||
           company.inventoryBcvRateEffectiveDate !== result.effectiveDate ||
-          !savedForDate;
+          nextHistory.length !== history.length;
         if (needsSave) {
           if (!window.sicovenStore?.save) throw new Error('La actualización automática requiere SICOVEN de escritorio con SQLite disponible.');
           updateCompanyRef.current({
@@ -79,9 +94,9 @@ export const InventarioView: React.FC = () => {
         }
         if (active) {
           setBcvSyncStatus('ready');
-          setBcvSyncMessage(savedForDate
-            ? 'Tasa diaria ya registrada; se conserva el historial.'
-            : 'Tasa consultada y guardada en el historial de Inventario.');
+          setBcvSyncMessage(providerHistory.length
+            ? `Tasa vigente guardada; se sincronizaron ${providerHistory.length} registros diarios disponibles del historial BCV.`
+            : savedForDate ? 'Tasa diaria ya registrada; se conserva el historial.' : 'Tasa consultada y guardada en el historial de Inventario.');
         }
       } catch (error) {
         if (active) {
