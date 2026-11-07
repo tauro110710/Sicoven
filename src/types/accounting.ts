@@ -322,6 +322,7 @@ export interface SaleInventoryLine {
   productName: string;
   quantity: number;
   unitPriceBs: number;
+  unitPriceUsd?: number;
   netAmountBs: number;
   taxRate: number;
   vatAmountBs: number;
