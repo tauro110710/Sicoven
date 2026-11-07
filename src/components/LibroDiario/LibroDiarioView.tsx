@@ -179,7 +179,7 @@ export const LibroDiarioView: React.FC = () => {
             <h3 className="text-xs font-bold text-slate-800">Asientos contables</h3>
             {pendingReversals.length === 0 ? <p className="text-xs text-slate-500">No hay asientos fuente sin contra-asiento.</p> : pendingReversals.slice(0, 8).map(entry => (
               <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-2">
-                <div className="min-w-0"><p className="text-xs font-semibold text-slate-800">#{entry.entryNumber} · {entry.description}</p><p className="text-[10px] text-slate-500">{entry.date} · {entry.type} · {entry.referenceDoc || 'Sin referencia documental'}</p></div>
+                <div className="min-w-0"><p className="text-xs font-bold text-slate-800">#{entry.entryNumber} · {entry.description}</p><p className="text-[10px] text-slate-500">{entry.date} · {entry.type} · {entry.referenceDoc || 'Sin referencia documental'}</p></div>
                 <button type="button" onClick={() => setReversalTarget(entry)} className="shrink-0 rounded bg-rose-50 px-2 py-1.5 text-[10px] font-bold text-rose-700">Reversar</button>
               </div>
             ))}
