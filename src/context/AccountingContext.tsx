@@ -42,7 +42,7 @@ import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters'
 import { formatIslrVoucherNumber, getMaxIslrVoucherSequence } from '../utils/islrVoucherNumber';
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus } from '../types/ivaRetentionEligibility';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, summarizeCreditDocumentAdjustments, validateCreditSettlement } from '../types/creditSettlement';
-import { buildCreditSettlementJournalItems } from '../types/creditSettlementAccounting';
+import { buildCreditSettlementJournalItems, getCreditSettlementSourceJournalType } from '../types/creditSettlementAccounting';
 import type { UniversalCreditSettlementDraft } from '../types/universalImport';
 import { buildSupplierAdvanceSettlementJournalItems } from '../types/supplierAdvanceSettlementAccounting';
 import { FinancialDisclosure, validateFinancialDisclosure } from '../types/financialDisclosures';
@@ -1521,9 +1521,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const sourceEntry = batch.journalEntries.find(entry =>
         entry.id === document.journalEntryId && entry.companyId === targetCompanyId
       );
-      const expectedSourceType = document.documentType === '02'
-        ? 'AJUSTE'
-        : (kind === 'SALE_COLLECTION' ? 'VENTA' : 'COMPRA');
+      const expectedSourceType = getCreditSettlementSourceJournalType(kind, document.documentType);
       const controlLines = (sourceEntry?.items || []).filter(item =>
         kind === 'SALE_COLLECTION'
           ? item.accountCode === '1.1.2.01' && Number(item.debitBs || 0) > 0

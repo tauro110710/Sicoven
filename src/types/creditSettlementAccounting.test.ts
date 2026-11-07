@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCreditSettlementJournalItems } from './creditSettlementAccounting';
+import { buildCreditSettlementJournalItems, getCreditSettlementSourceJournalType } from './creditSettlementAccounting';
 
 const cash = { code: '1.1.1.01', name: 'Banco' };
 const control = { code: '1.1.2.01', name: 'CxC' };
@@ -44,4 +44,12 @@ test('rejects amounts that do not reconcile to settlement rate', () => {
 test('rejects invalid amounts and unresolved ledger accounts', () => {
   assert.throws(() => buildCreditSettlementJournalItems({ ...base, kind: 'SALE_COLLECTION', amountUsd: 0 }), /válidos/);
   assert.throws(() => buildCreditSettlementJournalItems({ ...base, kind: 'SALE_COLLECTION', cashAccount: undefined as never }), /cuentas contables/);
+});
+
+
+test('resuelve el asiento AJUSTE de notas de débito y conserva VENTA/COMPRA para facturas', () => {
+  assert.equal(getCreditSettlementSourceJournalType('SALE_COLLECTION', '01'), 'VENTA');
+  assert.equal(getCreditSettlementSourceJournalType('PURCHASE_PAYMENT', '01'), 'COMPRA');
+  assert.equal(getCreditSettlementSourceJournalType('SALE_COLLECTION', '02'), 'AJUSTE');
+  assert.equal(getCreditSettlementSourceJournalType('PURCHASE_PAYMENT', '02'), 'AJUSTE');
 });

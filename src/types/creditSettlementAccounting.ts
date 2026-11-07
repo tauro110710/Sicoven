@@ -59,3 +59,12 @@ export function buildCreditSettlementJournalItems(input: CreditSettlementJournal
   }
   return baseItems;
 }
+
+/** Resolves the immutable source journal type for imported credit settlements. */
+export function getCreditSettlementSourceJournalType(
+  kind: SettlementJournalKind,
+  documentType: string
+): 'VENTA' | 'COMPRA' | 'AJUSTE' {
+  if (documentType === '02') return 'AJUSTE';
+  return kind === 'SALE_COLLECTION' ? 'VENTA' : 'COMPRA';
+}
