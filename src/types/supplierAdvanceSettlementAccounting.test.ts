@@ -31,7 +31,7 @@ test('omite líneas FX cuando no existe diferencia material', () => {
 
 test('rechaza diferencia cambiaria incongruente y cuentas FX incompletas', () => {
   assert.throws(() => buildSupplierAdvanceSettlementJournalItems({ kind: 'REFUND_RECEIVED' as const, amountUsd: 10, settlementValueBs: 1100, advanceBookValueBs: 1000, exchangeDifferenceBs: 50, ...accounts }), /no coincide/);
-  assert.throws(() => buildSupplierAdvanceSettlementJournalItems({ kind: 'REFUND_RECEIVED' as const, amountUsd: 10, settlementValueBs: 1100, advanceBookValueBs: 1000, exchangeDifferenceBs: 100, ...accounts, fxGainAccount: undefined }), /Faltan las cuentas/);
+  assert.throws(() => buildSupplierAdvanceSettlementJournalItems({ kind: 'REFUND_RECEIVED' as const, amountUsd: 10, settlementValueBs: 1100, advanceBookValueBs: 1000, exchangeDifferenceBs: 100, ...accounts, fxGainAccount: undefined }), /Falta la cuenta de ganancia/);
 });
 
 test('permite ganancia cambiaria cuando solo existe la cuenta de ganancia', () => {

@@ -364,9 +364,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // estos contadores evitan reutilizar correlativos e identificadores por estado obsoleto.
   const runAtomicInvoiceImport = <T,>(operation: () => T): T => {
     const reservationsBefore = new Set(bankOutgoingReservationsRef.current);
-    // React setters are queued synchronously; capture every persisted accounting
-    // collection so a synchronous import failure cannot leak partial state.
+    // React setters are queued synchronously; capture the complete persisted
+    // snapshot so a synchronous import failure cannot leak partial state.
     const before = {
+      companies, currentCompanyId, displayCurrency,
       accounts, bankAccounts, bankStatementMovements, creditSettlements,
       financialDisclosures, islrFiscalEvents, islrVouchers, journalEntries,
       purchases, sales, products, movements, supplierAdvanceSettlements,
@@ -388,6 +389,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           persistenceWaitersRef.current = persistenceWaitersRef.current.filter(waiter => waiter !== reservation.waiter);
           reservation.release();
         });
+      setCompanies(before.companies);
+      setCurrentCompanyId(before.currentCompanyId);
+      setDisplayCurrency(before.displayCurrency);
       setAccounts(before.accounts);
       setBankAccounts(before.bankAccounts);
       setBankStatementMovements(before.bankStatementMovements);
