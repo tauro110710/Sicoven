@@ -524,7 +524,19 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
        importInventoryMovements(movementRows,targetCompany.id);
       }
      });
-     else prepared.forEach(p=>addPurchase({...p,documentType:p.documentType,retentionRate:p.retentionRate,vatWithheldBs:p.vatWithheldBs,vatWithheldUsd:p.vatWithheldUsd} as Parameters<typeof addPurchase>[0],targetCompany.id));
+     else prepared.forEach(p=>{
+      const purchase=p as Parameters<typeof addPurchase>[0];
+      addPurchase({...purchase,documentType:purchase.documentType,retentionRate:purchase.retentionRate,vatWithheldBs:purchase.vatWithheldBs,vatWithheldUsd:purchase.vatWithheldUsd},targetCompany.id);
+      if(purchase.inventoryLines?.length){
+       const movementRows=purchase.inventoryLines.map(line=>({
+        productId:line.productId,date:purchase.invoiceDate,type:'ENTRADA' as const,concept:'COMPRA',
+        documentRef:'FAC-'+purchase.invoiceNumber,quantity:line.quantity,
+        unitCostBs:line.unitCostBs,bcvRate:purchase.bcvRate,
+        counterpartyRif:purchase.supplierRif,counterpartyName:purchase.supplierName
+       }));
+       importInventoryMovements(movementRows,targetCompany.id);
+      }
+     });
     });
     setNotice((kind==='sales'?'Ventas':'Compras')+' importadas: '+prepared.length+' facturas. SICOVEN generó los asientos y derivó CxC/CxP según la condición de pago. Revisa documentos, impuestos y saldos; confirma por separado el siguiente módulo.');
     setSelected(old=>old.filter(id=>id!==kind));setConfirmed(false);
