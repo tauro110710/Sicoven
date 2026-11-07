@@ -111,11 +111,43 @@ test('integración: análisis JSON, selección individual, empresa destino, dupl
     assert.ok(findUniversalInvoiceJournalCollision('ANTERIOR', initial.journalEntries, 'VENTA'));
 
     const importedEntry = journalEntry('imported-company-2', 'company-2', 1, 'FAC-F-002');
+    const importedSettlement = {
+      id: 'settlement-company-2-1',
+      companyId: 'company-2',
+      documentId: 'sale-company-2-1',
+      kind: 'SALE_COLLECTION',
+      settlementDate: '2026-11-07',
+      amountBs: 1100,
+      amountUsd: 10,
+      method: 'BANK_TRANSFER_BS',
+      bankAccountId: 'bank-company-2-bs',
+      reference: 'TRX-SETTLEMENT-001',
+      bcvRate: 110,
+      journalEntryId: importedEntry.id,
+      isReversed: false
+    };
     const imported = {
       ...initial,
-      journalEntries: [...initial.journalEntries, importedEntry]
+      journalEntries: [...initial.journalEntries, importedEntry],
+      creditSettlements: [importedSettlement]
     };
     assert.equal(persistAccountingSnapshot(db, imported, { id: 1, username: 'admin', role: 'admin' }).ok, true);
+    const postedAudit = db.prepare("SELECT details_json FROM audit_events WHERE event_type='credit_settlement_posted'").all();
+    assert.equal(postedAudit.length, 1, 'la liquidación debe generar una entrada de auditoría al persistirse');
+    const postedDetails = JSON.parse(postedAudit[0].details_json);
+    assert.deepEqual(
+      [postedDetails.settlementId, postedDetails.companyId, postedDetails.documentId, postedDetails.kind,
+        postedDetails.amountBs, postedDetails.amountUsd, postedDetails.reference, postedDetails.journalEntryId],
+      [importedSettlement.id, 'company-2', importedSettlement.documentId, 'SALE_COLLECTION',
+        1100, 10, 'TRX-SETTLEMENT-001', importedEntry.id]
+    );
+    const auditAfterFirstSave = db.prepare('SELECT COUNT(*) AS n FROM audit_events').get().n;
+    assert.equal(persistAccountingSnapshot(db, imported, { id: 1, username: 'admin', role: 'admin' }).ok, true);
+    assert.equal(
+      db.prepare('SELECT COUNT(*) AS n FROM audit_events').get().n,
+      auditAfterFirstSave,
+      'guardar nuevamente el mismo snapshot no debe duplicar la auditoría de la liquidación'
+    );
 
     db.close();
     db = new Database(databasePath, { readonly: true });
