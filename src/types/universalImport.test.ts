@@ -155,6 +155,7 @@ test('detecta detalles de mercancía anidados en una factura de venta', () => {
   assert.equal(hasUniversalNestedMerchandiseDetails({ artículos: [{ códigoProducto: 'A-2', cantidad: 3 }] }), true);
   assert.equal(hasUniversalNestedMerchandiseDetails({ payments: [{ paymentReference: 'P-1', amount: 10 }] }), false);
   assert.equal(hasUniversalNestedMerchandiseDetails({ items: [] }), false);
+  assert.equal(hasUniversalNestedMerchandiseDetails({ items: [{ paymentReference: 'P-1', amount: 10 }], lines: [{ sku: 'A-3', qty: 1 }] }), true);
 });
 
 test('detecta renglones de mercancía relacionados por referencia explícita sin cruzar archivos', () => {
