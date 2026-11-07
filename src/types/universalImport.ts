@@ -85,14 +85,19 @@ export const resolveUniversalPartyReference = (
     ? ['customerEmail','clientEmail','correoCliente','email','correo']
     : ['supplierEmail','vendorEmail','correoProveedor','email','correo'];
   const taxStatusKeys = ['supplierTaxStatus','taxStatus','condicionFiscal','tipoContribuyente','supplierType'];
-  const resolution = (record: Record<string, unknown>, source: 'inline' | 'related-record'): UniversalPartyResolution => ({
-    name: String(pickValue(record, nameKeys)).trim(),
-    rif: String(pickValue(record, rifKeys)).trim(),
-    address: pickValue(record, addressKeys) === undefined ? undefined : String(pickValue(record, addressKeys)).trim(),
-    email: customer ? undefined : (pickValue(record, emailKeys) === undefined ? undefined : String(pickValue(record, emailKeys)).trim()),
-    taxStatus: customer ? undefined : (pickValue(record, taxStatusKeys) === undefined ? undefined : String(pickValue(record, taxStatusKeys)).trim()),
-    source
-  });
+  const resolution = (record: Record<string, unknown>, source: 'inline' | 'related-record'): UniversalPartyResolution => {
+    const address = pickValue(record, addressKeys);
+    const email = customer ? undefined : pickValue(record, emailKeys);
+    const taxStatus = customer ? undefined : pickValue(record, taxStatusKeys);
+    return {
+      name: String(pickValue(record, nameKeys)).trim(),
+      rif: String(pickValue(record, rifKeys)).trim(),
+      ...(address === undefined ? {} : { address: String(address).trim() }),
+      ...(email === undefined ? {} : { email: String(email).trim() }),
+      ...(taxStatus === undefined ? {} : { taxStatus: String(taxStatus).trim() }),
+      source
+    };
+  };
   const inlineName = pickValue(invoice, nameKeys);
   const inlineRif = pickValue(invoice, rifKeys);
   if (inlineName && inlineRif) return resolution(invoice, 'inline');
