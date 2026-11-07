@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractUniversalJsonCollections } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections } from './universalImport';
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -35,4 +35,12 @@ test('cuenta elementos inválidos sin descartarlos silenciosamente', () => {
 test('no interpreta arreglos de escalares como colecciones de registros', () => {
   const result = extractUniversalJsonCollections({ etiquetas: ['uno', 'dos'], productos: [{ id: 1 }] });
   assert.deepEqual(result.map(item => item.path), ['productos']);
+});
+
+test('separa formato del archivo y software que lo generó', () => {
+  assert.equal(detectUniversalImportFormat('respaldo.JSON'), 'json');
+  assert.equal(detectUniversalImportFormat('libro.xlsx'), 'xlsx');
+  assert.equal(detectUniversalImportFormat('exportacion.xls'), 'unsupported');
+  assert.equal(detectImportSourceSystem({ app: 'POSVEN-Pro', data: {} }).id, 'posven-pro');
+  assert.equal(detectImportSourceSystem({ app: 'ERP de otra empresa', data: {} }).id, 'unknown');
 });
