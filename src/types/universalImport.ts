@@ -690,6 +690,11 @@ export const planUniversalInvoiceSettlements = (
     }
     seenInvoices.add(invoiceRowId);
     const matches = resolveUniversalInvoiceSettlementRows(allSourceRows, invoice);
+    // Los importes agregados dentro de la factura no identifican fechas, medios ni
+    // referencias individuales. No se pueden convertir en liquidaciones inventadas.
+    if (hasUniversalInlineSettlementAmount(invoice)) {
+      throw new Error('La factura ' + invoiceRowId + ' declara un importe liquidado dentro de la propia fila. Debe desglosarse en registros de cobro/pago individuales antes de importarla.');
+    }
     const settlements = matches.map(row => {
       const preview = mapUniversalSettlementPreview(row);
       if (seenSettlements.has(preview.sourceRowId)) {
@@ -702,8 +707,10 @@ export const planUniversalInvoiceSettlements = (
         const purchaseTokens = ['purchase','purchases','compra','pago','payment','payable','cxp'];
         const allowed = invoiceKind === 'sales' ? salesTokens : purchaseTokens;
         const opposite = invoiceKind === 'sales' ? purchaseTokens : salesTokens;
-        if (opposite.includes(declaredKind) && !allowed.includes(declaredKind)) {
-          throw new Error('La liquidación ' + preview.sourceRowId + ' declara un tipo incompatible con la factura seleccionada.');
+        if (!allowed.includes(declaredKind)) {
+          throw new Error(opposite.includes(declaredKind)
+            ? 'La liquidación ' + preview.sourceRowId + ' declara un tipo incompatible con la factura seleccionada.'
+            : 'La liquidación ' + preview.sourceRowId + ' declara un tipo de operación no reconocido; requiere clasificación manual.');
         }
       }
       return preview;

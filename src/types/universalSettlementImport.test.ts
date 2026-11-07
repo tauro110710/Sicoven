@@ -41,3 +41,20 @@ test('rechaza una factura seleccionada dos veces para impedir duplicar sus liqui
     /clave de origen vacía o duplicada/
   );
 });
+
+
+test('rechaza importes liquidados agregados sin detalle de movimientos', () => {
+  const source = { ...invoice(), paidAmountBs: 100 };
+  assert.throws(
+    () => planUniversalInvoiceSettlements([source], [source], 'sales'),
+    /desglosarse en registros/
+  );
+});
+
+test('rechaza tipos declarados desconocidos en una liquidación', () => {
+  const row = { ...settlement(), transactionType: 'ajuste-desconocido' };
+  assert.throws(
+    () => planUniversalInvoiceSettlements([invoice()], [invoice(), row], 'sales'),
+    /tipo de operación no reconocido/
+  );
+});
