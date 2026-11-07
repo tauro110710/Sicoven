@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept } from '../../types/universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 
@@ -51,10 +51,11 @@ const pick = (row:Row, ...keys:string[]) => {
 };
 
 export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClose}) => {
- const { companies, products: allProducts, getCompanyInventoryProducts, importInventoryProducts, importInventoryMovements, accounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, currentCompany } = useAccounting();
+ const { companies, products: allProducts, getCompanyInventoryProducts, getCompanyInventoryMovements, importInventoryProducts, importInventoryMovements, accounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, currentCompany } = useAccounting();
  const [targetCompanyId, setTargetCompanyId] = useState('');
  const targetCompany = companies.find(company => company.id === targetCompanyId) || null;
  const companyProducts = targetCompany ? getCompanyInventoryProducts(targetCompany.id) : [];
+ const companyMovements = targetCompany ? getCompanyInventoryMovements(targetCompany.id) : [];
  const companySales = targetCompany ? filterEntriesByCompany(allSales, targetCompany.id) : [];
  const companyPurchases = targetCompany ? filterEntriesByCompany(allPurchases, targetCompany.id) : [];
  const companyJournalEntries = targetCompany ? filterEntriesByCompany(allJournalEntries, targetCompany.id) : [];
@@ -461,12 +462,11 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const common={invoiceDate,invoiceNumber,controlNumber:String(pick(r,'controlNumber','numeroControl','numero de control')??'').trim(),documentType:documentTypeRaw as '01'|'02'|'03',totalAmountBs,exemptAmountBs,taxableBaseBs,taxRate,vatAmountBs,vatWithheldBs,bcvRate:rate,totalAmountUsd,taxableBaseUsd,vatAmountUsd,vatWithheldUsd,notes:String(pick(r,'notes','observaciones')??''),paymentTerm,creditDays,dueDate,currencyPricingMode:'REVISION_MANUAL' as const,fiscalAdjustmentMode:'REVISION_CONTADOR' as const};
      if(!common.controlNumber)throw new Error('Fila '+(i+1)+': número de control obligatorio.');
      if(kind==='sales'){
-      const hasNestedMerchandise=hasUniversalNestedMerchandiseDetails(r);
+      const nestedSaleLines=pick(r,'inventoryLines','saleLines','productLines','items','lines','details','detalles','detalle','articulos','productos');
       const relatedSaleDetails=resolveUniversalPurchaseDetailRows(rows,r);
-      if(hasNestedMerchandise||relatedSaleDetails.length){
-       throw new Error('Fila '+(i+1)+': esta factura de venta contiene renglones de mercancía. El modelo de ventas actual de SICOVEN aún no conserva líneas comerciales ni sus salidas de Kardex en la importación universal. No se importó esta factura para evitar perder el detalle o alterar inventario. Use una exportación de ventas resumida sin renglones o espere el adaptador de ventas detalladas.');
-      }
-      return {...common,customerRif:partyRif,customerName:partyName,customerAddress:String(pick(r,'customerAddress','direccionCliente')??resolvedParty.address??''),retentionRate:num(r,i,false,'retentionRate','tasaRetencion'),retentionVoucherNumber:String(pick(r,'retentionVoucherNumber','comprobanteRetencion')??'')||undefined};
+      const rawSaleLines=Array.isArray(nestedSaleLines)&&nestedSaleLines.length?nestedSaleLines:relatedSaleDetails;
+      const inventoryLines=rawSaleLines.length?prepareUniversalSaleInventoryLines(rawSaleLines,companyProducts,{taxRate,taxableBaseBs,exemptAmountBs,vatAmountBs,bcvRate:rate}):undefined;
+      return {...common,customerRif:partyRif,customerName:partyName,customerAddress:String(pick(r,'customerAddress','direccionCliente')??resolvedParty.address??''),retentionRate:num(r,i,false,'retentionRate','tasaRetencion'),retentionVoucherNumber:String(pick(r,'retentionVoucherNumber','comprobanteRetencion')??'')||undefined,inventoryLines};
      }
      const accountCreditDate=String(pick(r,'accountCreditDate','fechaAbonoCuenta','fechaReconocimiento','fechaPago')??'').slice(0,10);
      if(!isValidIsoDate(accountCreditDate))throw new Error('Fila '+(i+1)+': las compras requieren la fecha efectiva de abono en cuenta/pago (accountCreditDate). No se inferirá desde la fecha de factura.');
@@ -505,7 +505,25 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const rawSupplierTaxStatus=norm(String(pick(r,'supplierTaxStatus','condicionFiscalProveedor')??resolvedParty.taxStatus??''));const supplierTaxStatus=({'ordinary':'ORDINARY','ordinario':'ORDINARY','contribuyenteordinario':'ORDINARY','formal':'FORMAL','contribuyenteformal':'FORMAL','special':'SPECIAL','especial':'SPECIAL','contribuyenteespecial':'SPECIAL','nonregistered':'NON_REGISTERED','notregistered':'NON_REGISTERED','noregistrado':'NON_REGISTERED','nocontribuyente':'NON_REGISTERED','unknown':'UNKNOWN','desconocido':'UNKNOWN'} as Record<string,string>)[rawSupplierTaxStatus];if(resolvedParty.taxStatus&&!supplierTaxStatus)throw new Error('Fila '+(i+1)+': la condición fiscal del proveedor no se reconoce; debe revisarse antes de importar retenciones.');return {...common,accountCreditDate,paymentAccountCode:paymentAccountCode||undefined,paymentReference:paymentReference||undefined,purchaseDebitAccountCode:purchaseDebitAccountCode||undefined,inventoryLines,supplierRif:partyRif,supplierName:partyName,supplierAddress:String(pick(r,'supplierAddress','direccionProveedor')??resolvedParty.address??''),supplierEmail:String(pick(r,'supplierEmail','correoProveedor')??resolvedParty.email??'')||undefined,supplierTaxStatus:supplierTaxStatus as any,ivaRetentionDecision:pick(r,'ivaRetentionDecision','retentionDecisionSnapshot') as any,islrConceptCode:islrWithheldBs>0?String(pick(r,'islrConceptCode')??''):undefined,islrConceptName:islrWithheldBs>0?String(pick(r,'islrConceptName')??''):undefined,islrRate:islrWithheldBs>0?num(r,i,true,'islrRate'):undefined,islrSubtrahendBs:islrWithheldBs>0?num(r,i,false,'islrSubtrahendBs'):undefined,islrBeneficiaryType:islrWithheldBs>0?pick(r,'islrBeneficiaryType') as any:undefined,islrResidency:islrWithheldBs>0?pick(r,'islrResidency') as any:undefined,islrBasePercentage:islrWithheldBs>0?num(r,i,true,'islrBasePercentage'):undefined,islrUnitTaxValueBs:islrWithheldBs>0?num(r,i,true,'islrUnitTaxValueBs'):undefined,islrFormulaFactor:islrWithheldBs>0?num(r,i,true,'islrFormulaFactor'):undefined,islrWithheldBs,islrWithheldUsd,retentionRate,voucherNumber:String(pick(r,'voucherNumber','comprobanteRetencion')??'')||undefined,vatWithheldBs,vatWithheldUsd};
     });
     runAtomicInvoiceImport(()=>{
-     if(kind==='sales')prepared.forEach(s=>addSale(s as Parameters<typeof addSale>[0],targetCompany.id));
+     if(kind==='sales')prepared.forEach(s=>{
+      const sale=s as Parameters<typeof addSale>[0];
+      addSale(sale,targetCompany.id);
+      if(sale.inventoryLines?.length){
+       const companyMovementHistory=companyMovements;
+       const unanchoredLine=sale.inventoryLines.find(line=>{
+        const product=companyProducts.find(item=>item.id===line.productId);
+        return Boolean(product&&Number(product.currentStock)>0&&!companyMovementHistory.some(movement=>movement.productId===product.id));
+       });
+       if(unanchoredLine)throw new Error('La factura '+sale.invoiceNumber+' no se puede descargar del inventario porque '+unanchoredLine.productCode+' tiene existencia actual sin historial de apertura/Kardex verificable. Importe primero el saldo inicial y su historial cronológico; no se descontará dos veces una existencia que podría ser un saldo final.');
+       const movementRows=sale.inventoryLines.map(line=>({
+        productId:line.productId,date:sale.invoiceDate,type:'SALIDA' as const,concept:'VENTA',
+        documentRef:'FAC-'+sale.invoiceNumber,quantity:line.quantity,
+        unitCostBs:companyProducts.find(product=>product.id===line.productId)?.avgCostBs??0,
+        bcvRate:sale.bcvRate,counterpartyRif:sale.customerRif,counterpartyName:sale.customerName
+       }));
+       importInventoryMovements(movementRows,targetCompany.id);
+      }
+     });
      else prepared.forEach(p=>addPurchase({...p,documentType:p.documentType,retentionRate:p.retentionRate,vatWithheldBs:p.vatWithheldBs,vatWithheldUsd:p.vatWithheldUsd} as Parameters<typeof addPurchase>[0],targetCompany.id));
     });
     setNotice((kind==='sales'?'Ventas':'Compras')+' importadas: '+prepared.length+' facturas. SICOVEN generó los asientos y derivó CxC/CxP según la condición de pago. Revisa documentos, impuestos y saldos; confirma por separado el siguiente módulo.');

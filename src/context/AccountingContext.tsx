@@ -156,6 +156,7 @@ interface AccountingContextType {
   products: InventoryProduct[];
   addProduct: (product: Omit<InventoryProduct, 'id' | 'companyId'>) => InventoryProduct;
   getCompanyInventoryProducts: (companyId: string) => InventoryProduct[];
+  getCompanyInventoryMovements: (companyId: string) => InventoryMovement[];
   importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[], targetCompanyId?: string) => Promise<number>;
   importInventoryMovements: (movements: InventoryMovementImportDraft[], targetCompanyId?: string) => number;
   executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => Promise<InventoryMovement[]>;
@@ -3646,6 +3647,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return products.filter(product => product.companyId === companyId);
   };
 
+  const getCompanyInventoryMovements = (companyId: string): InventoryMovement[] => {
+    if (!companies.some(company => company.id === companyId)) throw new Error('La empresa destino no existe en SICOVEN.');
+    return movements.filter(movement => movement.companyId === companyId);
+  };
+
   const importInventoryProducts = async (rows: Omit<InventoryProduct, 'id' | 'companyId'>[], targetCompanyId: string = currentCompany.id): Promise<number> => {
     assertSQLitePersistenceReady('Importar inventario');
     if (!companies.some(company => company.id === targetCompanyId)) throw new Error('La empresa destino no existe en SICOVEN.');
@@ -5689,6 +5695,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         products: products.filter(p => p.companyId === currentCompany.id),
         addProduct,
         getCompanyInventoryProducts,
+        getCompanyInventoryMovements,
         importInventoryProducts,
         importInventoryMovements,
         executeProduction,
