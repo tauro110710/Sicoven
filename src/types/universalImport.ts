@@ -140,7 +140,7 @@ export const resolveUniversalPurchaseDetailRows = (
     }
     return undefined;
   };
-  const invoiceIds = ['id','invoiceId','purchaseId','documentId','uuid','idFactura','idCompra']
+  const invoiceIds = ['id','invoiceId','saleId','purchaseId','documentId','uuid','idFactura','idVenta','idCompra','ventaId','sale_id','venta_id']
     .map(key => pickValue(invoice, [key]))
     .filter(value => value !== undefined)
     .map(normalize);
@@ -148,7 +148,7 @@ export const resolveUniversalPurchaseDetailRows = (
   if (uniqueIds.length > 1) throw new Error('La factura contiene identificadores incompatibles; no se pueden enlazar sus renglones con seguridad.');
   if (!uniqueIds.length) return [];
   const fileId = String(invoice.migrationfile ?? '');
-  const foreignKeys = ['invoiceId','purchaseId','documentId','facturaId','compraId','idFactura','idCompra','invoice_id','purchase_id','document_id','factura_id','compra_id'];
+  const foreignKeys = ['invoiceId','saleId','purchaseId','documentId','facturaId','ventaId','compraId','idFactura','idVenta','idCompra','invoice_id','sale_id','purchase_id','document_id','factura_id','venta_id','compra_id'];
   const matches = rows.filter(candidate => {
     if (candidate === invoice || String(candidate.migrationfile ?? '') !== fileId) return false;
     const reference = pickValue(candidate, foreignKeys);
