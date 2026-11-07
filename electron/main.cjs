@@ -410,10 +410,7 @@ app.whenReady().then(async () => {
       filters: [{ name: prepared.filterName, extensions: [prepared.extension] }]
     });
     if (result.canceled || !result.filePath) return { ok: false, canceled: true };
-    await fs.promises.writeFile(result.filePath, prepared.buffer, { flag: 'wx' }).catch(async error => {
-      if (error && error.code === 'EEXIST') throw new Error('El archivo ya existe. Elige otro nombre para conservar el archivo anterior.');
-      throw error;
-    });
+    await fs.promises.writeFile(result.filePath, prepared.buffer);
     shell.showItemInFolder(result.filePath);
     return { ok: true, filePath: result.filePath, bytes: prepared.buffer.length };
   });
