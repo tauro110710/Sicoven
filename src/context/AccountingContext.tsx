@@ -43,6 +43,7 @@ import { formatIslrVoucherNumber, getMaxIslrVoucherSequence } from '../utils/isl
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus } from '../types/ivaRetentionEligibility';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, summarizeCreditDocumentAdjustments, validateCreditSettlement } from '../types/creditSettlement';
 import { buildCreditSettlementJournalItems } from '../types/creditSettlementAccounting';
+import type { UniversalCreditSettlementDraft } from '../types/universalImport';
 import { buildSupplierAdvanceSettlementJournalItems } from '../types/supplierAdvanceSettlementAccounting';
 import { FinancialDisclosure, validateFinancialDisclosure } from '../types/financialDisclosures';
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
@@ -154,6 +155,7 @@ interface AccountingContextType {
   deleteSale: (id: string) => void;
   runAtomicInvoiceImport: <T>(operation: () => T) => T;
   runAtomicInvoiceImportAndWait: <T>(operation: () => T) => Promise<T>;
+  addImportedCreditSettlements: (drafts: UniversalCreditSettlementDraft[], documents: Array<SaleRecord | PurchaseRecord>, targetCompanyId?: string) => CreditSettlement[];
 
   // Inventario
   products: InventoryProduct[];
@@ -1435,6 +1437,163 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         : Math.max(0, Number(document.totalAmountUsd || 0)));
     return { originalAmountUsd, originalAmountBs };
   };
+
+
+  const addImportedCreditSettlements = (
+    drafts: UniversalCreditSettlementDraft[],
+    documents: Array<SaleRecord | PurchaseRecord>,
+    targetCompanyId: string = currentCompany.id
+  ): CreditSettlement[] => {
+    if (!drafts.length) return [];
+    const batch = activeImportBatchRef.current;
+    if (!batch) throw new Error('Las liquidaciones históricas solo pueden registrarse dentro del lote contable atómico.');
+    const targetCompany = companies.find(company => company.id === targetCompanyId);
+    if (!targetCompany) throw new Error('La empresa destino de las liquidaciones no existe.');
+    const documentById = new Map(documents.map(document => [document.id, document]));
+    const remainingByDocument = new Map<string, number>();
+    const created: CreditSettlement[] = [];
+    const normalizedReference = (value?: string) => String(value || '').trim().replace(/\s+/g, '').toUpperCase();
+
+    for (const [index, draft] of drafts.entries()) {
+      const kind = draft.kind;
+      const document = documentById.get(draft.documentId);
+      if (!document || document.companyId !== targetCompanyId || document.isCancelled || document.paymentTerm !== 'CREDITO') {
+        throw new Error('La liquidación ' + draft.sourceRowId + ' no tiene una factura de crédito válida dentro del lote.');
+      }
+      if (!isValidIsoDate(draft.settlementDate) || draft.settlementDate < String(document.invoiceDate || '')) {
+        throw new Error('La liquidación ' + draft.sourceRowId + ' tiene una fecha anterior a su factura o una fecha inválida.');
+      }
+      if (kind === 'PURCHASE_PAYMENT') {
+        const dateError = validatePurchasePaymentDate(draft.settlementDate, getPurchaseAccountCreditDate(document as PurchaseRecord));
+        if (dateError) throw new Error('Liquidación ' + draft.sourceRowId + ': ' + dateError);
+      }
+
+      const amountUsd = Math.round((Number(draft.amountUsd) + Number.EPSILON) * 100) / 100;
+      const amountBs = Math.round((Number(draft.amountBs) + Number.EPSILON) * 100) / 100;
+      const settlementRate = Number(draft.bcvRate);
+      const invoiceRate = Number(document.bcvRate) > 0
+        ? Number(document.bcvRate)
+        : (Number(document.totalAmountUsd) > 0 ? Number(document.totalAmountBs) / Number(document.totalAmountUsd) : 0);
+      if (!Number.isFinite(amountUsd) || amountUsd <= 0 || !Number.isFinite(amountBs) || amountBs <= 0 ||
+          !Number.isFinite(settlementRate) || settlementRate <= 0 || !Number.isFinite(invoiceRate) || invoiceRate <= 0 ||
+          Math.abs(amountBs - amountUsd * settlementRate) > 0.02) {
+        throw new Error('La liquidación ' + draft.sourceRowId + ' no concilia sus importes Bs/USD con la tasa BCV declarada.');
+      }
+
+      const principal = getCreditPrincipal(document, kind).originalAmountUsd;
+      const remainingUsd = remainingByDocument.has(document.id) ? remainingByDocument.get(document.id)! : principal;
+      const validation = validateCreditSettlement({
+        documentId: document.id, kind, settlementDate: draft.settlementDate,
+        amountUsd, amountBs, method: draft.method,
+        bankAccountId: draft.bankAccountId, reference: draft.reference, bcvRate: settlementRate
+      }, remainingUsd);
+      if (validation) throw new Error('Liquidación ' + draft.sourceRowId + ': ' + validation);
+
+      const bankTransfer = draft.method === 'BANK_TRANSFER_BS' || draft.method === 'BANK_TRANSFER_USD';
+      const bank = bankTransfer
+        ? bankAccounts.find(item => item.id === draft.bankAccountId && item.companyId === targetCompanyId)
+        : undefined;
+      const expectedCurrency = draft.method === 'BANK_TRANSFER_USD' ? 'USD' : 'BS';
+      if (bankTransfer && (!bank || bank.currency !== expectedCurrency || !String(draft.reference || '').trim())) {
+        throw new Error('La liquidación ' + draft.sourceRowId + ' requiere una cuenta bancaria destino de la moneda correcta y una referencia.');
+      }
+      if (!bankTransfer && draft.bankAccountId) {
+        throw new Error('La liquidación ' + draft.sourceRowId + ' asigna una cuenta bancaria a un medio de efectivo.');
+      }
+
+      const referenceKey = normalizedReference(draft.reference);
+      const duplicateBankReference = bankTransfer && referenceKey && [
+        ...creditSettlements, ...created
+      ].some(item => item.companyId === targetCompanyId && item.bankAccountId === bank!.id &&
+        !item.isReversed && normalizedReference(item.reference) === referenceKey);
+      const duplicateWithoutReference = !referenceKey && [
+        ...creditSettlements, ...created
+      ].some(item => item.companyId === targetCompanyId && item.documentId === document.id &&
+        item.kind === kind && !item.isReversed && !String(item.reference || '').trim() &&
+        item.settlementDate === draft.settlementDate &&
+        Math.round(Number(item.amountUsd) * 100) === Math.round(amountUsd * 100) &&
+        item.method === draft.method && item.bankAccountId === draft.bankAccountId &&
+        Math.round(Number(item.bcvRate) * 1000000) === Math.round(settlementRate * 1000000));
+      if (duplicateBankReference || duplicateWithoutReference) {
+        throw new Error('La liquidación ' + draft.sourceRowId + ' reutiliza una referencia bancaria o una operación ya registrada.');
+      }
+
+      const sourceEntry = batch.journalEntries.find(entry =>
+        entry.id === document.journalEntryId && entry.companyId === targetCompanyId
+      );
+      const expectedSourceType = kind === 'SALE_COLLECTION' ? 'VENTA' : 'COMPRA';
+      const controlLines = (sourceEntry?.items || []).filter(item =>
+        kind === 'SALE_COLLECTION'
+          ? item.accountCode === '1.1.2.01' && Number(item.debitBs || 0) > 0
+          : item.accountCode.startsWith('2.1.1.') && Number(item.creditBs || 0) > 0
+      );
+      if (!sourceEntry || sourceEntry.type !== expectedSourceType || controlLines.length !== 1) {
+        throw new Error('La factura de la liquidación ' + draft.sourceRowId + ' no generó un asiento original con una única cuenta de control verificable.');
+      }
+      const controlAccount = accounts.find(account => account.code === controlLines[0].accountCode && account.isMovement);
+      const cashCode = bank?.accountCode || (draft.method === 'CASH_USD' ? '1.1.1.02' : '1.1.1.01');
+      const cashAccount = accounts.find(account => account.code === cashCode && account.isMovement);
+      const fxGain = accounts.find(account => account.code === '4.2.1.01' && account.isMovement);
+      const fxLoss = accounts.find(account => account.code === '6.1.1.08' && account.isMovement);
+      if (!controlAccount || !cashAccount ||
+          (kind === 'SALE_COLLECTION' && controlAccount.type !== 'ACTIVO') ||
+          (kind === 'PURCHASE_PAYMENT' && controlAccount.type !== 'PASIVO')) {
+        throw new Error('La liquidación ' + draft.sourceRowId + ' no tiene auxiliares contables de CxC/CxP y tesorería válidos.');
+      }
+
+      const fxDifferenceBs = Math.round((amountBs - amountUsd * invoiceRate) * 100) / 100;
+      const items = buildCreditSettlementJournalItems({
+        kind, method: draft.method, amountBs, amountUsd, invoiceRate,
+        settlementRate, cashAccount, controlAccount, fxGainAccount: fxGain, fxLossAccount: fxLoss
+      });
+      const entry = addJournalEntry({
+        entryNumber: 0,
+        date: draft.settlementDate,
+        description: (kind === 'SALE_COLLECTION' ? 'Cobro de cuenta por cobrar' : 'Pago de cuenta por pagar') +
+          ' - ' + document.invoiceNumber + (Math.abs(fxDifferenceBs) >= 0.01 ? ' (incluye diferencia cambiaria)' : ''),
+        type: 'AJUSTE',
+        bcvRate: settlementRate,
+        referenceDoc: document.invoiceNumber,
+        items
+      }, accounts, targetCompanyId);
+      const fxFiscalAdjustmentProposal = calculateFxFiscalAdjustment({
+        companyId: targetCompanyId,
+        documentId: document.id,
+        sourceDocumentRef: document.invoiceNumber,
+        documentDate: document.invoiceDate,
+        settlementDate: draft.settlementDate,
+        originalRate: invoiceRate,
+        settlementRate,
+        originalAmountUsd: amountUsd,
+        originalAmountBs: amountUsd * invoiceRate,
+        settlementAmountBs: amountBs,
+        sourceKind: kind === 'SALE_COLLECTION' ? 'SALE_RECEIVABLE' : 'PURCHASE_PAYABLE'
+      });
+      const settlement: CreditSettlement = {
+        id: 'credit-settlement-' + targetCompanyId + '-' + Date.now() + '-' + index,
+        companyId: targetCompanyId,
+        documentId: document.id,
+        kind,
+        settlementDate: draft.settlementDate,
+        amountBs,
+        amountUsd,
+        method: draft.method,
+        bankAccountId: bank?.id,
+        reference: draft.reference?.trim() || undefined,
+        bcvRate: settlementRate,
+        journalEntryId: entry.id,
+        fxFiscalAdjustmentProposal,
+        createdAt: new Date().toISOString()
+      };
+      created.push(settlement);
+      remainingByDocument.set(document.id, Math.max(0, remainingUsd - amountUsd));
+    }
+
+    setCreditSettlements(previous => [...previous, ...created]);
+    return created;
+  };
+
+
 
   const getCreditBalance = (documentId: string, kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT'): CreditBalance => {
     const document = kind === 'SALE_COLLECTION'
@@ -5725,6 +5884,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         deleteSale,
         runAtomicInvoiceImport,
         runAtomicInvoiceImportAndWait,
+        addImportedCreditSettlements,
         products: products.filter(p => p.companyId === currentCompany.id),
         addProduct,
         getCompanyInventoryProducts,
