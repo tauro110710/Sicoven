@@ -72,7 +72,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  const [error,setError]=useState('');
  const [notice,setNotice]=useState('');
  const [settlementPreview,setSettlementPreview]=useState<Array<{
-  invoiceRowId:string;sourceRowId:string;settlementDate:string;amountUsd:number;amountBs:number;
+  invoiceRowId:string;sourceRowId:string;settlementDate:string;bcvRate:number;amountUsd:number;amountBs:number;
   method:string;reference?:string;destinationError:string|null;
  }>>([]);
  const [confirmed,setConfirmed]=useState(false);
@@ -430,6 +430,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      invoiceRowId:plan.invoiceRowId,
      sourceRowId:settlement.sourceRowId,
      settlementDate:settlement.settlementDate,
+     bcvRate:settlement.bcvRate,
      amountUsd:settlement.amountUsd,
      amountBs:settlement.amountBs,
      method:settlement.method,
@@ -824,10 +825,11 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      <p className="mt-1 text-xs text-amber-900">Cada liquidación se muestra con su factura de origen, tasa, importe, referencia y destino. Esta pantalla no registra cobros ni pagos.</p>
      <div className="mt-3 max-h-64 overflow-auto">
       <table className="min-w-full text-xs">
-       <thead><tr className="border-b border-amber-200 text-left"><th className="px-2 py-2">Factura origen</th><th className="px-2 py-2">Liquidación</th><th className="px-2 py-2">Fecha</th><th className="px-2 py-2">Medio</th><th className="px-2 py-2 text-right">USD</th><th className="px-2 py-2 text-right">Bs</th><th className="px-2 py-2">Referencia</th><th className="px-2 py-2">Destino</th></tr></thead>
+       <thead><tr className="border-b border-amber-200 text-left"><th className="px-2 py-2">Factura origen</th><th className="px-2 py-2">Liquidación</th><th className="px-2 py-2">Fecha</th><th className="px-2 py-2">Medio</th><th className="px-2 py-2 text-right">Tasa BCV</th><th className="px-2 py-2 text-right">USD</th><th className="px-2 py-2 text-right">Bs</th><th className="px-2 py-2">Referencia</th><th className="px-2 py-2">Destino</th></tr></thead>
        <tbody>{settlementPreview.map(item=><tr key={item.sourceRowId} className="border-b border-amber-100 align-top">
         <td className="px-2 py-2 font-mono">{item.invoiceRowId}</td><td className="px-2 py-2 font-mono">{item.sourceRowId}</td>
-        <td className="px-2 py-2">{item.settlementDate}</td><td className="px-2 py-2">{item.method}</td>
+        <td className="px-2 py-2">{item.settlementDate}</td><td className="px-2 py-2">{item.method==='CASH_BS'?'Efectivo Bs':item.method==='CASH_USD'?'Efectivo USD':item.method==='BANK_TRANSFER_BS'?'Transferencia Bs':'Transferencia USD'}</td>
+        <td className="px-2 py-2 text-right tabular-nums">{item.bcvRate.toFixed(4)}</td>
         <td className="px-2 py-2 text-right tabular-nums">{item.amountUsd.toFixed(2)}</td><td className="px-2 py-2 text-right tabular-nums">{item.amountBs.toFixed(2)}</td>
         <td className="px-2 py-2">{item.reference||'—'}</td>
         <td className="px-2 py-2">{item.destinationError?<span className="font-medium text-rose-700">{item.destinationError}</span>:<span className="font-medium text-emerald-700">Verificado</span>}</td>
