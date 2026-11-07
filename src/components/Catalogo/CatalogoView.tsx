@@ -14,13 +14,14 @@ import {
 import { Account, AccountType } from '../../types/accounting';
 
 export const CatalogoView: React.FC = () => {
-  const { accounts, addAccount, waitForPersistence } = useAccounting();
+  const { accounts, addAccount, updateAccount, deleteAccount, waitForPersistence } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
 
   // New Account state
   const [code, setCode] = useState('');
@@ -47,17 +48,14 @@ export const CatalogoView: React.FC = () => {
     setSaving(true);
     try {
       const level = code.trim().split('.').length;
-      addAccount({
-        code: code.trim(),
-        name: name.trim().toUpperCase(),
-        type,
-        level,
-        isMovement
-      });
+      const draft: Account = { ...(editingAccount || {} as Account), code: code.trim(), name: name.trim().toUpperCase(), type, level, isMovement };
+      if (editingAccount) updateAccount(editingAccount.code, draft);
+      else addAccount(draft);
       await waitForPersistence();
       setIsModalOpen(false);
       setCode('');
       setName('');
+      setEditingAccount(null);
       setAccountError(null);
     } catch (error) {
       setAccountError(error instanceof Error ? error.message : 'No se pudo validar la cuenta contable.');
@@ -108,7 +106,7 @@ export const CatalogoView: React.FC = () => {
           </div>
 
           <button
-            onClick={() => { setAccountError(null); setIsModalOpen(true); }}
+            onClick={() => { setEditingAccount(null); setCode(''); setName(''); setType('ACTIVO'); setIsMovement(true); setAccountError(null); setIsModalOpen(true); }}
             className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition shadow cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -162,6 +160,7 @@ export const CatalogoView: React.FC = () => {
                 <th className="py-2.5 px-4 w-32 text-center">Clasificación</th>
                 <th className="py-2.5 px-4 w-28 text-center">Nivel</th>
                 <th className="py-2.5 px-4 w-36 text-center">Tipo de Cuenta</th>
+                <th className="py-2.5 px-3 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -213,6 +212,11 @@ export const CatalogoView: React.FC = () => {
                         </span>
                       )}
                     </td>
+                    <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                      <button type="button" onClick={()=>{setEditingAccount(acc);setCode(acc.code);setName(acc.name);setType(acc.type);setIsMovement(acc.isMovement);setAccountError(null);setIsModalOpen(true);}} className="text-xs font-semibold text-blue-700 hover:underline mr-3">Editar</button>
+                      <button type="button" onClick={async()=>{try{deleteAccount(acc.code);await waitForPersistence();}catch(error){const message=error instanceof Error?error.message:'No se pudo eliminar la cuenta.';if(message.includes('movimientos históricos')&&window.confirm(message+' ¿Desea inactivarla para conservar la trazabilidad?')){try{updateAccount(acc.code,{...acc,isActive:false});await waitForPersistence();}catch(inner){window.alert(inner instanceof Error?inner.message:'No se pudo inactivar la cuenta.');}}else window.alert(message);}}} className="text-xs font-semibold text-rose-700 hover:underline">Eliminar / Inactivar</button>
+                      {acc.isActive===false&&<span className="ml-2 text-[10px] font-bold text-amber-700">INACTIVA</span>}
+                    </td>
                   </tr>
                 );
               })}
@@ -226,9 +230,9 @@ export const CatalogoView: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200">
             <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white">
-              <h3 className="font-semibold text-base">Crear Cuenta Contable</h3>
+              <h3 className="font-semibold text-base">{editingAccount ? 'Editar Cuenta Contable' : 'Crear Cuenta Contable'}</h3>
               <button
-                onClick={() => setIsModalOpen(false)}
+                onClick={() => {setIsModalOpen(false);setEditingAccount(null);}}
                 disabled={saving}
                 className="p-1 rounded-lg text-slate-400 hover:text-white transition cursor-pointer disabled:opacity-40"
               >
@@ -314,7 +318,7 @@ export const CatalogoView: React.FC = () => {
                   className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
-                  {saving ? "Confirmando SQLite..." : "Agregar al Catálogo"}
+                  {saving ? "Confirmando SQLite..." : editingAccount ? "Guardar Cambios" : "Agregar al Catálogo"}
                 </button>
               </div>
             </form>
