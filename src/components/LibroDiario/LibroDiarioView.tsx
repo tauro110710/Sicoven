@@ -387,7 +387,7 @@ export const LibroDiarioView: React.FC = () => {
                 </div>
 
                 {/* Entry Description / Glosa */}
-                <div className="px-4 py-2 bg-slate-50/30 text-xs font-medium text-slate-800 border-b border-slate-100">
+                <div className="px-4 py-2 bg-slate-50/30 text-xs font-bold text-slate-900 border-b border-slate-100">
                   <span className="text-slate-500 font-normal">Descripción: </span>
                   {entry.description}
                 </div>
@@ -436,7 +436,7 @@ export const LibroDiarioView: React.FC = () => {
                           <td className="py-2 px-4">
                             <span className="font-medium text-slate-800">{item.accountName}</span>
                             {item.description && (
-                              <span className="block text-[11px] text-slate-400 italic">
+                              <span className="block text-[11px] text-slate-600 italic font-bold">
                                 {item.description}
                               </span>
                             )}
