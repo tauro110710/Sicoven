@@ -321,7 +321,7 @@ test('agrupa diarios desde encabezados normalizados por el lector universal', ()
 test('normaliza prefijos repetidos y detecta asientos que ya representan una factura', () => {
   assert.equal(normalizeUniversalDocumentReference('FAC-000123'), '000123');
   assert.equal(normalizeUniversalDocumentReference('Factura 000123'), '000123');
-  assert.equal(normalizeUniversalDocumentReference('FAC-FAC-000123'), '000123');
+  assert.equal(normalizeUniversalDocumentReference('FAC-FAC-000123'), '000123');\n  assert.equal(normalizeUniversalDocumentReference('FAC'), 'FAC');
   const entries = [
     { referenceDoc: 'FAC-000123' },
     { referenceDoc: 'FAC-000124' }
