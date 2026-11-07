@@ -3725,7 +3725,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
 
-  const importInventoryMovements = (rows: Omit<InventoryMovement, 'id' | 'companyId'>[], targetCompanyId: string = targetCompany.id): number => {
+  const importInventoryMovements = (rows: Omit<InventoryMovement, 'id' | 'companyId'>[], targetCompanyId: string = currentCompany.id): number => {
     const targetCompany = companies.find(company => company.id === targetCompanyId);
     if (!targetCompany) throw new Error('La empresa destino de los movimientos no existe en SICOVEN.');
     if (!Array.isArray(rows) || rows.length === 0) throw new Error('El archivo no contiene movimientos para importar.');
