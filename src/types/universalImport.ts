@@ -62,7 +62,7 @@ export const resolveUniversalPartyReference = (
   invoice: Record<string, unknown>,
   kind: UniversalPartyKind
 ): UniversalPartyResolution => {
-  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const pickValue = (record: Record<string, unknown>, keys: string[]) => {
     const wanted = new Set(keys.map(normalize));
     for (const [key, value] of Object.entries(record)) {
@@ -132,7 +132,7 @@ export const resolveUniversalPurchaseDetailRows = (
   rows: Array<Record<string, unknown>>,
   invoice: Record<string, unknown>
 ): Array<Record<string, unknown>> => {
-  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const pickValue = (record: Record<string, unknown>, keys: string[]) => {
     const wanted = new Set(keys.map(normalize));
     for (const [key, value] of Object.entries(record)) {
@@ -168,7 +168,7 @@ export const prepareUniversalSaleInventoryLines = (
   invoice: { taxRate: number; taxableBaseBs: number; exemptAmountBs: number; vatAmountBs: number; bcvRate?: number }
 ): SaleInventoryLine[] => {
   if (!Array.isArray(rawLines) || rawLines.length === 0) throw new Error('La factura no contiene renglones de mercancía importables.');
-  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const pickValue = (row: Record<string, unknown>, keys: string[]) => {
     const wanted = new Set(keys.map(normalize));
     return Object.entries(row).find(([key, value]) => wanted.has(normalize(key)) && value !== undefined && value !== null && String(value).trim() !== '')?.[1];
@@ -389,7 +389,7 @@ export const normalizeUniversalDocumentReference = (value: unknown): string => {
   return normalized.replace(/^(FACTURA|FAC)/, '');
 };
 
-const normalizeUniversalValue = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const normalizeUniversalValue = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 export const mapUniversalInventoryMovementType = (value: unknown): UniversalInventoryMovementType | null => {
   const key = normalizeUniversalValue(value);
@@ -417,7 +417,7 @@ export const mapUniversalInventoryMovementConcept = (value: unknown): UniversalI
 };
 
 export const hasUniversalNestedMerchandiseDetails = (invoice: Record<string, unknown>): boolean => {
-  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const wanted = new Set(['saleLines','inventoryLines','productLines','items','lines','details','detalles','detalle','articulos','productos'].map(normalize));
   const nestedCollections = Object.entries(invoice)
     .filter(([key, value]) => wanted.has(normalize(key)) && Array.isArray(value))
