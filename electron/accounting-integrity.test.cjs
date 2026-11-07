@@ -607,6 +607,123 @@ test('SQLite keeps inventory movements append-only', () => {
   ), /eliminación del registro histórico en movements/);
 });
 
+
+test('SQLite validates a sales invoice and its collection created in the same atomic batch', () => {
+  const sale = {
+    id: 'sale-batch-collection', companyId: 'company-1', opNumber: 1,
+    invoiceDate: '2026-10-10', customerRif: 'J-12345678-9', customerName: 'Cliente',
+    invoiceNumber: 'S-100', controlNumber: 'CTRL-S-100', documentType: '01',
+    totalAmountBs: 116, taxableBaseBs: 100, exemptAmountBs: 0, taxRate: 16,
+    vatAmountBs: 16, vatWithheldBs: 0, vatWithheldUsd: 0,
+    igtfAmountBs: 0, igtfAmountUsd: 0, igtfApplicable: false,
+    bcvRate: 100, totalAmountUsd: 1.16, taxableBaseUsd: 1,
+    vatAmountUsd: 0.16, paymentTerm: 'CREDITO',
+    journalEntryId: 'sale-batch-entry', inventoryLines: []
+  };
+  const saleJournal = {
+    id: 'sale-batch-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-10', description: 'Factura venta S-100', type: 'VENTA',
+    bcvRate: 100, referenceDoc: 'FAC-S-100',
+    items: [
+      { accountCode: '1.1.2.01', debitBs: 116, creditBs: 0, debitUsd: 1.16, creditUsd: 0 },
+      { accountCode: '4.1.1.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 },
+      { accountCode: '2.1.2.01', debitBs: 0, creditBs: 16, debitUsd: 0, creditUsd: 0.16 }
+    ], createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const paymentJournal = {
+    id: 'sale-batch-collection-entry', companyId: 'company-1', entryNumber: 2,
+    date: '2026-10-11', description: 'Cobro factura S-100', type: 'AJUSTE',
+    bcvRate: 110, referenceDoc: 'S-100',
+    items: [
+      { accountCode: '1.1.1.01', debitBs: 55, creditBs: 0, debitUsd: 0.5, creditUsd: 0 },
+      { accountCode: '1.1.2.01', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 0.5 },
+      { accountCode: '4.2.1.01', debitBs: 0, creditBs: 5, debitUsd: 0, creditUsd: 0 }
+    ], createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const accounts = [
+    { code: '1.1.2.01', name: 'Cuentas por cobrar clientes', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', isMovement: true },
+    { code: '4.2.1.01', name: 'Ganancia cambiaria', type: 'INGRESOS', isMovement: true }
+  ];
+  const settlement = {
+    id: 'sale-batch-collection', companyId: 'company-1',
+    documentId: sale.id, kind: 'SALE_COLLECTION',
+    settlementDate: '2026-10-11', bcvRate: 110,
+    amountUsd: 0.5, amountBs: 55, method: 'CASH_BS',
+    journalEntryId: paymentJournal.id, createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const prior = { ...emptyState(), accounts, sales: [], journalEntries: [], creditSettlements: [] };
+  const next = {
+    ...prior, sales: [sale],
+    journalEntries: [saleJournal, paymentJournal],
+    creditSettlements: [settlement]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...next,
+    journalEntries: [saleJournal, {
+      ...paymentJournal,
+      items: paymentJournal.items.map(line => line.accountCode === '1.1.2.01'
+        ? { ...line, accountCode: '1.1.2.99' } : line)
+    }]
+  }), /cobro de una factura.*ND de venta/);
+});
+
+test('SQLite rejects sales collections that exceed net receivable after withholding', () => {
+  const sale = {
+    id: 'sale-overpayment', companyId: 'company-1', opNumber: 1,
+    invoiceDate: '2026-10-10', customerRif: 'J-12345678-9', customerName: 'Cliente',
+    invoiceNumber: 'S-101', controlNumber: 'CTRL-S-101', documentType: '01',
+    totalAmountBs: 116, taxableBaseBs: 100, exemptAmountBs: 0, taxRate: 16,
+    vatAmountBs: 16, vatWithheldBs: 16, vatWithheldUsd: 0.16,
+    igtfAmountBs: 0, igtfAmountUsd: 0, igtfApplicable: false,
+    bcvRate: 100, totalAmountUsd: 1.16, taxableBaseUsd: 1,
+    vatAmountUsd: 0.16, paymentTerm: 'CREDITO',
+    journalEntryId: 'sale-overpayment-entry', inventoryLines: []
+  };
+  const saleJournal = {
+    id: 'sale-overpayment-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-10', description: 'Factura venta S-101', type: 'VENTA',
+    bcvRate: 100, referenceDoc: 'FAC-S-101',
+    items: [
+      { accountCode: '1.1.2.01', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '1.1.3.03', debitBs: 16, creditBs: 0, debitUsd: 0.16, creditUsd: 0 },
+      { accountCode: '4.1.1.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 },
+      { accountCode: '2.1.2.01', debitBs: 0, creditBs: 16, debitUsd: 0, creditUsd: 0.16 }
+    ], createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const settlement = {
+    id: 'sale-overpayment-settlement', companyId: 'company-1',
+    documentId: sale.id, kind: 'SALE_COLLECTION',
+    settlementDate: '2026-10-11', bcvRate: 100,
+    amountUsd: 1.01, amountBs: 101, method: 'CASH_BS',
+    journalEntryId: 'sale-overpayment-payment', createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const paymentJournal = {
+    id: 'sale-overpayment-payment', companyId: 'company-1', entryNumber: 2,
+    date: '2026-10-11', description: 'Cobro excesivo S-101', type: 'AJUSTE',
+    bcvRate: 100, referenceDoc: 'S-101',
+    items: [
+      { accountCode: '1.1.1.01', debitBs: 101, creditBs: 0, debitUsd: 1.01, creditUsd: 0 },
+      { accountCode: '1.1.2.01', debitBs: 0, creditBs: 101, debitUsd: 0, creditUsd: 1.01 }
+    ], createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const accounts = [
+    { code: '1.1.2.01', name: 'Cuentas por cobrar clientes', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.3.03', name: 'IVA retenido por cobrar', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', isMovement: true },
+    { code: '4.1.1.01', name: 'Ventas', type: 'INGRESOS', isMovement: true },
+    { code: '2.1.2.01', name: 'IVA débito fiscal', type: 'PASIVO', isMovement: true }
+  ];
+  const prior = { ...emptyState(), accounts, sales: [], journalEntries: [], creditSettlements: [] };
+  const next = {
+    ...prior, sales: [sale],
+    journalEntries: [saleJournal, paymentJournal],
+    creditSettlements: [settlement]
+  };
+  assert.throws(() => validateAccountingSnapshot(prior, next), /principal neto de CxC/);
+});
+
 test('SQLite allows reversal metadata on a settlement but not edits to its amount', () => {
   const original = sourceEntry();
   const reversal = reversalEntry();
