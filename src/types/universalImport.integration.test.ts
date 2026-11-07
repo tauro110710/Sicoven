@@ -24,7 +24,10 @@ const emptyState = () => ({
   currentCompanyId: 'company-1',
   accounts: [
     { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', level: 4, isMovement: true },
-    { code: '4.1.1.01', name: 'Ingresos', type: 'INGRESOS', level: 4, isMovement: true }
+    { code: '1.1.1.03', name: 'Banco Bs', type: 'ACTIVO', level: 4, isMovement: true },
+    { code: '1.1.2.01', name: 'Cuentas por cobrar', type: 'ACTIVO', level: 4, isMovement: true },
+    { code: '4.1.1.01', name: 'Ingresos', type: 'INGRESOS', level: 4, isMovement: true },
+    { code: '4.2.1.01', name: 'Ganancia cambiaria', type: 'INGRESOS', level: 4, isMovement: true }
   ],
   journalEntries: [],
   purchases: [],
@@ -110,11 +113,40 @@ test('integración: análisis JSON, selección individual, empresa destino, dupl
     );
     assert.ok(findUniversalInvoiceJournalCollision('ANTERIOR', initial.journalEntries, 'VENTA'));
 
-    const importedEntry = journalEntry('imported-company-2', 'company-2', 1, 'FAC-F-002');
+    const sourceSaleEntry = {
+      ...journalEntry('sale-source-company-2', 'company-2', 1, 'F-002'),
+      type: 'VENTA',
+      items: [
+        { accountCode: '1.1.2.01', accountName: 'Cuentas por cobrar', debitBs: 1000, creditBs: 0, debitUsd: 10, creditUsd: 0, description: 'CxC factura F-002' },
+        { accountCode: '4.1.1.01', accountName: 'Ingresos', debitBs: 0, creditBs: 1000, debitUsd: 0, creditUsd: 10, description: 'Venta F-002' }
+      ]
+    };
+    const importedEntry = {
+      ...journalEntry('settlement-journal-company-2', 'company-2', 2, 'F-002'),
+      type: 'AJUSTE',
+      items: [
+        { accountCode: '1.1.1.03', accountName: 'Banco Bs', debitBs: 1100, creditBs: 0, debitUsd: 10, creditUsd: 0, description: 'Cobro por transferencia' },
+        { accountCode: '1.1.2.01', accountName: 'Cuentas por cobrar', debitBs: 0, creditBs: 1000, debitUsd: 0, creditUsd: 10, description: 'Cancelación de CxC' },
+        { accountCode: '4.2.1.01', accountName: 'Ganancia cambiaria', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 0, description: 'Ganancia cambiaria' }
+      ]
+    };
+    const importedSale = {
+      id: 'sale-company-2-1',
+      companyId: 'company-2',
+      documentType: '01',
+      paymentTerm: 'CREDITO',
+      invoiceDate: '2026-11-06',
+      invoiceNumber: 'F-002',
+      totalAmountBs: 1000,
+      totalAmountUsd: 10,
+      bcvRate: 100,
+      journalEntryId: sourceSaleEntry.id,
+      isCancelled: false
+    };
     const importedSettlement = {
       id: 'settlement-company-2-1',
       companyId: 'company-2',
-      documentId: 'sale-company-2-1',
+      documentId: importedSale.id,
       kind: 'SALE_COLLECTION',
       settlementDate: '2026-11-07',
       amountBs: 1100,
@@ -128,7 +160,9 @@ test('integración: análisis JSON, selección individual, empresa destino, dupl
     };
     const imported = {
       ...initial,
-      journalEntries: [...initial.journalEntries, importedEntry],
+      sales: [importedSale],
+      bankAccounts: [{ id: 'bank-company-2-bs', companyId: 'company-2', accountCode: '1.1.1.03', currency: 'BS' }],
+      journalEntries: [...initial.journalEntries, sourceSaleEntry, importedEntry],
       creditSettlements: [importedSettlement]
     };
     assert.equal(persistAccountingSnapshot(db, imported, { id: 1, username: 'admin', role: 'admin' }).ok, true);
@@ -155,7 +189,8 @@ test('integración: análisis JSON, selección individual, empresa destino, dupl
     assert.equal(saved.currentCompanyId, 'company-1', 'la importación no debe cambiar la empresa activa');
     assert.deepEqual(saved.journalEntries.map((entry: any) => [entry.id, entry.companyId]), [
       ['prior-company-1', 'company-1'],
-      ['imported-company-2', 'company-2']
+      ['sale-source-company-2', 'company-2'],
+      ['settlement-journal-company-2', 'company-2']
     ]);
     assert.equal(saved.journalEntries.filter((entry: any) => entry.companyId === 'company-1').length, 1);
     assert.equal(saved.journalEntries.filter((entry: any) => entry.companyId === 'company-2').length, 1);
