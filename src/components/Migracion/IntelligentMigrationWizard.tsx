@@ -50,7 +50,7 @@ const pick = (row:Row, ...keys:string[]) => {
 
 export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClose}) => {
  const { companies, products: allProducts, getCompanyInventoryProducts, importInventoryProducts, restoreBackupJson, accounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, currentCompany } = useAccounting();
- const [targetCompanyId, setTargetCompanyId] = useState(currentCompany.id);
+ const [targetCompanyId, setTargetCompanyId] = useState('');
  const targetCompany = companies.find(company => company.id === targetCompanyId) || null;
  const companyProducts = targetCompany ? getCompanyInventoryProducts(targetCompany.id) : [];
  const companySales = filterEntriesByCompany(allSales, currentCompany.id);
