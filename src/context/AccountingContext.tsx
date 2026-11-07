@@ -362,10 +362,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // estos contadores evitan reutilizar correlativos e identificadores por estado obsoleto.
   const runAtomicInvoiceImport = <T,>(operation: () => T): T => {
     const reservationsBefore = new Set(bankOutgoingReservationsRef.current);
-    // React setters are queued synchronously; capture every collection touched by
-    // addSale/addPurchase and restore the complete batch if any operation throws.
+    // React setters are queued synchronously; capture every persisted accounting
+    // collection so a synchronous import failure cannot leak partial state.
     const before = {
-      journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, islrFiscalEvents,
+      accounts, bankAccounts, bankStatementMovements, creditSettlements,
+      financialDisclosures, islrFiscalEvents, islrVouchers, journalEntries,
+      purchases, sales, products, movements, supplierAdvanceSettlements,
+      supplierDirectAdvances, vatVouchers, vatWithholdingDeclarations,
+      vatWithholdingDeclarationEvents,
       saleSequence: { ...saleSequenceRef.current },
       purchaseSequence: { ...purchaseSequenceRef.current },
       journalSequence: { ...journalSequenceRef.current },
@@ -382,14 +386,23 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           persistenceWaitersRef.current = persistenceWaitersRef.current.filter(waiter => waiter !== reservation.waiter);
           reservation.release();
         });
+      setAccounts(before.accounts);
+      setBankAccounts(before.bankAccounts);
+      setBankStatementMovements(before.bankStatementMovements);
+      setCreditSettlements(before.creditSettlements);
+      setFinancialDisclosures(before.financialDisclosures);
+      setIslrFiscalEvents(before.islrFiscalEvents);
+      setIslrVouchers(before.islrVouchers);
       setJournalEntries(before.journalEntries);
       setPurchases(before.purchases);
       setSales(before.sales);
       setProducts(before.products);
       setMovements(before.movements);
+      setSupplierAdvanceSettlements(before.supplierAdvanceSettlements);
+      setSupplierDirectAdvances(before.supplierDirectAdvances);
       setVatVouchers(before.vatVouchers);
-      setIslrVouchers(before.islrVouchers);
-      setIslrFiscalEvents(before.islrFiscalEvents);
+      setVatWithholdingDeclarations(before.vatWithholdingDeclarations);
+      setVatWithholdingDeclarationEvents(before.vatWithholdingDeclarationEvents);
       saleSequenceRef.current = before.saleSequence;
       purchaseSequenceRef.current = before.purchaseSequence;
       journalSequenceRef.current = before.journalSequence;
