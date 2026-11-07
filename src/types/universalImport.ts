@@ -190,7 +190,23 @@ export const mapUniversalInventoryMovementConcept = (value: unknown): UniversalI
   return map[key] ?? null;
 };
 
-export const hasUniversalNestedMerchandiseDetails = (invoice: Record<string, unknown>): boolean => {\n  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');\n  const wanted = new Set(['saleLines','inventoryLines','productLines','items','lines','details','detalles','detalle','articulos','productos'].map(normalize));\n  const nestedCollections = Object.entries(invoice)\n    .filter(([key, value]) => wanted.has(normalize(key)) && Array.isArray(value))\n    .map(([, value]) => value as unknown[]);\n  return nestedCollections.some(nested => nested.some((value) => {\n    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;\n    const line = value as Record<string, unknown>;\n    const lineKeys = new Set(Object.keys(line).map(normalize));\n    const hasCode = ['productCode','codigoProducto','productSku','sku','itemCode','codigo','code'].some(key => lineKeys.has(normalize(key)));\n    const hasQuantity = ['quantity','cantidad','qty'].some(key => lineKeys.has(normalize(key)));\n    return hasCode && hasQuantity;\n  }));\n};\n\nexport type UniversalImportFormat = 'json' | 'csv' | 'tsv' | 'txt' | 'xlsx' | 'xlsm' | 'unsupported';
+export const hasUniversalNestedMerchandiseDetails = (invoice: Record<string, unknown>): boolean => {
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const wanted = new Set(['saleLines','inventoryLines','productLines','items','lines','details','detalles','detalle','articulos','productos'].map(normalize));
+  const nestedCollections = Object.entries(invoice)
+    .filter(([key, value]) => wanted.has(normalize(key)) && Array.isArray(value))
+    .map(([, value]) => value as unknown[]);
+  return nestedCollections.some(nested => nested.some((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const line = value as Record<string, unknown>;
+    const lineKeys = new Set(Object.keys(line).map(normalize));
+    const hasCode = ['productCode','codigoProducto','productSku','sku','itemCode','codigo','code'].some(key => lineKeys.has(normalize(key)));
+    const hasQuantity = ['quantity','cantidad','qty'].some(key => lineKeys.has(normalize(key)));
+    return hasCode && hasQuantity;
+  }));
+};
+
+export type UniversalImportFormat = 'json' | 'csv' | 'tsv' | 'txt' | 'xlsx' | 'xlsm' | 'unsupported';
 
 export const detectUniversalImportFormat = (fileName: string): UniversalImportFormat => {
   const extension = fileName.toLowerCase().split('.').pop() || '';
