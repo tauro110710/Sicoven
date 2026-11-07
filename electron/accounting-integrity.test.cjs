@@ -1090,7 +1090,7 @@ test('SQLite validates a purchase invoice and its credit payment created in the 
     islrWithheldBs: 0, islrWithheldUsd: 0, retentionRate: 0,
     bcvRate: 100, totalAmountUsd: 1, taxableBaseUsd: 1,
     paymentTerm: 'CREDITO', creditDays: 30, dueDate: '2026-11-09',
-    purchaseDebitAccountCode: '6.1.1.01', inventoryLines: [],
+    purchaseDebitAccountCode: '1.1.4.01', inventoryLines: [],
     journalEntryId: 'purchase-batch-entry'
   };
   const purchaseJournal = {
@@ -1098,7 +1098,7 @@ test('SQLite validates a purchase invoice and its credit payment created in the 
     date: '2026-10-10', description: 'Compra 101', type: 'COMPRA',
     bcvRate: 100, referenceDoc: 'FAC-101',
     items: [
-      { accountCode: '6.1.1.01', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '1.1.4.01', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
       { accountCode: '2.1.1.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1, description: 'Cuenta por pagar proveedor' }
     ], createdAt: '2026-10-10T10:00:00.000Z'
   };
@@ -1113,7 +1113,7 @@ test('SQLite validates a purchase invoice and its credit payment created in the 
     ], createdAt: '2026-10-11T10:00:00.000Z'
   };
   const accounts = [
-    { code: '6.1.1.01', name: 'Gastos', type: 'GASTOS', isMovement: true },
+    { code: '1.1.4.01', name: 'Inventario', type: 'ACTIVO', isMovement: true },
     { code: '2.1.1.01', name: 'Proveedores', type: 'PASIVO', isMovement: true },
     { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', isMovement: true },
     { code: '6.1.1.08', name: 'Pérdida cambiaria', type: 'GASTOS', isMovement: true }
@@ -2472,7 +2472,7 @@ test('SQLite accepts and constrains a cash payment against the ND own payable an
       items: paymentJournal.items.map(line => line.accountCode === '2.1.1.01'
         ? { ...line, accountCode: '2.1.1.99' } : line)
     }]
-  }), /pago de una ND/);
+  }), /pago de una factura\\/ND de proveedor/);
 });
 
 
