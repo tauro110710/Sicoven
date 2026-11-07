@@ -62,9 +62,9 @@ export const resolveUniversalPartyReference = (
 ): UniversalPartyResolution => {
   const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const pickValue = (record: Record<string, unknown>, keys: string[]) => {
-    for (const key of keys) {
-      const value = record[normalize(key)];
-      if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+    const wanted = new Set(keys.map(normalize));
+    for (const [key, value] of Object.entries(record)) {
+      if (wanted.has(normalize(key)) && value !== undefined && value !== null && String(value).trim() !== '') return value;
     }
     return undefined;
   };
