@@ -5,6 +5,7 @@ import { calculateVnrWriteDown, calculatePeriodicCostOfSales } from '../../types
 import type { InventoryProduct } from '../../types/accounting';
 import { validateOpeningInventoryRow, validateMovementImportRow } from '../../types/inventoryImport';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
+import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
@@ -67,6 +68,22 @@ export const InventarioContableTools: React.FC = () => {
     }
     setComponentId('');
   }, [currentCompany.id]);
+
+  useEffect(() => {
+    const rate = resolveInventoryBcvRate(currentCompany.inventoryBcvRateHistory || [], periodEnd);
+    if (rate) setClosingRate(String(rate.rate));
+    else if (periodEnd === currentCompany.inventoryBcvRateEffectiveDate && currentCompany.inventoryBcvRate) {
+      setClosingRate(String(currentCompany.inventoryBcvRate));
+    }
+  }, [currentCompany.id, currentCompany.inventoryBcvRate, currentCompany.inventoryBcvRateEffectiveDate, currentCompany.inventoryBcvRateHistory, periodEnd]);
+
+  useEffect(() => {
+    const rate = resolveInventoryBcvRate(currentCompany.inventoryBcvRateHistory || [], productionDate);
+    if (rate) setProductionRate(String(rate.rate));
+    else if (productionDate === currentCompany.inventoryBcvRateEffectiveDate && currentCompany.inventoryBcvRate) {
+      setProductionRate(String(currentCompany.inventoryBcvRate));
+    }
+  }, [currentCompany.id, currentCompany.inventoryBcvRate, currentCompany.inventoryBcvRateEffectiveDate, currentCompany.inventoryBcvRateHistory, productionDate]);
 
   const selectedProduct = companyProducts.find(product => product.id === productId);
   const selectedFinishedProduct = companyProducts.find(product => product.id === finishedProductId);
@@ -136,7 +153,7 @@ export const InventarioContableTools: React.FC = () => {
           return {
             code: row.code!.trim(), name: row.name!.trim(), category: row.category || 'General', unit: row.unit || 'Unidad',
             minStock: validated.minStock, currentStock: validated.currentStock, avgCostBs: validated.avgCostBs,
-            avgCostUsd: 0, lastCostBs: validated.avgCostBs, lastCostUsd: 0, salesPriceBs: validated.salesPriceBs,
+            avgCostUsd: validated.openingBcvRate > 0 ? validated.avgCostBs / validated.openingBcvRate : 0, lastCostBs: validated.avgCostBs, lastCostUsd: validated.openingBcvRate > 0 ? validated.avgCostBs / validated.openingBcvRate : 0, salesPriceBs: Number(currentCompany.inventoryBcvRate || 0) > 0 ? validated.salesPriceUsd * Number(currentCompany.inventoryBcvRate) : validated.salesPriceBs,
             salesPriceUsd: validated.salesPriceUsd, inventoryAccountCode: row.inventoryaccountcode || '1.1.4.01',
             costOfSalesAccountCode: row.costofsalesaccountcode || '5.1.1.01',
             adjustmentAccountCode: row.adjustmentaccountcode || '5.1.2.01',
