@@ -14,6 +14,143 @@ export const getUniversalJsonValueAtPath = (root: unknown, path: string): unknow
     return (current as Record<string, unknown>)[key];
   }, root);
 
+export type PosvenBackupMappingAnalysis = {
+  salesInvoices: number; salesCollectionReceipts: number; salesDetailLines: number;
+  salesProductLines: number; unresolvedSalesProductLines: number; salesWithLinkedReceivable: number;
+  salesMissingFiscalControl: number; salesMissingCustomerRif: number; salesMissingTaxRate: number;
+  purchases: number; purchasesWithUniqueSupplier: number; purchasesWithoutSupplierMatch: number;
+  purchasesMissingBcvRate: number; purchasesMissingFiscalControl: number; purchasesMissingTaxBreakdown: number;
+  receivables: number; receivablesLinkedToSales: number; receivablesWithoutSaleLink: number; receivablePaymentEvents: number;
+  payables: number; payablesWithUniquePurchaseMatch: number; payablesWithAmbiguousPurchaseMatch: number; payablesWithoutPurchaseMatch: number; payablePaymentEvents: number;
+  movements: number; movementsWithProductResolved: number; movementSaleRows: number; movementPurchaseRows: number;
+  movementOpeningRows: number; movementAdjustmentRows: number; movementOtherRows: number; movementsMissingCostAndBcv: number;
+  cashbookRows: number; cashbookRowsWithDoubleEntryAccounts: number; cashbookRowsWithDebitCredit: number;
+  cashSessions: number; terminals: number; zReports: number; returns: number; returnsLinkedToSales: number;
+  voids: number; voidsLinkedToSales: number; hasBankAccounts: boolean; hasRetentionVouchers: boolean;
+  hasFixedAssets: boolean; hasChartOfAccounts: boolean; users: number;
+};
+
+export const analyzePosvenBackupMapping = (root: unknown): PosvenBackupMappingAnalysis => {
+  const data = root && typeof root === 'object' && !Array.isArray(root)
+    ? (root as Record<string, unknown>).data : undefined;
+  const source = data && typeof data === 'object' && !Array.isArray(data)
+    ? data as Record<string, unknown> : {};
+  const list = (key: string): Array<Record<string, unknown>> => {
+    const value = source[key];
+    return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> =>
+      Boolean(item) && typeof item === 'object' && !Array.isArray(item)) : [];
+  };
+  const norm = (value: unknown) => String(value ?? '').trim().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const pick = (row: Record<string, unknown>, ...keys: string[]) => {
+    for (const key of keys) {
+      const value = Object.entries(row).find(([field, cell]) => norm(field) === norm(key) &&
+        cell !== undefined && cell !== null && String(cell).trim() !== '')?.[1];
+      if (value !== undefined) return value;
+    }
+    return undefined;
+  };
+  const products = list('productos');
+  const productIds = new Set(products.map(row => String(row.id ?? '')).filter(Boolean));
+  const sales = list('ventas');
+  const receivables = list('cxc');
+  const saleIds = new Set(sales.map(row => String(row.id ?? '')).filter(Boolean));
+  const receiptRows = sales.filter(row => /^C\d+-CXC-/i.test(String(row.id ?? '')) ||
+    (Array.isArray(row.items) && row.items.some(item => item && typeof item === 'object' &&
+      norm((item as Record<string, unknown>).productoId) === 'abono')));
+  const invoiceRows = sales.filter(row => !receiptRows.includes(row));
+  const receivableSaleIds = new Set(receivables.flatMap(row =>
+    [row.ventaId, row.facturaId].filter(Boolean).map(String)));
+  const saleLines = invoiceRows.flatMap(row => Array.isArray(row.items) ? row.items : [])
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item));
+  const productSaleLines = saleLines.filter(item => norm(item.productoId) !== 'abono' && Boolean(item.productoId));
+  const unresolvedSalesProductLines = productSaleLines.filter(item => !productIds.has(String(item.productoId))).length;
+  const customersByName = new Map<string, number>();
+  list('clientes').forEach(row => {
+    const name = norm(row.name ?? row.nombre);
+    if (name) customersByName.set(name, (customersByName.get(name) ?? 0) + 1);
+  });
+  const suppliersByName = new Map<string, number>();
+  list('proveedores').forEach(row => {
+    const name = norm(row.nombre ?? row.name);
+    if (name) suppliersByName.set(name, (suppliersByName.get(name) ?? 0) + 1);
+  });
+  const purchases = list('compras');
+  const payables = list('cxp');
+  const purchasesForPayable = (payable: Record<string, unknown>) => {
+    const invoiceNo = norm(payable.numeroFactura ?? String(payable.concepto ?? '').split('#').pop());
+    const supplier = norm(payable.proveedor);
+    return purchases.filter(purchase => norm(purchase.numeroFactura) === invoiceNo &&
+      norm(purchase.proveedor) === supplier);
+  };
+  const payableMatches = payables.map(purchasesForPayable);
+  const movements = list('movimientos');
+  const movementTypeCounts = new Map<string, number>();
+  movements.forEach(row => {
+    const type = norm(row.tipo);
+    movementTypeCounts.set(type, (movementTypeCounts.get(type) ?? 0) + 1);
+  });
+  const journal = list('libroDiario');
+  const cashSessions = list('terminales').reduce((sum, terminal) =>
+    sum + (Array.isArray(terminal.cashHistory) ? terminal.cashHistory.length : 0), 0);
+  const returns = list('devoluciones');
+  const voids = list('anulaciones');
+  const hasFields = (row: Record<string, unknown>, keys: string[]) =>
+    keys.some(key => pick(row, key) !== undefined);
+  return {
+    salesInvoices: invoiceRows.length,
+    salesCollectionReceipts: receiptRows.length,
+    salesDetailLines: saleLines.length,
+    salesProductLines: productSaleLines.length,
+    unresolvedSalesProductLines,
+    salesWithLinkedReceivable: invoiceRows.filter(row => receivableSaleIds.has(String(row.id ?? ''))).length,
+    salesMissingFiscalControl: invoiceRows.filter(row => !hasFields(row, ['controlNumber','numeroControl','nroControl'])).length,
+    salesMissingCustomerRif: invoiceRows.filter(row => !hasFields(row, ['customerRif','rifCliente','rif','taxId'])).length,
+    salesMissingTaxRate: invoiceRows.filter(row => !hasFields(row, ['taxRate','alicuota','tasaIva'])).length,
+    purchases: purchases.length,
+    purchasesWithUniqueSupplier: purchases.filter(row => suppliersByName.get(norm(row.proveedor)) === 1).length,
+    purchasesWithoutSupplierMatch: purchases.filter(row => suppliersByName.get(norm(row.proveedor)) !== 1).length,
+    purchasesMissingBcvRate: purchases.filter(row => !hasFields(row, ['bcvRate','tasaBcv','tasa'])).length,
+    purchasesMissingFiscalControl: purchases.filter(row => !hasFields(row, ['controlNumber','numeroControl','nroControl'])).length,
+    purchasesMissingTaxBreakdown: purchases.filter(row => !hasFields(row, ['taxableBaseBs','baseImponibleBs']) ||
+      !hasFields(row, ['vatAmountBs','ivaBs']) || !hasFields(row, ['exemptAmountBs','exentoBs'])).length,
+    receivables: receivables.length,
+    receivablesLinkedToSales: receivables.filter(row => [row.ventaId,row.facturaId].some(id => id && saleIds.has(String(id)))).length,
+    receivablesWithoutSaleLink: receivables.filter(row => ![row.ventaId,row.facturaId].some(id => id && saleIds.has(String(id)))).length,
+    receivablePaymentEvents: receivables.reduce((sum,row) => sum + (Array.isArray(row.historialPagos) ? row.historialPagos.length : 0),0),
+    payables: payables.length,
+    payablesWithUniquePurchaseMatch: payableMatches.filter(matches => matches.length === 1).length,
+    payablesWithAmbiguousPurchaseMatch: payableMatches.filter(matches => matches.length > 1).length,
+    payablesWithoutPurchaseMatch: payableMatches.filter(matches => matches.length === 0).length,
+    payablePaymentEvents: payables.reduce((sum,row) => sum + (Array.isArray(row.historialPagos) ? row.historialPagos.length : 0),0),
+    movements: movements.length,
+    movementsWithProductResolved: movements.filter(row => productIds.has(String(row.productoId ?? ''))).length,
+    movementSaleRows: movementTypeCounts.get('venta') ?? 0,
+    movementPurchaseRows: movementTypeCounts.get('compra') ?? 0,
+    movementOpeningRows: movementTypeCounts.get('inicial') ?? 0,
+    movementAdjustmentRows: (movementTypeCounts.get('ajusteentrada') ?? 0) + (movementTypeCounts.get('ajustesalida') ?? 0),
+    movementOtherRows: movements.length - (movementTypeCounts.get('venta') ?? 0) - (movementTypeCounts.get('compra') ?? 0) -
+      (movementTypeCounts.get('inicial') ?? 0) - (movementTypeCounts.get('ajusteentrada') ?? 0) - (movementTypeCounts.get('ajustesalida') ?? 0),
+    movementsMissingCostAndBcv: movements.filter(row => !hasFields(row, ['unitCostBs','costoUnitarioBs','costBs']) ||
+      !hasFields(row, ['bcvRate','tasaBcv'])).length,
+    cashbookRows: journal.length,
+    cashbookRowsWithDoubleEntryAccounts: journal.filter(row => hasFields(row, ['accountCode','codigoCuenta','cuenta'])).length,
+    cashbookRowsWithDebitCredit: journal.filter(row => hasFields(row, ['debitBs','debe','debito']) && hasFields(row, ['creditBs','haber','credito'])).length,
+    cashSessions,
+    terminals: list('terminales').length,
+    zReports: list('reportesZ').length,
+    returns: returns.length,
+    returnsLinkedToSales: returns.filter(row => saleIds.has(String(row.ventaId ?? ''))).length,
+    voids: voids.length,
+    voidsLinkedToSales: voids.filter(row => saleIds.has(String(row.ventaId ?? ''))).length,
+    hasBankAccounts: ['bancos','bankAccounts','cuentasBancarias'].some(key => list(key).length > 0),
+    hasRetentionVouchers: ['retenciones','retencionesIVA','retencionesISLR','withholdings'].some(key => list(key).length > 0),
+    hasFixedAssets: ['activos','activosFijos','fixedAssets'].some(key => list(key).length > 0),
+    hasChartOfAccounts: ['planCuentas','catalogoCuentas','chartOfAccounts'].some(key => list(key).length > 0),
+    users: list('users').length
+  };
+};
+
 const parseUniversalAdvanceNumber = (value: unknown): number => {
   let raw = String(value ?? '').trim().replace(/[^0-9,.-]/g, '');
   if (raw.includes(',') && raw.includes('.')) raw = raw.replace(/\./g, '').replace(',', '.');
