@@ -16,6 +16,8 @@ Este documento desarrolla la ADR de SQLite local por empresa. No habilita todav�
 - Estos tres helpers tienen pruebas unitarias, pero aún no están conectados a un orquestador de migración ni al arranque Electron. No habilitan ni ejecutan una migración por sí solos.
 - Inventario previo estricto: helper creado en `electron/tenant-migration-preflight.cjs`; clasifica tablas de control, snapshot, auditoría, referencias globales, tablas de empresa e hijas. Bloquea la migración si aparece una tabla persistente desconocida, falta una tabla crítica, el snapshot no es único/válido o existen empresas/RIF ambiguos.
 - El preflight es de solo lectura y no activa la nueva arquitectura. Su lista de clasificación debe mantenerse sincronizada con cada nueva tabla persistente que se incorpore al producto.
+- Journal durable: helper creado en `electron/tenant-migration-journal.cjs`; guarda las fases PREPARED/STAGING/VALIDATING/REGISTERING/COMMITTED y los estados de rollback/error mediante escritura atómica y sincronización a disco. Verifica el SHA-256 del backup de origen, bloquea journals duplicados y transiciones obsoletas, y no reinicia automáticamente un journal dañado.
+- El journal y el preflight aún son componentes aislados: todavía no existe un ejecutor que cree el backup SQLite consistente, copie cada empresa, valide los archivos y registre el conjunto de bases de forma coordinada.
 - No se ha fusionado ni activado el modo multiarchivo en main.
 
 ## Archivos locales
