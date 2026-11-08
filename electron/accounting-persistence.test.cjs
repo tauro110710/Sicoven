@@ -455,3 +455,56 @@ test('una venta universal con líneas requiere salidas de Kardex y asientos de c
     db.close();
   }
 });
+
+test('customer and supplier masters are synchronized to company-scoped SQLite rows in the snapshot transaction', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE app_state (
+      state_key TEXT PRIMARY KEY, state_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL,
+      details_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE party_masters (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      party_type TEXT NOT NULL CHECK(party_type IN ('CUSTOMER','SUPPLIER')),
+      name TEXT NOT NULL,
+      fiscal_id TEXT,
+      fiscal_id_type TEXT,
+      normalized_fiscal_id TEXT,
+      address TEXT,
+      phone TEXT,
+      email TEXT,
+      active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(company_id, party_type, normalized_fiscal_id)
+    );
+  `);
+  try {
+    const state = {
+      ...emptyState(),
+      customers: [{ id: 'customer-1', companyId: 'company-1', name: 'Cliente Uno', fiscalId: 'V-12345678-9', fiscalIdType: 'RIF', active: true }],
+      suppliers: [{ id: 'supplier-1', companyId: 'company-1', name: 'Proveedor Uno', fiscalId: 'J-12345678-9', fiscalIdType: 'RIF', active: true }]
+    };
+    assert.equal(persistAccountingSnapshot(db, state).ok, true);
+    const rows = db.prepare('SELECT party_type, company_id, name, normalized_fiscal_id FROM party_masters ORDER BY party_type').all();
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].party_type, 'CUSTOMER');
+    assert.equal(rows[1].party_type, 'SUPPLIER');
+    assert.ok(rows.every(row => row.company_id === 'company-1'));
+    assert.equal(rows[0].normalized_fiscal_id, 'V123456789');
+    const before = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json;
+    assert.throws(() => persistAccountingSnapshot(db, {
+      ...state,
+      customers: [...state.customers, { ...state.customers[0], id: 'customer-duplicate', name: 'Cliente duplicado' }]
+    }), /identificadores fiscales duplicados/);
+    assert.equal(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json, before);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM party_masters').get().n, 2);
+  } finally {
+    db.close();
+  }
+});
