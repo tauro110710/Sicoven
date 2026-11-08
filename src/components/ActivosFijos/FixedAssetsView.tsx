@@ -123,7 +123,11 @@ export const FixedAssetsView: React.FC = () => {
       setMessage('Activo ' + created.assetCode + ' registrado y vinculado al asiento ' + created.sourceJournalEntryId + '. No se generó un segundo asiento de adquisición.');
       setDescription('');
       setCategory('Mobiliario y equipos');
-      setAssetCode('AF-' + String(Number(created.assetCode.replace(/^AF-/, '')) + 1).padStart(5, '0'));
+      const maxAssetSequence = [created, ...fixedAssets].reduce((max, asset) => {
+        const match = /^AF-(\\d+)$/.exec(asset.assetCode);
+        return match ? Math.max(max, Number(match[1])) : max;
+      }, 0);
+      setAssetCode('AF-' + String(maxAssetSequence + 1).padStart(5, '0'));
       setResidualBs('0');
       setResidualUsd('0');
     } catch (e) {
