@@ -256,6 +256,51 @@ function persistAccountingSnapshot(db, state, actor = null) {
       }
     }
 
+    const oldFixedAssets = new Map((Array.isArray(priorState.fixedAssets) ? priorState.fixedAssets : [])
+      .map(item => [String(item.id), item]));
+    for (const asset of (Array.isArray(state.fixedAssets) ? state.fixedAssets : [])) {
+      const oldAsset = oldFixedAssets.get(String(asset.id));
+      if (!oldAsset) {
+        auditInsert.run('fixed_asset_registered', JSON.stringify({
+          assetId: asset.id, companyId: asset.companyId, assetCode: asset.assetCode,
+          description: asset.description, category: asset.category,
+          acquisitionDate: asset.acquisitionDate, serviceDate: asset.serviceDate,
+          acquisitionCostBs: asset.acquisitionCostBs, acquisitionCostUsd: asset.acquisitionCostUsd,
+          acquisitionBcvRate: asset.acquisitionBcvRate,
+          residualValueBs: asset.residualValueBs, residualValueUsd: asset.residualValueUsd,
+          usefulLifeMonths: asset.usefulLifeMonths, depreciationMethod: asset.depreciationMethod,
+          sourceJournalEntryId: asset.sourceJournalEntryId,
+          sourceJournalLineIndex: asset.sourceJournalLineIndex,
+          assetAccountCode: asset.assetAccountCode,
+          accumulatedDepreciationAccountCode: asset.accumulatedDepreciationAccountCode,
+          depreciationExpenseAccountCode: asset.depreciationExpenseAccountCode,
+          actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null
+        }));
+      }
+      const oldEvents = new Map((Array.isArray(oldAsset?.depreciationEvents) ? oldAsset.depreciationEvents : [])
+        .map(event => [String(event.id), event]));
+      for (const event of (Array.isArray(asset.depreciationEvents) ? asset.depreciationEvents : [])) {
+        const oldEvent = oldEvents.get(String(event.id));
+        if (!oldEvent) {
+          auditInsert.run('fixed_asset_depreciation_posted', JSON.stringify({
+            assetId: asset.id, companyId: asset.companyId, assetCode: asset.assetCode,
+            depreciationEventId: event.id, period: event.period, date: event.date,
+            days: event.days, amountBs: event.amountBs, amountUsd: event.amountUsd,
+            journalEntryId: event.journalEntryId,
+            actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null
+          }));
+        } else if (!oldEvent.reversedByJournalEntryId && event.reversedByJournalEntryId) {
+          auditInsert.run('fixed_asset_depreciation_reversed', JSON.stringify({
+            assetId: asset.id, companyId: asset.companyId, assetCode: asset.assetCode,
+            depreciationEventId: event.id, period: event.period,
+            journalEntryId: event.journalEntryId,
+            reversedByJournalEntryId: event.reversedByJournalEntryId,
+            actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null
+          }));
+        }
+      }
+    }
+
     const oldVatVouchers = new Map((Array.isArray(priorState.vatVouchers) ? priorState.vatVouchers : [])
       .map(item => [String(item.id), item]));
     for (const voucher of (Array.isArray(state.vatVouchers) ? state.vatVouchers : [])) {
