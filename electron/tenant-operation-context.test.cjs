@@ -189,3 +189,57 @@ test('rejects overlapping company switches rather than racing database handles',
   await first;
   assert.equal(context.getActiveCompanyId(), 'company-a');
 });
+
+
+test('holds an exclusive maintenance lock after draining operations and persistence', async t => {
+  const flushes = [];
+  const { context } = makeContext(t, {
+    flushPendingWrites: async () => { flushes.push('flush'); }
+  });
+  await context.switchCompany('company-a');
+  flushes.length = 0;
+
+  let releaseOperation;
+  const operation = context.withActiveDatabase(() => new Promise(resolve => {
+    releaseOperation = resolve;
+  }));
+  const lockPromise = context.acquireMaintenanceLock();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(context.isSwitching(), true);
+  assert.deepEqual(flushes, []);
+  await assert.rejects(
+    () => context.withActiveDatabase(() => true),
+    /cambio de empresa está en curso/
+  );
+
+  releaseOperation('drained');
+  assert.equal(await operation, 'drained');
+  const releaseLock = await lockPromise;
+  assert.deepEqual(flushes, ['flush']);
+  await assert.rejects(
+    () => context.withPersistenceDatabase(() => true),
+    /cambio de empresa está en curso/
+  );
+  assert.equal(context.isSwitching(), true);
+  releaseLock();
+  releaseLock();
+  assert.equal(context.isSwitching(), false);
+  assert.equal(await context.withActiveDatabase((_db, companyId) => companyId), 'company-a');
+});
+
+test('releases the maintenance gate if the persistence drain fails', async t => {
+  let flushCount = 0;
+  const { context } = makeContext(t, {
+    flushPendingWrites: async () => {
+      flushCount += 1;
+      if (flushCount === 2) throw new Error('simulated persistence drain failure');
+    }
+  });
+  await context.switchCompany('company-a');
+  await assert.rejects(
+    () => context.acquireMaintenanceLock(),
+    /simulated persistence drain failure/
+  );
+  assert.equal(context.isSwitching(), false);
+  assert.equal(await context.withActiveDatabase((_db, companyId) => companyId), 'company-a');
+});
