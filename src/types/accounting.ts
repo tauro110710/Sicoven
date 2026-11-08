@@ -417,6 +417,14 @@ export interface InventoryProduct {
   avgCostUsd: number;
   lastCostBs: number;
   lastCostUsd: number;
+  /** Niveles comerciales normalizados; los niveles no usados permanecen null. */
+  price1: number;
+  price2?: number | null;
+  price3?: number | null;
+  price4?: number | null;
+  /** Moneda única de referencia para los cuatro niveles comerciales. */
+  priceCurrency?: 'USD' | 'BS';
+  /** Campos de compatibilidad histórica; no son la fuente maestra de los niveles. */
   salesPriceBs: number;
   salesPriceUsd: number;
   /** Cuenta de movimiento asociada al valor del inventario. */
