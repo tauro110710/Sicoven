@@ -986,7 +986,7 @@ function validateFixedAssetLedger(previousState, nextState) {
         !Number.isFinite(Number(asset.residualValueUsd)) || Number(asset.residualValueUsd) < 0 ||
         Number(asset.residualValueBs) >= Number(asset.acquisitionCostBs) ||
         Number(asset.residualValueUsd) >= Number(asset.acquisitionCostUsd) ||
-        !Number.isInteger(asset.sourceJournalLineIndex) || asset.sourceJournalLineIndex < 0) {
+        !Number.isInteger(asset.sourceJournalLineIndex) || asset.sourceJournalLineIndex < 0 || !Array.isArray(asset.depreciationEvents)) {
       throw new Error('SQLite rechazó un expediente de activo fijo con datos, fechas, costos, vida útil o empresa inválidos.');
     }
     const assetCodeKey = String(asset.companyId) + '|' + String(asset.assetCode).trim().toUpperCase();
@@ -1016,6 +1016,13 @@ function validateFixedAssetLedger(previousState, nextState) {
     if (usedSourceLines.has(sourceKey)) throw new Error('SQLite rechazó la doble capitalización de una misma línea de adquisición.');
     usedSourceLines.add(sourceKey);
 
+    const firstPeriod = String(asset.serviceDate).slice(0, 7);
+    const serviceDateUtc = new Date(String(asset.serviceDate) + 'T00:00:00.000Z');
+    const targetMonthIndex = serviceDateUtc.getUTCMonth() + Number(asset.usefulLifeMonths);
+    const firstTargetMonth = new Date(Date.UTC(serviceDateUtc.getUTCFullYear(), targetMonthIndex, 1));
+    const finalDayOfTargetMonth = new Date(Date.UTC(firstTargetMonth.getUTCFullYear(), firstTargetMonth.getUTCMonth() + 1, 0)).getUTCDate();
+    const lifeEnd = new Date(Date.UTC(firstTargetMonth.getUTCFullYear(), firstTargetMonth.getUTCMonth(), Math.min(serviceDateUtc.getUTCDate(), finalDayOfTargetMonth)));
+    const lastPeriod = new Date(lifeEnd.getTime() - 86400000).toISOString().slice(0, 7);
     const activePeriods = new Set();
     const eventIds = new Set();
     const activeEvents = asArray(asset.depreciationEvents).filter(event => !event.reversedByJournalEntryId);
@@ -1024,7 +1031,7 @@ function validateFixedAssetLedger(previousState, nextState) {
     for (const event of asArray(asset.depreciationEvents)) {
       if (!event || typeof event.id !== 'string' || !event.id.trim() || eventIds.has(String(event.id)) ||
           event.companyId !== asset.companyId || event.assetId !== asset.id ||
-          !/^\d{4}-(0[1-9]|1[0-2])$/.test(String(event.period || '')) ||
+          !/^\d{4}-(0[1-9]|1[0-2])$/.test(String(event.period || '')) || String(event.period) < firstPeriod || String(event.period) > lastPeriod ||
           !isValidIsoDate(event.date) || String(event.date).slice(0, 7) !== String(event.period) ||
           !Number.isInteger(event.days) || event.days <= 0 ||
           !Number.isFinite(Number(event.amountBs)) || Number(event.amountBs) <= 0 ||
@@ -1073,7 +1080,6 @@ function validateFixedAssetLedger(previousState, nextState) {
     if (activeDepreciationBs > depreciableBs + 0.01 || activeDepreciationUsd > depreciableUsd + 0.000001) {
       throw new Error('SQLite rechazó depreciación acumulada superior al importe depreciable del activo ' + asset.assetCode + '.');
     }
-    const firstPeriod = String(asset.serviceDate).slice(0, 7);
     const sortedActiveEvents = activeEvents.slice().sort((a, b) => String(a.period).localeCompare(String(b.period)));
     let expectedPeriod = firstPeriod;
     for (const event of sortedActiveEvents) {
