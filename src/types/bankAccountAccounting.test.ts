@@ -11,11 +11,13 @@ const parents: Account[] = DEFAULT_CHART_OF_ACCOUNTS.filter(account =>
 testCase('el plan base contiene solamente las dos cuentas padre bancarias y ninguna entidad bancaria precargada', () => {
   assert.equal(parents.length, 2);
   assert.deepEqual(parents.map(account => account.code), ['1.1.1.06', '1.1.1.07']);
+  assert.deepEqual(parents.map(account => account.name), ['Bancos Nacionales en Bolívares (BS.)', 'Bancos en Moneda Extranjera (USD)']);
+  assert.equal(parents.some(account => /EUR|VES/i.test(account.name)), false);
   assert.ok(parents.every(account => account.type === 'ACTIVO' && !account.isMovement && account.parentCode === '1.1.1'));
   assert.equal(DEFAULT_CHART_OF_ACCOUNTS.some(account => /Banesco|Mercantil|Banco de Venezuela/i.test(account.name)), false);
 });
 
-testCase('crea el primer auxiliar nacional bajo la cuenta padre VES seleccionada', () => {
+testCase('crea el primer auxiliar nacional bajo la cuenta padre BS. seleccionada', () => {
   const result = buildBankAuxiliaryAccounts(parents, 'BS', 'Banco de Prueba', 'CORRIENTE', '1.1.1.06');
   assert.equal(result.parent.code, '1.1.1.06');
   assert.equal(result.auxiliary.code, '1.1.1.06.01');
