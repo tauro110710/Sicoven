@@ -84,8 +84,6 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   const avgCostUsd = bcvRate > 0 ? avgCostBs / bcvRate : 0;
   const liveBcvRate = Number(currentCompany.bcvRate || 0);
   const primaryPrice = priceValues[0];
-  const salesPriceBs = priceCurrency === 'USD' ? primaryPrice * liveBcvRate : primaryPrice;
-  const salesPriceUsd = priceCurrency === 'USD' ? primaryPrice : (liveBcvRate > 0 ? primaryPrice / liveBcvRate : 0);
   const priceEquivalent = (value: number) => priceCurrency === 'USD'
     ? (liveBcvRate > 0 ? formatBs(value * liveBcvRate) : 'Tasa BCV no disponible')
     : (liveBcvRate > 0 ? formatUsd(value / liveBcvRate) : 'Tasa BCV no disponible');
@@ -99,7 +97,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
     e.preventDefault();
     setError('');
     if (!code.trim() || !name.trim()) { setError('El código y la descripción son obligatorios.'); return; }
-    if (!product && (currentStock > 0 || avgCostBs > 0 || salesPriceBs > 0) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('Ingrese la tasa BCV histórica aplicable al inventario inicial, por ejemplo 889,67.'); return; }
+    if (!product && (currentStock > 0 || avgCostBs > 0) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('Ingrese la tasa BCV histórica aplicable al inventario inicial, por ejemplo 889,67.'); return; }
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
@@ -117,8 +115,8 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
         price3: priceInputs[2].trim() ? priceValues[2] : null,
         price4: priceInputs[3].trim() ? priceValues[3] : null,
         priceCurrency,
-        salesPriceBs: Number(salesPriceBs) || 0,
-        salesPriceUsd: Number(salesPriceUsd) || 0,
+        salesPriceBs: 0,
+        salesPriceUsd: 0,
         vatTreatment
       }, correctionReason, correctionWorkpaper);
     } else {
@@ -138,8 +136,8 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
         price3: priceInputs[2].trim() ? priceValues[2] : null,
         price4: priceInputs[3].trim() ? priceValues[3] : null,
         priceCurrency,
-        salesPriceBs: Number(salesPriceBs) || 0,
-        salesPriceUsd: Number(salesPriceUsd) || 0,
+        salesPriceBs: 0,
+        salesPriceUsd: 0,
         inventoryAccountCode, costOfSalesAccountCode, adjustmentAccountCode, openingBalanceAccountCode,
         costingMethod, vatTreatment, itemType, openingDate, openingBcvRate: bcvRate
       });
