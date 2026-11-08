@@ -165,8 +165,9 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   if(kind!=='customers'&&kind!=='suppliers')return [] as Row[];
   const sourcePattern=kind==='customers'?/(customer|client|cliente)/i:/(supplier|vendor|proveedor)/i;
   return rows.filter(row=>{
+   const isPartyCollection=sourcePattern.test(String(row.migrationcollection??row.migrationsource??''));
    const invoiceLike=pick(row,'invoiceNumber','numeroFactura','factura','invoiceDate','fechaFactura')!==undefined;
-   if(invoiceLike)return false;
+   if(invoiceLike&&!isPartyCollection)return false;
    const name=kind==='customers'
     ? pick(row,'name','nombre','razonSocial','customerName','clientName','cliente')
     : pick(row,'name','nombre','razonSocial','supplierName','proveedor','vendorName');
@@ -174,7 +175,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
    const source=String(row.migrationcollection??row.migrationsource??'');
    const hasIdentity=pick(row,'fiscalId','taxId','rif','customerRif','supplierRif','cedula','documentNumber','identification','identificacion')!==undefined;
    const hasContact=pick(row,'address','direccion','phone','telefono','email','correo','tipoIdentificacion','identificacion')!==undefined;
-   return sourcePattern.test(source)||hasIdentity||hasContact;
+   return isPartyCollection||hasIdentity||hasContact;
   });
  },[rows,selected]);
  const filteredInventoryRows=useMemo(()=>{
