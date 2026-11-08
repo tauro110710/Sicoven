@@ -5062,7 +5062,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   // Tesorería: alta bancaria y creación automática del auxiliar contable.
-  const addBankAccount = (bankData: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'> & { bcvRate?: number }): BankAccount => {
+  const addBankAccount = (bankData: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'> & { bcvRate?: number; parentAccountCode: string }): BankAccount => {
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('Registrar una cuenta bancaria requiere SQLite local de escritorio disponible y lista.');
     }
@@ -5071,6 +5071,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (digits.length !== 20) throw new Error('El número de cuenta bancaria debe contener exactamente 20 dígitos.');
     if (!bankData.bankName?.trim()) throw new Error('Indique el nombre del banco.');
     if (bankData.currency !== 'BS' && bankData.currency !== 'USD') throw new Error('La moneda bancaria debe ser Bs. o USD.');
+    const expectedBankParentCode = bankData.currency === 'USD' ? '1.1.1.07' : '1.1.1.06';
+    if (bankData.parentAccountCode !== expectedBankParentCode) throw new Error('La cuenta padre seleccionada no corresponde a la moneda de la cuenta bancaria.');
     const accountType = bankData.accountType ?? 'CORRIENTE';
     if (accountType !== 'CORRIENTE' && accountType !== 'AHORRO') throw new Error('Seleccione un tipo de cuenta bancaria válido.');
     if (bankAccounts.some(b => b.companyId === currentCompany.id && b.accountNumber.replace(/\D/g, '') === digits)) {
@@ -5096,14 +5098,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       : (rate > 0 ? Math.round((bs / rate) * 1000000) / 1000000 : 0);
 
     const { parent, auxiliary: newAux, accounts: accountsWithAux } = buildBankAuxiliaryAccounts(
-      accounts, bankData.currency, bankData.bankName.trim(), accountType
+      accounts, bankData.currency, bankData.bankName.trim(), accountType, bankData.parentAccountCode
     );
     const accountCode = newAux.code;
     const auxName = newAux.name;
     const equity = hasOpeningBalance ? accounts.find(a => a.code === '3.3.1.01' && a.isMovement) : undefined;
     if (hasOpeningBalance && !equity) throw new Error('No existe la cuenta de contrapartida de apertura 3.3.1.01.');
 
-    const { bcvRate: _openingBcvRate, ...bankFields } = bankData;
+    const { bcvRate: _openingBcvRate, parentAccountCode: _parentAccountCode, ...bankFields } = bankData;
     const newBank: BankAccount = { ...bankFields, accountType, accountCode, accountNumber: digits, initialBalanceBs: bs, initialBalanceUsd: usd, id: `bank-acc-${Date.now()}-${Math.floor(Math.random()*100000)}`, companyId: currentCompany.id };
     // La validación del asiento debe reconocer el auxiliar recién generado.
     // Se valida contra el catálogo proyectado y luego se guardan ambos estados juntos.
