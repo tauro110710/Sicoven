@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import {
   Settings,
@@ -24,7 +24,7 @@ import { CompanyModal } from '../CompanyModal';
 import { formatBs, validateVenezuelanRif } from '../../utils/formatters';
 import { IntelligentMigrationWizard } from '../Migracion/IntelligentMigrationWizard';
 
-export const ConfiguracionView: React.FC = () => {
+export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
   const {
     companies,
     currentCompany,
@@ -48,6 +48,32 @@ export const ConfiguracionView: React.FC = () => {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [companySaveBusy, setCompanySaveBusy] = useState(false);
   const companySaveInFlightRef = React.useRef(false);
+  const [showCompanyAudit, setShowCompanyAudit] = useState(false);
+  const [companyAuditEvents, setCompanyAuditEvents] = useState<Array<{ id: number; eventType: string; details: Record<string, unknown>; createdAt: string }>>([]);
+  const [companyAuditLoading, setCompanyAuditLoading] = useState(false);
+  const [companyAuditError, setCompanyAuditError] = useState('');
+
+  useEffect(() => {
+    if (!showCompanyAudit || !token || !currentCompany.id || !window.sicovenStore?.listAuditEvents) return;
+    let active = true;
+    setCompanyAuditLoading(true);
+    void window.sicovenStore.listAuditEvents(token, 500)
+      .then(result => {
+        if (!active) return;
+        if (!result.ok) throw new Error(result.message || 'No se pudo consultar la auditoría local.');
+        const events = (result.events || []).filter(event =>
+          event.eventType === 'company_profile_updated' && String(event.details.companyId || '') === currentCompany.id
+        );
+        setCompanyAuditEvents(events);
+        setCompanyAuditError('');
+      })
+      .catch(error => {
+        if (!active) return;
+        setCompanyAuditError(error instanceof Error ? error.message : 'No se pudo consultar la auditoría local.');
+      })
+      .finally(() => { if (active) setCompanyAuditLoading(false); });
+    return () => { active = false; };
+  }, [showCompanyAudit, token, currentCompany.id, saveSuccess]);
   const [factoryResetBusy, setFactoryResetBusy] = useState(false);
   const [factoryResetStage, setFactoryResetStage] = useState('');
   const [backupRestoreBusy, setBackupRestoreBusy] = useState(false);
@@ -234,12 +260,12 @@ export const ConfiguracionView: React.FC = () => {
       debitUsd: sum.debitUsd + item.debitUsd, creditUsd: sum.creditUsd + item.creditUsd
     }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
     const confirmed = window.confirm(
-      'REGISTRAR ASIENTO DE APERTURA\\n\\nEmpresa: ' + currentCompany.name +
-      '\\nFecha: ' + openingDate +
-      '\\nTasa BCV: Bs. ' + openingBcvRateInput + ' por USD' +
-      '\\nTotal debe: Bs. ' + totals.debitBs.toFixed(2) + ' / $ ' + totals.debitUsd.toFixed(6) +
-      '\\nTotal haber: Bs. ' + totals.creditBs.toFixed(2) + ' / $ ' + totals.creditUsd.toFixed(6) +
-      '\\n\\nEl asiento se guardará en SQLite y quedará registrado en la bitácora. Esta acción no se ejecuta automáticamente. ¿Confirma?'
+      'REGISTRAR ASIENTO DE APERTURA\n\nEmpresa: ' + currentCompany.name +
+      '\nFecha: ' + openingDate +
+      '\nTasa BCV: Bs. ' + openingBcvRateInput + ' por USD' +
+      '\nTotal debe: Bs. ' + totals.debitBs.toFixed(2) + ' / $ ' + totals.debitUsd.toFixed(6) +
+      '\nTotal haber: Bs. ' + totals.creditBs.toFixed(2) + ' / $ ' + totals.creditUsd.toFixed(6) +
+      '\n\nEl asiento se guardará en SQLite y quedará registrado en la bitácora. Esta acción no se ejecuta automáticamente. ¿Confirma?'
     );
     if (!confirmed) return;
     setOpeningBusy(true);
@@ -374,6 +400,13 @@ export const ConfiguracionView: React.FC = () => {
       newExchangeabilityAssessment = assessment;
     }
 
+    const legalIdentityChanged =
+      rifValidation.formattedRif !== currentCompany.rif ||
+      name.trim().toUpperCase() !== currentCompany.name;
+    if (legalIdentityChanged && !window.confirm(
+      'RECTIFICACIÓN DE IDENTIDAD DE LA EMPRESA\n\nSe cambiará la razón social o el RIF de la empresa activa. El cambio quedará registrado en la auditoría con los valores anteriores y nuevos, el usuario y la fecha. Verifique que la rectificación corresponda a la misma entidad jurídica y cuente con soporte documental.\n\n¿Desea continuar?'
+    )) return;
+
     if (companySaveInFlightRef.current) return;
     companySaveInFlightRef.current = true;
     setCompanySaveBusy(true);
@@ -469,9 +502,9 @@ export const ConfiguracionView: React.FC = () => {
       return;
     }
     const confirmed = window.confirm(
-      'CIERRE CONTABLE DEL PERÍODO\\n\\nSe bloquearán en SQLite las nuevas operaciones retroactivas con fecha igual o anterior a ' +
+      'CIERRE CONTABLE DEL PERÍODO\n\nSe bloquearán en SQLite las nuevas operaciones retroactivas con fecha igual o anterior a ' +
       periodCloseDate +
-      '. El cierre no puede retrocederse desde esta pantalla; una reapertura requerirá un procedimiento formal y auditado.\\n\\n¿Confirma el cierre?'
+      '. El cierre no puede retrocederse desde esta pantalla; una reapertura requerirá un procedimiento formal y auditado.\n\n¿Confirma el cierre?'
     );
     if (!confirmed) return;
     setPeriodCloseBusy(true);
@@ -601,6 +634,11 @@ export const ConfiguracionView: React.FC = () => {
             <p className="text-xs text-slate-500">
               {currentCompany.name} ({currentCompany.rif})
             </p>
+            <p className="mt-1 max-w-3xl text-[11px] text-slate-600">Puede rectificar la razón social, RIF, nombre comercial y datos de contacto de esta empresa. Los cambios de identidad requieren confirmación y quedan registrados en la auditoría con los valores anteriores y nuevos.</p>
+            <p className="mt-1 max-w-3xl text-[11px] text-amber-800">Esta edición solo modifica la ficha interna de SICOVEN; no actualiza el registro oficial del SENIAT. Si cambió la información registral real, actualícela también ante el SENIAT. El RIF es único, permanente y personal: no use esta opción para sustituir una entidad por otra.</p>
+            <button type="button" onClick={() => setShowCompanyAudit(value => !value)} className="mt-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+              {showCompanyAudit ? 'Ocultar historial' : 'Ver historial de rectificaciones'}
+            </button>
           </div>
           {saveSuccess && (
             <span className="flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-300">
@@ -608,6 +646,41 @@ export const ConfiguracionView: React.FC = () => {
             </span>
           )}
         </div>
+
+        {showCompanyAudit && (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-xs font-bold text-slate-800">Historial de rectificaciones de esta empresa</h4>
+              <button type="button" onClick={() => setShowCompanyAudit(false)} className="text-xs text-slate-500 hover:text-slate-800">Cerrar</button>
+            </div>
+            {companyAuditLoading && <p className="text-xs text-slate-500">Consultando auditoría SQLite...</p>}
+            {companyAuditError && <p role="alert" className="text-xs text-rose-700">{companyAuditError}</p>}
+            {!companyAuditLoading && !companyAuditError && companyAuditEvents.length === 0 && <p className="text-xs text-slate-500">No hay rectificaciones de datos maestros registradas para esta empresa.</p>}
+            {companyAuditEvents.map(event => {
+              const details = event.details || {};
+              const actor = details.actor && typeof details.actor === 'object' ? details.actor as Record<string, unknown> : {};
+              const changedFields = Array.isArray(details.changedFields) ? details.changedFields as Array<{ field: string; previousValue?: unknown; newValue?: unknown }> : [];
+              const labels: Record<string, string> = { name: 'Razón social', tradeName: 'Nombre comercial', rif: 'RIF', address: 'Dirección fiscal', phone: 'Teléfono', email: 'Correo electrónico' };
+              const showValue = (value: unknown) => value === null || value === undefined || value === '' ? '—' : String(value);
+              return (
+                <div key={event.id} className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+                  <div className="flex flex-wrap justify-between gap-2 text-[11px] text-slate-500">
+                    <span>{new Date(event.createdAt).toLocaleString()}</span>
+                    <span>Usuario: <strong className="text-slate-700">{showValue(actor.username)}</strong> · Rol: {showValue(actor.role)}</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {changedFields.map((field, index) => (
+                      <div key={field.field + '-' + index} className="grid grid-cols-1 sm:grid-cols-[130px_1fr] gap-1 text-[11px]">
+                        <strong className="text-slate-700">{labels[field.field] || field.field}</strong>
+                        <span className="break-words text-slate-600"><span className="text-rose-700">{showValue(field.previousValue)}</span><span className="px-2 text-slate-400">→</span><span className="font-semibold text-emerald-700">{showValue(field.newValue)}</span></span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         <form onSubmit={handleSaveCompany} className="pt-6 space-y-4 text-xs">
           <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 space-y-2">
@@ -729,6 +802,11 @@ export const ConfiguracionView: React.FC = () => {
             </div>
           </div>
 
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Nombre Comercial</label>
+            <input type="text" value={tradeName} onChange={e => setTradeName(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none" />
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Calificación SENIAT</label>
@@ -839,7 +917,7 @@ export const ConfiguracionView: React.FC = () => {
               className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 disabled:opacity-40 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
             >
               <Save className="w-4 h-4" />
-              {companySaveBusy ? "Confirmando SQLite..." : "Guardar Parámetros de Empresa"}
+              {companySaveBusy ? "Confirmando SQLite..." : "Guardar Datos y Parámetros de Empresa"}
             </button>
           </div>
         </form>
@@ -1126,7 +1204,7 @@ export const ConfiguracionView: React.FC = () => {
             <button
               disabled={factoryResetBusy}
               onClick={async () => {
-                const first = window.confirm('RESET DE FÁBRICA SICOVEN\\n\\nSe eliminarán los registros operativos: asientos, compras, ventas, inventario, movimientos, retenciones, conciliaciones, liquidaciones y cuentas bancarias operativas. Se eliminarán todas las empresas registradas y sus parámetros, junto con todos los registros operativos. Se conservarán el acceso administrativo y la licencia/prueba actual. Esta acción no se puede deshacer. ¿Deseas continuar?');
+                const first = window.confirm('RESET DE FÁBRICA SICOVEN\n\nSe eliminarán los registros operativos: asientos, compras, ventas, inventario, movimientos, retenciones, conciliaciones, liquidaciones y cuentas bancarias operativas. Se eliminarán todas las empresas registradas y sus parámetros, junto con todos los registros operativos. Se conservarán el acceso administrativo y la licencia/prueba actual. Esta acción no se puede deshacer. ¿Deseas continuar?');
                 if (!first) return;
                 setFactoryResetBusy(true);
                 setFactoryResetStage('Verificando sesión y preparando el reinicio…');
