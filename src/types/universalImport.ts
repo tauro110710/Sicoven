@@ -29,7 +29,7 @@ const requireUniversalAdvanceDate = (value: unknown): string => {
 export const mapUniversalSupplierDirectAdvanceDraft = (
   row: Record<string, unknown>, allSourceRows: Array<Record<string, unknown>>
 ): UniversalSupplierDirectAdvanceDraft => {
-  const operation = String(pickUniversalAdvanceValue(row, ['operationType','transactionType','tipoOperacion','tipoMovimiento','concept','concepto','kind','tipo']) ?? '')
+  const operation = String(pickUniversalAdvanceValue(row, ['settlementKind','operationType','transactionType','tipoOperacion','tipoMovimiento','concept','concepto','kind','tipo']) ?? '')
     .trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const directTokens = ['supplierdirectadvance','directsupplieradvance','anticodirectoproveedor','anticipodirectoproveedor','anticipoproveedor','anticipodirecto','desembolsoanticipoproveedor'];
   if (!directTokens.includes(operation)) throw new Error('La fila no identifica expresamente un desembolso directo de anticipo a proveedor.');
