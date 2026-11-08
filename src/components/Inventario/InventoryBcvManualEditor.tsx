@@ -122,7 +122,7 @@ export const InventoryBcvManualEditor: React.FC = () => {
             </button>
           </div>
           <p className="sm:col-span-2 text-[11px] text-slate-500">
-            Se guarda localmente en SQLite. La tasa manual prevalece para esa fecha y no será reemplazada por la sincronización automática.
+            Se guarda localmente en SQLite. La tasa manual prevalece para esa fecha y no será reemplazada por la consulta automática.
           </p>
         </form>
       )}
