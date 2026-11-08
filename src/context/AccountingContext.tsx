@@ -4317,7 +4317,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
         bcvRate: rate, costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO'
       };
-      // Kardex-only imports are a logistics ledger: never inherit or create a journal-entry link from source data.\n      if (options.accountingMode === 'kardex-only') delete movement.journalEntryId;\n      const inventoryCode = product.inventoryAccountCode || getDefaultInventoryAccountCode(product.itemType);
+      // Kardex-only imports are a logistics ledger: never inherit or create a journal-entry link from source data.
+      if (options.accountingMode === 'kardex-only') delete movement.journalEntryId;
+      const inventoryCode = product.inventoryAccountCode || getDefaultInventoryAccountCode(product.itemType);
       const costCode = product.costOfSalesAccountCode || '5.1.1.01';
       const adjustmentCode = product.adjustmentAccountCode || '5.1.2.01';
       const inventoryAccount = accounts.find(a => a.code === inventoryCode && a.isMovement);
