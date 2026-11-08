@@ -511,6 +511,7 @@ app.whenReady().then(async () => {
         for (const [token, session] of sessions.entries()) {
           if (Number(session.id) === removedSeedId) sessions.delete(token);
         }
+        if (activeRendererSessionToken && !sessions.has(activeRendererSessionToken)) activeRendererSessionToken = null;
       }
       return { ok: true, seedReplaced: removedSeedId !== null };
     } catch (error) {
@@ -621,6 +622,7 @@ app.whenReady().then(async () => {
     db.prepare('DELETE FROM auth_users WHERE id=?').run(seed.id);
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('seed_admin_deleted', JSON.stringify({ by: actor.username }));
     for (const [k, v] of sessions.entries()) if (v.id === seed.id) sessions.delete(k);
+    if (activeRendererSessionToken && !sessions.has(activeRendererSessionToken)) activeRendererSessionToken = null;
     return { ok: true };
   });
 
@@ -872,6 +874,7 @@ app.whenReady().then(async () => {
       const status = licenseView();
       if (!status.authorized) {
         sessions.clear();
+      activeRendererSessionToken = null;
         db.prepare('DELETE FROM auth_sessions').run();
         BrowserWindow.getAllWindows().forEach(win => win.webContents.send('sicoven:license-status-changed', status));
       }
@@ -882,6 +885,7 @@ app.whenReady().then(async () => {
     const status = await revalidateLicense();
     if (!status.authorized) {
       sessions.clear();
+      activeRendererSessionToken = null;
       db.prepare('DELETE FROM auth_sessions').run();
       BrowserWindow.getAllWindows().forEach(win => win.webContents.send('sicoven:license-status-changed', status));
     }
