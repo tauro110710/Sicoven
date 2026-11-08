@@ -45,7 +45,7 @@ test('prevents duplicate journal creation and stale phase transitions', t => {
 test('requires a valid immutable backup path, checksum, and unique company list', t => {
   const { backup, hash, journal } = fixture(t);
   assert.throws(() => journal.create({ companyIds: ['company-a', 'company-a'], sourceBackupPath: backup, sourceBackupSha256: hash }), /journal|duplicados/i);
-  assert.throws(() => journal.create({ companyIds: ['company-a'], sourceBackupPath: backup, sourceBackupSha256: 'bad' }), /journal|incompleto/i);
+  assert.throws(() => journal.create({ companyIds: ['company-a'], sourceBackupPath: backup, sourceBackupSha256: 'bad' }), /SHA-256/i);
 });
 
 test('refuses to mark unknown companies or record completion outside staging', t => {
