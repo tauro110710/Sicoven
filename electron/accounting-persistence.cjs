@@ -602,13 +602,15 @@ db.exec(`
 `);
 }
 
-function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession }) {
+function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession, withDatabase = null }) {
   if (!ipcMain || typeof ipcMain.handle !== 'function' ||
-      typeof licenseView !== 'function' || typeof getActiveSession !== 'function') {
+      typeof licenseView !== 'function' || typeof getActiveSession !== 'function' ||
+      (withDatabase !== null && typeof withDatabase !== 'function')) {
     throw new Error('No se pudo registrar el puente de persistencia contable de SICOVEN.');
   }
-  initializeAccountingPersistenceSchema(db);
-  ipcMain.handle('sicoven:reopen-accounting-period', (_event, token, input) => {
+  if (!withDatabase) initializeAccountingPersistenceSchema(db);
+  const runWithDatabase = (token, operation) => withDatabase ? withDatabase(token, operation) : operation(db);
+  ipcMain.handle('sicoven:reopen-accounting-period', async (_event, token, input) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const actor = getActiveSession(token);
@@ -630,8 +632,9 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
         throw new Error('La nueva fecha de cierre no existe en el calendario.');
       }
     }
-    const reopen = db.transaction(() => {
-      const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    return runWithDatabase(token, activeDb => {
+    const reopen = activeDb.transaction(() => {
+      const row = activeDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
       if (!row) throw new Error('No existe un estado contable persistido para reabrir.');
       let state;
       try { state = JSON.parse(row.state_json); }
@@ -658,30 +661,31 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
       };
       const json = JSON.stringify(nextState);
       if (json.length > 50 * 1024 * 1024) throw new Error('El estado contable supera el límite permitido.');
-      db.prepare("UPDATE app_state SET state_json=?, updated_at=datetime('now') WHERE state_key='accounting'").run(json);
+      activeDb.prepare("UPDATE app_state SET state_json=?, updated_at=datetime('now') WHERE state_key='accounting'").run(json);
       const details = {
         reopeningId, companyId, companyName: String(company.name || ''),
         previousClosedThroughDate, reopenedThroughDate,
         reason, actor: { userId: actor.id, username: actor.username }
       };
-      db.prepare(`INSERT INTO period_reopenings
+      activeDb.prepare(`INSERT INTO period_reopenings
         (id,company_id,company_name,previous_closed_through_date,reopened_through_date,reason,actor_user_id,actor_username)
         VALUES(?,?,?,?,?,?,?,?)`)
         .run(reopeningId, companyId, String(company.name || ''), previousClosedThroughDate,
           reopenedThroughDate, reason, Number(actor.id), String(actor.username || ''));
-      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+      activeDb.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
         .run('accounting_period_reopened', JSON.stringify(details));
       return { ok: true, company: nextState.companies.find(item => String(item.id) === companyId), reopeningId };
     });
     return reopen();
+    });
   });
-  ipcMain.handle('sicoven:save-state', (_event, token, state) => {
+  ipcMain.handle('sicoven:save-state', async (_event, token, state) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const actor = getActiveSession(token);
     if (!actor) throw new Error('Sesión no válida. Inicie sesión para guardar datos contables.');
     if (!state || typeof state !== 'object' || Array.isArray(state)) throw new Error('Estado contable inválido');
-    return persistAccountingSnapshot(db, state, actor);
+    return runWithDatabase(token, activeDb => persistAccountingSnapshot(activeDb, state, actor));
   });
 }
 
