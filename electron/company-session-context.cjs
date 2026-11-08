@@ -43,9 +43,25 @@ function createCompanySessionContext({ runtime, operationContext, getActiveSessi
     // The operation context closes admission, drains queued writes and flushes
     // the previous tenant before publishing the new active database.
     const switched = await operationContext.switchCompany(companyId);
-    selectedByToken.clear();
-    selectedByToken.set(token, companyId);
-    return { ok: true, changed: Boolean(switched.changed), companyId };
+    try {
+      // A switch can wait for queued writes. Revalidate the credential, company
+      // state and authorization after that wait, before publishing the binding.
+      const current = requireSession(token);
+      const currentCompany = runtime.listCompanies().find(item =>
+        String(item.id) === companyId && String(item.status) === 'ACTIVE'
+      );
+      if (!currentCompany || await canAccessCompany(current.actor, currentCompany) !== true) {
+        throw new Error('La sesión o los permisos de empresa cambiaron durante el cambio de contexto.');
+      }
+      selectedByToken.clear();
+      selectedByToken.set(token, companyId);
+      return { ok: true, changed: Boolean(switched.changed), companyId };
+    } catch (error) {
+      // Never leave an unbound tenant active if authorization changed mid-switch.
+      try { await operationContext.clearActiveCompany(); } catch {}
+      selectedByToken.clear();
+      throw error;
+    }
   }
 
   function getSelectedCompanyId(tokenInput) {
