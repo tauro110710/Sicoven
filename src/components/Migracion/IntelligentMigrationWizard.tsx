@@ -654,6 +654,9 @@ const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fech
     });
     let importedSettlementCount=0;
     let skippedSettlementCount=0;
+    let importedDirectAdvanceCount=0;
+    let importedAdvanceSettlementCount=0;
+    const selectedAdvanceRows=advanceRows.filter(row=>selectedAdvanceIdsForBatch.includes(String(row.migrationrowid??'')));
     const createdDocuments: Array<ReturnType<typeof addSale> | ReturnType<typeof addPurchase>>=[];
     const createdDocumentIds: Record<string,string>={};
     await runAtomicInvoiceImportAndWait(()=>{
@@ -721,8 +724,8 @@ const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fech
      });
      importedAdvanceSettlementCount=addImportedSupplierAdvanceSettlements(supplierAdvanceSettlementDrafts,targetCompany.id).length;
     });
-    setSettlementPreview([]);setSelectedSettlementSourceRowIds([]);
-    setNotice((kind==='sales'?'Ventas':'Compras')+' importadas: '+prepared.length+' facturas. Liquidaciones contabilizadas: '+importedSettlementCount+'; omitidas por selección: '+skippedSettlementCount+'. SICOVEN generó los asientos seleccionados, actualizó CxC/CxP y SQLite confirmó el lote completo en una sola transacción.');
+    setSettlementPreview([]);setSelectedSettlementSourceRowIds([]);setSupplierAdvancePreview([]);setSelectedSupplierAdvanceSourceRowIds([]);
+    setNotice((kind==='sales'?'Ventas':'Compras')+' importadas: '+prepared.length+' facturas. Liquidaciones de factura: '+importedSettlementCount+'; omitidas: '+skippedSettlementCount+'. Anticipos directos: '+importedDirectAdvanceCount+'. Reembolsos/aplicaciones FIFO: '+importedAdvanceSettlementCount+'. Los asientos y saldos se confirmaron juntos en una sola transacción SQLite.');
     setSelected(old=>old.filter(id=>id!==kind));setConfirmed(false);
      setBusy(false);return;
    }
