@@ -91,13 +91,20 @@ export const InventoryMovementImport: React.FC<{ isOpen: boolean; onClose: () =>
     try {
       const sourceRows = await rowsFromFile(file);
       if (!sourceRows.length) throw new Error('No se encontraron filas de movimientos.');
-      const byCode = new Map(products.map(product => [normalize(product.code), product]));
-      const byName = new Map(products.map(product => [normalize(product.name), product]));
+      const byCode = new Map<string, typeof products>();
+      const byName = new Map<string, typeof products>();
+      products.forEach(product => {
+        byCode.set(normalize(product.code), [...(byCode.get(normalize(product.code)) ?? []), product]);
+        byName.set(normalize(product.name), [...(byName.get(normalize(product.name)) ?? []), product]);
+      });
       const result = sourceRows.map((row, index): PreparedRow => {
         const sourceProductId = String(valueAt(row, 'productId', 'productoId', 'idProducto') ?? '').trim();
         const code = String(valueAt(row, 'productCode', 'codigoProducto', 'codigo', 'sku', 'code') ?? '').trim();
         const name = String(valueAt(row, 'productName', 'nombreProducto', 'producto', 'nombre', 'descripcion') ?? '').trim();
-        const product = (code ? byCode.get(normalize(code)) : undefined) || (name ? byName.get(normalize(name)) : undefined) || (sourceProductId ? products.find(item => item.id === sourceProductId) : undefined);
+        const codeMatches = code ? byCode.get(normalize(code)) ?? [] : [];
+        const nameMatches = name ? byName.get(normalize(name)) ?? [] : [];
+        if (codeMatches.length > 1 || (!codeMatches.length && nameMatches.length > 1)) throw new Error('Fila ' + (index + 2) + ': el código o nombre coincide con varios artículos. Corrija el archivo para usar un código único.');
+        const product = codeMatches[0] || nameMatches[0] || (sourceProductId ? products.find(item => item.id === sourceProductId) : undefined);
         if (!product) throw new Error('Fila ' + (index + 2) + ': no se encontró un artículo único por código o nombre. Código: ' + (code || '—') + '.');
         const rawType = normalize(valueAt(row, 'type', 'movementType', 'tipo', 'tipoMovimiento'));
         const rawConcept = normalize(valueAt(row, 'concept', 'concepto', 'operacion', 'operation'));
@@ -113,6 +120,7 @@ export const InventoryMovementImport: React.FC<{ isOpen: boolean; onClose: () =>
         if (!isValidIsoDate(date)) throw new Error('Fila ' + (index + 2) + ': fecha inválida; use AAAA-MM-DD o DD/MM/AAAA.');
         const documentRef = String(valueAt(row, 'documentRef', 'referencia', 'documento', 'numeroDocumento', 'documentNumber') ?? '').trim();
         if (!documentRef) throw new Error('Fila ' + (index + 2) + ': la referencia documental es obligatoria.');
+        if (['DEVOLUCION_COMPRA', 'DEVOLUCION_CLIENTE', 'INVENTARIO_INICIAL'].includes(concept)) throw new Error('Fila ' + (index + 2) + ': devoluciones y saldos iniciales requieren sus flujos vinculados; no se importan como movimientos aislados.');
         const quantityRaw = valueAt(row, 'quantity', 'cantidad', 'qty');
         const quantity = quantityRaw === undefined ? 0 : parseMigrationNumber(quantityRaw);
         const balanceRaw = valueAt(row, 'balanceQty', 'existenciaFinal', 'stockFinal', 'saldoCantidad');
@@ -145,8 +153,6 @@ export const InventoryMovementImport: React.FC<{ isOpen: boolean; onClose: () =>
     if (!prepared.length || busy) return;
     setBusy(true); setError(''); setNotice('');
     try {
-      const { sourceRow: _sourceRow, productLabel: _productLabel, ...first } = prepared[0];
-      void first;
       const drafts = prepared.map(({ sourceRow: _row, productLabel: _label, ...draft }) => draft);
       const count = importInventoryMovements(drafts, currentCompany.id, { accountingMode: 'kardex-only' });
       await waitForPersistence();
