@@ -4354,6 +4354,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const effectiveUnitCost = row.type === 'ENTRADA' ? requestedCost + landedCostsBs / Math.max(Number(row.quantity), 1e-8) : requestedCost;
       const isAdjustment = row.type === 'AJUSTE';
       const targetStock = Number(row.balanceQty);
+      const expectedBalanceQty = row.expectedBalanceQty === undefined ? undefined : Number(row.expectedBalanceQty);
       const quantity = isAdjustment ? Math.abs(targetStock - product.currentStock) : Number(row.quantity);
       const validation = validateInventoryMovement({
         date: row.date, quantity: isAdjustment ? Math.max(quantity,0.00000001) : Number(row.quantity),
@@ -4397,8 +4398,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       const totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
       const newAverageUsd = newAverageBs / rate;
+      if (expectedBalanceQty !== undefined && (!Number.isFinite(expectedBalanceQty) || Math.abs(expectedBalanceQty - newStock) > 0.000001)) {
+        throw new Error('Fila ' + (index + 2) + ': la existencia final declarada (' + expectedBalanceQty + ') no coincide con la existencia calculada (' + newStock + ') para ' + product.code + '. Revise el orden y los movimientos previos.');
+      }
+      const { expectedBalanceQty: _expectedBalanceQty, ...movementDraft } = row;
       const movement: InventoryMovement = {
-        ...row, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
+        ...movementDraft, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
         companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: unitCostBs / rate, additionalLandedCostsBs: landedCostsBs,
         totalCostBs, totalCostUsd, balanceQty: newStock,
         balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
