@@ -60,6 +60,7 @@ function fixture(t, overrides = {}) {
     exec() {}
     prepare(sql) {
       if (sql.startsWith('INSERT INTO sicoven_database_meta')) return { run: (...values) => this.meta.push(values) };
+      if (sql.includes('SELECT meta_value FROM sicoven_database_meta')) return { get: () => ({ meta_value: path.basename(path.dirname(this.file)) }) };
       if (sql.includes('COUNT(*) AS count FROM audit_events')) return { get: () => ({ count: 0 }) };
       if (sql.includes('COUNT(*) AS count FROM supporting_documents')) return { get: () => ({ count: 0 }) };
       throw new Error('Consulta inesperada en base preparada: ' + sql);
