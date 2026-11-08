@@ -974,7 +974,7 @@ function validateFixedAssetLedger(previousState, nextState) {
 
   for (const asset of assets) {
     if (!companies.has(String(asset.companyId)) || !String(asset.assetCode || '').trim() ||
-        !String(asset.description || '').trim() || !String(asset.category || '').trim() ||
+        !String(asset.description || '').trim() || !String(asset.category || '').trim() || /TERRENO/i.test(String(asset.category || '')) ||
         !isValidIsoDate(asset.acquisitionDate) || !isValidIsoDate(asset.serviceDate) ||
         asset.serviceDate < asset.acquisitionDate ||
         !Number.isInteger(asset.usefulLifeMonths) || asset.usefulLifeMonths <= 0 ||
