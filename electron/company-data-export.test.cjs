@@ -74,3 +74,18 @@ test('exports JSON with only the selected company and attached document bytes', 
   assert.equal(payload.supportingDocuments.length, 1);
   assert.equal(Buffer.from(payload.supportingDocuments[0].contentBase64, 'base64').toString(), bytes.toString());
 });
+
+test('refuses company handover when any tenant table contains another company data', async t => {
+  const { root, runtime, company } = fixture(t);
+  await runtime.createCompany(company);
+  const db = runtime.getCompanyDatabase(company.id);
+  db.exec('CREATE TABLE export_isolation_probe (id TEXT PRIMARY KEY, company_id TEXT NOT NULL, payload TEXT NOT NULL)');
+  db.prepare('INSERT INTO export_isolation_probe(id,company_id,payload) VALUES(?,?,?)')
+    .run('foreign-row', 'another-company', 'must-not-leak');
+  const destination = path.join(root, 'must-not-export.json');
+  await assert.rejects(
+    exportCompanyData({ db, company, userDataDir: root, destination, format: 'json' }),
+    /pertenecientes a otra empresa/
+  );
+  assert.equal(fs.existsSync(destination), false);
+});
