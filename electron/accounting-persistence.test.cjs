@@ -455,3 +455,76 @@ test('una venta universal con líneas requiere salidas de Kardex y asientos de c
     db.close();
   }
 });
+
+test('party master rows persist, update, remove and roll back atomically with the accounting snapshot', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE app_state (
+      state_key TEXT PRIMARY KEY, state_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL,
+      details_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE party_masters (
+      id TEXT PRIMARY KEY, company_id TEXT NOT NULL,
+      party_type TEXT NOT NULL CHECK(party_type IN ('CUSTOMER','SUPPLIER')),
+      name TEXT NOT NULL, fiscal_id TEXT, fiscal_id_type TEXT,
+      normalized_fiscal_id TEXT, address TEXT, phone TEXT, email TEXT,
+      active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(company_id, party_type, normalized_fiscal_id)
+    );
+  `);
+  try {
+    const initial = {
+      ...emptyState(),
+      customers: [{
+        id: 'customer-1', companyId: 'company-1', name: 'Cliente Uno',
+        fiscalIdType: 'RIF', fiscalId: 'J-12345678-9', active: true
+      }],
+      suppliers: [{
+        id: 'supplier-1', companyId: 'company-1', name: 'Proveedor Uno',
+        fiscalIdType: 'RIF', fiscalId: 'J-12345678-9', active: true
+      }]
+    };
+    assert.equal(persistAccountingSnapshot(db, initial).ok, true);
+    let rows = db.prepare('SELECT id, party_type, normalized_fiscal_id, active FROM party_masters ORDER BY id').all();
+    assert.deepEqual(rows, [
+      { id: 'customer-1', party_type: 'CUSTOMER', normalized_fiscal_id: 'J123456789', active: 1 },
+      { id: 'supplier-1', party_type: 'SUPPLIER', normalized_fiscal_id: 'J123456789', active: 1 }
+    ]);
+
+    const updated = {
+      ...initial,
+      customers: [{ ...initial.customers[0], name: 'Cliente Actualizado' }],
+      suppliers: [{ ...initial.suppliers[0], active: false }]
+    };
+    assert.equal(persistAccountingSnapshot(db, updated).ok, true);
+    assert.equal(db.prepare("SELECT name FROM party_masters WHERE id='customer-1'").get().name, 'Cliente Actualizado');
+    assert.equal(db.prepare("SELECT active FROM party_masters WHERE id='supplier-1'").get().active, 0);
+
+    const invalid = {
+      ...updated,
+      customers: [
+        updated.customers[0],
+        { id: 'customer-2', companyId: 'company-1', name: 'Cliente Duplicado', fiscalIdType: 'RIF', fiscalId: 'J 12345678-9' }
+      ]
+    };
+    assert.throws(() => persistAccountingSnapshot(db, invalid), /identificadores fiscales duplicados/);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM party_masters').get().n, 2);
+    const saved = JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
+    assert.equal(saved.customers.length, 1);
+    assert.equal(saved.customers[0].name, 'Cliente Actualizado');
+
+    const removed = { ...updated, customers: [] };
+    assert.equal(persistAccountingSnapshot(db, removed).ok, true);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM party_masters WHERE party_type='CUSTOMER'").get().n, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM party_masters WHERE party_type='SUPPLIER'").get().n, 1);
+  } finally {
+    db.close();
+  }
+});
+

@@ -10,6 +10,8 @@ import {
   SaleRecord,
   InventoryProduct,
   InventoryMovement,
+  Customer,
+  Supplier,
   InventoryMovementImportDraft,
   VatRetentionVoucher,
   VatWithholdingDeclaration,
@@ -162,13 +164,21 @@ interface AccountingContextType {
   runAtomicInvoiceImportAndWait: <T>(operation: () => T) => Promise<T>;
   addImportedCreditSettlements: (drafts: UniversalCreditSettlementDraft[], documents: Array<SaleRecord | PurchaseRecord>, targetCompanyId?: string) => CreditSettlement[];
 
+  // Maestros independientes por empresa
+  customers: Customer[];
+  addCustomer: (customer: Omit<Customer, 'id' | 'companyId'>, targetCompanyId?: string) => Customer;
+  importCustomers: (customers: Array<Omit<Customer, 'id' | 'companyId'>>, targetCompanyId?: string) => Promise<number>;
+  suppliers: Supplier[];
+  addSupplier: (supplier: Omit<Supplier, 'id' | 'companyId'>, targetCompanyId?: string) => Supplier;
+  importSuppliers: (suppliers: Array<Omit<Supplier, 'id' | 'companyId'>>, targetCompanyId?: string) => Promise<number>;
+
   // Inventario
   products: InventoryProduct[];
   addProduct: (product: Omit<InventoryProduct, 'id' | 'companyId'>) => InventoryProduct;
   getCompanyInventoryProducts: (companyId: string) => InventoryProduct[];
   getCompanyInventoryMovements: (companyId: string) => InventoryMovement[];
   importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[], targetCompanyId?: string) => Promise<number>;
-  importInventoryMovements: (movements: InventoryMovementImportDraft[], targetCompanyId?: string) => number;
+  importInventoryMovements: (movements: InventoryMovementImportDraft[], targetCompanyId?: string, options?: { accountingMode?: 'post' | 'kardex-only' }) => number;
   executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => Promise<InventoryMovement[]>;
   updateProduct: (product: InventoryProduct, reason: string, workpaperNote: string) => Promise<void>;
   movements: InventoryMovement[];
@@ -295,6 +305,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       return [];
     }
   });
+
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
   const [movements, setMovements] = useState<InventoryMovement[]>(() => {
     try {
@@ -1019,7 +1032,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const bankOutgoingLockRef = useRef(createBankOutgoingLock());
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
-    vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency
+    customers, suppliers, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency
   };
 
   useEffect(() => {
@@ -1049,6 +1062,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             if (Array.isArray(saved.purchases)) setPurchases(saved.purchases as PurchaseRecord[]);
             if (Array.isArray(saved.sales)) setSales(saved.sales as SaleRecord[]);
             if (Array.isArray(saved.products)) setProducts(saved.products as InventoryProduct[]);
+            if (Array.isArray(saved.customers)) setCustomers(saved.customers as Customer[]);
+            if (Array.isArray(saved.suppliers)) setSuppliers(saved.suppliers as Supplier[]);
             if (Array.isArray(saved.movements)) setMovements(saved.movements as InventoryMovement[]);
             if (Array.isArray(saved.vatVouchers)) setVatVouchers(saved.vatVouchers as VatRetentionVoucher[]);
             if (Array.isArray(saved.vatWithholdingDeclarations)) setVatWithholdingDeclarations(saved.vatWithholdingDeclarations as VatWithholdingDeclaration[]);
@@ -1071,6 +1086,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             setPurchases([]);
             setSales([]);
             setProducts([]);
+            setCustomers([]);
+            setSuppliers([]);
             setMovements([]);
             setVatVouchers([]);
             setVatWithholdingDeclarations([]);
@@ -1093,6 +1110,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               purchases: [],
               sales: [],
               products: [],
+              customers: [],
+              suppliers: [],
               movements: [],
               vatVouchers: [],
               vatWithholdingDeclarations: [],
@@ -1166,6 +1185,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             setPurchases(confirmed.purchases || []);
             setSales(confirmed.sales || []);
             setProducts(confirmed.products || []);
+            setCustomers(confirmed.customers || []);
+            setSuppliers(confirmed.suppliers || []);
             setMovements(confirmed.movements || []);
             setVatVouchers(confirmed.vatVouchers || []);
             setVatWithholdingDeclarations(confirmed.vatWithholdingDeclarations || []);
@@ -1196,6 +1217,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       localStorage.setItem(`${STORAGE_KEY}_purchases`, JSON.stringify(purchases));
       localStorage.setItem(`${STORAGE_KEY}_sales`, JSON.stringify(sales));
       localStorage.setItem(`${STORAGE_KEY}_products`, JSON.stringify(products));
+      localStorage.setItem(`${STORAGE_KEY}_customers`, JSON.stringify(customers));
+      localStorage.setItem(`${STORAGE_KEY}_suppliers`, JSON.stringify(suppliers));
       localStorage.setItem(`${STORAGE_KEY}_movements`, JSON.stringify(movements));
       localStorage.setItem(`${STORAGE_KEY}_vatVouchers`, JSON.stringify(vatVouchers));
       localStorage.setItem(`${STORAGE_KEY}_vatWithholdingDeclarations`, JSON.stringify(vatWithholdingDeclarations));
@@ -1209,7 +1232,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       console.error('Error guardando datos locales de desarrollo:', normalized);
       waitersForSnapshot.forEach(waiter => waiter.reject(normalized));
     }
-  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency]);
+  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, customers, suppliers, movements, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency]);
 
   const addCompany = (comp: Omit<Company, 'id'>): Company => {
     assertSQLitePersistenceReady('Registrar la empresa');
@@ -4096,6 +4119,64 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
+  // Maestros independientes: no dependen de que exista una factura de venta o compra.
+  const normalizePartyKey = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleUpperCase().replace(/[^A-Z0-9]/g, '');
+  const validatePartyDraft = (draft: { name?: string; fiscalId?: string; phone?: string }, collection: Array<Customer | Supplier>, companyId: string, excludeId?: string) => {
+    const name = String(draft.name || '').trim();
+    if (!name) throw new Error('El nombre o razón social del maestro es obligatorio.');
+    const fiscalId = normalizePartyKey(draft.fiscalId);
+    const phone = normalizePartyKey(draft.phone);
+    const nameKey = normalizePartyKey(name);
+    const duplicate = collection.find(item => item.companyId === companyId && item.id !== excludeId && (
+      (fiscalId && normalizePartyKey(item.fiscalId) === fiscalId) ||
+      (!fiscalId && normalizePartyKey(item.name) === nameKey && normalizePartyKey(item.phone) === phone)
+    ));
+    if (duplicate) throw new Error('Ya existe un maestro con el mismo identificador fiscal o nombre/teléfono en esta empresa: ' + duplicate.name + '.');
+    return { name, fiscalId: String(draft.fiscalId || '').trim() || undefined };
+  };
+  const addCustomer = (draft: Omit<Customer, 'id' | 'companyId'>, targetCompanyId: string = currentCompany.id): Customer => {
+    assertSQLitePersistenceReady('Registrar el cliente maestro');
+    if (!companies.some(company => company.id === targetCompanyId)) throw new Error('La empresa destino del cliente no existe.');
+    const validated = validatePartyDraft(draft, customers, targetCompanyId);
+    const item: Customer = { ...draft, ...validated, id: 'customer-' + Date.now() + '-' + Math.floor(Math.random() * 100000), companyId: targetCompanyId, active: draft.active !== false };
+    setCustomers(previous => [...previous, item]);
+    return item;
+  };
+  const addSupplier = (draft: Omit<Supplier, 'id' | 'companyId'>, targetCompanyId: string = currentCompany.id): Supplier => {
+    assertSQLitePersistenceReady('Registrar el proveedor maestro');
+    if (!companies.some(company => company.id === targetCompanyId)) throw new Error('La empresa destino del proveedor no existe.');
+    const validated = validatePartyDraft(draft, suppliers, targetCompanyId);
+    const item: Supplier = { ...draft, ...validated, id: 'supplier-' + Date.now() + '-' + Math.floor(Math.random() * 100000), companyId: targetCompanyId, active: draft.active !== false };
+    setSuppliers(previous => [...previous, item]);
+    return item;
+  };
+  const importCustomers = async (drafts: Array<Omit<Customer, 'id' | 'companyId'>>, targetCompanyId: string = currentCompany.id): Promise<number> => {
+    assertSQLitePersistenceReady('Importar maestros de clientes');
+    if (!companies.some(company => company.id === targetCompanyId)) throw new Error('La empresa destino de clientes no existe.');
+    if (!Array.isArray(drafts) || drafts.length === 0) throw new Error('No hay clientes seleccionados para importar.');
+    const batch: Customer[] = [];
+    for (const draft of drafts) {
+      const validated = validatePartyDraft(draft, [...customers, ...batch], targetCompanyId);
+      batch.push({ ...draft, ...validated, id: 'customer-import-' + Date.now() + '-' + batch.length + '-' + Math.floor(Math.random() * 100000), companyId: targetCompanyId, active: draft.active !== false });
+    }
+    setCustomers(previous => [...previous, ...batch]);
+    await waitForPersistence();
+    return batch.length;
+  };
+  const importSuppliers = async (drafts: Array<Omit<Supplier, 'id' | 'companyId'>>, targetCompanyId: string = currentCompany.id): Promise<number> => {
+    assertSQLitePersistenceReady('Importar maestros de proveedores');
+    if (!companies.some(company => company.id === targetCompanyId)) throw new Error('La empresa destino de proveedores no existe.');
+    if (!Array.isArray(drafts) || drafts.length === 0) throw new Error('No hay proveedores seleccionados para importar.');
+    const batch: Supplier[] = [];
+    for (const draft of drafts) {
+      const validated = validatePartyDraft(draft, [...suppliers, ...batch], targetCompanyId);
+      batch.push({ ...draft, ...validated, id: 'supplier-import-' + Date.now() + '-' + batch.length + '-' + Math.floor(Math.random() * 100000), companyId: targetCompanyId, active: draft.active !== false });
+    }
+    setSuppliers(previous => [...previous, ...batch]);
+    await waitForPersistence();
+    return batch.length;
+  };
+
   // Inventario contable: cada movimiento valida existencias y conserva la tasa histórica.
   const addProduct = (prodData: Omit<InventoryProduct, 'id' | 'companyId'>): InventoryProduct => {
     assertSQLitePersistenceReady('Registrar el artículo de inventario');
@@ -4118,6 +4199,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const newProd: InventoryProduct = {
       ...prodData,
       code,
+      priceCurrency: prodData.priceCurrency || 'BS',
+      price1: Number(prodData.price1 ?? (prodData.priceCurrency === 'USD' ? prodData.salesPriceUsd : prodData.salesPriceBs) ?? 0),
+      price2: prodData.price2 ?? null,
+      price3: prodData.price3 ?? null,
+      price4: prodData.price4 ?? null,
       currentStock: initialQuantity,
       avgCostBs: initialCostBs,
       avgCostUsd: rate > 0 ? initialCostBs / rate : 0,
@@ -4224,7 +4310,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       const product: InventoryProduct = {
         ...row, id: 'prod-import-' + Date.now() + '-' + prepared.length + '-' + Math.floor(Math.random() * 100000),
-        companyId: targetCompanyId, code, name, currentStock: quantity, avgCostBs: unitCostBs,
+        companyId: targetCompanyId, code, name,
+        priceCurrency: row.priceCurrency || 'BS',
+        price1: Number(row.price1 ?? (row.priceCurrency === 'USD' ? row.salesPriceUsd : row.salesPriceBs) ?? 0),
+        price2: row.price2 ?? null, price3: row.price3 ?? null, price4: row.price4 ?? null,
+        currentStock: quantity, avgCostBs: unitCostBs,
         avgCostUsd: rate > 0 ? unitCostBs / rate : 0, lastCostBs, lastCostUsd,
         inventoryAccountCode: row.inventoryAccountCode || getDefaultInventoryAccountCode(row.itemType),
         costOfSalesAccountCode: row.costOfSalesAccountCode || '5.1.1.01',
@@ -4277,7 +4367,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
 
-  const importInventoryMovements = (rows: InventoryMovementImportDraft[], targetCompanyId: string = currentCompany.id): number => {
+  const importInventoryMovements = (rows: InventoryMovementImportDraft[], targetCompanyId: string = currentCompany.id, options: { accountingMode?: 'post' | 'kardex-only' } = {}): number => {
+    assertSQLitePersistenceReady('Importar movimientos de inventario');
     const targetCompany = companies.find(company => company.id === targetCompanyId);
     if (!targetCompany) throw new Error('La empresa destino de los movimientos no existe en SICOVEN.');
     if (!Array.isArray(rows) || rows.length === 0) throw new Error('El archivo no contiene movimientos para importar.');
@@ -4310,6 +4401,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const effectiveUnitCost = row.type === 'ENTRADA' ? requestedCost + landedCostsBs / Math.max(Number(row.quantity), 1e-8) : requestedCost;
       const isAdjustment = row.type === 'AJUSTE';
       const targetStock = Number(row.balanceQty);
+      const expectedBalanceQty = row.expectedBalanceQty === undefined ? undefined : Number(row.expectedBalanceQty);
       const quantity = isAdjustment ? Math.abs(targetStock - product.currentStock) : Number(row.quantity);
       const validation = validateInventoryMovement({
         date: row.date, quantity: isAdjustment ? Math.max(quantity,0.00000001) : Number(row.quantity),
@@ -4353,14 +4445,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       const totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
       const newAverageUsd = newAverageBs / rate;
+      if (expectedBalanceQty !== undefined && (!Number.isFinite(expectedBalanceQty) || Math.abs(expectedBalanceQty - newStock) > 0.000001)) {
+        throw new Error('Fila ' + (index + 2) + ': la existencia final declarada (' + expectedBalanceQty + ') no coincide con la existencia calculada (' + newStock + ') para ' + product.code + '. Revise el orden y los movimientos previos.');
+      }
+      const { expectedBalanceQty: _expectedBalanceQty, ...movementDraft } = row;
       const movement: InventoryMovement = {
-        ...row, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
+        ...movementDraft, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
         companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: unitCostBs / rate, additionalLandedCostsBs: landedCostsBs,
         totalCostBs, totalCostUsd, balanceQty: newStock,
         balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
         balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
         bcvRate: rate, costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO'
       };
+      // Kardex-only imports are a logistics ledger: never inherit or create a journal-entry link from source data.
+      if (options.accountingMode === 'kardex-only') delete movement.journalEntryId;
       const inventoryCode = product.inventoryAccountCode || getDefaultInventoryAccountCode(product.itemType);
       const costCode = product.costOfSalesAccountCode || '5.1.1.01';
       const adjustmentCode = product.adjustmentAccountCode || '5.1.2.01';
@@ -4372,7 +4470,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const isCustomerReturn = row.type === 'ENTRADA' && row.concept === 'DEVOLUCION_CLIENTE';
       const isSupplierReturn = row.type === 'SALIDA' && row.concept === 'DEVOLUCION_COMPRA';
       const positiveAdjustment = row.type === 'AJUSTE' && targetStock > product.currentStock;
-      if (isSale || isLoss || isCustomerReturn || isSupplierReturn || isAdjustment) {
+      if (options.accountingMode !== 'kardex-only' && (isSale || isLoss || isCustomerReturn || isSupplierReturn || isAdjustment)) {
         if (!inventoryAccount) throw new Error('Cuenta de inventario inválida para ' + product.code + '.');
         const payableAccount = accounts.find(a => a.code === '2.1.1.01' && a.isMovement);
         if ((isSale || isCustomerReturn) && !costAccount) throw new Error('Cuenta de costo de ventas inválida para ' + product.code + '.');
@@ -4421,9 +4519,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!updated.code.trim() || !updated.name.trim() || !updated.category.trim() || !updated.unit.trim()) {
       throw new Error('Código, descripción, categoría y unidad son obligatorios.');
     }
-    if (![updated.minStock, updated.salesPriceBs, updated.salesPriceUsd].every(value => Number.isFinite(Number(value)) && Number(value) >= 0)) {
+    if (![updated.minStock, updated.salesPriceBs, updated.salesPriceUsd, updated.price1 ?? 0, updated.price2 ?? 0, updated.price3 ?? 0, updated.price4 ?? 0].every(value => Number.isFinite(Number(value)) && Number(value) >= 0)) {
       throw new Error('Stock mínimo y precios deben ser importes numéricos no negativos.');
     }
+    if (updated.priceCurrency !== undefined && updated.priceCurrency !== 'USD' && updated.priceCurrency !== 'BS') throw new Error('La moneda de referencia de precios debe ser USD o BS.');
     if (!['GENERAL_16', 'REDUCIDA_8', 'EXENTO', 'EXONERADO'].includes(updated.vatTreatment || 'GENERAL_16')) {
       throw new Error('El tratamiento IVA del artículo no es válido.');
     }
@@ -5736,6 +5835,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setPurchases([]);
     setSales([]);
     setProducts([]);
+    setCustomers([]);
+    setSuppliers([]);
     setMovements([]);
     setVatVouchers([]);
     setVatWithholdingDeclarations([]);
@@ -5796,6 +5897,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       purchases,
       sales,
       products,
+      customers,
+      suppliers,
       movements,
       vatVouchers,
       vatWithholdingDeclarations,
@@ -5821,6 +5924,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const protectedCollections: Array<[string, string, Array<{ id?: string }>]> = [
       ['empresas', 'companies', companies], ['asientos', 'journalEntries', journalEntries], ['compras', 'purchases', purchases],
       ['ventas', 'sales', sales], ['artículos', 'products', products],
+      ['clientes maestros', 'customers', customers], ['proveedores maestros', 'suppliers', suppliers],
       ['movimientos de inventario', 'movements', movements], ['comprobantes IVA', 'vatVouchers', vatVouchers],
       ['declaraciones IVA', 'vatWithholdingDeclarations', vatWithholdingDeclarations],
       ['eventos de declaraciones IVA', 'vatWithholdingDeclarationEvents', vatWithholdingDeclarationEvents],
@@ -5888,6 +5992,27 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         companyIds.add(c.id);
         return false;
       })) throw new Error('El respaldo contiene empresas inválidas o IDs de empresa duplicados.');
+      const customers: Customer[] = data?.customers === undefined ? [] : data.customers;
+      const suppliers: Supplier[] = data?.suppliers === undefined ? [] : data.suppliers;
+      if (!Array.isArray(customers) || !Array.isArray(suppliers)) throw new Error('El respaldo contiene maestros de clientes o proveedores inválidos.');
+      const partyIds = new Set<string>();
+      const partyFiscalKeys = new Set<string>();
+      for (const [partyType, rows] of [['CUSTOMER', customers], ['SUPPLIER', suppliers]] as const) {
+        for (const row of rows) {
+          if (!row || typeof row.id !== 'string' || !row.id.trim() || partyIds.has(row.id) ||
+              typeof row.companyId !== 'string' || !companyIds.has(row.companyId) ||
+              typeof row.name !== 'string' || !row.name.trim()) {
+            throw new Error('El respaldo contiene un maestro con ID, empresa o nombre inválido o duplicado.');
+          }
+          partyIds.add(row.id);
+          const fiscalId = String(row.fiscalId || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+          if (fiscalId) {
+            const key = row.companyId + '|' + partyType + '|' + fiscalId;
+            if (partyFiscalKeys.has(key)) throw new Error('El respaldo contiene identificaciones fiscales duplicadas en los maestros.');
+            partyFiscalKeys.add(key);
+          }
+        }
+      }
       const vatWithholdingDeclarations: VatWithholdingDeclaration[] = data?.vatWithholdingDeclarations === undefined ? [] : data.vatWithholdingDeclarations;
       const vatWithholdingDeclarationEvents: VatWithholdingDeclarationEvent[] = data?.vatWithholdingDeclarationEvents === undefined ? [] : data.vatWithholdingDeclarationEvents;
       if (!Array.isArray(vatWithholdingDeclarations) || !Array.isArray(vatWithholdingDeclarationEvents)) {
@@ -6159,6 +6284,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setPurchases(data.purchases);
       setSales(data.sales);
       setProducts(data.products);
+      setCustomers(Array.isArray(data.customers) ? data.customers : []);
+      setSuppliers(Array.isArray(data.suppliers) ? data.suppliers : []);
       setMovements(data.movements);
       setVatVouchers(data.vatVouchers);
       setVatWithholdingDeclarations(vatWithholdingDeclarations);
@@ -6245,6 +6372,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         runAtomicInvoiceImport,
         runAtomicInvoiceImportAndWait,
         addImportedCreditSettlements,
+        customers: customers.filter(item => item.companyId === currentCompany.id),
+        addCustomer,
+        importCustomers,
+        suppliers: suppliers.filter(item => item.companyId === currentCompany.id),
+        addSupplier,
+        importSuppliers,
         products: products.filter(p => p.companyId === currentCompany.id),
         addProduct,
         getCompanyInventoryProducts,

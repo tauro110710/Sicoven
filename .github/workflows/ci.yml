@@ -24,7 +24,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Install dependencies
+      - name: Install dependencies (skip unused Electron binary on Linux)
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
         run: npm install --no-audit --no-fund
       - name: Run automated tests
         run: npm test
