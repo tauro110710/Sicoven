@@ -4073,7 +4073,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   // Maestros independientes: no dependen de que exista una factura de venta o compra.
-  const normalizePartyKey = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLocaleUpperCase().replace(/[^A-Z0-9]/g, '');
+  const normalizePartyKey = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleUpperCase().replace(/[^A-Z0-9]/g, '');
   const validatePartyDraft = (draft: { name?: string; fiscalId?: string; phone?: string }, collection: Array<Customer | Supplier>, companyId: string, excludeId?: string) => {
     const name = String(draft.name || '').trim();
     if (!name) throw new Error('El nombre o razón social del maestro es obligatorio.');
