@@ -103,12 +103,15 @@ function validateAsset(asset: FixedAsset): { serviceDate: Date; lifeEnd: Date } 
   if (!Number.isInteger(asset.usefulLifeMonths) || asset.usefulLifeMonths <= 0) {
     throw new Error('La vida útil debe ser un número entero de meses mayor que cero.');
   }
-  const values = [asset.acquisitionCostBs, asset.acquisitionCostUsd, asset.residualValueBs, asset.residualValueUsd];
-  if (!values.every(value => Number.isFinite(value) && value >= 0)) {
-    throw new Error('Los costos y valores residuales del activo deben ser finitos y no negativos.');
+  const values = [asset.acquisitionCostBs, asset.acquisitionCostUsd, asset.acquisitionBcvRate, asset.residualValueBs, asset.residualValueUsd];
+  if (!values.every(value => Number.isFinite(value) && value >= 0) || asset.acquisitionBcvRate <= 0) {
+    throw new Error('Los costos y valores residuales deben ser finitos y no negativos, y la tasa histórica de adquisición debe ser mayor que cero.');
   }
   if (asset.residualValueBs > asset.acquisitionCostBs || asset.residualValueUsd > asset.acquisitionCostUsd) {
     throw new Error('El valor residual no puede superar el costo de adquisición.');
+  }
+  if (asset.residualValueBs === asset.acquisitionCostBs || asset.residualValueUsd === asset.acquisitionCostUsd) {
+    throw new Error('El activo debe tener un importe depreciable positivo en ambas monedas para registrar asientos duales.');
   }
   if (asset.depreciationMethod !== 'STRAIGHT_LINE' || !Number.isInteger(asset.sourceJournalLineIndex) || asset.sourceJournalLineIndex < 0) {
     throw new Error('El método de depreciación o el vínculo a la línea contable de origen no es válido.');
