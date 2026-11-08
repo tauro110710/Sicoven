@@ -46,13 +46,13 @@ function snapshot(companies, overrides = {}) {
   return { ...empty, ...overrides };
 }
 
-test('saves and reloads each company in its own SQLite file', t => {
+test('saves and reloads each company in its own SQLite file', async t => {
   const { manager } = fixture(t);
   const companyA = { id: 'company-a', name: 'Empresa A', rif: 'J-12345678-9' };
   const first = snapshot([companyA], {
     sales: [{ id: 'sale-a', companyId: 'company-a', totalAmountBs: 100 }]
   });
-  assert.deepEqual(saveTenantAccountingSnapshot(manager, first), {
+  assert.deepEqual(await saveTenantAccountingSnapshot(manager, first), {
     ok: true, savedCompanyIds: ['company-a'], unchanged: false
   });
   const loaded = loadTenantAccountingSnapshot(manager, 'company-a');
@@ -63,7 +63,7 @@ test('saves and reloads each company in its own SQLite file', t => {
   const both = snapshot([companyA, companyB], {
     sales: [{ id: 'sale-a', companyId: 'company-a', totalAmountBs: 100 }]
   });
-  assert.deepEqual(saveTenantAccountingSnapshot(manager, both), {
+  assert.deepEqual(await saveTenantAccountingSnapshot(manager, both), {
     ok: true, savedCompanyIds: ['company-b'], unchanged: false
   });
   const combined = loadTenantAccountingSnapshot(manager, 'company-b');
@@ -72,32 +72,32 @@ test('saves and reloads each company in its own SQLite file', t => {
   assert.equal(manager.getDatabasePath('company-a') !== manager.getDatabasePath('company-b'), true);
 });
 
-test('rejects partial multi-company updates before writing either database', t => {
+test('coordinates shared chart updates across company databases', async t => {
   const { manager } = fixture(t);
   const a = { id: 'company-a', name: 'Empresa A', rif: 'J-12345678-9' };
   const b = { id: 'company-b', name: 'Empresa B', rif: 'J-98765432-1' };
   const initial = snapshot([a]);
-  saveTenantAccountingSnapshot(manager, initial);
-  saveTenantAccountingSnapshot(manager, snapshot([a, b]));
+  await saveTenantAccountingSnapshot(manager, initial);
+  await saveTenantAccountingSnapshot(manager, snapshot([a, b]));
   const before = loadTenantAccountingSnapshot(manager);
   const changed = snapshot([a, b], {
     accounts: [{ code: '1.1.1.02', name: 'Banco' }]
   });
-  assert.throws(() => saveTenantAccountingSnapshot(manager, changed), /varias empresas|parámetros globales/i);
+  await saveTenantAccountingSnapshot(manager, changed);
   const after = loadTenantAccountingSnapshot(manager);
-  assert.deepEqual(after.accounts, before.accounts);
+  assert.deepEqual(after.accounts, changed.accounts);
 });
 
-test('does not silently remove a registered company from the accounting snapshot', t => {
+test('does not silently remove a registered company from the accounting snapshot', async t => {
   const { manager } = fixture(t);
   const a = { id: 'company-a', name: 'Empresa A', rif: 'J-12345678-9' };
   const b = { id: 'company-b', name: 'Empresa B', rif: 'J-98765432-1' };
-  saveTenantAccountingSnapshot(manager, snapshot([a]));
+  await saveTenantAccountingSnapshot(manager, snapshot([a]));
   saveTenantAccountingSnapshot(manager, snapshot([a, b]));
   assert.throws(() => saveTenantAccountingSnapshot(manager, snapshot([a])), /falta en el snapshot/i);
 });
 
-test('blocks tenant snapshots that contain data owned by another company', t => {
+test('blocks tenant snapshots that contain data owned by another company', async t => {
   const { manager } = fixture(t);
   const a = { id: 'company-a', name: 'Empresa A', rif: 'J-12345678-9' };
   const invalid = snapshot([a], {
@@ -106,7 +106,26 @@ test('blocks tenant snapshots that contain data owned by another company', t => 
   assert.throws(() => saveTenantAccountingSnapshot(manager, invalid), /empresa propietaria válida/i);
 });
 
-test('returns null only when the local registry contains no active companies', t => {
+test('returns null only when the local registry contains no active companies', async t => {
   const { manager } = fixture(t);
   assert.equal(loadTenantAccountingSnapshot(manager), null);
+});
+
+test('rolls back every company database if one database rejects a coordinated write', async t => {
+  const { manager } = fixture(t);
+  const a = { id: 'company-a', name: 'Empresa A', rif: 'J-12345678-9' };
+  const b = { id: 'company-b', name: 'Empresa B', rif: 'J-98765432-1' };
+  await saveTenantAccountingSnapshot(manager, snapshot([a]));
+  await saveTenantAccountingSnapshot(manager, snapshot([a, b]));
+  const before = loadTenantAccountingSnapshot(manager);
+  const dbB = manager.openCompany('company-b');
+  dbB.exec(`CREATE TRIGGER reject_tenant_write BEFORE UPDATE ON app_state
+    BEGIN SELECT RAISE(ABORT, 'injected tenant persistence failure'); END;`);
+  const changed = snapshot([a, b], {
+    accounts: [{ code: '1.1.1.02', name: 'Banco' }]
+  });
+  await assert.rejects(() => saveTenantAccountingSnapshot(manager, changed), /injected tenant persistence failure/);
+  const after = loadTenantAccountingSnapshot(manager);
+  assert.deepEqual(after.accounts, before.accounts);
+  assert.deepEqual(after.companies.map(company => company.id).sort(), ['company-a', 'company-b']);
 });
