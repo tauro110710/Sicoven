@@ -145,7 +145,9 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   if(!posvenBackup||!backupPayload)return [] as Array<{name:string;count:number;objects:number;invalid:number;fields:string[];identityField:string;missingIdentity:number;duplicateIdentity:number;numericSummaries:Array<{field:string;count:number;sum:number}>;referenceFields:string[];relationshipHints:Array<{field:string;targetCollection:string}>;target:string;mode:string;reason:string;canImport:boolean}>;
   try{
    const root=JSON.parse(backupPayload) as {data?:Record<string,unknown>};
-   return extractUniversalJsonCollections(root.data??{}).map(collection=>{
+   const collections=extractUniversalJsonCollections(root.data??{});
+   const collectionPaths=collections.map(collection=>collection.path);
+   return collections.map(collection=>{
     const name=collection.path;
     const objects=collection.rows as Row[];
     const fields=Array.from(new Set(objects.slice(0,5).flatMap(row=>Object.keys(row)))).slice(0,12);
@@ -183,7 +185,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
       /factura|invoice|ventaid|saleid|documento/.test(fieldKey)?/venta|sale|factura|invoice|compra|purchase/i:
       /asiento|journal|entrynumber/.test(fieldKey)?/diario|journal|asiento/i:null;
      if(!targetPattern)return [];
-     const candidates=Object.keys(root.data??{}).filter(candidate=>candidate!==name&&targetPattern.test(candidate));
+     const candidates=collectionPaths.filter(candidate=>candidate!==name&&targetPattern.test(candidate));
      return candidates.slice(0,2).map(targetCollection=>({field,targetCollection}));
     }).slice(0,10);
     let target='Sin destino identificado';let mode='No importar automáticamente';let reason='La colección requiere revisión de esquema y significado antes de asignar datos contables.';let canImport=false;
