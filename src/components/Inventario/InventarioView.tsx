@@ -77,7 +77,7 @@ export const InventarioView: React.FC = () => {
           nextHistory = appendDailyInventoryBcvRate(nextHistory, {
             rate: dailyRate.rate,
             effectiveDate: dailyRate.effectiveDate,
-            fetchedAt: dailyRate.updatedAt,
+            fetchedAt: dailyRate.fetchedAt,
             source: dailyRate.sourceUrl,
             provider: dailyRate.provider,
             mode: 'AUTOMATIC'
@@ -86,14 +86,14 @@ export const InventarioView: React.FC = () => {
         nextHistory = appendDailyInventoryBcvRate(nextHistory, {
           rate: result.rate,
           effectiveDate: result.effectiveDate,
-          fetchedAt: result.updatedAt,
+          fetchedAt: result.fetchedAt,
           source: result.sourceUrl,
           provider: result.provider,
           mode: 'AUTOMATIC'
         });
         const savedForDate = resolveInventoryBcvRate(nextHistory, result.effectiveDate);
         const effectiveRate = savedForDate?.rate ?? result.rate;
-        const effectiveFetchedAt = savedForDate?.fetchedAt ?? result.updatedAt;
+        const effectiveFetchedAt = savedForDate?.fetchedAt ?? result.fetchedAt;
         const needsSave = company.inventoryBcvRate !== effectiveRate ||
           company.inventoryBcvRateEffectiveDate !== result.effectiveDate ||
           company.inventoryBcvRateFetchedAt !== effectiveFetchedAt ||
