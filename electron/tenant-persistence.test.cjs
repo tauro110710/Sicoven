@@ -72,6 +72,17 @@ test('saves and reloads each company in its own SQLite file', async t => {
   assert.equal(manager.getDatabasePath('company-a') !== manager.getDatabasePath('company-b'), true);
 });
 
+test('keeps the local company registry synchronized with audited company metadata', async t => {
+  const { manager } = fixture(t);
+  const original = { id: 'company-a', name: 'Empresa anterior', rif: 'J-12345678-9' };
+  await saveTenantAccountingSnapshot(manager, snapshot([original]));
+  const corrected = { ...original, name: 'Empresa rectificada', rif: 'J-98765432-1' };
+  await saveTenantAccountingSnapshot(manager, snapshot([corrected]));
+  const record = manager.listCompanies().find(item => item.id === 'company-a');
+  assert.equal(record.name, corrected.name);
+  assert.equal(record.rif, corrected.rif);
+});
+
 test('coordinates shared chart updates across company databases', async t => {
   const { manager } = fixture(t);
   const a = { id: 'company-a', name: 'Empresa A', rif: 'J-12345678-9' };
