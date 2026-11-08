@@ -40,7 +40,7 @@ assert.match(persistence, /ipcMain\.handle\('sicoven:save-state', \(_event, toke
 assert.match(persistence, /if \(!licensing\.authorized\)/);
 assert.match(persistence, /const actor = getActiveSession\(token\)/);
 assert.match(persistence, /if \(!actor\)/);
-assert.match(persistence, /persistAccountingSnapshot\\(activeDb, state, actor\\)/);
+assert.match(persistence, /persistAccountingSnapshot\(activeDb, state, actor\)/);
 
 assert.match(main, /function getActiveSession/);
 assert.match(main, /expiry <= Date/);
