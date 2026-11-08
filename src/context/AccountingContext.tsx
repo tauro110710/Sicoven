@@ -5931,6 +5931,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       )) {
         throw new Error('El respaldo contiene eventos fiscales ISLR incompletos o inválidos.');
       }
+      const requiredCollections = [
+        'companies', 'accounts', 'journalEntries', 'purchases', 'sales', 'products',
+        'movements', 'vatVouchers', 'islrVouchers', 'bankAccounts', 'bankStatementMovements'
+      ] as const;
+      if (!data || typeof data !== 'object' || requiredCollections.some(key => !Array.isArray(data[key]))) {
+        throw new Error('El respaldo está incompleto o no contiene todas las colecciones requeridas.');
+      }
+      const companyIds = new Set<string>();
+      if (data.companies.length === 0 || data.companies.some((c: any) => {
+        if (!c || typeof c.id !== 'string' || !c.id.trim() || typeof c.rif !== 'string' || typeof c.name !== 'string' ||
+            companyIds.has(c.id)) return true;
+        companyIds.add(c.id);
+        return false;
+      })) throw new Error('El respaldo contiene empresas inválidas o IDs de empresa duplicados.');
       const customers: Customer[] = data?.customers === undefined ? [] : data.customers;
       const suppliers: Supplier[] = data?.suppliers === undefined ? [] : data.suppliers;
       if (!Array.isArray(customers) || !Array.isArray(suppliers)) throw new Error('El respaldo contiene maestros de clientes o proveedores inválidos.');
@@ -5952,20 +5966,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           }
         }
       }
-      const requiredCollections = [
-        'companies', 'accounts', 'journalEntries', 'purchases', 'sales', 'products',
-        'movements', 'vatVouchers', 'islrVouchers', 'bankAccounts', 'bankStatementMovements'
-      ] as const;
-      if (!data || typeof data !== 'object' || requiredCollections.some(key => !Array.isArray(data[key]))) {
-        throw new Error('El respaldo está incompleto o no contiene todas las colecciones requeridas.');
-      }
-      const companyIds = new Set<string>();
-      if (data.companies.length === 0 || data.companies.some((c: any) => {
-        if (!c || typeof c.id !== 'string' || !c.id.trim() || typeof c.rif !== 'string' || typeof c.name !== 'string' ||
-            companyIds.has(c.id)) return true;
-        companyIds.add(c.id);
-        return false;
-      })) throw new Error('El respaldo contiene empresas inválidas o IDs de empresa duplicados.');
       const vatWithholdingDeclarations: VatWithholdingDeclaration[] = data?.vatWithholdingDeclarations === undefined ? [] : data.vatWithholdingDeclarations;
       const vatWithholdingDeclarationEvents: VatWithholdingDeclarationEvent[] = data?.vatWithholdingDeclarationEvents === undefined ? [] : data.vatWithholdingDeclarationEvents;
       if (!Array.isArray(vatWithholdingDeclarations) || !Array.isArray(vatWithholdingDeclarationEvents)) {
