@@ -131,7 +131,7 @@ function collectCompanyDatabases(root) {
   });
 }
 
-function copyCompanyDatabaseTree(source, destination) {
+async function copyCompanyDatabaseTree(source, destination) {
   if (!lstatIfExists(source)) return [];
   assertDirectory(source, 'El directorio de bases por empresa');
   fs.mkdirSync(destination, { recursive: false });
@@ -147,8 +147,15 @@ function copyCompanyDatabaseTree(source, destination) {
     if (entries.some(name => name !== 'accounting.sqlite')) throw new Error('La carpeta de una empresa contiene archivos inesperados.');
     const from = path.join(fromDir, 'accounting.sqlite'), to = path.join(toDir, 'accounting.sqlite');
     assertRegularFile(from, 'La base SQLite de ' + entry.name);
-    fs.copyFileSync(from, to, fs.constants.COPYFILE_EXCL);
-    if (sha256File(from) !== sha256File(to)) throw new Error('La copia SQLite de ' + entry.name + ' no coincide.');
+    const tenantDb = new Database(from);
+    try { await tenantDb.backup(to); }
+    finally { if (tenantDb.open) tenantDb.close(); }
+    const check = new Database(to, { readonly: true, fileMustExist: true });
+    try {
+      assertSqliteIntegrity(check);
+      const storedId = String(check.prepare(\"SELECT meta_value FROM sicoven_database_meta WHERE meta_key='company_id'\").get()?.meta_value || '');
+      if (storedId !== entry.name) throw new Error('La copia de seguridad perdió la identidad de ' + entry.name + '.');
+    } finally { check.close(); }
     manifest.push({ path: COMPANIES_DIR + '/' + entry.name + '/accounting.sqlite', companyId: entry.name, size: fs.statSync(to).size, sha256: sha256File(to) });
   }
   return manifest;
@@ -211,7 +218,7 @@ async function createBackup({ db, userDataDir, destination, allowInternalDestina
         if (sha256File(to) !== item.sha256) throw new Error('Falló la verificación de un documento durante el respaldo: ' + item.path);
       }
     }
-    const companyDatabases = copyCompanyDatabaseTree(path.join(root, COMPANIES_DIR), path.join(staging, COMPANIES_DIR));
+    const companyDatabases = await copyCompanyDatabaseTree(path.join(root, COMPANIES_DIR), path.join(staging, COMPANIES_DIR));
     const manifest = {
       format: FORMAT, application: 'SICOVEN', createdAt: new Date().toISOString(),
       database: { file: DB_FILE, size: fs.statSync(path.join(staging, DB_FILE)).size, sha256: sha256File(path.join(staging, DB_FILE)) },
