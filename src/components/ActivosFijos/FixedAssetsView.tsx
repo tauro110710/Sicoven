@@ -114,6 +114,14 @@ export const FixedAssetsView: React.FC = () => {
       setError('No hay una línea de adquisición capitalizada disponible para vincular.');
       return;
     }
+    if (!accumulatedAccounts.some(account => account.code === accumulatedAccountCode)) {
+      setError('Falta crear o seleccionar la cuenta correctora de depreciación acumulada correspondiente en el Catálogo de Cuentas.');
+      return;
+    }
+    if (!expenseAccounts.some(account => account.code === expenseAccountCode)) {
+      setError('Falta seleccionar una cuenta válida de gasto de depreciación en el Catálogo de Cuentas.');
+      return;
+    }
     const parsedResidualBs = parseAmount(residualBs);
     const parsedResidualUsd = parseAmount(residualUsd);
     const life = Number(usefulLifeMonths);
@@ -237,6 +245,7 @@ export const FixedAssetsView: React.FC = () => {
               <select value={accumulatedAccountCode} onChange={event => setAccumulatedAccountCode(event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm">
                 {accumulatedAccounts.map(account => <option key={account.code} value={account.code}>{account.code} · {account.name}</option>)}
               </select>
+              {!accumulatedAccounts.some(account => account.code === accumulatedAccountCode) && <span className="mt-1 block text-amber-700">La cuenta correctora requerida no está creada en esta empresa. Créela en el Catálogo de Cuentas antes de registrar el activo.</span>}
             </label>
             <label className="text-xs font-medium text-slate-700">Cuenta de gasto de depreciación
               <select value={expenseAccountCode} onChange={event => setExpenseAccountCode(event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm">
@@ -248,7 +257,7 @@ export const FixedAssetsView: React.FC = () => {
               <span className="ml-2">Tasa histórica: <strong>{selectedSource?.entry.bcvRate || '—'}</strong></span>
             </div>
             <div className="md:col-span-2">
-              <button type="button" disabled={saving || !selectedSource} onClick={submitAsset} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+              <button type="button" disabled={saving || !selectedSource || !accumulatedAccounts.some(account => account.code === accumulatedAccountCode) || !expenseAccounts.some(account => account.code === expenseAccountCode)} onClick={submitAsset} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 {saving ? 'Registrando…' : 'Registrar activo'}
               </button>
             </div>
