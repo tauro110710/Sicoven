@@ -457,16 +457,30 @@ test('SQLite: persiste anticipos directos y reembolsos con asignación FIFO y as
     ).get().state_json;
     db.exec(`CREATE TRIGGER reject_advance_snapshot BEFORE UPDATE ON app_state
       BEGIN SELECT RAISE(ABORT, 'injected supplier advance persistence failure'); END;`);
+    const secondAdvanceJournal = {
+      ...advanceJournal,
+      id: 'advance-journal-2', entryNumber: 3, date: '2026-11-07',
+      referenceDoc: 'TRF-ADV-002',
+      items: [
+        { accountCode: '1.1.2.03', accountName: 'Anticipos a proveedores', debitBs: 500, creditBs: 0, debitUsd: 5, creditUsd: 0 },
+        { accountCode: '1.1.1.03', accountName: 'Banco Bs', debitBs: 0, creditBs: 500, debitUsd: 0, creditUsd: 5 }
+      ]
+    };
+    const secondDirectAdvance = {
+      ...state.supplierDirectAdvances[0],
+      id: 'advance-direct-2', date: '2026-11-07',
+      amountUsd: 5, bookValueBs: 500, paidAmount: 500,
+      reference: 'TRF-ADV-002', support: 'SOP-ADV-002',
+      journalEntryId: secondAdvanceJournal.id
+    };
     const failedState = {
       ...state,
-      supplierAdvanceSettlements: [{
-        ...state.supplierAdvanceSettlements[0],
-        amountUsd: 3
-      }]
+      journalEntries: [...state.journalEntries, secondAdvanceJournal],
+      supplierDirectAdvances: [...state.supplierDirectAdvances, secondDirectAdvance]
     };
     assert.throws(
       () => persistAccountingSnapshot(db, failedState, { id: 1, username: 'admin', role: 'admin' }),
-      /injected supplier advance persistence failure|no coincide con el importe liquidado/
+      /injected supplier advance persistence failure/
     );
     assert.equal(
       db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json,
