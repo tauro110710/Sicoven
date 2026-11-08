@@ -323,6 +323,12 @@ export interface SaleInventoryLine {
   quantity: number;
   unitPriceBs: number;
   unitPriceUsd?: number;
+  /** Nivel comercial elegido en el documento, cuando se origina desde catálogo. */
+  priceLevel?: 1 | 2 | 3 | 4;
+  priceCurrency?: 'USD' | 'BS';
+  priceValue?: number;
+  /** Tasa de referencia conservada al fijar el precio del renglón. */
+  priceBcvRate?: number;
   netAmountBs: number;
   taxRate: number;
   vatAmountBs: number;
@@ -418,7 +424,7 @@ export interface InventoryProduct {
   lastCostBs: number;
   lastCostUsd: number;
   /** Niveles comerciales normalizados; los niveles no usados permanecen null. */
-  price1: number;
+  price1?: number;
   price2?: number | null;
   price3?: number | null;
   price4?: number | null;
