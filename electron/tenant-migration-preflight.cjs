@@ -2,6 +2,12 @@
 
 const { GLOBAL_REFERENCE_TABLES, COMPANY_TABLES, CHILD_TABLES } = require('./tenant-relational-migration.cjs');
 
+const REQUIRED_RELATIONAL_TABLES = Object.freeze([
+  ...GLOBAL_REFERENCE_TABLES,
+  ...COMPANY_TABLES.map(item => item.table),
+  ...CHILD_TABLES.map(item => item.table)
+]);
+
 const CONTROL_TABLES = Object.freeze([
   'auth_users',
   'auth_sessions',
@@ -36,8 +42,11 @@ function inspectLegacyDatabase(db) {
     if (!category) unknownTables.push(name);
     else classified.push({ name, category });
   }
-  const missingRequired = ['app_state', 'audit_events', ...CONTROL_TABLES.filter(name => name !== 'company_database_registry')]
-    .filter(name => !tables.includes(name));
+  const missingRequired = [
+    'app_state', 'audit_events',
+    ...CONTROL_TABLES.filter(name => name !== 'company_database_registry'),
+    ...REQUIRED_RELATIONAL_TABLES
+  ].filter(name => !tables.includes(name));
   const stateRows = tables.includes('app_state')
     ? db.prepare('SELECT state_key,state_json,updated_at FROM app_state ORDER BY state_key').all()
     : [];
@@ -84,4 +93,4 @@ function inspectLegacyDatabase(db) {
   });
 }
 
-module.exports = { CONTROL_TABLES, SNAPSHOT_TABLES, AUDIT_TABLES, inspectLegacyDatabase };
+module.exports = { CONTROL_TABLES, SNAPSHOT_TABLES, AUDIT_TABLES, REQUIRED_RELATIONAL_TABLES, inspectLegacyDatabase };
