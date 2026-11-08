@@ -311,9 +311,9 @@ export const InventarioView: React.FC = () => {
                           )}
                         </td>
                         <td className="py-2.5 px-4 text-right font-mono font-semibold text-emerald-700">
-                          {formatBs(prod.salesPriceBs)}
+                          {prod.priceCurrency === 'USD' ? formatUsd(Number(prod.price1 ?? prod.salesPriceUsd)) : formatBs(Number(prod.price1 ?? prod.salesPriceBs))}
                           {true && (
-                            <span className="block text-[10px] text-emerald-600/70">{formatUsd(prod.salesPriceUsd)}</span>
+                            <span className="block text-[10px] text-emerald-600/70">{prod.priceCurrency === 'USD' ? formatBs(Number(prod.price1 ?? prod.salesPriceUsd) * Number(currentCompany.bcvRate || 0)) : (Number(currentCompany.bcvRate || 0) > 0 ? formatUsd(Number(prod.price1 ?? prod.salesPriceBs) / Number(currentCompany.bcvRate)) : 'USD —')}</span>
                           )}
                         </td>
                         <td className="py-2.5 px-4 text-right font-mono font-black text-slate-900 bg-slate-50/50">
