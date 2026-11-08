@@ -46,6 +46,25 @@ export interface CreditBalance {
   creditedBySupplierAdvancesBs?: number;
 }
 
+/** Read-only FX exposure calculation; never posts or changes the original credit document. */
+export interface CreditFxExposure {
+  valuationBs: number;
+  differenceBs: number;
+}
+export function calculateCreditFxExposure(
+  outstandingUsd: number,
+  bookValueBs: number,
+  valuationRate: number
+): CreditFxExposure {
+  if (![outstandingUsd, bookValueBs, valuationRate].every(Number.isFinite) ||
+      outstandingUsd < 0 || bookValueBs < 0 || valuationRate <= 0) {
+    throw new Error('Los importes y la tasa del análisis de exposición deben ser finitos y no negativos; la tasa debe ser mayor que cero.');
+  }
+  const roundBs = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+  const valuationBs = roundBs(outstandingUsd * valuationRate);
+  return { valuationBs, differenceBs: roundBs(valuationBs - bookValueBs) };
+}
+
 export interface CreditDocumentAdjustmentRecord {
   netReceivableAdjustmentUsd?: number;
   netReceivableAdjustmentBs?: number;
