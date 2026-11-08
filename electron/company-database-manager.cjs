@@ -201,6 +201,8 @@ function createCompanyDatabaseManager({
   function registerCompany(companyInput) {
     const company = normalizeCompanyMetadata(companyInput);
     if (selectRecord.get(company.companyId)) throw new Error('La empresa ya tiene un registro de base SQLite.');
+    const duplicateRif = controlDb.prepare('SELECT company_id FROM ' + REGISTRY_TABLE + ' WHERE upper(rif)=?').get(company.rif);
+    if (duplicateRif) throw new Error('El RIF ya está asociado a otra empresa del registro local.');
     const relativePath = expectedRelativePath(company.companyId);
     const filePath = path.resolve(root, relativePath);
     fs.mkdirSync(companiesRoot, { recursive: true });
