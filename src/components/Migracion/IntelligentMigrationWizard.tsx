@@ -38,6 +38,7 @@ const MODULES: ModuleInfo[] = [
 ];
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const isPosvenProductCollection = isUniversalProductCollectionPath;
+const isSingleInventoryMasterSelection = (ids: ModuleId[]) => ids.length === 1 && ids[0] === 'inventory';
 const parseCsv = (text: string): Row[] => parseDelimitedRecords(text);
 const scalar = (v: unknown): unknown => {
  if (v && typeof v === 'object' && 'text' in v) return (v as {text:unknown}).text;
@@ -467,7 +468,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
    const missingInventoryFields = requiredInventoryFields.filter(group => !group.some(key => available.has(norm(key)))).map(group => group[0]);
    if (missingInventoryFields.length) { setError('No se puede migrar Inventario: faltan campos esenciales '+missingInventoryFields.join(', ')+'. No se supondrán existencias, costos ni precios en cero.'); return; }
   }
-  if(selected.length!==1 || selected[0]!=='inventory'){setError('El migrador universal solo admite maestros: productos/inventario, clientes y proveedores. Las demás colecciones son de diagnóstico y no se importan.');return;}
+  if(!isSingleInventoryMasterSelection(selected)){setError('El migrador universal solo admite maestros: productos/inventario, clientes y proveedores. Las demás colecciones son de diagnóstico y no se importan.');return;}
   setBusy(true);
   try{
    if(selected[0]==='sales'||selected[0]==='purchases'){
