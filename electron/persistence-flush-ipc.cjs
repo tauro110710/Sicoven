@@ -17,6 +17,38 @@ function registerPersistenceFlushIpc({
 
   const pending = new Map();
 
+  async function requestFlush(sender, token) {
+    const licensing = licenseView();
+    if (!licensing?.authorized) throw new Error(licensing?.message || 'Licencia no autorizada.');
+    if (!getActiveSession(token)) throw new Error('Sesión no válida para confirmar la persistencia local.');
+
+    const senderUrl = String(sender?.getURL?.() || '');
+    if (!senderUrl.startsWith('file://') && !senderUrl.startsWith('http://localhost:') && !senderUrl.startsWith('http://127.0.0.1:')) {
+      throw new Error('Origen no autorizado para confirmar la persistencia local.');
+    }
+
+    const window = getWindow(sender);
+    if (!window || window.isDestroyed?.() || sender.isDestroyed?.()) {
+      throw new Error('La ventana de SICOVEN no está disponible para confirmar la persistencia.');
+    }
+
+    const requestId = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pending.delete(requestId);
+        reject(new Error('SICOVEN no recibió confirmación del renderer; se canceló el cambio para proteger los datos.'));
+      }, timeoutMs);
+      pending.set(requestId, { sender, resolve, reject, timer });
+      try {
+        sender.send('sicoven:persistence-flush-request', { requestId });
+      } catch (error) {
+        clearTimeout(timer);
+        pending.delete(requestId);
+        reject(error instanceof Error ? error : new Error('No se pudo solicitar la confirmación de persistencia.'));
+      }
+    });
+  }
+
   const onAcknowledgement = (event, acknowledgement) => {
     const requestId = String(acknowledgement?.requestId || '');
     const request = pending.get(requestId);
@@ -33,39 +65,10 @@ function registerPersistenceFlushIpc({
   };
 
   ipcMain.on('sicoven:persistence-flush-ack', onAcknowledgement);
-  ipcMain.handle('sicoven:persistence-flush', async (event, token) => {
-    const licensing = licenseView();
-    if (!licensing?.authorized) throw new Error(licensing?.message || 'Licencia no autorizada.');
-    if (!getActiveSession(token)) throw new Error('Sesión no válida para confirmar la persistencia local.');
-
-    const senderUrl = String(event.sender.getURL?.() || '');
-    if (!senderUrl.startsWith('file://') && !senderUrl.startsWith('http://localhost:') && !senderUrl.startsWith('http://127.0.0.1:')) {
-      throw new Error('Origen no autorizado para confirmar la persistencia local.');
-    }
-
-    const window = getWindow(event.sender);
-    if (!window || window.isDestroyed?.() || event.sender.isDestroyed?.()) {
-      throw new Error('La ventana de SICOVEN no está disponible para confirmar la persistencia.');
-    }
-
-    const requestId = crypto.randomUUID();
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        pending.delete(requestId);
-        reject(new Error('SICOVEN no recibió confirmación del renderer; se canceló el cambio para proteger los datos.'));
-      }, timeoutMs);
-      pending.set(requestId, { sender: event.sender, resolve, reject, timer });
-      try {
-        event.sender.send('sicoven:persistence-flush-request', { requestId });
-      } catch (error) {
-        clearTimeout(timer);
-        pending.delete(requestId);
-        reject(error instanceof Error ? error : new Error('No se pudo solicitar la confirmación de persistencia.'));
-      }
-    });
-  });
+  ipcMain.handle('sicoven:persistence-flush', (event, token) => requestFlush(event.sender, token));
 
   return Object.freeze({
+    requestFlush,
     dispose() {
       ipcMain.removeListener?.('sicoven:persistence-flush-ack', onAcknowledgement);
       ipcMain.removeHandler?.('sicoven:persistence-flush');
