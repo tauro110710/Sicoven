@@ -4,6 +4,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const sessions = new Map();
+let activeRendererSessionToken = null;
 const LICENSE_API = 'https://crm-sicoven.vercel.app/api/activations';
 const LICENSE_PRODUCT_CODE = 'SICOVEN_DESKTOP';
 const TRIAL_DURATION_HOURS = 120;
@@ -451,6 +452,7 @@ app.whenReady().then(async () => {
     const status = await revalidateLicense();
     if (!status.authorized) {
       sessions.clear();
+      activeRendererSessionToken = null;
       db.prepare('DELETE FROM auth_sessions').run();
       BrowserWindow.getAllWindows().forEach(win => win.webContents.send('sicoven:license-status-changed', status));
     }
@@ -538,6 +540,7 @@ app.whenReady().then(async () => {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     db.prepare('INSERT INTO auth_sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(tokenHash, user.id, expiresAt);
     sessions.set(token, { id: user.id, username: user.username, role: user.role, expiresAt });
+    activeRendererSessionToken = token;
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('login_success', JSON.stringify({ username: user.username }));
     return { ok: true, token, user: { username: user.username, role: user.role, isSeed: Boolean(user.is_seed) } };
   });
@@ -553,12 +556,14 @@ app.whenReady().then(async () => {
       return { ok: false, message: 'Sesión expirada. Inicie sesión nuevamente.' };
     }
     sessions.set(token, { id: row.id, username: row.username, role: row.role, expiresAt: row.expires_at });
+    activeRendererSessionToken = token;
     return { ok: true, token, user: { username: row.username, role: row.role, isSeed: Boolean(row.is_seed) } };
   });
 
   ipcMain.handle('sicoven:auth-logout', (_event, token) => {
     const value = String(token || '');
     sessions.delete(value);
+    if (activeRendererSessionToken === value) activeRendererSessionToken = null;
     if (/^[a-f0-9]{64}$/.test(value)) {
       const tokenHash = crypto.createHash('sha256').update(value).digest('hex');
       db.prepare('DELETE FROM auth_sessions WHERE token_hash=?').run(tokenHash);
@@ -838,7 +843,7 @@ app.whenReady().then(async () => {
     getWindow: () => BrowserWindow.getFocusedWindow() });
 
   registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession });
-  registerPersistenceFlushIpc({ ipcMain, licenseView, getActiveSession, getWindow: sender => BrowserWindow.fromWebContents(sender) });
+  const persistenceFlushBridge = registerPersistenceFlushIpc({ ipcMain, licenseView, getActiveSession, getWindow: sender => BrowserWindow.fromWebContents(sender) });
   registerTenantMigrationPreflightIpc({ ipcMain, db, licenseView, getActiveSession });
   registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession });
   registerInflationClassificationIpc({ ipcMain, db, licenseView, getActiveSession });
