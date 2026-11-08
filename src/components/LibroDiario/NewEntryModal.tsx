@@ -95,6 +95,22 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
     }
   ]);
 
+  // Si la tasa cambia después de capturar los importes, recalcular los equivalentes
+  // sin alterar los importes originales en Bs. ni redondear cada renglón a centavos.
+  useEffect(() => {
+    if (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0) return;
+    setItems(prev => {
+      let changed = false;
+      const next = prev.map(item => {
+        const debitUsd = convertBsToUsdAmount(Number(item.debitBs) || 0, parsedBcvRate);
+        const creditUsd = convertBsToUsdAmount(Number(item.creditBs) || 0, parsedBcvRate);
+        if (debitUsd !== item.debitUsd || creditUsd !== item.creditUsd) changed = true;
+        return { ...item, debitUsd, creditUsd };
+      });
+      return changed ? next : prev;
+    });
+  }, [parsedBcvRate]);
+
   if (!isOpen) return null;
 
   const handleAccountChange = (index: number, code: string) => {
@@ -147,22 +163,6 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
       )
     );
   };
-
-  // Si la tasa cambia después de capturar los importes, recalcular los equivalentes
-  // sin alterar los importes originales en Bs. ni redondear cada renglón a centavos.
-  useEffect(() => {
-    if (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0) return;
-    setItems(prev => {
-      let changed = false;
-      const next = prev.map(item => {
-        const debitUsd = convertBsToUsdAmount(Number(item.debitBs) || 0, parsedBcvRate);
-        const creditUsd = convertBsToUsdAmount(Number(item.creditBs) || 0, parsedBcvRate);
-        if (debitUsd !== item.debitUsd || creditUsd !== item.creditUsd) changed = true;
-        return { ...item, debitUsd, creditUsd };
-      });
-      return changed ? next : prev;
-    });
-  }, [parsedBcvRate]);
 
   const addRow = () => {
     const defaultAcc = movementAccounts[0];
