@@ -143,8 +143,8 @@ function inspectTenantMigrationRecovery(options) {
     allPrepared,
     allRegistered,
     canFinalize,
-    requiresManualRecovery: record.phase === 'ROLLBACK_REQUIRED' || record.phase === 'FAILED' ||
-      !backup.valid || !allPrepared || (record.phase === 'REGISTERING' && !allRegistered)
+    requiresManualRecovery: !backup.valid || !allPrepared || !allRegistered ||
+      (record.phase !== 'COMMITTED' && !canFinalize)
   });
 }
 
