@@ -2,6 +2,45 @@ const crypto = require('node:crypto');
 const { validateAccountingSnapshot } = require('./accounting-integrity.cjs');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
 
+function syncPartyMasterRows(db, state) {
+  if (!Array.isArray(state.customers) && !Array.isArray(state.suppliers)) return;
+  const companies = new Set((Array.isArray(state.companies) ? state.companies : []).map(company => String(company.id)));
+  const rows = [
+    ...(Array.isArray(state.customers) ? state.customers.map(item => ({ ...item, partyType: 'CUSTOMER' })) : []),
+    ...(Array.isArray(state.suppliers) ? state.suppliers.map(item => ({ ...item, partyType: 'SUPPLIER' })) : [])
+  ];
+  const ids = new Set();
+  const fiscalKeys = new Set();
+  const prepared = rows.map(item => {
+    const id = String(item.id || '').trim();
+    const companyId = String(item.companyId || '').trim();
+    const name = String(item.name || '').trim();
+    const fiscalId = String(item.fiscalId || '').trim();
+    const normalizedFiscalId = fiscalId.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!id || !companyId || !companies.has(companyId) || !name) throw new Error('Un maestro de cliente/proveedor tiene ID, empresa o nombre inválido; se canceló la persistencia.');
+    if (!['CUSTOMER', 'SUPPLIER'].includes(item.partyType)) throw new Error('Tipo de maestro no reconocido.');
+    if (ids.has(id)) throw new Error('Hay identificadores duplicados entre maestros de clientes y proveedores.');
+    ids.add(id);
+    if (normalizedFiscalId) { const key = companyId + '|' + item.partyType + '|' + normalizedFiscalId; if (fiscalKeys.has(key)) throw new Error('Hay identificadores fiscales duplicados en los maestros de la empresa.'); fiscalKeys.add(key); }
+    return { id, companyId, partyType: item.partyType, name, fiscalId: fiscalId || null, fiscalIdType: item.fiscalIdType || null, normalizedFiscalId: normalizedFiscalId || null, address: String(item.address || '').trim() || null, phone: String(item.phone || '').trim() || null, email: String(item.email || '').trim() || null, active: item.active === false ? 0 : 1 };
+  });
+  const nextIds = new Set(prepared.map(row => row.id));
+  const existingIds = db.prepare('SELECT id FROM party_masters').all();
+  const remove = db.prepare('DELETE FROM party_masters WHERE id=?');
+  for (const existing of existingIds) {
+    if (!nextIds.has(String(existing.id))) remove.run(String(existing.id));
+  }
+  const insert = db.prepare(`INSERT INTO party_masters
+    (id, company_id, party_type, name, fiscal_id, fiscal_id_type, normalized_fiscal_id, address, phone, email, active)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(id) DO UPDATE SET
+      company_id=excluded.company_id, party_type=excluded.party_type, name=excluded.name,
+      fiscal_id=excluded.fiscal_id, fiscal_id_type=excluded.fiscal_id_type,
+      normalized_fiscal_id=excluded.normalized_fiscal_id, address=excluded.address,
+      phone=excluded.phone, email=excluded.email, active=excluded.active,
+      updated_at=datetime('now')`);
+  for (const row of prepared) insert.run(row.id, row.companyId, row.partyType, row.name, row.fiscalId, row.fiscalIdType, row.normalizedFiscalId, row.address, row.phone, row.email, row.active);
+}
 function persistAccountingSnapshot(db, state, actor = null) {
   const json = JSON.stringify(state);
   if (json.length > 50 * 1024 * 1024) throw new Error('El respaldo supera el límite permitido');
@@ -406,6 +445,7 @@ function persistAccountingSnapshot(db, state, actor = null) {
         }));
       }
     }
+    syncPartyMasterRows(db, state);
     db.prepare(`INSERT INTO app_state(state_key,state_json,updated_at) VALUES(?,?,datetime('now'))
       ON CONFLICT(state_key) DO UPDATE SET state_json=excluded.state_json, updated_at=excluded.updated_at`)
       .run('accounting', json);
@@ -437,6 +477,23 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
     CREATE TRIGGER IF NOT EXISTS accounting_exercise_links_no_delete
       BEFORE DELETE ON accounting_exercise_links
       BEGIN SELECT RAISE(ABORT, 'accounting_exercise_links is append-only'); END;
+    CREATE TABLE IF NOT EXISTS party_masters (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      party_type TEXT NOT NULL CHECK(party_type IN ('CUSTOMER','SUPPLIER')),
+      name TEXT NOT NULL,
+      fiscal_id TEXT,
+      fiscal_id_type TEXT,
+      normalized_fiscal_id TEXT,
+      address TEXT,
+      phone TEXT,
+      email TEXT,
+      active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(company_id, party_type, normalized_fiscal_id)
+    );
+    CREATE INDEX IF NOT EXISTS party_masters_company_type_name_idx ON party_masters(company_id, party_type, name);
     CREATE TABLE IF NOT EXISTS period_reopenings (
       id TEXT PRIMARY KEY,
       company_id TEXT NOT NULL,

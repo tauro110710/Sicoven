@@ -56,6 +56,37 @@ export interface ExchangeabilityAssessment {
   approvedAt: string;
 }
 
+export interface InventoryPriceLabels {
+  price1: string;
+  price2: string;
+  price3: string;
+  price4: string;
+}
+
+export interface Customer {
+  id: string;
+  companyId: string;
+  name: string;
+  fiscalId?: string;
+  fiscalIdType?: 'RIF' | 'CEDULA' | 'PASSPORT' | 'OTHER';
+  address?: string;
+  phone?: string;
+  email?: string;
+  active: boolean;
+}
+
+export interface Supplier {
+  id: string;
+  companyId: string;
+  name: string;
+  fiscalId?: string;
+  fiscalIdType?: 'RIF' | 'CEDULA' | 'PASSPORT' | 'OTHER';
+  address?: string;
+  phone?: string;
+  email?: string;
+  active: boolean;
+}
+
 export interface Company {
   id: string;
   rif: string; // e.g., "J-40892182-3"
@@ -90,6 +121,8 @@ export interface Company {
   functionalCurrencyAssessments?: FunctionalCurrencyAssessment[];
   /** Evaluaciones de convertibilidad fechadas y ligadas a un propósito concreto. */
   exchangeabilityAssessments?: ExchangeabilityAssessment[];
+  /** Etiquetas comerciales configurables; los identificadores internos Precio_1..4 permanecen fijos. */
+  inventoryPriceLabels?: InventoryPriceLabels;
   logoUrl?: string; // URL o base64 del logo de la empresa
 }
 
@@ -325,6 +358,12 @@ export interface SaleInventoryLine {
   quantity: number;
   unitPriceBs: number;
   unitPriceUsd?: number;
+  /** Nivel comercial elegido en el documento, cuando se origina desde catálogo. */
+  priceLevel?: 1 | 2 | 3 | 4;
+  priceCurrency?: 'USD' | 'BS';
+  priceValue?: number;
+  /** Tasa de referencia conservada al fijar el precio del renglón. */
+  priceBcvRate?: number;
   netAmountBs: number;
   taxRate: number;
   vatAmountBs: number;
@@ -419,6 +458,14 @@ export interface InventoryProduct {
   avgCostUsd: number;
   lastCostBs: number;
   lastCostUsd: number;
+  /** Niveles comerciales normalizados; los niveles no usados permanecen null. */
+  price1?: number;
+  price2?: number | null;
+  price3?: number | null;
+  price4?: number | null;
+  /** Moneda única de referencia para los cuatro niveles comerciales. */
+  priceCurrency?: 'USD' | 'BS';
+  /** Campos de compatibilidad histórica; no son la fuente maestra de los niveles. */
   salesPriceBs: number;
   salesPriceUsd: number;
   /** Cuenta de movimiento asociada al valor del inventario. */
@@ -443,6 +490,7 @@ export interface InventoryProduct {
 
 export type InventoryMovementImportDraft =
   Pick<InventoryMovement, 'productId' | 'date' | 'type' | 'concept' | 'documentRef' | 'quantity' | 'unitCostBs'> &
+  { expectedBalanceQty?: number } &
   Partial<Omit<InventoryMovement, 'id' | 'companyId' | 'productId' | 'date' | 'type' | 'concept' | 'documentRef' | 'quantity' | 'unitCostBs'>>;
 
 export interface InventoryMovement {
@@ -654,7 +702,7 @@ export interface IslrRetentionVoucher {
 export interface BankAccount {
   id: string;
   companyId: string;
-  accountCode: string; // Código de la cuenta auxiliar hija de la cuenta padre bancaria
+  accountCode: string; // e.g. "1.1.1.03"
   bankName: string; // e.g. "Banco Nacional de Crédito (BNC)"
   accountNumber: string; // 20 dígitos estándar venezolano
   currency: 'BS' | 'USD';

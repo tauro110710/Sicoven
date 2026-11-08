@@ -22,7 +22,6 @@ import { validateFunctionalCurrencyAssessment, validateExchangeabilityAssessment
 import { buildOpeningEntryItems } from '../../types/accountingYearOpening';
 import { CompanyModal } from '../CompanyModal';
 import { formatBs, validateVenezuelanRif } from '../../utils/formatters';
-import { MigracionInteligente } from './MigracionInteligente';
 import { IntelligentMigrationWizard } from '../Migracion/IntelligentMigrationWizard';
 
 export const ConfiguracionView: React.FC = () => {
@@ -95,6 +94,10 @@ export const ConfiguracionView: React.FC = () => {
   const [address, setAddress] = useState(currentCompany.address);
   const [phone, setPhone] = useState(currentCompany.phone);
   const [email, setEmail] = useState(currentCompany.email);
+  const [priceLabel1, setPriceLabel1] = useState(currentCompany.inventoryPriceLabels?.price1 || 'Precio 1');
+  const [priceLabel2, setPriceLabel2] = useState(currentCompany.inventoryPriceLabels?.price2 || 'Precio 2');
+  const [priceLabel3, setPriceLabel3] = useState(currentCompany.inventoryPriceLabels?.price3 || 'Precio 3');
+  const [priceLabel4, setPriceLabel4] = useState(currentCompany.inventoryPriceLabels?.price4 || 'Precio 4');
   const [fiscalYear, setFiscalYear] = useState(currentCompany.fiscalYear);
   const [accountingFramework, setAccountingFramework] = useState<AccountingFramework | ''>(currentCompany.accountingFramework || '');
   const [accountingFrameworkVersion, setAccountingFrameworkVersion] = useState(currentCompany.accountingFrameworkVersion || '');
@@ -139,6 +142,10 @@ export const ConfiguracionView: React.FC = () => {
     setAddress(currentCompany.address);
     setPhone(currentCompany.phone);
     setEmail(currentCompany.email);
+    setPriceLabel1(currentCompany.inventoryPriceLabels?.price1 || 'Precio 1');
+    setPriceLabel2(currentCompany.inventoryPriceLabels?.price2 || 'Precio 2');
+    setPriceLabel3(currentCompany.inventoryPriceLabels?.price3 || 'Precio 3');
+    setPriceLabel4(currentCompany.inventoryPriceLabels?.price4 || 'Precio 4');
     setFiscalYear(currentCompany.fiscalYear);
     setAccountingFramework(currentCompany.accountingFramework || '');
     setAccountingFrameworkVersion(currentCompany.accountingFrameworkVersion || '');
@@ -388,6 +395,7 @@ export const ConfiguracionView: React.FC = () => {
         address: address.trim(),
         phone: phone.trim(),
         email: email.trim(),
+        inventoryPriceLabels: { price1: priceLabel1.trim() || 'Precio 1', price2: priceLabel2.trim() || 'Precio 2', price3: priceLabel3.trim() || 'Precio 3', price4: priceLabel4.trim() || 'Precio 4' },
         fiscalYear: Number(fiscalYear),
       });
       await waitForPersistence();
@@ -814,6 +822,16 @@ export const ConfiguracionView: React.FC = () => {
             </div>
           </div>
 
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 space-y-3">
+            <div><h4 className="text-sm font-bold text-slate-900">Etiquetas comerciales de los cuatro precios</h4><p className="mt-1 text-xs text-slate-600">Personaliza cómo aparecen en el formulario y pantallas de inventario. Los campos internos Precio_1, Precio_2, Precio_3 y Precio_4 no cambian y siguen siendo universales para importación.</p></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+              <label className="text-xs font-semibold text-slate-700">Precio_1<input value={priceLabel1} onChange={e=>setPriceLabel1(e.target.value)} maxLength={40} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2 font-normal"/></label>
+              <label className="text-xs font-semibold text-slate-700">Precio_2<input value={priceLabel2} onChange={e=>setPriceLabel2(e.target.value)} maxLength={40} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2 font-normal"/></label>
+              <label className="text-xs font-semibold text-slate-700">Precio_3<input value={priceLabel3} onChange={e=>setPriceLabel3(e.target.value)} maxLength={40} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2 font-normal"/></label>
+              <label className="text-xs font-semibold text-slate-700">Precio_4<input value={priceLabel4} onChange={e=>setPriceLabel4(e.target.value)} maxLength={40} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2 font-normal"/></label>
+            </div>
+          </div>
+
           <div className="flex justify-end pt-3 border-t border-slate-200">
             <button
               type="submit"
@@ -1016,17 +1034,16 @@ export const ConfiguracionView: React.FC = () => {
         {!isStorageReady && <p className="text-xs text-rose-700">SQLite no está disponible. La preparación y el registro permanecen deshabilitados.</p>}
       </div>
 
-      <section className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 space-y-3">
+      <section className="rounded-2xl border border-blue-200 bg-blue-50/50 p-5 space-y-3">
         <div>
-          <h2 className="text-base font-bold text-slate-900">Importación transaccional universal</h2>
-          <p className="mt-1 text-sm text-slate-600">Abre el asistente que valida y registra módulos compatibles en SQLite, con empresa destino explícita y confirmación antes de escribir.</p>
+          <h2 className="text-base font-bold text-slate-900">Importador Inteligente Universal</h2>
+          <p className="mt-1 text-sm text-slate-600">Un solo centro para analizar archivos JSON, CSV, TSV, TXT y Excel XLSX/XLSM de POSVEN u otros sistemas. El importador admite únicamente maestros de datos; ventas, compras, movimientos históricos, CxC/CxP, cierres y demás colecciones quedan en diagnóstico. La empresa destino y la confirmación son obligatorias antes de escribir en SQLite.</p>
         </div>
-        <button type="button" onClick={() => setShowUniversalMigrationWizard(true)} disabled={!isStorageReady} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">
-          <Upload className="h-4 w-4" /> Abrir importador transaccional
+        <button type="button" onClick={() => setShowUniversalMigrationWizard(true)} disabled={!isStorageReady} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50">
+          <Upload className="h-4 w-4" /> Abrir importador universal
         </button>
-        {!isStorageReady && <p className="text-xs text-rose-700">SQLite no está disponible. El importador permanece deshabilitado.</p>}
+        {!isStorageReady && <p className="text-xs text-rose-700">SQLite no está disponible. El importador permanece deshabilitado para proteger los datos.</p>}
       </section>
-      <MigracionInteligente />
       {showUniversalMigrationWizard && <IntelligentMigrationWizard onClose={() => setShowUniversalMigrationWizard(false)} />}
 
       {/* Normativas Legales y Respaldo de Información */}
