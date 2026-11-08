@@ -10,6 +10,10 @@ Este documento desarrolla la ADR de SQLite local por empresa. No habilita todav�
 - Partición y unión de snapshots: creadas y probadas.
 - Integración con el arranque Electron, los IPC, el contexto React y el backup/restore: pendiente.
 - Migración de la base heredada: pendiente.
+- Separación conservadora de auditoría: helper creado en `electron/tenant-audit-migration.cjs`; asigna eventos únicamente por coincidencia exacta de `details_json.companyId`. Eventos globales, malformados o con empresa desconocida permanecen en control y se reportan como no resueltos.
+- Copia relacional auxiliar: helper creado en `electron/tenant-relational-migration.cjs`; replica referencias globales de índices y copia tablas de empresa y sus hijos por relaciones explícitas, dentro de una transacción y con comprobación de claves foráneas.
+- Copia de documentos físicos: helper creado en `electron/tenant-document-migration.cjs`; valida clave, archivo regular, tamaño y SHA-256, crea el destino sin sobrescribir archivos y revierte los archivos creados por el lote si falla una validación.
+- Estos tres helpers tienen pruebas unitarias, pero aún no están conectados a un orquestador de migración ni al arranque Electron. No habilitan ni ejecutan una migración por sí solos.
 - No se ha fusionado ni activado el modo multiarchivo en main.
 
 ## Archivos locales
