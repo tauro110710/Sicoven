@@ -30,6 +30,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   const [priceCurrency, setPriceCurrency] = useState<'USD' | 'BS'>('USD');
   const [priceInputs, setPriceInputs] = useState(['', '', '', '']);
   const priceValues = priceInputs.map(parseDecimalInput);
+  const priceLabels = [currentCompany.inventoryPriceLabels?.price1 || 'Precio 1', currentCompany.inventoryPriceLabels?.price2 || 'Precio 2', currentCompany.inventoryPriceLabels?.price3 || 'Precio 3', currentCompany.inventoryPriceLabels?.price4 || 'Precio 4'];
   const setPriceInput = (index: number, value: string) => setPriceInputs(previous => previous.map((item, i) => i === index ? value : item));
   const [inventoryAccountCode, setInventoryAccountCode] = useState('1.1.4.01');
   const [costOfSalesAccountCode, setCostOfSalesAccountCode] = useState('5.1.1.01');
@@ -336,7 +337,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {priceInputs.map((value, index) => (
                 <div key={index}>
-                  <label className="block font-semibold text-slate-700 mb-1">Precio_{index + 1}{index === 0 ? ' *' : ''}</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{priceLabels[index]}{index === 0 ? ' *' : ''}</label>
                   <input type="text" inputMode="decimal" required={index === 0} value={value} placeholder={index === 0 ? '0.00' : 'Opcional'} onChange={e => setPriceInput(index, e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none" />
                   <span className="block text-[10px] text-slate-500 font-mono mt-1">{value.trim() ? priceEquivalent(priceValues[index]) : 'Sin definir'}</span>
                 </div>
