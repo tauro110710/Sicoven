@@ -65,13 +65,53 @@ const pick = (row:Row, ...keys:string[]) => {
 
 export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClose}) => {
  const { companies, products: allProducts, getCompanyInventoryProducts, getCompanyInventoryMovements, importInventoryProducts, importInventoryMovements, importCustomers, importSuppliers, accounts, bankAccounts, addAccount, addJournalEntry, addSale, addPurchase, addImportedCreditSettlements, addImportedSupplierDirectAdvances, addImportedSupplierAdvanceSettlements, runAtomicInvoiceImportAndWait, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, currentCompany } = useAccounting();
- const downloadTemplate = (kind: UniversalMasterTemplateKind) => {
-  const template = getUniversalMasterTemplate(kind);
-  const blob = new Blob(['\uFEFF' + template.csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url; anchor.download = template.fileName; document.body.appendChild(anchor);
-  anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
+ const downloadTemplate = async (kind: UniversalMasterTemplateKind) => {
+  try {
+   const template = getUniversalMasterTemplate(kind);
+   const workbook = new ExcelJS.Workbook();
+   workbook.creator = 'SICOVEN';
+   workbook.subject = 'Plantilla universal de maestros';
+   workbook.created = new Date();
+   const dataSheet = workbook.addWorksheet('Datos');
+   dataSheet.addRow(template.headers);
+   dataSheet.views = [{ state: 'frozen', ySplit: 1 }];
+   dataSheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: template.headers.length } };
+   dataSheet.columns = template.headers.map(header => ({ header, key: header, width: Math.max(16, Math.min(30, header.length + 5)) }));
+   const exampleSheet = workbook.addWorksheet('Ejemplo');
+   exampleSheet.addRow(template.headers);
+   exampleSheet.addRow(template.example);
+   exampleSheet.views = [{ state: 'frozen', ySplit: 1 }];
+   exampleSheet.columns = template.headers.map(header => ({ header, key: header, width: Math.max(16, Math.min(30, header.length + 5)) }));
+   const instructionSheet = workbook.addWorksheet('Instrucciones');
+   instructionSheet.columns = [{ header: 'Tema', key: 'topic', width: 28 }, { header: 'Instrucción', key: 'instruction', width: 100 }];
+   instructionSheet.addRow(['Plantilla', template.fileName.replace(/\.csv$/i, '.xlsx')]);
+   instructionSheet.addRow(['Uso', 'Completa únicamente la hoja Datos. La hoja Ejemplo es ilustrativa y NO se importa.']);
+   instructionSheet.addRow(['Empresa destino', 'Selecciona la empresa correcta en SICOVEN antes de confirmar la importación.']);
+   if (kind === 'inventory') {
+    instructionSheet.addRow(['Campos obligatorios', 'Código, Nombre, Existencia, CostoPromedioBs, UltimoCostoBs, UltimoCostoUsd, StockMinimo, MetodoCosteo, TratamientoIVA, TipoArticulo, cuentas contables destino, FechaApertura, TasaBCVApertura, Precio_1 y Moneda_Precio.']);
+    instructionSheet.addRow(['Precios', 'Precio_1 es obligatorio. Precio_2, Precio_3 y Precio_4 son opcionales; déjalos vacíos si no se utilizan. Un cero se interpreta como nivel no definido.']);
+    instructionSheet.addRow(['Moneda_Precio', 'Usa únicamente USD o BS. La misma moneda de referencia aplica a los cuatro niveles del producto. No incluyas equivalentes convertidos como precios separados.']);
+    instructionSheet.addRow(['Equivalentes', 'SICOVEN calcula el equivalente en la otra moneda con la tasa BCV vigente para mostrarlo; no sustituye ni altera el precio de referencia guardado.']);
+    instructionSheet.addRow(['Costos históricos', 'CostoPromedioBs, UltimoCostoBs, UltimoCostoUsd y TasaBCVApertura deben corresponder al corte histórico declarado. No uses la tasa actual para reconstruir períodos anteriores.']);
+    instructionSheet.addRow(['Cuentas', 'Declara los códigos existentes en SICOVEN para Inventario, Costo de ventas/consumo, Ajustes y Contrapartida de apertura. No se asignan cuentas por semejanza.']);
+    instructionSheet.addRow(['No importar', 'No cargues ventas, compras, movimientos históricos, saldos CxC/CxP ni cierres en esta plantilla.']);
+   } else {
+    instructionSheet.addRow(['Campos obligatorios', 'Nombre es obligatorio. TipoIdentificacion e Identificacion deben corresponderse cuando se suministren.']);
+    instructionSheet.addRow(['Identificación', 'RIF venezolano se valida cuando TipoIdentificacion sea RIF. Para clientes puede dejarse vacío si no se dispone del dato.']);
+    instructionSheet.addRow(['Duplicados', 'SICOVEN evita duplicar identificación fiscal dentro del mismo tipo de maestro y empresa. Revisa los registros antes de importar.']);
+    instructionSheet.addRow(['Uso', kind === 'customers' ? 'Se importan clientes como maestros independientes; no se crean facturas ni saldos históricos de CxC.' : 'Se importan proveedores como maestros independientes; no se crean compras ni saldos históricos de CxP.']);
+   }
+   instructionSheet.addRow(['Privacidad y calidad', 'Incluye únicamente datos reales y necesarios. No inventes RIF, teléfonos, correos, costos, precios ni referencias.']);
+   const buffer = await workbook.xlsx.writeBuffer();
+   const bytes = new Uint8Array(buffer);
+   const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+   const url = URL.createObjectURL(blob);
+   const anchor = document.createElement('a');
+   anchor.href = url; anchor.download = template.fileName.replace(/\.csv$/i, '.xlsx');
+   document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
+  } catch (error) {
+   setError(error instanceof Error ? error.message : 'No se pudo generar la plantilla Excel.');
+  }
  };
  const [targetCompanyId, setTargetCompanyId] = useState('');
  const targetCompany = companies.find(company => company.id === targetCompanyId) || null;
@@ -1070,11 +1110,11 @@ const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fech
     <label className="flex cursor-pointer flex-col items-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center hover:border-emerald-500"><FileUp size={30} className="mb-2 text-emerald-700"/><strong>Selecciona uno o varios archivos de cualquier sistema</strong><span className="mt-1 text-sm text-slate-500">JSON, CSV, TSV, TXT, Excel XLSX o XLSM · análisis local del contenido y sus colecciones</span><input className="mt-3 block max-w-full text-sm" type="file" multiple accept=".json,.csv,.tsv,.txt,.xlsx,.xlsm" onChange={e=>void readFiles(Array.from(e.target.files||[]))}/></label>
     <section className="rounded-xl border border-slate-200 bg-white p-4">
      <h3 className="font-semibold text-slate-900">Plantillas universales de SICOVEN</h3>
-     <p className="mt-1 text-xs text-slate-600">Descarga la plantilla correspondiente, completa los datos reales y vuelve a cargarla. Los identificadores internos de precios son Precio_1 a Precio_4 y Moneda_Precio; los campos no utilizados pueden quedar vacíos.</p>
+     <p className="mt-1 text-xs text-slate-600">Descarga la plantilla Excel XLSX correspondiente. Incluye hojas separadas Datos, Ejemplo e Instrucciones; solo se importa la hoja Datos. Los identificadores internos de precios son Precio_1 a Precio_4 y Moneda_Precio.</p>
      <div className="mt-3 flex flex-wrap gap-2">
-      <button type="button" onClick={()=>downloadTemplate('inventory')} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold hover:bg-slate-50">Descargar Productos / Inventario</button>
-      <button type="button" onClick={()=>downloadTemplate('customers')} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold hover:bg-slate-50">Descargar Clientes</button>
-      <button type="button" onClick={()=>downloadTemplate('suppliers')} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold hover:bg-slate-50">Descargar Proveedores</button>
+      <button type="button" onClick={()=>downloadTemplate('inventory')} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold hover:bg-slate-50">Descargar Excel Productos / Inventario</button>
+      <button type="button" onClick={()=>downloadTemplate('customers')} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold hover:bg-slate-50">Descargar Excel Clientes</button>
+      <button type="button" onClick={()=>downloadTemplate('suppliers')} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold hover:bg-slate-50">Descargar Excel Proveedores</button>
      </div>
     </section>
     {files.length>0&&<p className="text-sm text-slate-600">{files.length} archivo(s) · {posvenBackup?'respaldo POSVEN detectado':backupPayload?'adaptador POSVEN detectado':rows.length+' registros detectados'}</p>}
