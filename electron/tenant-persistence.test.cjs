@@ -94,7 +94,7 @@ test('does not silently remove a registered company from the accounting snapshot
   const b = { id: 'company-b', name: 'Empresa B', rif: 'J-98765432-1' };
   await saveTenantAccountingSnapshot(manager, snapshot([a]));
   saveTenantAccountingSnapshot(manager, snapshot([a, b]));
-  assert.throws(() => saveTenantAccountingSnapshot(manager, snapshot([a])), /falta en el snapshot/i);
+  await assert.rejects(() => saveTenantAccountingSnapshot(manager, snapshot([a])), /falta en el snapshot/i);
 });
 
 test('blocks tenant snapshots that contain data owned by another company', async t => {
