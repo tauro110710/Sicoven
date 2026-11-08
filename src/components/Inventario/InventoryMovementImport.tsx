@@ -156,7 +156,7 @@ export const InventoryMovementImport: React.FC<{ isOpen: boolean; onClose: () =>
       const drafts = prepared.map(({ sourceRow: _row, productLabel: _label, ...draft }) => draft);
       const count = importInventoryMovements(drafts, currentCompany.id, { accountingMode: 'kardex-only' });
       await waitForPersistence();
-      setNotice('Se actualizaron ' + count + ' movimientos del Kardex. No se crearon ventas, facturas, ingresos ni asientos contables adicionales; el asiento global de ventas del día permanece como autoridad contable.');
+      setNotice('Se actualizaron ' + count + ' movimientos del Kardex. Este registro logístico queda independiente: no crea, modifica ni enlaza asientos contables, facturas o ventas. La contabilidad diaria conserva su propio proceso y sus propios comprobantes.');
       setPrepared([]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudieron registrar los movimientos.');
@@ -167,12 +167,12 @@ export const InventoryMovementImport: React.FC<{ isOpen: boolean; onClose: () =>
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/60 p-3">
       <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <div><h2 className="text-base font-bold text-slate-900">Importar movimientos al Kardex</h2><p className="text-xs text-slate-500">Solo movimientos de mercancía; no importa ventas ni genera asientos duplicados.</p></div>
+          <div><h2 className="text-base font-bold text-slate-900">Importar movimientos al Kardex</h2><p className="text-xs text-slate-500">Registro logístico independiente de ventas y asientos contables. No se enlaza al Reporte Z.</p></div>
           <button type="button" onClick={() => { reset(); onClose(); }} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Cerrar"><X className="h-5 w-5" /></button>
         </div>
         <div className="space-y-4 overflow-y-auto p-5">
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
-            Empresa destino: <strong>{currentCompany.name}</strong>. Los movimientos se vinculan por código de artículo o, si falta, por nombre exacto. La tasa BCV histórica y los costos requeridos deben venir en el archivo; no se inventan.
+            Empresa destino: <strong>{currentCompany.name}</strong>. Este proceso actualiza exclusivamente el Kardex. No participa en la contabilización del Reporte Z ni genera vínculos con asientos contables. Los movimientos se identifican por código único de artículo; la tasa histórica y los costos requeridos deben venir en el archivo.
           </div>
           <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 p-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
             <FileUp className="h-5 w-5" /> Seleccionar archivo de movimientos
