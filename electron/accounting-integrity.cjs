@@ -1082,11 +1082,32 @@ function validateFixedAssetLedger(previousState, nextState) {
     }
     const sortedActiveEvents = activeEvents.slice().sort((a, b) => String(a.period).localeCompare(String(b.period)));
     let expectedPeriod = firstPeriod;
+    const usefulLifeDays = Math.round((lifeEnd.getTime() - serviceDateUtc.getTime()) / 86400000);
+    let calculatedAccumulatedBs = 0;
+    let calculatedAccumulatedUsd = 0;
     for (const event of sortedActiveEvents) {
       if (String(event.period) !== expectedPeriod) {
         throw new Error('SQLite rechazó períodos de depreciación fuera de secuencia para ' + asset.assetCode + '.');
       }
       const [year, month] = expectedPeriod.split('-').map(Number);
+      const periodStart = new Date(Date.UTC(year, month - 1, 1));
+      const periodEnd = new Date(Date.UTC(year, month, 1));
+      const overlapStart = periodStart > serviceDateUtc ? periodStart : serviceDateUtc;
+      const overlapEnd = periodEnd < lifeEnd ? periodEnd : lifeEnd;
+      const expectedDays = Math.max(0, Math.round((overlapEnd.getTime() - overlapStart.getTime()) / 86400000));
+      const finalPeriod = overlapEnd.getTime() === lifeEnd.getTime();
+      const expectedBs = finalPeriod
+        ? Math.round((depreciableBs - calculatedAccumulatedBs + Number.EPSILON) * 100) / 100
+        : Math.round((depreciableBs * expectedDays / usefulLifeDays + Number.EPSILON) * 100) / 100;
+      const expectedUsd = finalPeriod
+        ? Math.round((depreciableUsd - calculatedAccumulatedUsd + Number.EPSILON) * 1000000) / 1000000
+        : Math.round((depreciableUsd * expectedDays / usefulLifeDays + Number.EPSILON) * 1000000) / 1000000;
+      if (event.days !== expectedDays || Math.abs(Number(event.amountBs) - expectedBs) > 0.01 ||
+          Math.abs(Number(event.amountUsd) - expectedUsd) > 0.000001) {
+        throw new Error('SQLite rechazó importes de depreciación que no coinciden con el método lineal prorrateado y el período ' + expectedPeriod + '.');
+      }
+      calculatedAccumulatedBs += Number(event.amountBs);
+      calculatedAccumulatedUsd += Number(event.amountUsd);
       expectedPeriod = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7);
     }
   }
