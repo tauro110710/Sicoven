@@ -175,10 +175,17 @@ test('migrates a real SQLite legacy file into an isolated tenant database and pr
     'CREATE TABLE auth_sessions (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES auth_users(id));' +
     'CREATE TABLE license_state (id INTEGER PRIMARY KEY, status TEXT NOT NULL);');
   const snapshot = createEmptyAccountingSnapshot();
-  snapshot.companies = [{ id: 'company-a', name: 'Comercio A', rif: 'J-12345678-9' }];
+  snapshot.companies = [
+    { id: 'company-a', name: 'Comercio A', rif: 'J-12345678-9' },
+    { id: 'company-b', name: 'Comercio B', rif: 'J-23456789-0' }
+  ];
   snapshot.currentCompanyId = 'company-a';
   sourceDb.prepare("INSERT INTO app_state(state_key,state_json) VALUES('accounting',?)")
     .run(JSON.stringify(snapshot));
+  const insertAudit = sourceDb.prepare('INSERT INTO audit_events(event_type,details_json,created_at) VALUES(?,?,?)');
+  insertAudit.run('company_a_event', JSON.stringify({ companyId: 'company-a' }), '2026-11-08T10:00:00.000Z');
+  insertAudit.run('company_b_event', JSON.stringify({ companyId: 'company-b' }), '2026-11-08T10:01:00.000Z');
+  insertAudit.run('global_event', JSON.stringify({ scope: 'system' }), '2026-11-08T10:02:00.000Z');
 
   const manager = createCompanyDatabaseManager({
     controlDb: sourceDb,
@@ -200,17 +207,27 @@ test('migrates a real SQLite legacy file into an isolated tenant database and pr
   try {
     const result = await orchestrator.execute();
     assert.equal(result.phase, 'COMMITTED');
-    assert.equal(result.companies.length, 1);
-    assert.equal(result.companies[0].companyId, 'company-a');
+    assert.equal(result.companies.length, 2);
+    assert.deepEqual(result.auditEvents, { total: 3, assigned: 2, retainedInControl: 1, unresolved: 0 });
     assert.equal(fs.existsSync(sourcePath), true);
     const original = JSON.parse(sourceDb.prepare(
       "SELECT state_json FROM app_state WHERE state_key='accounting'"
     ).get().state_json);
     assert.deepEqual(original, snapshot);
-    const tenantDb = manager.openCompany('company-a');
-    assert.deepEqual(readTenantSnapshot(tenantDb, 'company-a'), snapshot);
-    assert.equal(tenantDb.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='auth_users'").get().count, 0);
-    assert.equal(manager.listCompanies().filter(item => item.status === 'ACTIVE').length, 1);
+
+    const tenantA = manager.openCompany('company-a');
+    const expectedA = { ...snapshot, companies: [snapshot.companies[0]], currentCompanyId: 'company-a' };
+    assert.deepEqual(readTenantSnapshot(tenantA, 'company-a'), expectedA);
+    assert.deepEqual(tenantA.prepare('SELECT event_type FROM audit_events ORDER BY id').all(), [{ event_type: 'company_a_event' }]);
+    assert.equal(tenantA.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='auth_users'").get().count, 0);
+
+    const tenantB = manager.openCompany('company-b');
+    const expectedB = { ...snapshot, companies: [snapshot.companies[1]], currentCompanyId: 'company-b' };
+    assert.deepEqual(readTenantSnapshot(tenantB, 'company-b'), expectedB);
+    assert.deepEqual(tenantB.prepare('SELECT event_type FROM audit_events ORDER BY id').all(), [{ event_type: 'company_b_event' }]);
+    assert.equal(tenantB.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='auth_users'").get().count, 0);
+    assert.equal(sourceDb.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 3);
+    assert.equal(manager.listCompanies().filter(item => item.status === 'ACTIVE').length, 2);
     assert.equal(fs.existsSync(result.backupPath), true);
   } finally {
     manager.closeAll();
