@@ -83,7 +83,7 @@ function createTenantMigrationOrchestrator(options) {
   const companiesRoot = path.join(root, 'companies');
 
   async function execute() {
-    const releaseMaintenanceLock = acquireMaintenanceLock();
+    const releaseMaintenanceLock = await acquireMaintenanceLock();
     if (typeof releaseMaintenanceLock !== 'function') {
       throw new Error('No se pudo adquirir el bloqueo de mantenimiento exclusivo; no se inició la migración.');
     }
