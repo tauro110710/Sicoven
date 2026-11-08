@@ -752,7 +752,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   };
 
   const submitClose = async () => {
-    if (closingPeriodSubmitting || !window.confirm('Va a bloquear el período contable hasta '+closedDate+'. La fecha no podrá retroceder desde esta pantalla. ¿Confirma el cierre?')) return;
+    if (closingPeriodSubmitting || !window.confirm('Va a generar la depreciación financiera pendiente de los activos fijos de esta empresa y bloquear el período contable hasta '+closedDate+'. La fecha no podrá retroceder desde esta pantalla. ¿Confirma el cierre?')) return;
     setClosingPeriodSubmitting(true);
     try {
       const depreciationEntriesCreated = await closeAccountingPeriod(closedDate);
