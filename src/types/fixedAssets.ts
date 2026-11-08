@@ -25,6 +25,7 @@ export interface FixedAsset {
   serviceDate: string;
   acquisitionCostBs: number;
   acquisitionCostUsd: number;
+  acquisitionBcvRate: number;
   residualValueBs: number;
   residualValueUsd: number;
   usefulLifeMonths: number;
@@ -208,3 +209,9 @@ export function calculateFixedAssetDepreciation(
     netBookValueUsdAfter: roundUsd(asset.acquisitionCostUsd - accumulatedUsd - amountUsd)
   };
 }
+
+export type FixedAssetRegistrationDraft = Omit<
+  FixedAsset,
+  'id' | 'companyId' | 'acquisitionCostBs' | 'acquisitionCostUsd' |
+  'acquisitionBcvRate' | 'status' | 'depreciationEvents' | 'createdAt'
+>;
