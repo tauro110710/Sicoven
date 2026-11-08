@@ -39,6 +39,7 @@ import {
   INITIAL_STATEMENT_MOVEMENTS
 } from '../data/initialData';
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
+import { validateRetentionVoucherSupplierEmail } from '../types/retentionVoucherCompliance';
 import { formatIslrVoucherNumber, getMaxIslrVoucherSequence } from '../utils/islrVoucherNumber';
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus } from '../types/ivaRetentionEligibility';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, summarizeCreditDocumentAdjustments, validateCreditSettlement } from '../types/creditSettlement';
@@ -2418,6 +2419,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (settlementModeError) throw new Error(settlementModeError);
     // Defensa de dominio: las compras nunca deben crear asientos con tasa o importes inválidos.
     if (!targetCompany) throw new Error('Selecciona una empresa antes de registrar la compra.');
+    // La Providencia SNAT/2026/00093, art. 18, exige correo del proveedor en
+    // comprobantes IVA/ISLR desde el 19-04-2027. No se altera ningún histórico.
+    const retentionIssueDates: string[] = [];
+    if (Number(purchaseData.vatWithheldBs) > 0) {
+      retentionIssueDates.push(new Date().toISOString().slice(0, 10));
+    }
+    if (Number(purchaseData.islrWithheldBs || 0) > 0) {
+      retentionIssueDates.push(String(purchaseData.accountCreditDate || ''));
+    }
+    for (const issueDate of retentionIssueDates) {
+      validateRetentionVoucherSupplierEmail(purchaseData.supplierEmail, issueDate);
+    }
     const rate = Number(purchaseData.bcvRate);
     if (!Number.isFinite(rate) || rate <= 0) throw new Error('La tasa BCV manual debe ser mayor que cero.');
     const amounts = [

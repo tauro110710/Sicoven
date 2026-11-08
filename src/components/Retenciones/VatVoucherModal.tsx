@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { VatRetentionVoucher } from '../../types/accounting';
 import { getVatVoucherDeliveryWindow } from '../../utils/vatVoucherDelivery';
+import { requiresSnat2026DocumentReference } from '../../types/retentionVoucherCompliance';
 import { X, Printer, ShieldCheck } from 'lucide-react';
 import { formatBs, formatUsd, formatDate, formatNumberVe } from '../../utils/formatters';
 
@@ -133,6 +134,11 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, corre
             <h2 className="font-bold text-[11px] sm:text-xs uppercase text-slate-800">
               COMPROBANTE DE RETENCIÓN DEL IMPUESTO AL VALOR AGREGADO (IVA)
             </h2>
+            {requiresSnat2026DocumentReference(voucher.date) && (
+              <p className="text-[9px] sm:text-[10px] font-semibold text-slate-700">
+                Emitido conforme a la Providencia Administrativa SNAT/2026/00093 (artículo 19).
+              </p>
+            )}
             <p className="text-[9px] sm:text-[10px] text-slate-700 italic">
               (Ley que Establece el Impuesto al Valor Agregado - Art. 11 y Providencia Administrativa SNAT/2025/000054)
             </p>
