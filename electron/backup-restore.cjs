@@ -153,7 +153,7 @@ async function copyCompanyDatabaseTree(source, destination) {
     const check = new Database(to, { readonly: true, fileMustExist: true });
     try {
       assertSqliteIntegrity(check);
-      const storedId = String(check.prepare(\"SELECT meta_value FROM sicoven_database_meta WHERE meta_key='company_id'\").get()?.meta_value || '');
+      const storedId = String(check.prepare("SELECT meta_value FROM sicoven_database_meta WHERE meta_key='company_id'").get()?.meta_value || '');
       if (storedId !== entry.name) throw new Error('La copia de seguridad perdió la identidad de ' + entry.name + '.');
     } finally { check.close(); }
     manifest.push({ path: COMPANIES_DIR + '/' + entry.name + '/accounting.sqlite', companyId: entry.name, size: fs.statSync(to).size, sha256: sha256File(to) });
