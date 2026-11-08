@@ -1005,7 +1005,7 @@ function validateFixedAssetLedger(previousState, nextState) {
         Number(sourceLine.creditBs || 0) !== 0 || Number(sourceLine.creditUsd || 0) !== 0 ||
         source.date < asset.acquisitionDate || Math.abs(Number(source.bcvRate) - Number(asset.acquisitionBcvRate)) > 0.000001 ||
         !assetAccount || assetAccount.type !== 'ACTIVO' || assetAccount.isMovement !== true ||
-        !String(asset.assetAccountCode).startsWith('1.2.') || normalize(assetAccount.name).includes('DEPRECIACION ACUMULADA') ||
+        !String(asset.assetAccountCode).startsWith('1.2.') || normalize(assetAccount.name).includes('TERRENO') || normalize(assetAccount.name).includes('DEPRECIACION ACUMULADA') ||
         !accumulatedAccount || accumulatedAccount.type !== 'ACTIVO' || accumulatedAccount.isMovement !== true ||
         !normalize(accumulatedAccount.name).includes('DEPRECIACION ACUMULADA') ||
         !expenseAccount || expenseAccount.type !== 'GASTOS' || expenseAccount.isMovement !== true ||
