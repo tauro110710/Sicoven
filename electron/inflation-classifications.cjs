@@ -131,15 +131,36 @@ function listInflationClassifications(db,filters={}) {
   const rows=db.prepare('SELECT d.id,d.company_id AS companyId,d.fiscal_year AS fiscalYear,d.account_code AS accountCode,d.scope,d.component_ref AS componentRef,d.version,d.supersedes_decision_id AS supersedesDecisionId,d.classification,d.measurement_basis AS measurementBasis,d.treatment,d.rationale,d.normative_reference AS normativeReference,d.origin_date AS originDate,d.measurement_date AS measurementDate,d.reporting_date AS reportingDate,d.carrying_amount_bs AS carryingAmountBs,d.carrying_amount_usd AS carryingAmountUsd,d.currency,d.contract_reference AS contractReference,d.created_by_user_id AS createdByUserId,d.created_by_username AS createdByUsername,d.created_at AS createdAt,r.decision AS reviewDecision,r.reason AS reviewReason,r.actor_username AS reviewer,r.reviewed_at AS reviewedAt FROM inflation_classification_decisions d LEFT JOIN inflation_classification_reviews r ON r.decision_id=d.id '+(where.length?'WHERE '+where.join(' AND '):'')+' ORDER BY d.company_id,d.fiscal_year,d.account_code,d.scope,d.component_ref,d.version').all(...params);
   return rows.map(row=>({...row,status:row.reviewDecision||'PENDING_REVIEW',reviewDecision:row.reviewDecision||null,reviewReason:row.reviewReason||null}));
 }
-function registerInflationClassificationIpc({ipcMain,db,licenseView,getActiveSession}) {
-  if(!ipcMain||typeof ipcMain.handle!=='function'||typeof licenseView!=='function'||typeof getActiveSession!=='function') throw new Error('No se pudo registrar el puente de clasificaciones de inflación.');
-  initializeInflationClassificationSchema(db);
+function registerInflationClassificationIpc({ipcMain,db,licenseView,getActiveSession,withDatabase=null}) {
+  if(!ipcMain||typeof ipcMain.handle!=='function'||typeof licenseView!=='function'||typeof getActiveSession!=='function'||
+    (withDatabase!==null&&typeof withDatabase!=='function')) throw new Error('No se pudo registrar el puente de clasificaciones de inflación.');
+  if(!withDatabase) initializeInflationClassificationSchema(db);
+  const runWithDatabase=(token,operation)=>withDatabase
+    ? withDatabase(token,(activeDb,companyId)=>operation(activeDb,companyId))
+    : operation(db,null);
   ipcMain.handle('sicoven:inflation-classification-list',(_event,token,filters)=>{
     const actor=getActiveSession(token);if(!licenseView().authorized||!actor) throw new Error('Sesión no válida o licencia no autorizada.');
-    const state=readState(db);if(filters?.companyId&&!state.companies.some(c=>String(c.id)===String(filters.companyId))) throw new Error('La empresa solicitada no existe.');
-    return listInflationClassifications(db,filters||{});
+    return runWithDatabase(token,(activeDb,companyId)=>{
+      const requested=String(filters?.companyId||'');
+      if(companyId&&requested&&requested!==companyId) throw new Error('La consulta solicitada no pertenece a la empresa activa.');
+      const state=readState(activeDb);
+      if(requested&&!state.companies.some(c=>String(c.id)===requested)) throw new Error('La empresa solicitada no existe.');
+      return listInflationClassifications(activeDb,{...(filters||{}),...(companyId?{companyId}: {})});
+    });
   });
-  ipcMain.handle('sicoven:inflation-classification-save',(_event,token,input)=>saveInflationClassification(db,input,requireAdmin(licenseView,getActiveSession,token)));
-  ipcMain.handle('sicoven:inflation-classification-review',(_event,token,input)=>reviewInflationClassification(db,input,requireAdmin(licenseView,getActiveSession,token)));
+  ipcMain.handle('sicoven:inflation-classification-save',(_event,token,input)=>{
+    const actor=requireAdmin(licenseView,getActiveSession,token);
+    return runWithDatabase(token,(activeDb,companyId)=>{
+      if(companyId&&String(input?.companyId||'')!==companyId) throw new Error('La clasificación no pertenece a la empresa activa.');
+      return saveInflationClassification(activeDb,input,actor);
+    });
+  });
+  ipcMain.handle('sicoven:inflation-classification-review',(_event,token,input)=>{
+    const actor=requireAdmin(licenseView,getActiveSession,token);
+    return runWithDatabase(token,(activeDb,companyId)=>{
+      if(companyId&&String(input?.companyId||'')!==companyId) throw new Error('La revisión no pertenece a la empresa activa.');
+      return reviewInflationClassification(activeDb,input,actor);
+    });
+  });
 }
 module.exports={initializeInflationClassificationSchema,validateDecision,saveInflationClassification,reviewInflationClassification,listInflationClassifications,registerInflationClassificationIpc};
