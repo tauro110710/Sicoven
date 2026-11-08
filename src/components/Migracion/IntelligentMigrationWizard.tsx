@@ -959,6 +959,7 @@ const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fech
     let priceCurrency:'USD'|'BS';
     let price1:number;
     let price2:number|null=null, price3:number|null=null, price4:number|null=null;
+    let legacyUsd:number|undefined;
     if(standardPriceRaw!==undefined){
      if(!['USD','BS','VES','BOLIVARES','BOLIVAR'].includes(normalizedCurrency))throw new Error('Registro '+(i+1)+': Moneda_Precio debe declarar USD o BS. No se convertirán precios sin moneda de origen.');
      priceCurrency=normalizedCurrency==='USD'?'USD':'BS';
@@ -968,12 +969,12 @@ const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fech
     }else{
      priceCurrency='BS';
      price1=number('salesPriceBs','precioVentaBs','priceBs','salesPrice','precioVenta');
-     const legacyUsd=number('salesPriceUsd','precioVentaUsd','priceUsd');
-     if(openingBcvRate>0&&Math.abs(legacyUsd-price1/openingBcvRate)>0.05)throw new Error('Registro '+(i+1)+': los precios Bs/USD heredados no concilian con la tasa declarada. Use Precio_1..4 y Moneda_Precio para evitar ambigüedad.');
+     legacyUsd=number('salesPriceUsd','precioVentaUsd','priceUsd');
     }
     const priceBs=priceCurrency==='BS'?price1:(Number(targetCompany.bcvRate)>0?price1*Number(targetCompany.bcvRate):0);
     const priceUsd=priceCurrency==='USD'?price1:(Number(targetCompany.bcvRate)>0?price1/Number(targetCompany.bcvRate):0);
     const openingBcvRate=number('openingBcvRate','bcvRate','tasaBcvApertura');
+    if(legacyUsd!==undefined&&openingBcvRate>0&&Math.abs(legacyUsd-price1/openingBcvRate)>0.05)throw new Error('Registro '+(i+1)+': los precios Bs/USD heredados no concilian con la tasa declarada. Use Precio_1..4 y Moneda_Precio para evitar ambigüedad.');
     const openingDate=String(pick(r,'openingDate','fechaApertura')??'').slice(0,10);
     if(!isValidIsoDate(openingDate))throw new Error('Registro '+(i+1)+': declare una fecha de apertura válida AAAA-MM-DD; no se usará la fecha actual.');
     if((stock>0||cost>0)&&openingBcvRate<=0)throw new Error('Registro '+(i+1)+': la existencia o costo inicial requiere una tasa BCV histórica positiva declarada en el archivo.');
