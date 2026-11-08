@@ -133,7 +133,7 @@ interface AccountingContextType {
   addJournalEntry: (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>, accountCatalog?: Account[], targetCompanyId?: string) => JournalEntry;
   deleteJournalEntry: (id: string) => void;
   reverseJournalEntry: (id: string, effectiveDate: string, reason: string, workpaperNote?: string, priorPeriodAdjustment?: boolean, retainedEarningsAccountCode?: string) => Promise<JournalEntry>;
-  closeAccountingPeriod: (closedThroughDate: string) => Promise<void>;
+  closeAccountingPeriod: (closedThroughDate: string) => Promise<number>;
   reopenAccountingPeriod: (reopenedThroughDate: string | null, reason: string) => Promise<void>;
   createAccountingYearOpening: (input: { periodStartDate: string; periodEndDate: string; openingDate: string; bcvRate: number; retainedEarningsAccountCode?: string }) => Promise<JournalEntry>;
 
