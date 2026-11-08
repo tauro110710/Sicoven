@@ -73,9 +73,12 @@ async function evaluate(expression) {
 }
 
 async function clickButton(label) {
-  const expression = '(() => { const button = [...document.querySelectorAll("button")].find(item => item.innerText.trim() === ' +
+  const findExpression = '(() => { const button = [...document.querySelectorAll("button")].find(item => item.innerText.trim() === ' +
+    JSON.stringify(label) + '); return Boolean(button && !button.disabled); })()';
+  await waitFor(() => evaluate(findExpression), 'El botón "' + label + '" no se habilitó a tiempo', 30000);
+  const clickExpression = '(() => { const button = [...document.querySelectorAll("button")].find(item => item.innerText.trim() === ' +
     JSON.stringify(label) + '); if (!button || button.disabled) return false; button.click(); return true; })()';
-  const result = await evaluate(expression);
+  const result = await evaluate(clickExpression);
   assert(result, 'No se pudo pulsar el botón "' + label + '".');
 }
 
