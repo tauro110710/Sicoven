@@ -86,7 +86,7 @@ export const FixedAssetsView: React.FC = () => {
       };
       if (defaults[selectedSource.line.accountCode]) setAccumulatedAccountCode(defaults[selectedSource.line.accountCode]);
     }
-  }, [selectedSource?.key, suggestedAssetCode]);
+  }, [selectedSource?.key, suggestedAssetCode, assetCode]);
 
   const submitAsset = async () => {
     setError('');
