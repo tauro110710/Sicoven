@@ -89,6 +89,15 @@ const MODULE_HELP: Record<string, { title: string; intro: string; items: HelpIte
       { question: '¿Puedo cambiar el costo de un artículo con movimientos históricos?', answer: 'No sustituya el costo histórico sin analizar sus efectos. Revise el método de valoración, las capas o movimientos que originaron el saldo y el impacto en costo de ventas y estados financieros. Corrija el origen del error mediante un ajuste trazable.', kind: 'warning' }
     ]
   },
+  'activos-fijos': {
+    title: 'Activos fijos',
+    intro: 'Registro de bienes capitalizados y depreciación financiera vinculada al Libro Diario.',
+    items: [
+      { question: '¿Cómo registro un activo?', answer: 'Seleccione una línea de adquisición que ya esté contabilizada en una cuenta de Propiedades, Planta y Equipos (1.2). El registro del activo enlaza esa línea y no crea un segundo asiento de compra. Complete la fecha en que estuvo disponible para uso, la vida útil, el estimado de valor residual y las cuentas de depreciación.', kind: 'guide' },
+      { question: '¿Cómo se calcula la depreciación?', answer: 'La primera etapa utiliza el método lineal financiero, prorrateado por los días exactos de disponibilidad para uso y con ajuste de redondeo en el período final. Cada período genera un asiento en Libro Diario en Bs. y USD. Revise vida útil, residual y patrón de consumo antes de contabilizar.', kind: 'guide' },
+      { question: '¿El módulo calcula depreciación fiscal o bajas de activos?', answer: 'Todavía no. La depreciación fiscal, bajas/ventas, deterioro, revaluaciones y efectos de inflación requieren flujos y políticas separados. No utilice el cálculo financiero como deducción fiscal ni registre una baja manual sin el procedimiento contable correspondiente.', kind: 'warning' }
+    ]
+  },
   'ret-iva': {
     title: 'Retenciones de IVA',
     intro: 'Ayuda para revisar comprobantes, períodos y archivos de retenciones.',
