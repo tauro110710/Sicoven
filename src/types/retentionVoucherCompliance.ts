@@ -30,3 +30,12 @@ export function validateRetentionVoucherSupplierEmail(
     );
   }
 }
+
+/** Article 19 requires fiscal documents to identify the governing providencia. */
+export function requiresSnat2026DocumentReference(voucherIssueDate: string): boolean {
+  if (!ISO_DATE.test(voucherIssueDate)) return false;
+  const parsed = new Date(voucherIssueDate + 'T00:00:00.000Z');
+  return Number.isFinite(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === voucherIssueDate &&
+    voucherIssueDate >= RETENTION_VOUCHER_EMAIL_EFFECTIVE_DATE;
+}
