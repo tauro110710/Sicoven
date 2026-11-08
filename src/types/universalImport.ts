@@ -15,7 +15,7 @@ export const getUniversalJsonValueAtPath = (root: unknown, path: string): unknow
   }, root);
 
 export type PosvenBackupMappingAnalysis = {
-  salesInvoices: number; salesCollectionReceipts: number; salesDetailLines: number;
+  salesInvoices: number; salesCollectionReceipts: number; collectionReceiptsLinkedToHistory: number; collectionReceiptsWithoutHistory: number; salesDetailLines: number;
   salesProductLines: number; unresolvedSalesProductLines: number; salesWithLinkedReceivable: number;
   salesMissingFiscalControl: number; salesMissingCustomerRif: number; salesMissingTaxRate: number;
   purchases: number; purchasesWithUniqueSupplier: number; purchasesWithoutSupplierMatch: number;
@@ -61,6 +61,13 @@ export const analyzePosvenBackupMapping = (root: unknown): PosvenBackupMappingAn
   const invoiceRows = sales.filter(row => !receiptRows.includes(row));
   const receivableSaleIds = new Set(receivables.flatMap(row =>
     [row.ventaId, row.facturaId].filter(Boolean).map(String)));
+  const collectionReceiptIds = new Set(receiptRows.map(row => String(row.id ?? '')).filter(Boolean));
+  const receivableHistoryIds = new Set(receivables.flatMap(row =>
+    (Array.isArray(row.historialPagos) ? row.historialPagos : []).flatMap(payment =>
+      payment && typeof payment === 'object'
+        ? [String((payment as Record<string, unknown>).id ?? ''), String((payment as Record<string, unknown>).reciboId ?? '')].filter(Boolean)
+        : [])));
+  const collectionReceiptsLinkedToHistory = [...collectionReceiptIds].filter(id => receivableHistoryIds.has(id)).length;
   const saleLines = invoiceRows.flatMap(row => Array.isArray(row.items) ? row.items : [])
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item));
   const productSaleLines = saleLines.filter(item => norm(item.productoId) !== 'abono' && Boolean(item.productoId));
@@ -95,6 +102,8 @@ export const analyzePosvenBackupMapping = (root: unknown): PosvenBackupMappingAn
   return {
     salesInvoices: invoiceRows.length,
     salesCollectionReceipts: receiptRows.length,
+    collectionReceiptsLinkedToHistory,
+    collectionReceiptsWithoutHistory: receiptRows.length - collectionReceiptsLinkedToHistory,
     salesDetailLines: saleLines.length,
     salesProductLines: productSaleLines.length,
     unresolvedSalesProductLines,
