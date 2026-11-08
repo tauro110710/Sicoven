@@ -52,7 +52,7 @@ function ensureDirectoryAbsent(directory, label) {
 
 function createTenantMigrationOrchestrator(options) {
   const {
-    sourceDb, userDataDir, manager, assertSourceQuiescent,
+    sourceDb, userDataDir, manager, acquireMaintenanceLock,
     getDocumentsRoot = () => path.join(userDataDir, 'supporting-documents'),
     Database = DatabaseDefault,
     assertSqliteIntegrity = assertSqliteIntegrityDefault,
@@ -83,9 +83,18 @@ function createTenantMigrationOrchestrator(options) {
   const companiesRoot = path.join(root, 'companies');
 
   async function execute() {
-    if (assertSourceQuiescent() !== true) {
-      throw new Error('La base heredada no está en mantenimiento exclusivo; se bloqueó la migración para evitar una copia inconsistente.');
+    const releaseMaintenanceLock = acquireMaintenanceLock();
+    if (typeof releaseMaintenanceLock !== 'function') {
+      throw new Error('No se pudo adquirir el bloqueo de mantenimiento exclusivo; no se inició la migración.');
     }
+    try {
+      return await executeUnderMaintenanceLock();
+    } finally {
+      releaseMaintenanceLock();
+    }
+  }
+
+  async function executeUnderMaintenanceLock() {
     const preflight = inspectLegacy(sourceDb);
     if (!preflight.ok) throw new Error('La inspección previa bloqueó la migración: ' + preflight.errors.join(' '));
 
