@@ -6,6 +6,7 @@ import { analyzePosvenBackupMapping, detectImportSourceSystem, detectUniversalIm
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { validateSupplierDirectAdvanceDraft } from '../../types/supplierDirectAdvance';
+import { getUniversalMasterTemplate, type UniversalMasterTemplateKind } from '../../types/universalImportTemplates';
 
 type Row = Record<string, unknown>;
 type ModuleId = 'inventory' | 'customers' | 'suppliers' | 'receivables' | 'payables' | 'sales' | 'purchases' | 'accounts' | 'journal' | 'movements' | 'banks' | 'retentions' | 'assets';
@@ -38,7 +39,7 @@ const MODULES: ModuleInfo[] = [
 ];
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const isPosvenProductCollection = isUniversalProductCollectionPath;
-const isSingleInventoryMasterSelection = (ids: ModuleId[]) => ids.length === 1 && ids[0] === 'inventory';
+const isSingleMasterSelection = (ids: ModuleId[]) => ids.length === 1 && ['inventory','customers','suppliers'].includes(ids[0]);
 const parseCsv = (text: string): Row[] => parseDelimitedRecords(text);
 const scalar = (v: unknown): unknown => {
  if (v && typeof v === 'object' && 'text' in v) return (v as {text:unknown}).text;
@@ -59,7 +60,15 @@ const pick = (row:Row, ...keys:string[]) => {
 };
 
 export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClose}) => {
- const { companies, products: allProducts, getCompanyInventoryProducts, getCompanyInventoryMovements, importInventoryProducts, importInventoryMovements, accounts, bankAccounts, addAccount, addJournalEntry, addSale, addPurchase, addImportedCreditSettlements, addImportedSupplierDirectAdvances, addImportedSupplierAdvanceSettlements, runAtomicInvoiceImportAndWait, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, currentCompany } = useAccounting();
+ const { companies, products: allProducts, getCompanyInventoryProducts, getCompanyInventoryMovements, importInventoryProducts, importInventoryMovements, importCustomers, importSuppliers, accounts, bankAccounts, addAccount, addJournalEntry, addSale, addPurchase, addImportedCreditSettlements, addImportedSupplierDirectAdvances, addImportedSupplierAdvanceSettlements, runAtomicInvoiceImportAndWait, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, currentCompany } = useAccounting();
+ const downloadTemplate = (kind: UniversalMasterTemplateKind) => {
+  const template = getUniversalMasterTemplate(kind);
+  const blob = new Blob(['\\uFEFF' + template.csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url; anchor.download = template.fileName; document.body.appendChild(anchor);
+  anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
+ };
  const [targetCompanyId, setTargetCompanyId] = useState('');
  const targetCompany = companies.find(company => company.id === targetCompanyId) || null;
  const companyProducts = targetCompany ? getCompanyInventoryProducts(targetCompany.id) : [];
@@ -468,7 +477,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
    const missingInventoryFields = requiredInventoryFields.filter(group => !group.some(key => available.has(norm(key)))).map(group => group[0]);
    if (missingInventoryFields.length) { setError('No se puede migrar Inventario: faltan campos esenciales '+missingInventoryFields.join(', ')+'. No se supondrán existencias, costos ni precios en cero.'); return; }
   }
-  if(!isSingleInventoryMasterSelection(selected)){setError('El migrador universal solo admite maestros: productos/inventario, clientes y proveedores. Las demás colecciones son de diagnóstico y no se importan.');return;}
+  if(!isSingleMasterSelection(selected)){setError('El migrador universal solo admite maestros: productos/inventario, clientes y proveedores. Las demás colecciones son de diagnóstico y no se importan.');return;}
   setBusy(true);
   try{
    if(selected[0]==='sales'||selected[0]==='purchases'){
@@ -1008,6 +1017,15 @@ const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fech
    <div className="space-y-5 overflow-y-auto p-5">
     <section className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-4 space-y-2"><label htmlFor="migration-target-company" className="flex items-center gap-2 text-sm font-semibold text-slate-900">Empresa destino de esta migración <span className="text-rose-600">*</span></label><select id="migration-target-company" value={targetCompanyId} onChange={event=>{setTargetCompanyId(event.target.value);setConfirmed(false);setError('');setNotice('');}} disabled={busy} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Seleccionar empresa…</option>{companies.map(company=><option key={company.id} value={company.id}>{company.name} · {company.rif}{company.id===currentCompany.id?' · actualmente seleccionada':''}</option>)}</select>{targetCompany?<p className="text-xs text-slate-600">Destino fijado: <strong>{targetCompany.name}</strong> · RIF {targetCompany.rif}. La empresa activa no cambiará.</p>:<p className="text-xs text-rose-700">Debe seleccionar una empresa antes de importar.</p>}<p className="text-xs text-slate-600">La importación de inventario, ventas, compras y asientos utiliza este destino explícito. La empresa activa no cambia. El plan de cuentas compartido, los maestros independientes de clientes/proveedores y las cargas aisladas de CxC/CxP no se importan porque el modelo actual no los separa de forma segura.</p></section>
     <label className="flex cursor-pointer flex-col items-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center hover:border-emerald-500"><FileUp size={30} className="mb-2 text-emerald-700"/><strong>Selecciona uno o varios archivos de cualquier sistema</strong><span className="mt-1 text-sm text-slate-500">JSON, CSV, TSV, TXT, Excel XLSX o XLSM · análisis local del contenido y sus colecciones</span><input className="mt-3 block max-w-full text-sm" type="file" multiple accept=".json,.csv,.tsv,.txt,.xlsx,.xlsm" onChange={e=>void readFiles(Array.from(e.target.files||[]))}/></label>
+    <section className="rounded-xl border border-slate-200 bg-white p-4">
+     <h3 className="font-semibold text-slate-900">Plantillas universales de SICOVEN</h3>
+     <p className="mt-1 text-xs text-slate-600">Descarga la plantilla correspondiente, completa los datos reales y vuelve a cargarla. Los identificadores internos de precios son Precio_1 a Precio_4 y Moneda_Precio; los campos no utilizados pueden quedar vacíos.</p>
+     <div className="mt-3 flex flex-wrap gap-2">
+      <button type="button" onClick={()=>downloadTemplate('inventory')} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold hover:bg-slate-50">Descargar Productos / Inventario</button>
+      <button type="button" onClick={()=>downloadTemplate('customers')} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold hover:bg-slate-50">Descargar Clientes</button>
+      <button type="button" onClick={()=>downloadTemplate('suppliers')} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold hover:bg-slate-50">Descargar Proveedores</button>
+     </div>
+    </section>
     {files.length>0&&<p className="text-sm text-slate-600">{files.length} archivo(s) · {posvenBackup?'respaldo POSVEN detectado':backupPayload?'adaptador POSVEN detectado':rows.length+' registros detectados'}</p>}
     {backupPayload&&<section className={'rounded-xl border p-4 text-sm '+(posvenBackup?'border-sky-300 bg-sky-50 text-sky-950':'border-amber-300 bg-amber-50 text-amber-950')}><h3 className="font-bold">{posvenBackup?'Respaldo POSVEN detectado · versión '+String((()=>{try{return JSON.parse(backupPayload).version??'desconocida'}catch{return 'desconocida'}})()):'Respaldo completo de SICOVEN'}</h3><p className="mt-1">{posvenBackup?'Se reconoció la estructura versionada y se analizaron las colecciones dentro de data. Este archivo no es un respaldo nativo de SICOVEN: no se restaurará ni contabilizará directamente. El siguiente paso es mapear cada módulo al modelo contable de la empresa y validar saldos, relaciones y duplicados. No se ha escrito ningún dato.':'Se detectó un respaldo estructurado. Al confirmarlo, se reemplazarán los datos actuales por los del archivo, tras validar referencias y estructura.'}</p>{posvenBackup&&<div className="mt-3 rounded-lg border border-sky-200 bg-white/70 p-3"><strong>{Object.values(backupCounts??{}).reduce((sum,count)=>sum+count,0).toLocaleString('es-VE')} registros en arreglos detectados</strong><div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4"><div className="rounded-md bg-sky-50 p-2"><span className="block text-xs">Colecciones</span><strong>{posvenQuality.collections}</strong></div><div className="rounded-md bg-sky-50 p-2"><span className="block text-xs">Filas objeto</span><strong>{posvenQuality.objectRows.toLocaleString('es-VE')}</strong></div><div className="rounded-md bg-sky-50 p-2"><span className="block text-xs">Elementos no objeto</span><strong>{posvenQuality.invalidRows.toLocaleString('es-VE')}</strong></div><div className="rounded-md bg-sky-50 p-2"><span className="block text-xs">Colecciones vacías</span><strong>{posvenQuality.emptyCollections}</strong></div></div><p className="mt-2 text-xs">Diagnóstico estructural solamente; estas cifras no implican que los registros estén validados contablemente ni que se hayan importado.</p></div>}<div className="mt-3 grid gap-3 md:grid-cols-2">{POSVEN_COLLECTION_LABELS.map(group=>{const entries=Object.entries(backupCounts??{}).filter(([name])=>group.match.test(name));if(!entries.length)return null;return <div key={group.label} className="rounded-lg border border-sky-200 bg-white/70 p-3"><h4 className="font-semibold">{group.label}</h4><ul className="mt-1 space-y-1">{entries.map(([name,count])=><li key={name} className="flex justify-between gap-3"><span className="break-all">{name}</span><strong className="shrink-0">{count.toLocaleString('es-VE')}</strong></li>)}</ul></div>})}</div><details className="mt-3"><summary className="cursor-pointer font-semibold">Ver todas las colecciones detectadas</summary><ul className="mt-2 grid grid-cols-2 gap-1 md:grid-cols-3">{Object.entries(backupCounts??{}).map(([name,count])=><li key={name}>{name}: <strong>{count.toLocaleString('es-VE')}</strong></li>)}</ul></details></section>}
     {posvenBackup&&posvenPreview.length>0&&<section className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4"><h3 className="font-bold text-slate-900">Colecciones detectadas: selección de importación</h3><p className="mt-1 text-sm text-slate-600">Puedes revisar las colecciones y su correspondencia con SICOVEN. Este análisis usa el esquema POSVEN real; no convierte cobros en ventas, el libro de caja en diario contable ni movimientos derivados en un segundo Kardex. Solo se habilita la importación cuando los datos de origen cubren todos los requisitos.</p>
