@@ -77,11 +77,13 @@ function fixture(t, overrides = {}) {
     }
     close() { this.open = false; }
   }
+  const registeredCompanies = [];
   const manager = {
-    listCompanies: () => [],
+    listCompanies: () => [...registeredCompanies],
     registerExistingCompanies(companies) {
       calls.push('register');
-      return companies.map(company => ({ id: company.id }));
+      registeredCompanies.push(...companies.map(company => ({ id: company.id, status: 'ACTIVE' })));
+      return companies.map(company => ({ company_id: company.id }));
     }
   };
   const options = {
