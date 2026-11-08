@@ -157,15 +157,18 @@ test('rejects a symlinked company directory instead of opening a database outsid
   const { userDataDir, manager } = fixture(t);
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-outside-'));
   t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+  manager.registerCompany({ id: 'comp-link', rif: 'J-12345678-9', name: 'Empresa con ruta enlazada' });
+  manager.closeCompany('comp-link');
   const companiesRoot = path.join(userDataDir, 'companies');
-  fs.mkdirSync(companiesRoot, { recursive: true });
   const target = path.join(companiesRoot, 'comp-link');
+  const original = path.join(companiesRoot, 'comp-link-original');
+  fs.renameSync(target, original);
   try {
     fs.symlinkSync(outside, target, process.platform === 'win32' ? 'junction' : 'dir');
   } catch (error) {
+    fs.renameSync(original, target);
     if (['EPERM', 'EACCES', 'ENOTSUP'].includes(error.code)) return t.skip('El sistema no permite crear enlaces simbólicos en este entorno.');
     throw error;
   }
-  manager.registerCompany({ id: 'comp-link', rif: 'J-12345678-9', name: 'Empresa con ruta enlazada' });
   assert.throws(() => manager.openCompany('comp-link'), /directorio local seguro/i);
 });
