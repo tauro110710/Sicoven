@@ -130,6 +130,20 @@ test('no confunde la cédula del cliente con un RIF fiscal verificable', () => {
   assert.equal(result.salesCustomerRifResolvedByRelatedRecord, 0);
   assert.equal(result.salesCustomerRifStillUnresolved, 1);
 });
+test('acepta solo longitudes numéricas compatibles con la estructura venezolana del RIF', () => {
+  const validEightDigits = analyzePosvenBackupMapping({ data: {
+    ventas: [{ id: 'V-1', cliente: 'Cliente A', totalUSD: 10 }],
+    clientes: [{ id: 'C-1', name: 'Cliente A', rif: 'J-1234567-8' }],
+    cxc: []
+  } });
+  const invalidTenDigits = analyzePosvenBackupMapping({ data: {
+    ventas: [{ id: 'V-2', cliente: 'Cliente B', totalUSD: 10 }],
+    clientes: [{ id: 'C-2', name: 'Cliente B', rif: 'J-1234567890' }],
+    cxc: []
+  } });
+  assert.equal(validEightDigits.salesCustomerRifResolvedByRelatedRecord, 1);
+  assert.equal(invalidTenDigits.salesCustomerRifResolvedByRelatedRecord, 0);
+});
 
 test('reconoce rutas anidadas de productos sin confundir detalles de ventas', () => {
   assert.equal(isUniversalProductCollectionPath('productos'), true);
