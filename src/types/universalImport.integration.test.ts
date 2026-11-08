@@ -10,7 +10,9 @@ import {
   classifyUniversalInvoiceRows,
   selectUniversalRowsByStableKeys,
   buildUniversalInvoiceIdentity,
-  findUniversalInvoiceJournalCollision
+  findUniversalInvoiceJournalCollision,
+  mapUniversalSupplierDirectAdvanceDraft,
+  mapUniversalSupplierAdvanceSettlementDraft
 } from './universalImport';
 
 const require = createRequire(import.meta.url);
@@ -289,4 +291,73 @@ test('FIFO de anticipos: notas de crédito y desembolsos directos comparten una 
     ),
     /fecha o importes históricos inválidos/
   );
+});
+
+
+test('importador universal: mapea anticipos directos, reembolsos y aplicaciones solo con operación y soporte explícitos', () => {
+  const directRow = {
+    migrationrowid: 'origen.json|anticipos|1',
+    migrationfile: 'origen.json',
+    operationType: 'SUPPLIER_DIRECT_ADVANCE',
+    supplierName: 'Proveedor Uno',
+    supplierRif: 'J-22222222-2',
+    date: '2026-11-01',
+    amountUsd: 10,
+    bcvRate: 100,
+    treasuryAccountCode: '1.1.1.03',
+    paymentCurrency: 'BS',
+    paidAmount: 1000,
+    reference: 'TRF-001',
+    support: 'Comprobante-001'
+  };
+  const direct = mapUniversalSupplierDirectAdvanceDraft(directRow, [directRow]);
+  assert.equal(direct.sourceRowId, directRow.migrationrowid);
+  assert.deepEqual(direct.draft, {
+    supplierRif: 'J-22222222-2',
+    supplierName: 'Proveedor Uno',
+    date: '2026-11-01',
+    amountUsd: 10,
+    bcvRate: 100,
+    treasuryAccountCode: '1.1.1.03',
+    paymentCurrency: 'BS',
+    paidAmount: 1000,
+    reference: 'TRF-001',
+    support: 'Comprobante-001'
+  });
+
+  const refundRow = {
+    migrationrowid: 'origen.json|anticipos|2',
+    migrationfile: 'origen.json',
+    transactionType: 'REFUND_RECEIVED',
+    supplierName: 'Proveedor Uno',
+    supplierRif: 'J-22222222-2',
+    date: '2026-11-03',
+    amountUsd: 4,
+    amountBs: 420,
+    bcvRate: 105,
+    treasuryAccountCode: '1.1.1.03',
+    cashReceivedBs: 420,
+    reference: 'REF-001'
+  };
+  const refund = mapUniversalSupplierAdvanceSettlementDraft(refundRow, [refundRow]);
+  assert.equal(refund.draft.kind, 'REFUND_RECEIVED');
+  assert.equal(refund.draft.cashReceivedBs, 420);
+  assert.equal(refund.draft.treasuryAccountCode, '1.1.1.03');
+
+  const applicationRow = {
+    migrationrowid: 'origen.json|anticipos|3',
+    migrationfile: 'origen.json',
+    transactionType: 'APPLIED_TO_PURCHASE',
+    supplierName: 'Proveedor Uno',
+    supplierRif: 'J-22222222-2',
+    date: '2026-11-04',
+    amountUsd: 3,
+    amountBs: 315,
+    bcvRate: 105
+  };
+  const application = mapUniversalSupplierAdvanceSettlementDraft(applicationRow, [applicationRow], 'purchase-created-in-batch');
+  assert.equal(application.draft.kind, 'APPLIED_TO_PURCHASE');
+  assert.equal(application.draft.targetPurchaseId, 'purchase-created-in-batch');
+  assert.throws(() => mapUniversalSupplierAdvanceSettlementDraft(applicationRow, [applicationRow]));
+  assert.throws(() => mapUniversalSupplierDirectAdvanceDraft({ ...directRow, operationType: 'PAYMENT' }, [directRow]));
 });
