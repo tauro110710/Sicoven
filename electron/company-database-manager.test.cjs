@@ -99,3 +99,56 @@ test('closes all active company databases without deleting their files', t => {
   assert.ok(fs.existsSync(manager.getDatabasePath('comp-one')));
   assert.ok(fs.existsSync(manager.getDatabasePath('comp-two')));
 });
+test('rejects a database file copied from a different registered company', t => {
+  const { manager } = fixture(t);
+  manager.registerCompany({ id: 'comp-source', rif: 'J-12345678-9', name: 'Origen' });
+  manager.registerCompany({ id: 'comp-target', rif: 'J-98765432-1', name: 'Destino' });
+  manager.closeAll();
+  fs.copyFileSync(manager.getDatabasePath('comp-source'), manager.getDatabasePath('comp-target'));
+  assert.throws(() => manager.openCompany('comp-target'), /identidad interna.*no coincide/i);
+});
+
+test('migrates tenant schema transactionally and updates its local registry version', t => {
+  const { manager, controlDb, userDataDir } = fixture(t);
+  manager.registerCompany({ id: 'comp-upgrade', rif: 'J-12345678-9', name: 'Empresa actualización' });
+  manager.closeAll();
+  const upgraded = createCompanyDatabaseManager({
+    controlDb, userDataDir, Database, assertSqliteIntegrity,
+    initializeCompanyDatabase() {},
+    migrateCompanyDatabase(db, { fromVersion, toVersion }) {
+      assert.equal(fromVersion, 1);
+      assert.equal(toVersion, 2);
+      db.exec('ALTER TABLE ledger_rows ADD COLUMN source TEXT');
+    },
+    schemaVersion: 2
+  });
+  t.after(() => upgraded.closeAll());
+  const db = upgraded.openCompany('comp-upgrade');
+  assert.ok(db.prepare('PRAGMA table_info(ledger_rows)').all().some(column => column.name === 'source'));
+  const registry = controlDb.prepare('SELECT schema_version FROM company_database_registry WHERE company_id=?').get('comp-upgrade');
+  const tenantVersion = db.prepare("SELECT meta_value FROM sicoven_database_meta WHERE meta_key='schema_version'").get().meta_value;
+  assert.equal(registry.schema_version, 2);
+  assert.equal(tenantVersion, '2');
+});
+
+test('rolls back a failed tenant migration and does not advance the registry', t => {
+  const { manager, controlDb, userDataDir } = fixture(t);
+  manager.registerCompany({ id: 'comp-failed-upgrade', rif: 'J-12345678-9', name: 'Empresa sin migrar' });
+  manager.closeAll();
+  const brokenUpgrade = createCompanyDatabaseManager({
+    controlDb, userDataDir, Database, assertSqliteIntegrity,
+    initializeCompanyDatabase() {},
+    migrateCompanyDatabase(db) {
+      db.exec('CREATE TABLE should_rollback(value TEXT)');
+      throw new Error('migration interrupted');
+    },
+    schemaVersion: 2
+  });
+  t.after(() => brokenUpgrade.closeAll());
+  assert.throws(() => brokenUpgrade.openCompany('comp-failed-upgrade'), /migration interrupted/);
+  const registry = controlDb.prepare('SELECT schema_version FROM company_database_registry WHERE company_id=?').get('comp-failed-upgrade');
+  assert.equal(registry.schema_version, 1);
+  const tenantDb = new Database(brokenUpgrade.getDatabasePath('comp-failed-upgrade'), { readonly: true });
+  assert.equal(tenantDb.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='should_rollback'").get(), undefined);
+  tenantDb.close();
+});
