@@ -84,7 +84,7 @@ export const analyzePosvenBackupMapping = (root: unknown): PosvenBackupMappingAn
   }));
   const salesCustomerRifResolvedByRelatedRecord = invoiceRows.filter(row => {
     const linked = receivablesBySaleId.get(String(row.id ?? '')) ?? [];
-    const hasLinkedRif = linked.some(receivable => /\\[\\s*[JGVEP]-[\\d.\\-]+\\s*\\]/i.test(String(receivable.cliente ?? '')));
+    const hasLinkedRif = linked.some(receivable => /\[\s*[JGVEP]-[\d.\-]+\s*\]/i.test(String(receivable.cliente ?? '')));
     const customerMatches = customersByName.get(norm(row.cliente)) ?? [];
     const hasUniqueCustomerRif = customerMatches.length === 1 && Boolean(customerMatches[0].cedula);
     return hasLinkedRif || hasUniqueCustomerRif;
