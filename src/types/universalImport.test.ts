@@ -47,7 +47,7 @@ test('mapea la estructura POSVEN real y separa facturas de recibos CxC', () => {
       { id: 'C1-V-0002', cliente: 'Cliente A', totalUSD: 2, items: [{ productoId: 'ABONO', cantidad: 1 }] }
     ],
     cxc: [
-      { id: 'CRD-1', ventaId: 'C4-V-0001', cliente: 'Cliente A [V-123]', historialPagos: [{ id: 'C4-CXC-0001', reciboId: 'C4-CXC-0001' }] },
+      { id: 'CRD-1', ventaId: 'C4-V-0001', cliente: 'Cliente A [J-12345678-9]', historialPagos: [{ id: 'C4-CXC-0001', reciboId: 'C4-CXC-0001' }] },
       { id: 'CRD-LEGACY', historialPagos: [] }
     ],
     compras: [
@@ -119,6 +119,16 @@ test('mapea la estructura POSVEN real y separa facturas de recibos CxC', () => {
   assert.equal(result.hasFixedAssets, false);
   assert.equal(result.hasChartOfAccounts, false);
   assert.equal(result.users, 1);
+});
+
+test('no confunde la cédula del cliente con un RIF fiscal verificable', () => {
+  const result = analyzePosvenBackupMapping({ data: {
+    ventas: [{ id: 'V-1', cliente: 'Cliente A', totalUSD: 10 }],
+    clientes: [{ id: 'C-1', name: 'Cliente A', cedula: 'V-26.137.404' }],
+    cxc: []
+  } });
+  assert.equal(result.salesCustomerRifResolvedByRelatedRecord, 0);
+  assert.equal(result.salesCustomerRifStillUnresolved, 1);
 });
 
 test('reconoce rutas anidadas de productos sin confundir detalles de ventas', () => {
