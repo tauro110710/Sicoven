@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
-import { analyzePosvenBackupMapping, detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, planUniversalInvoiceSettlements, validateUniversalSettlementDestination, mapUniversalInvoiceSettlementDrafts, mapUniversalSupplierDirectAdvanceDraft, mapUniversalSupplierAdvanceSettlementDraft, selectUniversalRowsByStableKeys, selectUniversalInvoiceSettlements, mapUniversalInventoryItemType, isUniversalProductCollectionPath, getUniversalJsonValueAtPath } from '../../types/universalImport';
+import { analyzePosvenBackupMapping, detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, planUniversalInvoiceSettlements, validateUniversalSettlementDestination, mapUniversalInvoiceSettlementDrafts, mapUniversalSupplierDirectAdvanceDraft, mapUniversalSupplierAdvanceSettlementDraft, selectUniversalRowsByStableKeys, selectUniversalInvoiceSettlements, mapUniversalInventoryItemType, isUniversalProductCollectionPath, getUniversalJsonValueAtPath, shouldUseGenericUniversalAdapters } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { validateSupplierDirectAdvanceDraft } from '../../types/supplierDirectAdvance';
@@ -246,6 +246,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   }catch{return [] as Array<{name:string;count:number;objects:number;invalid:number;fields:string[];identityField:string;missingIdentity:number;duplicateIdentity:number;numericSummaries:Array<{field:string;count:number;sum:number}>;referenceFields:string[];relationshipHints:Array<{field:string;targetCollection:string}>;target:string;mode:string;reason:string;canImport:boolean}>;}
  },[posvenBackup,backupPayload]);
  const analysis = useMemo(()=>{
+  // POSVEN se analiza exclusivamente mediante su mapeador versionado; evitar falsos positivos genéricos.
+  if(!shouldUseGenericUniversalAdapters(posvenBackup?'posven-pro':'unknown'))return [];
   const sources = new Map<string, Row[]>();
   rows.forEach(row=>{
    const source=String(row.migrationsource??'archivo sin nombre');
