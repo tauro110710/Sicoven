@@ -24,8 +24,23 @@ function sha256File(file) {
   } finally { fs.closeSync(fd); }
   return hash.digest('hex');
 }
+function assertCompanyDataIsolation(db, companyId) {
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
+  for (const table of tables) {
+    const name = String(table.name);
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Error('La base contiene un nombre de tabla no exportable.');
+    const columns = db.prepare('PRAGMA table_info("' + name + '")').all();
+    if (!columns.some(column => String(column.name).toLowerCase() === 'company_id')) continue;
+    const foreignRows = db.prepare('SELECT COUNT(*) AS count FROM "' + name + '" WHERE company_id IS NULL OR CAST(company_id AS TEXT) <> ?').get(String(companyId));
+    if (Number(foreignRows?.count || 0) > 0) {
+      throw new Error('La tabla ' + name + ' contiene registros sin empresa o pertenecientes a otra empresa. Se bloqueó la entrega para evitar exponer información ajena.');
+    }
+  }
+  return true;
+}
 function verifyCompanyIdentity(db, companyId, expectedRif) {
   assertSqliteIntegrity(db);
+  assertCompanyDataIsolation(db, companyId);
   const metadata = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sicoven_database_meta'").get();
   if (!metadata) throw new Error('La base no contiene metadatos de identidad multiempresa.');
   const id = String(db.prepare("SELECT meta_value FROM sicoven_database_meta WHERE meta_key='company_id'").get()?.meta_value || '');
@@ -149,4 +164,4 @@ async function exportCompanyData(options) {
   if (format === 'sqlite') return writeSqliteExport(options);
   throw new Error('Formato de entrega no admitido. Seleccione SQLite o JSON.');
 }
-module.exports = { exportCompanyData, verifyCompanyIdentity, collectDocuments, exportTablesAsJson };
+module.exports = { exportCompanyData, verifyCompanyIdentity, assertCompanyDataIsolation, collectDocuments, exportTablesAsJson };
