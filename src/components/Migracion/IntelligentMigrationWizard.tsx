@@ -992,7 +992,7 @@ const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fech
     {posvenMapping&&<div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-sm">
      <h4 className="font-semibold text-slate-900">Resultado del mapeo cruzado del respaldo</h4>
      <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-      <p>Ventas comerciales: <strong>{posvenMapping.salesInvoices.toLocaleString('es-VE')}</strong> · recibos CxC separados: <strong>{posvenMapping.salesCollectionReceipts.toLocaleString('es-VE')}</strong></p>
+      <p>Ventas comerciales: <strong>{posvenMapping.salesInvoices.toLocaleString('es-VE')}</strong> · recibos CxC: <strong>{posvenMapping.salesCollectionReceipts.toLocaleString('es-VE')}</strong>; enlazados al historial: <strong>{posvenMapping.collectionReceiptsLinkedToHistory.toLocaleString('es-VE')}</strong>; pendientes: <strong>{posvenMapping.collectionReceiptsWithoutHistory.toLocaleString('es-VE')}</strong></p>
       <p>CxC enlazadas a ventas: <strong>{posvenMapping.receivablesLinkedToSales.toLocaleString('es-VE')}</strong> / {posvenMapping.receivables.toLocaleString('es-VE')}</p>
       <p>Compras con proveedor único: <strong>{posvenMapping.purchasesWithUniqueSupplier.toLocaleString('es-VE')}</strong> / {posvenMapping.purchases.toLocaleString('es-VE')}</p>
       <p>CxP con compra única: <strong>{posvenMapping.payablesWithUniquePurchaseMatch.toLocaleString('es-VE')}</strong>; ambiguas: <strong>{posvenMapping.payablesWithAmbiguousPurchaseMatch.toLocaleString('es-VE')}</strong>; sin vínculo: <strong>{posvenMapping.payablesWithoutPurchaseMatch.toLocaleString('es-VE')}</strong></p>
