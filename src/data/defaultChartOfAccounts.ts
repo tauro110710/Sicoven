@@ -38,6 +38,7 @@ export const DEFAULT_CHART_OF_ACCOUNTS: Account[] = [
   { code: '1.2.1.05', name: '(-) Depreciación Acumulada Mobiliario', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.2.1' },
   { code: '1.2.1.06', name: '(-) Depreciación Acumulada Vehículos', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.2.1' },
   { code: '1.2.1.07', name: '(-) Depreciación Acumulada Computación', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.2.1' },
+  { code: '1.2.1.08', name: '(-) Depreciación Acumulada Maquinarias y Equipos Industriales', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.2.1' },
 
   // 2 PASIVO
   { code: '2', name: 'PASIVO', type: 'PASIVO', level: 1, isMovement: false },
