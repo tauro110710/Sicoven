@@ -74,6 +74,8 @@ import { buildSupplierDebitNoteAccountingPlan, type SupplierDebitNoteAccountingD
 import { calculatePurchaseServiceCreditNote, type PurchaseServiceCreditNoteRequest } from '../types/purchaseServiceCreditNote';
 import { calculateSaleCorrectionNote, type SaleCorrectionNoteRequest } from '../types/saleCorrectionNote';
 import { resolveNonInventoryPurchaseDebitAccount, resolveTreasuryAccountCurrency } from '../types/purchaseAccounting';
+import type { FixedAsset, FixedAssetDepreciationEvent, FixedAssetRegistrationDraft } from '../types/fixedAssets';
+import { calculateFixedAssetDepreciation, getNextFixedAssetDepreciationPeriod } from '../types/fixedAssets';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -171,6 +173,9 @@ interface AccountingContextType {
   updateProduct: (product: InventoryProduct, reason: string, workpaperNote: string) => Promise<void>;
   movements: InventoryMovement[];
   addMovement: (movement: Omit<InventoryMovement, 'id' | 'companyId'>) => InventoryMovement;
+  fixedAssets: FixedAsset[];
+  registerFixedAsset: (draft: FixedAssetRegistrationDraft) => Promise<FixedAsset>;
+  recordFixedAssetDepreciation: (assetId: string) => Promise<FixedAssetDepreciationEvent>;
 
   // Notas y revelaciones de estados financieros
   financialDisclosures: FinancialDisclosure[];
@@ -302,6 +307,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       return [];
     }
   });
+
+  const [fixedAssets, setFixedAssets] = useState<FixedAsset[]>([]);
 
   const [vatVouchers, setVatVouchers] = useState<VatRetentionVoucher[]>(() => {
     try {
@@ -828,6 +835,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!window.sicovenStore?.save || !storageReady) throw new Error('La reversión requiere SQLite local disponible y confirmada. No se permite registrar contra-asientos usando únicamente caché del navegador.');
     const source = journalEntries.find(entry => entry.id === id && entry.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró el asiento original en la empresa activa.');
+    if (fixedAssets.some(asset => asset.companyId === currentCompany.id && asset.sourceJournalEntryId === source.id)) {
+      throw new Error('No se puede revertir directamente la adquisición de un activo fijo registrado. Primero debe ejecutarse su baja contable desde el módulo de Activos Fijos.');
+    }
     if (!Number.isFinite(Number(source.bcvRate)) || Number(source.bcvRate) <= 0) throw new Error('El asiento original no conserva una tasa BCV histórica válida. Corrija primero la tasa del documento antes de reversarlo.');
     const vatPaymentReversalBlocker = getVatPaymentJournalReversalBlocker(
       vatWithholdingDeclarationEvents, source.id
@@ -950,6 +960,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setSupplierDirectAdvances(prev => prev.map(advance => advance.companyId === currentCompany.id && advance.journalEntryId === source.id
       ? { ...advance, isReversed: true, reversedByJournalEntryId: reversal.id }
       : advance));
+    setFixedAssets(prev => prev.map(asset => ({
+      ...asset,
+      depreciationEvents: asset.depreciationEvents.map(event => event.companyId === currentCompany.id && event.journalEntryId === source.id
+        ? { ...event, reversedByJournalEntryId: reversal.id }
+        : event)
+    })));
     if (bankReadiness.pairs.length > 0) {
       const reconciledAt = new Date().toISOString();
       const pairByOriginal = new Map(bankReadiness.pairs.map(pair => [pair.originalStatementId, pair]));
@@ -1016,7 +1032,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // Una cuenta bancaria solo puede tener un egreso pendiente de confirmación SQLite.
   const bankOutgoingLockRef = useRef(createBankOutgoingLock());
   const stateSnapshot = {
-    companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
+    companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, fixedAssets,
     vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency
   };
 
@@ -1048,6 +1064,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             if (Array.isArray(saved.sales)) setSales(saved.sales as SaleRecord[]);
             if (Array.isArray(saved.products)) setProducts(saved.products as InventoryProduct[]);
             if (Array.isArray(saved.movements)) setMovements(saved.movements as InventoryMovement[]);
+            if (Array.isArray(saved.fixedAssets)) setFixedAssets(saved.fixedAssets as FixedAsset[]);
             if (Array.isArray(saved.vatVouchers)) setVatVouchers(saved.vatVouchers as VatRetentionVoucher[]);
             if (Array.isArray(saved.vatWithholdingDeclarations)) setVatWithholdingDeclarations(saved.vatWithholdingDeclarations as VatWithholdingDeclaration[]);
             if (Array.isArray(saved.vatWithholdingDeclarationEvents)) setVatWithholdingDeclarationEvents(saved.vatWithholdingDeclarationEvents as VatWithholdingDeclarationEvent[]);
@@ -1070,6 +1087,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             setSales([]);
             setProducts([]);
             setMovements([]);
+            setFixedAssets([]);
             setVatVouchers([]);
             setVatWithholdingDeclarations([]);
             setVatWithholdingDeclarationEvents([]);
@@ -1092,6 +1110,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               sales: [],
               products: [],
               movements: [],
+              fixedAssets: [],
               vatVouchers: [],
               vatWithholdingDeclarations: [],
               vatWithholdingDeclarationEvents: [],
@@ -1417,6 +1436,110 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     activeImportBatchRef.current?.journalEntries.push(newEntry);
     setJournalEntries(prev => [...prev, newEntry]);
     return newEntry;
+  };
+
+  const registerFixedAsset = async (draft: FixedAssetRegistrationDraft): Promise<FixedAsset> => {
+    assertSQLitePersistenceReady('Registrar activo fijo');
+    const assetCode = String(draft.assetCode || '').trim().toUpperCase();
+    const description = String(draft.description || '').trim();
+    const category = String(draft.category || '').trim();
+    if (!assetCode || !description || !category) throw new Error('Indique código, descripción y categoría del activo.');
+    if (fixedAssets.some(asset => asset.companyId === currentCompany.id && asset.assetCode.toUpperCase() === assetCode)) {
+      throw new Error('Ya existe un activo fijo con ese código en la empresa activa.');
+    }
+    const source = journalEntries.find(entry => entry.id === draft.sourceJournalEntryId && entry.companyId === currentCompany.id);
+    if (!source || source.reversalOfEntryId || source.reversedByEntryId ||
+        journalEntries.some(entry => entry.companyId === currentCompany.id && entry.reversalOfEntryId === source.id)) {
+      throw new Error('El asiento de adquisición no existe, pertenece a otra empresa o está reversado.');
+    }
+    if (fixedAssets.some(asset => asset.companyId === currentCompany.id &&
+        asset.sourceJournalEntryId === source.id && asset.sourceJournalLineIndex === draft.sourceJournalLineIndex)) {
+      throw new Error('La línea de adquisición ya está vinculada a otro activo fijo.');
+    }
+    if (!isValidIsoDate(draft.acquisitionDate) || draft.acquisitionDate < source.date || !isValidIsoDate(draft.serviceDate)) {
+      throw new Error('Las fechas de adquisición y puesta en servicio deben ser válidas y no anteriores al asiento de origen.');
+    }
+    const sourceLine = source.items[draft.sourceJournalLineIndex];
+    const assetAccount = accounts.find(account => account.code === draft.assetAccountCode);
+    const accumulatedAccount = accounts.find(account => account.code === draft.accumulatedDepreciationAccountCode);
+    const expenseAccount = accounts.find(account => account.code === draft.depreciationExpenseAccountCode);
+    if (!sourceLine || sourceLine.accountCode !== draft.assetAccountCode ||
+        !assetAccount || assetAccount.type !== 'ACTIVO' || !assetAccount.isMovement || !assetAccount.code.startsWith('1.2.') ||
+        Number(sourceLine.debitBs) <= 0 || Number(sourceLine.debitUsd) <= 0 ||
+        Number(sourceLine.creditBs || 0) > 0 || Number(sourceLine.creditUsd || 0) > 0) {
+      throw new Error('La línea de origen debe ser un débito dual ya contabilizado en una cuenta de Propiedades, Planta y Equipos (1.2).');
+    }
+    if (!accumulatedAccount || accumulatedAccount.type !== 'ACTIVO' || !accumulatedAccount.isMovement ||
+        !accumulatedAccount.code.startsWith('1.2.') || !/DEPRECIACI[ÓO]N ACUMULADA/i.test(accumulatedAccount.name) ||
+        accumulatedAccount.code === assetAccount.code) {
+      throw new Error('Seleccione una cuenta correctora de depreciación acumulada dentro de Propiedades, Planta y Equipos.');
+    }
+    if (!expenseAccount || expenseAccount.type !== 'GASTOS' || !expenseAccount.isMovement ||
+        !/DEPRECIACI[ÓO]N/i.test(expenseAccount.name)) {
+      throw new Error('Seleccione una cuenta de gasto de depreciación válida.');
+    }
+    const asset: FixedAsset = {
+      ...draft,
+      id: 'fixed-asset-' + currentCompany.id + '-' + crypto.randomUUID(),
+      companyId: currentCompany.id,
+      assetCode,
+      description,
+      category,
+      acquisitionCostBs: Number(sourceLine.debitBs),
+      acquisitionCostUsd: Number(sourceLine.debitUsd),
+      acquisitionBcvRate: Number(source.bcvRate),
+      status: 'ACTIVE',
+      depreciationEvents: [],
+      createdAt: new Date().toISOString()
+    };
+    getNextFixedAssetDepreciationPeriod(asset);
+    setFixedAssets(previous => [...previous, asset]);
+    await waitForPersistence();
+    return asset;
+  };
+
+  const recordFixedAssetDepreciation = async (assetId: string): Promise<FixedAssetDepreciationEvent> => {
+    assertSQLitePersistenceReady('Registrar depreciación de activo fijo');
+    const asset = fixedAssets.find(item => item.id === assetId && item.companyId === currentCompany.id);
+    if (!asset) throw new Error('No se encontró el activo fijo en la empresa activa.');
+    const period = getNextFixedAssetDepreciationPeriod(asset);
+    if (!period) throw new Error('El activo ya alcanzó su valor residual o no tiene depreciación pendiente.');
+    const calculation = calculateFixedAssetDepreciation(asset, period);
+    if (calculation.amountBs <= 0 || calculation.amountUsd <= 0) {
+      throw new Error('El período no genera importes positivos en ambas monedas. Revise el costo, valor residual y vida útil del activo.');
+    }
+    const expenseAccount = accounts.find(account => account.code === asset.depreciationExpenseAccountCode);
+    const accumulatedAccount = accounts.find(account => account.code === asset.accumulatedDepreciationAccountCode);
+    if (!expenseAccount || !accumulatedAccount) throw new Error('Las cuentas contables configuradas para depreciación ya no existen.');
+    const entry = addJournalEntry({
+      entryNumber: 0,
+      date: calculation.postingDate,
+      description: 'Depreciación financiera ' + period + ' · ' + asset.assetCode + ' · ' + asset.description,
+      type: 'AJUSTE',
+      bcvRate: asset.acquisitionBcvRate,
+      referenceDoc: 'DEP-' + asset.assetCode + '-' + period,
+      items: [
+        { accountCode: expenseAccount.code, accountName: expenseAccount.name, debitBs: calculation.amountBs, creditBs: 0, debitUsd: calculation.amountUsd, creditUsd: 0, description: 'Gasto de depreciación ' + asset.assetCode },
+        { accountCode: accumulatedAccount.code, accountName: accumulatedAccount.name, debitBs: 0, creditBs: calculation.amountBs, debitUsd: 0, creditUsd: calculation.amountUsd, description: 'Depreciación acumulada ' + asset.assetCode }
+      ]
+    });
+    const event: FixedAssetDepreciationEvent = {
+      id: 'fixed-asset-dep-' + asset.id + '-' + period + '-' + crypto.randomUUID(),
+      companyId: currentCompany.id,
+      assetId: asset.id,
+      period,
+      date: calculation.postingDate,
+      days: calculation.days,
+      amountBs: calculation.amountBs,
+      amountUsd: calculation.amountUsd,
+      journalEntryId: entry.id,
+      createdAt: new Date().toISOString()
+    };
+    setFixedAssets(previous => previous.map(item => item.id === asset.id
+      ? { ...item, depreciationEvents: [...item.depreciationEvents, event] }
+      : item));
+    await waitForPersistence();
+    return event;
   };
 
   const getCreditPrincipal = (document: SaleRecord | PurchaseRecord, kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT') => {
@@ -5690,6 +5813,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setSales([]);
     setProducts([]);
     setMovements([]);
+    setFixedAssets([]);
     setVatVouchers([]);
     setVatWithholdingDeclarations([]);
     setVatWithholdingDeclarationEvents([]);
@@ -5722,6 +5846,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setSales([]);
     setProducts([]);
     setMovements([]);
+    setFixedAssets([]);
     setVatVouchers([]);
     setVatWithholdingDeclarations([]);
     setVatWithholdingDeclarationEvents([]);
@@ -5750,6 +5875,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       sales,
       products,
       movements,
+      fixedAssets,
       vatVouchers,
       vatWithholdingDeclarations,
       vatWithholdingDeclarationEvents,
@@ -5774,7 +5900,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const protectedCollections: Array<[string, string, Array<{ id?: string }>]> = [
       ['empresas', 'companies', companies], ['asientos', 'journalEntries', journalEntries], ['compras', 'purchases', purchases],
       ['ventas', 'sales', sales], ['artículos', 'products', products],
-      ['movimientos de inventario', 'movements', movements], ['comprobantes IVA', 'vatVouchers', vatVouchers],
+      ['movimientos de inventario', 'movements', movements], ['activos fijos', 'fixedAssets', fixedAssets], ['comprobantes IVA', 'vatVouchers', vatVouchers],
       ['declaraciones IVA', 'vatWithholdingDeclarations', vatWithholdingDeclarations],
       ['eventos de declaraciones IVA', 'vatWithholdingDeclarationEvents', vatWithholdingDeclarationEvents],
       ['comprobantes ISLR', 'islrVouchers', islrVouchers], ['cuentas bancarias', 'bankAccounts', bankAccounts],
@@ -5827,6 +5953,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       )) {
         throw new Error('El respaldo contiene eventos fiscales ISLR incompletos o inválidos.');
       }
+      const fixedAssets: FixedAsset[] = data?.fixedAssets === undefined ? [] : data.fixedAssets;
+      if (!Array.isArray(fixedAssets)) throw new Error('El respaldo contiene una colección de activos fijos inválida.');
       const requiredCollections = [
         'companies', 'accounts', 'journalEntries', 'purchases', 'sales', 'products',
         'movements', 'vatVouchers', 'islrVouchers', 'bankAccounts', 'bankStatementMovements'
@@ -6113,6 +6241,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setSales(data.sales);
       setProducts(data.products);
       setMovements(data.movements);
+      setFixedAssets(fixedAssets);
       setVatVouchers(data.vatVouchers);
       setVatWithholdingDeclarations(vatWithholdingDeclarations);
       setVatWithholdingDeclarationEvents(vatWithholdingDeclarationEvents);
@@ -6206,6 +6335,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         updateProduct,
         movements: movements.filter(m => m.companyId === currentCompany.id),
         addMovement,
+        fixedAssets: fixedAssets.filter(asset => asset.companyId === currentCompany.id),
+        registerFixedAsset,
+        recordFixedAssetDepreciation,
         vatVouchers: vatVouchers.filter(v => v.companyId === currentCompany.id),
         vatWithholdingDeclarations: vatWithholdingDeclarations.filter(item => item.companyId === currentCompany.id),
         vatWithholdingDeclarationEvents: vatWithholdingDeclarationEvents.filter(event =>
