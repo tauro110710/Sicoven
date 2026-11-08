@@ -1613,7 +1613,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       : supplierAdvanceSettlements;
     const document = kind === 'SALE_COLLECTION'
       ? allSales.find(item => item.id === documentId && item.companyId === targetCompanyId)
-      : allPurchases.find(item => item.id === documentId && item.companyId === currentCompany.id);
+      : allPurchases.find(item => item.id === documentId && item.companyId === targetCompanyId);
     if (!document) throw new Error('No se encontró la factura en la empresa activa.');
     if (document.isCancelled) throw new Error('La factura fue reversada y ya no tiene saldo exigible en este auxiliar.');
     const principal = getCreditPrincipal(document, kind);
@@ -1621,18 +1621,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       documentId,
       principal.originalAmountUsd,
       principal.originalAmountBs,
-      creditSettlements.filter(item => item.companyId === currentCompany.id && item.kind === kind && !item.isReversed)
+      creditSettlements.filter(item => item.companyId === targetCompanyId && item.kind === kind && !item.isReversed)
     );
     const creditNotes = kind === 'PURCHASE_PAYMENT'
-      ? allPurchases.filter(item => item.companyId === currentCompany.id && item.originalPurchaseId === documentId && item.documentType === '03' && !item.isCancelled)
-      : allSales.filter(item => item.companyId === currentCompany.id && item.originalSaleId === documentId && item.documentType === '03' && !item.isCancelled);
+      ? allPurchases.filter(item => item.companyId === targetCompanyId && item.originalPurchaseId === documentId && item.documentType === '03' && !item.isCancelled)
+      : allSales.filter(item => item.companyId === targetCompanyId && item.originalSaleId === documentId && item.documentType === '03' && !item.isCancelled);
     const debitNotes = kind === 'PURCHASE_PAYMENT'
-      ? allPurchases.filter(item => item.companyId === currentCompany.id && item.originalPurchaseId === documentId && item.documentType === '02' && !item.isCancelled)
-      : allSales.filter(item => item.companyId === currentCompany.id && item.originalSaleId === documentId && item.documentType === '02' && !item.isCancelled);
+      ? allPurchases.filter(item => item.companyId === targetCompanyId && item.originalPurchaseId === documentId && item.documentType === '02' && !item.isCancelled)
+      : allSales.filter(item => item.companyId === targetCompanyId && item.originalSaleId === documentId && item.documentType === '02' && !item.isCancelled);
     const {creditedByNotesUsd,creditedByNotesBs,debitedByNotesUsd,debitedByNotesBs} =
       summarizeCreditDocumentAdjustments(kind,creditNotes,debitNotes);
     const advanceApplications = kind === 'PURCHASE_PAYMENT'
-      ? allAdvanceSettlements.filter(item => item.companyId === currentCompany.id &&
+      ? allAdvanceSettlements.filter(item => item.companyId === targetCompanyId &&
           !item.isReversed && item.kind === 'APPLIED_TO_PURCHASE' && item.targetPurchaseId === documentId)
       : [];
     const creditedBySupplierAdvancesUsd = advanceApplications.reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
