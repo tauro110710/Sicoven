@@ -652,7 +652,7 @@ export interface IslrRetentionVoucher {
 export interface BankAccount {
   id: string;
   companyId: string;
-  accountCode: string; // e.g. "1.1.1.03"
+  accountCode: string; // Código de la cuenta auxiliar hija de la cuenta padre bancaria
   bankName: string; // e.g. "Banco Nacional de Crédito (BNC)"
   accountNumber: string; // 20 dígitos estándar venezolano
   currency: 'BS' | 'USD';
