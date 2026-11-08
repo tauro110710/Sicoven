@@ -1,3 +1,79 @@
+export interface VnrProvisionLedgerBalance {
+  provisionBs: number;
+  provisionUsd: number;
+  entryCount: number;
+}
+
+/**
+ * Reconstructs the VNR allowance balance from its immutable journal entries.
+ * Reversals (including reversals of reversals) follow reversalOfEntryId links.
+ * The product's cached Bs. amount is never used to invent a historical USD rate.
+ */
+export function calculateVnrProvisionLedgerBalance(
+  productCode: string,
+  journalEntries: Array<{
+    id: string;
+    referenceDoc?: string;
+    reversalOfEntryId?: string;
+    items: Array<{
+      accountCode: string;
+      debitBs: number;
+      creditBs: number;
+      debitUsd: number;
+      creditUsd: number;
+    }>;
+  }>,
+  allowanceAccountCode = '1.1.4.03'
+): VnrProvisionLedgerBalance {
+  const code = String(productCode || '').trim();
+  if (!code || !Array.isArray(journalEntries) || !allowanceAccountCode.trim()) {
+    throw new Error('No se puede reconstruir la provisión VNR sin código de artículo, asientos y cuenta correctora válidos.');
+  }
+
+  const includedIds = new Set(
+    journalEntries
+      .filter(entry => String(entry.referenceDoc || '').startsWith('VNR-' + code + '-'))
+      .map(entry => String(entry.id))
+  );
+  let expanded = true;
+  while (expanded) {
+    expanded = false;
+    for (const entry of journalEntries) {
+      if (entry.reversalOfEntryId && includedIds.has(String(entry.reversalOfEntryId)) && !includedIds.has(String(entry.id))) {
+        includedIds.add(String(entry.id));
+        expanded = true;
+      }
+    }
+  }
+
+  let provisionBs = 0;
+  let provisionUsd = 0;
+  let entryCount = 0;
+  for (const entry of journalEntries) {
+    if (!includedIds.has(String(entry.id))) continue;
+    if (!Array.isArray(entry.items)) throw new Error('Un asiento VNR no contiene renglones contables válidos.');
+    entryCount += 1;
+    for (const line of entry.items) {
+      if (line.accountCode !== allowanceAccountCode) continue;
+      const values = [line.debitBs, line.creditBs, line.debitUsd, line.creditUsd].map(value => value === undefined || value === null ? 0 : Number(value));
+      if (!values.every(value => Number.isFinite(value) && value >= 0)) {
+        throw new Error('El historial contable de la provisión VNR contiene importes inválidos.');
+      }
+      provisionBs += values[1] - values[0];
+      provisionUsd += values[3] - values[2];
+    }
+  }
+
+  if (provisionBs < -0.01 || provisionUsd < -0.000001) {
+    throw new Error('Las reversiones del VNR exceden el saldo histórico de la cuenta correctora.');
+  }
+  return {
+    provisionBs: Math.round(Math.max(0, provisionBs) * 100) / 100,
+    provisionUsd: Math.round(Math.max(0, provisionUsd) * 1_000_000) / 1_000_000,
+    entryCount
+  };
+}
+
 export type InventoryCostingMethod = 'PROMEDIO_PONDERADO' | 'PEPS';
 export type InventoryVatTreatment = 'GENERAL_16' | 'REDUCIDA_8' | 'EXENTO' | 'EXONERADO';
 export type InventoryItemType = 'MERCANCIA' | 'MATERIA_PRIMA' | 'PRODUCTO_EN_PROCESO' | 'PRODUCTO_TERMINADO' | 'SUBPRODUCTO';

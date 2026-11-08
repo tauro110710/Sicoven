@@ -9,7 +9,8 @@ import {
   normalizeProductionRecipe,
   getDefaultInventoryAccountCode,
   calculateVnrWriteDown,
-  calculatePeriodicCostOfSales
+  calculatePeriodicCostOfSales,
+  calculateVnrProvisionLedgerBalance
 } from './inventoryAccounting';
 
 describe('motor de inventario contable', () => {
@@ -173,5 +174,38 @@ describe('motor de inventario contable', () => {
     assert.throws(() => calculatePeriodicCostOfSales({
       openingInventoryBs: 1000, purchasesAndLandedCostsBs: 200, closingInventoryBs: 1500
     }), /inventario final supera/i);
+  });
+});
+
+describe('reconstrucción de provisión VNR desde el Libro Diario', () => {
+  const line = (overrides: Partial<{accountCode:string;debitBs:number;creditBs:number;debitUsd:number;creditUsd:number}> = {}) => ({
+    accountCode: '1.1.4.03', debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0, ...overrides
+  });
+
+  it('reconstruye Bs. y USD acumulados sin recalcular el histórico a la tasa actual', () => {
+    const result = calculateVnrProvisionLedgerBalance('ART-01', [
+      { id:'vnr-1', referenceDoc:'VNR-ART-01-2026-01-31', items:[line({creditBs:1000,creditUsd:10})] },
+      { id:'vnr-2', referenceDoc:'VNR-ART-01-2026-02-28', items:[line({creditBs:500,creditUsd:4})] },
+      { id:'other', referenceDoc:'VNR-ART-02-2026-02-28', items:[line({creditBs:9000,creditUsd:90})] }
+    ]);
+    assert.deepEqual(result, {provisionBs:1500,provisionUsd:14,entryCount:2});
+  });
+
+  it('includes a reversal and a subsequent reversal-of-reversal', () => {
+    const result = calculateVnrProvisionLedgerBalance('ART-01', [
+      { id:'vnr-1', referenceDoc:'VNR-ART-01-2026-01-31', items:[line({creditBs:1000,creditUsd:10})] },
+      { id:'rev-1', reversalOfEntryId:'vnr-1', referenceDoc:'REV-1', items:[line({debitBs:200,debitUsd:2})] },
+      { id:'rev-2', reversalOfEntryId:'rev-1', referenceDoc:'REV-2', items:[line({creditBs:50,creditUsd:0.5})] }
+    ]);
+    assert.deepEqual(result, {provisionBs:850,provisionUsd:8.5,entryCount:3});
+  });
+
+  it('rejects reversal balances below zero and malformed ledger values', () => {
+    assert.throws(() => calculateVnrProvisionLedgerBalance('ART-01', [
+      { id:'vnr-1', referenceDoc:'VNR-ART-01-2026-01-31', items:[line({debitBs:1})] }
+    ]), /reversiones.*exceden/i);
+    assert.throws(() => calculateVnrProvisionLedgerBalance('ART-01', [
+      { id:'vnr-1', referenceDoc:'VNR-ART-01-2026-01-31', items:[line({creditUsd:Number.NaN})] }
+    ]), /importes inválidos/i);
   });
 });

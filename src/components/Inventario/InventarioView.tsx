@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import {
   Package,
@@ -20,13 +20,29 @@ import { NewProductModal } from './NewProductModal';
 import { NewMovementModal } from './NewMovementModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
+import { calculateVnrProvisionLedgerBalance } from '../../types/inventoryAccounting';
 import { InventarioContableTools } from './InventarioContableTools';
 import { IntelligentMigrationWizard } from '../Migracion/IntelligentMigrationWizard';
 
 export const InventarioView: React.FC = () => {
-  const { currentCompany, products: allProducts, movements: allMovements } = useAccounting();
+  const { currentCompany, products: allProducts, movements: allMovements, journalEntries: allJournalEntries } = useAccounting();
   const companyProducts = filterEntriesByCompany(allProducts, currentCompany.id);
   const companyMovements = filterEntriesByCompany(allMovements, currentCompany.id);
+  const companyJournalEntries = filterEntriesByCompany(allJournalEntries, currentCompany.id);
+  const vnrLedgerBalances = useMemo(() => {
+    const balances = new Map<string, ReturnType<typeof calculateVnrProvisionLedgerBalance> | null>();
+    for (const product of companyProducts) {
+      try {
+        const balance = calculateVnrProvisionLedgerBalance(product.code, companyJournalEntries);
+        balances.set(product.id, Math.abs(balance.provisionBs - Number(product.vnrProvisionBs || 0)) <= 0.01 ? balance : null);
+      } catch {
+        balances.set(product.id, null);
+      }
+    }
+    return balances;
+  }, [companyProducts, companyJournalEntries]);
+  const hasUnreconciledVnr = companyProducts.some(product => vnrLedgerBalances.get(product.id) === null);
+
 
   const [activeTab, setActiveTab] = useState<'EXISTENCIAS' | 'KARDEX' | 'CONTABILIDAD'>('EXISTENCIAS');
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -67,14 +83,14 @@ export const InventarioView: React.FC = () => {
     .sort((a, b) => b.date.localeCompare(a.date));
 
   // Valuations
-  const totalInventoryValueBs = companyProducts.reduce(
-    (sum, p) => sum + Math.max(0, p.currentStock * p.avgCostBs - Number(p.vnrProvisionBs || 0)),
-    0
-  );
-  const totalInventoryValueUsd = companyProducts.reduce(
-    (sum, p) => sum + Math.max(0, p.currentStock * p.avgCostUsd - Number(p.vnrProvisionBs || 0) / Math.max(Number(currentCompany.bcvRate || 0), 0.000001)),
-    0
-  );
+  const totalInventoryValueBs = hasUnreconciledVnr ? null : companyProducts.reduce((sum, product) => {
+    const vnr = vnrLedgerBalances.get(product.id)!;
+    return sum + Math.max(0, product.currentStock * product.avgCostBs - vnr.provisionBs);
+  }, 0);
+  const totalInventoryValueUsd = hasUnreconciledVnr ? null : companyProducts.reduce((sum, product) => {
+    const vnr = vnrLedgerBalances.get(product.id)!;
+    return sum + Math.max(0, product.currentStock * product.avgCostUsd - vnr.provisionUsd);
+  }, 0);
   const lowStockCount = companyProducts.filter(p => p.currentStock <= p.minStock).length;
 
   return (
@@ -123,16 +139,22 @@ export const InventarioView: React.FC = () => {
         </div>
 
         {/* Inventory Metric Cards */}
+        {hasUnreconciledVnr && (
+          <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+            Hay artículos cuya provisión VNR en la ficha no concilia con el saldo de la cuenta correctora 1.1.4.03 en el Libro Diario. Sus valores netos no se presentan en USD ni Bs. hasta revisar el historial.
+          </p>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6">
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide block">
               Valoración Total del Inventario
             </span>
             <div className="text-lg font-bold font-mono text-emerald-700 mt-1">
-              {formatBs(totalInventoryValueBs)}
+              {totalInventoryValueBs === null ? 'Pendiente conciliar VNR' : formatBs(totalInventoryValueBs)}
             </div>
             <div className="text-xs font-mono text-slate-500">
-              {formatUsd(totalInventoryValueUsd)}
+              {totalInventoryValueUsd === null ? 'Pendiente conciliar VNR' : formatUsd(totalInventoryValueUsd)}
             </div>
           </div>
 
@@ -260,8 +282,9 @@ export const InventarioView: React.FC = () => {
                   </tr>
                 ) : (
                   filteredProducts.map(prod => {
-                    const totalValBs = Math.max(0, prod.currentStock * prod.avgCostBs - Number(prod.vnrProvisionBs || 0));
-                    const totalValUsd = Math.max(0, prod.currentStock * prod.avgCostUsd - Number(prod.vnrProvisionBs || 0) / Math.max(Number(currentCompany.bcvRate || 0), 0.000001));
+                    const vnrBalance = vnrLedgerBalances.get(prod.id) || null;
+                    const totalValBs = vnrBalance ? Math.max(0, prod.currentStock * prod.avgCostBs - vnrBalance.provisionBs) : null;
+                    const totalValUsd = vnrBalance ? Math.max(0, prod.currentStock * prod.avgCostUsd - vnrBalance.provisionUsd) : null;
                     const isLow = prod.currentStock <= prod.minStock;
 
                     return (
@@ -294,9 +317,9 @@ export const InventarioView: React.FC = () => {
                           )}
                         </td>
                         <td className="py-2.5 px-4 text-right font-mono font-black text-slate-900 bg-slate-50/50">
-                          {formatBs(totalValBs)}
+                          {totalValBs === null ? 'Pendiente conciliar' : formatBs(totalValBs)}
                           {true && (
-                            <span className="block text-[10px] text-slate-400 font-normal">{formatUsd(totalValUsd)}</span>
+                            <span className="block text-[10px] text-slate-400 font-normal">{totalValUsd === null ? 'Pendiente conciliar' : formatUsd(totalValUsd)}</span>
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-center">

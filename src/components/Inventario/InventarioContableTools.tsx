@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FileUp, Scale, FileSpreadsheet, AlertTriangle } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
-import { calculateVnrWriteDown, calculatePeriodicCostOfSales } from '../../types/inventoryAccounting';
+import { calculateVnrWriteDown, calculatePeriodicCostOfSales, calculateVnrProvisionLedgerBalance } from '../../types/inventoryAccounting';
 import type { InventoryProduct } from '../../types/accounting';
 import { validateOpeningInventoryRow, validateMovementImportRow } from '../../types/inventoryImport';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
@@ -38,6 +38,19 @@ export const InventarioContableTools: React.FC = () => {
   const companyProducts = filterEntriesByCompany(allProducts, currentCompany.id);
   const companyMovements = filterEntriesByCompany(allMovements, currentCompany.id);
   const companyJournalEntries = filterEntriesByCompany(allJournalEntries, currentCompany.id);
+  const vnrLedgerBalances = useMemo(() => {
+    const balances = new Map<string, ReturnType<typeof calculateVnrProvisionLedgerBalance> | null>();
+    for (const product of companyProducts) {
+      try {
+        const balance = calculateVnrProvisionLedgerBalance(product.code, companyJournalEntries);
+        balances.set(product.id, Math.abs(balance.provisionBs - Number(product.vnrProvisionBs || 0)) <= 0.01 ? balance : null);
+      } catch {
+        balances.set(product.id, null);
+      }
+    }
+    return balances;
+  }, [companyProducts, companyJournalEntries]);
+
   const [importing, setImporting] = useState(false);
   const [importMode, setImportMode] = useState<'INVENTARIO_INICIAL' | 'MOVIMIENTOS'>('INVENTARIO_INICIAL');
   const [message, setMessage] = useState('');
@@ -187,13 +200,17 @@ export const InventarioContableTools: React.FC = () => {
 
   const exportInventory = () => downloadCsv('SICOVEN_Inventario_Valorado.csv', [
     'codigo','descripcion','tipo','unidad','existencia','metodo_costeo','costo_promedio_bs','provision_vnr_bs','valor_neto_bs',
-    'costo_promedio_usd','valor_neto_usd','cuenta_inventario','cuenta_costo_ventas','iva','tasa_apertura_bcv'
-  ], companyProducts.map(p => [
-    p.code,p.name,p.itemType || 'MERCANCIA',p.unit,p.currentStock,p.costingMethod || 'PROMEDIO_PONDERADO',
-    p.avgCostBs,p.vnrProvisionBs || 0,Math.max(0,p.currentStock*p.avgCostBs-(p.vnrProvisionBs || 0)),
-    p.avgCostUsd,Math.max(0,p.currentStock*p.avgCostUsd-((p.vnrProvisionBs || 0)/(p.openingBcvRate || currentCompany.bcvRate))),
-    p.inventoryAccountCode || '1.1.4.01',p.costOfSalesAccountCode || '5.1.1.01',p.vatTreatment || 'GENERAL_16',p.openingBcvRate || currentCompany.bcvRate
-  ]));
+    'costo_promedio_usd','provision_vnr_usd_libro','valor_neto_usd','estado_conciliacion_vnr','cuenta_inventario','cuenta_costo_ventas','iva','tasa_apertura_bcv'
+  ], companyProducts.map(p => {
+    const vnr = vnrLedgerBalances.get(p.id) || null;
+    return [
+      p.code,p.name,p.itemType || 'MERCANCIA',p.unit,p.currentStock,p.costingMethod || 'PROMEDIO_PONDERADO',
+      p.avgCostBs,vnr ? vnr.provisionBs : 'PENDIENTE',vnr ? Math.max(0,p.currentStock*p.avgCostBs-vnr.provisionBs) : 'PENDIENTE',
+      p.avgCostUsd,vnr ? vnr.provisionUsd : 'PENDIENTE',vnr ? Math.max(0,p.currentStock*p.avgCostUsd-vnr.provisionUsd) : 'PENDIENTE',
+      vnr ? 'CONCILIADO' : 'PENDIENTE_CONCILIAR',
+      p.inventoryAccountCode || '1.1.4.01',p.costOfSalesAccountCode || '5.1.1.01',p.vatTreatment || 'GENERAL_16',p.openingBcvRate || currentCompany.bcvRate
+    ];
+  }));
 
   const exportInventoryBalancePdf = () => {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -205,18 +222,22 @@ export const InventarioContableTools: React.FC = () => {
     doc.text('RESUMEN CONSOLIDADO DE INVENTARIO PARA LIBRO DE INVENTARIOS Y BALANCES', 14, 25);
     doc.setFontSize(7);
     doc.text('Valores en libros antes de provisión y valor neto luego de la provisión VNR registrada. Verificar conciliación con el Libro Mayor.', 14, 30);
-    const rows = companyProducts.slice().sort((a,b) => String(a.inventoryAccountCode || '').localeCompare(String(b.inventoryAccountCode || '')) || a.code.localeCompare(b.code)).map(p => [
-      p.inventoryAccountCode || '1.1.4.01', p.code, p.name, p.itemType || 'MERCANCIA', p.unit,
-      Number(p.currentStock).toFixed(3), Number(p.avgCostBs).toFixed(2),
-      Number(p.currentStock * p.avgCostBs).toFixed(2), Number(p.vnrProvisionBs || 0).toFixed(2),
-      Math.max(0,p.currentStock*p.avgCostBs-Number(p.vnrProvisionBs || 0)).toFixed(2),
-      Math.max(0,p.currentStock*p.avgCostUsd-Number(p.vnrProvisionBs || 0)/Math.max(Number(currentCompany.bcvRate || 0),0.000001)).toFixed(6)
-    ]);
+    const rows = companyProducts.slice().sort((a,b) => String(a.inventoryAccountCode || '').localeCompare(String(b.inventoryAccountCode || '')) || a.code.localeCompare(b.code)).map(p => {
+      const vnr = vnrLedgerBalances.get(p.id) || null;
+      return [
+        p.inventoryAccountCode || '1.1.4.01', p.code, p.name, p.itemType || 'MERCANCIA', p.unit,
+        Number(p.currentStock).toFixed(3), Number(p.avgCostBs).toFixed(2),
+        Number(p.currentStock * p.avgCostBs).toFixed(2), vnr ? vnr.provisionBs.toFixed(2) : 'PENDIENTE',
+        vnr ? Math.max(0,p.currentStock*p.avgCostBs-vnr.provisionBs).toFixed(2) : 'PENDIENTE',
+        vnr ? Math.max(0,p.currentStock*p.avgCostUsd-vnr.provisionUsd).toFixed(6) : 'PENDIENTE'
+      ];
+    });
+    const allVnrReconciled = companyProducts.every(p => vnrLedgerBalances.get(p.id) !== null);
     autoTable(doc, {
       startY: 34,
       head: [['Cuenta inventario','Código','Descripción','Clasificación','Unidad','Cantidad','Costo unit. Bs.','Valor bruto Bs.','Provisión VNR Bs.','Valor neto Bs.','Valor neto USD']],
       body: rows,
-      foot: [['TOTAL','','','','','','',companyProducts.reduce((sum,p)=>sum+p.currentStock*p.avgCostBs,0).toFixed(2),companyProducts.reduce((sum,p)=>sum+Number(p.vnrProvisionBs || 0),0).toFixed(2),companyProducts.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostBs-Number(p.vnrProvisionBs || 0)),0).toFixed(2),companyProducts.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostUsd-Number(p.vnrProvisionBs || 0)/Math.max(Number(currentCompany.bcvRate || 0),0.000001)),0).toFixed(6)]],
+      foot: [['TOTAL','','','','','','',companyProducts.reduce((sum,p)=>sum+p.currentStock*p.avgCostBs,0).toFixed(2),allVnrReconciled?companyProducts.reduce((sum,p)=>sum+(vnrLedgerBalances.get(p.id)?.provisionBs||0),0).toFixed(2):'PENDIENTE',allVnrReconciled?companyProducts.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostBs-(vnrLedgerBalances.get(p.id)?.provisionBs||0)),0).toFixed(2):'PENDIENTE',allVnrReconciled?companyProducts.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostUsd-(vnrLedgerBalances.get(p.id)?.provisionUsd||0)),0).toFixed(6):'PENDIENTE']],
       styles: { fontSize: 7, cellPadding: 1, overflow: 'linebreak' },
       headStyles: { fontSize: 7 },
       footStyles: { fontStyle: 'bold' },
@@ -287,7 +308,11 @@ export const InventarioContableTools: React.FC = () => {
     try {
       const rate = Number(currentCompany.bcvRate);
       if (!Number.isFinite(rate) || rate <= 0) throw new Error('La empresa no tiene una tasa BCV válida.');
+      const ledgerProvision = calculateVnrProvisionLedgerBalance(selectedProduct.code, companyJournalEntries);
       const oldProvision = Number(selectedProduct.vnrProvisionBs || 0);
+      if (Math.abs(ledgerProvision.provisionBs - oldProvision) > 0.01) {
+        throw new Error('La provisión VNR de la ficha no concilia con el saldo histórico de la cuenta 1.1.4.03. No se modificó el artículo ni se generó asiento; requiere revisión del Libro Diario.');
+      }
       const delta = Math.round((vnr.writeDownBs - oldProvision) * 100) / 100;
       if (Math.abs(delta) < 0.01) {
         setMessage('La provisión registrada ya coincide con el cálculo VNR.');
@@ -297,7 +322,16 @@ export const InventarioContableTools: React.FC = () => {
       const allowanceAccount = accounts.find(a => a.code === '1.1.4.03' && a.isMovement);
       if (!lossAccount || !allowanceAccount) throw new Error('Faltan las cuentas contables de desvalorización VNR.');
       const amountBs = Math.abs(delta);
-      const amountUsd = Math.round(amountBs / rate * 1000000) / 1000000;
+      // Aumentos: convertir al tipo de cambio de reconocimiento. Reversiones:
+      // descargar proporcionalmente el USD histórico de la provisión existente.
+      const amountUsd = delta > 0
+        ? Math.round(amountBs / rate * 1000000) / 1000000
+        : oldProvision > 0
+          ? Math.round(ledgerProvision.provisionUsd * (amountBs / oldProvision) * 1000000) / 1000000
+          : 0;
+      if (!Number.isFinite(amountUsd) || amountUsd < 0 || (delta < 0 && amountUsd > ledgerProvision.provisionUsd + 0.000001)) {
+        throw new Error('La reversión VNR no concilia con el saldo USD de la cuenta correctora; no se generó un asiento.');
+      }
       const items = delta > 0 ? [
         { accountCode: lossAccount.code, accountName: lossAccount.name, debitBs: amountBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: 'Pérdida por desvalorización VNR · ' + selectedProduct.code },
         { accountCode: allowanceAccount.code, accountName: allowanceAccount.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: 'Provisión correctora VNR · ' + selectedProduct.code }
