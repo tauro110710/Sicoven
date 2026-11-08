@@ -104,6 +104,7 @@ test('prepares and validates every company before registering databases, then co
   const journalPath = path.join(root, 'tenant-migration', 'tenant-migration-journal.json');
   const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8'));
   assert.equal(journal.phase, 'COMMITTED');
+  assert.equal(journal.migrationId, result.migrationId);
   assert.deepEqual(journal.completedCompanyIds, ['company-a']);
   assert.equal(fs.existsSync(result.backupPath), true);
 });
