@@ -13,14 +13,13 @@ export interface InventoryBcvRateResult {
 export interface InventoryBcvHistoricalRate {
   rate: number;
   effectiveDate: string;
-  updatedAt: string;
+  fetchedAt: string;
   sourceUrl: string;
   provider: 'bcv.today';
 }
 
 interface BcvApiPayload {
   USD?: unknown;
-  updated_at?: unknown;
   effective_date?: unknown;
   date?: unknown;
 }
