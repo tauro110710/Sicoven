@@ -103,7 +103,7 @@ test('blocks tenant snapshots that contain data owned by another company', async
   const invalid = snapshot([a], {
     sales: [{ id: 'sale-b', companyId: 'company-b', totalAmountBs: 200 }]
   });
-  assert.throws(() => saveTenantAccountingSnapshot(manager, invalid), /empresa propietaria válida/i);
+  await assert.rejects(() => saveTenantAccountingSnapshot(manager, invalid), /empresa propietaria válida/i);
 });
 
 test('returns null only when the local registry contains no active companies', async t => {
