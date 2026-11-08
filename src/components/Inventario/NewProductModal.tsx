@@ -3,6 +3,7 @@ import { useAccounting } from '../../context/AccountingContext';
 import { Package, X, Check } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
 import type { InventoryProduct } from '../../types/accounting';
+import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
 
 interface NewProductModalProps {
   isOpen: boolean;
@@ -71,18 +72,30 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
     } else {
       setCode(''); setName(''); setCategory('Mercancías Generales'); setUnit('Unidad');
       setMinStockInput('10'); setCurrentStockInput('0'); setOpeningDate(new Date().toISOString().slice(0, 10));
-      setOpeningBcvRateInput(''); setAvgCostInput(''); setPriceCurrency('USD'); setPriceInputs(['', '', '', '']);
+      setOpeningBcvRateInput(String(currentCompany.inventoryBcvRate || '')); setAvgCostInput(''); setPriceCurrency('USD'); setPriceInputs(['', '', '', '']);
       setInventoryAccountCode('1.1.4.01'); setCostOfSalesAccountCode('5.1.1.01');
       setAdjustmentAccountCode('5.1.2.01'); setOpeningBalanceAccountCode('3.3.1.01');
       setCostingMethod('PROMEDIO_PONDERADO'); setVatTreatment('GENERAL_16'); setItemType('MERCANCIA');
     }
   }, [isOpen, product]);
 
+  useEffect(() => {
+    if (!isOpen || product) return;
+    const historicalRate = resolveInventoryBcvRate(currentCompany.inventoryBcvRateHistory || [], openingDate);
+    if (historicalRate) {
+      setOpeningBcvRateInput(String(historicalRate.rate));
+    } else if (openingDate === currentCompany.inventoryBcvRateEffectiveDate && currentCompany.inventoryBcvRate) {
+      setOpeningBcvRateInput(String(currentCompany.inventoryBcvRate));
+    } else {
+      setOpeningBcvRateInput('');
+    }
+  }, [isOpen, product, openingDate, currentCompany.id, currentCompany.inventoryBcvRate, currentCompany.inventoryBcvRateEffectiveDate, currentCompany.inventoryBcvRateHistory]);
+
   if (!isOpen) return null;
 
   const bcvRate = parseDecimalInput(openingBcvRateInput);
   const avgCostUsd = bcvRate > 0 ? avgCostBs / bcvRate : 0;
-  const liveBcvRate = Number(currentCompany.bcvRate || 0);
+  const liveBcvRate = Number(currentCompany.inventoryBcvRate || 0);
   const primaryPrice = priceValues[0];
   const priceEquivalent = (value: number) => priceCurrency === 'USD'
     ? (liveBcvRate > 0 ? formatBs(value * liveBcvRate) : 'Tasa BCV no disponible')

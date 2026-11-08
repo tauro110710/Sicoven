@@ -87,6 +87,8 @@ export interface Supplier {
   active: boolean;
 }
 
+import type { InventoryBcvHistoryEntry } from './inventoryBcvRate';
+
 export interface Company {
   id: string;
   rif: string; // e.g., "J-40892182-3"
@@ -115,6 +117,11 @@ export interface Company {
   fiscalYear: number; // e.g. 2026
   bcvRate: number; // Tasa oficial BCV Bs/$
   lastRateUpdate?: string;
+  /** Tasa BCV propia del módulo Inventario; no modifica la tasa contable. */
+  inventoryBcvRate?: number;
+  inventoryBcvRateEffectiveDate?: string;
+  inventoryBcvRateFetchedAt?: string;
+  inventoryBcvRateHistory?: InventoryBcvHistoryEntry[];
   /** Último día incluido en un período contable bloqueado. */
   closedThroughDate?: string;
   /** Historial de evaluaciones NIC 21; ausencia = pendiente, nunca se asigna moneda por defecto. */
@@ -468,6 +475,8 @@ export interface InventoryProduct {
   /** Campos de compatibilidad histórica; no son la fuente maestra de los niveles. */
   salesPriceBs: number;
   salesPriceUsd: number;
+  /** Margen bruto objetivo utilizado para sugerir el precio; no altera el costo contable. */
+  targetMarginPercent?: number;
   /** Cuenta de movimiento asociada al valor del inventario. */
   inventoryAccountCode?: string;
   /** Cuenta de costo de ventas o consumo asociada al artículo. */
