@@ -165,3 +165,11 @@ El módulo `electron/tenant-operation-context.cjs` define el contrato de coordin
 8. Al cerrar sesión, vaciar el contexto operativo después de esperar los guardados y operaciones en curso.
 
 El módulo es una pieza aislada y probada; **todavía no está conectado a `main.cjs`, a los handlers IPC ni a `AccountingContext`**. No activa aún el modo multiempresa en la aplicación y no autoriza migrar datos reales. La integración debe validar la sesión en el proceso principal y nunca aceptar rutas SQLite ni confiar en un ID de empresa arbitrario del renderer.
+
+## Inspección previa desde el puente seguro de Electron
+
+Se incorporó `sicoven:tenant-migration-preflight` al proceso principal y al preload. El handler exige licencia vigente y sesión contable autenticada, y ejecuta exclusivamente `inspectLegacyDatabase` sobre la conexión heredada actual.
+
+La respuesta incluye clasificación de tablas, empresas detectadas y bloqueos de preflight, además de `readOnly: true`, `migrationStarted: false` y la identificación de la base fuente. La inspección no crea el registro multiempresa, no modifica esquemas, no copia archivos, no registra bases de empresa y no cambia la base operativa de la aplicación.
+
+Este puente sirve para conocer los bloqueos reales antes de diseñar y ejecutar el orquestador reversible. No es un botón de migración ni habilita todavía la operación multiempresa.
