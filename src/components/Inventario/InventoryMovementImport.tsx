@@ -118,8 +118,9 @@ export const InventoryMovementImport: React.FC<{ isOpen: boolean; onClose: () =>
         } else throw new Error('Fila ' + (index + 2) + ': tipo/concepto no reconocido. Indique ENTRADA, SALIDA o AJUSTE y un concepto compatible.');
         const date = dateValue(valueAt(row, 'date', 'fecha', 'fechaMovimiento'));
         if (!isValidIsoDate(date)) throw new Error('Fila ' + (index + 2) + ': fecha inválida; use AAAA-MM-DD o DD/MM/AAAA.');
-        const documentRef = String(valueAt(row, 'documentRef', 'referencia', 'documento', 'numeroDocumento', 'documentNumber') ?? '').trim();
-        if (!documentRef) throw new Error('Fila ' + (index + 2) + ': la referencia documental es obligatoria.');
+        const sourceReference = String(valueAt(row, 'documentRef', 'referencia', 'documento', 'numeroDocumento', 'documentNumber') ?? '').trim();
+        const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 48);
+        const documentRef = sourceReference || 'IMPORT-KARDEX-' + safeFileName + '-F' + (index + 2);
         if (['DEVOLUCION_COMPRA', 'DEVOLUCION_CLIENTE', 'INVENTARIO_INICIAL'].includes(concept)) throw new Error('Fila ' + (index + 2) + ': devoluciones y saldos iniciales requieren sus flujos vinculados; no se importan como movimientos aislados.');
         const quantityRaw = valueAt(row, 'quantity', 'cantidad', 'qty');
         const quantity = quantityRaw === undefined ? 0 : parseMigrationNumber(quantityRaw);
@@ -138,7 +139,7 @@ export const InventoryMovementImport: React.FC<{ isOpen: boolean; onClose: () =>
         if (concept === 'DEVOLUCION_CLIENTE' && type !== 'ENTRADA') throw new Error('Fila ' + (index + 2) + ': devolución de cliente debe ser una entrada.');
         return {
           productId: product.id, date, type, concept, documentRef, quantity: type === 'AJUSTE' ? Math.abs(balanceQty - product.currentStock) : quantity,
-          unitCostBs, bcvRate, balanceQty: Number.isFinite(balanceQty) ? balanceQty : product.currentStock,
+          unitCostBs, bcvRate, balanceQty: Number.isFinite(balanceQty) ? balanceQty : undefined, expectedBalanceQty: Number.isFinite(balanceQty) && type !== 'AJUSTE' ? balanceQty : undefined,
           additionalLandedCostsBs, counterpartyRif: String(valueAt(row, 'counterpartyRif', 'rifContraparte') ?? '') || undefined,
           counterpartyName: String(valueAt(row, 'counterpartyName', 'nombreContraparte') ?? '') || undefined,
           sourceRow: index + 2, productLabel: product.code + ' · ' + product.name
