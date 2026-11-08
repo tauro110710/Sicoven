@@ -143,9 +143,13 @@ export default function App() {
   const logout = async () => {
     try {
       if (auth && window.sicovenStore) await window.sicovenStore.logout(auth.token);
-    } finally {
       try { localStorage.removeItem('sicoven_auth_token'); } catch {}
       setAuth(null);
+    } catch (error) {
+      // If SQLite cannot confirm its pending writes, keep the authenticated
+      // session visible so the accountant can retry instead of being signed out.
+      const message = error instanceof Error ? error.message : 'No se pudo cerrar la sesión de SICOVEN.';
+      window.alert(message);
     }
   };
 
