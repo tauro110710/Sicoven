@@ -1038,6 +1038,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // Serializa las escrituras completas de app_state: varias actualizaciones rápidas
   // no deben competir y permitir que una instantánea antigua sobrescriba una nueva.
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  // Mantiene una sola instantánea pendiente: los cambios rápidos se consolidan sin perder confirmaciones.
+  const pendingSnapshotRef = useRef<{ snapshot: any; waiters: Array<{ resolve: () => void; reject: (error: Error) => void }> } | null>(null);
+  const persistencePumpInFlightRef = useRef(false);
   const persistenceFaultRef = useRef(false);
   const lastPersistedSnapshotRef = useRef<any>(null);
   const journalReversalInFlightRef = useRef(false);
@@ -1178,60 +1181,81 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!storageReady) return;
     const waitersForSnapshot = persistenceWaitersRef.current.splice(0);
     if (window.sicovenStore) {
-      const snapshotToSave = stateSnapshot;
-      const saveTask = saveQueueRef.current.then(async () => {
-        if (persistenceFaultRef.current) throw new Error('La persistencia SQLite quedó bloqueada tras un fallo anterior.');
-        const result = await window.sicovenStore!.save(token, snapshotToSave);
-        if (result?.ok !== true) throw new Error('SQLite no confirmó el guardado del estado contable.');
-        lastPersistedSnapshotRef.current = snapshotToSave;
-        setStorageError(null);
-      });
-      saveQueueRef.current = saveTask.then(() => undefined, () => undefined);
-      saveTask.then(
-        () => waitersForSnapshot.forEach(waiter => waiter.resolve()),
-        error => {
-          const normalized = error instanceof Error ? error : new Error('Error desconocido al guardar en SQLite.');
-          console.error('Error guardando los datos contables en SQLite:', normalized);
-          persistenceFaultRef.current = true;
-          const confirmed = lastPersistedSnapshotRef.current;
-          if (confirmed) {
-            // La transacción SQLite falló: regresar la interfaz al último snapshot
-            // confirmado evita mostrar operaciones que nunca llegaron a la base local.
-            setCompanies(confirmed.companies || []);
-            setCurrentCompanyId(confirmed.currentCompanyId || confirmed.companies?.[0]?.id || '');
-            const confirmedAccounts = Array.isArray(confirmed.accounts) ? confirmed.accounts : DEFAULT_CHART_OF_ACCOUNTS;
-            const confirmedCodes = new Set(confirmedAccounts.map((account: Account) => account.code));
-            setAccounts(removeUnusedLegacyDefaultBanks(
-              [...confirmedAccounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !confirmedCodes.has(account.code))],
-              confirmed.journalEntries || [],
-              confirmed.bankAccounts || []
-            ));
-            setJournalEntries(confirmed.journalEntries || []);
-            setPurchases(confirmed.purchases || []);
-            setSales(confirmed.sales || []);
-            setProducts(confirmed.products || []);
-            setCustomers(confirmed.customers || []);
-            setSuppliers(confirmed.suppliers || []);
-            setMovements(confirmed.movements || []);
-            setFixedAssets(confirmed.fixedAssets || []);
-            setVatVouchers(confirmed.vatVouchers || []);
-            setVatWithholdingDeclarations(confirmed.vatWithholdingDeclarations || []);
-            setVatWithholdingDeclarationEvents(confirmed.vatWithholdingDeclarationEvents || []);
-            setIslrVouchers(confirmed.islrVouchers || []);
-            setBankAccounts(confirmed.bankAccounts || []);
-            setBankStatementMovements(confirmed.bankStatementMovements || []);
-            setCreditSettlements(confirmed.creditSettlements || []);
-            setSupplierAdvanceSettlements(confirmed.supplierAdvanceSettlements || []);
-            setSupplierDirectAdvances(confirmed.supplierDirectAdvances || []);
-            setIslrFiscalEvents(confirmed.islrFiscalEvents || []);
-            setFinancialDisclosures(confirmed.financialDisclosures || []);
-            setDisplayCurrency(confirmed.displayCurrency || 'DUAL');
+      const pending = pendingSnapshotRef.current;
+      if (pending) {
+        // La instantánea nueva contiene los cambios anteriores; sus confirmaciones
+        // se resuelven juntas cuando SQLite confirme la versión más reciente.
+        pending.snapshot = stateSnapshot;
+        pending.waiters.push(...waitersForSnapshot);
+      } else {
+        pendingSnapshotRef.current = { snapshot: stateSnapshot, waiters: waitersForSnapshot };
+      }
+
+      if (!persistencePumpInFlightRef.current) {
+        persistencePumpInFlightRef.current = true;
+        const pumpTask = (async () => {
+          while (pendingSnapshotRef.current && !persistenceFaultRef.current) {
+            const batch = pendingSnapshotRef.current;
+            pendingSnapshotRef.current = null;
+            try {
+              const result = await window.sicovenStore!.save(token, batch.snapshot);
+              if (result?.ok !== true) throw new Error('SQLite no confirmó el guardado del estado contable.');
+              lastPersistedSnapshotRef.current = batch.snapshot;
+              setStorageError(null);
+              batch.waiters.forEach(waiter => waiter.resolve());
+            } catch (error) {
+              const normalized = error instanceof Error ? error : new Error('Error desconocido al guardar en SQLite.');
+              console.error('Error guardando los datos contables en SQLite:', normalized);
+              persistenceFaultRef.current = true;
+              const queued = pendingSnapshotRef.current;
+              pendingSnapshotRef.current = null;
+              const confirmed = lastPersistedSnapshotRef.current;
+              if (confirmed) {
+                // La transacción SQLite falló: regresar la interfaz al último snapshot
+                // confirmado evita mostrar operaciones que nunca llegaron a la base local.
+                setCompanies(confirmed.companies || []);
+                setCurrentCompanyId(confirmed.currentCompanyId || confirmed.companies?.[0]?.id || '');
+                const confirmedAccounts = Array.isArray(confirmed.accounts) ? confirmed.accounts : DEFAULT_CHART_OF_ACCOUNTS;
+                const confirmedCodes = new Set(confirmedAccounts.map((account: Account) => account.code));
+                setAccounts(removeUnusedLegacyDefaultBanks(
+                  [...confirmedAccounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !confirmedCodes.has(account.code))],
+                  confirmed.journalEntries || [],
+                  confirmed.bankAccounts || []
+                ));
+                setJournalEntries(confirmed.journalEntries || []);
+                setPurchases(confirmed.purchases || []);
+                setSales(confirmed.sales || []);
+                setProducts(confirmed.products || []);
+                setCustomers(confirmed.customers || []);
+                setSuppliers(confirmed.suppliers || []);
+                setMovements(confirmed.movements || []);
+                setFixedAssets(confirmed.fixedAssets || []);
+                setVatVouchers(confirmed.vatVouchers || []);
+                setVatWithholdingDeclarations(confirmed.vatWithholdingDeclarations || []);
+                setVatWithholdingDeclarationEvents(confirmed.vatWithholdingDeclarationEvents || []);
+                setIslrVouchers(confirmed.islrVouchers || []);
+                setBankAccounts(confirmed.bankAccounts || []);
+                setBankStatementMovements(confirmed.bankStatementMovements || []);
+                setCreditSettlements(confirmed.creditSettlements || []);
+                setSupplierAdvanceSettlements(confirmed.supplierAdvanceSettlements || []);
+                setSupplierDirectAdvances(confirmed.supplierDirectAdvances || []);
+                setIslrFiscalEvents(confirmed.islrFiscalEvents || []);
+                setFinancialDisclosures(confirmed.financialDisclosures || []);
+                setDisplayCurrency(confirmed.displayCurrency || 'DUAL');
+              }
+              setStorageError(normalized.message);
+              setStorageReady(false);
+              batch.waiters.forEach(waiter => waiter.reject(normalized));
+              queued?.waiters.forEach(waiter => waiter.reject(normalized));
+              break;
+            }
           }
-          setStorageError(normalized.message);
-          setStorageReady(false);
-          waitersForSnapshot.forEach(waiter => waiter.reject(normalized));
-        }
-      );
+        })();
+        saveQueueRef.current = pumpTask.then(() => undefined, () => undefined);
+        void pumpTask.finally(() => {
+          persistencePumpInFlightRef.current = false;
+        });
+      }
       return;
     }
     // Solo para vista de desarrollo web; el ejecutable de escritorio usa SQLite.
