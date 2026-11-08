@@ -243,3 +243,61 @@ test('releases the maintenance gate if the persistence drain fails', async t => 
   assert.equal(context.isSwitching(), false);
   assert.equal(await context.withActiveDatabase((_db, companyId) => companyId), 'company-a');
 });
+
+
+test('keeps the previous tenant open and active when the persistence drain fails during a switch', async t => {
+  let flushCount = 0;
+  const { context, open } = makeContext(t, {
+    flushPendingWrites: async () => {
+      flushCount += 1;
+      if (flushCount === 2) throw new Error('simulated tenant save failure');
+    }
+  });
+  await context.switchCompany('company-a');
+  await assert.rejects(
+    () => context.switchCompany('company-b'),
+    /simulated tenant save failure/
+  );
+  assert.equal(context.getActiveCompanyId(), 'company-a');
+  assert.equal(context.isSwitching(), false);
+  assert.equal(open.has('company-a'), true);
+  assert.equal(open.has('company-b'), false);
+  assert.equal(await context.withActiveDatabase((_db, companyId) => companyId), 'company-a');
+});
+
+test('does not close or clear the active tenant when logout drain fails', async t => {
+  const { context, open } = makeContext(t, {
+    flushPendingWrites: async () => { throw new Error('simulated logout save failure'); }
+  });
+  // Establish the tenant without relying on the failing logout flush.
+  const runtime = {
+    listCompanies: () => [{ id: 'company-a', status: 'ACTIVE' }],
+    isCompanyOpen: id => open.has(id),
+    getCompanyDatabase: id => {
+      if (!open.has(id)) open.set(id, {
+        companyId: id,
+        prepare: () => ({ get: () => ({ state_json: JSON.stringify({
+          companies: [{ id }], currentCompanyId: id
+        }) }) })
+      });
+      return open.get(id);
+    },
+    closeCompany: id => open.delete(id)
+  };
+  // Use a fresh context whose initial switch can flush successfully, then fail on clear.
+  let flushCount = 0;
+  const { context: logoutContext, open: logoutOpen } = makeContext(t, {
+    flushPendingWrites: async () => {
+      flushCount += 1;
+      if (flushCount > 1) throw new Error('simulated logout save failure');
+    }
+  });
+  await logoutContext.switchCompany('company-a');
+  await assert.rejects(() => logoutContext.clearActiveCompany(), /simulated logout save failure/);
+  assert.equal(logoutContext.getActiveCompanyId(), 'company-a');
+  assert.equal(logoutContext.isSwitching(), false);
+  assert.equal(logoutOpen.has('company-a'), true);
+  assert.equal(await logoutContext.withActiveDatabase((_db, companyId) => companyId), 'company-a');
+  void context;
+  void runtime;
+});
