@@ -27,6 +27,10 @@ function assertSafeDirectory(directory) {
   }
 }
 
+function sha256File(filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
 function validateJournal(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
       value.version !== 1 || typeof value.migrationId !== 'string' ||
@@ -92,6 +96,20 @@ function createTenantMigrationJournal({ userDataDir, now = () => new Date().toIS
 
   function create({ companyIds, sourceBackupPath, sourceBackupSha256 }) {
     if (read()) throw new Error('Ya existe un journal de migración. Debe recuperarse o cerrarse antes de iniciar otra migración.');
+    if (!Array.isArray(companyIds) || companyIds.length === 0 ||
+        companyIds.some(companyId => typeof companyId !== 'string' || !companyId.trim()) ||
+        new Set(companyIds).size !== companyIds.length) {
+      throw new Error('La lista de empresas del journal está vacía o contiene identificadores duplicados.');
+    }
+    const backupPath = path.resolve(String(sourceBackupPath || ''));
+    const backupStat = fs.lstatSync(backupPath);
+    if (backupStat.isSymbolicLink() || !backupStat.isFile()) {
+      throw new Error('La copia de seguridad de origen debe ser un archivo regular local.');
+    }
+    const backupHash = String(sourceBackupSha256 || '').toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(backupHash) || sha256File(backupPath) !== backupHash) {
+      throw new Error('El SHA-256 de la copia de seguridad no coincide; no se creó el journal.');
+    }
     const timestamp = now();
     const journal = validateJournal({
       version: 1,
@@ -101,8 +119,8 @@ function createTenantMigrationJournal({ userDataDir, now = () => new Date().toIS
       updatedAt: timestamp,
       companyIds: [...companyIds],
       completedCompanyIds: [],
-      sourceBackupPath: path.resolve(sourceBackupPath || ''),
-      sourceBackupSha256: String(sourceBackupSha256 || '').toLowerCase(),
+      sourceBackupPath: backupPath,
+      sourceBackupSha256: backupHash,
       lastError: null
     });
     writeAtomic(journal);
@@ -118,9 +136,19 @@ function createTenantMigrationJournal({ userDataDir, now = () => new Date().toIS
     if (!TRANSITIONS[current.phase]?.includes(nextPhase)) {
       throw new Error('La transición de migración solicitada no está permitida.');
     }
+    const allowedPatch = {};
+    if (Object.prototype.hasOwnProperty.call(patch, 'lastError')) {
+      if (patch.lastError !== null && (typeof patch.lastError !== 'string' || patch.lastError.length > 2000)) {
+        throw new Error('El detalle de error del journal no es válido.');
+      }
+      allowedPatch.lastError = patch.lastError;
+    }
+    if (Object.keys(patch).some(key => key !== 'lastError')) {
+      throw new Error('El journal no permite modificar campos inmutables durante una transición.');
+    }
     const next = validateJournal({
       ...current,
-      ...patch,
+      ...allowedPatch,
       migrationId: current.migrationId,
       version: current.version,
       phase: nextPhase,
