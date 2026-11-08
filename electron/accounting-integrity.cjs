@@ -978,7 +978,7 @@ function validateFixedAssetLedger(previousState, nextState) {
         !isValidIsoDate(asset.acquisitionDate) || !isValidIsoDate(asset.serviceDate) ||
         asset.serviceDate < asset.acquisitionDate ||
         !Number.isInteger(asset.usefulLifeMonths) || asset.usefulLifeMonths <= 0 ||
-        !['ACTIVE','DISPOSED'].includes(asset.status) || asset.depreciationMethod !== 'STRAIGHT_LINE' ||
+        asset.status !== 'ACTIVE' || asset.depreciationMethod !== 'STRAIGHT_LINE' ||
         !Number.isFinite(Number(asset.acquisitionCostBs)) || Number(asset.acquisitionCostBs) <= 0 ||
         !Number.isFinite(Number(asset.acquisitionCostUsd)) || Number(asset.acquisitionCostUsd) <= 0 ||
         !Number.isFinite(Number(asset.acquisitionBcvRate)) || Number(asset.acquisitionBcvRate) <= 0 ||
