@@ -15,6 +15,8 @@ function createLegacyDb() {
     CREATE TABLE license_state(id INTEGER PRIMARY KEY,status TEXT);
     CREATE TABLE company_database_registry(company_id TEXT PRIMARY KEY);
   `);
+  const { REQUIRED_RELATIONAL_TABLES } = require('./tenant-migration-preflight.cjs');
+  for (const table of REQUIRED_RELATIONAL_TABLES) db.exec('CREATE TABLE \' + table + \' (id TEXT PRIMARY KEY)');
   db.prepare('INSERT INTO app_state VALUES(?,?,?)').run('accounting', JSON.stringify({
     companies: [
       { id: 'company-a', rif: 'J-12345678-9', name: 'Empresa A' },
@@ -43,6 +45,18 @@ test('blocks migration when any persistent table is not explicitly classified', 
     assert.equal(result.ok, false);
     assert.deepEqual(result.unknownTables, ['unexpected_finance_cache']);
     assert.match(result.errors.join(' '), /sin clasificación explícita/);
+  } finally { db.close(); }
+});
+
+
+test('blocks migration when a required relational table is missing', () => {
+  const db = createLegacyDb();
+  try {
+    db.exec('DROP TABLE vat_fiscal_incident_events');
+    const result = inspectLegacyDatabase(db);
+    assert.equal(result.ok, false);
+    assert.ok(result.missingRequired.includes('vat_fiscal_incident_events'));
+    assert.match(result.errors.join(' '), /Faltan tablas esperadas/);
   } finally { db.close(); }
 });
 
