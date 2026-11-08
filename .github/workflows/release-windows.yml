@@ -9,6 +9,12 @@ on:
       - '.github/workflows/release-windows.yml'
     tags:
       - 'v*'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/release-windows.yml'
   workflow_dispatch:
 
 permissions:
