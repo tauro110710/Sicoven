@@ -455,63 +455,68 @@ function persistAccountingSnapshot(db, state, actor = null) {
   return { ok: true, savedAt: new Date().toISOString() };
 }
 
+function initializeAccountingPersistenceSchema(db) {
+  if (!db || typeof db.exec !== 'function') throw new TypeError('Se requiere una conexión SQLite para inicializar el esquema contable.');
+db.exec(`
+  CREATE TABLE IF NOT EXISTS accounting_exercise_links (
+    id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL,
+    prior_period_start_date TEXT NOT NULL,
+    prior_period_end_date TEXT NOT NULL,
+    next_period_start_date TEXT NOT NULL,
+    journal_entry_id TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(company_id, prior_period_start_date, prior_period_end_date, next_period_start_date)
+  );
+  CREATE TRIGGER IF NOT EXISTS accounting_exercise_links_no_update
+    BEFORE UPDATE ON accounting_exercise_links
+    BEGIN SELECT RAISE(ABORT, 'accounting_exercise_links is append-only'); END;
+  CREATE TRIGGER IF NOT EXISTS accounting_exercise_links_no_delete
+    BEFORE DELETE ON accounting_exercise_links
+    BEGIN SELECT RAISE(ABORT, 'accounting_exercise_links is append-only'); END;
+  CREATE TABLE IF NOT EXISTS party_masters (
+    id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL,
+    party_type TEXT NOT NULL CHECK(party_type IN ('CUSTOMER','SUPPLIER')),
+    name TEXT NOT NULL,
+    fiscal_id TEXT,
+    fiscal_id_type TEXT,
+    normalized_fiscal_id TEXT,
+    address TEXT,
+    phone TEXT,
+    email TEXT,
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(company_id, party_type, normalized_fiscal_id)
+  );
+  CREATE INDEX IF NOT EXISTS party_masters_company_type_name_idx ON party_masters(company_id, party_type, name);
+  CREATE TABLE IF NOT EXISTS period_reopenings (
+    id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL,
+    company_name TEXT NOT NULL,
+    previous_closed_through_date TEXT NOT NULL,
+    reopened_through_date TEXT,
+    reason TEXT NOT NULL,
+    actor_user_id INTEGER NOT NULL,
+    actor_username TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TRIGGER IF NOT EXISTS period_reopenings_no_update
+    BEFORE UPDATE ON period_reopenings
+    BEGIN SELECT RAISE(ABORT, 'period_reopenings is append-only'); END;
+  CREATE TRIGGER IF NOT EXISTS period_reopenings_no_delete
+    BEFORE DELETE ON period_reopenings
+    BEGIN SELECT RAISE(ABORT, 'period_reopenings is append-only'); END;
+`);
+}
+
 function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession }) {
   if (!ipcMain || typeof ipcMain.handle !== 'function' ||
       typeof licenseView !== 'function' || typeof getActiveSession !== 'function') {
     throw new Error('No se pudo registrar el puente de persistencia contable de SICOVEN.');
   }
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS accounting_exercise_links (
-      id TEXT PRIMARY KEY,
-      company_id TEXT NOT NULL,
-      prior_period_start_date TEXT NOT NULL,
-      prior_period_end_date TEXT NOT NULL,
-      next_period_start_date TEXT NOT NULL,
-      journal_entry_id TEXT NOT NULL UNIQUE,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE(company_id, prior_period_start_date, prior_period_end_date, next_period_start_date)
-    );
-    CREATE TRIGGER IF NOT EXISTS accounting_exercise_links_no_update
-      BEFORE UPDATE ON accounting_exercise_links
-      BEGIN SELECT RAISE(ABORT, 'accounting_exercise_links is append-only'); END;
-    CREATE TRIGGER IF NOT EXISTS accounting_exercise_links_no_delete
-      BEFORE DELETE ON accounting_exercise_links
-      BEGIN SELECT RAISE(ABORT, 'accounting_exercise_links is append-only'); END;
-    CREATE TABLE IF NOT EXISTS party_masters (
-      id TEXT PRIMARY KEY,
-      company_id TEXT NOT NULL,
-      party_type TEXT NOT NULL CHECK(party_type IN ('CUSTOMER','SUPPLIER')),
-      name TEXT NOT NULL,
-      fiscal_id TEXT,
-      fiscal_id_type TEXT,
-      normalized_fiscal_id TEXT,
-      address TEXT,
-      phone TEXT,
-      email TEXT,
-      active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE(company_id, party_type, normalized_fiscal_id)
-    );
-    CREATE INDEX IF NOT EXISTS party_masters_company_type_name_idx ON party_masters(company_id, party_type, name);
-    CREATE TABLE IF NOT EXISTS period_reopenings (
-      id TEXT PRIMARY KEY,
-      company_id TEXT NOT NULL,
-      company_name TEXT NOT NULL,
-      previous_closed_through_date TEXT NOT NULL,
-      reopened_through_date TEXT,
-      reason TEXT NOT NULL,
-      actor_user_id INTEGER NOT NULL,
-      actor_username TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE TRIGGER IF NOT EXISTS period_reopenings_no_update
-      BEFORE UPDATE ON period_reopenings
-      BEGIN SELECT RAISE(ABORT, 'period_reopenings is append-only'); END;
-    CREATE TRIGGER IF NOT EXISTS period_reopenings_no_delete
-      BEFORE DELETE ON period_reopenings
-      BEGIN SELECT RAISE(ABORT, 'period_reopenings is append-only'); END;
-  `);
+  initializeAccountingPersistenceSchema(db);
   ipcMain.handle('sicoven:reopen-accounting-period', (_event, token, input) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
@@ -589,4 +594,4 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
   });
 }
 
-module.exports = { persistAccountingSnapshot, registerAccountingPersistenceHandler };
+module.exports = { persistAccountingSnapshot, initializeAccountingPersistenceSchema, registerAccountingPersistenceHandler };
