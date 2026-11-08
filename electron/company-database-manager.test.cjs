@@ -46,6 +46,16 @@ test('creates a separate local SQLite file for each registered company', t => {
   assert.deepEqual(manager.listCompanies().map(row => row.id).sort(), ['comp-a', 'comp-b']);
 });
 
+test('prevents two local companies from sharing the same RIF', t => {
+  const { manager } = fixture(t);
+  manager.registerCompany({ id: 'rif-a', rif: 'J-12345678-9', name: 'Empresa A' });
+  assert.throws(
+    () => manager.registerCompany({ id: 'rif-b', rif: 'j-12345678-9', name: 'Empresa B' }),
+    /RIF ya está asociado/i
+  );
+  assert.deepEqual(manager.listCompanies().map(item => item.id), ['rif-a']);
+});
+
 test('rejects path traversal and malformed company identifiers', t => {
   const { manager } = fixture(t);
   assert.throws(() => manager.registerCompany({ id: '../outside', rif: 'J-12345678-9', name: 'Intruso' }), /identificador.*no es válido/i);
