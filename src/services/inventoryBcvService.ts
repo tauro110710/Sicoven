@@ -43,7 +43,8 @@ async function requestRate(url: string): Promise<BcvApiPayload | null> {
     if (!response.ok) return null;
     const payload = await response.json() as BcvApiPayload;
     const rate = Number(payload?.USD);
-    return Number.isFinite(rate) && rate > 0 ? payload : null;
+    const effectiveDate = payload?.effective_date || payload?.date;
+    return Number.isFinite(rate) && rate > 0 && isValidDate(effectiveDate) ? payload : null;
   } catch {
     return null;
   } finally {
@@ -65,9 +66,10 @@ export async function fetchInventoryBcvRate(): Promise<InventoryBcvRateResult> {
 
   const rate = Number(payload.USD);
   const effectiveDateCandidate = payload.effective_date || payload.date;
-  const effectiveDate = isValidDate(effectiveDateCandidate)
-    ? effectiveDateCandidate
-    : new Date().toISOString().slice(0, 10);
+  if (!isValidDate(effectiveDateCandidate)) {
+    throw new Error('La fuente BCV no devolvió una fecha de vigencia válida. No se inventó ni guardó una fecha para esa tasa.');
+  }
+  const effectiveDate = effectiveDateCandidate;
   const updatedAt = typeof payload.updated_at === 'string' && Number.isFinite(Date.parse(payload.updated_at))
     ? payload.updated_at
     : new Date().toISOString();
