@@ -132,9 +132,9 @@ interface AccountingContextType {
 
   // Liquidaciones de crédito
   creditSettlements: CreditSettlement[];
-  getCreditBalance: (documentId: string, kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT') => CreditBalance;
+  getCreditBalance: (documentId: string, kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT', targetCompanyId?: string) => CreditBalance;
   addCreditSettlement: (draft: CreditSettlementDraft) => Promise<CreditSettlement>;
-  getSupplierAdvanceBalance: (supplierRif: string) => SupplierAdvanceBalance;
+  getSupplierAdvanceBalance: (supplierRif: string, targetCompanyId?: string) => SupplierAdvanceBalance;
   supplierAdvanceSettlements: SupplierAdvanceSettlement[];
   addSupplierAdvanceSettlement: (draft: SupplierAdvanceSettlementDraft) => Promise<SupplierAdvanceSettlement>;
   supplierDirectAdvances: SupplierDirectAdvance[];
@@ -1604,7 +1604,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
 
 
-  const getCreditBalance = (documentId: string, kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT'): CreditBalance => {
+  const getCreditBalance = (documentId: string, kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT', targetCompanyId: string = currentCompany.id): CreditBalance => {
     const batch = activeImportBatchRef.current;
     const allSales = batch ? [...sales, ...batch.sales] : sales;
     const allPurchases = batch ? [...purchases, ...batch.purchases] : purchases;
@@ -1612,7 +1612,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ? [...supplierAdvanceSettlements, ...batch.supplierAdvanceSettlements]
       : supplierAdvanceSettlements;
     const document = kind === 'SALE_COLLECTION'
-      ? allSales.find(item => item.id === documentId && item.companyId === currentCompany.id)
+      ? allSales.find(item => item.id === documentId && item.companyId === targetCompanyId)
       : allPurchases.find(item => item.id === documentId && item.companyId === currentCompany.id);
     if (!document) throw new Error('No se encontró la factura en la empresa activa.');
     if (document.isCancelled) throw new Error('La factura fue reversada y ya no tiene saldo exigible en este auxiliar.');
@@ -1652,13 +1652,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     };
   };
 
-  const getSupplierAdvanceBalance = (supplierRif: string): SupplierAdvanceBalance => {
+  const getSupplierAdvanceBalance = (supplierRif: string, targetCompanyId: string = currentCompany.id): SupplierAdvanceBalance => {
     const batch = activeImportBatchRef.current;
     return calculateOutstandingSupplierAdvance(
       supplierRif,
       batch ? [...purchases, ...batch.purchases] : purchases,
       batch ? [...supplierAdvanceSettlements, ...batch.supplierAdvanceSettlements] : supplierAdvanceSettlements,
-      currentCompany.id,
+      targetCompanyId,
       batch ? [...supplierDirectAdvances, ...batch.supplierDirectAdvances] : supplierDirectAdvances
     );
   };
@@ -1828,7 +1828,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const dateError = validatePurchasePaymentDate(draft.date, getPurchaseAccountCreditDate(target));
         if (dateError) throw new Error('Liquidación ' + sourceRowId + ': ' + dateError);
       }
-      const available = getSupplierAdvanceBalance(rif).outstandingUsd;
+      const available = getSupplierAdvanceBalance(rif, targetCompanyId).outstandingUsd;
       const treasuryCodes = [...new Set([
         ...bankAccounts.filter(bank => bank.companyId === targetCompanyId && (!bank.currency || bank.currency === 'BS')).map(bank => bank.accountCode),
         ...accounts.filter(account => account.type === 'ACTIVO' && account.isMovement && account.code === '1.1.1.01').map(account => account.code)
@@ -1836,7 +1836,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const validation = validateSupplierAdvanceSettlementDraft(draft, available, target?.supplierRif, treasuryCodes);
       if (validation) throw new Error('Liquidación ' + sourceRowId + ': ' + validation);
       if (target) {
-        const payable = getCreditBalance(target.id, 'PURCHASE_PAYMENT');
+        const payable = getCreditBalance(target.id, 'PURCHASE_PAYMENT', targetCompanyId);
         if (draft.amountUsd > payable.outstandingUsd + 0.000005) {
           throw new Error('Liquidación ' + sourceRowId + ': la aplicación supera el saldo pendiente de la compra destino.');
         }
@@ -1871,7 +1871,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const settlementValueBs = draft.kind === 'REFUND_RECEIVED'
         ? Math.round((draft.cashReceivedBs ?? draft.amountBs) * 100) / 100
         : (() => {
-            const payable = getCreditBalance(target!.id, 'PURCHASE_PAYMENT');
+            const payable = getCreditBalance(target!.id, 'PURCHASE_PAYMENT', targetCompanyId);
             return Math.round((payable.outstandingUsd > 0
               ? payable.outstandingBsAtInvoiceRate * amountUsd / payable.outstandingUsd
               : 0) * 100) / 100;
