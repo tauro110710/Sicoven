@@ -36,6 +36,9 @@ declare global {
       createAdmin: (token: string, input: { username: string; password: string; role?: 'admin' | 'contador' }) => Promise<{ ok: boolean; message?: string }>;
       deleteSeedAdmin: (token: string) => Promise<{ ok: boolean; message?: string }>;
       load: (token: string) => Promise<Record<string, unknown> | null>;
+      flushPersistence: (token: string) => Promise<{ ok: true }>;
+      onPersistenceFlushRequest: (callback: (request: { requestId: string }) => void) => () => void;
+      ackPersistenceFlush: (requestId: string, message?: string | null) => void;
       inspectTenantMigrationPreflight: (token: string) => Promise<{ ok: boolean; readOnly: true; migrationStarted: false; sourceDatabase: 'sicoven.sqlite'; tables: Array<{ name: string; category: string }>; unknownTables: string[]; missingRequired: string[]; companyCount: number; companyIds: string[]; errors: string[] }>;
       listAuditEvents: (token: string, limit?: number) => Promise<{ ok: boolean; message?: string; events?: Array<{ id: number; eventType: string; details: Record<string, unknown>; createdAt: string }> }>;
       save: (token: string, state: Record<string, unknown>) => Promise<{ ok: boolean; savedAt: string }>;
