@@ -124,7 +124,7 @@ export const FixedAssetsView: React.FC = () => {
       setDescription('');
       setCategory('Mobiliario y equipos');
       const maxAssetSequence = [created, ...fixedAssets].reduce((max, asset) => {
-        const match = /^AF-(\\d+)$/.exec(asset.assetCode);
+        const match = /^AF-(\d+)$/.exec(asset.assetCode);
         return match ? Math.max(max, Number(match[1])) : max;
       }, 0);
       setAssetCode('AF-' + String(maxAssetSequence + 1).padStart(5, '0'));
