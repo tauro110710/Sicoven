@@ -143,3 +143,10 @@ La copia de tablas auxiliares debe respetar el orden de dependencias y ejecutars
 - Actualizar una instalación real desde la versión anterior conservando login, licencia, administrador semilla y datos.
 - Probar cierre de sesión, reinicio, fallo de escritura, interrupción durante migración y recuperación del journal.
 - Build Windows NSIS y pruebas de instalación/actualización; no basta con generar el instalador.
+
+
+## Alta de empresa: inicialización antes del registro
+
+La provisión de una empresa debe crear su archivo y esquema, escribir y validar el snapshot inicial y solo entonces hacer visible la empresa en `company_database_registry`. El callback de inicialización de datos se ejecuta dentro de la transacción de creación del esquema; si falla, se revierte el esquema y el registro central no recibe una fila ACTIVE. El archivo huérfano se conserva para inspección/recuperación y nunca se sobrescribe automáticamente.
+
+Esta protección está implementada en `company-database-manager.cjs` y `tenant-runtime.cjs`. La prueba correspondiente simula un fallo al sembrar los datos y comprueba que no queda una empresa activa ni filas parciales en la base.
