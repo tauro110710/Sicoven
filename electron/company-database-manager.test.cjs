@@ -173,3 +173,51 @@ test('rejects a symlinked company directory instead of opening a database outsid
   }
   assert.throws(() => manager.openCompany('comp-link'), /directorio local seguro/i);
 });
+
+test('registers verified staged tenant databases as one control-registry transaction', t => {
+  const { userDataDir, controlDb, manager } = fixture(t);
+  const company = { id: 'staged-a', rif: 'J-12345678-9', name: 'Empresa preparada' };
+  const companyDirectory = path.join(userDataDir, 'companies', company.id);
+  fs.mkdirSync(companyDirectory, { recursive: true });
+  const staged = new Database(path.join(companyDirectory, 'accounting.sqlite'));
+  staged.exec(`
+    CREATE TABLE sicoven_database_meta (meta_key TEXT PRIMARY KEY, meta_value TEXT NOT NULL);
+    INSERT INTO sicoven_database_meta(meta_key,meta_value) VALUES('company_id','staged-a');
+    INSERT INTO sicoven_database_meta(meta_key,meta_value) VALUES('schema_version','1');
+    CREATE TABLE ledger_rows (id TEXT PRIMARY KEY, amount REAL NOT NULL);
+    INSERT INTO ledger_rows(id,amount) VALUES('legacy-row',321);
+  `);
+  staged.close();
+
+  const [record] = manager.registerExistingCompanies([company]);
+  assert.equal(record.id, company.id);
+  const tenantDb = manager.openCompany(company.id);
+  assert.equal(tenantDb.prepare('SELECT amount FROM ledger_rows WHERE id=?').get('legacy-row').amount, 321);
+  assert.equal(manager.listCompanies().length, 1);
+});
+
+test('rejects staged tenant database identity mismatch without partial registry insertion', t => {
+  const { userDataDir, manager, controlDb } = fixture(t);
+  const company = { id: 'staged-b', rif: 'J-12345678-9', name: 'Empresa preparada' };
+  const directory = path.join(userDataDir, 'companies', company.id);
+  fs.mkdirSync(directory, { recursive: true });
+  const staged = new Database(path.join(directory, 'accounting.sqlite'));
+  staged.exec(`
+    CREATE TABLE sicoven_database_meta (meta_key TEXT PRIMARY KEY, meta_value TEXT NOT NULL);
+    INSERT INTO sicoven_database_meta(meta_key,meta_value) VALUES('company_id','other-company');
+    INSERT INTO sicoven_database_meta(meta_key,meta_value) VALUES('schema_version','1');
+  `);
+  staged.close();
+  assert.throws(() => manager.registerExistingCompanies([company]), /identidad o versión de esquema/i);
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_database_registry').get().count, 0);
+});
+
+test('updates a company RIF and name in the local registry without changing its database file', t => {
+  const { manager } = fixture(t);
+  manager.registerCompany({ id: 'metadata-a', rif: 'J-12345678-9', name: 'Empresa original' });
+  const filePath = manager.getDatabasePath('metadata-a');
+  const updated = manager.updateCompanyMetadata({ id: 'metadata-a', rif: 'J-98765432-1', name: 'Empresa rectificada' });
+  assert.equal(updated.name, 'Empresa rectificada');
+  assert.equal(updated.rif, 'J-98765432-1');
+  assert.equal(manager.getDatabasePath('metadata-a'), filePath);
+});
