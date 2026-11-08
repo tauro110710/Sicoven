@@ -71,6 +71,18 @@ El registro de autenticación, las sesiones y la licencia permanecen exclusivame
 6. Las escrituras que afecten más de una base (por ejemplo, cambio global del catálogo de cuentas) requieren un coordinador de backup/rollback con journal verificable. No se simulan transacciones distribuidas.
 7. Las operaciones de auditoría se consultan desde la base de la empresa; los eventos de autenticación/licencia permanecen en la base de control.
 
+## Guardado multiempresa y cambios globales
+
+El helper de persistencia de esta fase guarda una empresa modificada por operación y verifica el snapshot después de escribirlo. Si detecta cambios simultáneos en varias empresas —por ejemplo, modificar el catálogo de cuentas global o la preferencia global de moneda— rechaza el guardado antes de escribir. No se permite una actualización parcial entre archivos.
+
+Antes de habilitar esos cambios debe existir un coordinador transaccional recuperable con:
+- copias SQLite consistentes de todos los archivos afectados;
+- journal durable en la base de control antes de iniciar las escrituras;
+- verificación posterior de cada archivo;
+- recuperación automática al iniciar si el proceso se interrumpe;
+- restauración de todos los archivos si falla una sola escritura;
+- pruebas de corte de energía/proceso, corrupción de respaldo y recuperación.
+
 ## IPC que deben resolver la base propietaria
 
 - load-state / save-state: unión y partición del snapshot.
