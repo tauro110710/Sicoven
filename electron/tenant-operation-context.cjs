@@ -15,6 +15,7 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
 
   let activeCompanyId = '';
   let switching = false;
+  let flushing = false;
   let activeOperations = 0;
   let idleWaiters = [];
 
@@ -38,9 +39,13 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
     }
   }
 
-  async function withActiveDatabase(operation) {
+  async function runWithActiveDatabase(operation, allowDuringFlush) {
     if (typeof operation !== 'function') throw new TypeError('La operación SQLite debe ser una función.');
-    const companyId = requireActiveCompany();
+    if (switching && !(allowDuringFlush && flushing)) {
+      throw new Error('El cambio de empresa está en curso. La operación fue bloqueada.');
+    }
+    const companyId = activeCompanyId;
+    if (!companyId) throw new Error('No hay una empresa activa en el contexto operativo.');
     const db = runtime.getCompanyDatabase(companyId);
     activeOperations += 1;
     try {
@@ -48,6 +53,15 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
     } finally {
       releaseOperation();
     }
+  }
+
+  function withActiveDatabase(operation) {
+    return runWithActiveDatabase(operation, false);
+  }
+
+  // Only the already-queued persistence drain may use this lane while a switch is flushing.
+  function withPersistenceDatabase(operation) {
+    return runWithActiveDatabase(operation, true);
   }
 
   async function switchCompany(companyIdInput) {
@@ -59,10 +73,12 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
     }
 
     switching = true;
+    flushing = true;
     let targetOpenedHere = false;
     try {
-      // Drain the renderer's serialized persistence queue before blocking the old tenant.
+      // The persistence lane remains open only while the renderer drains already-queued saves.
       await flushPendingWrites();
+      flushing = false;
       await waitForActiveOperations();
 
       const target = runtime.listCompanies().find(record =>
@@ -88,6 +104,7 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
       }
       throw error;
     } finally {
+      flushing = false;
       switching = false;
     }
   }
@@ -95,14 +112,17 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
   async function clearActiveCompany() {
     if (switching) throw new Error('Ya hay un cambio de empresa en curso.');
     switching = true;
+    flushing = true;
     try {
       await flushPendingWrites();
+      flushing = false;
       await waitForActiveOperations();
       const previousId = activeCompanyId;
       if (previousId) runtime.closeCompany(previousId);
       activeCompanyId = '';
       return { ok: true, previousCompanyId: previousId || null };
     } finally {
+      flushing = false;
       switching = false;
     }
   }
@@ -111,6 +131,7 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
     switchCompany,
     clearActiveCompany,
     withActiveDatabase,
+    withPersistenceDatabase,
     getActiveCompanyId: () => activeCompanyId || null,
     isSwitching: () => switching,
     getActiveOperationCount: () => activeOperations
