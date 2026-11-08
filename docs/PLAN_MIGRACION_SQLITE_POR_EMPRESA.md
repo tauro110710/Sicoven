@@ -150,3 +150,18 @@ La copia de tablas auxiliares debe respetar el orden de dependencias y ejecutars
 La provisión de una empresa debe crear su archivo y esquema, escribir y validar el snapshot inicial y solo entonces hacer visible la empresa en `company_database_registry`. El callback de inicialización de datos se ejecuta dentro de la transacción de creación del esquema; si falla, se revierte el esquema y el registro central no recibe una fila ACTIVE. El archivo huérfano se conserva para inspección/recuperación y nunca se sobrescribe automáticamente.
 
 Esta protección está implementada en `company-database-manager.cjs` y `tenant-runtime.cjs`. La prueba correspondiente simula un fallo al sembrar los datos y comprueba que no queda una empresa activa ni filas parciales en la base.
+
+## Contexto operativo y cambio de empresa
+
+El módulo `electron/tenant-operation-context.cjs` define el contrato de coordinación que debe utilizar el proceso principal al activar una empresa:
+
+1. Esperar la cola de persistencia pendiente del renderer.
+2. Bloquear nuevas operaciones IPC que intenten acceder a datos operativos durante el cambio.
+3. Esperar a que finalicen las operaciones que ya estaban en curso.
+4. Comprobar que la empresa destino está registrada y ACTIVE.
+5. Abrir su archivo SQLite y validar la identidad del snapshot antes de publicar el nuevo contexto.
+6. Solo después de validar el destino, cerrar la conexión operativa anterior y cambiar el identificador activo.
+7. Si falla la validación o el cierre anterior, conservar el contexto previo y cerrar únicamente la conexión destino abierta por el intento fallido.
+8. Al cerrar sesión, vaciar el contexto operativo después de esperar los guardados y operaciones en curso.
+
+El módulo es una pieza aislada y probada; **todavía no está conectado a `main.cjs`, a los handlers IPC ni a `AccountingContext`**. No activa aún el modo multiempresa en la aplicación y no autoriza migrar datos reales. La integración debe validar la sesión en el proceso principal y nunca aceptar rutas SQLite ni confiar en un ID de empresa arbitrario del renderer.
