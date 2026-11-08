@@ -79,14 +79,18 @@ export const FixedAssetsView: React.FC = () => {
       setAcquisitionDate(selectedSource.entry.date);
       setServiceDate(selectedSource.entry.date);
       if (!assetCode.trim()) setAssetCode(suggestedAssetCode);
-      const defaults: Record<string, string> = {
-        '1.2.1.01': '1.2.1.05',
-        '1.2.1.02': '1.2.1.07',
-        '1.2.1.03': '1.2.1.06'
-      };
-      if (defaults[selectedSource.line.accountCode]) setAccumulatedAccountCode(defaults[selectedSource.line.accountCode]);
     }
   }, [selectedSource?.key, suggestedAssetCode, assetCode]);
+
+  useEffect(() => {
+    if (!selectedSource) return;
+    const defaults: Record<string, string> = {
+      '1.2.1.01': '1.2.1.05',
+      '1.2.1.02': '1.2.1.07',
+      '1.2.1.03': '1.2.1.06'
+    };
+    if (defaults[selectedSource.line.accountCode]) setAccumulatedAccountCode(defaults[selectedSource.line.accountCode]);
+  }, [selectedSource?.key]);
 
   const submitAsset = async () => {
     setError('');
