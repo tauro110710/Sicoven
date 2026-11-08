@@ -46,7 +46,7 @@ test('mapea la estructura POSVEN real y separa facturas de recibos CxC', () => {
       { id: 'C4-CXC-0001', cliente: 'Cliente A', totalUSD: 2, items: [{ productoId: 'ABONO', cantidad: 1 }] }
     ],
     cxc: [
-      { id: 'CRD-1', ventaId: 'C4-V-0001', historialPagos: [{ id: 'P1' }] },
+      { id: 'CRD-1', ventaId: 'C4-V-0001', historialPagos: [{ id: 'C4-CXC-0001', reciboId: 'C4-CXC-0001' }] },
       { id: 'CRD-LEGACY', historialPagos: [] }
     ],
     compras: [
@@ -75,7 +75,9 @@ test('mapea la estructura POSVEN real y separa facturas de recibos CxC', () => {
   } };
   const result = analyzePosvenBackupMapping(backup);
   assert.equal(result.salesInvoices, 1);
-  assert.equal(result.salesCollectionReceipts, 1);
+  assert.equal(result.salesCollectionReceipts, 2);
+  assert.equal(result.collectionReceiptsLinkedToHistory, 1);
+  assert.equal(result.collectionReceiptsWithoutHistory, 1);
   assert.equal(result.salesProductLines, 1);
   assert.equal(result.unresolvedSalesProductLines, 0);
   assert.equal(result.salesMissingFiscalControl, 1);
