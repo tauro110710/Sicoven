@@ -37,6 +37,11 @@ const MODULES: ModuleInfo[] = [
  { id:'assets', name:'Activos fijos', aliases:['assetId','codigoActivo','assetCode','fechaAdquisicion','acquisitionDate','valorHistorico'], fields:['assetId','name','acquisitionDate','historicalCost'], transactional:true }
 ];
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+const isPosvenProductCollection = (path: string) => /(^|\\.)(productos|products|inventory|inventario)$/i.test(path.trim());
+const getNestedValue = (value: unknown, path: string): unknown => path.split('.').filter(Boolean).reduce<unknown>((current, key) => {
+ if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined;
+ return (current as Record<string, unknown>)[key];
+}, value);
 const parseCsv = (text: string): Row[] => parseDelimitedRecords(text);
 const scalar = (v: unknown): unknown => {
  if (v && typeof v === 'object' && 'text' in v) return (v as {text:unknown}).text;
@@ -140,12 +145,13 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   if(!posvenBackup||!backupPayload)return [] as Array<{name:string;count:number;objects:number;invalid:number;fields:string[];identityField:string;missingIdentity:number;duplicateIdentity:number;numericSummaries:Array<{field:string;count:number;sum:number}>;referenceFields:string[];relationshipHints:Array<{field:string;targetCollection:string}>;target:string;mode:string;reason:string;canImport:boolean}>;
   try{
    const root=JSON.parse(backupPayload) as {data?:Record<string,unknown>};
-   return Object.entries(root.data??{}).filter(([,value])=>Array.isArray(value)).map(([name,value])=>{
-    const list=value as unknown[];const objects=list.filter(row=>!!row&&typeof row==='object'&&!Array.isArray(row)) as Row[];
+   return extractUniversalJsonCollections(root.data??{}).map(collection=>{
+    const name=collection.path;
+    const objects=collection.rows as Row[];
     const fields=Array.from(new Set(objects.slice(0,5).flatMap(row=>Object.keys(row)))).slice(0,12);
     // Diagnóstico preventivo: la clave candidata no se considera validada.
     const observedKeys=new Set(objects.flatMap(row=>Object.keys(row).map(norm)));
-    const key=norm(name);
+    const key=norm(name.split('.').pop()??name);
     const identityCandidates=/venta|sale|factura|invoice|compra|purchase|cxc|cxp|receivable|payable|diario|journal|asiento|reportez|zreport/i.test(key)
      ? ['id','uuid','invoicenumber','numerofactura','numero','documentnumber','referencia','codigo']
      : /producto|product|inventario|inventory|cliente|customer|proveedor|supplier|cuenta|account/i.test(key)
@@ -223,7 +229,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     else if(/^(retenciones|retencionesiva|retencionesislr|retentions|withholdings)$/.test(key)){target='Retenciones fiscales';mode='Solo conciliación';reason='Los comprobantes deben enlazarse con su factura, sujeto, período y parámetros fiscales originales. No se recrearán comprobantes ni importes fiscales incompletos.';}
     else if(/^(activos|activosfijos|fixedassets|assets)$/.test(key)){target='Activos fijos';mode='Revisión de esquema';reason='Requiere enlazar el registro patrimonial con adquisición, depreciación acumulada, vida útil y cuentas contables. No se importará como inventario comercial.';}
     else if(/^(movimientoscaja|cashmovements|cajamovimientos|cierrescaja)$/.test(key)){target='Caja / movimientos y cierres';mode='Solo conciliación';reason='Debe conciliarse con facturas, medios de pago, caja y cierres Z; no se contabiliza de forma independiente.';}
-    return {name,count:list.length,objects:objects.length,invalid:list.length-objects.length,fields,identityField,missingIdentity,duplicateIdentity,numericSummaries,referenceFields,relationshipHints,target,mode,reason,canImport};
+    return {name,count:collection.totalItems,objects:objects.length,invalid:collection.invalidItems,fields,identityField,missingIdentity,duplicateIdentity,numericSummaries,referenceFields,relationshipHints,target,mode,reason,canImport};
    });
   }catch{return [] as Array<{name:string;count:number;objects:number;invalid:number;fields:string[];identityField:string;missingIdentity:number;duplicateIdentity:number;numericSummaries:Array<{field:string;count:number;sum:number}>;referenceFields:string[];relationshipHints:Array<{field:string;targetCollection:string}>;target:string;mode:string;reason:string;canImport:boolean}>;}
  },[posvenBackup,backupPayload]);
