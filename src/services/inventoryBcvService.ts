@@ -5,7 +5,7 @@ export const INVENTORY_BCV_HISTORY_URL = 'https://bcv.today/api/v1/history.json'
 export interface InventoryBcvRateResult {
   rate: number;
   effectiveDate: string;
-  updatedAt: string;
+  fetchedAt: string;
   sourceUrl: string;
   provider: 'bcv.today';
 }
@@ -70,11 +70,9 @@ export async function fetchInventoryBcvRate(): Promise<InventoryBcvRateResult> {
     throw new Error('La fuente BCV no devolvió una fecha de vigencia válida. No se inventó ni guardó una fecha para esa tasa.');
   }
   const effectiveDate = effectiveDateCandidate;
-  const updatedAt = typeof payload.updated_at === 'string' && Number.isFinite(Date.parse(payload.updated_at))
-    ? payload.updated_at
-    : new Date().toISOString();
+  const fetchedAt = new Date().toISOString();
 
-  return { rate: Number(rate.toFixed(4)), effectiveDate, updatedAt, sourceUrl, provider: 'bcv.today' };
+  return { rate: Number(rate.toFixed(4)), effectiveDate, fetchedAt, sourceUrl, provider: 'bcv.today' };
 }
 
 /** Fetches the available daily history so missed days can be backfilled without altering prior records. */
@@ -88,13 +86,12 @@ export async function fetchInventoryBcvHistory(): Promise<InventoryBcvHistorical
     if (!response.ok) return [];
     const payload = await response.json() as unknown;
     if (!Array.isArray(payload)) return [];
+    const fetchedAt = new Date().toISOString();
     return payload.flatMap((item: any) => {
       const rate = Number(item?.USD);
       const date = item?.effective_date || item?.date;
       if (!Number.isFinite(rate) || rate <= 0 || !isValidDate(date)) return [];
-      const updatedAt = typeof item?.updated_at === 'string' && Number.isFinite(Date.parse(item.updated_at))
-        ? item.updated_at : date + 'T12:00:00.000Z';
-      return [{ rate: Number(rate.toFixed(4)), effectiveDate: date, updatedAt,
+      return [{ rate: Number(rate.toFixed(4)), effectiveDate: date, fetchedAt,
         sourceUrl: INVENTORY_BCV_HISTORY_URL, provider: 'bcv.today' as const }];
     }).sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
   } catch {
