@@ -486,7 +486,13 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
       if(explicit){
        const sourceMatch=sourceRows.find(candidate=>String(candidate.migrationrowid??'')===explicit||
         String(pick(candidate,'id','purchaseId','invoiceId','idCompra')??'')===explicit);
-       if(sourceMatch)return {sourceRowId:String(sourceMatch.migrationrowid??''),label:String(pick(sourceMatch,'invoiceNumber','numeroFactura','factura','documento')??explicit)};
+       if(sourceMatch){
+        const sourceParty=resolveUniversalPartyReference(rows,sourceMatch,'supplier');
+        if(sourceParty.rif.trim().toUpperCase()!==party.rif.trim().toUpperCase()){
+         return {label:explicit,error:'La factura destino pertenece a un proveedor distinto. No se aplicará el anticipo.'};
+        }
+        return {sourceRowId:String(sourceMatch.migrationrowid??''),label:String(pick(sourceMatch,'invoiceNumber','numeroFactura','factura','documento')??explicit)};
+       }
        const existingById=companyPurchases.find(purchase=>purchase.id===explicit&&String(purchase.supplierRif||'').trim().toUpperCase()===party.rif.toUpperCase());
        if(existingById)return {existingId:existingById.id,label:existingById.invoiceNumber||existingById.id};
       }
