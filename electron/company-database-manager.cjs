@@ -198,7 +198,10 @@ function createCompanyDatabaseManager({
     return getRecord(company.companyId);
   }
 
-  function registerCompany(companyInput) {
+  function registerCompany(companyInput, initializeCompanyData = null) {
+    if (initializeCompanyData !== null && typeof initializeCompanyData !== 'function') {
+      throw new TypeError('El inicializador de datos de empresa debe ser una función.');
+    }
     const company = normalizeCompanyMetadata(companyInput);
     if (selectRecord.get(company.companyId)) throw new Error('La empresa ya tiene un registro de base SQLite.');
     const duplicateRif = controlDb.prepare('SELECT company_id FROM ' + REGISTRY_TABLE + ' WHERE upper(rif)=?').get(company.rif);
@@ -228,6 +231,9 @@ function createCompanyDatabaseManager({
           schemaVersion,
           isNew: true
         });
+        // Seed the first operational snapshot before the company becomes visible
+        // in the control registry. Both schema and initial data share this transaction.
+        if (initializeCompanyData) initializeCompanyData(tenantDb, company);
       });
       initialize();
       assertSqliteIntegrity(tenantDb);
