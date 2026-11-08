@@ -152,3 +152,20 @@ test('rolls back a failed tenant migration and does not advance the registry', t
   assert.equal(tenantDb.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='should_rollback'").get(), undefined);
   tenantDb.close();
 });
+
+test('rejects a symlinked company directory instead of opening a database outside userData', t => {
+  const { userDataDir, manager } = fixture(t);
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-outside-'));
+  t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+  const companiesRoot = path.join(userDataDir, 'companies');
+  fs.mkdirSync(companiesRoot, { recursive: true });
+  const target = path.join(companiesRoot, 'comp-link');
+  try {
+    fs.symlinkSync(outside, target, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch (error) {
+    if (['EPERM', 'EACCES', 'ENOTSUP'].includes(error.code)) return t.skip('El sistema no permite crear enlaces simbólicos en este entorno.');
+    throw error;
+  }
+  manager.registerCompany({ id: 'comp-link', rif: 'J-12345678-9', name: 'Empresa con ruta enlazada' });
+  assert.throws(() => manager.openCompany('comp-link'), /directorio local seguro/i);
+});
