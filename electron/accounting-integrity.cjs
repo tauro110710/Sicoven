@@ -944,7 +944,8 @@ function validateFixedAssetLedger(previousState, nextState) {
   const accounts = new Map(asArray(nextState.accounts).map(account => [String(account.code), account]));
   const usedSourceLines = new Set();
   const usedDepreciationEntries = new Set();
-  const normalize = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase();
+  const assetCodes = new Set();
+  const normalize = value => String(value || '').toUpperCase().replace(/Ó/g, 'O');
 
   for (const oldAsset of previousAssets) {
     const current = assetById.get(String(oldAsset.id));
@@ -988,6 +989,9 @@ function validateFixedAssetLedger(previousState, nextState) {
         !Number.isInteger(asset.sourceJournalLineIndex) || asset.sourceJournalLineIndex < 0) {
       throw new Error('SQLite rechazó un expediente de activo fijo con datos, fechas, costos, vida útil o empresa inválidos.');
     }
+    const assetCodeKey = String(asset.companyId) + '|' + String(asset.assetCode).trim().toUpperCase();
+    if (assetCodes.has(assetCodeKey)) throw new Error('SQLite rechazó códigos de activos fijos duplicados dentro de una empresa.');
+    assetCodes.add(assetCodeKey);
     const source = entryById.get(String(asset.sourceJournalEntryId));
     const sourceLine = source && asArray(source.items)[asset.sourceJournalLineIndex];
     const assetAccount = accounts.get(String(asset.assetAccountCode));
@@ -1001,7 +1005,7 @@ function validateFixedAssetLedger(previousState, nextState) {
         Number(sourceLine.creditBs || 0) !== 0 || Number(sourceLine.creditUsd || 0) !== 0 ||
         source.date > asset.acquisitionDate || Math.abs(Number(source.bcvRate) - Number(asset.acquisitionBcvRate)) > 0.000001 ||
         !assetAccount || assetAccount.type !== 'ACTIVO' || assetAccount.isMovement !== true ||
-        !String(asset.assetAccountCode).startsWith('1.2.') ||
+        !String(asset.assetAccountCode).startsWith('1.2.') || normalize(assetAccount.name).includes('DEPRECIACION ACUMULADA') ||
         !accumulatedAccount || accumulatedAccount.type !== 'ACTIVO' || accumulatedAccount.isMovement !== true ||
         !normalize(accumulatedAccount.name).includes('DEPRECIACION ACUMULADA') ||
         !expenseAccount || expenseAccount.type !== 'GASTOS' || expenseAccount.isMovement !== true ||
@@ -1014,10 +1018,13 @@ function validateFixedAssetLedger(previousState, nextState) {
 
     const activePeriods = new Set();
     const eventIds = new Set();
+    const activeEvents = asArray(asset.depreciationEvents).filter(event => !event.reversedByJournalEntryId);
+    let activeDepreciationBs = 0;
+    let activeDepreciationUsd = 0;
     for (const event of asArray(asset.depreciationEvents)) {
       if (!event || typeof event.id !== 'string' || !event.id.trim() || eventIds.has(String(event.id)) ||
           event.companyId !== asset.companyId || event.assetId !== asset.id ||
-          !/^\\d{4}-(0[1-9]|1[0-2])$/.test(String(event.period || '')) ||
+          !/^\d{4}-(0[1-9]|1[0-2])$/.test(String(event.period || '')) ||
           !isValidIsoDate(event.date) || String(event.date).slice(0, 7) !== String(event.period) ||
           !Number.isInteger(event.days) || event.days <= 0 ||
           !Number.isFinite(Number(event.amountBs)) || Number(event.amountBs) <= 0 ||
@@ -1029,6 +1036,8 @@ function validateFixedAssetLedger(previousState, nextState) {
       if (!event.reversedByJournalEntryId) {
         if (activePeriods.has(String(event.period))) throw new Error('SQLite rechazó dos depreciaciones vigentes para el mismo activo y período.');
         activePeriods.add(String(event.period));
+        activeDepreciationBs += Number(event.amountBs);
+        activeDepreciationUsd += Number(event.amountUsd);
       }
       const journal = entryById.get(String(event.journalEntryId));
       const expectedRef = 'DEP-' + asset.assetCode + '-' + event.period;
@@ -1054,6 +1063,25 @@ function validateFixedAssetLedger(previousState, nextState) {
           throw new Error('SQLite rechazó una marca de reversión de depreciación sin contra-asiento vinculado.');
         }
       }
+      const journalReversal = entries.find(item => String(item.reversalOfEntryId || '') === String(event.journalEntryId));
+      if (Boolean(journalReversal) !== Boolean(event.reversedByJournalEntryId)) {
+        throw new Error('SQLite rechazó un estado de reversión de depreciación que no coincide con el Libro Diario.');
+      }
+    }
+    const depreciableBs = Number(asset.acquisitionCostBs) - Number(asset.residualValueBs);
+    const depreciableUsd = Number(asset.acquisitionCostUsd) - Number(asset.residualValueUsd);
+    if (activeDepreciationBs > depreciableBs + 0.01 || activeDepreciationUsd > depreciableUsd + 0.000001) {
+      throw new Error('SQLite rechazó depreciación acumulada superior al importe depreciable del activo ' + asset.assetCode + '.');
+    }
+    const firstPeriod = String(asset.serviceDate).slice(0, 7);
+    const sortedActiveEvents = activeEvents.slice().sort((a, b) => String(a.period).localeCompare(String(b.period)));
+    let expectedPeriod = firstPeriod;
+    for (const event of sortedActiveEvents) {
+      if (String(event.period) !== expectedPeriod) {
+        throw new Error('SQLite rechazó períodos de depreciación fuera de secuencia para ' + asset.assetCode + '.');
+      }
+      const [year, month] = expectedPeriod.split('-').map(Number);
+      expectedPeriod = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7);
     }
   }
 }
