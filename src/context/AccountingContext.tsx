@@ -77,7 +77,7 @@ import { calculatePurchaseServiceCreditNote, type PurchaseServiceCreditNoteReque
 import { calculateSaleCorrectionNote, type SaleCorrectionNoteRequest } from '../types/saleCorrectionNote';
 import { resolveNonInventoryPurchaseDebitAccount, resolveTreasuryAccountCurrency } from '../types/purchaseAccounting';
 import type { FixedAsset, FixedAssetDepreciationEvent, FixedAssetRegistrationDraft } from '../types/fixedAssets';
-import { calculateFixedAssetDepreciation, getNextFixedAssetDepreciationPeriod } from '../types/fixedAssets';
+import { calculateFixedAssetDepreciation, getNextFixedAssetDepreciationPeriod, getFixedAssetDepreciationScheduleThrough } from '../types/fixedAssets';
 
 export interface AccountingAuditEvent {
   id: number;
