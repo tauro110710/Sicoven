@@ -107,7 +107,13 @@ export const InventarioView: React.FC = () => {
             inventoryBcvRateFetchedAt: effectiveFetchedAt,
             inventoryBcvRateHistory: nextHistory
           });
-          await waitForPersistenceRef.current();
+          try {
+            await waitForPersistenceRef.current();
+          } catch (persistenceError) {
+            updateCompanyRef.current(company);
+            await waitForPersistenceRef.current().catch(() => undefined);
+            throw persistenceError;
+          }
         }
         if (active) {
           setBcvStatus('ready');
