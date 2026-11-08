@@ -42,6 +42,7 @@ function partitionAccountingSnapshot(state) {
     if (!id || companyById.has(id)) throw new Error('El snapshot contiene empresas con identificadores vacíos o duplicados.');
     companyById.set(id, company);
   }
+  requireArray(state, 'accounts');
   const currentCompanyId = String(state.currentCompanyId || '');
   if (currentCompanyId && !companyById.has(currentCompanyId)) {
     throw new Error('La empresa activa no existe en el snapshot contable.');
@@ -138,6 +139,19 @@ function mergeAccountingSnapshots(snapshots, preferredCompanyId = '') {
     }
     seenCompanies.add(companyId);
     companies.push(company);
+    const declarationIds = new Set(requireArray(snapshot, 'vatWithholdingDeclarations').map(item => String(item.id || '')));
+    for (const field of COMPANY_SCOPED_ARRAY_FIELDS) {
+      for (const item of requireArray(snapshot, field)) {
+        if (String(item?.companyId || '') !== companyId) {
+          throw new Error('La base SQLite contiene registros de ' + field + ' pertenecientes a otra empresa.');
+        }
+      }
+    }
+    for (const event of requireArray(snapshot, 'vatWithholdingDeclarationEvents')) {
+      if (!declarationIds.has(String(event?.declarationId || ''))) {
+        throw new Error('La base SQLite contiene un evento IVA vinculado a una declaración de otra empresa o inexistente.');
+      }
+    }
     if (JSON.stringify(snapshot.accounts || []) !== accountsJson) {
       throw new Error('Los planes de cuentas locales no coinciden entre empresas. Se bloqueó la carga para evitar un catálogo contable ambiguo.');
     }
