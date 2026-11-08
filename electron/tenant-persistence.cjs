@@ -80,10 +80,16 @@ async function saveTenantAccountingSnapshot(manager, state, actor = null) {
   const { snapshot, isNew } = changed[0];
   const company = snapshot.companies[0];
   let registeredHere = false;
+  let metadataUpdated = false;
+  const previousRecord = recordById.get(String(company.id));
   try {
     if (isNew) {
       manager.registerCompany(company);
       registeredHere = true;
+    } else if (previousRecord &&
+        (String(previousRecord.name) !== String(company.name) || String(previousRecord.rif).toUpperCase() !== String(company.rif).toUpperCase())) {
+      manager.updateCompanyMetadata(company);
+      metadataUpdated = true;
     }
     const db = manager.openCompany(company.id);
     const result = persistAccountingSnapshot(db, snapshot, actor);
@@ -94,8 +100,24 @@ async function saveTenantAccountingSnapshot(manager, state, actor = null) {
     }
     return { ok: true, savedCompanyIds: [company.id], unchanged: false };
   } catch (error) {
+    const rollbackErrors = [];
+    if (metadataUpdated && previousRecord) {
+      try {
+        manager.updateCompanyMetadata({
+          id: company.id,
+          rif: previousRecord.rif,
+          name: previousRecord.name
+        });
+      } catch (rollbackError) {
+        rollbackErrors.push('no se pudo restaurar la ficha del registro local: ' + String(rollbackError?.message || rollbackError));
+      }
+    }
     if (registeredHere) {
-      try { manager.archiveCompany(company.id); } catch {}
+      try { manager.archiveCompany(company.id); }
+      catch (rollbackError) { rollbackErrors.push('no se pudo archivar la base recién creada: ' + String(rollbackError?.message || rollbackError)); }
+    }
+    if (rollbackErrors.length) {
+      throw new Error('Falló el guardado de ' + company.id + ' y la reversión de metadatos quedó incompleta: ' + rollbackErrors.join('; '), { cause: error });
     }
     throw error;
   }
