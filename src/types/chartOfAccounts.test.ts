@@ -5,7 +5,7 @@ import type { Account } from './accounting';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 
 const account = (overrides: Partial<Account> = {}): Account => ({
-  code: '1.1.1.06',
+  code: '1.1.1.08',
   name: 'Banco adicional',
   type: 'ACTIVO',
   level: 4,
