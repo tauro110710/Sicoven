@@ -613,7 +613,7 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
   const runWithDatabase = (token, operation) => withDatabase
     ? withDatabase(token, (activeDb, companyId) => operation(activeDb, companyId))
     : operation(db, null);
-  ipcMain.handle('sicoven:reopen-accounting-period', async (_event, token, input) => {
+  ipcMain.handle('sicoven:reopen-accounting-period', (_event, token, input) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const actor = getActiveSession(token);
@@ -685,7 +685,7 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
     return reopen();
     });
   });
-  ipcMain.handle('sicoven:save-state', async (_event, token, state) => {
+  ipcMain.handle('sicoven:save-state', (_event, token, state) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const actor = getActiveSession(token);
