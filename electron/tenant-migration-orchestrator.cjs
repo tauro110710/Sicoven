@@ -242,9 +242,11 @@ function createTenantMigrationOrchestrator(options) {
       }
 
       journal.advance('VALIDATING', 'REGISTERING');
-      const registeredCompanies = manager.registerExistingCompanies(companies);
-      if (registeredCompanies.length !== companies.length ||
-          companies.some(company => !registeredCompanies.some(item => String(item.id) === String(company.id)))) {
+      manager.registerExistingCompanies(companies);
+      // The manager's registration return shape is intentionally not part of this contract;
+      // verify through its normalized read model instead.
+      const registeredCompanies = manager.listCompanies().filter(item => item.status === 'ACTIVE');
+      if (companies.some(company => !registeredCompanies.some(item => String(item.id) === String(company.id)))) {
         throw new Error('El registro local no confirmó todas las bases SQLite preparadas.');
       }
       journal.advance('REGISTERING', 'COMMITTED');
