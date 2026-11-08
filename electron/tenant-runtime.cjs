@@ -4,8 +4,10 @@ const { createCompanyDatabaseManager } = require('./company-database-manager.cjs
 const { initializeTenantDatabase } = require('./tenant-schema.cjs');
 const {
   loadTenantAccountingSnapshot,
-  saveTenantAccountingSnapshot
+  saveTenantAccountingSnapshot,
+  readTenantSnapshot
 } = require('./tenant-persistence.cjs');
+const { persistAccountingSnapshot } = require('./accounting-persistence.cjs');
 const { createEmptyAccountingSnapshot } = require('./tenant-snapshot.cjs');
 
 function createTenantRuntime({
@@ -54,11 +56,15 @@ function createTenantRuntime({
       const empty = createEmptyAccountingSnapshot();
       empty.companies = [{ id: String(company.id), name: String(company.name), rif: String(company.rif) }];
       empty.currentCompanyId = String(company.id);
-      const saved = await saveTenantAccountingSnapshot(manager, empty, actor);
-      if (!saved.ok || saved.savedCompanyIds[0] !== String(company.id)) {
-        throw new Error('La base local se creó, pero no se confirmó el snapshot inicial de la empresa.');
-      }
       const db = manager.openCompany(company.id);
+      const saved = persistAccountingSnapshot(db, empty, actor);
+      if (saved?.ok !== true) {
+        throw new Error('La base local se creó, pero SQLite no confirmó el snapshot inicial de la empresa.');
+      }
+      const verified = readTenantSnapshot(db, company.id);
+      if (verified.companies.length !== 1 || String(verified.companies[0].rif) !== String(company.rif)) {
+        throw new Error('La verificación posterior no coincide con la identidad de la empresa recién creada.');
+      }
       const identity = db.prepare("SELECT meta_value FROM sicoven_database_meta WHERE meta_key='company_id'").get();
       if (String(identity?.meta_value || '') !== String(company.id)) {
         throw new Error('La comprobación de identidad de la base recién creada no coincide.');
