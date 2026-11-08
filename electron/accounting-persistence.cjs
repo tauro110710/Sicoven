@@ -498,6 +498,26 @@ function persistAccountingSnapshot(db, state, actor = null) {
     const oldCompanies = new Map((Array.isArray(priorState.companies) ? priorState.companies : []).map(company => [String(company.id), company]));
     for (const company of (Array.isArray(state.companies) ? state.companies : [])) {
       const oldCompany = oldCompanies.get(String(company.id));
+      if (oldCompany) {
+        const profileFields = ['name', 'tradeName', 'rif', 'address', 'phone', 'email'];
+        const changedFields = profileFields
+          .filter(field => String(oldCompany[field] ?? '') !== String(company[field] ?? ''))
+          .map(field => ({
+            field,
+            previousValue: oldCompany[field] ?? null,
+            newValue: company[field] ?? null
+          }));
+        if (changedFields.length) {
+          auditInsert.run('company_profile_updated', JSON.stringify({
+            companyId: company.id,
+            companyName: company.name,
+            changedFields,
+            reason: 'Rectificación de datos maestros desde Configuración',
+            actor: actor ? { userId: actor.id ?? null, username: actor.username || null, role: actor.role || null } : null,
+            occurredAt: new Date().toISOString()
+          }));
+        }
+      }
       const previousBcvRate = Number(oldCompany?.bcvRate);
       const nextBcvRate = Number(company.bcvRate);
       if (oldCompany && Number.isFinite(previousBcvRate) && Number.isFinite(nextBcvRate) && previousBcvRate !== nextBcvRate) {
