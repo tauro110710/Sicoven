@@ -5,6 +5,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { persistAccountingSnapshot, registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
+const { initializeTenantDatabase } = require('./tenant-schema.cjs');
+const { createEmptyAccountingSnapshot } = require('./tenant-snapshot.cjs');
 
 const emptyState = () => ({
   companies: [], currentCompanyId: '', accounts: [],
@@ -759,5 +761,66 @@ test('SQLite rolls back all audit and state writes when an IVA event fails integ
     assert.equal((persisted.vatVouchers || []).some(item => item.id === 'voucher-atomicity-invalid'), false);
   } finally {
     harness.db.close();
+  }
+});
+
+
+test('tenant-routed persistence writes only to the selected company database', async () => {
+  const controlDb = new Database(':memory:');
+  const tenantDb = new Database(':memory:');
+  initializeTenantDatabase(tenantDb);
+  const handlers = new Map();
+  registerAccountingPersistenceHandler({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    db: controlDb,
+    licenseView: () => ({ authorized: true }),
+    getActiveSession: () => ({ id: 1, username: 'contador', role: 'contador' }),
+    withDatabase: async (token, operation) => {
+      assert.equal(token, 'valid-session');
+      return operation(tenantDb, 'company-a');
+    }
+  });
+  try {
+    const state = createEmptyAccountingSnapshot();
+    state.companies = [{ id: 'company-a', name: 'Empresa A', rif: 'J-12345678-9' }];
+    state.currentCompanyId = 'company-a';
+    const result = await handlers.get('sicoven:save-state')({}, 'valid-session', state);
+    assert.equal(result.ok, true);
+    const saved = JSON.parse(tenantDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
+    assert.equal(saved.companies[0].id, 'company-a');
+    assert.equal(controlDb.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='app_state'").get().count, 0);
+  } finally {
+    tenantDb.close();
+    controlDb.close();
+  }
+});
+
+test('tenant-routed persistence rejects snapshots containing more than the selected company', async () => {
+  const controlDb = new Database(':memory:');
+  const tenantDb = new Database(':memory:');
+  initializeTenantDatabase(tenantDb);
+  const handlers = new Map();
+  registerAccountingPersistenceHandler({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    db: controlDb,
+    licenseView: () => ({ authorized: true }),
+    getActiveSession: () => ({ id: 1, username: 'contador', role: 'contador' }),
+    withDatabase: async (_token, operation) => operation(tenantDb, 'company-a')
+  });
+  try {
+    const state = createEmptyAccountingSnapshot();
+    state.companies = [
+      { id: 'company-a', name: 'Empresa A', rif: 'J-12345678-9' },
+      { id: 'company-b', name: 'Empresa B', rif: 'J-98765432-1' }
+    ];
+    state.currentCompanyId = 'company-a';
+    await assert.rejects(
+      handlers.get('sicoven:save-state')({}, 'valid-session', state),
+      /no pertenece exclusivamente a la empresa activa/
+    );
+    assert.equal(tenantDb.prepare('SELECT COUNT(*) AS count FROM app_state').get().count, 0);
+  } finally {
+    tenantDb.close();
+    controlDb.close();
   }
 });
