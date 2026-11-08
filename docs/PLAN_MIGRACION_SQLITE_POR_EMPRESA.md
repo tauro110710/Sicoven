@@ -212,3 +212,10 @@ La selección de empresa no puede convertirse en una autoridad del renderer. El 
 La versión actual de escritorio utiliza una sola ventana operativa y una sola conexión SQLite de empresa activa. Por ello, el contexto debe pertenecer a una única sesión autenticada a la vez: una segunda sesión no puede apropiarse del contexto mientras la primera lo mantenga. El cierre de sesión o la pérdida de autorización debe drenar las operaciones, cerrar la conexión activa y eliminar el vínculo. Cada operación contable debe resolver la base a través de ese contexto; nunca debe elegir una ruta o empresa confiando en parámetros del renderer.
 
 El módulo de contexto y sus pruebas son una capa aislada de seguridad. No se considera integrada la arquitectura multiempresa hasta registrar sus IPC en el proceso principal, conectar el ciclo de vida de login/logout/licencia, exponer únicamente la selección necesaria en preload y migrar de forma completa los handlers contables y documentales. Hasta entonces, sicoven.sqlite continúa siendo la única base operativa y no se ejecuta migración de datos.
+
+
+### Contrato IPC para selección de empresa
+
+Se definió un adaptador IPC separado para tres operaciones: listar empresas accesibles por la sesión, solicitar la selección de una empresa y consultar la empresa activa. Cada handler vuelve a comprobar licencia y sesión en el proceso principal. La selección recibe únicamente `companyId`; rutas, nombres de archivo y conexiones nunca se aceptan desde el renderer. La lista de empresas se filtra en el contexto de sesión y solo devuelve identificador, razón social y RIF, nunca la ruta SQLite.
+
+Este adaptador permanece aislado hasta que el arranque pueda construir el runtime local y el coordinador de operaciones con un drenaje real de persistencia del renderer. No debe registrarse con un `flushPendingWrites` vacío ni con permisos genéricos improvisados: el cambio de empresa debe esperar las escrituras contables pendientes y utilizar una política explícita de acceso por usuario. El IPC tampoco se expone en preload antes de que los handlers estén registrados en `main.cjs`.
