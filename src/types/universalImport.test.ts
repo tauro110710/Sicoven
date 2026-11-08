@@ -43,7 +43,8 @@ test('mapea la estructura POSVEN real y separa facturas de recibos CxC', () => {
     productos: [{ id: 'p1', codigo: 'A1' }],
     ventas: [
       { id: 'C4-V-0001', cliente: 'Cliente A', totalUSD: 10, items: [{ productoId: 'p1', cantidad: 1 }] },
-      { id: 'C4-CXC-0001', cliente: 'Cliente A', totalUSD: 2, items: [{ productoId: 'ABONO', cantidad: 1 }] }
+      { id: 'C4-CXC-0001', cliente: 'Cliente A', totalUSD: 1, items: [{ productoId: 'p1', cantidad: 1 }] },
+      { id: 'C1-V-0002', cliente: 'Cliente A', totalUSD: 2, items: [{ productoId: 'ABONO', cantidad: 1 }] }
     ],
     cxc: [
       { id: 'CRD-1', ventaId: 'C4-V-0001', cliente: 'Cliente A [V-123]', historialPagos: [{ id: 'C4-CXC-0001', reciboId: 'C4-CXC-0001' }] },
