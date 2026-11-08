@@ -51,6 +51,21 @@ test('accepts depreciation only when the dual-currency journal matches the asset
   assert.doesNotThrow(() => validateFixedAssetLedger({}, state([current],[acquisition,depreciation])));
 });
 
+test('rejects a balanced depreciation journal that does not match the straight-line calculation', () => {
+  const incorrectEvent = event({amountBs:2000,amountUsd:20});
+  const incorrectJournal = {
+    ...depreciation,
+    items:[
+      {accountCode:'6.1.1.06',debitBs:2000,creditBs:0,debitUsd:20,creditUsd:0},
+      {accountCode:'1.2.1.05',debitBs:0,creditBs:2000,debitUsd:0,creditUsd:20}
+    ]
+  };
+  assert.throws(
+    () => validateFixedAssetLedger({},state([asset({depreciationEvents:[incorrectEvent]})],[acquisition,incorrectJournal])),
+    /no coinciden con el método lineal prorrateado/
+  );
+});
+
 test('rejects changes to immutable acquisition details and source line', () => {
   const prior = state();
   const changed = state([asset({acquisitionCostBs:36000})]);
