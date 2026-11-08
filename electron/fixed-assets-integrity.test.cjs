@@ -27,14 +27,14 @@ const depreciation = {
   id:'dep-1',companyId:'company-1',date:'2026-01-31',type:'AJUSTE',bcvRate:100,
   referenceDoc:'DEP-AF-00001-2026-01',
   items:[
-    {accountCode:'6.1.1.06',debitBs:1528.77,creditBs:0,debitUsd:15.3,creditUsd:0},
-    {accountCode:'1.2.1.05',debitBs:0,creditBs:1528.77,debitUsd:0,creditUsd:15.3}
+    {accountCode:'6.1.1.06',debitBs:1530,creditBs:0,debitUsd:15.3,creditUsd:0},
+    {accountCode:'1.2.1.05',debitBs:0,creditBs:1530,debitUsd:0,creditUsd:15.3}
   ]
 };
 
 const event = (overrides = {}) => ({
   id:'dep-event-1',companyId:'company-1',assetId:'asset-1',period:'2026-01',date:'2026-01-31',
-  days:17,amountBs:1528.77,amountUsd:15.3,journalEntryId:'dep-1',
+  days:17,amountBs:1530,amountUsd:15.3,journalEntryId:'dep-1',
   createdAt:'2026-01-31T12:00:00.000Z',...overrides
 });
 
