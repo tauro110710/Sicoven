@@ -46,9 +46,10 @@ function registerCompanyExportIpc({
     const release = await operationContext.acquireMaintenanceLock();
     try {
       const db = runtime.getCompanyDatabase(companyId);
+      const result = await exportCompanyData({ db, company, userDataDir: app.getPath('userData'), destination, format });
       db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
-        .run('company_data_exported', JSON.stringify({ companyId, actor: actor.username, format, createdAt: new Date().toISOString() }));
-      return await exportCompanyData({ db, company, userDataDir: app.getPath('userData'), destination, format });
+        .run('company_data_exported', JSON.stringify({ companyId, actor: actor.username, format, destination: result.destination, createdAt: new Date().toISOString() }));
+      return result;
     } finally {
       release();
     }
