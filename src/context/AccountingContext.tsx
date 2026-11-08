@@ -1524,7 +1524,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const description = String(draft.description || '').trim();
     const category = String(draft.category || '').trim();
     if (!assetCode || !description || !category) throw new Error('Indique código, descripción y categoría del activo.');
-    if (/TERRENO/i.test(category)) throw new Error('Los terrenos no se deprecian en este módulo; regístrelos en el auxiliar de activos no depreciables cuando esté disponible.');
+    const nonDepreciable = draft.depreciationMethod === 'NON_DEPRECIABLE';
     if (fixedAssets.some(asset => asset.companyId === currentCompany.id && asset.assetCode.toUpperCase() === assetCode)) {
       throw new Error('Ya existe un activo fijo con ese código en la empresa activa.');
     }
@@ -1545,19 +1545,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const accumulatedAccount = accounts.find(account => account.code === draft.accumulatedDepreciationAccountCode);
     const expenseAccount = accounts.find(account => account.code === draft.depreciationExpenseAccountCode);
     if (!sourceLine || sourceLine.accountCode !== draft.assetAccountCode ||
-        !assetAccount || assetAccount.type !== 'ACTIVO' || !assetAccount.isMovement || !assetAccount.code.startsWith('1.2.') || /TERRENO|DEPRECIACI[ÓO]N ACUMULADA/i.test(assetAccount.name) ||
+        !assetAccount || assetAccount.type !== 'ACTIVO' || !assetAccount.isMovement || !assetAccount.code.startsWith('1.2.') || /DEPRECIACI[ÓO]N ACUMULADA/i.test(assetAccount.name) ||
         Number(sourceLine.debitBs) <= 0 || Number(sourceLine.debitUsd) <= 0 ||
         Number(sourceLine.creditBs || 0) > 0 || Number(sourceLine.creditUsd || 0) > 0) {
       throw new Error('La línea de origen debe ser un débito dual ya contabilizado en una cuenta de Propiedades, Planta y Equipos (1.2).');
     }
-    if (!accumulatedAccount || accumulatedAccount.type !== 'ACTIVO' || !accumulatedAccount.isMovement ||
+    if (!nonDepreciable && (!accumulatedAccount || accumulatedAccount.type !== 'ACTIVO' || !accumulatedAccount.isMovement ||
         !accumulatedAccount.code.startsWith('1.2.') || !/DEPRECIACI[ÓO]N ACUMULADA/i.test(accumulatedAccount.name) ||
-        accumulatedAccount.code === assetAccount.code) {
+        accumulatedAccount.code === assetAccount.code)) {
       throw new Error('Seleccione una cuenta correctora de depreciación acumulada dentro de Propiedades, Planta y Equipos.');
     }
-    if (!expenseAccount || expenseAccount.type !== 'GASTOS' || !expenseAccount.isMovement ||
-        !/DEPRECIACI[ÓO]N/i.test(expenseAccount.name)) {
+    if (!nonDepreciable && (!expenseAccount || expenseAccount.type !== 'GASTOS' || !expenseAccount.isMovement ||
+        !/DEPRECIACI[ÓO]N/i.test(expenseAccount.name))) {
       throw new Error('Seleccione una cuenta de gasto de depreciación válida.');
+    }
+    if (nonDepreciable && (Number(draft.usefulLifeMonths) !== 0 ||
+        Number(draft.residualValueBs) !== Number(sourceLine.debitBs) ||
+        Number(draft.residualValueUsd) !== Number(sourceLine.debitUsd))) {
+      throw new Error('Los activos no depreciables conservan el costo histórico como valor residual y no requieren vida útil.');
     }
     const asset: FixedAsset = {
       ...draft,

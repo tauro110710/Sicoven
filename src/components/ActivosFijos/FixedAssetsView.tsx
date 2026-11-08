@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
-import { getNextFixedAssetDepreciationPeriod, type FixedAssetRegistrationDraft } from '../../types/fixedAssets';
+import { getNextFixedAssetDepreciationPeriod, type FixedAssetRegistrationDraft, type FixedAssetDepreciationMethod } from '../../types/fixedAssets';
 
 const parseAmount = (value: string): number => {
   const raw = value.trim();
@@ -22,6 +22,7 @@ export const FixedAssetsView: React.FC = () => {
   const [assetCode, setAssetCode] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('Mobiliario y equipos');
+  const [depreciationMethod, setDepreciationMethod] = useState<FixedAssetDepreciationMethod>('STRAIGHT_LINE');
   const [acquisitionDate, setAcquisitionDate] = useState('');
   const [serviceDate, setServiceDate] = useState('');
   const [usefulLifeMonths, setUsefulLifeMonths] = useState('60');
@@ -45,7 +46,7 @@ export const FixedAssetsView: React.FC = () => {
         asset.sourceJournalEntryId === entry.id && asset.sourceJournalLineIndex === index
       );
       if (!account || account.type !== 'ACTIVO' || !account.isMovement ||
-          !account.code.startsWith('1.2.') || /TERRENO|DEPRECIACI[ÓO]N ACUMULADA/i.test(account.name) ||
+          !account.code.startsWith('1.2.') || /DEPRECIACI[ÓO]N ACUMULADA/i.test(account.name) ||
           Number(line.debitBs) <= 0 || Number(line.debitUsd) <= 0 ||
           Number(line.creditBs || 0) > 0 || Number(line.creditUsd || 0) > 0 || alreadyRegistered) return [];
       return [{ key: entry.id + '|' + index, entry, line, index, account }];
@@ -113,29 +114,32 @@ export const FixedAssetsView: React.FC = () => {
       setError('No hay una línea de adquisición capitalizada disponible para vincular.');
       return;
     }
-    if (!accumulatedAccounts.some(account => account.code === accumulatedAccountCode)) {
+    if (depreciationMethod === 'STRAIGHT_LINE' && !accumulatedAccounts.some(account => account.code === accumulatedAccountCode)) {
       setError('Falta crear o seleccionar la cuenta correctora de depreciación acumulada correspondiente en el Catálogo de Cuentas.');
       return;
     }
-    if (!expenseAccounts.some(account => account.code === expenseAccountCode)) {
+    if (depreciationMethod === 'STRAIGHT_LINE' && !expenseAccounts.some(account => account.code === expenseAccountCode)) {
       setError('Falta seleccionar una cuenta válida de gasto de depreciación en el Catálogo de Cuentas.');
       return;
     }
     const parsedResidualBs = parseAmount(residualBs);
     const parsedResidualUsd = parseAmount(residualUsd);
     const life = Number(usefulLifeMonths);
-    if (!Number.isFinite(parsedResidualBs) || !Number.isFinite(parsedResidualUsd) ||
-        !Number.isInteger(life) || life <= 0) {
+    if (depreciationMethod === 'STRAIGHT_LINE' &&
+        (!Number.isFinite(parsedResidualBs) || !Number.isFinite(parsedResidualUsd) ||
+         !Number.isInteger(life) || life <= 0)) {
       setError('Revise el valor residual y la vida útil en meses.');
       return;
     }
     const draft: FixedAssetRegistrationDraft = {
       assetCode, description, category, acquisitionDate, serviceDate,
-      residualValueBs: parsedResidualBs, residualValueUsd: parsedResidualUsd,
-      usefulLifeMonths: life, depreciationMethod: 'STRAIGHT_LINE',
+      residualValueBs: depreciationMethod === 'NON_DEPRECIABLE' ? Number(selectedSource.line.debitBs) : parsedResidualBs,
+      residualValueUsd: depreciationMethod === 'NON_DEPRECIABLE' ? Number(selectedSource.line.debitUsd) : parsedResidualUsd,
+      usefulLifeMonths: depreciationMethod === 'NON_DEPRECIABLE' ? 0 : life,
+      depreciationMethod,
       assetAccountCode: selectedSource.line.accountCode,
-      accumulatedDepreciationAccountCode: accumulatedAccountCode,
-      depreciationExpenseAccountCode: expenseAccountCode,
+      accumulatedDepreciationAccountCode: depreciationMethod === 'NON_DEPRECIABLE' ? '' : accumulatedAccountCode,
+      depreciationExpenseAccountCode: depreciationMethod === 'NON_DEPRECIABLE' ? '' : expenseAccountCode,
       sourceJournalEntryId: selectedSource.entry.id,
       sourceJournalLineIndex: selectedSource.index
     };
@@ -145,6 +149,7 @@ export const FixedAssetsView: React.FC = () => {
       setMessage('Activo ' + created.assetCode + ' registrado y vinculado al asiento ' + created.sourceJournalEntryId + '. No se generó un segundo asiento de adquisición.');
       setDescription('');
       setCategory('Mobiliario y equipos');
+       setDepreciationMethod('STRAIGHT_LINE');
       const maxAssetSequence = [created, ...fixedAssets].reduce((max, asset) => {
         const match = /^AF-(\d+)$/.exec(asset.assetCode);
         return match ? Math.max(max, Number(match[1])) : max;
@@ -163,11 +168,11 @@ export const FixedAssetsView: React.FC = () => {
     <div className="space-y-6 p-4 sm:p-6">
       <header>
         <h1 className="text-xl font-bold text-slate-900">Activos fijos</h1>
-        <p className="mt-1 text-sm text-slate-600">Registro vinculado al Libro Diario y depreciación financiera lineal en doble moneda.</p>
+        <p className="mt-1 text-sm text-slate-600">Registro vinculado al Libro Diario, con depreciación lineal automática y control de bienes no depreciables.</p>
       </header>
 
       <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
-        <strong>Integridad de adquisición:</strong> solo se pueden registrar activos cuya línea ya esté debitada en una cuenta de Propiedades, Planta y Equipos (1.2). El alta no duplica el asiento original. Esta primera etapa incluye depreciación financiera lineal prorrateada por días para bienes depreciables; excluye terrenos, depreciación fiscal, bajas/ventas, deterioro y revaluaciones.
+        <strong>Integridad de adquisición:</strong> solo se registran líneas ya contabilizadas en Propiedades, Planta y Equipo (1.2), sin duplicar el asiento original. Los bienes depreciables usan línea recta; los terrenos y otros bienes no depreciables conservan su costo sin generar depreciación.
       </div>
 
       {(error || message) && (
@@ -217,32 +222,40 @@ export const FixedAssetsView: React.FC = () => {
             <label className="text-xs font-medium text-slate-700">Disponible para uso desde
               <input type="date" value={serviceDate} onChange={event => setServiceDate(event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
             </label>
-            <label className="text-xs font-medium text-slate-700">Vida útil (meses)
-              <input type="number" min="1" step="1" value={usefulLifeMonths} onChange={event => setUsefulLifeMonths(event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
+            <label className="text-xs font-medium text-slate-700">Tratamiento del activo
+              <select value={depreciationMethod} onChange={event => setDepreciationMethod(event.target.value as FixedAssetDepreciationMethod)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm">
+                <option value="STRAIGHT_LINE">Depreciable · Línea recta</option>
+                <option value="NON_DEPRECIABLE">No depreciable · Conserva costo</option>
+              </select>
             </label>
-            <label className="text-xs font-medium text-slate-700">Valor residual Bs.
-              <input value={residualBs} onChange={event => setResidualBs(event.target.value)} inputMode="decimal" className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
-            </label>
-            <label className="text-xs font-medium text-slate-700">Valor residual USD
-              <input value={residualUsd} onChange={event => setResidualUsd(event.target.value)} inputMode="decimal" className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
-            </label>
-            <label className="text-xs font-medium text-slate-700">Cuenta de depreciación acumulada
+            {depreciationMethod === 'STRAIGHT_LINE' ? <>
+              <label className="text-xs font-medium text-slate-700">Vida útil (meses)
+                <input type="number" min="1" step="1" value={usefulLifeMonths} onChange={event => setUsefulLifeMonths(event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
+              </label>
+              <label className="text-xs font-medium text-slate-700">Valor residual Bs.
+                <input value={residualBs} onChange={event => setResidualBs(event.target.value)} inputMode="decimal" className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
+              </label>
+              <label className="text-xs font-medium text-slate-700">Valor residual USD
+                <input value={residualUsd} onChange={event => setResidualUsd(event.target.value)} inputMode="decimal" className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
+              </label>
+              <label className="text-xs font-medium text-slate-700">Cuenta de depreciación acumulada
               <select value={accumulatedAccountCode} onChange={event => setAccumulatedAccountCode(event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm">
                 {accumulatedAccounts.map(account => <option key={account.code} value={account.code}>{account.code} · {account.name}</option>)}
               </select>
               {!accumulatedAccounts.some(account => account.code === accumulatedAccountCode) && <span className="mt-1 block text-amber-700">La cuenta correctora requerida no está creada en esta empresa. Créela en el Catálogo de Cuentas antes de registrar el activo.</span>}
-            </label>
-            <label className="text-xs font-medium text-slate-700">Cuenta de gasto de depreciación
-              <select value={expenseAccountCode} onChange={event => setExpenseAccountCode(event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm">
-                {expenseAccounts.map(account => <option key={account.code} value={account.code}>{account.code} · {account.name}</option>)}
-              </select>
-            </label>
+              </label>
+              <label className="text-xs font-medium text-slate-700">Cuenta de gasto de depreciación
+                <select value={expenseAccountCode} onChange={event => setExpenseAccountCode(event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm">
+                  {expenseAccounts.map(account => <option key={account.code} value={account.code}>{account.code} · {account.name}</option>)}
+                </select>
+              </label>
+            </> : <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 md:col-span-2">Este bien no se depreciará. Su valor residual será igual al costo histórico de adquisición.</div>}
             <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 md:col-span-2">
               Costo de origen: <strong>{selectedSource ? formatBs(selectedSource.line.debitBs) + ' / ' + formatUsd(selectedSource.line.debitUsd) : '—'}</strong>
               <span className="ml-2">Tasa histórica: <strong>{selectedSource?.entry.bcvRate || '—'}</strong></span>
             </div>
             <div className="md:col-span-2">
-              <button type="button" disabled={saving || !selectedSource || !accumulatedAccounts.some(account => account.code === accumulatedAccountCode) || !expenseAccounts.some(account => account.code === expenseAccountCode)} onClick={submitAsset} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+              <button type="button" disabled={saving || !selectedSource || (depreciationMethod === 'STRAIGHT_LINE' && (!accumulatedAccounts.some(account => account.code === accumulatedAccountCode) || !expenseAccounts.some(account => account.code === expenseAccountCode)))} onClick={submitAsset} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 {saving ? 'Registrando…' : 'Registrar activo'}
               </button>
             </div>
@@ -307,7 +320,7 @@ export const FixedAssetsView: React.FC = () => {
                       <td className="p-3 text-right">{formatUsd(accumulatedUsd)}</td>
                       <td className="p-3 text-right font-semibold">{formatBs(netBs)}</td>
                       <td className="p-3 text-right font-semibold">{formatUsd(netUsd)}</td>
-                      <td className="p-3">{historyError ? 'Revisar historial' : nextPeriod || 'Depreciación completada'}</td>
+                      <td className="p-3">{historyError ? 'Revisar historial' : asset.depreciationMethod === 'NON_DEPRECIABLE' ? 'No depreciable' : nextPeriod || 'Depreciación completada'}</td>
                       <td className="p-3">
                         {historyError
                           ? <span className="font-semibold text-amber-700">Revisar</span>

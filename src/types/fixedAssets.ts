@@ -1,4 +1,4 @@
-export type FixedAssetDepreciationMethod = 'STRAIGHT_LINE';
+export type FixedAssetDepreciationMethod = 'STRAIGHT_LINE' | 'NON_DEPRECIABLE';
 export type FixedAssetStatus = 'ACTIVE' | 'DISPOSED';
 
 export interface FixedAssetDepreciationEvent {
@@ -100,8 +100,9 @@ function validateAsset(asset: FixedAsset): { serviceDate: Date; lifeEnd: Date } 
   const acquisitionDate = parseIsoDate(asset.acquisitionDate, 'La fecha de adquisición');
   const serviceDate = parseIsoDate(asset.serviceDate, 'La fecha de puesta en servicio');
   if (serviceDate < acquisitionDate) throw new Error('La puesta en servicio no puede ser anterior a la adquisición.');
-  if (!Number.isInteger(asset.usefulLifeMonths) || asset.usefulLifeMonths <= 0) {
-    throw new Error('La vida útil debe ser un número entero de meses mayor que cero.');
+  const nonDepreciable = asset.depreciationMethod === 'NON_DEPRECIABLE';
+  if (!Number.isInteger(asset.usefulLifeMonths) || (nonDepreciable ? asset.usefulLifeMonths !== 0 : asset.usefulLifeMonths <= 0)) {
+    throw new Error(nonDepreciable ? 'Un activo no depreciable debe tener vida útil cero.' : 'La vida útil debe ser un número entero de meses mayor que cero.');
   }
   const values = [asset.acquisitionCostBs, asset.acquisitionCostUsd, asset.acquisitionBcvRate, asset.residualValueBs, asset.residualValueUsd];
   if (!values.every(value => Number.isFinite(value) && value >= 0) || asset.acquisitionBcvRate <= 0) {
@@ -110,23 +111,29 @@ function validateAsset(asset: FixedAsset): { serviceDate: Date; lifeEnd: Date } 
   if (asset.residualValueBs > asset.acquisitionCostBs || asset.residualValueUsd > asset.acquisitionCostUsd) {
     throw new Error('El valor residual no puede superar el costo de adquisición.');
   }
-  if (asset.residualValueBs === asset.acquisitionCostBs || asset.residualValueUsd === asset.acquisitionCostUsd) {
-    throw new Error('El activo debe tener un importe depreciable positivo en ambas monedas para registrar asientos duales.');
+  if (nonDepreciable) {
+    if (asset.residualValueBs !== asset.acquisitionCostBs || asset.residualValueUsd !== asset.acquisitionCostUsd ||
+        asset.depreciationEvents.length > 0 || asset.accumulatedDepreciationAccountCode || asset.depreciationExpenseAccountCode) {
+      throw new Error('Un activo no depreciable conserva su costo como valor residual y no admite eventos ni cuentas de depreciación.');
+    }
+  } else if (asset.depreciationMethod !== 'STRAIGHT_LINE' ||
+      asset.residualValueBs >= asset.acquisitionCostBs || asset.residualValueUsd >= asset.acquisitionCostUsd) {
+    throw new Error('El activo depreciable debe tener importe depreciable positivo en ambas monedas.');
   }
-  if (asset.depreciationMethod !== 'STRAIGHT_LINE' || !Number.isInteger(asset.sourceJournalLineIndex) || asset.sourceJournalLineIndex < 0) {
-    throw new Error('El método de depreciación o el vínculo a la línea contable de origen no es válido.');
+  if (!Number.isInteger(asset.sourceJournalLineIndex) || asset.sourceJournalLineIndex < 0) {
+    throw new Error('El vínculo a la línea contable de origen no es válido.');
   }
   if (!asset.assetCode.trim() || !asset.companyId || !asset.sourceJournalEntryId ||
-      !asset.assetAccountCode || !asset.accumulatedDepreciationAccountCode || !asset.depreciationExpenseAccountCode) {
+      !asset.assetAccountCode || (!nonDepreciable && (!asset.accumulatedDepreciationAccountCode || !asset.depreciationExpenseAccountCode))) {
     throw new Error('El expediente del activo no contiene todos los vínculos contables obligatorios.');
   }
-  return { serviceDate, lifeEnd: addMonthsClamped(serviceDate, asset.usefulLifeMonths) };
+  return { serviceDate, lifeEnd: nonDepreciable ? serviceDate : addMonthsClamped(serviceDate, asset.usefulLifeMonths) };
 }
 
 /** Returns the earliest unposted month in the asset's useful life. Reversed periods can be posted again. */
 export function getNextFixedAssetDepreciationPeriod(asset: FixedAsset): string | null {
   const { serviceDate, lifeEnd } = validateAsset(asset);
-  if (asset.status !== 'ACTIVE') return null;
+  if (asset.status !== 'ACTIVE' || asset.depreciationMethod === 'NON_DEPRECIABLE') return null;
   if (asset.acquisitionCostBs === asset.residualValueBs &&
       asset.acquisitionCostUsd === asset.residualValueUsd) return null;
 

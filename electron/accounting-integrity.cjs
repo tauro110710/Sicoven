@@ -973,19 +973,25 @@ function validateFixedAssetLedger(previousState, nextState) {
   }
 
   for (const asset of assets) {
+    const nonDepreciable = asset.depreciationMethod === 'NON_DEPRECIABLE';
     if (!companies.has(String(asset.companyId)) || !String(asset.assetCode || '').trim() ||
-        !String(asset.description || '').trim() || !String(asset.category || '').trim() || /TERRENO/i.test(String(asset.category || '')) ||
+        !String(asset.description || '').trim() || !String(asset.category || '').trim() ||
         !isValidIsoDate(asset.acquisitionDate) || !isValidIsoDate(asset.serviceDate) ||
         asset.serviceDate < asset.acquisitionDate ||
-        !Number.isInteger(asset.usefulLifeMonths) || asset.usefulLifeMonths <= 0 ||
-        asset.status !== 'ACTIVE' || asset.depreciationMethod !== 'STRAIGHT_LINE' ||
+        !Number.isInteger(asset.usefulLifeMonths) || (nonDepreciable ? asset.usefulLifeMonths !== 0 : asset.usefulLifeMonths <= 0) ||
+        asset.status !== 'ACTIVE' || !['STRAIGHT_LINE', 'NON_DEPRECIABLE'].includes(asset.depreciationMethod) ||
         !Number.isFinite(Number(asset.acquisitionCostBs)) || Number(asset.acquisitionCostBs) <= 0 ||
         !Number.isFinite(Number(asset.acquisitionCostUsd)) || Number(asset.acquisitionCostUsd) <= 0 ||
         !Number.isFinite(Number(asset.acquisitionBcvRate)) || Number(asset.acquisitionBcvRate) <= 0 ||
         !Number.isFinite(Number(asset.residualValueBs)) || Number(asset.residualValueBs) < 0 ||
         !Number.isFinite(Number(asset.residualValueUsd)) || Number(asset.residualValueUsd) < 0 ||
-        Number(asset.residualValueBs) >= Number(asset.acquisitionCostBs) ||
-        Number(asset.residualValueUsd) >= Number(asset.acquisitionCostUsd) ||
+        Number(asset.residualValueBs) > Number(asset.acquisitionCostBs) ||
+        Number(asset.residualValueUsd) > Number(asset.acquisitionCostUsd) ||
+        (nonDepreciable && (Number(asset.residualValueBs) !== Number(asset.acquisitionCostBs) ||
+          Number(asset.residualValueUsd) !== Number(asset.acquisitionCostUsd) || asset.depreciationEvents.length !== 0 ||
+          asset.accumulatedDepreciationAccountCode || asset.depreciationExpenseAccountCode)) ||
+        (!nonDepreciable && (Number(asset.residualValueBs) >= Number(asset.acquisitionCostBs) ||
+          Number(asset.residualValueUsd) >= Number(asset.acquisitionCostUsd))) ||
         !Number.isInteger(asset.sourceJournalLineIndex) || asset.sourceJournalLineIndex < 0 || !Array.isArray(asset.depreciationEvents)) {
       throw new Error('SQLite rechazó un expediente de activo fijo con datos, fechas, costos, vida útil o empresa inválidos.');
     }
@@ -1005,11 +1011,11 @@ function validateFixedAssetLedger(previousState, nextState) {
         Number(sourceLine.creditBs || 0) !== 0 || Number(sourceLine.creditUsd || 0) !== 0 ||
         source.date < asset.acquisitionDate || Math.abs(Number(source.bcvRate) - Number(asset.acquisitionBcvRate)) > 0.000001 ||
         !assetAccount || assetAccount.type !== 'ACTIVO' || assetAccount.isMovement !== true ||
-        !String(asset.assetAccountCode).startsWith('1.2.') || normalize(assetAccount.name).includes('TERRENO') || normalize(assetAccount.name).includes('DEPRECIACION ACUMULADA') ||
-        !accumulatedAccount || accumulatedAccount.type !== 'ACTIVO' || accumulatedAccount.isMovement !== true ||
-        !normalize(accumulatedAccount.name).includes('DEPRECIACION ACUMULADA') ||
-        !expenseAccount || expenseAccount.type !== 'GASTOS' || expenseAccount.isMovement !== true ||
-        !normalize(expenseAccount.name).includes('DEPRECIACION')) {
+        !String(asset.assetAccountCode).startsWith('1.2.') || normalize(assetAccount.name).includes('DEPRECIACION ACUMULADA') ||
+        (!nonDepreciable && (!accumulatedAccount || accumulatedAccount.type !== 'ACTIVO' || accumulatedAccount.isMovement !== true ||
+          !normalize(accumulatedAccount.name).includes('DEPRECIACION ACUMULADA') ||
+          !expenseAccount || expenseAccount.type !== 'GASTOS' || expenseAccount.isMovement !== true ||
+          !normalize(expenseAccount.name).includes('DEPRECIACION')))) {
       throw new Error('SQLite rechazó un activo fijo sin asiento de adquisición capitalizado, línea origen o cuentas de depreciación válidas.');
     }
     const sourceKey = String(asset.companyId) + '|' + String(asset.sourceJournalEntryId) + '|' + String(asset.sourceJournalLineIndex);

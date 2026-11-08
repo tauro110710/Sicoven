@@ -94,3 +94,13 @@ test('requires the asset event to record the journal reversal marker', () => {
   assert.doesNotThrow(() => validateFixedAssetLedger({},state([current],[acquisition,depreciation,reversal])));
   assert.throws(() => validateFixedAssetLedger({},state([asset({depreciationEvents:[event()]})],[acquisition,depreciation,reversal])), /no coincide con el Libro Diario/);
 });
+
+
+test('accepts a non-depreciable land asset without depreciation accounts or events', () => {
+  const land = asset({
+    category: 'Terreno', depreciationMethod: 'NON_DEPRECIABLE', usefulLifeMonths: 0,
+    residualValueBs: 36500, residualValueUsd: 365,
+    accumulatedDepreciationAccountCode: '', depreciationExpenseAccountCode: '', depreciationEvents: []
+  });
+  assert.doesNotThrow(() => validateFixedAssetLedger({}, state([land], [acquisition])));
+});

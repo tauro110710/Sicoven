@@ -103,3 +103,14 @@ test('monthly schedule catches up consecutive missing periods without duplicatin
   const schedule = getFixedAssetDepreciationScheduleThrough(current, '2026-03-31');
   assert.deepEqual(schedule.map(item => item.period), ['2026-02', '2026-03']);
 });
+
+
+test('registers land as a non-depreciable asset with full residual value and no schedule', () => {
+  const land = asset({
+    category: 'Terreno', depreciationMethod: 'NON_DEPRECIABLE', usefulLifeMonths: 0,
+    residualValueBs: 36500, residualValueUsd: 365,
+    accumulatedDepreciationAccountCode: '', depreciationExpenseAccountCode: ''
+  });
+  assert.equal(getNextFixedAssetDepreciationPeriod(land), null);
+  assert.deepEqual(getFixedAssetDepreciationScheduleThrough(land, '2026-12-31'), []);
+});
