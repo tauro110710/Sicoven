@@ -142,6 +142,10 @@ export const ConfiguracionView: React.FC = () => {
     setAddress(currentCompany.address);
     setPhone(currentCompany.phone);
     setEmail(currentCompany.email);
+    setPriceLabel1(currentCompany.inventoryPriceLabels?.price1 || 'Precio 1');
+    setPriceLabel2(currentCompany.inventoryPriceLabels?.price2 || 'Precio 2');
+    setPriceLabel3(currentCompany.inventoryPriceLabels?.price3 || 'Precio 3');
+    setPriceLabel4(currentCompany.inventoryPriceLabels?.price4 || 'Precio 4');
     setFiscalYear(currentCompany.fiscalYear);
     setAccountingFramework(currentCompany.accountingFramework || '');
     setAccountingFrameworkVersion(currentCompany.accountingFrameworkVersion || '');
