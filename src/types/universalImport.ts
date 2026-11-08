@@ -17,7 +17,7 @@ export const getUniversalJsonValueAtPath = (root: unknown, path: string): unknow
 export type PosvenBackupMappingAnalysis = {
   salesInvoices: number; salesCollectionReceipts: number; collectionReceiptsLinkedToHistory: number; collectionReceiptsWithoutHistory: number; salesDetailLines: number;
   salesProductLines: number; unresolvedSalesProductLines: number; salesWithLinkedReceivable: number;
-  salesMissingFiscalControl: number; salesMissingCustomerRif: number; salesMissingTaxRate: number;
+  salesMissingFiscalControl: number; salesMissingCustomerRif: number; salesCustomerRifResolvedByRelatedRecord: number; salesCustomerRifStillUnresolved: number; salesMissingTaxRate: number;
   purchases: number; purchasesWithUniqueSupplier: number; purchasesWithoutSupplierMatch: number;
   purchasesMissingBcvRate: number; purchasesMissingFiscalControl: number; purchasesMissingTaxBreakdown: number;
   receivables: number; receivablesLinkedToSales: number; receivablesWithoutSaleLink: number; receivablePaymentEvents: number;
@@ -72,6 +72,23 @@ export const analyzePosvenBackupMapping = (root: unknown): PosvenBackupMappingAn
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item));
   const productSaleLines = saleLines.filter(item => norm(item.productoId) !== 'abono' && Boolean(item.productoId));
   const unresolvedSalesProductLines = productSaleLines.filter(item => !productIds.has(String(item.productoId))).length;
+  const customersByName = new Map<string, Array<Record<string, unknown>>>();
+  list('clientes').forEach(row => {
+    const name = norm(row.name ?? row.nombre);
+    if (name) customersByName.set(name, [...(customersByName.get(name) ?? []), row]);
+  });
+  const receivablesBySaleId = new Map<string, Array<Record<string, unknown>>>();
+  receivables.forEach(row => [row.ventaId,row.facturaId].filter(Boolean).forEach(id => {
+    const key = String(id);
+    receivablesBySaleId.set(key, [...(receivablesBySaleId.get(key) ?? []), row]);
+  }));
+  const salesCustomerRifResolvedByRelatedRecord = invoiceRows.filter(row => {
+    const linked = receivablesBySaleId.get(String(row.id ?? '')) ?? [];
+    const hasLinkedRif = linked.some(receivable => /\\[\\s*[JGVEP]-[\\d.\\-]+\\s*\\]/i.test(String(receivable.cliente ?? '')));
+    const customerMatches = customersByName.get(norm(row.cliente)) ?? [];
+    const hasUniqueCustomerRif = customerMatches.length === 1 && Boolean(customerMatches[0].cedula);
+    return hasLinkedRif || hasUniqueCustomerRif;
+  }).length;
   const suppliersByName = new Map<string, number>();
   list('proveedores').forEach(row => {
     const name = norm(row.nombre ?? row.name);
@@ -110,6 +127,8 @@ export const analyzePosvenBackupMapping = (root: unknown): PosvenBackupMappingAn
     salesWithLinkedReceivable: invoiceRows.filter(row => receivableSaleIds.has(String(row.id ?? ''))).length,
     salesMissingFiscalControl: invoiceRows.filter(row => !hasFields(row, ['controlNumber','numeroControl','nroControl'])).length,
     salesMissingCustomerRif: invoiceRows.filter(row => !hasFields(row, ['customerRif','rifCliente','rif','taxId'])).length,
+    salesCustomerRifResolvedByRelatedRecord,
+    salesCustomerRifStillUnresolved: invoiceRows.length - salesCustomerRifResolvedByRelatedRecord,
     salesMissingTaxRate: invoiceRows.filter(row => !hasFields(row, ['taxRate','alicuota','tasaIva'])).length,
     purchases: purchases.length,
     purchasesWithUniqueSupplier: purchases.filter(row => suppliersByName.get(norm(row.proveedor)) === 1).length,
