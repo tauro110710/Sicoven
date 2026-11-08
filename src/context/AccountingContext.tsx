@@ -5071,7 +5071,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (digits.length !== 20) throw new Error('El número de cuenta bancaria debe contener exactamente 20 dígitos.');
     if (!bankData.bankName?.trim()) throw new Error('Indique el nombre del banco.');
     if (bankData.currency !== 'BS' && bankData.currency !== 'USD') throw new Error('La moneda bancaria debe ser Bs. o USD.');
-    const expectedBankParentCode = bankData.currency === 'USD' ? '1.1.1.07' : '1.1.1.06';
+    const expectedBankParentCode = bankData.currency === 'USD' ? '1.1.1.04' : '1.1.1.03';
     if (bankData.parentAccountCode !== expectedBankParentCode) throw new Error('La cuenta padre seleccionada no corresponde a la moneda de la cuenta bancaria.');
     const accountType = bankData.accountType ?? 'CORRIENTE';
     if (accountType !== 'CORRIENTE' && accountType !== 'AHORRO') throw new Error('Seleccione un tipo de cuenta bancaria válido.');
