@@ -1018,7 +1018,7 @@ export const ConfiguracionView: React.FC = () => {
       <section className="rounded-2xl border border-blue-200 bg-blue-50/50 p-5 space-y-3">
         <div>
           <h2 className="text-base font-bold text-slate-900">Importador Inteligente Universal</h2>
-          <p className="mt-1 text-sm text-slate-600">Un solo centro para analizar archivos JSON, CSV, TSV, TXT y Excel XLSX/XLSM de POSVEN u otros sistemas. Detecta colecciones, muestra vista previa y ejecuta únicamente módulos con adaptadores validados, con empresa destino explícita y confirmación antes de escribir en SQLite.</p>
+          <p className="mt-1 text-sm text-slate-600">Un solo centro para analizar archivos JSON, CSV, TSV, TXT y Excel XLSX/XLSM de POSVEN u otros sistemas. El importador admite únicamente maestros de datos; ventas, compras, movimientos históricos, CxC/CxP, cierres y demás colecciones quedan en diagnóstico. La empresa destino y la confirmación son obligatorias antes de escribir en SQLite.</p>
         </div>
         <button type="button" onClick={() => setShowUniversalMigrationWizard(true)} disabled={!isStorageReady} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50">
           <Upload className="h-4 w-4" /> Abrir importador universal
