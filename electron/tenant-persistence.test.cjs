@@ -93,7 +93,7 @@ test('does not silently remove a registered company from the accounting snapshot
   const a = { id: 'company-a', name: 'Empresa A', rif: 'J-12345678-9' };
   const b = { id: 'company-b', name: 'Empresa B', rif: 'J-98765432-1' };
   await saveTenantAccountingSnapshot(manager, snapshot([a]));
-  saveTenantAccountingSnapshot(manager, snapshot([a, b]));
+  await saveTenantAccountingSnapshot(manager, snapshot([a, b]));
   await assert.rejects(() => saveTenantAccountingSnapshot(manager, snapshot([a])), /falta en el snapshot/i);
 });
 
