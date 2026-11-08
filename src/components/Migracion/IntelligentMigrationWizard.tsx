@@ -468,7 +468,6 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const costUsd=numeric('costoUSD');
     if(stock>0&&costUsd<=0)throw new Error('Producto '+code+': tiene existencia pero no tiene costo USD positivo.');
     const priceUsd=numeric('precioUSD');
-    const priceBs=numeric('precioBS',false);
     const minStock=numeric('stockMinimo',false);
     const costBs=costUsd*rate;
     if(!Number.isFinite(costBs))throw new Error('Producto '+code+': el costo convertido a Bs no es válido.');
