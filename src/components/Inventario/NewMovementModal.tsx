@@ -3,6 +3,7 @@ import { useAccounting } from '../../context/AccountingContext';
 import { ArrowLeftRight, X, Check } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
+import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
 
 interface NewMovementModalProps {
   isOpen: boolean;
@@ -57,6 +58,17 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
       setUnitCostInput(String(selectedProduct.avgCostBs || 0));
     }
   }, [productId, selectedProduct]);
+
+  React.useEffect(() => {
+    const historicalRate = resolveInventoryBcvRate(currentCompany.inventoryBcvRateHistory || [], date);
+    if (historicalRate) {
+      setBcvRateInput(String(historicalRate.rate));
+    } else if (date === currentCompany.inventoryBcvRateEffectiveDate && currentCompany.inventoryBcvRate) {
+      setBcvRateInput(String(currentCompany.inventoryBcvRate));
+    } else {
+      setBcvRateInput('');
+    }
+  }, [date, currentCompany.id, currentCompany.inventoryBcvRate, currentCompany.inventoryBcvRateEffectiveDate, currentCompany.inventoryBcvRateHistory]);
 
   if (!isOpen || !selectedProduct) return null;
 
