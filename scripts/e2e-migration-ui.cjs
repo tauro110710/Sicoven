@@ -116,8 +116,10 @@ async function main() {
   await command('Page.enable');
   await command('Runtime.enable');
 
-  await waitFor(() => evaluate("document.body && document.body.innerText.includes('Continuar con la prueba gratuita')"), 'No apareció la opción de prueba gratuita');
-  await clickButton('Continuar con la prueba gratuita');
+  await waitFor(() => evaluate("Boolean(document.querySelector('#username') && document.querySelector('#password')) || Boolean(document.body && document.body.innerText.includes('Continuar con la prueba gratuita'))"), 'No apareció la pantalla de licencia ni el formulario de acceso');
+  await capture('migration-login-screen.png');
+  const trialButtonVisible = await evaluate("Boolean([...document.querySelectorAll('button')].find(button => button.innerText.trim() === 'Continuar con la prueba gratuita'))");
+  if (trialButtonVisible) await clickButton('Continuar con la prueba gratuita');
 
   await waitFor(() => evaluate("Boolean(document.querySelector('#username') && document.querySelector('#password'))"), 'No apareció el formulario de acceso');
   await setInput('#username', 'admin');
