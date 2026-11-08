@@ -51,16 +51,19 @@ function createTenantRuntime({
     if (!company || typeof company !== 'object') throw new TypeError('La ficha de empresa es obligatoria.');
     const existing = manager.listCompanies().find(item => String(item.id) === String(company.id));
     if (existing) throw new Error('La empresa ya está registrada. No se reemplazará ni reinicializará su base SQLite.');
-    manager.registerCompany(company);
+    const empty = createEmptyAccountingSnapshot();
+    empty.companies = [{ id: String(company.id), name: String(company.name), rif: String(company.rif) }];
+    empty.currentCompanyId = String(company.id);
     try {
-      const empty = createEmptyAccountingSnapshot();
-      empty.companies = [{ id: String(company.id), name: String(company.name), rif: String(company.rif) }];
-      empty.currentCompanyId = String(company.id);
+      // The manager keeps the tenant out of the control registry until this
+      // callback commits the initial snapshot together with schema creation.
+      manager.registerCompany(company, tenantDb => {
+        const saved = persistAccountingSnapshot(tenantDb, empty, actor);
+        if (saved?.ok !== true) {
+          throw new Error('SQLite no confirmó el snapshot inicial de la empresa.');
+        }
+      });
       const db = manager.openCompany(company.id);
-      const saved = persistAccountingSnapshot(db, empty, actor);
-      if (saved?.ok !== true) {
-        throw new Error('La base local se creó, pero SQLite no confirmó el snapshot inicial de la empresa.');
-      }
       const verified = readTenantSnapshot(db, company.id);
       if (verified.companies.length !== 1 || String(verified.companies[0].rif) !== String(company.rif)) {
         throw new Error('La verificación posterior no coincide con la identidad de la empresa recién creada.');
