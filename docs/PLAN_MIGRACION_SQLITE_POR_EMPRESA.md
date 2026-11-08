@@ -96,6 +96,22 @@ Los handlers no deben confiar en rutas proporcionadas por el renderer. El proces
 - Mantener el legado intacto y un journal de migración hasta completar pruebas de actualización y restore.
 - Si cualquier empresa falla, no activar el modo multiarchivo y no borrar la base anterior.
 
+
+## Migración de tablas auxiliares y auditoría
+
+La partición del JSON no basta. Antes de activar una empresa se deben trasladar también las tablas relacionales y sus relaciones:
+
+- **Correcciones:** copiar `accounting_correction_cases` por `company_id`; copiar `accounting_correction_case_events` y `accounting_correction_case_workflow_events` únicamente por los `case_id` de esa empresa. Conservar IDs, estados, actor, fechas y eventos append-only.
+- **Clasificación de inflación:** copiar `inflation_classification_decisions` y `inflation_classification_reviews` por `company_id`, preservando cadenas de versiones y revisiones.
+- **Expedientes de inflación:** copiar `inflation_source_dossiers` por `company_id`, luego sus evidencias y revisiones por `dossier_id`. Los expedientes dependen de series de índices.
+- **Índices de referencia:** copiar a cada archivo de empresa las tablas `inflation_index_sources`, `inflation_index_series`, `inflation_index_observations` e `inflation_index_approvals` completas, porque los expedientes de cada empresa referencian `series_id`. No se debe dejar una FK apuntando a otra base SQLite.
+- **Documentos:** copiar `supporting_documents` por `company_id` y sus eventos por `document_id`. Copiar también los archivos físicos desde el almacén legado al directorio de la empresa, conservando `storage_key`, nombre original, tamaño y SHA-256. Validar hash antes de registrar el nuevo archivo.
+- **Incidencias fiscales IVA:** copiar `vat_fiscal_incidents` por `company_id`; trasladar eventos y referencias por `incident_id`, validando que cada referencia pertenezca a la misma empresa.
+- **Auditoría:** separar `audit_events` mediante `companyId` en el JSON de detalles. Copiar a la base de empresa las filas con empresa propietaria inequívoca, conservando ID, tipo, detalles y fecha. Los eventos globales de autenticación, licencia, administrador semilla y mantenimiento permanecen en el archivo de control. Un evento con empresa desconocida no se asigna por aproximación: se conserva en control y se reporta en el manifiesto.
+- **Historiales contables:** el snapshot conserva las relaciones entre asientos, compras, ventas, activos fijos, depreciaciones, conciliaciones, retenciones, cierres y anticipos. Después de escribirlo, comprobar vínculos de origen, balance de asientos, unicidad de períodos y pertenencia de cada registro a la empresa.
+
+La copia de tablas auxiliares debe respetar el orden de dependencias y ejecutarse dentro de una transacción de la base destino. El proceso completo se prepara en staging; el registro central solo se actualiza cuando todas las bases y documentos superan sus verificaciones. La base heredada nunca se modifica durante la migración.
+
 ## Pruebas de aceptación
 
 - Varias empresas con operaciones de todos los módulos.
