@@ -101,7 +101,8 @@ export const FixedAssetsView: React.FC = () => {
     const defaults: Record<string, string> = {
       '1.2.1.01': '1.2.1.05',
       '1.2.1.02': '1.2.1.07',
-      '1.2.1.03': '1.2.1.06'
+      '1.2.1.03': '1.2.1.06',
+        '1.2.1.04': '1.2.1.08'
     };
     if (defaults[selectedSource.line.accountCode]) setAccumulatedAccountCode(defaults[selectedSource.line.accountCode]);
   }, [selectedSource?.key]);
