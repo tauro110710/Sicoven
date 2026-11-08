@@ -4,6 +4,21 @@ import type { Account, JournalEntryItem } from './accounting';
  * Prevents posting to missing or grouping accounts before the entry reaches
  * application state or SQLite persistence. Historical entries are not rewritten.
  */
+
+/** Convierte Bs. a USD con la tasa explícita del asiento sin redondear cada renglón.
+ * La presentación puede mostrar seis decimales; el valor interno conserva precisión
+ * para que el redondeo por línea no genere falsos descuadres en el total del asiento.
+ */
+export function convertBsToUsdAmount(amountBs: number, bcvRate: number): number {
+  if (!Number.isFinite(amountBs) || amountBs < 0) {
+    throw new Error('El importe en Bs. debe ser finito y no negativo.');
+  }
+  if (!Number.isFinite(bcvRate) || bcvRate <= 0) {
+    throw new Error('La tasa BCV debe ser finita y mayor que cero.');
+  }
+  return amountBs / bcvRate;
+}
+
 export function validateJournalEntryAccounts(
   items: Pick<JournalEntryItem, 'accountCode'>[],
   accounts: Account[]
