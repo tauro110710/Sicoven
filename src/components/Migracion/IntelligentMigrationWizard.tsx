@@ -514,7 +514,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const minStock=numeric('stockMinimo',false);
     const costBs=costUsd*rate;
     if(!Number.isFinite(costBs))throw new Error('Producto '+code+': el costo convertido a Bs no es válido.');
-    return {code,name,category:String(row.categoria??row.departamento??'General').trim()||'General',unit:String(row.unidad??'Unidad').trim()||'Unidad',minStock,currentStock:stock,avgCostBs:costBs,avgCostUsd:costUsd,lastCostBs:costBs,lastCostUsd:costUsd,price1:priceUsd,price2:null,price3:null,price4:null,priceCurrency:'USD' as const,salesPriceBs:priceUsd*(Number(targetCompany.bcvRate)>0?Number(targetCompany.bcvRate):rate),salesPriceUsd:priceUsd,costingMethod:'PROMEDIO_PONDERADO' as const,vatTreatment:posvenVatTreatment as 'GENERAL_16'|'REDUCIDA_8'|'EXENTO'|'EXONERADO',itemType:'MERCANCIA' as const,openingDate:posvenOpeningDate,openingBcvRate:rate};
+    return {code,name,category:String(row.categoria??row.departamento??'General').trim()||'General',unit:String(row.unidad??'Unidad').trim()||'Unidad',minStock,currentStock:stock,avgCostBs:costBs,avgCostUsd:costUsd,lastCostBs:costBs,lastCostUsd:costUsd,price1:priceUsd,price2:null,price3:null,price4:null,priceCurrency:'USD' as const,salesPriceBs:0,salesPriceUsd:0,costingMethod:'PROMEDIO_PONDERADO' as const,vatTreatment:posvenVatTreatment as 'GENERAL_16'|'REDUCIDA_8'|'EXENTO'|'EXONERADO',itemType:'MERCANCIA' as const,openingDate:posvenOpeningDate,openingBcvRate:rate};
    });
    const duplicates=prepared.filter(product=>existing.has(product.code.toLocaleUpperCase()));
    const toImport=prepared.filter(product=>!existing.has(product.code.toLocaleUpperCase()));
@@ -1071,8 +1071,6 @@ const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fech
      price1=number('salesPriceBs','precioVentaBs','priceBs','salesPrice','precioVenta');
      legacyUsd=number('salesPriceUsd','precioVentaUsd','priceUsd');
     }
-    const priceBs=priceCurrency==='BS'?price1:(Number(targetCompany.bcvRate)>0?price1*Number(targetCompany.bcvRate):0);
-    const priceUsd=priceCurrency==='USD'?price1:(Number(targetCompany.bcvRate)>0?price1/Number(targetCompany.bcvRate):0);
     const openingBcvRate=number('openingBcvRate','bcvRate','tasaBcvApertura');
     if(legacyUsd!==undefined&&openingBcvRate>0&&Math.abs(legacyUsd-price1/openingBcvRate)>0.05)throw new Error('Registro '+(i+1)+': los precios Bs/USD heredados no concilian con la tasa declarada. Use Precio_1..4 y Moneda_Precio para evitar ambigüedad.');
     const openingDate=String(pick(r,'openingDate','fechaApertura')??'').slice(0,10);
@@ -1094,7 +1092,7 @@ const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fech
     const vnrSellingCostBs=optionalAmount('vnrSellingCostBs','costoVentaVnrBs');
     const vnrLastTestDate=String(pick(r,'vnrLastTestDate','fechaPruebaVnr')??'').slice(0,10)||undefined;
     if(vnrLastTestDate&&!isValidIsoDate(vnrLastTestDate))throw new Error('Registro '+(i+1)+': fecha de prueba VNR inválida.');
-    return {code,name,category,unit,minStock,currentStock:stock,avgCostBs:cost,avgCostUsd:openingBcvRate>0?cost/openingBcvRate:0,lastCostBs,lastCostUsd,price1,price2,price3,price4,priceCurrency,salesPriceBs:priceBs,salesPriceUsd:priceUsd,costingMethod,vatTreatment,itemType,inventoryAccountCode,costOfSalesAccountCode,adjustmentAccountCode,openingBalanceAccountCode,openingDate,openingBcvRate,vnrProvisionBs,vnrEstimatedSellingPriceBs,vnrCompletionCostBs,vnrSellingCostBs,vnrLastTestDate};
+    return {code,name,category,unit,minStock,currentStock:stock,avgCostBs:cost,avgCostUsd:openingBcvRate>0?cost/openingBcvRate:0,lastCostBs,lastCostUsd,price1,price2,price3,price4,priceCurrency,salesPriceBs:0,salesPriceUsd:0,costingMethod,vatTreatment,itemType,inventoryAccountCode,costOfSalesAccountCode,adjustmentAccountCode,openingBalanceAccountCode,openingDate,openingBcvRate,vnrProvisionBs,vnrEstimatedSellingPriceBs,vnrCompletionCostBs,vnrSellingCostBs,vnrLastTestDate};
    });
    const count=await importInventoryProducts(prepared,targetCompany.id);
    setNotice('Inventario importado en '+targetCompany.name+' (RIF '+targetCompany.rif+'): '+count+' artículos incorporados. SICOVEN no sobrescribió códigos existentes. Revisa el Kardex y la valoración inicial antes de continuar.');
