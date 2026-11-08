@@ -51,7 +51,7 @@ export const FixedAssetsView: React.FC = () => {
           Number(line.creditBs || 0) > 0 || Number(line.creditUsd || 0) > 0 || alreadyRegistered) return [];
       return [{ key: entry.id + '|' + index, entry, line, index, account }];
     });
-  }, [journalEntries, accounts, fixedAssets, reversedSourceIds]);
+  }), [journalEntries, accounts, fixedAssets, reversedSourceIds]);
 
   const selectedSource = sourceOptions.find(option => option.key === sourceKey) || sourceOptions[0];
   const accumulatedAccounts = accounts.filter(account =>
