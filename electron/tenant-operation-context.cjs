@@ -16,6 +16,7 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
   let activeCompanyId = '';
   let switching = false;
   let flushing = false;
+  let maintenanceLockHeld = false;
   let activeOperations = 0;
   let idleWaiters = [];
   // Serialize asynchronous database work as well as tracking it for safe tenant switches.
@@ -68,6 +69,32 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
   // Only the already-queued persistence drain may use this lane while a switch is flushing.
   function withPersistenceDatabase(operation) {
     return runWithActiveDatabase(operation, true);
+  }
+
+  async function acquireMaintenanceLock() {
+    if (switching || maintenanceLockHeld) throw new Error('Ya existe un cambio de empresa o un bloqueo de mantenimiento en curso.');
+    switching = true;
+    flushing = false;
+    try {
+      await waitForActiveOperations();
+      flushing = true;
+      await flushPendingWrites();
+      flushing = false;
+      await waitForActiveOperations();
+      maintenanceLockHeld = true;
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        maintenanceLockHeld = false;
+        flushing = false;
+        switching = false;
+      };
+    } catch (error) {
+      flushing = false;
+      switching = false;
+      throw error;
+    }
   }
 
   async function switchCompany(companyIdInput) {
@@ -141,6 +168,7 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
   return Object.freeze({
     switchCompany,
     clearActiveCompany,
+    acquireMaintenanceLock,
     withActiveDatabase,
     withPersistenceDatabase,
     getActiveCompanyId: () => activeCompanyId || null,
