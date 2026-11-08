@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateCreditBalance, summarizeCreditDocumentAdjustments, validateCreditSettlement, type CreditSettlement, type CreditSettlementDraft } from './creditSettlement';
+import { calculateCreditBalance, calculateCreditFxExposure, summarizeCreditDocumentAdjustments, validateCreditSettlement, type CreditSettlement, type CreditSettlementDraft } from './creditSettlement';
 
 const settlement = (overrides: Partial<CreditSettlement> = {}): CreditSettlement => ({
   id: 's-1', companyId: 'c-1', documentId: 'invoice-1', kind: 'SALE_COLLECTION',
@@ -160,5 +160,31 @@ describe('credit settlement balances and validation', () => {
     assert.ok(validateCreditSettlement({ ...draft, settlementDate: '2026-99-99' }, 100));
     assert.ok(validateCreditSettlement({ ...draft, amountUsd: 0 }, 100));
     assert.ok(validateCreditSettlement({ ...draft, amountBs: 0 }, 100));
+  });
+});
+
+describe('read-only receivable/payable FX exposure', () => {
+  it('calculates the closing-rate scenario against the historical book value', () => {
+    assert.deepEqual(calculateCreditFxExposure(100, 8000, 100), {
+      valuationBs: 10000,
+      differenceBs: 2000
+    });
+  });
+
+  it('supports a negative scenario difference without mutating the document balance', () => {
+    assert.deepEqual(calculateCreditFxExposure(100, 10000, 90), {
+      valuationBs: 9000,
+      differenceBs: -1000
+    });
+  });
+
+  it('rounds the scenario to cents and rejects invalid amounts or rates', () => {
+    assert.deepEqual(calculateCreditFxExposure(12.345, 1000, 100), {
+      valuationBs: 1234.5,
+      differenceBs: 234.5
+    });
+    assert.throws(() => calculateCreditFxExposure(-1, 100, 100), /exposición/);
+    assert.throws(() => calculateCreditFxExposure(1, 100, 0), /exposición/);
+    assert.throws(() => calculateCreditFxExposure(Number.NaN, 100, 100), /exposición/);
   });
 });
