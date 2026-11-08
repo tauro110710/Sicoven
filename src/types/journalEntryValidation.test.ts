@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateJournalEntryAccounts, isJournalEntryBalanced } from './journalEntryValidation';
+import { validateJournalEntryAccounts, isJournalEntryBalanced, convertBsToUsdAmount } from './journalEntryValidation';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 
 describe('journal entry account validation', () => {
@@ -55,4 +55,16 @@ describe('journal entry dual-currency balance indicator', () => {
     assert.equal(isJournalEntryBalanced({ debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 }), false);
     assert.equal(isJournalEntryBalanced({ debitBs: -1, creditBs: -1, debitUsd: 0, creditUsd: 0 }), false);
   });
+});
+
+test('la conversión manual Bs./USD conserva precisión interna y no redondea cada renglón a centavos', () => {
+  const value = convertBsToUsdAmount(100, 900);
+  assert.equal(value, 100 / 900);
+  assert.ok(Math.abs(value * 900 - 100) < 1e-10);
+});
+
+test('la conversión manual rechaza importes o tasas inválidos', () => {
+  assert.throws(() => convertBsToUsdAmount(-1, 900), /importe en Bs/);
+  assert.throws(() => convertBsToUsdAmount(100, 0), /tasa BCV/);
+  assert.throws(() => convertBsToUsdAmount(Number.NaN, 900), /importe en Bs/);
 });
