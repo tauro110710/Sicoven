@@ -172,7 +172,6 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     ? pick(row,'name','nombre','razonSocial','customerName','clientName','cliente')
     : pick(row,'name','nombre','razonSocial','supplierName','proveedor','vendorName');
    if(name===undefined)return false;
-   const source=String(row.migrationcollection??row.migrationsource??'');
    const hasIdentity=pick(row,'fiscalId','taxId','rif','customerRif','supplierRif','cedula','documentNumber','identification','identificacion')!==undefined;
    const hasContact=pick(row,'address','direccion','phone','telefono','email','correo','tipoIdentificacion','identificacion')!==undefined;
    return isPartyCollection||hasIdentity||hasContact;
