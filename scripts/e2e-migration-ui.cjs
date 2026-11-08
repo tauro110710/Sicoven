@@ -161,7 +161,7 @@ async function main() {
   const pythonCheck = [
     'import json, sqlite3, sys',
     "db = sqlite3.connect('file:' + sys.argv[1] + '?mode=ro', uri=True)",
-    "row = db.execute(\\\"SELECT state_json FROM app_state WHERE state_key='accounting'\\\").fetchone()",
+    "row = db.execute(\"SELECT state_json FROM app_state WHERE state_key='accounting'\").fetchone()",
     "assert row and row[0], 'SQLite no contiene el snapshot contable persistido.'",
     'state = json.loads(row[0])',
     "company = next((item for item in state.get('companies', []) if item.get('rif') == 'J-12345678-9'), None)",
