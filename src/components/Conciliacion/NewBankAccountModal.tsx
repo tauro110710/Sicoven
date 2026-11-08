@@ -18,14 +18,14 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
   const [checkbookNumber, setCheckbookNumber] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [currency, setCurrency] = useState<'BS' | 'USD'>('BS');
-  const [parentAccountCode, setParentAccountCode] = useState('1.1.1.06');
+  const [parentAccountCode, setParentAccountCode] = useState('1.1.1.03');
   const [initialBalanceBs, setInitialBalanceBs] = useState<string>('');
   const [bcvRateInput, setBcvRateInput] = useState<string>('');
 
   if (!isOpen) return null;
 
   const normalizedAccountNumber = accountNumber.replace(/\D/g, '');
-  const expectedParentCode = currency === 'USD' ? '1.1.1.07' : '1.1.1.06';
+  const expectedParentCode = currency === 'USD' ? '1.1.1.04' : '1.1.1.03';
   const selectedParentAccount = accounts.find(account => account.code === parentAccountCode && account.code === expectedParentCode && account.type === 'ACTIVO' && account.level === 4 && account.parentCode === '1.1.1' && !account.isMovement);
   const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
   const parsedOpeningBalance = parseAmount(initialBalanceBs) || 0;
@@ -70,7 +70,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
       setCheckbookNumber('');
       setAccountNumber('');
       setCurrency('BS');
-      setParentAccountCode('1.1.1.06');
+      setParentAccountCode('1.1.1.03');
       setInitialBalanceBs('');
       setBcvRateInput('');
       onClose();
@@ -156,7 +156,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
                 onChange={e => {
                   const nextCurrency = e.target.value as 'BS' | 'USD';
                   setCurrency(nextCurrency);
-                  setParentAccountCode(nextCurrency === 'USD' ? '1.1.1.07' : '1.1.1.06');
+                  setParentAccountCode(nextCurrency === 'USD' ? '1.1.1.04' : '1.1.1.03');
                 }}
                 className="pointer-events-auto select-text w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               >
@@ -185,8 +185,8 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
               className="pointer-events-auto select-text w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
             >
               {currency === 'BS'
-                ? <option value="1.1.1.06">1.1.1.06 · Bancos Nacionales en Bolívares (BS.)</option>
-                : <option value="1.1.1.07">1.1.1.07 · Bancos en Moneda Extranjera (USD)</option>}
+                ? <option value="1.1.1.03">1.1.1.03 · Bancos Nacionales en Bolívares (BS.)</option>
+                : <option value="1.1.1.04">1.1.1.04 · Bancos en Moneda Extranjera (USD)</option>}
             </select>
             <p className="mt-1 text-[10px] text-slate-500">El auxiliar de esta cuenta bancaria se generará debajo de la cuenta padre seleccionada.</p>
             {!selectedParentAccount && <p className="mt-1 text-[10px] text-rose-600">La cuenta padre no existe o no tiene la clasificación requerida en el Plan de Cuentas.</p>}
