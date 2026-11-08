@@ -64,6 +64,25 @@ function createCompanyDatabaseManager({
     'SELECT company_id,rif,name,relative_path,schema_version,status,created_at,updated_at FROM ' + REGISTRY_TABLE + ' WHERE company_id=?'
   );
 
+  function assertSafeDirectory(directoryPath, label) {
+    const stat = fs.lstatSync(directoryPath);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new Error(label + ' no es un directorio local seguro; se bloqueó el acceso a SQLite.');
+    }
+  }
+
+  function assertSafeDatabaseFile(filePath) {
+    try {
+      const stat = fs.lstatSync(filePath);
+      if (stat.isSymbolicLink() || !stat.isFile()) {
+        throw new Error('El archivo SQLite registrado no es un archivo local regular; se bloqueó la apertura.');
+      }
+    } catch (error) {
+      if (error && error.code === 'ENOENT') return;
+      throw error;
+    }
+  }
+
   function expectedRelativePath(companyId) {
     return path.join('companies', companyId, 'accounting.sqlite');
   }
