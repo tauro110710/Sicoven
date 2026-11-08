@@ -79,6 +79,7 @@ function fixture(t, overrides = {}) {
     sourceDb,
     userDataDir: root,
     manager,
+    assertSourceQuiescent: () => true,
     Database: FakeDatabase,
     assertSqliteIntegrity: () => {},
     initializeTenantDatabase: () => {},
