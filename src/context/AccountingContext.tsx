@@ -1287,10 +1287,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             }
           }
         })();
-        saveQueueRef.current = pumpTask.then(() => undefined, () => undefined);
-        void pumpTask.finally(() => {
+        const settledPump = pumpTask.finally(() => {
           persistencePumpInFlightRef.current = false;
         });
+        saveQueueRef.current = settledPump.then(() => undefined, () => undefined);
       }
       return;
     }
