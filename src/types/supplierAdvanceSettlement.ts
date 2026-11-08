@@ -261,7 +261,7 @@ export function allocateSupplierAdvanceFifo(
     if (!source.id?.trim() || sourceKeys.has(key)) {
       throw new Error('El conjunto de anticipos contiene identificadores vacíos o duplicados.');
     }
-    const dateParts = String(source.date || '').match(/^(\\d{4})-(\\d{2})-(\\d{2})$/)?.slice(1).map(Number);
+    const dateParts = String(source.date || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)?.slice(1).map(Number);
     const parsedDate = dateParts ? new Date(Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2])) : null;
     if (!dateParts || !parsedDate || parsedDate.getUTCFullYear() !== dateParts[0] ||
         parsedDate.getUTCMonth() !== dateParts[1] - 1 || parsedDate.getUTCDate() !== dateParts[2] ||
