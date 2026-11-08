@@ -31,7 +31,7 @@ export const mapUniversalSupplierDirectAdvanceDraft = (
 ): UniversalSupplierDirectAdvanceDraft => {
   const operation = String(pickUniversalAdvanceValue(row, ['operationType','transactionType','tipoOperacion','tipoMovimiento','concept','concepto','kind','tipo']) ?? '')
     .trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const directTokens = ['supplierdirectadvance','directsupplieradvance','anticodirectoproveedor','anticipodirectoproveedor','anticipoproveedor','desembolsoanticipoproveedor'];
+  const directTokens = ['supplierdirectadvance','directsupplieradvance','anticodirectoproveedor','anticipodirectoproveedor','anticipoproveedor','anticipodirecto','desembolsoanticipoproveedor'];
   if (!directTokens.includes(operation)) throw new Error('La fila no identifica expresamente un desembolso directo de anticipo a proveedor.');
   const sourceRowId = String(row.migrationrowid ?? '').trim();
   if (!sourceRowId) throw new Error('El anticipo directo no conserva su identificador estable de fila de origen.');
@@ -66,8 +66,8 @@ export const mapUniversalSupplierAdvanceSettlementDraft = (
   const party = resolveUniversalPartyReference(allSourceRows, row, 'supplier');
   const operation = String(pickUniversalAdvanceValue(row, ['settlementKind','operationType','transactionType','tipoOperacion','kind','tipo','concept','concepto']) ?? '')
     .trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const refundTokens = ['refundreceived','supplieradvancerefund','refundsupplieradvance','reembolsoanticipo'];
-  const applicationTokens = ['appliedtopurchase','supplieradvanceapplication','advanceapplication','aplicacionanticipo','anticipoaplicadocompra'];
+  const refundTokens = ['refundreceived','supplieradvancerefund','refundsupplieradvance','reembolsoanticipo','reembolsoanticipoproveedor'];
+  const applicationTokens = ['appliedtopurchase','supplieradvanceapplication','advanceapplication','aplicacionanticipo','aplicacionanticipoproveedor','anticipoaplicadocompra'];
   const kind = refundTokens.includes(operation) ? 'REFUND_RECEIVED' : applicationTokens.includes(operation) ? 'APPLIED_TO_PURCHASE' : null;
   if (!kind) throw new Error('La fila no identifica expresamente un reembolso o una aplicación de anticipo a compra.');
   const date = requireUniversalAdvanceDate(pickUniversalAdvanceValue(row, ['date','fecha','settlementDate','fechaLiquidacion','refundDate','fechaReembolso']));
