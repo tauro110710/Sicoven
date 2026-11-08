@@ -26,6 +26,15 @@ describe('journal entry account validation', () => {
     );
   });
 
+  it('rejects inactive movement accounts', () => {
+    const movement = DEFAULT_CHART_OF_ACCOUNTS.find(account => account.isMovement);
+    assert.ok(movement);
+    assert.throws(
+      () => validateJournalEntryAccounts([{ accountCode: movement!.code }], [{ ...movement!, isActive: false }]),
+      /está inactiva/
+    );
+  });
+
   it('rejects blank account codes', () => {
     assert.throws(
       () => validateJournalEntryAccounts([{ accountCode: '  ' }], DEFAULT_CHART_OF_ACCOUNTS),
