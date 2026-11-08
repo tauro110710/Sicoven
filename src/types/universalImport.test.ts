@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, selectUniversalRowsByStableKeys, mapUniversalSettlementPreview, mapUniversalInventoryItemType, isUniversalProductCollectionPath, getUniversalJsonValueAtPath, planUniversalInvoiceSettlements, selectUniversalInvoiceSettlements, validateUniversalSettlementDestination } from './universalImport';
+import { analyzePosvenBackupMapping, detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, selectUniversalRowsByStableKeys, mapUniversalSettlementPreview, mapUniversalInventoryItemType, isUniversalProductCollectionPath, getUniversalJsonValueAtPath, planUniversalInvoiceSettlements, selectUniversalInvoiceSettlements, validateUniversalSettlementDestination } from './universalImport';
 
 
 
@@ -36,6 +36,80 @@ test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () =
   assert.equal(result[0].path, '$');
   assert.equal(result[0].rows.length, 2);
   assert.equal(result[0].invalidItems, 0);
+});
+
+test('mapea la estructura POSVEN real y separa facturas de recibos CxC', () => {
+  const backup = { app: 'posven-pro', version: 3, data: {
+    productos: [{ id: 'p1', codigo: 'A1' }],
+    ventas: [
+      { id: 'C4-V-0001', cliente: 'Cliente A', totalUSD: 10, items: [{ productoId: 'p1', cantidad: 1 }] },
+      { id: 'C4-CXC-0001', cliente: 'Cliente A', totalUSD: 2, items: [{ productoId: 'ABONO', cantidad: 1 }] }
+    ],
+    cxc: [
+      { id: 'CRD-1', ventaId: 'C4-V-0001', historialPagos: [{ id: 'P1' }] },
+      { id: 'CRD-LEGACY', historialPagos: [] }
+    ],
+    compras: [
+      { id: 'CP1', numeroFactura: '01', proveedor: 'Proveedor A' },
+      { id: 'CP2', numeroFactura: '02', proveedor: 'Proveedor A' }
+    ],
+    proveedores: [{ id: 'S1', nombre: 'Proveedor A' }],
+    cxp: [
+      { id: 'XP1', numeroFactura: '01', proveedor: 'Proveedor A', historialPagos: [{ id: 'P2' }] },
+      { id: 'XP2', numeroFactura: '99', proveedor: 'Otro', historialPagos: [] }
+    ],
+    movimientos: [
+      { id: 'M1', productoId: 'p1', tipo: 'venta' },
+      { id: 'M2', productoId: 'p1', tipo: 'compra' },
+      { id: 'M3', productoId: 'p1', tipo: 'inicial' },
+      { id: 'M4', productoId: 'p1', tipo: 'ajuste_entrada' },
+      { id: 'M5', productoId: 'missing', tipo: 'ajuste_salida' }
+    ],
+    libroDiario: [{ id: 'L1', tipo: 'ingreso', montoUSD: 10, montoBS: 100 }],
+    terminales: [{ id: 'T1', cashHistory: [{ id: 'C1' }, { id: 'C2' }] }],
+    reportesZ: [{ id: 'Z1' }],
+    devoluciones: [{ id: 'D1', ventaId: 'C4-V-0001' }],
+    anulaciones: [{ id: 'A1', ventaId: 'C4-V-0001' }],
+    users: [{ id: 'U1' }]
+  } };
+  const result = analyzePosvenBackupMapping(backup);
+  assert.equal(result.salesInvoices, 1);
+  assert.equal(result.salesCollectionReceipts, 1);
+  assert.equal(result.salesProductLines, 1);
+  assert.equal(result.unresolvedSalesProductLines, 0);
+  assert.equal(result.salesMissingFiscalControl, 1);
+  assert.equal(result.salesMissingCustomerRif, 1);
+  assert.equal(result.salesMissingTaxRate, 1);
+  assert.equal(result.salesWithLinkedReceivable, 1);
+  assert.equal(result.receivables, 2);
+  assert.equal(result.receivablesLinkedToSales, 1);
+  assert.equal(result.receivablesWithoutSaleLink, 1);
+  assert.equal(result.receivablePaymentEvents, 1);
+  assert.equal(result.purchases, 2);
+  assert.equal(result.purchasesWithUniqueSupplier, 2);
+  assert.equal(result.payablesWithUniquePurchaseMatch, 1);
+  assert.equal(result.payablesWithoutPurchaseMatch, 1);
+  assert.equal(result.payablePaymentEvents, 1);
+  assert.equal(result.movements, 5);
+  assert.equal(result.movementsWithProductResolved, 4);
+  assert.equal(result.movementSaleRows, 1);
+  assert.equal(result.movementPurchaseRows, 1);
+  assert.equal(result.movementOpeningRows, 1);
+  assert.equal(result.movementAdjustmentRows, 2);
+  assert.equal(result.movementsMissingCostAndBcv, 5);
+  assert.equal(result.cashbookRows, 1);
+  assert.equal(result.cashbookRowsWithDoubleEntryAccounts, 0);
+  assert.equal(result.cashbookRowsWithDebitCredit, 0);
+  assert.equal(result.cashSessions, 2);
+  assert.equal(result.terminals, 1);
+  assert.equal(result.zReports, 1);
+  assert.equal(result.returnsLinkedToSales, 1);
+  assert.equal(result.voidsLinkedToSales, 1);
+  assert.equal(result.hasBankAccounts, false);
+  assert.equal(result.hasRetentionVouchers, false);
+  assert.equal(result.hasFixedAssets, false);
+  assert.equal(result.hasChartOfAccounts, false);
+  assert.equal(result.users, 1);
 });
 
 test('reconoce rutas anidadas de productos sin confundir detalles de ventas', () => {
