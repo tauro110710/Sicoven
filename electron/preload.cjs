@@ -54,5 +54,6 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   savePdf: (input) => ipcRenderer.invoke('sicoven:pdf-save', input),
   saveTextFile: (input) => ipcRenderer.invoke('sicoven:text-save', input),
   createBackup: (token) => ipcRenderer.invoke('sicoven:backup-create', token),
-  restoreBackup: (token) => ipcRenderer.invoke('sicoven:restore-execute', token)
+  restoreBackup: (token) => ipcRenderer.invoke('sicoven:restore-execute', token),
+  exportCompanyData: (token, input) => ipcRenderer.invoke('sicoven:company-export-data', token, input)
 }));
