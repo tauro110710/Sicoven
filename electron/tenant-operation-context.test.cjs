@@ -79,6 +79,42 @@ test('does not expose the target company until an in-flight operation has comple
   assert.equal(context.getActiveCompanyId(), 'company-b');
 });
 
+
+test('permits only the queued persistence drain while switching and closes that lane before waiting for active work', async t => {
+  let context;
+  const flushCalls = [];
+  const { runtime, open } = makeRuntime();
+  context = createTenantOperationContext({
+    runtime,
+    flushPendingWrites: async () => {
+      if (!context.getActiveCompanyId()) return;
+      const saved = await context.withPersistenceDatabase((db, companyId) => [db.companyId, companyId]);
+      flushCalls.push(saved);
+    }
+  });
+  t.after(() => { for (const id of [...open.keys()]) runtime.closeCompany(id); });
+
+  await context.switchCompany('company-a');
+  let releaseOperation;
+  const operation = context.withActiveDatabase(() => new Promise(resolve => {
+    releaseOperation = resolve;
+  }));
+  const switching = context.switchCompany('company-b');
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.deepEqual(flushCalls, [['company-a', 'company-a']]);
+  assert.equal(context.isSwitching(), true);
+  await assert.rejects(
+    () => context.withPersistenceDatabase(() => true),
+    /cambio de empresa está en curso/
+  );
+
+  releaseOperation();
+  await operation;
+  await switching;
+  assert.equal(context.getActiveCompanyId(), 'company-b');
+});
+
 test('preserves the previous company when the requested company is missing or archived', async t => {
   const { context } = makeContext(t);
   await context.switchCompany('company-a');
