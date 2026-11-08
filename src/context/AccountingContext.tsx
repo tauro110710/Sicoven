@@ -110,6 +110,7 @@ interface AccountingContextType {
   createVatFiscalIncident: (input: VatFiscalIncidentCreateInput) => Promise<VatFiscalIncident>;
   recordVatFiscalIncidentEvent: (input: VatFiscalIncidentEventInput) => Promise<VatFiscalIncident>;
   waitForPersistence: () => Promise<void>;
+  flushPendingWrites: () => Promise<void>;
   companies: Company[];
   isStorageReady: boolean;
   storageError: string | null;
@@ -1055,6 +1056,41 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const persistenceWaitersRef = useRef<Array<{ resolve: () => void; reject: (error: Error) => void }>>([]);
   // Una cuenta bancaria solo puede tener un egreso pendiente de confirmación SQLite.
   const bankOutgoingLockRef = useRef(createBankOutgoingLock());
+  const flushPendingWrites = useCallback(async (): Promise<void> => {
+    if (persistenceFaultRef.current) {
+      throw new Error('La persistencia SQLite falló. SICOVEN bloqueó las operaciones para proteger los datos.');
+    }
+    if (window.sicovenStore && !storageReady) {
+      throw new Error('SQLite todavía no está lista para confirmar la persistencia.');
+    }
+    // Wait until the active save pump and every snapshot coalesced behind it
+    // have completed. A failed save rejects the flush and prevents tenant changes.
+    while (true) {
+      const currentQueue = saveQueueRef.current;
+      await currentQueue;
+      if (persistenceFaultRef.current) {
+        throw new Error('La persistencia SQLite falló. SICOVEN bloqueó las operaciones para proteger los datos.');
+      }
+      if (currentQueue === saveQueueRef.current &&
+          !persistencePumpInFlightRef.current &&
+          !pendingSnapshotRef.current) return;
+    }
+  }, [storageReady]);
+
+  useEffect(() => {
+    const store = window.sicovenStore;
+    if (!store?.onPersistenceFlushRequest || !store.ackPersistenceFlush) return;
+    return store.onPersistenceFlushRequest(request => {
+      void flushPendingWrites().then(
+        () => store.ackPersistenceFlush(request.requestId),
+        error => store.ackPersistenceFlush(
+          request.requestId,
+          error instanceof Error ? error.message : 'No se pudo confirmar la persistencia SQLite.'
+        )
+      );
+    });
+  }, [flushPendingWrites]);
+
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, fixedAssets,
     customers, suppliers, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency
@@ -6615,6 +6651,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         createVatFiscalIncident,
         recordVatFiscalIncidentEvent,
         waitForPersistence,
+        flushPendingWrites,
         isStorageReady: storageReady,
         storageError,
         currentCompany,
