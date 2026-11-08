@@ -266,7 +266,8 @@ export function allocateSupplierAdvanceFifo(
     if (!dateParts || !parsedDate || parsedDate.getUTCFullYear() !== dateParts[0] ||
         parsedDate.getUTCMonth() !== dateParts[1] - 1 || parsedDate.getUTCDate() !== dateParts[2] ||
         !Number.isFinite(source.amountUsd) || source.amountUsd <= 0 ||
-        !Number.isFinite(source.bookValueBs) || source.bookValueBs < 0) {
+        !Number.isFinite(source.bookValueBs) || source.bookValueBs < 0 ||
+        (source.kind === 'DIRECT_ADVANCE' && source.bookValueBs <= 0)) {
       throw new Error('Un anticipo fuente contiene fecha o importes históricos inválidos.');
     }
     sourceKeys.add(key);
