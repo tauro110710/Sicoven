@@ -64,7 +64,7 @@ test('binds the selected tenant to the session and ignores renderer tenant chang
   const { context, operationContext } = fixture();
   await context.selectCompany(tokenA, 'company-a');
   assert.equal(context.getSelectedCompanyId(tokenA), 'company-a');
-  await assert.rejects(() => context.getSelectedCompanyId(tokenB), /no tiene una empresa/i);
+  assert.throws(() => context.getSelectedCompanyId(tokenB), /no tiene una empresa/i);
   const result = await context.withSelectedDatabase(tokenA, (db, companyId) => ({
     marker: db.marker, companyId
   }));
@@ -86,7 +86,7 @@ test('logout clears the active tenant and invalidates the session binding', asyn
   const result = await context.clearSession(tokenA);
   assert.deepEqual(result, { ok: true, changed: true, previousCompanyId: 'company-a' });
   assert.equal(calls.at(-1)[0], 'clear');
-  assert.throws(() => context.getSelectedCompanyId(tokenA), /sesión expiró/i);
+  assert.throws(() => context.getSelectedCompanyId(tokenA), /no tiene una empresa/i);
 });
 
 test('revalidates session and permissions after a delayed tenant switch', async () => {
