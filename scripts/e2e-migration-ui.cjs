@@ -1,8 +1,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
-const Database = require('better-sqlite3');
+const { spawn, execFileSync } = require('node:child_process');
 
 const appPath = process.env.SICOVEN_E2E_APP;
 const port = Number(process.env.SICOVEN_E2E_CDP_PORT || 9333);
@@ -159,20 +158,23 @@ async function main() {
 
   const databasePath = path.join(process.env.APPDATA || '', 'sicoven-desktop', 'sicoven.sqlite');
   assert(fs.existsSync(databasePath), 'No se encontró la base SQLite de prueba: ' + databasePath);
-  const db = new Database(databasePath, { readonly: true, fileMustExist: true });
-  try {
-    const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
-    assert(row?.state_json, 'SQLite no contiene el snapshot contable persistido.');
-    const state = JSON.parse(row.state_json);
-    const company = (state.companies || []).find(item => item.rif === 'J-12345678-9');
-    const product = (state.products || []).find(item => item.code === productCode);
-    assert(company, 'La empresa de prueba no quedó persistida en SQLite.');
-    assert(product, 'El artículo importado no quedó persistido en SQLite.');
-    assert(product.companyId === company.id, 'El artículo quedó asociado a una empresa distinta de la empresa destino.');
-    console.log('E2E OK: ' + productCode + ' persistido en SQLite para ' + company.name + '; empresaId=' + company.id + '.');
-  } finally {
-    db.close();
-  }
+  const pythonCheck = [
+    'import json, sqlite3, sys',
+    "db = sqlite3.connect('file:' + sys.argv[1] + '?mode=ro', uri=True)",
+    "row = db.execute(\\\"SELECT state_json FROM app_state WHERE state_key='accounting'\\\").fetchone()",
+    "assert row and row[0], 'SQLite no contiene el snapshot contable persistido.'",
+    'state = json.loads(row[0])',
+    "company = next((item for item in state.get('companies', []) if item.get('rif') == 'J-12345678-9'), None)",
+    "product = next((item for item in state.get('products', []) if item.get('code') == '" + productCode + "'), None)",
+    "assert company, 'La empresa de prueba no quedó persistida en SQLite.'",
+    "assert product, 'El artículo importado no quedó persistido en SQLite.'",
+    "assert product.get('companyId') == company.get('id'), 'El artículo quedó asociado a una empresa distinta de la empresa destino.'",
+    "assert db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok', 'SQLite integrity_check no está correcto.'",
+    "print('E2E OK: " + productCode + " persistido en SQLite para ' + company.get('name') + '; empresaId=' + company.get('id') + '.')",
+    'db.close()'
+  ].join('; ');
+  const verification = execFileSync('python', ['-c', pythonCheck, databasePath], { encoding: 'utf8' });
+  console.log(verification.trim());
 }
 
 main().catch(error => {
