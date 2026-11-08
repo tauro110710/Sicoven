@@ -51,7 +51,8 @@ test('mapea la estructura POSVEN real y separa facturas de recibos CxC', () => {
     ],
     compras: [
       { id: 'CP1', numeroFactura: '01', proveedor: 'Proveedor A' },
-      { id: 'CP2', numeroFactura: '02', proveedor: 'Proveedor A' }
+      { id: 'CP2', numeroFactura: '02', proveedor: 'Proveedor A' },
+      { id: 'CP3', numeroFactura: '01', proveedor: 'Proveedor A' }
     ],
     proveedores: [{ id: 'S1', nombre: 'Proveedor A' }],
     cxp: [
@@ -85,9 +86,10 @@ test('mapea la estructura POSVEN real y separa facturas de recibos CxC', () => {
   assert.equal(result.receivablesLinkedToSales, 1);
   assert.equal(result.receivablesWithoutSaleLink, 1);
   assert.equal(result.receivablePaymentEvents, 1);
-  assert.equal(result.purchases, 2);
-  assert.equal(result.purchasesWithUniqueSupplier, 2);
-  assert.equal(result.payablesWithUniquePurchaseMatch, 1);
+  assert.equal(result.purchases, 3);
+  assert.equal(result.purchasesWithUniqueSupplier, 3);
+  assert.equal(result.payablesWithUniquePurchaseMatch, 0);
+  assert.equal(result.payablesWithAmbiguousPurchaseMatch, 1);
   assert.equal(result.payablesWithoutPurchaseMatch, 1);
   assert.equal(result.payablePaymentEvents, 1);
   assert.equal(result.movements, 5);
