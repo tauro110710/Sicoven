@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import ExcelJS from 'exceljs';
 import { FileUp, X, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
-import { InventoryMovementImportDraft } from '../../types/accounting';
+import type { InventoryMovementImportDraft } from '../../types/accounting';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
 
 type SourceRow = Record<string, unknown>;
@@ -34,7 +34,14 @@ const rowsFromFile = async (file: File): Promise<SourceRow[]> => {
     const candidates = [data.movimientos, data.movements, data.inventoryMovements, data.kardex];
     const rows = candidates.find(Array.isArray);
     if (!rows) throw new Error('El JSON no contiene una colección reconocible de movimientos de inventario.');
-    return rows.filter((row): row is SourceRow => Boolean(row) && typeof row === 'object' && !Array.isArray(row));
+    const products = [data.productos, data.products, data.inventario].find(Array.isArray) as SourceRow[] | undefined;
+    const productCodes = new Map((products ?? []).map(product => [String(product.id ?? product.productId ?? ''), String(product.codigo ?? product.code ?? product.sku ?? '')]));
+    return rows.filter((row): row is SourceRow => Boolean(row) && typeof row === 'object' && !Array.isArray(row)).map(row => {
+      if (valueAt(row, 'productCode', 'codigoProducto', 'codigo', 'sku', 'code')) return row;
+      const productId = String(valueAt(row, 'productId', 'productoId', 'idProducto') ?? '');
+      const productCode = productCodes.get(productId);
+      return productCode ? { ...row, productCode } : row;
+    });
   }
   if (['xlsx', 'xlsm'].includes(extension || '')) {
     const workbook = new ExcelJS.Workbook();
@@ -80,18 +87,19 @@ export const InventoryMovementImport: React.FC<{ isOpen: boolean; onClose: () =>
       const byCode = new Map(products.map(product => [normalize(product.code), product]));
       const byName = new Map(products.map(product => [normalize(product.name), product]));
       const result = sourceRows.map((row, index): PreparedRow => {
+        const sourceProductId = String(valueAt(row, 'productId', 'productoId', 'idProducto') ?? '').trim();
         const code = String(valueAt(row, 'productCode', 'codigoProducto', 'codigo', 'sku', 'code') ?? '').trim();
         const name = String(valueAt(row, 'productName', 'nombreProducto', 'producto', 'nombre', 'descripcion') ?? '').trim();
-        const product = (code ? byCode.get(normalize(code)) : undefined) || (name ? byName.get(normalize(name)) : undefined);
+        const product = (code ? byCode.get(normalize(code)) : undefined) || (name ? byName.get(normalize(name)) : undefined) || (sourceProductId ? products.find(item => item.id === sourceProductId) : undefined);
         if (!product) throw new Error('Fila ' + (index + 2) + ': no se encontró un artículo único por código o nombre. Código: ' + (code || '—') + '.');
         const rawType = normalize(valueAt(row, 'type', 'movementType', 'tipo', 'tipoMovimiento'));
         const rawConcept = normalize(valueAt(row, 'concept', 'concepto', 'operacion', 'operation'));
         let type: 'ENTRADA' | 'SALIDA' | 'AJUSTE';
         let concept: string;
         if (rawType.includes('ajuste') || rawConcept.includes('ajuste')) { type = 'AJUSTE'; concept = 'AJUSTE'; }
-        else if (rawType.includes('salida') || ['venta', 'merma', 'autoconsumo'].includes(rawConcept)) {
+        else if (rawType.includes('venta') || rawType.includes('salida') || ['venta', 'merma', 'autoconsumo'].includes(rawConcept)) {
           type = 'SALIDA'; concept = rawConcept.includes('merma') ? 'MERMA' : rawConcept.includes('autoconsumo') ? 'AUTOCONSUMO' : 'VENTA';
-        } else if (rawType.includes('entrada') || ['compra', 'devolucioncliente', 'inventarioinicial'].includes(rawConcept)) {
+        } else if (rawType.includes('compra') || rawType.includes('entrada') || ['compra', 'devolucioncliente', 'inventarioinicial'].includes(rawConcept)) {
           type = 'ENTRADA'; concept = rawConcept === 'devolucioncliente' ? 'DEVOLUCION_CLIENTE' : rawConcept === 'inventarioinicial' ? 'INVENTARIO_INICIAL' : 'COMPRA';
         } else throw new Error('Fila ' + (index + 2) + ': tipo/concepto no reconocido. Indique ENTRADA, SALIDA o AJUSTE y un concepto compatible.');
         const date = dateValue(valueAt(row, 'date', 'fecha', 'fechaMovimiento'));
@@ -108,7 +116,7 @@ export const InventoryMovementImport: React.FC<{ isOpen: boolean; onClose: () =>
         const bcvRate = rateRaw === undefined ? 0 : parseMigrationNumber(rateRaw);
         if (!Number.isFinite(bcvRate) || bcvRate <= 0) throw new Error('Fila ' + (index + 2) + ': falta una tasa BCV histórica positiva; no se utilizará la tasa actual para reconstruir el pasado.');
         const costRaw = valueAt(row, 'unitCostBs', 'costoUnitarioBs', 'costoBs', 'unitCost');
-        const unitCostBs = costRaw === undefined && type === 'SALIDA' ? product.avgCostBs : costRaw === undefined ? NaN : parseMigrationNumber(costRaw);
+        const unitCostBs = costRaw === undefined && (type === 'SALIDA' || type === 'AJUSTE') ? product.avgCostBs : costRaw === undefined ? NaN : parseMigrationNumber(costRaw);
         if (!Number.isFinite(unitCostBs) || unitCostBs < 0 || (type === 'ENTRADA' && unitCostBs <= 0)) throw new Error('Fila ' + (index + 2) + ': costo unitario Bs. no válido; las entradas requieren costo positivo.');
         const additionalLandedCostsBs = parseMigrationNumber(valueAt(row, 'additionalLandedCostsBs', 'fleteBs', 'gastosImportacionBs') ?? 0);
         if (!Number.isFinite(additionalLandedCostsBs) || additionalLandedCostsBs < 0) throw new Error('Fila ' + (index + 2) + ': fletes/gastos no pueden ser negativos.');
