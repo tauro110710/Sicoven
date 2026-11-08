@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const { validateAccountingSnapshot } = require('./accounting-integrity.cjs');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
+const { partitionAccountingSnapshot } = require('./tenant-snapshot.cjs');
 
 function syncPartyMasterRows(db, state) {
   if (!Array.isArray(state.customers) && !Array.isArray(state.suppliers)) return;
@@ -609,7 +610,9 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
     throw new Error('No se pudo registrar el puente de persistencia contable de SICOVEN.');
   }
   if (!withDatabase) initializeAccountingPersistenceSchema(db);
-  const runWithDatabase = (token, operation) => withDatabase ? withDatabase(token, operation) : operation(db);
+  const runWithDatabase = (token, operation) => withDatabase
+    ? withDatabase(token, (activeDb, companyId) => operation(activeDb, companyId))
+    : operation(db, null);
   ipcMain.handle('sicoven:reopen-accounting-period', async (_event, token, input) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
@@ -632,7 +635,10 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
         throw new Error('La nueva fecha de cierre no existe en el calendario.');
       }
     }
-    return runWithDatabase(token, activeDb => {
+    return runWithDatabase(token, (activeDb, selectedCompanyId) => {
+    if (selectedCompanyId && selectedCompanyId !== companyId) {
+      throw new Error('La reapertura solicitada no pertenece a la empresa activa.');
+    }
     const reopen = activeDb.transaction(() => {
       const row = activeDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
       if (!row) throw new Error('No existe un estado contable persistido para reabrir.');
@@ -685,7 +691,17 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
     const actor = getActiveSession(token);
     if (!actor) throw new Error('Sesión no válida. Inicie sesión para guardar datos contables.');
     if (!state || typeof state !== 'object' || Array.isArray(state)) throw new Error('Estado contable inválido');
-    return runWithDatabase(token, activeDb => persistAccountingSnapshot(activeDb, state, actor));
+    return runWithDatabase(token, (activeDb, selectedCompanyId) => {
+      if (selectedCompanyId) {
+        const partitions = partitionAccountingSnapshot(state);
+        if (partitions.length !== 1 ||
+            String(partitions[0]?.companies?.[0]?.id || '') !== selectedCompanyId ||
+            String(state.currentCompanyId || '') !== selectedCompanyId) {
+          throw new Error('El snapshot no pertenece exclusivamente a la empresa activa. Se bloqueó el guardado para evitar mezclar datos.');
+        }
+      }
+      return persistAccountingSnapshot(activeDb, state, actor);
+    });
   });
 }
 
