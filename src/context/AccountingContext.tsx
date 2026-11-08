@@ -4388,9 +4388,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!updated.code.trim() || !updated.name.trim() || !updated.category.trim() || !updated.unit.trim()) {
       throw new Error('Código, descripción, categoría y unidad son obligatorios.');
     }
-    if (![updated.minStock, updated.salesPriceBs, updated.salesPriceUsd].every(value => Number.isFinite(Number(value)) && Number(value) >= 0)) {
+    if (![updated.minStock, updated.salesPriceBs, updated.salesPriceUsd, updated.price1 ?? 0, updated.price2 ?? 0, updated.price3 ?? 0, updated.price4 ?? 0].every(value => Number.isFinite(Number(value)) && Number(value) >= 0)) {
       throw new Error('Stock mínimo y precios deben ser importes numéricos no negativos.');
     }
+    if (updated.priceCurrency !== undefined && updated.priceCurrency !== 'USD' && updated.priceCurrency !== 'BS') throw new Error('La moneda de referencia de precios debe ser USD o BS.');
     if (!['GENERAL_16', 'REDUCIDA_8', 'EXENTO', 'EXONERADO'].includes(updated.vatTreatment || 'GENERAL_16')) {
       throw new Error('El tratamiento IVA del artículo no es válido.');
     }
