@@ -16,7 +16,7 @@ function syncPartyMasterRows(db, state) {
     const companyId = String(item.companyId || '').trim();
     const name = String(item.name || '').trim();
     const fiscalId = String(item.fiscalId || '').trim();
-    const normalizedFiscalId = fiscalId.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const normalizedFiscalId = fiscalId.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (!id || !companyId || !companies.has(companyId) || !name) throw new Error('Un maestro de cliente/proveedor tiene ID, empresa o nombre inválido; se canceló la persistencia.');
     if (!['CUSTOMER', 'SUPPLIER'].includes(item.partyType)) throw new Error('Tipo de maestro no reconocido.');
     if (ids.has(id)) throw new Error('Hay identificadores duplicados entre maestros de clientes y proveedores.');
