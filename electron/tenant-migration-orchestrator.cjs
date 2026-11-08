@@ -117,6 +117,7 @@ function createTenantMigrationOrchestrator(options) {
     }
 
     const backupDb = new Database(backupPath, { readonly: true, fileMustExist: true });
+    let backupHash;
     try {
       assertSqliteIntegrity(backupDb);
       const backupPreflight = inspectLegacy(backupDb);
@@ -127,11 +128,11 @@ function createTenantMigrationOrchestrator(options) {
           backupPreflight.companyIds.some((companyId, index) => String(companyId) !== String(companyIds[index]))) {
         throw new Error('El inventario de empresas del respaldo no coincide con el inventario previo del origen.');
       }
+      backupHash = sha256File(backupPath);
     } catch (error) {
       if (backupDb.open) backupDb.close();
       throw error;
     }
-    const backupHash = sha256File(backupPath);
     let journal = null;
     let journalOwned = false;
     let auditPartition;
@@ -247,8 +248,15 @@ function createTenantMigrationOrchestrator(options) {
         })
       });
     } catch (error) {
-      const current = journalOwned ? journal.read() : null;
-      if (current && ['PREPARED', 'STAGING', 'VALIDATING', 'REGISTERING', 'FAILED'].includes(current.phase)) {
+      let current = null;
+      if (journalOwned) {
+        try { current = journal.read(); } catch {}
+      }
+      const registeredIds = new Set(manager.listCompanies().map(item => String(item.id)));
+      const registrationAlreadyCommitted = current?.phase === 'REGISTERING' &&
+        companyIds.every(companyId => registeredIds.has(companyId));
+      if (current && !registrationAlreadyCommitted &&
+          ['PREPARED', 'STAGING', 'VALIDATING', 'REGISTERING', 'FAILED'].includes(current.phase)) {
         try {
           journal.advance(current.phase, 'ROLLBACK_REQUIRED', {
             lastError: String(error?.message || error).slice(0, 2000)
