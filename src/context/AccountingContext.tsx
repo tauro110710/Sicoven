@@ -1207,7 +1207,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               const normalized = error instanceof Error ? error : new Error('Error desconocido al guardar en SQLite.');
               console.error('Error guardando los datos contables en SQLite:', normalized);
               persistenceFaultRef.current = true;
-              const queued = pendingSnapshotRef.current;
+              const queued = pendingSnapshotRef.current as { snapshot: any; waiters: Array<{ resolve: () => void; reject: (error: Error) => void }> } | null;
               pendingSnapshotRef.current = null;
               const confirmed = lastPersistedSnapshotRef.current;
               if (confirmed) {
