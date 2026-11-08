@@ -3,6 +3,7 @@ const path = require('node:path');
 
 const DEFAULT_SCHEMA_VERSION = 1;
 const REGISTRY_TABLE = 'company_database_registry';
+const TENANT_META_TABLE = 'sicoven_database_meta';
 
 function normalizeCompanyId(value) {
   const id = String(value || '').trim();
@@ -109,11 +110,17 @@ function createCompanyDatabaseManager({
     const tenantDb = new Database(filePath);
     try {
       configureDatabase(tenantDb);
-      const initialize = tenantDb.transaction(() => initializeCompanyDatabase(tenantDb, {
-        companyId: company.companyId,
-        schemaVersion,
-        isNew: true
-      }));
+      const initialize = tenantDb.transaction(() => {
+        tenantDb.exec('CREATE TABLE ' + TENANT_META_TABLE + ' (meta_key TEXT PRIMARY KEY, meta_value TEXT NOT NULL)');
+        const insertMeta = tenantDb.prepare('INSERT INTO ' + TENANT_META_TABLE + '(meta_key,meta_value) VALUES(?,?)');
+        insertMeta.run('company_id', company.companyId);
+        insertMeta.run('schema_version', String(schemaVersion));
+        initializeCompanyDatabase(tenantDb, {
+          companyId: company.companyId,
+          schemaVersion,
+          isNew: true
+        });
+      });
       initialize();
       assertSqliteIntegrity(tenantDb);
     } finally {
@@ -144,27 +151,40 @@ function createCompanyDatabaseManager({
     const tenantDb = new Database(filePath);
     try {
       configureDatabase(tenantDb);
-      const currentVersion = Number(record.schema_version);
-      if (!Number.isInteger(currentVersion) || currentVersion < 1 || currentVersion > schemaVersion) {
-        throw new Error('La versión de esquema de la empresa no es compatible con esta versión de SICOVEN.');
+      const metadataTable = tenantDb.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(TENANT_META_TABLE);
+      if (!metadataTable) throw new Error('La base de empresa no contiene sus metadatos de identidad y esquema. Se bloqueó la apertura.');
+      const tenantMeta = tenantDb.prepare('SELECT meta_value FROM ' + TENANT_META_TABLE + ' WHERE meta_key=?');
+      const tenantCompanyId = tenantMeta.get('company_id')?.meta_value;
+      if (String(tenantCompanyId || '') !== companyId) {
+        throw new Error('La identidad interna de la base SQLite no coincide con la empresa registrada. Se bloqueó la apertura.');
+      }
+      let currentVersion = Number(tenantMeta.get('schema_version')?.meta_value);
+      const registeredVersion = Number(record.schema_version);
+      if (!Number.isInteger(currentVersion) || currentVersion < 1 || currentVersion > schemaVersion ||
+          !Number.isInteger(registeredVersion) || registeredVersion < 1 || registeredVersion > schemaVersion ||
+          currentVersion < registeredVersion) {
+        throw new Error('La versión de esquema de la empresa no es compatible o no coincide con su registro local.');
+      }
+      if (currentVersion > registeredVersion) {
+        controlDb.prepare('UPDATE ' + REGISTRY_TABLE + " SET schema_version=?,updated_at=datetime('now') WHERE company_id=? AND schema_version=?").run(currentVersion, companyId, registeredVersion);
+        if (Number(getRecord(companyId).schema_version) !== currentVersion) {
+          throw new Error('No se pudo reconciliar el registro tras una migración local ya confirmada.');
+        }
       }
       if (currentVersion < schemaVersion) {
-        const migrate = tenantDb.transaction(() => migrateCompanyDatabase(tenantDb, {
-          companyId,
-          fromVersion: currentVersion,
-          toVersion: schemaVersion
-        }));
+        const fromVersion = currentVersion;
+        const migrate = tenantDb.transaction(() => {
+          migrateCompanyDatabase(tenantDb, { companyId, fromVersion, toVersion: schemaVersion });
+          tenantDb.prepare('UPDATE ' + TENANT_META_TABLE + ' SET meta_value=? WHERE meta_key=?').run(String(schemaVersion), 'schema_version');
+        });
         migrate();
         assertSqliteIntegrity(tenantDb);
-        controlDb.prepare(`
-          UPDATE ${REGISTRY_TABLE}
-          SET schema_version=?,updated_at=datetime('now')
-          WHERE company_id=? AND schema_version=?
-        `).run(schemaVersion, companyId, currentVersion);
+        controlDb.prepare('UPDATE ' + REGISTRY_TABLE + " SET schema_version=?,updated_at=datetime('now') WHERE company_id=? AND schema_version=?").run(schemaVersion, companyId, fromVersion);
         const updated = getRecord(companyId);
         if (Number(updated.schema_version) !== schemaVersion) {
           throw new Error('No se pudo confirmar la nueva versión de esquema en el registro local.');
         }
+        currentVersion = schemaVersion;
       }
       openDatabases.set(companyId, tenantDb);
       return tenantDb;
