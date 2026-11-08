@@ -488,6 +488,7 @@ export interface InventoryProduct {
 
 export type InventoryMovementImportDraft =
   Pick<InventoryMovement, 'productId' | 'date' | 'type' | 'concept' | 'documentRef' | 'quantity' | 'unitCostBs'> &
+  { expectedBalanceQty?: number } &
   Partial<Omit<InventoryMovement, 'id' | 'companyId' | 'productId' | 'date' | 'type' | 'concept' | 'documentRef' | 'quantity' | 'unitCostBs'>>;
 
 export interface InventoryMovement {
