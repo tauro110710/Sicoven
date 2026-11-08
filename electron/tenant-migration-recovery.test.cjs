@@ -121,3 +121,34 @@ test('does not finalize when a registered tenant database fails integrity verifi
     /No es seguro confirmar el journal/
   );
 });
+
+
+test('does not finalize when tenant schema version differs from the control registry', async t => {
+  const { root, manager, options } = fixture(t, {
+    createJournal: journalOptions => {
+      const journal = createTenantMigrationJournal(journalOptions);
+      return Object.freeze({
+        ...journal,
+        advance(expected, next, patch) {
+          if (expected === 'REGISTERING' && next === 'COMMITTED') throw new Error('simulated journal interruption');
+          return journal.advance(expected, next, patch);
+        }
+      });
+    }
+  });
+  await assert.rejects(() => createTenantMigrationOrchestrator(options).execute(), /La migración no se confirmó/);
+  const databasePath = path.join(root, 'companies', 'company-a', 'accounting.sqlite');
+  const tenantDb = new Database(databasePath);
+  tenantDb.prepare("UPDATE sicoven_database_meta SET meta_value='999' WHERE meta_key='schema_version'").run();
+  tenantDb.close();
+
+  const inspection = inspectTenantMigrationRecovery({ userDataDir: root, manager, Database, assertSqliteIntegrity });
+  assert.equal(inspection.companies[0].databaseValid, true);
+  assert.equal(inspection.companies[0].registryMatches, false);
+  assert.equal(inspection.canFinalize, false);
+  assert.equal(inspection.requiresManualRecovery, true);
+  assert.throws(
+    () => finalizeTenantMigrationRecovery({ userDataDir: root, manager, Database, assertSqliteIntegrity }),
+    /No es seguro confirmar el journal/
+  );
+});
