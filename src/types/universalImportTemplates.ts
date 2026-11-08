@@ -20,10 +20,12 @@ const templates: Record<UniversalMasterTemplateKind, { fileName: string; headers
 
 const csvCell = (value: string) => /[",\n\r]/.test(value) ? '"' + value.replace(/"/g, '""') + '"' : value;
 
-export const getUniversalMasterTemplate = (kind: UniversalMasterTemplateKind): { fileName: string; csv: string } => {
+export const getUniversalMasterTemplate = (kind: UniversalMasterTemplateKind): { fileName: string; headers: string[]; example: string[]; csv: string } => {
   const template = templates[kind];
   return {
     fileName: template.fileName,
+    headers: [...template.headers],
+    example: [...template.example],
     csv: [template.headers, template.example].map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n'
   };
 };
