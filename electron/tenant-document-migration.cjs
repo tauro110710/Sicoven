@@ -62,8 +62,15 @@ function copyCompanyDocumentFiles({ documents, sourceRoot, destinationRoot }) {
           sourceStat.size !== expectedSize || sha256File(sourcePath) !== expectedHash) {
         throw new Error('El tamaño o SHA-256 de un documento legado no coincide con su registro. No se copió el archivo.');
       }
-      fs.copyFileSync(sourcePath, destinationPath, fs.constants.COPYFILE_EXCL);
+      const contents = fs.readFileSync(sourcePath);
+      const destinationFd = fs.openSync(destinationPath, 'wx', 0o600);
       created.push(destinationPath);
+      try {
+        fs.writeFileSync(destinationFd, contents);
+        fs.fsyncSync(destinationFd);
+      } finally {
+        fs.closeSync(destinationFd);
+      }
       const copiedStat = fs.lstatSync(destinationPath);
       if (copiedStat.isSymbolicLink() || !copiedStat.isFile() ||
           copiedStat.size !== expectedSize || sha256File(destinationPath) !== expectedHash) {
