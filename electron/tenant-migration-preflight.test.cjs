@@ -16,7 +16,7 @@ function createLegacyDb() {
     CREATE TABLE company_database_registry(company_id TEXT PRIMARY KEY);
   `);
   const { REQUIRED_RELATIONAL_TABLES } = require('./tenant-migration-preflight.cjs');
-  for (const table of REQUIRED_RELATIONAL_TABLES) db.exec('CREATE TABLE \' + table + \' (id TEXT PRIMARY KEY)');
+  for (const table of REQUIRED_RELATIONAL_TABLES) db.exec("CREATE TABLE \"" + table + "\" (id TEXT PRIMARY KEY)");
   db.prepare('INSERT INTO app_state VALUES(?,?,?)').run('accounting', JSON.stringify({
     companies: [
       { id: 'company-a', rif: 'J-12345678-9', name: 'Empresa A' },
