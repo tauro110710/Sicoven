@@ -37,7 +37,7 @@ async function saveTenantAccountingSnapshot(manager, state, actor = null) {
     throw new TypeError('El gestor local no ofrece las operaciones necesarias para guardar empresas.');
   }
 
-  const partitions = partitionAccountingSnapshot(state);
+  const partitions = partitionAccountingSnapshot(state).map(snapshot => JSON.parse(JSON.stringify(snapshot)));
   const byId = new Map(partitions.map(snapshot => [String(snapshot.companies[0].id), snapshot]));
   const records = manager.listCompanies();
   const activeRecords = records.filter(record => record.status === 'ACTIVE');
