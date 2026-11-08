@@ -472,7 +472,77 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      setSettlementPreview([]);
      setSelectedSettlementSourceRowIds([]);
     }
-    const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha de factura','fechaEmision','fecha')??'').slice(0,10);if(!isValidIsoDate(value))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
+         const advanceTargets=new Map<string,{sourceRowId?:string;existingId?:string;label:string;error?:string}>();
+     const sourceFiles=new Set(sourceRows.map(row=>String(row.migrationfile??'')));
+     const advanceOperation=(row:Row)=>norm(String(pick(row,'settlementKind','operationType','transactionType','tipoOperacion','tipoMovimiento','kind','tipo','concept','concepto')??''));
+     const directAdvanceTokens=['supplierdirectadvance','directsupplieradvance','anticipodirectoproveedor','desembolsoanticipoproveedor','anticipoproveedor'];
+     const refundTokens=['refundreceived','supplieradvancerefund','refundsupplieradvance','reembolsoanticipo'];
+     const applicationTokens=['appliedtopurchase','supplieradvanceapplication','advanceapplication','aplicacionanticipo','anticipoaplicadocompra'];
+     const advanceRows=kind==='purchases'?rows.filter(row=>sourceFiles.has(String(row.migrationfile??''))&&
+      [...directAdvanceTokens,...refundTokens,...applicationTokens].includes(advanceOperation(row))):[];
+     const resolveAdvanceTarget=(row:Row)=>{
+      const party=resolveUniversalPartyReference(rows,row,'supplier');
+      const explicit=String(pick(row,'targetPurchaseRowId','purchaseRowId','targetPurchaseId','purchaseId','invoiceId','documentId','idCompra')??'').trim();
+      if(explicit){
+       const sourceMatch=sourceRows.find(candidate=>String(candidate.migrationrowid??'')===explicit||
+        String(pick(candidate,'id','purchaseId','invoiceId','idCompra')??'')===explicit);
+       if(sourceMatch)return {sourceRowId:String(sourceMatch.migrationrowid??''),label:String(pick(sourceMatch,'invoiceNumber','numeroFactura','factura','documento')??explicit)};
+       const existingById=companyPurchases.find(purchase=>purchase.id===explicit&&String(purchase.supplierRif||'').trim().toUpperCase()===party.rif.toUpperCase());
+       if(existingById)return {existingId:existingById.id,label:existingById.invoiceNumber||existingById.id};
+      }
+      const targetNumber=String(pick(row,'targetPurchaseInvoiceNumber','purchaseInvoiceNumber','targetInvoiceNumber','numeroFacturaCompra','facturaCompra','invoiceNumber','numeroFactura','factura')??'').trim();
+      if(targetNumber){
+       const normalizeRef=(value:unknown)=>normalizeUniversalDocumentReference(String(value??''));
+       const candidates=sourceRows.filter(candidate=>
+        normalizeRef(pick(candidate,'invoiceNumber','numeroFactura','factura','documento'))===normalizeRef(targetNumber)&&
+        String(resolveUniversalPartyReference(rows,candidate,'supplier').rif).trim().toUpperCase()===party.rif.toUpperCase());
+       if(candidates.length===1)return {sourceRowId:String(candidates[0].migrationrowid??''),label:targetNumber};
+       if(candidates.length>1)return {label:targetNumber,error:'La factura destino coincide con varias filas seleccionadas.'};
+       const existing=companyPurchases.filter(purchase=>normalizeRef(purchase.invoiceNumber)===normalizeRef(targetNumber)&&
+        String(purchase.supplierRif||'').trim().toUpperCase()===party.rif.toUpperCase()&&!purchase.isCancelled);
+       if(existing.length===1)return {existingId:existing[0].id,label:targetNumber};
+       if(existing.length>1)return {label:targetNumber,error:'La factura destino coincide con varios documentos existentes.'};
+      }
+      return {label:targetNumber||'Sin factura destino',error:'No se pudo enlazar la aplicación a una compra inequívoca del mismo proveedor.'};
+     };
+     const nextAdvancePreview=advanceRows.map(row=>{
+      const operation=advanceOperation(row);
+      let error:string|null=null;let supplierName='';let supplierRif='';let date='';let amountUsd=0;let amountBs=0;let reference='';let target='';
+      try{
+       const party=resolveUniversalPartyReference(rows,row,'supplier');supplierName=party.name;supplierRif=party.rif;
+       if(directAdvanceTokens.includes(operation)){
+        const mapped=mapUniversalSupplierDirectAdvanceDraft(row,rows).draft;
+        date=mapped.date;amountUsd=mapped.amountUsd;amountBs=Math.round(mapped.amountUsd*mapped.bcvRate*100)/100;reference=mapped.reference;
+       }else{
+        const isApplication=applicationTokens.includes(operation);
+        const resolved=isApplication?resolveAdvanceTarget(row):undefined;
+        if(resolved?.error)throw new Error(resolved.error);
+        if(isApplication&&!resolved?.sourceRowId&&!resolved?.existingId)throw new Error('La aplicación no tiene una factura destino verificable.');
+        if(isApplication)advanceTargets.set(String(row.migrationrowid),resolved!);
+        const mapped=mapUniversalSupplierAdvanceSettlementDraft(row,rows,isApplication?'__purchase_pending__':undefined).draft;
+        date=mapped.date;amountUsd=mapped.amountUsd;amountBs=mapped.amountBs;reference=String(mapped.reference||'');
+        target=isApplication?(resolved?.label||'Compra destino'):'Reembolso a tesorería';
+       }
+      }catch(cause){error=cause instanceof Error?cause.message:'La operación de anticipo no pudo validarse.';}
+      return {sourceRowId:String(row.migrationrowid??''),operation:directAdvanceTokens.includes(operation)?'Anticipo directo':refundTokens.includes(operation)?'Reembolso':'Aplicación a compra',supplierName,supplierRif,date,amountUsd,amountBs,reference,target,error};
+     });
+     if(advanceRows.length){
+      const samePreview=supplierAdvancePreview.length===nextAdvancePreview.length&&
+       nextAdvancePreview.every((item,index)=>supplierAdvancePreview[index]?.sourceRowId===item.sourceRowId);
+      const selectedAdvanceIds=samePreview
+       ?selectedSupplierAdvanceSourceRowIds.filter(id=>nextAdvancePreview.some(item=>item.sourceRowId===id))
+       :nextAdvancePreview.map(item=>item.sourceRowId);
+      setSupplierAdvancePreview(nextAdvancePreview);
+      setSelectedSupplierAdvanceSourceRowIds(selectedAdvanceIds);
+      const unresolved=nextAdvancePreview.filter(item=>selectedAdvanceIds.includes(item.sourceRowId)&&item.error).length;
+      if(unresolved){
+       setNotice('Se detectaron '+nextAdvancePreview.length+' operaciones de anticipos; '+unresolved+' seleccionadas requieren corregir datos o vínculo. Desmarca las filas que no deseas importar o corrige el archivo.');
+       setBusy(false);return;
+      }
+     }else{
+      setSupplierAdvancePreview([]);setSelectedSupplierAdvanceSourceRowIds([]);
+     }
+const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha de factura','fechaEmision','fecha')??'').slice(0,10);if(!isValidIsoDate(value))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
     const num=(r:Row,i:number,required:boolean,...keys:string[])=>{const raw=pick(r,...keys);if((raw===undefined||raw==='')&&required)throw new Error('Fila '+(i+1)+': falta el campo obligatorio '+keys[0]+'.');const value=raw===undefined||raw===''?0:parseMigrationNumber(raw);if(!Number.isFinite(value)||value<0)throw new Error('Fila '+(i+1)+': importe inválido en '+keys[0]+'.');return value;};
     const documentKey=(invoiceNumber:string,partyRif:string)=>buildUniversalInvoiceIdentity(kind,invoiceNumber,partyRif);
     const controlKey=(controlNumber:string,partyRif:string)=>norm(controlNumber)+'|'+norm(partyRif);
