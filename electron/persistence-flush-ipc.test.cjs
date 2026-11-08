@@ -10,6 +10,7 @@ function setup({ authorized = true, session = true, timeoutMs = 100 } = {}) {
   const events = new EventEmitter();
   const sender = new EventEmitter();
   sender.isDestroyed = () => false;
+  sender.getURL = () => 'file:///sicoven/index.html';
   sender.send = (channel, payload) => events.emit('request', channel, payload);
   const window = { isDestroyed: () => false };
   const ipcMain = {
