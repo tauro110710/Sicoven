@@ -190,7 +190,7 @@ test('registers verified staged tenant databases as one control-registry transac
   staged.close();
 
   const [record] = manager.registerExistingCompanies([company]);
-  assert.equal(record.id, company.id);
+  assert.equal(record.company_id, company.id);
   const tenantDb = manager.openCompany(company.id);
   assert.equal(tenantDb.prepare('SELECT amount FROM ledger_rows WHERE id=?').get('legacy-row').amount, 321);
   assert.equal(manager.listCompanies().length, 1);
