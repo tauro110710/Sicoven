@@ -120,16 +120,25 @@ function createTenantMigrationOrchestrator(options) {
       if (!isDeepStrictEqual(backupSnapshot, legacySnapshot)) throw new Error('El snapshot del respaldo no coincide con el origen; se canceló la migración.');
     } finally { backupDb.close(); }
     const backupHash = sha256File(backupPath);
-    const journal = createJournal({ userDataDir: root, now, id });
+    let journalIdFirstCall = true;
+    const journal = createJournal({
+      userDataDir: root,
+      now,
+      id: () => {
+        if (journalIdFirstCall) { journalIdFirstCall = false; return migrationId; }
+        return crypto.randomUUID();
+      }
+    });
     journal.create({ companyIds, sourceBackupPath: backupPath, sourceBackupSha256: backupHash });
     journal.advance('PREPARED', 'STAGING');
 
-    const auditRows = sourceDb.prepare('SELECT id,event_type,details_json,created_at FROM audit_events ORDER BY id').all();
-    const auditPartition = splitAudit(auditRows, companyIds);
-    const documentRoot = path.resolve(getDocumentsRoot());
+    let auditPartition;
     const companyResults = [];
 
     try {
+      const auditRows = sourceDb.prepare('SELECT id,event_type,details_json,created_at FROM audit_events ORDER BY id').all();
+      auditPartition = splitAudit(auditRows, companyIds);
+      const documentRoot = path.resolve(getDocumentsRoot());
       fs.mkdirSync(companiesRoot, { recursive: true, mode: 0o700 });
       assertSafeDirectory(companiesRoot, 'La carpeta companies');
 
