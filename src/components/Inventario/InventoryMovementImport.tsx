@@ -173,7 +173,7 @@ export const InventoryMovementImport: React.FC<{ isOpen: boolean; onClose: () =>
         </div>
         <div className="space-y-4 overflow-y-auto p-5">
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
-            Empresa destino: <strong>{currentCompany.name}</strong>. Este proceso actualiza exclusivamente el Kardex. No participa en la contabilización del Reporte Z ni genera vínculos con asientos contables. Los movimientos se identifican por código único de artículo; la tasa histórica y los costos requeridos deben venir en el archivo.
+            Empresa destino: <strong>{currentCompany.name}</strong>. Este proceso actualiza exclusivamente el Kardex. No participa en la contabilización del Reporte Z ni genera vínculos con asientos contables. Los movimientos se identifican por código único de artículo. La tasa BCV histórica y los costos requeridos deben venir en el archivo; si no existe folio, SICOVEN genera una referencia técnica explícita con el nombre del archivo y la fila de origen.
           </div>
           <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 p-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
             <FileUp className="h-5 w-5" /> Seleccionar archivo de movimientos
