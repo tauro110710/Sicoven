@@ -475,9 +475,9 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
          const advanceTargets=new Map<string,{sourceRowId?:string;existingId?:string;label:string;error?:string}>();
      const sourceFiles=new Set(sourceRows.map(row=>String(row.migrationfile??'')));
      const advanceOperation=(row:Row)=>norm(String(pick(row,'settlementKind','operationType','transactionType','tipoOperacion','tipoMovimiento','kind','tipo','concept','concepto')??''));
-     const directAdvanceTokens=['supplierdirectadvance','directsupplieradvance','anticipodirectoproveedor','desembolsoanticipoproveedor','anticipoproveedor'];
-     const refundTokens=['refundreceived','supplieradvancerefund','refundsupplieradvance','reembolsoanticipo'];
-     const applicationTokens=['appliedtopurchase','supplieradvanceapplication','advanceapplication','aplicacionanticipo','anticipoaplicadocompra'];
+     const directAdvanceTokens=['supplierdirectadvance','directsupplieradvance','anticipodirectoproveedor','desembolsoanticipoproveedor','anticipoproveedor','anticipodirecto'];
+     const refundTokens=['refundreceived','supplieradvancerefund','refundsupplieradvance','reembolsoanticipo','reembolsoanticipoproveedor'];
+     const applicationTokens=['appliedtopurchase','supplieradvanceapplication','advanceapplication','aplicacionanticipo','aplicacionanticipoproveedor','anticipoaplicadocompra'];
      const advanceRows=kind==='purchases'?rows.filter(row=>sourceFiles.has(String(row.migrationfile??''))&&
       [...directAdvanceTokens,...refundTokens,...applicationTokens].includes(advanceOperation(row))):[];
      const resolveAdvanceTarget=(row:Row)=>{
