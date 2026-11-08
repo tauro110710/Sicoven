@@ -19,6 +19,9 @@ function createCompanySessionContext({ runtime, operationContext, getActiveSessi
   }
 
   const selectedByToken = new Map();
+  // SICOVEN currently has one renderer and one operational SQLite connection.
+  // Keep the tenant context owned by exactly one authenticated session.
+  let activeSessionToken = null;
 
   function requireSession(tokenInput) {
     const token = String(tokenInput || '');
@@ -30,6 +33,9 @@ function createCompanySessionContext({ runtime, operationContext, getActiveSessi
 
   async function selectCompany(tokenInput, companyIdInput) {
     const { token, actor } = requireSession(tokenInput);
+    if (activeSessionToken && activeSessionToken !== token) {
+      throw new Error('Ya existe otra sesión autenticada con el contexto operativo de SICOVEN. Cierre esa sesión antes de cambiar de usuario.');
+    }
     const companyId = String(companyIdInput || '').trim();
     if (!companyId) throw new Error('Debe seleccionar una empresa.');
     const company = runtime.listCompanies().find(item =>
@@ -55,11 +61,13 @@ function createCompanySessionContext({ runtime, operationContext, getActiveSessi
       }
       selectedByToken.clear();
       selectedByToken.set(token, companyId);
+      activeSessionToken = token;
       return { ok: true, changed: Boolean(switched.changed), companyId };
     } catch (error) {
       // Never leave an unbound tenant active if authorization changed mid-switch.
       try { await operationContext.clearActiveCompany(); } catch {}
       selectedByToken.clear();
+      activeSessionToken = null;
       throw error;
     }
   }
@@ -89,10 +97,12 @@ function createCompanySessionContext({ runtime, operationContext, getActiveSessi
     if (!selectedByToken.has(token)) return { ok: true, changed: false };
     if (selectedByToken.get(token) !== operationContext.getActiveCompanyId()) {
       selectedByToken.delete(token);
+      if (activeSessionToken === token) activeSessionToken = null;
       return { ok: true, changed: false };
     }
     const result = await operationContext.clearActiveCompany();
     selectedByToken.delete(token);
+    if (activeSessionToken === token) activeSessionToken = null;
     return { ok: true, changed: true, previousCompanyId: result.previousCompanyId || null };
   }
 
@@ -101,6 +111,7 @@ function createCompanySessionContext({ runtime, operationContext, getActiveSessi
       if (operationContext.getActiveCompanyId()) await operationContext.clearActiveCompany();
     } finally {
       selectedByToken.clear();
+      activeSessionToken = null;
     }
     return { ok: true };
   }
