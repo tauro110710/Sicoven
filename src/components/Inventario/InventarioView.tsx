@@ -44,6 +44,10 @@ export const InventarioView: React.FC = () => {
     () => [...(currentCompany.inventoryBcvRateHistory || [])].sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate) || b.fetchedAt.localeCompare(a.fetchedAt)),
     [currentCompany.inventoryBcvRateHistory]
   );
+  const currentBcvRateSource = resolveInventoryBcvRate(
+    currentCompany.inventoryBcvRateHistory || [],
+    currentCompany.inventoryBcvRateEffectiveDate || '9999-12-31'
+  )?.provider;
 
   useEffect(() => {
     if (!isStorageReady) return;
@@ -117,8 +121,8 @@ export const InventarioView: React.FC = () => {
         }
         if (active) {
           setBcvStatus('ready');
-          setBcvMessage(providerHistory.length
-            ? 'Tasa vigente guardada localmente; se incorporaron los registros diarios disponibles.'
+          setBcvMessage(nextHistory.length > history.length
+            ? 'Tasa vigente guardada localmente; se añadieron ' + (nextHistory.length - history.length) + ' registros diarios al historial.'
             : savedForDate ? 'La tasa de esta fecha ya estaba registrada; se conserva el historial.' : 'Tasa consultada y guardada localmente en SQLite.');
         }
       } catch (error) {
@@ -261,7 +265,7 @@ export const InventarioView: React.FC = () => {
                 <span className="ml-2 text-xs font-semibold text-slate-500">por USD</span>
               </div>
               <div className="mt-1 text-[11px] text-slate-600">
-                Vigencia: {currentCompany.inventoryBcvRateEffectiveDate || 'Pendiente'} · Fuente: {resolveInventoryBcvRate(currentCompany.inventoryBcvRateHistory || [], currentCompany.inventoryBcvRateEffectiveDate || '9999-12-31')?.provider === 'manual' ? 'Registro manual' : 'bcv.today'}
+                Vigencia: {currentCompany.inventoryBcvRateEffectiveDate || 'Pendiente'} · Fuente: {currentBcvRateSource === 'manual' ? 'Registro manual' : currentBcvRateSource === 'bcv.today' ? 'bcv.today' : 'Origen no documentado'}
               </div>
               <div role="status" className={`mt-1 text-[11px] ${bcvStatus === 'error' ? 'text-amber-800' : 'text-sky-800'}`}>
                 {bcvMessage}
