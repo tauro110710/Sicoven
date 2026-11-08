@@ -6,7 +6,7 @@ export type UniversalSupplierDirectAdvanceDraft = { sourceRowId: string; draft: 
 export type UniversalSupplierAdvanceSettlementDraft = { sourceRowId: string; draft: SupplierAdvanceSettlementDraft };
 
 export const isUniversalProductCollectionPath = (path: string): boolean =>
-  /(^|\\.)(productos|products|inventory|inventario)$/i.test(path.trim());
+  /(^|\.)(productos|products|inventory|inventario)$/i.test(path.trim());
 
 export const getUniversalJsonValueAtPath = (root: unknown, path: string): unknown =>
   path.split('.').filter(Boolean).reduce<unknown>((current, key) => {
