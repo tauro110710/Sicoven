@@ -218,13 +218,17 @@ test('migrates a real SQLite legacy file into an isolated tenant database and pr
     const tenantA = manager.openCompany('company-a');
     const expectedA = { ...snapshot, companies: [snapshot.companies[0]], currentCompanyId: 'company-a' };
     assert.deepEqual(readTenantSnapshot(tenantA, 'company-a'), expectedA);
-    assert.deepEqual(tenantA.prepare('SELECT event_type FROM audit_events ORDER BY id').all(), [{ event_type: 'company_a_event' }]);
+    assert.deepEqual(tenantA.prepare('SELECT event_type FROM audit_events ORDER BY id').all(), [
+      { event_type: 'company_a_event' }, { event_type: 'state_saved' }
+    ]);
     assert.equal(tenantA.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='auth_users'").get().count, 0);
 
     const tenantB = manager.openCompany('company-b');
     const expectedB = { ...snapshot, companies: [snapshot.companies[1]], currentCompanyId: 'company-b' };
     assert.deepEqual(readTenantSnapshot(tenantB, 'company-b'), expectedB);
-    assert.deepEqual(tenantB.prepare('SELECT event_type FROM audit_events ORDER BY id').all(), [{ event_type: 'company_b_event' }]);
+    assert.deepEqual(tenantB.prepare('SELECT event_type FROM audit_events ORDER BY id').all(), [
+      { event_type: 'company_b_event' }, { event_type: 'state_saved' }
+    ]);
     assert.equal(tenantB.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='auth_users'").get().count, 0);
     assert.equal(sourceDb.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 3);
     assert.equal(manager.listCompanies().filter(item => item.status === 'ACTIVE').length, 2);
