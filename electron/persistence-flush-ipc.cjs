@@ -38,6 +38,11 @@ function registerPersistenceFlushIpc({
     if (!licensing?.authorized) throw new Error(licensing?.message || 'Licencia no autorizada.');
     if (!getActiveSession(token)) throw new Error('Sesión no válida para confirmar la persistencia local.');
 
+    const senderUrl = String(event.sender.getURL?.() || '');
+    if (!senderUrl.startsWith('file://') && !senderUrl.startsWith('http://localhost:') && !senderUrl.startsWith('http://127.0.0.1:')) {
+      throw new Error('Origen no autorizado para confirmar la persistencia local.');
+    }
+
     const window = getWindow(event.sender);
     if (!window || window.isDestroyed?.() || event.sender.isDestroyed?.()) {
       throw new Error('La ventana de SICOVEN no está disponible para confirmar la persistencia.');
