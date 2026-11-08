@@ -358,7 +358,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [supplierDirectAdvances, setSupplierDirectAdvances] = useState<SupplierDirectAdvance[]>([]);
   const bankStatementImportInFlightRef = useRef(false);
   type PendingBankOutgoingReservation = { release: () => void; waiter: { resolve: () => void; reject: (error: Error) => void } };
-  type ActiveAccountingImportBatch = { journalEntries: JournalEntry[]; sales: SaleRecord[]; purchases: PurchaseRecord[]; supplierDirectAdvances: SupplierDirectAdvance[]; supplierAdvanceSettlements: SupplierAdvanceSettlement[]; reservedBankLockKeys: Set<string> };
+  type ActiveAccountingImportBatch = { journalEntries: JournalEntry[]; sales: SaleRecord[]; purchases: PurchaseRecord[]; creditSettlements: CreditSettlement[]; supplierDirectAdvances: SupplierDirectAdvance[]; supplierAdvanceSettlements: SupplierAdvanceSettlement[]; reservedBankLockKeys: Set<string> };
   const bankOutgoingReservationsRef = useRef<PendingBankOutgoingReservation[]>([]);
   const activeImportBatchRef = useRef<ActiveAccountingImportBatch | null>(null);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
@@ -428,7 +428,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('No se permiten importaciones contables anidadas.');
     }
     const previousBatch = activeImportBatchRef.current;
-    activeImportBatchRef.current = { journalEntries: [], sales: [], purchases: [], supplierDirectAdvances: [], supplierAdvanceSettlements: [], reservedBankLockKeys: new Set<string>() };
+    activeImportBatchRef.current = { journalEntries: [], sales: [], purchases: [], creditSettlements: [], supplierDirectAdvances: [], supplierAdvanceSettlements: [], reservedBankLockKeys: new Set<string>() };
     try {
       const result = operation();
       activeImportBatchRef.current = previousBatch;
@@ -1595,6 +1595,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         createdAt: new Date().toISOString()
       };
       created.push(settlement);
+      batch.creditSettlements.push(settlement);
       remainingByDocument.set(document.id, Math.max(0, remainingUsd - amountUsd));
     }
 
@@ -1611,6 +1612,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const allAdvanceSettlements = batch
       ? [...supplierAdvanceSettlements, ...batch.supplierAdvanceSettlements]
       : supplierAdvanceSettlements;
+    const allCreditSettlements = batch ? [...creditSettlements, ...batch.creditSettlements] : creditSettlements;
     const document = kind === 'SALE_COLLECTION'
       ? allSales.find(item => item.id === documentId && item.companyId === targetCompanyId)
       : allPurchases.find(item => item.id === documentId && item.companyId === targetCompanyId);
@@ -1621,7 +1623,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       documentId,
       principal.originalAmountUsd,
       principal.originalAmountBs,
-      creditSettlements.filter(item => item.companyId === targetCompanyId && item.kind === kind && !item.isReversed)
+      allCreditSettlements.filter(item => item.companyId === targetCompanyId && item.kind === kind && !item.isReversed)
     );
     const creditNotes = kind === 'PURCHASE_PAYMENT'
       ? allPurchases.filter(item => item.companyId === targetCompanyId && item.originalPurchaseId === documentId && item.documentType === '03' && !item.isCancelled)
