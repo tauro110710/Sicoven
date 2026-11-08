@@ -250,6 +250,11 @@ async function executeRestoreUnlocked({backupDirectory,userDataDir,db,getDb,clos
   realDir(root,'Datos de SICOVEN');
   if(source===root || source.startsWith(root+path.sep)) throw new Error('El respaldo no puede estar dentro de los datos activos.');
   const sourceInfo=verifyBackupDirectory(source);
+  const activeCompanies = path.join(root, COMPANIES);
+  const sourceManifest = JSON.parse(fs.readFileSync(path.join(source, 'manifest.json'), 'utf8'));
+  if (sourceManifest.companyDatabases === undefined && exists(activeCompanies) && fs.readdirSync(activeCompanies).length > 0) {
+    throw new Error('Este respaldo global antiguo no contiene las bases individuales de las empresas. Se bloqueó la restauración para evitar perder información multiempresa.');
+  }
   const operationId=crypto.randomUUID();
   const operationRoot=path.join(root,OP_ROOT);
   if(!exists(operationRoot)) fs.mkdirSync(operationRoot);
