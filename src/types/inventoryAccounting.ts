@@ -55,7 +55,7 @@ export function calculateVnrProvisionLedgerBalance(
     entryCount += 1;
     for (const line of entry.items) {
       if (line.accountCode !== allowanceAccountCode) continue;
-      const values = [line.debitBs, line.creditBs, line.debitUsd, line.creditUsd].map(value => Number(value || 0));
+      const values = [line.debitBs, line.creditBs, line.debitUsd, line.creditUsd].map(value => value === undefined || value === null ? 0 : Number(value));
       if (!values.every(value => Number.isFinite(value) && value >= 0)) {
         throw new Error('El historial contable de la provisión VNR contiene importes inválidos.');
       }
