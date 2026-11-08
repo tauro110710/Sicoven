@@ -96,8 +96,13 @@ function createCompanySessionContext({ runtime, operationContext, getActiveSessi
     return { ok: true, changed: true, previousCompanyId: result.previousCompanyId || null };
   }
 
-  function clearAllSessions() {
-    selectedByToken.clear();
+  async function clearAllSessions() {
+    try {
+      if (operationContext.getActiveCompanyId()) await operationContext.clearActiveCompany();
+    } finally {
+      selectedByToken.clear();
+    }
+    return { ok: true };
   }
 
   return Object.freeze({ selectCompany, getSelectedCompanyId, withSelectedDatabase, clearSession, clearAllSessions });
