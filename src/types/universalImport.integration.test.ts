@@ -276,8 +276,17 @@ test('FIFO de anticipos: notas de crédito y desembolsos directos comparten una 
   ]);
   assert.deepEqual(afterPrevious.creditNoteAllocations, []);
 
+  const reversedHistory = previouslyPosted.map(item => ({ ...item, isReversed: true }));
+  const afterReversal = allocateSupplierAdvanceFifo(notes, direct, reversedHistory, 'company-2', 'J-22222222-2', 7);
+  assert.deepEqual(afterReversal.directAdvanceAllocations, [
+    { directAdvanceId: 'ADV-OLDEST', amountUsd: 7, bookValueBs: 840 }
+  ]);
+  assert.deepEqual(afterReversal.creditNoteAllocations, []);
+
   assert.throws(
-    () => allocateSupplierAdvanceFifo(notes, direct, [], 'company-2', 'J-22222222-2', 40),
-    /saldo disponible combinado/
+    () => allocateSupplierAdvanceFifo(
+      [{ ...notes[0], date: '2026-02-31' }], direct, [], 'company-2', 'J-22222222-2', 1
+    ),
+    /fecha o importes históricos inválidos/
   );
 });
