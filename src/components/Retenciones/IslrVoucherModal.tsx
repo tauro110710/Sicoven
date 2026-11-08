@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Company, IslrRetentionVoucher } from '../../types/accounting';
 import { X, Printer, ShieldCheck } from 'lucide-react';
 import { formatBs, formatUsd, formatDate, formatNumberVe } from '../../utils/formatters';
+import { requiresSnat2026DocumentReference } from '../../types/retentionVoucherCompliance';
 
 interface IslrVoucherModalProps {
   voucher: IslrRetentionVoucher | null;
@@ -82,6 +83,11 @@ export const IslrVoucherModal: React.FC<IslrVoucherModalProps> = ({ voucher, com
             <h2 className="font-bold text-[11px] sm:text-xs uppercase text-slate-800">
               COMPROBANTE DE RETENCIÓN DE IMPUESTO SOBRE LA RENTA (ISLR)
             </h2>
+            {requiresSnat2026DocumentReference(voucher.date) && (
+              <p className="text-[9px] sm:text-[10px] font-semibold text-slate-700">
+                Emitido conforme a la Providencia Administrativa SNAT/2026/00093 (artículo 19).
+              </p>
+            )}
             <p className="text-[9px] sm:text-[10px] text-slate-700 italic">
               (Decreto Presidencial N° 1.808 – Reglamento Parcial de la Ley de ISLR en Materia de Retenciones)
             </p>
