@@ -369,3 +369,111 @@ test('importador universal: mapea anticipos directos, reembolsos y aplicaciones 
   );
   assert.throws(() => mapUniversalSupplierDirectAdvanceDraft({ ...directRow, operationType: 'PAYMENT' }, [directRow]));
 });
+
+
+test('SQLite: persiste anticipos directos y reembolsos con asignación FIFO y asientos enlazados en un único snapshot', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE app_state (
+      state_key TEXT PRIMARY KEY, state_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL,
+      details_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  try {
+    const state: any = emptyState();
+    state.accounts.push(
+      { code: '1.1.2.03', name: 'Anticipos a proveedores', type: 'ACTIVO', level: 4, isMovement: true }
+    );
+    state.bankAccounts = [{
+      id: 'bank-company-2-bs', companyId: 'company-2',
+      accountCode: '1.1.1.03', currency: 'BS'
+    }];
+    const advanceJournal = {
+      id: 'advance-journal-1', companyId: 'company-2', entryNumber: 1,
+      date: '2026-11-06', description: 'Desembolso directo de anticipo',
+      type: 'ANTICIPO_PROVEEDOR', bcvRate: 100, referenceDoc: 'TRF-ADV-001',
+      items: [
+        { accountCode: '1.1.2.03', accountName: 'Anticipos a proveedores', debitBs: 1000, creditBs: 0, debitUsd: 10, creditUsd: 0 },
+        { accountCode: '1.1.1.03', accountName: 'Banco Bs', debitBs: 0, creditBs: 1000, debitUsd: 0, creditUsd: 10 }
+      ],
+      createdAt: '2026-11-06T10:00:00.000Z'
+    };
+    const refundJournal = {
+      id: 'refund-journal-1', companyId: 'company-2', entryNumber: 2,
+      date: '2026-11-07', description: 'Reembolso recibido de anticipo',
+      type: 'ANTICIPO_PROVEEDOR', bcvRate: 110, referenceDoc: 'REF-ADV-001',
+      items: [
+        { accountCode: '1.1.1.03', accountName: 'Banco Bs', debitBs: 220, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+        { accountCode: '1.1.2.03', accountName: 'Anticipos a proveedores', debitBs: 0, creditBs: 200, debitUsd: 0, creditUsd: 2 },
+        { accountCode: '4.2.1.01', accountName: 'Ganancia cambiaria', debitBs: 0, creditBs: 20, debitUsd: 0, creditUsd: 0 }
+      ],
+      createdAt: '2026-11-07T10:00:00.000Z'
+    };
+    state.journalEntries = [advanceJournal, refundJournal];
+    state.supplierDirectAdvances = [{
+      id: 'advance-direct-1', companyId: 'company-2',
+      supplierRif: 'J-22222222-2', supplierName: 'Proveedor Uno',
+      date: '2026-11-06', amountUsd: 10, bookValueBs: 1000, bcvRate: 100,
+      treasuryAccountCode: '1.1.1.03', paymentCurrency: 'BS', paidAmount: 1000,
+      reference: 'TRF-ADV-001', support: 'SOP-ADV-001',
+      journalEntryId: advanceJournal.id, createdAt: '2026-11-06T10:00:00.000Z'
+    }];
+    state.supplierAdvanceSettlements = [{
+      id: 'advance-refund-1', companyId: 'company-2',
+      supplierRif: 'J-22222222-2', supplierName: 'Proveedor Uno',
+      kind: 'REFUND_RECEIVED', date: '2026-11-07',
+      amountUsd: 2, amountBs: 200, advanceBookValueBs: 200,
+      bcvRate: 110, treasuryAccountCode: '1.1.1.03',
+      cashReceivedBs: 220, exchangeDifferenceBs: 20,
+      sourceCreditNoteIds: [], sourceCreditNoteAllocations: [],
+      sourceDirectAdvanceIds: ['advance-direct-1'],
+      sourceDirectAdvanceAllocations: [{
+        directAdvanceId: 'advance-direct-1', amountUsd: 2, bookValueBs: 200
+      }],
+      reference: 'REF-ADV-001', journalEntryId: refundJournal.id,
+      createdAt: '2026-11-07T10:00:00.000Z'
+    }];
+
+    const saved = persistAccountingSnapshot(
+      db, state, { id: 1, username: 'admin', role: 'admin' }
+    );
+    assert.equal(saved.ok, true);
+    const stored = JSON.parse(
+      db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json
+    );
+    assert.deepEqual(stored.supplierDirectAdvances, state.supplierDirectAdvances);
+    assert.deepEqual(stored.supplierAdvanceSettlements, state.supplierAdvanceSettlements);
+    assert.deepEqual(
+      stored.journalEntries.map((entry: any) => entry.id),
+      ['advance-journal-1', 'refund-journal-1']
+    );
+
+    const beforeFailure = db.prepare(
+      "SELECT state_json FROM app_state WHERE state_key='accounting'"
+    ).get().state_json;
+    db.exec(`CREATE TRIGGER reject_advance_snapshot BEFORE UPDATE ON app_state
+      BEGIN SELECT RAISE(ABORT, 'injected supplier advance persistence failure'); END;`);
+    const failedState = {
+      ...state,
+      supplierAdvanceSettlements: [{
+        ...state.supplierAdvanceSettlements[0],
+        amountUsd: 3
+      }]
+    };
+    assert.throws(
+      () => persistAccountingSnapshot(db, failedState, { id: 1, username: 'admin', role: 'admin' }),
+      /injected supplier advance persistence failure|no coincide con el importe liquidado/
+    );
+    assert.equal(
+      db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json,
+      beforeFailure,
+      'un fallo del snapshot no puede dejar anticipos o liquidaciones parcialmente guardados'
+    );
+  } finally {
+    if (db.open) db.close();
+  }
+});
