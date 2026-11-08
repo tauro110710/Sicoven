@@ -14,6 +14,8 @@ function fixture(options = {}) {
     CREATE TABLE auth_sessions(token_hash TEXT PRIMARY KEY,user_id INTEGER);
     CREATE TABLE license_state(id INTEGER PRIMARY KEY,status TEXT);
   `);
+  const { REQUIRED_RELATIONAL_TABLES } = require('./tenant-migration-preflight.cjs');
+  for (const table of REQUIRED_RELATIONAL_TABLES) db.exec('CREATE TABLE "' + table + '" (id TEXT PRIMARY KEY)');
   db.prepare('INSERT INTO app_state VALUES(?,?,?)').run(
     'accounting',
     JSON.stringify({ companies: [{ id: 'company-a', rif: 'J-12345678-9', name: 'Empresa A' }] }),
