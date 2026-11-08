@@ -52,3 +52,17 @@ test('inventory BCV history endpoint returns dated rates in chronological order'
     assert.equal(result[0].sourceUrl, INVENTORY_BCV_HISTORY_URL);
   } finally { globalThis.fetch = originalFetch; }
 });
+test('inventory BCV service does not invent an effective date when a provider omits it', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    calls.push(String(input));
+    if (calls.length === 1) return new Response(JSON.stringify({ USD: 900 }), { status: 200 });
+    return new Response(JSON.stringify({ USD: 901, effective_date: '2026-11-08' }), { status: 200 });
+  };
+  try {
+    const result = await fetchInventoryBcvRate();
+    assert.deepEqual(calls, [INVENTORY_BCV_PRIMARY_URL, INVENTORY_BCV_FALLBACK_URL]);
+    assert.equal(result.effectiveDate, '2026-11-08');
+  } finally { globalThis.fetch = originalFetch; }
+});
