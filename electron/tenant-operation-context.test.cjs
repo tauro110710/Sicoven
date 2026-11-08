@@ -17,7 +17,12 @@ function makeRuntime() {
     getCompanyDatabase: id => {
       const record = records.find(item => item.id === id && item.status === 'ACTIVE');
       if (!record) throw new Error('company unavailable');
-      if (!open.has(id)) open.set(id, { companyId: id });
+      if (!open.has(id)) open.set(id, {
+        companyId: id,
+        prepare: () => ({ get: () => ({ state_json: JSON.stringify({
+          companies: [{ id }], currentCompanyId: id
+        }) }) })
+      });
       return open.get(id);
     },
     closeCompany: id => open.delete(id)
