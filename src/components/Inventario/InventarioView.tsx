@@ -11,7 +11,8 @@ import {
   Boxes,
   ArrowUpRight,
   ArrowDownRight,
-  Pencil
+  Pencil,
+  FileUp
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import type { InventoryProduct } from '../../types/accounting';
@@ -21,6 +22,7 @@ import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { calculateVnrProvisionLedgerBalance } from '../../types/inventoryAccounting';
 import { InventarioContableTools } from './InventarioContableTools';
+import { InventoryMovementImport } from './InventoryMovementImport';
 
 export const InventarioView: React.FC = () => {
   const { currentCompany, products: allProducts, movements: allMovements, journalEntries: allJournalEntries } = useAccounting();
@@ -46,6 +48,7 @@ export const InventarioView: React.FC = () => {
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState<InventoryProduct | null>(null);
   const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
+  const [isMovementImportOpen, setIsMovementImportOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProductId, setSelectedProductId] = useState<string>('ALL');
   const effectiveSelectedProductId = companyProducts.some(product => product.id === selectedProductId) ? selectedProductId : 'ALL';
@@ -110,6 +113,7 @@ export const InventarioView: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2.5">
+            {activeTab === 'KARDEX' && <button type="button" onClick={() => setIsMovementImportOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-semibold text-blue-800 transition hover:bg-blue-100"><FileUp className="h-3.5 w-3.5" />Importar movimientos</button>}
             <button
               onClick={() => window.print()}
               className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer border border-slate-300"
@@ -438,6 +442,7 @@ export const InventarioView: React.FC = () => {
       {/* Modals */}
       <NewProductModal isOpen={isProductModalOpen} product={productToEdit} onClose={() => { setIsProductModalOpen(false); setProductToEdit(null); }} />
       <NewMovementModal isOpen={isMovementModalOpen} onClose={() => setIsMovementModalOpen(false)} />
+      <InventoryMovementImport isOpen={isMovementImportOpen} onClose={() => setIsMovementImportOpen(false)} />
     </div>
   );
 };
