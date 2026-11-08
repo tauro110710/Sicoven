@@ -9,8 +9,8 @@ export const DEFAULT_CHART_OF_ACCOUNTS: Account[] = [
   { code: '1.1.1.02', name: 'Caja Moneda Extranjera (USD)', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.1' },
   // Cuentas padre bancarias: los auxiliares de cada cuenta real se generan desde Tesorería.
   // Los códigos .03–.05 quedan reservados y no se reasignan para preservar históricos.
-  { code: '1.1.1.06', name: 'Bancos Nacionales en Moneda Nacional (VES)', type: 'ACTIVO', level: 4, isMovement: false, parentCode: '1.1.1' },
-  { code: '1.1.1.07', name: 'Bancos en Moneda Extranjera (USD/EUR)', type: 'ACTIVO', level: 4, isMovement: false, parentCode: '1.1.1' },
+  { code: '1.1.1.06', name: 'Bancos Nacionales en Bolívares (BS.)', type: 'ACTIVO', level: 4, isMovement: false, parentCode: '1.1.1' },
+  { code: '1.1.1.07', name: 'Bancos en Moneda Extranjera (USD)', type: 'ACTIVO', level: 4, isMovement: false, parentCode: '1.1.1' },
 
   { code: '1.1.2', name: 'Cuentas y Documentos por Cobrar', type: 'ACTIVO', level: 3, isMovement: false, parentCode: '1.1' },
   { code: '1.1.2.01', name: 'Cuentas por Cobrar Clientes Comerciales', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.2' },
