@@ -362,5 +362,10 @@ test('importador universal: mapea anticipos directos, reembolsos y aplicaciones 
   assert.equal(application.draft.kind, 'APPLIED_TO_PURCHASE');
   assert.equal(application.draft.targetPurchaseId, 'purchase-created-in-batch');
   assert.throws(() => mapUniversalSupplierAdvanceSettlementDraft(applicationRow, [applicationRow]));
+  const { amountBs: _refundAmountBs, cashReceivedBs: _cashReceivedBs, ...refundWithoutActualBs } = refundRow;
+  assert.throws(
+    () => mapUniversalSupplierAdvanceSettlementDraft(refundWithoutActualBs, [refundWithoutActualBs]),
+    /importe real recibido en Bs/
+  );
   assert.throws(() => mapUniversalSupplierDirectAdvanceDraft({ ...directRow, operationType: 'PAYMENT' }, [directRow]));
 });
