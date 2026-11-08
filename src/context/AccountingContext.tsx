@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Company,
   Account,
@@ -6543,6 +6543,32 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
+  // Cache company-scoped projections: a render caused by a small UI state change
+  // must not repeatedly scan every historical ledger collection.
+  const activeCompanyId = currentCompany.id;
+  const visibleJournalEntries = useMemo(() => journalEntries.filter(item => item.companyId === activeCompanyId), [journalEntries, activeCompanyId]);
+  const visibleCreditSettlements = useMemo(() => creditSettlements.filter(item => item.companyId === activeCompanyId), [creditSettlements, activeCompanyId]);
+  const visibleSupplierAdvanceSettlements = useMemo(() => supplierAdvanceSettlements.filter(item => item.companyId === activeCompanyId), [supplierAdvanceSettlements, activeCompanyId]);
+  const visibleSupplierDirectAdvances = useMemo(() => supplierDirectAdvances.filter(item => item.companyId === activeCompanyId), [supplierDirectAdvances, activeCompanyId]);
+  const visiblePurchases = useMemo(() => purchases.filter(item => item.companyId === activeCompanyId), [purchases, activeCompanyId]);
+  const visibleSales = useMemo(() => sales.filter(item => item.companyId === activeCompanyId), [sales, activeCompanyId]);
+  const visibleCustomers = useMemo(() => customers.filter(item => item.companyId === activeCompanyId), [customers, activeCompanyId]);
+  const visibleSuppliers = useMemo(() => suppliers.filter(item => item.companyId === activeCompanyId), [suppliers, activeCompanyId]);
+  const visibleProducts = useMemo(() => products.filter(item => item.companyId === activeCompanyId), [products, activeCompanyId]);
+  const visibleMovements = useMemo(() => movements.filter(item => item.companyId === activeCompanyId), [movements, activeCompanyId]);
+  const visibleFixedAssets = useMemo(() => fixedAssets.filter(item => item.companyId === activeCompanyId), [fixedAssets, activeCompanyId]);
+  const visibleVatVouchers = useMemo(() => vatVouchers.filter(item => item.companyId === activeCompanyId), [vatVouchers, activeCompanyId]);
+  const visibleVatDeclarations = useMemo(() => vatWithholdingDeclarations.filter(item => item.companyId === activeCompanyId), [vatWithholdingDeclarations, activeCompanyId]);
+  const visibleVatDeclarationEvents = useMemo(() => {
+    const declarationIds = new Set(visibleVatDeclarations.map(item => item.id));
+    return vatWithholdingDeclarationEvents.filter(event => declarationIds.has(event.declarationId));
+  }, [vatWithholdingDeclarationEvents, visibleVatDeclarations]);
+  const visibleIslrVouchers = useMemo(() => islrVouchers.filter(item => item.companyId === activeCompanyId), [islrVouchers, activeCompanyId]);
+  const visibleIslrFiscalEvents = useMemo(() => islrFiscalEvents.filter(item => item.companyId === activeCompanyId), [islrFiscalEvents, activeCompanyId]);
+  const visibleFinancialDisclosures = useMemo(() => financialDisclosures.filter(item => item.companyId === activeCompanyId), [financialDisclosures, activeCompanyId]);
+  const visibleBankAccounts = useMemo(() => bankAccounts.filter(item => item.companyId === activeCompanyId), [bankAccounts, activeCompanyId]);
+  const visibleBankStatementMovements = useMemo(() => bankStatementMovements.filter(item => item.companyId === activeCompanyId), [bankStatementMovements, activeCompanyId]);
+
   return (
     <AccountingContext.Provider
       value={{
@@ -6579,43 +6605,43 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         deleteAccount,
         setAccountCashFlowActivity,
         setAccountCashFlowIndirectTreatment,
-        journalEntries: journalEntries.filter(e => e.companyId === currentCompany.id),
+        journalEntries: visibleJournalEntries,
         addJournalEntry,
         deleteJournalEntry,
         reverseJournalEntry,
         closeAccountingPeriod,
         reopenAccountingPeriod,
         createAccountingYearOpening,
-        creditSettlements: creditSettlements.filter(s => s.companyId === currentCompany.id),
+        creditSettlements: visibleCreditSettlements,
         getCreditBalance,
         addCreditSettlement,
         getSupplierAdvanceBalance,
-        supplierAdvanceSettlements: supplierAdvanceSettlements.filter(item => item.companyId === currentCompany.id),
+        supplierAdvanceSettlements: visibleSupplierAdvanceSettlements,
         addSupplierAdvanceSettlement,
-        supplierDirectAdvances: supplierDirectAdvances.filter(item => item.companyId === currentCompany.id),
+        supplierDirectAdvances: visibleSupplierDirectAdvances,
         addSupplierDirectAdvance,
         addImportedSupplierDirectAdvances,
         addImportedSupplierAdvanceSettlements,
-        purchases: purchases.filter(p => p.companyId === currentCompany.id),
+        purchases: visiblePurchases,
         addPurchase,
         addPurchaseCreditNote,
         addPurchaseServiceCreditNote,
         addSupplierDebitNote,
         deletePurchase,
-        sales: sales.filter(s => s.companyId === currentCompany.id),
+        sales: visibleSales,
         addSale,
         addSaleCorrectionNote,
         deleteSale,
         runAtomicInvoiceImport,
         runAtomicInvoiceImportAndWait,
         addImportedCreditSettlements,
-        customers: customers.filter(item => item.companyId === currentCompany.id),
+        customers: visibleCustomers,
         addCustomer,
         importCustomers,
-        suppliers: suppliers.filter(item => item.companyId === currentCompany.id),
+        suppliers: visibleSuppliers,
         addSupplier,
         importSuppliers,
-        products: products.filter(p => p.companyId === currentCompany.id),
+        products: visibleProducts,
         addProduct,
         getCompanyInventoryProducts,
         getCompanyInventoryMovements,
@@ -6623,27 +6649,26 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         importInventoryMovements,
         executeProduction,
         updateProduct,
-        movements: movements.filter(m => m.companyId === currentCompany.id),
+        movements: visibleMovements,
         addMovement,
-        fixedAssets: fixedAssets.filter(asset => asset.companyId === currentCompany.id),
+        fixedAssets: visibleFixedAssets,
         registerFixedAsset,
         recordFixedAssetDepreciation,
-        vatVouchers: vatVouchers.filter(v => v.companyId === currentCompany.id),
-        vatWithholdingDeclarations: vatWithholdingDeclarations.filter(item => item.companyId === currentCompany.id),
-        vatWithholdingDeclarationEvents: vatWithholdingDeclarationEvents.filter(event =>
-          vatWithholdingDeclarations.some(item => item.id === event.declarationId && item.companyId === currentCompany.id)),
+        vatVouchers: visibleVatVouchers,
+        vatWithholdingDeclarations: visibleVatDeclarations,
+        vatWithholdingDeclarationEvents: visibleVatDeclarationEvents,
         createVatWithholdingDeclaration,
         recordVatWithholdingDeclarationEvent,
-        islrVouchers: islrVouchers.filter(v => v.companyId === currentCompany.id),
-        islrFiscalEvents: islrFiscalEvents.filter(event => event.companyId === currentCompany.id),
-        financialDisclosures: financialDisclosures.filter(item => item.companyId === currentCompany.id),
+        islrVouchers: visibleIslrVouchers,
+        islrFiscalEvents: visibleIslrFiscalEvents,
+        financialDisclosures: visibleFinancialDisclosures,
         saveFinancialDisclosure,
         deleteVatVoucher,
         recordVatVoucherDelivery,
         recordIslrVoucherDelivery,
         deleteIslrVoucher,
-        bankAccounts: bankAccounts.filter(b => b.companyId === currentCompany.id),
-        bankStatementMovements: bankStatementMovements.filter(m => m.companyId === currentCompany.id),
+        bankAccounts: visibleBankAccounts,
+        bankStatementMovements: visibleBankStatementMovements,
         addBankAccount,
         registerTreasuryMovement,
         addBankStatementMovement,
