@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   createAdmin: (token, input) => ipcRenderer.invoke('sicoven:auth-create-admin', token, input),
   deleteSeedAdmin: (token) => ipcRenderer.invoke('sicoven:auth-delete-seed', token),
   load: (token) => ipcRenderer.invoke('sicoven:load-state', token),
+  inspectTenantMigrationPreflight: (token) => ipcRenderer.invoke('sicoven:tenant-migration-preflight', token),
   listAuditEvents: (token, limit) => ipcRenderer.invoke('sicoven:audit-list', token, limit),
   recordAuditCorrection: (token, input) => ipcRenderer.invoke('sicoven:audit-record-correction', token, input),
   createCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-create', token, input),
