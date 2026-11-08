@@ -22,7 +22,6 @@ import { validateFunctionalCurrencyAssessment, validateExchangeabilityAssessment
 import { buildOpeningEntryItems } from '../../types/accountingYearOpening';
 import { CompanyModal } from '../CompanyModal';
 import { formatBs, validateVenezuelanRif } from '../../utils/formatters';
-import { MigracionInteligente } from './MigracionInteligente';
 import { IntelligentMigrationWizard } from '../Migracion/IntelligentMigrationWizard';
 
 export const ConfiguracionView: React.FC = () => {
@@ -1018,15 +1017,14 @@ export const ConfiguracionView: React.FC = () => {
 
       <section className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 space-y-3">
         <div>
-          <h2 className="text-base font-bold text-slate-900">Importación transaccional universal</h2>
-          <p className="mt-1 text-sm text-slate-600">Abre el asistente que valida y registra módulos compatibles en SQLite, con empresa destino explícita y confirmación antes de escribir.</p>
+          <h2 className="text-base font-bold text-slate-900">Importador Inteligente Universal</h2>
+          <p className="mt-1 text-sm text-slate-600">Un solo centro para analizar archivos JSON, CSV, TSV, TXT y Excel XLSX/XLSM de POSVEN u otros sistemas. Detecta colecciones, muestra vista previa y ejecuta únicamente módulos con adaptadores validados, con empresa destino explícita y confirmación antes de escribir en SQLite.</p>
         </div>
         <button type="button" onClick={() => setShowUniversalMigrationWizard(true)} disabled={!isStorageReady} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">
-          <Upload className="h-4 w-4" /> Abrir importador transaccional
+          <Upload className="h-4 w-4" /> Abrir importador universal
         </button>
-        {!isStorageReady && <p className="text-xs text-rose-700">SQLite no está disponible. El importador permanece deshabilitado.</p>}
+        {!isStorageReady && <p className="text-xs text-rose-700">SQLite no está disponible. El importador permanece deshabilitado para proteger los datos.</p>}
       </section>
-      <MigracionInteligente />
       {showUniversalMigrationWizard && <IntelligentMigrationWizard onClose={() => setShowUniversalMigrationWizard(false)} />}
 
       {/* Normativas Legales y Respaldo de Información */}
