@@ -30,6 +30,7 @@ const verifyPassword = (password, salt, expected) => {
 const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
+const { registerTenantMigrationPreflightIpc } = require('./tenant-migration-preflight-ipc.cjs');
 const { prepareTextDownload } = require('./text-download.cjs');
 const { registerTextDownloadHandler } = require('./text-download-ipc.cjs');
 
@@ -836,6 +837,7 @@ app.whenReady().then(async () => {
     getWindow: () => BrowserWindow.getFocusedWindow() });
 
   registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession });
+  registerTenantMigrationPreflightIpc({ ipcMain, db, licenseView, getActiveSession });
   registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession });
   registerInflationClassificationIpc({ ipcMain, db, licenseView, getActiveSession });
   registerInflationRemeReadinessIpc({ ipcMain, db, licenseView, getActiveSession });
