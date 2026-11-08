@@ -37,7 +37,7 @@ const MODULES: ModuleInfo[] = [
  { id:'assets', name:'Activos fijos', aliases:['assetId','codigoActivo','assetCode','fechaAdquisicion','acquisitionDate','valorHistorico'], fields:['assetId','name','acquisitionDate','historicalCost'], transactional:true }
 ];
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
-const isPosvenProductCollection = (path: string) => /(^|\\.)(productos|products|inventory|inventario)$/i.test(path.trim());
+const isPosvenProductCollection = (path: string) => /(^|\.)(productos|products|inventory|inventario)$/i.test(path.trim());
 const getNestedValue = (value: unknown, path: string): unknown => path.split('.').filter(Boolean).reduce<unknown>((current, key) => {
  if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined;
  return (current as Record<string, unknown>)[key];
