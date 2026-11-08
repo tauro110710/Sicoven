@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, planUniversalInvoiceSettlements, validateUniversalSettlementDestination, mapUniversalInvoiceSettlementDrafts, mapUniversalSupplierDirectAdvanceDraft, mapUniversalSupplierAdvanceSettlementDraft, selectUniversalRowsByStableKeys, selectUniversalInvoiceSettlements, mapUniversalInventoryItemType, isUniversalProductCollectionPath, getUniversalJsonValueAtPath } from '../../types/universalImport';
+import { analyzePosvenBackupMapping, detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, planUniversalInvoiceSettlements, validateUniversalSettlementDestination, mapUniversalInvoiceSettlementDrafts, mapUniversalSupplierDirectAdvanceDraft, mapUniversalSupplierAdvanceSettlementDraft, selectUniversalRowsByStableKeys, selectUniversalInvoiceSettlements, mapUniversalInventoryItemType, isUniversalProductCollectionPath, getUniversalJsonValueAtPath } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { validateSupplierDirectAdvanceDraft } from '../../types/supplierDirectAdvance';
@@ -137,6 +137,10 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   return classifyUniversalInvoiceRows(candidateRows).ambiguous;
  },[rows,posvenBackup,selectedPosvenCollections]);
  const filteredPosvenProducts=useMemo(()=>{const q=norm(posvenProductFilter);return posvenProducts.filter(row=>!q||norm([row.codigo,row.nombre,row.categoria,row.departamento].map(value=>String(value??'')).join(' ')).includes(q));},[posvenProducts,posvenProductFilter]);
+ const posvenMapping = useMemo(()=>{
+  if(!posvenBackup||!backupPayload)return null;
+  try{return analyzePosvenBackupMapping(JSON.parse(backupPayload));}catch{return null;}
+ },[posvenBackup,backupPayload]);
  const posvenPreview = useMemo(()=>{
   if(!posvenBackup||!backupPayload)return [] as Array<{name:string;count:number;objects:number;invalid:number;fields:string[];identityField:string;missingIdentity:number;duplicateIdentity:number;numericSummaries:Array<{field:string;count:number;sum:number}>;referenceFields:string[];relationshipHints:Array<{field:string;targetCollection:string}>;target:string;mode:string;reason:string;canImport:boolean}>;
   try{
@@ -187,42 +191,52 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     let target='Sin destino identificado';let mode='No importar automáticamente';let reason='La colección requiere revisión de esquema y significado antes de asignar datos contables.';let canImport=false;
     if(/^(productos|products|inventory|inventario|catalogoproductos|productscatalog)$/.test(key)){target='Inventario / productos';mode='Adaptador disponible';canImport=true;reason='Importa únicamente artículos activos que no sean kits. El costo Bs se calcula con costoUSD × tasa BCV indicada; exige tratamiento IVA explícito y fecha de corte.';}
     else if(/^(ventas|sales|facturas|invoices|facturasventa|salesinvoices)$/.test(key)){
-     target='Ventas / facturas';
-     const ready=classifyUniversalInvoiceRows(objects).sales.length>0;
-     mode=ready?'Adaptador universal disponible':'Revisión de encabezados';
-     reason=ready?'Las facturas candidatas se importan una por una mediante el adaptador universal, que valida cliente/RIF, fechas, control, moneda, impuestos, pagos y detalles.':'No se encontraron filas de factura con fecha, total y referencia explícita de cliente. No se importará por semejanza de nombres.';
-     canImport=ready;
+     target='Ventas / facturas y cobros';
+     if(posvenMapping&&key==='ventas'){
+      mode='Mapeo POSVEN identificado · requiere completar datos fiscales';
+      reason=posvenMapping.salesInvoices+' facturas comerciales identificadas; '+posvenMapping.salesCollectionReceipts+' recibos de cobro CxC separados para no tratarlos como ventas. '+posvenMapping.salesWithLinkedReceivable+' facturas tienen vínculo explícito con CxC. Faltan control fiscal en '+posvenMapping.salesMissingFiscalControl+', RIF explícito en '+posvenMapping.salesMissingCustomerRif+' y alícuota IVA en '+posvenMapping.salesMissingTaxRate+' registros. No se inventarán esos datos ni se contabilizarán todavía.';
+     }else{
+      const ready=classifyUniversalInvoiceRows(objects).sales.length>0;
+      mode=ready?'Adaptador universal disponible':'Revisión de encabezados';
+      reason=ready?'Las facturas candidatas se importan una por una mediante el adaptador universal, que valida cliente/RIF, fechas, control, moneda, impuestos, pagos y detalles.':'No se encontraron filas de factura con fecha, total y referencia explícita de cliente. No se importará por semejanza de nombres.';
+      canImport=ready;
+     }
     }
     else if(/^(compras|purchases|facturascompra|purchaseinvoices)$/.test(key)){
-     target='Compras / facturas';
-     const ready=classifyUniversalInvoiceRows(objects).purchases.length>0;
-     mode=ready?'Adaptador universal disponible':'Revisión de encabezados';
-     reason=ready?'Las facturas candidatas se importan una por una mediante el adaptador universal, que valida proveedor/RIF, fecha de abono en cuenta, pago, impuestos, detalle y Kardex.':'No se encontraron filas de factura con fecha, total y referencia explícita de proveedor. No se importará por semejanza de nombres.';
-     canImport=ready;
+     target='Compras / facturas y CxP';
+     if(posvenMapping&&key==='compras'){
+      mode='Mapeo POSVEN identificado · requiere completar datos fiscales';
+      reason=posvenMapping.purchases+' compras identificadas; proveedor maestro resuelto por nombre en '+posvenMapping.purchasesWithUniqueSupplier+' y sin coincidencia única en '+posvenMapping.purchasesWithoutSupplierMatch+'. Faltan tasa BCV histórica en '+posvenMapping.purchasesMissingBcvRate+', número de control en '+posvenMapping.purchasesMissingFiscalControl+' y desglose fiscal en '+posvenMapping.purchasesMissingTaxBreakdown+' documentos. No se inferirán importes ni cuentas.';
+     }else{
+      const ready=classifyUniversalInvoiceRows(objects).purchases.length>0;
+      mode=ready?'Adaptador universal disponible':'Revisión de encabezados';
+      reason=ready?'Las facturas candidatas se importan una por una mediante el adaptador universal, que valida proveedor/RIF, fecha de abono en cuenta, pago, impuestos, detalle y Kardex.':'No se encontraron filas de factura con fecha, total y referencia explícita de proveedor. No se importará por semejanza de nombres.';
+      canImport=ready;
+     }
     }
     else if(/^(clientes|customers|clients)$/.test(key)){target='Referencias de clientes';mode='Solo referencia';reason='Cruzar contra facturas; SICOVEN no ofrece importación independiente de este maestro en este flujo.';}
     else if(/^(proveedores|suppliers|vendors)$/.test(key)){target='Referencias de proveedores';mode='Solo referencia';reason='Cruzar contra compras; SICOVEN no ofrece importación independiente de este maestro en este flujo.';}
-    else if(/^(cxc|receivables|cuentasporcobrar)$/.test(key)){target='Cuentas por cobrar';mode='Solo conciliación';reason='No contabilizar por separado sin conciliar facturas y pagos; SICOVEN deriva saldos desde ventas a crédito.';}
-    else if(/^(cxp|payables|cuentasporpagar)$/.test(key)){target='Cuentas por pagar';mode='Solo conciliación';reason='No contabilizar por separado sin conciliar compras y pagos; SICOVEN deriva saldos desde compras a crédito.';}
+    else if(/^(cxc|receivables|cuentasporcobrar)$/.test(key)){target='Cuentas por cobrar';mode='Conciliación con ventas y recibos';reason=posvenMapping?' '+posvenMapping.receivables+' saldos CxC; '+posvenMapping.receivablesLinkedToSales+' enlazan a facturas del respaldo y '+posvenMapping.receivablesWithoutSaleLink+' no tienen factura enlazada. Hay '+posvenMapping.receivablePaymentEvents+' eventos en historialPagos. Se concilian con la venta y sus cobros; no se importan como CxC duplicada.':'No contabilizar por separado sin conciliar facturas y pagos; SICOVEN deriva saldos desde ventas a crédito.';}
+    else if(/^(cxp|payables|cuentasporpagar)$/.test(key)){target='Cuentas por pagar';mode='Conciliación con compras y pagos';reason=posvenMapping?' '+posvenMapping.payables+' saldos CxP; '+posvenMapping.payablesWithUniquePurchaseMatch+' enlazan de forma única con una compra, '+posvenMapping.payablesWithAmbiguousPurchaseMatch+' son ambiguos y '+posvenMapping.payablesWithoutPurchaseMatch+' no tienen compra coincidente. Se detectaron '+posvenMapping.payablePaymentEvents+' eventos de pago. No se duplican saldos ni se enlaza por coincidencia ambigua.':'No contabilizar por separado sin conciliar compras y pagos; SICOVEN deriva saldos desde compras a crédito.';}
     else if(/^(librodiario|journalentries|journal|asientos|diario)$/.test(key)){
      target='Libro diario';
      const has=(keys:string[])=>objects.some(row=>Object.entries(row).some(([field,value])=>keys.includes(norm(field))&&value!==undefined&&value!==null&&String(value).trim()!==''));
      const ready=has(['accountcode','codigocuenta','cuenta'])&&has(['date','fecha'])&&has(['entrynumber','numeroasiento','asiento','referencedoc','referencia','documento'])&&has(['debitbs','debe','debito'])&&has(['creditbs','haber','credito'])&&has(['bcvrate','tasabcv']);
-     mode=ready?'Adaptador universal disponible':'Solo conciliación';
-     reason=ready?'Las líneas se agrupan por archivo, fecha y referencia; se validan cuentas de movimiento, tasa BCV y cuadre en Bs/USD.':'El libro diario debe entregar líneas con cuenta, fecha, referencia, debe, haber y BCV; no se importa un resumen ni un asiento incompleto.';
+     mode=posvenMapping&&key==='librodiario'?'Libro de caja POSVEN · no es diario de doble partida':ready?'Adaptador universal disponible':'Solo conciliación';
+     reason=posvenMapping&&key==='librodiario'?posvenMapping.cashbookRows+' registros de ingresos/egresos de caja; solo '+posvenMapping.cashbookRowsWithDoubleEntryAccounts+' tienen cuenta contable y '+posvenMapping.cashbookRowsWithDebitCredit+' contienen debe/haber. Categorías como VENTA, COBRO_DEUDA y PAGO_PROVEEDOR describen flujo de caja, no asientos completos; no se contabilizarán como Libro Diario.':ready?'Las líneas se agrupan por archivo, fecha y referencia; se validan cuentas de movimiento, tasa BCV y cuadre en Bs/USD.':'El libro diario debe entregar líneas con cuenta, fecha, referencia, debe, haber y BCV; no se importa un resumen ni un asiento incompleto.';
      canImport=ready;
     }
     else if(/^(movimientos|movements|kardex|stockmovements|inventorymovements|movimientosinventario)$/.test(key)){
      target='Movimientos de inventario';
      const has=(keys:string[])=>objects.some(row=>Object.entries(row).some(([field,value])=>keys.includes(norm(field))&&value!==undefined&&value!==null&&String(value).trim()!==''));
      const ready=has(['productcode','codigoproducto','sku','codigo','code'])&&has(['date','fecha','movementdate'])&&has(['type','movementtype','tipomovimiento','tipo'])&&has(['concept','concepto','movementconcept'])&&has(['documentref','referencia','documento','invoicenumber'])&&has(['unitcostbs','costobs','costounitario','unitcost'])&&has(['bcvrate','tasabcv'])&&has(['quantity','cantidad','qty']);
-     mode=ready?'Adaptador universal disponible':'Revisión de esquema';
-     reason=ready?'Solo se importarán movimientos con artículo existente, tipo/concepto compatibles, documento enlazado y fecha/costo/BCV válidos. Saldos iniciales, compras aisladas y devoluciones quedan bloqueados.':'El Kardex requiere código de producto, fecha, tipo, concepto, documento, cantidad, costo Bs y BCV explícitos.';
+     mode=posvenMapping&&key==='movimientos'?'Kardex identificado · falta costo histórico y BCV':ready?'Adaptador universal disponible':'Revisión de esquema';
+     reason=posvenMapping&&key==='movimientos'?posvenMapping.movements+' movimientos; '+posvenMapping.movementsWithProductResolved+' referencias de producto resueltas. Incluye '+posvenMapping.movementSaleRows+' salidas por venta y '+posvenMapping.movementPurchaseRows+' entradas por compra que se generan desde sus documentos, más '+posvenMapping.movementOpeningRows+' aperturas y '+posvenMapping.movementAdjustmentRows+' ajustes. Faltan costo unitario histórico y BCV en '+posvenMapping.movementsMissingCostAndBcv+' filas; no se importará el Kardex aislado ni se duplicarán ventas/compras.':'Solo se importarán movimientos con artículo existente, tipo/concepto compatibles, documento enlazado y fecha/costo/BCV válidos. Saldos iniciales, compras aisladas y devoluciones quedan bloqueados.';
      canImport=ready;
     }
-    else if(/^(devoluciones|returns|anulaciones|voids|cancelaciones)$/.test(key)){target='Devoluciones / anulaciones';mode='Solo conciliación';reason='Requiere enlazar la operación original y validar reversos de inventario, caja, impuestos y contabilidad.';}
+    else if(/^(devoluciones|returns|anulaciones|voids|cancelaciones)$/.test(key)){target='Devoluciones / anulaciones';mode='Conciliación con documento original';reason=posvenMapping?'Devoluciones: '+posvenMapping.returns+', enlazadas a ventas: '+posvenMapping.returnsLinkedToSales+'. Anulaciones: '+posvenMapping.voids+', enlazadas a ventas: '+posvenMapping.voidsLinkedToSales+'. Requieren flujo de reversión fiscal, caja y Kardex; no se importan como ventas o movimientos independientes.':'Requiere enlazar la operación original y validar reversos de inventario, caja, impuestos y contabilidad.';}
     else if(/^(reportesz|zreports|cierresz|cierres)$/.test(key)){target='Reportes Z / cierres';mode='Evidencia de auditoría';reason='No son facturas importables; usar para conciliar totales de ventas, impuestos, medios de pago y caja.';}
-    else if(/^(terminales|terminals|cajas|registers)$/.test(key)){target='Configuración operativa';mode='No importar';reason='Requiere una política explícita de equivalencia con las cajas/terminales de SICOVEN.';}
+    else if(/^(terminales|terminals|cajas|registers)$/.test(key)){target='Historial de cajas y terminales';mode='Conciliación de aperturas/cierres';reason=posvenMapping?posvenMapping.terminals+' terminales y '+posvenMapping.cashSessions+' sesiones en cashHistory. Se conserva como evidencia para conciliar cierres Z; no se crean cajas ni sesiones nuevas automáticamente.':'Requiere una política explícita de equivalencia con las cajas/terminales de SICOVEN.';}
     else if(/^(bancos|banks|cuentasbancarias|bankaccounts|movimientosbancarios|bankmovements)$/.test(key)){target='Bancos / movimientos bancarios';mode='Revisión de esquema';reason='Requiere mapear cada cuenta bancaria de origen con una cuenta destino SICOVEN y validar moneda, titularidad, referencias y conciliación. No se importará automáticamente.';}
     else if(/^(retenciones|retencionesiva|retencionesislr|retentions|withholdings)$/.test(key)){target='Retenciones fiscales';mode='Solo conciliación';reason='Los comprobantes deben enlazarse con su factura, sujeto, período y parámetros fiscales originales. No se recrearán comprobantes ni importes fiscales incompletos.';}
     else if(/^(activos|activosfijos|fixedassets|assets)$/.test(key)){target='Activos fijos';mode='Revisión de esquema';reason='Requiere enlazar el registro patrimonial con adquisición, depreciación acumulada, vida útil y cuentas contables. No se importará como inventario comercial.';}
