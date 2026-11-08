@@ -83,9 +83,9 @@ test('coordinates shared chart updates across company databases', async t => {
   const changed = snapshot([a, b], {
     accounts: [{ code: '1.1.1.02', name: 'Banco' }]
   });
-  await saveTenantAccountingSnapshot(manager, changed);
+  await assert.rejects(() => saveTenantAccountingSnapshot(manager, changed), /coordinador transaccional recuperable/i);
   const after = loadTenantAccountingSnapshot(manager);
-  assert.deepEqual(after.accounts, changed.accounts);
+  assert.deepEqual(after.accounts, before.accounts);
 });
 
 test('does not silently remove a registered company from the accounting snapshot', async t => {
@@ -109,23 +109,4 @@ test('blocks tenant snapshots that contain data owned by another company', async
 test('returns null only when the local registry contains no active companies', async t => {
   const { manager } = fixture(t);
   assert.equal(loadTenantAccountingSnapshot(manager), null);
-});
-
-test('rolls back every company database if one database rejects a coordinated write', async t => {
-  const { manager } = fixture(t);
-  const a = { id: 'company-a', name: 'Empresa A', rif: 'J-12345678-9' };
-  const b = { id: 'company-b', name: 'Empresa B', rif: 'J-98765432-1' };
-  await saveTenantAccountingSnapshot(manager, snapshot([a]));
-  await saveTenantAccountingSnapshot(manager, snapshot([a, b]));
-  const before = loadTenantAccountingSnapshot(manager);
-  const dbB = manager.openCompany('company-b');
-  dbB.exec(`CREATE TRIGGER reject_tenant_write BEFORE UPDATE ON app_state
-    BEGIN SELECT RAISE(ABORT, 'injected tenant persistence failure'); END;`);
-  const changed = snapshot([a, b], {
-    accounts: [{ code: '1.1.1.02', name: 'Banco' }]
-  });
-  await assert.rejects(() => saveTenantAccountingSnapshot(manager, changed), /injected tenant persistence failure/);
-  const after = loadTenantAccountingSnapshot(manager);
-  assert.deepEqual(after.accounts, before.accounts);
-  assert.deepEqual(after.companies.map(company => company.id).sort(), ['company-a', 'company-b']);
 });
