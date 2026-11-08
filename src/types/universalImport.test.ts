@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzePosvenBackupMapping, detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, selectUniversalRowsByStableKeys, mapUniversalSettlementPreview, mapUniversalInventoryItemType, isUniversalProductCollectionPath, getUniversalJsonValueAtPath, planUniversalInvoiceSettlements, selectUniversalInvoiceSettlements, validateUniversalSettlementDestination } from './universalImport';
+import { analyzePosvenBackupMapping, detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, selectUniversalRowsByStableKeys, mapUniversalSettlementPreview, mapUniversalInventoryItemType, isUniversalProductCollectionPath, getUniversalJsonValueAtPath, planUniversalInvoiceSettlements, selectUniversalInvoiceSettlements, validateUniversalSettlementDestination, shouldUseGenericUniversalAdapters } from './universalImport';
 
 
 
@@ -668,4 +668,10 @@ test('valida transferencia USD y no permite vincular caja a una cuenta bancaria'
   const accounts = [{ code: '1.1.1.07.01', type: 'ACTIVO', isMovement: true }];
   assert.equal(validateUniversalSettlementDestination(usd, 'company-1', banks, accounts), null);
   assert.match(validateUniversalSettlementDestination({ ...usd, method: 'CASH_BS' as const }, 'company-1', banks, accounts) || '', /efectivo no puede identificar/);
+});
+
+test('aísla respaldos POSVEN de los adaptadores genéricos', () => {
+  assert.equal(shouldUseGenericUniversalAdapters('posven-pro'), false);
+  assert.equal(shouldUseGenericUniversalAdapters('unknown'), true);
+  assert.equal(shouldUseGenericUniversalAdapters('other-erp'), true);
 });
