@@ -18,6 +18,9 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
   let flushing = false;
   let activeOperations = 0;
   let idleWaiters = [];
+  // Serialize asynchronous database work as well as tracking it for safe tenant switches.
+  // A rejected operation must not poison the queue for subsequent operations.
+  let operationTail = Promise.resolve();
 
   function requireActiveCompany() {
     if (switching) throw new Error('El cambio de empresa está en curso. La operación fue bloqueada.');
@@ -39,20 +42,23 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
     }
   }
 
-  async function runWithActiveDatabase(operation, allowDuringFlush) {
+  function runWithActiveDatabase(operation, allowDuringFlush) {
     if (typeof operation !== 'function') throw new TypeError('La operación SQLite debe ser una función.');
     if (switching && !(allowDuringFlush && flushing)) {
       throw new Error('El cambio de empresa está en curso. La operación fue bloqueada.');
     }
     const companyId = activeCompanyId;
     if (!companyId) throw new Error('No hay una empresa activa en el contexto operativo.');
-    const db = runtime.getCompanyDatabase(companyId);
+
+    // Admission happens synchronously before the switch gate can close. Queued work
+    // therefore remains attached to the company that was active when it was submitted.
     activeOperations += 1;
-    try {
-      return await operation(db, companyId);
-    } finally {
-      releaseOperation();
-    }
+    const execution = operationTail.then(() => {
+      const db = runtime.getCompanyDatabase(companyId);
+      return operation(db, companyId);
+    });
+    operationTail = execution.then(() => undefined, () => undefined);
+    return execution.finally(releaseOperation);
   }
 
   function withActiveDatabase(operation) {
