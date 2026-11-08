@@ -263,7 +263,9 @@ function createTenantMigrationOrchestrator(options) {
       if (journalOwned) {
         try { current = journal.read(); } catch {}
       }
-      const registeredIds = new Set(manager.listCompanies().map(item => String(item.id)));
+      const registeredIds = new Set(manager.listCompanies()
+        .filter(item => item.status === 'ACTIVE')
+        .map(item => String(item.id)));
       const registrationAlreadyCommitted = current?.phase === 'REGISTERING' &&
         companyIds.every(companyId => registeredIds.has(companyId));
       if (current && !registrationAlreadyCommitted &&
