@@ -8,6 +8,7 @@ import { BalancesView } from './components/Balances/BalancesView';
 import { LibroComprasView } from './components/LibroCompras/LibroComprasView';
 import { LibroVentasView } from './components/LibroVentas/LibroVentasView';
 import { InventarioView } from './components/Inventario/InventarioView';
+import { FixedAssetsView } from './components/ActivosFijos/FixedAssetsView';
 import { RetencionesIvaView } from './components/Retenciones/RetencionesIvaView';
 import { RetencionesIslrView } from './components/Retenciones/RetencionesIslrView';
 import { CatalogoView } from './components/Catalogo/CatalogoView';
@@ -56,6 +57,8 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
         return <LibroVentasView />;
       case 'inventario':
         return <InventarioView />;
+      case 'activos-fijos':
+        return <FixedAssetsView />;
       case 'ret-iva':
         return <RetencionesIvaView />;
       case 'ret-islr':

@@ -752,12 +752,18 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   };
 
   const submitClose = async () => {
-    if (closingPeriodSubmitting || !window.confirm('Va a bloquear el período contable hasta '+closedDate+'. La fecha no podrá retroceder desde esta pantalla. ¿Confirma el cierre?')) return;
+    if (closingPeriodSubmitting || !window.confirm('Va a generar la depreciación financiera pendiente de los activos fijos de esta empresa y bloquear el período contable hasta '+closedDate+'. La fecha no podrá retroceder desde esta pantalla. ¿Confirma el cierre?')) return;
     setClosingPeriodSubmitting(true);
     try {
-      closeAccountingPeriod(closedDate);
-      await waitForPersistence();
-      setFeedback({kind:'success', message:'Período cerrado y confirmado en SQLite hasta '+closedDate+'. No se admitirán nuevos asientos ni facturas con fecha igual o anterior.'});
+      const depreciationEntriesCreated = await closeAccountingPeriod(closedDate);
+      setFeedback({
+        kind:'success',
+        message:'Período cerrado y confirmado en SQLite hasta '+closedDate+'. '+(
+          depreciationEntriesCreated > 0
+            ? 'Se generaron automáticamente '+depreciationEntriesCreated+' asiento(s) de depreciación de activos fijos para esta empresa. '
+            : 'No había depreciaciones pendientes de activos fijos para este cierre. '
+        )+'No se admitirán nuevos asientos ni facturas con fecha igual o anterior.'
+      });
     } catch (error) {
       setFeedback({kind:'error', message:error instanceof Error ? error.message : 'No se pudo confirmar el cierre del período en SQLite.'});
     } finally {

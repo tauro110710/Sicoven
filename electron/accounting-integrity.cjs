@@ -925,6 +925,200 @@ function validateSaleCorrectionNotes(previousState, nextState) {
   }
 }
 
+
+function validateFixedAssetLedger(previousState, nextState) {
+  const previousAssets = asArray(previousState?.fixedAssets);
+  const assets = asArray(nextState?.fixedAssets);
+  const assetById = new Map();
+  for (const asset of assets) {
+    if (!asset || typeof asset.id !== 'string' || !asset.id.trim() ||
+        typeof asset.companyId !== 'string' || !asset.companyId.trim() ||
+        assetById.has(String(asset.id))) {
+      throw new Error('SQLite rechazó activos fijos con IDs o empresas ausentes/duplicados.');
+    }
+    assetById.set(String(asset.id), asset);
+  }
+  const companies = new Set(asArray(nextState.companies).map(item => String(item.id)));
+  const entries = asArray(nextState.journalEntries);
+  const entryById = new Map(entries.map(entry => [String(entry.id), entry]));
+  const accounts = new Map(asArray(nextState.accounts).map(account => [String(account.code), account]));
+  const usedSourceLines = new Set();
+  const usedDepreciationEntries = new Set();
+  const assetCodes = new Set();
+  const normalize = value => String(value || '').toUpperCase().replace(/Ó/g, 'O');
+
+  for (const oldAsset of previousAssets) {
+    const current = assetById.get(String(oldAsset.id));
+    if (!current) throw new Error('SQLite bloqueó la eliminación del activo fijo ' + oldAsset.assetCode + '.');
+    const oldBase = { ...oldAsset }; delete oldBase.depreciationEvents;
+    const currentBase = { ...current }; delete currentBase.depreciationEvents;
+    if (JSON.stringify(oldBase) !== JSON.stringify(currentBase)) {
+      throw new Error('SQLite bloqueó la modificación de los datos originales del activo fijo ' + oldAsset.assetCode + '.');
+    }
+    const oldEvents = new Map(asArray(oldAsset.depreciationEvents).map(event => [String(event.id), event]));
+    const currentEvents = new Map(asArray(current.depreciationEvents).map(event => [String(event.id), event]));
+    if (currentEvents.size !== asArray(current.depreciationEvents).length) {
+      throw new Error('SQLite rechazó eventos de depreciación duplicados para ' + current.assetCode + '.');
+    }
+    for (const oldEvent of oldEvents.values()) {
+      const nextEvent = currentEvents.get(String(oldEvent.id));
+      if (!nextEvent) throw new Error('SQLite bloqueó la eliminación del evento de depreciación ' + oldEvent.id + '.');
+      const oldCopy = { ...oldEvent }; delete oldCopy.reversedByJournalEntryId;
+      const nextCopy = { ...nextEvent }; delete nextCopy.reversedByJournalEntryId;
+      if (JSON.stringify(oldCopy) !== JSON.stringify(nextCopy) ||
+          (oldEvent.reversedByJournalEntryId && nextEvent.reversedByJournalEntryId !== oldEvent.reversedByJournalEntryId)) {
+        throw new Error('SQLite bloqueó la modificación del historial de depreciación ' + oldEvent.id + '.');
+      }
+    }
+  }
+
+  for (const asset of assets) {
+    const nonDepreciable = asset.depreciationMethod === 'NON_DEPRECIABLE';
+    if (!companies.has(String(asset.companyId)) || !String(asset.assetCode || '').trim() ||
+        !String(asset.description || '').trim() || !String(asset.category || '').trim() ||
+        !isValidIsoDate(asset.acquisitionDate) || !isValidIsoDate(asset.serviceDate) ||
+        asset.serviceDate < asset.acquisitionDate ||
+        !Number.isInteger(asset.usefulLifeMonths) || (nonDepreciable ? asset.usefulLifeMonths !== 0 : asset.usefulLifeMonths <= 0) ||
+        asset.status !== 'ACTIVE' || !['STRAIGHT_LINE', 'NON_DEPRECIABLE'].includes(asset.depreciationMethod) ||
+        !Number.isFinite(Number(asset.acquisitionCostBs)) || Number(asset.acquisitionCostBs) <= 0 ||
+        !Number.isFinite(Number(asset.acquisitionCostUsd)) || Number(asset.acquisitionCostUsd) <= 0 ||
+        !Number.isFinite(Number(asset.acquisitionBcvRate)) || Number(asset.acquisitionBcvRate) <= 0 ||
+        !Number.isFinite(Number(asset.residualValueBs)) || Number(asset.residualValueBs) < 0 ||
+        !Number.isFinite(Number(asset.residualValueUsd)) || Number(asset.residualValueUsd) < 0 ||
+        Number(asset.residualValueBs) > Number(asset.acquisitionCostBs) ||
+        Number(asset.residualValueUsd) > Number(asset.acquisitionCostUsd) ||
+        (nonDepreciable && (Number(asset.residualValueBs) !== Number(asset.acquisitionCostBs) ||
+          Number(asset.residualValueUsd) !== Number(asset.acquisitionCostUsd) || asset.depreciationEvents.length !== 0 ||
+          asset.accumulatedDepreciationAccountCode || asset.depreciationExpenseAccountCode)) ||
+        (!nonDepreciable && (Number(asset.residualValueBs) >= Number(asset.acquisitionCostBs) ||
+          Number(asset.residualValueUsd) >= Number(asset.acquisitionCostUsd))) ||
+        !Number.isInteger(asset.sourceJournalLineIndex) || asset.sourceJournalLineIndex < 0 || !Array.isArray(asset.depreciationEvents)) {
+      throw new Error('SQLite rechazó un expediente de activo fijo con datos, fechas, costos, vida útil o empresa inválidos.');
+    }
+    const assetCodeKey = String(asset.companyId) + '|' + String(asset.assetCode).trim().toUpperCase();
+    if (assetCodes.has(assetCodeKey)) throw new Error('SQLite rechazó códigos de activos fijos duplicados dentro de una empresa.');
+    assetCodes.add(assetCodeKey);
+    const source = entryById.get(String(asset.sourceJournalEntryId));
+    const sourceLine = source && asArray(source.items)[asset.sourceJournalLineIndex];
+    const assetAccount = accounts.get(String(asset.assetAccountCode));
+    const accumulatedAccount = accounts.get(String(asset.accumulatedDepreciationAccountCode));
+    const expenseAccount = accounts.get(String(asset.depreciationExpenseAccountCode));
+    if (!source || source.companyId !== asset.companyId || source.reversalOfEntryId ||
+        entries.some(entry => String(entry.reversalOfEntryId || '') === String(source.id)) ||
+        !sourceLine || sourceLine.accountCode !== asset.assetAccountCode ||
+        Math.abs(Number(sourceLine.debitBs) - Number(asset.acquisitionCostBs)) > 0.01 ||
+        Math.abs(Number(sourceLine.debitUsd) - Number(asset.acquisitionCostUsd)) > 0.000001 ||
+        Number(sourceLine.creditBs || 0) !== 0 || Number(sourceLine.creditUsd || 0) !== 0 ||
+        source.date < asset.acquisitionDate || Math.abs(Number(source.bcvRate) - Number(asset.acquisitionBcvRate)) > 0.000001 ||
+        !assetAccount || assetAccount.type !== 'ACTIVO' || assetAccount.isMovement !== true ||
+        !String(asset.assetAccountCode).startsWith('1.2.') || normalize(assetAccount.name).includes('DEPRECIACION ACUMULADA') ||
+        (!nonDepreciable && (!accumulatedAccount || accumulatedAccount.type !== 'ACTIVO' || accumulatedAccount.isMovement !== true ||
+          !normalize(accumulatedAccount.name).includes('DEPRECIACION ACUMULADA') ||
+          !expenseAccount || expenseAccount.type !== 'GASTOS' || expenseAccount.isMovement !== true ||
+          !normalize(expenseAccount.name).includes('DEPRECIACION')))) {
+      throw new Error('SQLite rechazó un activo fijo sin asiento de adquisición capitalizado, línea origen o cuentas de depreciación válidas.');
+    }
+    const sourceKey = String(asset.companyId) + '|' + String(asset.sourceJournalEntryId) + '|' + String(asset.sourceJournalLineIndex);
+    if (usedSourceLines.has(sourceKey)) throw new Error('SQLite rechazó la doble capitalización de una misma línea de adquisición.');
+    usedSourceLines.add(sourceKey);
+
+    const firstPeriod = String(asset.serviceDate).slice(0, 7);
+    const serviceDateUtc = new Date(String(asset.serviceDate) + 'T00:00:00.000Z');
+    const targetMonthIndex = serviceDateUtc.getUTCMonth() + Number(asset.usefulLifeMonths);
+    const firstTargetMonth = new Date(Date.UTC(serviceDateUtc.getUTCFullYear(), targetMonthIndex, 1));
+    const finalDayOfTargetMonth = new Date(Date.UTC(firstTargetMonth.getUTCFullYear(), firstTargetMonth.getUTCMonth() + 1, 0)).getUTCDate();
+    const lifeEnd = new Date(Date.UTC(firstTargetMonth.getUTCFullYear(), firstTargetMonth.getUTCMonth(), Math.min(serviceDateUtc.getUTCDate(), finalDayOfTargetMonth)));
+    const lastPeriod = new Date(lifeEnd.getTime() - 86400000).toISOString().slice(0, 7);
+    const activePeriods = new Set();
+    const eventIds = new Set();
+    const activeEvents = asArray(asset.depreciationEvents).filter(event => !event.reversedByJournalEntryId);
+    let activeDepreciationBs = 0;
+    let activeDepreciationUsd = 0;
+    for (const event of asArray(asset.depreciationEvents)) {
+      if (!event || typeof event.id !== 'string' || !event.id.trim() || eventIds.has(String(event.id)) ||
+          event.companyId !== asset.companyId || event.assetId !== asset.id ||
+          !/^\d{4}-(0[1-9]|1[0-2])$/.test(String(event.period || '')) || String(event.period) < firstPeriod || String(event.period) > lastPeriod ||
+          !isValidIsoDate(event.date) || String(event.date).slice(0, 7) !== String(event.period) ||
+          !Number.isInteger(event.days) || event.days <= 0 ||
+          !Number.isFinite(Number(event.amountBs)) || Number(event.amountBs) <= 0 ||
+          !Number.isFinite(Number(event.amountUsd)) || Number(event.amountUsd) <= 0 ||
+          !String(event.journalEntryId || '').trim()) {
+        throw new Error('SQLite rechazó un evento de depreciación con campos inválidos para ' + asset.assetCode + '.');
+      }
+      eventIds.add(String(event.id));
+      if (!event.reversedByJournalEntryId) {
+        if (activePeriods.has(String(event.period))) throw new Error('SQLite rechazó dos depreciaciones vigentes para el mismo activo y período.');
+        activePeriods.add(String(event.period));
+        activeDepreciationBs += Number(event.amountBs);
+        activeDepreciationUsd += Number(event.amountUsd);
+      }
+      const journal = entryById.get(String(event.journalEntryId));
+      const expectedRef = 'DEP-' + asset.assetCode + '-' + event.period;
+      const lines = asArray(journal?.items);
+      const debit = lines.reduce((sum, line) => sum + (line.accountCode === asset.depreciationExpenseAccountCode ? Number(line.debitBs || 0) : 0), 0);
+      const debitUsd = lines.reduce((sum, line) => sum + (line.accountCode === asset.depreciationExpenseAccountCode ? Number(line.debitUsd || 0) : 0), 0);
+      const credit = lines.reduce((sum, line) => sum + (line.accountCode === asset.accumulatedDepreciationAccountCode ? Number(line.creditBs || 0) : 0), 0);
+      const creditUsd = lines.reduce((sum, line) => sum + (line.accountCode === asset.accumulatedDepreciationAccountCode ? Number(line.creditUsd || 0) : 0), 0);
+      if (!journal || journal.companyId !== asset.companyId || journal.type !== 'AJUSTE' ||
+          journal.date !== event.date || String(journal.referenceDoc || '') !== expectedRef ||
+          Math.abs(Number(journal.bcvRate) - Number(asset.acquisitionBcvRate)) > 0.000001 ||
+          Math.abs(debit - Number(event.amountBs)) > 0.01 ||
+          Math.abs(debitUsd - Number(event.amountUsd)) > 0.000001 ||
+          Math.abs(credit - Number(event.amountBs)) > 0.01 ||
+          Math.abs(creditUsd - Number(event.amountUsd)) > 0.000001 ||
+          usedDepreciationEntries.has(String(event.journalEntryId))) {
+        throw new Error('SQLite rechazó un evento de depreciación sin asiento dual vinculado o con importes diferentes.');
+      }
+      usedDepreciationEntries.add(String(event.journalEntryId));
+      if (event.reversedByJournalEntryId) {
+        const reversal = entryById.get(String(event.reversedByJournalEntryId));
+        if (!reversal || reversal.companyId !== asset.companyId || reversal.reversalOfEntryId !== event.journalEntryId) {
+          throw new Error('SQLite rechazó una marca de reversión de depreciación sin contra-asiento vinculado.');
+        }
+      }
+      const journalReversal = entries.find(item => String(item.reversalOfEntryId || '') === String(event.journalEntryId));
+      if (Boolean(journalReversal) !== Boolean(event.reversedByJournalEntryId)) {
+        throw new Error('SQLite rechazó un estado de reversión de depreciación que no coincide con el Libro Diario.');
+      }
+    }
+    const depreciableBs = Number(asset.acquisitionCostBs) - Number(asset.residualValueBs);
+    const depreciableUsd = Number(asset.acquisitionCostUsd) - Number(asset.residualValueUsd);
+    if (activeDepreciationBs > depreciableBs + 0.01 || activeDepreciationUsd > depreciableUsd + 0.000001) {
+      throw new Error('SQLite rechazó depreciación acumulada superior al importe depreciable del activo ' + asset.assetCode + '.');
+    }
+    const sortedActiveEvents = activeEvents.slice().sort((a, b) => String(a.period).localeCompare(String(b.period)));
+    let expectedPeriod = firstPeriod;
+    const usefulLifeDays = Math.round((lifeEnd.getTime() - serviceDateUtc.getTime()) / 86400000);
+    let calculatedAccumulatedBs = 0;
+    let calculatedAccumulatedUsd = 0;
+    for (const event of sortedActiveEvents) {
+      if (String(event.period) !== expectedPeriod) {
+        throw new Error('SQLite rechazó períodos de depreciación fuera de secuencia para ' + asset.assetCode + '.');
+      }
+      const [year, month] = expectedPeriod.split('-').map(Number);
+      const periodStart = new Date(Date.UTC(year, month - 1, 1));
+      const periodEnd = new Date(Date.UTC(year, month, 1));
+      const overlapStart = periodStart > serviceDateUtc ? periodStart : serviceDateUtc;
+      const overlapEnd = periodEnd < lifeEnd ? periodEnd : lifeEnd;
+      const expectedDays = Math.max(0, Math.round((overlapEnd.getTime() - overlapStart.getTime()) / 86400000));
+      const finalPeriod = overlapEnd.getTime() === lifeEnd.getTime();
+      const expectedBs = finalPeriod
+        ? Math.round((depreciableBs - calculatedAccumulatedBs + Number.EPSILON) * 100) / 100
+        : Math.round((depreciableBs * expectedDays / usefulLifeDays + Number.EPSILON) * 100) / 100;
+      const expectedUsd = finalPeriod
+        ? Math.round((depreciableUsd - calculatedAccumulatedUsd + Number.EPSILON) * 1000000) / 1000000
+        : Math.round((depreciableUsd * expectedDays / usefulLifeDays + Number.EPSILON) * 1000000) / 1000000;
+      if (event.days !== expectedDays || Math.abs(Number(event.amountBs) - expectedBs) > 0.01 ||
+          Math.abs(Number(event.amountUsd) - expectedUsd) > 0.000001) {
+        throw new Error('SQLite rechazó importes de depreciación que no coinciden con el método lineal prorrateado y el período ' + expectedPeriod + '.');
+      }
+      calculatedAccumulatedBs += Number(event.amountBs);
+      calculatedAccumulatedUsd += Number(event.amountUsd);
+      expectedPeriod = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7);
+    }
+  }
+}
+
 function validateAccountingSnapshot(previousState, nextState) {
   if (!nextState || typeof nextState !== 'object' || Array.isArray(nextState)) {
     throw new Error('Estado contable inválido.');
@@ -988,6 +1182,7 @@ function validateAccountingSnapshot(previousState, nextState) {
     ['journalEntryId', 'isCancelled', 'cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote'], ['isCancelled']);
   validateSaleCorrectionNotes(priorState, nextState);
   assertAppendOnlyCollection(priorState, nextState, 'movements');
+  validateFixedAssetLedger(priorState, nextState);
   assertAppendOnlyCollection(priorState, nextState, 'creditSettlements',
     ['isReversed', 'reversedByJournalEntryId'], ['isReversed']);
   assertAppendOnlyCollection(priorState, nextState, 'supplierAdvanceSettlements',
@@ -2545,4 +2740,4 @@ function validateAccountingSnapshot(previousState, nextState) {
   return { priorEntries, nextEntries, priorById, nextById };
 }
 
-module.exports = { validateAccountingSnapshot, validateNewAccountCatalogEntries, exceedsUsdPayable };
+module.exports = { validateAccountingSnapshot, validateNewAccountCatalogEntries, validateFixedAssetLedger, exceedsUsdPayable };

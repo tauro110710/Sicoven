@@ -85,6 +85,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'ventas', label: 'Libro de Ventas', icon: TrendingUp },
     { id: 'cxc', label: 'Cuentas por cobrar', icon: HandCoins },
     { id: 'inventario', label: 'Inventario', icon: Package },
+    { id: 'activos-fijos', label: 'Activos fijos', icon: Building2 },
     { id: 'ret-iva', label: 'Retenciones IVA & TXT', icon: Receipt },
     { id: 'ret-islr', label: 'Retenciones ISLR & XML', icon: FileText },
     { id: 'catalogo', label: 'Plan de Cuentas', icon: FileSpreadsheet },
