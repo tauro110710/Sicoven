@@ -8,7 +8,7 @@ import {
 
 const asset = (overrides: Partial<FixedAsset> = {}): FixedAsset => ({
   id:'asset-1',companyId:'company-1',assetCode:'AF-00001',description:'Equipo de oficina',category:'Mobiliario',
-  acquisitionDate:'2026-01-10',serviceDate:'2026-01-15',acquisitionCostBs:36500,acquisitionCostUsd:365,
+  acquisitionDate:'2026-01-10',serviceDate:'2026-01-15',acquisitionCostBs:36500,acquisitionCostUsd:365,acquisitionBcvRate:100,
   residualValueBs:3650,residualValueUsd:36.5,usefulLifeMonths:12,depreciationMethod:'STRAIGHT_LINE',
   assetAccountCode:'1.2.1.01',accumulatedDepreciationAccountCode:'1.2.1.02',depreciationExpenseAccountCode:'5.2.1.01',
   sourceJournalEntryId:'entry-1',sourceJournalLineIndex:0,status:'ACTIVE',depreciationEvents:[],createdAt:'2026-01-10T12:00:00.000Z',
