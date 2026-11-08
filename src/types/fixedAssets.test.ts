@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   calculateFixedAssetDepreciation,
   getNextFixedAssetDepreciationPeriod,
+  getFixedAssetDepreciationScheduleThrough,
   type FixedAsset
 } from './fixedAssets';
 
@@ -80,4 +81,25 @@ test('rejects depreciation history outside the asset life or above depreciable c
     days:17,amountBs:40000,amountUsd:400,journalEntryId:'over',createdAt:'2026-01-31T12:00:00.000Z'
   }]});
   assert.throws(()=>calculateFixedAssetDepreciation(over,'2026-02'),/supera el importe depreciable/);
+});
+
+
+test('builds a sequential monthly depreciation schedule only through the company close date', () => {
+  const current = asset({ serviceDate: '2026-01-15', usefulLifeMonths: 12 });
+  const throughFebruary = getFixedAssetDepreciationScheduleThrough(current, '2026-02-28');
+  assert.deepEqual(throughFebruary.map(item => item.period), ['2026-01', '2026-02']);
+  assert.equal(throughFebruary[0].postingDate, '2026-01-31');
+  assert.equal(throughFebruary[1].postingDate, '2026-02-28');
+  const throughJanuary = getFixedAssetDepreciationScheduleThrough(current, '2026-01-30');
+  assert.deepEqual(throughJanuary, []);
+});
+
+test('monthly schedule catches up consecutive missing periods without duplicating posted periods', () => {
+  const current = asset({ depreciationEvents: [{
+    id: 'dep-jan', companyId: 'company-1', assetId: 'asset-1', period: '2026-01',
+    date: '2026-01-31', days: 17, amountBs: 1500, amountUsd: 15,
+    journalEntryId: 'entry-jan', createdAt: '2026-01-31T12:00:00.000Z'
+  }] });
+  const schedule = getFixedAssetDepreciationScheduleThrough(current, '2026-03-31');
+  assert.deepEqual(schedule.map(item => item.period), ['2026-02', '2026-03']);
 });

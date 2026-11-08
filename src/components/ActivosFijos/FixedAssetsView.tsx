@@ -265,6 +265,11 @@ export const FixedAssetsView: React.FC = () => {
         )}
       </section>
 
+      <section className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
+        <strong>Depreciación automática por empresa.</strong>
+        <p className="mt-1">Al cerrar cada período contable, SICOVEN calcula los meses pendientes de cada activo de esta empresa, genera los asientos duales en Bs. y USD y los confirma en SQLite antes de completar el cierre. Los períodos ya contabilizados no se duplican; si hay depreciación pendiente dentro de un período cerrado, el sistema exige su reapertura formal.</p>
+      </section>
+
       <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
         <div className="border-b p-4">
           <h2 className="font-semibold text-slate-900">Registro de activos de la empresa</h2>

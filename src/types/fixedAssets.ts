@@ -213,6 +213,42 @@ export function calculateFixedAssetDepreciation(
   };
 }
 
+
+/**
+ * Builds the missing financial depreciation schedule through a date.
+ * It is used by the company period-close workflow; preview events are local
+ * calculation markers only and are never persisted.
+ */
+export function getFixedAssetDepreciationScheduleThrough(
+  asset: FixedAsset,
+  throughDate: string
+): FixedAssetDepreciationCalculation[] {
+  parseIsoDate(throughDate, 'La fecha límite del cierre contable');
+  const schedule: FixedAssetDepreciationCalculation[] = [];
+  let working: FixedAsset = { ...asset, depreciationEvents: [...asset.depreciationEvents] };
+  let period = getNextFixedAssetDepreciationPeriod(working);
+  while (period) {
+    const calculation = calculateFixedAssetDepreciation(working, period);
+    if (calculation.postingDate > throughDate) break;
+    schedule.push(calculation);
+    const previewEvent: FixedAssetDepreciationEvent = {
+      id: 'preview-' + asset.id + '-' + period,
+      companyId: asset.companyId,
+      assetId: asset.id,
+      period,
+      date: calculation.postingDate,
+      days: calculation.days,
+      amountBs: calculation.amountBs,
+      amountUsd: calculation.amountUsd,
+      journalEntryId: 'preview-entry-' + asset.id + '-' + period,
+      createdAt: '2000-01-01T00:00:00.000Z'
+    };
+    working = { ...working, depreciationEvents: [...working.depreciationEvents, previewEvent] };
+    period = getNextFixedAssetDepreciationPeriod(working);
+  }
+  return schedule;
+}
+
 export type FixedAssetRegistrationDraft = Omit<
   FixedAsset,
   'id' | 'companyId' | 'acquisitionCostBs' | 'acquisitionCostUsd' |

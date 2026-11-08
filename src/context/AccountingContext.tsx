@@ -756,7 +756,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
-  const closeAccountingPeriod = async (closedThroughDate: string): Promise<void> => {
+  const closeAccountingPeriod = async (closedThroughDate: string): Promise<number> => {
     assertSQLitePersistenceReady('Cerrar el período contable');
     if (periodClosureInFlightRef.current) throw new Error('Ya hay un cierre contable en proceso.');
     if (!isValidIsoDate(closedThroughDate)) throw new Error('Indique una fecha de cierre válida.');
@@ -782,6 +782,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     periodClosureInFlightRef.current = true;
     try {
+      // Antes de bloquear el período, SICOVEN calcula y contabiliza la depreciación
+      // financiera pendiente de todos los activos de ESTA empresa hasta la fecha
+      // de cierre. El lote confirma SQLite antes de marcar el período como cerrado.
+      const depreciationEntriesCreated = await recordCompanyFixedAssetDepreciationThrough(closedThroughDate);
       // Registrar el waiter antes de publicar el estado evita perder la confirmación
       // cuando React programa el efecto de persistencia en el siguiente ciclo.
       const persistenceConfirmation = waitForPersistence();
@@ -789,6 +793,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         ? { ...company, closedThroughDate }
         : company));
       await persistenceConfirmation;
+      return depreciationEntriesCreated;
     } finally {
       periodClosureInFlightRef.current = false;
     }
@@ -1623,6 +1628,86 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       : item));
     await waitForPersistence();
     return event;
+    } finally {
+      fixedAssetOperationLocksRef.current.delete(operationLock);
+    }
+  };
+
+
+  const recordCompanyFixedAssetDepreciationThrough = async (throughDate: string): Promise<number> => {
+    assertSQLitePersistenceReady('Preparar depreciación del cierre mensual');
+    if (!isValidIsoDate(throughDate)) throw new Error('La fecha límite de depreciación no es válida.');
+    const companyId = currentCompany.id;
+    const operationLock = companyId + '|FIXED_ASSET_MONTH_CLOSE|' + throughDate;
+    if (fixedAssetOperationLocksRef.current.has(operationLock)) {
+      throw new Error('La depreciación mensual de esta empresa ya está en proceso.');
+    }
+    fixedAssetOperationLocksRef.current.add(operationLock);
+    try {
+      const companyAssets = fixedAssets.filter(asset => asset.companyId === companyId);
+      const planned = companyAssets.flatMap(asset =>
+        getFixedAssetDepreciationScheduleThrough(asset, throughDate).map(calculation => ({
+          asset,
+          calculation
+        }))
+      );
+      if (!planned.length) return 0;
+
+      if (currentCompany.closedThroughDate && planned.some(item =>
+        item.calculation.postingDate <= String(currentCompany.closedThroughDate)
+      )) {
+        throw new Error('Hay depreciaciones pendientes dentro de un período ya cerrado. Reabra formalmente ese período antes de continuar.');
+      }
+
+      // Validar todo el lote antes de generar el primer asiento.
+      for (const item of planned) {
+        const expense = accounts.find(account => account.code === item.asset.depreciationExpenseAccountCode);
+        const accumulated = accounts.find(account => account.code === item.asset.accumulatedDepreciationAccountCode);
+        if (!expense || expense.type !== 'GASTOS' || !expense.isMovement ||
+            !accumulated || accumulated.type !== 'ACTIVO' || !accumulated.isMovement) {
+          throw new Error('No se pudo preparar el cierre: revise las cuentas de depreciación de ' + item.asset.assetCode + '.');
+        }
+        if (item.calculation.amountBs <= 0 || item.calculation.amountUsd <= 0) {
+          throw new Error('La depreciación de ' + item.asset.assetCode + ' no genera importes positivos en ambas monedas.');
+        }
+      }
+
+      let updatedAssets = fixedAssets.slice();
+      for (const item of planned) {
+        const expense = accounts.find(account => account.code === item.asset.depreciationExpenseAccountCode)!;
+        const accumulated = accounts.find(account => account.code === item.asset.accumulatedDepreciationAccountCode)!;
+        const { calculation, asset } = item;
+        const entry = addJournalEntry({
+          entryNumber: 0,
+          date: calculation.postingDate,
+          description: 'Depreciación financiera ' + calculation.period + ' · ' + asset.assetCode + ' · ' + asset.description,
+          type: 'AJUSTE',
+          bcvRate: asset.acquisitionBcvRate,
+          referenceDoc: 'DEP-' + asset.assetCode + '-' + calculation.period,
+          items: [
+            { accountCode: expense.code, accountName: expense.name, debitBs: calculation.amountBs, creditBs: 0, debitUsd: calculation.amountUsd, creditUsd: 0, description: 'Gasto de depreciación ' + asset.assetCode },
+            { accountCode: accumulated.code, accountName: accumulated.name, debitBs: 0, creditBs: calculation.amountBs, debitUsd: 0, creditUsd: calculation.amountUsd, description: 'Depreciación acumulada ' + asset.assetCode }
+          ]
+        }, accounts, companyId);
+        const event: FixedAssetDepreciationEvent = {
+          id: 'fixed-asset-dep-' + asset.id + '-' + calculation.period + '-' + crypto.randomUUID(),
+          companyId,
+          assetId: asset.id,
+          period: calculation.period,
+          date: calculation.postingDate,
+          days: calculation.days,
+          amountBs: calculation.amountBs,
+          amountUsd: calculation.amountUsd,
+          journalEntryId: entry.id,
+          createdAt: new Date().toISOString()
+        };
+        updatedAssets = updatedAssets.map(current => current.id === asset.id && current.companyId === companyId
+          ? { ...current, depreciationEvents: [...current.depreciationEvents, event] }
+          : current);
+      }
+      setFixedAssets(updatedAssets);
+      await waitForPersistence();
+      return planned.length;
     } finally {
       fixedAssetOperationLocksRef.current.delete(operationLock);
     }
