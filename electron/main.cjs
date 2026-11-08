@@ -874,7 +874,7 @@ app.whenReady().then(async () => {
       const status = licenseView();
       if (!status.authorized) {
         sessions.clear();
-      activeRendererSessionToken = null;
+        activeRendererSessionToken = null;
         db.prepare('DELETE FROM auth_sessions').run();
         BrowserWindow.getAllWindows().forEach(win => win.webContents.send('sicoven:license-status-changed', status));
       }
