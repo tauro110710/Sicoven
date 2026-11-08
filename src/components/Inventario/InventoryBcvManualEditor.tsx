@@ -74,7 +74,13 @@ export const InventoryBcvManualEditor: React.FC = () => {
           inventoryBcvRateFetchedAt: latestForDate.fetchedAt
         } : {})
       });
-      await waitForPersistence();
+      try {
+        await waitForPersistence();
+      } catch (persistenceError) {
+        updateCompany(currentCompany);
+        await waitForPersistence().catch(() => undefined);
+        throw persistenceError;
+      }
       setRateInput('');
       setNote('');
       setOpen(false);
