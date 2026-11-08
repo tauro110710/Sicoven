@@ -56,6 +56,37 @@ export interface ExchangeabilityAssessment {
   approvedAt: string;
 }
 
+export interface InventoryPriceLabels {
+  price1: string;
+  price2: string;
+  price3: string;
+  price4: string;
+}
+
+export interface Customer {
+  id: string;
+  companyId: string;
+  name: string;
+  fiscalId?: string;
+  fiscalIdType?: 'RIF' | 'CEDULA' | 'PASSPORT' | 'OTHER';
+  address?: string;
+  phone?: string;
+  email?: string;
+  active: boolean;
+}
+
+export interface Supplier {
+  id: string;
+  companyId: string;
+  name: string;
+  fiscalId?: string;
+  fiscalIdType?: 'RIF' | 'CEDULA' | 'PASSPORT' | 'OTHER';
+  address?: string;
+  phone?: string;
+  email?: string;
+  active: boolean;
+}
+
 export interface Company {
   id: string;
   rif: string; // e.g., "J-40892182-3"
@@ -90,6 +121,8 @@ export interface Company {
   functionalCurrencyAssessments?: FunctionalCurrencyAssessment[];
   /** Evaluaciones de convertibilidad fechadas y ligadas a un propósito concreto. */
   exchangeabilityAssessments?: ExchangeabilityAssessment[];
+  /** Etiquetas comerciales configurables; los identificadores internos Precio_1..4 permanecen fijos. */
+  inventoryPriceLabels?: InventoryPriceLabels;
   logoUrl?: string; // URL o base64 del logo de la empresa
 }
 
