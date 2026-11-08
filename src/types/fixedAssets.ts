@@ -109,6 +109,9 @@ function validateAsset(asset: FixedAsset): { serviceDate: Date; lifeEnd: Date } 
   if (asset.residualValueBs > asset.acquisitionCostBs || asset.residualValueUsd > asset.acquisitionCostUsd) {
     throw new Error('El valor residual no puede superar el costo de adquisición.');
   }
+  if (asset.depreciationMethod !== 'STRAIGHT_LINE' || !Number.isInteger(asset.sourceJournalLineIndex) || asset.sourceJournalLineIndex < 0) {
+    throw new Error('El método de depreciación o el vínculo a la línea contable de origen no es válido.');
+  }
   if (!asset.assetCode.trim() || !asset.companyId || !asset.sourceJournalEntryId ||
       !asset.assetAccountCode || !asset.accumulatedDepreciationAccountCode || !asset.depreciationExpenseAccountCode) {
     throw new Error('El expediente del activo no contiene todos los vínculos contables obligatorios.');
@@ -130,6 +133,13 @@ export function getNextFixedAssetDepreciationPeriod(asset: FixedAsset): string |
   const periods = new Set<string>();
   for (const event of activeEvents) {
     if (!ISO_MONTH.test(event.period)) throw new Error('El historial de depreciación contiene un período inválido.');
+    if (event.period < firstPeriod || event.period > lastPeriod ||
+        event.companyId !== asset.companyId || event.assetId !== asset.id ||
+        !event.journalEntryId || !Number.isFinite(event.amountBs) || !Number.isFinite(event.amountUsd) ||
+        event.amountBs < 0 || event.amountUsd < 0) {
+      throw new Error('El historial de depreciación contiene un evento inconsistente con el activo o su vida útil.');
+    }
+    parseIsoDate(event.date, 'La fecha del evento de depreciación');
     if (periods.has(event.period)) throw new Error('El activo contiene más de una depreciación vigente para el mismo período.');
     periods.add(event.period);
   }
@@ -175,6 +185,9 @@ export function calculateFixedAssetDepreciation(
 
   const baseBs = asset.acquisitionCostBs - asset.residualValueBs;
   const baseUsd = asset.acquisitionCostUsd - asset.residualValueUsd;
+  if (accumulatedBs > baseBs + 0.01 || accumulatedUsd > baseUsd + 0.000001) {
+    throw new Error('La depreciación acumulada supera el importe depreciable del activo.');
+  }
   const isFinalPeriod = overlapEnd.getTime() === lifeEnd.getTime();
   const amountBs = isFinalPeriod
     ? roundBs(Math.max(0, baseBs - accumulatedBs))
