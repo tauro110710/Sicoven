@@ -1300,8 +1300,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const structuralChange = draft.code !== current.code || draft.type !== current.type || draft.level !== current.level ||
       draft.parentCode !== current.parentCode || draft.isMovement !== current.isMovement;
     const isRequiredBankParent = originalCode === '1.1.1.03' || originalCode === '1.1.1.04';
-    if (isRequiredBankParent && (structuralChange || draft.isActive === false)) {
-      throw new Error('Las cuentas padre bancarias 1.1.1.03 y 1.1.1.04 son estructurales y no pueden modificarse ni inactivarse.');
+    if (isRequiredBankParent && (structuralChange || draft.isActive === false || draft.name !== current.name)) {
+      throw new Error('Las cuentas padre bancarias 1.1.1.03 y 1.1.1.04 son estructurales y no pueden modificarse, renombrarse ni inactivarse.');
     }
     if (structuralChange && (hasChildren || hasJournalHistory || hasBankLink)) {
       throw new Error('No se puede cambiar la estructura de una cuenta con subcuentas, asientos históricos o instrumentos bancarios vinculados.');
@@ -1311,8 +1311,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const nextName = String(draft.name || '').trim();
     if (!nextName) throw new Error('La denominación de la cuenta no puede quedar vacía.');
-    const validated = prepareAccountForCatalog({ ...current, ...draft, name: nextName.toUpperCase() }, accounts.filter(item => item.code !== originalCode));
-    setAccounts(prev => prev.map(item => item.code === originalCode ? validated : item)
+    const updated = structuralChange
+      ? prepareAccountForCatalog({ ...current, ...draft, name: nextName.toUpperCase() }, accounts.filter(item => item.code !== originalCode))
+      : { ...current, ...draft, name: nextName.toUpperCase() };
+    setAccounts(prev => prev.map(item => item.code === originalCode ? updated : item)
       .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })));
   };
 
