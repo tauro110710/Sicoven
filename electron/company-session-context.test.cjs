@@ -54,6 +54,24 @@ test('requires an authenticated main-process session before selecting a company'
   await assert.rejects(() => context.selectCompany('c'.repeat(64), 'company-a'), /sesión expiró/i);
 });
 
+test('lists only active companies authorized for the authenticated actor without exposing database paths', async () => {
+  const { context, companies } = fixture();
+  companies.push({
+    id: 'company-path-check', status: 'ACTIVE', name: 'Empresa protegida',
+    rif: 'J-123', relativePath: 'companies/company-path-check/accounting.sqlite'
+  });
+  const adminChoices = await context.listAccessibleCompanies(tokenA);
+  assert.deepEqual(adminChoices, [
+    { id: 'company-a', name: '', rif: '' },
+    { id: 'company-b', name: '', rif: '' },
+    { id: 'company-path-check', name: 'Empresa protegida', rif: 'J-123' }
+  ]);
+  const accountantChoices = await context.listAccessibleCompanies(tokenB);
+  assert.deepEqual(accountantChoices, [{ id: 'company-b', name: '', rif: '' }]);
+  assert.equal(JSON.stringify(adminChoices).includes('relativePath'), false);
+  await assert.rejects(() => context.listAccessibleCompanies('invalid'), /Sesión no válida/);
+});
+
 test('rejects archived and unauthorized companies', async () => {
   const { context } = fixture();
   await assert.rejects(() => context.selectCompany(tokenA, 'company-archived'), /archivada/i);
