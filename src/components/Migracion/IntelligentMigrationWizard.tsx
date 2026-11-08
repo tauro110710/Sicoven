@@ -129,8 +129,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     : pick(row,'name','nombre','razonSocial','supplierName','proveedor','vendorName');
    if(name===undefined)return false;
    const source=String(row.migrationcollection??row.migrationsource??'');
-   const hasIdentity=pick(row,'fiscalId','taxId','rif','customerRif','supplierRif','cedula','documentNumber','identification')!==undefined;
-   const hasContact=pick(row,'address','direccion','phone','telefono','email','correo')!==undefined;
+   const hasIdentity=pick(row,'fiscalId','taxId','rif','customerRif','supplierRif','cedula','documentNumber','identification','identificacion')!==undefined;
+   const hasContact=pick(row,'address','direccion','phone','telefono','email','correo','tipoIdentificacion','identificacion')!==undefined;
    return sourcePattern.test(source)||hasIdentity||hasContact;
   });
  },[rows,selected]);
@@ -291,8 +291,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const matched=m.aliases.filter(a=>keys.has(norm(a)));
     const groupsByModule:Partial<Record<ModuleId,string[][]>>={
      inventory:[['code','codigo','sku','productcode'],['name','nombre','productname','producto']],
-     customers:[['customername','clientename','customer','cliente','customerrif','rifcliente'],['rif','taxid','identificacion']],
-     suppliers:[['suppliername','proveedor','proveedorrif','rifproveedor','supplierid'],['rif','taxid','identificacion']],
+     customers:[['name','nombre','razonsocial','customername','clientename','customer','cliente'],['fiscalid','taxid','rif','customerrif','rifcliente','identificacion','tipoidentificacion','email','correo','phone','telefono','address','direccion']],
+     suppliers:[['name','nombre','razonsocial','suppliername','proveedor','vendorname'],['fiscalid','taxid','rif','supplierid','supplierrif','rifproveedor','identificacion','tipoidentificacion','email','correo','phone','telefono','address','direccion']],
      receivables:[['customername','cliente','clienterif','rifcliente'],['invoicenumber','invoice','factura','documento'],['saldo','saldoactual','monto','importe','balance','amount']],
      payables:[['suppliername','proveedor','proveedorrif','rifproveedor'],['invoicenumber','invoice','factura','documento'],['saldo','saldoactual','monto','importe','balance','amount']],
      sales:[['invoiceDate','fecha','date'],['invoiceNumber','factura','documento'],['totalAmountBs','total','totalbs','monto']],
@@ -340,7 +340,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const movementsReady=m.id==='movements'&&['productcode','codigoproducto','sku','code','codigo'].some(k=>keys.has(norm(k)))&&['date','fecha','movementdate'].some(k=>keys.has(norm(k)))&&['type','movementtype','tipomovimiento','tipo'].some(k=>keys.has(norm(k)))&&['concept','concepto','movementconcept'].some(k=>keys.has(norm(k)))&&['documentref','referencia','documento','invoicenumber'].some(k=>keys.has(norm(k)))&&['unitcostbs','costobs','costounitario','unitcost'].some(k=>keys.has(norm(k)))&&['bcvrate','tasabcv'].some(k=>keys.has(norm(k)))&&(['quantity','cantidad','qty'].some(k=>keys.has(norm(k)))||['balanceqty','existenciafinal','stockfinal'].some(k=>keys.has(norm(k))));
     const partyReady = (m.id==='customers'||m.id==='suppliers') &&
       (m.id==='customers' ? ['name','nombre','razonsocial','customername','clientename','cliente'] : ['name','nombre','razonsocial','suppliername','proveedor','vendorname']).some(k=>keys.has(norm(k))) &&
-      (['fiscalid','taxid','rif','customerrif','supplierrif','rifproveedor','cedula','documentnumber','identification','address','direccion','phone','telefono','email','correo'].some(k=>keys.has(norm(k))) || /(customer|client|cliente|supplier|vendor|proveedor)/i.test(sourceCollectionHint));
+      (['fiscalid','taxid','rif','customerrif','supplierrif','rifproveedor','cedula','documentnumber','identification','identificacion','tipoidentificacion','address','direccion','phone','telefono','email','correo'].some(k=>keys.has(norm(k))) || /(customer|client|cliente|supplier|vendor|proveedor)/i.test(sourceCollectionHint));
     const readyFinal=(m.id==='inventory' && ready) || partyReady;
     detected.push({...m,source,matched,missing,detected:true,ready:readyFinal});
    }
@@ -513,14 +513,14 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const explicitType=String(pick(row,'fiscalIdType','tipoIdentificacion','tipoDocumento','documentType')??'').trim().toUpperCase();
      const rif=pick(row,'rif','customerRif','supplierRif','rifCliente','rifProveedor');
      const cedula=pick(row,'cedula','identificationNumber','numeroDocumento');
-     const fiscalRaw=pick(row,'fiscalId','taxId','identification','documentNumber')??rif??cedula;
+     const fiscalRaw=pick(row,'fiscalId','taxId','identification','identificacion','documentNumber','documento')??rif??cedula;
      const fiscalId=String(fiscalRaw??'').trim()||undefined;
      let fiscalIdType:'RIF'|'CEDULA'|'PASSPORT'|'OTHER'|undefined;
      if(explicitType.includes('RIF')||rif!==undefined)fiscalIdType='RIF';
      else if(explicitType.includes('CED')||cedula!==undefined)fiscalIdType='CEDULA';
      else if(explicitType.includes('PAS'))fiscalIdType='PASSPORT';
      else if(explicitType)fiscalIdType='OTHER';
-     if(fiscalIdType==='RIF'&&fiscalId&&!validateVenezuelanRif(fiscalId))throw new Error('Registro '+(index+1)+': el RIF '+fiscalId+' no supera la validación venezolana.');
+     if(fiscalIdType==='RIF'&&fiscalId&&!validateVenezuelanRif(fiscalId).isValid)throw new Error('Registro '+(index+1)+': el RIF '+fiscalId+' no supera la validación venezolana.');
      const activeRaw=String(pick(row,'active','activo','status','estado')??'SI').trim().toLowerCase();
      const active=!['false','0','no','inactivo','inactive'].includes(activeRaw);
      return {name,fiscalId,fiscalIdType,address:String(pick(row,'address','direccion','domicilio')??'').trim()||undefined,phone:String(pick(row,'phone','telefono','movil','celular')??'').trim()||undefined,email:String(pick(row,'email','correo','correoElectronico')??'').trim()||undefined,active};
