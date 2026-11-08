@@ -81,7 +81,7 @@ function fixture(t, overrides = {}) {
     sourceDb,
     userDataDir: root,
     manager,
-    assertSourceQuiescent: () => true,
+    acquireMaintenanceLock: () => { calls.push('lock'); return () => calls.push('unlock'); },
     Database: FakeDatabase,
     assertSqliteIntegrity: () => {},
     initializeTenantDatabase: () => {},
@@ -104,7 +104,7 @@ test('prepares and validates every company before registering databases, then co
   const result = await createTenantMigrationOrchestrator(options).execute();
   assert.equal(result.ok, true);
   assert.equal(result.phase, 'COMMITTED');
-  assert.deepEqual(calls, ['backup', 'register']);
+  assert.deepEqual(calls, ['lock', 'backup', 'register', 'unlock']);
   assert.equal(fs.existsSync(path.join(root, 'companies', 'company-a', 'accounting.sqlite')), true);
   const journalPath = path.join(root, 'tenant-migration', 'tenant-migration-journal.json');
   const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8'));
@@ -122,7 +122,7 @@ test('keeps the source and prepared files intact and marks recovery when tenant 
     () => createTenantMigrationOrchestrator(options).execute(),
     /base heredada y el respaldo permanecen intactos/i
   );
-  assert.deepEqual(calls, ['backup']);
+  assert.deepEqual(calls, ['lock', 'backup', 'unlock']);
   const journal = JSON.parse(fs.readFileSync(
     path.join(root, 'tenant-migration', 'tenant-migration-journal.json'), 'utf8'
   ));
@@ -139,17 +139,19 @@ test('blocks a failed preflight before creating a backup or company database', a
     () => createTenantMigrationOrchestrator(options).execute(),
     /inspección previa bloqueó/i
   );
-  assert.deepEqual(calls, []);
+  assert.deepEqual(calls, ['lock', 'unlock']);
   assert.equal(fs.existsSync(path.join(root, 'tenant-migration')), false);
   assert.equal(fs.existsSync(path.join(root, 'companies')), false);
 });
 
-test('requires an exclusive maintenance gate before inspecting or backing up the legacy database', async t => {
-  const { root, calls, options } = fixture(t, { assertSourceQuiescent: () => false });
+test('requires an acquired maintenance lock and releases it after a blocked preflight', async t => {
+  const { root, calls, options } = fixture(t, {
+    inspectLegacy: () => ({ ok: false, companyCount: 0, companyIds: [], errors: ['unknown table'] })
+  });
   await assert.rejects(
     () => createTenantMigrationOrchestrator(options).execute(),
-    /mantenimiento exclusivo/i
+    /inspección previa bloqueó/i
   );
-  assert.deepEqual(calls, []);
+  assert.deepEqual(calls, ['lock', 'unlock']);
   assert.equal(fs.existsSync(path.join(root, 'tenant-migration')), false);
 });
