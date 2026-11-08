@@ -8,6 +8,7 @@ const { hasFullSystemAccess } = require('./auth-roles.cjs');
 const FORMAT = 'SICOVEN_BACKUP_V1';
 const DB_FILE = 'sicoven.sqlite';
 const DOCS_DIR = 'supporting-documents';
+const COMPANIES_DIR = 'companies';
 const HASH_RE = /^[a-f0-9]{64}$/;
 const MAX_DOCUMENTS = 10000;
 const MAX_RELATIVE_PATH = 1024;
@@ -107,6 +108,52 @@ function verifyDatabase(file) {
   } finally { check.close(); }
 }
 
+function collectCompanyDatabases(root) {
+  const directory = path.join(root, COMPANIES_DIR);
+  if (!lstatIfExists(directory)) return [];
+  assertDirectory(directory, 'El directorio de bases por empresa');
+  return fs.readdirSync(directory, { withFileTypes: true }).sort((a,b)=>a.name.localeCompare(b.name)).map(entry => {
+    if (entry.isSymbolicLink() || !entry.isDirectory() || !/^[A-Za-z0-9_-]{1,120}$/.test(entry.name)) {
+      throw new Error('El registro local contiene una carpeta de empresa no válida.');
+    }
+    const relative = COMPANIES_DIR + '/' + entry.name + '/accounting.sqlite';
+    const file = path.join(root, ...relative.split('/'));
+    assertRegularFile(file, 'La base SQLite de ' + entry.name);
+    const check = new Database(file, { readonly: true, fileMustExist: true });
+    try {
+      assertSqliteIntegrity(check);
+      const metaTable = check.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sicoven_database_meta'").get();
+      if (!metaTable) throw new Error('La base de ' + entry.name + ' no contiene identidad multiempresa.');
+      const companyId = String(check.prepare("SELECT meta_value FROM sicoven_database_meta WHERE meta_key='company_id'").get()?.meta_value || '');
+      if (companyId !== entry.name) throw new Error('La identidad interna de una base no coincide con su carpeta.');
+    } finally { check.close(); }
+    return { path: relative, companyId: entry.name, size: fs.statSync(file).size, sha256: sha256File(file) };
+  });
+}
+
+function copyCompanyDatabaseTree(source, destination) {
+  if (!lstatIfExists(source)) return [];
+  assertDirectory(source, 'El directorio de bases por empresa');
+  fs.mkdirSync(destination, { recursive: false });
+  const manifest = [];
+  for (const entry of fs.readdirSync(source, { withFileTypes: true }).sort((a,b)=>a.name.localeCompare(b.name))) {
+    if (entry.isSymbolicLink() || !entry.isDirectory() || !/^[A-Za-z0-9_-]{1,120}$/.test(entry.name)) {
+      throw new Error('El directorio de empresas contiene una entrada no permitida.');
+    }
+    const fromDir = path.join(source, entry.name), toDir = path.join(destination, entry.name);
+    assertDirectory(fromDir, 'La carpeta de empresa');
+    fs.mkdirSync(toDir, { recursive: false });
+    const entries = fs.readdirSync(fromDir);
+    if (entries.some(name => name !== 'accounting.sqlite')) throw new Error('La carpeta de una empresa contiene archivos inesperados.');
+    const from = path.join(fromDir, 'accounting.sqlite'), to = path.join(toDir, 'accounting.sqlite');
+    assertRegularFile(from, 'La base SQLite de ' + entry.name);
+    fs.copyFileSync(from, to, fs.constants.COPYFILE_EXCL);
+    if (sha256File(from) !== sha256File(to)) throw new Error('La copia SQLite de ' + entry.name + ' no coincide.');
+    manifest.push({ path: COMPANIES_DIR + '/' + entry.name + '/accounting.sqlite', companyId: entry.name, size: fs.statSync(to).size, sha256: sha256File(to) });
+  }
+  return manifest;
+}
+
 function validateManifest(manifest) {
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest) ||
       manifest.format !== FORMAT || manifest.application !== 'SICOVEN' ||
@@ -115,8 +162,14 @@ function validateManifest(manifest) {
       !Number.isSafeInteger(manifest.database.size) || manifest.database.size <= 0 ||
       typeof manifest.database.sha256 !== 'string' || !HASH_RE.test(manifest.database.sha256) ||
       typeof manifest.createdAt !== 'string' || !Number.isFinite(Date.parse(manifest.createdAt)) ||
-      !Array.isArray(manifest.documents) || manifest.documents.length > MAX_DOCUMENTS) {
+      !Array.isArray(manifest.documents) || manifest.documents.length > MAX_DOCUMENTS ||
+      (manifest.companyDatabases !== undefined && (!Array.isArray(manifest.companyDatabases) || manifest.companyDatabases.length > 10000))) {
     throw new Error('El formato del respaldo no es compatible o el manifiesto es inválido.');
+  }
+  const companyIds = new Set();
+  for (const item of manifest.companyDatabases || []) {
+    if (!item || !/^[A-Za-z0-9_-]{1,120}$/.test(String(item.companyId || '')) || item.path !== COMPANIES_DIR + '/' + item.companyId + '/accounting.sqlite' || companyIds.has(item.companyId) || !Number.isSafeInteger(item.size) || item.size <= 0 || typeof item.sha256 !== 'string' || !HASH_RE.test(item.sha256)) throw new Error('El manifiesto contiene una base de empresa inválida o duplicada.');
+    companyIds.add(item.companyId);
   }
   const seen = new Set();
   for (const item of manifest.documents) {
@@ -158,10 +211,12 @@ async function createBackup({ db, userDataDir, destination, allowInternalDestina
         if (sha256File(to) !== item.sha256) throw new Error('Falló la verificación de un documento durante el respaldo: ' + item.path);
       }
     }
+    const companyDatabases = copyCompanyDatabaseTree(path.join(root, COMPANIES_DIR), path.join(staging, COMPANIES_DIR));
     const manifest = {
       format: FORMAT, application: 'SICOVEN', createdAt: new Date().toISOString(),
       database: { file: DB_FILE, size: fs.statSync(path.join(staging, DB_FILE)).size, sha256: sha256File(path.join(staging, DB_FILE)) },
-      documents: collectFiles(targetDocs)
+      documents: collectFiles(targetDocs),
+      companyDatabases
     };
     validateManifest(manifest);
     fs.writeFileSync(path.join(staging, 'manifest.json'), JSON.stringify(manifest, null, 2), { flag: 'wx' });
@@ -200,7 +255,9 @@ function verifyBackupDirectory(directory) {
   }))].sort();
   const actualDirectories = collectDirectories(docsRoot);
   if (JSON.stringify(actualDirectories) !== JSON.stringify(expectedDirectories)) throw new Error('La estructura de directorios del respaldo no coincide con el manifiesto.');
-  const allowedRootEntries = new Set(['manifest.json', DB_FILE, DOCS_DIR]);
+  const actualCompanyDatabases = collectCompanyDatabases(root);
+  if (JSON.stringify(actualCompanyDatabases) !== JSON.stringify(manifest.companyDatabases || [])) throw new Error('Las bases SQLite de las empresas no coinciden con el manifiesto global.');
+  const allowedRootEntries = new Set(['manifest.json', DB_FILE, DOCS_DIR, COMPANIES_DIR]);
   for (const entry of fs.readdirSync(root)) {
     if (!allowedRootEntries.has(entry)) throw new Error('El respaldo contiene elementos inesperados.');
   }
