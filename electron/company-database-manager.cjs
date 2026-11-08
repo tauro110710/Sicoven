@@ -94,6 +94,10 @@ function createCompanyDatabaseManager({
       throw new Error('La ruta registrada para la empresa no coincide con la ruta local autorizada. Se bloqueó la apertura.');
     }
     const resolved = path.resolve(root, record.relative_path);
+    if (fs.existsSync(companiesRoot)) assertSafeDirectory(companiesRoot, 'La carpeta companies');
+    const companyDirectory = path.dirname(resolved);
+    if (fs.existsSync(companyDirectory)) assertSafeDirectory(companyDirectory, 'La carpeta de la empresa');
+    assertSafeDatabaseFile(resolved);
     const prefix = companiesRoot + path.sep;
     if (!resolved.startsWith(prefix) || resolved !== path.resolve(companiesRoot, companyId, 'accounting.sqlite')) {
       throw new Error('La ruta SQLite de la empresa intenta salir del directorio local autorizado.');
@@ -120,9 +124,13 @@ function createCompanyDatabaseManager({
     if (selectRecord.get(company.companyId)) throw new Error('La empresa ya tiene un registro de base SQLite.');
     const relativePath = expectedRelativePath(company.companyId);
     const filePath = path.resolve(root, relativePath);
+    fs.mkdirSync(companiesRoot, { recursive: true });
+    assertSafeDirectory(companiesRoot, 'La carpeta companies');
     const companyDirectory = path.dirname(filePath);
     fs.mkdirSync(companyDirectory, { recursive: true });
+    assertSafeDirectory(companyDirectory, 'La carpeta de la empresa');
     if (fs.existsSync(filePath)) {
+      assertSafeDatabaseFile(filePath);
       throw new Error('Existe un archivo SQLite sin registro para esta empresa. Se conserva intacto y requiere inspección; no se sobrescribió.');
     }
 
