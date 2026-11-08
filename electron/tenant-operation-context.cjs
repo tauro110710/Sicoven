@@ -78,8 +78,8 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
       readTenantSnapshot(targetDb, targetId);
 
       const previousId = activeCompanyId;
-      activeCompanyId = targetId;
       if (previousId) runtime.closeCompany(previousId);
+      activeCompanyId = targetId;
 
       return { ok: true, changed: true, companyId: targetId, previousCompanyId: previousId || null };
     } catch (error) {
@@ -99,8 +99,8 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
       await flushPendingWrites();
       await waitForActiveOperations();
       const previousId = activeCompanyId;
-      activeCompanyId = '';
       if (previousId) runtime.closeCompany(previousId);
+      activeCompanyId = '';
       return { ok: true, previousCompanyId: previousId || null };
     } finally {
       switching = false;
