@@ -58,6 +58,7 @@ function fixture(t, overrides = {}) {
       this.open = true;
       this.readonly = Boolean(options.readonly);
       this.meta = [];
+      if (!this.readonly) fs.writeFileSync(file, 'tenant-sqlite-fixture');
     }
     pragma(value) {
       if (value === 'foreign_key_check') return [];
@@ -65,13 +66,13 @@ function fixture(t, overrides = {}) {
     }
     exec() {}
     prepare(sql) {
-      if (sql.includes('SELECT state_json FROM app_state')) return { get: () => ({ state_json: JSON.stringify(snapshot) }) };
-      if (sql.includes('FROM audit_events')) return { all: () => [] };
-      if (sql.includes('FROM supporting_documents')) return { all: () => [] };
-      if (sql.startsWith('INSERT INTO sicoven_database_meta')) return { run: (...values) => this.meta.push(values) };
-      if (sql.includes('SELECT meta_value FROM sicoven_database_meta')) return { get: () => ({ meta_value: path.basename(path.dirname(this.file)) }) };
       if (sql.includes('COUNT(*) AS count FROM audit_events')) return { get: () => ({ count: 0 }) };
       if (sql.includes('COUNT(*) AS count FROM supporting_documents')) return { get: () => ({ count: 0 }) };
+      if (sql.includes('SELECT state_json FROM app_state')) return { get: () => ({ state_json: JSON.stringify(snapshot) }) };
+      if (sql.startsWith('INSERT INTO sicoven_database_meta')) return { run: (...values) => this.meta.push(values) };
+      if (sql.includes('SELECT meta_value FROM sicoven_database_meta')) return { get: () => ({ meta_value: path.basename(path.dirname(this.file)) }) };
+      if (sql.includes('FROM audit_events')) return { all: () => [] };
+      if (sql.includes('FROM supporting_documents')) return { all: () => [] };
       throw new Error('Consulta inesperada en base preparada: ' + sql);
     }
     close() { this.open = false; }
