@@ -72,6 +72,20 @@ test('binds the selected tenant to the session and ignores renderer tenant chang
   assert.equal(operationContext.getActiveCompanyId(), 'company-a');
 });
 
+test('prevents a second authenticated session from taking over the single operational tenant context', async () => {
+  const { context } = fixture();
+  await context.selectCompany(tokenA, 'company-a');
+  await assert.rejects(
+    () => context.selectCompany(tokenB, 'company-b'),
+    /otra sesión autenticada/i
+  );
+  assert.equal(context.getSelectedCompanyId(tokenA), 'company-a');
+  assert.throws(() => context.getSelectedCompanyId(tokenB), /no tiene una empresa/i);
+  await context.clearSession(tokenA);
+  await context.selectCompany(tokenB, 'company-b');
+  assert.equal(context.getSelectedCompanyId(tokenB), 'company-b');
+});
+
 test('switches only after the operation context has completed its guarded switch', async () => {
   const { context, calls } = fixture();
   await context.selectCompany(tokenA, 'company-a');
