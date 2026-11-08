@@ -33,3 +33,10 @@ test('rejects invalid voucher issue dates', () => {
   assert.throws(() => validateRetentionVoucherSupplierEmail('a@b.com', '2027-02-30'), /fecha de emisión/);
   assert.throws(() => validateRetentionVoucherSupplierEmail('a@b.com', ''), /fecha de emisión/);
 });
+
+test('requires the SNAT/2026/00093 document reference from its effective date', async () => {
+  const { requiresSnat2026DocumentReference } = await import('./retentionVoucherCompliance');
+  assert.equal(requiresSnat2026DocumentReference('2027-04-18'), false);
+  assert.equal(requiresSnat2026DocumentReference('2027-04-19'), true);
+  assert.equal(requiresSnat2026DocumentReference('invalid'), false);
+});
