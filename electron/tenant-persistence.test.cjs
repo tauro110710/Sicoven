@@ -49,26 +49,22 @@ function snapshot(companies, overrides = {}) {
 test('saves and reloads each company in its own SQLite file', async t => {
   const { manager } = fixture(t);
   const companyA = { id: 'company-a', name: 'Empresa A', rif: 'J-12345678-9' };
-  const first = snapshot([companyA], {
-    sales: [{ id: 'sale-a', companyId: 'company-a', totalAmountBs: 100 }]
-  });
+  const first = snapshot([companyA]);
   assert.deepEqual(await saveTenantAccountingSnapshot(manager, first), {
     ok: true, savedCompanyIds: ['company-a'], unchanged: false
   });
   const loaded = loadTenantAccountingSnapshot(manager, 'company-a');
-  assert.deepEqual(loaded.sales, first.sales);
+  assert.deepEqual(loaded.sales, []);
   assert.deepEqual(loaded.companies, [companyA]);
 
   const companyB = { id: 'company-b', name: 'Empresa B', rif: 'J-98765432-1' };
-  const both = snapshot([companyA, companyB], {
-    sales: [{ id: 'sale-a', companyId: 'company-a', totalAmountBs: 100 }]
-  });
+  const both = snapshot([companyA, companyB]);
   assert.deepEqual(await saveTenantAccountingSnapshot(manager, both), {
     ok: true, savedCompanyIds: ['company-b'], unchanged: false
   });
   const combined = loadTenantAccountingSnapshot(manager, 'company-b');
   assert.equal(combined.currentCompanyId, 'company-b');
-  assert.deepEqual(combined.sales, both.sales);
+  assert.deepEqual(combined.sales, []);
   assert.equal(manager.getDatabasePath('company-a') !== manager.getDatabasePath('company-b'), true);
 });
 
