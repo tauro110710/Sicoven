@@ -16,7 +16,7 @@ const parseAmount = (value: string): number => {
 
 export const FixedAssetsView: React.FC = () => {
   const {
-    accounts, journalEntries, fixedAssets, registerFixedAsset, recordFixedAssetDepreciation
+    accounts, journalEntries, fixedAssets, registerFixedAsset
   } = useAccounting();
   const [sourceKey, setSourceKey] = useState('');
   const [assetCode, setAssetCode] = useState('');
@@ -30,7 +30,6 @@ export const FixedAssetsView: React.FC = () => {
   const [accumulatedAccountCode, setAccumulatedAccountCode] = useState('1.2.1.05');
   const [expenseAccountCode, setExpenseAccountCode] = useState('6.1.1.06');
   const [saving, setSaving] = useState(false);
-  const [depreciatingAssetId, setDepreciatingAssetId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -160,20 +159,6 @@ export const FixedAssetsView: React.FC = () => {
     }
   };
 
-  const postDepreciation = async (assetId: string) => {
-    setError('');
-    setMessage('');
-    setDepreciatingAssetId(assetId);
-    try {
-      const event = await recordFixedAssetDepreciation(assetId);
-      setMessage('Depreciación ' + event.period + ' contabilizada. Asiento: ' + event.journalEntryId + '.');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo contabilizar la depreciación.');
-    } finally {
-      setDepreciatingAssetId(null);
-    }
-  };
-
   return (
     <div className="space-y-6 p-4 sm:p-6">
       <header>
@@ -281,7 +266,7 @@ export const FixedAssetsView: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1050px] text-left text-xs">
               <thead className="bg-slate-50 text-slate-500">
-                <tr><th className="p-3">Activo</th><th className="p-3">Origen</th><th className="p-3 text-right">Costo Bs.</th><th className="p-3 text-right">Costo USD</th><th className="p-3 text-right">Deprec. Bs.</th><th className="p-3 text-right">Deprec. USD</th><th className="p-3 text-right">Neto Bs.</th><th className="p-3 text-right">Neto USD</th><th className="p-3">Próximo período</th><th className="p-3">Acción</th></tr>
+                <tr><th className="p-3">Activo</th><th className="p-3">Origen</th><th className="p-3 text-right">Costo Bs.</th><th className="p-3 text-right">Costo USD</th><th className="p-3 text-right">Deprec. Bs.</th><th className="p-3 text-right">Deprec. USD</th><th className="p-3 text-right">Neto Bs.</th><th className="p-3 text-right">Neto USD</th><th className="p-3">Próximo período</th><th className="p-3">Proceso</th></tr>
               </thead>
               <tbody>
                 {fixedAssets.map(asset => {
@@ -324,9 +309,11 @@ export const FixedAssetsView: React.FC = () => {
                       <td className="p-3 text-right font-semibold">{formatUsd(netUsd)}</td>
                       <td className="p-3">{historyError ? 'Revisar historial' : nextPeriod || 'Depreciación completada'}</td>
                       <td className="p-3">
-                        <button type="button" disabled={Boolean(historyError || !nextPeriod || depreciatingAssetId)} onClick={() => postDepreciation(asset.id)} className="rounded-md border px-3 py-1.5 font-semibold text-slate-700 disabled:opacity-40">
-                          {depreciatingAssetId === asset.id ? 'Guardando…' : 'Registrar'}
-                        </button>
+                        {historyError
+                          ? <span className="font-semibold text-amber-700">Revisar</span>
+                          : nextPeriod
+                            ? <span className="font-semibold text-sky-700">Cierre mensual</span>
+                            : <span className="text-slate-500">Completada</span>}
                       </td>
                     </tr>
                   );
