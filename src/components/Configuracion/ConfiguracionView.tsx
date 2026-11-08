@@ -23,6 +23,7 @@ import { buildOpeningEntryItems } from '../../types/accountingYearOpening';
 import { CompanyModal } from '../CompanyModal';
 import { formatBs, validateVenezuelanRif } from '../../utils/formatters';
 import { MigracionInteligente } from './MigracionInteligente';
+import { IntelligentMigrationWizard } from '../Migracion/IntelligentMigrationWizard';
 
 export const ConfiguracionView: React.FC = () => {
   const {
@@ -44,6 +45,7 @@ export const ConfiguracionView: React.FC = () => {
   } = useAccounting();
 
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
+  const [showUniversalMigrationWizard, setShowUniversalMigrationWizard] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [companySaveBusy, setCompanySaveBusy] = useState(false);
   const companySaveInFlightRef = React.useRef(false);
@@ -1014,7 +1016,18 @@ export const ConfiguracionView: React.FC = () => {
         {!isStorageReady && <p className="text-xs text-rose-700">SQLite no está disponible. La preparación y el registro permanecen deshabilitados.</p>}
       </div>
 
+      <section className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 space-y-3">
+        <div>
+          <h2 className="text-base font-bold text-slate-900">Importación transaccional universal</h2>
+          <p className="mt-1 text-sm text-slate-600">Abre el asistente que valida y registra módulos compatibles en SQLite, con empresa destino explícita y confirmación antes de escribir.</p>
+        </div>
+        <button type="button" onClick={() => setShowUniversalMigrationWizard(true)} disabled={!isStorageReady} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">
+          <Upload className="h-4 w-4" /> Abrir importador transaccional
+        </button>
+        {!isStorageReady && <p className="text-xs text-rose-700">SQLite no está disponible. El importador permanece deshabilitado.</p>}
+      </section>
       <MigracionInteligente />
+      {showUniversalMigrationWizard && <IntelligentMigrationWizard onClose={() => setShowUniversalMigrationWizard(false)} />}
 
       {/* Normativas Legales y Respaldo de Información */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

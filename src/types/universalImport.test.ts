@@ -1,6 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, mapUniversalInventoryItemType } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, selectUniversalRowsByStableKeys, mapUniversalSettlementPreview, mapUniversalInventoryItemType, planUniversalInvoiceSettlements, selectUniversalInvoiceSettlements, validateUniversalSettlementDestination } from './universalImport';
+
+
+
+test('la selección individual de liquidaciones conserva solo las claves marcadas y sus facturas', () => {
+  const plans = [
+    { invoiceRowId: 'invoice-1', invoiceKind: 'sales' as const, settlements: [
+      { sourceRowId: 'payment-1', settlementDate: '2026-11-01', bcvRate: 100, amountUsd: 5, amountBs: 500, method: 'CASH_BS' as const },
+      { sourceRowId: 'payment-2', settlementDate: '2026-11-02', bcvRate: 100, amountUsd: 3, amountBs: 300, method: 'CASH_BS' as const }
+    ] },
+    { invoiceRowId: 'invoice-2', invoiceKind: 'purchases' as const, settlements: [
+      { sourceRowId: 'payment-3', settlementDate: '2026-11-03', bcvRate: 100, amountUsd: 2, amountBs: 200, method: 'CASH_BS' as const }
+    ] }
+  ];
+  const selected = selectUniversalInvoiceSettlements(plans, ['payment-2', 'payment-3']);
+  assert.deepEqual(selected.map(plan => [plan.invoiceRowId, plan.settlements.map(item => item.sourceRowId)]), [
+    ['invoice-1', ['payment-2']], ['invoice-2', ['payment-3']]
+  ]);
+  assert.equal(selectUniversalInvoiceSettlements(plans, []).reduce((sum, plan) => sum + plan.settlements.length, 0), 0);
+});
+
+test('la selección individual rechaza claves ausentes o duplicadas', () => {
+  const plans = [{ invoiceRowId: 'invoice-1', invoiceKind: 'sales' as const, settlements: [
+    { sourceRowId: 'payment-1', settlementDate: '2026-11-01', bcvRate: 100, amountUsd: 5, amountBs: 500, method: 'CASH_BS' as const }
+  ] }];
+  assert.throws(() => selectUniversalInvoiceSettlements(plans, ['missing']), /ya no está disponible/);
+  assert.throws(() => selectUniversalInvoiceSettlements(plans, ['payment-1', 'payment-1']), /vacías o duplicadas/);
+  assert.throws(() => selectUniversalInvoiceSettlements([{ ...plans[0], settlements: [...plans[0].settlements, ...plans[0].settlements] }], ['payment-1']), /vacía o duplicada/);
+});
 
 test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () => {
   const result = extractUniversalJsonCollections([{ codigo: 'A1' }, { codigo: 'A2' }]);
@@ -390,4 +418,131 @@ test('la clasificación de inventario universal exige valores de origen reconoci
   assert.equal(mapUniversalInventoryItemType(''), null);
   assert.equal(mapUniversalInventoryItemType('Producto'), null);
   assert.equal(mapUniversalInventoryItemType('servicio'), null);
+});
+
+
+test('detecta liquidaciones por identificador explícito solo dentro del mismo archivo', () => {
+  const invoice = { migrationfile: 'ventas.json', id: 'sale-1', invoiceNumber: 'F-001', customerRif: 'J-123' };
+  const linked = { migrationfile: 'ventas.json', invoiceId: 'sale-1', date: '2026-11-05', amountBs: 40, method: 'TRANSFERENCIA' };
+  const foreignFile = { migrationfile: 'pagos.json', invoiceId: 'sale-1', date: '2026-11-05', amountBs: 40, method: 'TRANSFERENCIA' };
+  assert.deepEqual(resolveUniversalInvoiceSettlementRows([invoice, linked, foreignFile], invoice), [linked]);
+});
+
+test('detecta liquidaciones por factura y RIF exactos cuando no existe ID', () => {
+  const invoice = { migrationfile: 'origen.json', invoiceNumber: 'FAC-77', customerRif: 'J-12345678-9' };
+  const linked = { migrationfile: 'origen.json', invoiceNumber: 'FAC-77', partyRif: 'J-12345678-9', fechaPago: '2026-11-05', montoBs: '125,00', medioPago: 'Banco' };
+  const wrongParty = { migrationfile: 'origen.json', invoiceNumber: 'FAC-77', partyRif: 'J-99999999-9', fechaPago: '2026-11-05', montoBs: 125, medioPago: 'Banco' };
+  assert.deepEqual(resolveUniversalInvoiceSettlementRows([invoice, linked, wrongParty], invoice), [linked]);
+});
+
+test('no confunde renglones de mercancía con liquidaciones', () => {
+  const invoice = { migrationfile: 'origen.json', id: 'sale-1' };
+  const line = { migrationfile: 'origen.json', saleId: 'sale-1', productCode: 'SKU-1', quantity: 2, date: '2026-11-05', amountBs: 50 };
+  assert.deepEqual(resolveUniversalInvoiceSettlementRows([invoice, line], invoice), []);
+});
+
+test('detecta importes pagados positivos embebidos y permite campos de pago en cero', () => {
+  assert.equal(hasUniversalInlineSettlementAmount({ montoPagado: '1.250,00' }), true);
+  assert.equal(hasUniversalInlineSettlementAmount({ amountCollectedUsd: '0.00' }), false);
+  assert.equal(hasUniversalInlineSettlementAmount({ totalPaidBs: 0 }), false);
+});
+
+test('rechaza identificadores contradictorios en la factura al buscar liquidaciones', () => {
+  const invoice = { migrationfile: 'origen.json', id: 'sale-1', invoiceId: 'sale-2', invoiceNumber: 'F-001', customerRif: 'J-123' };
+  assert.throws(() => resolveUniversalInvoiceSettlementRows([invoice], invoice), /identificadores incompatibles/);
+});
+
+
+test('la selección individual importa exclusivamente las claves estables marcadas', () => {
+  const collections = extractUniversalJsonCollections({
+    ventas: [
+      { invoiceNumber: 'F-001', customerName: 'Cliente 1', customerRif: 'J-1' },
+      { invoiceNumber: 'F-002', customerName: 'Cliente 2', customerRif: 'J-2' }
+    ]
+  });
+  const rows = collections.flatMap(collection => collection.rows.map((row, index) => ({
+    ...row,
+    migrationfile: 'ventas.json',
+    migrationcollection: collection.path,
+    migrationrowid: 'ventas.json|' + collection.path + '|' + index
+  })));
+  const selected = selectUniversalRowsByStableKeys(rows, ['ventas.json|ventas|1']);
+  assert.deepEqual(selected.map(row => row.invoiceNumber), ['F-002']);
+  assert.equal(selectUniversalRowsByStableKeys(rows, []).length, 0);
+});
+
+test('la selección individual rechaza claves ausentes, duplicadas y ambiguas', () => {
+  const rows = [
+    { migrationrowid: 'file.json|ventas|0', invoiceNumber: 'F-001' },
+    { migrationrowid: 'file.json|ventas|1', invoiceNumber: 'F-002' }
+  ];
+  assert.throws(() => selectUniversalRowsByStableKeys(rows, ['file.json|ventas|9']), /ya no está disponible/);
+  assert.throws(() => selectUniversalRowsByStableKeys(rows, ['file.json|ventas|0', 'file.json|ventas|0']), /claves de registro duplicadas/);
+  assert.throws(() => selectUniversalRowsByStableKeys([...rows, { ...rows[0], invoiceNumber: 'F-003' }], ['file.json|ventas|0']), /no es única/);
+});
+
+
+test('normaliza cobros en efectivo con fecha, BCV y equivalencia Bs/USD explícitos', () => {
+ const r=mapUniversalSettlementPreview({migrationrowid:'origen.json|cobros|0',fechaCobro:'2026-10-15',tasaBcv:250,montoBs:2500,medioPago:'efectivo'});
+ assert.equal(r.amountUsd,10);assert.equal(r.method,'CASH_BS');assert.equal(r.settlementDate,'2026-10-15');
+});
+test('rechaza liquidaciones sin tasa, fecha inválida, diferencias cambiarias o banco no identificado', () => {
+ const b={migrationrowid:'f|pagos|0',fechaPago:'2026-10-15',tasaBcv:250,montoBs:2500,medioPago:'efectivo'};
+ assert.throws(()=>mapUniversalSettlementPreview({...b,tasaBcv:undefined}),/tasa BCV histórica/);
+ assert.throws(()=>mapUniversalSettlementPreview({...b,fechaPago:'2026-02-30'}),/fecha válida/);
+ assert.throws(()=>mapUniversalSettlementPreview({...b,montoUsd:20}),/no concilian/);
+ assert.throws(()=>mapUniversalSettlementPreview({...b,medioPago:'transferencia',referencia:'TR-1'}),/ID de una cuenta bancaria real/);
+ assert.throws(()=>mapUniversalSettlementPreview({...b,medioPago:'transferencia',bankAccountId:'BANK-1'}),/referencia o comprobante/);
+});
+
+ 
+test('el plan de liquidaciones bloquea referencias bancarias repetidas ignorando espacios y mayúsculas en todo el lote', () => {
+  const invoices = [
+    { migrationfile: 'origen.json', migrationrowid: 'ventas|0', id: 'V-1', invoiceNumber: 'F-1', customerRif: 'J-1', totalAmountUsd: 100 },
+    { migrationfile: 'origen.json', migrationrowid: 'ventas|1', id: 'V-2', invoiceNumber: 'F-2', customerRif: 'J-2', totalAmountUsd: 100 }
+  ];
+  const settlements = [
+    { migrationfile: 'origen.json', migrationrowid: 'cobros|0', invoiceId: 'V-1', settlementDate: '2026-11-06', bcvRate: 100, amountBs: 1000, amountUsd: 10, method: 'TRANSFERENCIA', bankAccountId: 'BANK-01', reference: 'AB 123' },
+    { migrationfile: 'origen.json', migrationrowid: 'cobros|1', invoiceId: 'V-2', settlementDate: '2026-11-06', bcvRate: 100, amountBs: 500, amountUsd: 5, method: 'TRANSFERENCIA', bankAccountId: ' bank-01 ', reference: 'ab123' }
+  ];
+  assert.throws(() => planUniversalInvoiceSettlements(invoices, [...invoices, ...settlements], 'sales'), /referencia bancaria .*repetida en la misma cuenta/);
+});
+
+test('el plan de liquidaciones conserva referencias iguales en cuentas bancarias distintas', () => {
+  const invoices = [
+    { migrationfile: 'origen.json', migrationrowid: 'ventas|0', id: 'V-1', invoiceNumber: 'F-1', customerRif: 'J-1', totalAmountUsd: 100 },
+    { migrationfile: 'origen.json', migrationrowid: 'ventas|1', id: 'V-2', invoiceNumber: 'F-2', customerRif: 'J-2', totalAmountUsd: 100 }
+  ];
+  const settlements = [
+    { migrationfile: 'origen.json', migrationrowid: 'cobros|0', invoiceId: 'V-1', settlementDate: '2026-11-06', bcvRate: 100, amountBs: 1000, amountUsd: 10, method: 'TRANSFERENCIA', bankAccountId: 'BANK-01', reference: 'AB-123' },
+    { migrationfile: 'origen.json', migrationrowid: 'cobros|1', invoiceId: 'V-2', settlementDate: '2026-11-06', bcvRate: 100, amountBs: 500, amountUsd: 5, method: 'TRANSFERENCIA', bankAccountId: 'BANK-02', reference: 'AB-123' }
+  ];
+  const plan = planUniversalInvoiceSettlements(invoices, [...invoices, ...settlements], 'sales');
+  assert.equal(plan.length, 2);
+  assert.equal(plan.reduce((sum, item) => sum + item.settlements.length, 0), 2);
+});
+
+
+test('valida destinos bancarios históricos por empresa, moneda y auxiliar de movimiento', () => {
+  const settlement = {
+    settlementDate: '2026-11-05', bcvRate: 100, amountUsd: 10, amountBs: 1000,
+    method: 'BANK_TRANSFER_BS' as const, bankAccountId: 'bank-bs', reference: 'TRX-1', sourceRowId: 'payment-1'
+  };
+  const bankAccounts = [{ id: 'bank-bs', companyId: 'company-1', accountCode: '1.1.1.03', currency: 'BS' as const }];
+  const accounts = [{ code: '1.1.1.03', type: 'ACTIVO', isMovement: true }];
+  assert.equal(validateUniversalSettlementDestination(settlement, 'company-1', bankAccounts, accounts), null);
+  assert.match(validateUniversalSettlementDestination(settlement, 'company-2', bankAccounts, accounts) || '', /inexistente o perteneciente a otra empresa/);
+  assert.match(validateUniversalSettlementDestination(settlement, 'company-1', [{ ...bankAccounts[0], currency: 'USD' as const }], accounts) || '', /moneda/);
+  assert.match(validateUniversalSettlementDestination(settlement, 'company-1', bankAccounts, [{ ...accounts[0], isMovement: false }]) || '', /auxiliar contable/);
+});
+
+test('valida transferencia USD y no permite vincular caja a una cuenta bancaria', () => {
+  const usd = {
+    settlementDate: '2026-11-05', bcvRate: 100, amountUsd: 10, amountBs: 1000,
+    method: 'BANK_TRANSFER_USD' as const, bankAccountId: 'bank-usd', reference: 'TRX-USD', sourceRowId: 'payment-usd'
+  };
+  const banks = [{ id: 'bank-usd', companyId: 'company-1', accountCode: '1.1.1.07.01', currency: 'USD' as const }];
+  const accounts = [{ code: '1.1.1.07.01', type: 'ACTIVO', isMovement: true }];
+  assert.equal(validateUniversalSettlementDestination(usd, 'company-1', banks, accounts), null);
+  assert.match(validateUniversalSettlementDestination({ ...usd, method: 'CASH_BS' as const }, 'company-1', banks, accounts) || '', /efectivo no puede identificar/);
 });

@@ -725,7 +725,7 @@ function validateSaleCorrectionNotes(previousState, nextState) {
   const priorSales = asArray(previousState?.sales);
   const nextSales = asArray(nextState?.sales);
   const priorIds = new Set(priorSales.map(item => String(item.id)));
-  const normalize = value => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
+  const normalize = value => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
   const round2 = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
   const round6 = value => Math.round((Number(value) + Number.EPSILON) * 1000000) / 1000000;
   const close = (a, b, tolerance = 0.02) => Number.isFinite(Number(a)) && Number.isFinite(Number(b)) && Math.abs(Number(a) - Number(b)) <= tolerance;
@@ -1924,11 +1924,17 @@ function validateAccountingSnapshot(previousState, nextState) {
   for (const settlement of asArray(nextState.creditSettlements)) {
     if (priorCreditSettlementIds.has(String(settlement.id)) || settlement.kind !== 'PURCHASE_PAYMENT') continue;
     const target = asArray(nextState.purchases).find(item =>
-      item.id === settlement.documentId && item.companyId === settlement.companyId && item.documentType === '02');
-    if (!target) continue;
-    const sourceJournal = target.journalEntryId ? priorById.get(String(target.journalEntryId)) : undefined;
+      item.id === settlement.documentId && item.companyId === settlement.companyId &&
+      ['01', '02'].includes(item.documentType));
+    if (!target) {
+      throw new Error('SQLite rechazó un pago de proveedor sin factura de compra o ND destino en la empresa indicada.');
+    }
+    // A newly imported invoice and its payment may be committed in one SQLite
+    // snapshot. Resolve the immutable source journal from that complete snapshot.
+    const sourceJournal = target.journalEntryId ? nextById.get(String(target.journalEntryId)) : undefined;
+    const expectedSourceType = target.documentType === '02' ? 'AJUSTE' : 'COMPRA';
     const payableCodes = sourceJournal && sourceJournal.companyId === target.companyId &&
-      sourceJournal.type === 'AJUSTE' && Array.isArray(sourceJournal.items)
+      sourceJournal.type === expectedSourceType && Array.isArray(sourceJournal.items)
       ? [...new Set(sourceJournal.items.filter(line =>
           String(line.accountCode || '').startsWith('2.1.1.') && Number(line.creditBs || 0) > 0
         ).map(line => String(line.accountCode)))]
@@ -1957,10 +1963,14 @@ function validateAccountingSnapshot(previousState, nextState) {
       .reduce((sum, line) => sum + Number(line.creditBs || 0), 0);
     const payableDebitUsd = asArray(journal?.items).filter(line => line.accountCode === payableCode)
       .reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
+    const payableCreditUsd = asArray(journal?.items).filter(line => line.accountCode === payableCode)
+      .reduce((sum, line) => sum + Number(line.creditUsd || 0), 0);
     const cashCredit = asArray(journal?.items).filter(line => line.accountCode === cashCode)
       .reduce((sum, line) => sum + Number(line.creditBs || 0), 0);
     const cashDebit = asArray(journal?.items).filter(line => line.accountCode === cashCode)
       .reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
+    const cashDebitUsd = asArray(journal?.items).filter(line => line.accountCode === cashCode)
+      .reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
     const cashCreditUsd = asArray(journal?.items).filter(line => line.accountCode === cashCode)
       .reduce((sum, line) => sum + Number(line.creditUsd || 0), 0);
     const fxCode = fxDifferenceBs > 0.009 ? '6.1.1.08' : fxDifferenceBs < -0.009 ? '4.2.1.01' : '';
@@ -1978,9 +1988,25 @@ function validateAccountingSnapshot(previousState, nextState) {
       debitUsd: acc.debitUsd + Number(line.debitUsd || 0),
       creditUsd: acc.creditUsd + Number(line.creditUsd || 0)
     }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
-    if (!target || target.isCancelled || target.paymentTerm !== 'CREDITO' ||
+    const normalizedReference = String(settlement.reference || '').trim().replace(/\s+/g, '').toUpperCase();
+    const duplicateBankReference = bankTransfer && normalizedReference && asArray(nextState.creditSettlements).some(item =>
+      item.id !== settlement.id && item.companyId === target.companyId &&
+      item.bankAccountId === settlement.bankAccountId && !item.isReversed &&
+      String(item.reference || '').trim().replace(/\s+/g, '').toUpperCase() === normalizedReference
+    );
+    const duplicateWithoutReference = !normalizedReference && asArray(nextState.creditSettlements).some(item =>
+      item.id !== settlement.id && item.companyId === target.companyId &&
+      item.documentId === settlement.documentId && item.kind === 'PURCHASE_PAYMENT' && !item.isReversed &&
+      !String(item.reference || '').trim() && item.settlementDate === settlement.settlementDate &&
+      Math.round(Number(item.amountUsd || 0) * 100) === Math.round(amountUsd * 100) &&
+      item.method === settlement.method && item.bankAccountId === settlement.bankAccountId &&
+      Math.round(Number(item.bcvRate || 0) * 1000000) === Math.round(settlementRate * 1000000)
+    );
+    if (target.isCancelled || target.paymentTerm !== 'CREDITO' ||
         !isValidIsoDate(settlement.settlementDate) ||
         settlement.settlementDate < String(target.accountCreditDate || target.invoiceDate) ||
+        !['CASH_BS', 'CASH_USD', 'BANK_TRANSFER_BS', 'BANK_TRANSFER_USD'].includes(settlement.method) ||
+        (bankTransfer && !String(settlement.reference || '').trim()) ||
         !Number.isFinite(amountUsd) || amountUsd <= 0 ||
         !Number.isFinite(amountBs) || amountBs <= 0 ||
         !Number.isFinite(settlementRate) || settlementRate <= 0 ||
@@ -1994,14 +2020,147 @@ function validateAccountingSnapshot(previousState, nextState) {
         Math.abs(payableDebit - expectedPayableBs) > 0.02 ||
         Math.abs(payableCredit) > 0.01 ||
         Math.abs(payableDebitUsd - amountUsd) > 0.0001 ||
+        Math.abs(payableCreditUsd) > 0.0001 ||
         Math.abs(cashCredit - amountBs) > 0.02 ||
         Math.abs(cashDebit) > 0.01 ||
+        Math.abs(cashDebitUsd) > 0.0001 ||
         Math.abs(cashCreditUsd - amountUsd) > 0.0001 ||
         Math.abs(fxLineAmount - fxAmount) > 0.02 ||
         asArray(journal.items).some(line => !allowedCodes.has(line.accountCode)) ||
         Math.abs(totals.debitBs - totals.creditBs) > 0.02 ||
-        Math.abs(totals.debitUsd - totals.creditUsd) > 0.0001) {
-      throw new Error('SQLite rechazó el pago de una ND: documento, cuenta CxP propia, tesorería, diferencial cambiario o asiento no concilian.');
+        Math.abs(totals.debitUsd - totals.creditUsd) > 0.0001 ||
+        duplicateBankReference || duplicateWithoutReference) {
+      throw new Error('SQLite rechazó el pago de una factura/ND de proveedor: documento, cuenta CxP propia, tesorería, referencia duplicada, diferencial cambiario o asiento no concilian.');
+    }
+  }
+
+
+  const priorSaleSettlementIds = new Set(asArray(priorState.creditSettlements).map(item => String(item.id)));
+  for (const settlement of asArray(nextState.creditSettlements)) {
+    if (priorSaleSettlementIds.has(String(settlement.id)) || settlement.kind !== 'SALE_COLLECTION') continue;
+    const target = asArray(nextState.sales).find(item =>
+      item.id === settlement.documentId && item.companyId === settlement.companyId &&
+      ['01', '02'].includes(item.documentType));
+    if (!target) {
+      throw new Error('SQLite rechazó un cobro sin factura/ND de venta destino en la empresa indicada.');
+    }
+    const sourceJournal = target.journalEntryId ? nextById.get(String(target.journalEntryId)) : undefined;
+    const expectedSourceType = target.documentType === '02' ? 'AJUSTE' : 'VENTA';
+    const receivableCode = '1.1.2.01';
+    const sourceReceivable = asArray(sourceJournal?.items).filter(line =>
+      line.accountCode === receivableCode && Number(line.debitBs || 0) > 0
+    );
+    const receivableAccount = asArray(nextState.accounts).find(account => account.code === receivableCode);
+    const journal = settlement.journalEntryId ? nextById.get(String(settlement.journalEntryId)) : undefined;
+    const amountUsd = Number(settlement.amountUsd);
+    const amountBs = Number(settlement.amountBs);
+    const settlementRate = Number(settlement.bcvRate);
+    const invoiceRate = Number(target.bcvRate) > 0
+      ? Number(target.bcvRate)
+      : (Number(target.totalAmountUsd) > 0 ? Number(target.totalAmountBs) / Number(target.totalAmountUsd) : 0);
+    const expectedReceivableBs = Math.round(amountUsd * invoiceRate * 100) / 100;
+    const expectedCashBs = Math.round(amountUsd * settlementRate * 100) / 100;
+    const fxDifferenceBs = Math.round((amountBs - expectedReceivableBs) * 100) / 100;
+    const bank = settlement.bankAccountId
+      ? asArray(nextState.bankAccounts).find(item => item.id === settlement.bankAccountId && item.companyId === target.companyId)
+      : undefined;
+    const bankTransfer = settlement.method === 'BANK_TRANSFER_BS' || settlement.method === 'BANK_TRANSFER_USD';
+    const expectedBankCurrency = settlement.method === 'BANK_TRANSFER_USD' ? 'USD' : 'BS';
+    const cashCode = bank?.accountCode || (settlement.method === 'CASH_USD' ? '1.1.1.02' : '1.1.1.01');
+    const cashAccount = asArray(nextState.accounts).find(account => account.code === cashCode);
+    const bankValid = bankTransfer ? Boolean(bank && bank.currency === expectedBankCurrency) : !settlement.bankAccountId;
+    const cashDebit = asArray(journal?.items).filter(line => line.accountCode === cashCode)
+      .reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
+    const cashCredit = asArray(journal?.items).filter(line => line.accountCode === cashCode)
+      .reduce((sum, line) => sum + Number(line.creditBs || 0), 0);
+    const cashDebitUsd = asArray(journal?.items).filter(line => line.accountCode === cashCode)
+      .reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
+    const cashCreditUsd = asArray(journal?.items).filter(line => line.accountCode === cashCode)
+      .reduce((sum, line) => sum + Number(line.creditUsd || 0), 0);
+    const receivableDebit = asArray(journal?.items).filter(line => line.accountCode === receivableCode)
+      .reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
+    const receivableCredit = asArray(journal?.items).filter(line => line.accountCode === receivableCode)
+      .reduce((sum, line) => sum + Number(line.creditBs || 0), 0);
+    const receivableDebitUsd = asArray(journal?.items).filter(line => line.accountCode === receivableCode)
+      .reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
+    const receivableCreditUsd = asArray(journal?.items).filter(line => line.accountCode === receivableCode)
+      .reduce((sum, line) => sum + Number(line.creditUsd || 0), 0);
+    const fxCode = fxDifferenceBs > 0.009 ? '4.2.1.01' : fxDifferenceBs < -0.009 ? '6.1.1.08' : '';
+    const fxAmount = Math.abs(fxDifferenceBs);
+    const fxLineAmount = fxCode
+      ? asArray(journal?.items).filter(line => line.accountCode === fxCode)
+          .reduce((sum, line) => sum + (fxCode === '4.2.1.01'
+            ? Number(line.creditBs || 0) - Number(line.debitBs || 0)
+            : Number(line.debitBs || 0) - Number(line.creditBs || 0)), 0)
+      : 0;
+    const allowedCodes = new Set([receivableCode, cashCode, ...(fxCode ? [fxCode] : [])]);
+    const totals = asArray(journal?.items).reduce((acc, line) => ({
+      debitBs: acc.debitBs + Number(line.debitBs || 0),
+      creditBs: acc.creditBs + Number(line.creditBs || 0),
+      debitUsd: acc.debitUsd + Number(line.debitUsd || 0),
+      creditUsd: acc.creditUsd + Number(line.creditUsd || 0)
+    }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
+    const normalizedReference = String(settlement.reference || '').trim().replace(/\s+/g, '').toUpperCase();
+    const duplicateBankReference = bankTransfer && normalizedReference && asArray(nextState.creditSettlements).some(item =>
+      item.id !== settlement.id && item.companyId === target.companyId &&
+      item.bankAccountId === settlement.bankAccountId && !item.isReversed &&
+      String(item.reference || '').trim().replace(/\s+/g, '').toUpperCase() === normalizedReference
+    );
+    const duplicateWithoutReference = !normalizedReference && asArray(nextState.creditSettlements).some(item =>
+      item.id !== settlement.id && item.companyId === target.companyId &&
+      item.documentId === settlement.documentId && item.kind === 'SALE_COLLECTION' && !item.isReversed &&
+      !String(item.reference || '').trim() && item.settlementDate === settlement.settlementDate &&
+      Math.round(Number(item.amountUsd || 0) * 100) === Math.round(amountUsd * 100) &&
+      item.method === settlement.method && item.bankAccountId === settlement.bankAccountId &&
+      Math.round(Number(item.bcvRate || 0) * 1000000) === Math.round(settlementRate * 1000000)
+    );
+    if (target.isCancelled || target.paymentTerm !== 'CREDITO' ||
+        !isValidIsoDate(settlement.settlementDate) ||
+        settlement.settlementDate < String(target.invoiceDate) ||
+        !['CASH_BS', 'CASH_USD', 'BANK_TRANSFER_BS', 'BANK_TRANSFER_USD'].includes(settlement.method) ||
+        (bankTransfer && !normalizedReference) ||
+        !Number.isFinite(amountUsd) || amountUsd <= 0 ||
+        !Number.isFinite(amountBs) || amountBs <= 0 ||
+        !Number.isFinite(settlementRate) || settlementRate <= 0 ||
+        !Number.isFinite(invoiceRate) || invoiceRate <= 0 ||
+        Math.abs(amountBs - expectedCashBs) >= 0.01 ||
+        !sourceJournal || sourceJournal.companyId !== target.companyId ||
+        sourceJournal.type !== expectedSourceType || sourceReceivable.length === 0 ||
+        !receivableAccount || receivableAccount.type !== 'ACTIVO' || receivableAccount.isMovement !== true ||
+        !cashAccount || cashAccount.type !== 'ACTIVO' || cashAccount.isMovement !== true || !bankValid ||
+        !journal || journal.companyId !== target.companyId || journal.type !== 'AJUSTE' ||
+        journal.date !== settlement.settlementDate || journal.referenceDoc !== target.invoiceNumber ||
+        Math.abs(cashDebit - amountBs) > 0.02 || Math.abs(cashCredit) > 0.01 ||
+        Math.abs(cashDebitUsd - amountUsd) > 0.0001 || Math.abs(cashCreditUsd) > 0.0001 ||
+        Math.abs(receivableCredit - expectedReceivableBs) > 0.02 || Math.abs(receivableDebit) > 0.01 ||
+        Math.abs(receivableCreditUsd - amountUsd) > 0.0001 || Math.abs(receivableDebitUsd) > 0.0001 ||
+        Math.abs(fxLineAmount - fxAmount) > 0.02 ||
+        asArray(journal.items).some(line => !allowedCodes.has(line.accountCode)) ||
+        Math.abs(totals.debitBs - totals.creditBs) > 0.02 ||
+        Math.abs(totals.debitUsd - totals.creditUsd) > 0.0001 ||
+        duplicateBankReference || duplicateWithoutReference) {
+      throw new Error('SQLite rechazó el cobro de una factura/ND de venta: documento, CxC, tesorería, referencia, diferencial cambiario o asiento no concilian.');
+    }
+  }
+
+  // Cobros, notas de crédito y ND deben compartir un único límite de CxC.
+  for (const sale of asArray(nextState.sales).filter(item =>
+    ['01', '02'].includes(item.documentType) && item.paymentTerm === 'CREDITO' && !item.isCancelled)) {
+    const collectedUsd = asArray(nextState.creditSettlements).filter(item =>
+      item.companyId === sale.companyId && item.documentId === sale.id &&
+      item.kind === 'SALE_COLLECTION' && !item.isReversed)
+      .reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
+    const creditedUsd = asArray(nextState.sales).filter(item =>
+      item.companyId === sale.companyId && item.originalSaleId === sale.id &&
+      item.documentType === '03' && !item.isCancelled)
+      .reduce((sum, item) => sum + Number(item.netReceivableAdjustmentUsd || 0), 0);
+    const debitedUsd = asArray(nextState.sales).filter(item =>
+      item.companyId === sale.companyId && item.originalSaleId === sale.id &&
+      item.documentType === '02' && !item.isCancelled)
+      .reduce((sum, item) => sum + Number(item.netReceivableAdjustmentUsd || 0), 0);
+    const netReceivableUsd = Number(sale.totalAmountUsd) - Number(sale.vatWithheldUsd || 0);
+    if (collectedUsd + creditedUsd > netReceivableUsd + debitedUsd + 0.005) {
+      throw new Error('SQLite rechazó el lote: cobros y notas de crédito superan el principal neto de CxC.');
     }
   }
 
@@ -2160,8 +2319,11 @@ function validateAccountingSnapshot(previousState, nextState) {
       }
     } else {
       const target = purchaseById.get(String(settlement.targetPurchaseId || ''));
+      // The target invoice may be part of this same atomic import batch.
+      // Resolve its immutable journal from the complete next snapshot, not only
+      // from the previously persisted state.
       const originalPurchaseJournal = target?.journalEntryId
-        ? priorById.get(String(target.journalEntryId))
+        ? nextById.get(String(target.journalEntryId))
         : undefined;
       const payableCandidates = originalPurchaseJournal && originalPurchaseJournal.companyId === companyId &&
         originalPurchaseJournal.type === (target?.documentType === '02' ? 'AJUSTE' : 'COMPRA') && Array.isArray(originalPurchaseJournal.items)

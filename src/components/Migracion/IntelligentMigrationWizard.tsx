@@ -2,9 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, mapUniversalInventoryItemType } from '../../types/universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, planUniversalInvoiceSettlements, validateUniversalSettlementDestination, mapUniversalInvoiceSettlementDrafts, mapUniversalSupplierDirectAdvanceDraft, mapUniversalSupplierAdvanceSettlementDraft, selectUniversalRowsByStableKeys, selectUniversalInvoiceSettlements, mapUniversalInventoryItemType } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
+import { validateSupplierDirectAdvanceDraft } from '../../types/supplierDirectAdvance';
 
 type Row = Record<string, unknown>;
 type ModuleId = 'inventory' | 'customers' | 'receivables' | 'payables' | 'sales' | 'purchases' | 'accounts' | 'journal' | 'movements';
@@ -51,7 +52,7 @@ const pick = (row:Row, ...keys:string[]) => {
 };
 
 export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClose}) => {
- const { companies, products: allProducts, getCompanyInventoryProducts, getCompanyInventoryMovements, importInventoryProducts, importInventoryMovements, accounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, currentCompany } = useAccounting();
+ const { companies, products: allProducts, getCompanyInventoryProducts, getCompanyInventoryMovements, importInventoryProducts, importInventoryMovements, accounts, bankAccounts, addAccount, addJournalEntry, addSale, addPurchase, addImportedCreditSettlements, addImportedSupplierDirectAdvances, addImportedSupplierAdvanceSettlements, runAtomicInvoiceImportAndWait, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, currentCompany } = useAccounting();
  const [targetCompanyId, setTargetCompanyId] = useState('');
  const targetCompany = companies.find(company => company.id === targetCompanyId) || null;
  const companyProducts = targetCompany ? getCompanyInventoryProducts(targetCompany.id) : [];
@@ -71,6 +72,17 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
  const [notice,setNotice]=useState('');
+ const [settlementPreview,setSettlementPreview]=useState<Array<{
+  invoiceRowId:string;sourceRowId:string;settlementDate:string;bcvRate:number;amountUsd:number;amountBs:number;
+  method:string;bankAccountId?:string;reference?:string;destinationError:string|null;
+ }>>([]);
+ const [selectedSettlementSourceRowIds,setSelectedSettlementSourceRowIds]=useState<string[]>([]);
+ const [settlementBankOverrides,setSettlementBankOverrides]=useState<Record<string,string>>({});
+ const [supplierAdvancePreview,setSupplierAdvancePreview]=useState<Array<{
+  sourceRowId:string;operation:string;supplierName:string;supplierRif:string;date:string;
+  amountUsd:number;amountBs:number;reference:string;target:string;error:string|null;
+ }>>([]);
+ const [selectedSupplierAdvanceSourceRowIds,setSelectedSupplierAdvanceSourceRowIds]=useState<string[]>([]);
  const [confirmed,setConfirmed]=useState(false);
  const [backupPayload,setBackupPayload]=useState<string|null>(null);
  const [backupCounts,setBackupCounts]=useState<Record<string,number>|null>(null);
@@ -261,7 +273,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   return detected;
  },[rows]);
  const readFiles=async(list:File[])=>{
-  setError('');setNotice('');setRows([]);setHeaders([]);setJsonCollectionDiagnostics([]);setSelected([]);setSelectedInventoryRowKeys([]);setSelectedModuleRowKeys({sales:[],purchases:[],journal:[],movements:[]});setInventoryFilter('');setConfirmed(false);setBackupPayload(null);setBackupCounts(null);setPosvenBackup(false);setPosvenQuality({collections:0,objectRows:0,invalidRows:0,emptyCollections:0,eligibleProducts:0,inactiveProducts:0,kitProducts:0,inactiveKits:0});setSelectedPosvenCollections([]);setPosvenBcvRate('');setPosvenOpeningDate('');setPosvenVatTreatment('');setPosvenProducts([]);setPosvenExcludedProducts([]);setSelectedPosvenProductCodes([]);setPosvenProductFilter('');setFiles(list);
+  setError('');setNotice('');setSupplierAdvancePreview([]);setSelectedSupplierAdvanceSourceRowIds([]);setRows([]);setHeaders([]);setJsonCollectionDiagnostics([]);setSelected([]);setSelectedInventoryRowKeys([]);setSelectedModuleRowKeys({sales:[],purchases:[],journal:[],movements:[]});setInventoryFilter('');setConfirmed(false);setBackupPayload(null);setBackupCounts(null);setPosvenBackup(false);setPosvenQuality({collections:0,objectRows:0,invalidRows:0,emptyCollections:0,eligibleProducts:0,inactiveProducts:0,kitProducts:0,inactiveKits:0});setSelectedPosvenCollections([]);setPosvenBcvRate('');setPosvenOpeningDate('');setPosvenVatTreatment('');setPosvenProducts([]);setPosvenExcludedProducts([]);setSelectedPosvenProductCodes([]);setPosvenProductFilter('');setFiles(list);
   if(!list.length)return;
   try{
    if(list.length===1 && list[0].name.toLowerCase().endsWith('.json')){
@@ -401,7 +413,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   setError('El Importador Inteligente Universal no restaura respaldos completos ni reemplaza los datos actuales. Los archivos se deben analizar por colecciones y cada módulo debe importarse mediante su adaptador con la empresa destino explícita. No se modificó ningún dato.');
  };
  const runMigration=async()=>{
-  setError('');setNotice('');
+  setError('');setNotice('');setSettlementPreview([]);
   if(!confirmed){setError('Marca la confirmación final antes de ejecutar la migración.');return;}
   if(!targetCompany){setError('Selecciona una empresa destino válida.');return;}
   if(selected.includes('accounts')){setError('El plan de cuentas de SICOVEN es actualmente un catálogo compartido por todas las empresas, no un catálogo separado por empresa. Para evitar mezclar planes contables, esta colección queda en análisis y conciliación; no se importará hasta que SICOVEN disponga de planes de cuentas por empresa.');return;}
@@ -418,10 +430,130 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const kind=selected[0];
     const classified=classifyUniversalInvoiceRows(rows);
     const classifiedRows=(kind==='sales'?classified.sales:classified.purchases) as Row[];
-    const sourceRows=classifiedRows.filter(row=>(selectedModuleRowKeys[kind]??[]).includes(String(row.migrationrowid??'')));
+    const sourceRows=selectUniversalRowsByStableKeys(classifiedRows,selectedModuleRowKeys[kind]??[]);
     if(!(selectedModuleRowKeys[kind]??[]).length)throw new Error('Selecciona individualmente las facturas que deseas importar. No se importó ningún documento.');
     if(sourceRows.length===0)throw new Error('No se identificaron archivos con encabezados de '+(kind==='sales'?'ventas y cliente':'compras y proveedor')+'. Verifica número de factura y datos de la contraparte.');
-    const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha de factura','fechaEmision','fecha')??'').slice(0,10);if(!isValidIsoDate(value))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
+    const detectedSettlementPlans=planUniversalInvoiceSettlements(sourceRows,rows,kind);
+    const sameSettlementRows=settlementPreview.length===detectedSettlementPlans.reduce((sum,plan)=>sum+plan.settlements.length,0)&&
+     detectedSettlementPlans.flatMap(plan=>plan.settlements).every((item,index)=>settlementPreview[index]?.sourceRowId===item.sourceRowId);
+    const activeSettlementBankOverrides=sameSettlementRows?settlementBankOverrides:{};
+    if(!sameSettlementRows)setSettlementBankOverrides({});
+    const settlementPlans=detectedSettlementPlans.map(plan=>({...plan,settlements:plan.settlements.map(item=>({
+     ...item,bankAccountId:activeSettlementBankOverrides[item.sourceRowId]||item.bankAccountId
+    }))}));
+    const settlementPlanByInvoice=new Map(settlementPlans.map(plan=>[plan.invoiceRowId,plan]));
+    const linkedSettlementPreview=settlementPlans.flatMap(plan=>plan.settlements.map(settlement=>({
+     invoiceRowId:plan.invoiceRowId,
+     sourceRowId:settlement.sourceRowId,
+     settlementDate:settlement.settlementDate,
+     bcvRate:settlement.bcvRate,
+     amountUsd:settlement.amountUsd,
+     amountBs:settlement.amountBs,
+     method:settlement.method,
+     bankAccountId:settlement.bankAccountId,
+     reference:settlement.reference,
+     destinationError:validateUniversalSettlementDestination(settlement,targetCompany.id,bankAccounts,accounts)
+    })));
+    let selectedSettlementIdsForBatch:string[]=[];
+    if(linkedSettlementPreview.length){
+     const samePreview=settlementPreview.length===linkedSettlementPreview.length&&
+      linkedSettlementPreview.every((item,index)=>settlementPreview[index]?.sourceRowId===item.sourceRowId);
+     selectedSettlementIdsForBatch=samePreview
+      ?selectedSettlementSourceRowIds.filter(id=>linkedSettlementPreview.some(item=>item.sourceRowId===id))
+      :linkedSettlementPreview.map(item=>item.sourceRowId);
+     setSettlementPreview(linkedSettlementPreview);
+     setSelectedSettlementSourceRowIds(selectedSettlementIdsForBatch);
+     const unresolved=linkedSettlementPreview.filter(item=>selectedSettlementIdsForBatch.includes(item.sourceRowId)&&item.destinationError).length;
+     if(unresolved){
+      setNotice('Se detectaron '+linkedSettlementPreview.length+' liquidaciones vinculadas. '+unresolved+' seleccionadas requieren una cuenta destino válida. Desmarca las que no deseas importar o corrige sus datos; las demás pueden contabilizarse.');
+      setBusy(false);
+      return;
+     }
+    }else{
+     setSettlementPreview([]);
+     setSelectedSettlementSourceRowIds([]);
+    }
+         const advanceTargets=new Map<string,{sourceRowId?:string;existingId?:string;label:string;error?:string}>();
+     const sourceFiles=new Set(sourceRows.map(row=>String(row.migrationfile??'')));
+     const advanceOperation=(row:Row)=>norm(String(pick(row,'settlementKind','operationType','transactionType','tipoOperacion','tipoMovimiento','kind','tipo','concept','concepto')??''));
+     const directAdvanceTokens=['supplierdirectadvance','directsupplieradvance','anticipodirectoproveedor','desembolsoanticipoproveedor','anticipoproveedor','anticipodirecto'];
+     const refundTokens=['refundreceived','supplieradvancerefund','refundsupplieradvance','reembolsoanticipo','reembolsoanticipoproveedor'];
+     const applicationTokens=['appliedtopurchase','supplieradvanceapplication','advanceapplication','aplicacionanticipo','aplicacionanticipoproveedor','anticipoaplicadocompra'];
+     const advanceRows=kind==='purchases'?rows.filter(row=>sourceFiles.has(String(row.migrationfile??''))&&
+      [...directAdvanceTokens,...refundTokens,...applicationTokens].includes(advanceOperation(row))):[];
+     const resolveAdvanceTarget=(row:Row)=>{
+      const party=resolveUniversalPartyReference(rows,row,'supplier');
+      const explicit=String(pick(row,'targetPurchaseRowId','purchaseRowId','targetPurchaseId','purchaseId','invoiceId','documentId','idCompra')??'').trim();
+      if(explicit){
+       const sourceMatch=sourceRows.find(candidate=>String(candidate.migrationrowid??'')===explicit||
+        String(pick(candidate,'id','purchaseId','invoiceId','idCompra')??'')===explicit);
+       if(sourceMatch){
+        const sourceParty=resolveUniversalPartyReference(rows,sourceMatch,'supplier');
+        if(sourceParty.rif.trim().toUpperCase()!==party.rif.trim().toUpperCase()){
+         return {label:explicit,error:'La factura destino pertenece a un proveedor distinto. No se aplicará el anticipo.'};
+        }
+        return {sourceRowId:String(sourceMatch.migrationrowid??''),label:String(pick(sourceMatch,'invoiceNumber','numeroFactura','factura','documento')??explicit)};
+       }
+       const existingById=companyPurchases.find(purchase=>purchase.id===explicit&&String(purchase.supplierRif||'').trim().toUpperCase()===party.rif.toUpperCase());
+       if(existingById)return {existingId:existingById.id,label:existingById.invoiceNumber||existingById.id};
+      }
+      const targetNumber=String(pick(row,'targetPurchaseInvoiceNumber','purchaseInvoiceNumber','targetInvoiceNumber','numeroFacturaCompra','facturaCompra','invoiceNumber','numeroFactura','factura')??'').trim();
+      if(targetNumber){
+       const normalizeRef=(value:unknown)=>normalizeUniversalDocumentReference(String(value??''));
+       const candidates=sourceRows.filter(candidate=>
+        normalizeRef(pick(candidate,'invoiceNumber','numeroFactura','factura','documento'))===normalizeRef(targetNumber)&&
+        String(resolveUniversalPartyReference(rows,candidate,'supplier').rif).trim().toUpperCase()===party.rif.toUpperCase());
+       if(candidates.length===1)return {sourceRowId:String(candidates[0].migrationrowid??''),label:targetNumber};
+       if(candidates.length>1)return {label:targetNumber,error:'La factura destino coincide con varias filas seleccionadas.'};
+       const existing=companyPurchases.filter(purchase=>normalizeRef(purchase.invoiceNumber)===normalizeRef(targetNumber)&&
+        String(purchase.supplierRif||'').trim().toUpperCase()===party.rif.toUpperCase()&&!purchase.isCancelled);
+       if(existing.length===1)return {existingId:existing[0].id,label:targetNumber};
+       if(existing.length>1)return {label:targetNumber,error:'La factura destino coincide con varios documentos existentes.'};
+      }
+      return {label:targetNumber||'Sin factura destino',error:'No se pudo enlazar la aplicación a una compra inequívoca del mismo proveedor.'};
+     };
+     const nextAdvancePreview=advanceRows.map(row=>{
+      const operation=advanceOperation(row);
+      let error:string|null=null;let supplierName='';let supplierRif='';let date='';let amountUsd=0;let amountBs=0;let reference='';let target='';
+      try{
+       const party=resolveUniversalPartyReference(rows,row,'supplier');supplierName=party.name;supplierRif=party.rif;
+       if(directAdvanceTokens.includes(operation)){
+        const mapped=mapUniversalSupplierDirectAdvanceDraft(row,rows).draft;
+        const validation=validateSupplierDirectAdvanceDraft(mapped,targetCompany.id,accounts);
+        if(validation)throw new Error(validation);
+        date=mapped.date;amountUsd=mapped.amountUsd;amountBs=Math.round(mapped.amountUsd*mapped.bcvRate*100)/100;reference=mapped.reference;
+       }else{
+        const isApplication=applicationTokens.includes(operation);
+        const resolved=isApplication?resolveAdvanceTarget(row):undefined;
+        if(resolved?.error)throw new Error(resolved.error);
+        if(isApplication&&!resolved?.sourceRowId&&!resolved?.existingId)throw new Error('La aplicación no tiene una factura destino verificable.');
+        if(isApplication)advanceTargets.set(String(row.migrationrowid),resolved!);
+        const mapped=mapUniversalSupplierAdvanceSettlementDraft(row,rows,isApplication?'__purchase_pending__':undefined).draft;
+        date=mapped.date;amountUsd=mapped.amountUsd;amountBs=mapped.amountBs;reference=String(mapped.reference||'');
+        target=isApplication?(resolved?.label||'Compra destino'):'Reembolso a tesorería';
+       }
+      }catch(cause){error=cause instanceof Error?cause.message:'La operación de anticipo no pudo validarse.';}
+      return {sourceRowId:String(row.migrationrowid??''),operation:directAdvanceTokens.includes(operation)?'Anticipo directo':refundTokens.includes(operation)?'Reembolso':'Aplicación a compra',supplierName,supplierRif,date,amountUsd,amountBs,reference,target,error};
+     });
+     let selectedAdvanceIdsForBatch:string[]=[];
+     if(advanceRows.length){
+      const samePreview=supplierAdvancePreview.length===nextAdvancePreview.length&&
+       nextAdvancePreview.every((item,index)=>supplierAdvancePreview[index]?.sourceRowId===item.sourceRowId);
+      selectedAdvanceIdsForBatch=samePreview
+       ?selectedSupplierAdvanceSourceRowIds.filter(id=>nextAdvancePreview.some(item=>item.sourceRowId===id))
+       :nextAdvancePreview.map(item=>item.sourceRowId);
+      setSupplierAdvancePreview(nextAdvancePreview);
+      setSelectedSupplierAdvanceSourceRowIds(selectedAdvanceIdsForBatch);
+      if(!samePreview){setNotice('Se detectaron '+nextAdvancePreview.length+' operaciones de anticipos de proveedores. Revisa cada fila y confirma cuáles deseas importar junto con las compras.');setBusy(false);return;}
+      const unresolved=nextAdvancePreview.filter(item=>selectedAdvanceIdsForBatch.includes(item.sourceRowId)&&item.error).length;
+      if(unresolved){
+       setNotice('Se detectaron '+nextAdvancePreview.length+' operaciones de anticipos; '+unresolved+' seleccionadas requieren corregir datos o vínculo. Desmarca las filas que no deseas importar o corrige el archivo.');
+       setBusy(false);return;
+      }
+     }else{
+      setSupplierAdvancePreview([]);setSelectedSupplierAdvanceSourceRowIds([]);
+     }
+const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha de factura','fechaEmision','fecha')??'').slice(0,10);if(!isValidIsoDate(value))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
     const num=(r:Row,i:number,required:boolean,...keys:string[])=>{const raw=pick(r,...keys);if((raw===undefined||raw==='')&&required)throw new Error('Fila '+(i+1)+': falta el campo obligatorio '+keys[0]+'.');const value=raw===undefined||raw===''?0:parseMigrationNumber(raw);if(!Number.isFinite(value)||value<0)throw new Error('Fila '+(i+1)+': importe inválido en '+keys[0]+'.');return value;};
     const documentKey=(invoiceNumber:string,partyRif:string)=>buildUniversalInvoiceIdentity(kind,invoiceNumber,partyRif);
     const controlKey=(controlNumber:string,partyRif:string)=>norm(controlNumber)+'|'+norm(partyRif);
@@ -461,6 +593,9 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const paymentTermRaw=norm(String(pick(r,'paymentTerm','condicionPago','condicion','tipoPago','formaPago')??''));
      if(!['contado','credito','cash','credit'].includes(paymentTermRaw))throw new Error('Fila '+(i+1)+': indique expresamente paymentTerm CONTADO o CREDITO; no se supondrá la condición de pago.');
      const paymentTerm=(paymentTermRaw==='contado'||paymentTermRaw==='cash'?'CONTADO':'CREDITO') as 'CONTADO'|'CREDITO';
+     if(kind==='sales'&&paymentTerm==='CONTADO'){
+      throw new Error('Fila '+(i+1)+': esta etapa no importa ventas de contado porque el archivo debe identificar y contabilizar la tesorería receptora. No se registrará como CxC ficticia.');
+     }
      const creditDays=paymentTerm==='CREDITO'?num(r,i,true,'creditDays','diasCredito'):0;
      const dueDate=paymentTerm==='CREDITO'?String(pick(r,'dueDate','fechaVencimiento','vencimiento')??'').slice(0,10):undefined;
      if(paymentTerm==='CREDITO'&&(!Number.isInteger(creditDays)||creditDays<1||!isValidIsoDate(dueDate)))throw new Error('Fila '+(i+1)+': las facturas a crédito requieren días de crédito y vencimiento válidos.');
@@ -476,13 +611,22 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const documentTypeRaw=String(documentTypeValue).trim();
      if(!['01','02','03'].includes(documentTypeRaw))throw new Error('Fila '+(i+1)+': tipo de documento inválido; use 01, 02 o 03.');
      if(documentTypeRaw!=='01')throw new Error('Fila '+(i+1)+': las notas de débito/crédito requieren flujos de corrección fiscal y contable enlazados a su factura original. Este adaptador solo importa facturas (01).');
-     const common={invoiceDate,invoiceNumber,controlNumber:String(pick(r,'controlNumber','numeroControl','numero de control')??'').trim(),documentType:documentTypeRaw as '01'|'02'|'03',totalAmountBs,exemptAmountBs,exemptAmountUsd,taxableBaseBs,taxRate,vatAmountBs,vatWithheldBs,bcvRate:rate,totalAmountUsd,taxableBaseUsd,vatAmountUsd,vatWithheldUsd,notes:String(pick(r,'notes','observaciones')??''),paymentTerm,creditDays,dueDate,currencyPricingMode:'REVISION_MANUAL' as const,fiscalAdjustmentMode:'REVISION_CONTADOR' as const};
+     const common={sourceRowId:String(r.migrationrowid??'').trim(),invoiceDate,invoiceNumber,controlNumber:String(pick(r,'controlNumber','numeroControl','numero de control')??'').trim(),documentType:documentTypeRaw as '01'|'02'|'03',totalAmountBs,exemptAmountBs,exemptAmountUsd,taxableBaseBs,taxRate,vatAmountBs,vatWithheldBs,bcvRate:rate,totalAmountUsd,taxableBaseUsd,vatAmountUsd,vatWithheldUsd,notes:String(pick(r,'notes','observaciones')??''),paymentTerm,creditDays,dueDate,currencyPricingMode:'REVISION_MANUAL' as const,fiscalAdjustmentMode:'REVISION_CONTADOR' as const};
      if(!common.controlNumber)throw new Error('Fila '+(i+1)+': número de control obligatorio.');
      if(kind==='sales'){
       const nestedSaleLines=pick(r,'inventoryLines','saleLines','productLines','items','lines','details','detalles','detalle','articulos','productos');
       const relatedSaleDetails=resolveUniversalPurchaseDetailRows(rows,r);
       const rawSaleLines=Array.isArray(nestedSaleLines)&&nestedSaleLines.length?nestedSaleLines:relatedSaleDetails;
       const inventoryLines=rawSaleLines.length?prepareUniversalSaleInventoryLines(rawSaleLines,companyProducts,{taxRate,taxableBaseBs,exemptAmountBs,vatAmountBs,bcvRate:rate}):undefined;
+      const outstandingRaw=pick(r,'outstandingBalanceBs','balanceDueBs','saldoPendienteBs','saldoActualBs','saldoPendiente','saldo');
+      const outstandingUsdRaw=pick(r,'outstandingBalanceUsd','balanceDueUsd','saldoPendienteUsd');
+      if(paymentTerm==='CREDITO'&&(outstandingRaw!==undefined||outstandingUsdRaw!==undefined)){
+       const settledUsd=(settlementPlanByInvoice.get(String(r.migrationrowid))?.settlements||[]).reduce((sum,item)=>sum+Math.round((item.amountUsd+Number.EPSILON)*100)/100,0);
+       const expectedOutstandingBs=Math.max(0,totalAmountBs-vatWithheldBs-settledUsd*rate);
+       const expectedOutstandingUsd=Math.max(0,totalAmountUsd-vatWithheldUsd-settledUsd);
+       if(outstandingRaw!==undefined&&(!Number.isFinite(parseMigrationNumber(outstandingRaw))||parseMigrationNumber(outstandingRaw)<0||Math.abs(parseMigrationNumber(outstandingRaw)-expectedOutstandingBs)>0.02))throw new Error('Fila '+(i+1)+': el saldo pendiente en Bs no coincide con CxC neta después de retenciones y liquidaciones detalladas.');
+       if(outstandingUsdRaw!==undefined&&(!Number.isFinite(parseMigrationNumber(outstandingUsdRaw))||parseMigrationNumber(outstandingUsdRaw)<0||Math.abs(parseMigrationNumber(outstandingUsdRaw)-expectedOutstandingUsd)>0.02))throw new Error('Fila '+(i+1)+': el saldo pendiente en USD no coincide con CxC neta después de retenciones y liquidaciones detalladas.');
+      }
       return {...common,customerRif:partyRif,customerName:partyName,customerAddress:String(pick(r,'customerAddress','direccionCliente')??resolvedParty.address??''),retentionRate:num(r,i,false,'retentionRate','tasaRetencion'),retentionVoucherNumber:String(pick(r,'retentionVoucherNumber','comprobanteRetencion')??'')||undefined,inventoryLines};
      }
      const accountCreditDate=String(pick(r,'accountCreditDate','fechaAbonoCuenta','fechaReconocimiento','fechaPago')??'').slice(0,10);
@@ -506,14 +650,34 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const netPayableBs=totalAmountBs-vatWithheldBs-islrWithheldBs;
      const netPayableUsd=totalAmountUsd-vatWithheldUsd-islrWithheldUsd;
      if(vatWithheldBs+islrWithheldBs>totalAmountBs+0.02||vatWithheldUsd+islrWithheldUsd>totalAmountUsd+0.02||netPayableBs < -0.02||netPayableUsd < -0.02)throw new Error('Fila '+(i+1)+': la suma de las retenciones IVA e ISLR supera el total de la factura.');
+     const outstandingRaw=pick(r,'outstandingBalanceBs','balanceDueBs','saldoPendienteBs','saldoActualBs','saldoPendiente','saldo');
+     const outstandingUsdRaw=pick(r,'outstandingBalanceUsd','balanceDueUsd','saldoPendienteUsd');
+     if(paymentTerm==='CREDITO'&&(outstandingRaw!==undefined||outstandingUsdRaw!==undefined)){
+      const settledUsd=(settlementPlanByInvoice.get(String(r.migrationrowid))?.settlements||[]).reduce((sum,item)=>sum+Math.round((item.amountUsd+Number.EPSILON)*100)/100,0);
+      const expectedOutstandingBs=Math.max(0,netPayableBs-settledUsd*rate);
+      const expectedOutstandingUsd=Math.max(0,netPayableUsd-settledUsd);
+      if(outstandingRaw!==undefined&&(!Number.isFinite(parseMigrationNumber(outstandingRaw))||parseMigrationNumber(outstandingRaw)<0||Math.abs(parseMigrationNumber(outstandingRaw)-expectedOutstandingBs)>0.02))throw new Error('Fila '+(i+1)+': el saldo pendiente en Bs no coincide con CxP neta después de retenciones y liquidaciones detalladas.');
+      if(outstandingUsdRaw!==undefined&&(!Number.isFinite(parseMigrationNumber(outstandingUsdRaw))||parseMigrationNumber(outstandingUsdRaw)<0||Math.abs(parseMigrationNumber(outstandingUsdRaw)-expectedOutstandingUsd)>0.02))throw new Error('Fila '+(i+1)+': el saldo pendiente en USD no coincide con CxP neta después de retenciones y liquidaciones detalladas.');
+     }
      const rawSupplierTaxStatus=norm(String(pick(r,'supplierTaxStatus','condicionFiscalProveedor')??resolvedParty.taxStatus??''));const supplierTaxStatus=({'ordinary':'ORDINARY','ordinario':'ORDINARY','contribuyenteordinario':'ORDINARY','formal':'FORMAL','contribuyenteformal':'FORMAL','special':'SPECIAL','especial':'SPECIAL','contribuyenteespecial':'SPECIAL','nonregistered':'NON_REGISTERED','notregistered':'NON_REGISTERED','noregistrado':'NON_REGISTERED','nocontribuyente':'NON_REGISTERED','unknown':'UNKNOWN','desconocido':'UNKNOWN'} as Record<string,string>)[rawSupplierTaxStatus];if(resolvedParty.taxStatus&&!supplierTaxStatus)throw new Error('Fila '+(i+1)+': la condición fiscal del proveedor no se reconoce; debe revisarse antes de importar retenciones.');return {...common,accountCreditDate,paymentAccountCode:paymentAccountCode||undefined,paymentReference:paymentReference||undefined,purchaseDebitAccountCode:purchaseDebitAccountCode||undefined,inventoryLines,supplierRif:partyRif,supplierName:partyName,supplierAddress:String(pick(r,'supplierAddress','direccionProveedor')??resolvedParty.address??''),supplierEmail:String(pick(r,'supplierEmail','correoProveedor')??resolvedParty.email??'')||undefined,supplierTaxStatus:supplierTaxStatus as any,ivaRetentionDecision:pick(r,'ivaRetentionDecision','retentionDecisionSnapshot') as any,islrConceptCode:islrWithheldBs>0?String(pick(r,'islrConceptCode')??''):undefined,islrConceptName:islrWithheldBs>0?String(pick(r,'islrConceptName')??''):undefined,islrRate:islrWithheldBs>0?num(r,i,true,'islrRate'):undefined,islrSubtrahendBs:islrWithheldBs>0?num(r,i,false,'islrSubtrahendBs'):undefined,islrBeneficiaryType:islrWithheldBs>0?pick(r,'islrBeneficiaryType') as any:undefined,islrResidency:islrWithheldBs>0?pick(r,'islrResidency') as any:undefined,islrBasePercentage:islrWithheldBs>0?num(r,i,true,'islrBasePercentage'):undefined,islrUnitTaxValueBs:islrWithheldBs>0?num(r,i,true,'islrUnitTaxValueBs'):undefined,islrFormulaFactor:islrWithheldBs>0?num(r,i,true,'islrFormulaFactor'):undefined,islrWithheldBs,islrWithheldUsd,retentionRate,voucherNumber:String(pick(r,'voucherNumber','comprobanteRetencion')??'')||undefined,vatWithheldBs,vatWithheldUsd};
     });
-    runAtomicInvoiceImport(()=>{
+    let importedSettlementCount=0;
+    let skippedSettlementCount=0;
+    let importedDirectAdvanceCount=0;
+    let importedAdvanceSettlementCount=0;
+    const selectedAdvanceRows=advanceRows.filter(row=>selectedAdvanceIdsForBatch.includes(String(row.migrationrowid??'')));
+    const createdDocuments: Array<ReturnType<typeof addSale> | ReturnType<typeof addPurchase>>=[];
+    const createdDocumentIds: Record<string,string>={};
+    await runAtomicInvoiceImportAndWait(()=>{
      if(kind==='sales'){
       const movementRows: Parameters<typeof importInventoryMovements>[0]=[];
       prepared.forEach(s=>{
-       const sale=s as Parameters<typeof addSale>[0];
-       addSale(sale,targetCompany.id);
+       const {sourceRowId,...saleData}=s;
+       if(!sourceRowId)throw new Error('Una factura de venta no conserva su clave estable de origen.');
+       const sale=saleData as Parameters<typeof addSale>[0];
+       const created=addSale(sale,targetCompany.id);
+       createdDocuments.push(created);
+       createdDocumentIds[sourceRowId]=created.id;
        if(sale.inventoryLines?.length){
         const unanchoredLine=sale.inventoryLines.find(line=>{
          const product=companyProducts.find(item=>item.id===line.productId);
@@ -534,8 +698,12 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      }else{
       const movementRows: Array<Record<string,unknown>>=[];
       prepared.forEach(p=>{
-       const purchase=p as Parameters<typeof addPurchase>[0];
-       addPurchase({...purchase,documentType:purchase.documentType,retentionRate:purchase.retentionRate,vatWithheldBs:purchase.vatWithheldBs,vatWithheldUsd:purchase.vatWithheldUsd},targetCompany.id);
+       const {sourceRowId,...purchaseData}=p;
+       if(!sourceRowId)throw new Error('Una factura de compra no conserva su clave estable de origen.');
+       const purchase=purchaseData as Parameters<typeof addPurchase>[0];
+       const created=addPurchase({...purchase,documentType:purchase.documentType,retentionRate:purchase.retentionRate,vatWithheldBs:purchase.vatWithheldBs,vatWithheldUsd:purchase.vatWithheldUsd},targetCompany.id);
+       createdDocuments.push(created);
+       createdDocumentIds[sourceRowId]=created.id;
        if(purchase.inventoryLines?.length){
         movementRows.push(...purchase.inventoryLines.map(line=>({
          productId:line.productId,date:purchase.invoiceDate,type:'ENTRADA' as const,concept:'COMPRA',
@@ -547,8 +715,26 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
       });
       if(movementRows.length)importInventoryMovements(movementRows as Parameters<typeof importInventoryMovements>[0],targetCompany.id);
      }
+     const selectedSettlementPlans=selectUniversalInvoiceSettlements(settlementPlans,selectedSettlementIdsForBatch);
+     const settlementDrafts=mapUniversalInvoiceSettlementDrafts(selectedSettlementPlans,createdDocumentIds);
+     const detectedSettlementCount=settlementPlans.reduce((sum,plan)=>sum+plan.settlements.length,0);
+     skippedSettlementCount=detectedSettlementCount-settlementDrafts.length;
+     importedSettlementCount=addImportedCreditSettlements(settlementDrafts,createdDocuments,targetCompany.id).length;
+     const directAdvanceDrafts=selectedAdvanceRows.filter(row=>directAdvanceTokens.includes(advanceOperation(row)))
+      .map(row=>mapUniversalSupplierDirectAdvanceDraft(row,rows));
+     importedDirectAdvanceCount=addImportedSupplierDirectAdvances(directAdvanceDrafts,targetCompany.id).length;
+     const supplierAdvanceSettlementDrafts=selectedAdvanceRows.filter(row=>
+      refundTokens.includes(advanceOperation(row))||applicationTokens.includes(advanceOperation(row))
+     ).map(row=>{
+      const sourceId=String(row.migrationrowid??'');
+      const target=advanceTargets.get(sourceId);
+      const targetPurchaseId=target?.existingId||(target?.sourceRowId?createdDocumentIds[target.sourceRowId]:undefined);
+      return mapUniversalSupplierAdvanceSettlementDraft(row,rows,targetPurchaseId);
+     });
+     importedAdvanceSettlementCount=addImportedSupplierAdvanceSettlements(supplierAdvanceSettlementDrafts,targetCompany.id).length;
     });
-    setNotice((kind==='sales'?'Ventas':'Compras')+' importadas: '+prepared.length+' facturas. SICOVEN generó los asientos y derivó CxC/CxP según la condición de pago. Revisa documentos, impuestos y saldos; confirma por separado el siguiente módulo.');
+    setSettlementPreview([]);setSelectedSettlementSourceRowIds([]);setSupplierAdvancePreview([]);setSelectedSupplierAdvanceSourceRowIds([]);
+    setNotice((kind==='sales'?'Ventas':'Compras')+' importadas: '+prepared.length+' facturas. Liquidaciones de factura: '+importedSettlementCount+'; omitidas: '+skippedSettlementCount+'. Anticipos directos: '+importedDirectAdvanceCount+'. Reembolsos/aplicaciones FIFO: '+importedAdvanceSettlementCount+'. Los asientos y saldos se confirmaron juntos en una sola transacción SQLite.');
     setSelected(old=>old.filter(id=>id!==kind));setConfirmed(false);
      setBusy(false);return;
    }
@@ -783,6 +969,65 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"><div className="mb-1 flex items-center gap-2 font-semibold"><ShieldCheck size={17}/> Controles de seguridad</div>Se rechazan códigos duplicados y campos numéricos inválidos; no se sobrescriben artículos existentes. Ventas, compras, asientos y movimientos históricos de inventario disponen de importadores con validaciones específicas. El plan de cuentas compartido no se modifica desde este flujo. CxC y CxP se derivan de facturas de crédito; clientes y proveedores no se importan como maestros separados porque el modelo actual los conserva dentro de sus documentos. Revisa la vista previa y confirma antes de importar.</div>
     {error&&<div role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800"><AlertTriangle className="mr-2 inline" size={17}/>{error}</div>}
     {notice&&<div role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 className="mr-2 inline" size={17}/>{notice}</div>}
+    {supplierAdvancePreview.length>0&&<section className="rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+      <h3 className="text-sm font-semibold text-indigo-950">Anticipos de proveedores detectados</h3>
+      <p className="mt-1 text-xs text-indigo-900">Selecciona individualmente los desembolsos, reembolsos y aplicaciones que deben contabilizarse con este lote de compras. Las aplicaciones se enlazan únicamente con una factura del mismo proveedor y conservan el FIFO histórico.</p>
+      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+       <button type="button" className="font-medium underline" onClick={()=>setSelectedSupplierAdvanceSourceRowIds(supplierAdvancePreview.map(item=>item.sourceRowId))}>Seleccionar todas</button>
+       <button type="button" className="font-medium underline" onClick={()=>setSelectedSupplierAdvanceSourceRowIds([])}>Desmarcar todas</button>
+       <span>{selectedSupplierAdvanceSourceRowIds.length} de {supplierAdvancePreview.length} operaciones seleccionadas</span>
+      </div>
+      <div className="mt-3 max-h-64 overflow-auto">
+       <table className="min-w-full text-xs">
+        <thead><tr className="border-b border-indigo-200 text-left"><th className="px-2 py-2">Importar</th><th className="px-2 py-2">Operación</th><th className="px-2 py-2">Proveedor / RIF</th><th className="px-2 py-2">Fecha</th><th className="px-2 py-2 text-right">USD</th><th className="px-2 py-2 text-right">Bs</th><th className="px-2 py-2">Referencia / destino</th><th className="px-2 py-2">Validación</th></tr></thead>
+        <tbody>{supplierAdvancePreview.map(item=><tr key={item.sourceRowId} className="border-b border-indigo-100 align-top">
+         <td className="px-2 py-2"><input type="checkbox" checked={selectedSupplierAdvanceSourceRowIds.includes(item.sourceRowId)} onChange={event=>setSelectedSupplierAdvanceSourceRowIds(current=>event.target.checked?[...current,item.sourceRowId]:current.filter(id=>id!==item.sourceRowId))} aria-label={'Importar operación de anticipo '+item.sourceRowId}/></td>
+         <td className="px-2 py-2">{item.operation}</td>
+         <td className="px-2 py-2">{item.supplierName}<span className="block font-mono text-slate-500">{item.supplierRif}</span></td>
+         <td className="px-2 py-2">{item.date||'—'}</td>
+         <td className="px-2 py-2 text-right tabular-nums">{item.amountUsd?item.amountUsd.toFixed(2):'—'}</td>
+         <td className="px-2 py-2 text-right tabular-nums">{item.amountBs?item.amountBs.toFixed(2):'—'}</td>
+         <td className="px-2 py-2">{item.reference||'—'}{item.target&&<span className="block text-slate-500">{item.target}</span>}<span className="block break-all font-mono text-slate-400">{item.sourceRowId}</span></td>
+         <td className="px-2 py-2">{item.error?<span className="font-medium text-rose-700">{item.error}</span>:<span className="font-medium text-emerald-700">Verificado</span>}</td>
+        </tr>)}</tbody>
+       </table>
+      </div>
+     </section>}
+    {settlementPreview.length>0&&<section className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+     <h3 className="text-sm font-semibold text-amber-900">Liquidaciones históricas vinculadas</h3>
+     <p className="mt-1 text-xs text-amber-900">Marca los cobros y pagos que deseas contabilizar junto con las facturas seleccionadas. Los registros desmarcados no se importarán ni modificarán sus saldos.</p>
+     <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+      <button type="button" className="font-medium underline" onClick={()=>setSelectedSettlementSourceRowIds(settlementPreview.map(item=>item.sourceRowId))}>Seleccionar todas</button>
+      <button type="button" className="font-medium underline" onClick={()=>setSelectedSettlementSourceRowIds([])}>Desmarcar todas</button>
+      <span>{selectedSettlementSourceRowIds.length} de {settlementPreview.length} liquidaciones seleccionadas</span>
+     </div>
+     <div className="mt-3 max-h-64 overflow-auto">
+      <table className="min-w-full text-xs">
+       <thead><tr className="border-b border-amber-200 text-left"><th className="px-2 py-2">Importar</th><th className="px-2 py-2">Factura origen</th><th className="px-2 py-2">Liquidación</th><th className="px-2 py-2">Fecha</th><th className="px-2 py-2">Medio</th><th className="px-2 py-2 text-right">Tasa BCV</th><th className="px-2 py-2 text-right">USD</th><th className="px-2 py-2 text-right">Bs</th><th className="px-2 py-2">Referencia</th><th className="px-2 py-2">Destino</th></tr></thead>
+       <tbody>{settlementPreview.map(item=><tr key={item.sourceRowId} className="border-b border-amber-100 align-top">
+        <td className="px-2 py-2"><input type="checkbox" checked={selectedSettlementSourceRowIds.includes(item.sourceRowId)} onChange={event=>setSelectedSettlementSourceRowIds(current=>event.target.checked?[...current,item.sourceRowId]:current.filter(id=>id!==item.sourceRowId))} aria-label={'Importar liquidación '+item.sourceRowId}/></td>
+        <td className="px-2 py-2 font-mono">{item.invoiceRowId}</td><td className="px-2 py-2 font-mono">{item.sourceRowId}</td>
+        <td className="px-2 py-2">{item.settlementDate}</td><td className="px-2 py-2">{item.method==='CASH_BS'?'Efectivo Bs':item.method==='CASH_USD'?'Efectivo USD':item.method==='BANK_TRANSFER_BS'?'Transferencia Bs':'Transferencia USD'}</td>
+        <td className="px-2 py-2 text-right tabular-nums">{item.bcvRate.toFixed(4)}</td>
+        <td className="px-2 py-2 text-right tabular-nums">{item.amountUsd.toFixed(2)}</td><td className="px-2 py-2 text-right tabular-nums">{item.amountBs.toFixed(2)}</td>
+        <td className="px-2 py-2">{item.reference||'—'}</td>
+        <td className="px-2 py-2">
+         {(item.method==='BANK_TRANSFER_BS'||item.method==='BANK_TRANSFER_USD')&&<div className="mb-2 min-w-52">
+          <select className="w-full rounded border border-slate-300 bg-white px-2 py-1" value={settlementBankOverrides[item.sourceRowId]??item.bankAccountId??''} onChange={event=>{
+           const bankAccountId=event.target.value;
+           setSettlementBankOverrides(current=>({...current,[item.sourceRowId]:bankAccountId}));
+           setSettlementPreview(current=>current.map(row=>row.sourceRowId===item.sourceRowId?{...row,bankAccountId,destinationError:'Cuenta destino modificada; vuelve a confirmar para validar.'}:row));
+          }}>
+           <option value="">Seleccionar cuenta bancaria…</option>
+           {bankAccounts.filter(bank=>bank.companyId===targetCompanyId&&bank.currency===(item.method==='BANK_TRANSFER_USD'?'USD':'BS')).map(bank=><option key={bank.id} value={bank.id}>{bank.bankName} •••{String(bank.accountNumber||'').slice(-4)} — {bank.accountCode}</option>)}
+          </select>
+         </div>}
+         {item.destinationError?<span className="font-medium text-rose-700">{item.destinationError}</span>:<span className="font-medium text-emerald-700">Verificado</span>}
+        </td>
+       </tr>)}</tbody>
+      </table>
+     </div>
+    </section>}
     {(rows.length>0||(posvenBackup&&selectedPosvenCollections.includes('productos')))&&<label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} className="mt-1"/><span>{posvenBackup&&selectedPosvenCollections.includes('productos')?'Confirmo la importación de los productos activos no-kit seleccionados. Entiendo que no se sobrescribirán códigos existentes, que el costo Bs se calculará con la tasa BCV indicada y que el tratamiento IVA elegido se aplicará a los artículos importados.':'Confirmo que revisé las colecciones y los registros seleccionados. Autorizo únicamente el módulo y las filas marcadas, con la empresa destino indicada; no autorizo restaurar respaldos completos ni reemplazar datos existentes.'}</span></label>}
    </div>
    <footer className="flex flex-wrap justify-between gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Cerrar</button><button disabled={posvenBackup?(busy||selectedPosvenCollections.length!==1||!confirmed||(selectedPosvenCollections.includes('productos')?(selectedPosvenProductCodes.length===0||!posvenVatTreatment||!posvenOpeningDate||!posvenBcvRate.trim()):(!selected.length||!['sales','purchases','journal','movements'].includes(selected[0])||!(selectedModuleRowKeys[selected[0]]??[]).length))):(busy||(!backupPayload&&(!rows.length||!confirmed||selected.length<1||!['inventory','journal','sales','purchases','movements'].includes(selected[0])))||!!backupPayload)} onClick={posvenBackup?(selectedPosvenCollections.includes('productos')?runPosvenImport:runMigration):backupPayload?runBackupImport:runMigration} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy?'Validando e importando…':posvenBackup?(selectedPosvenCollections.includes('productos')?'Importar productos POSVEN':'Importar módulo POSVEN seleccionado'):backupPayload?'Respaldo completo no importable':'Importar siguiente módulo'}</button></footer>

@@ -607,6 +607,136 @@ test('SQLite keeps inventory movements append-only', () => {
   ), /eliminación del registro histórico en movements/);
 });
 
+
+test('SQLite validates a sales invoice and its collection created in the same atomic batch', () => {
+  const sale = {
+    id: 'sale-batch-collection', companyId: 'company-1', opNumber: 1,
+    invoiceDate: '2026-10-10', customerRif: 'J-12345678-9', customerName: 'Cliente',
+    invoiceNumber: 'S-100', controlNumber: 'CTRL-S-100', documentType: '01',
+    totalAmountBs: 116, taxableBaseBs: 100, exemptAmountBs: 0, taxRate: 16,
+    vatAmountBs: 16, vatWithheldBs: 0, vatWithheldUsd: 0,
+    igtfAmountBs: 0, igtfAmountUsd: 0, igtfApplicable: false,
+    bcvRate: 100, totalAmountUsd: 1.16, taxableBaseUsd: 1,
+    vatAmountUsd: 0.16, paymentTerm: 'CREDITO',
+    journalEntryId: 'sale-batch-entry', inventoryLines: []
+  };
+  const saleJournal = {
+    id: 'sale-batch-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-10', description: 'Factura venta S-100', type: 'VENTA',
+    bcvRate: 100, referenceDoc: 'FAC-S-100',
+    items: [
+      { accountCode: '1.1.2.01', debitBs: 116, creditBs: 0, debitUsd: 1.16, creditUsd: 0 },
+      { accountCode: '4.1.1.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 },
+      { accountCode: '2.1.2.01', debitBs: 0, creditBs: 16, debitUsd: 0, creditUsd: 0.16 }
+    ], createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const paymentJournal = {
+    id: 'sale-batch-collection-entry', companyId: 'company-1', entryNumber: 2,
+    date: '2026-10-11', description: 'Cobro factura S-100', type: 'AJUSTE',
+    bcvRate: 110, referenceDoc: 'S-100',
+    items: [
+      { accountCode: '1.1.1.03', debitBs: 55, creditBs: 0, debitUsd: 0.5, creditUsd: 0 },
+      { accountCode: '1.1.2.01', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 0.5 },
+      { accountCode: '4.2.1.01', debitBs: 0, creditBs: 5, debitUsd: 0, creditUsd: 0 }
+    ], createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const accounts = [
+    { code: '1.1.2.01', name: 'Cuentas por cobrar clientes', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.1.03', name: 'Banco', type: 'ACTIVO', isMovement: true },
+    { code: '4.2.1.01', name: 'Ganancia cambiaria', type: 'INGRESOS', isMovement: true }
+  ];
+  const settlement = {
+    id: 'sale-batch-collection', companyId: 'company-1',
+    documentId: sale.id, kind: 'SALE_COLLECTION',
+    settlementDate: '2026-10-11', bcvRate: 110,
+    amountUsd: 0.5, amountBs: 55, method: 'BANK_TRANSFER_BS',
+    bankAccountId: 'bank-1', reference: 'SALE TRX 100',
+    journalEntryId: paymentJournal.id, createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const prior = { ...emptyState(), accounts, sales: [], journalEntries: [], creditSettlements: [],
+    bankAccounts: [{ id: 'bank-1', companyId: 'company-1', accountCode: '1.1.1.03', currency: 'BS' }] };
+  const next = {
+    ...prior, sales: [sale],
+    journalEntries: [saleJournal, paymentJournal],
+    creditSettlements: [settlement]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...next,
+    journalEntries: [saleJournal, {
+      ...paymentJournal,
+      items: paymentJournal.items.map(line => line.accountCode === '1.1.2.01'
+        ? { ...line, accountCode: '1.1.2.99' } : line)
+    }]
+  }), /cobro de una factura.*ND de venta/);
+  const priorDuplicate = {
+    ...prior,
+    creditSettlements: [{
+      id: 'prior-sale-bank-payment', companyId: 'company-1', documentId: 'other-sale',
+      kind: 'SALE_COLLECTION', bankAccountId: 'bank-1', reference: 'SALE   TRX 100', isReversed: false
+    }]
+  };
+  assert.throws(() => validateAccountingSnapshot(priorDuplicate, {
+    ...next,
+    creditSettlements: [...priorDuplicate.creditSettlements, settlement]
+  }), /referencia/);
+});
+
+test('SQLite rejects sales collections that exceed net receivable after withholding', () => {
+  const sale = {
+    id: 'sale-overpayment', companyId: 'company-1', opNumber: 1,
+    invoiceDate: '2026-10-10', customerRif: 'J-12345678-9', customerName: 'Cliente',
+    invoiceNumber: 'S-101', controlNumber: 'CTRL-S-101', documentType: '01',
+    totalAmountBs: 116, taxableBaseBs: 100, exemptAmountBs: 0, taxRate: 16,
+    vatAmountBs: 16, vatWithheldBs: 16, vatWithheldUsd: 0.16,
+    igtfAmountBs: 0, igtfAmountUsd: 0, igtfApplicable: false,
+    bcvRate: 100, totalAmountUsd: 1.16, taxableBaseUsd: 1,
+    vatAmountUsd: 0.16, paymentTerm: 'CREDITO',
+    journalEntryId: 'sale-overpayment-entry', inventoryLines: []
+  };
+  const saleJournal = {
+    id: 'sale-overpayment-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-10', description: 'Factura venta S-101', type: 'VENTA',
+    bcvRate: 100, referenceDoc: 'FAC-S-101',
+    items: [
+      { accountCode: '1.1.2.01', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '1.1.3.03', debitBs: 16, creditBs: 0, debitUsd: 0.16, creditUsd: 0 },
+      { accountCode: '4.1.1.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 },
+      { accountCode: '2.1.2.01', debitBs: 0, creditBs: 16, debitUsd: 0, creditUsd: 0.16 }
+    ], createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const settlement = {
+    id: 'sale-overpayment-settlement', companyId: 'company-1',
+    documentId: sale.id, kind: 'SALE_COLLECTION',
+    settlementDate: '2026-10-11', bcvRate: 100,
+    amountUsd: 1.01, amountBs: 101, method: 'CASH_BS',
+    journalEntryId: 'sale-overpayment-payment', createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const paymentJournal = {
+    id: 'sale-overpayment-payment', companyId: 'company-1', entryNumber: 2,
+    date: '2026-10-11', description: 'Cobro excesivo S-101', type: 'AJUSTE',
+    bcvRate: 100, referenceDoc: 'S-101',
+    items: [
+      { accountCode: '1.1.1.01', debitBs: 101, creditBs: 0, debitUsd: 1.01, creditUsd: 0 },
+      { accountCode: '1.1.2.01', debitBs: 0, creditBs: 101, debitUsd: 0, creditUsd: 1.01 }
+    ], createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const accounts = [
+    { code: '1.1.2.01', name: 'Cuentas por cobrar clientes', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.3.03', name: 'IVA retenido por cobrar', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', isMovement: true },
+    { code: '4.1.1.01', name: 'Ventas', type: 'INGRESOS', isMovement: true },
+    { code: '2.1.2.01', name: 'IVA débito fiscal', type: 'PASIVO', isMovement: true }
+  ];
+  const prior = { ...emptyState(), accounts, sales: [], journalEntries: [], creditSettlements: [] };
+  const next = {
+    ...prior, sales: [sale],
+    journalEntries: [saleJournal, paymentJournal],
+    creditSettlements: [settlement]
+  };
+  assert.throws(() => validateAccountingSnapshot(prior, next), /principal neto de CxC/);
+});
+
 test('SQLite allows reversal metadata on a settlement but not edits to its amount', () => {
   const original = sourceEntry();
   const reversal = reversalEntry();
@@ -990,6 +1120,166 @@ test('SQLite rejects a retention correction flag linked to an unrelated entry', 
   next.vatVouchers[0].correctionEntryId = 'unrelated-entry';
   next.vatVouchers[0].correctionEntryIds.push('unrelated-entry');
   assert.throws(() => validateAccountingSnapshot(prior, next), /corrección de retención IVA/);
+});
+
+
+test('SQLite accepts a supplier advance application to a purchase invoice created in the same atomic batch', () => {
+  const { prior: fixturePrior, next: fixtureNext } = supplierCreditFixture();
+  const originalPurchase = structuredClone(fixturePrior.purchases[0]);
+  const originalEntry = structuredClone(fixturePrior.journalEntries[0]);
+  const originalMovement = structuredClone(fixturePrior.movements[0]);
+  const product = structuredClone(fixturePrior.products[0]);
+  const vatVoucher = structuredClone(fixturePrior.vatVouchers[0]);
+  const islrVoucher = structuredClone(fixturePrior.islrVouchers[0]);
+  originalPurchase.id = 'purchase-created-in-batch';
+  originalPurchase.invoiceNumber = '101';
+  originalPurchase.controlNumber = '00-101';
+  originalPurchase.journalEntryId = 'purchase-created-in-batch-entry';
+  originalEntry.id = 'purchase-created-in-batch-entry';
+  originalEntry.entryNumber = 1;
+  originalEntry.referenceDoc = 'FAC-101';
+  originalEntry.items.find(item => item.accountCode === '2.1.1.01').description = 'Cuenta por pagar proveedor';
+  originalMovement.id = 'purchase-created-in-batch-movement';
+  originalMovement.documentRef = 'FAC-101';
+  originalPurchase.inventoryLines = [];
+  originalMovement.quantity = 0;
+  originalMovement.totalCostBs = 0;
+  originalMovement.totalCostUsd = 0;
+  originalPurchase.paymentTerm = 'CREDITO';
+
+  const accounts = [
+    { code: '1.1.2.03', name: 'Anticipos a proveedores', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.1.01', name: 'Caja principal', type: 'ACTIVO', isMovement: true },
+    { code: '2.1.1.01', name: 'Proveedores', type: 'PASIVO', isMovement: true }
+  ];
+  const directJournal = {
+    id: 'batch-direct-source-journal', companyId: 'company-1', entryNumber: 2,
+    date: '2026-10-10', description: 'Anticipo directo', type: 'ANTICIPO_PROVEEDOR',
+    bcvRate: 100, referenceDoc: 'DIRECT-BATCH-1',
+    items: [
+      { accountCode: '1.1.2.03', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+    ], createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const applicationJournal = {
+    id: 'batch-application-journal', companyId: 'company-1', entryNumber: 3,
+    date: '2026-10-11', description: 'Aplicación anticipo a factura 101',
+    type: 'ANTICIPO_PROVEEDOR', bcvRate: 100, referenceDoc: '101',
+    items: [
+      { accountCode: '2.1.1.01', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+    ], createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const source = {
+    id: 'batch-direct-source', companyId: 'company-1', supplierRif: originalPurchase.supplierRif,
+    supplierName: originalPurchase.supplierName, date: '2026-10-10', amountUsd: 1,
+    bookValueBs: 100, bcvRate: 100, treasuryAccountCode: '1.1.1.01',
+    paymentCurrency: 'BS', paidAmount: 100, reference: 'DIRECT-BATCH-1',
+    support: 'REC-DIRECT-BATCH-1', journalEntryId: directJournal.id,
+    createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const settlement = {
+    id: 'batch-advance-application', companyId: 'company-1',
+    supplierRif: originalPurchase.supplierRif, supplierName: originalPurchase.supplierName,
+    sourceCreditNoteIds: [], sourceCreditNoteAllocations: [],
+    sourceDirectAdvanceIds: [source.id],
+    sourceDirectAdvanceAllocations: [{ directAdvanceId: source.id, amountUsd: 1, bookValueBs: 100 }],
+    kind: 'APPLIED_TO_PURCHASE', date: '2026-10-11', amountUsd: 1, amountBs: 100,
+    advanceBookValueBs: 100, bcvRate: 100, targetPurchaseId: originalPurchase.id,
+    journalEntryId: applicationJournal.id, reference: 'APPLY-BATCH-1',
+    createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const prior = {
+    ...emptyState(), accounts, purchases: [], journalEntries: [], movements: [],
+    products: [], vatVouchers: [], islrVouchers: [],
+    supplierDirectAdvances: [], supplierAdvanceSettlements: []
+  };
+  const next = {
+    ...prior,
+    purchases: [originalPurchase],
+    journalEntries: [originalEntry, directJournal, applicationJournal],
+    movements: [],
+    products: [product],
+    vatVouchers: [{ ...vatVoucher, purchaseRecordId: originalPurchase.id, invoiceNumber: originalPurchase.invoiceNumber }],
+    islrVouchers: [{ ...islrVoucher, invoiceNumber: originalPurchase.invoiceNumber }],
+    supplierDirectAdvances: [source],
+    supplierAdvanceSettlements: [settlement]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
+});
+
+
+test('SQLite validates a purchase invoice and its credit payment created in the same atomic batch', () => {
+  const { prior: basePrior } = supplierCreditFixture();
+  const purchase = structuredClone(basePrior.purchases[0]);
+  const purchaseJournal = structuredClone(basePrior.journalEntries[0]);
+  const movement = structuredClone(basePrior.movements[0]);
+  const product = { ...basePrior.products[0], currentStock: 2 };
+  const vatVoucher = structuredClone(basePrior.vatVouchers[0]);
+  const islrVoucher = structuredClone(basePrior.islrVouchers[0]);
+  const settlementRate = 110;
+  const amountUsd = 0.5;
+  const amountBs = 55;
+  const expectedPayableBs = 50;
+  const paymentJournal = {
+    id: 'purchase-batch-payment-entry', companyId: 'company-1', entryNumber: 2,
+    date: '2026-10-11', description: 'Pago parcial factura 100', type: 'AJUSTE',
+    bcvRate: settlementRate, referenceDoc: purchase.invoiceNumber,
+    items: [
+      { accountCode: '2.1.1.01', debitBs: expectedPayableBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0 },
+      { accountCode: '1.1.1.03', debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd },
+      { accountCode: '6.1.1.08', debitBs: 5, creditBs: 0, debitUsd: 0, creditUsd: 0 }
+    ], createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const settlement = {
+    id: 'purchase-batch-payment', companyId: 'company-1',
+    documentId: purchase.id, kind: 'PURCHASE_PAYMENT',
+    settlementDate: '2026-10-11', bcvRate: settlementRate,
+    amountUsd, amountBs, method: 'BANK_TRANSFER_BS', bankAccountId: 'bank-1', reference: 'BANK 100',
+    journalEntryId: paymentJournal.id, createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const accounts = [
+    { code: '1.1.4.01', name: 'Inventario', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.3.01', name: 'IVA crédito fiscal', type: 'ACTIVO', isMovement: true },
+    { code: '6.1.1.11', name: 'IGTF', type: 'GASTOS', isMovement: true },
+    { code: '2.1.2.03', name: 'IVA retenido por pagar', type: 'PASIVO', isMovement: true },
+    { code: '2.1.2.04', name: 'ISLR retenido por pagar', type: 'PASIVO', isMovement: true },
+    { code: '2.1.1.01', name: 'Proveedores', type: 'PASIVO', isMovement: true },
+    { code: '1.1.1.03', name: 'Banco', type: 'ACTIVO', isMovement: true },
+    { code: '6.1.1.08', name: 'Pérdida cambiaria', type: 'GASTOS', isMovement: true }
+  ];
+  const prior = {
+    ...basePrior, purchases: [], journalEntries: [], movements: [], products: [],
+    vatVouchers: [], islrVouchers: [], creditSettlements: [], accounts,
+    bankAccounts: [{ id: 'bank-1', companyId: 'company-1', accountCode: '1.1.1.03', currency: 'BS' }]
+  };
+  const next = {
+    ...prior, purchases: [purchase],
+    journalEntries: [purchaseJournal, paymentJournal],
+    movements: [movement], products: [product],
+    vatVouchers: [vatVoucher], islrVouchers: [islrVoucher],
+    creditSettlements: [settlement]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...next,
+    journalEntries: [purchaseJournal, {
+      ...paymentJournal,
+      items: paymentJournal.items.map(line => line.accountCode === '2.1.1.01'
+        ? { ...line, accountCode: '2.1.1.99' } : line)
+    }]
+  }), /pago de una factura.*ND de proveedor/);
+  const priorDuplicate = {
+    ...prior,
+    creditSettlements: [{
+      id: 'prior-bank-payment', companyId: 'company-1', documentId: 'other-purchase',
+      kind: 'PURCHASE_PAYMENT', bankAccountId: 'bank-1', reference: 'BANK   100', isReversed: false
+    }]
+  };
+  assert.throws(() => validateAccountingSnapshot(priorDuplicate, {
+    ...next,
+    creditSettlements: [...priorDuplicate.creditSettlements, settlement]
+  }), /referencia duplicada/);
 });
 
 test('SQLite applies a direct supplier advance to a future payable and reduces the remaining AP ceiling', () => {
@@ -2322,7 +2612,7 @@ test('SQLite accepts and constrains a cash payment against the ND own payable an
       items: paymentJournal.items.map(line => line.accountCode === '2.1.1.01'
         ? { ...line, accountCode: '2.1.1.99' } : line)
     }]
-  }), /pago de una ND/);
+  }), /pago de una factura.*ND de proveedor/);
 });
 
 

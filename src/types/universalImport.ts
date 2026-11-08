@@ -1,4 +1,106 @@
 import type { InventoryProduct, SaleInventoryLine } from './accounting';
+import type { SupplierDirectAdvanceDraft } from './supplierDirectAdvance';
+import type { SupplierAdvanceSettlementDraft } from './supplierAdvanceSettlement';
+
+export type UniversalSupplierDirectAdvanceDraft = { sourceRowId: string; draft: SupplierDirectAdvanceDraft };
+export type UniversalSupplierAdvanceSettlementDraft = { sourceRowId: string; draft: SupplierAdvanceSettlementDraft };
+
+const parseUniversalAdvanceNumber = (value: unknown): number => {
+  let raw = String(value ?? '').trim().replace(/[^0-9,.-]/g, '');
+  if (raw.includes(',') && raw.includes('.')) raw = raw.replace(/\./g, '').replace(',', '.');
+  else raw = raw.replace(',', '.');
+  return Number(raw);
+};
+const pickUniversalAdvanceValue = (row: Record<string, unknown>, keys: string[]): unknown => {
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const wanted = new Set(keys.map(normalize));
+  return Object.entries(row).find(([key, value]) => wanted.has(normalize(key)) && value !== undefined && value !== null && String(value).trim() !== '')?.[1];
+};
+const requireUniversalAdvanceDate = (value: unknown): string => {
+  const date = String(value ?? '').trim().slice(0, 10);
+  const parts = date.match(/^(\d{4})-(\d{2})-(\d{2})$/)?.slice(1).map(Number);
+  const parsed = parts ? new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])) : null;
+  if (!parts || !parsed || parsed.getUTCFullYear() !== parts[0] || parsed.getUTCMonth() !== parts[1] - 1 || parsed.getUTCDate() !== parts[2]) {
+    throw new Error('La operación de anticipo requiere una fecha histórica válida en formato AAAA-MM-DD.');
+  }
+  return date;
+};
+
+export const mapUniversalSupplierDirectAdvanceDraft = (
+  row: Record<string, unknown>, allSourceRows: Array<Record<string, unknown>>
+): UniversalSupplierDirectAdvanceDraft => {
+  const operation = String(pickUniversalAdvanceValue(row, ['settlementKind','operationType','transactionType','tipoOperacion','tipoMovimiento','concept','concepto','kind','tipo']) ?? '')
+    .trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const directTokens = ['supplierdirectadvance','directsupplieradvance','anticodirectoproveedor','anticipodirectoproveedor','anticipoproveedor','anticipodirecto','desembolsoanticipoproveedor'];
+  if (!directTokens.includes(operation)) throw new Error('La fila no identifica expresamente un desembolso directo de anticipo a proveedor.');
+  const sourceRowId = String(row.migrationrowid ?? '').trim();
+  if (!sourceRowId) throw new Error('El anticipo directo no conserva su identificador estable de fila de origen.');
+  const party = resolveUniversalPartyReference(allSourceRows, row, 'supplier');
+  const date = requireUniversalAdvanceDate(pickUniversalAdvanceValue(row, ['date','fecha','advanceDate','fechaAnticipo','disbursementDate']));
+  const bcvRate = parseUniversalAdvanceNumber(pickUniversalAdvanceValue(row, ['bcvRate','tasaBcv','exchangeRate','tasaHistorica']));
+  const amountUsdRaw = pickUniversalAdvanceValue(row, ['amountUsd','advanceAmountUsd','montoUsd','importeUsd','anticipoUsd']);
+  const amountBsRaw = pickUniversalAdvanceValue(row, ['amountBs','advanceAmountBs','montoBs','importeBs','anticipoBs']);
+  const amountUsd = amountUsdRaw === undefined ? parseUniversalAdvanceNumber(amountBsRaw) / bcvRate : parseUniversalAdvanceNumber(amountUsdRaw);
+  const treasuryAccountCode = String(pickUniversalAdvanceValue(row, ['treasuryAccountCode','accountCode','codigoCuenta','cuentaTesoreria','codigoCuentaTesoreria']) ?? '').trim();
+  const currencyRaw = String(pickUniversalAdvanceValue(row, ['paymentCurrency','currency','moneda','currencyCode']) ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const paymentCurrency = ['bs','ves','bolivar','bolivares'].includes(currencyRaw) ? 'BS' : ['usd','us','dolar','dolares'].includes(currencyRaw) ? 'USD' : null;
+  const paidAmountRaw = pickUniversalAdvanceValue(row, ['paidAmount','disbursedAmount','amountPaid','importeDesembolsado','montoDesembolsado']);
+  const paidAmountSpecific = paymentCurrency === 'USD'
+    ? pickUniversalAdvanceValue(row, ['paidAmountUsd','disbursedAmountUsd','montoDesembolsadoUsd'])
+    : pickUniversalAdvanceValue(row, ['paidAmountBs','disbursedAmountBs','montoDesembolsadoBs']);
+  const paidAmount = parseUniversalAdvanceNumber(paidAmountSpecific ?? paidAmountRaw);
+  const reference = String(pickUniversalAdvanceValue(row, ['reference','paymentReference','disbursementReference','referencia','comprobante']) ?? '').trim();
+  const support = String(pickUniversalAdvanceValue(row, ['support','supportDocument','documentSupport','soporte','comprobanteSoporte','documentoSoporte']) ?? '').trim();
+  if (!Number.isFinite(bcvRate) || bcvRate <= 0 || !Number.isFinite(amountUsd) || amountUsd <= 0 || !treasuryAccountCode ||
+      !paymentCurrency || !Number.isFinite(paidAmount) || paidAmount <= 0 || !reference || !support) {
+    throw new Error('El anticipo ' + sourceRowId + ' requiere importe, tasa BCV, cuenta de tesorería, moneda, desembolso real, referencia y soporte explícitos.');
+  }
+  return { sourceRowId, draft: { supplierRif: party.rif, supplierName: party.name, date, amountUsd, bcvRate, treasuryAccountCode, paymentCurrency, paidAmount, reference, support } };
+};
+
+export const mapUniversalSupplierAdvanceSettlementDraft = (
+  row: Record<string, unknown>, allSourceRows: Array<Record<string, unknown>>, targetPurchaseId?: string
+): UniversalSupplierAdvanceSettlementDraft => {
+  const sourceRowId = String(row.migrationrowid ?? '').trim();
+  if (!sourceRowId) throw new Error('La liquidación de anticipo no conserva su identificador estable de fila de origen.');
+  const party = resolveUniversalPartyReference(allSourceRows, row, 'supplier');
+  const operation = String(pickUniversalAdvanceValue(row, ['settlementKind','operationType','transactionType','tipoOperacion','kind','tipo','concept','concepto']) ?? '')
+    .trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const refundTokens = ['refundreceived','supplieradvancerefund','refundsupplieradvance','reembolsoanticipo','reembolsoanticipoproveedor'];
+  const applicationTokens = ['appliedtopurchase','supplieradvanceapplication','advanceapplication','aplicacionanticipo','aplicacionanticipoproveedor','anticipoaplicadocompra'];
+  const kind = refundTokens.includes(operation) ? 'REFUND_RECEIVED' : applicationTokens.includes(operation) ? 'APPLIED_TO_PURCHASE' : null;
+  if (!kind) throw new Error('La fila no identifica expresamente un reembolso o una aplicación de anticipo a compra.');
+  const date = requireUniversalAdvanceDate(pickUniversalAdvanceValue(row, ['date','fecha','settlementDate','fechaLiquidacion','refundDate','fechaReembolso']));
+  const bcvRate = parseUniversalAdvanceNumber(pickUniversalAdvanceValue(row, ['bcvRate','settlementBcvRate','tasaBcv','exchangeRate','tasaHistorica']));
+  const amountUsdRaw = pickUniversalAdvanceValue(row, ['amountUsd','settlementAmountUsd','montoUsd','importeUsd','amountAppliedUsd']);
+  const amountBsRaw = pickUniversalAdvanceValue(row, ['amountBs','settlementAmountBs','montoBs','importeBs','amountAppliedBs']);
+  const cashRaw = pickUniversalAdvanceValue(row, ['cashReceivedBs','refundReceivedBs','montoReembolsadoBs','importeRecibidoBs']);
+  if (kind === 'REFUND_RECEIVED' && amountBsRaw === undefined && cashRaw === undefined) {
+    throw new Error('El reembolso ' + sourceRowId + ' requiere el importe real recibido en Bs; no se inferirá desde la tasa BCV.');
+  }
+  const amountUsd = amountUsdRaw === undefined ? parseUniversalAdvanceNumber(amountBsRaw ?? cashRaw) / bcvRate : parseUniversalAdvanceNumber(amountUsdRaw);
+  const amountBs = amountBsRaw === undefined
+    ? (kind === 'REFUND_RECEIVED' ? parseUniversalAdvanceNumber(cashRaw) : amountUsd * bcvRate)
+    : parseUniversalAdvanceNumber(amountBsRaw);
+  const reference = String(pickUniversalAdvanceValue(row, ['reference','settlementReference','paymentReference','referencia','comprobante']) ?? '').trim();
+  const treasuryAccountCode = String(pickUniversalAdvanceValue(row, ['treasuryAccountCode','accountCode','codigoCuenta','cuentaTesoreria','codigoCuentaTesoreria']) ?? '').trim();
+  if (!Number.isFinite(bcvRate) || bcvRate <= 0 || !Number.isFinite(amountUsd) || amountUsd <= 0 || !Number.isFinite(amountBs) || amountBs <= 0) {
+    throw new Error('La liquidación ' + sourceRowId + ' requiere importes Bs/USD positivos y su tasa BCV histórica.');
+  }
+  if (kind === 'REFUND_RECEIVED' && !treasuryAccountCode) throw new Error('El reembolso ' + sourceRowId + ' requiere la cuenta real de caja/banco receptora.');
+  if (kind === 'APPLIED_TO_PURCHASE' && !String(targetPurchaseId || '').trim()) throw new Error('La aplicación ' + sourceRowId + ' no se pudo vincular a una compra del mismo proveedor.');
+  const cashReceivedBs = kind === 'REFUND_RECEIVED' ? (cashRaw === undefined ? amountBs : parseUniversalAdvanceNumber(cashRaw)) : undefined;
+  if (kind === 'REFUND_RECEIVED' && (!Number.isFinite(cashReceivedBs) || Number(cashReceivedBs) <= 0)) {
+    throw new Error('El reembolso ' + sourceRowId + ' requiere el importe realmente recibido en Bs.');
+  }
+  return { sourceRowId, draft: {
+    supplierRif: party.rif, kind, date, amountUsd, amountBs, cashReceivedBs, bcvRate,
+    treasuryAccountCode: kind === 'REFUND_RECEIVED' ? treasuryAccountCode : undefined,
+    targetPurchaseId: kind === 'APPLIED_TO_PURCHASE' ? targetPurchaseId : undefined,
+    reference: reference || undefined
+  }};
+};
+
 
 export type UniversalJsonCollection = {
   path: string;
@@ -456,6 +558,262 @@ export const hasUniversalNestedMerchandiseDetails = (invoice: Record<string, unk
   }));
 };
 
+
+
+/**
+ * Detecta liquidaciones relacionadas con una factura dentro del mismo archivo.
+ * Nunca enlaza por similitud ni cruza colecciones de archivos diferentes.
+ */
+export const resolveUniversalInvoiceSettlementRows = (
+  rows: Array<Record<string, unknown>>,
+  invoice: Record<string, unknown>
+): Array<Record<string, unknown>> => {
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const pickValue = (record: Record<string, unknown>, keys: string[]) => {
+    const wanted = new Set(keys.map(normalize));
+    for (const [key, value] of Object.entries(record)) {
+      if (wanted.has(normalize(key)) && value !== undefined && value !== null && String(value).trim() !== '') return value;
+    }
+    return undefined;
+  };
+  const ids = ['id','invoiceId','saleId','purchaseId','documentId','uuid','idFactura','idVenta','idCompra']
+    .map(key => pickValue(invoice, [key])).filter(value => value !== undefined).map(normalize);
+  const uniqueIds = [...new Set(ids)];
+  if (uniqueIds.length > 1) throw new Error('La factura contiene identificadores incompatibles; no se pueden enlazar sus cobros/pagos con seguridad.');
+  const invoiceNumber = pickValue(invoice, ['invoiceNumber','numeroFactura','factura','documento','documentNumber']);
+  const partyRif = pickValue(invoice, ['customerRif','clientRif','supplierRif','vendorRif','rifCliente','rifProveedor','rif']);
+  if (!uniqueIds.length && (invoiceNumber === undefined || partyRif === undefined)) return [];
+  const fileId = String(invoice.migrationfile ?? '');
+  const foreignKeys = ['invoiceId','saleId','purchaseId','documentId','facturaId','ventaId','compraId','idFactura','idVenta','idCompra','invoice_id','sale_id','purchase_id','document_id'];
+  const invoiceNumberKeys = ['invoiceNumber','numeroFactura','factura','documentNumber','referencedInvoiceNumber','affectedInvoiceNumber','facturaAfectada'];
+  const partyRifKeys = ['customerRif','clientRif','supplierRif','vendorRif','rifCliente','rifProveedor','partyRif','rif'];
+  const dateKeys = ['settlementDate','paymentDate','collectionDate','fechaPago','fechaCobro','date','fecha'];
+  const amountKeys = ['settlementAmountBs','paymentAmountBs','collectionAmountBs','amountBs','amountUsd','amount','importe','monto','montoBs','montoUsd','paidAmount','amountPaid','collectedAmount','amountCollected','paymentAmount','collectionAmount'];
+  const evidenceKeys = ['method','paymentMethod','settlementMethod','collectionMethod','medioPago','formaPago','reference','paymentReference','collectionReference','referenceNumber','comprobante','bankAccountId','transactionId','transactionType','type','tipoMovimiento','tipoOperacion'];
+  return rows.filter(candidate => {
+    if (candidate === invoice || String(candidate.migrationfile ?? '') !== fileId) return false;
+    const reference = pickValue(candidate, foreignKeys);
+    const idMatch = uniqueIds.length === 1 && reference !== undefined && normalize(reference) === uniqueIds[0];
+    const numberMatch = reference === undefined && invoiceNumber !== undefined && partyRif !== undefined &&
+      pickValue(candidate, invoiceNumberKeys) !== undefined &&
+      normalize(pickValue(candidate, invoiceNumberKeys)) === normalize(invoiceNumber) &&
+      pickValue(candidate, partyRifKeys) !== undefined &&
+      normalize(pickValue(candidate, partyRifKeys)) === normalize(partyRif);
+    if (!idMatch && !numberMatch) return false;
+    const productCode = pickValue(candidate, ['productCode','codigoProducto','productSku','sku','itemCode','codigo','code']);
+    const quantity = pickValue(candidate, ['quantity','cantidad','qty']);
+    if (productCode !== undefined && quantity !== undefined) return false;
+    const hasDate = pickValue(candidate, dateKeys) !== undefined;
+    const hasAmount = pickValue(candidate, amountKeys) !== undefined;
+    const hasEvidence = pickValue(candidate, evidenceKeys) !== undefined;
+    return hasDate && hasAmount && (idMatch || hasEvidence);
+  });
+};
+
+/** Detecta pagos/cobros embebidos sin confundir importes de IVA o retenciones. */
+export const hasUniversalInlineSettlementAmount = (invoice: Record<string, unknown>): boolean => {
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const keys = new Set([
+    'paidAmountBs','amountPaidBs','collectedAmountBs','amountCollectedBs','settledAmountBs','amountSettledBs',
+    'totalPaidBs','totalCollectedBs','paymentsTotalBs','montoPagadoBs','montoCobradoBs','abonosBs',
+    'paidAmountUsd','amountPaidUsd','collectedAmountUsd','amountCollectedUsd','settledAmountUsd','amountSettledUsd',
+    'paidAmount','amountPaid','collectedAmount','amountCollected','settledAmount','amountSettled',
+    'totalPaid','totalCollected','montoPagado','montoCobrado','abono'
+  ].map(normalize));
+  for (const [key, value] of Object.entries(invoice)) {
+    if (!keys.has(normalize(key)) || value === undefined || value === null || String(value).trim() === '') continue;
+    let raw = String(value).trim().replace(/[^0-9,.-]/g, '');
+    if (raw.includes(',') && raw.includes('.')) raw = raw.replace(/\./g, '').replace(',', '.');
+    else raw = raw.replace(',', '.');
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount > 0.000001) return true;
+  }
+  return false;
+};
+
+
+
+/**
+ * Aplica la selección explícita del asistente mediante claves estables de fila.
+ * Rechaza claves ausentes o ambiguas para impedir importaciones parciales distintas
+ * de las que el usuario marcó en la vista previa.
+ */
+export const selectUniversalRowsByStableKeys = (
+  rows: Array<Record<string, unknown>>,
+  selectedKeys: string[]
+): Array<Record<string, unknown>> => {
+  const keys = selectedKeys.map(key => String(key ?? '').trim());
+  if (keys.some(key => !key)) throw new Error('La selección contiene una clave de registro vacía.');
+  if (new Set(keys).size !== keys.length) throw new Error('La selección contiene claves de registro duplicadas.');
+  const selected = new Set(keys);
+  const matches = rows.filter(row => selected.has(String(row.migrationrowid ?? '').trim()));
+  for (const key of keys) {
+    const count = matches.filter(row => String(row.migrationrowid ?? '').trim() === key).length;
+    if (count === 0) throw new Error('El registro seleccionado ya no está disponible: ' + key + '. Vuelve a analizar el archivo.');
+    if (count > 1) throw new Error('La clave del registro seleccionado no es única: ' + key + '. No se importó ningún registro.');
+  }
+  return matches;
+};
+
+
+
+export type UniversalSettlementPreview = {
+  settlementDate: string; bcvRate: number; amountUsd: number; amountBs: number;
+  method: 'CASH_BS' | 'CASH_USD' | 'BANK_TRANSFER_BS' | 'BANK_TRANSFER_USD';
+  bankAccountId?: string; reference?: string; sourceRowId: string;
+};
+
+/** Normaliza liquidaciones sin crear asientos ni inferir cuentas de tesorería. */
+export const mapUniversalSettlementPreview = (row: Record<string, unknown>): UniversalSettlementPreview => {
+  const normalize=(value:unknown)=>String(value??'').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const pick=(keys:string[])=>{const wanted=new Set(keys.map(normalize));return Object.entries(row).find(([key,value])=>wanted.has(normalize(key))&&value!==undefined&&value!==null&&String(value).trim()!=='')?.[1];};
+  const number=(value:unknown)=>{let raw=String(value??'').trim().replace(/[^0-9,.-]/g,'');if(raw.includes(',')&&raw.includes('.'))raw=raw.replace(/\./g,'').replace(',','.');else raw=raw.replace(',','.');return Number(raw);};
+  const date=String(pick(['settlementDate','paymentDate','collectionDate','fechaPago','fechaCobro','date','fecha'])??'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new Error('La liquidación no declara una fecha válida.');
+  const [y,m,d]=date.split('-').map(Number),parsed=new Date(Date.UTC(y,m-1,d));
+  if(parsed.getUTCFullYear()!==y||parsed.getUTCMonth()!==m-1||parsed.getUTCDate()!==d)throw new Error('La liquidación no declara una fecha válida.');
+  const bcvRate=number(pick(['settlementBcvRate','bcvRate','tasaBcv','tasaBcvHistorica','exchangeRate']));
+  if(!Number.isFinite(bcvRate)||bcvRate<=0)throw new Error('La liquidación requiere su propia tasa BCV histórica.');
+  const bsRaw=pick(['settlementAmountBs','paymentAmountBs','collectionAmountBs','amountBs','montoBs','importeBs','monto']);
+  const usdRaw=pick(['settlementAmountUsd','paymentAmountUsd','collectionAmountUsd','amountUsd','montoUsd','importeUsd']);
+  const amountBs=bsRaw===undefined?NaN:number(bsRaw),amountUsd=usdRaw===undefined?amountBs/bcvRate:number(usdRaw);
+  if(!Number.isFinite(amountBs)||amountBs<=0||!Number.isFinite(amountUsd)||amountUsd<=0)throw new Error('La liquidación requiere importes positivos en Bs y USD; USD solo puede calcularse desde Bs usando la tasa histórica declarada.');
+  if(Math.abs(amountBs/bcvRate-amountUsd)>0.02)throw new Error('Los importes Bs/USD de la liquidación no concilian con su tasa BCV histórica.');
+  const raw=normalize(pick(['method','paymentMethod','settlementMethod','collectionMethod','medioPago','formaPago']));
+  const methods:Record<string,UniversalSettlementPreview['method']>={efectivo:'CASH_BS',cash:'CASH_BS',efectivobs:'CASH_BS',cashbs:'CASH_BS',efectivousd:'CASH_USD',cashusd:'CASH_USD',divisas:'CASH_USD',transferenciabs:'BANK_TRANSFER_BS',transferencia:'BANK_TRANSFER_BS',transfer:'BANK_TRANSFER_BS',banktransfer:'BANK_TRANSFER_BS',transferenciausd:'BANK_TRANSFER_USD',transferenciusd:'BANK_TRANSFER_USD',transferusd:'BANK_TRANSFER_USD',banktransferusd:'BANK_TRANSFER_USD'};
+  const method=methods[raw];if(!method)throw new Error('El medio de liquidación no está identificado de forma compatible; requiere revisión manual.');
+  const bankAccountId=String(pick(['bankAccountId','bankId','cuentaBancariaId','idCuentaBancaria'])??'').trim();
+  if(method.startsWith('BANK_TRANSFER')&&!bankAccountId)throw new Error('La transferencia requiere el ID de una cuenta bancaria real de la empresa destino.');
+  const reference=String(pick(['reference','paymentReference','collectionReference','referenceNumber','comprobante','referencia'])??'').trim();
+  if(method.startsWith('BANK_TRANSFER')&&!reference)throw new Error('La transferencia requiere su referencia o comprobante.');
+  const sourceRowId=String(row.migrationrowid??'').trim();if(!sourceRowId)throw new Error('La liquidación no tiene identificador estable de fila de origen.');
+  return {settlementDate:date,bcvRate,amountUsd,amountBs,method,...(bankAccountId?{bankAccountId}:{}),...(reference?{reference}:{}),sourceRowId};
+};
+
+
+export type UniversalSettlementBankDestination = {
+  id: string;
+  companyId: string;
+  accountCode: string;
+  currency?: 'BS' | 'USD';
+};
+
+export type UniversalSettlementLedgerAccount = {
+  code: string;
+  type: string;
+  isMovement: boolean;
+};
+
+/**
+ * Validates the real destination before a historical settlement can be posted.
+ * Bank transfers must match an existing bank account in the target company and
+ * its declared currency; cash methods must resolve to the corresponding cash auxiliary.
+ */
+export const validateUniversalSettlementDestination = (
+  settlement: UniversalSettlementPreview,
+  companyId: string,
+  bankAccounts: UniversalSettlementBankDestination[],
+  accounts: UniversalSettlementLedgerAccount[]
+): string | null => {
+  if (!companyId.trim()) return 'Debe seleccionar la empresa destino de la liquidación.';
+  if (settlement.method === 'BANK_TRANSFER_BS' || settlement.method === 'BANK_TRANSFER_USD') {
+    const bank = bankAccounts.find(item => item.id === settlement.bankAccountId && item.companyId === companyId);
+    if (!bank) return 'La liquidación referencia una cuenta bancaria inexistente o perteneciente a otra empresa.';
+    const expectedCurrency = settlement.method === 'BANK_TRANSFER_USD' ? 'USD' : 'BS';
+    if ((bank.currency || 'BS') !== expectedCurrency) {
+      return 'La moneda de la transferencia no coincide con la moneda de la cuenta bancaria destino.';
+    }
+    const auxiliary = accounts.find(item => item.code === bank.accountCode);
+    if (!auxiliary || auxiliary.type !== 'ACTIVO' || auxiliary.isMovement !== true) {
+      return 'La cuenta bancaria destino no tiene un auxiliar contable de activo válido para movimientos.';
+    }
+    return null;
+  }
+  if (settlement.bankAccountId) {
+    return 'Una liquidación en efectivo no puede identificar una cuenta bancaria de destino.';
+  }
+  const cashCode = settlement.method === 'CASH_USD' ? '1.1.1.02' : '1.1.1.01';
+  const cash = accounts.find(item => item.code === cashCode);
+  if (!cash || cash.type !== 'ACTIVO' || cash.isMovement !== true) {
+    return 'No existe el auxiliar de caja correspondiente a la moneda de la liquidación.';
+  }
+  return null;
+};
+
+
+export type UniversalCreditSettlementDraft = {
+  invoiceRowId: string;
+  sourceRowId: string;
+  documentId: string;
+  kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT';
+  settlementDate: string;
+  bcvRate: number;
+  amountUsd: number;
+  amountBs: number;
+  method: UniversalSettlementPreview['method'];
+  bankAccountId?: string;
+  reference?: string;
+};
+
+/**
+ * Resolves source invoice row keys to the newly created SICOVEN document IDs.
+ * This is only a mapping step; it never creates journal entries or persists data.
+ */
+export const mapUniversalInvoiceSettlementDrafts = (
+  plans: UniversalInvoiceSettlementPlan[],
+  targetDocumentIds: Record<string, string>
+): UniversalCreditSettlementDraft[] => {
+  const seenSourceRows = new Set<string>();
+  return plans.flatMap(plan => {
+    const documentId = String(targetDocumentIds[plan.invoiceRowId] ?? '').trim();
+    if (plan.settlements.length && !documentId) {
+      throw new Error('La factura de origen ' + plan.invoiceRowId + ' no tiene un documento SICOVEN destino enlazado.');
+    }
+    return plan.settlements.map(settlement => {
+      if (!settlement.sourceRowId || seenSourceRows.has(settlement.sourceRowId)) {
+        throw new Error('Una liquidación de origen está vacía o se intentó aplicar más de una vez.');
+      }
+      seenSourceRows.add(settlement.sourceRowId);
+      return {
+        invoiceRowId: plan.invoiceRowId,
+        sourceRowId: settlement.sourceRowId,
+        documentId,
+        kind: plan.invoiceKind === 'sales' ? 'SALE_COLLECTION' as const : 'PURCHASE_PAYMENT' as const,
+        settlementDate: settlement.settlementDate,
+        bcvRate: settlement.bcvRate,
+        amountUsd: settlement.amountUsd,
+        amountBs: settlement.amountBs,
+        method: settlement.method,
+        ...(settlement.bankAccountId ? { bankAccountId: settlement.bankAccountId } : {}),
+        ...(settlement.reference ? { reference: settlement.reference } : {})
+      };
+    });
+  });
+};
+
+/** Filters the detected settlement plan to individually selected stable source-row keys. */
+export const selectUniversalInvoiceSettlements = (
+  plans: UniversalInvoiceSettlementPlan[], selectedSourceRowIds: string[]
+): UniversalInvoiceSettlementPlan[] => {
+  const selected = new Set(selectedSourceRowIds.map(value => String(value || '').trim()));
+  if (selected.size !== selectedSourceRowIds.length || selected.has('')) {
+    throw new Error('La selección de liquidaciones contiene claves vacías o duplicadas.');
+  }
+  const available = new Set<string>();
+  for (const plan of plans) for (const settlement of plan.settlements) {
+    if (!settlement.sourceRowId || available.has(settlement.sourceRowId)) {
+      throw new Error('El plan contiene una clave de liquidación vacía o duplicada.');
+    }
+    available.add(settlement.sourceRowId);
+  }
+  for (const key of selected) if (!available.has(key)) {
+    throw new Error('La liquidación seleccionada ya no está disponible: ' + key + '.');
+  }
+  return plans.map(plan => ({ ...plan, settlements: plan.settlements.filter(item => selected.has(item.sourceRowId)) }));
+};
+
 export type UniversalImportFormat = 'json' | 'csv' | 'tsv' | 'txt' | 'xlsx' | 'xlsm' | 'unsupported';
 
 export const detectUniversalImportFormat = (fileName: string): UniversalImportFormat => {
@@ -521,4 +879,141 @@ export const mapUniversalInventoryItemType = (value: unknown): 'MERCANCIA' | 'MA
   if (['productoterminado', 'finishedproduct', 'finishedgoods'].includes(token)) return 'PRODUCTO_TERMINADO';
   if (['subproducto', 'byproduct'].includes(token)) return 'SUBPRODUCTO';
   return null;
+};
+
+
+export type UniversalInvoiceSettlementPlan = {
+  invoiceRowId: string;
+  invoiceKind: 'sales' | 'purchases';
+  settlements: UniversalSettlementPreview[];
+};
+
+/**
+ * Construye el lote de liquidaciones únicamente para las facturas seleccionadas.
+ * Las relaciones deben venir de una FK explícita o del par número+RIF dentro
+ * del mismo archivo. No asigna pagos a documentos por orden ni por similitud.
+ */
+export const planUniversalInvoiceSettlements = (
+  invoices: Array<Record<string, unknown>>,
+  allSourceRows: Array<Record<string, unknown>>,
+  invoiceKind: 'sales' | 'purchases'
+): UniversalInvoiceSettlementPlan[] => {
+  const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const pick = (row: Record<string, unknown>, keys: string[]) => {
+    const wanted = new Set(keys.map(normalize));
+    return Object.entries(row).find(([key, value]) => wanted.has(normalize(key)) &&
+      value !== undefined && value !== null && String(value).trim() !== '')?.[1];
+  };
+  const seenInvoices = new Set<string>();
+  const seenSettlements = new Set<string>();
+  const seenBankReferences = new Set<string>();
+  return invoices.map(invoice => {
+    const invoiceRowId = String(invoice.migrationrowid ?? '').trim();
+    if (!invoiceRowId || seenInvoices.has(invoiceRowId)) {
+      throw new Error('La selección de facturas contiene una clave de origen vacía o duplicada.');
+    }
+    seenInvoices.add(invoiceRowId);
+    const matches = resolveUniversalInvoiceSettlementRows(allSourceRows, invoice);
+    // Los importes agregados dentro de la factura no identifican fechas, medios ni
+    // referencias individuales. No se pueden convertir en liquidaciones inventadas.
+    if (hasUniversalInlineSettlementAmount(invoice)) {
+      throw new Error('La factura ' + invoiceRowId + ' declara un importe liquidado dentro de la propia fila. Debe desglosarse en registros de cobro/pago individuales antes de importarla.');
+    }
+    const settlements = matches.map(row => {
+      const preview = mapUniversalSettlementPreview(row);
+      if (seenSettlements.has(preview.sourceRowId)) {
+        throw new Error('La liquidación ' + preview.sourceRowId + ' está vinculada más de una vez. No se importó el lote.');
+      }
+      seenSettlements.add(preview.sourceRowId);
+      if (preview.method.startsWith('BANK_TRANSFER')) {
+        // Las referencias bancarias se comparan sin distinguir mayúsculas ni espacios,
+        // pero se conserva la puntuación porque puede formar parte del identificador.
+        const normalizeBankToken = (value: string) => value.trim().replace(/\s+/g, '').toUpperCase();
+        const bankReferenceKey = normalizeBankToken(String(preview.bankAccountId || '')) + '|' +
+          normalizeBankToken(String(preview.reference || ''));
+        if (seenBankReferences.has(bankReferenceKey)) {
+          throw new Error('La referencia bancaria ' + preview.reference + ' está repetida en la misma cuenta dentro del lote. Revise el archivo antes de importar.');
+        }
+        seenBankReferences.add(bankReferenceKey);
+      }
+      const declaredKind = normalize(pick(row, ['transactionType','tipoOperacion','documentType','tipoDocumento']));
+      if (declaredKind) {
+        const salesTokens = ['sale','sales','venta','cobro','collection','receivable','cxc'];
+        const purchaseTokens = ['purchase','purchases','compra','pago','payment','payable','cxp'];
+        const allowed = invoiceKind === 'sales' ? salesTokens : purchaseTokens;
+        const opposite = invoiceKind === 'sales' ? purchaseTokens : salesTokens;
+        if (!allowed.includes(declaredKind)) {
+          throw new Error(opposite.includes(declaredKind)
+            ? 'La liquidación ' + preview.sourceRowId + ' declara un tipo incompatible con la factura seleccionada.'
+            : 'La liquidación ' + preview.sourceRowId + ' declara un tipo de operación no reconocido; requiere clasificación manual.');
+        }
+      }
+      return preview;
+    });
+    const totalUsdRaw = pick(invoice, ['totalAmountUsd','totalUsd','montoTotalUsd','importeTotalUsd']);
+    const totalBsRaw = pick(invoice, ['totalAmountBs','totalBs','montoTotalBs','importeTotalBs','total','montoTotal']);
+    const invoiceRateRaw = pick(invoice, ['bcvRate','tasaBcv','exchangeRate']);
+    const parseAmount = (value: unknown) => {
+      let raw = String(value ?? '').trim().replace(/[^0-9,.-]/g, '');
+      if (raw.includes(',') && raw.includes('.')) raw = raw.replace(/\./g, '').replace(',', '.');
+      else raw = raw.replace(',', '.');
+      return Number(raw);
+    };
+    const invoiceRate = invoiceRateRaw !== undefined ? parseAmount(invoiceRateRaw) : NaN;
+    const grossTotalUsd = totalUsdRaw !== undefined ? parseAmount(totalUsdRaw)
+      : totalBsRaw !== undefined && Number.isFinite(invoiceRate) && invoiceRate > 0
+        ? parseAmount(totalBsRaw) / invoiceRate : NaN;
+    if (settlements.length && (!Number.isFinite(grossTotalUsd) || grossTotalUsd <= 0)) {
+      throw new Error('La factura ' + invoiceRowId + ' tiene liquidaciones relacionadas, pero no declara un total y una tasa que permitan verificar su saldo exigible.');
+    }
+    const optionalAmount = (keys: string[]): number => {
+      const raw = pick(invoice, keys);
+      if (raw === undefined) return 0;
+      const value = parseAmount(raw);
+      if (!Number.isFinite(value) || value < 0) {
+        throw new Error('La factura ' + invoiceRowId + ' contiene una retención inválida que impide calcular su saldo exigible.');
+      }
+      return value;
+    };
+    const vatWithheldUsdRaw = pick(invoice, ['vatWithheldUsd','ivaRetenidoUsd','retencionIvaUsd']);
+    const vatWithheldBsRaw = pick(invoice, ['vatWithheldBs','ivaRetenidoBs','retencionIvaBs']);
+    const islrWithheldUsdRaw = invoiceKind === 'purchases'
+      ? pick(invoice, ['islrWithheldUsd','islrRetenidoUsd','withheldIslrUsd']) : undefined;
+    const islrWithheldBsRaw = invoiceKind === 'purchases'
+      ? pick(invoice, ['islrWithheldBs','islrRetenidoBs','withheldIslrBs']) : undefined;
+    const vatWithheldUsd = vatWithheldUsdRaw !== undefined
+      ? optionalAmount(['vatWithheldUsd','ivaRetenidoUsd','retencionIvaUsd'])
+      : vatWithheldBsRaw !== undefined && Number.isFinite(invoiceRate) && invoiceRate > 0
+        ? optionalAmount(['vatWithheldBs','ivaRetenidoBs','retencionIvaBs']) / invoiceRate : 0;
+    const vatWithheldBs = optionalAmount(['vatWithheldBs','ivaRetenidoBs','retencionIvaBs']);
+    const islrWithheldUsd = islrWithheldUsdRaw !== undefined
+      ? optionalAmount(['islrWithheldUsd','islrRetenidoUsd','withheldIslrUsd'])
+      : islrWithheldBsRaw !== undefined && Number.isFinite(invoiceRate) && invoiceRate > 0
+        ? optionalAmount(['islrWithheldBs','islrRetenidoBs','withheldIslrBs']) / invoiceRate : 0;
+    const islrWithheldBs = invoiceKind === 'purchases'
+      ? optionalAmount(['islrWithheldBs','islrRetenidoBs','withheldIslrBs']) : 0;
+    if (settlements.length && ((vatWithheldBsRaw !== undefined && vatWithheldUsdRaw === undefined && !(invoiceRate > 0)) ||
+        (islrWithheldBsRaw !== undefined && islrWithheldUsdRaw === undefined && !(invoiceRate > 0)))) {
+      throw new Error('La factura ' + invoiceRowId + ' declara retenciones en Bs sin tasa histórica para convertirlas a USD y calcular CxC/CxP.');
+    }
+    if (Number.isFinite(invoiceRate) && invoiceRate > 0 &&
+        ((vatWithheldUsdRaw !== undefined && vatWithheldBsRaw !== undefined && Math.abs(vatWithheldBs / invoiceRate - vatWithheldUsd) > 0.02) ||
+         (islrWithheldUsdRaw !== undefined && islrWithheldBsRaw !== undefined && Math.abs(islrWithheldBs / invoiceRate - islrWithheldUsd) > 0.02))) {
+      throw new Error('Las retenciones de la factura ' + invoiceRowId + ' no concilian entre Bs y USD a su tasa BCV histórica.');
+    }
+    const totalWithheldUsd = vatWithheldUsd + islrWithheldUsd;
+    if (totalWithheldUsd > grossTotalUsd + 0.00001) {
+      throw new Error('Las retenciones de la factura ' + invoiceRowId + ' superan el total del documento.');
+    }
+    const netTotalUsd = Math.max(0, grossTotalUsd - totalWithheldUsd);
+    const settledUsd = settlements.reduce((sum, item) => sum + item.amountUsd, 0);
+    if (settlements.length && netTotalUsd <= 0) {
+      throw new Error('La factura ' + invoiceRowId + ' no tiene saldo exigible positivo después de retenciones.');
+    }
+    if (settledUsd - netTotalUsd > 0.00001) {
+      throw new Error('Las liquidaciones vinculadas a la factura ' + invoiceRowId + ' superan su saldo neto exigible después de retenciones. No se importó el lote.');
+    }
+    return { invoiceRowId, invoiceKind, settlements };
+  });
 };

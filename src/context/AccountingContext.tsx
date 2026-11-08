@@ -42,6 +42,9 @@ import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters'
 import { formatIslrVoucherNumber, getMaxIslrVoucherSequence } from '../utils/islrVoucherNumber';
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus } from '../types/ivaRetentionEligibility';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, summarizeCreditDocumentAdjustments, validateCreditSettlement } from '../types/creditSettlement';
+import { buildCreditSettlementJournalItems, getCreditSettlementSourceJournalType } from '../types/creditSettlementAccounting';
+import type { UniversalCreditSettlementDraft } from '../types/universalImport';
+import { buildSupplierAdvanceSettlementJournalItems } from '../types/supplierAdvanceSettlementAccounting';
 import { FinancialDisclosure, validateFinancialDisclosure } from '../types/financialDisclosures';
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
@@ -63,8 +66,8 @@ import { validateSaleSettlementMode } from '../types/saleSettlement';
 import { allocateSupplierCredit } from '../types/supplierCreditAllocation';
 import { calculateOutstandingSupplierAdvance, type SupplierAdvanceBalance } from '../types/supplierAdvance';
 import { calculateSupplierAdvanceFxSettlement } from '../types/supplierAdvanceFx';
-import { allocateDirectSupplierAdvance, validateSupplierDirectAdvanceDraft, type SupplierDirectAdvance, type SupplierDirectAdvanceDraft } from '../types/supplierDirectAdvance';
-import { allocateSupplierAdvanceCreditNotes, validateSupplierAdvanceCreditNoteAllocations, validateSupplierAdvanceSettlementDraft, type SupplierAdvanceSettlement, type SupplierAdvanceSettlementDraft } from '../types/supplierAdvanceSettlement';
+import { validateSupplierDirectAdvanceDraft, type SupplierDirectAdvance, type SupplierDirectAdvanceDraft } from '../types/supplierDirectAdvance';
+import { allocateSupplierAdvanceFifo, validateSupplierAdvanceCreditNoteAllocations, validateSupplierAdvanceSettlementDraft, type SupplierAdvanceSettlement, type SupplierAdvanceSettlementDraft } from '../types/supplierAdvanceSettlement';
 import type { VatFiscalIncident, VatFiscalIncidentCreateInput, VatFiscalIncidentEventInput } from '../types/vatFiscalIncidents';
 import { buildSupplierDebitNoteAccountingPlan, type SupplierDebitNoteAccountingDraft } from '../types/supplierDebitNoteAccounting';
 import { calculatePurchaseServiceCreditNote, type PurchaseServiceCreditNoteRequest } from '../types/purchaseServiceCreditNote';
@@ -129,13 +132,15 @@ interface AccountingContextType {
 
   // Liquidaciones de crédito
   creditSettlements: CreditSettlement[];
-  getCreditBalance: (documentId: string, kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT') => CreditBalance;
+  getCreditBalance: (documentId: string, kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT', targetCompanyId?: string) => CreditBalance;
   addCreditSettlement: (draft: CreditSettlementDraft) => Promise<CreditSettlement>;
-  getSupplierAdvanceBalance: (supplierRif: string) => SupplierAdvanceBalance;
+  getSupplierAdvanceBalance: (supplierRif: string, targetCompanyId?: string) => SupplierAdvanceBalance;
   supplierAdvanceSettlements: SupplierAdvanceSettlement[];
   addSupplierAdvanceSettlement: (draft: SupplierAdvanceSettlementDraft) => Promise<SupplierAdvanceSettlement>;
   supplierDirectAdvances: SupplierDirectAdvance[];
   addSupplierDirectAdvance: (draft: SupplierDirectAdvanceDraft) => Promise<SupplierDirectAdvance>;
+  addImportedSupplierDirectAdvances: (items: Array<{ sourceRowId: string; draft: SupplierDirectAdvanceDraft }>, targetCompanyId?: string) => SupplierDirectAdvance[];
+  addImportedSupplierAdvanceSettlements: (items: Array<{ sourceRowId: string; draft: SupplierAdvanceSettlementDraft }>, targetCompanyId?: string) => SupplierAdvanceSettlement[];
 
   // Compras
   purchases: PurchaseRecord[];
@@ -151,6 +156,8 @@ interface AccountingContextType {
   addSaleCorrectionNote: (draft: Omit<SaleCorrectionNoteRequest, 'sourceSale' | 'priorCreditNotes' | 'closedThroughDate'> & { sourceSaleId: string }) => Promise<SaleRecord>;
   deleteSale: (id: string) => void;
   runAtomicInvoiceImport: <T>(operation: () => T) => T;
+  runAtomicInvoiceImportAndWait: <T>(operation: () => T) => Promise<T>;
+  addImportedCreditSettlements: (drafts: UniversalCreditSettlementDraft[], documents: Array<SaleRecord | PurchaseRecord>, targetCompanyId?: string) => CreditSettlement[];
 
   // Inventario
   products: InventoryProduct[];
@@ -351,7 +358,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [supplierDirectAdvances, setSupplierDirectAdvances] = useState<SupplierDirectAdvance[]>([]);
   const bankStatementImportInFlightRef = useRef(false);
   type PendingBankOutgoingReservation = { release: () => void; waiter: { resolve: () => void; reject: (error: Error) => void } };
+  type ActiveAccountingImportBatch = { journalEntries: JournalEntry[]; sales: SaleRecord[]; purchases: PurchaseRecord[]; creditSettlements: CreditSettlement[]; supplierDirectAdvances: SupplierDirectAdvance[]; supplierAdvanceSettlements: SupplierAdvanceSettlement[]; reservedBankLockKeys: Set<string> };
   const bankOutgoingReservationsRef = useRef<PendingBankOutgoingReservation[]>([]);
+  const activeImportBatchRef = useRef<ActiveAccountingImportBatch | null>(null);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
   const supplierAdvanceSettlementInFlightRef = useRef<Set<string>>(new Set());
   const supplierDirectAdvanceInFlightRef = useRef<Set<string>>(new Set());
@@ -362,10 +371,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // estos contadores evitan reutilizar correlativos e identificadores por estado obsoleto.
   const runAtomicInvoiceImport = <T,>(operation: () => T): T => {
     const reservationsBefore = new Set(bankOutgoingReservationsRef.current);
-    // React setters are queued synchronously; capture every collection touched by
-    // addSale/addPurchase and restore the complete batch if any operation throws.
+    // React setters are queued synchronously; capture the complete persisted
+    // snapshot so a synchronous import failure cannot leak partial state.
     const before = {
-      journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, islrFiscalEvents,
+      companies, currentCompanyId, displayCurrency,
+      accounts, bankAccounts, bankStatementMovements, creditSettlements,
+      financialDisclosures, islrFiscalEvents, islrVouchers, journalEntries,
+      purchases, sales, products, movements, supplierAdvanceSettlements,
+      supplierDirectAdvances, vatVouchers, vatWithholdingDeclarations,
+      vatWithholdingDeclarationEvents,
       saleSequence: { ...saleSequenceRef.current },
       purchaseSequence: { ...purchaseSequenceRef.current },
       journalSequence: { ...journalSequenceRef.current },
@@ -382,14 +396,26 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           persistenceWaitersRef.current = persistenceWaitersRef.current.filter(waiter => waiter !== reservation.waiter);
           reservation.release();
         });
+      setCompanies(before.companies);
+      setCurrentCompanyId(before.currentCompanyId);
+      setDisplayCurrency(before.displayCurrency);
+      setAccounts(before.accounts);
+      setBankAccounts(before.bankAccounts);
+      setBankStatementMovements(before.bankStatementMovements);
+      setCreditSettlements(before.creditSettlements);
+      setFinancialDisclosures(before.financialDisclosures);
+      setIslrFiscalEvents(before.islrFiscalEvents);
+      setIslrVouchers(before.islrVouchers);
       setJournalEntries(before.journalEntries);
       setPurchases(before.purchases);
       setSales(before.sales);
       setProducts(before.products);
       setMovements(before.movements);
+      setSupplierAdvanceSettlements(before.supplierAdvanceSettlements);
+      setSupplierDirectAdvances(before.supplierDirectAdvances);
       setVatVouchers(before.vatVouchers);
-      setIslrVouchers(before.islrVouchers);
-      setIslrFiscalEvents(before.islrFiscalEvents);
+      setVatWithholdingDeclarations(before.vatWithholdingDeclarations);
+      setVatWithholdingDeclarationEvents(before.vatWithholdingDeclarationEvents);
       saleSequenceRef.current = before.saleSequence;
       purchaseSequenceRef.current = before.purchaseSequence;
       journalSequenceRef.current = before.journalSequence;
@@ -398,8 +424,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       islrEventSequenceRef.current = before.islrEventSequence;
       throw error;
     };
+    if (activeImportBatchRef.current) {
+      throw new Error('No se permiten importaciones contables anidadas.');
+    }
+    const previousBatch = activeImportBatchRef.current;
+    activeImportBatchRef.current = { journalEntries: [], sales: [], purchases: [], creditSettlements: [], supplierDirectAdvances: [], supplierAdvanceSettlements: [], reservedBankLockKeys: new Set<string>() };
     try {
       const result = operation();
+      activeImportBatchRef.current = previousBatch;
       if (result && typeof (result as any).then === 'function') {
         // Async operations may publish functional React updates while the shared
         // SQLite snapshot queue is pending. If persistence rejects, the provider
@@ -411,6 +443,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       return result;
     } catch (error) {
+      activeImportBatchRef.current = previousBatch;
       return rollback(error);
     }
   };
@@ -447,6 +480,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return new Promise<void>((resolve, reject) => persistenceWaitersRef.current.push({ resolve, reject }));
   };
 
+  const runAtomicInvoiceImportAndWait = async <T,>(operation: () => T): Promise<T> => {
+    const result = runAtomicInvoiceImport(operation);
+    if (result && typeof (result as any).then === 'function') {
+      throw new Error('El lote de importación debe ser síncrono; las operaciones asíncronas no pueden compartir una confirmación atómica.');
+    }
+    await waitForPersistence();
+    return result;
+  };
+
   // Reserva las cuentas bancarias acreditadas por el asiento hasta que el snapshot
   // completo reciba confirmación (o rechazo) de SQLite. La reserva es síncrona:
   // evita que dos eventos del renderer validen el mismo saldo desactualizado.
@@ -458,14 +500,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       .filter(bank => bank.companyId === companyId && creditedAccountCodes.has(bank.accountCode))
       .map(bank => `${companyId}:${bank.id}`))];
     if (!lockKeys.length) return;
+    const activeBatch = activeImportBatchRef.current;
+    const lockKeysToAcquire = lockKeys.filter(key => !activeBatch?.reservedBankLockKeys.has(key));
+    if (!lockKeysToAcquire.length) return;
 
     const releases: Array<() => void> = [];
     try {
-      for (const key of lockKeys) releases.push(bankOutgoingLockRef.current.acquire(key));
+      for (const key of lockKeysToAcquire) releases.push(bankOutgoingLockRef.current.acquire(key));
     } catch (error) {
       releases.forEach(release => release());
       throw error;
     }
+    if (activeBatch) lockKeysToAcquire.forEach(key => activeBatch.reservedBankLockKeys.add(key));
 
     let released = false;
     let reservation: PendingBankOutgoingReservation;
@@ -1341,8 +1387,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const requestedAmount = entry.items
           .filter(item => item.accountCode === bank.accountCode)
           .reduce((sum, item) => sum + Number(bank.currency === 'USD' ? item.creditUsd || 0 : item.creditBs || 0), 0);
+        const balanceEntries = activeImportBatchRef.current
+          ? [...journalEntries, ...activeImportBatchRef.current.journalEntries]
+          : journalEntries;
         const availableBalance = calculateBankAvailableBalance({
-          bankAccount: bank, companyId: targetCompany.id, asOfDate: entry.date, journalEntries
+          bankAccount: bank, companyId: targetCompany.id, asOfDate: entry.date, journalEntries: balanceEntries
         });
         validateBankOutgoingAvailability({
           availableBalance, requestedAmount, currency: bank.currency
@@ -1364,6 +1413,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       createdAt: new Date().toISOString()
     };
     reserveBankOutgoingAccounts(newEntry.companyId, newEntry.items);
+    activeImportBatchRef.current?.journalEntries.push(newEntry);
     setJournalEntries(prev => [...prev, newEntry]);
     return newEntry;
   };
@@ -1390,10 +1440,182 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return { originalAmountUsd, originalAmountBs };
   };
 
-  const getCreditBalance = (documentId: string, kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT'): CreditBalance => {
+
+  const addImportedCreditSettlements = (
+    drafts: UniversalCreditSettlementDraft[],
+    documents: Array<SaleRecord | PurchaseRecord>,
+    targetCompanyId: string = currentCompany.id
+  ): CreditSettlement[] => {
+    if (!drafts.length) return [];
+    const batch = activeImportBatchRef.current;
+    if (!batch) throw new Error('Las liquidaciones históricas solo pueden registrarse dentro del lote contable atómico.');
+    const targetCompany = companies.find(company => company.id === targetCompanyId);
+    if (!targetCompany) throw new Error('La empresa destino de las liquidaciones no existe.');
+    const documentById = new Map(documents.map(document => [document.id, document]));
+    const remainingByDocument = new Map<string, number>();
+    const created: CreditSettlement[] = [];
+    const normalizedReference = (value?: string) => String(value || '').trim().replace(/\s+/g, '').toUpperCase();
+
+    for (const [index, draft] of drafts.entries()) {
+      const kind = draft.kind;
+      const document = documentById.get(draft.documentId);
+      if (!document || document.companyId !== targetCompanyId || document.isCancelled || document.paymentTerm !== 'CREDITO') {
+        throw new Error('La liquidación ' + draft.sourceRowId + ' no tiene una factura de crédito válida dentro del lote.');
+      }
+      if (!isValidIsoDate(draft.settlementDate) || draft.settlementDate < String(document.invoiceDate || '')) {
+        throw new Error('La liquidación ' + draft.sourceRowId + ' tiene una fecha anterior a su factura o una fecha inválida.');
+      }
+      if (kind === 'PURCHASE_PAYMENT') {
+        const dateError = validatePurchasePaymentDate(draft.settlementDate, getPurchaseAccountCreditDate(document as PurchaseRecord));
+        if (dateError) throw new Error('Liquidación ' + draft.sourceRowId + ': ' + dateError);
+      }
+
+      const amountUsd = Math.round((Number(draft.amountUsd) + Number.EPSILON) * 100) / 100;
+      const amountBs = Math.round((Number(draft.amountBs) + Number.EPSILON) * 100) / 100;
+      const settlementRate = Number(draft.bcvRate);
+      const invoiceRate = Number(document.bcvRate) > 0
+        ? Number(document.bcvRate)
+        : (Number(document.totalAmountUsd) > 0 ? Number(document.totalAmountBs) / Number(document.totalAmountUsd) : 0);
+      if (!Number.isFinite(amountUsd) || amountUsd <= 0 || !Number.isFinite(amountBs) || amountBs <= 0 ||
+          !Number.isFinite(settlementRate) || settlementRate <= 0 || !Number.isFinite(invoiceRate) || invoiceRate <= 0 ||
+          Math.abs(amountBs - amountUsd * settlementRate) > 0.02) {
+        throw new Error('La liquidación ' + draft.sourceRowId + ' no concilia sus importes Bs/USD con la tasa BCV declarada.');
+      }
+
+      const principal = getCreditPrincipal(document, kind).originalAmountUsd;
+      const remainingUsd = remainingByDocument.has(document.id) ? remainingByDocument.get(document.id)! : principal;
+      const validation = validateCreditSettlement({
+        documentId: document.id, kind, settlementDate: draft.settlementDate,
+        amountUsd, amountBs, method: draft.method,
+        bankAccountId: draft.bankAccountId, reference: draft.reference, bcvRate: settlementRate
+      }, remainingUsd);
+      if (validation) throw new Error('Liquidación ' + draft.sourceRowId + ': ' + validation);
+
+      const bankTransfer = draft.method === 'BANK_TRANSFER_BS' || draft.method === 'BANK_TRANSFER_USD';
+      const bank = bankTransfer
+        ? bankAccounts.find(item => item.id === draft.bankAccountId && item.companyId === targetCompanyId)
+        : undefined;
+      const expectedCurrency = draft.method === 'BANK_TRANSFER_USD' ? 'USD' : 'BS';
+      if (bankTransfer && (!bank || bank.currency !== expectedCurrency || !String(draft.reference || '').trim())) {
+        throw new Error('La liquidación ' + draft.sourceRowId + ' requiere una cuenta bancaria destino de la moneda correcta y una referencia.');
+      }
+      if (!bankTransfer && draft.bankAccountId) {
+        throw new Error('La liquidación ' + draft.sourceRowId + ' asigna una cuenta bancaria a un medio de efectivo.');
+      }
+
+      const referenceKey = normalizedReference(draft.reference);
+      const duplicateBankReference = bankTransfer && referenceKey && [
+        ...creditSettlements, ...created
+      ].some(item => item.companyId === targetCompanyId && item.bankAccountId === bank!.id &&
+        !item.isReversed && normalizedReference(item.reference) === referenceKey);
+      const duplicateWithoutReference = !referenceKey && [
+        ...creditSettlements, ...created
+      ].some(item => item.companyId === targetCompanyId && item.documentId === document.id &&
+        item.kind === kind && !item.isReversed && !String(item.reference || '').trim() &&
+        item.settlementDate === draft.settlementDate &&
+        Math.round(Number(item.amountUsd) * 100) === Math.round(amountUsd * 100) &&
+        item.method === draft.method && item.bankAccountId === draft.bankAccountId &&
+        Math.round(Number(item.bcvRate) * 1000000) === Math.round(settlementRate * 1000000));
+      if (duplicateBankReference || duplicateWithoutReference) {
+        throw new Error('La liquidación ' + draft.sourceRowId + ' reutiliza una referencia bancaria o una operación ya registrada.');
+      }
+
+      const sourceEntry = batch.journalEntries.find(entry =>
+        entry.id === document.journalEntryId && entry.companyId === targetCompanyId
+      );
+      const expectedSourceType = getCreditSettlementSourceJournalType(kind, document.documentType);
+      const controlLines = (sourceEntry?.items || []).filter(item =>
+        kind === 'SALE_COLLECTION'
+          ? item.accountCode === '1.1.2.01' && Number(item.debitBs || 0) > 0
+          : item.accountCode.startsWith('2.1.1.') && Number(item.creditBs || 0) > 0
+      );
+      if (!sourceEntry || sourceEntry.type !== expectedSourceType || controlLines.length !== 1) {
+        throw new Error('La factura de la liquidación ' + draft.sourceRowId + ' no generó un asiento original con una única cuenta de control verificable.');
+      }
+      const controlAccount = accounts.find(account => account.code === controlLines[0].accountCode && account.isMovement);
+      const cashCode = bank?.accountCode || (draft.method === 'CASH_USD' ? '1.1.1.02' : '1.1.1.01');
+      const cashAccount = accounts.find(account => account.code === cashCode && account.isMovement);
+      const fxGain = accounts.find(account => account.code === '4.2.1.01' && account.isMovement);
+      const fxLoss = accounts.find(account => account.code === '6.1.1.08' && account.isMovement);
+      if (!controlAccount || !cashAccount ||
+          (kind === 'SALE_COLLECTION' && controlAccount.type !== 'ACTIVO') ||
+          (kind === 'PURCHASE_PAYMENT' && controlAccount.type !== 'PASIVO')) {
+        throw new Error('La liquidación ' + draft.sourceRowId + ' no tiene auxiliares contables de CxC/CxP y tesorería válidos.');
+      }
+
+      const fxDifferenceBs = Math.round((amountBs - amountUsd * invoiceRate) * 100) / 100;
+      const items = buildCreditSettlementJournalItems({
+        kind, method: draft.method, amountBs, amountUsd, invoiceRate,
+        settlementRate, cashAccount, controlAccount, fxGainAccount: fxGain, fxLossAccount: fxLoss
+      });
+      const entry = addJournalEntry({
+        entryNumber: 0,
+        date: draft.settlementDate,
+        description: (kind === 'SALE_COLLECTION' ? 'Cobro de cuenta por cobrar' : 'Pago de cuenta por pagar') +
+          ' - ' + document.invoiceNumber + (Math.abs(fxDifferenceBs) >= 0.01 ? ' (incluye diferencia cambiaria)' : ''),
+        type: 'AJUSTE',
+        bcvRate: settlementRate,
+        referenceDoc: document.invoiceNumber,
+        items
+      }, accounts, targetCompanyId);
+      const fiscalMode = document.fiscalAdjustmentMode || 'REVISION_CONTADOR';
+      let fxFiscalAdjustmentProposal: CreditSettlement['fxFiscalAdjustmentProposal'];
+      try {
+        fxFiscalAdjustmentProposal = calculateFxFiscalAdjustment({
+          totalAmountUsd: Number(document.totalAmountUsd || 0),
+          taxableBaseUsd: Number(document.taxableBaseUsd || 0),
+          vatAmountUsd: Number(document.vatAmountUsd || 0),
+          exemptAmountUsd: Math.max(0, Number(document.totalAmountUsd || 0) - Number(document.taxableBaseUsd || 0) - Number(document.vatAmountUsd || 0) - Number(document.igtfAmountUsd || 0)),
+          invoiceRate,
+          settlementRate,
+          settledAmountUsd: amountUsd,
+          mode: fiscalMode
+        });
+      } catch {
+        fxFiscalAdjustmentProposal = {
+          direction: 'REVIEW_REQUIRED', deltaBaseBs: 0, deltaVatBs: 0,
+          deltaExemptBs: 0, deltaTotalBs: 0,
+          explanation: 'No se pudo calcular la propuesta con los datos fiscales disponibles; requiere revisión manual.'
+        };
+      }
+      const settlement: CreditSettlement = {
+        id: 'credit-settlement-' + targetCompanyId + '-' + Date.now() + '-' + index,
+        companyId: targetCompanyId,
+        documentId: document.id,
+        kind,
+        settlementDate: draft.settlementDate,
+        amountBs,
+        amountUsd,
+        method: draft.method,
+        bankAccountId: bank?.id,
+        reference: draft.reference?.trim() || undefined,
+        bcvRate: settlementRate,
+        journalEntryId: entry.id,
+        fxFiscalAdjustmentProposal,
+        createdAt: new Date().toISOString()
+      };
+      created.push(settlement);
+      batch.creditSettlements.push(settlement);
+      remainingByDocument.set(document.id, Math.max(0, remainingUsd - amountUsd));
+    }
+
+    setCreditSettlements(previous => [...previous, ...created]);
+    return created;
+  };
+
+
+
+  const getCreditBalance = (documentId: string, kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT', targetCompanyId: string = currentCompany.id): CreditBalance => {
+    const batch = activeImportBatchRef.current;
+    const allSales = batch ? [...sales, ...batch.sales] : sales;
+    const allPurchases = batch ? [...purchases, ...batch.purchases] : purchases;
+    const allAdvanceSettlements = batch
+      ? [...supplierAdvanceSettlements, ...batch.supplierAdvanceSettlements]
+      : supplierAdvanceSettlements;
+    const allCreditSettlements = batch ? [...creditSettlements, ...batch.creditSettlements] : creditSettlements;
     const document = kind === 'SALE_COLLECTION'
-      ? sales.find(item => item.id === documentId && item.companyId === currentCompany.id)
-      : purchases.find(item => item.id === documentId && item.companyId === currentCompany.id);
+      ? allSales.find(item => item.id === documentId && item.companyId === targetCompanyId)
+      : allPurchases.find(item => item.id === documentId && item.companyId === targetCompanyId);
     if (!document) throw new Error('No se encontró la factura en la empresa activa.');
     if (document.isCancelled) throw new Error('La factura fue reversada y ya no tiene saldo exigible en este auxiliar.');
     const principal = getCreditPrincipal(document, kind);
@@ -1401,18 +1623,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       documentId,
       principal.originalAmountUsd,
       principal.originalAmountBs,
-      creditSettlements.filter(item => item.companyId === currentCompany.id && item.kind === kind && !item.isReversed)
+      allCreditSettlements.filter(item => item.companyId === targetCompanyId && item.kind === kind && !item.isReversed)
     );
     const creditNotes = kind === 'PURCHASE_PAYMENT'
-      ? purchases.filter(item => item.companyId === currentCompany.id && item.originalPurchaseId === documentId && item.documentType === '03' && !item.isCancelled)
-      : sales.filter(item => item.companyId === currentCompany.id && item.originalSaleId === documentId && item.documentType === '03' && !item.isCancelled);
+      ? allPurchases.filter(item => item.companyId === targetCompanyId && item.originalPurchaseId === documentId && item.documentType === '03' && !item.isCancelled)
+      : allSales.filter(item => item.companyId === targetCompanyId && item.originalSaleId === documentId && item.documentType === '03' && !item.isCancelled);
     const debitNotes = kind === 'PURCHASE_PAYMENT'
-      ? purchases.filter(item => item.companyId === currentCompany.id && item.originalPurchaseId === documentId && item.documentType === '02' && !item.isCancelled)
-      : sales.filter(item => item.companyId === currentCompany.id && item.originalSaleId === documentId && item.documentType === '02' && !item.isCancelled);
+      ? allPurchases.filter(item => item.companyId === targetCompanyId && item.originalPurchaseId === documentId && item.documentType === '02' && !item.isCancelled)
+      : allSales.filter(item => item.companyId === targetCompanyId && item.originalSaleId === documentId && item.documentType === '02' && !item.isCancelled);
     const {creditedByNotesUsd,creditedByNotesBs,debitedByNotesUsd,debitedByNotesBs} =
       summarizeCreditDocumentAdjustments(kind,creditNotes,debitNotes);
     const advanceApplications = kind === 'PURCHASE_PAYMENT'
-      ? supplierAdvanceSettlements.filter(item => item.companyId === currentCompany.id &&
+      ? allAdvanceSettlements.filter(item => item.companyId === targetCompanyId &&
           !item.isReversed && item.kind === 'APPLIED_TO_PURCHASE' && item.targetPurchaseId === documentId)
       : [];
     const creditedBySupplierAdvancesUsd = advanceApplications.reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
@@ -1432,8 +1654,310 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     };
   };
 
-  const getSupplierAdvanceBalance = (supplierRif: string): SupplierAdvanceBalance =>
-    calculateOutstandingSupplierAdvance(supplierRif, purchases, supplierAdvanceSettlements, currentCompany.id, supplierDirectAdvances);
+  const getSupplierAdvanceBalance = (supplierRif: string, targetCompanyId: string = currentCompany.id): SupplierAdvanceBalance => {
+    const batch = activeImportBatchRef.current;
+    return calculateOutstandingSupplierAdvance(
+      supplierRif,
+      batch ? [...purchases, ...batch.purchases] : purchases,
+      batch ? [...supplierAdvanceSettlements, ...batch.supplierAdvanceSettlements] : supplierAdvanceSettlements,
+      targetCompanyId,
+      batch ? [...supplierDirectAdvances, ...batch.supplierDirectAdvances] : supplierDirectAdvances
+    );
+  };
+
+  const addImportedSupplierDirectAdvances = (
+    items: Array<{ sourceRowId: string; draft: SupplierDirectAdvanceDraft }>,
+    targetCompanyId: string = currentCompany.id
+  ): SupplierDirectAdvance[] => {
+    const batch = activeImportBatchRef.current;
+    if (!batch) throw new Error('Los anticipos directos importados solo pueden registrarse dentro del lote contable atómico.');
+    if (!items.length) return [];
+    const targetCompany = companies.find(company => company.id === targetCompanyId);
+    if (!targetCompany) throw new Error('La empresa destino de los anticipos no existe.');
+    const existing = [...supplierDirectAdvances, ...batch.supplierDirectAdvances];
+    const seenRows = new Set<string>();
+    const seenReferences = new Set<string>();
+    const created: SupplierDirectAdvance[] = [];
+
+    for (const item of items) {
+      const sourceRowId = String(item?.sourceRowId || '').trim();
+      const draft = item?.draft;
+      if (!sourceRowId || seenRows.has(sourceRowId)) {
+        throw new Error('La selección de anticipos contiene claves de origen vacías o duplicadas.');
+      }
+      seenRows.add(sourceRowId);
+      const validation = validateSupplierDirectAdvanceDraft(draft, targetCompanyId, accounts);
+      if (validation) throw new Error('Anticipo ' + sourceRowId + ': ' + validation);
+      const rif = String(draft.supplierRif || '').trim().toUpperCase();
+      if (!validateVenezuelanRif(rif).isValid) {
+        throw new Error('Anticipo ' + sourceRowId + ': el RIF del proveedor no tiene una estructura venezolana válida.');
+      }
+      if (targetCompany.closedThroughDate && draft.date <= targetCompany.closedThroughDate) {
+        throw new Error('Anticipo ' + sourceRowId + ': el período está cerrado hasta ' + targetCompany.closedThroughDate + '.');
+      }
+      const bank = bankAccounts.find(account =>
+        account.companyId === targetCompanyId && account.accountCode === draft.treasuryAccountCode
+      );
+      const accountCurrency = resolveTreasuryAccountCurrency(draft.treasuryAccountCode, bank?.currency);
+      if (accountCurrency !== draft.paymentCurrency) {
+        throw new Error('Anticipo ' + sourceRowId + ': la moneda del desembolso no coincide con la cuenta real de Caja/Banco.');
+      }
+      const reference = String(draft.reference || '').trim();
+      const duplicateKey = [targetCompanyId, draft.treasuryAccountCode, draft.date, reference.toUpperCase()].join('|');
+      if (!reference || seenReferences.has(duplicateKey) || existing.some(advance =>
+        advance.companyId === targetCompanyId && !advance.isReversed &&
+        advance.treasuryAccountCode === draft.treasuryAccountCode &&
+        advance.date === draft.date && advance.reference.trim().toUpperCase() === reference.toUpperCase()
+      )) {
+        throw new Error('Anticipo ' + sourceRowId + ': referencia vacía o ya utilizada en esa cuenta y fecha.');
+      }
+      seenReferences.add(duplicateKey);
+
+      const advanceAccount = accounts.find(account =>
+        account.code === '1.1.2.03' && account.isMovement && account.type === 'ACTIVO'
+      );
+      const treasuryAccount = accounts.find(account =>
+        account.code === draft.treasuryAccountCode && account.isMovement && account.type === 'ACTIVO'
+      );
+      if (!advanceAccount || !treasuryAccount) {
+        throw new Error('Anticipo ' + sourceRowId + ': falta el auxiliar de anticipos o la cuenta real de tesorería.');
+      }
+      const amountUsd = Math.round((draft.amountUsd + Number.EPSILON) * 1000000) / 1000000;
+      const bookValueBs = Math.round((amountUsd * draft.bcvRate + Number.EPSILON) * 100) / 100;
+      const entry = addJournalEntry({
+        entryNumber: 0,
+        date: draft.date,
+        description: 'Anticipo directo importado a proveedor ' + rif + ' · ' + draft.supplierName.trim(),
+        type: 'ANTICIPO_PROVEEDOR',
+        bcvRate: draft.bcvRate,
+        referenceDoc: reference,
+        items: [
+          { accountCode: advanceAccount.code, accountName: advanceAccount.name, debitBs: bookValueBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: 'Reconocimiento de anticipo directo a proveedor' },
+          { accountCode: treasuryAccount.code, accountName: treasuryAccount.name, debitBs: 0, creditBs: bookValueBs, debitUsd: 0, creditUsd: amountUsd, description: 'Desembolso documentado desde Caja/Banco' }
+        ]
+      }, accounts, targetCompanyId);
+      const record: SupplierDirectAdvance = {
+        ...draft,
+        supplierRif: rif,
+        supplierName: draft.supplierName.trim(),
+        id: 'supplier-direct-advance-' + targetCompanyId + '-' + entry.id + '-' + sourceRowId,
+        companyId: targetCompanyId,
+        amountUsd,
+        bookValueBs,
+        reference,
+        support: String(draft.support || '').trim(),
+        journalEntryId: entry.id,
+        createdAt: new Date().toISOString()
+      };
+      batch.supplierDirectAdvances.push(record);
+      created.push(record);
+    }
+    setSupplierDirectAdvances(previous => [...previous, ...created]);
+    return created;
+  };
+
+  const addImportedSupplierAdvanceSettlements = (
+    items: Array<{ sourceRowId: string; draft: SupplierAdvanceSettlementDraft }>,
+    targetCompanyId: string = currentCompany.id
+  ): SupplierAdvanceSettlement[] => {
+    const batch = activeImportBatchRef.current;
+    if (!batch) throw new Error('Las aplicaciones y reembolsos importados solo pueden registrarse dentro del lote contable atómico.');
+    if (!items.length) return [];
+    const targetCompany = companies.find(company => company.id === targetCompanyId);
+    if (!targetCompany) throw new Error('La empresa destino de las liquidaciones de anticipos no existe.');
+    const allPurchases = [...purchases, ...batch.purchases];
+    const allDirectAdvances = [...supplierDirectAdvances, ...batch.supplierDirectAdvances];
+    const allSettlements = [...supplierAdvanceSettlements, ...batch.supplierAdvanceSettlements];
+    const allJournalEntries = [...journalEntries, ...batch.journalEntries];
+    const seenRows = new Set<string>();
+    const seenOperations = new Set<string>();
+    const created: SupplierAdvanceSettlement[] = [];
+
+    for (const item of items) {
+      const sourceRowId = String(item?.sourceRowId || '').trim();
+      const draft = item?.draft;
+      if (!sourceRowId || seenRows.has(sourceRowId)) {
+        throw new Error('La selección de liquidaciones de anticipos contiene claves de origen vacías o duplicadas.');
+      }
+      seenRows.add(sourceRowId);
+      const rif = String(draft?.supplierRif || '').trim().toUpperCase();
+      const operationKey = [
+        targetCompanyId, rif, draft?.kind, draft?.date,
+        Math.round(Number(draft?.amountUsd) * 1000000),
+        Math.round(Number(draft?.amountBs) * 100),
+        draft?.treasuryAccountCode || '', draft?.targetPurchaseId || '',
+        String(draft?.reference || '').trim().toUpperCase()
+      ].join('|');
+      if (seenOperations.has(operationKey) || allSettlements.some(settlement =>
+        settlement.companyId === targetCompanyId && !settlement.isReversed &&
+        String(settlement.supplierRif || '').trim().toUpperCase() === rif &&
+        settlement.kind === draft.kind && settlement.date === draft.date &&
+        Math.round(Number(settlement.amountUsd) * 1000000) === Math.round(Number(draft.amountUsd) * 1000000) &&
+        (draft.reference?.trim()
+          ? String(settlement.reference || '').trim().toUpperCase() === draft.reference.trim().toUpperCase()
+          : !settlement.reference?.trim() &&
+            Math.round(Number(settlement.amountBs) * 100) === Math.round(Number(draft.amountBs) * 100) &&
+            (settlement.targetPurchaseId || '') === (draft.targetPurchaseId || '') &&
+            (settlement.treasuryAccountCode || '') === (draft.treasuryAccountCode || ''))
+      )) {
+        throw new Error('Liquidación ' + sourceRowId + ': posible operación duplicada en el archivo o en SICOVEN.');
+      }
+      seenOperations.add(operationKey);
+      if (targetCompany.closedThroughDate && draft.date <= targetCompany.closedThroughDate) {
+        throw new Error('Liquidación ' + sourceRowId + ': la fecha pertenece a un período contable cerrado.');
+      }
+      const sourceNotes = allPurchases.filter(purchase =>
+        purchase.companyId === targetCompanyId && purchase.documentType === '03' &&
+        !purchase.isCancelled &&
+        String(purchase.supplierRif || '').trim().toUpperCase() === rif &&
+        Number(purchase.supplierAdvanceUsd || 0) > 0
+      ).sort((a, b) =>
+        String(a.invoiceDate || '').localeCompare(String(b.invoiceDate || '')) || String(a.id).localeCompare(String(b.id))
+      );
+      const sourceDirectAdvances = allDirectAdvances.filter(advance =>
+        advance.companyId === targetCompanyId && !advance.isReversed &&
+        String(advance.supplierRif || '').trim().toUpperCase() === rif
+      ).sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+      const target = draft.kind === 'APPLIED_TO_PURCHASE'
+        ? allPurchases.find(purchase => purchase.id === draft.targetPurchaseId &&
+            purchase.companyId === targetCompanyId && ['01', '02'].includes(purchase.documentType) &&
+            purchase.paymentTerm === 'CREDITO' && !purchase.isCancelled)
+        : undefined;
+      if (draft.kind === 'APPLIED_TO_PURCHASE' && !target) {
+        throw new Error('Liquidación ' + sourceRowId + ': la compra destino no existe en la empresa, no es crédito o está reversada.');
+      }
+      if (target) {
+        const dateError = validatePurchasePaymentDate(draft.date, getPurchaseAccountCreditDate(target));
+        if (dateError) throw new Error('Liquidación ' + sourceRowId + ': ' + dateError);
+      }
+      const available = getSupplierAdvanceBalance(rif, targetCompanyId).outstandingUsd;
+      const treasuryCodes = [...new Set([
+        ...bankAccounts.filter(bank => bank.companyId === targetCompanyId && (!bank.currency || bank.currency === 'BS')).map(bank => bank.accountCode),
+        ...accounts.filter(account => account.type === 'ACTIVO' && account.isMovement && account.code === '1.1.1.01').map(account => account.code)
+      ])];
+      const validation = validateSupplierAdvanceSettlementDraft(draft, available, target?.supplierRif, treasuryCodes);
+      if (validation) throw new Error('Liquidación ' + sourceRowId + ': ' + validation);
+      if (target) {
+        const payable = getCreditBalance(target.id, 'PURCHASE_PAYMENT', targetCompanyId);
+        if (draft.amountUsd > payable.outstandingUsd + 0.000005) {
+          throw new Error('Liquidación ' + sourceRowId + ': la aplicación supera el saldo pendiente de la compra destino.');
+        }
+      }
+
+      const amountUsd = Math.round((draft.amountUsd + Number.EPSILON) * 1000000) / 1000000;
+      const advanceAccount = accounts.find(account => account.code === '1.1.2.03' && account.isMovement);
+      let counterpartCode = draft.treasuryAccountCode!;
+      if (draft.kind === 'APPLIED_TO_PURCHASE') {
+        const originalEntry = target?.journalEntryId
+          ? allJournalEntries.find(entry => entry.id === target.journalEntryId && entry.companyId === targetCompanyId)
+          : undefined;
+        if (!originalEntry || originalEntry.type !== (target?.documentType === '02' ? 'AJUSTE' : 'COMPRA')) {
+          throw new Error('Liquidación ' + sourceRowId + ': la compra destino no conserva un asiento original verificable.');
+        }
+        const payableCandidates = originalEntry.items.filter(line => {
+          const account = accounts.find(candidate => candidate.code === line.accountCode && candidate.isMovement);
+          const label = (account?.name || '') + ' ' + (line.description || '');
+          return Boolean(account && Number(line.creditBs) > 0 && account.code.startsWith('2.1.1.') &&
+            /(proveedor|cuentas por pagar|neto a pagar)/i.test(label));
+        });
+        const payableCodes = [...new Set(payableCandidates.map(line => line.accountCode))];
+        if (payableCodes.length !== 1) {
+          throw new Error('Liquidación ' + sourceRowId + ': no se identificó una única cuenta auxiliar de CxP en la compra.');
+        }
+        counterpartCode = payableCodes[0];
+      }
+      const counterpart = accounts.find(account => account.code === counterpartCode && account.isMovement);
+      if (!advanceAccount || !counterpart) {
+        throw new Error('Liquidación ' + sourceRowId + ': faltan cuentas contables imputables para anticipos/tesorería/CxP.');
+      }
+      const settlementValueBs = draft.kind === 'REFUND_RECEIVED'
+        ? Math.round((draft.cashReceivedBs ?? draft.amountBs) * 100) / 100
+        : (() => {
+            const payable = getCreditBalance(target!.id, 'PURCHASE_PAYMENT', targetCompanyId);
+            return Math.round((payable.outstandingUsd > 0
+              ? payable.outstandingBsAtInvoiceRate * amountUsd / payable.outstandingUsd
+              : 0) * 100) / 100;
+          })();
+      const allocation = allocateSupplierAdvanceFifo(
+        sourceNotes.map(note => ({
+          id: note.id, date: note.invoiceDate,
+          amountUsd: Number(note.supplierAdvanceUsd || 0),
+          bookValueBs: Number(note.supplierAdvanceBs || 0)
+        })),
+        sourceDirectAdvances.map(source => ({
+          id: source.id, date: source.date,
+          amountUsd: Number(source.amountUsd || 0),
+          bookValueBs: Number(source.bookValueBs || 0)
+        })),
+        allSettlements,
+        targetCompanyId,
+        rif,
+        amountUsd
+      );
+      const sourceCreditNoteAllocations = allocation.creditNoteAllocations;
+      const sourceCreditNoteIds = sourceCreditNoteAllocations.map(source => source.creditNoteId);
+      const sourceDirectAdvanceAllocations = allocation.directAdvanceAllocations;
+      const sourceDirectAdvanceIds = sourceDirectAdvanceAllocations.map(source => source.directAdvanceId);
+      const advanceBookValueBs = Math.round((
+        sourceCreditNoteAllocations.reduce((sum, source) => sum + source.bookValueBs, 0) +
+        sourceDirectAdvanceAllocations.reduce((sum, source) => sum + source.bookValueBs, 0)
+      ) * 100) / 100;
+      const fx = calculateSupplierAdvanceFxSettlement(amountUsd, advanceBookValueBs, amountUsd, settlementValueBs);
+      const gain = accounts.find(account => account.code === '4.2.1.01' && account.isMovement);
+      const loss = accounts.find(account => account.code === '6.1.1.08' && account.isMovement);
+      if (fx.exchangeDifferenceBs >= 0.01 && !gain) {
+        throw new Error('Liquidación ' + sourceRowId + ': falta la cuenta de ganancia cambiaria.');
+      }
+      if (fx.exchangeDifferenceBs <= -0.01 && !loss) {
+        throw new Error('Liquidación ' + sourceRowId + ': falta la cuenta de pérdida cambiaria.');
+      }
+      const journalItems = buildSupplierAdvanceSettlementJournalItems({
+        kind: draft.kind,
+        amountUsd,
+        settlementValueBs,
+        advanceBookValueBs,
+        exchangeDifferenceBs: fx.exchangeDifferenceBs,
+        counterpartAccount: counterpart,
+        advanceAccount,
+        fxGainAccount: gain,
+        fxLossAccount: loss
+      });
+      const entry = addJournalEntry({
+        entryNumber: 0,
+        date: draft.date,
+        description: draft.kind === 'REFUND_RECEIVED'
+          ? 'Reembolso importado de anticipo de proveedor ' + rif
+          : 'Aplicación importada de anticipo a factura ' + target!.invoiceNumber,
+        type: 'ANTICIPO_PROVEEDOR',
+        bcvRate: draft.bcvRate,
+        referenceDoc: draft.reference?.trim() || target?.invoiceNumber,
+        items: journalItems
+      }, accounts, targetCompanyId);
+      const settlement: SupplierAdvanceSettlement = {
+        ...draft,
+        supplierRif: rif,
+        supplierName: sourceNotes[0]?.supplierName || sourceDirectAdvances[0]?.supplierName || target?.supplierName || '',
+        sourceCreditNoteIds,
+        sourceCreditNoteAllocations,
+        sourceDirectAdvanceIds,
+        sourceDirectAdvanceAllocations,
+        id: 'supplier-advance-import-' + targetCompanyId + '-' + entry.id + '-' + sourceRowId,
+        companyId: targetCompanyId,
+        amountUsd,
+        amountBs: advanceBookValueBs,
+        advanceBookValueBs,
+        cashReceivedBs: draft.kind === 'REFUND_RECEIVED' ? settlementValueBs : undefined,
+        exchangeDifferenceBs: fx.exchangeDifferenceBs,
+        journalEntryId: entry.id,
+        createdAt: new Date().toISOString()
+      };
+      batch.supplierAdvanceSettlements.push(settlement);
+      allSettlements.push(settlement);
+      created.push(settlement);
+    }
+    setSupplierAdvanceSettlements(previous => [...previous, ...created]);
+    return created;
+  };
 
   const addSupplierDirectAdvance = async (draft: SupplierDirectAdvanceDraft): Promise<SupplierDirectAdvance> => {
     assertSQLitePersistenceReady('Registrar anticipo directo a proveedor');
@@ -1594,57 +2118,34 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             ? payable.outstandingBsAtInvoiceRate * amountUsd / payable.outstandingUsd
             : 0) * 100) / 100;
         })();
-    // Consumir primero los saldos originados en notas de crédito y luego
-    // los desembolsos directos, cada origen con su valor histórico FIFO.
-    const activeSettlements = supplierAdvanceSettlements.filter(item => item.companyId === currentCompany.id &&
-      !item.isReversed && String(item.supplierRif || '').trim().toUpperCase() === rif);
-    const noteConsumedUsd = activeSettlements.flatMap(item => item.sourceCreditNoteAllocations || [])
-      .reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
-    const directConsumedUsd = activeSettlements.flatMap(item => item.sourceDirectAdvanceAllocations || [])
-      .reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
-    const noteAvailableUsd = Math.max(0, sourceNotes.reduce((sum, item) => sum + Number(item.supplierAdvanceUsd || 0), 0) - noteConsumedUsd);
-    const directAvailableUsd = Math.max(0, sourceDirectAdvances.reduce((sum, item) => sum + Number(item.amountUsd || 0), 0) - directConsumedUsd);
-    if (amountUsd > noteAvailableUsd + directAvailableUsd + 0.000005) {
-      throw new Error('La liquidación supera los anticipos disponibles de notas de crédito y desembolsos directos.');
-    }
-    const noteRequestedUsd = Math.min(amountUsd, noteAvailableUsd);
-    const directRequestedUsd = Math.max(0, amountUsd - noteRequestedUsd);
-    const sourceCreditNoteAllocations = noteRequestedUsd > 0.000005
-      ? allocateSupplierAdvanceCreditNotes(
-          sourceNotes.map(note => ({
-            id: note.id,
-            amountUsd: Number(note.supplierAdvanceUsd || 0),
-            bookValueBs: Number(note.supplierAdvanceBs || 0)
-          })),
-          supplierAdvanceSettlements, currentCompany.id, rif, noteRequestedUsd
-        )
-      : [];
+    // Distribuir notas de crédito y desembolsos directos en una sola cola FIFO
+    // cronológica, conservando el valor histórico de cada origen.
+    const fifoAllocation = allocateSupplierAdvanceFifo(
+      sourceNotes.map(note => ({
+        id: note.id,
+        date: note.invoiceDate,
+        amountUsd: Number(note.supplierAdvanceUsd || 0),
+        bookValueBs: Number(note.supplierAdvanceBs || 0)
+      })),
+      sourceDirectAdvances.map(advanceSource => ({
+        id: advanceSource.id,
+        date: advanceSource.date,
+        amountUsd: Number(advanceSource.amountUsd || 0),
+        bookValueBs: Number(advanceSource.bookValueBs || 0)
+      })),
+      supplierAdvanceSettlements,
+      currentCompany.id,
+      rif,
+      amountUsd
+    );
+    const sourceCreditNoteAllocations = fifoAllocation.creditNoteAllocations;
     const sourceCreditNoteIds = sourceCreditNoteAllocations.map(item => item.creditNoteId);
-    const sourceDirectAdvanceAllocations = directRequestedUsd > 0.000005
-      ? allocateDirectSupplierAdvance(
-          sourceDirectAdvances,
-          activeSettlements.map(item => ({
-            companyId: item.companyId, supplierRif: item.supplierRif,
-            allocations: item.sourceDirectAdvanceAllocations || [], isReversed: item.isReversed
-          })),
-          currentCompany.id, rif, directRequestedUsd
-        )
-      : [];
+    const sourceDirectAdvanceAllocations = fifoAllocation.directAdvanceAllocations;
     const sourceDirectAdvanceIds = sourceDirectAdvanceAllocations.map(item => item.directAdvanceId);
     const advanceBookValueBs = Math.round((
       sourceCreditNoteAllocations.reduce((sum, allocation) => sum + allocation.bookValueBs, 0) +
       sourceDirectAdvanceAllocations.reduce((sum, allocation) => sum + allocation.bookValueBs, 0)
     ) * 100) / 100;
-    if (sourceCreditNoteAllocations.length) {
-      const allocationError = validateSupplierAdvanceCreditNoteAllocations(
-        sourceCreditNoteAllocations, sourceCreditNoteIds, noteRequestedUsd,
-        sourceCreditNoteAllocations.reduce((sum, allocation) => sum + allocation.bookValueBs, 0)
-      );
-      if (allocationError) throw new Error(allocationError);
-    }
-    if (sourceDirectAdvanceAllocations.reduce((sum, item) => sum + item.amountUsd, 0) + 0.000005 < directRequestedUsd) {
-      throw new Error('No se pudo distribuir el importe completo entre los desembolsos directos disponibles.');
-    }
 
     // Se reutiliza el cálculo FX con el valor histórico exacto de la asignación FIFO.
     const fxAmounts = calculateSupplierAdvanceFxSettlement(
@@ -1653,33 +2154,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const differenceBs = fxAmounts.exchangeDifferenceBs;
     const gain = accounts.find(item => item.code === '4.2.1.01' && item.isMovement);
     const loss = accounts.find(item => item.code === '6.1.1.08' && item.isMovement);
-    if (Math.abs(differenceBs) >= 0.01 && !(gain && loss)) {
-      throw new Error('Faltan las cuentas de ganancia/pérdida por diferencial cambiario. No se registró la liquidación.');
+    if (differenceBs >= 0.01 && !gain) {
+      throw new Error('Falta la cuenta de ganancia por diferencial cambiario. No se registró la liquidación.');
+    }
+    if (differenceBs <= -0.01 && !loss) {
+      throw new Error('Falta la cuenta de pérdida por diferencial cambiario. No se registró la liquidación.');
     }
 
-    const debitItems: JournalEntryItem[] = [{
-      accountCode: counterpart.code, accountName: counterpart.name,
-      debitBs: settlementValueBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0,
-      description: draft.kind === 'REFUND_RECEIVED' ? 'Reembolso de anticipo de proveedor' : 'Aplicación de anticipo a cuenta por pagar'
-    }];
-    const creditItems: JournalEntryItem[] = [{
-      accountCode: advance.code, accountName: advance.name,
-      debitBs: 0, creditBs: advanceBookValueBs, debitUsd: 0, creditUsd: amountUsd,
-      description: 'Descarga del anticipo a su valor histórico FIFO'
-    }];
-    if (differenceBs > 0.009) {
-      creditItems.push({
-        accountCode: gain!.code, accountName: gain!.name,
-        debitBs: 0, creditBs: differenceBs, debitUsd: 0, creditUsd: 0,
-        description: 'Ganancia por diferencial cambiario en liquidación de anticipo'
-      });
-    } else if (differenceBs < -0.009) {
-      debitItems.push({
-        accountCode: loss!.code, accountName: loss!.name,
-        debitBs: Math.abs(differenceBs), creditBs: 0, debitUsd: 0, creditUsd: 0,
-        description: 'Pérdida por diferencial cambiario en liquidación de anticipo'
-      });
-    }
+    const settlementJournalItems = buildSupplierAdvanceSettlementJournalItems({
+      kind: draft.kind,
+      amountUsd,
+      settlementValueBs,
+      advanceBookValueBs,
+      exchangeDifferenceBs: differenceBs,
+      counterpartAccount: counterpart,
+      advanceAccount: advance,
+      fxGainAccount: gain,
+      fxLossAccount: loss
+    });
     let resolvePersistence!: () => void;
     let rejectPersistence!: (error: Error) => void;
     const persistenceConfirmation = new Promise<void>((resolve, reject) => {
@@ -1695,7 +2187,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         description: draft.kind === 'REFUND_RECEIVED' ? `Reembolso de anticipo de proveedor ${rif}` : `Aplicación de anticipo a factura ${target!.invoiceNumber}`,
         type: 'ANTICIPO_PROVEEDOR', bcvRate: draft.bcvRate,
         referenceDoc: draft.reference?.trim() || target?.invoiceNumber,
-        items: [...debitItems, ...creditItems]
+        items: settlementJournalItems
       });
     } catch (cause) {
       persistenceWaitersRef.current = persistenceWaitersRef.current.filter(waiter => waiter !== persistenceWaiter);
@@ -1860,34 +2352,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const amountUsd = Math.round(draft.amountUsd * 100) / 100;
     const fxGain = accounts.find(account => account.code === '4.2.1.01' && account.isMovement);
     const fxLoss = accounts.find(account => account.code === '6.1.1.08' && account.isMovement);
-    const fxLines = (): JournalEntryItem[] => {
-      if (Math.abs(fxDifferenceBs) < 0.01) return [];
-      if (kind === 'SALE_COLLECTION') {
-        // Cobro superior al valor contable: ganancia (Haber); inferior: pérdida (Debe).
-        if (fxDifferenceBs > 0) {
-          if (!fxGain) throw new Error('Falta la cuenta Ganancia por Diferencial Cambiario (4.2.1.01).');
-          return [{ accountCode: fxGain.code, accountName: fxGain.name, debitBs: 0, creditBs: fxDifferenceBs, debitUsd: 0, creditUsd: 0, description: 'Ganancia cambiaria por cobro a tasa posterior' }];
-        }
-        if (!fxLoss) throw new Error('Falta la cuenta Pérdida en Diferencial Cambiario (6.1.1.08).');
-        return [{ accountCode: fxLoss.code, accountName: fxLoss.name, debitBs: Math.abs(fxDifferenceBs), creditBs: 0, debitUsd: 0, creditUsd: 0, description: 'Pérdida cambiaria por cobro a tasa posterior' }];
-      }
-      // Pago superior al pasivo contable: pérdida (Debe); inferior: ganancia (Haber).
-      if (fxDifferenceBs > 0) {
-        if (!fxLoss) throw new Error('Falta la cuenta Pérdida en Diferencial Cambiario (6.1.1.08).');
-        return [{ accountCode: fxLoss.code, accountName: fxLoss.name, debitBs: fxDifferenceBs, creditBs: 0, debitUsd: 0, creditUsd: 0, description: 'Pérdida cambiaria por pago a tasa posterior' }];
-      }
-      if (!fxGain) throw new Error('Falta la cuenta Ganancia por Diferencial Cambiario (4.2.1.01).');
-      return [{ accountCode: fxGain.code, accountName: fxGain.name, debitBs: 0, creditBs: Math.abs(fxDifferenceBs), debitUsd: 0, creditUsd: 0, description: 'Ganancia cambiaria por pago a tasa posterior' }];
-    };
     let entry: JournalEntry;
     try {
-      const baseItems: JournalEntryItem[] = kind === 'SALE_COLLECTION' ? [
-        { accountCode: cashCode, accountName: cashAccount.name, debitBs: amountBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: isBankTransfer ? 'Cobro de factura de crédito por transferencia bancaria' : 'Cobro de factura de crédito' },
-        { accountCode: controlCode, accountName: controlAccount.name, debitBs: 0, creditBs: amountAtInvoiceRate, debitUsd: 0, creditUsd: amountUsd, description: 'Cancelación parcial de cuenta por cobrar al valor contable original' }
-      ] : [
-        { accountCode: controlCode, accountName: controlAccount.name, debitBs: amountAtInvoiceRate, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: 'Cancelación parcial de cuenta por pagar al valor contable original' },
-        { accountCode: cashCode, accountName: cashAccount.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: isBankTransfer ? 'Pago de factura de crédito por transferencia bancaria' : 'Pago de factura de crédito' }
-      ];
       entry = addJournalEntry({
         entryNumber: 0,
         date: draft.settlementDate,
@@ -1895,7 +2361,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         type: 'AJUSTE',
         bcvRate: draft.bcvRate,
         referenceDoc: document.invoiceNumber,
-        items: [...baseItems, ...fxLines()]
+        items: buildCreditSettlementJournalItems({
+          kind, method: draft.method, amountBs, amountUsd, invoiceRate,
+          settlementRate: draft.bcvRate,
+          cashAccount, controlAccount, fxGainAccount: fxGain, fxLossAccount: fxLoss
+        })
+
       });
     } catch (error) {
       settlementInFlightRef.current.delete(operationKey);
@@ -2044,7 +2515,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const normalizeDocument = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '');
     const normalizeRif = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const duplicateInvoice = purchases.some(existing =>
+    const duplicateInvoice = [...purchases, ...(activeImportBatchRef.current?.purchases || [])].some(existing =>
       existing.companyId === targetCompany.id &&
       existing.documentType === purchaseData.documentType &&
       normalizeDocument(existing.invoiceNumber) === normalizeDocument(purchaseData.invoiceNumber) &&
@@ -2099,7 +2570,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           purchaseData.islrBasePercentage !== concept.basePercentage) {
         throw new Error('Los parámetros históricos de cálculo ISLR no coinciden con el concepto fiscal seleccionado.');
       }
-      const matchingMonthlyOperations = purchases.filter(item =>
+      const matchingMonthlyOperations = [...purchases, ...(activeImportBatchRef.current?.purchases || [])].filter(item =>
         item.companyId === targetCompany.id &&
         item.documentType === '01' &&
         String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierKey &&
@@ -2262,9 +2733,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ? bankAccounts.find(bank => bank.companyId === targetCompany.id && bank.accountCode === paymentAccount!.code)
       : undefined;
     if (bankPaymentAccount) {
+      const balanceEntries = activeImportBatchRef.current
+        ? [...journalEntries, ...activeImportBatchRef.current.journalEntries]
+        : journalEntries;
       const availableBalance = calculateBankAvailableBalance({
         bankAccount: bankPaymentAccount, companyId: targetCompany.id,
-        asOfDate: purchaseData.accountCreditDate!, journalEntries
+        asOfDate: purchaseData.accountCreditDate!, journalEntries: balanceEntries
       });
       validateBankOutgoingAvailability({
         availableBalance,
@@ -2307,6 +2781,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     };
 
     reserveBankOutgoingAccounts(createdJournalEntry.companyId, createdJournalEntry.items);
+    activeImportBatchRef.current?.journalEntries.push(createdJournalEntry);
     setJournalEntries(prev => [...prev, createdJournalEntry]);
 
     const finalPurchase: PurchaseRecord = {
@@ -2326,6 +2801,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       journalEntryId: createdJournalEntry.id
     };
 
+    activeImportBatchRef.current?.purchases.push(finalPurchase);
     setPurchases(prev => [...prev, finalPurchase]);
 
     // 2. Si retuvo IVA, crear el comprobante oficial de retención de IVA
@@ -3241,7 +3717,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('El total de la venta no coincide con base imponible, exento, IVA e IGTF.');
     }
     const normalizeSaleDocument = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '');
-    const duplicateSale = sales.some(existing =>
+    const duplicateSale = [...sales, ...(activeImportBatchRef.current?.sales || [])].some(existing =>
       existing.companyId === targetCompany.id &&
       existing.documentType === saleData.documentType &&
       normalizeSaleDocument(existing.invoiceNumber) === normalizeSaleDocument(saleData.invoiceNumber)
@@ -3367,6 +3843,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     };
 
     reserveBankOutgoingAccounts(createdJournalEntry.companyId, createdJournalEntry.items);
+    activeImportBatchRef.current?.journalEntries.push(createdJournalEntry);
     setJournalEntries(prev => [...prev, createdJournalEntry]);
 
     const finalSale: SaleRecord = {
@@ -3387,6 +3864,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       journalEntryId: createdJournalEntry.id
     };
 
+    activeImportBatchRef.current?.sales.push(finalSale);
     setSales(prev => [...prev, finalSale]);
     return finalSale;
   };
@@ -5690,6 +6168,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         addSupplierAdvanceSettlement,
         supplierDirectAdvances: supplierDirectAdvances.filter(item => item.companyId === currentCompany.id),
         addSupplierDirectAdvance,
+        addImportedSupplierDirectAdvances,
+        addImportedSupplierAdvanceSettlements,
         purchases: purchases.filter(p => p.companyId === currentCompany.id),
         addPurchase,
         addPurchaseCreditNote,
@@ -5701,6 +6181,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         addSaleCorrectionNote,
         deleteSale,
         runAtomicInvoiceImport,
+        runAtomicInvoiceImportAndWait,
+        addImportedCreditSettlements,
         products: products.filter(p => p.companyId === currentCompany.id),
         addProduct,
         getCompanyInventoryProducts,
