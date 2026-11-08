@@ -1003,7 +1003,7 @@ function validateFixedAssetLedger(previousState, nextState) {
         Math.abs(Number(sourceLine.debitBs) - Number(asset.acquisitionCostBs)) > 0.01 ||
         Math.abs(Number(sourceLine.debitUsd) - Number(asset.acquisitionCostUsd)) > 0.000001 ||
         Number(sourceLine.creditBs || 0) !== 0 || Number(sourceLine.creditUsd || 0) !== 0 ||
-        source.date > asset.acquisitionDate || Math.abs(Number(source.bcvRate) - Number(asset.acquisitionBcvRate)) > 0.000001 ||
+        source.date < asset.acquisitionDate || Math.abs(Number(source.bcvRate) - Number(asset.acquisitionBcvRate)) > 0.000001 ||
         !assetAccount || assetAccount.type !== 'ACTIVO' || assetAccount.isMovement !== true ||
         !String(asset.assetAccountCode).startsWith('1.2.') || normalize(assetAccount.name).includes('DEPRECIACION ACUMULADA') ||
         !accumulatedAccount || accumulatedAccount.type !== 'ACTIVO' || accumulatedAccount.isMovement !== true ||
