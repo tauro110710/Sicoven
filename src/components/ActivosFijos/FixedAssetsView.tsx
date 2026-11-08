@@ -159,7 +159,7 @@ export const FixedAssetsView: React.FC = () => {
       </header>
 
       <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
-        <strong>Integridad de adquisición:</strong> solo se pueden registrar activos cuya línea ya esté debitada en una cuenta de Propiedades, Planta y Equipos (1.2). El alta no duplica el asiento original. Esta primera etapa incluye depreciación financiera lineal prorrateada por días; no calcula depreciación fiscal, bajas/ventas, deterioro ni revaluaciones.
+        <strong>Integridad de adquisición:</strong> solo se pueden registrar activos cuya línea ya esté debitada en una cuenta de Propiedades, Planta y Equipos (1.2). El alta no duplica el asiento original. Esta primera etapa incluye depreciación financiera lineal prorrateada por días para bienes depreciables; excluye terrenos, depreciación fiscal, bajas/ventas, deterioro y revaluaciones.
       </div>
 
       {(error || message) && (
