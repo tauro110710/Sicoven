@@ -49,7 +49,6 @@ function registerPersistenceFlushIpc({
         pending.delete(requestId);
         reject(new Error('SICOVEN no recibió confirmación del renderer; se canceló el cambio para proteger los datos.'));
       }, timeoutMs);
-      timer.unref?.();
       pending.set(requestId, { sender: event.sender, resolve, reject, timer });
       try {
         event.sender.send('sicoven:persistence-flush-request', { requestId });
