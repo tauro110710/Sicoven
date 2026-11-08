@@ -24,6 +24,6 @@ export const getUniversalMasterTemplate = (kind: UniversalMasterTemplateKind): {
   const template = templates[kind];
   return {
     fileName: template.fileName,
-    csv: [template.headers, template.example].map(row => row.map(csvCell).join(',')).join('\\r\\n') + '\\r\\n'
+    csv: [template.headers, template.example].map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n'
   };
 };
