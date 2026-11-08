@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, selectUniversalRowsByStableKeys, mapUniversalSettlementPreview, mapUniversalInventoryItemType, planUniversalInvoiceSettlements, selectUniversalInvoiceSettlements, validateUniversalSettlementDestination } from './universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, hasUniversalNestedMerchandiseDetails, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, resolveUniversalInvoiceSettlementRows, hasUniversalInlineSettlementAmount, selectUniversalRowsByStableKeys, mapUniversalSettlementPreview, mapUniversalInventoryItemType, isUniversalProductCollectionPath, getUniversalJsonValueAtPath, planUniversalInvoiceSettlements, selectUniversalInvoiceSettlements, validateUniversalSettlementDestination } from './universalImport';
 
 
 
@@ -36,6 +36,22 @@ test('detecta arreglos JSON en la raíz sin conocer el nombre del sistema', () =
   assert.equal(result[0].path, '$');
   assert.equal(result[0].rows.length, 2);
   assert.equal(result[0].invalidItems, 0);
+});
+
+test('reconoce rutas anidadas de productos sin confundir detalles de ventas', () => {
+  assert.equal(isUniversalProductCollectionPath('productos'), true);
+  assert.equal(isUniversalProductCollectionPath('catalogo.productos'), true);
+  assert.equal(isUniversalProductCollectionPath('inventario.products'), true);
+  assert.equal(isUniversalProductCollectionPath('ventas.detalles'), false);
+  assert.equal(isUniversalProductCollectionPath('compras'), false);
+});
+
+test('resuelve una colección JSON por ruta anidada sin alterar el respaldo', () => {
+  const source = { catalogo: { inventario: { productos: [{ codigo: 'A1' }] } } };
+  const selected = getUniversalJsonValueAtPath(source, 'catalogo.inventario.productos');
+  assert.deepEqual(selected, [{ codigo: 'A1' }]);
+  assert.equal(getUniversalJsonValueAtPath(source, 'catalogo.inventario.noExiste'), undefined);
+  assert.deepEqual(source.catalogo.inventario.productos, [{ codigo: 'A1' }]);
 });
 
 test('descubre varias colecciones anidadas y conserva su ruta', () => {
