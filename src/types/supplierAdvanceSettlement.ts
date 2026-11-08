@@ -217,6 +217,150 @@ export function allocateSupplierAdvanceCreditNotes(
   return result;
 }
 
+
+export interface SupplierAdvanceFifoSource extends SupplierAdvanceCreditNoteSource {
+  date: string;
+  kind: 'CREDIT_NOTE' | 'DIRECT_ADVANCE';
+}
+
+export interface SupplierAdvanceFifoAllocation {
+  creditNoteAllocations: SupplierAdvanceCreditNoteAllocation[];
+  directAdvanceAllocations: SupplierAdvanceDirectAllocation[];
+}
+
+/**
+ * Allocates one supplier settlement across credit notes and direct disbursements
+ * in a single chronological FIFO queue. Each allocation retains its source's
+ * historical book value; prior active settlements reduce only their exact source.
+ */
+export function allocateSupplierAdvanceFifo(
+  creditNotes: Array<SupplierAdvanceCreditNoteSource & { date: string }>,
+  directAdvances: Array<SupplierAdvanceDirectSource & { date: string }>,
+  settlements: SupplierAdvanceSettlement[],
+  companyId: string,
+  supplierRif: string,
+  requestedUsd: number
+): SupplierAdvanceFifoAllocation {
+  if (!companyId.trim() || !String(supplierRif || '').trim()) {
+    throw new Error('La empresa y el RIF del proveedor son obligatorios para distribuir anticipos.');
+  }
+  if (!Number.isFinite(requestedUsd) || requestedUsd <= 0) {
+    throw new Error('El importe a distribuir entre anticipos debe ser mayor que cero.');
+  }
+  if (!Array.isArray(creditNotes) || !Array.isArray(directAdvances) || !Array.isArray(settlements)) {
+    throw new Error('No se pudo reconstruir el historial de anticipos del proveedor.');
+  }
+  const rif = supplierRif.trim().toUpperCase();
+  const sources: SupplierAdvanceFifoSource[] = [
+    ...creditNotes.map(source => ({ ...source, kind: 'CREDIT_NOTE' as const })),
+    ...directAdvances.map(source => ({ ...source, kind: 'DIRECT_ADVANCE' as const }))
+  ];
+  const sourceKeys = new Set<string>();
+  for (const source of sources) {
+    const key = source.kind + ':' + source.id;
+    if (!source.id?.trim() || sourceKeys.has(key)) {
+      throw new Error('El conjunto de anticipos contiene identificadores vacíos o duplicados.');
+    }
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(source.date || '') ||
+        !Number.isFinite(Date.parse(source.date + 'T00:00:00Z')) ||
+        !Number.isFinite(source.amountUsd) || source.amountUsd <= 0 ||
+        !Number.isFinite(source.bookValueBs) || source.bookValueBs < 0) {
+      throw new Error('Un anticipo fuente contiene fecha o importes históricos inválidos.');
+    }
+    sourceKeys.add(key);
+  }
+
+  const used = new Map<string, { usd: number; bs: number }>();
+  for (const settlement of settlements) {
+    if (settlement.companyId !== companyId || settlement.isReversed ||
+        String(settlement.supplierRif || '').trim().toUpperCase() !== rif) continue;
+    const noteAllocations = settlement.sourceCreditNoteAllocations || [];
+    const directAllocations = settlement.sourceDirectAdvanceAllocations || [];
+    if (!noteAllocations.length && (settlement.sourceCreditNoteIds || []).length) {
+      throw new Error('Existe una liquidación histórica sin distribución por nota de crédito. Debe conciliarse manualmente antes de continuar.');
+    }
+    if (!noteAllocations.length && !directAllocations.length) {
+      throw new Error('Existe una liquidación histórica sin distribución individual por origen de anticipo.');
+    }
+    if (noteAllocations.length) {
+      const noteError = validateSupplierAdvanceCreditNoteAllocations(
+        noteAllocations,
+        settlement.sourceCreditNoteIds || [],
+        noteAllocations.reduce((sum, item) => sum + Number(item.amountUsd), 0),
+        noteAllocations.reduce((sum, item) => sum + Number(item.bookValueBs), 0)
+      );
+      if (noteError) throw new Error('La liquidación histórica ' + String(settlement.id || '') + ' no es conciliable: ' + noteError);
+    }
+    const directIds = directAllocations.map(item => item?.directAdvanceId);
+    if (directIds.some(id => typeof id !== 'string' || !id.trim()) ||
+        new Set(directIds).size !== directIds.length ||
+        directAllocations.some(item => !Number.isFinite(item.amountUsd) || item.amountUsd <= 0 ||
+          !Number.isFinite(item.bookValueBs) || item.bookValueBs < 0)) {
+      throw new Error('Una liquidación histórica contiene aplicaciones de anticipos directos inválidas.');
+    }
+    const totalUsd = roundUsd(
+      noteAllocations.reduce((sum, item) => sum + item.amountUsd, 0) +
+      directAllocations.reduce((sum, item) => sum + item.amountUsd, 0)
+    );
+    const totalBs = roundBs(
+      noteAllocations.reduce((sum, item) => sum + item.bookValueBs, 0) +
+      directAllocations.reduce((sum, item) => sum + item.bookValueBs, 0)
+    );
+    if (Math.abs(totalUsd - roundUsd(settlement.amountUsd)) > 0.00001 ||
+        Math.abs(totalBs - roundBs(settlement.advanceBookValueBs ?? settlement.amountBs)) > 0.02) {
+      throw new Error('La liquidación histórica ' + String(settlement.id || '') + ' no concilia con sus valores históricos de origen.');
+    }
+    for (const allocation of noteAllocations) {
+      const key = 'CREDIT_NOTE:' + allocation.creditNoteId;
+      if (!sourceKeys.has(key)) throw new Error('Una liquidación histórica referencia una nota de crédito inexistente.');
+      const current = used.get(key) || { usd: 0, bs: 0 };
+      current.usd = roundUsd(current.usd + allocation.amountUsd);
+      current.bs = roundBs(current.bs + allocation.bookValueBs);
+      used.set(key, current);
+    }
+    for (const allocation of directAllocations) {
+      const key = 'DIRECT_ADVANCE:' + allocation.directAdvanceId;
+      if (!sourceKeys.has(key)) throw new Error('Una liquidación histórica referencia un anticipo directo inexistente.');
+      const current = used.get(key) || { usd: 0, bs: 0 };
+      current.usd = roundUsd(current.usd + allocation.amountUsd);
+      current.bs = roundBs(current.bs + allocation.bookValueBs);
+      used.set(key, current);
+    }
+  }
+
+  const ordered = [...sources].sort((a, b) =>
+    a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id)
+  );
+  let remaining = roundUsd(requestedUsd);
+  const result: SupplierAdvanceFifoAllocation = { creditNoteAllocations: [], directAdvanceAllocations: [] };
+  for (const source of ordered) {
+    if (remaining <= 0.000005) break;
+    const key = source.kind + ':' + source.id;
+    const consumed = used.get(key) || { usd: 0, bs: 0 };
+    const availableUsd = roundUsd(source.amountUsd - consumed.usd);
+    const availableBsRaw = roundBs(source.bookValueBs - consumed.bs);
+    if (availableUsd < -0.000005 || availableBsRaw < -0.02) {
+      throw new Error('Las aplicaciones históricas exceden el saldo del anticipo ' + source.id + '.');
+    }
+    if (availableUsd <= 0.000005) continue;
+    const availableBs = Math.max(0, availableBsRaw);
+    const takeUsd = Math.min(remaining, availableUsd);
+    const takeBs = takeUsd >= availableUsd - 0.000005
+      ? availableBs
+      : roundBs(availableBs * takeUsd / availableUsd);
+    if (source.kind === 'CREDIT_NOTE') {
+      result.creditNoteAllocations.push({ creditNoteId: source.id, amountUsd: roundUsd(takeUsd), bookValueBs: takeBs });
+    } else {
+      result.directAdvanceAllocations.push({ directAdvanceId: source.id, amountUsd: roundUsd(takeUsd), bookValueBs: takeBs });
+    }
+    remaining = roundUsd(remaining - takeUsd);
+  }
+  if (remaining > 0.000005) {
+    throw new Error('La liquidación supera el saldo disponible combinado de anticipos del proveedor.');
+  }
+  return result;
+}
+
 /** Structural and arithmetic validation used by SQLite and backup import guards. */
 export function validateSupplierAdvanceCreditNoteAllocations(
   allocations: SupplierAdvanceCreditNoteAllocation[],
