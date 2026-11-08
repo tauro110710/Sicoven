@@ -851,7 +851,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const source = journalEntries.find(entry => entry.id === id && entry.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró el asiento original en la empresa activa.');
     if (fixedAssets.some(asset => asset.companyId === currentCompany.id && asset.sourceJournalEntryId === source.id)) {
-      throw new Error('No se puede revertir directamente la adquisición de un activo fijo registrado. Primero debe ejecutarse su baja contable desde el módulo de Activos Fijos.');
+      throw new Error('No se puede revertir directamente la adquisición de un activo fijo registrado. La baja y venta de activos fijos no está habilitada en esta versión; no se puede revertir desde el Libro Diario.');
     }
     if (!Number.isFinite(Number(source.bcvRate)) || Number(source.bcvRate) <= 0) throw new Error('El asiento original no conserva una tasa BCV histórica válida. Corrija primero la tasa del documento antes de reversarlo.');
     const vatPaymentReversalBlocker = getVatPaymentJournalReversalBlocker(
