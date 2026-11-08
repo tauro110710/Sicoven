@@ -158,7 +158,10 @@ function registerInflationClassificationIpc({ipcMain,db,licenseView,getActiveSes
   ipcMain.handle('sicoven:inflation-classification-review',(_event,token,input)=>{
     const actor=requireAdmin(licenseView,getActiveSession,token);
     return runWithDatabase(token,(activeDb,companyId)=>{
-      if(companyId&&String(input?.companyId||'')!==companyId) throw new Error('La revisión no pertenece a la empresa activa.');
+      if(companyId){
+        const existing=activeDb.prepare('SELECT company_id FROM inflation_classification_decisions WHERE id=?').get(String(input?.decisionId||''));
+        if(!existing||String(existing.company_id)!==companyId) throw new Error('La revisión no pertenece a la empresa activa.');
+      }
       return reviewInflationClassification(activeDb,input,actor);
     });
   });
