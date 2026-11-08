@@ -163,6 +163,7 @@ test('rejects a symlinked company directory instead of opening a database outsid
   const target = path.join(companiesRoot, 'comp-link');
   const original = path.join(companiesRoot, 'comp-link-original');
   fs.renameSync(target, original);
+  fs.copyFileSync(path.join(original, 'accounting.sqlite'), path.join(outside, 'accounting.sqlite'));
   try {
     fs.symlinkSync(outside, target, process.platform === 'win32' ? 'junction' : 'dir');
   } catch (error) {
