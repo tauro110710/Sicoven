@@ -1461,8 +1461,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         asset.sourceJournalEntryId === source.id && asset.sourceJournalLineIndex === draft.sourceJournalLineIndex)) {
       throw new Error('La línea de adquisición ya está vinculada a otro activo fijo.');
     }
-    if (!isValidIsoDate(draft.acquisitionDate) || draft.acquisitionDate < source.date || !isValidIsoDate(draft.serviceDate)) {
-      throw new Error('Las fechas de adquisición y puesta en servicio deben ser válidas y no anteriores al asiento de origen.');
+    if (!isValidIsoDate(draft.acquisitionDate) || source.date < draft.acquisitionDate || !isValidIsoDate(draft.serviceDate)) {
+      throw new Error('Las fechas deben ser válidas; el asiento de capitalización no puede ser anterior a la adquisición.');
     }
     const sourceLine = source.items[draft.sourceJournalLineIndex];
     const assetAccount = accounts.find(account => account.code === draft.assetAccountCode);
