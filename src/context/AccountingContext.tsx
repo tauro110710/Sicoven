@@ -5850,6 +5850,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       purchases,
       sales,
       products,
+      customers,
+      suppliers,
       movements,
       vatVouchers,
       vatWithholdingDeclarations,
@@ -5875,6 +5877,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const protectedCollections: Array<[string, string, Array<{ id?: string }>]> = [
       ['empresas', 'companies', companies], ['asientos', 'journalEntries', journalEntries], ['compras', 'purchases', purchases],
       ['ventas', 'sales', sales], ['artículos', 'products', products],
+      ['clientes maestros', 'customers', customers], ['proveedores maestros', 'suppliers', suppliers],
       ['movimientos de inventario', 'movements', movements], ['comprobantes IVA', 'vatVouchers', vatVouchers],
       ['declaraciones IVA', 'vatWithholdingDeclarations', vatWithholdingDeclarations],
       ['eventos de declaraciones IVA', 'vatWithholdingDeclarationEvents', vatWithholdingDeclarationEvents],
@@ -5927,6 +5930,27 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         typeof event.journalEntryId !== 'string' || !event.journalEntryId.trim()
       )) {
         throw new Error('El respaldo contiene eventos fiscales ISLR incompletos o inválidos.');
+      }
+      const customers: Customer[] = data?.customers === undefined ? [] : data.customers;
+      const suppliers: Supplier[] = data?.suppliers === undefined ? [] : data.suppliers;
+      if (!Array.isArray(customers) || !Array.isArray(suppliers)) throw new Error('El respaldo contiene maestros de clientes o proveedores inválidos.');
+      const partyIds = new Set<string>();
+      const partyFiscalKeys = new Set<string>();
+      for (const [partyType, rows] of [['CUSTOMER', customers], ['SUPPLIER', suppliers]] as const) {
+        for (const row of rows) {
+          if (!row || typeof row.id !== 'string' || !row.id.trim() || partyIds.has(row.id) ||
+              typeof row.companyId !== 'string' || !companyIds.has(row.companyId) ||
+              typeof row.name !== 'string' || !row.name.trim()) {
+            throw new Error('El respaldo contiene un maestro con ID, empresa o nombre inválido o duplicado.');
+          }
+          partyIds.add(row.id);
+          const fiscalId = String(row.fiscalId || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+          if (fiscalId) {
+            const key = row.companyId + '|' + partyType + '|' + fiscalId;
+            if (partyFiscalKeys.has(key)) throw new Error('El respaldo contiene identificaciones fiscales duplicadas en los maestros.');
+            partyFiscalKeys.add(key);
+          }
+        }
       }
       const requiredCollections = [
         'companies', 'accounts', 'journalEntries', 'purchases', 'sales', 'products',
