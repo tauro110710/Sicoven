@@ -535,6 +535,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
        :nextAdvancePreview.map(item=>item.sourceRowId);
       setSupplierAdvancePreview(nextAdvancePreview);
       setSelectedSupplierAdvanceSourceRowIds(selectedAdvanceIdsForBatch);
+      if(!samePreview){setNotice('Se detectaron '+nextAdvancePreview.length+' operaciones de anticipos de proveedores. Revisa cada fila y confirma cuáles deseas importar junto con las compras.');setBusy(false);return;}
       const unresolved=nextAdvancePreview.filter(item=>selectedAdvanceIdsForBatch.includes(item.sourceRowId)&&item.error).length;
       if(unresolved){
        setNotice('Se detectaron '+nextAdvancePreview.length+' operaciones de anticipos; '+unresolved+' seleccionadas requieren corregir datos o vínculo. Desmarca las filas que no deseas importar o corrige el archivo.');
@@ -956,6 +957,30 @@ const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fech
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"><div className="mb-1 flex items-center gap-2 font-semibold"><ShieldCheck size={17}/> Controles de seguridad</div>Se rechazan códigos duplicados y campos numéricos inválidos; no se sobrescriben artículos existentes. Ventas, compras, asientos y movimientos históricos de inventario disponen de importadores con validaciones específicas. El plan de cuentas compartido no se modifica desde este flujo. CxC y CxP se derivan de facturas de crédito; clientes y proveedores no se importan como maestros separados porque el modelo actual los conserva dentro de sus documentos. Revisa la vista previa y confirma antes de importar.</div>
     {error&&<div role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800"><AlertTriangle className="mr-2 inline" size={17}/>{error}</div>}
     {notice&&<div role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 className="mr-2 inline" size={17}/>{notice}</div>}
+    {supplierAdvancePreview.length>0&&<section className="rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+      <h3 className="text-sm font-semibold text-indigo-950">Anticipos de proveedores detectados</h3>
+      <p className="mt-1 text-xs text-indigo-900">Selecciona individualmente los desembolsos, reembolsos y aplicaciones que deben contabilizarse con este lote de compras. Las aplicaciones se enlazan únicamente con una factura del mismo proveedor y conservan el FIFO histórico.</p>
+      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+       <button type="button" className="font-medium underline" onClick={()=>setSelectedSupplierAdvanceSourceRowIds(supplierAdvancePreview.map(item=>item.sourceRowId))}>Seleccionar todas</button>
+       <button type="button" className="font-medium underline" onClick={()=>setSelectedSupplierAdvanceSourceRowIds([])}>Desmarcar todas</button>
+       <span>{selectedSupplierAdvanceSourceRowIds.length} de {supplierAdvancePreview.length} operaciones seleccionadas</span>
+      </div>
+      <div className="mt-3 max-h-64 overflow-auto">
+       <table className="min-w-full text-xs">
+        <thead><tr className="border-b border-indigo-200 text-left"><th className="px-2 py-2">Importar</th><th className="px-2 py-2">Operación</th><th className="px-2 py-2">Proveedor / RIF</th><th className="px-2 py-2">Fecha</th><th className="px-2 py-2 text-right">USD</th><th className="px-2 py-2 text-right">Bs</th><th className="px-2 py-2">Referencia / destino</th><th className="px-2 py-2">Validación</th></tr></thead>
+        <tbody>{supplierAdvancePreview.map(item=><tr key={item.sourceRowId} className="border-b border-indigo-100 align-top">
+         <td className="px-2 py-2"><input type="checkbox" checked={selectedSupplierAdvanceSourceRowIds.includes(item.sourceRowId)} onChange={event=>setSelectedSupplierAdvanceSourceRowIds(current=>event.target.checked?[...current,item.sourceRowId]:current.filter(id=>id!==item.sourceRowId))} aria-label={'Importar operación de anticipo '+item.sourceRowId}/></td>
+         <td className="px-2 py-2">{item.operation}</td>
+         <td className="px-2 py-2">{item.supplierName}<span className="block font-mono text-slate-500">{item.supplierRif}</span></td>
+         <td className="px-2 py-2">{item.date||'—'}</td>
+         <td className="px-2 py-2 text-right tabular-nums">{item.amountUsd?item.amountUsd.toFixed(2):'—'}</td>
+         <td className="px-2 py-2 text-right tabular-nums">{item.amountBs?item.amountBs.toFixed(2):'—'}</td>
+         <td className="px-2 py-2">{item.reference||'—'}{item.target&&<span className="block text-slate-500">{item.target}</span>}<span className="block break-all font-mono text-slate-400">{item.sourceRowId}</span></td>
+         <td className="px-2 py-2">{item.error?<span className="font-medium text-rose-700">{item.error}</span>:<span className="font-medium text-emerald-700">Verificado</span>}</td>
+        </tr>)}</tbody>
+       </table>
+      </div>
+     </section>}
     {settlementPreview.length>0&&<section className="rounded-lg border border-amber-200 bg-amber-50 p-3">
      <h3 className="text-sm font-semibold text-amber-900">Liquidaciones históricas vinculadas</h3>
      <p className="mt-1 text-xs text-amber-900">Marca los cobros y pagos que deseas contabilizar junto con las facturas seleccionadas. Los registros desmarcados no se importarán ni modificarán sus saldos.</p>
