@@ -42,7 +42,7 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
     }
   }
 
-  function runWithActiveDatabase(operation, allowDuringFlush) {
+  async function runWithActiveDatabase(operation, allowDuringFlush) {
     if (typeof operation !== 'function') throw new TypeError('La operación SQLite debe ser una función.');
     if (switching && !(allowDuringFlush && flushing)) {
       throw new Error('El cambio de empresa está en curso. La operación fue bloqueada.');
@@ -79,10 +79,13 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
     }
 
     switching = true;
-    flushing = true;
+    flushing = false;
     let targetOpenedHere = false;
     try {
-      // The persistence lane remains open only while the renderer drains already-queued saves.
+      // First drain operations admitted before the switch gate closed. Only then
+      // open the privileged lane for renderer saves that were already queued.
+      await waitForActiveOperations();
+      flushing = true;
       await flushPendingWrites();
       flushing = false;
       await waitForActiveOperations();
@@ -118,8 +121,10 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
   async function clearActiveCompany() {
     if (switching) throw new Error('Ya hay un cambio de empresa en curso.');
     switching = true;
-    flushing = true;
+    flushing = false;
     try {
+      await waitForActiveOperations();
+      flushing = true;
       await flushPendingWrites();
       flushing = false;
       await waitForActiveOperations();
