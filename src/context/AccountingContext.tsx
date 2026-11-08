@@ -1469,7 +1469,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const accumulatedAccount = accounts.find(account => account.code === draft.accumulatedDepreciationAccountCode);
     const expenseAccount = accounts.find(account => account.code === draft.depreciationExpenseAccountCode);
     if (!sourceLine || sourceLine.accountCode !== draft.assetAccountCode ||
-        !assetAccount || assetAccount.type !== 'ACTIVO' || !assetAccount.isMovement || !assetAccount.code.startsWith('1.2.') ||
+        !assetAccount || assetAccount.type !== 'ACTIVO' || !assetAccount.isMovement || !assetAccount.code.startsWith('1.2.') || /DEPRECIACI[ÓO]N ACUMULADA/i.test(assetAccount.name) ||
         Number(sourceLine.debitBs) <= 0 || Number(sourceLine.debitUsd) <= 0 ||
         Number(sourceLine.creditBs || 0) > 0 || Number(sourceLine.creditUsd || 0) > 0) {
       throw new Error('La línea de origen debe ser un débito dual ya contabilizado en una cuenta de Propiedades, Planta y Equipos (1.2).');
