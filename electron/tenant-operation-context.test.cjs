@@ -80,7 +80,7 @@ test('does not expose the target company until an in-flight operation has comple
 });
 
 
-test('permits only the queued persistence drain while switching and closes that lane before waiting for active work', async t => {
+test('drains active operations before opening the persistence flush lane during a company switch', async t => {
   let context;
   const flushCalls = [];
   const { runtime, open } = makeRuntime();
@@ -102,7 +102,7 @@ test('permits only the queued persistence drain while switching and closes that 
   const switching = context.switchCompany('company-b');
   await new Promise(resolve => setImmediate(resolve));
 
-  assert.deepEqual(flushCalls, [['company-a', 'company-a']]);
+  assert.deepEqual(flushCalls, []);
   assert.equal(context.isSwitching(), true);
   await assert.rejects(
     () => context.withPersistenceDatabase(() => true),
@@ -112,6 +112,7 @@ test('permits only the queued persistence drain while switching and closes that 
   releaseOperation();
   await operation;
   await switching;
+  assert.deepEqual(flushCalls, [['company-a', 'company-a']]);
   assert.equal(context.getActiveCompanyId(), 'company-b');
 });
 
