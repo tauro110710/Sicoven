@@ -1,5 +1,6 @@
 'use strict';
 
+const { isDeepStrictEqual } = require('node:util');
 const { persistAccountingSnapshot } = require('./accounting-persistence.cjs');
 const {
   partitionAccountingSnapshot,
@@ -69,7 +70,7 @@ async function saveTenantAccountingSnapshot(manager, state, actor = null) {
     let previous;
     try { previous = JSON.parse(row.state_json); }
     catch { throw new Error('El snapshot guardado de ' + company.id + ' no es JSON válido.'); }
-    if (JSON.stringify(previous) !== JSON.stringify(snapshot)) changed.push({ snapshot, isNew: false });
+    if (!isDeepStrictEqual(previous, snapshot)) changed.push({ snapshot, isNew: false });
   }
 
   if (changed.length > 1) {
@@ -95,7 +96,7 @@ async function saveTenantAccountingSnapshot(manager, state, actor = null) {
     const result = persistAccountingSnapshot(db, snapshot, actor);
     if (result?.ok !== true) throw new Error('SQLite no confirmó el guardado contable de ' + company.id + '.');
     const saved = readTenantSnapshot(db, company.id);
-    if (JSON.stringify(saved) !== JSON.stringify(snapshot)) {
+    if (!isDeepStrictEqual(saved, snapshot)) {
       throw new Error('La verificación posterior al guardado detectó diferencias en la base de ' + company.id + '.');
     }
     return { ok: true, savedCompanyIds: [company.id], unchanged: false };
