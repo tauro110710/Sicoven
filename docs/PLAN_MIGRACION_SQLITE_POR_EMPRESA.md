@@ -14,6 +14,8 @@ Este documento desarrolla la ADR de SQLite local por empresa. No habilita todav�
 - Copia relacional auxiliar: helper creado en `electron/tenant-relational-migration.cjs`; replica referencias globales de índices y copia tablas de empresa y sus hijos por relaciones explícitas, dentro de una transacción y con comprobación de claves foráneas.
 - Copia de documentos físicos: helper creado en `electron/tenant-document-migration.cjs`; valida clave, archivo regular, tamaño y SHA-256, crea el destino sin sobrescribir archivos y revierte los archivos creados por el lote si falla una validación.
 - Estos tres helpers tienen pruebas unitarias, pero aún no están conectados a un orquestador de migración ni al arranque Electron. No habilitan ni ejecutan una migración por sí solos.
+- Inventario previo estricto: helper creado en `electron/tenant-migration-preflight.cjs`; clasifica tablas de control, snapshot, auditoría, referencias globales, tablas de empresa e hijas. Bloquea la migración si aparece una tabla persistente desconocida, falta una tabla crítica, el snapshot no es único/válido o existen empresas/RIF ambiguos.
+- El preflight es de solo lectura y no activa la nueva arquitectura. Su lista de clasificación debe mantenerse sincronizada con cada nueva tabla persistente que se incorpore al producto.
 - No se ha fusionado ni activado el modo multiarchivo en main.
 
 ## Archivos locales
