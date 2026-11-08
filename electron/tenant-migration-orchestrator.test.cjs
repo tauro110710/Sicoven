@@ -144,14 +144,12 @@ test('blocks a failed preflight before creating a backup or company database', a
   assert.equal(fs.existsSync(path.join(root, 'companies')), false);
 });
 
-test('requires an acquired maintenance lock and releases it after a blocked preflight', async t => {
-  const { root, calls, options } = fixture(t, {
-    inspectLegacy: () => ({ ok: false, companyCount: 0, companyIds: [], errors: ['unknown table'] })
-  });
+test('refuses to run if the maintenance lock cannot be acquired', async t => {
+  const { root, calls, options } = fixture(t, { acquireMaintenanceLock: () => null });
   await assert.rejects(
     () => createTenantMigrationOrchestrator(options).execute(),
-    /inspección previa bloqueó/i
+    /no se pudo adquirir el bloqueo/i
   );
-  assert.deepEqual(calls, ['lock', 'unlock']);
+  assert.deepEqual(calls, []);
   assert.equal(fs.existsSync(path.join(root, 'tenant-migration')), false);
 });
