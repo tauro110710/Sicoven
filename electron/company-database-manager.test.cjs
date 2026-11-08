@@ -234,7 +234,7 @@ test('updates a company RIF and name in the local registry without changing its 
 
 
 test('does not activate a company in the control registry when initial operational data seeding fails', t => {
-  const { manager, controlDb } = fixture(t);
+  const { manager, controlDb, userDataDir } = fixture(t);
   assert.throws(() => manager.registerCompany(
     { id: 'seed-failure', rif: 'J-12345678-9', name: 'Empresa incompleta' },
     tenantDb => {
@@ -243,7 +243,7 @@ test('does not activate a company in the control registry when initial operation
     }
   ), /initial snapshot rejected/);
   assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_database_registry WHERE company_id=?').get('seed-failure').count, 0);
-  const filePath = path.join(path.dirname(manager.getDatabasePath('seed-failure')), 'accounting.sqlite');
+  const filePath = path.join(userDataDir, 'companies', 'seed-failure', 'accounting.sqlite');
   assert.equal(fs.existsSync(filePath), true);
   const orphan = new Database(filePath, { readonly: true });
   assert.equal(orphan.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ledger_rows'").get(), undefined);
