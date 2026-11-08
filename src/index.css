@@ -47,32 +47,16 @@
   [role="textbox"][aria-disabled="true"] {
     cursor: not-allowed;
   }
-}
-
-@layer base {
-  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
-  textarea,
-  select {
-    pointer-events: auto !important;
-    user-select: text !important;
-    -webkit-user-select: text !important;
-    -webkit-app-region: no-drag;
-  }
-
-  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
-  textarea {
-    cursor: text;
-  }
-
-  select {
-    cursor: pointer;
-  }
 
   input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
   textarea:focus,
   select:focus {
     outline: 2px solid #059669;
     outline-offset: 1px;
+  }
+
+  select {
+    cursor: pointer;
   }
 }
 
