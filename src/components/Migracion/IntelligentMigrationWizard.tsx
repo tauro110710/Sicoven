@@ -64,7 +64,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  const { companies, products: allProducts, getCompanyInventoryProducts, getCompanyInventoryMovements, importInventoryProducts, importInventoryMovements, importCustomers, importSuppliers, accounts, bankAccounts, addAccount, addJournalEntry, addSale, addPurchase, addImportedCreditSettlements, addImportedSupplierDirectAdvances, addImportedSupplierAdvanceSettlements, runAtomicInvoiceImportAndWait, sales: allSales, purchases: allPurchases, journalEntries: allJournalEntries, currentCompany } = useAccounting();
  const downloadTemplate = (kind: UniversalMasterTemplateKind) => {
   const template = getUniversalMasterTemplate(kind);
-  const blob = new Blob(['\\uFEFF' + template.csv], { type: 'text/csv;charset=utf-8' });
+  const blob = new Blob(['\uFEFF' + template.csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url; anchor.download = template.fileName; document.body.appendChild(anchor);
