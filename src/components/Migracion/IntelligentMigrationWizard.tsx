@@ -276,6 +276,11 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      movements:['productcode','codigoproducto','sku','documentref','movementtype','tipomovimiento']
     };
     const hasSpecific=(specificSignals[m.id]??[]).some(key=>keys.has(norm(key)));
+    const sourceCollectionHint=norm(String(sourceRows[0]?.migrationcollection??sourceRows[0]?.migrationsource??''));
+    const hasBankAccountIdentity=['bankaccountnumber','accountnumber','numerocuenta','iban'].some(key=>keys.has(norm(key)));
+    if(m.id==='banks'&&!/(bank|banco|extracto|statement)/.test(sourceCollectionHint)&&!hasBankAccountIdentity) continue;
+    const hasRetentionVoucherIdentity=['vouchernumber','retentionnumber','comprobantederetencion','numerocomprobanteretencion'].some(key=>keys.has(norm(key)));
+    if(m.id==='retentions'&&!/(retencion|retention|withholding)/.test(sourceCollectionHint)&&!hasRetentionVoucherIdentity) continue;
     if(matchedGroups<2&&!hasSpecific) continue;
     const missing=m.fields.filter(field=>!keys.has(norm(field)));
     const ready=m.id==='inventory'&&groups[0].some(k=>keys.has(norm(k)))&&groups[1].some(k=>keys.has(norm(k)))&&
