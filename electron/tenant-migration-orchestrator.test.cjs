@@ -59,6 +59,7 @@ function fixture(t, overrides = {}) {
     }
     exec() {}
     prepare(sql) {
+      if (sql.includes('SELECT state_json FROM app_state')) return { get: () => ({ state_json: JSON.stringify(snapshot) }) };
       if (sql.startsWith('INSERT INTO sicoven_database_meta')) return { run: (...values) => this.meta.push(values) };
       if (sql.includes('SELECT meta_value FROM sicoven_database_meta')) return { get: () => ({ meta_value: path.basename(path.dirname(this.file)) }) };
       if (sql.includes('COUNT(*) AS count FROM audit_events')) return { get: () => ({ count: 0 }) };
