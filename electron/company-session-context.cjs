@@ -31,6 +31,22 @@ function createCompanySessionContext({ runtime, operationContext, getActiveSessi
     return { token, actor };
   }
 
+  async function listAccessibleCompanies(tokenInput) {
+    const { actor } = requireSession(tokenInput);
+    const activeCompanies = runtime.listCompanies().filter(item => String(item.status) === 'ACTIVE');
+    const accessible = [];
+    for (const company of activeCompanies) {
+      if (await canAccessCompany(actor, company) === true) {
+        accessible.push(Object.freeze({
+          id: String(company.id),
+          name: String(company.name || ''),
+          rif: String(company.rif || '')
+        }));
+      }
+    }
+    return accessible;
+  }
+
   async function selectCompany(tokenInput, companyIdInput) {
     const { token, actor } = requireSession(tokenInput);
     if (activeSessionToken && activeSessionToken !== token) {
@@ -116,7 +132,7 @@ function createCompanySessionContext({ runtime, operationContext, getActiveSessi
     return { ok: true };
   }
 
-  return Object.freeze({ selectCompany, getSelectedCompanyId, withSelectedDatabase, clearSession, clearAllSessions });
+  return Object.freeze({ listAccessibleCompanies, selectCompany, getSelectedCompanyId, withSelectedDatabase, clearSession, clearAllSessions });
 }
 
 module.exports = { createCompanySessionContext };
