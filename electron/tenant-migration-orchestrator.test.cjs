@@ -141,3 +141,13 @@ test('blocks a failed preflight before creating a backup or company database', a
   assert.equal(fs.existsSync(path.join(root, 'tenant-migration')), false);
   assert.equal(fs.existsSync(path.join(root, 'companies')), false);
 });
+
+test('requires an exclusive maintenance gate before inspecting or backing up the legacy database', async t => {
+  const { root, calls, options } = fixture(t, { assertSourceQuiescent: () => false });
+  await assert.rejects(
+    () => createTenantMigrationOrchestrator(options).execute(),
+    /mantenimiento exclusivo/i
+  );
+  assert.deepEqual(calls, []);
+  assert.equal(fs.existsSync(path.join(root, 'tenant-migration')), false);
+});
