@@ -371,3 +371,43 @@ test('global backup and restore include every independent company SQLite databas
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('legacy global backup is rejected before restore when active company databases exist', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-legacy-restore-'));
+  const userData = path.join(root, 'active');
+  const sourceData = path.join(root, 'legacy-source');
+  const backupDir = path.join(root, 'legacy-backup');
+  fs.mkdirSync(userData);
+  fs.mkdirSync(sourceData);
+  let activeDb = makeDatabase(path.join(userData, 'sicoven.sqlite'), 'active-global');
+  const sourceDb = makeDatabase(path.join(sourceData, 'sicoven.sqlite'), 'legacy-global');
+  makeCompanyDatabase(userData, 'company-existing', 'preserve-this-company');
+  try {
+    await createBackup({ db: sourceDb, userDataDir: sourceData, destination: backupDir });
+    const manifestPath = path.join(backupDir, 'manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    delete manifest.companyDatabases;
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+    assert.equal(verifyBackupDirectory(backupDir).ok, true);
+    await assert.rejects(
+      require('./restore-engine.cjs').executeRestore({
+        backupDirectory: backupDir,
+        userDataDir: userData,
+        db: activeDb,
+        getDb: () => activeDb,
+        closeDatabase: async () => { if (activeDb?.open) activeDb.close(); },
+        reopenDatabase: async () => { activeDb = new Database(path.join(userData, 'sicoven.sqlite')); },
+        actor: 'admin'
+      }),
+      /respaldo global antiguo no contiene las bases individuales/
+    );
+    const preserved = new Database(path.join(userData, 'companies', 'company-existing', 'accounting.sqlite'), { readonly: true });
+    try {
+      assert.equal(JSON.parse(preserved.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json).marker, 'preserve-this-company');
+    } finally { preserved.close(); }
+  } finally {
+    if (activeDb?.open) activeDb.close();
+    if (sourceDb.open) sourceDb.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
