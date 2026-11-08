@@ -1449,6 +1449,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const description = String(draft.description || '').trim();
     const category = String(draft.category || '').trim();
     if (!assetCode || !description || !category) throw new Error('Indique código, descripción y categoría del activo.');
+    if (/TERRENO/i.test(category)) throw new Error('Los terrenos no se deprecian. Regístrelos fuera del módulo de depreciación financiera.');
     if (/TERRENO/i.test(category)) throw new Error('Los terrenos no se deprecian en este módulo; regístrelos en el auxiliar de activos no depreciables cuando esté disponible.');
     if (fixedAssets.some(asset => asset.companyId === currentCompany.id && asset.assetCode.toUpperCase() === assetCode)) {
       throw new Error('Ya existe un activo fijo con ese código en la empresa activa.');
