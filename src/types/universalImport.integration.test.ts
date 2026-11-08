@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { allocateSupplierAdvanceFifo } from './supplierAdvanceSettlement';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -230,4 +231,53 @@ test('integración: análisis JSON, selección individual, empresa destino, dupl
     if (db?.open) db.close();
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+
+test('FIFO de anticipos: notas de crédito y desembolsos directos comparten una cola cronológica y conservan el valor histórico', () => {
+  const notes = [
+    { id: 'NC-OLDER', date: '2026-11-02', amountUsd: 10, bookValueBs: 900 },
+    { id: 'NC-NEWER', date: '2026-11-05', amountUsd: 8, bookValueBs: 880 }
+  ];
+  const direct = [
+    { id: 'ADV-OLDEST', date: '2026-11-01', amountUsd: 10, bookValueBs: 1200 },
+    { id: 'ADV-NEWER', date: '2026-11-04', amountUsd: 5, bookValueBs: 650 }
+  ];
+  const allocation = allocateSupplierAdvanceFifo(notes, direct, [], 'company-2', 'J-22222222-2', 15);
+  assert.deepEqual(allocation.directAdvanceAllocations, [
+    { directAdvanceId: 'ADV-OLDEST', amountUsd: 10, bookValueBs: 1200 }
+  ]);
+  assert.deepEqual(allocation.creditNoteAllocations, [
+    { creditNoteId: 'NC-OLDER', amountUsd: 5, bookValueBs: 450 }
+  ]);
+
+  const previouslyPosted = [{
+    id: 'SET-001',
+    companyId: 'company-2',
+    supplierRif: 'J-22222222-2',
+    supplierName: 'Proveedor',
+    sourceCreditNoteIds: [],
+    sourceDirectAdvanceIds: ['ADV-OLDEST'],
+    sourceDirectAdvanceAllocations: [{ directAdvanceId: 'ADV-OLDEST', amountUsd: 4, bookValueBs: 480 }],
+    kind: 'APPLIED_TO_PURCHASE' as const,
+    date: '2026-11-03',
+    amountUsd: 4,
+    amountBs: 480,
+    advanceBookValueBs: 480,
+    bcvRate: 120,
+    targetPurchaseId: 'PUR-001',
+    journalEntryId: 'JE-001',
+    createdAt: '2026-11-03T10:00:00.000Z'
+  }];
+  const afterPrevious = allocateSupplierAdvanceFifo(notes, direct, previouslyPosted, 'company-2', 'J-22222222-2', 7);
+  assert.deepEqual(afterPrevious.directAdvanceAllocations, [
+    { directAdvanceId: 'ADV-OLDEST', amountUsd: 6, bookValueBs: 720 },
+    { directAdvanceId: 'ADV-NEWER', amountUsd: 1, bookValueBs: 130 }
+  ]);
+  assert.deepEqual(afterPrevious.creditNoteAllocations, []);
+
+  assert.throws(
+    () => allocateSupplierAdvanceFifo(notes, direct, [], 'company-2', 'J-22222222-2', 40),
+    /saldo disponible combinado/
+  );
 });
