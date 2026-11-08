@@ -132,22 +132,25 @@ function createTenantMigrationOrchestrator(options) {
       throw error;
     }
     const backupHash = sha256File(backupPath);
-    let journalIdFirstCall = true;
-    const journal = createJournal({
-      userDataDir: root,
-      now,
-      id: () => {
-        if (journalIdFirstCall) { journalIdFirstCall = false; return migrationId; }
-        return crypto.randomUUID();
-      }
-    });
-    journal.create({ companyIds, sourceBackupPath: backupPath, sourceBackupSha256: backupHash });
-    journal.advance('PREPARED', 'STAGING');
-
+    let journal = null;
+    let journalOwned = false;
     let auditPartition;
     const companyResults = [];
 
     try {
+      let journalIdFirstCall = true;
+      journal = createJournal({
+        userDataDir: root,
+        now,
+        id: () => {
+          if (journalIdFirstCall) { journalIdFirstCall = false; return migrationId; }
+          return crypto.randomUUID();
+        }
+      });
+      journal.create({ companyIds, sourceBackupPath: backupPath, sourceBackupSha256: backupHash });
+      journalOwned = true;
+      journal.advance('PREPARED', 'STAGING');
+
       const auditRows = backupDb.prepare('SELECT id,event_type,details_json,created_at FROM audit_events ORDER BY id').all();
       auditPartition = splitAudit(auditRows, companyIds);
       const documentRoot = path.resolve(getDocumentsRoot());
@@ -244,7 +247,7 @@ function createTenantMigrationOrchestrator(options) {
         })
       });
     } catch (error) {
-      const current = journal.read();
+      const current = journalOwned ? journal.read() : null;
       if (current && ['PREPARED', 'STAGING', 'VALIDATING', 'REGISTERING', 'FAILED'].includes(current.phase)) {
         try {
           journal.advance(current.phase, 'ROLLBACK_REQUIRED', {
