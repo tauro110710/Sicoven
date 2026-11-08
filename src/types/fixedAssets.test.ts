@@ -63,3 +63,15 @@ test('rejects invalid dates, life, residual values and malformed history', () =>
     amountBs:1,amountUsd:0.01,journalEntryId:'b',createdAt:'2026-01-31T12:00:00.000Z'
   }]})),/más de una depreciación/);
 });
+
+test('rejects depreciation history outside the asset life or above depreciable cost', () => {
+  assert.throws(()=>getNextFixedAssetDepreciationPeriod(asset({depreciationEvents:[{
+    id:'dep-late',companyId:'company-1',assetId:'asset-1',period:'2028-01',date:'2028-01-31',
+    days:31,amountBs:1,amountUsd:0.01,journalEntryId:'late',createdAt:'2028-01-31T12:00:00.000Z'
+  }]})),/inconsistente/);
+  const over = asset({depreciationEvents:[{
+    id:'dep-over',companyId:'company-1',assetId:'asset-1',period:'2026-01',date:'2026-01-31',
+    days:17,amountBs:40000,amountUsd:400,journalEntryId:'over',createdAt:'2026-01-31T12:00:00.000Z'
+  }]});
+  assert.throws(()=>calculateFixedAssetDepreciation(over,'2026-02'),/supera el importe depreciable/);
+});
