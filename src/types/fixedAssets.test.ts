@@ -44,8 +44,14 @@ test('allows reposting a reversed period while preserving the reversed event', (
 });
 
 test('the final period absorbs rounding residue and never depreciates below residual value', () => {
-  let current = asset({usefulLifeMonths:1,serviceDate:'2026-01-15'});
-  const result = calculateFixedAssetDepreciation(current,'2026-01');
+  const initial = asset({usefulLifeMonths:1,serviceDate:'2026-01-15'});
+  const first = calculateFixedAssetDepreciation(initial,'2026-01');
+  const afterFirst = asset({usefulLifeMonths:1,serviceDate:'2026-01-15',depreciationEvents:[{
+    id:'dep-jan',companyId:'company-1',assetId:'asset-1',period:'2026-01',date:first.postingDate,
+    days:first.days,amountBs:first.amountBs,amountUsd:first.amountUsd,journalEntryId:'entry-jan',
+    createdAt:'2026-01-31T12:00:00.000Z'
+  }]});
+  const result = calculateFixedAssetDepreciation(afterFirst,'2026-02');
   assert.equal(result.accumulatedBsAfter,32850);
   assert.equal(result.accumulatedUsdAfter,328.5);
   assert.equal(result.netBookValueBsAfter,3650);
