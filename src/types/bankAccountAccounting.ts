@@ -3,44 +3,52 @@ import type { Account } from './accounting';
 export type BankCurrency = 'BS' | 'USD';
 export type BankAccountKind = 'CORRIENTE' | 'AHORRO';
 
+export const BANK_PARENT_ACCOUNT_CODES: Record<BankCurrency, string> = {
+  BS: '1.1.1.03',
+  USD: '1.1.1.04'
+};
+
 export function buildBankAuxiliaryAccounts(
   currentAccounts: Account[],
   currency: BankCurrency,
   bankName: string,
-  accountType: BankAccountKind
+  accountType: BankAccountKind,
+  selectedParentCode: string
 ): { parent: Account; auxiliary: Account; accounts: Account[] } {
-  const parentCode = currency === 'USD' ? '1.1.1.07' : '1.1.1.06';
-  const controlName = currency === 'USD'
-    ? 'Bancos Moneda Extranjera (control)'
-    : 'Bancos Moneda Nacional (control)';
-  const existingParent = currentAccounts.find(account => account.code === parentCode);
-  const parent: Account = existingParent
-    ? { ...existingParent, name: controlName, type: 'ACTIVO', isMovement: false, level: 4, parentCode: '1.1.1' }
-    : { code: parentCode, name: controlName, type: 'ACTIVO', level: 4, isMovement: false, parentCode: '1.1.1' };
+  const expectedParentCode = BANK_PARENT_ACCOUNT_CODES[currency];
+  if (selectedParentCode !== expectedParentCode) {
+    throw new Error('La cuenta padre seleccionada no corresponde a la moneda de la cuenta bancaria.');
+  }
+  const parent = currentAccounts.find(account => account.code === selectedParentCode);
+  if (!parent) {
+    throw new Error(`No existe la cuenta padre bancaria ${selectedParentCode}. Restaure o actualice primero el Plan de Cuentas.`);
+  }
+  if (parent.isMovement || parent.type !== 'ACTIVO' || parent.level !== 4 || parent.parentCode !== '1.1.1') {
+    throw new Error('La cuenta padre bancaria debe ser una cuenta agrupadora de Activo, hija de Efectivo y Equivalentes.');
+  }
 
   const children = currentAccounts.filter(account =>
-    account.parentCode === parentCode && /^\d+$/.test(account.code.split('.').at(-1) || '')
+    account.parentCode === selectedParentCode && /^\d+$/.test(account.code.split('.').at(-1) || '')
   );
   const nextAux = children.reduce(
     (maximum, account) => Math.max(maximum, Number(account.code.split('.').at(-1) || 0)),
     0
   ) + 1;
-  const code = parentCode + '.' + String(nextAux).padStart(2, '0');
+  const code = selectedParentCode + '.' + String(nextAux).padStart(2, '0');
   if (currentAccounts.some(account => account.code === code)) {
     throw new Error('No se pudo generar un código auxiliar bancario único.');
   }
 
   const auxiliary: Account = {
     code,
-    name: `${bankName} - Cta. ${accountType === 'AHORRO' ? 'Ahorro' : 'Corriente'} ${currency === 'USD' ? 'USD' : 'Bs.'}`,
+    name: `${bankName} - Cta. ${accountType === 'AHORRO' ? 'Ahorro' : 'Corriente'} ${currency === 'USD' ? 'USD' : 'BS.'}`,
     type: 'ACTIVO',
     level: 5,
     isMovement: true,
-    parentCode
+    parentCode: selectedParentCode
   };
   const accounts = [
-    ...currentAccounts.filter(account => account.code !== parentCode && account.code !== code),
-    parent,
+    ...currentAccounts.filter(account => account.code !== code),
     auxiliary
   ].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
 

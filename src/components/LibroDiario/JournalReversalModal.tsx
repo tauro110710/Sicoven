@@ -65,7 +65,7 @@ export const JournalReversalModal: React.FC<JournalReversalModalProps> = ({ sour
       <div className="mx-auto mt-6 max-w-2xl rounded-2xl bg-white shadow-2xl">
         <div className="border-b border-slate-200 p-4">
           <h2 id="journal-reversal-title" className="text-base font-bold text-slate-900">Reversar asiento contable</h2>
-          <p className="mt-1 text-xs text-slate-600">Asiento #{source.entryNumber} · {source.date} · {source.description}</p>
+          <p className="mt-1 text-xs text-slate-600">Asiento #{source.entryNumber} · {source.date} · <strong className="font-extrabold">{source.description}</strong></p>
           <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">El asiento original se conservará. Se generará un contra-asiento enlazado; los efectos fiscales y auxiliares relacionados quedarán sujetos a sus controles específicos.</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4 p-4">

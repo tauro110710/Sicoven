@@ -110,6 +110,8 @@ export interface Account {
   level: number; // 1 to 5
   isMovement: boolean; // Solo las cuentas de movimiento aceptan asientos
   parentCode?: string;
+  /** Las cuentas inactivas conservan el historial, pero no admiten nuevos asientos. */
+  isActive?: boolean;
   /** Clasificación explícita usada por el Estado de Flujos de Efectivo; opcional para compatibilidad histórica. */
   cashFlowActivity?: CashFlowActivity;
   /** Tratamiento explícito para el método indirecto; nunca se infiere por el nombre de la cuenta. */
@@ -652,7 +654,7 @@ export interface IslrRetentionVoucher {
 export interface BankAccount {
   id: string;
   companyId: string;
-  accountCode: string; // e.g. "1.1.1.03"
+  accountCode: string; // Código de la cuenta auxiliar hija de la cuenta padre bancaria
   bankName: string; // e.g. "Banco Nacional de Crédito (BNC)"
   accountNumber: string; // 20 dígitos estándar venezolano
   currency: 'BS' | 'USD';
@@ -660,6 +662,8 @@ export interface BankAccount {
   initialBalanceUsd: number;
   accountType?: 'CORRIENTE' | 'AHORRO';
   checkbookNumber?: string;
+  accountHolderName?: string;
+  accountHolderRif?: string;
 }
 
 export type BankMovementType = 'DEBIT' | 'CREDIT';
