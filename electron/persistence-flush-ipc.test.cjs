@@ -31,8 +31,9 @@ function setup({ authorized = true, session = true, timeoutMs = 100 } = {}) {
 
 test('persistence flush resolves only after the same renderer acknowledges', async () => {
   const state = setup();
+  const requestPromise = new Promise(resolve => state.events.once('request', (_channel, payload) => resolve(payload)));
   const operation = state.handlers.get('sicoven:persistence-flush')({ sender: state.sender }, 'valid-token');
-  const request = await new Promise(resolve => state.events.once('request', (_channel, payload) => resolve(payload)));
+  const request = await requestPromise;
   state.events.emit('sicoven:persistence-flush-ack', { sender: state.sender }, { requestId: request.requestId, ok: true });
   assert.deepEqual(await operation, { ok: true });
   assert.equal(state.bridge.getPendingCount(), 0);
@@ -41,8 +42,9 @@ test('persistence flush resolves only after the same renderer acknowledges', asy
 
 test('persistence flush ignores acknowledgements from another renderer', async () => {
   const state = setup();
+  const requestPromise = new Promise(resolve => state.events.once('request', (_channel, payload) => resolve(payload)));
   const operation = state.handlers.get('sicoven:persistence-flush')({ sender: state.sender }, 'valid-token');
-  const request = await new Promise(resolve => state.events.once('request', (_channel, payload) => resolve(payload)));
+  const request = await requestPromise;
   state.events.emit('sicoven:persistence-flush-ack', { sender: {} }, { requestId: request.requestId, ok: true });
   assert.equal(state.bridge.getPendingCount(), 1);
   state.events.emit('sicoven:persistence-flush-ack', { sender: state.sender }, { requestId: request.requestId, ok: true });
@@ -78,8 +80,9 @@ test('persistence flush times out closed rather than allowing an unsafe switch',
 
 test('persistence flush rejects an acknowledgement that reports a renderer failure', async () => {
   const state = setup();
+  const requestPromise = new Promise(resolve => state.events.once('request', (_channel, payload) => resolve(payload)));
   const operation = state.handlers.get('sicoven:persistence-flush')({ sender: state.sender }, 'valid-token');
-  const request = await new Promise(resolve => state.events.once('request', (_channel, payload) => resolve(payload)));
+  const request = await requestPromise;
   state.events.emit('sicoven:persistence-flush-ack', { sender: state.sender }, {
     requestId: request.requestId, ok: false, message: 'SQLite no confirmó el guardado.'
   });
