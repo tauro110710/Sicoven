@@ -203,3 +203,12 @@ El módulo `electron/tenant-migration-recovery.cjs` ofrece dos operaciones separ
 Las pruebas cubren la interrupción simulada después del registro, la corrupción de una base tenant y la discrepancia entre la versión de esquema interna y la registrada en control. Una discrepancia exige recuperación manual y bloquea la confirmación del journal.
 
 **Estado vigente:** los módulos de migración y recuperación continúan aislados de la aplicación. No existe aún una migración real ejecutada ni una activación multiempresa. La base heredada `userData/sicoven.sqlite` sigue siendo la única base operativa.
+
+
+### Contexto operativo ligado a sesión autenticada
+
+La selección de empresa no puede convertirse en una autoridad del renderer. El proceso principal debe resolver la empresa operativa a partir del token de sesión autenticado y mantener el vínculo en memoria. El identificador enviado por el renderer solo se acepta como solicitud de selección y se valida contra el registro local de empresas activas y los permisos del actor.
+
+La versión actual de escritorio utiliza una sola ventana operativa y una sola conexión SQLite de empresa activa. Por ello, el contexto debe pertenecer a una única sesión autenticada a la vez: una segunda sesión no puede apropiarse del contexto mientras la primera lo mantenga. El cierre de sesión o la pérdida de autorización debe drenar las operaciones, cerrar la conexión activa y eliminar el vínculo. Cada operación contable debe resolver la base a través de ese contexto; nunca debe elegir una ruta o empresa confiando en parámetros del renderer.
+
+El módulo de contexto y sus pruebas son una capa aislada de seguridad. No se considera integrada la arquitectura multiempresa hasta registrar sus IPC en el proceso principal, conectar el ciclo de vida de login/logout/licencia, exponer únicamente la selección necesaria en preload y migrar de forma completa los handlers contables y documentales. Hasta entonces, sicoven.sqlite continúa siendo la única base operativa y no se ejecuta migración de datos.
