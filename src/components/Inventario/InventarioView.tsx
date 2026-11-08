@@ -50,7 +50,7 @@ export const InventarioView: React.FC = () => {
   )?.provider;
 
   useEffect(() => {
-    if (!isStorageReady) return;
+    if (!isStorageReady || !currentCompany.id) return;
     let active = true;
     let running = false;
     const refreshInventoryRate = async () => {
