@@ -5,6 +5,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const Database = require('better-sqlite3');
+const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
+const { initializeTenantDatabase } = require('./tenant-schema.cjs');
+const { createCompanyDatabaseManager } = require('./company-database-manager.cjs');
+const { createEmptyAccountingSnapshot } = require('./tenant-snapshot.cjs');
+const { readTenantSnapshot } = require('./tenant-persistence.cjs');
 const { createTenantMigrationOrchestrator } = require('./tenant-migration-orchestrator.cjs');
 
 function fixture(t, overrides = {}) {
@@ -152,4 +158,59 @@ test('refuses to run if the maintenance lock cannot be acquired', async t => {
   );
   assert.deepEqual(calls, []);
   assert.equal(fs.existsSync(path.join(root, 'tenant-migration')), false);
+});
+
+
+test('migrates a real SQLite legacy file into an isolated tenant database and preserves the source', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-tenant-real-migration-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const sourcePath = path.join(root, 'sicoven.sqlite');
+  const sourceDb = new Database(sourcePath);
+  sourceDb.pragma('foreign_keys = ON');
+  initializeTenantDatabase(sourceDb);
+  sourceDb.exec('CREATE TABLE auth_users (id INTEGER PRIMARY KEY, username TEXT NOT NULL);' +
+    'CREATE TABLE auth_sessions (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES auth_users(id));' +
+    'CREATE TABLE license_state (id INTEGER PRIMARY KEY, status TEXT NOT NULL);');
+  const snapshot = createEmptyAccountingSnapshot();
+  snapshot.companies = [{ id: 'company-a', name: 'Comercio A', rif: 'J-12345678-9' }];
+  snapshot.currentCompanyId = 'company-a';
+  sourceDb.prepare("INSERT INTO app_state(state_key,state_json) VALUES('accounting',?)")
+    .run(JSON.stringify(snapshot));
+
+  const manager = createCompanyDatabaseManager({
+    controlDb: sourceDb,
+    userDataDir: root,
+    Database,
+    assertSqliteIntegrity,
+    initializeCompanyDatabase: initializeTenantDatabase,
+    schemaVersion: 1
+  });
+  const orchestrator = createTenantMigrationOrchestrator({
+    sourceDb,
+    userDataDir: root,
+    manager,
+    Database,
+    assertSqliteIntegrity,
+    acquireMaintenanceLock: () => () => {}
+  });
+
+  try {
+    const result = await orchestrator.execute();
+    assert.equal(result.phase, 'COMMITTED');
+    assert.equal(result.companies.length, 1);
+    assert.equal(result.companies[0].companyId, 'company-a');
+    assert.equal(fs.existsSync(sourcePath), true);
+    const original = JSON.parse(sourceDb.prepare(
+      "SELECT state_json FROM app_state WHERE state_key='accounting'"
+    ).get().state_json);
+    assert.deepEqual(original, snapshot);
+    const tenantDb = manager.openCompany('company-a');
+    assert.deepEqual(readTenantSnapshot(tenantDb, 'company-a'), snapshot);
+    assert.equal(tenantDb.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='auth_users'").get().count, 0);
+    assert.equal(manager.listCompanies().filter(item => item.status === 'ACTIVE').length, 1);
+    assert.equal(fs.existsSync(result.backupPath), true);
+  } finally {
+    manager.closeAll();
+    sourceDb.close();
+  }
 });
