@@ -17,8 +17,10 @@ const POSVEN_COLLECTION_LABELS: Array<{label:string; match:RegExp}> = [
  {label:'Clientes y cuentas por cobrar',match:/customer|client|receivable|cxc/i},
  {label:'Cuentas por pagar',match:/payable|cxp/i},
  {label:'Caja, movimientos de caja y cierres',match:/cash|caja|register|shift|corte|report.?z|movimiento.*caja|cash.*movement/i},
+ {label:'Bancos y conciliación',match:/bank|banco|statement|extracto|conciliacion|transferencia/i},
  {label:'Contabilidad y libro diario',match:/journal|ledger|account|asiento|diario|accounting/i},
- {label:'Impuestos y retenciones',match:/tax|vat|iva|retention|retencion|islr/i}
+ {label:'Impuestos y retenciones',match:/tax|vat|iva|retention|retencion|islr/i},
+ {label:'Activos fijos',match:/fixed.?asset|activo.?fijo|depreciacion|asset/i}
 ];
 const MODULES: ModuleInfo[] = [
  { id:'inventory', name:'Inventario / productos', aliases:['code','codigo','sku','name','nombre','product','producto','currentstock','existencia'], fields:['code','name'], transactional:false },
