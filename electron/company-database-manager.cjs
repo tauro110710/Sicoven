@@ -27,8 +27,8 @@ function createCompanyDatabaseManager({
   userDataDir,
   Database,
   assertSqliteIntegrity,
-  initializeCompanyDatabase = () => {},
-  migrateCompanyDatabase = () => {},
+  initializeCompanyDatabase,
+  migrateCompanyDatabase,
   schemaVersion = DEFAULT_SCHEMA_VERSION
 }) {
   if (!controlDb || typeof controlDb.prepare !== 'function' || typeof controlDb.exec !== 'function') {
@@ -60,7 +60,7 @@ function createCompanyDatabaseManager({
   `);
 
   const selectRecord = controlDb.prepare(
-    'SELECT company_id,rif,name,relative_path,schema_version,status,created_at,updated_at FROM ${REGISTRY_TABLE} WHERE company_id=?'
+    'SELECT company_id,rif,name,relative_path,schema_version,status,created_at,updated_at FROM ' + REGISTRY_TABLE + ' WHERE company_id=?'
   );
 
   function expectedRelativePath(companyId) {
