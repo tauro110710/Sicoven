@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
-import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, planUniversalInvoiceSettlements, validateUniversalSettlementDestination, mapUniversalInvoiceSettlementDrafts, mapUniversalSupplierDirectAdvanceDraft, mapUniversalSupplierAdvanceSettlementDraft, selectUniversalRowsByStableKeys, selectUniversalInvoiceSettlements, mapUniversalInventoryItemType } from '../../types/universalImport';
+import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, planUniversalInvoiceSettlements, validateUniversalSettlementDestination, mapUniversalInvoiceSettlementDrafts, mapUniversalSupplierDirectAdvanceDraft, mapUniversalSupplierAdvanceSettlementDraft, selectUniversalRowsByStableKeys, selectUniversalInvoiceSettlements, mapUniversalInventoryItemType, isUniversalProductCollectionPath, getUniversalJsonValueAtPath } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { validateSupplierDirectAdvanceDraft } from '../../types/supplierDirectAdvance';
@@ -37,11 +37,7 @@ const MODULES: ModuleInfo[] = [
  { id:'assets', name:'Activos fijos', aliases:['assetId','codigoActivo','assetCode','fechaAdquisicion','acquisitionDate','valorHistorico'], fields:['assetId','name','acquisitionDate','historicalCost'], transactional:true }
 ];
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
-const isPosvenProductCollection = (path: string) => /(^|\.)(productos|products|inventory|inventario)$/i.test(path.trim());
-const getNestedValue = (value: unknown, path: string): unknown => path.split('.').filter(Boolean).reduce<unknown>((current, key) => {
- if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined;
- return (current as Record<string, unknown>)[key];
-}, value);
+const isPosvenProductCollection = isUniversalProductCollectionPath;
 const parseCsv = (text: string): Row[] => parseDelimitedRecords(text);
 const scalar = (v: unknown): unknown => {
  if (v && typeof v === 'object' && 'text' in v) return (v as {text:unknown}).text;
@@ -393,7 +389,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   try{
    const root=JSON.parse(backupPayload) as {data?:Record<string,unknown>};
    const productCollectionPath=selectedPosvenCollections.find(isPosvenProductCollection);
-   const source=productCollectionPath?getNestedValue(root.data,productCollectionPath):undefined;
+   const source=productCollectionPath?getUniversalJsonValueAtPath(root.data,productCollectionPath):undefined;
    if(!Array.isArray(source))throw new Error('El respaldo no contiene la colección Productos seleccionada.');
    const eligible=source.filter((row):row is Row=>!!row&&typeof row==='object'&&!Array.isArray(row)&&(row as Row).activo===true&&(row as Row).isKit!==true);
    const selectedRows=eligible.filter(row=>selectedPosvenProductCodes.includes(String(row.codigo??'').trim()));
