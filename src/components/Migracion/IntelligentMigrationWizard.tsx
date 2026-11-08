@@ -272,7 +272,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   return detected;
  },[rows]);
  const readFiles=async(list:File[])=>{
-  setError('');setNotice('');setRows([]);setHeaders([]);setJsonCollectionDiagnostics([]);setSelected([]);setSelectedInventoryRowKeys([]);setSelectedModuleRowKeys({sales:[],purchases:[],journal:[],movements:[]});setInventoryFilter('');setConfirmed(false);setBackupPayload(null);setBackupCounts(null);setPosvenBackup(false);setPosvenQuality({collections:0,objectRows:0,invalidRows:0,emptyCollections:0,eligibleProducts:0,inactiveProducts:0,kitProducts:0,inactiveKits:0});setSelectedPosvenCollections([]);setPosvenBcvRate('');setPosvenOpeningDate('');setPosvenVatTreatment('');setPosvenProducts([]);setPosvenExcludedProducts([]);setSelectedPosvenProductCodes([]);setPosvenProductFilter('');setFiles(list);
+  setError('');setNotice('');setSupplierAdvancePreview([]);setSelectedSupplierAdvanceSourceRowIds([]);setRows([]);setHeaders([]);setJsonCollectionDiagnostics([]);setSelected([]);setSelectedInventoryRowKeys([]);setSelectedModuleRowKeys({sales:[],purchases:[],journal:[],movements:[]});setInventoryFilter('');setConfirmed(false);setBackupPayload(null);setBackupCounts(null);setPosvenBackup(false);setPosvenQuality({collections:0,objectRows:0,invalidRows:0,emptyCollections:0,eligibleProducts:0,inactiveProducts:0,kitProducts:0,inactiveKits:0});setSelectedPosvenCollections([]);setPosvenBcvRate('');setPosvenOpeningDate('');setPosvenVatTreatment('');setPosvenProducts([]);setPosvenExcludedProducts([]);setSelectedPosvenProductCodes([]);setPosvenProductFilter('');setFiles(list);
   if(!list.length)return;
   try{
    if(list.length===1 && list[0].name.toLowerCase().endsWith('.json')){
