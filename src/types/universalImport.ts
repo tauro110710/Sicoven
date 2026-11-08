@@ -17,7 +17,7 @@ export const getUniversalJsonValueAtPath = (root: unknown, path: string): unknow
 export type PosvenBackupMappingAnalysis = {
   salesInvoices: number; salesCollectionReceipts: number; collectionReceiptsLinkedToHistory: number; collectionReceiptsWithoutHistory: number; salesDetailLines: number;
   salesProductLines: number; unresolvedSalesProductLines: number; salesWithLinkedReceivable: number;
-  salesMissingFiscalControl: number; salesMissingCustomerRif: number; salesCustomerRifResolvedByRelatedRecord: number; salesCustomerRifStillUnresolved: number; salesMissingTaxRate: number;
+  salesMissingFiscalControl: number; salesMissingDocumentType: number; salesMissingBcvRate: number; salesMissingCustomerRif: number; salesCustomerRifResolvedByRelatedRecord: number; salesCustomerRifStillUnresolved: number; salesMissingTaxRate: number;
   purchases: number; purchasesWithUniqueSupplier: number; purchasesWithoutSupplierMatch: number;
   purchasesMissingBcvRate: number; purchasesMissingFiscalControl: number; purchasesMissingTaxBreakdown: number;
   receivables: number; receivablesLinkedToSales: number; receivablesWithoutSaleLink: number; receivablePaymentEvents: number;
@@ -126,6 +126,8 @@ export const analyzePosvenBackupMapping = (root: unknown): PosvenBackupMappingAn
     unresolvedSalesProductLines,
     salesWithLinkedReceivable: invoiceRows.filter(row => receivableSaleIds.has(String(row.id ?? ''))).length,
     salesMissingFiscalControl: invoiceRows.filter(row => !hasFields(row, ['controlNumber','numeroControl','nroControl'])).length,
+    salesMissingDocumentType: invoiceRows.filter(row => !hasFields(row, ['documentType','tipoDocumento','codigoTipoDocumento'])).length,
+    salesMissingBcvRate: invoiceRows.filter(row => { const rate = Number(pick(row,'bcvRate','tasaBcv','tasa')); return !Number.isFinite(rate) || rate <= 0; }).length,
     salesMissingCustomerRif: invoiceRows.filter(row => !hasFields(row, ['customerRif','rifCliente','rif','taxId'])).length,
     salesCustomerRifResolvedByRelatedRecord,
     salesCustomerRifStillUnresolved: invoiceRows.length - salesCustomerRifResolvedByRelatedRecord,
