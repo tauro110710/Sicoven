@@ -273,10 +273,13 @@ test('FIFO de anticipos: notas de crédito y desembolsos directos comparten una 
   }];
   const afterPrevious = allocateSupplierAdvanceFifo(notes, direct, previouslyPosted, 'company-2', 'J-22222222-2', 7);
   assert.deepEqual(afterPrevious.directAdvanceAllocations, [
-    { directAdvanceId: 'ADV-OLDEST', amountUsd: 6, bookValueBs: 720 },
-    { directAdvanceId: 'ADV-NEWER', amountUsd: 1, bookValueBs: 130 }
+    { directAdvanceId: 'ADV-OLDEST', amountUsd: 6, bookValueBs: 720 }
   ]);
-  assert.deepEqual(afterPrevious.creditNoteAllocations, []);
+  // After the oldest direct disbursement is exhausted, the 2026-11-02
+  // credit note precedes the newer 2026-11-04 direct advance in global FIFO.
+  assert.deepEqual(afterPrevious.creditNoteAllocations, [
+    { creditNoteId: 'NC-OLDER', amountUsd: 1, bookValueBs: 90 }
+  ]);
 
   const reversedHistory = previouslyPosted.map(item => ({ ...item, isReversed: true }));
   const afterReversal = allocateSupplierAdvanceFifo(notes, direct, reversedHistory, 'company-2', 'J-22222222-2', 7);
