@@ -119,6 +119,85 @@ function createCompanyDatabaseManager({
     return record;
   }
 
+  function registerExistingCompanies(companyInputs) {
+    if (!Array.isArray(companyInputs) || companyInputs.length === 0) {
+      throw new TypeError('Se requiere una lista no vacía de empresas para registrar sus bases SQLite existentes.');
+    }
+    const companies = companyInputs.map(normalizeCompanyMetadata);
+    const ids = new Set();
+    const rifs = new Set();
+    const prepared = companies.map(company => {
+      if (ids.has(company.companyId) || rifs.has(company.rif)) {
+        throw new Error('La lista de migración contiene identificadores o RIF duplicados.');
+      }
+      ids.add(company.companyId);
+      rifs.add(company.rif);
+      if (selectRecord.get(company.companyId)) {
+        throw new Error('Una de las empresas ya está registrada en el catálogo local de bases SQLite.');
+      }
+      const relativePath = expectedRelativePath(company.companyId);
+      const filePath = path.resolve(root, relativePath);
+      const companyDirectory = path.dirname(filePath);
+      if (!fs.existsSync(companiesRoot) || !fs.existsSync(companyDirectory) || !fs.existsSync(filePath)) {
+        throw new Error('Falta el archivo SQLite preparado para ' + company.companyId + '. No se registró ninguna empresa.');
+      }
+      assertSafeDirectory(companiesRoot, 'La carpeta companies');
+      assertSafeDirectory(companyDirectory, 'La carpeta de la empresa');
+      assertSafeDatabaseFile(filePath);
+      const tenantDb = new Database(filePath, { readonly: true, fileMustExist: true });
+      try {
+        assertSqliteIntegrity(tenantDb);
+        const metadataTable = tenantDb.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(TENANT_META_TABLE);
+        if (!metadataTable) throw new Error('La base preparada para ' + company.companyId + ' no contiene metadatos de identidad.');
+        const meta = tenantDb.prepare('SELECT meta_value FROM ' + TENANT_META_TABLE + ' WHERE meta_key=?');
+        const storedId = String(meta.get('company_id')?.meta_value || '');
+        const storedVersion = Number(meta.get('schema_version')?.meta_value);
+        if (storedId !== company.companyId || !Number.isInteger(storedVersion) ||
+            storedVersion < 1 || storedVersion > schemaVersion) {
+          throw new Error('La identidad o versión de esquema de la base preparada para ' + company.companyId + ' no es compatible.');
+        }
+        return { company, relativePath, schemaVersion: storedVersion };
+      } finally {
+        tenantDb.close();
+      }
+    });
+
+    const existingRifs = new Set(controlDb.prepare('SELECT rif FROM ' + REGISTRY_TABLE).all().map(row => String(row.rif).toUpperCase()));
+    for (const company of companies) {
+      if (existingRifs.has(company.rif)) {
+        throw new Error('El RIF ' + company.rif + ' ya está registrado en otra empresa local.');
+      }
+    }
+
+    const insert = controlDb.transaction(() => {
+      const statement = controlDb.prepare(`
+        INSERT INTO ${REGISTRY_TABLE}
+          (company_id,rif,name,relative_path,schema_version,status)
+        VALUES(?,?,?,?,?,'ACTIVE')
+      `);
+      for (const item of prepared) {
+        statement.run(item.company.companyId, item.company.rif, item.company.name,
+          item.relativePath, item.schemaVersion);
+      }
+    });
+    insert();
+    return prepared.map(item => getRecord(item.company.companyId));
+  }
+
+  function updateCompanyMetadata(companyInput) {
+    const company = normalizeCompanyMetadata(companyInput);
+    getRecord(company.companyId);
+    const duplicate = controlDb.prepare(
+      'SELECT company_id FROM ' + REGISTRY_TABLE + ' WHERE upper(rif)=? AND company_id<>?'
+    ).get(company.rif, company.companyId);
+    if (duplicate) throw new Error('El RIF ya está asociado a otra empresa del registro local.');
+    const result = controlDb.prepare(
+      "UPDATE " + REGISTRY_TABLE + " SET rif=?,name=?,updated_at=datetime('now') WHERE company_id=?"
+    ).run(company.rif, company.name, company.companyId);
+    if (result.changes !== 1) throw new Error('No se pudo actualizar la ficha de la empresa en el registro local.');
+    return getRecord(company.companyId);
+  }
+
   function registerCompany(companyInput) {
     const company = normalizeCompanyMetadata(companyInput);
     if (selectRecord.get(company.companyId)) throw new Error('La empresa ya tiene un registro de base SQLite.');
@@ -265,6 +344,8 @@ function createCompanyDatabaseManager({
 
   return Object.freeze({
     registerCompany,
+    registerExistingCompanies,
+    updateCompanyMetadata,
     openCompany,
     closeCompany,
     archiveCompany,
