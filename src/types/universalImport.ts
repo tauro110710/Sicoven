@@ -31,7 +31,7 @@ export const mapUniversalSupplierDirectAdvanceDraft = (
 ): UniversalSupplierDirectAdvanceDraft => {
   const operation = String(pickUniversalAdvanceValue(row, ['operationType','transactionType','tipoOperacion','tipoMovimiento','concept','concepto','kind','tipo']) ?? '')
     .trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const directTokens = ['supplierdirectadvance','directsupplieradvance','anticodirectoproveedor','anticipodirectoproveedor','desembolsoanticipoproveedor'];
+  const directTokens = ['supplierdirectadvance','directsupplieradvance','anticodirectoproveedor','anticipodirectoproveedor','anticipoproveedor','desembolsoanticipoproveedor'];
   if (!directTokens.includes(operation)) throw new Error('La fila no identifica expresamente un desembolso directo de anticipo a proveedor.');
   const sourceRowId = String(row.migrationrowid ?? '').trim();
   if (!sourceRowId) throw new Error('El anticipo directo no conserva su identificador estable de fila de origen.');
@@ -74,10 +74,15 @@ export const mapUniversalSupplierAdvanceSettlementDraft = (
   const bcvRate = parseUniversalAdvanceNumber(pickUniversalAdvanceValue(row, ['bcvRate','settlementBcvRate','tasaBcv','exchangeRate','tasaHistorica']));
   const amountUsdRaw = pickUniversalAdvanceValue(row, ['amountUsd','settlementAmountUsd','montoUsd','importeUsd','amountAppliedUsd']);
   const amountBsRaw = pickUniversalAdvanceValue(row, ['amountBs','settlementAmountBs','montoBs','importeBs','amountAppliedBs']);
-  const amountUsd = amountUsdRaw === undefined ? parseUniversalAdvanceNumber(amountBsRaw) / bcvRate : parseUniversalAdvanceNumber(amountUsdRaw);
-  const amountBs = amountBsRaw === undefined ? amountUsd * bcvRate : parseUniversalAdvanceNumber(amountBsRaw);
-  const reference = String(pickUniversalAdvanceValue(row, ['reference','settlementReference','paymentReference','referencia','comprobante']) ?? '').trim();
   const cashRaw = pickUniversalAdvanceValue(row, ['cashReceivedBs','refundReceivedBs','montoReembolsadoBs','importeRecibidoBs']);
+  if (kind === 'REFUND_RECEIVED' && amountBsRaw === undefined && cashRaw === undefined) {
+    throw new Error('El reembolso ' + sourceRowId + ' requiere el importe real recibido en Bs; no se inferirá desde la tasa BCV.');
+  }
+  const amountUsd = amountUsdRaw === undefined ? parseUniversalAdvanceNumber(amountBsRaw ?? cashRaw) / bcvRate : parseUniversalAdvanceNumber(amountUsdRaw);
+  const amountBs = amountBsRaw === undefined
+    ? (kind === 'REFUND_RECEIVED' ? parseUniversalAdvanceNumber(cashRaw) : amountUsd * bcvRate)
+    : parseUniversalAdvanceNumber(amountBsRaw);
+  const reference = String(pickUniversalAdvanceValue(row, ['reference','settlementReference','paymentReference','referencia','comprobante']) ?? '').trim();
   const treasuryAccountCode = String(pickUniversalAdvanceValue(row, ['treasuryAccountCode','accountCode','codigoCuenta','cuentaTesoreria','codigoCuentaTesoreria']) ?? '').trim();
   if (!Number.isFinite(bcvRate) || bcvRate <= 0 || !Number.isFinite(amountUsd) || amountUsd <= 0 || !Number.isFinite(amountBs) || amountBs <= 0) {
     throw new Error('La liquidación ' + sourceRowId + ' requiere importes Bs/USD positivos y su tasa BCV histórica.');
