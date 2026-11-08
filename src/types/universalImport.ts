@@ -82,7 +82,7 @@ export const analyzePosvenBackupMapping = (root: unknown): PosvenBackupMappingAn
     const key = String(id);
     receivablesBySaleId.set(key, [...(receivablesBySaleId.get(key) ?? []), row]);
   }));
-  const isStrictRif = (value: unknown) => /^[JGVEP]\d{9,10}$/.test(String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, ''));
+  const isStrictRif = (value: unknown) => /^[JGVEP]\d{8,9}$/.test(String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, ''));
   const salesCustomerRifResolvedByRelatedRecord = invoiceRows.filter(row => {
     const linked = receivablesBySaleId.get(String(row.id ?? '')) ?? [];
     const hasLinkedRif = linked.some(receivable => {
