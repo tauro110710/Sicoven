@@ -124,6 +124,31 @@ test('preserves the previous company when the requested company is missing or ar
   assert.equal(context.getActiveCompanyId(), 'company-a');
 });
 
+test('serializes asynchronous database operations and recovers the queue after a rejection', async t => {
+  const { context } = makeContext(t);
+  await context.switchCompany('company-a');
+  const events = [];
+  let releaseFirst;
+  const first = context.withActiveDatabase(async (_db, companyId) => {
+    events.push('first-start:' + companyId);
+    await new Promise(resolve => { releaseFirst = resolve; });
+    events.push('first-end:' + companyId);
+    throw new Error('expected first operation failure');
+  });
+  const second = context.withActiveDatabase((_db, companyId) => {
+    events.push('second:' + companyId);
+    return 'second-complete';
+  });
+
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(events, ['first-start:company-a']);
+  releaseFirst();
+  await assert.rejects(first, /expected first operation failure/);
+  assert.equal(await second, 'second-complete');
+  assert.deepEqual(events, ['first-start:company-a', 'first-end:company-a', 'second:company-a']);
+  assert.equal(context.getActiveOperationCount(), 0);
+});
+
 test('serializes access through the active tenant and closes the previous connection after a successful switch', async t => {
   const { context, open } = makeContext(t);
   await context.switchCompany('company-a');
