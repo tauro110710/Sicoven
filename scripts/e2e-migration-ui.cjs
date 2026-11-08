@@ -101,7 +101,7 @@ async function main() {
   assert(typeof WebSocket === 'function', 'Node.js no ofrece WebSocket global para el protocolo CDP.');
   fs.writeFileSync(fixturePath, [
     'code,name,category,unit,currentStock,avgCostBs,lastCostBs,lastCostUsd,salesPriceBs,salesPriceUsd,minStock,costingMethod,vatTreatment,itemType,openingDate,openingBcvRate,inventoryAccountCode,costOfSalesAccountCode,adjustmentAccountCode,openingBalanceAccountCode',
-    'E2E-MIG-0001,ARTICULO PRUEBA MIGRACION,E2E,Unidad,3,100,100,0.2,180,0.36,1,PROMEDIO_PONDERADO,GENERAL_16,MERCANCIA,2026-01-01,500,1.1.4.01,5.1.1.01,5.1.2.01,3.1.1.01'
+    'E2E-MIG-0001,ARTICULO PRUEBA MIGRACION,E2E,Unidad,3,100,100,0.2,180,0.36,1,PROMEDIO_PONDERADO,16,MERCANCIA,2026-01-01,500,1.1.4.01,5.1.1.01,5.1.2.01,3.1.1.01'
   ].join('\n'), 'utf8');
 
   appProcess = spawn(appPath, ['--remote-debugging-port=' + port, '--disable-gpu'], {
