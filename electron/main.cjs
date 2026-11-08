@@ -560,8 +560,13 @@ app.whenReady().then(async () => {
     return { ok: true, token, user: { username: row.username, role: row.role, isSeed: Boolean(row.is_seed) } };
   });
 
-  ipcMain.handle('sicoven:auth-logout', (_event, token) => {
+  ipcMain.handle('sicoven:auth-logout', async (event, token) => {
     const value = String(token || '');
+    // Do not invalidate the authenticated renderer until its queued SQLite
+    // snapshots have been acknowledged. On timeout, keep the session alive.
+    if (activeRendererSessionToken === value && sessions.has(value)) {
+      await persistenceFlushBridge.requestFlush(event.sender, value);
+    }
     sessions.delete(value);
     if (activeRendererSessionToken === value) activeRendererSessionToken = null;
     if (/^[a-f0-9]{64}$/.test(value)) {
