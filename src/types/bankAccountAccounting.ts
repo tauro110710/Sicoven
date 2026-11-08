@@ -41,7 +41,7 @@ export function buildBankAuxiliaryAccounts(
 
   const auxiliary: Account = {
     code,
-    name: `${bankName} - Cta. ${accountType === 'AHORRO' ? 'Ahorro' : 'Corriente'} ${currency === 'USD' ? 'USD' : 'VES'}`,
+    name: `${bankName} - Cta. ${accountType === 'AHORRO' ? 'Ahorro' : 'Corriente'} ${currency === 'USD' ? 'USD' : 'BS.'}`,
     type: 'ACTIVO',
     level: 5,
     isMovement: true,
