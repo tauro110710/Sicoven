@@ -79,7 +79,7 @@ test('keeps the local company registry synchronized with audited company metadat
   assert.equal(record.rif, corrected.rif);
 });
 
-test('coordinates shared chart updates across company databases', async t => {
+test('blocks shared chart updates until a recoverable coordinator exists', async t => {
   const { manager } = fixture(t);
   const a = { id: 'company-a', name: 'Empresa A', rif: 'J-12345678-9' };
   const b = { id: 'company-b', name: 'Empresa B', rif: 'J-98765432-1' };
