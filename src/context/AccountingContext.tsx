@@ -139,6 +139,7 @@ interface AccountingContextType {
   addSupplierAdvanceSettlement: (draft: SupplierAdvanceSettlementDraft) => Promise<SupplierAdvanceSettlement>;
   supplierDirectAdvances: SupplierDirectAdvance[];
   addSupplierDirectAdvance: (draft: SupplierDirectAdvanceDraft) => Promise<SupplierDirectAdvance>;
+  addImportedSupplierDirectAdvances: (items: Array<{ sourceRowId: string; draft: SupplierDirectAdvanceDraft }>, targetCompanyId?: string) => SupplierDirectAdvance[];
 
   // Compras
   purchases: PurchaseRecord[];
@@ -356,7 +357,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [supplierDirectAdvances, setSupplierDirectAdvances] = useState<SupplierDirectAdvance[]>([]);
   const bankStatementImportInFlightRef = useRef(false);
   type PendingBankOutgoingReservation = { release: () => void; waiter: { resolve: () => void; reject: (error: Error) => void } };
-  type ActiveAccountingImportBatch = { journalEntries: JournalEntry[]; sales: SaleRecord[]; purchases: PurchaseRecord[]; reservedBankLockKeys: Set<string> };
+  type ActiveAccountingImportBatch = { journalEntries: JournalEntry[]; sales: SaleRecord[]; purchases: PurchaseRecord[]; supplierDirectAdvances: SupplierDirectAdvance[]; supplierAdvanceSettlements: SupplierAdvanceSettlement[]; reservedBankLockKeys: Set<string> };
   const bankOutgoingReservationsRef = useRef<PendingBankOutgoingReservation[]>([]);
   const activeImportBatchRef = useRef<ActiveAccountingImportBatch | null>(null);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
@@ -426,7 +427,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('No se permiten importaciones contables anidadas.');
     }
     const previousBatch = activeImportBatchRef.current;
-    activeImportBatchRef.current = { journalEntries: [], sales: [], purchases: [], reservedBankLockKeys: new Set<string>() };
+    activeImportBatchRef.current = { journalEntries: [], sales: [], purchases: [], supplierDirectAdvances: [], supplierAdvanceSettlements: [], reservedBankLockKeys: new Set<string>() };
     try {
       const result = operation();
       activeImportBatchRef.current = previousBatch;
@@ -1644,8 +1645,107 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     };
   };
 
-  const getSupplierAdvanceBalance = (supplierRif: string): SupplierAdvanceBalance =>
-    calculateOutstandingSupplierAdvance(supplierRif, purchases, supplierAdvanceSettlements, currentCompany.id, supplierDirectAdvances);
+  const getSupplierAdvanceBalance = (supplierRif: string): SupplierAdvanceBalance => {
+    const batch = activeImportBatchRef.current;
+    return calculateOutstandingSupplierAdvance(
+      supplierRif,
+      batch ? [...purchases, ...batch.purchases] : purchases,
+      batch ? [...supplierAdvanceSettlements, ...batch.supplierAdvanceSettlements] : supplierAdvanceSettlements,
+      currentCompany.id,
+      batch ? [...supplierDirectAdvances, ...batch.supplierDirectAdvances] : supplierDirectAdvances
+    );
+  };
+
+  const addImportedSupplierDirectAdvances = (
+    items: Array<{ sourceRowId: string; draft: SupplierDirectAdvanceDraft }>,
+    targetCompanyId: string = currentCompany.id
+  ): SupplierDirectAdvance[] => {
+    const batch = activeImportBatchRef.current;
+    if (!batch) throw new Error('Los anticipos directos importados solo pueden registrarse dentro del lote contable atómico.');
+    if (!items.length) return [];
+    const targetCompany = companies.find(company => company.id === targetCompanyId);
+    if (!targetCompany) throw new Error('La empresa destino de los anticipos no existe.');
+    const existing = [...supplierDirectAdvances, ...batch.supplierDirectAdvances];
+    const seenRows = new Set<string>();
+    const seenReferences = new Set<string>();
+    const created: SupplierDirectAdvance[] = [];
+
+    for (const item of items) {
+      const sourceRowId = String(item?.sourceRowId || '').trim();
+      const draft = item?.draft;
+      if (!sourceRowId || seenRows.has(sourceRowId)) {
+        throw new Error('La selección de anticipos contiene claves de origen vacías o duplicadas.');
+      }
+      seenRows.add(sourceRowId);
+      const validation = validateSupplierDirectAdvanceDraft(draft, targetCompanyId, accounts);
+      if (validation) throw new Error('Anticipo ' + sourceRowId + ': ' + validation);
+      const rif = String(draft.supplierRif || '').trim().toUpperCase();
+      if (!validateVenezuelanRif(rif).isValid) {
+        throw new Error('Anticipo ' + sourceRowId + ': el RIF del proveedor no tiene una estructura venezolana válida.');
+      }
+      if (targetCompany.closedThroughDate && draft.date <= targetCompany.closedThroughDate) {
+        throw new Error('Anticipo ' + sourceRowId + ': el período está cerrado hasta ' + targetCompany.closedThroughDate + '.');
+      }
+      const bank = bankAccounts.find(account =>
+        account.companyId === targetCompanyId && account.accountCode === draft.treasuryAccountCode
+      );
+      const accountCurrency = resolveTreasuryAccountCurrency(draft.treasuryAccountCode, bank?.currency);
+      if (accountCurrency !== draft.paymentCurrency) {
+        throw new Error('Anticipo ' + sourceRowId + ': la moneda del desembolso no coincide con la cuenta real de Caja/Banco.');
+      }
+      const reference = String(draft.reference || '').trim();
+      const duplicateKey = [targetCompanyId, draft.treasuryAccountCode, draft.date, reference.toUpperCase()].join('|');
+      if (!reference || seenReferences.has(duplicateKey) || existing.some(advance =>
+        advance.companyId === targetCompanyId && !advance.isReversed &&
+        advance.treasuryAccountCode === draft.treasuryAccountCode &&
+        advance.date === draft.date && advance.reference.trim().toUpperCase() === reference.toUpperCase()
+      )) {
+        throw new Error('Anticipo ' + sourceRowId + ': referencia vacía o ya utilizada en esa cuenta y fecha.');
+      }
+      seenReferences.add(duplicateKey);
+
+      const advanceAccount = accounts.find(account =>
+        account.code === '1.1.2.03' && account.isMovement && account.type === 'ACTIVO'
+      );
+      const treasuryAccount = accounts.find(account =>
+        account.code === draft.treasuryAccountCode && account.isMovement && account.type === 'ACTIVO'
+      );
+      if (!advanceAccount || !treasuryAccount) {
+        throw new Error('Anticipo ' + sourceRowId + ': falta el auxiliar de anticipos o la cuenta real de tesorería.');
+      }
+      const amountUsd = Math.round((draft.amountUsd + Number.EPSILON) * 1000000) / 1000000;
+      const bookValueBs = Math.round((amountUsd * draft.bcvRate + Number.EPSILON) * 100) / 100;
+      const entry = addJournalEntry({
+        entryNumber: 0,
+        date: draft.date,
+        description: 'Anticipo directo importado a proveedor ' + rif + ' · ' + draft.supplierName.trim(),
+        type: 'ANTICIPO_PROVEEDOR',
+        bcvRate: draft.bcvRate,
+        referenceDoc: reference,
+        items: [
+          { accountCode: advanceAccount.code, accountName: advanceAccount.name, debitBs: bookValueBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: 'Reconocimiento de anticipo directo a proveedor' },
+          { accountCode: treasuryAccount.code, accountName: treasuryAccount.name, debitBs: 0, creditBs: bookValueBs, debitUsd: 0, creditUsd: amountUsd, description: 'Desembolso documentado desde Caja/Banco' }
+        ]
+      }, accounts, targetCompanyId);
+      const record: SupplierDirectAdvance = {
+        ...draft,
+        supplierRif: rif,
+        supplierName: draft.supplierName.trim(),
+        id: 'supplier-direct-advance-' + targetCompanyId + '-' + entry.id + '-' + sourceRowId,
+        companyId: targetCompanyId,
+        amountUsd,
+        bookValueBs,
+        reference,
+        support: String(draft.support || '').trim(),
+        journalEntryId: entry.id,
+        createdAt: new Date().toISOString()
+      };
+      batch.supplierDirectAdvances.push(record);
+      created.push(record);
+    }
+    setSupplierDirectAdvances(previous => [...previous, ...created]);
+    return created;
+  };
 
   const addSupplierDirectAdvance = async (draft: SupplierDirectAdvanceDraft): Promise<SupplierDirectAdvance> => {
     assertSQLitePersistenceReady('Registrar anticipo directo a proveedor');
@@ -5856,6 +5956,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         addSupplierAdvanceSettlement,
         supplierDirectAdvances: supplierDirectAdvances.filter(item => item.companyId === currentCompany.id),
         addSupplierDirectAdvance,
+        addImportedSupplierDirectAdvances,
         purchases: purchases.filter(p => p.companyId === currentCompany.id),
         addPurchase,
         addPurchaseCreditNote,
