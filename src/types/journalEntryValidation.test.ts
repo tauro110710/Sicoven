@@ -68,3 +68,10 @@ test('la conversión manual rechaza importes o tasas inválidos', () => {
   assert.throws(() => convertBsToUsdAmount(100, 0), /tasa BCV/);
   assert.throws(() => convertBsToUsdAmount(Number.NaN, 900), /importe en Bs/);
 });
+
+test('mantiene conciliación USD al dividir un importe en varios renglones', () => {
+  const debitUsd = Array.from({ length: 10 }, () => convertBsToUsdAmount(1, 3))
+    .reduce((sum, amount) => sum + amount, 0);
+  const creditUsd = convertBsToUsdAmount(10, 3);
+  assert.ok(Math.abs(debitUsd - creditUsd) < 0.000001);
+});
