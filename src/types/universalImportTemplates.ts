@@ -18,7 +18,7 @@ const templates: Record<UniversalMasterTemplateKind, { fileName: string; headers
   }
 };
 
-const csvCell = (value: string) => /[",\\n\\r]/.test(value) ? '"' + value.replace(/"/g, '""') + '"' : value;
+const csvCell = (value: string) => /[",\n\r]/.test(value) ? '"' + value.replace(/"/g, '""') + '"' : value;
 
 export const getUniversalMasterTemplate = (kind: UniversalMasterTemplateKind): { fileName: string; csv: string } => {
   const template = templates[kind];
