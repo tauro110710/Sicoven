@@ -65,11 +65,6 @@ export const analyzePosvenBackupMapping = (root: unknown): PosvenBackupMappingAn
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item));
   const productSaleLines = saleLines.filter(item => norm(item.productoId) !== 'abono' && Boolean(item.productoId));
   const unresolvedSalesProductLines = productSaleLines.filter(item => !productIds.has(String(item.productoId))).length;
-  const customersByName = new Map<string, number>();
-  list('clientes').forEach(row => {
-    const name = norm(row.name ?? row.nombre);
-    if (name) customersByName.set(name, (customersByName.get(name) ?? 0) + 1);
-  });
   const suppliersByName = new Map<string, number>();
   list('proveedores').forEach(row => {
     const name = norm(row.nombre ?? row.name);
