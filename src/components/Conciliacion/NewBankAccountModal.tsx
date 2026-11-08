@@ -160,7 +160,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
                 }}
                 className="pointer-events-auto select-text w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               >
-                <option value="BS">Bolívares (VES)</option>
+                <option value="BS">Bolívares (BS.)</option>
                 <option value="USD">Dólares (USD)</option>
               </select>
             </div>
@@ -185,8 +185,8 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
               className="pointer-events-auto select-text w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
             >
               {currency === 'BS'
-                ? <option value="1.1.1.06">1.1.1.06 · Bancos Nacionales en Moneda Nacional (VES)</option>
-                : <option value="1.1.1.07">1.1.1.07 · Bancos en Moneda Extranjera (USD/EUR)</option>}
+                ? <option value="1.1.1.06">1.1.1.06 · Bancos Nacionales en Bolívares (BS.)</option>
+                : <option value="1.1.1.07">1.1.1.07 · Bancos en Moneda Extranjera (USD)</option>}
             </select>
             <p className="mt-1 text-[10px] text-slate-500">El auxiliar de esta cuenta bancaria se generará debajo de la cuenta padre seleccionada.</p>
             {!selectedParentAccount && <p className="mt-1 text-[10px] text-rose-600">La cuenta padre no existe o no tiene la clasificación requerida en el Plan de Cuentas.</p>}
