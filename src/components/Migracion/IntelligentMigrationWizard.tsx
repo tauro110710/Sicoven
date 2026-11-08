@@ -526,15 +526,16 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
       }catch(cause){error=cause instanceof Error?cause.message:'La operación de anticipo no pudo validarse.';}
       return {sourceRowId:String(row.migrationrowid??''),operation:directAdvanceTokens.includes(operation)?'Anticipo directo':refundTokens.includes(operation)?'Reembolso':'Aplicación a compra',supplierName,supplierRif,date,amountUsd,amountBs,reference,target,error};
      });
+     let selectedAdvanceIdsForBatch:string[]=[];
      if(advanceRows.length){
       const samePreview=supplierAdvancePreview.length===nextAdvancePreview.length&&
        nextAdvancePreview.every((item,index)=>supplierAdvancePreview[index]?.sourceRowId===item.sourceRowId);
-      const selectedAdvanceIds=samePreview
+      selectedAdvanceIdsForBatch=samePreview
        ?selectedSupplierAdvanceSourceRowIds.filter(id=>nextAdvancePreview.some(item=>item.sourceRowId===id))
        :nextAdvancePreview.map(item=>item.sourceRowId);
       setSupplierAdvancePreview(nextAdvancePreview);
-      setSelectedSupplierAdvanceSourceRowIds(selectedAdvanceIds);
-      const unresolved=nextAdvancePreview.filter(item=>selectedAdvanceIds.includes(item.sourceRowId)&&item.error).length;
+      setSelectedSupplierAdvanceSourceRowIds(selectedAdvanceIdsForBatch);
+      const unresolved=nextAdvancePreview.filter(item=>selectedAdvanceIdsForBatch.includes(item.sourceRowId)&&item.error).length;
       if(unresolved){
        setNotice('Se detectaron '+nextAdvancePreview.length+' operaciones de anticipos; '+unresolved+' seleccionadas requieren corregir datos o vínculo. Desmarca las filas que no deseas importar o corrige el archivo.');
        setBusy(false);return;
@@ -706,6 +707,18 @@ const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fech
      const detectedSettlementCount=settlementPlans.reduce((sum,plan)=>sum+plan.settlements.length,0);
      skippedSettlementCount=detectedSettlementCount-settlementDrafts.length;
      importedSettlementCount=addImportedCreditSettlements(settlementDrafts,createdDocuments,targetCompany.id).length;
+     const directAdvanceDrafts=selectedAdvanceRows.filter(row=>directAdvanceTokens.includes(advanceOperation(row)))
+      .map(row=>mapUniversalSupplierDirectAdvanceDraft(row,rows));
+     importedDirectAdvanceCount=addImportedSupplierDirectAdvances(directAdvanceDrafts,targetCompany.id).length;
+     const supplierAdvanceSettlementDrafts=selectedAdvanceRows.filter(row=>
+      refundTokens.includes(advanceOperation(row))||applicationTokens.includes(advanceOperation(row))
+     ).map(row=>{
+      const sourceId=String(row.migrationrowid??'');
+      const target=advanceTargets.get(sourceId);
+      const targetPurchaseId=target?.existingId||(target?.sourceRowId?createdDocumentIds[target.sourceRowId]:undefined);
+      return mapUniversalSupplierAdvanceSettlementDraft(row,rows,targetPurchaseId);
+     });
+     importedAdvanceSettlementCount=addImportedSupplierAdvanceSettlements(supplierAdvanceSettlementDrafts,targetCompany.id).length;
     });
     setSettlementPreview([]);setSelectedSettlementSourceRowIds([]);
     setNotice((kind==='sales'?'Ventas':'Compras')+' importadas: '+prepared.length+' facturas. Liquidaciones contabilizadas: '+importedSettlementCount+'; omitidas por selección: '+skippedSettlementCount+'. SICOVEN generó los asientos seleccionados, actualizó CxC/CxP y SQLite confirmó el lote completo en una sola transacción.');
