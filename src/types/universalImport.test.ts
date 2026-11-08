@@ -82,6 +82,8 @@ test('mapea la estructura POSVEN real y separa facturas de recibos CxC', () => {
   assert.equal(result.salesProductLines, 1);
   assert.equal(result.unresolvedSalesProductLines, 0);
   assert.equal(result.salesMissingFiscalControl, 1);
+  assert.equal(result.salesMissingDocumentType, 1);
+  assert.equal(result.salesMissingBcvRate, 1);
   assert.equal(result.salesMissingCustomerRif, 1);
   assert.equal(result.salesCustomerRifResolvedByRelatedRecord, 1);
   assert.equal(result.salesCustomerRifStillUnresolved, 0);
