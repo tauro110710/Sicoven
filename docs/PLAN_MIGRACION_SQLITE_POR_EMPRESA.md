@@ -17,7 +17,7 @@ Este documento desarrolla la ADR de SQLite local por empresa. No habilita todav�
 - Inventario previo estricto: helper creado en `electron/tenant-migration-preflight.cjs`; clasifica tablas de control, snapshot, auditoría, referencias globales, tablas de empresa e hijas. Bloquea la migración si aparece una tabla persistente desconocida, falta una tabla crítica, el snapshot no es único/válido o existen empresas/RIF ambiguos.
 - El preflight es de solo lectura y no activa la nueva arquitectura. Su lista de clasificación debe mantenerse sincronizada con cada nueva tabla persistente que se incorpore al producto.
 - Journal durable: helper creado en `electron/tenant-migration-journal.cjs`; guarda las fases PREPARED/STAGING/VALIDATING/REGISTERING/COMMITTED y los estados de rollback/error mediante escritura atómica y sincronización a disco. Verifica el SHA-256 del backup de origen, bloquea journals duplicados y transiciones obsoletas, y no reinicia automáticamente un journal dañado.
-- El orquestador crea un backup SQLite consistente, verifica su integridad, repite el preflight sobre la copia, usa ese backup inmutable como única fuente de snapshots/tablas/auditoría/documentos y registra el conjunto solo después de validar cada archivo. Exige un bloqueo exclusivo de mantenimiento durante toda la operación. La recuperación automática tras una interrupción y la reconciliación de estados REGISTERING todavía requieren implementación y pruebas.
+- El orquestador crea un backup SQLite consistente, verifica su integridad, repite el preflight sobre la copia, usa ese backup inmutable como única fuente de snapshots/tablas/auditoría/documentos y registra el conjunto solo después de validar cada archivo. Exige un bloqueo exclusivo de mantenimiento durante toda la operación. El inspector `electron/tenant-migration-recovery.cjs` valida backup, hashes, integridad, claves foráneas, identidad, snapshot, documentos y correspondencia del registro. Puede reconciliar únicamente `REGISTERING` → `COMMITTED` cuando todas las comprobaciones pasan; no ejecuta rollback ni limpieza automática.
 - No se ha fusionado ni activado el modo multiarchivo en main.
 
 ## Archivos locales
@@ -25,9 +25,9 @@ Este documento desarrolla la ADR de SQLite local por empresa. No habilita todav�
 userData/
 - sicoven.sqlite: auth_users, auth_sessions, license_state, company_database_registry y app_control_state.
 - companies/<company-id>/accounting.sqlite: datos contables y operativos de esa empresa.
-- companies/<company-id>/documents/: documentos de esa empresa.
+- companies/<company-id>/supporting-documents/: documentos de esa empresa.
 - companies/<company-id>/backups/: respaldos individuales.
-- migration/legacy-sicoven.sqlite: copia intacta durante la migración.
+- tenant-migration/sicoven-<migration-id>.sqlite.backup: respaldo SQLite consistente e inmutable de la base heredada, protegido por journal y SHA-256.
 
 El archivo de control conserva autenticación, sesiones, licencia y registro de empresas. Los datos contables y operativos viven en el archivo de la empresa.
 
@@ -164,7 +164,7 @@ El módulo `electron/tenant-operation-context.cjs` define el contrato de coordin
 7. Si falla la validación o el cierre anterior, conservar el contexto previo y cerrar únicamente la conexión destino abierta por el intento fallido.
 8. Al cerrar sesión, vaciar el contexto operativo después de esperar los guardados y operaciones en curso.
 
-El módulo es una pieza aislada y probada; **todavía no está conectado a `main.cjs`, a los handlers IPC ni a `AccountingContext`**. No activa aún el modo multiempresa en la aplicación y no autoriza migrar datos reales. La integración debe validar la sesión en el proceso principal y nunca aceptar rutas SQLite ni confiar en un ID de empresa arbitrario del renderer.
+El módulo es una pieza aislada y probada; **todavía no está conectado a `main.cjs`, a los handlers IPC ni a `AccountingContext`**. No activa aún el modo multiempresa en la aplicación y no autoriza migrar datos reales. La integración debe validar la sesión en el proceso principal y nunca aceptar rutas SQLite ni confiar en un ID de empresa arbitrario del renderer. El mismo contexto incorpora `acquireMaintenanceLock()`: cierra el acceso a nuevas operaciones, drena las operaciones activas, permite exclusivamente el flush pendiente de persistencia y conserva el bloqueo hasta que el orquestador libera su callback.
 
 ## Inspección previa desde el puente seguro de Electron
 
@@ -190,3 +190,16 @@ El ejecutor electron/tenant-migration-orchestrator.cjs coordina la migración de
 La prueba de integración del orquestador usa SQLite real, crea dos empresas, verifica que cada archivo contenga solo su empresa y que los eventos de auditoría se distribuyan por propietario, mientras el evento global y la base heredada permanecen en control. También se prueba el bloqueo de mantenimiento, el journal y los fallos de preparación.
 
 **Límite importante:** el orquestador es todavía un módulo aislado. No se invoca desde main.cjs, no está expuesto por IPC y no debe ejecutarse sobre una instalación de usuario hasta integrar el bloqueo real de operaciones, el arranque multiempresa, los handlers de negocio, documentos, auditoría, backups/restores y recuperación tras cierre inesperado. La base heredada sigue siendo la base operativa de la aplicación.
+
+
+## Recuperación e inspección posterior a una interrupción
+
+El módulo `electron/tenant-migration-recovery.cjs` ofrece dos operaciones separadas:
+
+- `inspectTenantMigrationRecovery()` es de solo lectura. Comprueba que el journal sea legible, que el backup permanezca dentro de `tenant-migration/` y conserve su SHA-256, y que cada base de empresa supere integridad SQLite y `foreign_key_check`.
+- Por cada empresa comprueba `company_id`, `schema_version`, snapshot de una sola empresa, documentos físicos (ruta segura, tamaño y SHA-256) y coincidencia con el registro de control (estado ACTIVE, nombre, RIF, ruta y versión de esquema).
+- `finalizeTenantMigrationRecovery()` solo permite avanzar el journal de `REGISTERING` a `COMMITTED` si todas las comprobaciones anteriores son correctas. No borra archivos, no restaura automáticamente bases y no intenta adivinar cómo reparar discrepancias.
+
+Las pruebas cubren la interrupción simulada después del registro, la corrupción de una base tenant y la discrepancia entre la versión de esquema interna y la registrada en control. Una discrepancia exige recuperación manual y bloquea la confirmación del journal.
+
+**Estado vigente:** los módulos de migración y recuperación continúan aislados de la aplicación. No existe aún una migración real ejecutada ni una activación multiempresa. La base heredada `userData/sicoven.sqlite` sigue siendo la única base operativa.
