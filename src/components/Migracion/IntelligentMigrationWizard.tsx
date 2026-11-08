@@ -5,6 +5,7 @@ import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUn
 import { detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, planUniversalInvoiceSettlements, validateUniversalSettlementDestination, mapUniversalInvoiceSettlementDrafts, mapUniversalSupplierDirectAdvanceDraft, mapUniversalSupplierAdvanceSettlementDraft, selectUniversalRowsByStableKeys, selectUniversalInvoiceSettlements, mapUniversalInventoryItemType } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
+import { validateSupplierDirectAdvanceDraft } from '../../types/supplierDirectAdvance';
 
 type Row = Record<string, unknown>;
 type ModuleId = 'inventory' | 'customers' | 'receivables' | 'payables' | 'sales' | 'purchases' | 'accounts' | 'journal' | 'movements';
@@ -518,6 +519,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
        const party=resolveUniversalPartyReference(rows,row,'supplier');supplierName=party.name;supplierRif=party.rif;
        if(directAdvanceTokens.includes(operation)){
         const mapped=mapUniversalSupplierDirectAdvanceDraft(row,rows).draft;
+        const validation=validateSupplierDirectAdvanceDraft(mapped,targetCompany.id,accounts);
+        if(validation)throw new Error(validation);
         date=mapped.date;amountUsd=mapped.amountUsd;amountBs=Math.round(mapped.amountUsd*mapped.bcvRate*100)/100;reference=mapped.reference;
        }else{
         const isApplication=applicationTokens.includes(operation);
