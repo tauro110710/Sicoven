@@ -261,8 +261,10 @@ export function allocateSupplierAdvanceFifo(
     if (!source.id?.trim() || sourceKeys.has(key)) {
       throw new Error('El conjunto de anticipos contiene identificadores vacíos o duplicados.');
     }
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(source.date || '') ||
-        !Number.isFinite(Date.parse(source.date + 'T00:00:00Z')) ||
+    const dateParts = String(source.date || '').match(/^(\\d{4})-(\\d{2})-(\\d{2})$/)?.slice(1).map(Number);
+    const parsedDate = dateParts ? new Date(Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2])) : null;
+    if (!dateParts || !parsedDate || parsedDate.getUTCFullYear() !== dateParts[0] ||
+        parsedDate.getUTCMonth() !== dateParts[1] - 1 || parsedDate.getUTCDate() !== dateParts[2] ||
         !Number.isFinite(source.amountUsd) || source.amountUsd <= 0 ||
         !Number.isFinite(source.bookValueBs) || source.bookValueBs < 0) {
       throw new Error('Un anticipo fuente contiene fecha o importes históricos inválidos.');
@@ -292,8 +294,10 @@ export function allocateSupplierAdvanceFifo(
       if (noteError) throw new Error('La liquidación histórica ' + String(settlement.id || '') + ' no es conciliable: ' + noteError);
     }
     const directIds = directAllocations.map(item => item?.directAdvanceId);
+    const declaredDirectIds = settlement.sourceDirectAdvanceIds || [];
     if (directIds.some(id => typeof id !== 'string' || !id.trim()) ||
         new Set(directIds).size !== directIds.length ||
+        declaredDirectIds.length !== directIds.length || directIds.some(id => !declaredDirectIds.includes(id)) ||
         directAllocations.some(item => !Number.isFinite(item.amountUsd) || item.amountUsd <= 0 ||
           !Number.isFinite(item.bookValueBs) || item.bookValueBs < 0)) {
       throw new Error('Una liquidación histórica contiene aplicaciones de anticipos directos inválidas.');
