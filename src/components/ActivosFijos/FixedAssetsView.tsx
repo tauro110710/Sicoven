@@ -61,6 +61,20 @@ export const FixedAssetsView: React.FC = () => {
   const expenseAccounts = accounts.filter(account =>
     account.type === 'GASTOS' && account.isMovement && /DEPRECIACI[ÓO]N/i.test(account.name)
   );
+  const assetSummary = useMemo(() => fixedAssets.reduce((summary, asset) => {
+    const events = asset.depreciationEvents.filter(event => !event.reversedByJournalEntryId);
+    const accumulatedBs = events.reduce((sum, event) => sum + Number(event.amountBs), 0);
+    const accumulatedUsd = events.reduce((sum, event) => sum + Number(event.amountUsd), 0);
+    return {
+      count: summary.count + 1,
+      costBs: summary.costBs + Number(asset.acquisitionCostBs),
+      costUsd: summary.costUsd + Number(asset.acquisitionCostUsd),
+      depreciationBs: summary.depreciationBs + accumulatedBs,
+      depreciationUsd: summary.depreciationUsd + accumulatedUsd,
+      netBs: summary.netBs + Math.max(Number(asset.residualValueBs), Number(asset.acquisitionCostBs) - accumulatedBs),
+      netUsd: summary.netUsd + Math.max(Number(asset.residualValueUsd), Number(asset.acquisitionCostUsd) - accumulatedUsd)
+    };
+  }, { count:0,costBs:0,costUsd:0,depreciationBs:0,depreciationUsd:0,netBs:0,netUsd:0 }), [fixedAssets]);
 
   const suggestedAssetCode = useMemo(() => {
     const max = fixedAssets.reduce((value, asset) => {
@@ -168,6 +182,12 @@ export const FixedAssetsView: React.FC = () => {
         </div>
       )}
 
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Activos registrados</p><p className="mt-1 text-2xl font-bold text-slate-900">{assetSummary.count}</p></div>
+        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Costo histórico · Bs.</p><p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.costBs)}</p></div>
+        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Costo histórico · USD</p><p className="mt-1 text-lg font-bold text-slate-900">{formatUsd(assetSummary.costUsd)}</p></div>
+        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Valor neto contable</p><p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.netBs)} <span className="text-sm font-medium text-slate-500">/ {formatUsd(assetSummary.netUsd)}</span></p></div>
+      </section>
       <section className="rounded-xl border bg-white p-4 shadow-sm">
         <h2 className="font-semibold text-slate-900">Registrar activo existente</h2>
         <p className="mt-1 text-xs text-slate-500">Seleccione la línea de adquisición ya contabilizada. El costo en Bs. y USD se toma directamente de ese asiento.</p>
@@ -259,7 +279,26 @@ export const FixedAssetsView: React.FC = () => {
                   try { nextPeriod = getNextFixedAssetDepreciationPeriod(asset); } catch { historyError = true; }
                   return (
                     <tr key={asset.id} className="border-t">
-                      <td className="p-3"><strong>{asset.assetCode} · {asset.description}</strong><span className="block text-slate-500">{asset.category} · {asset.usefulLifeMonths} meses</span></td>
+                      <td className="p-3">
+                        <strong>{asset.assetCode} · {asset.description}</strong>
+                        <span className="block text-slate-500">{asset.category} · {asset.usefulLifeMonths} meses</span>
+                        <details className="mt-2 max-w-xs">
+                          <summary className="cursor-pointer text-sky-700">Historial ({asset.depreciationEvents.length})</summary>
+                          <div className="mt-2 space-y-2">
+                            {asset.depreciationEvents.slice().sort((a,b) => a.period.localeCompare(b.period)).map(event => (
+                              <div key={event.id} className="rounded-md bg-slate-50 p-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <strong>{event.period}</strong>
+                                  <span className={event.reversedByJournalEntryId ? 'text-rose-700' : 'text-emerald-700'}>{event.reversedByJournalEntryId ? 'Reversada' : 'Vigente'}</span>
+                                </div>
+                                <span className="block text-slate-500">{formatDate(event.date)} · {event.days} días</span>
+                                <span className="block">{formatBs(event.amountBs)} / {formatUsd(event.amountUsd)}</span>
+                                <span className="block break-all text-slate-500">Asiento: {event.journalEntryId}{event.reversedByJournalEntryId ? ' · Reversión: ' + event.reversedByJournalEntryId : ''}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      </td>
                       <td className="p-3">{asset.sourceJournalEntryId}<span className="block text-slate-500">{formatDate(asset.acquisitionDate)} · {asset.assetAccountCode}</span></td>
                       <td className="p-3 text-right">{formatBs(asset.acquisitionCostBs)}</td>
                       <td className="p-3 text-right">{formatUsd(asset.acquisitionCostUsd)}</td>
