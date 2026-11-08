@@ -13,11 +13,11 @@ Este documento desarrolla la ADR de SQLite local por empresa. No habilita todav�
 - Separación conservadora de auditoría: helper creado en `electron/tenant-audit-migration.cjs`; asigna eventos únicamente por coincidencia exacta de `details_json.companyId`. Eventos globales, malformados o con empresa desconocida permanecen en control y se reportan como no resueltos.
 - Copia relacional auxiliar: helper creado en `electron/tenant-relational-migration.cjs`; replica referencias globales de índices y copia tablas de empresa y sus hijos por relaciones explícitas, dentro de una transacción y con comprobación de claves foráneas.
 - Copia de documentos físicos: helper creado en `electron/tenant-document-migration.cjs`; valida clave, archivo regular, tamaño y SHA-256, crea el destino sin sobrescribir archivos y revierte los archivos creados por el lote si falla una validación.
-- Estos tres helpers tienen pruebas unitarias, pero aún no están conectados a un orquestador de migración ni al arranque Electron. No habilitan ni ejecutan una migración por sí solos.
+- Los helpers ya están coordinados por electron/tenant-migration-orchestrator.cjs, que prepara y valida el conjunto de bases antes de registrarlas. El orquestador todavía no está conectado al arranque Electron, al IPC ni a una pantalla de migración; por tanto, no se ha ejecutado contra datos reales de usuarios.
 - Inventario previo estricto: helper creado en `electron/tenant-migration-preflight.cjs`; clasifica tablas de control, snapshot, auditoría, referencias globales, tablas de empresa e hijas. Bloquea la migración si aparece una tabla persistente desconocida, falta una tabla crítica, el snapshot no es único/válido o existen empresas/RIF ambiguos.
 - El preflight es de solo lectura y no activa la nueva arquitectura. Su lista de clasificación debe mantenerse sincronizada con cada nueva tabla persistente que se incorpore al producto.
 - Journal durable: helper creado en `electron/tenant-migration-journal.cjs`; guarda las fases PREPARED/STAGING/VALIDATING/REGISTERING/COMMITTED y los estados de rollback/error mediante escritura atómica y sincronización a disco. Verifica el SHA-256 del backup de origen, bloquea journals duplicados y transiciones obsoletas, y no reinicia automáticamente un journal dañado.
-- El journal y el preflight aún son componentes aislados: todavía no existe un ejecutor que cree el backup SQLite consistente, copie cada empresa, valide los archivos y registre el conjunto de bases de forma coordinada.
+- El orquestador crea un backup SQLite consistente, verifica su integridad, repite el preflight sobre la copia, usa ese backup inmutable como única fuente de snapshots/tablas/auditoría/documentos y registra el conjunto solo después de validar cada archivo. Exige un bloqueo exclusivo de mantenimiento durante toda la operación. La recuperación automática tras una interrupción y la reconciliación de estados REGISTERING todavía requieren implementación y pruebas.
 - No se ha fusionado ni activado el modo multiarchivo en main.
 
 ## Archivos locales
@@ -173,3 +173,20 @@ Se incorporó `sicoven:tenant-migration-preflight` al proceso principal y al pre
 La respuesta incluye clasificación de tablas, empresas detectadas y bloqueos de preflight, además de `readOnly: true`, `migrationStarted: false` y la identificación de la base fuente. La inspección no crea el registro multiempresa, no modifica esquemas, no copia archivos, no registra bases de empresa y no cambia la base operativa de la aplicación.
 
 Este puente sirve para conocer los bloqueos reales antes de diseñar y ejecutar el orquestador reversible. No es un botón de migración ni habilita todavía la operación multiempresa.
+
+
+## Orquestador de migración y límites actuales
+
+El ejecutor electron/tenant-migration-orchestrator.cjs coordina la migración de forma conservadora:
+
+1. Exige un callback acquireMaintenanceLock que adquiera un bloqueo exclusivo y devuelva una función para liberarlo. El bloqueo se mantiene durante toda la migración; no basta con comprobar que no haya operaciones activas en un instante.
+2. Ejecuta el preflight de solo lectura sobre la base heredada y particiona el snapshot validado.
+3. Crea un respaldo consistente con la API de backup de SQLite, comprueba integridad, repite el preflight sobre el respaldo y verifica que la lista de empresas y el snapshot coincidan.
+4. Usa el respaldo verificado como fuente inmutable para las tablas relacionales, auditoría, documentos y snapshot. No mezcla lecturas de distintos momentos desde la base viva.
+5. Prepara una carpeta y un archivo SQLite por empresa, inicializa el esquema, copia auditoría atribuible por details_json.companyId, tablas auxiliares y archivos documentales, y valida identidad, snapshot, integridad y claves foráneas.
+6. Registra todas las bases mediante la transacción de registerExistingCompanies solo después de completar las validaciones.
+7. Mantiene el respaldo original y el journal. Si una fase falla, no borra automáticamente los archivos preparados; marca ROLLBACK_REQUIRED para que una recuperación explícita inspeccione el estado antes de cualquier limpieza o reintento.
+
+La prueba de integración del orquestador usa SQLite real, crea dos empresas, verifica que cada archivo contenga solo su empresa y que los eventos de auditoría se distribuyan por propietario, mientras el evento global y la base heredada permanecen en control. También se prueba el bloqueo de mantenimiento, el journal y los fallos de preparación.
+
+**Límite importante:** el orquestador es todavía un módulo aislado. No se invoca desde main.cjs, no está expuesto por IPC y no debe ejecutarse sobre una instalación de usuario hasta integrar el bloqueo real de operaciones, el arranque multiempresa, los handlers de negocio, documentos, auditoría, backups/restores y recuperación tras cierre inesperado. La base heredada sigue siendo la base operativa de la aplicación.
