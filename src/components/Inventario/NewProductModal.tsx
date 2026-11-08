@@ -27,8 +27,10 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   const [openingBcvRateInput, setOpeningBcvRateInput] = useState('');
   const [avgCostInput, setAvgCostInput] = useState('');
   const avgCostBs = parseDecimalInput(avgCostInput);
-  const [salesPriceInput, setSalesPriceInput] = useState('');
-  const salesPriceBs = parseDecimalInput(salesPriceInput);
+  const [priceCurrency, setPriceCurrency] = useState<'USD' | 'BS'>('USD');
+  const [priceInputs, setPriceInputs] = useState(['', '', '', '']);
+  const priceValues = priceInputs.map(parseDecimalInput);
+  const setPriceInput = (index: number, value: string) => setPriceInputs(previous => previous.map((item, i) => i === index ? value : item));
   const [inventoryAccountCode, setInventoryAccountCode] = useState('1.1.4.01');
   const [costOfSalesAccountCode, setCostOfSalesAccountCode] = useState('5.1.1.01');
   const [adjustmentAccountCode, setAdjustmentAccountCode] = useState('5.1.2.01');
@@ -52,14 +54,23 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       setMinStockInput(String(product.minStock)); setCurrentStockInput(String(product.currentStock));
       setOpeningDate(product.openingDate || new Date().toISOString().slice(0, 10));
       setOpeningBcvRateInput(String(product.openingBcvRate || ''));
-      setAvgCostInput(String(product.avgCostBs)); setSalesPriceInput(String(product.salesPriceBs));
+      setAvgCostInput(String(product.avgCostBs));
+      const legacyCurrency = product.priceCurrency || 'BS';
+      setPriceCurrency(legacyCurrency);
+      const legacyPrimary = Number(product.price1 ?? (legacyCurrency === 'USD' ? product.salesPriceUsd : product.salesPriceBs)) || 0;
+      setPriceInputs([
+        legacyPrimary ? String(legacyPrimary) : '',
+        product.price2 == null ? '' : String(product.price2),
+        product.price3 == null ? '' : String(product.price3),
+        product.price4 == null ? '' : String(product.price4)
+      ]);
       setInventoryAccountCode(product.inventoryAccountCode || '1.1.4.01'); setCostOfSalesAccountCode(product.costOfSalesAccountCode || '5.1.1.01');
       setAdjustmentAccountCode(product.adjustmentAccountCode || '5.1.2.01'); setOpeningBalanceAccountCode(product.openingBalanceAccountCode || '3.3.1.01');
       setCostingMethod(product.costingMethod || 'PROMEDIO_PONDERADO'); setVatTreatment(product.vatTreatment || 'GENERAL_16'); setItemType(product.itemType || 'MERCANCIA');
     } else {
       setCode(''); setName(''); setCategory('Mercancías Generales'); setUnit('Unidad');
       setMinStockInput('10'); setCurrentStockInput('0'); setOpeningDate(new Date().toISOString().slice(0, 10));
-      setOpeningBcvRateInput(''); setAvgCostInput(''); setSalesPriceInput('');
+      setOpeningBcvRateInput(''); setAvgCostInput(''); setPriceCurrency('USD'); setPriceInputs(['', '', '', '']);
       setInventoryAccountCode('1.1.4.01'); setCostOfSalesAccountCode('5.1.1.01');
       setAdjustmentAccountCode('5.1.2.01'); setOpeningBalanceAccountCode('3.3.1.01');
       setCostingMethod('PROMEDIO_PONDERADO'); setVatTreatment('GENERAL_16'); setItemType('MERCANCIA');
@@ -70,7 +81,13 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
 
   const bcvRate = parseDecimalInput(openingBcvRateInput);
   const avgCostUsd = bcvRate > 0 ? avgCostBs / bcvRate : 0;
-  const salesPriceUsd = bcvRate > 0 ? salesPriceBs / bcvRate : (product?.salesPriceUsd || 0);
+  const liveBcvRate = Number(currentCompany.bcvRate || 0);
+  const primaryPrice = priceValues[0];
+  const salesPriceBs = priceCurrency === 'USD' ? primaryPrice * liveBcvRate : primaryPrice;
+  const salesPriceUsd = priceCurrency === 'USD' ? primaryPrice : (liveBcvRate > 0 ? primaryPrice / liveBcvRate : 0);
+  const priceEquivalent = (value: number) => priceCurrency === 'USD'
+    ? (liveBcvRate > 0 ? formatBs(value * liveBcvRate) : 'Tasa BCV no disponible')
+    : (liveBcvRate > 0 ? formatUsd(value / liveBcvRate) : 'Tasa BCV no disponible');
 
   const movementAccounts = accounts.filter(account => account.isMovement);
   const inventoryAccounts = movementAccounts.filter(account => account.type === 'ACTIVO');
@@ -94,8 +111,13 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
         ...product,
         code: code.trim().toUpperCase(), name: name.trim().toUpperCase(),
         category: category.trim(), unit: unit.trim(), minStock: Number(minStock) || 0,
+        price1: primaryPrice,
+        price2: priceInputs[1].trim() ? priceValues[1] : null,
+        price3: priceInputs[2].trim() ? priceValues[2] : null,
+        price4: priceInputs[3].trim() ? priceValues[3] : null,
+        priceCurrency,
         salesPriceBs: Number(salesPriceBs) || 0,
-        salesPriceUsd: bcvRate > 0 ? salesPriceBs / bcvRate : product.salesPriceUsd,
+        salesPriceUsd: Number(salesPriceUsd) || 0,
         vatTreatment
       }, correctionReason, correctionWorkpaper);
     } else {
@@ -110,8 +132,13 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
         avgCostUsd,
         lastCostBs: Number(avgCostBs) || 0,
         lastCostUsd: avgCostUsd,
+        price1: primaryPrice,
+        price2: priceInputs[1].trim() ? priceValues[1] : null,
+        price3: priceInputs[2].trim() ? priceValues[2] : null,
+        price4: priceInputs[3].trim() ? priceValues[3] : null,
+        priceCurrency,
         salesPriceBs: Number(salesPriceBs) || 0,
-        salesPriceUsd,
+        salesPriceUsd: Number(salesPriceUsd) || 0,
         inventoryAccountCode, costOfSalesAccountCode, adjustmentAccountCode, openingBalanceAccountCode,
         costingMethod, vatTreatment, itemType, openingDate, openingBcvRate: bcvRate
       });
@@ -286,36 +313,36 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Costo Unitario (Bs.)</label>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={avgCostInput}
-                disabled={Boolean(product)}
-                placeholder="0.00"
-                onChange={e => setAvgCostInput(e.target.value)}
-                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-              />
-              <span className="text-[11px] text-slate-500 font-mono">
-                Equivalente: {formatUsd(avgCostUsd)}
-              </span>
+              <label className="block font-semibold text-slate-700 mb-1">Costo unitario de inventario (Bs.)</label>
+              <input type="text" inputMode="decimal" value={avgCostInput} disabled={Boolean(product)} placeholder="0.00" onChange={e => setAvgCostInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none" />
+              <span className="text-[11px] text-slate-500 font-mono">Equivalente histórico: {formatUsd(avgCostUsd)}</span>
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Precio de Venta Sugerido (Bs.)</label>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={salesPriceInput}
-                placeholder="0.00"
-                onChange={e => setSalesPriceInput(e.target.value)}
-                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-              />
-              <span className="text-[11px] text-slate-500 font-mono">
-                Equivalente: {formatUsd(salesPriceUsd)}
-              </span>
+              <label className="block font-semibold text-slate-700 mb-1">Moneda de referencia de los precios</label>
+              <select value={priceCurrency} onChange={e => setPriceCurrency(e.target.value as 'USD' | 'BS')} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-semibold">
+                <option value="USD">USD — Dólares (predeterminado)</option>
+                <option value="BS">Bs. — Bolívares</option>
+              </select>
+              <span className="text-[11px] text-slate-500">La misma moneda aplica a los cuatro niveles.</span>
             </div>
+          </div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div><strong className="text-slate-800">Precios comerciales</strong><p className="text-[10px] text-slate-500">Campos internos universales: Precio_1 a Precio_4.</p></div>
+              <span className="text-[10px] text-slate-600">BCV vigente: {liveBcvRate > 0 ? liveBcvRate.toLocaleString('es-VE') : 'No disponible'}</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {priceInputs.map((value, index) => (
+                <div key={index}>
+                  <label className="block font-semibold text-slate-700 mb-1">Precio_{index + 1}{index === 0 ? ' *' : ''}</label>
+                  <input type="text" inputMode="decimal" required={index === 0} value={value} placeholder={index === 0 ? '0.00' : 'Opcional'} onChange={e => setPriceInput(index, e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none" />
+                  <span className="block text-[10px] text-slate-500 font-mono mt-1">{value.trim() ? priceEquivalent(priceValues[index]) : 'Sin definir'}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-500">Los niveles vacíos permanecen sin definir. El equivalente en la otra moneda se calcula con la tasa BCV vigente y no se guarda como un precio independiente.</p>
           </div>
 
           {product && <div className="grid gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
