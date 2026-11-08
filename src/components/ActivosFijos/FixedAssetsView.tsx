@@ -46,7 +46,7 @@ export const FixedAssetsView: React.FC = () => {
         asset.sourceJournalEntryId === entry.id && asset.sourceJournalLineIndex === index
       );
       if (!account || account.type !== 'ACTIVO' || !account.isMovement ||
-          !account.code.startsWith('1.2.') || /DEPRECIACI[ÓO]N ACUMULADA/i.test(account.name) ||
+          !account.code.startsWith('1.2.') || /TERRENO|DEPRECIACI[ÓO]N ACUMULADA/i.test(account.name) ||
           Number(line.debitBs) <= 0 || Number(line.debitUsd) <= 0 ||
           Number(line.creditBs || 0) > 0 || Number(line.creditUsd || 0) > 0 || alreadyRegistered) return [];
       return [{ key: entry.id + '|' + index, entry, line, index, account }];
