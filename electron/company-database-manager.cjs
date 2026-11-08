@@ -29,7 +29,7 @@ function createCompanyDatabaseManager({
   Database,
   assertSqliteIntegrity,
   initializeCompanyDatabase,
-  migrateCompanyDatabase,
+  migrateCompanyDatabase = null,
   schemaVersion = DEFAULT_SCHEMA_VERSION
 }) {
   if (!controlDb || typeof controlDb.prepare !== 'function' || typeof controlDb.exec !== 'function') {
@@ -38,8 +38,8 @@ function createCompanyDatabaseManager({
   if (typeof Database !== 'function') throw new TypeError('Se requiere el constructor de better-sqlite3.');
   if (typeof assertSqliteIntegrity !== 'function') throw new TypeError('Se requiere el verificador de integridad SQLite.');
   if (!Number.isInteger(schemaVersion) || schemaVersion < 1) throw new TypeError('La versión de esquema debe ser un entero positivo.');
-  if (typeof initializeCompanyDatabase !== 'function' || typeof migrateCompanyDatabase !== 'function') {
-    throw new TypeError('Los inicializadores de esquema de empresa deben ser funciones.');
+  if (typeof initializeCompanyDatabase !== 'function' || (migrateCompanyDatabase !== null && typeof migrateCompanyDatabase !== 'function')) {
+    throw new TypeError('El inicializador de esquema y el migrador opcional de empresa deben ser funciones válidas.');
   }
 
   const root = path.resolve(String(userDataDir || ''));
@@ -172,6 +172,9 @@ function createCompanyDatabaseManager({
         }
       }
       if (currentVersion < schemaVersion) {
+        if (typeof migrateCompanyDatabase !== 'function') {
+          throw new Error('No existe una migración SQLite registrada para actualizar esta empresa a la versión requerida.');
+        }
         const fromVersion = currentVersion;
         const migrate = tenantDb.transaction(() => {
           migrateCompanyDatabase(tenantDb, { companyId, fromVersion, toVersion: schemaVersion });
