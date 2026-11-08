@@ -32,6 +32,9 @@ export function validateJournalEntryAccounts(
     if (!account.isMovement) {
       throw new Error('La cuenta ' + code + ' es agrupadora y no admite movimientos contables.');
     }
+    if (account.isActive === false) {
+      throw new Error('La cuenta ' + code + ' está inactiva y no admite nuevos movimientos contables.');
+    }
   }
 }
 

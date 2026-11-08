@@ -14,6 +14,8 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
   const [saving, setSaving] = useState(false);
 
   const [bankName, setBankName] = useState('');
+  const [accountHolderName, setAccountHolderName] = useState('');
+  const [accountHolderRif, setAccountHolderRif] = useState('');
   const [accountType, setAccountType] = useState<'CORRIENTE' | 'AHORRO'>('CORRIENTE');
   const [checkbookNumber, setCheckbookNumber] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
@@ -54,6 +56,8 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
     try {
       addBankAccount({
         bankName: bankName.trim(),
+        accountHolderName: accountHolderName.trim() || undefined,
+        accountHolderRif: accountHolderRif.trim().toUpperCase() || undefined,
         accountNumber: normalizedAccountNumber,
         parentAccountCode,
         currency,
@@ -66,6 +70,8 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
       await waitForPersistence();
       // Dejar el formulario limpio para la próxima alta, sin datos residuales.
       setBankName('');
+      setAccountHolderName('');
+      setAccountHolderRif('');
       setAccountType('CORRIENTE');
       setCheckbookNumber('');
       setAccountNumber('');
@@ -117,6 +123,16 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
               onChange={e => setBankName(e.target.value)}
               className="pointer-events-auto select-text w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
             />
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Titular de la cuenta</label>
+                <input type="text" autoComplete="name" value={accountHolderName} onChange={e => setAccountHolderName(e.target.value)} placeholder="Nombre o razón social" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">RIF del titular</label>
+                <input type="text" value={accountHolderRif} onChange={e => setAccountHolderRif(e.target.value.toUpperCase())} placeholder="J-12345678-9" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
