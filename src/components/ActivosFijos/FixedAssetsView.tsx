@@ -186,6 +186,7 @@ export const FixedAssetsView: React.FC = () => {
         <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Activos registrados</p><p className="mt-1 text-2xl font-bold text-slate-900">{assetSummary.count}</p></div>
         <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Costo histórico · Bs.</p><p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.costBs)}</p></div>
         <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Costo histórico · USD</p><p className="mt-1 text-lg font-bold text-slate-900">{formatUsd(assetSummary.costUsd)}</p></div>
+        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Depreciación acumulada</p><p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.depreciationBs)} <span className="text-sm font-medium text-slate-500">/ {formatUsd(assetSummary.depreciationUsd)}</span></p></div>
         <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Valor neto contable</p><p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.netBs)} <span className="text-sm font-medium text-slate-500">/ {formatUsd(assetSummary.netUsd)}</span></p></div>
       </section>
       <section className="rounded-xl border bg-white p-4 shadow-sm">
