@@ -1009,6 +1009,10 @@ export type ImportSourceSystem = {
  * Identifica el software de origen solo cuando el propio contenido lo declara.
  * La extensión del archivo nunca se usa para inferir qué sistema lo generó.
  */
+
+/** POSVEN usa un contrato versionado y adaptadores propios; nunca debe pasar por los heurísticos genéricos. */
+export const shouldUseGenericUniversalAdapters = (sourceSystemId: string): boolean => sourceSystemId !== 'posven-pro';
+
 export const detectImportSourceSystem = (value: unknown): ImportSourceSystem => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return { id: 'unknown', label: 'Sistema de origen no identificado', confidence: 'unknown' };
