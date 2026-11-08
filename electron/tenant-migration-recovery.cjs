@@ -84,8 +84,12 @@ function inspectTenantMigrationRecovery(options) {
       try {
         assertSqliteIntegrity(db);
         if (db.pragma('foreign_key_check').length) throw new Error('La base contiene claves foráneas inválidas.');
-        const identity = db.prepare("SELECT meta_value FROM sicoven_database_meta WHERE meta_key='company_id'").get();
-        if (String(identity?.meta_value || '') !== companyId) throw new Error('La identidad interna no coincide con la empresa del journal.');
+        const metadata = new Map(db.prepare('SELECT meta_key,meta_value FROM sicoven_database_meta').all()
+          .map(row => [String(row.meta_key), String(row.meta_value)]));
+        if (metadata.get('company_id') !== companyId) throw new Error('La identidad interna no coincide con la empresa del journal.');
+        const schemaVersion = Number(metadata.get('schema_version'));
+        if (!Number.isSafeInteger(schemaVersion) || schemaVersion < 1) throw new Error('La versión de esquema interna está ausente o no es válida.');
+        item.schemaVersion = schemaVersion;
         item.databaseValid = true;
 
         const snapshot = readSnapshot(db, companyId);
@@ -124,6 +128,7 @@ function inspectTenantMigrationRecovery(options) {
         String(registered.status) === 'ACTIVE' &&
         String(registered.name) === String(item.company.name) &&
         String(registered.rif).toUpperCase() === String(item.company.rif).toUpperCase() &&
+        Number(registered.schemaVersion) === Number(item.schemaVersion) &&
         path.normalize(String(registered.relativePath)) === path.normalize(path.join('companies', companyId, 'accounting.sqlite')));
       if (!item.registryMatches) item.errors.push('El registro local no coincide con la identidad o ruta de la base preparada.');
     }
