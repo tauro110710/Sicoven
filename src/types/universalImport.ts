@@ -5,6 +5,15 @@ import type { SupplierAdvanceSettlementDraft } from './supplierAdvanceSettlement
 export type UniversalSupplierDirectAdvanceDraft = { sourceRowId: string; draft: SupplierDirectAdvanceDraft };
 export type UniversalSupplierAdvanceSettlementDraft = { sourceRowId: string; draft: SupplierAdvanceSettlementDraft };
 
+export const isUniversalProductCollectionPath = (path: string): boolean =>
+  /(^|\\.)(productos|products|inventory|inventario)$/i.test(path.trim());
+
+export const getUniversalJsonValueAtPath = (root: unknown, path: string): unknown =>
+  path.split('.').filter(Boolean).reduce<unknown>((current, key) => {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined;
+    return (current as Record<string, unknown>)[key];
+  }, root);
+
 const parseUniversalAdvanceNumber = (value: unknown): number => {
   let raw = String(value ?? '').trim().replace(/[^0-9,.-]/g, '');
   if (raw.includes(',') && raw.includes('.')) raw = raw.replace(/\./g, '').replace(',', '.');
