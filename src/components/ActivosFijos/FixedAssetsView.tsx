@@ -78,9 +78,9 @@ export const FixedAssetsView: React.FC = () => {
     if (selectedSource) {
       setAcquisitionDate(selectedSource.entry.date);
       setServiceDate(selectedSource.entry.date);
-      if (!assetCode.trim()) setAssetCode(suggestedAssetCode);
+      setAssetCode(current => current.trim() ? current : suggestedAssetCode);
     }
-  }, [selectedSource?.key, suggestedAssetCode, assetCode]);
+  }, [selectedSource?.key, suggestedAssetCode]);
 
   useEffect(() => {
     if (!selectedSource) return;
