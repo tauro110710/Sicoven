@@ -6,7 +6,12 @@ import { getNextFixedAssetDepreciationPeriod, type FixedAssetRegistrationDraft }
 const parseAmount = (value: string): number => {
   const raw = value.trim();
   if (!raw) return 0;
-  return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw);
+  const comma = raw.lastIndexOf(',');
+  const dot = raw.lastIndexOf('.');
+  if (comma >= 0 && dot >= 0) {
+    return Number(comma > dot ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/,/g, ''));
+  }
+  return Number(comma >= 0 ? raw.replace(',', '.') : raw);
 };
 
 export const FixedAssetsView: React.FC = () => {
