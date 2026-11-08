@@ -4,8 +4,8 @@ export type BankCurrency = 'BS' | 'USD';
 export type BankAccountKind = 'CORRIENTE' | 'AHORRO';
 
 export const BANK_PARENT_ACCOUNT_CODES: Record<BankCurrency, string> = {
-  BS: '1.1.1.06',
-  USD: '1.1.1.07'
+  BS: '1.1.1.03',
+  USD: '1.1.1.04'
 };
 
 export function buildBankAuxiliaryAccounts(
