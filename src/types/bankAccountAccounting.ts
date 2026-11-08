@@ -28,7 +28,7 @@ export function buildBankAuxiliaryAccounts(
   }
 
   const children = currentAccounts.filter(account =>
-    account.parentCode === selectedParentCode && /^\\d+$/.test(account.code.split('.').at(-1) || '')
+    account.parentCode === selectedParentCode && /^\d+$/.test(account.code.split('.').at(-1) || '')
   );
   const nextAux = children.reduce(
     (maximum, account) => Math.max(maximum, Number(account.code.split('.').at(-1) || 0)),
