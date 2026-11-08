@@ -4073,6 +4073,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const newProd: InventoryProduct = {
       ...prodData,
       code,
+      priceCurrency: prodData.priceCurrency || 'BS',
+      price1: Number(prodData.price1 ?? (prodData.priceCurrency === 'USD' ? prodData.salesPriceUsd : prodData.salesPriceBs) ?? 0),
+      price2: prodData.price2 ?? null,
+      price3: prodData.price3 ?? null,
+      price4: prodData.price4 ?? null,
       currentStock: initialQuantity,
       avgCostBs: initialCostBs,
       avgCostUsd: rate > 0 ? initialCostBs / rate : 0,
@@ -4179,7 +4184,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       const product: InventoryProduct = {
         ...row, id: 'prod-import-' + Date.now() + '-' + prepared.length + '-' + Math.floor(Math.random() * 100000),
-        companyId: targetCompanyId, code, name, currentStock: quantity, avgCostBs: unitCostBs,
+        companyId: targetCompanyId, code, name,
+        priceCurrency: row.priceCurrency || 'BS',
+        price1: Number(row.price1 ?? (row.priceCurrency === 'USD' ? row.salesPriceUsd : row.salesPriceBs) ?? 0),
+        price2: row.price2 ?? null, price3: row.price3 ?? null, price4: row.price4 ?? null,
+        currentStock: quantity, avgCostBs: unitCostBs,
         avgCostUsd: rate > 0 ? unitCostBs / rate : 0, lastCostBs, lastCostUsd,
         inventoryAccountCode: row.inventoryAccountCode || getDefaultInventoryAccountCode(row.itemType),
         costOfSalesAccountCode: row.costOfSalesAccountCode || '5.1.1.01',
