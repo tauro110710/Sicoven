@@ -89,6 +89,16 @@ test('logout clears the active tenant and invalidates the session binding', asyn
   assert.throws(() => context.getSelectedCompanyId(tokenA), /no tiene una empresa/i);
 });
 
+test('clears the active database as well as every session binding on license shutdown', async () => {
+  const { context, calls, operationContext } = fixture();
+  await context.selectCompany(tokenA, 'company-a');
+  const result = await context.clearAllSessions();
+  assert.deepEqual(result, { ok: true });
+  assert.equal(operationContext.getActiveCompanyId(), null);
+  assert.equal(calls.at(-1)[0], 'clear');
+  assert.throws(() => context.getSelectedCompanyId(tokenA), /no tiene una empresa/i);
+});
+
 test('revalidates session and permissions after a delayed tenant switch', async () => {
   let valid = true;
   let access = true;
