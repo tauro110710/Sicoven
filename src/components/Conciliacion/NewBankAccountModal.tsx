@@ -9,7 +9,7 @@ interface NewBankAccountModalProps {
 }
 
 export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen, onClose }) => {
-  const { addBankAccount, waitForPersistence } = useAccounting();
+  const { addBankAccount, waitForPersistence, accounts } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
@@ -18,12 +18,15 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
   const [checkbookNumber, setCheckbookNumber] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [currency, setCurrency] = useState<'BS' | 'USD'>('BS');
+  const [parentAccountCode, setParentAccountCode] = useState('1.1.1.06');
   const [initialBalanceBs, setInitialBalanceBs] = useState<string>('');
   const [bcvRateInput, setBcvRateInput] = useState<string>('');
 
   if (!isOpen) return null;
 
   const normalizedAccountNumber = accountNumber.replace(/\D/g, '');
+  const expectedParentCode = currency === 'USD' ? '1.1.1.07' : '1.1.1.06';
+  const selectedParentAccount = accounts.find(account => account.code === parentAccountCode && account.code === expectedParentCode && account.type === 'ACTIVO' && account.level === 4 && account.parentCode === '1.1.1' && !account.isMovement);
   const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
   const parsedOpeningBalance = parseAmount(initialBalanceBs) || 0;
   const bcvRate = parseAmount(bcvRateInput) || 0;
@@ -32,6 +35,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!bankName.trim()) return;
+    if (!selectedParentAccount) { window.alert('Seleccione la cuenta padre bancaria correspondiente a la moneda. Si no aparece, actualice o restaure el Plan de Cuentas.'); return; }
     if (normalizedAccountNumber.length !== 20) {
       window.alert('El número de cuenta debe contener exactamente 20 dígitos.');
       return;
@@ -51,6 +55,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
       addBankAccount({
         bankName: bankName.trim(),
         accountNumber: normalizedAccountNumber,
+        parentAccountCode,
         currency,
         bcvRate,
         initialBalanceBs: Math.round(openingBalanceBs * 100) / 100,
@@ -65,6 +70,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
       setCheckbookNumber('');
       setAccountNumber('');
       setCurrency('BS');
+      setParentAccountCode('1.1.1.06');
       setInitialBalanceBs('');
       setBcvRateInput('');
       onClose();
@@ -147,11 +153,15 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
               <label className="block font-semibold text-slate-700 mb-1">Moneda</label>
               <select
                 value={currency}
-                onChange={e => setCurrency(e.target.value as 'BS' | 'USD')}
+                onChange={e => {
+                  const nextCurrency = e.target.value as 'BS' | 'USD';
+                  setCurrency(nextCurrency);
+                  setParentAccountCode(nextCurrency === 'USD' ? '1.1.1.07' : '1.1.1.06');
+                }}
                 className="pointer-events-auto select-text w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               >
-                <option value="BS">Bolívares (Bs.)</option>
-                <option value="USD">Dólares ($ USD)</option>
+                <option value="BS">Bolívares (VES)</option>
+                <option value="USD">Dólares (USD)</option>
               </select>
             </div>
             <div>
@@ -165,6 +175,21 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
                 className="pointer-events-auto select-text w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               />
             </div>
+          </div>
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Cuenta padre contable *</label>
+            <select
+              required
+              value={parentAccountCode}
+              onChange={e => setParentAccountCode(e.target.value)}
+              className="pointer-events-auto select-text w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+            >
+              {currency === 'BS'
+                ? <option value="1.1.1.06">1.1.1.06 · Bancos Nacionales en Moneda Nacional (VES)</option>
+                : <option value="1.1.1.07">1.1.1.07 · Bancos en Moneda Extranjera (USD/EUR)</option>}
+            </select>
+            <p className="mt-1 text-[10px] text-slate-500">El auxiliar de esta cuenta bancaria se generará debajo de la cuenta padre seleccionada.</p>
+            {!selectedParentAccount && <p className="mt-1 text-[10px] text-rose-600">La cuenta padre no existe o no tiene la clasificación requerida en el Plan de Cuentas.</p>}
           </div>
 
           {parsedOpeningBalance > 0 && <div>
