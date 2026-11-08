@@ -267,7 +267,7 @@ export const InventarioView: React.FC = () => {
                   <th className="py-2.5 px-3 w-20 text-center">Unidad</th>
                   <th className="py-2.5 px-4 text-right w-24">Existencia</th>
                   <th className="py-2.5 px-4 text-right w-32">Costo Promedio (Bs. / USD)</th>
-                  <th className="py-2.5 px-4 text-right w-32">Precio Venta (Bs. / USD)</th>
+                  <th className="py-2.5 px-4 text-right w-32">{currentCompany.inventoryPriceLabels?.price1 || 'Precio 1'} (Bs. / USD)</th>
                   <th className="py-2.5 px-4 text-right w-36">Valoración Total (Bs. / USD)</th>
                   <th className="py-2.5 px-3 text-center w-28">Estado Stock</th>
                   <th className="py-2.5 px-3 text-center w-24">Acciones</th>
@@ -314,7 +314,7 @@ export const InventarioView: React.FC = () => {
                           <span className="block text-[10px] text-slate-500">{currentCompany.inventoryPriceLabels?.price1 || 'Precio 1'}</span>
                           {prod.priceCurrency === 'USD' ? formatUsd(Number(prod.price1 ?? prod.salesPriceUsd)) : formatBs(Number(prod.price1 ?? prod.salesPriceBs))}
                           {true && (
-                            <span className="block text-[10px] text-emerald-600/70">{prod.priceCurrency === 'USD' ? formatBs(Number(prod.price1 ?? prod.salesPriceUsd) * Number(currentCompany.bcvRate || 0)) : (Number(currentCompany.bcvRate || 0) > 0 ? formatUsd(Number(prod.price1 ?? prod.salesPriceBs) / Number(currentCompany.bcvRate)) : 'USD —')}</span>
+                            <span className="block text-[10px] text-emerald-600/70">{prod.priceCurrency === 'USD' ? (Number(currentCompany.bcvRate || 0) > 0 ? formatBs(Number(prod.price1 ?? prod.salesPriceUsd) * Number(currentCompany.bcvRate)) : 'Bs. —') : (Number(currentCompany.bcvRate || 0) > 0 ? formatUsd(Number(prod.price1 ?? prod.salesPriceBs) / Number(currentCompany.bcvRate)) : 'USD —')}</span>
                           )}
                         </td>
                         <td className="py-2.5 px-4 text-right font-mono font-black text-slate-900 bg-slate-50/50">
