@@ -24,8 +24,21 @@ function syncPartyMasterRows(db, state) {
     if (normalizedFiscalId) { const key = companyId + '|' + item.partyType + '|' + normalizedFiscalId; if (fiscalKeys.has(key)) throw new Error('Hay identificadores fiscales duplicados en los maestros de la empresa.'); fiscalKeys.add(key); }
     return { id, companyId, partyType: item.partyType, name, fiscalId: fiscalId || null, fiscalIdType: item.fiscalIdType || null, normalizedFiscalId: normalizedFiscalId || null, address: String(item.address || '').trim() || null, phone: String(item.phone || '').trim() || null, email: String(item.email || '').trim() || null, active: item.active === false ? 0 : 1 };
   });
-  db.prepare('DELETE FROM party_masters').run();
-  const insert = db.prepare('INSERT INTO party_masters (id, company_id, party_type, name, fiscal_id, fiscal_id_type, normalized_fiscal_id, address, phone, email, active) VALUES(?,?,?,?,?,?,?,?,?,?,?)');
+  if (prepared.length) {
+    const placeholders = prepared.map(() => '?').join(',');
+    db.prepare('DELETE FROM party_masters WHERE id NOT IN (' + placeholders + ')').run(...prepared.map(row => row.id));
+  } else {
+    db.prepare('DELETE FROM party_masters').run();
+  }
+  const insert = db.prepare(`INSERT INTO party_masters
+    (id, company_id, party_type, name, fiscal_id, fiscal_id_type, normalized_fiscal_id, address, phone, email, active)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(id) DO UPDATE SET
+      company_id=excluded.company_id, party_type=excluded.party_type, name=excluded.name,
+      fiscal_id=excluded.fiscal_id, fiscal_id_type=excluded.fiscal_id_type,
+      normalized_fiscal_id=excluded.normalized_fiscal_id, address=excluded.address,
+      phone=excluded.phone, email=excluded.email, active=excluded.active,
+      updated_at=datetime('now')`);
   for (const row of prepared) insert.run(row.id, row.companyId, row.partyType, row.name, row.fiscalId, row.fiscalIdType, row.normalizedFiscalId, row.address, row.phone, row.email, row.active);
 }
 function persistAccountingSnapshot(db, state, actor = null) {
