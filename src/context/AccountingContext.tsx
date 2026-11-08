@@ -1025,6 +1025,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // asiento, auxiliares, Kardex, retenciones y conciliaciones.
   const correctionWorkflowInFlightRef = useRef(false);
   const productionInFlightRef = useRef(false);
+  const fixedAssetOperationLocksRef = useRef(new Set<string>());
   const periodClosureInFlightRef = useRef(false);
   const periodReopeningInFlightRef = useRef(false);
   const yearOpeningInFlightRef = useRef(false);
@@ -1440,6 +1441,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const registerFixedAsset = async (draft: FixedAssetRegistrationDraft): Promise<FixedAsset> => {
     assertSQLitePersistenceReady('Registrar activo fijo');
+    const operationLock = currentCompany.id + '|REGISTER|' + String(draft.sourceJournalEntryId) + '|' + String(draft.sourceJournalLineIndex);
+    if (fixedAssetOperationLocksRef.current.has(operationLock)) throw new Error('La línea de adquisición ya está siendo registrada como activo fijo.');
+    fixedAssetOperationLocksRef.current.add(operationLock);
+    try {
     const assetCode = String(draft.assetCode || '').trim().toUpperCase();
     const description = String(draft.description || '').trim();
     const category = String(draft.category || '').trim();
@@ -1496,10 +1501,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setFixedAssets(previous => [...previous, asset]);
     await waitForPersistence();
     return asset;
+    } finally {
+      fixedAssetOperationLocksRef.current.delete(operationLock);
+    }
   };
 
   const recordFixedAssetDepreciation = async (assetId: string): Promise<FixedAssetDepreciationEvent> => {
     assertSQLitePersistenceReady('Registrar depreciación de activo fijo');
+    const operationLock = currentCompany.id + '|DEPRECIATION|' + assetId;
+    if (fixedAssetOperationLocksRef.current.has(operationLock)) throw new Error('La depreciación de este activo ya está en proceso.');
+    fixedAssetOperationLocksRef.current.add(operationLock);
+    try {
     const asset = fixedAssets.find(item => item.id === assetId && item.companyId === currentCompany.id);
     if (!asset) throw new Error('No se encontró el activo fijo en la empresa activa.');
     const period = getNextFixedAssetDepreciationPeriod(asset);
@@ -1540,6 +1552,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       : item));
     await waitForPersistence();
     return event;
+    } finally {
+      fixedAssetOperationLocksRef.current.delete(operationLock);
+    }
   };
 
   const getCreditPrincipal = (document: SaleRecord | PurchaseRecord, kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT') => {
