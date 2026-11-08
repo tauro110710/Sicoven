@@ -4233,6 +4233,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
 
   const importInventoryMovements = (rows: InventoryMovementImportDraft[], targetCompanyId: string = currentCompany.id, options: { accountingMode?: 'post' | 'kardex-only' } = {}): number => {
+    assertSQLitePersistenceReady('Importar movimientos de inventario');
     const targetCompany = companies.find(company => company.id === targetCompanyId);
     if (!targetCompany) throw new Error('La empresa destino de los movimientos no existe en SICOVEN.');
     if (!Array.isArray(rows) || rows.length === 0) throw new Error('El archivo no contiene movimientos para importar.');
