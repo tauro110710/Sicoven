@@ -49,11 +49,18 @@ const rowsFromFile = async (file: File): Promise<SourceRow[]> => {
     const sheet = workbook.worksheets[0];
     if (!sheet) throw new Error('El Excel no contiene hojas.');
     const matrix: unknown[][] = [];
-    sheet.eachRow({ includeEmpty: false }, row => matrix.push(row.values.slice(1).map(cell => {
-      if (cell && typeof cell === 'object' && 'text' in cell) return (cell as { text: string }).text;
-      if (cell && typeof cell === 'object' && 'result' in cell) return (cell as { result: unknown }).result;
-      return cell;
-    })));
+    sheet.eachRow({ includeEmpty: false }, row => {
+      const values: unknown[] = [];
+      row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
+        const value = cell.value;
+        values[columnNumber - 1] = value && typeof value === 'object' && 'text' in value
+          ? (value as { text: string }).text
+          : value && typeof value === 'object' && 'result' in value
+            ? (value as { result: unknown }).result
+            : value;
+      });
+      matrix.push(values);
+    });
     if (matrix.length < 2) throw new Error('La primera hoja no contiene filas de movimientos.');
     const headers = validateUniqueMigrationHeaders(matrix[0], 'hoja de movimientos');
     return matrix.slice(1).filter(row => row.some(cell => String(cell ?? '').trim())).map(row => {
