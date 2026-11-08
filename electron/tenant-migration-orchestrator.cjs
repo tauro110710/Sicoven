@@ -52,7 +52,7 @@ function ensureDirectoryAbsent(directory, label) {
 
 function createTenantMigrationOrchestrator(options) {
   const {
-    sourceDb, userDataDir, manager,
+    sourceDb, userDataDir, manager, assertSourceQuiescent,
     getDocumentsRoot = () => path.join(userDataDir, 'supporting-documents'),
     Database = DatabaseDefault,
     assertSqliteIntegrity = assertSqliteIntegrityDefault,
@@ -83,6 +83,9 @@ function createTenantMigrationOrchestrator(options) {
   const companiesRoot = path.join(root, 'companies');
 
   async function execute() {
+    if (assertSourceQuiescent() !== true) {
+      throw new Error('La base heredada no está en mantenimiento exclusivo; se bloqueó la migración para evitar una copia inconsistente.');
+    }
     const preflight = inspectLegacy(sourceDb);
     if (!preflight.ok) throw new Error('La inspección previa bloqueó la migración: ' + preflight.errors.join(' '));
 
@@ -116,9 +119,18 @@ function createTenantMigrationOrchestrator(options) {
     const backupDb = new Database(backupPath, { readonly: true, fileMustExist: true });
     try {
       assertSqliteIntegrity(backupDb);
+      const backupPreflight = inspectLegacy(backupDb);
+      if (!backupPreflight.ok) throw new Error('El respaldo no superó el mismo inventario previo: ' + backupPreflight.errors.join(' '));
       const backupSnapshot = readLegacyAccountingSnapshot(backupDb);
       if (!isDeepStrictEqual(backupSnapshot, legacySnapshot)) throw new Error('El snapshot del respaldo no coincide con el origen; se canceló la migración.');
-    } finally { backupDb.close(); }
+      if (backupPreflight.companyIds.length !== companyIds.length ||
+          backupPreflight.companyIds.some((companyId, index) => String(companyId) !== String(companyIds[index]))) {
+        throw new Error('El inventario de empresas del respaldo no coincide con el inventario previo del origen.');
+      }
+    } catch (error) {
+      if (backupDb.open) backupDb.close();
+      throw error;
+    }
     const backupHash = sha256File(backupPath);
     let journalIdFirstCall = true;
     const journal = createJournal({
@@ -136,7 +148,7 @@ function createTenantMigrationOrchestrator(options) {
     const companyResults = [];
 
     try {
-      const auditRows = sourceDb.prepare('SELECT id,event_type,details_json,created_at FROM audit_events ORDER BY id').all();
+      const auditRows = backupDb.prepare('SELECT id,event_type,details_json,created_at FROM audit_events ORDER BY id').all();
       auditPartition = splitAudit(auditRows, companyIds);
       const documentRoot = path.resolve(getDocumentsRoot());
       fs.mkdirSync(companiesRoot, { recursive: true, mode: 0o700 });
@@ -166,11 +178,11 @@ function createTenantMigrationOrchestrator(options) {
 
           // Preserve original audit IDs first so migration audit rows append after them.
           auditCount = copyAudit(tenantDb, auditPartition.byCompany.get(companyId) || []);
-          relationalResult = copyRelational(sourceDb, tenantDb, companyId);
+          relationalResult = copyRelational(backupDb, tenantDb, companyId);
           const saved = persistSnapshot(tenantDb, snapshot, null);
           if (saved?.ok !== true) throw new Error('SQLite no confirmó el snapshot de ' + companyId + '.');
 
-          const documents = sourceDb.prepare(
+          const documents = backupDb.prepare(
             'SELECT storage_key,byte_size,sha256 FROM supporting_documents WHERE company_id=? ORDER BY id'
           ).all(companyId);
           if (documents.length) {
@@ -245,6 +257,8 @@ function createTenantMigrationOrchestrator(options) {
         String(error?.message || error),
         { cause: error }
       );
+    } finally {
+      if (backupDb.open) backupDb.close();
     }
   }
 
