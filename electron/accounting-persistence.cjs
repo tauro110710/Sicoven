@@ -24,11 +24,11 @@ function syncPartyMasterRows(db, state) {
     if (normalizedFiscalId) { const key = companyId + '|' + item.partyType + '|' + normalizedFiscalId; if (fiscalKeys.has(key)) throw new Error('Hay identificadores fiscales duplicados en los maestros de la empresa.'); fiscalKeys.add(key); }
     return { id, companyId, partyType: item.partyType, name, fiscalId: fiscalId || null, fiscalIdType: item.fiscalIdType || null, normalizedFiscalId: normalizedFiscalId || null, address: String(item.address || '').trim() || null, phone: String(item.phone || '').trim() || null, email: String(item.email || '').trim() || null, active: item.active === false ? 0 : 1 };
   });
-  if (prepared.length) {
-    const placeholders = prepared.map(() => '?').join(',');
-    db.prepare('DELETE FROM party_masters WHERE id NOT IN (' + placeholders + ')').run(...prepared.map(row => row.id));
-  } else {
-    db.prepare('DELETE FROM party_masters').run();
+  const nextIds = new Set(prepared.map(row => row.id));
+  const existingIds = db.prepare('SELECT id FROM party_masters').all();
+  const remove = db.prepare('DELETE FROM party_masters WHERE id=?');
+  for (const existing of existingIds) {
+    if (!nextIds.has(String(existing.id))) remove.run(String(existing.id));
   }
   const insert = db.prepare(`INSERT INTO party_masters
     (id, company_id, party_type, name, fiscal_id, fiscal_id_type, normalized_fiscal_id, address, phone, email, active)
