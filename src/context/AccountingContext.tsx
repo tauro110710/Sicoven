@@ -166,7 +166,7 @@ interface AccountingContextType {
   getCompanyInventoryProducts: (companyId: string) => InventoryProduct[];
   getCompanyInventoryMovements: (companyId: string) => InventoryMovement[];
   importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[], targetCompanyId?: string) => Promise<number>;
-  importInventoryMovements: (movements: InventoryMovementImportDraft[], targetCompanyId?: string) => number;
+  importInventoryMovements: (movements: InventoryMovementImportDraft[], targetCompanyId?: string, options?: { accountingMode?: 'post' | 'kardex-only' }) => number;
   executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => Promise<InventoryMovement[]>;
   updateProduct: (product: InventoryProduct, reason: string, workpaperNote: string) => Promise<void>;
   movements: InventoryMovement[];
@@ -4232,7 +4232,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
 
-  const importInventoryMovements = (rows: InventoryMovementImportDraft[], targetCompanyId: string = currentCompany.id): number => {
+  const importInventoryMovements = (rows: InventoryMovementImportDraft[], targetCompanyId: string = currentCompany.id, options: { accountingMode?: 'post' | 'kardex-only' } = {}): number => {
     const targetCompany = companies.find(company => company.id === targetCompanyId);
     if (!targetCompany) throw new Error('La empresa destino de los movimientos no existe en SICOVEN.');
     if (!Array.isArray(rows) || rows.length === 0) throw new Error('El archivo no contiene movimientos para importar.');
@@ -4327,7 +4327,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const isCustomerReturn = row.type === 'ENTRADA' && row.concept === 'DEVOLUCION_CLIENTE';
       const isSupplierReturn = row.type === 'SALIDA' && row.concept === 'DEVOLUCION_COMPRA';
       const positiveAdjustment = row.type === 'AJUSTE' && targetStock > product.currentStock;
-      if (isSale || isLoss || isCustomerReturn || isSupplierReturn || isAdjustment) {
+      if (options.accountingMode !== 'kardex-only' && (isSale || isLoss || isCustomerReturn || isSupplierReturn || isAdjustment)) {
         if (!inventoryAccount) throw new Error('Cuenta de inventario inválida para ' + product.code + '.');
         const payableAccount = accounts.find(a => a.code === '2.1.1.01' && a.isMovement);
         if ((isSale || isCustomerReturn) && !costAccount) throw new Error('Cuenta de costo de ventas inválida para ' + product.code + '.');
