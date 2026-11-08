@@ -1516,8 +1516,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const registerFixedAsset = async (draft: FixedAssetRegistrationDraft): Promise<FixedAsset> => {
     assertSQLitePersistenceReady('Registrar activo fijo');
-    const operationLock = currentCompany.id + '|REGISTER|' + String(draft.sourceJournalEntryId) + '|' + String(draft.sourceJournalLineIndex);
+    const companyId = currentCompany.id;
+    const closeLock = companyId + '|FIXED_ASSET_MONTH_CLOSE';
+    const registrationLock = companyId + '|FIXED_ASSET_REGISTRATION';
+    const operationLock = companyId + '|REGISTER|' + String(draft.sourceJournalEntryId) + '|' + String(draft.sourceJournalLineIndex);
+    if (fixedAssetOperationLocksRef.current.has(closeLock)) throw new Error('El cierre mensual de activos fijos está en curso; espere antes de registrar otro activo.');
+    if (fixedAssetOperationLocksRef.current.has(registrationLock)) throw new Error('Ya hay un registro de activo fijo en curso para esta empresa.');
     if (fixedAssetOperationLocksRef.current.has(operationLock)) throw new Error('La línea de adquisición ya está siendo registrada como activo fijo.');
+    fixedAssetOperationLocksRef.current.add(registrationLock);
     fixedAssetOperationLocksRef.current.add(operationLock);
     try {
     const assetCode = String(draft.assetCode || '').trim().toUpperCase();
@@ -1584,12 +1590,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return asset;
     } finally {
       fixedAssetOperationLocksRef.current.delete(operationLock);
+      fixedAssetOperationLocksRef.current.delete(registrationLock);
     }
   };
 
   const recordFixedAssetDepreciation = async (assetId: string): Promise<FixedAssetDepreciationEvent> => {
     assertSQLitePersistenceReady('Registrar depreciación de activo fijo');
+    const closeLock = currentCompany.id + '|FIXED_ASSET_MONTH_CLOSE';
     const operationLock = currentCompany.id + '|DEPRECIATION|' + assetId;
+    if (fixedAssetOperationLocksRef.current.has(closeLock)) throw new Error('El cierre mensual de activos fijos está en curso; espere antes de registrar depreciación manual.');
     if (fixedAssetOperationLocksRef.current.has(operationLock)) throw new Error('La depreciación de este activo ya está en proceso.');
     fixedAssetOperationLocksRef.current.add(operationLock);
     try {
@@ -1643,13 +1652,21 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     assertSQLitePersistenceReady('Preparar depreciación del cierre mensual');
     if (!isValidIsoDate(throughDate)) throw new Error('La fecha límite de depreciación no es válida.');
     const companyId = currentCompany.id;
-    const operationLock = companyId + '|FIXED_ASSET_MONTH_CLOSE|' + throughDate;
+    const operationLock = companyId + '|FIXED_ASSET_MONTH_CLOSE';
     if (fixedAssetOperationLocksRef.current.has(operationLock)) {
       throw new Error('La depreciación mensual de esta empresa ya está en proceso.');
     }
+    const companyAssets = fixedAssets.filter(asset => asset.companyId === companyId);
+    const assetLocks = companyAssets.map(asset => companyId + '|DEPRECIATION|' + asset.id);
+    const registrationLock = companyId + '|FIXED_ASSET_REGISTRATION';
+    if (fixedAssetOperationLocksRef.current.has(registrationLock) ||
+        assetLocks.some(lock => fixedAssetOperationLocksRef.current.has(lock))) {
+      throw new Error('Hay un registro o una depreciación manual de activos fijos en curso. El cierre no se ejecutó; vuelva a intentarlo.');
+    }
     fixedAssetOperationLocksRef.current.add(operationLock);
+    fixedAssetOperationLocksRef.current.add(registrationLock);
+    assetLocks.forEach(lock => fixedAssetOperationLocksRef.current.add(lock));
     try {
-      const companyAssets = fixedAssets.filter(asset => asset.companyId === companyId);
       const planned = companyAssets.flatMap(asset =>
         getFixedAssetDepreciationScheduleThrough(asset, throughDate).map(calculation => ({
           asset,
@@ -1715,6 +1732,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       return planned.length;
     } finally {
       fixedAssetOperationLocksRef.current.delete(operationLock);
+      fixedAssetOperationLocksRef.current.delete(registrationLock);
+      assetLocks.forEach(lock => fixedAssetOperationLocksRef.current.delete(lock));
     }
   };
 
