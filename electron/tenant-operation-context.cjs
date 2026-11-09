@@ -97,7 +97,7 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
     }
   }
 
-  async function switchCompany(companyIdInput) {
+  async function switchCompany(companyIdInput, options = {}) {
     const targetId = String(companyIdInput || '').trim();
     if (!targetId) throw new Error('Debe indicar una empresa registrada para cambiar el contexto.');
     if (switching) throw new Error('Ya hay un cambio de empresa en curso.');
@@ -109,13 +109,12 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
     flushing = false;
     let targetOpenedHere = false;
     try {
-      // First drain operations admitted before the switch gate closed. When
-      // no tenant is active yet (initial post-migration selection), there are
-      // no tenant writes to flush; the migration itself already drained the
-      // legacy renderer queue before registering the new databases.
+      // First drain operations admitted before the switch gate closed.
+      // Initial post-migration selection can explicitly skip a second flush:
+      // the migration/create operation already drained the legacy renderer.
       const previousId = activeCompanyId;
       await waitForActiveOperations();
-      if (previousId) {
+      if (options?.skipFlush !== true) {
         flushing = true;
         await flushPendingWrites();
         flushing = false;
