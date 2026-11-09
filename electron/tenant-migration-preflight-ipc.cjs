@@ -6,7 +6,7 @@ const { inspectLegacyDatabase } = require('./tenant-migration-preflight.cjs');
 function registerTenantMigrationPreflightIpc({ ipcMain, db, licenseView, getActiveSession }) {
   if (!ipcMain || typeof ipcMain.handle !== 'function' ||
       !db || typeof db.prepare !== 'function' ||
-      typeof licenseView !== 'function' || typeof getActiveSession !== 'function') {
+      typeof licenseView !== 'function' || typeof getActiveSession !== 'function' || typeof assertOperationalReady !== 'function') {
     throw new TypeError('No se pudo registrar la inspección previa de migración SQLite por empresa.');
   }
 
@@ -33,7 +33,7 @@ function registerTenantMigrationPreflightIpc({ ipcMain, db, licenseView, getActi
 }
 
 
-function registerTenantMigrationExecuteIpc({ ipcMain, db, runtime, operationContext, licenseView, getActiveSession }) {
+function registerTenantMigrationExecuteIpc({ ipcMain, db, runtime, operationContext, licenseView, getActiveSession, assertOperationalReady = () => {} }) {
   if (!ipcMain || typeof ipcMain.handle !== 'function' ||
       !db || typeof db.prepare !== 'function' ||
       !runtime || typeof runtime.migrateLegacyDatabase !== 'function' ||
@@ -43,6 +43,7 @@ function registerTenantMigrationExecuteIpc({ ipcMain, db, runtime, operationCont
   }
 
   ipcMain.handle('sicoven:tenant-migration-execute', async (_event, token) => {
+    assertOperationalReady();
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const actor = getActiveSession(token);
