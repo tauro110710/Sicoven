@@ -98,11 +98,21 @@ function createCompanySessionContext({ runtime, operationContext, getActiveSessi
   }
 
   function withSelectedDatabase(tokenInput, operation) {
+    if (typeof operation !== 'function') throw new TypeError('La operación de empresa debe ser una función.');
     getSelectedCompanyId(tokenInput);
-    return operationContext.withActiveDatabase((database, companyId) => {
-      const selected = selectedByToken.get(String(tokenInput));
+    return operationContext.withActiveDatabase(async (database, companyId) => {
+      // Revalidate the session, active registry record and authorization for
+      // every database operation, not only when the user selects a company.
+      const { token, actor } = requireSession(tokenInput);
+      const selected = selectedByToken.get(token);
       if (!selected || selected !== companyId) {
         throw new Error('El contexto de empresa cambió; se bloqueó la operación.');
+      }
+      const company = runtime.listCompanies().find(item =>
+        String(item.id) === companyId && String(item.status) === 'ACTIVE'
+      );
+      if (!company || await canAccessCompany(actor, company) !== true) {
+        throw new Error('La sesión ya no tiene acceso autorizado a la empresa activa.');
       }
       return operation(database, companyId);
     });
