@@ -626,7 +626,16 @@ app.whenReady().then(async () => {
     // Do not invalidate the authenticated renderer until its queued SQLite
     // snapshots have been acknowledged. On timeout, keep the session alive.
     if (activeRendererSessionToken === value && sessions.has(value)) {
-      await persistenceFlushBridge.requestFlush(event.sender, value);
+      let tenantSelected = false;
+      try {
+        tenantController.companySessionContext.getSelectedCompanyId(value);
+        tenantSelected = true;
+      } catch {}
+      if (tenantSelected) {
+        await tenantController.companySessionContext.clearSession(value);
+      } else {
+        await persistenceFlushBridge.requestFlush(event.sender, value);
+      }
     }
     sessions.delete(value);
     if (activeRendererSessionToken === value) activeRendererSessionToken = null;
