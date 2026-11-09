@@ -21,6 +21,11 @@ on:
 permissions:
   contents: read
 
+# Keep only the newest validation for a PR/ref when rapid updates arrive.
+concurrency:
+  group: sicoven-g13-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   restore-tests:
     name: Restore tests (${{ matrix.os }})

@@ -2,42 +2,112 @@ param(
   [Parameter(Mandatory=$true)][string]$ExecutablePath,
   [Parameter(Mandatory=$true)][string]$Version,
   [int]$Port = 9222,
-  [int]$TimeoutSeconds = 60
+  [int]$TimeoutSeconds = 60,
+  [switch]$TestValidationInput
 )
 $ErrorActionPreference = "Stop"
+
+function Send-CdpCommand($socket, [int]$Id, [string]$Method, [hashtable]$Params) {
+  $payload = @{ id = $Id; method = $Method; params = $Params } | ConvertTo-Json -Depth 8 -Compress
+  $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
+  $socket.SendAsync([ArraySegment[byte]]::new($bytes), [System.Net.WebSockets.WebSocketMessageType]::Text, $true, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+  $buffer = [byte[]]::new(65536)
+  $deadline = [DateTime]::UtcNow.AddSeconds(10)
+  while ([DateTime]::UtcNow -lt $deadline) {
+    $builder = [Text.StringBuilder]::new()
+    do {
+      $part = $socket.ReceiveAsync([ArraySegment[byte]]::new($buffer), [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+      if ($part.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) { throw "El renderer cerró el canal CDP." }
+      [void]$builder.Append([Text.Encoding]::UTF8.GetString($buffer, 0, $part.Count))
+    } while (-not $part.EndOfMessage)
+    $message = $builder.ToString() | ConvertFrom-Json
+    if ($message.id -ne $Id) { continue }
+    if ($message.error) { throw "CDP $Method falló: $($message.error.message)" }
+    return $message.result
+  }
+  throw "Timeout esperando respuesta CDP para $Method."
+}
 
 function Get-RendererSnapshot([string]$WebSocketUrl) {
   $socket = [System.Net.WebSockets.ClientWebSocket]::new()
   try {
     $socket.ConnectAsync([Uri]$WebSocketUrl, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
-    $payload = @{
-      id = 1
-      method = "Runtime.evaluate"
-      params = @{
-        expression = "(() => { const r=document.querySelector('#root'); return JSON.stringify({ready:document.readyState,title:document.title,rootChildren:r?r.children.length:0,bodyText:(document.body?.innerText||'').trim(),width:innerWidth,height:innerHeight}); })()"
+    $response = Send-CdpCommand $socket 1 "Runtime.evaluate" @{
+      expression = "(() => { const r=document.querySelector('#root'); return JSON.stringify({ready:document.readyState,title:document.title,rootChildren:r?r.children.length:0,bodyText:(document.body?.innerText||'').trim(),width:innerWidth,height:innerHeight}); })()"
+      returnByValue = $true
+      awaitPromise = $true
+    }
+    $value = $response.result.value
+    if (-not $value) { throw "El renderer no devolvió estado DOM." }
+    return ($value | ConvertFrom-Json)
+  } finally {
+    if ($socket.State -eq [System.Net.WebSockets.WebSocketState]::Open) {
+      $socket.CloseAsync([System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure, "done", [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+    }
+    $socket.Dispose()
+  }
+}
+
+function Test-RendererAlertInput([string]$WebSocketUrl) {
+  $socket = [System.Net.WebSockets.ClientWebSocket]::new()
+  try {
+    $socket.ConnectAsync([Uri]$WebSocketUrl, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+    $null = Send-CdpCommand $socket 1 "Page.bringToFront" @{}
+
+    # Si aparece la pantalla de licencia, entrar en la prueba gratuita para abrir
+    # el formulario real de acceso de SICOVEN.
+    $null = Send-CdpCommand $socket 2 "Runtime.evaluate" @{
+      expression = "(() => { const trial=[...document.querySelectorAll('button')].find(button=>button.innerText.trim()==='Continuar con la prueba gratuita'); if(trial) trial.click(); return true; })()"
+      returnByValue = $true
+      awaitPromise = $true
+    }
+
+    $loginReady = $false
+    for ($attempt = 0; $attempt -lt 40; $attempt++) {
+      $state = Send-CdpCommand $socket 3 "Runtime.evaluate" @{
+        expression = "Boolean(document.querySelector('#username'))"
         returnByValue = $true
         awaitPromise = $true
       }
-    } | ConvertTo-Json -Depth 8 -Compress
-    $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
-    $socket.SendAsync([ArraySegment[byte]]::new($bytes), [System.Net.WebSockets.WebSocketMessageType]::Text, $true, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
-    $buffer = [byte[]]::new(65536)
-    $response = $null
-    $deadline = [DateTime]::UtcNow.AddSeconds(10)
-    while ([DateTime]::UtcNow -lt $deadline -and -not $response) {
-      $builder = [Text.StringBuilder]::new()
-      do {
-        $part = $socket.ReceiveAsync([ArraySegment[byte]]::new($buffer), [Threading.CancellationToken]::None).GetAwaiter().GetResult()
-        if ($part.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) { throw "El renderer cerró el canal CDP." }
-        [void]$builder.Append([Text.Encoding]::UTF8.GetString($buffer, 0, $part.Count))
-      } while (-not $part.EndOfMessage)
-      $message = $builder.ToString() | ConvertFrom-Json
-      if ($message.id -eq 1) { $response = $message }
+      if ($state.result.value) { $loginReady = $true; break }
+      Start-Sleep -Milliseconds 250
     }
-    if (-not $response) { throw "Timeout esperando respuesta Runtime.evaluate de CDP." }
-    $value = $response.result.result.value
-    if (-not $value) { throw "El renderer no devolvió estado DOM." }
-    return ($value | ConvertFrom-Json)
+    if (-not $loginReady) { throw "No apareció el campo de usuario real de SICOVEN para la prueba de escritura." }
+
+    $setup = Send-CdpCommand $socket 4 "Runtime.evaluate" @{
+      expression = "(() => { const input=document.querySelector('#username'); const r=input.getBoundingClientRect(); window.alert('Prueba de validación: el campo de usuario debe seguir aceptando escritura.'); const close=document.querySelector('#sicoven-alert-layer .sicoven-alert-dismiss'); const cr=close?.getBoundingClientRect(); return JSON.stringify({x:r.left+r.width/2,y:r.top+r.height/2,closeX:cr?cr.left+cr.width/2:0,closeY:cr?cr.top+cr.height/2:0,noticeCount:document.querySelectorAll('#sicoven-alert-layer [role=alert]').length,layerPointerEvents:getComputedStyle(document.querySelector('#sicoven-alert-layer')).pointerEvents}); })()"
+      returnByValue = $true
+      awaitPromise = $true
+      userGesture = $true
+    }
+    $probe = $setup.result.value | ConvertFrom-Json
+    if ($probe.noticeCount -lt 1) { throw "window.alert no generó el aviso accesible esperado." }
+    if ($probe.layerPointerEvents -ne "none") { throw "La capa de avisos está interceptando eventos de puntero." }
+
+    # Primero cerrar el aviso como lo haría el usuario.
+    $null = Send-CdpCommand $socket 5 "Input.dispatchMouseEvent" @{ type = "mouseMoved"; x = $probe.closeX; y = $probe.closeY }
+    $null = Send-CdpCommand $socket 6 "Input.dispatchMouseEvent" @{ type = "mousePressed"; x = $probe.closeX; y = $probe.closeY; button = "left"; clickCount = 1 }
+    $null = Send-CdpCommand $socket 7 "Input.dispatchMouseEvent" @{ type = "mouseReleased"; x = $probe.closeX; y = $probe.closeY; button = "left"; clickCount = 1 }
+    $closed = Send-CdpCommand $socket 8 "Runtime.evaluate" @{
+      expression = "document.querySelectorAll('#sicoven-alert-layer [role=alert]').length === 0"
+      returnByValue = $true
+      awaitPromise = $true
+    }
+    if (-not $closed.result.value) { throw "No se pudo cerrar el aviso antes de probar la escritura." }
+
+    # Después de cerrar el aviso, hacer clic y escribir en el input real de acceso.
+    $null = Send-CdpCommand $socket 9 "Input.dispatchMouseEvent" @{ type = "mouseMoved"; x = $probe.x; y = $probe.y }
+    $null = Send-CdpCommand $socket 10 "Input.dispatchMouseEvent" @{ type = "mousePressed"; x = $probe.x; y = $probe.y; button = "left"; clickCount = 1 }
+    $null = Send-CdpCommand $socket 11 "Input.dispatchMouseEvent" @{ type = "mouseReleased"; x = $probe.x; y = $probe.y; button = "left"; clickCount = 1 }
+    $null = Send-CdpCommand $socket 12 "Input.insertText" @{ text = "SICOVEN-INPUT-OK" }
+
+    $verification = Send-CdpCommand $socket 13 "Runtime.evaluate" @{
+      expression = "(() => { const input=document.querySelector('#username'); return Boolean(input && document.activeElement===input && input.value==='SICOVEN-INPUT-OK'); })()"
+      returnByValue = $true
+      awaitPromise = $true
+    }
+    if (-not $verification.result.value) { throw "El campo real de usuario no recibió clic, foco y escritura después de cerrar el aviso." }
+    Write-Host "VALIDATION INPUT OK: aviso cerrado y campo real de SICOVEN editable sin reiniciar."
   } finally {
     if ($socket.State -eq [System.Net.WebSockets.WebSocketState]::Open) {
       $socket.CloseAsync([System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure, "done", [Threading.CancellationToken]::None).GetAwaiter().GetResult()
@@ -51,6 +121,7 @@ $process = Start-Process -FilePath $ExecutablePath -ArgumentList @("--disable-gp
 try {
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
   $snapshot = $null
+  $page = $null
   $lastError = ""
   while ([DateTime]::UtcNow -lt $deadline) {
     $process.Refresh()
@@ -67,6 +138,10 @@ try {
   }
   if (-not $snapshot -or $snapshot.ready -ne "complete" -or $snapshot.rootChildren -lt 1 -or $snapshot.bodyText.Length -lt 10 -or $snapshot.width -lt 800 -or $snapshot.height -lt 600) {
     throw "SICOVEN $Version no demostró renderizado visible. Último estado: $($snapshot | ConvertTo-Json -Compress -Depth 5). Error CDP: $lastError"
+  }
+  if ($TestValidationInput) {
+    if (-not $page -or -not $page.webSocketDebuggerUrl) { throw "No se encontró el renderer para probar la escritura después del aviso." }
+    Test-RendererAlertInput $page.webSocketDebuggerUrl
   }
   Write-Host "RENDERER OK $Version : $($snapshot | ConvertTo-Json -Compress -Depth 5)"
 } finally {

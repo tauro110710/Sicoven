@@ -101,7 +101,7 @@ jobs:
           python -c "import os,sqlite3,sys; c=sqlite3.connect(os.environ['SICOVEN_DB_PATH']); r=c.execute('SELECT probe_value FROM _sicoven_upgrade_probe WHERE probe_key=?', ('upgrade',)).fetchone(); c.close(); sys.exit(0 if r and r[0]=='preserve-me' else 1)"
           if ($LASTEXITCODE -ne 0) { throw "La actualización 1.0.20 a $version eliminó o alteró datos SQLite." }
           # Inspeccionar el DOM real del renderer después de actualizar a la versión $version.
-          & (Join-Path $env:GITHUB_WORKSPACE "scripts/windows-renderer-smoke.ps1") -ExecutablePath $app -Version $version
+          & (Join-Path $env:GITHUB_WORKSPACE "scripts/windows-renderer-smoke.ps1") -ExecutablePath $app -Version $version -TestValidationInput
           if ($LASTEXITCODE -ne 0) { throw "La interfaz gráfica de SICOVEN $version no superó la prueba de renderizado." }
           python -c "import os,sqlite3,sys; c=sqlite3.connect(os.environ['SICOVEN_DB_PATH']); r=c.execute('SELECT probe_value FROM _sicoven_upgrade_probe WHERE probe_key=?', ('upgrade',)).fetchone(); c.close(); sys.exit(0 if r and r[0]=='preserve-me' else 1)"
           if ($LASTEXITCODE -ne 0) { throw "El arranque real de SICOVEN $version no conservó los datos SQLite del equipo." }
