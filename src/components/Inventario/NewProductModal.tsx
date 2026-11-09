@@ -109,13 +109,17 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   const effectivePricingConfiguration = withoutInventoryExchangeRates(pricingConfiguration);
   const avgCostUsd = parseDecimalInput(avgCostInput);
   const avgCostBs = bcvRate > 0 ? Number((avgCostUsd * bcvRate).toFixed(2)) : 0;
+  let pricingCalculationError = '';
   const pricingCalculation = (() => {
     try {
       if (pricingConfiguration.mode === 'AUTOMATIC' && priceCurrency === 'BS') {
         throw new Error('La fijación automática se calcula en USD. Para fijar precios en bolívares, use el modo manual; la tasa BCV se registra en cada factura del Libro de Ventas.');
       }
       return calculateInventoryPrices({ baseCost: avgCostUsd, configuration: effectivePricingConfiguration });
-    } catch (error) { return { prices: [0, 0, 0, 0] as [number, number, number, number], exchangeGapPercent: 0, exchangeFactor: 1, error: error instanceof Error ? error.message : 'Configuración de precios inválida.' }; }
+    } catch (error) {
+      pricingCalculationError = error instanceof Error ? error.message : 'Configuración de precios inválida.';
+      return { prices: [0, 0, 0, 0] as [number, number, number, number], exchangeGapPercent: 0, exchangeFactor: 1 };
+    }
   })();
   const effectivePriceValues = pricingConfiguration.mode === 'AUTOMATIC' ? pricingCalculation.prices : priceValues;
   const primaryPrice = effectivePriceValues[0];
@@ -129,7 +133,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
     e.preventDefault();
     setError('');
     if (!code.trim() || !name.trim()) { setError('El código y la descripción son obligatorios.'); return; }
-    if (pricingConfiguration.mode === 'AUTOMATIC' && (avgCostUsd <= 0 || pricingCalculation.error)) { setError(pricingCalculation.error || 'Ingrese un costo de inventario positivo y su tasa histórica antes de calcular precios automáticos.'); return; }
+    if (pricingConfiguration.mode === 'AUTOMATIC' && (avgCostUsd <= 0 || pricingCalculationError)) { setError(pricingCalculationError || 'Ingrese un costo de inventario positivo y su tasa histórica antes de calcular precios automáticos.'); return; }
     if (!product && (currentStock > 0 || avgCostUsd > 0) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('Ingrese la tasa BCV histórica aplicable al inventario inicial, por ejemplo 889,67.'); return; }
     if (savingRef.current) return;
     savingRef.current = true;
@@ -387,7 +391,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
                 ))}
               </div>
               <p className="text-[10px] text-slate-500">La fijación automática usa el costo base en USD y los márgenes configurados. No se aplican tasas BCV/EUR ni factores de brecha dentro del Inventario.</p>
-              {pricingCalculation.error && <p role="alert" className="text-[10px] text-rose-700">{pricingCalculation.error}</p>}
+              {pricingCalculationError && <p role="alert" className="text-[10px] text-rose-700">{pricingCalculationError}</p>}
               <p className="text-[10px] text-slate-500">Costo base para el motor comercial: {formatUsd(avgCostUsd)}. El costo histórico y la tasa fiscal/contable no se modifican.</p>
             </div>}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -396,7 +400,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
                 return <div key={index}>
                   <label className="block font-semibold text-slate-700 mb-1">{priceLabels[index]}{index === 0 ? ' *' : ''}</label>
                   <input type="text" inputMode="decimal" required={index === 0} disabled={pricingConfiguration.mode === 'AUTOMATIC'} value={pricingConfiguration.mode === 'AUTOMATIC' ? (shownValue ? shownValue.toFixed(2) : '') : value} placeholder={index === 0 ? '0.00' : 'Opcional'} onChange={e => setPriceInput(index, e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg font-mono font-bold disabled:bg-slate-100" />
-                  <span className="block text-[10px] text-slate-500 font-mono mt-1">{pricingConfiguration.mode === 'AUTOMATIC' ? (pricingCalculation.error ? 'No calculado' : 'Calculado en USD') : (value.trim() ? (priceCurrency === 'USD' ? 'USD' : 'Bs.') : 'Sin definir')}</span>
+                  <span className="block text-[10px] text-slate-500 font-mono mt-1">{pricingConfiguration.mode === 'AUTOMATIC' ? (pricingCalculationError ? 'No calculado' : 'Calculado en USD') : (value.trim() ? (priceCurrency === 'USD' ? 'USD' : 'Bs.') : 'Sin definir')}</span>
                 </div>;
               })}
             </div>
