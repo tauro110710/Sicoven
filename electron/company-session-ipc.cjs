@@ -43,7 +43,8 @@ function registerCompanySessionIpc({
     requireAuthorizedSession(token);
     const companyId = String(input?.companyId || '').trim();
     if (!companyId || companyId.length > 120) throw new Error('La empresa solicitada no es válida.');
-    const result = await companySessionContext.selectCompany(token, companyId);
+    const result = await companySessionContext.selectCompany(token, companyId,
+      operationContext.getActiveCompanyId?.() ? {} : { skipFlush: true });
     saveActiveCompanyPreference(companyId);
     return result;
   });
@@ -74,7 +75,7 @@ function registerCompanySessionIpc({
     } finally {
       release();
     }
-    const selection = await companySessionContext.selectCompany(token, company.id);
+    const selection = await companySessionContext.selectCompany(token, company.id, { skipFlush: true });
     saveActiveCompanyPreference(company.id);
     return { ...created, selection };
   });
