@@ -155,8 +155,16 @@ function getDocument(db, { storageDir, documentId, actor }) {
   })();
   return { path: target, mimeType: path.extname(target) === '.pdf' ? 'application/pdf' : path.extname(target) === '.webp' ? 'image/webp' : path.extname(target) === '.png' ? 'image/png' : 'image/jpeg' };
 }
-function registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, dialog, shell, app, getWindow }) {
-  initializeDocumentVaultSchema(db);
+function registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, dialog, shell, app, getWindow, withDatabase = null }) {
+  if (!ipcMain || typeof ipcMain.handle !== 'function' ||
+      typeof licenseView !== 'function' || typeof getActiveSession !== 'function' ||
+      (withDatabase !== null && typeof withDatabase !== 'function')) {
+    throw new Error('No se pudo registrar el repositorio documental.');
+  }
+  if (!withDatabase) initializeDocumentVaultSchema(db);
+  const runWithDatabase = (token, operation) => withDatabase
+    ? withDatabase(token, (activeDb, companyId) => operation(activeDb, companyId))
+    : operation(db, null);
   const authenticate = token => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
@@ -173,13 +181,33 @@ function registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, 
     const source = selection.filePaths[0], stat = fs.statSync(source);
     if (!stat.isFile() || stat.size < 1 || stat.size > MAX_DOCUMENT_BYTES) throw new Error('El archivo debe tener entre 1 byte y 20 MB.');
     const buffer = fs.readFileSync(source);
-    return attachDocument(db, { storageDir: path.join(app.getPath('userData'), 'supporting-documents'), input: { ...input, fileName: path.basename(source) }, buffer, actor });
+    return runWithDatabase(token, (activeDb, companyId) => {
+      if (companyId && String(input?.companyId || '') !== companyId) throw new Error('El documento no pertenece a la empresa activa.');
+      return attachDocument(activeDb, { storageDir: path.join(app.getPath('userData'), 'supporting-documents', companyId || 'legacy'), input, buffer, actor });
+    });
   });
-  ipcMain.handle('sicoven:document-list', (_event, token, filters) => { authenticate(token); return listDocuments(db, filters || {}); });
-  ipcMain.handle('sicoven:document-review', (_event, token, input) => { const actor = authenticate(token); return reviewDocument(db, input || {}, actor); });
+  ipcMain.handle('sicoven:document-list', (_event, token, filters) => {
+    authenticate(token);
+    return runWithDatabase(token, (activeDb, companyId) => {
+      if (companyId && filters?.companyId && String(filters.companyId) !== companyId) throw new Error('La consulta documental no pertenece a la empresa activa.');
+      return listDocuments(activeDb, { ...(filters || {}), ...(companyId ? { companyId } : {}) });
+    });
+  });
+  ipcMain.handle('sicoven:document-review', (_event, token, input) => {
+    const actor = authenticate(token);
+    return runWithDatabase(token, (activeDb, companyId) => {
+      const row = activeDb.prepare('SELECT company_id AS companyId FROM supporting_documents WHERE id=?').get(String(input?.documentId || ''));
+      if (!row || (companyId && String(row.companyId) !== companyId)) throw new Error('El documento no pertenece a la empresa activa.');
+      return reviewDocument(activeDb, input || {}, actor);
+    });
+  });
   ipcMain.handle('sicoven:document-open', async (_event, token, documentId) => {
     const actor = authenticate(token);
-    const result = getDocument(db, { storageDir: path.join(app.getPath('userData'), 'supporting-documents'), documentId, actor });
+    const result = await runWithDatabase(token, (activeDb, companyId) => {
+      const row = activeDb.prepare('SELECT company_id AS companyId FROM supporting_documents WHERE id=?').get(String(documentId || ''));
+      if (!row || (companyId && String(row.companyId) !== companyId)) throw new Error('El documento no pertenece a la empresa activa.');
+      return getDocument(activeDb, { storageDir: path.join(app.getPath('userData'), 'supporting-documents', companyId || 'legacy'), documentId, actor });
+    });
     const error = await shell.openPath(result.path);
     if (error) throw new Error('No se pudo abrir el documento: ' + error);
     return { ok: true };
