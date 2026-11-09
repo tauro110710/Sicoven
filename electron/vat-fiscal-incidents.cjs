@@ -268,11 +268,16 @@ function listVatFiscalIncidents(db, filters = {}) {
     : db.prepare('SELECT * FROM vat_fiscal_incidents ORDER BY detected_at DESC,created_at DESC').all();
   return rows.map(row => getVatFiscalIncident(db, row.id));
 }
-function registerVatFiscalIncidentIpc({ ipcMain, db, licenseView, getActiveSession }) {
-  if (!ipcMain || typeof ipcMain.handle !== 'function' || typeof licenseView !== 'function' || typeof getActiveSession !== 'function') {
+function registerVatFiscalIncidentIpc({ ipcMain, db, licenseView, getActiveSession, withDatabase = null }) {
+  if (!ipcMain || typeof ipcMain.handle !== 'function' ||
+      typeof licenseView !== 'function' || typeof getActiveSession !== 'function' ||
+      (withDatabase !== null && typeof withDatabase !== 'function')) {
     throw new Error('No se pudo registrar el puente de incidencias fiscales IVA.');
   }
-  initializeVatFiscalIncidentSchema(db);
+  if (!withDatabase) initializeVatFiscalIncidentSchema(db);
+  const runWithDatabase = (token, operation) => withDatabase
+    ? withDatabase(token, (activeDb, companyId) => operation(activeDb, companyId))
+    : operation(db, null);
   const authenticate = token => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
@@ -280,14 +285,31 @@ function registerVatFiscalIncidentIpc({ ipcMain, db, licenseView, getActiveSessi
     requireAdmin(actor);
     return actor;
   };
-  ipcMain.handle('sicoven:vat-fiscal-incident-create', (_event, token, input) => createVatFiscalIncident(db, input, authenticate(token)));
+  ipcMain.handle('sicoven:vat-fiscal-incident-create', (_event, token, input) => {
+    const actor = authenticate(token);
+    return runWithDatabase(token, (activeDb, companyId) => {
+      if (companyId && String(input?.companyId || '') !== companyId) throw new Error('La incidencia no pertenece a la empresa activa.');
+      return createVatFiscalIncident(activeDb, input, actor);
+    });
+  });
   ipcMain.handle('sicoven:vat-fiscal-incident-list', (_event, token, filters) => {
     authenticate(token);
-    const state = readAccountingState(db);
-    if (filters?.companyId && !byId(state.companies, filters.companyId)) throw new Error('La empresa solicitada no existe.');
-    return listVatFiscalIncidents(db, filters || {});
+    return runWithDatabase(token, (activeDb, companyId) => {
+      if (companyId && filters?.companyId && String(filters.companyId) !== companyId) throw new Error('La consulta no pertenece a la empresa activa.');
+      const state = readAccountingState(activeDb);
+      const requestedCompanyId = companyId || filters?.companyId;
+      if (requestedCompanyId && !byId(state.companies, requestedCompanyId)) throw new Error('La empresa solicitada no existe.');
+      return listVatFiscalIncidents(activeDb, { ...(filters || {}), ...(companyId ? { companyId } : {}) });
+    });
   });
-  ipcMain.handle('sicoven:vat-fiscal-incident-event', (_event, token, input) => recordVatFiscalIncidentEvent(db, input, authenticate(token)));
+  ipcMain.handle('sicoven:vat-fiscal-incident-event', (_event, token, input) => {
+    const actor = authenticate(token);
+    return runWithDatabase(token, (activeDb, companyId) => {
+      const incident = activeDb.prepare('SELECT company_id AS companyId FROM vat_fiscal_incidents WHERE id=?').get(String(input?.incidentId || ''));
+      if (!incident || (companyId && String(incident.companyId) !== companyId)) throw new Error('La incidencia no pertenece a la empresa activa.');
+      return recordVatFiscalIncidentEvent(activeDb, input, actor);
+    });
+  });
 }
 module.exports = {
   initializeVatFiscalIncidentSchema, createVatFiscalIncident,
