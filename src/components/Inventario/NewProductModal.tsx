@@ -60,7 +60,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       setOpeningDate(product.openingDate || new Date().toISOString().slice(0, 10));
       setOpeningBcvRateInput(String(product.openingBcvRate || ''));
       setAvgCostInput(String(product.avgCostBs));
-      setPricingConfiguration(product.pricingConfiguration || currentCompany.inventoryPricingDefaults || DEFAULT_INVENTORY_PRICING);
+      setPricingConfiguration(product.pricingConfiguration || DEFAULT_INVENTORY_PRICING);
       const legacyCurrency = product.priceCurrency || 'BS';
       setPriceCurrency(legacyCurrency);
       const legacyPrimary = Number(product.price1 ?? (legacyCurrency === 'USD' ? product.salesPriceUsd : product.salesPriceBs)) || 0;
@@ -387,10 +387,13 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
                 Aplicar factor de protección por brecha cambiaria (solo para fijación comercial)
               </label>
               {pricingConfiguration.applyExchangeGap && <div className="grid grid-cols-2 gap-2">
-                <label className="text-[10px] font-semibold text-slate-700">Tasa de referencia BCV (Bs./USD)
+                <label className="col-span-2 text-[10px] font-semibold text-slate-700">Divisa de las tasas comparadas
+                  <select value={pricingConfiguration.exchangeRateCurrency || 'USD'} onChange={e => setPricingConfiguration(previous => ({ ...previous, exchangeRateCurrency: e.target.value as 'USD' | 'EUR' }))} className="mt-1 w-full px-2 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="USD">USD — Dólar</option><option value="EUR">EUR — Euro</option></select>
+                </label>
+                <label className="text-[10px] font-semibold text-slate-700">Tasa de referencia BCV (Bs./{pricingConfiguration.exchangeRateCurrency || 'USD'})
                   <input type="number" min="0.0001" step="0.0001" value={pricingConfiguration.referenceRate ?? ''} onChange={e => setPricingConfiguration(previous => ({ ...previous, referenceRate: Number(e.target.value) }))} className="mt-1 w-full px-2 py-1.5 border border-slate-300 rounded-lg font-mono" />
                 </label>
-                <label className="text-[10px] font-semibold text-slate-700">Tasa de reposición / real (Bs./USD)
+                <label className="text-[10px] font-semibold text-slate-700">Tasa de reposición / real (Bs./{pricingConfiguration.exchangeRateCurrency || 'USD'})
                   <input type="number" min="0.0001" step="0.0001" value={pricingConfiguration.replacementRate ?? ''} onChange={e => setPricingConfiguration(previous => ({ ...previous, replacementRate: Number(e.target.value) }))} className="mt-1 w-full px-2 py-1.5 border border-slate-300 rounded-lg font-mono" />
                 </label>
                 <p className="col-span-2 text-[10px] text-slate-600">Brecha calculada: {pricingCalculation.error ? 'Pendiente de tasas válidas' : '+' + pricingCalculation.exchangeGapPercent.toFixed(2) + '%'} · Ambas tasas deben corresponder a la misma divisa.</p>
