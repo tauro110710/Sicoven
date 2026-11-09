@@ -7,17 +7,18 @@ const { exportCompanyData } = require('./company-data-export.cjs');
 
 function registerCompanyExportIpc({
   ipcMain, runtime, operationContext, companySessionContext,
-  licenseView, getActiveSession, dialog, app, getWindow
+  licenseView, getActiveSession, dialog, app, getWindow, assertOperationalReady = () => {}
 }) {
   if (!ipcMain || typeof ipcMain.handle !== 'function' ||
       !runtime || typeof runtime.listCompanies !== 'function' || typeof runtime.getCompanyDatabase !== 'function' ||
       !operationContext || typeof operationContext.acquireMaintenanceLock !== 'function' ||
       !companySessionContext || typeof companySessionContext.getSelectedCompanyId !== 'function' ||
       typeof licenseView !== 'function' || typeof getActiveSession !== 'function' ||
-      !dialog || !app) {
+      typeof assertOperationalReady !== 'function' || !dialog || !app) {
     throw new TypeError('No se pudo registrar la exportación segura de datos por empresa.');
   }
   ipcMain.handle('sicoven:company-export-data', async (event, token, input) => {
+    assertOperationalReady();
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const actor = getActiveSession(token);
