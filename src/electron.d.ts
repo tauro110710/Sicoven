@@ -42,6 +42,7 @@ declare global {
       inspectTenantMigrationPreflight: (token: string) => Promise<{ ok: boolean; readOnly: true; migrationStarted: false; sourceDatabase: 'sicoven.sqlite'; tables: Array<{ name: string; category: string }>; unknownTables: string[]; missingRequired: string[]; companyCount: number; companyIds: string[]; errors: string[] }>;
       executeTenantMigration: (token: string) => Promise<{ ok: boolean; phase?: string; companies?: Array<{ companyId: string }>; actor: string; sourceDatabase: 'sicoven.sqlite'; sourcePreserved: true; globalBackupRestoreRetained: true }>;
       listAccessibleCompanies: (token: string) => Promise<Array<{ id: string; name: string; rif: string }>>;
+      getTenantRegistryStatus: (token: string) => Promise<{ registeredCount: number; activeCount: number; companies: Array<{ id: string; name: string; rif: string; status: string }> }>;
       selectActiveCompany: (token: string, companyId: string) => Promise<{ ok: boolean; changed: boolean; companyId: string; previousCompanyId?: string | null }>;
       createCompany: (token: string, input: Record<string, unknown>) => Promise<{ ok: boolean; company: { id: string; name: string; rif: string }; selection: { ok: boolean; changed: boolean; companyId: string } }>;
       getActiveCompany: (token: string) => Promise<{ companyId: string }>;
