@@ -68,6 +68,50 @@ function registerCompanySessionIpc({
     return { companyId: companySessionContext.getSelectedCompanyId(token) };
   });
 
+  ipcMain.handle('sicoven:company-update-metadata', async (_event, token, input) => {
+    assertOperationalReady();
+    const actor = requireAuthorizedSession(token);
+    const companyId = String(input?.companyId || '').trim();
+    if (!companyId || companyId !== companySessionContext.getSelectedCompanyId(token)) {
+      throw new Error('Solo se puede actualizar la ficha de la empresa activa.');
+    }
+    const current = runtime.listCompanies().find(item =>
+      String(item.id) === companyId && String(item.status) === 'ACTIVE'
+    );
+    if (!current) throw new Error('La empresa activa no está disponible en el registro local.');
+    const name = String(input?.name || '').trim().toUpperCase();
+    const rif = String(input?.rif || '').trim().toUpperCase();
+    if (!name || !rif) throw new Error('La razón social y el RIF son obligatorios.');
+    const release = await operationContext.acquireMaintenanceLock();
+    try {
+      assertOperationalReady();
+      const currentSession = requireAuthorizedSession(token);
+      if (companySessionContext.getSelectedCompanyId(token) !== companyId) {
+        throw new Error('La empresa activa cambió durante la actualización de su ficha.');
+      }
+      const previous = { companyId, name: current.name, rif: current.rif };
+      const updated = runtime.updateCompanyMetadata({ companyId, name, rif });
+      const tenantDb = runtime.getCompanyDatabase(companyId);
+      try {
+        tenantDb.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+          .run('company_metadata_updated', JSON.stringify({
+            companyId, actorUserId: currentSession.id, actorUsername: currentSession.username,
+            previous: { name: previous.name, rif: previous.rif },
+            next: { name, rif }, updatedAt: new Date().toISOString()
+          }));
+      } catch (auditError) {
+        try { runtime.updateCompanyMetadata(previous); } catch (rollbackError) {
+          throw new Error('La ficha cambió, pero falló la auditoría y tampoco pudo revertirse el registro: ' +
+            String(rollbackError?.message || rollbackError), { cause: auditError });
+        }
+        throw auditError;
+      }
+      return { ok: true, company: updated };
+    } finally {
+      release();
+    }
+  });
+
   ipcMain.handle('sicoven:company-create', async (_event, token, input) => {
     assertOperationalReady();
     const actor = requireAuthorizedSession(token);
