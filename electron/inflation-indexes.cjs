@@ -218,8 +218,16 @@ function getInflationIndexCatalog(db) {
     missingMonths: JSON.parse(item.missingMonthsJson || '[]'),
     observations: db.prepare('SELECT period,source_value AS sourceValue,normalized_value AS value,observation_status AS observationStatus FROM inflation_index_observations WHERE series_id=? ORDER BY period').all(item.id) }));
 }
-function registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession }) {
-  initializeInflationIndexSchema(db);
+function registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession, withDatabase = null }) {
+  if (!ipcMain || typeof ipcMain.handle !== 'function' ||
+      typeof licenseView !== 'function' || typeof getActiveSession !== 'function' ||
+      (withDatabase !== null && typeof withDatabase !== 'function')) {
+    throw new Error('No se pudo registrar el puente de índices de inflación.');
+  }
+  if (!withDatabase) initializeInflationIndexSchema(db);
+  const runWithDatabase = (token, operation) => withDatabase
+    ? withDatabase(token, (activeDb, companyId) => operation(activeDb, companyId))
+    : operation(db, null);
   const authenticate = token => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
@@ -227,18 +235,24 @@ function registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession 
     if (!actor) throw new Error('Sesión no válida. Inicie sesión para consultar los índices.');
     return actor;
   };
-  ipcMain.handle('sicoven:inflation-index-list', (_event, token) => { authenticate(token); return getInflationIndexCatalog(db); });
+  ipcMain.handle('sicoven:inflation-index-list', (_event, token) => {
+    authenticate(token);
+    return runWithDatabase(token, activeDb => getInflationIndexCatalog(activeDb));
+  });
   ipcMain.handle('sicoven:inflation-index-preview', (_event, token, input) => {
-    authenticate(token); const data = validateImportInput(input);
+    authenticate(token);
+    const data = validateImportInput(input);
     return { ok: true, seriesCode: data.seriesCode, metricType: data.metricType, basePeriod: data.basePeriod,
       firstPeriod: data.firstPeriod, lastPeriod: data.lastPeriod, observationCount: data.observationCount,
       missingMonths: data.missingMonths, statusCounts: data.statusCounts, sourceSha256: data.sourceSha256, sourceBytes: data.sourceBytes };
   });
   ipcMain.handle('sicoven:inflation-index-import', (_event, token, input) => {
-    const actor = authenticate(token); return importInflationIndexSeries(db, input, actor);
+    const actor = authenticate(token);
+    return runWithDatabase(token, activeDb => importInflationIndexSeries(activeDb, input, actor));
   });
   ipcMain.handle('sicoven:inflation-index-review', (_event, token, input) => {
-    const actor = authenticate(token); return approveInflationIndexSeries(db, input?.seriesId, input?.decision, input?.reason, actor);
+    const actor = authenticate(token);
+    return runWithDatabase(token, activeDb => approveInflationIndexSeries(activeDb, input?.seriesId, input?.decision, input?.reason, actor));
   });
 }
 module.exports = { parseInflationIndexCsv, initializeInflationIndexSchema, validateImportInput,
