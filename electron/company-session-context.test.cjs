@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createCompanySessionContext } = require('./company-session-context.cjs');
+const { registerCompanySessionIpc } = require('./company-session-ipc.cjs');
 
 const tokenA = 'a'.repeat(64);
 const tokenB = 'b'.repeat(64);
@@ -222,4 +223,51 @@ test('rechecks company status and access before every tenant database operation'
   allowed = true;
   companies[0].status = 'ARCHIVED';
   await assert.rejects(() => context.withSelectedDatabase(tokenA, () => true), /no tiene acceso autorizado/);
+});
+
+
+test('company creation IPC serializes tenant creation and persists the selected-company preference', async () => {
+  const handlers = new Map();
+  const preferences = new Map();
+  const audits = [];
+  let selectedCompanyId = null;
+  let createdCompany = null;
+  let acquired = 0, released = 0;
+  const controlDb = {
+    prepare: () => ({ run: (_json) => preferences.set('active_company_preference', _json) })
+  };
+  const tenantDb = {
+    prepare: () => ({ run: (...args) => audits.push(args) })
+  };
+  registerCompanySessionIpc({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    companySessionContext: {
+      listAccessibleCompanies: async () => [],
+      selectCompany: async (_token, companyId) => { selectedCompanyId = companyId; return { ok: true, changed: true, companyId }; },
+      getSelectedCompanyId: () => selectedCompanyId
+    },
+    runtime: {
+      createCompany: async company => { createdCompany = company; return { ok: true, company }; },
+      getCompanyDatabase: () => tenantDb
+    },
+    operationContext: {
+      acquireMaintenanceLock: async () => {
+        acquired += 1;
+        return () => { released += 1; };
+      }
+    },
+    controlDb,
+    licenseView: () => ({ authorized: true }),
+    getActiveSession: token => token === tokenA ? ({ id: 1, username: 'admin', role: 'admin' }) : null
+  });
+  const result = await handlers.get('sicoven:company-create')({}, tokenA, {
+    name: 'EMPRESA A', rif: 'J-12345678-9', taxpayerType: 'ORDINARIO'
+  });
+  assert.equal(result.ok, true);
+  assert.ok(createdCompany.id);
+  assert.equal(selectedCompanyId, createdCompany.id);
+  assert.equal(acquired, 1);
+  assert.equal(released, 1);
+  assert.equal(audits[0][0], 'company_created');
+  assert.ok(preferences.has('active_company_preference'));
 });
