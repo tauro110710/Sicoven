@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
-const { registerTenantMigrationPreflightIpc } = require('./tenant-migration-preflight-ipc.cjs');
+const { registerTenantMigrationPreflightIpc, registerTenantMigrationExecuteIpc } = require('./tenant-migration-preflight-ipc.cjs');
 
 function fixture(options = {}) {
   const db = new Database(':memory:');
@@ -75,5 +75,60 @@ test('returns blockers without attempting migration when the legacy snapshot is 
     assert.equal(result.readOnly, true);
     assert.equal(result.migrationStarted, false);
     assert.match(result.errors.join(' '), /No hay empresas/);
+  } finally { db.close(); }
+});
+
+
+test('executes migration only after authenticated preflight and an exclusive maintenance lock', async () => {
+  const { db, handlers } = fixture();
+  let lockAcquired = 0;
+  let lockReleased = 0;
+  let migrationCalls = 0;
+  const runtime = {
+    migrateLegacyDatabase: async options => {
+      migrationCalls += 1;
+      const release = await options.acquireMaintenanceLock();
+      lockAcquired += 1;
+      try { return { ok: true, phase: 'COMMITTED', companies: [{ companyId: 'company-a' }] }; }
+      finally { release(); lockReleased += 1; }
+    }
+  };
+  const operationContext = {
+    acquireMaintenanceLock: async () => () => {}
+  };
+  registerTenantMigrationExecuteIpc({
+    ipcMain: { handle: (name, handler) => handlers.set(name, handler) },
+    db, runtime, operationContext,
+    licenseView: () => ({ authorized: true }),
+    getActiveSession: () => ({ id: 1, username: 'contador', role: 'contador' })
+  });
+  try {
+    const result = await handlers.get('sicoven:tenant-migration-execute')({}, 'valid-session');
+    assert.equal(result.phase, 'COMMITTED');
+    assert.equal(result.sourcePreserved, true);
+    assert.equal(result.globalBackupRestoreRetained, true);
+    assert.equal(migrationCalls, 1);
+    assert.equal(lockAcquired, 1);
+    assert.equal(lockReleased, 1);
+  } finally { db.close(); }
+});
+
+test('does not start migration without an authorized accounting session', async () => {
+  const { db, handlers } = fixture();
+  let migrationCalls = 0;
+  registerTenantMigrationExecuteIpc({
+    ipcMain: { handle: (name, handler) => handlers.set(name, handler) },
+    db,
+    runtime: { migrateLegacyDatabase: async () => { migrationCalls += 1; return { ok: true }; } },
+    operationContext: { acquireMaintenanceLock: async () => () => {} },
+    licenseView: () => ({ authorized: true }),
+    getActiveSession: () => null
+  });
+  try {
+    await assert.rejects(
+      handlers.get('sicoven:tenant-migration-execute')({}, 'invalid-session'),
+      /sesión contable autenticada/
+    );
+    assert.equal(migrationCalls, 0);
   } finally { db.close(); }
 });
