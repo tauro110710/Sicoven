@@ -321,7 +321,19 @@ function verifyBackupDirectory(directory) {
   return { ok: true, integrity: integrity.integrity, documentCount: actual.length, databaseSha256: manifest.database.sha256, createdAt: manifest.createdAt };
 }
 
-function registerBackupIpc({ ipcMain, db, licenseView, getActiveSession, dialog, app, getWindow }) {
+function registerBackupIpc({ ipcMain, db, licenseView, getActiveSession, dialog, app, getWindow, operationContext = null, runtime = null }) {
+  if (operationContext && typeof operationContext.acquireMaintenanceLock !== 'function') {
+    throw new TypeError('El respaldo global requiere un bloqueo de mantenimiento válido.');
+  }
+  async function runGlobalBackup(operation) {
+    const release = operationContext ? await operationContext.acquireMaintenanceLock() : () => {};
+    try {
+      runtime?.closeAll?.();
+      return await operation();
+    } finally {
+      release();
+    }
+  }
   ipcMain.handle('sicoven:backup-create', async (_event, token) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
@@ -333,7 +345,9 @@ function registerBackupIpc({ ipcMain, db, licenseView, getActiveSession, dialog,
     if (selection.canceled || !selection.filePaths?.[0]) return { ok: false, canceled: true };
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const destination = path.join(selection.filePaths[0], 'SICOVEN-backup-' + stamp);
-    const result = await createBackup({ db, userDataDir: app.getPath('userData'), destination });
+    const result = await runGlobalBackup(() =>
+      createBackup({ db, userDataDir: app.getPath('userData'), destination })
+    );
     try {
       db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('accounting_backup_created', JSON.stringify({ actor: actor.username, destination: path.basename(destination), databaseSha256: result.databaseSha256, documentCount: result.documentCount, createdAt: result.createdAt }));
     } catch (auditError) {
