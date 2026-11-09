@@ -226,7 +226,7 @@ async function bindDefaultTenantForSession(token) {
     } catch {}
   }
   const selected = companies.find(item => String(item.id) === preferredId) || companies[0];
-  await tenantController.companySessionContext.selectCompany(token, selected.id);
+  await tenantController.companySessionContext.selectCompany(token, selected.id, { skipFlush: true });
   return selected.id;
 }
 
