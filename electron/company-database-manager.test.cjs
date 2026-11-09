@@ -150,7 +150,7 @@ test('migrates tenant schema transactionally and updates its local registry vers
 });
 
 test('rolls back a failed tenant migration and does not advance the registry', t => {
-  const { manager, controlDb, userDataDir } = fixture(t);
+  const { manager, controlDb, userDataDir, registerManager } = fixture(t);
   manager.registerCompany({ id: 'comp-failed-upgrade', rif: 'J-12345678-9', name: 'Empresa sin migrar' });
   manager.closeAll();
   const brokenUpgrade = createCompanyDatabaseManager({
