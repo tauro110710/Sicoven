@@ -91,8 +91,8 @@ function registerCompanySessionIpc({
       }
       const previous = { companyId, name: current.name, rif: current.rif };
       const updated = runtime.updateCompanyMetadata({ companyId, name, rif });
-      const tenantDb = runtime.getCompanyDatabase(companyId);
       try {
+        const tenantDb = runtime.getCompanyDatabase(companyId);
         tenantDb.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
           .run('company_metadata_updated', JSON.stringify({
             companyId, actorUserId: currentSession.id, actorUsername: currentSession.username,
