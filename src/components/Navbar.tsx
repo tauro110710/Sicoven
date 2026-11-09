@@ -160,6 +160,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               v{__SICOVEN_VERSION__}
             </span>
           </div>
+          <div className="hidden sm:flex flex-col items-end justify-center min-w-0 px-2" title="Tasa BCV vigente utilizada exclusivamente para equivalencias y cálculos de Inventario">
+            <span className="text-[9px] uppercase tracking-wide text-slate-400">BCV · Inventario</span>
+            <span className="text-xs font-bold font-mono text-emerald-300 whitespace-nowrap">{currentCompany.inventoryBcvRate ? formatBs(currentCompany.inventoryBcvRate) + ' / USD' : 'Consultando tasa…'}</span>
+            <span className="text-[9px] text-slate-400">{currentCompany.inventoryBcvRateEffectiveDate ? 'Vigencia ' + currentCompany.inventoryBcvRateEffectiveDate : 'Sin fecha vigente'}</span>
+          </div>
           {/* Company Switcher, Currency View & Mobile Menu Button */}
           <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
             {/* Multi-Company Selector */}
