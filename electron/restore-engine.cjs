@@ -50,8 +50,36 @@ function verifyCompanyTree(directory, manifest) {
       const meta=db.prepare("SELECT meta_value FROM sicoven_database_meta WHERE meta_key='company_id'").get();
       if(String(meta?.meta_value||'')!==item.companyId) throw new Error('La identidad interna de la base de empresa no coincide.');
     } finally { db.close(); }
-    const names=fs.readdirSync(path.join(root,entry.name));
-    if(names.length!==1||names[0]!=='accounting.sqlite') throw new Error('Una carpeta de empresa contiene archivos inesperados.');
+    const companyDirectory = path.join(root, entry.name);
+    const names = fs.readdirSync(companyDirectory);
+    if (names.some(name => !['accounting.sqlite', 'supporting-documents'].includes(name))) {
+      throw new Error('Una carpeta de empresa contiene archivos inesperados.');
+    }
+    const documentsDirectory = path.join(companyDirectory, 'supporting-documents');
+    const actualDocuments = [];
+    function collectCompanyDocuments(directory, relative = '') {
+      if (!exists(directory)) return;
+      realDir(directory, 'Documentos de empresa');
+      for (const child of fs.readdirSync(directory, { withFileTypes: true }).sort((a,b)=>a.name.localeCompare(b.name))) {
+        const absolute = path.join(directory, child.name);
+        const childRelative = relative ? relative + '/' + child.name : child.name;
+        if (child.isSymbolicLink()) throw new Error('Los documentos de empresa no admiten enlaces simbólicos.');
+        if (child.isDirectory()) collectCompanyDocuments(absolute, childRelative);
+        else if (child.isFile()) {
+          realFile(absolute, 'Documento de empresa');
+          actualDocuments.push({
+            path: 'supporting-documents/' + childRelative,
+            size: fs.statSync(absolute).size,
+            sha256: hashFile(absolute)
+          });
+        } else throw new Error('La carpeta de documentos de empresa contiene un elemento no admitido.');
+      }
+    }
+    collectCompanyDocuments(documentsDirectory);
+    const expectedDocuments = (item.documents || []).slice().sort((a,b)=>a.path.localeCompare(b.path));
+    if (JSON.stringify(actualDocuments) !== JSON.stringify(expectedDocuments)) {
+      throw new Error('Los documentos de la empresa ' + item.companyId + ' no coinciden con el manifiesto global.');
+    }
   }
   return true;
 }
