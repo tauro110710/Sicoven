@@ -116,7 +116,7 @@ interface AccountingContextType {
   storageError: string | null;
   currentCompany: Company;
   setCurrentCompanyId: (id: string) => void;
-  addCompany: (comp: Omit<Company, 'id'>) => Company;
+  addCompany: (comp: Omit<Company, 'id'>) => Promise<Company>;
   updateCompany: (comp: Company) => void;
   updateBcvRate: (newRate: number, effectiveDate?: string) => void;
   correctBcvRate: (input: { newRate: number; effectiveDate: string; reason: string; workpaperNote?: string }) => Promise<void>;
@@ -1321,8 +1321,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, customers, suppliers, movements, fixedAssets, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency]);
 
-  const addCompany = (comp: Omit<Company, 'id'>): Company => {
+  const addCompany = async (comp: Omit<Company, 'id'>): Promise<Company> => {
     assertSQLitePersistenceReady('Registrar la empresa');
+    if (window.sicovenStore) {
+      const created = await window.sicovenStore.createCompany(token, comp as unknown as Record<string, unknown>);
+      if (!created?.ok || !created.company?.id) {
+        throw new Error('SQLite no confirmó la creación de la base independiente de la empresa.');
+      }
+      // The new tenant is selected by the main process. Reloading hydrates its
+      // empty, verified snapshot; never copy the previous company's in-memory
+      // collections into the new database.
+      return { ...comp, id: created.company.id };
+    }
     const newComp: Company = {
       ...comp,
       id: `comp-${Date.now()}`
