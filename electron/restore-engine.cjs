@@ -334,25 +334,62 @@ async function executeRestore(args) {
   finally { restoreInProgress = false; }
 }
 
-function registerRestoreIpc({ipcMain,app,dialog,licenseView,getActiveSession,getDb,closeDatabase,reopenDatabase,getWindow}) {
-  ipcMain.handle('sicoven:restore-execute',async(_event,token)=>{
-    const licensing=licenseView();
-    if(!licensing.authorized) throw new Error(licensing.message||'Licencia no autorizada.');
-    const actor=getActiveSession(token);
-    if(!hasFullSystemAccess(actor)) throw new Error('Se requiere una sesión autenticada con rol contable (admin o contador) para restaurar respaldos.');
-    const parent=getWindow?.();
-    const selection=parent
-      ? await dialog.showOpenDialog(parent,{title:'Seleccionar respaldo verificado de SICOVEN',properties:['openDirectory']})
-      : await dialog.showOpenDialog({title:'Seleccionar respaldo verificado de SICOVEN',properties:['openDirectory']});
-    if(selection.canceled||!selection.filePaths?.[0]) return {ok:false,canceled:true};
-    const check=verifyBackupDirectory(selection.filePaths[0]);
-    const confirm=parent
-      ? await dialog.showMessageBox(parent,{type:'warning',buttons:['Cancelar','Restaurar respaldo'],defaultId:0,cancelId:0,title:'Confirmar restauración contable',message:'Esta operación reemplazará la base contable y los documentos actuales.',detail:'Respaldo: '+path.basename(selection.filePaths[0])+'\\nDocumentos: '+check.documentCount+'\\nHuella SQLite: '+check.databaseSha256+'\\nSe creará un snapshot de retorno antes del cambio.'})
-      : await dialog.showMessageBox({type:'warning',buttons:['Cancelar','Restaurar respaldo'],defaultId:0,cancelId:0,title:'Confirmar restauración contable',message:'Esta operación reemplazará la base contable y los documentos actuales.',detail:'Respaldo: '+path.basename(selection.filePaths[0])+'\\nDocumentos: '+check.documentCount+'\\nHuella SQLite: '+check.databaseSha256+'\\nSe creará un snapshot de retorno antes del cambio.'});
-    if(confirm.response!==1) return {ok:false,canceled:true};
-    const result=await executeRestore({backupDirectory:selection.filePaths[0],userDataDir:app.getPath('userData'),db:getDb(),getDb,closeDatabase,reopenDatabase,actor:actor.username});
-    reconcileRestoreAudit({ db: getDb(), userDataDir: app.getPath('userData') });
-    return result;
+function registerRestoreIpc({
+  ipcMain, app, dialog, licenseView, getActiveSession, getDb,
+  closeDatabase, reopenDatabase, getWindow, operationContext = null, runtime = null
+}) {
+  if (operationContext && typeof operationContext.acquireMaintenanceLock !== 'function') {
+    throw new TypeError('La restauración global requiere un bloqueo de mantenimiento válido.');
+  }
+  if (runtime && typeof runtime.rebindControlDatabase !== 'function') {
+    throw new TypeError('La restauración global requiere un runtime capaz de reabrir el registro de empresas.');
+  }
+  ipcMain.handle('sicoven:restore-execute', async (_event, token) => {
+    const licensing = licenseView();
+    if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
+    const actor = getActiveSession(token);
+    if (!hasFullSystemAccess(actor)) throw new Error('Se requiere una sesión autenticada con rol contable (admin o contador) para restaurar respaldos.');
+    const parent = getWindow?.();
+    const selection = parent
+      ? await dialog.showOpenDialog(parent, { title: 'Seleccionar respaldo verificado de SICOVEN', properties: ['openDirectory'] })
+      : await dialog.showOpenDialog({ title: 'Seleccionar respaldo verificado de SICOVEN', properties: ['openDirectory'] });
+    if (selection.canceled || !selection.filePaths?.[0]) return { ok: false, canceled: true };
+    const check = verifyBackupDirectory(selection.filePaths[0]);
+    const confirm = parent
+      ? await dialog.showMessageBox(parent, {
+          type: 'warning', buttons: ['Cancelar', 'Restaurar respaldo'], defaultId: 0, cancelId: 0,
+          title: 'Confirmar restauración contable',
+          message: 'Esta operación reemplazará la base de control, todas las bases de empresas y los documentos actuales.',
+          detail: 'Respaldo: ' + path.basename(selection.filePaths[0]) + '\nDocumentos: ' + check.documentCount +
+            '\nHuella SQLite: ' + check.databaseSha256 + '\nSe creará un snapshot de retorno antes del cambio.'
+        })
+      : await dialog.showMessageBox({
+          type: 'warning', buttons: ['Cancelar', 'Restaurar respaldo'], defaultId: 0, cancelId: 0,
+          title: 'Confirmar restauración contable',
+          message: 'Esta operación reemplazará la base de control, todas las bases de empresas y los documentos actuales.',
+          detail: 'Respaldo: ' + path.basename(selection.filePaths[0]) + '\nDocumentos: ' + check.documentCount +
+            '\nHuella SQLite: ' + check.databaseSha256 + '\nSe creará un snapshot de retorno antes del cambio.'
+        });
+    if (confirm.response !== 1) return { ok: false, canceled: true };
+
+    const release = operationContext ? await operationContext.acquireMaintenanceLock() : () => {};
+    try {
+      runtime?.closeAll?.();
+      const result = await executeRestore({
+        backupDirectory: selection.filePaths[0],
+        userDataDir: app.getPath('userData'),
+        db: getDb(), getDb, closeDatabase, reopenDatabase,
+        actor: actor.username
+      });
+      reconcileRestoreAudit({ db: getDb(), userDataDir: app.getPath('userData') });
+      return result;
+    } finally {
+      try {
+        if (runtime && getDb()?.open) runtime.rebindControlDatabase(getDb());
+      } finally {
+        release();
+      }
+    }
   });
 }
 module.exports={executeRestore,recoverPendingRestore,registerRestoreIpc,restoreRollback};
