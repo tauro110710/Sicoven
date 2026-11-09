@@ -198,6 +198,16 @@ function licenseView(row = readLicenseRow()) {
   };
 }
 
+async function clearTenantRuntimeAfterLicenseShutdown() {
+  try {
+    if (tenantController) await tenantController.companySessionContext.clearAllSessions();
+  } catch (error) {
+    console.error('[SICOVEN tenant] No se pudo limpiar el contexto al cerrar la licencia:', error?.message || error);
+  } finally {
+    try { tenantController?.runtime.closeAll(); } catch {}
+  }
+}
+
 async function bindDefaultTenantForSession(token) {
   if (!tenantController) return null;
   const companies = tenantController.runtime.listCompanies().filter(item => String(item.status) === 'ACTIVE');
@@ -501,6 +511,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('sicoven:license-revalidate', async () => {
     const status = await revalidateLicense();
     if (!status.authorized) {
+      await clearTenantRuntimeAfterLicenseShutdown();
       sessions.clear();
       activeRendererSessionToken = null;
       db.prepare('DELETE FROM auth_sessions').run();
@@ -990,9 +1001,10 @@ app.whenReady().then(async () => {
   const initialLicenseStatus = licenseView();
   if (initialLicenseStatus.status === 'trial' && initialLicenseStatus.trialExpiresAt) {
     const remainingTrialMs = Math.max(0, Date.parse(initialLicenseStatus.trialExpiresAt) - Date.now());
-    trialExpiryTimer = setTimeout(() => {
+    trialExpiryTimer = setTimeout(async () => {
       const status = licenseView();
       if (!status.authorized) {
+        await clearTenantRuntimeAfterLicenseShutdown();
         sessions.clear();
         activeRendererSessionToken = null;
         db.prepare('DELETE FROM auth_sessions').run();
@@ -1004,6 +1016,7 @@ app.whenReady().then(async () => {
   licenseRecheckTimer = setInterval(async () => {
     const status = await revalidateLicense();
     if (!status.authorized) {
+      await clearTenantRuntimeAfterLicenseShutdown();
       sessions.clear();
       activeRendererSessionToken = null;
       db.prepare('DELETE FROM auth_sessions').run();
@@ -1016,6 +1029,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', () => {
+  try { tenantController?.runtime.closeAll(); } catch {}
   if (updateCheckTimer) clearInterval(updateCheckTimer);
   if (licenseRecheckTimer) clearInterval(licenseRecheckTimer);
   if (trialExpiryTimer) clearTimeout(trialExpiryTimer);
