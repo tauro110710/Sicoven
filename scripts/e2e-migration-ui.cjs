@@ -135,8 +135,8 @@ async function main() {
 
   await waitFor(() => evaluate("[...document.querySelectorAll('button')].some(button => button.innerText.trim() === 'Configuración')"), 'No apareció la navegación de Configuración');
   await clickButton('Configuración');
-  await waitFor(() => evaluate("[...document.querySelectorAll('button')].some(button => button.innerText.includes('Abrir importador transaccional'))"), 'No apareció el acceso al importador transaccional');
-  await clickButton('Abrir importador transaccional');
+  await waitFor(() => evaluate("[...document.querySelectorAll('button')].some(button => button.innerText.includes('Abrir importador universal'))"), 'No apareció el acceso al importador transaccional');
+  await clickButton('Abrir importador universal');
   await waitFor(() => evaluate("Boolean(document.querySelector('[role=dialog] #migration-target-company'))"), 'No abrió el diálogo del importador');
   await capture('migration-wizard-open.png');
 
