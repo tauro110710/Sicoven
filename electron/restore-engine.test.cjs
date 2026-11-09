@@ -351,6 +351,11 @@ test('global backup and restore include every independent company SQLite databas
     const manifest = JSON.parse(fs.readFileSync(path.join(backupDir, 'manifest.json'), 'utf8'));
     assert.deepEqual(manifest.companyDatabases.map(item => item.companyId), ['company-a', 'company-b']);
     assert.deepEqual(manifest.companyDatabases.map(item => item.documents.length), [1, 1]);
+    const backedUpCompanyDocument = path.join(backupDir, 'companies', 'company-a', 'supporting-documents', 'support.txt');
+    fs.writeFileSync(backedUpCompanyDocument, 'tampered-document');
+    assert.throws(() => verifyBackupDirectory(backupDir), /documentos de las empresas no coinciden/);
+    fs.writeFileSync(backedUpCompanyDocument, 'document-source-a');
+    assert.equal(verifyBackupDirectory(backupDir).ok, true);
     sourceDb.close();
     const result = await require('./restore-engine.cjs').executeRestore({
       backupDirectory: backupDir,
