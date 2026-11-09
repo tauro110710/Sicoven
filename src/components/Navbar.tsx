@@ -160,10 +160,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               v{__SICOVEN_VERSION__}
             </span>
           </div>
-          <div className="hidden sm:flex flex-col items-end justify-center min-w-0 px-2" title="Tasa BCV vigente utilizada exclusivamente para equivalencias y cálculos de Inventario">
-            <span className="text-[9px] uppercase tracking-wide text-slate-400">BCV · Inventario</span>
-            <span className="text-xs font-bold font-mono text-emerald-300 whitespace-nowrap">{currentCompany.inventoryBcvRate ? formatBs(currentCompany.inventoryBcvRate) + ' / USD' : 'Consultando tasa…'}</span>
-            <span className="text-[9px] text-slate-400">{currentCompany.inventoryBcvRateEffectiveDate ? 'Vigencia ' + currentCompany.inventoryBcvRateEffectiveDate : 'Sin fecha vigente'}</span>
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 px-1.5 sm:px-2" title="Tasa BCV vigente utilizada exclusivamente para equivalencias y cálculos de Inventario" aria-label="Tasa del Banco Central de Venezuela para Inventario">
+            <img src="./bcv-logo.svg" alt="Banco Central de Venezuela" className="h-8 w-8 sm:h-9 sm:w-9 object-contain rounded-full bg-white p-0.5 flex-shrink-0" />
+            <div className="flex flex-col items-start justify-center min-w-0">
+              <span className="text-[9px] uppercase tracking-wide text-slate-300">Tasa BCV · Inventario</span>
+              <span className="text-xs sm:text-sm font-bold font-mono text-emerald-300 whitespace-nowrap">{currentCompany.inventoryBcvRate ? formatBs(currentCompany.inventoryBcvRate) + ' / USD' : 'Consultando…'}</span>
+              <span className="text-[9px] text-slate-400 whitespace-nowrap">{currentCompany.inventoryBcvRateEffectiveDate ? 'Vigencia ' + currentCompany.inventoryBcvRateEffectiveDate : 'Sin fecha vigente'}</span>
+            </div>
           </div>
           {/* Company Switcher, Currency View & Mobile Menu Button */}
           <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
