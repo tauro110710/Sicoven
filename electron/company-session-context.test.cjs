@@ -229,15 +229,12 @@ test('rechecks company status and access before every tenant database operation'
 test('company creation IPC serializes tenant creation and persists the selected-company preference', async () => {
   const handlers = new Map();
   const preferences = new Map();
-  const audits = [];
+  let createdActor = null;
   let selectedCompanyId = null;
   let createdCompany = null;
   let acquired = 0, released = 0;
   const controlDb = {
     prepare: () => ({ run: (_json) => preferences.set('active_company_preference', _json) })
-  };
-  const tenantDb = {
-    prepare: () => ({ run: (...args) => audits.push(args) })
   };
   registerCompanySessionIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
@@ -247,8 +244,7 @@ test('company creation IPC serializes tenant creation and persists the selected-
       getSelectedCompanyId: () => selectedCompanyId
     },
     runtime: {
-      createCompany: async company => { createdCompany = company; return { ok: true, company }; },
-      getCompanyDatabase: () => tenantDb
+      createCompany: async (company, actor) => { createdCompany = company; createdActor = actor; return { ok: true, company }; }
     },
     operationContext: {
       acquireMaintenanceLock: async () => {
@@ -268,6 +264,6 @@ test('company creation IPC serializes tenant creation and persists the selected-
   assert.equal(selectedCompanyId, createdCompany.id);
   assert.equal(acquired, 1);
   assert.equal(released, 1);
-  assert.equal(audits[0][0], 'company_created');
+  assert.equal(createdActor.username, 'admin');
   assert.ok(preferences.has('active_company_preference'));
 });
