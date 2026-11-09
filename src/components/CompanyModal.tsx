@@ -78,7 +78,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
     savingRef.current = true;
     setSaving(true);
     try {
-    addCompany({
+    await addCompany({
       rif: rifValidation.formattedRif,
       name: name.trim().toUpperCase(),
       tradeName: tradeName.trim() || undefined,
@@ -99,6 +99,12 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       fiscalYear: Number(fiscalYear) || new Date().getFullYear(),
       bcvRate: 0,
     });
+    if (window.sicovenStore) {
+      // The main process created and selected a separate SQLite tenant.
+      // Reload before any stale in-memory company data can be persisted there.
+      window.location.reload();
+      return;
+    }
     await waitForPersistence();
     onClose();
     } catch (error) {
