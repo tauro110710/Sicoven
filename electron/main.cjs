@@ -2818,7 +2818,7 @@ app.whenReady().then(async () => {
     companySessionContext: tenantController.companySessionContext,
     runtime: tenantController.runtime,
     operationContext: tenantController.operationContext,
-    controlDb: db,
+    controlDb: dbHandle,
     licenseView, getActiveSession
   });
   registerCompanyExportIpc({
