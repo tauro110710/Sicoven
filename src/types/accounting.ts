@@ -63,6 +63,7 @@ export interface InventoryPricingConfiguration {
   basis: InventoryPricingBasis;
   margins: [number, number, number, number];
   applyExchangeGap: boolean;
+  exchangeRateCurrency?: 'USD' | 'EUR';
   /** Tasas en Bs. por unidad de la misma divisa (USD o EUR). */
   referenceRate?: number;
   replacementRate?: number;
