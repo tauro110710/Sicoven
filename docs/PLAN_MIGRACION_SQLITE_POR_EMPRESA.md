@@ -26,7 +26,6 @@ userData/
 - sicoven.sqlite: auth_users, auth_sessions, license_state, company_database_registry y app_control_state.
 - companies/<company-id>/accounting.sqlite: datos contables y operativos de esa empresa.
 - companies/<company-id>/supporting-documents/: documentos de esa empresa.
-- companies/<company-id>/backups/: respaldos individuales.
 - tenant-migration/sicoven-<migration-id>.sqlite.backup: respaldo SQLite consistente e inmutable de la base heredada, protegido por journal y SHA-256.
 
 El archivo de control conserva autenticación, sesiones, licencia y registro de empresas. Los datos contables y operativos viven en el archivo de la empresa.
@@ -99,7 +98,7 @@ Antes de habilitar esos cambios debe existir un coordinador transaccional recupe
 - correction-case-*: resolver la base de la empresa del caso.
 - inflation-classification-*, inflation-source-dossier-* y vat-fiscal-incident-*: resolver la base de la empresa indicada y comprobar su propiedad.
 - supporting-document-*: guardar metadata y archivos bajo companies/<company-id>/documents.
-- backup/restore: respaldo individual de una empresa y respaldo completo de instalación, con registro de control y manifiesto de hashes.
+- backup/restore: un único respaldo/restauración global de instalación, con DB de control, todas las DB de empresas, documentos y manifiesto de hashes. Para una empresa seleccionada solo se ofrece exportación/entrega en SQLite o JSON; no hay restauración individual.
 - reset-accounting: reset controlado de los archivos operativos, sin eliminar auth_users, auth_sessions ni license_state.
 
 Los handlers no deben confiar en rutas proporcionadas por el renderer. El proceso principal resuelve el companyId contra el registro local.
