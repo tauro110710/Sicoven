@@ -489,6 +489,8 @@ export interface InventoryProduct {
   price4?: number | null;
   /** Moneda única de referencia para los cuatro niveles comerciales. */
   priceCurrency?: 'USD' | 'BS';
+  /** Regla comercial propia del artículo; si falta, hereda la configuración de la empresa. */
+  pricingConfiguration?: InventoryPricingConfiguration;
   /** Campos de compatibilidad histórica; no son la fuente maestra de los niveles. */
   salesPriceBs: number;
   salesPriceUsd: number;
