@@ -135,13 +135,13 @@ async function main() {
 
   await waitFor(() => evaluate("[...document.querySelectorAll('button')].some(button => button.innerText.trim() === 'Configuración')"), 'No apareció la navegación de Configuración');
   await clickButton('Configuración');
-  await waitFor(() => evaluate("[...document.querySelectorAll('button')].some(button => button.innerText.includes('Abrir importador transaccional'))"), 'No apareció el acceso al importador transaccional');
-  await clickButton('Abrir importador transaccional');
+  await waitFor(() => evaluate("[...document.querySelectorAll('button')].some(button => button.innerText.includes('Abrir importador universal'))"), 'No apareció el acceso al importador transaccional');
+  await clickButton('Abrir importador universal');
   await waitFor(() => evaluate("Boolean(document.querySelector('[role=dialog] #migration-target-company'))"), 'No abrió el diálogo del importador');
   await capture('migration-wizard-open.png');
 
-  const selectedCompany = await evaluate('(() => { const select = document.querySelector("#migration-target-company"); const option = [...(select?.options || [])].find(item => item.value); if (!select || !option) return false; const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set; setter.call(select, option.value); select.dispatchEvent(new Event("change", { bubbles: true })); return true; })()');
-  assert(selectedCompany, 'El importador no presentó una empresa destino seleccionable.');
+  const selectedCompanyId = await evaluate('(() => { const select = document.querySelector("#migration-target-company"); const option = [...(select?.options || [])].find(item => item.value); if (!select || !option) return ""; const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set; setter.call(select, option.value); select.dispatchEvent(new Event("change", { bubbles: true })); return select.value; })()');
+  assert(selectedCompanyId, 'El importador no presentó una empresa destino seleccionable.');
 
   const documentNode = await command('DOM.getDocument', { depth: -1, pierce: true });
   const fileNode = await command('DOM.querySelector', {
@@ -161,7 +161,9 @@ async function main() {
   await waitFor(() => evaluate("document.body.innerText.includes('Inventario importado en E2E MIGRATION TEST, C.A.')"), 'La interfaz no confirmó la importación del artículo de prueba', 60000);
   await capture('migration-import-success.png');
 
-  const databasePath = path.join(process.env.APPDATA || '', 'sicoven-desktop', 'sicoven.sqlite');
+  // Cada empresa opera en su propia base SQLite; el archivo raíz sicoven.sqlite
+  // es la base de control/compatibilidad y no contiene el snapshot contable del tenant.
+  const databasePath = path.join(process.env.APPDATA || '', 'sicoven-desktop', 'companies', selectedCompanyId, 'accounting.sqlite');
   assert(fs.existsSync(databasePath), 'No se encontró la base SQLite de prueba: ' + databasePath);
   const pythonCheck = [
     'import json, sqlite3, sys',
