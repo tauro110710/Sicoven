@@ -4,6 +4,8 @@ import { Package, X, Check } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
 import type { InventoryProduct } from '../../types/accounting';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
+import { calculateInventoryPrices, DEFAULT_INVENTORY_PRICING } from '../../types/inventoryPricing';
+import type { InventoryPricingConfiguration } from '../../types/accounting';
 
 interface NewProductModalProps {
   isOpen: boolean;
@@ -30,6 +32,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   const avgCostBs = parseDecimalInput(avgCostInput);
   const [priceCurrency, setPriceCurrency] = useState<'USD' | 'BS'>('USD');
   const [priceInputs, setPriceInputs] = useState(['', '', '', '']);
+  const [pricingConfiguration, setPricingConfiguration] = useState<InventoryPricingConfiguration>(DEFAULT_INVENTORY_PRICING);
   const priceValues = priceInputs.map(parseDecimalInput);
   const priceLabels = [currentCompany.inventoryPriceLabels?.price1 || 'Precio 1', currentCompany.inventoryPriceLabels?.price2 || 'Precio 2', currentCompany.inventoryPriceLabels?.price3 || 'Precio 3', currentCompany.inventoryPriceLabels?.price4 || 'Precio 4'];
   const setPriceInput = (index: number, value: string) => setPriceInputs(previous => previous.map((item, i) => i === index ? value : item));
@@ -57,6 +60,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       setOpeningDate(product.openingDate || new Date().toISOString().slice(0, 10));
       setOpeningBcvRateInput(String(product.openingBcvRate || ''));
       setAvgCostInput(String(product.avgCostBs));
+      setPricingConfiguration(product.pricingConfiguration || currentCompany.inventoryPricingDefaults || DEFAULT_INVENTORY_PRICING);
       const legacyCurrency = product.priceCurrency || 'BS';
       setPriceCurrency(legacyCurrency);
       const legacyPrimary = Number(product.price1 ?? (legacyCurrency === 'USD' ? product.salesPriceUsd : product.salesPriceBs)) || 0;
@@ -73,6 +77,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       setCode(''); setName(''); setCategory('Mercancías Generales'); setUnit('Unidad');
       setMinStockInput('10'); setCurrentStockInput('0'); setOpeningDate(new Date().toISOString().slice(0, 10));
       setOpeningBcvRateInput(String(currentCompany.inventoryBcvRate || '')); setAvgCostInput(''); setPriceCurrency('USD'); setPriceInputs(['', '', '', '']);
+      setPricingConfiguration(currentCompany.inventoryPricingDefaults || DEFAULT_INVENTORY_PRICING);
       setInventoryAccountCode('1.1.4.01'); setCostOfSalesAccountCode('5.1.1.01');
       setAdjustmentAccountCode('5.1.2.01'); setOpeningBalanceAccountCode('3.3.1.01');
       setCostingMethod('PROMEDIO_PONDERADO'); setVatTreatment('GENERAL_16'); setItemType('MERCANCIA');
@@ -96,7 +101,16 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   const bcvRate = parseDecimalInput(openingBcvRateInput);
   const avgCostUsd = bcvRate > 0 ? avgCostBs / bcvRate : 0;
   const liveBcvRate = Number(currentCompany.inventoryBcvRate || 0);
-  const primaryPrice = priceValues[0];
+  const pricingCalculation = (() => {
+    try {
+      const result = calculateInventoryPrices({ baseCost: avgCostUsd, configuration: pricingConfiguration });
+      const prices = priceCurrency === 'BS' ? result.prices.map(value => value * liveBcvRate) as [number, number, number, number] : result.prices;
+      if (pricingConfiguration.mode === 'AUTOMATIC' && priceCurrency === 'BS' && liveBcvRate <= 0) throw new Error('La tasa BCV vigente es necesaria para expresar precios automáticos en bolívares.');
+      return { ...result, prices };
+    } catch (error) { return { prices: [0, 0, 0, 0] as [number, number, number, number], exchangeGapPercent: 0, exchangeFactor: 1, error: error instanceof Error ? error.message : 'Configuración de precios inválida.' }; }
+  })();
+  const effectivePriceValues = pricingConfiguration.mode === 'AUTOMATIC' ? pricingCalculation.prices : priceValues;
+  const primaryPrice = effectivePriceValues[0];
   const priceEquivalent = (value: number) => priceCurrency === 'USD'
     ? (liveBcvRate > 0 ? formatBs(value * liveBcvRate) : 'Tasa BCV no disponible')
     : (liveBcvRate > 0 ? formatUsd(value / liveBcvRate) : 'Tasa BCV no disponible');
@@ -124,10 +138,11 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
         code: code.trim().toUpperCase(), name: name.trim().toUpperCase(),
         category: category.trim(), unit: unit.trim(), minStock: Number(minStock) || 0,
         price1: primaryPrice,
-        price2: priceInputs[1].trim() ? priceValues[1] : null,
-        price3: priceInputs[2].trim() ? priceValues[2] : null,
-        price4: priceInputs[3].trim() ? priceValues[3] : null,
+        price2: pricingConfiguration.mode === 'AUTOMATIC' || priceInputs[1].trim() ? effectivePriceValues[1] : null,
+        price3: pricingConfiguration.mode === 'AUTOMATIC' || priceInputs[2].trim() ? effectivePriceValues[2] : null,
+        price4: pricingConfiguration.mode === 'AUTOMATIC' || priceInputs[3].trim() ? effectivePriceValues[3] : null,
         priceCurrency,
+        pricingConfiguration,
         salesPriceBs: 0,
         salesPriceUsd: 0,
         vatTreatment
