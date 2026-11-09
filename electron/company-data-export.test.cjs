@@ -29,7 +29,7 @@ test('exports selected company as a verified standalone SQLite package with its 
   await runtime.createCompany(company);
   await runtime.createCompany(other);
   const db = runtime.getCompanyDatabase(company.id);
-  const storageDir = path.join(root, 'supporting-documents');
+  const storageDir = path.join(root, 'companies', company.id, 'supporting-documents');
   fs.mkdirSync(storageDir);
   const storageKey = '123e4567-e89b-42d3-a456-426614174000.pdf';
   const bytes = Buffer.from('%PDF-1.4 company A document');
@@ -58,7 +58,7 @@ test('exports JSON with only the selected company and attached document bytes', 
   await runtime.createCompany(company);
   await runtime.createCompany(other);
   const db = runtime.getCompanyDatabase(company.id);
-  const storageDir = path.join(root, 'supporting-documents');
+  const storageDir = path.join(root, 'companies', company.id, 'supporting-documents');
   fs.mkdirSync(storageDir);
   const storageKey = '123e4567-e89b-42d3-a456-426614174001.pdf';
   const bytes = Buffer.from('%PDF-1.4 company A JSON document');
