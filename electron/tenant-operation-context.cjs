@@ -149,16 +149,19 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
     }
   }
 
-  async function clearActiveCompany() {
+  async function clearActiveCompany(options = {}) {
     if (switching) throw new Error('Ya hay un cambio de empresa en curso.');
+    const skipFlush = options?.skipFlush === true;
     switching = true;
     flushing = false;
     try {
       await waitForActiveOperations();
-      flushing = true;
-      await flushPendingWrites();
-      flushing = false;
-      await waitForActiveOperations();
+      if (!skipFlush) {
+        flushing = true;
+        await flushPendingWrites();
+        flushing = false;
+        await waitForActiveOperations();
+      }
       const previousId = activeCompanyId;
       if (previousId) runtime.closeCompany(previousId);
       activeCompanyId = '';
