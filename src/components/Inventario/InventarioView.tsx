@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import {
   Package,
@@ -23,127 +23,9 @@ import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { calculateVnrProvisionLedgerBalance } from '../../types/inventoryAccounting';
 import { InventarioContableTools } from './InventarioContableTools';
 import { InventoryMovementImport } from './InventoryMovementImport';
-import { fetchInventoryBcvHistory, fetchInventoryBcvRate } from '../../services/inventoryBcvService';
-import { appendDailyInventoryBcvRate, resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
-import { InventoryBcvManualEditor } from './InventoryBcvManualEditor';
 
 export const InventarioView: React.FC = () => {
-  const { currentCompany, products: allProducts, movements: allMovements, journalEntries: allJournalEntries, updateCompany, waitForPersistence, isStorageReady } = useAccounting();
-  const [bcvStatus, setBcvStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [bcvMessage, setBcvMessage] = useState('Consultando la tasa BCV del módulo Inventario…');
-  const [showBcvHistory, setShowBcvHistory] = useState(false);
-  const currentCompanyRef = useRef(currentCompany);
-  const updateCompanyRef = useRef(updateCompany);
-  const waitForPersistenceRef = useRef(waitForPersistence);
-  useEffect(() => {
-    currentCompanyRef.current = currentCompany;
-    updateCompanyRef.current = updateCompany;
-    waitForPersistenceRef.current = waitForPersistence;
-  }, [currentCompany, updateCompany, waitForPersistence]);
-  const bcvHistory = useMemo(
-    () => [...(currentCompany.inventoryBcvRateHistory || [])].sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate) || b.fetchedAt.localeCompare(a.fetchedAt)),
-    [currentCompany.inventoryBcvRateHistory]
-  );
-  const currentBcvRateSource = resolveInventoryBcvRate(
-    currentCompany.inventoryBcvRateHistory || [],
-    currentCompany.inventoryBcvRateEffectiveDate || '9999-12-31'
-  )?.provider;
-
-  useEffect(() => {
-    if (!isStorageReady || !currentCompany.id) return;
-    let active = true;
-    let running = false;
-    const refreshInventoryRate = async () => {
-      if (running) return;
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        setBcvStatus('error');
-        setBcvMessage('Sin conexión a Internet. SICOVEN conserva y utiliza la última tasa guardada en SQLite; puede registrar una tasa manual.');
-        return;
-      }
-      running = true;
-      try {
-        const [result, providerHistory] = await Promise.all([
-          fetchInventoryBcvRate(),
-          fetchInventoryBcvHistory()
-        ]);
-        if (!active) return;
-        const company = currentCompanyRef.current;
-        const history = company.inventoryBcvRateHistory || [];
-        const latestSavedDate = history.reduce(
-          (latest, entry) => entry.effectiveDate > latest ? entry.effectiveDate : latest,
-          company.inventoryBcvRateEffectiveDate || ''
-        );
-        if (latestSavedDate && result.effectiveDate < latestSavedDate) {
-          throw new Error('La fuente BCV devolvió una fecha anterior a la última tasa guardada. Se conserva el valor vigente y no se altera el historial.');
-        }
-        let nextHistory = history;
-        for (const dailyRate of providerHistory.filter(entry => entry.effectiveDate <= result.effectiveDate)) {
-          nextHistory = appendDailyInventoryBcvRate(nextHistory, {
-            rate: dailyRate.rate,
-            effectiveDate: dailyRate.effectiveDate,
-            fetchedAt: dailyRate.fetchedAt,
-            source: dailyRate.sourceUrl,
-            provider: dailyRate.provider,
-            mode: 'AUTOMATIC'
-          });
-        }
-        nextHistory = appendDailyInventoryBcvRate(nextHistory, {
-          rate: result.rate,
-          effectiveDate: result.effectiveDate,
-          fetchedAt: result.fetchedAt,
-          source: result.sourceUrl,
-          provider: result.provider,
-          mode: 'AUTOMATIC'
-        });
-        const savedForDate = resolveInventoryBcvRate(nextHistory, result.effectiveDate);
-        const effectiveRate = savedForDate?.rate ?? result.rate;
-        const effectiveFetchedAt = savedForDate?.fetchedAt ?? result.fetchedAt;
-        const needsSave = company.inventoryBcvRate !== effectiveRate ||
-          company.inventoryBcvRateEffectiveDate !== result.effectiveDate ||
-          company.inventoryBcvRateFetchedAt !== effectiveFetchedAt ||
-          nextHistory.length !== history.length;
-        if (needsSave) {
-          if (!window.sicovenStore?.save) throw new Error('La actualización BCV requiere SICOVEN de escritorio con SQLite local disponible.');
-          updateCompanyRef.current({
-            ...company,
-            inventoryBcvRate: effectiveRate,
-            inventoryBcvRateEffectiveDate: result.effectiveDate,
-            inventoryBcvRateFetchedAt: effectiveFetchedAt,
-            inventoryBcvRateHistory: nextHistory
-          });
-          try {
-            await waitForPersistenceRef.current();
-          } catch (persistenceError) {
-            updateCompanyRef.current(company);
-            await waitForPersistenceRef.current().catch(() => undefined);
-            throw persistenceError;
-          }
-        }
-        if (active) {
-          setBcvStatus('ready');
-          setBcvMessage(nextHistory.length > history.length
-            ? 'Tasa vigente guardada localmente; se añadieron ' + (nextHistory.length - history.length) + ' registros diarios al historial.'
-            : savedForDate ? 'La tasa de esta fecha ya estaba registrada; se conserva el historial.' : 'Tasa consultada y guardada localmente en SQLite.');
-        }
-      } catch (error) {
-        if (active) {
-          setBcvStatus('error');
-          setBcvMessage(error instanceof Error ? error.message : 'No se pudo consultar la tasa BCV. Se conserva la última tasa local.');
-        }
-      } finally {
-        running = false;
-      }
-    };
-    void refreshInventoryRate();
-    const handleOnline = () => { void refreshInventoryRate(); };
-    window.addEventListener('online', handleOnline);
-    const interval = window.setInterval(() => { void refreshInventoryRate(); }, 60 * 60 * 1000);
-    return () => {
-      active = false;
-      window.removeEventListener('online', handleOnline);
-      window.clearInterval(interval);
-    };
-  }, [currentCompany.id, isStorageReady]);
+  const { currentCompany, products: allProducts, movements: allMovements, journalEntries: allJournalEntries } = useAccounting();
   const companyProducts = filterEntriesByCompany(allProducts, currentCompany.id);
   const companyMovements = filterEntriesByCompany(allMovements, currentCompany.id);
   const companyJournalEntries = filterEntriesByCompany(allJournalEntries, currentCompany.id);
@@ -254,45 +136,6 @@ export const InventarioView: React.FC = () => {
               Crear Artículo
             </button>
           </div>
-        </div>
-
-        <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50/70 p-4 no-print">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-wide text-sky-900">Tasa BCV propia de Inventario</div>
-              <div className="mt-1 text-xl font-bold font-mono text-slate-900">
-                {currentCompany.inventoryBcvRate ? formatBs(currentCompany.inventoryBcvRate) : 'Sin tasa registrada'}
-                <span className="ml-2 text-xs font-semibold text-slate-500">por USD</span>
-              </div>
-              <div className="mt-1 text-[11px] text-slate-600">
-                Vigencia: {currentCompany.inventoryBcvRateEffectiveDate || 'Pendiente'} · Fuente: {currentBcvRateSource === 'manual' ? 'Registro manual' : currentBcvRateSource === 'bcv.today' ? 'bcv.today' : 'Origen no documentado'}
-              </div>
-              <div role="status" className={`mt-1 text-[11px] ${bcvStatus === 'error' ? 'text-amber-800' : 'text-sky-800'}`}>
-                {bcvMessage}
-              </div>
-            </div>
-            <button type="button" onClick={() => setShowBcvHistory(value => !value)} className="rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs font-semibold text-sky-900 hover:bg-sky-100">
-              {showBcvHistory ? 'Ocultar historial' : 'Historial diario (' + bcvHistory.length + ')'}
-            </button>
-          </div>
-          <InventoryBcvManualEditor />
-          {showBcvHistory && (
-            <div className="mt-3 overflow-x-auto rounded-lg border border-sky-100 bg-white">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-50 text-left text-slate-500"><tr><th className="p-2">Fecha valor</th><th className="p-2 text-right">Bs./USD</th><th className="p-2">Tipo</th><th className="p-2">Registrada</th></tr></thead>
-                <tbody>
-                  {bcvHistory.map(entry => (
-                    <tr key={entry.id} className="border-t border-slate-100">
-                      <td className="p-2">{entry.effectiveDate}</td>
-                      <td className="p-2 text-right font-mono">{entry.rate.toLocaleString('es-VE', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</td>
-                      <td className="p-2">{entry.mode === 'AUTOMATIC' ? 'Automática' : 'Manual'}</td>
-                      <td className="p-2">{new Date(entry.fetchedAt).toLocaleString('es-VE')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
 
         {/* Inventory Metric Cards */}
