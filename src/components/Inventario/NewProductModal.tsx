@@ -100,20 +100,16 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   const bcvRate = parseDecimalInput(openingBcvRateInput);
   const avgCostUsd = parseDecimalInput(avgCostInput);
   const avgCostBs = bcvRate > 0 ? Number((avgCostUsd * bcvRate).toFixed(2)) : 0;
-  const liveBcvRate = Number(currentCompany.inventoryBcvRate || 0);
   const pricingCalculation = (() => {
     try {
-      const result = calculateInventoryPrices({ baseCost: avgCostUsd, configuration: pricingConfiguration });
-      const prices = priceCurrency === 'BS' ? result.prices.map(value => value * liveBcvRate) as [number, number, number, number] : result.prices;
-      if (pricingConfiguration.mode === 'AUTOMATIC' && priceCurrency === 'BS' && liveBcvRate <= 0) throw new Error('La tasa BCV vigente es necesaria para expresar precios automáticos en bolívares.');
-      return { ...result, prices };
+      if (pricingConfiguration.mode === 'AUTOMATIC' && priceCurrency === 'BS') {
+        throw new Error('La fijación automática se calcula en USD. Para fijar precios en bolívares, use el modo manual; la tasa BCV se registra en cada factura del Libro de Ventas.');
+      }
+      return calculateInventoryPrices({ baseCost: avgCostUsd, configuration: pricingConfiguration });
     } catch (error) { return { prices: [0, 0, 0, 0] as [number, number, number, number], exchangeGapPercent: 0, exchangeFactor: 1, error: error instanceof Error ? error.message : 'Configuración de precios inválida.' }; }
   })();
   const effectivePriceValues = pricingConfiguration.mode === 'AUTOMATIC' ? pricingCalculation.prices : priceValues;
   const primaryPrice = effectivePriceValues[0];
-  const priceEquivalent = (value: number) => priceCurrency === 'USD'
-    ? (liveBcvRate > 0 ? formatBs(value * liveBcvRate) : 'Tasa BCV no disponible')
-    : (liveBcvRate > 0 ? formatUsd(value / liveBcvRate) : 'Tasa BCV no disponible');
 
   const movementAccounts = accounts.filter(account => account.isMovement);
   const inventoryAccounts = movementAccounts.filter(account => account.type === 'ACTIVO');
@@ -360,7 +356,6 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <div><strong className="text-slate-800">Estrategia de precios comerciales</strong><p className="text-[10px] text-slate-500">La regla puede ser distinta por empresa y sobrescribirse por artículo.</p></div>
-              <span className="text-[10px] text-slate-600">BCV vigente: {liveBcvRate > 0 ? liveBcvRate.toLocaleString('es-VE') : 'No disponible'}</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <label className="block font-semibold text-slate-700">Método de fijación
@@ -407,11 +402,11 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
                 return <div key={index}>
                   <label className="block font-semibold text-slate-700 mb-1">{priceLabels[index]}{index === 0 ? ' *' : ''}</label>
                   <input type="text" inputMode="decimal" required={index === 0} disabled={pricingConfiguration.mode === 'AUTOMATIC'} value={pricingConfiguration.mode === 'AUTOMATIC' ? (shownValue ? shownValue.toFixed(2) : '') : value} placeholder={index === 0 ? '0.00' : 'Opcional'} onChange={e => setPriceInput(index, e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg font-mono font-bold disabled:bg-slate-100" />
-                  <span className="block text-[10px] text-slate-500 font-mono mt-1">{pricingConfiguration.mode === 'AUTOMATIC' ? (pricingCalculation.error ? 'No calculado' : priceEquivalent(shownValue)) : (value.trim() ? priceEquivalent(shownValue) : 'Sin definir')}</span>
+                  <span className="block text-[10px] text-slate-500 font-mono mt-1">{pricingConfiguration.mode === 'AUTOMATIC' ? (pricingCalculation.error ? 'No calculado' : 'Calculado en USD') : (value.trim() ? (priceCurrency === 'USD' ? 'USD' : 'Bs.') : 'Sin definir')}</span>
                 </div>;
               })}
             </div>
-            <p className="text-[10px] text-slate-500">Los cuatro niveles comparten la moneda seleccionada. En modo automático, los importes se calculan con la regla elegida; en modo manual se conservan los valores digitados. La conversión a Bs. usa BCV vigente y no reemplaza el valor de facturación histórica.</p>
+            <p className="text-[10px] text-slate-500">Los cuatro niveles comparten la moneda seleccionada. En modo automático, los importes se calculan en USD; en modo manual se conservan los valores digitados. La tasa BCV de cada venta se registra manualmente en el Libro de Ventas y no depende de una tasa global del Inventario.</p>
           </div>
 
           {product && <div className="grid gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
