@@ -106,9 +106,11 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
       await window.sicovenStore.selectActiveCompany(auth.token, firstCompanyId);
       window.location.reload();
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo completar la migración.';
       setTenantMigration(state => ({
-        ...state, running: false,
-        error: error instanceof Error ? error.message : 'No se pudo completar la migración.'
+        ...state, required: false, running: false,
+        blocked: 'La migración no quedó confirmada. Se bloqueó el reintento automático para proteger los archivos preparados y el journal. No elimines ni sobrescribas las bases locales. Detalle: ' + message,
+        error: message
       }));
     }
   };
