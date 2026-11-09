@@ -134,7 +134,7 @@ function createCompanySessionContext({ runtime, operationContext, getActiveSessi
 
   async function clearAllSessions() {
     try {
-      if (operationContext.getActiveCompanyId()) await operationContext.clearActiveCompany();
+      if (operationContext.getActiveCompanyId()) await operationContext.clearActiveCompany({ skipFlush: true });
     } finally {
       selectedByToken.clear();
       activeSessionToken = null;
