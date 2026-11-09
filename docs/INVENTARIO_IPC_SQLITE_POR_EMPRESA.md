@@ -103,7 +103,7 @@ La interfaz solo podrá mostrar una empresa nueva como operativa después de que
 3. Hacer que el cambio de empresa espere la cola de persistencia actual, bloquee escrituras, cierre recursos anteriores y cargue el snapshot nuevo.
 4. Adaptar los handlers de estado, auditoría, correcciones y periodos.
 5. Adaptar inflación, documentos e incidencias IVA junto con sus relaciones y archivos.
-6. Implementar backup/restore por empresa y de instalación completa.
+6. Implementar únicamente backup/restore global; para una empresa seleccionada, ofrecer exportación/entrega SQLite o JSON sin restauración individual.
 7. Integrar el orquestador reversible de migración heredada y registrar todas las bases únicamente después de validar el conjunto completo.
 8. Probar aislamiento, operaciones simultáneas, fallos de cambio de empresa, corrupción, rollback, instalación limpia y actualización.
 
