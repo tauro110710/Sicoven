@@ -29,7 +29,6 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   const [openingDate, setOpeningDate] = useState(new Date().toISOString().slice(0, 10));
   const [openingBcvRateInput, setOpeningBcvRateInput] = useState('');
   const [avgCostInput, setAvgCostInput] = useState('');
-  const avgCostBs = parseDecimalInput(avgCostInput);
   const [priceCurrency, setPriceCurrency] = useState<'USD' | 'BS'>('USD');
   const [priceInputs, setPriceInputs] = useState(['', '', '', '']);
   const [pricingConfiguration, setPricingConfiguration] = useState<InventoryPricingConfiguration>(DEFAULT_INVENTORY_PRICING);
@@ -59,7 +58,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       setMinStockInput(String(product.minStock)); setCurrentStockInput(String(product.currentStock));
       setOpeningDate(product.openingDate || new Date().toISOString().slice(0, 10));
       setOpeningBcvRateInput(String(product.openingBcvRate || ''));
-      setAvgCostInput(String(product.avgCostBs));
+      setAvgCostInput(String(product.avgCostUsd));
       setPricingConfiguration(product.pricingConfiguration || DEFAULT_INVENTORY_PRICING);
       const legacyCurrency = product.priceCurrency || 'BS';
       setPriceCurrency(legacyCurrency);
@@ -99,7 +98,8 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   if (!isOpen) return null;
 
   const bcvRate = parseDecimalInput(openingBcvRateInput);
-  const avgCostUsd = bcvRate > 0 ? avgCostBs / bcvRate : 0;
+  const avgCostUsd = parseDecimalInput(avgCostInput);
+  const avgCostBs = bcvRate > 0 ? Number((avgCostUsd * bcvRate).toFixed(2)) : 0;
   const liveBcvRate = Number(currentCompany.inventoryBcvRate || 0);
   const pricingCalculation = (() => {
     try {
@@ -125,7 +125,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
     setError('');
     if (!code.trim() || !name.trim()) { setError('El código y la descripción son obligatorios.'); return; }
     if (pricingConfiguration.mode === 'AUTOMATIC' && (avgCostUsd <= 0 || pricingCalculation.error)) { setError(pricingCalculation.error || 'Ingrese un costo de inventario positivo y su tasa histórica antes de calcular precios automáticos.'); return; }
-    if (!product && (currentStock > 0 || avgCostBs > 0) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('Ingrese la tasa BCV histórica aplicable al inventario inicial, por ejemplo 889,67.'); return; }
+    if (!product && (currentStock > 0 || avgCostUsd > 0) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('Ingrese la tasa BCV histórica aplicable al inventario inicial, por ejemplo 889,67.'); return; }
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
@@ -344,9 +344,9 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Costo unitario de inventario (Bs.)</label>
+              <label className="block font-semibold text-slate-700 mb-1">Costo base unitario de adquisición (USD)</label>
               <input type="text" inputMode="decimal" value={avgCostInput} disabled={Boolean(product)} placeholder="0.00" onChange={e => setAvgCostInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none" />
-              <span className="text-[11px] text-slate-500 font-mono">Equivalente histórico: {formatUsd(avgCostUsd)}</span>
+              <span className="text-[11px] text-slate-500 font-mono">Costo histórico calculado en Bs.: {formatBs(avgCostBs)} · Tasa de adquisición: {bcvRate > 0 ? bcvRate.toLocaleString('es-VE') : 'Pendiente'}</span>
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Moneda de referencia de los precios</label>
