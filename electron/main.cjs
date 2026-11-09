@@ -654,28 +654,32 @@ app.whenReady().then(async () => {
     return { ok: true };
   });
 
-  ipcMain.handle('sicoven:load-state', (_event, token) => {
-    // La lectura contable requiere licencia válida y sesión autenticada.
+  ipcMain.handle('sicoven:load-state', async (_event, token) => {
+    // The legacy database is used only before any tenant has been registered.
     if (!licenseView().authorized || !getActiveSession(token)) return null;
-    const row = db.prepare('SELECT state_json FROM app_state WHERE state_key = ?').get('accounting');
-    if (!row) return null;
-    try { return JSON.parse(row.state_json); } catch { return null; }
+    return tenantController.withDatabase(token, activeDb => {
+      const row = activeDb.prepare('SELECT state_json FROM app_state WHERE state_key = ?').get('accounting');
+      if (!row) return null;
+      try { return JSON.parse(row.state_json); } catch { return null; }
+    });
   });
 
-  ipcMain.handle('sicoven:audit-list', (_event, token, requestedLimit = 100) => {
+  ipcMain.handle('sicoven:audit-list', async (_event, token, requestedLimit = 100) => {
     if (!licenseView().authorized || !getActiveSession(token)) {
       return { ok: false, message: 'Sesión no válida o licencia no autorizada.', events: [] };
     }
     const limit = Math.min(500, Math.max(1, Math.floor(Number(requestedLimit) || 100)));
-    const rows = db.prepare("SELECT id,event_type,details_json,created_at FROM audit_events WHERE event_type <> 'state_saved' ORDER BY id DESC LIMIT ?").all(limit);
-    return {
-      ok: true,
-      events: rows.map(row => {
-        let details = {};
-        try { details = JSON.parse(row.details_json) || {}; } catch {}
-        return { id: row.id, eventType: row.event_type, details, createdAt: row.created_at };
-      })
-    };
+    return tenantController.withDatabase(token, activeDb => {
+      const rows = activeDb.prepare("SELECT id,event_type,details_json,created_at FROM audit_events WHERE event_type <> 'state_saved' ORDER BY id DESC LIMIT ?").all(limit);
+      return {
+        ok: true,
+        events: rows.map(row => {
+          let details = {};
+          try { details = JSON.parse(row.details_json) || {}; } catch {}
+          return { id: row.id, eventType: row.event_type, details, createdAt: row.created_at };
+        })
+      };
+    });
   });
 
   ipcMain.handle('sicoven:audit-record-correction', (_event, token, input) => {
