@@ -383,8 +383,6 @@ export interface SaleInventoryLine {
   /** Nivel comercial elegido en el documento, cuando se origina desde catálogo. */
   priceLevel?: 1 | 2 | 3 | 4;
   priceCurrency?: 'USD' | 'BS';
-  /** Regla comercial propia del artículo; si falta, hereda la configuración de la empresa. */
-  pricingConfiguration?: InventoryPricingConfiguration;
   priceValue?: number;
   /** Tasa de referencia conservada al fijar el precio del renglón. */
   priceBcvRate?: number;
