@@ -24,12 +24,20 @@ function fixture(t, overrides = {}) {
     },
     ...overrides
   });
+  const managers = [manager];
+  const registerManager = additionalManager => {
+    managers.push(additionalManager);
+    return additionalManager;
+  };
   t.after(() => {
-    try { manager.closeAll(); } catch {}
-    try { controlDb.close(); } catch {}
+    // Close every tenant manager before deleting SQLite files on Windows.
+    for (const currentManager of managers.reverse()) {
+      try { currentManager.closeAll(); } catch {}
+    }
+    try { if (controlDb.open) controlDb.close(); } catch {}
     fs.rmSync(userDataDir, { recursive: true, force: true });
   });
-  return { userDataDir, controlDb, manager };
+  return { userDataDir, controlDb, manager, registerManager };
 }
 
 test('creates a separate local SQLite file for each registered company', t => {
@@ -119,7 +127,7 @@ test('rejects a database file copied from a different registered company', t => 
 });
 
 test('migrates tenant schema transactionally and updates its local registry version', t => {
-  const { manager, controlDb, userDataDir } = fixture(t);
+  const { manager, controlDb, userDataDir, registerManager } = fixture(t);
   manager.registerCompany({ id: 'comp-upgrade', rif: 'J-12345678-9', name: 'Empresa actualización' });
   manager.closeAll();
   const upgraded = createCompanyDatabaseManager({
@@ -132,7 +140,7 @@ test('migrates tenant schema transactionally and updates its local registry vers
     },
     schemaVersion: 2
   });
-  t.after(() => upgraded.closeAll());
+  registerManager(upgraded);
   const db = upgraded.openCompany('comp-upgrade');
   assert.ok(db.prepare('PRAGMA table_info(ledger_rows)').all().some(column => column.name === 'source'));
   const registry = controlDb.prepare('SELECT schema_version FROM company_database_registry WHERE company_id=?').get('comp-upgrade');
@@ -154,7 +162,7 @@ test('rolls back a failed tenant migration and does not advance the registry', t
     },
     schemaVersion: 2
   });
-  t.after(() => brokenUpgrade.closeAll());
+  registerManager(brokenUpgrade);
   assert.throws(() => brokenUpgrade.openCompany('comp-failed-upgrade'), /migration interrupted/);
   const registry = controlDb.prepare('SELECT schema_version FROM company_database_registry WHERE company_id=?').get('comp-failed-upgrade');
   assert.equal(registry.schema_version, 1);

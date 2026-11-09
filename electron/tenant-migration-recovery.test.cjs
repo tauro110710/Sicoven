@@ -19,7 +19,6 @@ const {
 
 function fixture(t, overrides = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-tenant-recovery-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const sourceDb = new Database(path.join(root, 'sicoven.sqlite'));
   sourceDb.pragma('foreign_keys = ON');
   initializeTenantDatabase(sourceDb);
@@ -51,8 +50,16 @@ function fixture(t, overrides = {}) {
     ...overrides
   };
   t.after(() => {
-    manager.closeAll();
-    if (sourceDb.open) sourceDb.close();
+    // SQLite handles must be closed before Windows can remove the fixture directory.
+    try {
+      manager.closeAll();
+    } finally {
+      try {
+        if (sourceDb.open) sourceDb.close();
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    }
   });
   return { root, sourceDb, manager, options };
 }
