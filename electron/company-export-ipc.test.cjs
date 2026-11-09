@@ -58,7 +58,7 @@ test('company export IPC records a durable start and completion audit and always
   assert.equal(lockState.acquired, 1);
   assert.equal(lockState.released, 1);
   const events = fixture.runtime.getCompanyDatabase(fixture.company.id)
-    .prepare("SELECT event_type,details_json FROM audit_events WHERE event_type='company_data_exported'").all();
+    .prepare("SELECT event_type,details_json FROM audit_events WHERE event_type LIKE 'company_data_export_%' ORDER BY id").all();
   assert.equal(events.length, 2);
   assert.deepEqual(events.map(event => event.event_type), ['company_data_export_started', 'company_data_exported']);
   assert.equal(JSON.parse(events[0].details_json).exportId, JSON.parse(events[1].details_json).exportId);
