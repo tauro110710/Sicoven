@@ -25,6 +25,15 @@ function fixture(overrides = {}) {
   registerCompanySessionIpc({
     ipcMain: { handle: (name, handler) => handlers.set(name, handler) },
     companySessionContext: context,
+    runtime: {
+      createCompany: async company => ({ ok: true, company }),
+      getCompanyDatabase: () => ({ prepare: () => ({ run: () => ({ lastInsertRowid: 1 }) }) })
+    },
+    operationContext: {
+      getActiveCompanyId: () => 'company-a',
+      acquireMaintenanceLock: async () => () => {}
+    },
+    controlDb: { prepare: () => ({ run: () => ({ changes: 1 }) }) },
     licenseView: () => ({ authorized: true }),
     getActiveSession: token => token === 'valid-token' ? { id: 1, role: 'admin' } : null,
     ...overrides
