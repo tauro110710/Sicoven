@@ -81,11 +81,11 @@ Sus tablas operativas y relaciones deben migrarse junto con sus handlers. Las se
 - `registerBackupIpc` actualmente recibe un proxy de la DB única.
 - `registerRestoreIpc` actualmente cierra y vuelve a abrir la DB única.
 
-Se requieren dos alcances explícitos:
-1. Respaldo/restauración individual de empresa, incluyendo su SQLite y sus documentos.
-2. Respaldo/restauración completa de instalación, incluyendo la DB de control y todas las empresas.
+Se requieren dos funciones distintas, sin duplicar el mecanismo de respaldo:
+1. **Respaldo/restauración global de la instalación**, que incluye la DB de control, todas las bases SQLite de empresas y todos los documentos. La restauración global debe validar el manifiesto, el registro y la identidad de cada base antes de exponer la instalación.
+2. **Exportación/entrega de una empresa seleccionada**, en SQLite o JSON, para entregar sus datos cuando cambie de contador. Esta exportación no es un respaldo operativo ni ofrece restauración individual dentro de SICOVEN.
 
-Restaurar una empresa nunca puede reemplazar otra. La restauración completa debe validar el registro y la identidad de todas las bases antes de exponer la instalación.
+No debe existir un flujo de backup/restore por empresa. La recuperación operativa se realiza mediante el respaldo global; la entrega individual es un paquete de datos independiente.
 
 ## 4. Renderer y preload
 
