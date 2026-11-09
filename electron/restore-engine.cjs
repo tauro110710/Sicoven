@@ -336,7 +336,7 @@ async function executeRestore(args) {
 
 function registerRestoreIpc({
   ipcMain, app, dialog, licenseView, getActiveSession, getDb,
-  closeDatabase, reopenDatabase, getWindow, operationContext = null, runtime = null
+  closeDatabase, reopenDatabase, getWindow, operationContext = null, runtime = null, onRestored = null
 }) {
   if (operationContext && typeof operationContext.acquireMaintenanceLock !== 'function') {
     throw new TypeError('La restauración global requiere un bloqueo de mantenimiento válido.');
@@ -382,7 +382,8 @@ function registerRestoreIpc({
         actor: actor.username
       });
       reconcileRestoreAudit({ db: getDb(), userDataDir: app.getPath('userData') });
-      return result;
+      if (typeof onRestored === 'function') onRestored(result);
+      return { ...result, reloadRequired: true };
     } finally {
       try {
         if (runtime && getDb()?.open) runtime.rebindControlDatabase(getDb());
