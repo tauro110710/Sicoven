@@ -137,7 +137,7 @@ La copia de tablas auxiliares debe respetar el orden de dependencias y ejecutars
 - Cambiar de empresa y comprobar que cada base solo contiene su propio companyId.
 - Intentar inyectar un registro huérfano o de otra empresa y comprobar bloqueo.
 - Corromper o retirar un archivo y comprobar que no se recrea vacío ni afecta a otras empresas.
-- Restaurar una empresa y comprobar que las otras permanecen idénticas.
+- Exportar una empresa seleccionada en SQLite y JSON y verificar que no incluya registros ni documentos de otras empresas.
 - Respaldar/restaurar toda la instalación.
 - Actualizar una instalación real desde la versión anterior conservando login, licencia, administrador semilla y datos.
 - Probar cierre de sesión, reinicio, fallo de escritura, interrupción durante migración y recuperación del journal.
