@@ -121,7 +121,7 @@ function writeJsonExport({ db, company, userDataDir, destination }) {
 }
 async function writeSqliteExport({ db, company, userDataDir, destination }) {
   const identity = verifyCompanyIdentity(db, company.id, company.rif);
-  const docs = collectDocuments(db, userDataDir);
+  const docs = collectDocuments(db, userDataDir, company.id);
   const target = path.resolve(destination);
   if (fs.existsSync(target)) throw new Error('La carpeta de destino ya existe; no se sobrescribirá.');
   const staging = target + '.tmp-' + crypto.randomUUID();
