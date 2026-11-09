@@ -74,8 +74,13 @@ let db;
 let persistenceFlushBridge = null;
 let tenantController = null;
 let restoreReloadPending = false;
+function assertOperationalReady() {
+  if (restoreReloadPending) {
+    throw new Error('La restauración global terminó. Recargue SICOVEN para hidratar los datos restaurados antes de continuar.');
+  }
+}
 function withOperationalDatabase(token, operation) {
-  if (restoreReloadPending) throw new Error('La restauración global terminó. Recargue SICOVEN para hidratar los datos restaurados antes de continuar.');
+  assertOperationalReady();
   if (!tenantController) throw new Error('El runtime SQLite local todavía no está disponible.');
   return tenantController.withDatabase(token, operation);
 }
@@ -2795,7 +2800,8 @@ app.whenReady().then(async () => {
     ipcMain, db: dbHandle, licenseView, getActiveSession, dialog, app,
     getWindow: () => BrowserWindow.getFocusedWindow(),
     operationContext: tenantController.operationContext,
-    runtime: tenantController.runtime
+    runtime: tenantController.runtime,
+    assertOperationalReady
   });
   registerRestoreIpc({
     ipcMain, app, dialog, licenseView, getActiveSession,
@@ -2803,7 +2809,8 @@ app.whenReady().then(async () => {
     getWindow: () => BrowserWindow.getFocusedWindow(),
     operationContext: tenantController.operationContext,
     runtime: tenantController.runtime,
-    onRestored: () => { restoreReloadPending = true; }
+    onRestored: () => { restoreReloadPending = true; },
+    assertOperationalReady
   });
 
   const withDatabase = withOperationalDatabase;
@@ -2819,14 +2826,15 @@ app.whenReady().then(async () => {
     runtime: tenantController.runtime,
     operationContext: tenantController.operationContext,
     controlDb: dbHandle,
-    licenseView, getActiveSession
+    licenseView, getActiveSession, assertOperationalReady
   });
   registerCompanyExportIpc({
     ipcMain, runtime: tenantController.runtime,
     operationContext: tenantController.operationContext,
     companySessionContext: tenantController.companySessionContext,
     licenseView, getActiveSession, dialog, app,
-    getWindow: sender => BrowserWindow.fromWebContents(sender)
+    getWindow: sender => BrowserWindow.fromWebContents(sender),
+    assertOperationalReady
   });
   registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession, withDatabase });
   registerInflationClassificationIpc({ ipcMain, db, licenseView, getActiveSession, withDatabase });
