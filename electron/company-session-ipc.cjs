@@ -80,13 +80,9 @@ function registerCompanySessionIpc({
     const release = await operationContext.acquireMaintenanceLock();
     let created;
     try {
+      // The runtime writes the initial snapshot and company_created audit
+      // event in the same SQLite transaction before registry visibility.
       created = await runtime.createCompany(company, actor);
-      const tenantDb = runtime.getCompanyDatabase(company.id);
-      tenantDb.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
-        .run('company_created', JSON.stringify({
-          companyId: company.id, rif: company.rif, name: company.name,
-          actorUserId: actor.id, actorUsername: actor.username, createdAt: new Date().toISOString()
-        }));
     } finally {
       release();
     }
