@@ -23,7 +23,7 @@ function setup(t) {
   return { root, controlDb, runtime, company };
 }
 
-function registerFixture({ root, runtime, company, destination, lockState }) {
+function registerFixture({ root, runtime, company, destination, lockState, getActiveSession = () => ({ id: 7, username: 'admin', role: 'admin' }), onLock = () => {} }) {
   const handlers = new Map();
   const ipcMain = { handle: (channel, handler) => handlers.set(channel, handler) };
   registerCompanyExportIpc({
@@ -32,12 +32,13 @@ function registerFixture({ root, runtime, company, destination, lockState }) {
     operationContext: {
       acquireMaintenanceLock: async () => {
         lockState.acquired += 1;
+        onLock();
         return () => { lockState.released += 1; };
       }
     },
     companySessionContext: { getSelectedCompanyId: () => company.id },
     licenseView: () => ({ authorized: true }),
-    getActiveSession: () => ({ id: 7, username: 'admin', role: 'admin' }),
+    getActiveSession,
     dialog: { showSaveDialog: async () => ({ canceled: false, filePath: destination }) },
     app: { getPath: key => key === 'userData' ? root : root },
     getWindow: () => null
@@ -79,4 +80,28 @@ test('company export IPC records failed attempts without marking rejected cross-
   assert.equal(fs.existsSync(destination), false);
   const events = db.prepare("SELECT event_type FROM audit_events WHERE event_type LIKE 'company_data_export_%' ORDER BY id").all();
   assert.deepEqual(events.map(event => event.event_type), ['company_data_export_started', 'company_data_export_failed']);
+});
+
+
+test('company export IPC revalidates the authenticated session after the maintenance drain', async t => {
+  const fixture = setup(t);
+  await fixture.runtime.createCompany(fixture.company);
+  let sessionActive = true;
+  const lockState = { acquired: 0, released: 0 };
+  const destination = path.join(fixture.root, 'expired-session-handover.json');
+  const handler = registerFixture({
+    ...fixture, destination, lockState,
+    getActiveSession: () => sessionActive ? ({ id: 7, username: 'admin', role: 'admin' }) : null,
+    onLock: () => { sessionActive = false; }
+  });
+  await assert.rejects(
+    handler({ sender: {} }, 'a'.repeat(64), { format: 'json' }),
+    /sesión expiró o perdió permisos/
+  );
+  assert.equal(lockState.acquired, 1);
+  assert.equal(lockState.released, 1);
+  assert.equal(fs.existsSync(destination), false);
+  const db = fixture.runtime.getCompanyDatabase(fixture.company.id);
+  const events = db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type LIKE 'company_data_export_%'").get();
+  assert.equal(events.count, 0);
 });
