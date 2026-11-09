@@ -48,13 +48,13 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
 
   function parseDecimalInput(value: string) { const raw = value.trim(); if (!raw) return 0; return Number(raw.includes(',') ? raw.split('.').join('').replace(',', '.') : raw); }
 
-function withoutInventoryExchangeRates(configuration: InventoryPricingConfiguration): InventoryPricingConfiguration {
-  const clean = { ...configuration, applyExchangeGap: false };
-  delete clean.exchangeRateCurrency;
-  delete clean.referenceRate;
-  delete clean.replacementRate;
-  return clean;
-}
+  function withoutInventoryExchangeRates(configuration: InventoryPricingConfiguration): InventoryPricingConfiguration {
+    const clean = { ...configuration, applyExchangeGap: false };
+    delete clean.exchangeRateCurrency;
+    delete clean.referenceRate;
+    delete clean.replacementRate;
+    return clean;
+  }
 
   useEffect(() => {
     if (!isOpen) return;
