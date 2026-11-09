@@ -109,13 +109,18 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
     flushing = false;
     let targetOpenedHere = false;
     try {
-      // First drain operations admitted before the switch gate closed. Only then
-      // open the privileged lane for renderer saves that were already queued.
+      // First drain operations admitted before the switch gate closed. When
+      // no tenant is active yet (initial post-migration selection), there are
+      // no tenant writes to flush; the migration itself already drained the
+      // legacy renderer queue before registering the new databases.
+      const previousId = activeCompanyId;
       await waitForActiveOperations();
-      flushing = true;
-      await flushPendingWrites();
-      flushing = false;
-      await waitForActiveOperations();
+      if (previousId) {
+        flushing = true;
+        await flushPendingWrites();
+        flushing = false;
+        await waitForActiveOperations();
+      }
 
       const target = runtime.listCompanies().find(record =>
         String(record.id) === targetId && String(record.status) === 'ACTIVE'
@@ -129,7 +134,6 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
       // Do not publish the new tenant until both its SQLite file and snapshot identity pass.
       readTenantSnapshot(targetDb, targetId);
 
-      const previousId = activeCompanyId;
       if (previousId) runtime.closeCompany(previousId);
       activeCompanyId = targetId;
 
