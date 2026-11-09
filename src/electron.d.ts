@@ -40,6 +40,10 @@ declare global {
       onPersistenceFlushRequest: (callback: (request: { requestId: string }) => void) => () => void;
       ackPersistenceFlush: (requestId: string, message?: string | null) => void;
       inspectTenantMigrationPreflight: (token: string) => Promise<{ ok: boolean; readOnly: true; migrationStarted: false; sourceDatabase: 'sicoven.sqlite'; tables: Array<{ name: string; category: string }>; unknownTables: string[]; missingRequired: string[]; companyCount: number; companyIds: string[]; errors: string[] }>;
+      executeTenantMigration: (token: string) => Promise<{ ok: boolean; phase?: string; companies?: Array<{ companyId: string }>; actor: string; sourceDatabase: 'sicoven.sqlite'; sourcePreserved: true; globalBackupRestoreRetained: true }>;
+      listAccessibleCompanies: (token: string) => Promise<Array<{ id: string; name: string; rif: string }>>;
+      selectActiveCompany: (token: string, companyId: string) => Promise<{ ok: boolean; changed: boolean; companyId: string; previousCompanyId?: string | null }>;
+      getActiveCompany: (token: string) => Promise<{ companyId: string }>;
       listAuditEvents: (token: string, limit?: number) => Promise<{ ok: boolean; message?: string; events?: Array<{ id: number; eventType: string; details: Record<string, unknown>; createdAt: string }> }>;
       save: (token: string, state: Record<string, unknown>) => Promise<{ ok: boolean; savedAt: string }>;
       reopenAccountingPeriod: (token: string, input: { companyId: string; reopenedThroughDate: string | null; reason: string }) => Promise<{ ok: boolean; reopeningId: string; company?: { id: string; name: string; closedThroughDate?: string } }>;
