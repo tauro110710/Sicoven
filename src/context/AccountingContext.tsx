@@ -117,7 +117,7 @@ interface AccountingContextType {
   currentCompany: Company;
   setCurrentCompanyId: (id: string) => void;
   addCompany: (comp: Omit<Company, 'id'>) => Promise<Company>;
-  updateCompany: (comp: Company) => void;
+  updateCompany: (comp: Company) => Promise<void>;
   updateBcvRate: (newRate: number, effectiveDate?: string) => void;
   correctBcvRate: (input: { newRate: number; effectiveDate: string; reason: string; workpaperNote?: string }) => Promise<void>;
 
@@ -493,8 +493,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
-  const updateCompany = (updated: Company) => {
+  const updateCompany = async (updated: Company): Promise<void> => {
     assertSQLitePersistenceReady('Actualizar la empresa');
+    if (window.sicovenStore) {
+      const result = await window.sicovenStore.updateCompanyMetadata(token, {
+        companyId: updated.id, name: updated.name, rif: updated.rif
+      });
+      if (!result?.ok) throw new Error('El registro local no confirmó la actualización de la identidad jurídica de la empresa.');
+    }
     setCompanies(prev => prev.map(c => (c.id === updated.id ? updated : c)));
   };
 
