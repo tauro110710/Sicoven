@@ -56,6 +56,19 @@ export interface ExchangeabilityAssessment {
   approvedAt: string;
 }
 
+export type InventoryPricingMode = 'MANUAL' | 'AUTOMATIC';
+export type InventoryPricingBasis = 'COST' | 'SALE';
+export interface InventoryPricingConfiguration {
+  mode: InventoryPricingMode;
+  basis: InventoryPricingBasis;
+  margins: [number, number, number, number];
+  applyExchangeGap: boolean;
+  exchangeRateCurrency?: 'USD' | 'EUR';
+  /** Tasas en Bs. por unidad de la misma divisa (USD o EUR). */
+  referenceRate?: number;
+  replacementRate?: number;
+}
+
 export interface InventoryPriceLabels {
   price1: string;
   price2: string;
@@ -130,6 +143,8 @@ export interface Company {
   exchangeabilityAssessments?: ExchangeabilityAssessment[];
   /** Etiquetas comerciales configurables; los identificadores internos Precio_1..4 permanecen fijos. */
   inventoryPriceLabels?: InventoryPriceLabels;
+  /** Estrategia comercial predeterminada de esta empresa; cada producto puede sobrescribirla. */
+  inventoryPricingDefaults?: InventoryPricingConfiguration;
   logoUrl?: string; // URL o base64 del logo de la empresa
 }
 
@@ -472,6 +487,8 @@ export interface InventoryProduct {
   price4?: number | null;
   /** Moneda única de referencia para los cuatro niveles comerciales. */
   priceCurrency?: 'USD' | 'BS';
+  /** Regla comercial propia del artículo; si falta, hereda la configuración de la empresa. */
+  pricingConfiguration?: InventoryPricingConfiguration;
   /** Campos de compatibilidad histórica; no son la fuente maestra de los niveles. */
   salesPriceBs: number;
   salesPriceUsd: number;
