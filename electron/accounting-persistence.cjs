@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const { validateAccountingSnapshot } = require('./accounting-integrity.cjs');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
+const { partitionAccountingSnapshot } = require('./tenant-snapshot.cjs');
 
 function syncPartyMasterRows(db, state) {
   if (!Array.isArray(state.customers) && !Array.isArray(state.suppliers)) return;
@@ -546,63 +547,72 @@ function persistAccountingSnapshot(db, state, actor = null) {
   return { ok: true, savedAt: new Date().toISOString() };
 }
 
-function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession }) {
+function initializeAccountingPersistenceSchema(db) {
+  if (!db || typeof db.exec !== 'function') throw new TypeError('Se requiere una conexión SQLite para inicializar el esquema contable.');
+db.exec(`
+  CREATE TABLE IF NOT EXISTS accounting_exercise_links (
+    id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL,
+    prior_period_start_date TEXT NOT NULL,
+    prior_period_end_date TEXT NOT NULL,
+    next_period_start_date TEXT NOT NULL,
+    journal_entry_id TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(company_id, prior_period_start_date, prior_period_end_date, next_period_start_date)
+  );
+  CREATE TRIGGER IF NOT EXISTS accounting_exercise_links_no_update
+    BEFORE UPDATE ON accounting_exercise_links
+    BEGIN SELECT RAISE(ABORT, 'accounting_exercise_links is append-only'); END;
+  CREATE TRIGGER IF NOT EXISTS accounting_exercise_links_no_delete
+    BEFORE DELETE ON accounting_exercise_links
+    BEGIN SELECT RAISE(ABORT, 'accounting_exercise_links is append-only'); END;
+  CREATE TABLE IF NOT EXISTS party_masters (
+    id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL,
+    party_type TEXT NOT NULL CHECK(party_type IN ('CUSTOMER','SUPPLIER')),
+    name TEXT NOT NULL,
+    fiscal_id TEXT,
+    fiscal_id_type TEXT,
+    normalized_fiscal_id TEXT,
+    address TEXT,
+    phone TEXT,
+    email TEXT,
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(company_id, party_type, normalized_fiscal_id)
+  );
+  CREATE INDEX IF NOT EXISTS party_masters_company_type_name_idx ON party_masters(company_id, party_type, name);
+  CREATE TABLE IF NOT EXISTS period_reopenings (
+    id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL,
+    company_name TEXT NOT NULL,
+    previous_closed_through_date TEXT NOT NULL,
+    reopened_through_date TEXT,
+    reason TEXT NOT NULL,
+    actor_user_id INTEGER NOT NULL,
+    actor_username TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TRIGGER IF NOT EXISTS period_reopenings_no_update
+    BEFORE UPDATE ON period_reopenings
+    BEGIN SELECT RAISE(ABORT, 'period_reopenings is append-only'); END;
+  CREATE TRIGGER IF NOT EXISTS period_reopenings_no_delete
+    BEFORE DELETE ON period_reopenings
+    BEGIN SELECT RAISE(ABORT, 'period_reopenings is append-only'); END;
+`);
+}
+
+function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession, withDatabase = null }) {
   if (!ipcMain || typeof ipcMain.handle !== 'function' ||
-      typeof licenseView !== 'function' || typeof getActiveSession !== 'function') {
+      typeof licenseView !== 'function' || typeof getActiveSession !== 'function' ||
+      (withDatabase !== null && typeof withDatabase !== 'function')) {
     throw new Error('No se pudo registrar el puente de persistencia contable de SICOVEN.');
   }
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS accounting_exercise_links (
-      id TEXT PRIMARY KEY,
-      company_id TEXT NOT NULL,
-      prior_period_start_date TEXT NOT NULL,
-      prior_period_end_date TEXT NOT NULL,
-      next_period_start_date TEXT NOT NULL,
-      journal_entry_id TEXT NOT NULL UNIQUE,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE(company_id, prior_period_start_date, prior_period_end_date, next_period_start_date)
-    );
-    CREATE TRIGGER IF NOT EXISTS accounting_exercise_links_no_update
-      BEFORE UPDATE ON accounting_exercise_links
-      BEGIN SELECT RAISE(ABORT, 'accounting_exercise_links is append-only'); END;
-    CREATE TRIGGER IF NOT EXISTS accounting_exercise_links_no_delete
-      BEFORE DELETE ON accounting_exercise_links
-      BEGIN SELECT RAISE(ABORT, 'accounting_exercise_links is append-only'); END;
-    CREATE TABLE IF NOT EXISTS party_masters (
-      id TEXT PRIMARY KEY,
-      company_id TEXT NOT NULL,
-      party_type TEXT NOT NULL CHECK(party_type IN ('CUSTOMER','SUPPLIER')),
-      name TEXT NOT NULL,
-      fiscal_id TEXT,
-      fiscal_id_type TEXT,
-      normalized_fiscal_id TEXT,
-      address TEXT,
-      phone TEXT,
-      email TEXT,
-      active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE(company_id, party_type, normalized_fiscal_id)
-    );
-    CREATE INDEX IF NOT EXISTS party_masters_company_type_name_idx ON party_masters(company_id, party_type, name);
-    CREATE TABLE IF NOT EXISTS period_reopenings (
-      id TEXT PRIMARY KEY,
-      company_id TEXT NOT NULL,
-      company_name TEXT NOT NULL,
-      previous_closed_through_date TEXT NOT NULL,
-      reopened_through_date TEXT,
-      reason TEXT NOT NULL,
-      actor_user_id INTEGER NOT NULL,
-      actor_username TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE TRIGGER IF NOT EXISTS period_reopenings_no_update
-      BEFORE UPDATE ON period_reopenings
-      BEGIN SELECT RAISE(ABORT, 'period_reopenings is append-only'); END;
-    CREATE TRIGGER IF NOT EXISTS period_reopenings_no_delete
-      BEFORE DELETE ON period_reopenings
-      BEGIN SELECT RAISE(ABORT, 'period_reopenings is append-only'); END;
-  `);
+  if (!withDatabase) initializeAccountingPersistenceSchema(db);
+  const runWithDatabase = (token, operation) => withDatabase
+    ? withDatabase(token, (activeDb, companyId) => operation(activeDb, companyId))
+    : operation(db, null);
   ipcMain.handle('sicoven:reopen-accounting-period', (_event, token, input) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
@@ -625,8 +635,12 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
         throw new Error('La nueva fecha de cierre no existe en el calendario.');
       }
     }
-    const reopen = db.transaction(() => {
-      const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    return runWithDatabase(token, (activeDb, selectedCompanyId) => {
+    if (selectedCompanyId && selectedCompanyId !== companyId) {
+      throw new Error('La reapertura solicitada no pertenece a la empresa activa.');
+    }
+    const reopen = activeDb.transaction(() => {
+      const row = activeDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
       if (!row) throw new Error('No existe un estado contable persistido para reabrir.');
       let state;
       try { state = JSON.parse(row.state_json); }
@@ -653,22 +667,23 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
       };
       const json = JSON.stringify(nextState);
       if (json.length > 50 * 1024 * 1024) throw new Error('El estado contable supera el límite permitido.');
-      db.prepare("UPDATE app_state SET state_json=?, updated_at=datetime('now') WHERE state_key='accounting'").run(json);
+      activeDb.prepare("UPDATE app_state SET state_json=?, updated_at=datetime('now') WHERE state_key='accounting'").run(json);
       const details = {
         reopeningId, companyId, companyName: String(company.name || ''),
         previousClosedThroughDate, reopenedThroughDate,
         reason, actor: { userId: actor.id, username: actor.username }
       };
-      db.prepare(`INSERT INTO period_reopenings
+      activeDb.prepare(`INSERT INTO period_reopenings
         (id,company_id,company_name,previous_closed_through_date,reopened_through_date,reason,actor_user_id,actor_username)
         VALUES(?,?,?,?,?,?,?,?)`)
         .run(reopeningId, companyId, String(company.name || ''), previousClosedThroughDate,
           reopenedThroughDate, reason, Number(actor.id), String(actor.username || ''));
-      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+      activeDb.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
         .run('accounting_period_reopened', JSON.stringify(details));
       return { ok: true, company: nextState.companies.find(item => String(item.id) === companyId), reopeningId };
     });
     return reopen();
+    });
   });
   ipcMain.handle('sicoven:save-state', (_event, token, state) => {
     const licensing = licenseView();
@@ -676,8 +691,18 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
     const actor = getActiveSession(token);
     if (!actor) throw new Error('Sesión no válida. Inicie sesión para guardar datos contables.');
     if (!state || typeof state !== 'object' || Array.isArray(state)) throw new Error('Estado contable inválido');
-    return persistAccountingSnapshot(db, state, actor);
+    return runWithDatabase(token, (activeDb, selectedCompanyId) => {
+      if (selectedCompanyId) {
+        const partitions = partitionAccountingSnapshot(state);
+        if (partitions.length !== 1 ||
+            String(partitions[0]?.companies?.[0]?.id || '') !== selectedCompanyId ||
+            String(state.currentCompanyId || '') !== selectedCompanyId) {
+          throw new Error('El snapshot no pertenece exclusivamente a la empresa activa. Se bloqueó el guardado para evitar mezclar datos.');
+        }
+      }
+      return persistAccountingSnapshot(activeDb, state, actor);
+    });
   });
 }
 
-module.exports = { persistAccountingSnapshot, registerAccountingPersistenceHandler };
+module.exports = { persistAccountingSnapshot, initializeAccountingPersistenceSchema, registerAccountingPersistenceHandler };

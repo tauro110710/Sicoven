@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 const {
   initializeVatFiscalIncidentSchema, createVatFiscalIncident,
-  recordVatFiscalIncidentEvent, getVatFiscalIncident
+  recordVatFiscalIncidentEvent, getVatFiscalIncident,
+  registerVatFiscalIncidentIpc
 } = require('./vat-fiscal-incidents.cjs');
 
 const actor = { id: 7, username: 'admin', role: 'admin' };
@@ -242,4 +243,30 @@ test('requires review before action and verifiable evidence for an action', () =
     declarationId: 'declaration-1'
   }, actor), /requiere al menos una referencia externa/);
   db.close();
+});
+
+
+test('VAT fiscal incident IPC writes only to the authenticated tenant database', async () => {
+  const control = fixture().db;
+  const tenant = fixture().db;
+  const handlers = new Map();
+  registerVatFiscalIncidentIpc({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    db: control,
+    licenseView: () => ({ authorized: true }),
+    getActiveSession: token => token === 'tenant-token' ? actor : null,
+    withDatabase: async (token, operation) => {
+      assert.equal(token, 'tenant-token');
+      return operation(tenant, 'co-1');
+    }
+  });
+  try {
+    const created = await handlers.get('sicoven:vat-fiscal-incident-create')({}, 'tenant-token', createInput());
+    assert.ok(created.id);
+    assert.equal(tenant.prepare('SELECT COUNT(*) AS n FROM vat_fiscal_incidents').get().n, 1);
+    assert.equal(control.prepare('SELECT COUNT(*) AS n FROM vat_fiscal_incidents').get().n, 0);
+  } finally {
+    control.close();
+    tenant.close();
+  }
 });

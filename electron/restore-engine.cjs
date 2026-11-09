@@ -11,6 +11,7 @@ const { appendRestoreOutcome, reconcileRestoreAudit } = require('./restore-audit
 
 const DB = 'sicoven.sqlite';
 const DOCS = 'supporting-documents';
+const COMPANIES = 'companies';
 const JOURNAL = 'restore-journal.json';
 const OP_ROOT = 'restore-operations';
 
@@ -27,6 +28,61 @@ function clearSqliteSidecars(userDataDir) {
   }
 }
 function copyFileVerified(from,to) { realFile(from,'Origen de copia'); fs.copyFileSync(from,to,fs.constants.COPYFILE_EXCL); if(hashFile(from)!==hashFile(to)) throw new Error('La copia de la base de datos no coincide.'); }
+function verifyCompanyTree(directory, manifest) {
+  const root = path.resolve(directory);
+  const expected = manifest.companyDatabases || [];
+  if (!exists(root)) {
+    if (expected.length) throw new Error('Faltan las bases locales de empresas en el respaldo.');
+    return true;
+  }
+  realDir(root, 'Directorio de bases por empresa');
+  const entries = fs.readdirSync(root, { withFileTypes: true }).sort((a,b)=>a.name.localeCompare(b.name));
+  if (entries.length !== expected.length) throw new Error('La cantidad de bases de empresa no coincide con el manifiesto.');
+  for (let index=0; index<entries.length; index+=1) {
+    const entry=entries[index], item=expected[index];
+    if (entry.isSymbolicLink() || !entry.isDirectory() || entry.name !== item.companyId) throw new Error('La identidad o estructura de una base de empresa no coincide.');
+    const file=path.join(root,entry.name,'accounting.sqlite');
+    realFile(file,'Base SQLite de empresa');
+    if (fs.statSync(file).size !== item.size || hashFile(file) !== item.sha256) throw new Error('La base SQLite de ' + item.companyId + ' no coincide con el respaldo.');
+    const Database=require('better-sqlite3');
+    const db=new Database(file,{readonly:true,fileMustExist:true});
+    try {
+      const meta=db.prepare("SELECT meta_value FROM sicoven_database_meta WHERE meta_key='company_id'").get();
+      if(String(meta?.meta_value||'')!==item.companyId) throw new Error('La identidad interna de la base de empresa no coincide.');
+    } finally { db.close(); }
+    const companyDirectory = path.join(root, entry.name);
+    const names = fs.readdirSync(companyDirectory);
+    if (names.some(name => !['accounting.sqlite', 'supporting-documents'].includes(name))) {
+      throw new Error('Una carpeta de empresa contiene archivos inesperados.');
+    }
+    const documentsDirectory = path.join(companyDirectory, 'supporting-documents');
+    const actualDocuments = [];
+    function collectCompanyDocuments(directory, relative = '') {
+      if (!exists(directory)) return;
+      realDir(directory, 'Documentos de empresa');
+      for (const child of fs.readdirSync(directory, { withFileTypes: true }).sort((a,b)=>a.name.localeCompare(b.name))) {
+        const absolute = path.join(directory, child.name);
+        const childRelative = relative ? relative + '/' + child.name : child.name;
+        if (child.isSymbolicLink()) throw new Error('Los documentos de empresa no admiten enlaces simbólicos.');
+        if (child.isDirectory()) collectCompanyDocuments(absolute, childRelative);
+        else if (child.isFile()) {
+          realFile(absolute, 'Documento de empresa');
+          actualDocuments.push({
+            path: 'supporting-documents/' + childRelative,
+            size: fs.statSync(absolute).size,
+            sha256: hashFile(absolute)
+          });
+        } else throw new Error('La carpeta de documentos de empresa contiene un elemento no admitido.');
+      }
+    }
+    collectCompanyDocuments(documentsDirectory);
+    const expectedDocuments = (item.documents || []).slice().sort((a,b)=>a.path.localeCompare(b.path));
+    if (JSON.stringify(actualDocuments) !== JSON.stringify(expectedDocuments)) {
+      throw new Error('Los documentos de la empresa ' + item.companyId + ' no coinciden con el manifiesto global.');
+    }
+  }
+  return true;
+}
 function copyTree(source,destination) {
   realDir(source,'Carpeta documental de respaldo'); fs.mkdirSync(destination,{recursive:false});
   for(const e of fs.readdirSync(source,{withFileTypes:true})) {
@@ -39,21 +95,27 @@ function copyTree(source,destination) {
 }
 function replaceFromBackup(backupDir,userDataDir,operationDir) {
   const verified=verifyBackupDirectory(backupDir);
-  const activeDb=path.join(userDataDir,DB), activeDocs=path.join(userDataDir,DOCS);
+  const activeDb=path.join(userDataDir,DB), activeDocs=path.join(userDataDir,DOCS), activeCompanies=path.join(userDataDir,COMPANIES);
   const nextDb=path.join(operationDir,'next.sqlite');
   const nextDocs=path.join(operationDir,'next-documents');
+  const nextCompanies=path.join(operationDir,'next-companies');
   copyFileVerified(path.join(backupDir,DB),nextDb);
   if(exists(path.join(backupDir,DOCS))) copyTree(path.join(backupDir,DOCS),nextDocs);
   else fs.mkdirSync(nextDocs);
+  if(exists(path.join(backupDir,COMPANIES))) copyTree(path.join(backupDir,COMPANIES),nextCompanies); else fs.mkdirSync(nextCompanies);
   // El destino anterior se conserva hasta verificar el reemplazo. Los renames
   // ocurren dentro del mismo volumen de userData para evitar copias parciales.
   const oldDb=path.join(operationDir,'displaced.sqlite');
   const oldDocs=path.join(operationDir,'displaced-documents');
+  const oldCompanies=path.join(operationDir,'displaced-companies');
   if(exists(activeDb)) fs.renameSync(activeDb,oldDb);
   try {
     fs.renameSync(nextDb,activeDb);
     if(exists(activeDocs)) fs.renameSync(activeDocs,oldDocs);
     fs.renameSync(nextDocs,activeDocs);
+    if(exists(activeCompanies)) fs.renameSync(activeCompanies,oldCompanies);
+    fs.renameSync(nextCompanies,activeCompanies);
+    verifyCompanyTree(activeCompanies, JSON.parse(fs.readFileSync(path.join(backupDir,'manifest.json'),'utf8')));
     const activeHash=hashFile(activeDb);
     if(activeHash!==verified.databaseSha256) throw new Error('La base instalada no coincide con el respaldo.');
     const check=verifyBackupDirectory(backupDir);
@@ -68,19 +130,25 @@ function restoreRollback(rollbackDir,userDataDir,operationDir) {
   // Si el respaldo está corrupto, la recuperación debe fallar sin alterar datos.
   const verified=verifyBackupDirectory(rollbackDir);
   clearSqliteSidecars(userDataDir);
-  const dbPath=path.join(userDataDir,DB), docsPath=path.join(userDataDir,DOCS);
+  const dbPath=path.join(userDataDir,DB), docsPath=path.join(userDataDir,DOCS), companiesPath=path.join(userDataDir,COMPANIES);
   const tmpDb=path.join(operationDir,'rollback.sqlite');
   const tmpDocs=path.join(operationDir,'rollback-documents');
+  const tmpCompanies=path.join(operationDir,'rollback-companies');
   if(exists(tmpDb)) fs.rmSync(tmpDb,{force:true});
   if(exists(tmpDocs)) fs.rmSync(tmpDocs,{recursive:true,force:true});
+  if(exists(tmpCompanies)) fs.rmSync(tmpCompanies,{recursive:true,force:true});
   copyFileVerified(path.join(rollbackDir,DB),tmpDb);
   if(exists(path.join(rollbackDir,DOCS))) copyTree(path.join(rollbackDir,DOCS),tmpDocs); else fs.mkdirSync(tmpDocs);
+  if(exists(path.join(rollbackDir,COMPANIES))) copyTree(path.join(rollbackDir,COMPANIES),tmpCompanies); else fs.mkdirSync(tmpCompanies);
   const displacedDb=path.join(operationDir,'failed.sqlite');
   const displacedDocs=path.join(operationDir,'failed-documents');
+  const displacedCompanies=path.join(operationDir,'failed-companies');
   if(exists(dbPath)) { if(exists(displacedDb)) fs.rmSync(displacedDb,{force:true}); fs.renameSync(dbPath,displacedDb); }
   fs.renameSync(tmpDb,dbPath);
   if(exists(docsPath)) { if(exists(displacedDocs)) fs.rmSync(displacedDocs,{recursive:true,force:true}); fs.renameSync(docsPath,displacedDocs); }
   fs.renameSync(tmpDocs,docsPath);
+  if(exists(companiesPath)) { if(exists(displacedCompanies)) fs.rmSync(displacedCompanies,{recursive:true,force:true}); fs.renameSync(companiesPath,displacedCompanies); }
+  fs.renameSync(tmpCompanies,companiesPath);
   // Verificar tanto SQLite como el conjunto íntegro de documentos tras el swap.
   const restored = verifyActiveMatchesBackup(rollbackDir,userDataDir);
   if(restored.databaseSha256!==verified.databaseSha256 || restored.documentCount!==verified.documentCount) {
@@ -129,6 +197,7 @@ function verifyActiveMatchesBackup(backupDir, userDataDir) {
     throw new Error('El journal indica restauración confirmada, pero la base activa no coincide con el staging. SICOVEN se mantiene bloqueado.');
   }
   const manifest = JSON.parse(fs.readFileSync(path.join(backupDir, 'manifest.json'), 'utf8'));
+  verifyCompanyTree(path.join(userDataDir,COMPANIES),manifest);
   const activeDocs = path.join(userDataDir, DOCS);
   const actual = [];
   function walk(root, relative = '') {
@@ -209,6 +278,11 @@ async function executeRestoreUnlocked({backupDirectory,userDataDir,db,getDb,clos
   realDir(root,'Datos de SICOVEN');
   if(source===root || source.startsWith(root+path.sep)) throw new Error('El respaldo no puede estar dentro de los datos activos.');
   const sourceInfo=verifyBackupDirectory(source);
+  const activeCompanies = path.join(root, COMPANIES);
+  const sourceManifest = JSON.parse(fs.readFileSync(path.join(source, 'manifest.json'), 'utf8'));
+  if (sourceManifest.companyDatabases === undefined && exists(activeCompanies) && fs.readdirSync(activeCompanies).length > 0) {
+    throw new Error('Este respaldo global antiguo no contiene las bases individuales de las empresas. Se bloqueó la restauración para evitar perder información multiempresa.');
+  }
   const operationId=crypto.randomUUID();
   const operationRoot=path.join(root,OP_ROOT);
   if(!exists(operationRoot)) fs.mkdirSync(operationRoot);
@@ -260,25 +334,65 @@ async function executeRestore(args) {
   finally { restoreInProgress = false; }
 }
 
-function registerRestoreIpc({ipcMain,app,dialog,licenseView,getActiveSession,getDb,closeDatabase,reopenDatabase,getWindow}) {
-  ipcMain.handle('sicoven:restore-execute',async(_event,token)=>{
-    const licensing=licenseView();
-    if(!licensing.authorized) throw new Error(licensing.message||'Licencia no autorizada.');
-    const actor=getActiveSession(token);
-    if(!hasFullSystemAccess(actor)) throw new Error('Se requiere una sesión autenticada con rol contable (admin o contador) para restaurar respaldos.');
-    const parent=getWindow?.();
-    const selection=parent
-      ? await dialog.showOpenDialog(parent,{title:'Seleccionar respaldo verificado de SICOVEN',properties:['openDirectory']})
-      : await dialog.showOpenDialog({title:'Seleccionar respaldo verificado de SICOVEN',properties:['openDirectory']});
-    if(selection.canceled||!selection.filePaths?.[0]) return {ok:false,canceled:true};
-    const check=verifyBackupDirectory(selection.filePaths[0]);
-    const confirm=parent
-      ? await dialog.showMessageBox(parent,{type:'warning',buttons:['Cancelar','Restaurar respaldo'],defaultId:0,cancelId:0,title:'Confirmar restauración contable',message:'Esta operación reemplazará la base contable y los documentos actuales.',detail:'Respaldo: '+path.basename(selection.filePaths[0])+'\\nDocumentos: '+check.documentCount+'\\nHuella SQLite: '+check.databaseSha256+'\\nSe creará un snapshot de retorno antes del cambio.'})
-      : await dialog.showMessageBox({type:'warning',buttons:['Cancelar','Restaurar respaldo'],defaultId:0,cancelId:0,title:'Confirmar restauración contable',message:'Esta operación reemplazará la base contable y los documentos actuales.',detail:'Respaldo: '+path.basename(selection.filePaths[0])+'\\nDocumentos: '+check.documentCount+'\\nHuella SQLite: '+check.databaseSha256+'\\nSe creará un snapshot de retorno antes del cambio.'});
-    if(confirm.response!==1) return {ok:false,canceled:true};
-    const result=await executeRestore({backupDirectory:selection.filePaths[0],userDataDir:app.getPath('userData'),db:getDb(),getDb,closeDatabase,reopenDatabase,actor:actor.username});
-    reconcileRestoreAudit({ db: getDb(), userDataDir: app.getPath('userData') });
-    return result;
+function registerRestoreIpc({
+  ipcMain, app, dialog, licenseView, getActiveSession, getDb,
+  closeDatabase, reopenDatabase, getWindow, operationContext = null, runtime = null, onRestored = null, assertOperationalReady = () => {}
+}) {
+  if (typeof assertOperationalReady !== 'function') throw new TypeError('La verificación del estado de restauración global no es válida.');
+  if (operationContext && typeof operationContext.acquireMaintenanceLock !== 'function') {
+    throw new TypeError('La restauración global requiere un bloqueo de mantenimiento válido.');
+  }
+  if (runtime && typeof runtime.rebindControlDatabase !== 'function') {
+    throw new TypeError('La restauración global requiere un runtime capaz de reabrir el registro de empresas.');
+  }
+  ipcMain.handle('sicoven:restore-execute', async (_event, token) => {
+    assertOperationalReady();
+    const licensing = licenseView();
+    if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
+    const actor = getActiveSession(token);
+    if (!hasFullSystemAccess(actor)) throw new Error('Se requiere una sesión autenticada con rol contable (admin o contador) para restaurar respaldos.');
+    const parent = getWindow?.();
+    const selection = parent
+      ? await dialog.showOpenDialog(parent, { title: 'Seleccionar respaldo verificado de SICOVEN', properties: ['openDirectory'] })
+      : await dialog.showOpenDialog({ title: 'Seleccionar respaldo verificado de SICOVEN', properties: ['openDirectory'] });
+    if (selection.canceled || !selection.filePaths?.[0]) return { ok: false, canceled: true };
+    const check = verifyBackupDirectory(selection.filePaths[0]);
+    const confirm = parent
+      ? await dialog.showMessageBox(parent, {
+          type: 'warning', buttons: ['Cancelar', 'Restaurar respaldo'], defaultId: 0, cancelId: 0,
+          title: 'Confirmar restauración contable',
+          message: 'Esta operación reemplazará la base de control, todas las bases de empresas y los documentos actuales.',
+          detail: 'Respaldo: ' + path.basename(selection.filePaths[0]) + '\nDocumentos: ' + check.documentCount +
+            '\nHuella SQLite: ' + check.databaseSha256 + '\nSe creará un snapshot de retorno antes del cambio.'
+        })
+      : await dialog.showMessageBox({
+          type: 'warning', buttons: ['Cancelar', 'Restaurar respaldo'], defaultId: 0, cancelId: 0,
+          title: 'Confirmar restauración contable',
+          message: 'Esta operación reemplazará la base de control, todas las bases de empresas y los documentos actuales.',
+          detail: 'Respaldo: ' + path.basename(selection.filePaths[0]) + '\nDocumentos: ' + check.documentCount +
+            '\nHuella SQLite: ' + check.databaseSha256 + '\nSe creará un snapshot de retorno antes del cambio.'
+        });
+    if (confirm.response !== 1) return { ok: false, canceled: true };
+
+    const release = operationContext ? await operationContext.acquireMaintenanceLock() : () => {};
+    try {
+      runtime?.closeAll?.();
+      const result = await executeRestore({
+        backupDirectory: selection.filePaths[0],
+        userDataDir: app.getPath('userData'),
+        db: getDb(), getDb, closeDatabase, reopenDatabase,
+        actor: actor.username
+      });
+      reconcileRestoreAudit({ db: getDb(), userDataDir: app.getPath('userData') });
+      if (typeof onRestored === 'function') onRestored(result);
+      return { ...result, reloadRequired: true };
+    } finally {
+      try {
+        if (runtime && getDb()?.open) runtime.rebindControlDatabase(getDb());
+      } finally {
+        release();
+      }
+    }
   });
 }
 module.exports={executeRestore,recoverPendingRestore,registerRestoreIpc,restoreRollback};

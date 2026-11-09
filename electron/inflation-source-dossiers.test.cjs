@@ -7,7 +7,8 @@ const {
   createInflationSourceDossier,
   reviewInflationSourceDossier,
   listInflationSourceDossiers,
-  getInflationSourceDossierEvidence
+  getInflationSourceDossierEvidence,
+  registerInflationSourceDossierIpc
 } = require('./inflation-source-dossiers.cjs');
 const { initializeInflationIndexSchema, importInflationIndexSeries } = require('./inflation-indexes.cjs');
 
@@ -195,4 +196,32 @@ test('dossier cannot be bound to a company absent from local SQLite accounting s
     assert.throws(() => createInflationSourceDossier(db, dossierInput(series.seriesId, { companyId: 'nonexistent-company' }), admin), /empresa.*existir/i);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM inflation_source_dossiers').get().n, 0);
   } finally { db.close(); }
+});
+
+
+test('inflation source dossier IPC is bound to the selected company database', async () => {
+  const controlDb = database();
+  const tenantDb = database();
+  const handlers = new Map();
+  try {
+    const series = makeSeries(tenantDb);
+    createInflationSourceDossier(tenantDb, dossierInput(series.seriesId), accountant);
+    registerInflationSourceDossierIpc({
+      ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+      db: controlDb,
+      licenseView: () => ({ authorized: true }),
+      getActiveSession: token => token === 'tenant-token' ? accountant : null,
+      withDatabase: async (token, operation) => {
+        assert.equal(token, 'tenant-token');
+        return operation(tenantDb, 'company-001');
+      }
+    });
+    const rows = await handlers.get('sicoven:inflation-source-dossier-list')({}, 'tenant-token', { companyId: 'company-001' });
+    assert.equal(rows.length, 1);
+    assert.equal(controlDb.prepare('SELECT COUNT(*) AS n FROM inflation_source_dossiers').get().n, 0);
+    assert.equal(tenantDb.prepare('SELECT COUNT(*) AS n FROM inflation_source_dossiers').get().n, 1);
+  } finally {
+    controlDb.close();
+    tenantDb.close();
+  }
 });

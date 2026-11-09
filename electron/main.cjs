@@ -4,6 +4,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const sessions = new Map();
+let activeRendererSessionToken = null;
 const LICENSE_API = 'https://crm-sicoven.vercel.app/api/activations';
 const LICENSE_PRODUCT_CODE = 'SICOVEN_DESKTOP';
 const TRIAL_DURATION_HOURS = 120;
@@ -30,6 +31,12 @@ const verifyPassword = (password, salt, expected) => {
 const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
+const { registerPersistenceFlushIpc } = require('./persistence-flush-ipc.cjs');
+const { registerTenantMigrationPreflightIpc, registerTenantMigrationExecuteIpc } = require('./tenant-migration-preflight-ipc.cjs');
+const { createTenantRuntimeController } = require('./tenant-runtime-controller.cjs');
+const { initializeTenantDatabase } = require('./tenant-schema.cjs');
+const { registerCompanySessionIpc } = require('./company-session-ipc.cjs');
+const { registerCompanyExportIpc } = require('./company-export-ipc.cjs');
 const { prepareTextDownload } = require('./text-download.cjs');
 const { registerTextDownloadHandler } = require('./text-download-ipc.cjs');
 
@@ -64,6 +71,17 @@ const { registerVatFiscalIncidentIpc } = require('./vat-fiscal-incidents.cjs');
 const { initializeCorrectionWorkflow, registerCorrectionRequest, reviewCorrectionRequest, markCorrectionExecuted, listCorrectionCases, findLinkedCorrectionEvidence, observeCorrectionRequest, resubmitCorrectionRequest, withdrawCorrectionRequest, requireApprovedCorrectionCase } = require('./accounting-correction-workflow.cjs');
 
 let db;
+let persistenceFlushBridge = null;
+let tenantController = null;
+let restoreReloadPending = false;
+function assertOperationalReady() {
+  if (restoreReloadPending) throw new Error('La restauración global terminó. Recargue SICOVEN para hidratar los datos restaurados antes de continuar.');
+}
+function withOperationalDatabase(token, operation) {
+  assertOperationalReady();
+  if (!tenantController) throw new Error('El runtime SQLite local todavía no está disponible.');
+  return tenantController.withDatabase(token, operation);
+}
 function openDatabase() {
   const dataDir = app.getPath('userData');
   fs.mkdirSync(dataDir, { recursive: true });
@@ -94,6 +112,7 @@ function openDatabase() {
       BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END;
   `);
   initializeCorrectionWorkflow(db);
+  initializeTenantDatabase(db);
   // Reconciliar el ledger externo antes de exponer la aplicación. Un ledger inválido bloquea el arranque.
   reconcileRestoreAudit({ db, userDataDir: dataDir });
   db.exec(`CREATE TABLE IF NOT EXISTS auth_users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','contador')), is_seed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')));`);
@@ -186,6 +205,38 @@ function licenseView(row = readLicenseRow()) {
               ? 'El período de prueba de 120 horas (5 días) terminó. Introduce una clave de licencia para continuar.'
               : (row.message || 'Active SICOVEN con una clave de licencia.'))
   };
+}
+
+async function clearTenantRuntimeAfterLicenseShutdown() {
+  try {
+    if (tenantController) await tenantController.companySessionContext.clearAllSessions();
+  } catch (error) {
+    console.error('[SICOVEN tenant] No se pudo limpiar el contexto al cerrar la licencia:', error?.message || error);
+  } finally {
+    try { tenantController?.runtime.closeAll(); } catch {}
+  }
+}
+
+async function bindDefaultTenantForSession(token) {
+  if (!tenantController) return null;
+  const companies = tenantController.runtime.listCompanies().filter(item => String(item.status) === 'ACTIVE');
+  if (companies.length === 0) return null;
+  let preferredId = '';
+  try {
+    const preference = db.prepare("SELECT state_json FROM app_state WHERE state_key='active_company_preference'").get();
+    const savedPreference = preference ? JSON.parse(preference.state_json) : null;
+    preferredId = String(savedPreference?.companyId || '');
+  } catch {}
+  if (!preferredId) {
+    try {
+      const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+      const legacy = row ? JSON.parse(row.state_json) : null;
+      preferredId = String(legacy?.currentCompanyId || '');
+    } catch {}
+  }
+  const selected = companies.find(item => String(item.id) === preferredId) || companies[0];
+  await tenantController.companySessionContext.selectCompany(token, selected.id, { skipFlush: true });
+  return selected.id;
 }
 
 function decryptLicenseKey(row) {
@@ -387,6 +438,27 @@ app.whenReady().then(async () => {
     // Si la recuperación no puede demostrar un estado íntegro, el arranque se bloquea.
     recoverPendingRestore({ userDataDir: dataDir });
     openDatabase();
+    // Keep the legacy schema available for read-only preflight and rollback;
+    // each newly created tenant receives the same operational schema locally.
+    persistenceFlushBridge = registerPersistenceFlushIpc({
+      ipcMain, licenseView, getActiveSession,
+      getWindow: sender => BrowserWindow.fromWebContents(sender)
+    });
+    tenantController = createTenantRuntimeController({
+      controlDb: db,
+      userDataDir: dataDir,
+      Database,
+      assertSqliteIntegrity,
+      getActiveSession,
+      flushPendingWrites: async () => {
+        const token = activeRendererSessionToken;
+        const window = BrowserWindow.getAllWindows().find(item => !item.isDestroyed());
+        if (!token || !window) {
+          throw new Error('No existe una sesión renderer activa para confirmar la persistencia antes del cambio de empresa.');
+        }
+        await persistenceFlushBridge.requestFlush(window.webContents, token);
+      }
+    });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     try {
@@ -448,7 +520,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('sicoven:license-revalidate', async () => {
     const status = await revalidateLicense();
     if (!status.authorized) {
+      await clearTenantRuntimeAfterLicenseShutdown();
       sessions.clear();
+      activeRendererSessionToken = null;
       db.prepare('DELETE FROM auth_sessions').run();
       BrowserWindow.getAllWindows().forEach(win => win.webContents.send('sicoven:license-status-changed', status));
     }
@@ -507,6 +581,7 @@ app.whenReady().then(async () => {
         for (const [token, session] of sessions.entries()) {
           if (Number(session.id) === removedSeedId) sessions.delete(token);
         }
+        if (activeRendererSessionToken && !sessions.has(activeRendererSessionToken)) activeRendererSessionToken = null;
       }
       return { ok: true, seedReplaced: removedSeedId !== null };
     } catch (error) {
@@ -520,7 +595,7 @@ app.whenReady().then(async () => {
     }
   });
 
-  ipcMain.handle('sicoven:auth-login', (_event, credentials) => {
+  ipcMain.handle('sicoven:auth-login', async (_event, credentials) => {
     const licensing = licenseView();
     if (!licensing.authorized) return { ok: false, message: licensing.message || 'Licencia no autorizada.' };
     const username = normalizeUsername(credentials?.username);
@@ -536,11 +611,23 @@ app.whenReady().then(async () => {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     db.prepare('INSERT INTO auth_sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(tokenHash, user.id, expiresAt);
     sessions.set(token, { id: user.id, username: user.username, role: user.role, expiresAt });
+    activeRendererSessionToken = token;
+    try {
+      await bindDefaultTenantForSession(token);
+      restoreReloadPending = false;
+    } catch (error) {
+      sessions.delete(token);
+      activeRendererSessionToken = null;
+      db.prepare('DELETE FROM auth_sessions WHERE token_hash=?').run(tokenHash);
+      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+        .run('tenant_session_binding_failed', JSON.stringify({ username: user.username, message: String(error?.message || error).slice(0, 500) }));
+      return { ok: false, message: 'No se pudo abrir de forma segura la empresa local. No se inició la sesión contable: ' + String(error?.message || error) };
+    }
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('login_success', JSON.stringify({ username: user.username }));
     return { ok: true, token, user: { username: user.username, role: user.role, isSeed: Boolean(user.is_seed) } };
   });
 
-  ipcMain.handle('sicoven:auth-restore', (_event, tokenInput) => {
+  ipcMain.handle('sicoven:auth-restore', async (_event, tokenInput) => {
     if (!licenseView().authorized) return { ok: false, message: 'Licencia no autorizada.' };
     const token = String(tokenInput || '');
     if (!/^[a-f0-9]{64}$/.test(token)) return { ok: false, message: 'Sesión expirada. Inicie sesión nuevamente.' };
@@ -551,12 +638,36 @@ app.whenReady().then(async () => {
       return { ok: false, message: 'Sesión expirada. Inicie sesión nuevamente.' };
     }
     sessions.set(token, { id: row.id, username: row.username, role: row.role, expiresAt: row.expires_at });
+    activeRendererSessionToken = token;
+    try {
+      await bindDefaultTenantForSession(token);
+      restoreReloadPending = false;
+    } catch (error) {
+      sessions.delete(token);
+      activeRendererSessionToken = null;
+      return { ok: false, message: 'No se pudo reabrir de forma segura la empresa local. Inicie sesión nuevamente: ' + String(error?.message || error) };
+    }
     return { ok: true, token, user: { username: row.username, role: row.role, isSeed: Boolean(row.is_seed) } };
   });
 
-  ipcMain.handle('sicoven:auth-logout', (_event, token) => {
+  ipcMain.handle('sicoven:auth-logout', async (event, token) => {
     const value = String(token || '');
+    // Do not invalidate the authenticated renderer until its queued SQLite
+    // snapshots have been acknowledged. On timeout, keep the session alive.
+    if (activeRendererSessionToken === value && sessions.has(value)) {
+      let tenantSelected = false;
+      try {
+        tenantController.companySessionContext.getSelectedCompanyId(value);
+        tenantSelected = true;
+      } catch {}
+      if (tenantSelected) {
+        await tenantController.companySessionContext.clearSession(value);
+      } else {
+        await persistenceFlushBridge.requestFlush(event.sender, value);
+      }
+    }
     sessions.delete(value);
+    if (activeRendererSessionToken === value) activeRendererSessionToken = null;
     if (/^[a-f0-9]{64}$/.test(value)) {
       const tokenHash = crypto.createHash('sha256').update(value).digest('hex');
       db.prepare('DELETE FROM auth_sessions WHERE token_hash=?').run(tokenHash);
@@ -609,34 +720,39 @@ app.whenReady().then(async () => {
     db.prepare('DELETE FROM auth_users WHERE id=?').run(seed.id);
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('seed_admin_deleted', JSON.stringify({ by: actor.username }));
     for (const [k, v] of sessions.entries()) if (v.id === seed.id) sessions.delete(k);
+    if (activeRendererSessionToken && !sessions.has(activeRendererSessionToken)) activeRendererSessionToken = null;
     return { ok: true };
   });
 
-  ipcMain.handle('sicoven:load-state', (_event, token) => {
-    // La lectura contable requiere licencia válida y sesión autenticada.
+  ipcMain.handle('sicoven:load-state', async (_event, token) => {
+    // The legacy database is used only before any tenant has been registered.
     if (!licenseView().authorized || !getActiveSession(token)) return null;
-    const row = db.prepare('SELECT state_json FROM app_state WHERE state_key = ?').get('accounting');
-    if (!row) return null;
-    try { return JSON.parse(row.state_json); } catch { return null; }
+    return withOperationalDatabase(token, activeDb => {
+      const row = activeDb.prepare('SELECT state_json FROM app_state WHERE state_key = ?').get('accounting');
+      if (!row) return null;
+      try { return JSON.parse(row.state_json); } catch { return null; }
+    });
   });
 
-  ipcMain.handle('sicoven:audit-list', (_event, token, requestedLimit = 100) => {
+  ipcMain.handle('sicoven:audit-list', async (_event, token, requestedLimit = 100) => {
     if (!licenseView().authorized || !getActiveSession(token)) {
       return { ok: false, message: 'Sesión no válida o licencia no autorizada.', events: [] };
     }
     const limit = Math.min(500, Math.max(1, Math.floor(Number(requestedLimit) || 100)));
-    const rows = db.prepare("SELECT id,event_type,details_json,created_at FROM audit_events WHERE event_type <> 'state_saved' ORDER BY id DESC LIMIT ?").all(limit);
-    return {
-      ok: true,
-      events: rows.map(row => {
-        let details = {};
-        try { details = JSON.parse(row.details_json) || {}; } catch {}
-        return { id: row.id, eventType: row.event_type, details, createdAt: row.created_at };
-      })
-    };
+    return withOperationalDatabase(token, activeDb => {
+      const rows = activeDb.prepare("SELECT id,event_type,details_json,created_at FROM audit_events WHERE event_type <> 'state_saved' ORDER BY id DESC LIMIT ?").all(limit);
+      return {
+        ok: true,
+        events: rows.map(row => {
+          let details = {};
+          try { details = JSON.parse(row.details_json) || {}; } catch {}
+          return { id: row.id, eventType: row.event_type, details, createdAt: row.created_at };
+        })
+      };
+    });
   });
 
-  ipcMain.handle('sicoven:audit-record-correction', (_event, token, input) => {
+  ipcMain.handle('sicoven:audit-record-correction', async (_event, token, input) => {
     const actor = getActiveSession(token);
     if (!hasFullSystemAccess(actor)) {
       return { ok: false, message: 'El Centro de Correcciones requiere una sesión autenticada con rol contable (admin o contador).' };
@@ -662,7 +778,8 @@ app.whenReady().then(async () => {
         sourceDocumentRef.length > 160 || correctionDocumentRef.length > 160 || journalEntryId.length > 160) {
       return { ok: false, message: 'Los datos del evento de auditoría están incompletos o no son válidos.' };
     }
-    const savedRow = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    return withOperationalDatabase(token, activeDb => {
+    const savedRow = activeDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     let savedState = {};
     try { savedState = savedRow ? JSON.parse(savedRow.state_json) : {}; } catch {}
     if (!Array.isArray(savedState.companies) || !savedState.companies.some(company => String(company.id) === companyId)) {
@@ -695,9 +812,10 @@ app.whenReady().then(async () => {
         : null,
       occurredAt
     };
-    const inserted = db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+    const inserted = activeDb.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
       .run(eventType, JSON.stringify(details));
     return { ok: true, id: Number(inserted.lastInsertRowid), createdAt: occurredAt };
+    });
   });
 
   const correctionActor = token => {
@@ -707,9 +825,10 @@ app.whenReady().then(async () => {
     if (!hasFullSystemAccess(actor)) throw new Error('Se requiere una sesión autenticada para acceder al Centro de Correcciones.');
     return actor;
   };
-  ipcMain.handle('sicoven:correction-case-create', (_event, token, input) => {
+  ipcMain.handle('sicoven:correction-case-create', async (_event, token, input) => {
     const actor = correctionActor(token);
-    const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    return withOperationalDatabase(token, activeDb => {
+    const row = activeDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     const state = row ? JSON.parse(row.state_json) : {};
     const collections = { SALE:'sales', PURCHASE:'purchases', JOURNAL_ENTRY:'journalEntries',
       INVENTORY_MOVEMENT:'movements' };
@@ -727,10 +846,13 @@ app.whenReady().then(async () => {
     if (!knownReferences.includes(sourceReference.toLocaleUpperCase())) {
       throw new Error('La referencia documental no coincide con el registro de origen. Verifique factura, asiento, comprobante o movimiento.');
     }
-    return registerCorrectionRequest(db,input,actor);
+    return registerCorrectionRequest(activeDb,input,actor);
+    });
   });
-  ipcMain.handle('sicoven:correction-case-authorize', (_event, token, input) =>
-    requireApprovedCorrectionCase(db,input,correctionActor(token)));
+  ipcMain.handle('sicoven:correction-case-authorize', async (_event, token, input) => {
+    const actor = correctionActor(token);
+    return withOperationalDatabase(token, activeDb => requireApprovedCorrectionCase(activeDb, input, actor));
+  });
   ipcMain.handle('sicoven:correction-case-review', () => {
     throw new Error('La revisión y aprobación previa ya no forman parte del Centro de Correcciones.');
   });
@@ -743,36 +865,43 @@ app.whenReady().then(async () => {
   ipcMain.handle('sicoven:correction-case-withdraw', () => {
     throw new Error('El retiro administrativo fue retirado del flujo operativo.');
   });
-  ipcMain.handle('sicoven:correction-case-execute', (_event, token, input) => {
+  ipcMain.handle('sicoven:correction-case-execute', async (_event, token, input) => {
     const actor = correctionActor(token);
-    const item = db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(input?.caseId || ''));
+    return withOperationalDatabase(token, activeDb => {
+    const item = activeDb.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(input?.caseId || ''));
     if (!item) throw new Error('El expediente de corrección no existe.');
     const reference = String(input?.executionRef || '').trim();
-    if (item.status === 'EXECUTED') return markCorrectionExecuted(db,{...input,executionRef:reference},actor);
-    requireApprovedCorrectionCase(db,{
+    if (item.status === 'EXECUTED') return markCorrectionExecuted(activeDb,{...input,executionRef:reference},actor);
+    requireApprovedCorrectionCase(activeDb,{
       companyId:item.company_id,entityType:item.entity_type,entityId:item.entity_id,
       sourceDocumentRef:item.source_ref,correctionDocumentRef:item.correction_ref
     },actor);
-    const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    const row = activeDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     const state = row ? JSON.parse(row.state_json) : {};
     const evidence = findLinkedCorrectionEvidence(state,item,reference);
     if (!evidence) {
       throw new Error('No se encontró un documento correctivo de la misma empresa con referencia coincidente y vínculo explícito al registro origen. La corrección permanece abierta; la operación no se marca como finalizada.');
     }
-    return markCorrectionExecuted(db,{...input,evidenceRecordId:evidence.id,evidenceCollection:evidence.__evidenceCollection},actor);
+    return markCorrectionExecuted(activeDb,{...input,evidenceRecordId:evidence.id,evidenceCollection:evidence.__evidenceCollection},actor);
+    });
   });
-  ipcMain.handle('sicoven:correction-case-list', (_event, token, companyId) => {
+  ipcMain.handle('sicoven:correction-case-list', async (_event, token, companyId) => {
     correctionActor(token);
-    const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    return withOperationalDatabase(token, activeDb => {
+    const row = activeDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     const state = row ? JSON.parse(row.state_json) : {};
     if (!Array.isArray(state.companies) || !state.companies.some(x=>String(x.id)===String(companyId))) throw new Error('La empresa solicitada no existe.');
-    return listCorrectionCases(db,companyId);
+    return listCorrectionCases(activeDb,companyId);
+    });
   });
 
   ipcMain.handle('sicoven:reset-accounting', (_event, token) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     if (!getActiveSession(token)) throw new Error('Sesión no válida. Inicie sesión para restablecer los datos.');
+    if (tenantController.runtime.listCompanies().length > 0) {
+      throw new Error('El reinicio global está bloqueado cuando existen bases independientes por empresa. Use el respaldo y la restauración global para recuperar una instalación completa.');
+    }
     // El estado operativo completo vive en app_state. Vaciar la tabla dentro de
     // una sola transacción impide dejar colecciones antiguas bajo claves adicionales.
     // auth_users, auth_sessions y license_state son tablas separadas y no se tocan.
@@ -829,20 +958,53 @@ app.whenReady().then(async () => {
     if (db?.open) throw new Error('SQLite ya está abierta; no se permite abrir una segunda conexión.');
     openDatabase();
   };
-  registerBackupIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession, dialog, app,
-    getWindow: () => BrowserWindow.getFocusedWindow() });
-  registerRestoreIpc({ ipcMain, app, dialog, licenseView, getActiveSession,
+  registerBackupIpc({
+    ipcMain, db: dbHandle, licenseView, getActiveSession, dialog, app,
+    getWindow: () => BrowserWindow.getFocusedWindow(),
+    operationContext: tenantController.operationContext,
+    runtime: tenantController.runtime,
+    assertOperationalReady
+  });
+  registerRestoreIpc({
+    ipcMain, app, dialog, licenseView, getActiveSession,
     getDb: () => db, closeDatabase, reopenDatabase,
-    getWindow: () => BrowserWindow.getFocusedWindow() });
+    getWindow: () => BrowserWindow.getFocusedWindow(),
+    operationContext: tenantController.operationContext,
+    runtime: tenantController.runtime,
+    onRestored: () => { restoreReloadPending = true; },
+    assertOperationalReady
+  });
 
-  registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession });
-  registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession });
-  registerInflationClassificationIpc({ ipcMain, db, licenseView, getActiveSession });
-  registerInflationRemeReadinessIpc({ ipcMain, db, licenseView, getActiveSession });
-  registerInflationSourceDossierIpc({ ipcMain, db, licenseView, getActiveSession });
+  const withDatabase = withOperationalDatabase;
+  registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession, withDatabase });
+  registerTenantMigrationPreflightIpc({ ipcMain, db, licenseView, getActiveSession });
+  registerTenantMigrationExecuteIpc({
+    ipcMain, db, runtime: tenantController.runtime,
+    operationContext: tenantController.operationContext, licenseView, getActiveSession, assertOperationalReady
+  });
+  registerCompanySessionIpc({
+    ipcMain,
+    companySessionContext: tenantController.companySessionContext,
+    runtime: tenantController.runtime,
+    operationContext: tenantController.operationContext,
+    controlDb: dbHandle,
+    licenseView, getActiveSession, assertOperationalReady
+  });
+  registerCompanyExportIpc({
+    ipcMain, runtime: tenantController.runtime,
+    operationContext: tenantController.operationContext,
+    companySessionContext: tenantController.companySessionContext,
+    licenseView, getActiveSession, dialog, app,
+    getWindow: sender => BrowserWindow.fromWebContents(sender),
+    assertOperationalReady
+  });
+  registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession, withDatabase });
+  registerInflationClassificationIpc({ ipcMain, db, licenseView, getActiveSession, withDatabase });
+  registerInflationRemeReadinessIpc({ ipcMain, db, licenseView, getActiveSession, withDatabase });
+  registerInflationSourceDossierIpc({ ipcMain, db, licenseView, getActiveSession, withDatabase });
   registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, dialog, shell, app,
-    getWindow: () => BrowserWindow.getFocusedWindow() });
-  registerVatFiscalIncidentIpc({ ipcMain, db, licenseView, getActiveSession });
+    getWindow: () => BrowserWindow.getFocusedWindow(), withDatabase });
+  registerVatFiscalIncidentIpc({ ipcMain, db, licenseView, getActiveSession, withDatabase });
 
 
   await revalidateLicense();
@@ -854,10 +1016,12 @@ app.whenReady().then(async () => {
   const initialLicenseStatus = licenseView();
   if (initialLicenseStatus.status === 'trial' && initialLicenseStatus.trialExpiresAt) {
     const remainingTrialMs = Math.max(0, Date.parse(initialLicenseStatus.trialExpiresAt) - Date.now());
-    trialExpiryTimer = setTimeout(() => {
+    trialExpiryTimer = setTimeout(async () => {
       const status = licenseView();
       if (!status.authorized) {
+        await clearTenantRuntimeAfterLicenseShutdown();
         sessions.clear();
+        activeRendererSessionToken = null;
         db.prepare('DELETE FROM auth_sessions').run();
         BrowserWindow.getAllWindows().forEach(win => win.webContents.send('sicoven:license-status-changed', status));
       }
@@ -867,7 +1031,9 @@ app.whenReady().then(async () => {
   licenseRecheckTimer = setInterval(async () => {
     const status = await revalidateLicense();
     if (!status.authorized) {
+      await clearTenantRuntimeAfterLicenseShutdown();
       sessions.clear();
+      activeRendererSessionToken = null;
       db.prepare('DELETE FROM auth_sessions').run();
       BrowserWindow.getAllWindows().forEach(win => win.webContents.send('sicoven:license-status-changed', status));
     }
@@ -878,6 +1044,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', () => {
+  try { tenantController?.runtime.closeAll(); } catch {}
   if (updateCheckTimer) clearInterval(updateCheckTimer);
   if (licenseRecheckTimer) clearInterval(licenseRecheckTimer);
   if (trialExpiryTimer) clearTimeout(trialExpiryTimer);

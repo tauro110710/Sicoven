@@ -5,7 +5,8 @@ const os = require('node:os');
 const path = require('node:path');
 const Database = require('better-sqlite3');
 const {
-  initializeDocumentVaultSchema, attachDocument, listDocuments, reviewDocument, getDocument
+  initializeDocumentVaultSchema, attachDocument, listDocuments, reviewDocument, getDocument,
+  registerDocumentVaultIpc
 } = require('./supporting-documents.cjs');
 
 const actor = { id: 7, username: 'contador', role: 'admin' };
@@ -130,4 +131,33 @@ test('the single accountant can verify their own correction-case evidence',()=>{
   assert.equal(persisted.length,1);
   assert.equal(persisted[0].status,'VERIFIED');
  }finally{h.close();}
+});
+
+
+test('document vault IPC reads and writes through the selected tenant database', async () => {
+  const control = fixture();
+  const tenant = fixture();
+  const handlers = new Map();
+  registerDocumentVaultIpc({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    db: control.db,
+    licenseView: () => ({ authorized: true }),
+    getActiveSession: token => token === 'tenant-token' ? actor : null,
+    dialog: {},
+    shell: {},
+    app: { getPath: () => tenant.storageDir },
+    getWindow: () => null,
+    withDatabase: async (token, operation) => {
+      assert.equal(token, 'tenant-token');
+      return operation(tenant.db, 'co-1');
+    }
+  });
+  try {
+    const rows = await handlers.get('sicoven:document-list')({}, 'tenant-token', {});
+    assert.deepEqual(rows, []);
+    assert.equal(control.db.prepare('SELECT COUNT(*) AS n FROM supporting_documents').get().n, 0);
+  } finally {
+    control.close();
+    tenant.close();
+  }
 });

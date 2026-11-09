@@ -18,23 +18,34 @@
   cursor: text;
 }
 
+
+/* Electron can make a whole window region draggable. Editable controls must
+   always opt out explicitly so text fields retain pointer, caret and selection. */
 @layer base {
-  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  input,
   textarea,
-  select {
+  select,
+  [contenteditable="true"],
+  [role="textbox"] {
+    -webkit-app-region: no-drag !important;
     pointer-events: auto !important;
     user-select: text !important;
     -webkit-user-select: text !important;
-    -webkit-app-region: no-drag;
   }
 
   input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
-  textarea {
+  textarea,
+  [contenteditable="true"],
+  [role="textbox"] {
     cursor: text;
   }
 
-  select {
-    cursor: pointer;
+  input:disabled,
+  textarea:disabled,
+  select:disabled,
+  [contenteditable="true"][aria-disabled="true"],
+  [role="textbox"][aria-disabled="true"] {
+    cursor: not-allowed;
   }
 
   input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
@@ -42,6 +53,10 @@
   select:focus {
     outline: 2px solid #059669;
     outline-offset: 1px;
+  }
+
+  select {
+    cursor: pointer;
   }
 }
 

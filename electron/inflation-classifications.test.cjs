@@ -18,3 +18,18 @@ test('review is append-only and can be recorded only once',()=>{const db=makeDb(
 test('correction creates a new linked version after prior review',()=>{const db=makeDb();try{saveInflationClassification(db,draft(),admin);reviewInflationClassification(db,{decisionId:'d1',decision:'REJECTED',reason:'Falta evidencia documental suficiente.'},admin);assert.throws(()=>saveInflationClassification(db,draft({id:'d2',version:2}),admin),/enlazar la última decisión/);saveInflationClassification(db,draft({id:'d2',version:2,supersedesDecisionId:'d1',rationale:'Clasificación corregida con evidencia.'}),admin);assert.equal(db.prepare('SELECT COUNT(*) n FROM inflation_classification_decisions').get().n,2);assert.throws(()=>db.prepare('UPDATE inflation_classification_decisions SET rationale=\'alterado\'').run(),/append-only/);}finally{db.close();}});
 test('audit failure rolls back the decision insert',()=>{const db=makeDb();try{db.exec('CREATE TRIGGER fail_audit BEFORE INSERT ON audit_events WHEN NEW.event_type=\'inflation_classification_created\' BEGIN SELECT RAISE(ABORT,\'audit failure\'); END;');assert.throws(()=>saveInflationClassification(db,draft(),admin),/audit failure/);assert.equal(db.prepare('SELECT COUNT(*) n FROM inflation_classification_decisions').get().n,0);}finally{db.close();}});
 test('IPC requires valid session and grants identical writes and reviews to administrator and accountant',()=>{const db=makeDb(),handlers=new Map(),contador={id:2,username:'contador',role:'contador'};registerInflationClassificationIpc({ipcMain:{handle:(n,h)=>handlers.set(n,h)},db,licenseView:()=>({authorized:true}),getActiveSession:t=>t==='admin'?admin:t==='contador'?contador:t==='operator'?{id:3,username:'operator',role:'operator'}:null});try{assert.throws(()=>handlers.get('sicoven:inflation-classification-list')({},'bad'),/Sesión no válida/);assert.throws(()=>handlers.get('sicoven:inflation-classification-save')({},'operator',draft()),/rol contable/);assert.equal(handlers.get('sicoven:inflation-classification-save')({},'admin',draft()).ok,true);assert.equal(handlers.get('sicoven:inflation-classification-review')({},'contador',{decisionId:'d1',decision:'APPROVED',reason:'Revisión contable independiente y documentada.'}).ok,true);assert.equal(handlers.get('sicoven:inflation-classification-save')({},'contador',draft({id:'d2',version:2,supersedesDecisionId:'d1',rationale:'Nueva versión con soporte revisado.'})).ok,true);assert.equal(handlers.get('sicoven:inflation-classification-list')({},'admin',{companyId:'company-2'}).length,0);}finally{db.close();}});
+
+test('tenant-routed classification IPC rejects records for a different selected company',()=>{
+ const control=makeDb(),tenant=makeDb(),handlers=new Map();
+ registerInflationClassificationIpc({
+  ipcMain:{handle:(name,handler)=>handlers.set(name,handler)},
+  db:control,licenseView:()=>({authorized:true}),getActiveSession:()=>admin,
+  withDatabase:(_token,operation)=>operation(tenant,'company-1')
+ });
+ try{
+  assert.equal(handlers.get('sicoven:inflation-classification-save')({},'admin',draft()).ok,true);
+  assert.throws(()=>handlers.get('sicoven:inflation-classification-save')({},'admin',draft({id:'foreign',companyId:'company-2'})),/empresa activa/);
+  assert.equal(tenant.prepare('SELECT COUNT(*) n FROM inflation_classification_decisions').get().n,1);
+  assert.equal(control.prepare('SELECT COUNT(*) n FROM inflation_classification_decisions').get().n,0);
+ }finally{control.close();tenant.close();}
+});

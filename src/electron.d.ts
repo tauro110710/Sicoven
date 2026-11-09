@@ -36,6 +36,17 @@ declare global {
       createAdmin: (token: string, input: { username: string; password: string; role?: 'admin' | 'contador' }) => Promise<{ ok: boolean; message?: string }>;
       deleteSeedAdmin: (token: string) => Promise<{ ok: boolean; message?: string }>;
       load: (token: string) => Promise<Record<string, unknown> | null>;
+      flushPersistence: (token: string) => Promise<{ ok: true }>;
+      onPersistenceFlushRequest: (callback: (request: { requestId: string }) => void) => () => void;
+      ackPersistenceFlush: (requestId: string, message?: string | null) => void;
+      inspectTenantMigrationPreflight: (token: string) => Promise<{ ok: boolean; readOnly: true; migrationStarted: false; sourceDatabase: 'sicoven.sqlite'; tables: Array<{ name: string; category: string }>; unknownTables: string[]; missingRequired: string[]; companyCount: number; companyIds: string[]; errors: string[] }>;
+      executeTenantMigration: (token: string) => Promise<{ ok: boolean; phase?: string; companies?: Array<{ companyId: string }>; actor: string; sourceDatabase: 'sicoven.sqlite'; sourcePreserved: true; globalBackupRestoreRetained: true }>;
+      listAccessibleCompanies: (token: string) => Promise<Array<{ id: string; name: string; rif: string }>>;
+      getTenantRegistryStatus: (token: string) => Promise<{ registeredCount: number; activeCount: number; companies: Array<{ id: string; name: string; rif: string; status: string }> }>;
+      selectActiveCompany: (token: string, companyId: string) => Promise<{ ok: boolean; changed: boolean; companyId: string; previousCompanyId?: string | null }>;
+      createCompany: (token: string, input: Record<string, unknown>) => Promise<{ ok: boolean; company: { id: string; name: string; rif: string }; selection: { ok: boolean; changed: boolean; companyId: string } }>;
+      getActiveCompany: (token: string) => Promise<{ companyId: string }>;
+      updateCompanyMetadata: (token: string, input: { companyId: string; name: string; rif: string }) => Promise<{ ok: boolean; company: { id: string; name: string; rif: string } }>;
       listAuditEvents: (token: string, limit?: number) => Promise<{ ok: boolean; message?: string; events?: Array<{ id: number; eventType: string; details: Record<string, unknown>; createdAt: string }> }>;
       save: (token: string, state: Record<string, unknown>) => Promise<{ ok: boolean; savedAt: string }>;
       reopenAccountingPeriod: (token: string, input: { companyId: string; reopenedThroughDate: string | null; reason: string }) => Promise<{ ok: boolean; reopeningId: string; company?: { id: string; name: string; closedThroughDate?: string } }>;
@@ -60,6 +71,9 @@ declare global {
       recordVatFiscalIncidentEvent: (token: string, input: import('./types/vatFiscalIncidents').VatFiscalIncidentEventInput) => Promise<import('./types/vatFiscalIncidents').VatFiscalIncident>;
       savePdf: (input: { fileName: string; base64: string }) => Promise<{ ok: boolean; canceled?: boolean; filePath?: string; bytes?: number }>;
       saveTextFile: (input: { fileName: string; content: string; contentType?: string; encoding?: 'utf-8' | 'iso-8859-1' }) => Promise<{ ok: boolean; canceled?: boolean; filePath?: string; bytes?: number }>;
+      createBackup: (token: string) => Promise<{ ok: boolean; canceled?: boolean; destination?: string; documentCount?: number; databaseSha256?: string; createdAt?: string }>;
+      restoreBackup: (token: string) => Promise<{ ok: boolean; canceled?: boolean; reloadRequired?: boolean; restoredAt?: string }>;
+      exportCompanyData: (token: string, input: { format: 'sqlite' | 'json' }) => Promise<{ ok: boolean; canceled?: boolean; format?: 'sqlite' | 'json'; destination?: string; documentCount?: number; databaseSha256?: string; bytes?: number; companyId?: string }>;
       getDemoUsage: () => Record<string, number>;
       consumeDemoAction: (moduleKey: string) => {
         ok: boolean;

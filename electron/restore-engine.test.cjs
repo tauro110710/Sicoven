@@ -317,3 +317,107 @@ test('executeRestore rolls back to the original SQLite and documents when reopen
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+
+function makeCompanyDatabase(userData, companyId, marker) {
+  const directory = path.join(userData, 'companies', companyId);
+  fs.mkdirSync(directory, { recursive: true });
+  const database = new Database(path.join(directory, 'accounting.sqlite'));
+  database.exec("CREATE TABLE sicoven_database_meta(meta_key TEXT PRIMARY KEY,meta_value TEXT NOT NULL); CREATE TABLE app_state(state_key TEXT PRIMARY KEY,state_json TEXT NOT NULL)");
+  database.prepare("INSERT INTO sicoven_database_meta(meta_key,meta_value) VALUES('company_id',?)").run(companyId);
+  database.prepare("INSERT INTO app_state(state_key,state_json) VALUES('accounting',?)").run(JSON.stringify({ companyId, marker }));
+  database.close();
+  const documents = path.join(directory, 'supporting-documents');
+  fs.mkdirSync(documents, { recursive: true });
+  fs.writeFileSync(path.join(documents, 'support.txt'), 'document-' + marker, { flag: 'wx' });
+}
+
+test('global backup and restore include every independent company SQLite database', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-global-tenant-restore-'));
+  const userData = path.join(root, 'active');
+  const sourceData = path.join(root, 'source');
+  const backupDir = path.join(root, 'global-backup');
+  fs.mkdirSync(userData);
+  fs.mkdirSync(sourceData);
+  const sourceDb = makeDatabase(path.join(sourceData, 'sicoven.sqlite'), 'source-global');
+  let activeDb = makeDatabase(path.join(userData, 'sicoven.sqlite'), 'active-global');
+  makeCompanyDatabase(sourceData, 'company-a', 'source-a');
+  makeCompanyDatabase(sourceData, 'company-b', 'source-b');
+  makeCompanyDatabase(userData, 'company-a', 'active-a');
+  makeCompanyDatabase(userData, 'company-old', 'must-be-replaced');
+  try {
+    const backup = await createBackup({ db: sourceDb, userDataDir: sourceData, destination: backupDir });
+    assert.equal(verifyBackupDirectory(backupDir).ok, true);
+    const manifest = JSON.parse(fs.readFileSync(path.join(backupDir, 'manifest.json'), 'utf8'));
+    assert.deepEqual(manifest.companyDatabases.map(item => item.companyId), ['company-a', 'company-b']);
+    assert.deepEqual(manifest.companyDatabases.map(item => item.documents.length), [1, 1]);
+    const backedUpCompanyDocument = path.join(backupDir, 'companies', 'company-a', 'supporting-documents', 'support.txt');
+    fs.writeFileSync(backedUpCompanyDocument, 'tampered-document');
+    assert.throws(() => verifyBackupDirectory(backupDir), /documentos de las empresas no coinciden/);
+    fs.writeFileSync(backedUpCompanyDocument, 'document-source-a');
+    assert.equal(verifyBackupDirectory(backupDir).ok, true);
+    sourceDb.close();
+    const result = await require('./restore-engine.cjs').executeRestore({
+      backupDirectory: backupDir,
+      userDataDir: userData,
+      db: activeDb,
+      getDb: () => activeDb,
+      closeDatabase: async () => { if (activeDb?.open) activeDb.close(); },
+      reopenDatabase: async () => { activeDb = new Database(path.join(userData, 'sicoven.sqlite')); },
+      actor: 'admin'
+    });
+    assert.equal(result.ok, true);
+    assert.equal(fs.existsSync(path.join(userData, 'companies', 'company-old')), false);
+    for (const [companyId, expected] of [['company-a', 'source-a'], ['company-b', 'source-b']]) {
+      const tenant = new Database(path.join(userData, 'companies', companyId, 'accounting.sqlite'), { readonly: true });
+      try {
+        assert.equal(JSON.parse(tenant.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json).marker, expected);
+        assert.equal(fs.readFileSync(path.join(userData, 'companies', companyId, 'supporting-documents', 'support.txt'), 'utf8'), 'document-' + expected);
+      } finally { tenant.close(); }
+    }
+  } finally {
+    if (activeDb?.open) activeDb.close();
+    if (sourceDb.open) sourceDb.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('legacy global backup is rejected before restore when active company databases exist', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-legacy-restore-'));
+  const userData = path.join(root, 'active');
+  const sourceData = path.join(root, 'legacy-source');
+  const backupDir = path.join(root, 'legacy-backup');
+  fs.mkdirSync(userData);
+  fs.mkdirSync(sourceData);
+  let activeDb = makeDatabase(path.join(userData, 'sicoven.sqlite'), 'active-global');
+  const sourceDb = makeDatabase(path.join(sourceData, 'sicoven.sqlite'), 'legacy-global');
+  makeCompanyDatabase(userData, 'company-existing', 'preserve-this-company');
+  try {
+    await createBackup({ db: sourceDb, userDataDir: sourceData, destination: backupDir });
+    const manifestPath = path.join(backupDir, 'manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    delete manifest.companyDatabases;
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+    assert.equal(verifyBackupDirectory(backupDir).ok, true);
+    await assert.rejects(
+      require('./restore-engine.cjs').executeRestore({
+        backupDirectory: backupDir,
+        userDataDir: userData,
+        db: activeDb,
+        getDb: () => activeDb,
+        closeDatabase: async () => { if (activeDb?.open) activeDb.close(); },
+        reopenDatabase: async () => { activeDb = new Database(path.join(userData, 'sicoven.sqlite')); },
+        actor: 'admin'
+      }),
+      /respaldo global antiguo no contiene las bases individuales/
+    );
+    const preserved = new Database(path.join(userData, 'companies', 'company-existing', 'accounting.sqlite'), { readonly: true });
+    try {
+      assert.equal(JSON.parse(preserved.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json).marker, 'preserve-this-company');
+    } finally { preserved.close(); }
+  } finally {
+    if (activeDb?.open) activeDb.close();
+    if (sourceDb.open) sourceDb.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

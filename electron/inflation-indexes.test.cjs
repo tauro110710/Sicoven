@@ -162,3 +162,31 @@ test('IPC requires a valid session and permits administrator and accountant impo
     assert.equal(accountantReview.ok, true);
   } finally { db.close(); }
 });
+
+
+test('inflation index IPC routes reads and writes through the authenticated tenant database', async () => {
+  const controlDb = database();
+  const tenantDb = database();
+  const handlers = new Map();
+  registerInflationIndexIpc({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    db: controlDb,
+    licenseView: () => ({ authorized: true }),
+    getActiveSession: token => token === 'tenant-token' ? admin : null,
+    withDatabase: async (token, operation) => {
+      assert.equal(token, 'tenant-token');
+      return operation(tenantDb, 'company-001');
+    }
+  });
+  try {
+    const imported = await handlers.get('sicoven:inflation-index-import')({}, 'tenant-token', importerInput());
+    assert.equal(imported.ok, true);
+    assert.equal(tenantDb.prepare('SELECT COUNT(*) AS n FROM inflation_index_series').get().n, 1);
+    assert.equal(controlDb.prepare('SELECT COUNT(*) AS n FROM inflation_index_series').get().n, 0);
+    const listed = await handlers.get('sicoven:inflation-index-list')({}, 'tenant-token');
+    assert.equal(listed.length, 1);
+  } finally {
+    controlDb.close();
+    tenantDb.close();
+  }
+});

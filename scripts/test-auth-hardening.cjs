@@ -33,14 +33,14 @@ assert.match(main, /DELETE FROM auth_sessions WHERE user_id=\?/);
 assert.match(main, /sicoven:auth-restore/);
 assert.match(main, /DELETE FROM auth_sessions WHERE token_hash=\?/);
 assert.match(main, /hasFullSystemAccess\(actor\)/);
-assert.match(main, /sicoven:load-state', \(_event, token\)/);
+assert.match(main, /sicoven:load-state', async \(_event, token\)/);
 const persistence = read('electron/accounting-persistence.cjs');
-assert.match(main, /registerAccountingPersistenceHandler\(\{ ipcMain, db, licenseView, getActiveSession \}\)/);
+assert.match(main, /registerAccountingPersistenceHandler\(\{ ipcMain, db, licenseView, getActiveSession, withDatabase \}\)/);
 assert.match(persistence, /ipcMain\.handle\('sicoven:save-state', \(_event, token, state\)/);
 assert.match(persistence, /if \(!licensing\.authorized\)/);
 assert.match(persistence, /const actor = getActiveSession\(token\)/);
 assert.match(persistence, /if \(!actor\)/);
-assert.match(persistence, /persistAccountingSnapshot\(db, state, actor\)/);
+assert.match(persistence, /persistAccountingSnapshot\(activeDb, state, actor\)/);
 
 assert.match(main, /function getActiveSession/);
 assert.match(main, /expiry <= Date/);

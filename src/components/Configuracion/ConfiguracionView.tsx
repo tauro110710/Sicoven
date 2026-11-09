@@ -411,7 +411,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     companySaveInFlightRef.current = true;
     setCompanySaveBusy(true);
     try {
-      updateCompany({
+      await updateCompany({
         ...currentCompany,
         ...(newCurrencyAssessment ? { functionalCurrencyAssessments: [...(currentCompany.functionalCurrencyAssessments || []), newCurrencyAssessment] } : {}),
         ...(newExchangeabilityAssessment ? { exchangeabilityAssessments: [...(currentCompany.exchangeabilityAssessments || []), newExchangeabilityAssessment] } : {}),
@@ -453,6 +453,45 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const handleCreateGlobalBackup = async () => {
+    if (!window.sicovenStore) { handleExportBackup(); return; }
+    setBackupRestoreBusy(true);
+    try {
+      const result = await window.sicovenStore.createBackup(token);
+      if (result?.ok) {
+        window.alert('El respaldo global de SICOVEN fue creado y verificado correctamente: ' + (result.destination || 'carpeta seleccionada.'));
+      } else if (!result?.canceled) {
+        throw new Error('No se confirmó la creación del respaldo global.');
+      }
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo crear el respaldo global.');
+    } finally {
+      setBackupRestoreBusy(false);
+    }
+  };
+
+  const handleRestoreGlobalBackup = async () => {
+    if (!window.sicovenStore) return;
+    const confirmed = window.confirm(
+      'RESTAURACIÓN GLOBAL DE SICOVEN\\n\\nSe reemplazarán la base de control, todas las bases SQLite de las empresas y sus documentos por el contenido del respaldo verificado. Se creará un snapshot de retorno antes del cambio.\\n\\n¿Deseas continuar?'
+    );
+    if (!confirmed) return;
+    setBackupRestoreBusy(true);
+    try {
+      const result = await window.sicovenStore.restoreBackup(token);
+      if (result?.ok) {
+        window.alert('La restauración global fue verificada. SICOVEN se recargará para abrir los datos restaurados.');
+        window.location.reload();
+        return;
+      }
+      if (!result?.canceled) throw new Error('La restauración global no fue confirmada.');
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo completar la restauración global.');
+    } finally {
+      setBackupRestoreBusy(false);
+    }
   };
 
   const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1155,31 +1194,51 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
             Respaldo y Seguridad de Datos
           </div>
           <p className="text-xs text-slate-500">
-            Exporta o restaura toda la contabilidad (asientos, compras, ventas, inventarios, retenciones) en formato JSON estructurado.
+            {window.sicovenStore
+              ? 'El respaldo global contiene la base de control, todas las bases SQLite independientes de las empresas y sus documentos. Para entregar una empresa individual, usa las acciones de entrega SQLite o JSON de la barra superior.'
+              : 'Exporta o restaura el estado contable de desarrollo en formato JSON estructurado.'}
           </p>
 
           <div className="space-y-2.5 pt-1">
-            <button
-              onClick={handleExportBackup}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow transition cursor-pointer"
-            >
-              <Download className="w-4 h-4" />
-              Descargar Respaldo JSON Completo
-            </button>
-
-            <label className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-300 transition cursor-pointer">
-              <Upload className="w-4 h-4" />
-              {backupRestoreBusy ? 'Restaurando y verificando SQLite…' : 'Restaurar desde Archivo JSON'}
-              <input
-                type="file"
-                accept=".json"
-                onChange={handleImportBackup}
+            {window.sicovenStore ? <>
+              <button
+                disabled={backupRestoreBusy}
+                onClick={() => void handleCreateGlobalBackup()}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow transition cursor-pointer disabled:opacity-50"
+              >
+                <Download className="w-4 h-4" />
+                {backupRestoreBusy ? 'Preparando respaldo global…' : 'Crear Respaldo Global Completo'}
+              </button>
+              <button
+                disabled={backupRestoreBusy}
+                onClick={() => void handleRestoreGlobalBackup()}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-300 transition cursor-pointer disabled:opacity-50"
+              >
+                <Upload className="w-4 h-4" />
+                {backupRestoreBusy ? 'Verificando restauración…' : 'Restaurar Respaldo Global'}
+              </button>
+            </> : <>
+              <button
+                onClick={handleExportBackup}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow transition cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                Descargar Respaldo JSON Completo
+              </button>
+              <label className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-300 transition cursor-pointer">
+                <Upload className="w-4 h-4" />
+                {backupRestoreBusy ? 'Restaurando y verificando SQLite…' : 'Restaurar desde Archivo JSON'}
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleImportBackup}
                   disabled={backupRestoreBusy}
-                className="hidden"
-              />
-            </label>
+                  className="hidden"
+                />
+              </label>
+            </>}
 
-            <button
+            <button hidden={Boolean(window.sicovenStore)}
               disabled={factoryResetBusy}
               onClick={async () => {
                 if (!confirm('¿Restablecer el sistema a los datos de muestra iniciales? Se sobrescribirán los datos actuales.')) return;
@@ -1201,7 +1260,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
               {factoryResetBusy ? 'Confirmando SQLite…' : 'Restablecer a Datos de Prueba Oficiales'}
             </button>
 
-            <button
+            <button hidden={Boolean(window.sicovenStore)}
               disabled={factoryResetBusy}
               onClick={async () => {
                 const first = window.confirm('RESET DE FÁBRICA SICOVEN\n\nSe eliminarán los registros operativos: asientos, compras, ventas, inventario, movimientos, retenciones, conciliaciones, liquidaciones y cuentas bancarias operativas. Se eliminarán todas las empresas registradas y sus parámetros, junto con todos los registros operativos. Se conservarán el acceso administrativo y la licencia/prueba actual. Esta acción no se puede deshacer. ¿Deseas continuar?');

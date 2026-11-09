@@ -15,6 +15,17 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   createAdmin: (token, input) => ipcRenderer.invoke('sicoven:auth-create-admin', token, input),
   deleteSeedAdmin: (token) => ipcRenderer.invoke('sicoven:auth-delete-seed', token),
   load: (token) => ipcRenderer.invoke('sicoven:load-state', token),
+  flushPersistence: (token) => ipcRenderer.invoke('sicoven:persistence-flush', token),
+  onPersistenceFlushRequest: (callback) => { const listener = (_event, request) => callback(request); ipcRenderer.on('sicoven:persistence-flush-request', listener); return () => ipcRenderer.removeListener('sicoven:persistence-flush-request', listener); },
+  ackPersistenceFlush: (requestId, message) => ipcRenderer.send('sicoven:persistence-flush-ack', { requestId, ok: !message, ...(message ? { message: String(message) } : {}) }),
+  inspectTenantMigrationPreflight: (token) => ipcRenderer.invoke('sicoven:tenant-migration-preflight', token),
+  executeTenantMigration: (token) => ipcRenderer.invoke('sicoven:tenant-migration-execute', token),
+  listAccessibleCompanies: (token) => ipcRenderer.invoke('sicoven:company-list-accessible', token),
+  getTenantRegistryStatus: (token) => ipcRenderer.invoke('sicoven:company-registry-status', token),
+  selectActiveCompany: (token, companyId) => ipcRenderer.invoke('sicoven:company-select-active', token, { companyId }),
+  createCompany: (token, input) => ipcRenderer.invoke('sicoven:company-create', token, input),
+  getActiveCompany: (token) => ipcRenderer.invoke('sicoven:company-get-active', token),
+  updateCompanyMetadata: (token, input) => ipcRenderer.invoke('sicoven:company-update-metadata', token, input),
   listAuditEvents: (token, limit) => ipcRenderer.invoke('sicoven:audit-list', token, limit),
   recordAuditCorrection: (token, input) => ipcRenderer.invoke('sicoven:audit-record-correction', token, input),
   createCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-create', token, input),
@@ -50,5 +61,6 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   savePdf: (input) => ipcRenderer.invoke('sicoven:pdf-save', input),
   saveTextFile: (input) => ipcRenderer.invoke('sicoven:text-save', input),
   createBackup: (token) => ipcRenderer.invoke('sicoven:backup-create', token),
-  restoreBackup: (token) => ipcRenderer.invoke('sicoven:restore-execute', token)
+  restoreBackup: (token) => ipcRenderer.invoke('sicoven:restore-execute', token),
+  exportCompanyData: (token, input) => ipcRenderer.invoke('sicoven:company-export-data', token, input)
 }));
