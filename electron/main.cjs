@@ -204,10 +204,17 @@ async function bindDefaultTenantForSession(token) {
   if (companies.length === 0) return null;
   let preferredId = '';
   try {
-    const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
-    const legacy = row ? JSON.parse(row.state_json) : null;
-    preferredId = String(legacy?.currentCompanyId || '');
+    const preference = db.prepare("SELECT state_json FROM app_state WHERE state_key='active_company_preference'").get();
+    const savedPreference = preference ? JSON.parse(preference.state_json) : null;
+    preferredId = String(savedPreference?.companyId || '');
   } catch {}
+  if (!preferredId) {
+    try {
+      const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+      const legacy = row ? JSON.parse(row.state_json) : null;
+      preferredId = String(legacy?.currentCompanyId || '');
+    } catch {}
+  }
   const selected = companies.find(item => String(item.id) === preferredId) || companies[0];
   await tenantController.companySessionContext.selectCompany(token, selected.id);
   return selected.id;
@@ -951,7 +958,11 @@ app.whenReady().then(async () => {
     operationContext: tenantController.operationContext, licenseView, getActiveSession
   });
   registerCompanySessionIpc({
-    ipcMain, companySessionContext: tenantController.companySessionContext,
+    ipcMain,
+    companySessionContext: tenantController.companySessionContext,
+    runtime: tenantController.runtime,
+    operationContext: tenantController.operationContext,
+    controlDb: db,
     licenseView, getActiveSession
   });
   registerCompanyExportIpc({
