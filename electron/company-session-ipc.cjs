@@ -39,6 +39,19 @@ function registerCompanySessionIpc({
     return companySessionContext.listAccessibleCompanies(token);
   });
 
+  ipcMain.handle('sicoven:company-registry-status', (_event, token) => {
+    requireAuthorizedSession(token);
+    const companies = runtime.listCompanies();
+    return {
+      registeredCount: companies.length,
+      activeCount: companies.filter(item => String(item.status) === 'ACTIVE').length,
+      companies: companies.map(item => ({
+        id: String(item.id), name: String(item.name || ''), rif: String(item.rif || ''),
+        status: String(item.status || '')
+      }))
+    };
+  });
+
   ipcMain.handle('sicoven:company-select-active', async (_event, token, input) => {
     requireAuthorizedSession(token);
     const companyId = String(input?.companyId || '').trim();
