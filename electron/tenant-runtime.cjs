@@ -63,6 +63,12 @@ function createTenantRuntime({
         if (saved?.ok !== true) {
           throw new Error('SQLite no confirmó el snapshot inicial de la empresa.');
         }
+        tenantDb.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+          .run('company_created', JSON.stringify({
+            companyId: String(company.id), rif: String(company.rif), name: String(company.name),
+            actorUserId: actor?.id ?? null, actorUsername: actor?.username || 'system',
+            createdAt: new Date().toISOString()
+          }));
       });
       const db = manager.openCompany(company.id);
       const verified = readTenantSnapshot(db, company.id);
