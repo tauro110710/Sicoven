@@ -108,13 +108,20 @@ function assessInflationIndexReadiness(db, requiredRanges) {
       : 'REME permanece bloqueado: corrija todos los requisitos de evidencia indicados.'
   };
 }
-function registerInflationRemeReadinessIpc({ ipcMain, db, licenseView, getActiveSession }) {
-  if (!ipcMain || typeof ipcMain.handle !== 'function') throw new Error('No se pudo registrar el control de preparación REME.');
+function registerInflationRemeReadinessIpc({ ipcMain, db, licenseView, getActiveSession, withDatabase = null }) {
+  if (!ipcMain || typeof ipcMain.handle !== 'function' ||
+      typeof licenseView !== 'function' || typeof getActiveSession !== 'function' ||
+      (withDatabase !== null && typeof withDatabase !== 'function')) {
+    throw new Error('No se pudo registrar el control de preparación REME.');
+  }
+  const runWithDatabase = (token, operation) => withDatabase
+    ? withDatabase(token, (activeDb, companyId) => operation(activeDb, companyId))
+    : operation(db, null);
   ipcMain.handle('sicoven:inflation-reme-readiness', (_event, token, ranges) => {
     const licensing = licenseView();
     const actor = getActiveSession(token);
     if (!licensing.authorized || !actor) throw new Error('Sesión no válida o licencia no autorizada.');
-    return assessInflationIndexReadiness(db, ranges);
+    return runWithDatabase(token, activeDb => assessInflationIndexReadiness(activeDb, ranges));
   });
 }
 module.exports = { validMonth, nextMonth, monthRange, normalizeRequiredRanges, assessInflationIndexReadiness, registerInflationRemeReadinessIpc };
