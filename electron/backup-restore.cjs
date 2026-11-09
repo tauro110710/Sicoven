@@ -321,7 +321,8 @@ function verifyBackupDirectory(directory) {
   return { ok: true, integrity: integrity.integrity, documentCount: actual.length, databaseSha256: manifest.database.sha256, createdAt: manifest.createdAt };
 }
 
-function registerBackupIpc({ ipcMain, db, licenseView, getActiveSession, dialog, app, getWindow, operationContext = null, runtime = null }) {
+function registerBackupIpc({ ipcMain, db, licenseView, getActiveSession, dialog, app, getWindow, operationContext = null, runtime = null, assertOperationalReady = () => {} }) {
+  if (typeof assertOperationalReady !== 'function') throw new TypeError('La verificación del estado de restauración global no es válida.');
   if (operationContext && typeof operationContext.acquireMaintenanceLock !== 'function') {
     throw new TypeError('El respaldo global requiere un bloqueo de mantenimiento válido.');
   }
@@ -335,6 +336,7 @@ function registerBackupIpc({ ipcMain, db, licenseView, getActiveSession, dialog,
     }
   }
   ipcMain.handle('sicoven:backup-create', async (_event, token) => {
+    assertOperationalReady();
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const actor = getActiveSession(token);
