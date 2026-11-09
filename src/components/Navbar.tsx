@@ -26,7 +26,6 @@ import {
   Menu,
   X
 } from 'lucide-react';
-import { formatBs, formatUsd } from '../utils/formatters';
 
 declare const __SICOVEN_VERSION__: string;
 
@@ -159,15 +158,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="inline-flex items-center rounded-md border border-sky-400/30 bg-sky-500/15 px-2 py-1 text-[10px] sm:text-xs font-bold tracking-wide text-sky-200 whitespace-nowrap" title="Versión instalada de SICOVEN" aria-label={`Versión ${__SICOVEN_VERSION__}`}>
               v{__SICOVEN_VERSION__}
             </span>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 px-1.5 sm:px-2" title="Tasa BCV vigente utilizada exclusivamente para equivalencias y cálculos de Inventario" aria-label="Tasa del Banco Central de Venezuela para Inventario">
-            <img src="./bcv-logo.svg" alt="Banco Central de Venezuela" className="h-8 w-8 sm:h-9 sm:w-9 object-contain rounded-full bg-white p-0.5 flex-shrink-0" />
-            <div className="flex flex-col items-start justify-center min-w-0">
-              <span className="text-[9px] uppercase tracking-wide text-slate-300">Tasa BCV · Inventario</span>
-              <span className="text-xs sm:text-sm font-bold font-mono text-emerald-300 whitespace-nowrap">{currentCompany.inventoryBcvRate ? formatBs(currentCompany.inventoryBcvRate) + ' / USD' : 'USD: consultando…'}</span>
-              {currentCompany.inventoryBcvEurRate ? <span className="text-[10px] sm:text-xs font-semibold font-mono text-sky-300 whitespace-nowrap">{formatBs(currentCompany.inventoryBcvEurRate)} / EUR</span> : null}
-              <span className="text-[9px] text-slate-400 whitespace-nowrap">{currentCompany.inventoryBcvRateEffectiveDate ? 'Vigencia ' + currentCompany.inventoryBcvRateEffectiveDate : 'Sin fecha vigente'}</span>
-            </div>
           </div>
           {/* Company Switcher, Currency View & Mobile Menu Button */}
           <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
