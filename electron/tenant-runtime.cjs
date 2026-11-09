@@ -53,7 +53,7 @@ function createTenantRuntime({
     const existing = manager.listCompanies().find(item => String(item.id) === String(company.id));
     if (existing) throw new Error('La empresa ya está registrada. No se reemplazará ni reinicializará su base SQLite.');
     const empty = createEmptyAccountingSnapshot();
-    empty.companies = [{ id: String(company.id), name: String(company.name), rif: String(company.rif) }];
+    empty.companies = [{ ...company, id: String(company.id), name: String(company.name), rif: String(company.rif) }];
     empty.currentCompanyId = String(company.id);
     try {
       // The manager keeps the tenant out of the control registry until this
