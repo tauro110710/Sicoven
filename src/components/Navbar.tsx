@@ -164,7 +164,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             <img src="./bcv-logo.svg" alt="Banco Central de Venezuela" className="h-8 w-8 sm:h-9 sm:w-9 object-contain rounded-full bg-white p-0.5 flex-shrink-0" />
             <div className="flex flex-col items-start justify-center min-w-0">
               <span className="text-[9px] uppercase tracking-wide text-slate-300">Tasa BCV · Inventario</span>
-              <span className="text-xs sm:text-sm font-bold font-mono text-emerald-300 whitespace-nowrap">{currentCompany.inventoryBcvRate ? formatBs(currentCompany.inventoryBcvRate) + ' / USD' : 'Consultando…'}</span>
+              <span className="text-xs sm:text-sm font-bold font-mono text-emerald-300 whitespace-nowrap">{currentCompany.inventoryBcvRate ? formatBs(currentCompany.inventoryBcvRate) + ' / USD' : 'USD: consultando…'}</span>
+              {currentCompany.inventoryBcvEurRate ? <span className="text-[10px] sm:text-xs font-semibold font-mono text-sky-300 whitespace-nowrap">{formatBs(currentCompany.inventoryBcvEurRate)} / EUR</span> : null}
               <span className="text-[9px] text-slate-400 whitespace-nowrap">{currentCompany.inventoryBcvRateEffectiveDate ? 'Vigencia ' + currentCompany.inventoryBcvRateEffectiveDate : 'Sin fecha vigente'}</span>
             </div>
           </div>
