@@ -32,7 +32,11 @@ const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
 const { registerPersistenceFlushIpc } = require('./persistence-flush-ipc.cjs');
-const { registerTenantMigrationPreflightIpc } = require('./tenant-migration-preflight-ipc.cjs');
+const { registerTenantMigrationPreflightIpc, registerTenantMigrationExecuteIpc } = require('./tenant-migration-preflight-ipc.cjs');
+const { createTenantRuntimeController } = require('./tenant-runtime-controller.cjs');
+const { initializeTenantDatabase } = require('./tenant-schema.cjs');
+const { registerCompanySessionIpc } = require('./company-session-ipc.cjs');
+const { registerCompanyExportIpc } = require('./company-export-ipc.cjs');
 const { prepareTextDownload } = require('./text-download.cjs');
 const { registerTextDownloadHandler } = require('./text-download-ipc.cjs');
 
@@ -67,6 +71,8 @@ const { registerVatFiscalIncidentIpc } = require('./vat-fiscal-incidents.cjs');
 const { initializeCorrectionWorkflow, registerCorrectionRequest, reviewCorrectionRequest, markCorrectionExecuted, listCorrectionCases, findLinkedCorrectionEvidence, observeCorrectionRequest, resubmitCorrectionRequest, withdrawCorrectionRequest, requireApprovedCorrectionCase } = require('./accounting-correction-workflow.cjs');
 
 let db;
+let persistenceFlushBridge = null;
+let tenantController = null;
 function openDatabase() {
   const dataDir = app.getPath('userData');
   fs.mkdirSync(dataDir, { recursive: true });
@@ -390,6 +396,28 @@ app.whenReady().then(async () => {
     // Si la recuperación no puede demostrar un estado íntegro, el arranque se bloquea.
     recoverPendingRestore({ userDataDir: dataDir });
     openDatabase();
+    // Keep the legacy schema available for read-only preflight and rollback;
+    // each newly created tenant receives the same operational schema locally.
+    initializeTenantDatabase(db);
+    persistenceFlushBridge = registerPersistenceFlushIpc({
+      ipcMain, licenseView, getActiveSession,
+      getWindow: sender => BrowserWindow.fromWebContents(sender)
+    });
+    tenantController = createTenantRuntimeController({
+      controlDb: db,
+      userDataDir: dataDir,
+      Database,
+      assertSqliteIntegrity,
+      getActiveSession,
+      flushPendingWrites: async () => {
+        const token = activeRendererSessionToken;
+        const window = BrowserWindow.getAllWindows().find(item => !item.isDestroyed());
+        if (!token || !window) {
+          throw new Error('No existe una sesión renderer activa para confirmar la persistencia antes del cambio de empresa.');
+        }
+        await persistenceFlushBridge.requestFlush(window.webContents, token);
+      }
+    });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     try {
@@ -849,16 +877,31 @@ app.whenReady().then(async () => {
     getDb: () => db, closeDatabase, reopenDatabase,
     getWindow: () => BrowserWindow.getFocusedWindow() });
 
-  registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession });
-  const persistenceFlushBridge = registerPersistenceFlushIpc({ ipcMain, licenseView, getActiveSession, getWindow: sender => BrowserWindow.fromWebContents(sender) });
+  const withDatabase = tenantController.withDatabase;
+  registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession, withDatabase });
   registerTenantMigrationPreflightIpc({ ipcMain, db, licenseView, getActiveSession });
-  registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession });
-  registerInflationClassificationIpc({ ipcMain, db, licenseView, getActiveSession });
-  registerInflationRemeReadinessIpc({ ipcMain, db, licenseView, getActiveSession });
-  registerInflationSourceDossierIpc({ ipcMain, db, licenseView, getActiveSession });
+  registerTenantMigrationExecuteIpc({
+    ipcMain, db, runtime: tenantController.runtime,
+    operationContext: tenantController.operationContext, licenseView, getActiveSession
+  });
+  registerCompanySessionIpc({
+    ipcMain, companySessionContext: tenantController.companySessionContext,
+    licenseView, getActiveSession
+  });
+  registerCompanyExportIpc({
+    ipcMain, runtime: tenantController.runtime,
+    operationContext: tenantController.operationContext,
+    companySessionContext: tenantController.companySessionContext,
+    licenseView, getActiveSession, dialog, app,
+    getWindow: sender => BrowserWindow.fromWebContents(sender)
+  });
+  registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession, withDatabase });
+  registerInflationClassificationIpc({ ipcMain, db, licenseView, getActiveSession, withDatabase });
+  registerInflationRemeReadinessIpc({ ipcMain, db, licenseView, getActiveSession, withDatabase });
+  registerInflationSourceDossierIpc({ ipcMain, db, licenseView, getActiveSession, withDatabase });
   registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, dialog, shell, app,
-    getWindow: () => BrowserWindow.getFocusedWindow() });
-  registerVatFiscalIncidentIpc({ ipcMain, db, licenseView, getActiveSession });
+    getWindow: () => BrowserWindow.getFocusedWindow(), withDatabase });
+  registerVatFiscalIncidentIpc({ ipcMain, db, licenseView, getActiveSession, withDatabase });
 
 
   await revalidateLicense();
