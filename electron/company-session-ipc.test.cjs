@@ -77,3 +77,34 @@ test('returns the active company only through the authenticated session binding'
   assert.deepEqual(handlers.get('sicoven:company-get-active')({}, 'valid-token'), { companyId: 'company-a' });
   assert.deepEqual(calls, [['active', 'valid-token']]);
 });
+
+
+test('updates registry identity and records a tenant audit event under maintenance lock', async () => {
+  let updatedMetadata = null;
+  const auditEvents = [];
+  let acquired = 0, released = 0;
+  const tenantDb = { prepare: () => ({ run: (...args) => auditEvents.push(args) }) };
+  const { handlers } = fixture({
+    runtime: {
+      listCompanies: () => [{ id: 'company-a', name: 'Empresa A', rif: 'J-1', status: 'ACTIVE' }],
+      createCompany: async company => ({ ok: true, company }),
+      updateCompanyMetadata: company => { updatedMetadata = company; return { ...company, status: 'ACTIVE' }; },
+      getCompanyDatabase: () => tenantDb
+    },
+    operationContext: {
+      getActiveCompanyId: () => 'company-a',
+      acquireMaintenanceLock: async () => {
+        acquired += 1;
+        return () => { released += 1; };
+      }
+    }
+  });
+  const result = await handlers.get('sicoven:company-update-metadata')({}, 'valid-token', {
+    companyId: 'company-a', name: 'EMPRESA A ACTUALIZADA', rif: 'J-12345678-9'
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(updatedMetadata, { companyId: 'company-a', name: 'EMPRESA A ACTUALIZADA', rif: 'J-12345678-9' });
+  assert.equal(auditEvents[0][0], 'company_metadata_updated');
+  assert.equal(acquired, 1);
+  assert.equal(released, 1);
+});
