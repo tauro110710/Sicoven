@@ -103,6 +103,7 @@ function openDatabase() {
       BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END;
   `);
   initializeCorrectionWorkflow(db);
+  initializeTenantDatabase(db);
   // Reconciliar el ledger externo antes de exponer la aplicación. Un ledger inválido bloquea el arranque.
   reconcileRestoreAudit({ db, userDataDir: dataDir });
   db.exec(`CREATE TABLE IF NOT EXISTS auth_users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','contador')), is_seed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')));`);
@@ -413,7 +414,6 @@ app.whenReady().then(async () => {
     openDatabase();
     // Keep the legacy schema available for read-only preflight and rollback;
     // each newly created tenant receives the same operational schema locally.
-    initializeTenantDatabase(db);
     persistenceFlushBridge = registerPersistenceFlushIpc({
       ipcMain, licenseView, getActiveSession,
       getWindow: sender => BrowserWindow.fromWebContents(sender)
@@ -929,11 +929,19 @@ app.whenReady().then(async () => {
     if (db?.open) throw new Error('SQLite ya está abierta; no se permite abrir una segunda conexión.');
     openDatabase();
   };
-  registerBackupIpc({ ipcMain, db: dbHandle, licenseView, getActiveSession, dialog, app,
-    getWindow: () => BrowserWindow.getFocusedWindow() });
-  registerRestoreIpc({ ipcMain, app, dialog, licenseView, getActiveSession,
+  registerBackupIpc({
+    ipcMain, db: dbHandle, licenseView, getActiveSession, dialog, app,
+    getWindow: () => BrowserWindow.getFocusedWindow(),
+    operationContext: tenantController.operationContext,
+    runtime: tenantController.runtime
+  });
+  registerRestoreIpc({
+    ipcMain, app, dialog, licenseView, getActiveSession,
     getDb: () => db, closeDatabase, reopenDatabase,
-    getWindow: () => BrowserWindow.getFocusedWindow() });
+    getWindow: () => BrowserWindow.getFocusedWindow(),
+    operationContext: tenantController.operationContext,
+    runtime: tenantController.runtime
+  });
 
   const withDatabase = tenantController.withDatabase;
   registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession, withDatabase });
