@@ -411,7 +411,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     companySaveInFlightRef.current = true;
     setCompanySaveBusy(true);
     try {
-      updateCompany({
+      await updateCompany({
         ...currentCompany,
         ...(newCurrencyAssessment ? { functionalCurrencyAssessments: [...(currentCompany.functionalCurrencyAssessments || []), newCurrencyAssessment] } : {}),
         ...(newExchangeabilityAssessment ? { exchangeabilityAssessments: [...(currentCompany.exchangeabilityAssessments || []), newExchangeabilityAssessment] } : {}),
