@@ -47,7 +47,7 @@ function createCompanySessionContext({ runtime, operationContext, getActiveSessi
     return accessible;
   }
 
-  async function selectCompany(tokenInput, companyIdInput) {
+  async function selectCompany(tokenInput, companyIdInput, options = {}) {
     const { token, actor } = requireSession(tokenInput);
     if (activeSessionToken && activeSessionToken !== token) {
       throw new Error('Ya existe otra sesión autenticada con el contexto operativo de SICOVEN. Cierre esa sesión antes de cambiar de usuario.');
@@ -64,7 +64,7 @@ function createCompanySessionContext({ runtime, operationContext, getActiveSessi
 
     // The operation context closes admission, drains queued writes and flushes
     // the previous tenant before publishing the new active database.
-    const switched = await operationContext.switchCompany(companyId);
+    const switched = await operationContext.switchCompany(companyId, options);
     try {
       // A switch can wait for queued writes. Revalidate the credential, company
       // state and authorization after that wait, before publishing the binding.
