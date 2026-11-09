@@ -979,10 +979,13 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
                 Aplicar factor de protección por brecha cambiaria a los precios comerciales
               </label>
               {inventoryPricingDefaults.applyExchangeGap && <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <label className="text-[11px] font-semibold text-slate-700">Tasa de referencia BCV (Bs./USD)
+                <label className="sm:col-span-2 text-[11px] font-semibold text-slate-700">Divisa de las tasas comparadas
+                  <select value={inventoryPricingDefaults.exchangeRateCurrency || 'USD'} onChange={e=>setInventoryPricingDefaults(previous=>({...previous,exchangeRateCurrency:e.target.value as 'USD'|'EUR'}))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2"><option value="USD">USD — Dólar</option><option value="EUR">EUR — Euro</option></select>
+                </label>
+                <label className="text-[11px] font-semibold text-slate-700">Tasa de referencia BCV (Bs./{inventoryPricingDefaults.exchangeRateCurrency || 'USD'})
                   <input type="number" min="0.0001" step="0.0001" value={inventoryPricingDefaults.referenceRate ?? ''} onChange={e=>setInventoryPricingDefaults(previous=>({...previous,referenceRate:Number(e.target.value)}))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2 font-mono"/>
                 </label>
-                <label className="text-[11px] font-semibold text-slate-700">Tasa de reposición / real (Bs./USD)
+                <label className="text-[11px] font-semibold text-slate-700">Tasa de reposición / real (Bs./{inventoryPricingDefaults.exchangeRateCurrency || 'USD'})
                   <input type="number" min="0.0001" step="0.0001" value={inventoryPricingDefaults.replacementRate ?? ''} onChange={e=>setInventoryPricingDefaults(previous=>({...previous,replacementRate:Number(e.target.value)}))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2 font-mono"/>
                 </label>
               </div>}
