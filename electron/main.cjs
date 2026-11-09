@@ -723,7 +723,7 @@ app.whenReady().then(async () => {
     });
   });
 
-  ipcMain.handle('sicoven:audit-record-correction', (_event, token, input) => {
+  ipcMain.handle('sicoven:audit-record-correction', async (_event, token, input) => {
     const actor = getActiveSession(token);
     if (!hasFullSystemAccess(actor)) {
       return { ok: false, message: 'El Centro de Correcciones requiere una sesión autenticada con rol contable (admin o contador).' };
@@ -749,7 +749,8 @@ app.whenReady().then(async () => {
         sourceDocumentRef.length > 160 || correctionDocumentRef.length > 160 || journalEntryId.length > 160) {
       return { ok: false, message: 'Los datos del evento de auditoría están incompletos o no son válidos.' };
     }
-    const savedRow = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    return tenantController.withDatabase(token, activeDb => {
+    const savedRow = activeDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     let savedState = {};
     try { savedState = savedRow ? JSON.parse(savedRow.state_json) : {}; } catch {}
     if (!Array.isArray(savedState.companies) || !savedState.companies.some(company => String(company.id) === companyId)) {
@@ -782,9 +783,10 @@ app.whenReady().then(async () => {
         : null,
       occurredAt
     };
-    const inserted = db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+    const inserted = activeDb.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
       .run(eventType, JSON.stringify(details));
     return { ok: true, id: Number(inserted.lastInsertRowid), createdAt: occurredAt };
+    });
   });
 
   const correctionActor = token => {
@@ -794,9 +796,10 @@ app.whenReady().then(async () => {
     if (!hasFullSystemAccess(actor)) throw new Error('Se requiere una sesión autenticada para acceder al Centro de Correcciones.');
     return actor;
   };
-  ipcMain.handle('sicoven:correction-case-create', (_event, token, input) => {
+  ipcMain.handle('sicoven:correction-case-create', async (_event, token, input) => {
     const actor = correctionActor(token);
-    const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    return tenantController.withDatabase(token, activeDb => {
+    const row = activeDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     const state = row ? JSON.parse(row.state_json) : {};
     const collections = { SALE:'sales', PURCHASE:'purchases', JOURNAL_ENTRY:'journalEntries',
       INVENTORY_MOVEMENT:'movements' };
@@ -814,10 +817,13 @@ app.whenReady().then(async () => {
     if (!knownReferences.includes(sourceReference.toLocaleUpperCase())) {
       throw new Error('La referencia documental no coincide con el registro de origen. Verifique factura, asiento, comprobante o movimiento.');
     }
-    return registerCorrectionRequest(db,input,actor);
+    return registerCorrectionRequest(activeDb,input,actor);
+    });
   });
-  ipcMain.handle('sicoven:correction-case-authorize', (_event, token, input) =>
-    requireApprovedCorrectionCase(db,input,correctionActor(token)));
+  ipcMain.handle('sicoven:correction-case-authorize', async (_event, token, input) => {
+    const actor = correctionActor(token);
+    return tenantController.withDatabase(token, activeDb => requireApprovedCorrectionCase(activeDb, input, actor));
+  });
   ipcMain.handle('sicoven:correction-case-review', () => {
     throw new Error('La revisión y aprobación previa ya no forman parte del Centro de Correcciones.');
   });
@@ -830,36 +836,43 @@ app.whenReady().then(async () => {
   ipcMain.handle('sicoven:correction-case-withdraw', () => {
     throw new Error('El retiro administrativo fue retirado del flujo operativo.');
   });
-  ipcMain.handle('sicoven:correction-case-execute', (_event, token, input) => {
+  ipcMain.handle('sicoven:correction-case-execute', async (_event, token, input) => {
     const actor = correctionActor(token);
-    const item = db.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(input?.caseId || ''));
+    return tenantController.withDatabase(token, activeDb => {
+    const item = activeDb.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(input?.caseId || ''));
     if (!item) throw new Error('El expediente de corrección no existe.');
     const reference = String(input?.executionRef || '').trim();
-    if (item.status === 'EXECUTED') return markCorrectionExecuted(db,{...input,executionRef:reference},actor);
-    requireApprovedCorrectionCase(db,{
+    if (item.status === 'EXECUTED') return markCorrectionExecuted(activeDb,{...input,executionRef:reference},actor);
+    requireApprovedCorrectionCase(activeDb,{
       companyId:item.company_id,entityType:item.entity_type,entityId:item.entity_id,
       sourceDocumentRef:item.source_ref,correctionDocumentRef:item.correction_ref
     },actor);
-    const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    const row = activeDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     const state = row ? JSON.parse(row.state_json) : {};
     const evidence = findLinkedCorrectionEvidence(state,item,reference);
     if (!evidence) {
       throw new Error('No se encontró un documento correctivo de la misma empresa con referencia coincidente y vínculo explícito al registro origen. La corrección permanece abierta; la operación no se marca como finalizada.');
     }
-    return markCorrectionExecuted(db,{...input,evidenceRecordId:evidence.id,evidenceCollection:evidence.__evidenceCollection},actor);
+    return markCorrectionExecuted(activeDb,{...input,evidenceRecordId:evidence.id,evidenceCollection:evidence.__evidenceCollection},actor);
+    });
   });
-  ipcMain.handle('sicoven:correction-case-list', (_event, token, companyId) => {
+  ipcMain.handle('sicoven:correction-case-list', async (_event, token, companyId) => {
     correctionActor(token);
-    const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    return tenantController.withDatabase(token, activeDb => {
+    const row = activeDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     const state = row ? JSON.parse(row.state_json) : {};
     if (!Array.isArray(state.companies) || !state.companies.some(x=>String(x.id)===String(companyId))) throw new Error('La empresa solicitada no existe.');
-    return listCorrectionCases(db,companyId);
+    return listCorrectionCases(activeDb,companyId);
+    });
   });
 
   ipcMain.handle('sicoven:reset-accounting', (_event, token) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     if (!getActiveSession(token)) throw new Error('Sesión no válida. Inicie sesión para restablecer los datos.');
+    if (tenantController.runtime.listCompanies().length > 0) {
+      throw new Error('El reinicio global está bloqueado cuando existen bases independientes por empresa. Use el respaldo y la restauración global para recuperar una instalación completa.');
+    }
     // El estado operativo completo vive en app_state. Vaciar la tabla dentro de
     // una sola transacción impide dejar colecciones antiguas bajo claves adicionales.
     // auth_users, auth_sessions y license_state son tablas separadas y no se tocan.
