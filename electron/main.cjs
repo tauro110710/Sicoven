@@ -980,7 +980,7 @@ app.whenReady().then(async () => {
   registerTenantMigrationPreflightIpc({ ipcMain, db, licenseView, getActiveSession });
   registerTenantMigrationExecuteIpc({
     ipcMain, db, runtime: tenantController.runtime,
-    operationContext: tenantController.operationContext, licenseView, getActiveSession
+    operationContext: tenantController.operationContext, licenseView, getActiveSession, assertOperationalReady
   });
   registerCompanySessionIpc({
     ipcMain,
