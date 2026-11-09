@@ -50,7 +50,7 @@ test('routes authenticated operations to the selected tenant and never falls bac
   const h = fixture(t);
   const company = { id: 'tenant-a', name: 'Empresa A', rif: 'J-12345678-9' };
   await h.controller.runtime.createCompany(company);
-  await h.controller.companySessionContext.selectCompany(token, company.id);
+  await h.controller.companySessionContext.selectCompany(token, company.id, { skipFlush: true });
   const result = await h.controller.withDatabase(token, (db, companyId) => ({
     companyId,
     snapshot: JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json)
