@@ -6,7 +6,7 @@ const { inspectLegacyDatabase } = require('./tenant-migration-preflight.cjs');
 function registerTenantMigrationPreflightIpc({ ipcMain, db, licenseView, getActiveSession }) {
   if (!ipcMain || typeof ipcMain.handle !== 'function' ||
       !db || typeof db.prepare !== 'function' ||
-      typeof licenseView !== 'function' || typeof getActiveSession !== 'function' || typeof assertOperationalReady !== 'function') {
+      typeof licenseView !== 'function' || typeof getActiveSession !== 'function') {
     throw new TypeError('No se pudo registrar la inspección previa de migración SQLite por empresa.');
   }
 
@@ -38,7 +38,7 @@ function registerTenantMigrationExecuteIpc({ ipcMain, db, runtime, operationCont
       !db || typeof db.prepare !== 'function' ||
       !runtime || typeof runtime.migrateLegacyDatabase !== 'function' ||
       !operationContext || typeof operationContext.acquireMaintenanceLock !== 'function' ||
-      typeof licenseView !== 'function' || typeof getActiveSession !== 'function') {
+      typeof licenseView !== 'function' || typeof getActiveSession !== 'function' || typeof assertOperationalReady !== 'function') {
     throw new TypeError('No se pudo registrar la ejecución protegida de migración SQLite por empresa.');
   }
 
