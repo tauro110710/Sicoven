@@ -48,8 +48,18 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
         const accessible = await window.sicovenStore.listAccessibleCompanies(auth.token);
         if (!active) return;
         setAccessibleCompanies(accessible);
-        if (accessible.length > 0) {
-          setTenantMigration({ loading: false, required: false, blocked: null, companyIds: [], running: false, error: null });
+        const registry = await window.sicovenStore.getTenantRegistryStatus(auth.token);
+        if (!active) return;
+        if (registry.registeredCount > 0) {
+          if (accessible.length > 0) {
+            setTenantMigration({ loading: false, required: false, blocked: null, companyIds: [], running: false, error: null });
+          } else {
+            setTenantMigration({
+              loading: false, required: false,
+              blocked: 'El registro local contiene empresas, pero ninguna está activa o disponible para esta sesión. No se repetirá la migración ni se crearán bases nuevas. Revisa el estado de las empresas desde una sesión autorizada.',
+              companyIds: [], running: false, error: null
+            });
+          }
           return;
         }
         const preflight = await window.sicovenStore.inspectTenantMigrationPreflight(auth.token);
