@@ -355,21 +355,58 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
               <span className="text-[11px] text-slate-500">La misma moneda aplica a los cuatro niveles.</span>
             </div>
           </div>
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3 space-y-2">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3 space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <div><strong className="text-slate-800">Precios comerciales</strong><p className="text-[10px] text-slate-500">Campos internos universales: Precio_1 a Precio_4.</p></div>
+              <div><strong className="text-slate-800">Estrategia de precios comerciales</strong><p className="text-[10px] text-slate-500">La regla puede ser distinta por empresa y sobrescribirse por artículo.</p></div>
               <span className="text-[10px] text-slate-600">BCV vigente: {liveBcvRate > 0 ? liveBcvRate.toLocaleString('es-VE') : 'No disponible'}</span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {priceInputs.map((value, index) => (
-                <div key={index}>
-                  <label className="block font-semibold text-slate-700 mb-1">{priceLabels[index]}{index === 0 ? ' *' : ''}</label>
-                  <input type="text" inputMode="decimal" required={index === 0} value={value} placeholder={index === 0 ? '0.00' : 'Opcional'} onChange={e => setPriceInput(index, e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none" />
-                  <span className="block text-[10px] text-slate-500 font-mono mt-1">{value.trim() ? priceEquivalent(priceValues[index]) : 'Sin definir'}</span>
-                </div>
-              ))}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <label className="block font-semibold text-slate-700">Método de fijación
+                <select value={pricingConfiguration.mode} onChange={e => setPricingConfiguration(previous => ({ ...previous, mode: e.target.value as InventoryPricingConfiguration['mode'] }))} className="mt-1 w-full px-2 py-1.5 border border-slate-300 rounded-lg bg-white">
+                  <option value="MANUAL">Manual</option><option value="AUTOMATIC">Automático por porcentaje</option>
+                </select>
+              </label>
+              <label className="block font-semibold text-slate-700">Base de cálculo
+                <select value={pricingConfiguration.basis} disabled={pricingConfiguration.mode === 'MANUAL'} onChange={e => setPricingConfiguration(previous => ({ ...previous, basis: e.target.value as InventoryPricingConfiguration['basis'] }))} className="mt-1 w-full px-2 py-1.5 border border-slate-300 rounded-lg bg-white disabled:bg-slate-100">
+                  <option value="COST">Markup sobre costo</option><option value="SALE">Margen sobre venta</option>
+                </select>
+              </label>
             </div>
-            <p className="text-[10px] text-slate-500">Los niveles vacíos permanecen sin definir. El equivalente en la otra moneda se calcula con la tasa BCV vigente y no se guarda como un precio independiente.</p>
+            {pricingConfiguration.mode === 'AUTOMATIC' && <div className="rounded-lg border border-slate-200 bg-white p-2 space-y-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {pricingConfiguration.margins.map((margin, index) => (
+                  <label key={index} className="block text-[10px] font-semibold text-slate-700">{priceLabels[index]} · %
+                    <input type="number" min="0" max="99.99" step="0.01" value={margin} onChange={e => setPricingConfiguration(previous => ({ ...previous, margins: previous.margins.map((value, i) => i === index ? Number(e.target.value) : value) as InventoryPricingConfiguration['margins'] }))} className="mt-1 w-full px-2 py-1.5 border border-slate-300 rounded-lg font-mono" />
+                  </label>
+                ))}
+              </div>
+              <label className="flex items-start gap-2 text-[11px] font-semibold text-slate-700">
+                <input type="checkbox" checked={pricingConfiguration.applyExchangeGap} onChange={e => setPricingConfiguration(previous => ({ ...previous, applyExchangeGap: e.target.checked }))} className="mt-0.5 rounded" />
+                Aplicar factor de protección por brecha cambiaria (solo para fijación comercial)
+              </label>
+              {pricingConfiguration.applyExchangeGap && <div className="grid grid-cols-2 gap-2">
+                <label className="text-[10px] font-semibold text-slate-700">Tasa de referencia BCV (Bs./USD)
+                  <input type="number" min="0.0001" step="0.0001" value={pricingConfiguration.referenceRate ?? ''} onChange={e => setPricingConfiguration(previous => ({ ...previous, referenceRate: Number(e.target.value) }))} className="mt-1 w-full px-2 py-1.5 border border-slate-300 rounded-lg font-mono" />
+                </label>
+                <label className="text-[10px] font-semibold text-slate-700">Tasa de reposición / real (Bs./USD)
+                  <input type="number" min="0.0001" step="0.0001" value={pricingConfiguration.replacementRate ?? ''} onChange={e => setPricingConfiguration(previous => ({ ...previous, replacementRate: Number(e.target.value) }))} className="mt-1 w-full px-2 py-1.5 border border-slate-300 rounded-lg font-mono" />
+                </label>
+                <p className="col-span-2 text-[10px] text-slate-600">Brecha calculada: {pricingCalculation.error ? 'Pendiente de tasas válidas' : '+' + pricingCalculation.exchangeGapPercent.toFixed(2) + '%'} · Ambas tasas deben corresponder a la misma divisa.</p>
+              </div>}
+              {pricingCalculation.error && <p role="alert" className="text-[10px] text-rose-700">{pricingCalculation.error}</p>}
+              <p className="text-[10px] text-slate-500">Costo base para el motor comercial: {formatUsd(avgCostUsd)}. El costo histórico y la tasa fiscal/contable no se modifican.</p>
+            </div>}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {priceInputs.map((value, index) => {
+                const shownValue = pricingConfiguration.mode === 'AUTOMATIC' ? effectivePriceValues[index] : priceValues[index];
+                return <div key={index}>
+                  <label className="block font-semibold text-slate-700 mb-1">{priceLabels[index]}{index === 0 ? ' *' : ''}</label>
+                  <input type="text" inputMode="decimal" required={index === 0} disabled={pricingConfiguration.mode === 'AUTOMATIC'} value={pricingConfiguration.mode === 'AUTOMATIC' ? (shownValue ? shownValue.toFixed(2) : '') : value} placeholder={index === 0 ? '0.00' : 'Opcional'} onChange={e => setPriceInput(index, e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg font-mono font-bold disabled:bg-slate-100" />
+                  <span className="block text-[10px] text-slate-500 font-mono mt-1">{pricingConfiguration.mode === 'AUTOMATIC' ? (pricingCalculation.error ? 'No calculado' : priceEquivalent(shownValue)) : (value.trim() ? priceEquivalent(shownValue) : 'Sin definir')}</span>
+                </div>;
+              })}
+            </div>
+            <p className="text-[10px] text-slate-500">Los cuatro niveles comparten la moneda seleccionada. En modo automático, los importes se calculan con la regla elegida; en modo manual se conservan los valores digitados. La conversión a Bs. usa BCV vigente y no reemplaza el valor de facturación histórica.</p>
           </div>
 
           {product && <div className="grid gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
