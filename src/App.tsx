@@ -24,6 +24,7 @@ import { LoginScreen, AuthUser } from './components/LoginScreen';
 import { AdminUsers } from './components/AdminUsers';
 import { LicenseGate } from './components/LicenseGate';
 import { ModuleHelp } from './components/ModuleHelp';
+import { InventoryBcvGlobalSync } from './components/Inventario/InventoryBcvGlobalSync';
 
 const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => Promise<void> }> = ({ auth, logout }) => {
   const [showAdmins, setShowAdmins] = useState(false);
@@ -214,6 +215,7 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col selection:bg-emerald-500 selection:text-white">
+      <InventoryBcvGlobalSync />
       {auth && <div className="flex flex-wrap items-center justify-end gap-2 bg-slate-800 px-4 py-2 text-xs text-white no-print">
         <span>Sesión: <strong>{auth.user.username}</strong></span>
         {window.sicovenStore && accessibleCompanies.length > 0 && <select aria-label="Empresa activa" disabled={companySwitching} value={currentCompany?.id || ''} onChange={event => void switchCompany(event.target.value)} className="max-w-[220px] rounded-lg border border-slate-600 bg-slate-700 px-2 py-1.5 text-white"><option value={currentCompany?.id || ''}>{currentCompany?.name || 'Empresa activa'}</option>{accessibleCompanies.filter(company => company.id !== currentCompany?.id).map(company => <option key={company.id} value={company.id}>{company.name || company.rif || company.id}</option>)}</select>}

@@ -132,6 +132,8 @@ export interface Company {
   lastRateUpdate?: string;
   /** Tasa BCV propia del módulo Inventario; no modifica la tasa contable. */
   inventoryBcvRate?: number;
+  /** Tasa EUR publicada por la misma fuente BCV; informativa para Inventario. */
+  inventoryBcvEurRate?: number;
   inventoryBcvRateEffectiveDate?: string;
   inventoryBcvRateFetchedAt?: string;
   inventoryBcvRateHistory?: InventoryBcvHistoryEntry[];
