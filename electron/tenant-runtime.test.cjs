@@ -27,12 +27,15 @@ test('keeps authentication/control database separate from company operational da
   const { runtime, controlDb } = fixture(t);
   controlDb.exec('CREATE TABLE control_probe(value TEXT)');
   controlDb.prepare('INSERT INTO control_probe(value) VALUES(?)').run('auth-remains-local');
-  await runtime.createCompany({ id: 'runtime-a', name: 'Empresa A', rif: 'J-12345678-9' });
+  await runtime.createCompany({ id: 'runtime-a', name: 'Empresa A', rif: 'J-12345678-9' }, { id: 7, username: 'admin' });
   const tenantDb = runtime.getCompanyDatabase('runtime-a');
   assert.notEqual(tenantDb.name, controlDb.name);
   assert.equal(controlDb.prepare('SELECT value FROM control_probe').get().value, 'auth-remains-local');
   assert.equal(tenantDb.prepare("SELECT state_key FROM app_state WHERE state_key='accounting'").get().state_key, 'accounting');
   assert.equal(runtime.listCompanies().length, 1);
+  const createdEvent = tenantDb.prepare("SELECT event_type,details_json FROM audit_events WHERE event_type='company_created'").get();
+  assert.equal(createdEvent.event_type, 'company_created');
+  assert.equal(JSON.parse(createdEvent.details_json).actorUsername, 'admin');
 });
 
 test('does not overwrite or silently recreate an existing company database', async t => {
