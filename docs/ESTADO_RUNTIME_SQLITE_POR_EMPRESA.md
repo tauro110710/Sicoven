@@ -32,7 +32,7 @@ Esta separación deliberada evita que una instalación existente abra bases vac�
 2. Implementar el orquestador de migración reversible: backup consistente con `.backup()`, SHA-256, preflight, staging, copia de snapshot/auxiliares/documentos, validación global, registro coordinado y rollback.
 3. Añadir una resolución segura de empresa activa en IPC, sin aceptar rutas ni confiar en identificadores arbitrarios del renderer.
 4. Migrar handlers y módulos especializados para que cada operación use la base de su empresa; mantener autenticación, sesiones y licencia en control.
-5. Adaptar respaldos/restauraciones por empresa y de instalación completa.
+5. Mantener un único respaldo/restauración global que incluya control, todas las DB de empresa y documentos; la empresa seleccionada solo podrá exportarse en SQLite o JSON para entrega, sin restauración individual.
 6. Adaptar el contexto React y el cambio de empresa con espera de persistencia, bloqueo de escrituras, cierre y rehidratación.
 7. Ejecutar pruebas de instalación y actualización en Windows, preservando el archivo heredado como rollback.
 
