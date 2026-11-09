@@ -198,3 +198,28 @@ test('preserves the prior authenticated tenant binding when a switch is rejected
   const result = await context.withSelectedDatabase(tokenA, (db, companyId) => [db.marker, companyId]);
   assert.deepEqual(result, ['company-a', 'company-a']);
 });
+
+
+test('rechecks company status and access before every tenant database operation', async () => {
+  let allowed = true;
+  const companies = [{ id: 'company-a', status: 'ACTIVE' }];
+  let activeCompanyId = null;
+  const context = createCompanySessionContext({
+    runtime: { listCompanies: () => companies },
+    operationContext: {
+      async switchCompany(id) { activeCompanyId = id; return { changed: true }; },
+      async clearActiveCompany() { const previousCompanyId = activeCompanyId; activeCompanyId = null; return { previousCompanyId }; },
+      getActiveCompanyId: () => activeCompanyId,
+      withActiveDatabase: operation => Promise.resolve(operation({ marker: 'tenant-db' }, activeCompanyId))
+    },
+    getActiveSession: token => token === tokenA ? { id: 1, role: 'admin' } : null,
+    canAccessCompany: async () => allowed
+  });
+  await context.selectCompany(tokenA, 'company-a');
+  assert.equal(await context.withSelectedDatabase(tokenA, db => db.marker), 'tenant-db');
+  allowed = false;
+  await assert.rejects(() => context.withSelectedDatabase(tokenA, () => true), /no tiene acceso autorizado/);
+  allowed = true;
+  companies[0].status = 'ARCHIVED';
+  await assert.rejects(() => context.withSelectedDatabase(tokenA, () => true), /no tiene acceso autorizado/);
+});
