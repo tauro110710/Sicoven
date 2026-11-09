@@ -124,6 +124,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
     e.preventDefault();
     setError('');
     if (!code.trim() || !name.trim()) { setError('El código y la descripción son obligatorios.'); return; }
+    if (pricingConfiguration.mode === 'AUTOMATIC' && (avgCostUsd <= 0 || pricingCalculation.error)) { setError(pricingCalculation.error || 'Ingrese un costo de inventario positivo y su tasa histórica antes de calcular precios automáticos.'); return; }
     if (!product && (currentStock > 0 || avgCostBs > 0) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('Ingrese la tasa BCV histórica aplicable al inventario inicial, por ejemplo 889,67.'); return; }
     if (savingRef.current) return;
     savingRef.current = true;
@@ -160,10 +161,11 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
         lastCostBs: Number(avgCostBs) || 0,
         lastCostUsd: avgCostUsd,
         price1: primaryPrice,
-        price2: priceInputs[1].trim() ? priceValues[1] : null,
-        price3: priceInputs[2].trim() ? priceValues[2] : null,
-        price4: priceInputs[3].trim() ? priceValues[3] : null,
+        price2: pricingConfiguration.mode === 'AUTOMATIC' || priceInputs[1].trim() ? effectivePriceValues[1] : null,
+        price3: pricingConfiguration.mode === 'AUTOMATIC' || priceInputs[2].trim() ? effectivePriceValues[2] : null,
+        price4: pricingConfiguration.mode === 'AUTOMATIC' || priceInputs[3].trim() ? effectivePriceValues[3] : null,
         priceCurrency,
+        pricingConfiguration,
         salesPriceBs: 0,
         salesPriceUsd: 0,
         inventoryAccountCode, costOfSalesAccountCode, adjustmentAccountCode, openingBalanceAccountCode,
