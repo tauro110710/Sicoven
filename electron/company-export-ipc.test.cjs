@@ -45,7 +45,7 @@ function registerFixture({ root, runtime, company, destination, lockState }) {
   return handlers.get('sicoven:company-export-data');
 }
 
-test('company export IPC audits only after a successful export and always releases maintenance lock', async t => {
+test('company export IPC records a durable start and completion audit and always releases maintenance lock', async t => {
   const fixture = setup(t);
   await fixture.runtime.createCompany(fixture.company);
   const lockState = { acquired: 0, released: 0 };
@@ -58,11 +58,13 @@ test('company export IPC audits only after a successful export and always releas
   assert.equal(lockState.released, 1);
   const events = fixture.runtime.getCompanyDatabase(fixture.company.id)
     .prepare("SELECT event_type,details_json FROM audit_events WHERE event_type='company_data_exported'").all();
-  assert.equal(events.length, 1);
-  assert.equal(JSON.parse(events[0].details_json).destination, destination);
+  assert.equal(events.length, 2);
+  assert.deepEqual(events.map(event => event.event_type), ['company_data_export_started', 'company_data_exported']);
+  assert.equal(JSON.parse(events[0].details_json).exportId, JSON.parse(events[1].details_json).exportId);
+  assert.equal(JSON.parse(events[1].details_json).destination, destination);
 });
 
-test('company export IPC does not audit a rejected cross-company package', async t => {
+test('company export IPC records failed attempts without marking rejected cross-company packages as exported', async t => {
   const fixture = setup(t);
   await fixture.runtime.createCompany(fixture.company);
   const db = fixture.runtime.getCompanyDatabase(fixture.company.id);
@@ -75,6 +77,6 @@ test('company export IPC does not audit a rejected cross-company package', async
   assert.equal(lockState.acquired, 1);
   assert.equal(lockState.released, 1);
   assert.equal(fs.existsSync(destination), false);
-  const events = db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='company_data_exported'").get();
-  assert.equal(events.count, 0);
+  const events = db.prepare("SELECT event_type FROM audit_events WHERE event_type LIKE 'company_data_export_%' ORDER BY id").all();
+  assert.deepEqual(events.map(event => event.event_type), ['company_data_export_started', 'company_data_export_failed']);
 });
