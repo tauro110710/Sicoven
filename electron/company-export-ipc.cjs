@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
 const { exportCompanyData } = require('./company-data-export.cjs');
 
@@ -43,13 +44,60 @@ function registerCompanyExportIpc({
       if (selection.canceled || !selection.filePath) return { ok: false, canceled: true };
       destination = selection.filePath;
     }
+
     const release = await operationContext.acquireMaintenanceLock();
     try {
+      // The dialog and maintenance drain are asynchronous. Revalidate the
+      // credential, license and selected tenant after the wait, immediately
+      // before opening the tenant database or writing an export artifact.
+      const currentLicense = licenseView();
+      if (!currentLicense.authorized) throw new Error(currentLicense.message || 'Licencia no autorizada.');
+      const currentActor = getActiveSession(token);
+      if (!hasFullSystemAccess(currentActor)) throw new Error('La sesión expiró o perdió permisos durante la preparación de la entrega.');
+      const selectedCompanyId = companySessionContext.getSelectedCompanyId(token);
+      if (selectedCompanyId !== companyId) throw new Error('La empresa activa cambió durante la preparación de la entrega.');
+      const currentCompany = runtime.listCompanies().find(item =>
+        String(item.id) === companyId && item.status === 'ACTIVE' &&
+        String(item.rif || '').toUpperCase() === String(company.rif || '').toUpperCase()
+      );
+      if (!currentCompany) throw new Error('La empresa dejó de estar activa o cambió su identidad durante la preparación de la entrega.');
+
       const db = runtime.getCompanyDatabase(companyId);
-      const result = await exportCompanyData({ db, company, userDataDir: app.getPath('userData'), destination, format });
+      const exportId = crypto.randomUUID();
+      const startedAt = new Date().toISOString();
       db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
-        .run('company_data_exported', JSON.stringify({ companyId, actor: actor.username, format, destination: result.destination, createdAt: new Date().toISOString() }));
-      return result;
+        .run('company_data_export_started', JSON.stringify({
+          exportId, companyId, actor: currentActor.username, format, destination, startedAt
+        }));
+
+      let result;
+      try {
+        result = await exportCompanyData({
+          db, company: currentCompany, userDataDir: app.getPath('userData'), destination, format
+        });
+      } catch (error) {
+        try {
+          db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+            .run('company_data_export_failed', JSON.stringify({
+              exportId, companyId, actor: currentActor.username, format,
+              destination, failedAt: new Date().toISOString(),
+              error: String(error?.message || error).slice(0, 1000)
+            }));
+        } catch (auditError) {
+          throw new Error('La exportación falló y tampoco pudo asentarse su resultado en la auditoría: ' +
+            String(auditError?.message || auditError), { cause: error });
+        }
+        throw error;
+      }
+
+      // Keep the STARTED event if this final append fails: it is durable evidence
+      // that an artifact may have been produced and needs reconciliation.
+      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+        .run('company_data_exported', JSON.stringify({
+          exportId, companyId, actor: currentActor.username, format,
+          destination: result.destination, createdAt: new Date().toISOString()
+        }));
+      return { ...result, exportId };
     } finally {
       release();
     }
