@@ -30,10 +30,100 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
   const [activeTab, setActiveTab] = useState<string>('diario');
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const { currentCompany, companies, isStorageReady, storageError } = useAccounting();
+  const [accessibleCompanies, setAccessibleCompanies] = useState<Array<{ id: string; name: string; rif: string }>>([]);
+  const [tenantMigration, setTenantMigration] = useState<{
+    loading: boolean; required: boolean; blocked: string | null;
+    companyIds: string[]; running: boolean; error: string | null;
+  }>({ loading: true, required: false, blocked: null, companyIds: [], running: false, error: null });
+  const [companySwitching, setCompanySwitching] = useState(false);
 
   useEffect(() => {
-    if (isStorageReady && companies.length === 0) setIsCompanyModalOpen(true);
-  }, [isStorageReady, companies.length]);
+    let active = true;
+    const inspectTenants = async () => {
+      if (!window.sicovenStore) {
+        if (active) setTenantMigration({ loading: false, required: false, blocked: null, companyIds: [], running: false, error: null });
+        return;
+      }
+      try {
+        const accessible = await window.sicovenStore.listAccessibleCompanies(auth.token);
+        if (!active) return;
+        setAccessibleCompanies(accessible);
+        if (accessible.length > 0) {
+          setTenantMigration({ loading: false, required: false, blocked: null, companyIds: [], running: false, error: null });
+          return;
+        }
+        const preflight = await window.sicovenStore.inspectTenantMigrationPreflight(auth.token);
+        if (!active) return;
+        if (preflight.companyCount > 0 && preflight.ok) {
+          setTenantMigration({ loading: false, required: true, blocked: null, companyIds: preflight.companyIds, running: false, error: null });
+        } else if (preflight.companyCount > 0 && !preflight.ok) {
+          setTenantMigration({
+            loading: false, required: false,
+            blocked: preflight.errors.join(' ') || 'La base heredada requiere revisión antes de migrar.',
+            companyIds: preflight.companyIds, running: false, error: null
+          });
+        } else {
+          setTenantMigration({ loading: false, required: false, blocked: null, companyIds: [], running: false, error: null });
+        }
+      } catch (error) {
+        if (!active) return;
+        setTenantMigration({
+          loading: false, required: false,
+          blocked: error instanceof Error ? error.message : 'No se pudo verificar el registro local de empresas.',
+          companyIds: [], running: false, error: null
+        });
+      }
+    };
+    void inspectTenants();
+    return () => { active = false; };
+  }, [auth.token]);
+
+  useEffect(() => {
+    if (!tenantMigration.loading && !tenantMigration.required && !tenantMigration.blocked &&
+        isStorageReady && companies.length === 0) setIsCompanyModalOpen(true);
+  }, [tenantMigration.loading, tenantMigration.required, tenantMigration.blocked, isStorageReady, companies.length]);
+
+  const executeTenantMigration = async () => {
+    if (!window.sicovenStore || tenantMigration.running || !tenantMigration.required) return;
+    setTenantMigration(state => ({ ...state, running: true, error: null }));
+    try {
+      const result = await window.sicovenStore.executeTenantMigration(auth.token);
+      if (!result?.ok || !result.companies?.length) {
+        throw new Error('La migración no confirmó la creación de las bases individuales de empresa.');
+      }
+      const firstCompanyId = tenantMigration.companyIds[0] || result.companies[0].companyId;
+      if (!firstCompanyId) throw new Error('La migración terminó sin una empresa inicial seleccionable.');
+      await window.sicovenStore.selectActiveCompany(auth.token, firstCompanyId);
+      window.location.reload();
+    } catch (error) {
+      setTenantMigration(state => ({
+        ...state, running: false,
+        error: error instanceof Error ? error.message : 'No se pudo completar la migración.'
+      }));
+    }
+  };
+
+  const switchCompany = async (companyId: string) => {
+    if (!window.sicovenStore || !companyId || companyId === currentCompany.id || companySwitching) return;
+    setCompanySwitching(true);
+    try {
+      await window.sicovenStore.selectActiveCompany(auth.token, companyId);
+      window.location.reload();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo cambiar la empresa activa.');
+      setCompanySwitching(false);
+    }
+  };
+
+  const exportCurrentCompany = async (format: 'sqlite' | 'json') => {
+    if (!window.sicovenStore || !currentCompany?.id) return;
+    try {
+      const result = await window.sicovenStore.exportCompanyData(auth.token, { format });
+      if (result.ok) window.alert('La entrega de datos de la empresa se generó correctamente en: ' + (result.destination || 'la ubicación seleccionada.'));
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo exportar la empresa seleccionada.');
+    }
+  };
 
   const renderActiveTab = () => {
     switch (activeTab) {
@@ -77,6 +167,26 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
   };
 
   if (showAdmins) return <AdminUsers token={auth.token} user={auth.user} onLogout={logout} onBack={() => setShowAdmins(false)} />;
+  if (tenantMigration.loading && window.sicovenStore) {
+    return <div className="min-h-screen flex items-center justify-center bg-slate-100"><div className="rounded-xl bg-white p-8 text-center shadow-lg"><div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-600" /><h1 className="font-bold text-slate-900">Verificando empresas locales</h1><p className="mt-2 text-sm text-slate-600">SICOVEN está comprobando el registro SQLite y el estado de migración.</p></div></div>;
+  }
+  if (tenantMigration.required || tenantMigration.blocked) {
+    return <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4 py-8">
+      <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xl">
+        <div className="flex items-center gap-3"><Building2 className="h-8 w-8 text-emerald-700" /><div><h1 className="text-xl font-black text-slate-900">Bases locales independientes por empresa</h1><p className="text-sm text-slate-500">Migración controlada de SICOVEN</p></div></div>
+        {tenantMigration.required ? <>
+          <p className="mt-5 text-sm leading-6 text-slate-700">Se detectó una base heredada con {tenantMigration.companyIds.length} empresa(s). SICOVEN puede separar sus datos en archivos SQLite locales independientes. La base original se conserva y la migración crea un respaldo consistente, verifica cada empresa y mantiene el registro de recuperación.</p>
+          <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">No cierres SICOVEN ni apagues el equipo durante la migración. Las operaciones contables permanecerán bloqueadas hasta verificar el resultado.</p>
+          {tenantMigration.error && <p role="alert" className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{tenantMigration.error}</p>}
+          <button disabled={tenantMigration.running} onClick={() => void executeTenantMigration()} className="mt-5 w-full rounded-xl bg-emerald-700 px-5 py-3 font-bold text-white disabled:opacity-60">{tenantMigration.running ? 'Migrando y verificando bases...' : 'Iniciar migración local segura'}</button>
+        </> : <>
+          <p className="mt-5 text-sm leading-6 text-rose-700">SICOVEN no pudo autorizar la migración automática. No se modificó la base heredada. Conserva el archivo sicoven.sqlite y solicita revisión técnica.</p>
+          <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{tenantMigration.blocked}</p>
+        </>}
+        <button onClick={logout} className="mt-4 w-full rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700">Cerrar sesión</button>
+      </div>
+    </div>;
+  }
   if (!isStorageReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100 px-6">
@@ -92,7 +202,12 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col selection:bg-emerald-500 selection:text-white">
-      {auth && <div className="flex items-center justify-end gap-3 bg-slate-800 px-4 py-2 text-xs text-white no-print"><span>Sesión: <strong>{auth.user.username}</strong></span><button onClick={()=>setShowAdmins(true)} className="rounded-lg border border-slate-600 px-3 py-1.5 hover:bg-slate-700">Usuarios</button><button onClick={logout} className="rounded-lg bg-emerald-600 px-3 py-1.5 font-semibold hover:bg-emerald-700">Cerrar sesión</button></div>}
+      {auth && <div className="flex flex-wrap items-center justify-end gap-2 bg-slate-800 px-4 py-2 text-xs text-white no-print">
+        <span>Sesión: <strong>{auth.user.username}</strong></span>
+        {window.sicovenStore && accessibleCompanies.length > 0 && <select aria-label="Empresa activa" disabled={companySwitching} value={currentCompany?.id || ''} onChange={event => void switchCompany(event.target.value)} className="max-w-[220px] rounded-lg border border-slate-600 bg-slate-700 px-2 py-1.5 text-white"><option value={currentCompany?.id || ''}>{currentCompany?.name || 'Empresa activa'}</option>{accessibleCompanies.filter(company => company.id !== currentCompany?.id).map(company => <option key={company.id} value={company.id}>{company.name || company.rif || company.id}</option>)}</select>}
+        {window.sicovenStore && currentCompany?.id && <><button onClick={() => void exportCurrentCompany('sqlite')} className="rounded-lg border border-slate-600 px-3 py-1.5 hover:bg-slate-700">Entregar SQLite</button><button onClick={() => void exportCurrentCompany('json')} className="rounded-lg border border-slate-600 px-3 py-1.5 hover:bg-slate-700">Entregar JSON</button></>}
+        <button onClick={()=>setShowAdmins(true)} className="rounded-lg border border-slate-600 px-3 py-1.5 hover:bg-slate-700">Usuarios</button><button onClick={logout} className="rounded-lg bg-emerald-600 px-3 py-1.5 font-semibold hover:bg-emerald-700">Cerrar sesión</button>
+      </div>}
       {/* Navigation Header */}
       <Navbar
         activeTab={activeTab}
