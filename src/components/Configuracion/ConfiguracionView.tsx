@@ -18,6 +18,8 @@ import {
   LockKeyhole
 } from 'lucide-react';
 import { AccountingFramework, TaxpayerType, IvaRetentionAgentBasis, JournalEntryItem, AccountingCurrencyCode, FunctionalCurrencyAssessment, ExchangeabilityAssessment } from '../../types/accounting';
+import type { InventoryPricingConfiguration } from '../../types/accounting';
+import { DEFAULT_INVENTORY_PRICING } from '../../types/inventoryPricing';
 import { validateFunctionalCurrencyAssessment, validateExchangeabilityAssessment } from '../../types/functionalCurrency';
 import { buildOpeningEntryItems } from '../../types/accountingYearOpening';
 import { CompanyModal } from '../CompanyModal';
@@ -124,6 +126,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
   const [priceLabel2, setPriceLabel2] = useState(currentCompany.inventoryPriceLabels?.price2 || 'Precio 2');
   const [priceLabel3, setPriceLabel3] = useState(currentCompany.inventoryPriceLabels?.price3 || 'Precio 3');
   const [priceLabel4, setPriceLabel4] = useState(currentCompany.inventoryPriceLabels?.price4 || 'Precio 4');
+  const [inventoryPricingDefaults, setInventoryPricingDefaults] = useState<InventoryPricingConfiguration>(currentCompany.inventoryPricingDefaults || DEFAULT_INVENTORY_PRICING);
   const [fiscalYear, setFiscalYear] = useState(currentCompany.fiscalYear);
   const [accountingFramework, setAccountingFramework] = useState<AccountingFramework | ''>(currentCompany.accountingFramework || '');
   const [accountingFrameworkVersion, setAccountingFrameworkVersion] = useState(currentCompany.accountingFrameworkVersion || '');
@@ -172,6 +175,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     setPriceLabel2(currentCompany.inventoryPriceLabels?.price2 || 'Precio 2');
     setPriceLabel3(currentCompany.inventoryPriceLabels?.price3 || 'Precio 3');
     setPriceLabel4(currentCompany.inventoryPriceLabels?.price4 || 'Precio 4');
+    setInventoryPricingDefaults(currentCompany.inventoryPricingDefaults || DEFAULT_INVENTORY_PRICING);
     setFiscalYear(currentCompany.fiscalYear);
     setAccountingFramework(currentCompany.accountingFramework || '');
     setAccountingFrameworkVersion(currentCompany.accountingFrameworkVersion || '');
@@ -429,6 +433,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
         phone: phone.trim(),
         email: email.trim(),
         inventoryPriceLabels: { price1: priceLabel1.trim() || 'Precio 1', price2: priceLabel2.trim() || 'Precio 2', price3: priceLabel3.trim() || 'Precio 3', price4: priceLabel4.trim() || 'Precio 4' },
+        inventoryPricingDefaults,
         fiscalYear: Number(fiscalYear),
       });
       await waitForPersistence();
@@ -947,6 +952,42 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
               <label className="text-xs font-semibold text-slate-700">Precio_3<input value={priceLabel3} onChange={e=>setPriceLabel3(e.target.value)} maxLength={40} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2 font-normal"/></label>
               <label className="text-xs font-semibold text-slate-700">Precio_4<input value={priceLabel4} onChange={e=>setPriceLabel4(e.target.value)} maxLength={40} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2 font-normal"/></label>
             </div>
+          </div>
+
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
+            <div><h4 className="text-sm font-bold text-slate-900">Estrategia comercial predeterminada de inventario</h4><p className="mt-1 text-xs text-slate-600">Esta regla se propone al crear artículos de esta empresa. Cada artículo puede usar una estrategia distinta sin cambiar la configuración general.</p></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <label className="text-xs font-semibold text-slate-700">Método de fijación
+                <select value={inventoryPricingDefaults.mode} onChange={e=>setInventoryPricingDefaults(previous=>({...previous,mode:e.target.value as InventoryPricingConfiguration['mode']}))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2">
+                  <option value="MANUAL">Manual</option><option value="AUTOMATIC">Automático por porcentaje</option>
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-slate-700">Base de cálculo
+                <select value={inventoryPricingDefaults.basis} disabled={inventoryPricingDefaults.mode==='MANUAL'} onChange={e=>setInventoryPricingDefaults(previous=>({...previous,basis:e.target.value as InventoryPricingConfiguration['basis']}))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2 disabled:bg-slate-100">
+                  <option value="COST">Markup sobre costo</option><option value="SALE">Margen sobre venta</option>
+                </select>
+              </label>
+            </div>
+            {inventoryPricingDefaults.mode==='AUTOMATIC' && <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {inventoryPricingDefaults.margins.map((margin,index)=><label key={index} className="text-[11px] font-semibold text-slate-700">Precio {index+1} · %
+                  <input type="number" min="0" max="99.99" step="0.01" value={margin} onChange={e=>setInventoryPricingDefaults(previous=>({...previous,margins:previous.margins.map((value,i)=>i===index?Number(e.target.value):value) as InventoryPricingConfiguration['margins']}))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2 font-mono"/>
+                </label>)}
+              </div>
+              <label className="flex items-start gap-2 text-xs font-semibold text-slate-700">
+                <input type="checkbox" checked={inventoryPricingDefaults.applyExchangeGap} onChange={e=>setInventoryPricingDefaults(previous=>({...previous,applyExchangeGap:e.target.checked}))} className="mt-0.5 rounded"/>
+                Aplicar factor de protección por brecha cambiaria a los precios comerciales
+              </label>
+              {inventoryPricingDefaults.applyExchangeGap && <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label className="text-[11px] font-semibold text-slate-700">Tasa de referencia BCV (Bs./USD)
+                  <input type="number" min="0.0001" step="0.0001" value={inventoryPricingDefaults.referenceRate ?? ''} onChange={e=>setInventoryPricingDefaults(previous=>({...previous,referenceRate:Number(e.target.value)}))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2 font-mono"/>
+                </label>
+                <label className="text-[11px] font-semibold text-slate-700">Tasa de reposición / real (Bs./USD)
+                  <input type="number" min="0.0001" step="0.0001" value={inventoryPricingDefaults.replacementRate ?? ''} onChange={e=>setInventoryPricingDefaults(previous=>({...previous,replacementRate:Number(e.target.value)}))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2 font-mono"/>
+                </label>
+              </div>}
+            </>}
+            <p className="text-[10px] text-slate-600">Las dos tasas de brecha deben expresarse en la misma divisa. Esta protección solo determina el precio comercial; no modifica la tasa BCV histórica ni la tasa fiscal de las operaciones.</p>
           </div>
 
           <div className="flex justify-end pt-3 border-t border-slate-200">
