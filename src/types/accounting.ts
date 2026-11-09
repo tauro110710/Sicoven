@@ -56,6 +56,18 @@ export interface ExchangeabilityAssessment {
   approvedAt: string;
 }
 
+export type InventoryPricingMode = 'MANUAL' | 'AUTOMATIC';
+export type InventoryPricingBasis = 'COST' | 'SALE';
+export interface InventoryPricingConfiguration {
+  mode: InventoryPricingMode;
+  basis: InventoryPricingBasis;
+  margins: [number, number, number, number];
+  applyExchangeGap: boolean;
+  /** Tasas en Bs. por unidad de la misma divisa (USD o EUR). */
+  referenceRate?: number;
+  replacementRate?: number;
+}
+
 export interface InventoryPriceLabels {
   price1: string;
   price2: string;
@@ -130,6 +142,8 @@ export interface Company {
   exchangeabilityAssessments?: ExchangeabilityAssessment[];
   /** Etiquetas comerciales configurables; los identificadores internos Precio_1..4 permanecen fijos. */
   inventoryPriceLabels?: InventoryPriceLabels;
+  /** Estrategia comercial predeterminada de esta empresa; cada producto puede sobrescribirla. */
+  inventoryPricingDefaults?: InventoryPricingConfiguration;
   logoUrl?: string; // URL o base64 del logo de la empresa
 }
 
@@ -368,6 +382,8 @@ export interface SaleInventoryLine {
   /** Nivel comercial elegido en el documento, cuando se origina desde catálogo. */
   priceLevel?: 1 | 2 | 3 | 4;
   priceCurrency?: 'USD' | 'BS';
+  /** Regla comercial propia del artículo; si falta, hereda la configuración de la empresa. */
+  pricingConfiguration?: InventoryPricingConfiguration;
   priceValue?: number;
   /** Tasa de referencia conservada al fijar el precio del renglón. */
   priceBcvRate?: number;
