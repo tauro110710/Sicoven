@@ -327,6 +327,9 @@ function makeCompanyDatabase(userData, companyId, marker) {
   database.prepare("INSERT INTO sicoven_database_meta(meta_key,meta_value) VALUES('company_id',?)").run(companyId);
   database.prepare("INSERT INTO app_state(state_key,state_json) VALUES('accounting',?)").run(JSON.stringify({ companyId, marker }));
   database.close();
+  const documents = path.join(directory, 'supporting-documents');
+  fs.mkdirSync(documents, { recursive: true });
+  fs.writeFileSync(path.join(documents, 'support.txt'), 'document-' + marker, { flag: 'wx' });
 }
 
 test('global backup and restore include every independent company SQLite database', async () => {
@@ -347,6 +350,7 @@ test('global backup and restore include every independent company SQLite databas
     assert.equal(verifyBackupDirectory(backupDir).ok, true);
     const manifest = JSON.parse(fs.readFileSync(path.join(backupDir, 'manifest.json'), 'utf8'));
     assert.deepEqual(manifest.companyDatabases.map(item => item.companyId), ['company-a', 'company-b']);
+    assert.deepEqual(manifest.companyDatabases.map(item => item.documents.length), [1, 1]);
     sourceDb.close();
     const result = await require('./restore-engine.cjs').executeRestore({
       backupDirectory: backupDir,
@@ -363,6 +367,7 @@ test('global backup and restore include every independent company SQLite databas
       const tenant = new Database(path.join(userData, 'companies', companyId, 'accounting.sqlite'), { readonly: true });
       try {
         assert.equal(JSON.parse(tenant.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json).marker, expected);
+        assert.equal(fs.readFileSync(path.join(userData, 'companies', companyId, 'supporting-documents', 'support.txt'), 'utf8'), 'document-' + expected);
       } finally { tenant.close(); }
     }
   } finally {
