@@ -336,8 +336,9 @@ async function executeRestore(args) {
 
 function registerRestoreIpc({
   ipcMain, app, dialog, licenseView, getActiveSession, getDb,
-  closeDatabase, reopenDatabase, getWindow, operationContext = null, runtime = null, onRestored = null
+  closeDatabase, reopenDatabase, getWindow, operationContext = null, runtime = null, onRestored = null, assertOperationalReady = () => {}
 }) {
+  if (typeof assertOperationalReady !== 'function') throw new TypeError('La verificación del estado de restauración global no es válida.');
   if (operationContext && typeof operationContext.acquireMaintenanceLock !== 'function') {
     throw new TypeError('La restauración global requiere un bloqueo de mantenimiento válido.');
   }
@@ -345,6 +346,7 @@ function registerRestoreIpc({
     throw new TypeError('La restauración global requiere un runtime capaz de reabrir el registro de empresas.');
   }
   ipcMain.handle('sicoven:restore-execute', async (_event, token) => {
+    assertOperationalReady();
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const actor = getActiveSession(token);
