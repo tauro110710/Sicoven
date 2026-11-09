@@ -9,6 +9,7 @@ const {
 } = require('./tenant-persistence.cjs');
 const { persistAccountingSnapshot } = require('./accounting-persistence.cjs');
 const { createEmptyAccountingSnapshot } = require('./tenant-snapshot.cjs');
+const { createTenantMigrationOrchestrator } = require('./tenant-migration-orchestrator.cjs');
 
 function createTenantRuntime({
   controlDb,
@@ -79,6 +80,22 @@ function createTenantRuntime({
     }
   }
 
+  async function migrateLegacyDatabase({ sourceDb, acquireMaintenanceLock, getDocumentsRoot } = {}) {
+    if (!sourceDb || !sourceDb.open) throw new TypeError('La base SQLite heredada debe permanecer abierta durante la migración.');
+    if (typeof acquireMaintenanceLock !== 'function') throw new TypeError('La migración requiere un bloqueo de mantenimiento exclusivo.');
+    if (manager.listCompanies().length > 0) {
+      throw new Error('Ya existen empresas registradas en SQLite individual. No se repetirá ni mezclará la migración.');
+    }
+    const orchestrator = createTenantMigrationOrchestrator({
+      sourceDb,
+      userDataDir,
+      manager,
+      acquireMaintenanceLock,
+      ...(typeof getDocumentsRoot === 'function' ? { getDocumentsRoot } : {})
+    });
+    return orchestrator.execute();
+  }
+
   function updateCompanyMetadata(company) {
     return manager.updateCompanyMetadata(company);
   }
@@ -97,6 +114,7 @@ function createTenantRuntime({
     loadAccounting,
     saveAccounting,
     createCompany,
+    migrateLegacyDatabase,
     updateCompanyMetadata,
     closeCompany,
     closeAll,
