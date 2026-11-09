@@ -50,7 +50,6 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
 
   function withoutInventoryExchangeRates(configuration: InventoryPricingConfiguration): InventoryPricingConfiguration {
     const clean = { ...configuration, applyExchangeGap: false };
-    delete clean.exchangeRateCurrency;
     delete clean.referenceRate;
     delete clean.replacementRate;
     return clean;
