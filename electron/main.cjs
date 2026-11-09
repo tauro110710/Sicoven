@@ -197,6 +197,21 @@ function licenseView(row = readLicenseRow()) {
   };
 }
 
+async function bindDefaultTenantForSession(token) {
+  if (!tenantController) return null;
+  const companies = tenantController.runtime.listCompanies().filter(item => String(item.status) === 'ACTIVE');
+  if (companies.length === 0) return null;
+  let preferredId = '';
+  try {
+    const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    const legacy = row ? JSON.parse(row.state_json) : null;
+    preferredId = String(legacy?.currentCompanyId || '');
+  } catch {}
+  const selected = companies.find(item => String(item.id) === preferredId) || companies[0];
+  await tenantController.companySessionContext.selectCompany(token, selected.id);
+  return selected.id;
+}
+
 function decryptLicenseKey(row) {
   if (!row?.encrypted_key) return '';
   if (!safeStorage.isEncryptionAvailable()) throw new Error('El almacenamiento seguro de Windows no está disponible.');
@@ -553,7 +568,7 @@ app.whenReady().then(async () => {
     }
   });
 
-  ipcMain.handle('sicoven:auth-login', (_event, credentials) => {
+  ipcMain.handle('sicoven:auth-login', async (_event, credentials) => {
     const licensing = licenseView();
     if (!licensing.authorized) return { ok: false, message: licensing.message || 'Licencia no autorizada.' };
     const username = normalizeUsername(credentials?.username);
@@ -570,11 +585,21 @@ app.whenReady().then(async () => {
     db.prepare('INSERT INTO auth_sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(tokenHash, user.id, expiresAt);
     sessions.set(token, { id: user.id, username: user.username, role: user.role, expiresAt });
     activeRendererSessionToken = token;
+    try {
+      await bindDefaultTenantForSession(token);
+    } catch (error) {
+      sessions.delete(token);
+      activeRendererSessionToken = null;
+      db.prepare('DELETE FROM auth_sessions WHERE token_hash=?').run(tokenHash);
+      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+        .run('tenant_session_binding_failed', JSON.stringify({ username: user.username, message: String(error?.message || error).slice(0, 500) }));
+      return { ok: false, message: 'No se pudo abrir de forma segura la empresa local. No se inició la sesión contable: ' + String(error?.message || error) };
+    }
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('login_success', JSON.stringify({ username: user.username }));
     return { ok: true, token, user: { username: user.username, role: user.role, isSeed: Boolean(user.is_seed) } };
   });
 
-  ipcMain.handle('sicoven:auth-restore', (_event, tokenInput) => {
+  ipcMain.handle('sicoven:auth-restore', async (_event, tokenInput) => {
     if (!licenseView().authorized) return { ok: false, message: 'Licencia no autorizada.' };
     const token = String(tokenInput || '');
     if (!/^[a-f0-9]{64}$/.test(token)) return { ok: false, message: 'Sesión expirada. Inicie sesión nuevamente.' };
@@ -586,6 +611,13 @@ app.whenReady().then(async () => {
     }
     sessions.set(token, { id: row.id, username: row.username, role: row.role, expiresAt: row.expires_at });
     activeRendererSessionToken = token;
+    try {
+      await bindDefaultTenantForSession(token);
+    } catch (error) {
+      sessions.delete(token);
+      activeRendererSessionToken = null;
+      return { ok: false, message: 'No se pudo reabrir de forma segura la empresa local. Inicie sesión nuevamente: ' + String(error?.message || error) };
+    }
     return { ok: true, token, user: { username: row.username, role: row.role, isSeed: Boolean(row.is_seed) } };
   });
 
