@@ -156,3 +156,45 @@ test('revalidates session and permissions after a delayed tenant switch', async 
   await assert.rejects(() => switching, /sesión expiró/i);
   assert.throws(() => context.getSelectedCompanyId(tokenA), /sesión expiró/i);
 });
+
+test('preserves the prior authenticated tenant binding when a switch is rejected by a failed persistence drain', async () => {
+  let activeCompanyId = null;
+  let failNextSwitch = false;
+  const context = createCompanySessionContext({
+    runtime: { listCompanies: () => [
+      { id: 'company-a', status: 'ACTIVE' },
+      { id: 'company-b', status: 'ACTIVE' }
+    ] },
+    operationContext: {
+      async switchCompany(id) {
+        if (failNextSwitch) {
+          failNextSwitch = false;
+          throw new Error('simulated persistence drain failure');
+        }
+        const previous = activeCompanyId;
+        activeCompanyId = id;
+        return { changed: previous !== id };
+      },
+      async clearActiveCompany() {
+        const previousCompanyId = activeCompanyId;
+        activeCompanyId = null;
+        return { previousCompanyId };
+      },
+      getActiveCompanyId: () => activeCompanyId,
+      withActiveDatabase: operation => Promise.resolve(operation({ marker: activeCompanyId }, activeCompanyId))
+    },
+    getActiveSession: token => token === tokenA ? { id: 1, role: 'admin' } : null,
+    canAccessCompany: async () => true
+  });
+
+  await context.selectCompany(tokenA, 'company-a');
+  failNextSwitch = true;
+  await assert.rejects(
+    () => context.selectCompany(tokenA, 'company-b'),
+    /simulated persistence drain failure/
+  );
+  assert.equal(context.getSelectedCompanyId(tokenA), 'company-a');
+  assert.equal(activeCompanyId, 'company-a');
+  const result = await context.withSelectedDatabase(tokenA, (db, companyId) => [db.marker, companyId]);
+  assert.deepEqual(result, ['company-a', 'company-a']);
+});
