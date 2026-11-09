@@ -58,10 +58,10 @@ function verifyCompanyIdentity(db, companyId, expectedRif) {
   if (expectedRif && rif !== String(expectedRif).trim().toUpperCase()) throw new Error('El RIF del snapshot no coincide con el registro local.');
   return { state, company: state.companies[0], rif };
 }
-function collectDocuments(db, userDataDir) {
+function collectDocuments(db, userDataDir, companyId) {
   const table = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='supporting_documents'").get();
   if (!table) return [];
-  const root = path.join(path.resolve(userDataDir), 'supporting-documents');
+  const root = path.join(path.resolve(userDataDir), 'companies', String(companyId), 'supporting-documents');
   return db.prepare('SELECT id,company_id,entity_type,entity_id,document_type,title,description,original_file_name,mime_type,storage_key,sha256,byte_size,uploaded_by_username,created_at FROM supporting_documents ORDER BY created_at,id')
     .all().map(row => {
       const storageKey = String(row.storage_key || '');
@@ -90,7 +90,7 @@ function exportTablesAsJson(db) {
 }
 function writeJsonExport({ db, company, userDataDir, destination }) {
   const identity = verifyCompanyIdentity(db, company.id, company.rif);
-  const docs = collectDocuments(db, userDataDir);
+  const docs = collectDocuments(db, userDataDir, company.id);
   const documentPayload = docs.map(item => ({
     ...item.metadata,
     contentBase64: fs.readFileSync(item.source).toString('base64'),
