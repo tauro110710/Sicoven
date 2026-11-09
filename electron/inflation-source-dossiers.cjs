@@ -341,8 +341,16 @@ function nextMonth(value) {
   const [year, month] = value.split('-').map(Number);
   return month === 12 ? String(year + 1).padStart(4, '0') + '-01' : String(year).padStart(4, '0') + '-' + String(month + 1).padStart(2, '0');
 }
-function registerInflationSourceDossierIpc({ ipcMain, db, licenseView, getActiveSession }) {
-  initializeInflationSourceDossierSchema(db);
+function registerInflationSourceDossierIpc({ ipcMain, db, licenseView, getActiveSession, withDatabase = null }) {
+  if (!ipcMain || typeof ipcMain.handle !== 'function' ||
+      typeof licenseView !== 'function' || typeof getActiveSession !== 'function' ||
+      (withDatabase !== null && typeof withDatabase !== 'function')) {
+    throw new Error('No se pudo registrar el puente de expedientes de inflación.');
+  }
+  if (!withDatabase) initializeInflationSourceDossierSchema(db);
+  const runWithDatabase = (token, operation) => withDatabase
+    ? withDatabase(token, (activeDb, companyId) => operation(activeDb, companyId))
+    : operation(db, null);
   const authenticate = token => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
@@ -350,17 +358,41 @@ function registerInflationSourceDossierIpc({ ipcMain, db, licenseView, getActive
     if (!actor) throw new Error('Sesión no válida.');
     return actor;
   };
+  const assertCompanyScope = (companyId, requested) => {
+    if (companyId && requested && String(requested) !== companyId) {
+      throw new Error('La operación solicitada no pertenece a la empresa activa.');
+    }
+  };
   ipcMain.handle('sicoven:inflation-source-dossier-evidence', (_event, token, evidenceId) => {
-    const actor = authenticate(token); return getInflationSourceDossierEvidence(db, evidenceId, actor);
+    const actor = authenticate(token);
+    return runWithDatabase(token, (activeDb, companyId) => {
+      const row = activeDb.prepare(`SELECT d.company_id AS companyId FROM inflation_source_dossier_evidence e
+        JOIN inflation_source_dossiers d ON d.id=e.dossier_id WHERE e.id=?`).get(String(evidenceId));
+      if (!row || (companyId && String(row.companyId) !== companyId)) throw new Error('La evidencia no pertenece a la empresa activa.');
+      return getInflationSourceDossierEvidence(activeDb, evidenceId, actor);
+    });
   });
   ipcMain.handle('sicoven:inflation-source-dossier-list', (_event, token, filters) => {
-    authenticate(token); return listInflationSourceDossiers(db, filters || {});
+    authenticate(token);
+    return runWithDatabase(token, (activeDb, companyId) => {
+      assertCompanyScope(companyId, filters?.companyId);
+      return listInflationSourceDossiers(activeDb, { ...(filters || {}), ...(companyId ? { companyId } : {}) });
+    });
   });
   ipcMain.handle('sicoven:inflation-source-dossier-create', (_event, token, input) => {
-    const actor = authenticate(token); return createInflationSourceDossier(db, input, actor);
+    const actor = authenticate(token);
+    return runWithDatabase(token, (activeDb, companyId) => {
+      assertCompanyScope(companyId, input?.companyId);
+      return createInflationSourceDossier(activeDb, input, actor);
+    });
   });
   ipcMain.handle('sicoven:inflation-source-dossier-review', (_event, token, input) => {
-    const actor = authenticate(token); return reviewInflationSourceDossier(db, input, actor);
+    const actor = authenticate(token);
+    return runWithDatabase(token, (activeDb, companyId) => {
+      const row = activeDb.prepare('SELECT company_id AS companyId FROM inflation_source_dossiers WHERE id=?').get(String(input?.dossierId || ''));
+      if (!row || (companyId && String(row.companyId) !== companyId)) throw new Error('El expediente no pertenece a la empresa activa.');
+      return reviewInflationSourceDossier(activeDb, input, actor);
+    });
   });
 }
 module.exports = { SOURCE_REQUIREMENTS, validateDossierInput, initializeInflationSourceDossierSchema,
