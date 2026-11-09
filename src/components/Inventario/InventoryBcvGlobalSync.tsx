@@ -33,10 +33,11 @@ export const InventoryBcvGlobalSync: React.FC = () => {
         const savedForDate = resolveInventoryBcvRate(nextHistory, result.effectiveDate);
         const effectiveRate = savedForDate?.rate ?? result.rate;
         const effectiveFetchedAt = savedForDate?.fetchedAt ?? result.fetchedAt;
-        const changed = company.inventoryBcvRate !== effectiveRate || company.inventoryBcvRateEffectiveDate !== result.effectiveDate || company.inventoryBcvRateFetchedAt !== effectiveFetchedAt || nextHistory.length !== history.length;
+        const effectiveEurRate = result.eurRate ?? company.inventoryBcvEurRate;
+        const changed = company.inventoryBcvRate !== effectiveRate || company.inventoryBcvEurRate !== effectiveEurRate || company.inventoryBcvRateEffectiveDate !== result.effectiveDate || company.inventoryBcvRateFetchedAt !== effectiveFetchedAt || nextHistory.length !== history.length;
         if (!changed) return;
         if (!window.sicovenStore?.save) throw new Error('La actualización BCV requiere SQLite local disponible.');
-        updateRef.current({ ...company, inventoryBcvRate: effectiveRate, inventoryBcvRateEffectiveDate: result.effectiveDate, inventoryBcvRateFetchedAt: effectiveFetchedAt, inventoryBcvRateHistory: nextHistory });
+        updateRef.current({ ...company, inventoryBcvRate: effectiveRate, inventoryBcvEurRate: effectiveEurRate, inventoryBcvRateEffectiveDate: result.effectiveDate, inventoryBcvRateFetchedAt: effectiveFetchedAt, inventoryBcvRateHistory: nextHistory });
         try { await persistRef.current(); }
         catch (error) { updateRef.current(company); await persistRef.current().catch(() => undefined); throw error; }
       } catch (error) {
