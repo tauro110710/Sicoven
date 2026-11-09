@@ -116,6 +116,8 @@ function collectCompanyDatabases(root) {
     if (entry.isSymbolicLink() || !entry.isDirectory() || !/^[A-Za-z0-9_-]{1,120}$/.test(entry.name)) {
       throw new Error('El registro local contiene una carpeta de empresa no válida.');
     }
+    const fromDir = path.join(directory, entry.name);
+    assertDirectory(fromDir, 'La carpeta de empresa');
     const relative = COMPANIES_DIR + '/' + entry.name + '/accounting.sqlite';
     const file = path.join(root, ...relative.split('/'));
     assertRegularFile(file, 'La base SQLite de ' + entry.name);
