@@ -4,6 +4,7 @@ export const INVENTORY_BCV_HISTORY_URL = 'https://bcv.today/api/v1/history.json'
 
 export interface InventoryBcvRateResult {
   rate: number;
+  eurRate?: number;
   effectiveDate: string;
   fetchedAt: string;
   sourceUrl: string;
@@ -20,6 +21,7 @@ export interface InventoryBcvHistoricalRate {
 
 interface BcvApiPayload {
   USD?: unknown;
+  EUR?: unknown;
   effective_date?: unknown;
   date?: unknown;
 }
@@ -71,7 +73,8 @@ export async function fetchInventoryBcvRate(): Promise<InventoryBcvRateResult> {
   const effectiveDate = effectiveDateCandidate;
   const fetchedAt = new Date().toISOString();
 
-  return { rate: Number(rate.toFixed(4)), effectiveDate, fetchedAt, sourceUrl, provider: 'bcv.today' };
+  const eurRate = Number(payload.EUR);
+  return { rate: Number(rate.toFixed(4)), eurRate: Number.isFinite(eurRate) && eurRate > 0 ? Number(eurRate.toFixed(4)) : undefined, effectiveDate, fetchedAt, sourceUrl, provider: 'bcv.today' };
 }
 
 /** Fetches the available daily history so missed days can be backfilled without altering prior records. */
