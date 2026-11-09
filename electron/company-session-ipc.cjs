@@ -5,7 +5,7 @@ const { hasFullSystemAccess } = require('./auth-roles.cjs');
 
 function registerCompanySessionIpc({
   ipcMain, companySessionContext, runtime, operationContext, controlDb,
-  licenseView, getActiveSession
+  licenseView, getActiveSession, assertOperationalReady = () => {}
 }) {
   if (!ipcMain || typeof ipcMain.handle !== 'function' ||
       !companySessionContext ||
@@ -15,7 +15,7 @@ function registerCompanySessionIpc({
       !runtime || typeof runtime.createCompany !== 'function' ||
       !operationContext || typeof operationContext.acquireMaintenanceLock !== 'function' ||
       !controlDb || typeof controlDb.prepare !== 'function' ||
-      typeof licenseView !== 'function' || typeof getActiveSession !== 'function') {
+      typeof licenseView !== 'function' || typeof getActiveSession !== 'function' || typeof assertOperationalReady !== 'function') {
     throw new TypeError('No se pudo registrar el IPC seguro de selección y creación de empresa.');
   }
 
@@ -53,6 +53,7 @@ function registerCompanySessionIpc({
   });
 
   ipcMain.handle('sicoven:company-select-active', async (_event, token, input) => {
+    assertOperationalReady();
     requireAuthorizedSession(token);
     const companyId = String(input?.companyId || '').trim();
     if (!companyId || companyId.length > 120) throw new Error('La empresa solicitada no es válida.');
@@ -68,6 +69,7 @@ function registerCompanySessionIpc({
   });
 
   ipcMain.handle('sicoven:company-create', async (_event, token, input) => {
+    assertOperationalReady();
     const actor = requireAuthorizedSession(token);
     const company = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : null;
     if (!company) throw new Error('Los datos de la empresa no son válidos.');
