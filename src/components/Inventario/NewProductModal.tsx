@@ -48,6 +48,14 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
 
   function parseDecimalInput(value: string) { const raw = value.trim(); if (!raw) return 0; return Number(raw.includes(',') ? raw.split('.').join('').replace(',', '.') : raw); }
 
+function withoutInventoryExchangeRates(configuration: InventoryPricingConfiguration): InventoryPricingConfiguration {
+  const clean = { ...configuration, applyExchangeGap: false };
+  delete clean.exchangeRateCurrency;
+  delete clean.referenceRate;
+  delete clean.replacementRate;
+  return clean;
+}
+
   useEffect(() => {
     if (!isOpen) return;
     setError('');
@@ -59,7 +67,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       setOpeningDate(product.openingDate || new Date().toISOString().slice(0, 10));
       setOpeningBcvRateInput(String(product.openingBcvRate || ''));
       setAvgCostInput(String(product.avgCostUsd));
-      setPricingConfiguration(product.pricingConfiguration || DEFAULT_INVENTORY_PRICING);
+      setPricingConfiguration(withoutInventoryExchangeRates(product.pricingConfiguration || DEFAULT_INVENTORY_PRICING));
       const legacyCurrency = product.priceCurrency || 'BS';
       setPriceCurrency(legacyCurrency);
       const legacyPrimary = Number(product.price1 ?? (legacyCurrency === 'USD' ? product.salesPriceUsd : product.salesPriceBs)) || 0;
@@ -76,7 +84,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       setCode(''); setName(''); setCategory('Mercancías Generales'); setUnit('Unidad');
       setMinStockInput('10'); setCurrentStockInput('0'); setOpeningDate(new Date().toISOString().slice(0, 10));
       setOpeningBcvRateInput(String(currentCompany.inventoryBcvRate || '')); setAvgCostInput(''); setPriceCurrency('USD'); setPriceInputs(['', '', '', '']);
-      setPricingConfiguration(currentCompany.inventoryPricingDefaults || DEFAULT_INVENTORY_PRICING);
+      setPricingConfiguration(withoutInventoryExchangeRates(currentCompany.inventoryPricingDefaults || DEFAULT_INVENTORY_PRICING));
       setInventoryAccountCode('1.1.4.01'); setCostOfSalesAccountCode('5.1.1.01');
       setAdjustmentAccountCode('5.1.2.01'); setOpeningBalanceAccountCode('3.3.1.01');
       setCostingMethod('PROMEDIO_PONDERADO'); setVatTreatment('GENERAL_16'); setItemType('MERCANCIA');
@@ -98,6 +106,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   if (!isOpen) return null;
 
   const bcvRate = parseDecimalInput(openingBcvRateInput);
+  const effectivePricingConfiguration = withoutInventoryExchangeRates(pricingConfiguration);
   const avgCostUsd = parseDecimalInput(avgCostInput);
   const avgCostBs = bcvRate > 0 ? Number((avgCostUsd * bcvRate).toFixed(2)) : 0;
   const pricingCalculation = (() => {
@@ -105,7 +114,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       if (pricingConfiguration.mode === 'AUTOMATIC' && priceCurrency === 'BS') {
         throw new Error('La fijación automática se calcula en USD. Para fijar precios en bolívares, use el modo manual; la tasa BCV se registra en cada factura del Libro de Ventas.');
       }
-      return calculateInventoryPrices({ baseCost: avgCostUsd, configuration: pricingConfiguration });
+      return calculateInventoryPrices({ baseCost: avgCostUsd, configuration: effectivePricingConfiguration });
     } catch (error) { return { prices: [0, 0, 0, 0] as [number, number, number, number], exchangeGapPercent: 0, exchangeFactor: 1, error: error instanceof Error ? error.message : 'Configuración de precios inválida.' }; }
   })();
   const effectivePriceValues = pricingConfiguration.mode === 'AUTOMATIC' ? pricingCalculation.prices : priceValues;
@@ -139,7 +148,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
         price3: pricingConfiguration.mode === 'AUTOMATIC' || priceInputs[2].trim() ? effectivePriceValues[2] : null,
         price4: pricingConfiguration.mode === 'AUTOMATIC' || priceInputs[3].trim() ? effectivePriceValues[3] : null,
         priceCurrency,
-        pricingConfiguration,
+        pricingConfiguration: effectivePricingConfiguration,
         salesPriceBs: 0,
         salesPriceUsd: 0,
         vatTreatment
@@ -161,7 +170,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
         price3: pricingConfiguration.mode === 'AUTOMATIC' || priceInputs[2].trim() ? effectivePriceValues[2] : null,
         price4: pricingConfiguration.mode === 'AUTOMATIC' || priceInputs[3].trim() ? effectivePriceValues[3] : null,
         priceCurrency,
-        pricingConfiguration,
+        pricingConfiguration: effectivePricingConfiguration,
         salesPriceBs: 0,
         salesPriceUsd: 0,
         inventoryAccountCode, costOfSalesAccountCode, adjustmentAccountCode, openingBalanceAccountCode,
@@ -377,22 +386,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
                   </label>
                 ))}
               </div>
-              <label className="flex items-start gap-2 text-[11px] font-semibold text-slate-700">
-                <input type="checkbox" checked={pricingConfiguration.applyExchangeGap} onChange={e => setPricingConfiguration(previous => ({ ...previous, applyExchangeGap: e.target.checked }))} className="mt-0.5 rounded" />
-                Aplicar factor de protección por brecha cambiaria (solo para fijación comercial)
-              </label>
-              {pricingConfiguration.applyExchangeGap && <div className="grid grid-cols-2 gap-2">
-                <label className="col-span-2 text-[10px] font-semibold text-slate-700">Divisa de las tasas comparadas
-                  <select value={pricingConfiguration.exchangeRateCurrency || 'USD'} onChange={e => setPricingConfiguration(previous => ({ ...previous, exchangeRateCurrency: e.target.value as 'USD' | 'EUR' }))} className="mt-1 w-full px-2 py-1.5 border border-slate-300 rounded-lg bg-white"><option value="USD">USD — Dólar</option><option value="EUR">EUR — Euro</option></select>
-                </label>
-                <label className="text-[10px] font-semibold text-slate-700">Tasa de referencia BCV (Bs./{pricingConfiguration.exchangeRateCurrency || 'USD'})
-                  <input type="number" min="0.0001" step="0.0001" value={pricingConfiguration.referenceRate ?? ''} onChange={e => setPricingConfiguration(previous => ({ ...previous, referenceRate: Number(e.target.value) }))} className="mt-1 w-full px-2 py-1.5 border border-slate-300 rounded-lg font-mono" />
-                </label>
-                <label className="text-[10px] font-semibold text-slate-700">Tasa de reposición / real (Bs./{pricingConfiguration.exchangeRateCurrency || 'USD'})
-                  <input type="number" min="0.0001" step="0.0001" value={pricingConfiguration.replacementRate ?? ''} onChange={e => setPricingConfiguration(previous => ({ ...previous, replacementRate: Number(e.target.value) }))} className="mt-1 w-full px-2 py-1.5 border border-slate-300 rounded-lg font-mono" />
-                </label>
-                <p className="col-span-2 text-[10px] text-slate-600">Brecha calculada: {pricingCalculation.error ? 'Pendiente de tasas válidas' : '+' + pricingCalculation.exchangeGapPercent.toFixed(2) + '%'} · Ambas tasas deben corresponder a la misma divisa.</p>
-              </div>}
+              <p className="text-[10px] text-slate-500">La fijación automática usa el costo base en USD y los márgenes configurados. No se aplican tasas BCV/EUR ni factores de brecha dentro del Inventario.</p>
               {pricingCalculation.error && <p role="alert" className="text-[10px] text-rose-700">{pricingCalculation.error}</p>}
               <p className="text-[10px] text-slate-500">Costo base para el motor comercial: {formatUsd(avgCostUsd)}. El costo histórico y la tasa fiscal/contable no se modifican.</p>
             </div>}
