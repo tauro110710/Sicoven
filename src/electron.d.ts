@@ -69,6 +69,8 @@ declare global {
       recordVatFiscalIncidentEvent: (token: string, input: import('./types/vatFiscalIncidents').VatFiscalIncidentEventInput) => Promise<import('./types/vatFiscalIncidents').VatFiscalIncident>;
       savePdf: (input: { fileName: string; base64: string }) => Promise<{ ok: boolean; canceled?: boolean; filePath?: string; bytes?: number }>;
       saveTextFile: (input: { fileName: string; content: string; contentType?: string; encoding?: 'utf-8' | 'iso-8859-1' }) => Promise<{ ok: boolean; canceled?: boolean; filePath?: string; bytes?: number }>;
+      createBackup: (token: string) => Promise<{ ok: boolean; canceled?: boolean; destination?: string; documentCount?: number; databaseSha256?: string; createdAt?: string }>;
+      restoreBackup: (token: string) => Promise<{ ok: boolean; canceled?: boolean; reloadRequired?: boolean; restoredAt?: string }>;
       exportCompanyData: (token: string, input: { format: 'sqlite' | 'json' }) => Promise<{ ok: boolean; canceled?: boolean; format?: 'sqlite' | 'json'; destination?: string; documentCount?: number; databaseSha256?: string; bytes?: number; companyId?: string }>;
       getDemoUsage: () => Record<string, number>;
       consumeDemoAction: (moduleKey: string) => {
