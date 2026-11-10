@@ -134,3 +134,40 @@ test('rejects payroll runs that mix company employees or mismatched frequencies'
     }), /no coincide/);
   } finally { db.close(); }
 });
+
+test('rejects overlapping effective periods for versions of the same legal rule', () => {
+  const db = setup();
+  try {
+    savePayrollLegalRule(db, 'co-a', {
+      code:'IVSS', description:'IVSS vigente', base:'normalSalary',
+      workerRate:0.04, employerRate:0.09, effectiveFrom:'2026-01-01',
+      effectiveTo:'2026-12-31', sourceReference:'Fuente normativa', verifiedAt:'2026-01-01'
+    });
+    assert.throws(() => savePayrollLegalRule(db, 'co-a', {
+      code:'IVSS', description:'IVSS duplicado', base:'normalSalary',
+      workerRate:0.04, employerRate:0.10, effectiveFrom:'2026-06-01',
+      effectiveTo:null, sourceReference:'Fuente normativa', verifiedAt:'2026-06-01'
+    }), /se solapa/);
+  } finally { db.close(); }
+});
+
+test('does not silently apply a legal rule with unconfigured applicability conditions', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId:'V-202', fullName:'Rosa Díaz', hireDate:'2024-01-01',
+      frequency:'BIWEEKLY', baseSalary:1000
+    });
+    savePayrollLegalRule(db, 'co-a', {
+      code:'IVSS', description:'IVSS según riesgo', base:'normalSalary',
+      workerRate:0.04, employerRate:0.09, effectiveFrom:'2026-01-01',
+      sourceReference:'Fuente normativa', verifiedAt:'2026-01-01',
+      applicability:{ employerRiskClass:'LOW' }
+    });
+    assert.throws(() => createPayrollRun(db, 'co-a', {
+      frequency:'BIWEEKLY', periodStart:'2026-06-01', periodEnd:'2026-06-15',
+      employees:[{ employeeId:employee.id, earnings:[{code:'SAL',description:'Salario',amount:500,isSalary:true}],
+        bases:{normalSalary:500,integralSalary:500,grossSalary:500} }]
+    }), /condiciones de empresa o trabajador/);
+  } finally { db.close(); }
+});
