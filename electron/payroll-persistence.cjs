@@ -313,6 +313,17 @@ function listPayrollRuns(db, companyId) {
     .map(row => ({...row,totals:JSON.parse(row.totalsJson)}));
 }
 
+function getPayrollRun(db, companyId, runId) {
+  ensureCompany(db, companyId);
+  const id = text(runId, 'Nómina', 120);
+  const row = db.prepare(`SELECT id,company_id AS companyId,frequency,period_start AS periodStart,
+    period_end AS periodEnd,status,calculation_snapshot_json AS snapshotJson,
+    totals_json AS totalsJson,created_at AS createdAt,confirmed_at AS confirmedAt,
+    journal_entry_id AS journalEntryId FROM payroll_runs WHERE id=? AND company_id=?`).get(id, companyId);
+  if (!row) throw new Error('La nómina no pertenece a la empresa activa.');
+  return { ...row, snapshot: JSON.parse(row.snapshotJson), totals: JSON.parse(row.totalsJson) };
+}
+
 function confirmPayrollRun(db, companyId, runId, journalEntryId) {
   ensureCompany(db, companyId);
   const id = text(runId, 'Nómina', 120);
@@ -417,6 +428,10 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
     authenticate(token);
     return withDatabase(token, (db, companyId) => savePayrollEmployee(db, companyId, input));
   });
+  ipcMain.handle('sicoven:payroll-run-get', async (_event, token, runId) => {
+    authenticate(token);
+    return withDatabase(token, (db, companyId) => getPayrollRun(db, companyId, runId));
+  });
   ipcMain.handle('sicoven:payroll-run-confirm', async (_event, token, runId, journalEntryId) => {
     authenticate(token);
     return withDatabase(token, (db, companyId) => confirmPayrollRun(db, companyId, runId, journalEntryId));
@@ -444,5 +459,5 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
 }
 module.exports = {
   listPayrollEmployees, listPayrollSalaryHistory, getPayrollSalaryForDate, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
-  createPayrollRun, listPayrollRuns, confirmPayrollRun, listConfirmedSalaryEntries, registerPayrollIpc
+  createPayrollRun, listPayrollRuns, getPayrollRun, confirmPayrollRun, listConfirmedSalaryEntries, registerPayrollIpc
 };
