@@ -62,10 +62,10 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   useEffect(() => { void loadEmployees(); void loadRuns(); }, [loadEmployees, loadRuns]);
 
   const updatePayInput = (employeeId: string, field: 'earning'|'normal'|'integral'|'gross', value: string) => {
-    setPayInputs(current => ({
-      ...current,
-      [employeeId]: { earning: '', normal: '', integral: '', gross: '', ...current[employeeId], [field]: value }
-    }));
+    setPayInputs(current => {
+      const previous = current[employeeId] ?? { earning: '', normal: '', integral: '', gross: '' };
+      return { ...current, [employeeId]: { ...previous, [field]: value } };
+    });
   };
 
   const createDraftRun = async (event: React.FormEvent) => {
@@ -75,7 +75,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
     if (selected.length === 0) { setError('No hay trabajadores activos con esta periodicidad.'); return; }
     const missing = selected.find(employee => {
       const values = payInputs[employee.id];
-      return !values || ['earning','normal','integral','gross'].some(key => !Number.isFinite(Number(values[key])) || Number(values[key]) <= 0);
+      return !values || (['earning','normal','integral','gross'] as const).some(key => !Number.isFinite(Number(values[key])) || Number(values[key]) <= 0);
     });
     if (missing) { setError('Complete asignación del período y las tres bases salariales para ' + missing.fullName + '. No se asumirán equivalencias entre salario semanal, quincenal, normal e integral.'); return; }
     setCreatingRun(true); setError(''); setSuccess('');
