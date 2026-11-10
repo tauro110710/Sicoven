@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { calculateVacationSalaryBasis, calculateAnnualLaborRights, calculateProfitSharingDistribution, calculateSeverance, calculateSeveranceInterest } = require('./payroll-legal-calculations.cjs');
+const { calculateVacationSalaryBasis, calculateAnnualLaborRights, calculateProfitSharingDistribution, calculateSeverance, calculateSeveranceInterest, calculateSeveranceSalaryBasis } = require('./payroll-legal-calculations.cjs');
 
 function text(value, label, max = 240, min = 1) {
   const result = String(value ?? '').trim();
@@ -635,10 +635,11 @@ function calculatePayrollSeverance(db, companyId, input) {
   const quarterlyDeposits=applicableDeposits.filter(item=>item.kind==='QUARTERLY').map(item=>({days:item.days,dailyIntegralSalary:item.dailyIntegralSalary}));
   const additionalSeniorityDeposits=applicableDeposits.filter(item=>item.kind==='SENIORITY').map(item=>({days:item.days,dailyIntegralSalary:item.dailyIntegralSalary}));
   const advances=applicableDeposits.filter(item=>item.kind==='ADVANCE');
-  const result=calculateSeverance({hireDate:employee.hireDate,asOfDate:input.asOfDate,dailyIntegralSalary:input.dailyIntegralSalary,quarterlyDeposits,additionalSeniorityDeposits});
+  const salaryBasis=calculateSeveranceSalaryBasis({salaryType:input.salaryType,lastMonthlyIntegratedSalary:input.lastMonthlyIntegratedSalary,previousSixMonthsIntegratedSalary:input.previousSixMonthsIntegratedSalary});
+  const result=calculateSeverance({hireDate:employee.hireDate,asOfDate:input.asOfDate,dailyIntegralSalary:salaryBasis.dailySalary,quarterlyDeposits,additionalSeniorityDeposits});
   const advanceTotal=Math.round((advances.reduce((sum,item)=>sum+item.amount,0)+Number.EPSILON)*100)/100;
   const grossEntitlement=result.greaterAmount;
-  return {...result,employeeId,fullName:employee.fullName,advanceTotal,netAfterAdvances:Math.max(0,Math.round((grossEntitlement-advanceTotal+Number.EPSILON)*100)/100),
+  return {...result,employeeId,fullName:employee.fullName,salaryBasis,advanceTotal,netAfterAdvances:Math.max(0,Math.round((grossEntitlement-advanceTotal+Number.EPSILON)*100)/100),
     advanceExcess:Math.max(0,Math.round((advanceTotal-grossEntitlement+Number.EPSILON)*100)/100),depositHistory:history.deposits};
 }
 
