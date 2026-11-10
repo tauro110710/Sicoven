@@ -303,6 +303,33 @@ function listPayrollRuns(db, companyId) {
     .map(row => ({...row,totals:JSON.parse(row.totalsJson)}));
 }
 
+function confirmPayrollRun(db, companyId, runId, journalEntryId) {
+  ensureCompany(db, companyId);
+  const id = text(runId, 'Nómina', 120);
+  const journalId = text(journalEntryId, 'Asiento contable', 120);
+  const now = new Date().toISOString();
+  const confirm = db.transaction(() => {
+    const run = db.prepare(`SELECT id,status,journal_entry_id AS journalEntryId,period_start AS periodStart,
+      period_end AS periodEnd,totals_json AS totalsJson
+      FROM payroll_runs WHERE id=? AND company_id=?`).get(id, companyId);
+    if (!run) throw new Error('La nómina no pertenece a la empresa activa.');
+    if (run.status === 'CONFIRMED') {
+      if (run.journalEntryId !== journalId) throw new Error('La nómina ya fue confirmada con otro asiento contable.');
+      return { id: run.id, companyId, status: run.status, journalEntryId: run.journalEntryId,
+        periodStart: run.periodStart, periodEnd: run.periodEnd, totals: JSON.parse(run.totalsJson), confirmedAt: null, alreadyConfirmed: true };
+    }
+    if (run.status !== 'DRAFT') throw new Error('Solo se puede confirmar una nómina en borrador.');
+    const result = db.prepare(`UPDATE payroll_runs SET status='CONFIRMED',journal_entry_id=?,confirmed_at=?
+      WHERE id=? AND company_id=? AND status='DRAFT'`).run(journalId, now, id, companyId);
+    if (result.changes !== 1) throw new Error('La nómina cambió mientras se confirmaba. Actualice e intente nuevamente.');
+    db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+      .run('payroll_run_confirmed', JSON.stringify({ runId:id, companyId, journalEntryId:journalId, confirmedAt:now }));
+    return { id, companyId, status:'CONFIRMED', journalEntryId:journalId,
+      periodStart:run.periodStart, periodEnd:run.periodEnd, totals:JSON.parse(run.totalsJson), confirmedAt:now, alreadyConfirmed:false };
+  });
+  return confirm();
+}
+
 function listConfirmedSalaryEntries(db, companyId, employeeId, fromDate, toDate) {
   ensureCompany(db, companyId);
   const id = text(employeeId, 'Trabajador', 120);
@@ -354,7 +381,7 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
     authenticate(token);
     return withDatabase(token, (db, companyId) => savePayrollEmployee(db, companyId, input));
   });
-  ipcMain.handle('sicoven:payroll-salary-entries-list', async (_event, token, employeeId, fromDate, toDate) => {
+  ipcMain.handle('sicoven:payroll-run-confirm', async (_event, token, runId, journalEntryId) => {\n    authenticate(token);\n    return withDatabase(token, (db, companyId) => confirmPayrollRun(db, companyId, runId, journalEntryId));\n  });\n  ipcMain.handle('sicoven:payroll-salary-entries-list', async (_event, token, employeeId, fromDate, toDate) => {
     authenticate(token);
     return withDatabase(token, (db, companyId) => listConfirmedSalaryEntries(db, companyId, employeeId, fromDate, toDate));
   });
@@ -377,5 +404,5 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
 }
 module.exports = {
   listPayrollEmployees, listPayrollSalaryHistory, getPayrollSalaryForDate, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
-  createPayrollRun, listPayrollRuns, listConfirmedSalaryEntries, registerPayrollIpc
+  createPayrollRun, listPayrollRuns, confirmPayrollRun, listConfirmedSalaryEntries, registerPayrollIpc
 };
