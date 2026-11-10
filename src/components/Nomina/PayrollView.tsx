@@ -346,7 +346,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
                   salaryType: 'FIXED' as const, lastMonth: '', month1: '', month2: '', month3: '',
                   asOfDate: new Date().toISOString().slice(0,10), fiscalYearStart: new Date().getFullYear() + '-01-01'
                 };
-                const setField = (field: keyof typeof values, value: string) => setLegalCalcInputs(current => ({
+                const setField = <K extends keyof typeof values,>(field: K, value: (typeof values)[K]) => setLegalCalcInputs(current => ({
                   ...current, [employee.id]: { ...values, [field]: value }
                 }));
                 const result = legalCalcResults[employee.id];
