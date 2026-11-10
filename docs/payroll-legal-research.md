@@ -55,6 +55,18 @@ Fuentes de orientación inicial (no sustituyen Gaceta/consulta oficial):
 - Grant Thornton Venezuela, guía 2026 de regímenes de seguridad social: https://www.grantthornton.com.ve/globalassets/1.-member-firms/venezuela/2026/hacer-negocios-en-venezuela-2026.pdf
 - Revista FACES, tabla comparativa de aportes parafiscales: https://www.servicio.bc.uc.edu.ve/faces/revista/evol7n1/vol7n12025.pdf
 
+## Verificación comparativa más reciente de aportes (consulta 10-11-2026)
+
+La tabla comparativa de PwC para Venezuela, revisada el 30-09-2026, confirma como referencia de trabajo: IVSS 4% trabajador y 9/10/11% patronal según riesgo, con tope de cinco salarios mínimos; Régimen Prestacional de Empleo 0,5% trabajador y 2% patronal, con tope de diez salarios mínimos; FAOV 1% trabajador y 2% patronal sobre salario integral mensual; INCES 2% patronal sobre la base salarial correspondiente y 0,5% trabajador sobre utilidades; LOPCYMAT 0,75% a 10% patronal según riesgo. La fuente es comparativa secundaria y no sustituye la Gaceta ni la clasificación individual del patrono.
+
+- PwC, Venezuela — Individual, Other taxes (revisión 30-09-2026): https://taxsummaries.pwc.com/venezuela/individual/other-taxes
+- PwC, Venezuela — Corporate, Other taxes: https://taxsummaries.pwc.com/venezuela/corporate/other-taxes
+- USB, FAOV (2% patronal + 1% trabajador sobre salario integral): https://www.dgch.usb.ve/r%C3%A9gimen-prestacional-de-vivienda-faov
+- BDO, Ley de Protección de las Pensiones (referencia de alícuota patronal 9%; validar texto y actos SENIAT vigentes): https://www.bdo.com.ve/es-ve/publicaciones/boletines-informativos/ley-de-proteccion-de-las-pensiones-de-seguridad-social-venezuela
+- SENIAT / Providencia SNAT/2025/000092, calendario 2026 de la contribución de pensiones: https://lega.law/lega-informa/calendario-spe-y-pensiones-2026/
+
+Estas referencias no se convierten automáticamente en reglas activas. La clasificación de riesgo IVSS/LOPCYMAT, los topes en salarios mínimos, el número de trabajadores para INCES, el tipo de entidad y la sujeción a la contribución de pensiones son datos del patrono. Cada regla debe configurarse con su vigencia, base y frecuencia; el sistema no debe aplicar una tasa universal ni prorratear un tope mensual sin un parámetro específico para semanal/quincenal.
+
 ## Reglas de producto derivadas
 
 1. Las tasas se guardan con fecha inicial/final, fuente, fecha de verificación y configuración aplicable.
