@@ -1,7 +1,34 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { completedYears, calculateAnnualLaborRights, calculateSeverance } = require('./payroll-legal-calculations.cjs');
+const { completedYears, calculateVacationSalaryBasis, calculateSeveranceSalaryBasis, calculateAnnualLaborRights, calculateSeverance } = require('./payroll-legal-calculations.cjs');
+
+test('uses three prior months for variable vacation salary and six for variable severance salary', () => {
+  const fixedVacation = calculateVacationSalaryBasis({salaryType:'FIXED',lastMonthNormalSalary:3000});
+  assert.equal(fixedVacation.monthlySalary,3000);
+  assert.equal(fixedVacation.dailySalary,100);
+  const variableVacation = calculateVacationSalaryBasis({
+    salaryType:'VARIABLE',previousThreeMonthsNormalSalary:[3000,3300,3600]
+  });
+  assert.equal(variableVacation.monthlySalary,3300);
+  assert.equal(variableVacation.dailySalary,110);
+  assert.equal(variableVacation.monthsAveraged,3);
+  assert.throws(() => calculateVacationSalaryBasis({
+    salaryType:'VARIABLE',previousThreeMonthsNormalSalary:[3000,3300]
+  }), /tres meses/);
+
+  const fixedSeverance = calculateSeveranceSalaryBasis({salaryType:'FIXED',lastMonthlyIntegratedSalary:4500});
+  assert.equal(fixedSeverance.dailySalary,150);
+  const variableSeverance = calculateSeveranceSalaryBasis({
+    salaryType:'VARIABLE',previousSixMonthsIntegratedSalary:[4200,4300,4400,4500,4600,4800]
+  });
+  assert.equal(variableSeverance.monthlySalary,4466.67);
+  assert.equal(variableSeverance.dailySalary,148.89);
+  assert.equal(variableSeverance.monthsAveraged,6);
+  assert.throws(() => calculateSeveranceSalaryBasis({
+    salaryType:'VARIABLE',previousSixMonthsIntegratedSalary:[4200,4300,4400,4500,4600]
+  }), /seis meses/);
+});
 
 test('calculates vacation and vacation bonus days by completed service years', () => {
   assert.equal(completedYears('2024-05-15','2025-05-14'),0);
