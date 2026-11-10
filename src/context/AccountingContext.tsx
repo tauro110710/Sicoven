@@ -227,7 +227,7 @@ interface AccountingContextType {
 
   // Respaldo
   resetToSampleData: () => Promise<void>;
-  resetFactoryData: (backupConfirmed: boolean) => Promise<{ removedCompanies?: number }>;
+  resetFactoryData: () => Promise<{ removedCompanies?: number }>;
   exportBackupJson: () => string;
   restoreBackupJson: (jsonData: string) => Promise<boolean>;
 }
