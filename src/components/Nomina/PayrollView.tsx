@@ -468,6 +468,70 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
       </section>
     </div>
 
+    <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <summary className="cursor-pointer font-bold text-slate-900">Configurar obligaciones legales de esta empresa</summary>
+      <p className="mt-2 text-xs text-slate-600">Configuración única por empresa. Registre cada obligación por separado, con su base, periodicidad, vigencia y fuente. Las tasas se expresan en porcentaje; no se aplican valores supuestos ni reglas de otra empresa.</p>
+      <div className="mt-3 space-y-2">
+        {legalRules.length === 0 ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">No hay reglas legales activas. Los borradores no aplicarán retenciones ni aportes hasta que registre las reglas verificadas.</p> :
+          legalRules.map(rule=><div key={rule.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 text-xs">
+            <div><p className="font-bold text-slate-800">{rule.code} · {rule.description} {rule.active ? '' : '(inactiva)'}</p>
+              <p className="text-slate-600">Base: {rule.base} · Periodicidad: {rule.frequencyScope==='ALL'?'Semanal y quincenal':rule.frequencyScope==='WEEKLY'?'Semanal':'Quincenal'} · Trabajador: {(rule.workerRate*100).toFixed(3)}% · Patrono: {(rule.employerRate*100).toFixed(3)}%</p>
+              <p className="text-slate-500">Vigencia: {rule.effectiveFrom} – {rule.effectiveTo || 'abierta'} · Verificada: {rule.verifiedAt}</p>
+            </div>
+            {rule.active && <div className="flex gap-2">
+              <button type="button" onClick={()=>editLegalRule(rule)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 font-semibold text-slate-700">Editar</button>
+              <button type="button" onClick={()=>void deactivateLegalRule(rule)} disabled={savingRule} className="rounded-lg border border-rose-200 px-2.5 py-1.5 font-semibold text-rose-700 disabled:opacity-50">Desactivar</button>
+            </div>}
+          </div>)}
+      </div>
+      <form onSubmit={saveLegalRule} className="mt-4 space-y-3 border-t border-slate-200 pt-4">
+        <h3 className="font-semibold text-slate-800">{editingRuleId ? 'Editar regla legal' : 'Agregar regla legal'}</h3>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="space-y-1 text-xs font-medium text-slate-700">Código
+            <input required maxLength={60} value={ruleForm.code} onChange={e=>setRuleForm(v=>({...v,code:e.target.value}))} className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-slate-700">Descripción
+            <input required maxLength={240} value={ruleForm.description} onChange={e=>setRuleForm(v=>({...v,description:e.target.value}))} className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-slate-700">Base
+            <select value={ruleForm.base} onChange={e=>setRuleForm(v=>({...v,base:e.target.value as 'normalSalary'|'integralSalary'|'grossSalary'}))} className="w-full rounded-lg border border-slate-300 px-3 py-2">
+              <option value="normalSalary">Salario normal</option><option value="integralSalary">Salario integral</option><option value="grossSalary">Salario bruto</option>
+            </select>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-slate-700">Se aplica a
+            <select value={ruleForm.frequencyScope} onChange={e=>setRuleForm(v=>({...v,frequencyScope:e.target.value as 'ALL'|'WEEKLY'|'BIWEEKLY'}))} className="w-full rounded-lg border border-slate-300 px-3 py-2">
+              <option value="ALL">Semanal y quincenal</option><option value="WEEKLY">Solo semanal</option><option value="BIWEEKLY">Solo quincenal</option>
+            </select>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-slate-700">Retención trabajador (%)
+            <input required type="number" min="0" max="100" step="0.001" value={ruleForm.workerRate} onChange={e=>setRuleForm(v=>({...v,workerRate:e.target.value}))} className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-slate-700">Aporte patronal (%)
+            <input required type="number" min="0" max="100" step="0.001" value={ruleForm.employerRate} onChange={e=>setRuleForm(v=>({...v,employerRate:e.target.value}))} className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-slate-700">Tope de base por período (Bs., opcional)
+            <input type="number" min="0" step="0.01" value={ruleForm.baseCap} onChange={e=>setRuleForm(v=>({...v,baseCap:e.target.value}))} className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-slate-700">Vigente desde
+            <input required type="date" value={ruleForm.effectiveFrom} onChange={e=>setRuleForm(v=>({...v,effectiveFrom:e.target.value}))} className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-slate-700">Vigente hasta (opcional)
+            <input type="date" value={ruleForm.effectiveTo} onChange={e=>setRuleForm(v=>({...v,effectiveTo:e.target.value}))} className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-slate-700">Verificada el
+            <input required type="date" value={ruleForm.verifiedAt} onChange={e=>setRuleForm(v=>({...v,verifiedAt:e.target.value}))} className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-slate-700 sm:col-span-2 lg:col-span-3">Fuente normativa y referencia
+            <input required maxLength={1000} value={ruleForm.sourceReference} onChange={e=>setRuleForm(v=>({...v,sourceReference:e.target.value}))} placeholder="Ley, artículo, Gaceta Oficial o fuente oficial consultada" className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
+          </label>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button disabled={savingRule} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{savingRule?'Guardando…':editingRuleId?'Guardar cambios':'Guardar regla'}</button>
+          {editingRuleId && <button type="button" onClick={()=>{setEditingRuleId(null);setRuleForm(current=>({...current,code:'',description:'',workerRate:'',employerRate:'',baseCap:'',effectiveTo:'',sourceReference:''}));}} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Cancelar edición</button>}
+        </div>
+      </form>
+    </details>
+
     <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
         <Calculator className="text-emerald-700"/><div><h2 className="font-bold text-slate-900">Procesar nómina</h2><p className="text-xs text-slate-500">Crea un borrador revisable; no contabiliza ni confirma automáticamente.</p></div>
