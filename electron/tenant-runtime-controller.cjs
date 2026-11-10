@@ -31,6 +31,7 @@ function createTenantRuntimeController({
     updateCompanyMetadata: (...args) => implementation.updateCompanyMetadata(...args),
     closeCompany: (...args) => implementation.closeCompany(...args),
     closeAll: (...args) => implementation.closeAll(...args),
+    resetAllCompanies: (...args) => implementation.resetAllCompanies(...args),
     isCompanyOpen: (...args) => implementation.isCompanyOpen(...args),
     getCompanyDatabasePath: (...args) => implementation.getCompanyDatabasePath(...args),
     rebindControlDatabase(nextControlDb) {
