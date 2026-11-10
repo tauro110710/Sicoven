@@ -2,7 +2,7 @@
 
 function validDate(value, label) {
   const text = String(value || '');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw new Error(label + ' debe usar AAAA-MM-DD.');
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(text)) throw new Error(label + ' debe usar AAAA-MM-DD.');
   const date = new Date(text + 'T00:00:00.000Z');
   if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0,10) !== text) throw new Error(label + ' no es válida.');
   return date;
@@ -12,14 +12,23 @@ function money(value, label) {
   if (!Number.isFinite(n) || n < 0) throw new Error(label + ' debe ser un importe no negativo.');
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
+function addMonthsClamped(date, months) {
+  const targetMonth = date.getUTCMonth() + months;
+  const firstOfTarget = new Date(Date.UTC(date.getUTCFullYear(), targetMonth, 1));
+  const lastDay = new Date(Date.UTC(firstOfTarget.getUTCFullYear(), firstOfTarget.getUTCMonth() + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(firstOfTarget.getUTCFullYear(), firstOfTarget.getUTCMonth(), Math.min(date.getUTCDate(), lastDay)));
+}
+function completedCalendarMonths(fromDate, toDate) {
+  let months = (toDate.getUTCFullYear() - fromDate.getUTCFullYear()) * 12
+    + toDate.getUTCMonth() - fromDate.getUTCMonth();
+  if (toDate < addMonthsClamped(fromDate, months)) months -= 1;
+  return Math.max(0, months);
+}
 function completedYears(hireDate, asOfDate) {
   const hire = validDate(hireDate, 'Fecha de ingreso');
   const asOf = validDate(asOfDate, 'Fecha de corte');
   if (asOf < hire) throw new Error('La fecha de corte no puede ser anterior al ingreso.');
-  let years = asOf.getUTCFullYear() - hire.getUTCFullYear();
-  const anniversary = new Date(Date.UTC(asOf.getUTCFullYear(), hire.getUTCMonth(), hire.getUTCDate()));
-  if (asOf < anniversary) years -= 1;
-  return years;
+  return Math.floor(completedCalendarMonths(hire, asOf) / 12);
 }
 function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
 function completeCalendarMonths(fromDate, toDate) {
@@ -85,18 +94,16 @@ function calculateSeverance(input) {
   const asOf = validDate(input.asOfDate, 'Fecha de corte');
   if (asOf < hire) throw new Error('La fecha de corte no puede ser anterior al ingreso.');
   const daily = money(input.dailyIntegralSalary, 'Salario diario integral');
-  const years = completedYears(input.hireDate, input.asOfDate);
-  const monthsElapsed = (asOf.getUTCFullYear() - hire.getUTCFullYear()) * 12
-    + (asOf.getUTCMonth() - hire.getUTCMonth())
-    - (asOf.getUTCDate() < hire.getUTCDate() ? 1 : 0);
+  const monthsElapsed = completedCalendarMonths(hire, asOf);
+  const years = Math.floor(monthsElapsed / 12);
   const quarters = Math.floor(monthsElapsed / 3);
   const quarterlyGuaranteeDays = quarters * 15;
   const additionalSeniorityDays = years > 1 ? Math.min(30, (years - 1) * 2) : 0;
   const guaranteeDays = quarterlyGuaranteeDays + additionalSeniorityDays;
-  const daysWorked = Math.floor((asOf.getTime() - hire.getTime()) / 86400000);
-  const hasPartialMonth = asOf.getUTCDate() !== hire.getUTCDate();
-  const serviceMonthsForFirstThree = monthsElapsed + (hasPartialMonth ? 1 : 0);
-  const terminationDays = daysWorked < 90
+  const beforeThreeMonths = asOf < addMonthsClamped(hire, 3);
+  const completedMonthDate = addMonthsClamped(hire, monthsElapsed);
+  const serviceMonthsForFirstThree = monthsElapsed + (asOf > completedMonthDate ? 1 : 0);
+  const terminationDays = beforeThreeMonths
     ? serviceMonthsForFirstThree * 5
     : (years + (monthsElapsed % 12 > 6 ? 1 : 0)) * 30;
   const guaranteeAmount = round2(guaranteeDays * daily);
