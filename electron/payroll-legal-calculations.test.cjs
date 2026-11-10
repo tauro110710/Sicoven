@@ -43,8 +43,20 @@ test('prorates annual profit-sharing floor by full calendar months in the fiscal
   assert.equal(result.profitSharingMinimumDays,12.5);
   assert.equal(result.profitSharingMinimum,1500);
 });
-test('applies five days per month or fraction for service shorter than three months', () => {
-  const result = calculateSeverance({hireDate:'2026-01-15',asOfDate:'2026-03-20',dailyIntegralSalary:100});
-  assert.equal(result.terminationDays,15);
-  assert.equal(result.terminationAmount,1500);
+test('applies five days per month or fraction only before the three-calendar-month anniversary', () => {
+  const partial = calculateSeverance({hireDate:'2026-01-31',asOfDate:'2026-04-29',dailyIntegralSalary:100});
+  assert.equal(partial.completedMonths,2);
+  assert.equal(partial.terminationDays,15);
+  assert.equal(partial.terminationAmount,1500);
+  const exact = calculateSeverance({hireDate:'2026-01-31',asOfDate:'2026-04-30',dailyIntegralSalary:100});
+  assert.equal(exact.completedMonths,3);
+  assert.equal(exact.quarterlyGuaranteeDays,15);
+  assert.equal(exact.terminationDays,0);
+  assert.equal(exact.greaterAmount,1500);
+});
+test('uses clamped calendar anniversaries for month-end and leap-day service', () => {
+  assert.equal(completedYears('2024-02-29','2025-02-27'),0);
+  assert.equal(completedYears('2024-02-29','2025-02-28'),1);
+  const result = calculateSeverance({hireDate:'2026-01-31',asOfDate:'2026-04-30',dailyIntegralSalary:100});
+  assert.equal(result.completedMonths,3);
 });
