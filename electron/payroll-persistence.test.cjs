@@ -429,6 +429,34 @@ test('confirms a payroll run once with its accounting entry and is safe to retry
 });
 
 
+test('does not substitute the inventory BCV history for the accounting BCV history', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-884', fullName: 'Elena Mora', hireDate: '2025-02-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    const run = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-07-01', periodEnd: '2026-07-15',
+      employees: [{ employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario base', amount: 600, isSalary: true }],
+        bases: {} }]
+    });
+    const journal = {
+      id: 'journal-inventory-rate-only', companyId: 'co-a', referenceDoc: 'NOM-' + run.id,
+      date: '2026-07-15', bcvRate: 100, items: [
+        { accountCode: '6.1.1.01', debitBs: 600, creditBs: 0, debitUsd: 6, creditUsd: 0 },
+        { accountCode: '2.1.3.01', debitBs: 0, creditBs: 600, debitUsd: 0, creditUsd: 6 }
+      ]
+    };
+    db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'")
+      .run(JSON.stringify({ companies: [{ id: 'co-a', inventoryBcvRateHistory: [
+        { id: 'inventory-only', rate: 100, effectiveDate: '2026-07-15' }
+      ] }], journalEntries: [journal] }));
+    assert.throws(() => confirmPayrollRun(db, 'co-a', run.id, journal.id), /tasa BCV histórica guardada/);
+  } finally { db.close(); }
+});
+
 test('refuses a balanced journal whose amounts do not match the payroll snapshot', () => {
   const db = setup();
   try {
