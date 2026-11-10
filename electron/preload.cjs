@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   reviewSupportingDocument: (token, input) => ipcRenderer.invoke('sicoven:document-review', token, input),
   openSupportingDocument: (token, documentId) => ipcRenderer.invoke('sicoven:document-open', token, documentId),
   listPayrollEmployees: (token) => ipcRenderer.invoke('sicoven:payroll-employees-list', token),
+  listPayrollSalaryHistory: (token, employeeId) => ipcRenderer.invoke('sicoven:payroll-salary-history-list', token, employeeId),
   savePayrollEmployee: (token, input) => ipcRenderer.invoke('sicoven:payroll-employee-save', token, input),
   listPayrollRuns: (token) => ipcRenderer.invoke('sicoven:payroll-runs-list', token),
   createPayrollRun: (token, input) => ipcRenderer.invoke('sicoven:payroll-run-create', token, input),
