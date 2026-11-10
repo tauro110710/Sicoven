@@ -6,7 +6,7 @@ const Database = require('better-sqlite3');
 const { initializeTenantDatabase } = require('./tenant-schema.cjs');
 const {
   listPayrollEmployees, listPayrollSalaryHistory, getPayrollSalaryForDate, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
-  registerPayrollIpc, createPayrollRun, listPayrollRuns, getPayrollRun, confirmPayrollRun, listConfirmedSalaryEntries, calculatePayrollAnnualRights
+  registerPayrollIpc, createPayrollRun, listPayrollRuns, getPayrollRun, confirmPayrollRun, listConfirmedSalaryEntries, calculatePayrollAnnualRights, calculatePayrollProfitSharing
 } = require('./payroll-persistence.cjs');
 
 function setup() {
@@ -556,5 +556,77 @@ test('refuses to confirm a payroll with an unbalanced or wrong-date journal', ()
       ] }], journalEntries: [journal] }));
     assert.throws(() => confirmPayrollRun(db, 'co-a', run.id, 'journal-invalid'), /fecha, tasa BCV/);
     assert.equal(listPayrollRuns(db, 'co-a').find(item => item.id === run.id).status, 'DRAFT');
+  } finally { db.close(); }
+});
+
+
+test('calculates annual profit sharing only from confirmed salary earnings in the active company', () => {
+  const db = setup();
+  try {
+    const ana = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-201', fullName: 'Ana Rojas', hireDate: '2024-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 3000
+    });
+    const luis = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-202', fullName: 'Luis Pérez', hireDate: '2024-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 3000
+    });
+    const confirmed = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2025-01-01', periodEnd: '2025-01-15',
+      employees: [
+        { employeeId: ana.id, earnings: [{ code:'SAL',description:'Salario',amount:1000,isSalary:true }], bases:{} },
+        { employeeId: luis.id, earnings: [{ code:'SAL',description:'Salario',amount:2000,isSalary:true }], bases:{} }
+      ]
+    });
+    db.prepare("UPDATE payroll_runs SET status='CONFIRMED' WHERE id=?").run(confirmed.id);
+    const draft = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2025-01-16', periodEnd: '2025-01-31',
+      employees: [
+        { employeeId: ana.id, earnings: [{ code:'SAL',description:'Salario',amount:9000,isSalary:true }], bases:{} },
+        { employeeId: luis.id, earnings: [{ code:'BONO',description:'Bono no salarial',amount:5000,isSalary:false }], bases:{} }
+      ]
+    });
+    const result = calculatePayrollProfitSharing(db, 'co-a', {
+      fiscalYearStart:'2025-01-01', fiscalYearEnd:'2025-12-31',
+      netProfits:100000, sourceReference:'Declaración de beneficios 2025',
+      verifiedAt:'2026-01-31',
+      employees:[
+        { employeeId:ana.id, monthlyNormalSalary:3000, monthsWorked:12 },
+        { employeeId:luis.id, monthlyNormalSalary:3000, monthsWorked:12 }
+      ]
+    });
+    assert.equal(result.totalWagesEarned,3000);
+    assert.equal(result.distributableFund,15000);
+    assert.equal(result.employees.find(item=>item.employeeId===ana.id).wagesEarned,1000);
+    assert.equal(result.employees.find(item=>item.employeeId===luis.id).wagesEarned,2000);
+    assert.equal(result.employees.find(item=>item.employeeId===ana.id).amount,5000);
+    assert.equal(result.employees.find(item=>item.employeeId===luis.id).amount,10000);
+    assert.match(result.salaryEvidence,/CONFIRMED/);
+    assert.throws(() => calculatePayrollProfitSharing(db, 'co-b', {
+      fiscalYearStart:'2025-01-01',fiscalYearEnd:'2025-12-31',netProfits:100000,
+      sourceReference:'Declaración',verifiedAt:'2026-01-31',
+      employees:[{employeeId:ana.id,monthlyNormalSalary:3000,monthsWorked:12}]
+    }),/empresa activa/);
+    assert.equal(db.prepare("SELECT status FROM payroll_runs WHERE id=?").get(draft.id).status,'DRAFT');
+  } finally { db.close(); }
+});
+
+test('blocks profit-sharing distribution when a confirmed payroll crosses fiscal-year boundaries', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId:'V-303',fullName:'Marta Díaz',hireDate:'2024-01-01',
+      frequency:'BIWEEKLY',baseSalary:2500
+    });
+    const run = createPayrollRun(db, 'co-a', {
+      frequency:'BIWEEKLY',periodStart:'2025-12-20',periodEnd:'2026-01-05',
+      employees:[{employeeId:employee.id,earnings:[{code:'SAL',description:'Salario',amount:1200,isSalary:true}],bases:{}}]
+    });
+    db.prepare("UPDATE payroll_runs SET status='CONFIRMED' WHERE id=?").run(run.id);
+    assert.throws(() => calculatePayrollProfitSharing(db, 'co-a', {
+      fiscalYearStart:'2025-01-01',fiscalYearEnd:'2025-12-31',netProfits:100000,
+      sourceReference:'Declaración',verifiedAt:'2026-01-31',
+      employees:[{employeeId:employee.id,monthlyNormalSalary:2500,monthsWorked:12}]
+    }), /cruza los límites del ejercicio/);
   } finally { db.close(); }
 });
