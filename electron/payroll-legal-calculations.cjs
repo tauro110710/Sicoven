@@ -69,6 +69,7 @@ function calculateAnnualLaborRights(input) {
     profitSharingMinimum: round2(profitSharingMinimumDays * daily),
     profitSharingMaximumDays,
     profitSharingMaximum: round2(profitSharingMaximumDays * daily),
+    monthsInFiscalYear,
     sources: [
       'LOTTT, arts. 131, 190 y 192; Gaceta Oficial N.º 6.076 Extraordinario, 07-05-2012'
     ]
