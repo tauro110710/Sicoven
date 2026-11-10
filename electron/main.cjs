@@ -897,13 +897,8 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('sicoven:reset-accounting', async (_event, token, options = {}) => {
     assertOperationalReady();
-    const licensing = licenseView();
-    if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const actor = getActiveSession(token);
-    if (!actor || actor.role !== 'admin') throw new Error('El RESET DE FÁBRICA requiere una sesión de administrador.');
-    if (options?.backupConfirmed !== true) {
-      throw new Error('Antes del RESET DE FÁBRICA debe crear y verificar un Respaldo global. Confirme que ya lo hizo para continuar.');
-    }
+    if (!actor) throw new Error('Debe iniciar sesión para ejecutar el RESET DE FÁBRICA.');
     const release = await tenantController.operationContext.acquireMaintenanceLock();
     try {
       // Freeze persistence and close every company connection before removing
@@ -931,7 +926,6 @@ app.whenReady().then(async () => {
             actor: { userId: actor.id, username: actor.username },
             removedCompanyCount: tenantReset.removedCompanies,
             removedCompanyIds: tenantReset.removedCompanyIds,
-            backupRequiredAndConfirmedByUser: true,
             preserved: ['auth_users', 'auth_sessions', 'license_state', 'audit_events']
           }));
       });
