@@ -387,6 +387,36 @@ test('confirms a payroll run once with its accounting entry and is safe to retry
 });
 
 
+test('refuses a balanced journal whose amounts do not match the payroll snapshot', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-883', fullName: 'Mario Gil', hireDate: '2025-02-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    const run = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-07-01', periodEnd: '2026-07-15',
+      employees: [{ employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario base', amount: 600, isSalary: true }],
+        bases: {} }]
+    });
+    const journal = {
+      id: 'journal-wrong-amount', companyId: 'co-a', referenceDoc: 'NOM-' + run.id,
+      date: '2026-07-15', bcvRate: 100, items: [
+        { accountCode: '6.1.1.01', debitBs: 610, creditBs: 0, debitUsd: 6.1, creditUsd: 0 },
+        { accountCode: '2.1.3.01', debitBs: 0, creditBs: 610, debitUsd: 0, creditUsd: 6.1 }
+      ]
+    };
+    db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'")
+      .run(JSON.stringify({ companies: [{ id: 'co-a', accountingBcvRateHistory: [
+        { id: 'bcv-test-2026-07-15', rate: 100, effectiveDate: '2026-07-15',
+          recordedAt: '2026-07-15T00:00:00.000Z', source: 'LEGACY' }
+      ] }], journalEntries: [journal] }));
+    assert.throws(() => confirmPayrollRun(db, 'co-a', run.id, journal.id), /no coinciden con los totales/);
+    assert.equal(listPayrollRuns(db, 'co-a').find(item => item.id === run.id).status, 'DRAFT');
+  } finally { db.close(); }
+});
+
 test('refuses to confirm a payroll with an unbalanced or wrong-date journal', () => {
   const db = setup();
   try {
