@@ -34,6 +34,9 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   const [payInputs, setPayInputs] = useState<Record<string,{earning:string;normal:string;integral:string;gross:string}>>({});
   const [creatingRun, setCreatingRun] = useState(false);
   const [legalRules, setLegalRules] = useState<Array<{code:string;base:'normalSalary'|'integralSalary'|'grossSalary';effectiveFrom:string;effectiveTo:string|null;active:boolean}>>([]);
+  const requiredBaseFields = new Set(legalRules
+    .filter(rule => rule.active && rule.effectiveFrom <= periodEnd && (!rule.effectiveTo || rule.effectiveTo >= periodEnd))
+    .map(rule => rule.base));
 
 
   const loadEmployees = useCallback(async () => {
@@ -73,9 +76,6 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
     if (creatingRun || !window.sicovenStore) return;
     const selected = employees.filter(employee => employee.active && employee.frequency === runFrequency);
     if (selected.length === 0) { setError('No hay trabajadores activos con esta periodicidad.'); return; }
-    const requiredBaseFields = new Set(legalRules
-      .filter(rule => rule.active && rule.effectiveFrom <= periodEnd && (!rule.effectiveTo || rule.effectiveTo >= periodEnd))
-      .map(rule => rule.base));
     const missing = selected.find(employee => {
       const values = payInputs[employee.id];
       if (!values || !Number.isFinite(Number(values.earning)) || Number(values.earning) <= 0) return true;
