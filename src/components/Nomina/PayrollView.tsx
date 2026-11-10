@@ -128,6 +128,38 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   };
 
 
+  const saveLegalRule = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (savingRule || !window.sicovenStore) return;
+    const workerRate = Number(ruleForm.workerRate), employerRate = Number(ruleForm.employerRate);
+    if (!Number.isFinite(workerRate) || workerRate < 0 || workerRate > 100 ||
+        !Number.isFinite(employerRate) || employerRate < 0 || employerRate > 100) {
+      setError('Las tasas del trabajador y patronales deben estar entre 0 y 100%.');
+      return;
+    }
+    if (!ruleForm.code.trim() || !ruleForm.description.trim() || !ruleForm.sourceReference.trim()) {
+      setError('Indique código, descripción y fuente normativa de la obligación.');
+      return;
+    }
+    setSavingRule(true); setError(''); setSuccess('');
+    try {
+      await window.sicovenStore.savePayrollLegalRule(token, {
+        code: ruleForm.code.trim(), description: ruleForm.description.trim(),
+        base: ruleForm.base, frequencyScope: ruleForm.frequencyScope,
+        workerRate: workerRate / 100, employerRate: employerRate / 100,
+        baseCap: ruleForm.baseCap.trim() ? Number(ruleForm.baseCap) : null,
+        effectiveFrom: ruleForm.effectiveFrom, effectiveTo: ruleForm.effectiveTo || null,
+        sourceReference: ruleForm.sourceReference.trim(), verifiedAt: ruleForm.verifiedAt,
+        active: true
+      });
+      await loadRuns();
+      setSuccess('Regla legal guardada para esta empresa. Se aplicará solo en los períodos y periodicidades de su vigencia.');
+      setRuleForm(current => ({ ...current, code: '', description: '', workerRate: '', employerRate: '', baseCap: '', effectiveTo: '', sourceReference: '' }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo guardar la regla legal.');
+    } finally { setSavingRule(false); }
+  };
+
   const calculateAnnualRights = async (employeeId: string) => {
     if (legalCalcLoading || !window.sicovenStore) return;
     const values = legalCalcInputs[employeeId] || {
