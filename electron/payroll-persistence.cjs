@@ -341,7 +341,7 @@ function getPayrollRun(db, companyId, runId) {
 }
 
 function confirmPayrollRun(db, companyId, runId, journalEntryId) {
-  ensureCompany(db, companyId);
+  const company = ensureCompany(db, companyId);
   const id = text(runId, 'Nómina', 120);
   const journalId = text(journalEntryId, 'Asiento contable', 120);
   const confirm = db.transaction(() => {
@@ -368,6 +368,17 @@ function confirmPayrollRun(db, companyId, runId, journalEntryId) {
         !Number.isFinite(Number(journal.bcvRate)) || Number(journal.bcvRate) <= 0) {
       throw new Error('El asiento de nómina no tiene fecha, tasa BCV o líneas contables válidas para el período.');
     }
+    const rates = Array.isArray(company.inventoryBcvRateHistory) ? company.inventoryBcvRateHistory
+      .filter(item => item && item.effectiveDate <= run.periodEnd && Number.isFinite(Number(item.rate)) && Number(item.rate) > 0)
+      .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate) || String(b.fetchedAt || '').localeCompare(String(a.fetchedAt || ''))) : [];
+    const applicableRate = rates[0];
+    const rateAgeDays = applicableRate
+      ? Math.floor((Date.parse(run.periodEnd + 'T00:00:00Z') - Date.parse(applicableRate.effectiveDate + 'T00:00:00Z')) / 86400000)
+      : Infinity;
+    if (!applicableRate || rateAgeDays < 0 || rateAgeDays > 7 ||
+        Math.abs(Number(journal.bcvRate) - Number(applicableRate.rate)) > 0.0001) {
+      throw new Error('El asiento debe usar la tasa BCV histórica guardada, vigente al cierre del período de nómina.');
+    }
     let debitBs = 0, creditBs = 0, debitUsd = 0, creditUsd = 0;
     for (const item of journal.items) {
       const values = ['debitBs','creditBs','debitUsd','creditUsd'].map(key => Number(item[key]));
@@ -380,6 +391,20 @@ function confirmPayrollRun(db, companyId, runId, journalEntryId) {
     const balanced = (debit, credit) => debit > 0 && credit > 0 && Math.abs(debit - credit) <= 0.01;
     if (!balanced(debitBs, creditBs) || !balanced(debitUsd, creditUsd)) {
       throw new Error('El asiento de nómina debe estar cuadrado en bolívares y dólares antes de confirmarse.');
+    }
+    const totals = JSON.parse(run.totalsJson);
+    const amountFor = (code, side) => journal.items
+      .filter(item => String(item.accountCode) === code)
+      .reduce((sum, item) => sum + Number(item[side] || 0), 0);
+    const expectedAmounts = [
+      ['6.1.1.01', 'debitBs', Number(totals.grossEarnings || 0)],
+      ['6.1.1.12', 'debitBs', Number(totals.employerContributions || 0)],
+      ['2.1.3.01', 'creditBs', Number(totals.netPay || 0)],
+      ['2.1.3.03', 'creditBs', Number(totals.workerLegalDeductions || 0) + Number(totals.employerContributions || 0)],
+      ['2.1.3.04', 'creditBs', Number(totals.otherDeductions || 0)]
+    ];
+    if (expectedAmounts.some(([code, side, expected]) => Math.abs(amountFor(code, side) - expected) > 0.01)) {
+      throw new Error('Los importes del asiento no coinciden con los totales guardados de esta nómina.');
     }
 
     const now = new Date().toISOString();
