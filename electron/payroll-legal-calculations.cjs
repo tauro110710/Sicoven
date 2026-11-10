@@ -49,6 +49,54 @@ function completeCalendarMonths(fromDate, toDate) {
 }
 
 /**
+ * Resolves the monthly/daily salary base for vacation under LOTTT art. 121.
+ * For piecework, commission or other variable pay, callers must supply the
+ * normal salary from the three immediately preceding months.
+ */
+function calculateVacationSalaryBasis(input) {
+  const type = String(input.salaryType || '');
+  let monthly;
+  let monthsAveraged = 1;
+  if (type === 'FIXED') {
+    monthly = money(input.lastMonthNormalSalary, 'Salario normal del mes anterior');
+  } else if (type === 'VARIABLE') {
+    const values = input.previousThreeMonthsNormalSalary;
+    if (!Array.isArray(values) || values.length !== 3) {
+      throw new Error('Para salario variable de vacaciones se requieren los tres meses inmediatamente anteriores.');
+    }
+    monthly = round2(values.reduce((sum, value) => sum + money(value, 'Salario normal mensual'), 0) / 3);
+    monthsAveraged = 3;
+  } else {
+    throw new Error('Indique si el salario para vacaciones es fijo o variable.');
+  }
+  return { monthlySalary: monthly, dailySalary: round2(monthly / 30), monthsAveraged, legalBasis: 'LOTTT art. 121' };
+}
+
+/**
+ * Resolves the salary base for severance under LOTTT art. 122.
+ * Variable salary averages six preceding months and must include all salary
+ * concepts plus the legally applicable vacation-bonus/profit-sharing aliquots.
+ */
+function calculateSeveranceSalaryBasis(input) {
+  const type = String(input.salaryType || '');
+  let monthly;
+  let monthsAveraged = 1;
+  if (type === 'FIXED') {
+    monthly = money(input.lastMonthlyIntegratedSalary, 'Último salario mensual integrado');
+  } else if (type === 'VARIABLE') {
+    const values = input.previousSixMonthsIntegratedSalary;
+    if (!Array.isArray(values) || values.length !== 6) {
+      throw new Error('Para prestaciones con salario variable se requieren los seis meses inmediatamente anteriores.');
+    }
+    monthly = round2(values.reduce((sum, value) => sum + money(value, 'Salario mensual integrado'), 0) / 6);
+    monthsAveraged = 6;
+  } else {
+    throw new Error('Indique si el salario para prestaciones es fijo o variable.');
+  }
+  return { monthlySalary: monthly, dailySalary: round2(monthly / 30), monthsAveraged, legalBasis: 'LOTTT art. 122' };
+}
+
+/**
  * LOTTT annual rights for fixed or variable salary.
  * dailyNormalSalary must already reflect the legally appropriate salary basis
  * (normal salary; variable salary uses the applicable statutory average).
@@ -124,4 +172,4 @@ function calculateSeverance(input) {
   };
 }
 
-module.exports = { completedYears, completeCalendarMonths, calculateAnnualLaborRights, calculateSeverance };
+module.exports = { completedYears, completeCalendarMonths, calculateVacationSalaryBasis, calculateSeveranceSalaryBasis, calculateAnnualLaborRights, calculateSeverance };
