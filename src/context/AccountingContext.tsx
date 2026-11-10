@@ -227,7 +227,7 @@ interface AccountingContextType {
 
   // Respaldo
   resetToSampleData: () => Promise<void>;
-  resetFactoryData: () => Promise<{ backupDestination?: string; removedCompanies?: number }>;
+  resetFactoryData: (backupConfirmed: boolean) => Promise<{ removedCompanies?: number }>;
   exportBackupJson: () => string;
   restoreBackupJson: (jsonData: string) => Promise<boolean>;
 }
@@ -6180,20 +6180,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     await waitForPersistence();
   };
 
-  const resetFactoryData = async (): Promise<{ backupDestination?: string; removedCompanies?: number }> => {
+  const resetFactoryData = async (backupConfirmed: boolean): Promise<{ removedCompanies?: number }> => {
     assertSQLitePersistenceReady('Restablecer SICOVEN de fábrica');
-    let resetResult: { backupDestination?: string; removedCompanies?: number } = {};
+    if (backupConfirmed !== true) throw new Error('Confirme que ya creó un Respaldo global antes de continuar.');
+    let resetResult: { removedCompanies?: number } = {};
     if (window.sicovenStore) {
       if (!storageReady) throw new Error('La base de datos todavía se está inicializando. Intente nuevamente.');
-      const result = await window.sicovenStore.resetAccounting(token);
+      const result = await window.sicovenStore.resetAccounting(token, { backupConfirmed });
       if (result?.canceled) throw new Error('El RESET DE FÁBRICA fue cancelado. No se modificaron los datos.');
       if (!result?.ok || !result.cleared || result.verified !== true) {
         throw new Error('SQLite no confirmó y verificó el RESET DE FÁBRICA.');
       }
-      resetResult = {
-        backupDestination: result.backupDestination,
-        removedCompanies: result.removedCompanies
-      };
+      resetResult = { removedCompanies: result.removedCompanies };
     }
     setCompanies([]);
     setCurrentCompanyId('');
