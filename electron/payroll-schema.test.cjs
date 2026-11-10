@@ -11,7 +11,7 @@ test('initializes payroll tables idempotently inside each company tenant', () =>
     const first = initializeTenantDatabase(db);
     const second = initializeTenantDatabase(db);
     assert.deepEqual(first.operationalTables, second.operationalTables);
-    for (const name of ['payroll_employees', 'payroll_salary_history', 'payroll_legal_rules', 'payroll_runs', 'payroll_run_lines']) {
+    for (const name of ['payroll_employees', 'payroll_salary_history', 'payroll_legal_rules', 'payroll_runs', 'payroll_run_lines', 'payroll_severance_deposits', 'payroll_severance_interest_months']) {
       assert.ok(first.operationalTables.includes(name));
       assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
     }
