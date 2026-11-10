@@ -6,6 +6,12 @@ import { buildPayrollJournalItems } from '../../utils/payrollAccounting';
 import { Users, UserPlus, RefreshCw, AlertCircle, CheckCircle2, Calculator, FileText, Printer, BookCheck } from 'lucide-react';
 
 type SalaryHistory = { id: string; effectiveFrom: string; effectiveTo: string | null; baseSalary: number; source: string };
+type PayrollLegalRule = {
+  id: string; code: string; description: string; base: 'normalSalary'|'integralSalary'|'grossSalary';
+  frequencyScope: 'ALL'|'WEEKLY'|'BIWEEKLY'; workerRate: number; employerRate: number;
+  baseCap: number|null; effectiveFrom: string; effectiveTo: string|null;
+  sourceReference: string; verifiedAt: string; active: boolean;
+};
 
 type Employee = {
   id: string; companyId: string; fiscalId: string; fullName: string; hireDate: string;
@@ -42,9 +48,17 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   const [legalCalcLoading, setLegalCalcLoading] = useState<string | null>(null);
   const [legalCalcInputs, setLegalCalcInputs] = useState<Record<string, {salaryType:'FIXED'|'VARIABLE';lastMonth:string;month1:string;month2:string;month3:string;asOfDate:string;fiscalYearStart:string}>>({});
   const [legalCalcResults, setLegalCalcResults] = useState<Record<string, {salaryBasis:{monthlySalary:number;dailySalary:number;monthsAveraged:number;legalBasis:string};completedYears:number;vacationDays:number;vacationPay:number;vacationBonusDays:number;vacationBonus:number;profitSharingMinimumDays:number;profitSharingMinimum:number;profitSharingMaximumDays:number;profitSharingMaximum:number;monthsInFiscalYear:number;sources:string[]}>>({});
-  const [legalRules, setLegalRules] = useState<Array<{code:string;base:'normalSalary'|'integralSalary'|'grossSalary';effectiveFrom:string;effectiveTo:string|null;active:boolean}>>([]);
+  const [legalRules, setLegalRules] = useState<PayrollLegalRule[]>([]);
+  const [ruleForm, setRuleForm] = useState({
+    code: '', description: '', base: 'normalSalary' as 'normalSalary'|'integralSalary'|'grossSalary',
+    frequencyScope: 'ALL' as 'ALL'|'WEEKLY'|'BIWEEKLY', workerRate: '', employerRate: '',
+    baseCap: '', effectiveFrom: new Date().toISOString().slice(0,10), effectiveTo: '',
+    sourceReference: '', verifiedAt: new Date().toISOString().slice(0,10)
+  });
+  const [savingRule, setSavingRule] = useState(false);
   const requiredBaseFields = new Set(legalRules
-    .filter(rule => rule.active && rule.effectiveFrom <= periodEnd && (!rule.effectiveTo || rule.effectiveTo >= periodEnd))
+    .filter(rule => rule.active && (rule.frequencyScope === 'ALL' || rule.frequencyScope === runFrequency) &&
+      rule.effectiveFrom <= periodEnd && (!rule.effectiveTo || rule.effectiveTo >= periodEnd))
     .map(rule => rule.base));
 
 
