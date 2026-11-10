@@ -38,6 +38,10 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   const [creatingRun, setCreatingRun] = useState(false);
   const [postingRun, setPostingRun] = useState<string | null>(null);
   const [pdfRun, setPdfRun] = useState<string | null>(null);
+  const [legalCalcOpen, setLegalCalcOpen] = useState<string | null>(null);
+  const [legalCalcLoading, setLegalCalcLoading] = useState<string | null>(null);
+  const [legalCalcInputs, setLegalCalcInputs] = useState<Record<string, {salaryType:'FIXED'|'VARIABLE';lastMonth:string;month1:string;month2:string;month3:string;asOfDate:string;fiscalYearStart:string}>>({});
+  const [legalCalcResults, setLegalCalcResults] = useState<Record<string, {salaryBasis:{monthlySalary:number;dailySalary:number;monthsAveraged:number;legalBasis:string};completedYears:number;vacationDays:number;vacationPay:number;vacationBonusDays:number;vacationBonus:number;profitSharingMinimumDays:number;profitSharingMinimum:number;profitSharingMaximumDays:number;profitSharingMaximum:number;monthsInFiscalYear:number;sources:string[]}>>({});
   const [legalRules, setLegalRules] = useState<Array<{code:string;base:'normalSalary'|'integralSalary'|'grossSalary';effectiveFrom:string;effectiveTo:string|null;active:boolean}>>([]);
   const requiredBaseFields = new Set(legalRules
     .filter(rule => rule.active && rule.effectiveFrom <= periodEnd && (!rule.effectiveTo || rule.effectiveTo >= periodEnd))
@@ -109,6 +113,36 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
     } finally { setCreatingRun(false); }
   };
 
+
+  const calculateAnnualRights = async (employeeId: string) => {
+    if (legalCalcLoading || !window.sicovenStore) return;
+    const values = legalCalcInputs[employeeId] || {
+      salaryType: 'FIXED' as const, lastMonth: '', month1: '', month2: '', month3: '',
+      asOfDate: new Date().toISOString().slice(0,10), fiscalYearStart: new Date().getFullYear() + '-01-01'
+    };
+    if (values.salaryType === 'FIXED' && (!Number.isFinite(Number(values.lastMonth)) || Number(values.lastMonth) <= 0)) {
+      setError('Indique el salario normal del mes anterior para calcular vacaciones y beneficios.');
+      return;
+    }
+    if (values.salaryType === 'VARIABLE' && [values.month1,values.month2,values.month3].some(value => !Number.isFinite(Number(value)) || Number(value) <= 0)) {
+      setError('Para salario variable se requieren los tres salarios normales mensuales anteriores.');
+      return;
+    }
+    setLegalCalcLoading(employeeId); setError(''); setSuccess('');
+    try {
+      const result = await window.sicovenStore.calculatePayrollAnnualRights(token, {
+        employeeId, asOfDate: values.asOfDate, fiscalYearStart: values.fiscalYearStart,
+        salaryType: values.salaryType,
+        ...(values.salaryType === 'FIXED'
+          ? { lastMonthNormalSalary: Number(values.lastMonth) }
+          : { previousThreeMonthsNormalSalary: [values.month1,values.month2,values.month3].map(Number) })
+      });
+      setLegalCalcResults(current => ({ ...current, [employeeId]: result }));
+      setSuccess('Cálculo LOTTT actualizado para ' + result.fullName + '. Revise el salario base y el período antes de utilizarlo.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo calcular los beneficios LOTTT.');
+    } finally { setLegalCalcLoading(null); }
+  };
 
   const postPayrollRun = async (runId: string) => {
     if (postingRun || !window.sicovenStore || !isStorageReady) return;
@@ -294,6 +328,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
               <div><p className="font-semibold text-slate-900">{employee.fullName}</p><p className="text-xs text-slate-500">{employee.fiscalId} · {employee.position || 'Sin cargo indicado'}</p></div>
               <div className="flex flex-wrap items-center gap-2"><div className="text-right"><p className="text-sm font-semibold text-slate-800">Bs. {employee.baseSalary.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p><p className="text-xs text-slate-500">{employee.frequency === 'WEEKLY' ? 'Semanal' : 'Quincenal'}</p></div>
                 <button type="button" onClick={() => void toggleSalaryHistory(employee.id)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">{historyLoading === employee.id ? 'Cargando…' : historyOpen === employee.id ? 'Ocultar historial' : 'Historial'}</button>
+                <button type="button" onClick={() => setLegalCalcOpen(current => current === employee.id ? null : employee.id)} className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-50">{legalCalcOpen === employee.id ? 'Cerrar cálculos' : 'Cálculos LOTTT'}</button>
                 <button type="button" onClick={() => { setEditingId(employee.id); setForm({ fiscalId: employee.fiscalId, fullName: employee.fullName, hireDate: employee.hireDate, position: employee.position || '', costCenter: employee.costCenter || '', frequency: employee.frequency, baseSalary: String(employee.baseSalary), salaryEffectiveFrom: new Date().toISOString().slice(0,10) }); setError(''); setSuccess(''); }} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Editar</button>
               </div>
             </div>
@@ -303,6 +338,51 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
                 <span className="text-slate-600">{item.effectiveFrom} – {item.effectiveTo || 'Vigente'}</span>
                 <span className="font-semibold text-slate-800">Bs. {item.baseSalary.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
               </div>)}
+            </div>}
+            {legalCalcOpen === employee.id && <div className="mt-3 space-y-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
+              <div><p className="font-semibold text-slate-800">Vacaciones, bono vacacional y utilidades</p><p className="text-xs text-slate-600">Cálculo bajo LOTTT. Introduzca el salario normal aplicable; el salario contractual semanal/quincenal no se convierte automáticamente.</p></div>
+              {(() => {
+                const values = legalCalcInputs[employee.id] || {
+                  salaryType: 'FIXED' as const, lastMonth: '', month1: '', month2: '', month3: '',
+                  asOfDate: new Date().toISOString().slice(0,10), fiscalYearStart: new Date().getFullYear() + '-01-01'
+                };
+                const setField = (field: keyof typeof values, value: string) => setLegalCalcInputs(current => ({
+                  ...current, [employee.id]: { ...values, [field]: value }
+                }));
+                const result = legalCalcResults[employee.id];
+                return <>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <label className="space-y-1 text-xs font-medium text-slate-700">Tipo de salario
+                      <select value={values.salaryType} onChange={e=>setField('salaryType',e.target.value as 'FIXED'|'VARIABLE')} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2">
+                        <option value="FIXED">Fijo</option><option value="VARIABLE">Variable (comisión/destajo)</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-xs font-medium text-slate-700">Fecha de cálculo
+                      <input type="date" value={values.asOfDate} onChange={e=>setField('asOfDate',e.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/>
+                    </label>
+                    <label className="space-y-1 text-xs font-medium text-slate-700">Inicio del ejercicio
+                      <input type="date" value={values.fiscalYearStart} onChange={e=>setField('fiscalYearStart',e.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/>
+                    </label>
+                  </div>
+                  {values.salaryType === 'FIXED'
+                    ? <label className="block max-w-sm space-y-1 text-xs font-medium text-slate-700">Salario normal del mes anterior (Bs.)
+                        <input type="number" min="0.01" step="0.01" value={values.lastMonth} onChange={e=>setField('lastMonth',e.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2"/>
+                      </label>
+                    : <div className="grid gap-2 sm:grid-cols-3">{(['month1','month2','month3'] as const).map((field,index)=><label key={field} className="space-y-1 text-xs font-medium text-slate-700">Mes anterior {index+1} (Bs.)
+                        <input type="number" min="0.01" step="0.01" value={values[field]} onChange={e=>setField(field,e.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2"/>
+                      </label>)}</div>}
+                  <button type="button" onClick={()=>void calculateAnnualRights(employee.id)} disabled={legalCalcLoading===employee.id} className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{legalCalcLoading===employee.id?'Calculando…':'Calcular beneficios'}</button>
+                  {result && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="rounded-lg border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Vacaciones · {result.vacationDays} días</p><p className="font-bold text-slate-900">Bs. {result.vacationPay.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p></div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Bono vacacional · {result.vacationBonusDays} días</p><p className="font-bold text-slate-900">Bs. {result.vacationBonus.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p></div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Utilidades · mínimo ({result.profitSharingMinimumDays} días)</p><p className="font-bold text-slate-900">Bs. {result.profitSharingMinimum.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p></div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Utilidades · máximo ({result.profitSharingMaximumDays} días)</p><p className="font-bold text-slate-900">Bs. {result.profitSharingMaximum.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p></div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Salario normal diario aplicado</p><p className="font-bold text-slate-900">Bs. {result.salaryBasis.dailySalary.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p></div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Antigüedad</p><p className="font-bold text-slate-900">{result.completedYears} años · {result.monthsInFiscalYear} meses del ejercicio</p></div>
+                  </div>}
+                  <p className="text-xs text-slate-500">Base: LOTTT arts. 121, 131, 190 y 192. El importe real de utilidades depende de la participación en beneficios líquidos y su distribución; este cálculo muestra el mínimo y máximo individual, no inventa el beneficio de la empresa.</p>
+                </>;
+              })()}
             </div>}
           </div>)}</div>}
       </section>
