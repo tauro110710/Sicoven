@@ -591,9 +591,11 @@ function savePayrollSeveranceInterestMonth(db, companyId, input) {
   ensureCompany(db, companyId);
   if(!input||typeof input!=='object'||Array.isArray(input)) throw new Error('El interés mensual es inválido.');
   const employeeId=text(input.employeeId,'Trabajador',120);
-  if(!db.prepare('SELECT id FROM payroll_employees WHERE id=? AND company_id=?').get(employeeId,companyId)) throw new Error('El trabajador no pertenece a la empresa activa.');
+  const employee=db.prepare('SELECT id,hire_date AS hireDate FROM payroll_employees WHERE id=? AND company_id=?').get(employeeId,companyId);
+  if(!employee) throw new Error('El trabajador no pertenece a la empresa activa.');
   const month=text(input.month,'Mes de cálculo',7);
-  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('El mes debe usar AAAA-MM.');
+  if(!/^\\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('El mes debe usar AAAA-MM.');
+  if(month<employee.hireDate.slice(0,7)) throw new Error('El mes de intereses no puede ser anterior al ingreso del trabajador.');
   const mode=String(input.mode||'');
   if(!['TRUST_OR_FUND','AUTHORIZED_BOOK_CREDIT','UNDEPOSITED'].includes(mode)) throw new Error('Seleccione el régimen de intereses aplicable.');
   const capital=positiveOrZero(input.capital,'Capital del mes');
