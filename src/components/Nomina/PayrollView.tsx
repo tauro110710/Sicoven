@@ -17,7 +17,10 @@ const emptyForm: { fiscalId: string; fullName: string; hireDate: string; positio
 
 export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   const { currentCompany } = useAccounting();
-  const [employees, setEmployees] = useState<Employee[]>([]);\n  const [salaryHistory, setSalaryHistory] = useState<Record<string, SalaryHistory[]>>({});\n  const [historyOpen, setHistoryOpen] = useState<string | null>(null);\n  const [historyLoading, setHistoryLoading] = useState<string | null>(null);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [salaryHistory, setSalaryHistory] = useState<Record<string, SalaryHistory[]>>({});
+  const [historyOpen, setHistoryOpen] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
