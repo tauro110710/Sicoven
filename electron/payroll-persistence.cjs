@@ -402,6 +402,11 @@ function confirmPayrollRun(db, companyId, runId, journalEntryId) {
     if (!balanced(debitBs, creditBs) || !balanced(debitUsd, creditUsd)) {
       throw new Error('El asiento de nómina debe estar cuadrado en bolívares y dólares antes de confirmarse.');
     }
+    const expectedDebitUsd = Math.round((debitBs / Number(applicableRate.rate)) * 100) / 100;
+    const expectedCreditUsd = Math.round((creditBs / Number(applicableRate.rate)) * 100) / 100;
+    if (Math.abs(debitUsd - expectedDebitUsd) > 0.05 || Math.abs(creditUsd - expectedCreditUsd) > 0.05) {
+      throw new Error('Los importes en dólares no corresponden a la tasa BCV histórica del período.');
+    }
     const totals = JSON.parse(run.totalsJson);
     const amountFor = (code, side) => journal.items
       .filter(item => String(item.accountCode) === code)
