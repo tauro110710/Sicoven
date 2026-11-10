@@ -124,7 +124,7 @@ function savePayrollEmployee(db, companyId, input) {
 function listPayrollLegalRules(db, companyId) {
   ensureCompany(db, companyId);
   return db.prepare(`SELECT id,company_id AS companyId,code,description,base_key AS base,
-    worker_rate AS workerRate,employer_rate AS employerRate,base_cap AS baseCap,
+    frequency_scope AS frequencyScope,worker_rate AS workerRate,employer_rate AS employerRate,base_cap AS baseCap,
     effective_from AS effectiveFrom,effective_to AS effectiveTo,
     source_reference AS sourceReference,verified_at AS verifiedAt,
     applicability_json AS applicabilityJson,active FROM payroll_legal_rules
@@ -139,6 +139,8 @@ function savePayrollLegalRule(db, companyId, input) {
   const description = text(input.description, 'Descripción', 240);
   const base = String(input.base || '');
   if (!['normalSalary', 'integralSalary', 'grossSalary'].includes(base)) throw new Error('La base de cálculo no está permitida.');
+  const frequencyScope = String(input.frequencyScope || 'ALL');
+  if (!['ALL','WEEKLY','BIWEEKLY'].includes(frequencyScope)) throw new Error('La periodicidad de aplicación de la regla no es válida.');
   const workerRate = Number(input.workerRate), employerRate = Number(input.employerRate);
   for (const [label, rate] of [['trabajador', workerRate], ['patronal', employerRate]]) {
     if (!Number.isFinite(rate) || rate < 0 || rate > 1) throw new Error('La tasa ' + label + ' debe estar entre 0 y 1.');
@@ -156,19 +158,20 @@ function savePayrollLegalRule(db, companyId, input) {
   if (input.id && !existing) throw new Error('La regla no existe en la empresa activa.');
   const overlapping = db.prepare(`SELECT id FROM payroll_legal_rules
     WHERE company_id=? AND code=? AND id<>?
+      AND (frequency_scope='ALL' OR ?='ALL' OR frequency_scope=?)
       AND effective_from<=COALESCE(?, '9999-12-31')
-      AND COALESCE(effective_to, '9999-12-31')>=?`).get(companyId, code, id, effectiveTo, effectiveFrom);
-  if (overlapping) throw new Error('La vigencia de esta regla se solapa con otra versión del mismo código.');
+      AND COALESCE(effective_to, '9999-12-31')>=?`).get(companyId, code, id, frequencyScope, frequencyScope, effectiveTo, effectiveFrom);
+  if (overlapping) throw new Error('La vigencia de esta regla se solapa con otra versión del mismo código y periodicidad.');
   db.prepare(`INSERT INTO payroll_legal_rules
-    (id,company_id,code,description,base_key,worker_rate,employer_rate,base_cap,effective_from,effective_to,
+    (id,company_id,code,description,base_key,frequency_scope,worker_rate,employer_rate,base_cap,effective_from,effective_to,
      source_reference,verified_at,applicability_json,active)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET description=excluded.description,base_key=excluded.base_key,
-    worker_rate=excluded.worker_rate,employer_rate=excluded.employer_rate,base_cap=excluded.base_cap,
+    frequency_scope=excluded.frequency_scope,worker_rate=excluded.worker_rate,employer_rate=excluded.employer_rate,base_cap=excluded.base_cap,
     effective_from=excluded.effective_from,effective_to=excluded.effective_to,
     source_reference=excluded.source_reference,verified_at=excluded.verified_at,
     applicability_json=excluded.applicability_json,active=excluded.active`)
-    .run(id, companyId, code, description, base, workerRate, employerRate, baseCap, effectiveFrom,
+    .run(id, companyId, code, description, base, frequencyScope, workerRate, employerRate, baseCap, effectiveFrom,
       effectiveTo, sourceReference, verifiedAt, applicability, active);
   db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
     .run(existing ? 'payroll_legal_rule_updated' : 'payroll_legal_rule_created',
@@ -176,7 +179,7 @@ function savePayrollLegalRule(db, companyId, input) {
   return listPayrollLegalRules(db, companyId).find(item => item.id === id);
 }
 
-function calculateEmployeeDraft(db, companyId, employee, input, periodEnd) {
+function calculateEmployeeDraft(db, companyId, employee, input, periodEnd, frequency) {
   if (!input || !Array.isArray(input.earnings) || input.earnings.length === 0) throw new Error('Cada trabajador requiere al menos una asignación.');
   const salaryRecord = getPayrollSalaryForDate(db, companyId, employee.id, periodEnd);
   const suppliedBases = input.bases && typeof input.bases === 'object' && !Array.isArray(input.bases)
@@ -197,7 +200,7 @@ function calculateEmployeeDraft(db, companyId, employee, input, periodEnd) {
     effective_to AS effectiveTo,source_reference AS sourceReference,verified_at AS verifiedAt,
     applicability_json AS applicabilityJson
     FROM payroll_legal_rules WHERE company_id=? AND active=1 AND effective_from<=?
-    AND (effective_to IS NULL OR effective_to>=?) ORDER BY code`).all(companyId, periodEnd, periodEnd);
+    AND (effective_to IS NULL OR effective_to>=?) AND frequency_scope IN ('ALL',?) ORDER BY code`).all(companyId, periodEnd, periodEnd, frequency);
   const requiredBases = new Set(rules.map(rule => rule.base));
   const bases = {};
   for (const key of ['normalSalary', 'integralSalary', 'grossSalary']) {
@@ -271,7 +274,7 @@ function createPayrollRun(db, companyId, input) {
       FROM payroll_employees WHERE id=? AND company_id=?`).get(employeeId, companyId);
     if (!employee || !employee.active) throw new Error('Un trabajador no pertenece a la empresa activa o está inactivo.');
     if (employee.frequency !== frequency) throw new Error('La periodicidad de ' + employee.fullName + ' no coincide con la nómina.');
-    return calculateEmployeeDraft(db, companyId, employee, item, periodEnd);
+    return calculateEmployeeDraft(db, companyId, employee, item, periodEnd, frequency);
   });
   const totals = calculations.reduce((sum, item) => ({
     grossEarnings: sum.grossEarnings + item.grossEarnings,
