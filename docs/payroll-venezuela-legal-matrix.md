@@ -16,9 +16,11 @@ Las obligaciones deben conservar códigos, bases, topes, periodicidad, condició
 
 ## LOTTT — beneficios del trabajador
 
+- Art. 121: vacaciones con salario normal del mes efectivo de labores inmediatamente anterior; si el salario es por unidad de obra, pieza, destajo o comisión, promedio del salario normal de los tres meses inmediatamente anteriores. No confundir con los seis meses del art. 122.
 - Art. 190: vacaciones anuales de 15 días hábiles al cumplir el primer año y un día adicional por año de servicio, hasta 15 adicionales.
 - Art. 192: bono vacacional mínimo de 15 días de salario normal, más un día por año hasta 30 días.
 - Art. 131: distribución de al menos 15% de los beneficios líquidos; para cada trabajador el límite mínimo equivale a 30 días de salario y el máximo a cuatro meses. Si no laboró todo el año, se reduce proporcionalmente por meses completos. No calcular utilidades solo como una provisión plana: debe distinguirse la participación real y el mínimo legal.
+- Art. 122: para prestaciones e indemnizaciones, último salario integrado; si el salario es variable, promedio de los seis meses inmediatamente anteriores, integrando todos los conceptos salariales y las alícuotas legalmente aplicables de bono vacacional y utilidades.
 - Art. 142: garantía de prestaciones de 15 días por trimestre, más 2 días por año después del primero, acumulativos hasta 30; al terminar la relación se compara la garantía con 30 días por año o fracción superior a seis meses y se paga el mayor, con las reglas especiales de los primeros tres meses.
 
 ## Parámetros requeridos sin convertir el módulo en un ERP
@@ -36,4 +38,4 @@ La configuración inicial debe ser breve y por empresa: clasificación de riesgo
 
 ## Estado
 
-Los cálculos LOTTT en `payroll-legal-calculations.cjs` son funciones aisladas iniciales y están cubiertos por pruebas unitarias. No deben confundirse con una nómina lista para confirmar: aún falta la integración de promedios salariales variables, utilidades reales/prorrateo fiscal, calendario trimestral de prestaciones, configuración legal por empresa, recibos y asientos contables.
+Los cálculos LOTTT en `payroll-legal-calculations.cjs` son funciones aisladas iniciales y están cubiertos por pruebas unitarias. Se incorporaron bases separadas para salario variable: promedio de tres meses para vacaciones (art. 121) y seis meses para prestaciones (art. 122). Estas funciones exigen que quien las invoque suministre los meses inmediatamente anteriores y, para prestaciones, los conceptos salariales y alícuotas aplicables. Todavía no están conectadas al flujo de nómina ni al historial de remuneraciones. No debe confundirse esta base aislada con una nómina lista para confirmar: aún falta integrar utilidades reales/prorrateo fiscal, calendario trimestral de prestaciones, configuración legal por empresa, recibos y asientos contables.
