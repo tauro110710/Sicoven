@@ -138,7 +138,7 @@ test('creates an immutable draft payroll snapshot and prevents duplicate periods
     assert.equal(run.totals.netPay, 940);
     assert.equal(listPayrollRuns(db, 'co-a').length, 1);
     const saved = db.prepare('SELECT calculation_snapshot_json FROM payroll_runs WHERE id=?').get(run.id);
-    assert.match(saved.calculation_snapshot_json, /RULE-TEST/);
+    assert.match(saved.calculation_snapshot_json, /RULE-TEST/);\n    const snapshot = JSON.parse(saved.calculation_snapshot_json);\n    assert.equal(snapshot.employees[0].salaryRecord.baseSalary, 1200);\n    assert.equal(snapshot.employees[0].salaryRecord.effectiveFrom, '2024-05-01');
     assert.throws(() => createPayrollRun(db, 'co-a', {
       frequency: 'BIWEEKLY', periodStart: '2026-06-01', periodEnd: '2026-06-15',
       employees: [{ employeeId: employee.id, earnings: [{code:'SAL',description:'Salario',amount:1000}], bases:{normalSalary:1000,integralSalary:1000,grossSalary:1000} }]
