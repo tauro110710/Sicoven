@@ -134,8 +134,10 @@ function calculateAnnualLaborRights(input) {
 }
 
 /**
- * LOTTT art. 142: quarterly guarantee, additional seniority days and
- * termination comparison. Does not calculate interest or final settlement.
+ * LOTTT art. 142: compares historical quarterly and seniority deposits
+ * (each with its own integral-salary basis) against the termination amount.
+ * It intentionally refuses to estimate past deposits from today's salary.
+ * Does not calculate interest or final settlement.
  */
 function calculateSeverance(input) {
   const hire = validDate(input.hireDate, 'Fecha de ingreso');
@@ -145,9 +147,23 @@ function calculateSeverance(input) {
   const monthsElapsed = completedCalendarMonths(hire, asOf);
   const years = Math.floor(monthsElapsed / 12);
   const quarters = Math.floor(monthsElapsed / 3);
-  const quarterlyGuaranteeDays = quarters * 15;
-  const additionalSeniorityDays = years > 1 ? Math.min(30, (years - 1) * 2) : 0;
-  const guaranteeDays = quarterlyGuaranteeDays + additionalSeniorityDays;
+  if (!Array.isArray(input.quarterlyDeposits)) {
+    throw new Error('Para comparar la garantía se requiere el historial de depósitos trimestrales con el salario integral de cada trimestre.');
+  }
+  if (!Array.isArray(input.additionalSeniorityDeposits)) {
+    throw new Error('Para comparar la garantía se requiere el historial de depósitos adicionales por antigüedad.');
+  }
+  const sumDeposits = (items, label) => items.reduce((sum, item) => {
+    const days = money(item.days, label + ' — días');
+    const depositDailySalary = money(item.dailyIntegralSalary, label + ' — salario diario integral');
+    if (days <= 0) throw new Error(label + ' debe registrar días mayores que cero.');
+    return sum + round2(days * depositDailySalary);
+  }, 0);
+  const quarterlyGuaranteeAmount = round2(sumDeposits(input.quarterlyDeposits, 'Depósito trimestral'));
+  const additionalSeniorityAmount = round2(sumDeposits(input.additionalSeniorityDeposits, 'Depósito adicional'));
+  const quarterlyGuaranteeDays = round2(input.quarterlyDeposits.reduce((sum, item) => sum + money(item.days, 'Días trimestrales'), 0));
+  const additionalSeniorityDays = round2(input.additionalSeniorityDeposits.reduce((sum, item) => sum + money(item.days, 'Días adicionales'), 0));
+  const guaranteeDays = round2(quarterlyGuaranteeDays + additionalSeniorityDays);
   const beforeThreeMonths = asOf < addMonthsClamped(hire, 3);
   const completedMonthDate = addMonthsClamped(hire, monthsElapsed);
   const serviceMonthsForFirstThree = monthsElapsed + (asOf > completedMonthDate ? 1 : 0);
@@ -155,7 +171,7 @@ function calculateSeverance(input) {
   const terminationDays = beforeThreeMonths
     ? serviceMonthsForFirstThree * 5
     : (years + (exceedsSixMonthFraction ? 1 : 0)) * 30;
-  const guaranteeAmount = round2(guaranteeDays * daily);
+  const guaranteeAmount = round2(quarterlyGuaranteeAmount + additionalSeniorityAmount);
   const terminationAmount = round2(terminationDays * daily);
   return {
     completedYears: years,
