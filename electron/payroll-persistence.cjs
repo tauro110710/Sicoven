@@ -130,19 +130,19 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
     if (!actor) throw new Error('La sesión expiró. Inicie sesión nuevamente.');
     return actor;
   };
-  ipcMain.handle('sicoven:payroll-employees-list', (_event, token) => {
+  ipcMain.handle('sicoven:payroll-employees-list', async (_event, token) => {
     authenticate(token);
     return withDatabase(token, (db, companyId) => listPayrollEmployees(db, companyId));
   });
-  ipcMain.handle('sicoven:payroll-employee-save', (_event, token, input) => {
+  ipcMain.handle('sicoven:payroll-employee-save', async (_event, token, input) => {
     authenticate(token);
     return withDatabase(token, (db, companyId) => savePayrollEmployee(db, companyId, input));
   });
-  ipcMain.handle('sicoven:payroll-rules-list', (_event, token) => {
+  ipcMain.handle('sicoven:payroll-rules-list', async (_event, token) => {
     authenticate(token);
     return withDatabase(token, (db, companyId) => listPayrollLegalRules(db, companyId));
   });
-  ipcMain.handle('sicoven:payroll-rule-save', (_event, token, input) => {
+  ipcMain.handle('sicoven:payroll-rule-save', async (_event, token, input) => {
     authenticate(token);
     return withDatabase(token, (db, companyId) => savePayrollLegalRule(db, companyId, input));
   });
