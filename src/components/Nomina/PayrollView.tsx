@@ -81,7 +81,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   const [interestResult, setInterestResult] = useState<Record<string, Record<string,unknown>>>({});
   const [depositForm, setDepositForm] = useState({depositDate:new Date().toISOString().slice(0,10),kind:'QUARTERLY' as 'QUARTERLY'|'SENIORITY'|'ADVANCE',days:'15',dailyIntegralSalary:'',sourceReference:'',verifiedAt:new Date().toISOString().slice(0,10)});
   const [interestForm, setInterestForm] = useState({month:new Date().toISOString().slice(0,7),mode:'UNDEPOSITED' as 'TRUST_OR_FUND'|'AUTHORIZED_BOOK_CREDIT'|'UNDEPOSITED',capital:'',monthlyRate:'',sourceReference:'',modeEvidence:'',verifiedAt:new Date().toISOString().slice(0,10)});
-  const [severanceCalcForm, setSeveranceCalcForm] = useState({asOfDate:new Date().toISOString().slice(0,10),dailyIntegralSalary:''});
+  const [severanceCalcForm, setSeveranceCalcForm] = useState({asOfDate:new Date().toISOString().slice(0,10),salaryType:'FIXED' as 'FIXED'|'VARIABLE',lastMonthlyIntegratedSalary:'',month1:'',month2:'',month3:'',month4:'',month5:'',month6:''});
 
   const requiredBaseFields = new Set(legalRules
     .filter(rule => rule.active && (rule.frequencyScope === 'ALL' || rule.frequencyScope === runFrequency) &&
@@ -432,10 +432,15 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
 
   const calculateSeveranceForEmployee = async (employeeId: string) => {
     if (severanceBusy || !window.sicovenStore) return;
-    if (!severanceCalcForm.dailyIntegralSalary.trim()) { setError('Indique el salario diario integral vigente a la fecha de corte.'); return; }
+    const salaryValues=severanceCalcForm.salaryType==='FIXED'
+      ? [severanceCalcForm.lastMonthlyIntegratedSalary]
+      : [severanceCalcForm.month1,severanceCalcForm.month2,severanceCalcForm.month3,severanceCalcForm.month4,severanceCalcForm.month5,severanceCalcForm.month6];
+    if (salaryValues.some(value=>!value.trim()||!Number.isFinite(Number(value))||Number(value)<=0)) { setError(severanceCalcForm.salaryType==='FIXED'?'Indique el último salario mensual integrado.':'Para salario variable se requieren los seis salarios mensuales integrados anteriores.'); return; }
     setSeveranceBusy(employeeId); setError('');
     try {
-      const result=await window.sicovenStore.calculatePayrollSeverance(token,{employeeId,asOfDate:severanceCalcForm.asOfDate,dailyIntegralSalary:Number(severanceCalcForm.dailyIntegralSalary)});
+      const result=await window.sicovenStore.calculatePayrollSeverance(token,{employeeId,asOfDate:severanceCalcForm.asOfDate,salaryType:severanceCalcForm.salaryType,
+        ...(severanceCalcForm.salaryType==='FIXED'?{lastMonthlyIntegratedSalary:Number(severanceCalcForm.lastMonthlyIntegratedSalary)}:
+          {previousSixMonthsIntegratedSalary:salaryValues.map(Number)})});
       setSeveranceResult(current=>({...current,[employeeId]:result as Record<string,unknown>}));
     } catch(e) { setSeveranceResult(current=>({...current,[employeeId]:{error:e instanceof Error?e.message:'No se pudo calcular las prestaciones.'}})); }
     finally { setSeveranceBusy(null); }
@@ -572,7 +577,9 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
                 {interestResult[employee.id] && <p className="mt-2 text-sm font-semibold text-slate-800">Intereses acumulados registrados: Bs. {Number(interestResult[employee.id].totalInterest||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p>}
               </div>
               <div className="border-t border-amber-200 pt-3"><p className="mb-2 text-xs font-bold text-slate-700">Comparar garantía y terminación (art. 142)</p>
-                <div className="grid gap-2 sm:grid-cols-2"><label className="space-y-1 text-xs text-slate-700">Fecha de corte<input type="date" value={severanceCalcForm.asOfDate} onChange={e=>setSeveranceCalcForm(v=>({...v,asOfDate:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label><label className="space-y-1 text-xs text-slate-700">Salario diario integral a la fecha (Bs.)<input type="number" min="0.01" step="0.01" value={severanceCalcForm.dailyIntegralSalary} onChange={e=>setSeveranceCalcForm(v=>({...v,dailyIntegralSalary:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label></div>
+                <div className="grid gap-2 sm:grid-cols-2"><label className="space-y-1 text-xs text-slate-700">Fecha de corte<input type="date" value={severanceCalcForm.asOfDate} onChange={e=>setSeveranceCalcForm(v=>({...v,asOfDate:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label><label className="space-y-1 text-xs text-slate-700">Tipo de salario integrado<select value={severanceCalcForm.salaryType} onChange={e=>setSeveranceCalcForm(v=>({...v,salaryType:e.target.value as 'FIXED'|'VARIABLE'}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"><option value="FIXED">Fijo · último mes</option><option value="VARIABLE">Variable · promedio seis meses</option></select></label>
+                  {severanceCalcForm.salaryType==='FIXED'?<label className="space-y-1 text-xs text-slate-700">Último salario mensual integrado (Bs.)<input type="number" min="0.01" step="0.01" value={severanceCalcForm.lastMonthlyIntegratedSalary} onChange={e=>setSeveranceCalcForm(v=>({...v,lastMonthlyIntegratedSalary:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>:<div className="grid grid-cols-2 gap-2 sm:col-span-2 sm:grid-cols-3">{(['month1','month2','month3','month4','month5','month6'] as const).map((field,index)=><label key={field} className="space-y-1 text-xs text-slate-700">Mes anterior {index+1} (Bs.)<input type="number" min="0.01" step="0.01" value={severanceCalcForm[field]} onChange={e=>setSeveranceCalcForm(v=>({...v,[field]:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>)}</div>}
+                </div>
                 <button type="button" onClick={()=>void calculateSeveranceForEmployee(employee.id)} disabled={severanceBusy===employee.id} className="mt-2 rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Calcular prestaciones</button>
                 {severanceResult[employee.id] && <div className="mt-2 rounded-lg bg-white p-3 text-sm">{severanceResult[employee.id].error ? <p className="text-rose-700">{String(severanceResult[employee.id].error)}</p> : <div className="grid gap-2 sm:grid-cols-2"><p>Garantía histórica: <strong>Bs. {Number(severanceResult[employee.id].guaranteeAmount||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p><p>Terminación: <strong>Bs. {Number(severanceResult[employee.id].terminationAmount||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p><p>Mayor importe legal: <strong>Bs. {Number(severanceResult[employee.id].greaterAmount||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p><p>Anticipos: <strong>Bs. {Number(severanceResult[employee.id].advanceTotal||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p><p>Saldo luego de anticipos: <strong>Bs. {Number(severanceResult[employee.id].netAfterAdvances||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p></div>}</div>}
               </div>
