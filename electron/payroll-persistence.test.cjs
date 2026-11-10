@@ -6,7 +6,7 @@ const Database = require('better-sqlite3');
 const { initializeTenantDatabase } = require('./tenant-schema.cjs');
 const {
   listPayrollEmployees, listPayrollSalaryHistory, getPayrollSalaryForDate, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
-  registerPayrollIpc, createPayrollRun, listPayrollRuns, getPayrollRun, confirmPayrollRun, listConfirmedSalaryEntries, calculatePayrollAnnualRights, calculatePayrollProfitSharing
+  registerPayrollIpc, createPayrollRun, listPayrollRuns, getPayrollRun, confirmPayrollRun, listConfirmedSalaryEntries, calculatePayrollAnnualRights, calculatePayrollProfitSharing, listPayrollSeveranceHistory, savePayrollSeveranceDeposit, savePayrollSeveranceInterestMonth, calculatePayrollSeverance, calculatePayrollSeveranceInterest
 } = require('./payroll-persistence.cjs');
 
 function setup() {
@@ -630,3 +630,80 @@ test('blocks profit-sharing distribution when a confirmed payroll crosses fiscal
     }), /cruza los límites del ejercicio/);
   } finally { db.close(); }
 });
+
+
+test('stores immutable historical severance deposits and monthly interest with auditable corrections', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-782', fullName: 'María Contreras', hireDate: '2026-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 1800
+    });
+    const deposit = savePayrollSeveranceDeposit(db, 'co-a', {
+      employeeId: employee.id, depositDate: '2026-03-31', kind: 'QUARTERLY',
+      days: 15, dailyIntegralSalary: 60, sourceReference: 'Comprobante bancario Q1',
+      verifiedAt: '2026-04-01'
+    });
+    assert.equal(deposit.amount, 900);
+    assert.throws(() => savePayrollSeveranceDeposit(db, 'co-a', {
+      employeeId: employee.id, depositDate: '2026-03-31', kind: 'QUARTERLY',
+      days: 15, dailyIntegralSalary: 65, sourceReference: 'Duplicado', verifiedAt: '2026-04-01'
+    }), /Ya existe un registro vigente/);
+    const corrected = savePayrollSeveranceDeposit(db, 'co-a', {
+      employeeId: employee.id, depositDate: '2026-03-31', kind: 'QUARTERLY',
+      days: 15, dailyIntegralSalary: 62, sourceReference: 'Comprobante rectificado',
+      verifiedAt: '2026-04-02', supersedesId: deposit.id
+    });
+    assert.equal(corrected.amount, 930);
+    const history = listPayrollSeveranceHistory(db, 'co-a', employee.id);
+    assert.equal(history.deposits.length, 1);
+    assert.equal(history.deposits[0].id, corrected.id);
+    assert.equal(history.deposits[0].supersedesId, deposit.id);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM payroll_severance_deposits').get().count, 2);
+    assert.throws(() => db.prepare('UPDATE payroll_severance_deposits SET amount=1 WHERE id=?').run(deposit.id), /append-only/);
+
+    const interest = savePayrollSeveranceInterestMonth(db, 'co-a', {
+      employeeId: employee.id, month: '2026-03', mode: 'UNDEPOSITED',
+      capital: 930, monthlyRate: 0.02, sourceReference: 'Tasa activa BCV documentada',
+      verifiedAt: '2026-04-05'
+    });
+    assert.equal(interest.interest, 18.6);
+    const revised = savePayrollSeveranceInterestMonth(db, 'co-a', {
+      employeeId: employee.id, month: '2026-03', mode: 'UNDEPOSITED',
+      capital: 930, monthlyRate: 0.021, sourceReference: 'Rectificación tasa BCV',
+      verifiedAt: '2026-04-06', supersedesId: interest.id
+    });
+    assert.equal(revised.interest, 19.53);
+    const interestResult = calculatePayrollSeveranceInterest(db, 'co-a', { employeeId: employee.id, mode: 'UNDEPOSITED' });
+    assert.equal(interestResult.totalInterest, 19.53);
+    assert.equal(interestResult.monthsCalculated, 1);
+    assert.equal(listPayrollSeveranceHistory(db, 'co-a', employee.id).interests.length, 1);
+    assert.throws(() => listPayrollSeveranceHistory(db, 'co-b', employee.id), /empresa activa/);
+    assert.throws(() => savePayrollSeveranceInterestMonth(db, 'co-a', {
+      employeeId: employee.id, month: '2026-13', mode: 'UNDEPOSITED', capital: 10,
+      monthlyRate: 0.02, sourceReference: 'Fuente', verifiedAt: '2026-04-05'
+    }), /AAAA-MM/);
+  } finally { db.close(); }
+});
+
+test('severance calculation refuses incomplete quarterly history and never estimates missing historical bases', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-783', fullName: 'José Rivas', hireDate: '2025-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 1800
+    });
+    assert.throws(() => calculatePayrollSeverance(db, 'co-a', {
+      employeeId: employee.id, asOfDate: '2026-03-31', dailyIntegralSalary: 60
+    }), /historial de garantía está incompleto/);
+    savePayrollSeveranceDeposit(db, 'co-a', {
+      employeeId: employee.id, depositDate: '2025-03-31', kind: 'QUARTERLY',
+      days: 15, dailyIntegralSalary: 50, sourceReference: 'Q1 comprobante',
+      verifiedAt: '2025-04-01'
+    });
+    assert.throws(() => calculatePayrollSeverance(db, 'co-a', {
+      employeeId: employee.id, asOfDate: '2026-03-31', dailyIntegralSalary: 60
+    }), /historial de garantía está incompleto/);
+  } finally { db.close(); }
+});
+
