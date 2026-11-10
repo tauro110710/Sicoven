@@ -93,6 +93,8 @@ test('adds service_year to legacy severance deposits without rewriting historica
     initializeTenantDatabase(db);
     const columns=db.pragma('table_info(payroll_severance_deposits)');
     assert.ok(columns.some(column=>column.name==='service_year'));
+    assert.ok(columns.some(column=>column.name==='advance_purpose'));
+    assert.ok(columns.some(column=>column.name==='advance_authorization_reference'));
     assert.equal(db.prepare('SELECT amount FROM payroll_severance_deposits WHERE id=?').get('legacy-deposit').amount,200);
   } finally { db.close(); }
 });

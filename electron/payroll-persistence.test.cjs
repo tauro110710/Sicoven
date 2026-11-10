@@ -804,3 +804,18 @@ test('rolls back a liquidation snapshot if its audit event cannot be written', (
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM payroll_liquidations').get().n,0);
   } finally { db.close(); }
 });
+
+
+test('limits advances to 75 percent of deposited guarantee and validates art. 144 purpose', () => {
+  const db=setup();
+  try {
+    const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-992',fullName:'María López',hireDate:'2024-01-01',frequency:'BIWEEKLY',baseSalary:3000});
+    savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-01',kind:'QUARTERLY',days:15,dailyIntegralSalary:100,sourceReference:'Garantía Q1',verifiedAt:'2024-04-02'});
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-02',kind:'ADVANCE',days:1,dailyIntegralSalary:100,sourceReference:'Anticipo',verifiedAt:'2024-04-02'}),/finalidad permitida/);
+    const advance=savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-02',kind:'ADVANCE',days:10,dailyIntegralSalary:100,advancePurpose:'EDUCATION',advanceAuthorizationReference:'Autorización escrita 04-02',sourceReference:'Transferencia educación',verifiedAt:'2024-04-02'});
+    assert.equal(advance.amount,1000);
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-03',kind:'ADVANCE',days:2,dailyIntegralSalary:100,advancePurpose:'MEDICAL',advanceAuthorizationReference:'Autorización escrita 04-03',sourceReference:'Transferencia médica',verifiedAt:'2024-04-03'}),/setenta y cinco por ciento/);
+    const history=listPayrollSeveranceHistory(db,'co-a',employee.id);
+    assert.equal(history.deposits.find(item=>item.kind==='ADVANCE').advancePurpose,'EDUCATION');
+  } finally { db.close(); }
+});

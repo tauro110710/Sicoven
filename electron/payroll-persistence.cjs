@@ -529,6 +529,31 @@ function listConfirmedSalaryEntries(db, companyId, employeeId, fromDate, toDate)
 }
 
 
+
+function validateAdvanceLedger(deposits) {
+  const advances = deposits.filter(item => item.kind === 'ADVANCE').sort((a,b) => a.depositDate.localeCompare(b.depositDate));
+  for (const advance of advances) {
+    if (!['HOUSING','MORTGAGE','EDUCATION','MEDICAL'].includes(String(advance.advancePurpose || '')) ||
+        !String(advance.advanceAuthorizationReference || '').trim()) {
+      throw new Error('Cada anticipo debe acreditar una finalidad permitida por el artículo 144 y su autorización/soporte.');
+    }
+    const guaranteeAtDate = deposits.filter(item =>
+      (item.kind === 'QUARTERLY' || item.kind === 'SENIORITY') && item.depositDate <= advance.depositDate
+    ).reduce((sum,item) => sum + Number(item.amount || 0),0);
+    const cumulativeAdvances = advances.filter(item => item.depositDate <= advance.depositDate)
+      .reduce((sum,item) => sum + Number(item.amount || 0),0);
+    if (cumulativeAdvances > guaranteeAtDate * 0.75 + 0.01) {
+      throw new Error('Los anticipos exceden el setenta y cinco por ciento de la garantía depositada a la fecha del anticipo (art. 144).');
+    }
+  }
+  const totalGuarantee = deposits.filter(item => item.kind === 'QUARTERLY' || item.kind === 'SENIORITY')
+    .reduce((sum,item) => sum + Number(item.amount || 0),0);
+  const totalAdvances = advances.reduce((sum,item) => sum + Number(item.amount || 0),0);
+  return {totalGuarantee:Math.round((totalGuarantee+Number.EPSILON)*100)/100,
+    totalAdvances:Math.round((totalAdvances+Number.EPSILON)*100)/100,
+    advanceLimit:Math.round((totalGuarantee*0.75+Number.EPSILON)*100)/100};
+}
+
 function listPayrollSeveranceHistory(db, companyId, employeeId) {
   ensureCompany(db, companyId);
   const id = text(employeeId, 'Trabajador', 120);
@@ -537,7 +562,8 @@ function listPayrollSeveranceHistory(db, companyId, employeeId) {
   }
   const employee = db.prepare('SELECT hire_date AS hireDate FROM payroll_employees WHERE id=? AND company_id=?').get(id,companyId);
   const deposits = db.prepare(`SELECT d.id,d.deposit_date AS depositDate,d.deposit_kind AS kind,d.service_year AS serviceYear,d.days,
-      d.daily_integral_salary AS dailyIntegralSalary,d.amount,d.source_reference AS sourceReference,
+      d.daily_integral_salary AS dailyIntegralSalary,d.amount,d.advance_purpose AS advancePurpose,
+      d.advance_authorization_reference AS advanceAuthorizationReference,d.source_reference AS sourceReference,
       d.verified_at AS verifiedAt,d.note,d.supersedes_id AS supersedesId,d.created_at AS createdAt
     FROM payroll_severance_deposits d
     WHERE d.company_id=? AND d.employee_id=?
@@ -567,6 +593,7 @@ function savePayrollSeveranceDeposit(db, companyId, input) {
   if(!['QUARTERLY','SENIORITY','ADVANCE'].includes(kind)) throw new Error('Indique si el registro es trimestral, adicional por antigüedad o anticipo.');
   const days=positiveOrZero(input.days,'Días reconocidos');
   const serviceYear=kind==='SENIORITY'?Number(input.serviceYear):null;
+  if(kind==='QUARTERLY' && Math.abs(days-15)>0.001) throw new Error('Cada depósito trimestral debe representar exactamente quince días de salario.');
   if(kind==='SENIORITY') {
     const completedAtDeposit=completedYears(employee.hireDate,depositDate);
     if(!Number.isInteger(serviceYear) || serviceYear<1 || serviceYear>15 || serviceYear>completedAtDeposit) {
@@ -588,6 +615,11 @@ function savePayrollSeveranceDeposit(db, companyId, input) {
   }
   const dailyIntegralSalary=positiveOrZero(input.dailyIntegralSalary,'Salario diario integral histórico');
   if(days<=0||dailyIntegralSalary<=0) throw new Error('Los días y el salario diario integral deben ser mayores que cero.');
+  const advancePurpose=kind==='ADVANCE'?String(input.advancePurpose||''):null;
+  const advanceAuthorizationReference=kind==='ADVANCE'?text(input.advanceAuthorizationReference,'Autorización o soporte del anticipo',300):null;
+  if(kind==='ADVANCE' && !['HOUSING','MORTGAGE','EDUCATION','MEDICAL'].includes(advancePurpose)) {
+    throw new Error('El anticipo solo procede para vivienda, liberación de hipoteca, educación o atención médica/hospitalaria (art. 144).');
+  }
   const sourceReference=text(input.sourceReference,'Fuente o comprobante',300);
   const verifiedAt=date(input.verifiedAt,'Fecha de verificación');
   const note=input.note?text(input.note,'Nota',500,0):'';
@@ -601,11 +633,19 @@ function savePayrollSeveranceDeposit(db, companyId, input) {
       AND NOT EXISTS(SELECT 1 FROM payroll_severance_deposits n WHERE n.supersedes_id=payroll_severance_deposits.id)`).get(companyId,employeeId,depositDate,kind);
     if(duplicate) throw new Error('Ya existe un registro vigente de ese tipo y fecha. Para corregirlo, use la opción de rectificación.');
   }
-  const id=crypto.randomUUID(),amount=Math.round((days*dailyIntegralSalary+Number.EPSILON)*100)/100;
+  const amount=Math.round((days*dailyIntegralSalary+Number.EPSILON)*100)/100;
+  const activeLedger=db.prepare(`SELECT d.id,d.deposit_kind AS kind,d.deposit_date AS depositDate,d.amount,
+      d.advance_purpose AS advancePurpose,d.advance_authorization_reference AS advanceAuthorizationReference
+    FROM payroll_severance_deposits d WHERE d.company_id=? AND d.employee_id=?
+      AND NOT EXISTS(SELECT 1 FROM payroll_severance_deposits n WHERE n.supersedes_id=d.id)`).all(companyId,employeeId)
+    .filter(item=>item.id!==supersedesId);
+  activeLedger.push({id:'__candidate__',kind,depositDate,amount,advancePurpose,advanceAuthorizationReference});
+  validateAdvanceLedger(activeLedger);
+  const id=crypto.randomUUID();
   const persist=db.transaction(()=>{
     db.prepare(`INSERT INTO payroll_severance_deposits
-      (id,company_id,employee_id,deposit_date,deposit_kind,service_year,days,daily_integral_salary,amount,source_reference,verified_at,note,supersedes_id)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,companyId,employeeId,depositDate,kind,serviceYear,days,dailyIntegralSalary,amount,sourceReference,verifiedAt,note,supersedesId);
+      (id,company_id,employee_id,deposit_date,deposit_kind,service_year,advance_purpose,advance_authorization_reference,days,daily_integral_salary,amount,source_reference,verified_at,note,supersedes_id)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,companyId,employeeId,depositDate,kind,serviceYear,advancePurpose,advanceAuthorizationReference,days,dailyIntegralSalary,amount,sourceReference,verifiedAt,note,supersedesId);
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
       .run('payroll_severance_deposit_recorded',JSON.stringify({id,companyId,employeeId,depositDate,kind,amount,supersedesId}));
   });
@@ -667,6 +707,7 @@ function calculatePayrollSeverance(db, companyId, input) {
   const quarterlyDeposits=applicableDeposits.filter(item=>item.kind==='QUARTERLY').map(item=>({days:item.days,dailyIntegralSalary:item.dailyIntegralSalary}));
   const additionalSeniorityDeposits=applicableDeposits.filter(item=>item.kind==='SENIORITY').map(item=>({serviceYear:item.serviceYear,days:item.days,dailyIntegralSalary:item.dailyIntegralSalary}));
   const advances=applicableDeposits.filter(item=>item.kind==='ADVANCE');
+  const advanceCompliance=validateAdvanceLedger(applicableDeposits);
   const salaryBasis=calculateSeveranceSalaryBasis({salaryType:input.salaryType,lastMonthlyIntegratedSalary:input.lastMonthlyIntegratedSalary,previousSixMonthsIntegratedSalary:input.previousSixMonthsIntegratedSalary});
   // Let the statutory calculator report missing quarterly history first; only
   // after that validate the identity and uniqueness of annual seniority years.
@@ -678,7 +719,7 @@ function calculatePayrollSeverance(db, companyId, input) {
   }
   const advanceTotal=Math.round((advances.reduce((sum,item)=>sum+item.amount,0)+Number.EPSILON)*100)/100;
   const grossEntitlement=result.greaterAmount;
-  return {...result,employeeId,fullName:employee.fullName,salaryBasis,advanceTotal,netAfterAdvances:Math.max(0,Math.round((grossEntitlement-advanceTotal+Number.EPSILON)*100)/100),
+  return {...result,employeeId,fullName:employee.fullName,salaryBasis,advanceCompliance,advanceTotal,netAfterAdvances:Math.max(0,Math.round((grossEntitlement-advanceTotal+Number.EPSILON)*100)/100),
     advanceExcess:Math.max(0,Math.round((advanceTotal-grossEntitlement+Number.EPSILON)*100)/100),depositHistory:history.deposits};
 }
 
@@ -710,7 +751,7 @@ function listPayrollLiquidations(db, companyId, employeeId) {
 }
 
 function createPayrollLiquidation(db, companyId, input) {
-  ensureCompany(db, companyId);
+  const company = ensureCompany(db, companyId);
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Los datos de la liquidación son inválidos.');
   const employeeId = text(input.employeeId, 'Trabajador', 120);
   const employee = db.prepare(`SELECT id,full_name AS fullName,fiscal_id AS fiscalId,hire_date AS hireDate
@@ -767,7 +808,8 @@ function createPayrollLiquidation(db, companyId, input) {
   }
   const createdAt = new Date().toISOString();
   const snapshot = {
-    version:1, companyId, employee:{employeeId,fullName:employee.fullName,fiscalId:employee.fiscalId,hireDate:employee.hireDate},
+    version:1, companyId, companySnapshot:{id:company.id,name:company.name,rif:company.rif,address:company.address,phone:company.phone},
+    employee:{employeeId,fullName:employee.fullName,fiscalId:employee.fiscalId,hireDate:employee.hireDate},
     createdAt, vacationSalaryBasis, severance, interest, liquidation
   };
   const persist = db.transaction(() => {

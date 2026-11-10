@@ -301,3 +301,19 @@ test('fails closed for unresolved dismissal, suspension, missing evidence and un
   assert.throws(()=>calculateFinalLiquidation({...base,terminationReason:'EARLY_FIXED_TERM_WITHDRAWAL_ART83'}),/Vencimiento del contrato/);
   assert.throws(()=>calculateFinalLiquidation({...base,terminationReason:'VOLUNTARY_RESIGNATION',profitSharingStatus:'PENDING'}),/utilidades pendientes/);
 });
+
+
+test('applies mora only when actual payment is after the five-day statutory period', () => {
+  const { calculateFinalLiquidation } = require('./payroll-legal-calculations.cjs');
+  const base={hireDate:'2025-01-01',terminationDate:'2026-01-01',dailyNormalSalary:100,
+    vacationDaysOutstanding:0,vacationBonusDaysOutstanding:0,vacationBalanceSource:'Registro conciliado',
+    severancePayable:1000,interestStatus:'NOT_APPLICABLE',interestStatusEvidence:'Intereses conciliados',
+    profitSharingStatus:'NOT_APPLICABLE',profitSharingSourceReference:'Utilidades conciliadas'};
+  const within=calculateFinalLiquidation({...base,terminationReason:'VOLUNTARY_RESIGNATION',paymentDate:'2026-01-06'});
+  assert.equal(within.lateInterestDays,0);
+  assert.equal(within.lateInterestAmount,0);
+  assert.throws(()=>calculateFinalLiquidation({...base,terminationReason:'VOLUNTARY_RESIGNATION',paymentDate:'2026-01-07'}),/intereses moratorios/);
+  const late=calculateFinalLiquidation({...base,terminationReason:'VOLUNTARY_RESIGNATION',paymentDate:'2026-01-07',lateInterestAmount:15,lateInterestSourceReference:'Cálculo con tasa activa BCV seis bancos'});
+  assert.equal(late.lateInterestDays,1);
+  assert.equal(late.total,1015);
+});

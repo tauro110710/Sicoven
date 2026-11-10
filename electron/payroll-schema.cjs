@@ -94,6 +94,8 @@ function initializePayrollSchema(db) {
       deposit_date TEXT NOT NULL,
       deposit_kind TEXT NOT NULL CHECK (deposit_kind IN ('QUARTERLY','SENIORITY','ADVANCE')),
       service_year INTEGER,
+      advance_purpose TEXT,
+      advance_authorization_reference TEXT,
       days REAL NOT NULL CHECK (days > 0),
       daily_integral_salary REAL NOT NULL CHECK (daily_integral_salary > 0),
       amount REAL NOT NULL CHECK (amount > 0),
@@ -179,6 +181,13 @@ function initializePayrollSchema(db) {
   const severanceColumns = db.pragma('table_info(payroll_severance_deposits)');
   if (!severanceColumns.some(column => column.name === 'service_year')) {
     db.exec('ALTER TABLE payroll_severance_deposits ADD COLUMN service_year INTEGER');
+  }
+  const advanceColumns = db.pragma('table_info(payroll_severance_deposits)');
+  if (!advanceColumns.some(column => column.name === 'advance_purpose')) {
+    db.exec('ALTER TABLE payroll_severance_deposits ADD COLUMN advance_purpose TEXT');
+  }
+  if (!advanceColumns.some(column => column.name === 'advance_authorization_reference')) {
+    db.exec('ALTER TABLE payroll_severance_deposits ADD COLUMN advance_authorization_reference TEXT');
   }
 
   const legalRuleSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='payroll_legal_rules'").get()?.sql || '';

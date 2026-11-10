@@ -55,7 +55,9 @@ El módulo incorpora un calculador consolidado que clasifica la causal, separa v
 
 La indemnización del art. 80/92 solo se agrega con clasificación confirmada y evidencia; el despido injustificado exige la elección expresa de no solicitar reenganche. El art. 83 exige contrato, causal y vencimiento acreditados. Mutuo acuerdo, vencimiento de contrato, culminación de obra y fallecimiento exigen sus soportes y no activan automáticamente el doble de prestaciones. Una suspensión se rechaza como liquidación final.
 
-Pendiente para cierre completo: libro estructurado de vacaciones por período (hoy se concilia el saldo desde el registro existente), integración de asiento contable específico con conciliación de provisiones/depósitos/anticipos, liquidación de intereses de mora posterior al plazo de cinco días, PDF de liquidación y pruebas E2E de todos los escenarios con casos patrón revisados. No generar asientos genéricos ni declarar terminada la liquidación hasta completar estos controles.
+El registro de anticipos valida las cuatro finalidades del artículo 144, exige autorización/soporte y limita el acumulado al 75% de la garantía disponible a la fecha de cada anticipo. La liquidación incorpora el interés moratorio cuando el pago efectivo excede los cinco días, siempre que se aporte el cálculo y la fuente de la tasa activa BCV referida a los seis principales bancos. El snapshot conserva identidad histórica del empleador y puede emitirse en PDF.
+
+Pendiente para cierre completo: libro estructurado de vacaciones por período (hoy se concilia el saldo desde el registro existente), integración de asiento contable específico con conciliación de provisiones/depósitos/anticipos, automatización de la tasa moratoria con una serie oficial verificable y pruebas E2E de todos los escenarios con casos patrón revisados. No generar asientos genéricos ni declarar terminada la liquidación hasta completar estos controles.
 
 ## Fuentes normativas y jurisprudenciales
 

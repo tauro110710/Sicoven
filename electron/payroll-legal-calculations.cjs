@@ -369,6 +369,25 @@ function calculateFinalLiquidation(input) {
   if (interestAmount > 0 && !String(input.interestSourceReference || '').trim()) throw new Error('Indique la fuente de los intereses reconocidos.');
   const pendingSalaryAmount = money(input.pendingSalaryAmount || 0, 'Salarios y conceptos causados pendientes');
   if (pendingSalaryAmount > 0 && !String(input.pendingSalarySourceReference || '').trim()) throw new Error('Indique el soporte de salarios y conceptos pendientes.');
+  const lateInterestAmount = money(input.lateInterestAmount || 0, 'Intereses moratorios');
+  const lateInterestSourceReference = String(input.lateInterestSourceReference || '').trim();
+  let lateInterestDays = 0;
+  if (input.paymentDate) {
+    const paymentDate = validDate(input.paymentDate, 'Fecha de pago');
+    if (paymentDate < end) throw new Error('La fecha de pago no puede ser anterior a la terminación.');
+    const dueDate = new Date(end.getTime());
+    dueDate.setUTCDate(dueDate.getUTCDate() + 5);
+    if (paymentDate > dueDate) {
+      lateInterestDays = Math.floor((paymentDate.getTime() - dueDate.getTime()) / 86400000);
+      if (lateInterestAmount <= 0 || !lateInterestSourceReference) {
+        throw new Error('El pago posterior a los cinco días exige calcular y soportar los intereses moratorios (arts. 128 y 142.f).');
+      }
+    } else if (lateInterestAmount > 0) {
+      throw new Error('No corresponde interés moratorio si el pago se realizó dentro de los cinco días siguientes a la terminación.');
+    }
+  } else if (lateInterestAmount > 0) {
+    throw new Error('Indique la fecha efectiva de pago para reconocer intereses moratorios.');
+  }
 
   const additionalEarnings = Array.isArray(input.additionalEarnings) ? input.additionalEarnings : [];
   const earningCodes = new Set();
@@ -429,7 +448,7 @@ function calculateFinalLiquidation(input) {
     throw new Error('El pago por fallecimiento requiere acreditar a los beneficiarios conforme al artículo 145.');
   }
 
-  const total = round2(severancePayable + vacationPay + vacationBonusPay + interestAmount +
+  const total = round2(severancePayable + vacationPay + vacationBonusPay + interestAmount + lateInterestAmount +
     profitSharingAmount + pendingSalaryAmount + additionalEarningsTotal + indemnity + agreedAdditionalAmount);
   return {
     terminationDate: input.terminationDate, terminationReason: reason, completedServiceYears,
@@ -437,13 +456,15 @@ function calculateFinalLiquidation(input) {
     vacationDaysOutstanding, vacationDaysPayable, fractionalVacationDays, vacationPay,
     vacationBonusDaysOutstanding, vacationBonusDaysPayable, fractionalVacationBonusDays, vacationBonusPay,
     dailyNormalSalary, vacationBalanceSource, severancePayable, interestAmount, interestStatus,
+    paymentDate:input.paymentDate || null, lateInterestDays, lateInterestAmount, lateInterestSourceReference,
     profitSharingAmount, profitSharingStatus, pendingSalaryAmount, additionalEarnings,
     additionalEarningsTotal, indemnity, remainingContractWages, agreedAdditionalAmount, total,
-    legalBases: ['LOTTT arts. 19, 80, 83, 92, 121, 122, 142, 145, 190, 192, 195, 196; GO 6.076 Extraordinario'],
+    legalBases: ['LOTTT arts. 19, 80, 83, 92, 121, 122, 128, 142, 144, 145, 190, 192, 195, 196; GO 6.076 Extraordinario'],
     notes: [
       'Vacaciones y bono vacacional se calculan separadamente con salario normal diario.',
       'La fracción del período en curso utiliza meses completos; las condiciones contractuales/colectivas superiores deben prevalecer si están acreditadas.',
       'No se aplicaron deducciones automáticas ni se descontó preaviso omitido.',
+      lateInterestDays > 0 ? 'Se incluyeron intereses moratorios por ' + lateInterestDays + ' días posteriores al plazo legal de cinco días.' : 'No se generaron intereses moratorios dentro del plazo legal o sin fecha de pago registrada.',
       reason === 'DEATH_ART145' ? 'El pago se entrega únicamente a beneficiarios acreditados conforme al artículo 145.' : ''
     ].filter(Boolean)
   };

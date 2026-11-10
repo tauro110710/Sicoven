@@ -79,7 +79,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   const [severanceBusy, setSeveranceBusy] = useState<string | null>(null);
   const [severanceResult, setSeveranceResult] = useState<Record<string, Record<string,unknown>>>({});
   const [interestResult, setInterestResult] = useState<Record<string, Record<string,unknown>>>({});
-  const [depositForm, setDepositForm] = useState({depositDate:new Date().toISOString().slice(0,10),kind:'QUARTERLY' as 'QUARTERLY'|'SENIORITY'|'ADVANCE',days:'15',serviceYear:'1',dailyIntegralSalary:'',sourceReference:'',verifiedAt:new Date().toISOString().slice(0,10),supersedesId:''});
+  const [depositForm, setDepositForm] = useState({depositDate:new Date().toISOString().slice(0,10),kind:'QUARTERLY' as 'QUARTERLY'|'SENIORITY'|'ADVANCE',days:'15',serviceYear:'1',dailyIntegralSalary:'',advancePurpose:'HOUSING',advanceAuthorizationReference:'',sourceReference:'',verifiedAt:new Date().toISOString().slice(0,10),supersedesId:''});
   const [interestForm, setInterestForm] = useState({month:new Date().toISOString().slice(0,7),mode:'UNDEPOSITED' as 'TRUST_OR_FUND'|'AUTHORIZED_BOOK_CREDIT'|'UNDEPOSITED',capital:'',monthlyRate:'',sourceReference:'',modeEvidence:'',verifiedAt:new Date().toISOString().slice(0,10),supersedesId:''});
   const [severanceCalcForm, setSeveranceCalcForm] = useState({asOfDate:new Date().toISOString().slice(0,10),salaryType:'FIXED' as 'FIXED'|'VARIABLE',lastMonthlyIntegratedSalary:'',month1:'',month2:'',month3:'',month4:'',month5:'',month6:''});
 
@@ -92,7 +92,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
     profitSharingStatus:'PENDING' as 'PENDING'|'SETTLED'|'NOT_APPLICABLE',profitSharingAmount:'0',profitSharingSourceReference:'',
     pendingSalaryAmount:'0',pendingSalarySourceReference:'',workerChoice:'PENDING',
     legalClassificationConfirmed:false,legalEvidence:'',contractEndDate:'',remainingContractWages:'0',contractEvidence:'',
-    beneficiaryEvidence:'',agreedAdditionalAmount:'0',agreementEvidence:''
+    beneficiaryEvidence:'',agreedAdditionalAmount:'0',agreementEvidence:'',paymentDate:'',lateInterestAmount:'0',lateInterestSourceReference:''
   });
   const [liquidationResults,setLiquidationResults] = useState<Record<string,Record<string,any>>>({});
   const [liquidationHistory,setLiquidationHistory] = useState<Record<string,Array<Record<string,any>>>>({});
@@ -427,7 +427,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
 
   const saveSeveranceDeposit = async (employeeId: string) => {
     if (severanceBusy || !window.sicovenStore) return;
-    if (!depositForm.dailyIntegralSalary.trim() || !depositForm.sourceReference.trim()) { setError('Indique el salario integral histórico y el comprobante del depósito.'); return; }
+    if (!depositForm.dailyIntegralSalary.trim() || !depositForm.sourceReference.trim() || (depositForm.kind==='ADVANCE' && !depositForm.advanceAuthorizationReference.trim())) { setError('Indique el salario integral histórico, comprobante y autorización escrita del anticipo cuando corresponda.'); return; }
     setSeveranceBusy(employeeId); setError(''); setSuccess('');
     try {
       await window.sicovenStore.savePayrollSeveranceDeposit(token,{employeeId,...depositForm,...(depositForm.supersedesId?{supersedesId:depositForm.supersedesId}:{}),days:Number(depositForm.days),dailyIntegralSalary:Number(depositForm.dailyIntegralSalary)});
@@ -516,6 +516,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
         ...(liquidationForm.interestExpectedMonths.trim()?{interestExpectedMonths:Number(liquidationForm.interestExpectedMonths)}:{}),
         profitSharingStatus:liquidationForm.profitSharingStatus,profitSharingAmount:Number(liquidationForm.profitSharingAmount),
         profitSharingSourceReference:liquidationForm.profitSharingSourceReference,
+        ...(liquidationForm.paymentDate.trim()?{paymentDate:liquidationForm.paymentDate}:{}),lateInterestAmount:Number(liquidationForm.lateInterestAmount),lateInterestSourceReference:liquidationForm.lateInterestSourceReference,
         pendingSalaryAmount:Number(liquidationForm.pendingSalaryAmount),
         pendingSalarySourceReference:liquidationForm.pendingSalarySourceReference,
         workerChoice:liquidationForm.workerChoice,interestStatusEvidence:liquidationForm.interestStatusEvidence,
@@ -532,6 +533,51 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
       setSuccess('Liquidación final guardada con snapshot inmutable y auditoría.');
     } catch(e) { setError(e instanceof Error?e.message:'No se pudo guardar la liquidación final.'); }
     finally { setSeveranceBusy(null); }
+  };
+
+
+  const exportLiquidationPdf = (employeeId:string) => {
+    const saved=liquidationResults[employeeId] as any;
+    if(!saved?.snapshot) return;
+    const snapshot=saved.snapshot, result=snapshot.liquidation;
+    const pdf=new jsPDF({unit:'mm',format:'a4'});
+    let y=18;
+    const write=(value:string,size=10,bold=false)=>{
+      pdf.setFont('helvetica',bold?'bold':'normal');pdf.setFontSize(size);
+      const rows=pdf.splitTextToSize(value,180);pdf.text(rows,15,y);y+=rows.length*5+2;
+      if(y>270){pdf.addPage();y=18;}
+    };
+    const money=(value:number)=>'Bs. '+Number(value||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const company=snapshot.companySnapshot||{};
+    const employee=snapshot.employee||{};
+    write(company.name||'Empleador',14,true);
+    if(company.rif) write('RIF: '+company.rif,9);
+    if(company.address) write(String(company.address),9);
+    if(company.phone) write('Teléfono: '+String(company.phone),9);
+    write('LIQUIDACIÓN FINAL DE PRESTACIONES Y BENEFICIOS',12,true);
+    write('Trabajador: '+(employee.fullName||'')+' · Cédula/RIF: '+(employee.fiscalId||''),10,true);
+    write('Ingreso: '+employee.hireDate+' · Terminación: '+result.terminationDate,10);
+    write('Causal: '+result.terminationReason,9);
+    y+=2;pdf.line(15,y,195,y);y+=7;
+    write('BASES DE CÁLCULO',10,true);
+    write('Salario diario normal: '+money(result.dailyNormalSalary),9);
+    write('Vacaciones pendientes: '+result.vacationDaysPayable+' días · '+money(result.vacationPay),9);
+    write('Bono vacacional pendiente: '+result.vacationBonusDaysPayable+' días · '+money(result.vacationBonusPay),9);
+    write('Prestaciones sociales netas de anticipos: '+money(result.severancePayable),9);
+    write('Intereses de prestaciones: '+money(result.interestAmount),9);
+    write('Intereses moratorios: '+money(result.lateInterestAmount),9);
+    write('Utilidades pendientes: '+money(result.profitSharingAmount),9);
+    write('Salarios y conceptos pendientes: '+money(result.pendingSalaryAmount),9);
+    write('Indemnización legal: '+money(result.indemnity),9);
+    write('Monto adicional convenido: '+money(result.agreedAdditionalAmount),9);
+    y+=2;pdf.line(15,y,195,y);y+=7;
+    write('TOTAL A PAGAR: '+money(result.total),13,true);
+    write('Fuentes / soportes de vacaciones: '+result.vacationBalanceSource,8);
+    (result.legalBases||[]).forEach((value:string)=>write(value,8));
+    (result.notes||[]).forEach((value:string)=>write('• '+value,8));
+    y=Math.max(y+10,245);pdf.line(25,y,90,y);pdf.line(120,y,185,y);
+    write('Firma del trabajador',8);write('Firma del empleador',8);
+    pdf.save('Liquidacion-'+String(employee.fiscalId||employeeId)+'-'+String(result.terminationDate)+'.pdf');
   };
 
   const save = async (event: React.FormEvent) => {
@@ -635,9 +681,10 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
               <div><p className="font-semibold text-slate-800">Prestaciones sociales e intereses · LOTTT arts. 142 y 143</p><p className="text-xs text-slate-600">Registre cada depósito con los días y el salario integral histórico del momento. Los registros son inmutables; las correcciones se agregan como rectificaciones. No se estiman datos faltantes.</p></div>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <label className="space-y-1 text-xs text-slate-700">Fecha del depósito<input type="date" value={depositForm.depositDate} onChange={e=>setDepositForm(v=>({...v,depositDate:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
-                <label className="space-y-1 text-xs text-slate-700">Tipo<select value={depositForm.kind} onChange={e=>setDepositForm(v=>({...v,kind:e.target.value as typeof v.kind,days:e.target.value==='SENIORITY'?'2':v.days,serviceYear:v.serviceYear}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"><option value="QUARTERLY">Garantía trimestral</option><option value="SENIORITY">Adicional por antigüedad</option><option value="ADVANCE">Anticipo pagado</option></select></label>
+                <label className="space-y-1 text-xs text-slate-700">Tipo<select value={depositForm.kind} onChange={e=>setDepositForm(v=>({...v,kind:e.target.value as typeof v.kind,days:e.target.value==='SENIORITY'?'2':e.target.value==='QUARTERLY'?'15':v.days,serviceYear:v.serviceYear}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"><option value="QUARTERLY">Garantía trimestral</option><option value="SENIORITY">Adicional por antigüedad</option><option value="ADVANCE">Anticipo pagado</option></select></label>
                 {depositForm.kind==='SENIORITY' && <label className="space-y-1 text-xs text-slate-700">Año de servicio (1–15)<input type="number" min="1" max="15" step="1" value={depositForm.serviceYear} onChange={e=>setDepositForm(v=>({...v,serviceYear:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>}
                 <label className="space-y-1 text-xs text-slate-700">Días reconocidos<input type="number" min="0.01" step="0.01" value={depositForm.days} readOnly={depositForm.kind==='SENIORITY'} onChange={e=>setDepositForm(v=>({...v,days:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
+                {depositForm.kind==='ADVANCE' && <><label className="space-y-1 text-xs text-slate-700">Finalidad del anticipo (art. 144)<select value={depositForm.advancePurpose} onChange={e=>setDepositForm(v=>({...v,advancePurpose:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"><option value="HOUSING">Vivienda: construcción/adquisición/mejora/reparación</option><option value="MORTGAGE">Liberación de hipoteca</option><option value="EDUCATION">Educación</option><option value="MEDICAL">Atención médica/hospitalaria</option></select></label><label className="space-y-1 text-xs text-slate-700 sm:col-span-2">Autorización escrita / soporte del anticipo<input value={depositForm.advanceAuthorizationReference} onChange={e=>setDepositForm(v=>({...v,advanceAuthorizationReference:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2" placeholder="Autorización del trabajador y documento justificativo"/></label></>}
                 <label className="space-y-1 text-xs text-slate-700">{depositForm.kind==='SENIORITY'?'Salario diario integral promedio del año de servicio (Bs.)':'Salario diario integral histórico (Bs.)'}<input type="number" min="0.01" step="0.01" value={depositForm.dailyIntegralSalary} onChange={e=>setDepositForm(v=>({...v,dailyIntegralSalary:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
                 {depositForm.kind==='SENIORITY' && <p className="text-xs text-slate-500 sm:col-span-2">Registre exactamente 2 días por cada año cumplido, hasta 15 años. La base debe ser el salario integral diario promedio del año que origina el depósito, no el salario actual.</p>}
                 <label className="space-y-1 text-xs text-slate-700 sm:col-span-2">Comprobante / fuente<input value={depositForm.sourceReference} onChange={e=>setDepositForm(v=>({...v,sourceReference:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2" placeholder="Referencia bancaria, fideicomiso o recibo"/></label>
@@ -664,7 +711,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
                 {severanceResult[employee.id] && <div className="mt-2 rounded-lg bg-white p-3 text-sm">{severanceResult[employee.id].error ? <p className="text-rose-700">{String(severanceResult[employee.id].error)}</p> : <div className="grid gap-2 sm:grid-cols-2"><p>Garantía histórica: <strong>Bs. {Number(severanceResult[employee.id].guaranteeAmount||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p><p>Terminación: <strong>Bs. {Number(severanceResult[employee.id].terminationAmount||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p><p>Mayor importe legal: <strong>Bs. {Number(severanceResult[employee.id].greaterAmount||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p><p>Anticipos: <strong>Bs. {Number(severanceResult[employee.id].advanceTotal||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p><p>Saldo luego de anticipos: <strong>Bs. {Number(severanceResult[employee.id].netAfterAdvances||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p></div>}</div>}
               </div>
               <div className="border-t border-amber-200 pt-3"><p className="text-xs font-bold text-slate-700">Historial vigente · Depósitos {severanceHistory[employee.id]?.deposits.length||0} · Meses de intereses {severanceHistory[employee.id]?.interests.length||0}</p>
-                {(severanceHistory[employee.id]?.deposits||[]).map((item:any)=><div key={String(item.id)} className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600"><span>{String(item.depositDate)} · {String(item.kind)} · {Number(item.days)} días × Bs. {Number(item.dailyIntegralSalary).toFixed(2)} · Bs. {Number(item.amount).toFixed(2)} · {String(item.sourceReference)}</span><button type="button" onClick={()=>setDepositForm({depositDate:String(item.depositDate),kind:item.kind as 'QUARTERLY'|'SENIORITY'|'ADVANCE',days:String(item.days),serviceYear:String(item.serviceYear||'1'),dailyIntegralSalary:String(item.dailyIntegralSalary),sourceReference:String(item.sourceReference),verifiedAt:String(item.verifiedAt||new Date().toISOString().slice(0,10)),supersedesId:String(item.id)})} className="rounded border border-amber-300 px-2 py-1 font-semibold text-amber-900">Rectificar</button></div>)}
+                {(severanceHistory[employee.id]?.deposits||[]).map((item:any)=><div key={String(item.id)} className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600"><span>{String(item.depositDate)} · {String(item.kind)} · {Number(item.days)} días × Bs. {Number(item.dailyIntegralSalary).toFixed(2)} · Bs. {Number(item.amount).toFixed(2)} · {String(item.sourceReference)}</span><button type="button" onClick={()=>setDepositForm({depositDate:String(item.depositDate),kind:item.kind as 'QUARTERLY'|'SENIORITY'|'ADVANCE',days:String(item.days),serviceYear:String(item.serviceYear||'1'),dailyIntegralSalary:String(item.dailyIntegralSalary),advancePurpose:String(item.advancePurpose||'HOUSING'),advanceAuthorizationReference:String(item.advanceAuthorizationReference||''),sourceReference:String(item.sourceReference),verifiedAt:String(item.verifiedAt||new Date().toISOString().slice(0,10)),supersedesId:String(item.id)})} className="rounded border border-amber-300 px-2 py-1 font-semibold text-amber-900">Rectificar</button></div>)}
                 {(severanceHistory[employee.id]?.interests||[]).map((item:any)=><div key={String(item.id)} className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600"><span>{String(item.month)} · {String(item.mode)} · tasa {(Number(item.monthlyRate)*100).toFixed(4)}% · interés Bs. {Number(item.interest).toFixed(2)} · {String(item.sourceReference)}</span><button type="button" onClick={()=>setInterestForm({month:String(item.month),mode:item.mode as 'TRUST_OR_FUND'|'AUTHORIZED_BOOK_CREDIT'|'UNDEPOSITED',capital:String(item.capital),monthlyRate:String(Number(item.monthlyRate)*100),sourceReference:String(item.sourceReference),modeEvidence:String(item.modeEvidence||''),verifiedAt:String(item.verifiedAt||new Date().toISOString().slice(0,10)),supersedesId:String(item.id)})} className="rounded border border-amber-300 px-2 py-1 font-semibold text-amber-900">Rectificar</button></div>)}
               </div>
               <div className="border-t border-amber-200 pt-3 space-y-3">
@@ -687,6 +734,9 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
                   <label className="space-y-1 text-xs text-slate-700 sm:col-span-2">Soporte del estado de utilidades<input value={liquidationForm.profitSharingSourceReference} onChange={e=>setLiquidationForm(v=>({...v,profitSharingSourceReference:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2" placeholder="Recibo de pago, cierre de ejercicio o constancia de no causación"/></label>
                   <label className="space-y-1 text-xs text-slate-700">Utilidades pendientes<select value={liquidationForm.profitSharingStatus} onChange={e=>setLiquidationForm(v=>({...v,profitSharingStatus:e.target.value as 'SETTLED'|'NOT_APPLICABLE'}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"><option value="PENDING">Seleccione estado…</option><option value="NOT_APPLICABLE">Conciliadas / no pendientes</option><option value="SETTLED">Incluir monto verificado</option></select></label>
                   {liquidationForm.profitSharingStatus==='SETTLED' && <><label className="space-y-1 text-xs text-slate-700">Utilidades pendientes (Bs.)<input type="number" min="0" step="0.01" value={liquidationForm.profitSharingAmount} onChange={e=>setLiquidationForm(v=>({...v,profitSharingAmount:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label><label className="space-y-1 text-xs text-slate-700 sm:col-span-2">Fuente utilidades<input value={liquidationForm.profitSharingSourceReference} onChange={e=>setLiquidationForm(v=>({...v,profitSharingSourceReference:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label></>}
+                  <label className="space-y-1 text-xs text-slate-700">Fecha efectiva de pago (si ya se pagó)<input type="date" value={liquidationForm.paymentDate} onChange={e=>setLiquidationForm(v=>({...v,paymentDate:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
+                  <label className="space-y-1 text-xs text-slate-700">Intereses moratorios (arts. 128 y 142.f) (Bs.)<input type="number" min="0" step="0.01" value={liquidationForm.lateInterestAmount} onChange={e=>setLiquidationForm(v=>({...v,lateInterestAmount:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
+                  {Number(liquidationForm.lateInterestAmount)>0 && <label className="space-y-1 text-xs text-slate-700 sm:col-span-2">Fuente del cálculo moratorio (tasa activa BCV / seis bancos)<input value={liquidationForm.lateInterestSourceReference} onChange={e=>setLiquidationForm(v=>({...v,lateInterestSourceReference:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>}
                   <label className="space-y-1 text-xs text-slate-700">Salarios/conceptos pendientes (Bs.)<input type="number" min="0" step="0.01" value={liquidationForm.pendingSalaryAmount} onChange={e=>setLiquidationForm(v=>({...v,pendingSalaryAmount:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
                   {Number(liquidationForm.pendingSalaryAmount)>0 && <label className="space-y-1 text-xs text-slate-700 sm:col-span-2">Soporte de salarios pendientes<input value={liquidationForm.pendingSalarySourceReference} onChange={e=>setLiquidationForm(v=>({...v,pendingSalarySourceReference:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>}
                   {['JUSTIFIED_WITHDRAWAL_ART80','JUSTIFIED_DISMISSAL_ART79','UNJUSTIFIED_DISMISSAL_ART92','CAUSE_BEYOND_WORKER_WILL_ART92','FORCE_MAJEURE_ART92','EARLY_FIXED_TERM_WITHDRAWAL_ART83'].includes(liquidationForm.terminationReason) && <><label className="flex items-center gap-2 text-xs text-slate-700"><input type="checkbox" checked={liquidationForm.legalClassificationConfirmed} onChange={e=>setLiquidationForm(v=>({...v,legalClassificationConfirmed:e.target.checked}))}/> Causal verificada con soporte</label><label className="space-y-1 text-xs text-slate-700 sm:col-span-2">Evidencia legal / expediente<input value={liquidationForm.legalEvidence} onChange={e=>setLiquidationForm(v=>({...v,legalEvidence:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label></>}
@@ -697,7 +747,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
                 </div>
                 <div className="flex flex-wrap gap-2"><button type="button" onClick={()=>void createLiquidationForEmployee(employee.id)} disabled={severanceBusy===employee.id} className="rounded-lg bg-rose-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{liquidationSupersedesId?'Guardar rectificación de liquidación':'Calcular y guardar liquidación final'}</button>{liquidationSupersedesId && <button type="button" onClick={()=>setLiquidationSupersedesId('')} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">Cancelar rectificación</button>}</div>
                 {(liquidationHistory[employee.id]||[]).map((item:any)=><div key={String(item.id)} className="flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 pt-2 text-xs text-slate-600"><span>{String(item.terminationDate)} · {String(item.terminationReason)} · Bs. {Number(item.total).toFixed(2)}</span><button type="button" onClick={()=>setLiquidationSupersedesId(String(item.id))} className="rounded border border-amber-300 px-2 py-1 font-semibold text-amber-900">Rectificar</button></div>)}
-                {liquidationResults[employee.id] && <div className="rounded-lg border border-emerald-200 bg-white p-3 text-sm"><p className="font-bold text-slate-800">Liquidación guardada · Bs. {Number(liquidationResults[employee.id].total).toFixed(2)}</p><p className="text-xs text-slate-600">Prestaciones Bs. {Number(liquidationResults[employee.id].snapshot.liquidation.severancePayable).toFixed(2)} · Vacaciones Bs. {Number(liquidationResults[employee.id].snapshot.liquidation.vacationPay).toFixed(2)} · Bono vacacional Bs. {Number(liquidationResults[employee.id].snapshot.liquidation.vacationBonusPay).toFixed(2)} · Indemnización Bs. {Number(liquidationResults[employee.id].snapshot.liquidation.indemnity).toFixed(2)}</p></div>}
+                {liquidationResults[employee.id] && <div className="rounded-lg border border-emerald-200 bg-white p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-bold text-slate-800">Liquidación guardada · Bs. {Number(liquidationResults[employee.id].total).toFixed(2)}</p><button type="button" onClick={()=>exportLiquidationPdf(employee.id)} className="rounded border border-emerald-300 px-2 py-1 text-xs font-semibold text-emerald-800">Descargar PDF</button></div><p className="text-xs text-slate-600">Prestaciones Bs. {Number(liquidationResults[employee.id].snapshot.liquidation.severancePayable).toFixed(2)} · Vacaciones Bs. {Number(liquidationResults[employee.id].snapshot.liquidation.vacationPay).toFixed(2)} · Bono vacacional Bs. {Number(liquidationResults[employee.id].snapshot.liquidation.vacationBonusPay).toFixed(2)} · Indemnización Bs. {Number(liquidationResults[employee.id].snapshot.liquidation.indemnity).toFixed(2)}</p></div>}
               </div>
             </div>}
             {legalCalcOpen === employee.id && <div className="mt-3 space-y-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
