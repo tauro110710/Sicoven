@@ -19,6 +19,15 @@ type Employee = {
   baseSalary: number; active: boolean;
 };
 
+type ProfitSharingResult = {
+  netProfits: number; statutoryRate: number; distributableFund: number; totalWagesEarned: number;
+  totalMinimum: number; totalMaximum: number; totalPayable: number; employerShortfall: number;
+  undistributedRemainder: number; sourceReference: string; verifiedAt: string; salaryEvidence: string;
+  employees: Array<{ employeeId: string; fullName: string; wagesEarned: number; monthlyNormalSalary: number;
+    monthsWorked: number; minimumDays: number; maximumDays: number; minimumAmount: number;
+    maximumAmount: number; proportionalShare: number; amount: number }>;
+};
+
 const emptyForm: { fiscalId: string; fullName: string; hireDate: string; position: string; costCenter: string; frequency: 'WEEKLY' | 'BIWEEKLY'; baseSalary: string; salaryEffectiveFrom: string } = {
   fiscalId: '', fullName: '', hireDate: new Date().toISOString().slice(0, 10),
   position: '', costCenter: '', frequency: 'BIWEEKLY' as const, baseSalary: '', salaryEffectiveFrom: new Date().toISOString().slice(0,10)
@@ -57,6 +66,14 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   });
   const [savingRule, setSavingRule] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [profitSharingInputs, setProfitSharingInputs] = useState({
+    fiscalYearStart: new Date().getFullYear() + '-01-01',
+    fiscalYearEnd: new Date().getFullYear() + '-12-31',
+    netProfits: '', sourceReference: '', verifiedAt: new Date().toISOString().slice(0,10)
+  });
+  const [profitSharingBases, setProfitSharingBases] = useState<Record<string,{monthlyNormalSalary:string;monthsWorked:string}>>({});
+  const [profitSharingLoading, setProfitSharingLoading] = useState(false);
+  const [profitSharingResult, setProfitSharingResult] = useState<ProfitSharingResult | null>(null);
   const requiredBaseFields = new Set(legalRules
     .filter(rule => rule.active && (rule.frequencyScope === 'ALL' || rule.frequencyScope === runFrequency) &&
       rule.effectiveFrom <= periodEnd && (!rule.effectiveTo || rule.effectiveTo >= periodEnd))
@@ -222,6 +239,42 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo calcular los beneficios LOTTT.');
     } finally { setLegalCalcLoading(null); }
+  };
+
+
+  const calculateProfitSharing = async () => {
+    if (profitSharingLoading || !window.sicovenStore) return;
+    const supplied = Object.entries(profitSharingBases).filter(([, values]) =>
+      values.monthlyNormalSalary.trim() || values.monthsWorked.trim()
+    );
+    if (supplied.some(([, values]) => !values.monthlyNormalSalary.trim() || !values.monthsWorked.trim())) {
+      setError('Complete salario normal y meses trabajados, o deje ambos campos vacíos.');
+      return;
+    }
+    const employeeBases = supplied.map(([employeeId, values]) => ({
+      employeeId, monthlyNormalSalary: Number(values.monthlyNormalSalary), monthsWorked: Number(values.monthsWorked)
+    }));
+    if (!Number.isFinite(Number(profitSharingInputs.netProfits)) || Number(profitSharingInputs.netProfits) < 0 ||
+        !profitSharingInputs.sourceReference.trim() || employeeBases.length === 0) {
+      setError('Indique los beneficios líquidos, su fuente y las bases salariales de los trabajadores.');
+      return;
+    }
+    setProfitSharingLoading(true); setError(''); setSuccess('');
+    try {
+      const result = await window.sicovenStore.calculatePayrollProfitSharing(token, {
+        fiscalYearStart: profitSharingInputs.fiscalYearStart,
+        fiscalYearEnd: profitSharingInputs.fiscalYearEnd,
+        netProfits: Number(profitSharingInputs.netProfits),
+        sourceReference: profitSharingInputs.sourceReference.trim(),
+        verifiedAt: profitSharingInputs.verifiedAt,
+        employees: employeeBases
+      });
+      setProfitSharingResult(result);
+      setSuccess('Distribución de utilidades calculada con nóminas confirmadas.');
+    } catch (e) {
+      setProfitSharingResult(null);
+      setError(e instanceof Error ? e.message : 'No se pudo calcular la distribución de utilidades.');
+    } finally { setProfitSharingLoading(false); }
   };
 
   const postPayrollRun = async (runId: string) => {
