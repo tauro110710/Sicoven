@@ -33,9 +33,8 @@ function calculateAnnualLaborRights(input) {
   const daily = money(input.dailyNormalSalary, 'Salario diario normal');
   const vacationDays = years < 1 ? 0 : 15 + Math.min(15, Math.max(0, years - 1));
   const vacationBonusDays = years < 1 ? 0 : 15 + Math.min(15, Math.max(0, years - 1));
-  const profitSharingMinimumDays = years < 1
-    ? 0
-    : Math.min(120, Math.max(30, 30));
+  const profitSharingMinimumDays = years < 1 ? 0 : 30;
+  const profitSharingMaximumDays = years < 1 ? 0 : 120;
   return {
     completedYears: years,
     vacationDays,
@@ -44,6 +43,8 @@ function calculateAnnualLaborRights(input) {
     vacationBonus: round2(vacationBonusDays * daily),
     profitSharingMinimumDays,
     profitSharingMinimum: round2(profitSharingMinimumDays * daily),
+    profitSharingMaximumDays,
+    profitSharingMaximum: round2(profitSharingMaximumDays * daily),
     sources: [
       'LOTTT, arts. 131, 190 y 192; Gaceta Oficial N.º 6.076 Extraordinario, 07-05-2012'
     ]
