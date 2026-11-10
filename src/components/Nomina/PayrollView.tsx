@@ -8,7 +8,7 @@ type Employee = {
   baseSalary: number; active: boolean;
 };
 
-const emptyForm = {
+const emptyForm: { fiscalId: string; fullName: string; hireDate: string; position: string; costCenter: string; frequency: 'WEEKLY' | 'BIWEEKLY'; baseSalary: string } = {
   fiscalId: '', fullName: '', hireDate: new Date().toISOString().slice(0, 10),
   position: '', costCenter: '', frequency: 'BIWEEKLY' as const, baseSalary: ''
 };
