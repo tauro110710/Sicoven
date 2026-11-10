@@ -168,6 +168,46 @@ test('creates an immutable draft payroll snapshot and prevents duplicate periods
   } finally { db.close(); }
 });
 
+test('requires only the salary bases used by legal rules effective in the payroll period', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-991', fullName: 'Julia Méndez', hireDate: '2025-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    const ordinary = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-01', periodEnd: '2026-06-15',
+      employees: [{ employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario', amount: 500, isSalary: true }],
+        bases: {} }]
+    });
+    assert.equal(ordinary.snapshot.employees[0].bases.normalSalary, 0);
+    assert.equal(ordinary.snapshot.employees[0].netPay, 500);
+
+    savePayrollLegalRule(db, 'co-a', {
+      code: 'FAOV-TEST', description: 'Regla que utiliza salario integral', base: 'integralSalary',
+      workerRate: 0.01, employerRate: 0.02, effectiveFrom: '2026-06-16',
+      sourceReference: 'Fuente normativa de prueba', verifiedAt: '2026-06-16'
+    });
+    const legal = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-16', periodEnd: '2026-06-30',
+      employees: [{ employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario', amount: 500, isSalary: true }],
+        bases: { integralSalary: 600 } }]
+    });
+    assert.equal(legal.snapshot.employees[0].bases.integralSalary, 600);
+    assert.equal(legal.snapshot.employees[0].bases.normalSalary, 0);
+    assert.equal(legal.snapshot.employees[0].workerLegalDeductions, 6);
+
+    assert.throws(() => createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-07-01', periodEnd: '2026-07-15',
+      employees: [{ employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario', amount: 500, isSalary: true }],
+        bases: {} }]
+    }), /requiere una base salarial positiva: integralSalary/);
+  } finally { db.close(); }
+});
+
 test('rejects payroll runs that mix company employees or mismatched frequencies', () => {
   const db = setup();
   try {
