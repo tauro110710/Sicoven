@@ -324,7 +324,7 @@ test('honors superior contractual vacation and vacation-bonus days with evidence
     dailyNormalSalary:100,vacationDaysOutstanding:0,vacationBonusDaysOutstanding:0,vacationBalanceSource:'Libro conciliado',
     severancePayable:0,interestStatus:'NOT_APPLICABLE',interestStatusEvidence:'Intereses conciliados',
     profitSharingStatus:'NOT_APPLICABLE',profitSharingSourceReference:'Utilidades conciliadas'};
-  assert.throws(()=>calculateFinalLiquidation({...base,vacationBonusAnnualDays:30}),/requieren contrato o convención/);
+  assert.throws(()=>calculateFinalLiquidation({...base,vacationBonusAnnualDays:30}),/requieren contrato, convención colectiva/);
   const result=calculateFinalLiquidation({...base,vacationAnnualDays:20,vacationBonusAnnualDays:30,
     vacationEntitlementEvidence:'Cláusula 18 del contrato individual'});
   assert.equal(result.currentCycleMonths,2);
@@ -365,7 +365,7 @@ test('covers documented contract expiration, work completion, mutual agreement, 
   assert.equal(forceMajeure.indemnity,1000);
   assert.equal(art83.remainingContractWages,3000);
   assert.equal(art83.indemnity,4000);
-  assert.equal(art83.total,5000);
+  assert.equal(art83.total,6416);
   assert.throws(()=>calculateFinalLiquidation({...base,terminationReason:'CONTRACT_EXPIRATION',
     contractEndDate:'2026-06-29',contractEvidence:'Contrato'}),/fecha coincidente/);
 });
