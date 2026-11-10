@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
-import { Users, UserPlus, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Users, UserPlus, RefreshCw, AlertCircle, CheckCircle2, Calculator, FileText } from 'lucide-react';
 
 type SalaryHistory = { id: string; effectiveFrom: string; effectiveTo: string | null; baseSalary: number; source: string };
 
@@ -27,6 +27,14 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [runs, setRuns] = useState<Array<{id:string;frequency:'WEEKLY'|'BIWEEKLY';periodStart:string;periodEnd:string;status:'DRAFT'|'CONFIRMED'|'VOIDED';totals:Record<string,number>;createdAt:string;confirmedAt:string|null; journalEntryId:string|null}>>([]);
+  const [runFrequency, setRunFrequency] = useState<'WEEKLY'|'BIWEEKLY'>('BIWEEKLY');
+  const [periodStart, setPeriodStart] = useState(new Date().toISOString().slice(0,10));
+  const [periodEnd, setPeriodEnd] = useState(new Date().toISOString().slice(0,10));
+  const [payInputs, setPayInputs] = useState<Record<string,{earning:string;normal:string;integral:string;gross:string}>>({});
+  const [creatingRun, setCreatingRun] = useState(false);
+  const [rulesCount, setRulesCount] = useState(0);
+
 
   const loadEmployees = useCallback(async () => {
     if (!window.sicovenStore) { setError('El almacenamiento local no está disponible.'); setLoading(false); return; }
@@ -36,7 +44,60 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
     finally { setLoading(false); }
   }, [token]);
 
-  useEffect(() => { void loadEmployees(); }, [loadEmployees]);
+
+  const loadRuns = useCallback(async () => {
+    if (!window.sicovenStore) return;
+    try {
+      const [items, rules] = await Promise.all([
+        window.sicovenStore.listPayrollRuns(token),
+        window.sicovenStore.listPayrollLegalRules(token)
+      ]);
+      setRuns(items);
+      setRulesCount(rules.length);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo consultar el historial de nóminas.');
+    }
+  }, [token]);
+
+  useEffect(() => { void loadEmployees(); void loadRuns(); }, [loadEmployees, loadRuns]);
+
+  const updatePayInput = (employeeId: string, field: 'earning'|'normal'|'integral'|'gross', value: string) => {
+    setPayInputs(current => ({
+      ...current,
+      [employeeId]: { earning: '', normal: '', integral: '', gross: '', ...current[employeeId], [field]: value }
+    }));
+  };
+
+  const createDraftRun = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (creatingRun || !window.sicovenStore) return;
+    const selected = employees.filter(employee => employee.active && employee.frequency === runFrequency);
+    if (selected.length === 0) { setError('No hay trabajadores activos con esta periodicidad.'); return; }
+    const missing = selected.find(employee => {
+      const values = payInputs[employee.id];
+      return !values || ['earning','normal','integral','gross'].some(key => !Number.isFinite(Number(values[key])) || Number(values[key]) <= 0);
+    });
+    if (missing) { setError('Complete asignación del período y las tres bases salariales para ' + missing.fullName + '. No se asumirán equivalencias entre salario semanal, quincenal, normal e integral.'); return; }
+    setCreatingRun(true); setError(''); setSuccess('');
+    try {
+      const result = await window.sicovenStore.createPayrollRun(token, {
+        frequency: runFrequency, periodStart, periodEnd,
+        employees: selected.map(employee => {
+          const values = payInputs[employee.id];
+          return {
+            employeeId: employee.id,
+            earnings: [{ code: 'SALARIO', description: 'Salario del período', amount: Number(values.earning), isSalary: true }],
+            bases: { normalSalary: Number(values.normal), integralSalary: Number(values.integral), grossSalary: Number(values.gross) }
+          };
+        })
+      });
+      await loadRuns();
+      setSuccess('Borrador de nómina creado. Revise sus importes y reglas antes de contabilizar; todavía no se ha confirmado ni generado asiento.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo calcular el borrador de nómina.');
+    } finally { setCreatingRun(false); }
+  };
+
 
   const toggleSalaryHistory = async (employeeId: string) => {
     if (historyOpen === employeeId) { setHistoryOpen(null); return; }
@@ -148,6 +209,62 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
           </div>)}</div>}
       </section>
     </div>
+
+    <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+        <Calculator className="text-emerald-700"/><div><h2 className="font-bold text-slate-900">Procesar nómina</h2><p className="text-xs text-slate-500">Crea un borrador revisable; no contabiliza ni confirma automáticamente.</p></div>
+      </div>
+      <form onSubmit={createDraftRun} className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className="space-y-1 text-sm font-medium text-slate-700">Periodicidad
+            <select value={runFrequency} onChange={e=>setRunFrequency(e.target.value as 'WEEKLY'|'BIWEEKLY')} className="w-full rounded-lg border border-slate-300 px-3 py-2">
+              <option value="WEEKLY">Semanal</option><option value="BIWEEKLY">Quincenal</option>
+            </select>
+          </label>
+          <label className="space-y-1 text-sm font-medium text-slate-700">Desde
+            <input required type="date" value={periodStart} onChange={e=>setPeriodStart(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
+          </label>
+          <label className="space-y-1 text-sm font-medium text-slate-700">Hasta
+            <input required type="date" min={periodStart} value={periodEnd} onChange={e=>setPeriodEnd(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
+          </label>
+        </div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          {rulesCount > 0 ? rulesCount + ' regla(s) legal(es) registradas. Solo se aplicarán las vigentes, verificadas y aplicables a esta empresa.' : 'No hay reglas legales configuradas. El borrador mostrará asignaciones y neto sin inventar retenciones ni aportes.'}
+          Las bases normal, integral y bruta se solicitan por separado: no se deducen de la ficha salarial.
+        </div>
+        {employees.filter(employee=>employee.active && employee.frequency===runFrequency).length === 0
+          ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">Registre trabajadores activos con periodicidad {runFrequency==='WEEKLY'?'semanal':'quincenal'} para procesar este período.</p>
+          : <div className="space-y-3">
+            {employees.filter(employee=>employee.active && employee.frequency===runFrequency).map(employee=>{
+              const values=payInputs[employee.id] || {earning:'',normal:'',integral:'',gross:''};
+              return <div key={employee.id} className="rounded-lg border border-slate-200 p-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><p className="font-semibold text-slate-900">{employee.fullName}</p><span className="text-xs text-slate-500">{employee.fiscalId}</span></div>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {([
+                    ['earning','Asignación del período'],
+                    ['normal','Base salario normal'],
+                    ['integral','Base salario integral'],
+                    ['gross','Base salario bruto']
+                  ] as const).map(([field,label])=><label key={field} className="space-y-1 text-xs font-medium text-slate-600">{label} (Bs.)
+                    <input required type="number" min="0.01" step="0.01" value={values[field]} onChange={e=>updatePayInput(employee.id,field,e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
+                  </label>)}
+                </div>
+              </div>;
+            })}
+          </div>}
+        <button disabled={creatingRun || loading || employees.filter(employee=>employee.active && employee.frequency===runFrequency).length===0} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 font-bold text-white hover:bg-emerald-800 disabled:opacity-60">
+          <Calculator size={17}/>{creatingRun?'Calculando…':'Calcular y guardar borrador'}
+        </button>
+      </form>
+      <div className="border-t border-slate-100 pt-4">
+        <div className="mb-2 flex items-center gap-2"><FileText size={17} className="text-slate-600"/><h3 className="font-bold text-slate-900">Historial de nóminas</h3></div>
+        {runs.length===0 ? <p className="text-sm text-slate-500">Todavía no hay nóminas procesadas en esta empresa.</p> :
+          <div className="divide-y divide-slate-100">{runs.map(run=><div key={run.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
+            <div><p className="font-semibold text-slate-800">{run.periodStart} al {run.periodEnd} · {run.frequency==='WEEKLY'?'Semanal':'Quincenal'}</p><p className="text-xs text-slate-500">Neto: Bs. {(run.totals.netPay||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})} · {run.id.slice(0,8)}</p></div>
+            <span className={run.status==='CONFIRMED'?'rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800':'rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800'}>{run.status==='CONFIRMED'?'Confirmada':run.status==='VOIDED'?'Anulada':'Borrador'}</span>
+          </div>)}</div>}
+      </div>
+    </section>
     <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
       La ficha del trabajador ya se guarda en la base SQLite independiente de esta empresa. Los cálculos legales, recibos y contabilización se habilitarán cuando sus reglas vigentes hayan sido verificadas; no se aplican tasas supuestas.
     </div>
