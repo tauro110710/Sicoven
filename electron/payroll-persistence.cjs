@@ -663,7 +663,7 @@ function calculatePayrollSeverance(db, companyId, input) {
   const applicableDeposits=history.deposits.filter(item=>item.depositDate<=asOfDate);
   const quarterlyDeposits=applicableDeposits.filter(item=>item.kind==='QUARTERLY').map(item=>({days:item.days,dailyIntegralSalary:item.dailyIntegralSalary}));
   const additionalSeniorityDeposits=applicableDeposits.filter(item=>item.kind==='SENIORITY').map(item=>({serviceYear:item.serviceYear,days:item.days,dailyIntegralSalary:item.dailyIntegralSalary}));
-  const expectedSeniorityYears=Math.min(Math.floor(completedCalendarMonths(employee.hireDate,asOfDate)/12),15);
+  const expectedSeniorityYears=Math.min(completedYears(employee.hireDate,asOfDate),15);
   const actualSeniorityYears=additionalSeniorityDeposits.map(item=>Number(item.serviceYear)).sort((a,b)=>a-b);
   if(actualSeniorityYears.length!==expectedSeniorityYears || actualSeniorityYears.some((year,index)=>year!==index+1)) {
     throw new Error('El historial debe identificar una sola vez cada año de servicio con depósito adicional. Revise los años inferidos o rectifique los registros históricos.');
