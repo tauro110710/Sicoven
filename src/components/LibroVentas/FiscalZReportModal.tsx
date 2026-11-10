@@ -132,7 +132,7 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
     if (sameDayRangeOverlap) { setError('El rango de facturas se solapa con otro Reporte Z ya registrado para esta máquina y fecha. Revise el cierre existente.'); return; }
     const referenceDoc = buildFiscalZReferenceDoc({ sourceType, machineSerial, sourceSystemName, sourceTerminalId, zNumber });
     if (journalEntries.some(entry => entry.companyId === currentCompany.id && entry.referenceDoc?.toUpperCase() === referenceDoc.toUpperCase())) {
-      setError('Ese Reporte Z ya fue registrado para esta máquina fiscal.'); return;
+      setError('Ese cierre ya fue registrado para el mismo origen, sistema y número.'); return;
     }
     if (PAYMENT_ROWS.some(row => parseAmount(payments[row.key]) > 0 && (
       row.key === 'credit'
@@ -192,7 +192,7 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
     }
   };
 
-  return <div className="fixed inset-0 z-[70] overflow-y-auto bg-slate-950/60 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Registrar Reporte Z">
+  return <div className="fixed inset-0 z-[70] overflow-y-auto bg-slate-950/60 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Registrar cierre diario de ventas">
     <div className="mx-auto my-4 max-w-5xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
       <header className="flex items-center justify-between gap-3 bg-slate-900 px-5 py-4 text-white">
         <div><h2 className="text-base font-bold">Registrar ventas por cierre diario</h2><p className="mt-1 text-xs text-slate-300">Máquina fiscal, sistema POS o facturación digital · asiento contable integrado</p></div>
@@ -202,13 +202,13 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
         <section className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-3">
           <label className="font-semibold text-slate-700">Origen del cierre<select value={sourceType} onChange={event => setSourceType(event.target.value as 'FISCAL_MACHINE' | 'POS' | 'DIGITAL')} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 font-normal"><option value="FISCAL_MACHINE">Máquina fiscal — Reporte Z</option><option value="POS">Sistema POS — cierre diario</option><option value="DIGITAL">Facturación digital — resumen / lote</option></select></label>
           <label className="font-semibold text-slate-700">Fecha del cierre<input type="date" value={date} onChange={event => setDate(event.target.value)} required className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
-          <label className="font-semibold text-slate-700">Número de Reporte Z<input value={zNumber} onChange={event => setZNumber(event.target.value)} required placeholder="Ej. 001258" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
+          <label className="font-semibold text-slate-700">N.º de cierre / Reporte Z<input value={zNumber} onChange={event => setZNumber(event.target.value)} required placeholder="Ej. 001258" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
           {sourceType === 'FISCAL_MACHINE' ? <>
             <label className="font-semibold text-slate-700">Serial de máquina fiscal<input value={machineSerial} onChange={event => setMachineSerial(event.target.value)} required placeholder="Serial impreso en equipo" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
             <label className="font-semibold text-slate-700">Marca<input value={machineBrand} onChange={event => setMachineBrand(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
             <label className="font-semibold text-slate-700">Modelo<input value={machineModel} onChange={event => setMachineModel(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
           </> : <>
-            <label className="font-semibold text-slate-700">{sourceType === 'POS' ? 'Nombre del sistema POS' : 'Plataforma / proveedor digital'}<input value={sourceSystemName} onChange={event => setSourceSystemName(event.target.value)} required placeholder={sourceType === 'POS' ? 'Ej. SICOVEN POS, otro sistema' : 'Nombre de la plataforma autorizada'} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
+            <label className="font-semibold text-slate-700">{sourceType === 'POS' ? 'Nombre del sistema POS' : 'Plataforma / proveedor digital'}<input value={sourceSystemName} onChange={event => setSourceSystemName(event.target.value)} required placeholder={sourceType === 'POS' ? 'Ej. SICOVEN POS, otro sistema' : 'Nombre de la plataforma / proveedor'} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
             <label className="font-semibold text-slate-700">Terminal / caja (si aplica)<input value={sourceTerminalId} onChange={event => setSourceTerminalId(event.target.value)} placeholder="Ej. Caja 01" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
           </>}
           <label className="font-semibold text-slate-700">Tasa BCV del cierre<input inputMode="decimal" value={rateInput} onChange={event => setRateInput(event.target.value)} required placeholder="Ej. 889,67" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
