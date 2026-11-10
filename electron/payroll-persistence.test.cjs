@@ -265,6 +265,9 @@ test('confirms a payroll run once with its accounting entry and is safe to retry
         bases: { normalSalary: 600, integralSalary: 600, grossSalary: 600 }
       }]
     });
+    assert.throws(() => confirmPayrollRun(db, 'co-a', run.id, 'journal-123'), /No existe en la contabilidad/);
+    db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'")
+      .run(JSON.stringify({ companies: [{ id: 'co-a' }], journalEntries: [{ id: 'journal-123', companyId: 'co-a', referenceDoc: 'NOM-' + run.id }] }));
     const confirmed = confirmPayrollRun(db, 'co-a', run.id, 'journal-123');
     assert.equal(confirmed.status, 'CONFIRMED');
     assert.equal(confirmed.journalEntryId, 'journal-123');
