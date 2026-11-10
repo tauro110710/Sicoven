@@ -129,8 +129,14 @@ async function main() {
   // El registro inicial puede abrirse automáticamente cuando termina la
   // hidratación SQLite. Si la aplicación muestra primero la pantalla principal,
   // seguir el flujo real del selector de empresas en lugar de asumir un modal.
-  await waitFor(() => evaluate("Boolean(document.querySelector('.company-registration-modal')) || Boolean([...document.querySelectorAll('button')].find(button => (button.title || '').startsWith('Empresa activa:')))"),
-    'SICOVEN no mostró el selector de empresas después del acceso', 60000);
+  try {
+    await waitFor(() => evaluate("Boolean(document.querySelector('.company-registration-modal')) || Boolean([...document.querySelectorAll('button')].find(button => (button.title || '').startsWith('Empresa activa:')))"),
+      'SICOVEN no mostró el selector de empresas después del acceso', 60000);
+  } catch (error) {
+    const diagnostic = await evaluate("JSON.stringify({title:document.title,body:(document.body?.innerText||'').slice(0,5000),url:location.href,companyModal:!!document.querySelector('.company-registration-modal'),companyButton:[...document.querySelectorAll('button')].some(button=>(button.title||'').startsWith('Empresa activa:')),loginForm:!!document.querySelector('#loginForm')})").catch(() => 'No se pudo leer el estado del renderer');
+    try { await capture('migration-post-login-failure.png'); } catch {}
+    throw new Error(String(error.message || error) + ' | Estado visible después del acceso: ' + diagnostic);
+  }
   let companyModalOpen = await evaluate("Boolean(document.querySelector('.company-registration-modal'))");
   if (!companyModalOpen) {
     const openedSelector = await evaluate("(() => { const button = [...document.querySelectorAll('button')].find(item => (item.title || '').startsWith('Empresa activa:')); if (!button) return false; button.click(); return true; })()");
