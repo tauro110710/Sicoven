@@ -156,8 +156,9 @@ function calculateSeverance(input) {
   if (input.quarterlyDeposits.length < quarters) {
     throw new Error('El historial de garantía está incompleto: faltan depósitos trimestrales.');
   }
-  if (input.additionalSeniorityDeposits.length < Math.max(0, years - 1)) {
-    throw new Error('El historial de garantía está incompleto: faltan depósitos adicionales por antigüedad.');
+  const expectedSeniorityDeposits = Math.min(years, 15);
+  if (input.additionalSeniorityDeposits.length !== expectedSeniorityDeposits) {
+    throw new Error('El historial de garantía está incompleto o contiene depósitos adicionales duplicados: se requieren ' + expectedSeniorityDeposits + ' registros anuales.');
   }
   const sumDeposits = (items, label) => items.reduce((sum, item) => {
     const days = money(item.days, label + ' — días');
@@ -169,6 +170,15 @@ function calculateSeverance(input) {
   const additionalSeniorityAmount = round2(sumDeposits(input.additionalSeniorityDeposits, 'Depósito adicional'));
   const quarterlyGuaranteeDays = round2(input.quarterlyDeposits.reduce((sum, item) => sum + money(item.days, 'Días trimestrales'), 0));
   const additionalSeniorityDays = round2(input.additionalSeniorityDeposits.reduce((sum, item) => sum + money(item.days, 'Días adicionales'), 0));
+  const expectedQuarterlyDays = round2(quarters * 15);
+  const expectedAdditionalSeniorityDays = round2(Math.min(years * 2, 30));
+  if (Math.abs(quarterlyGuaranteeDays - expectedQuarterlyDays) > 0.001) {
+    throw new Error('Los depósitos trimestrales deben representar quince días por cada trimestre completo.');
+  }
+  if (Math.abs(additionalSeniorityDays - expectedAdditionalSeniorityDays) > 0.001 ||
+      input.additionalSeniorityDeposits.some(item => Math.abs(money(item.days, 'Días adicionales') - 2) > 0.001)) {
+    throw new Error('Los depósitos adicionales deben ser de dos días por cada año cumplido, acumulativos hasta treinta días.');
+  }
   const guaranteeDays = round2(quarterlyGuaranteeDays + additionalSeniorityDays);
   const beforeThreeMonths = asOf < addMonthsClamped(hire, 3);
   const completedMonthDate = addMonthsClamped(hire, monthsElapsed);

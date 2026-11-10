@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { calculateVacationSalaryBasis, calculateAnnualLaborRights, calculateProfitSharingDistribution, calculateSeverance, calculateSeveranceInterest, calculateSeveranceSalaryBasis } = require('./payroll-legal-calculations.cjs');
+const { completedYears, calculateVacationSalaryBasis, calculateAnnualLaborRights, calculateProfitSharingDistribution, calculateSeverance, calculateSeveranceInterest, calculateSeveranceSalaryBasis } = require('./payroll-legal-calculations.cjs');
 
 function text(value, label, max = 240, min = 1) {
   const result = String(value ?? '').trim();
@@ -563,6 +563,21 @@ function savePayrollSeveranceDeposit(db, companyId, input) {
   const kind=String(input.kind||'');
   if(!['QUARTERLY','SENIORITY','ADVANCE'].includes(kind)) throw new Error('Indique si el registro es trimestral, adicional por antigüedad o anticipo.');
   const days=positiveOrZero(input.days,'Días reconocidos');
+  if(kind==='SENIORITY') {
+    const serviceYear=completedYears(employee.hireDate,depositDate);
+    if(serviceYear<1 || serviceYear>15) throw new Error('El depósito adicional solo corresponde al cierre de cada año cumplido y hasta completar treinta días (quince años).');
+    if(Math.abs(days-2)>0.001) throw new Error('El depósito adicional por antigüedad debe ser exactamente de dos días por año.');
+    const priorRows=db.prepare(`SELECT id,deposit_date AS depositDate FROM payroll_severance_deposits
+      WHERE company_id=? AND employee_id=? AND deposit_kind='SENIORITY'`).all(companyId,employeeId);
+    const duplicateYear=priorRows.find(row=>row.id!==input.supersedesId &&
+      !db.prepare('SELECT id FROM payroll_severance_deposits WHERE supersedes_id=?').get(row.id) &&
+      completedYears(employee.hireDate,row.depositDate)===serviceYear);
+    if(duplicateYear) throw new Error('Ya existe el depósito adicional correspondiente al año de servicio ' + serviceYear + '. Use rectificación si el registro está equivocado.');
+    if(input.supersedesId) {
+      const previous=db.prepare('SELECT deposit_date AS depositDate FROM payroll_severance_deposits WHERE id=? AND company_id=?').get(input.supersedesId,companyId);
+      if(!previous || completedYears(employee.hireDate,previous.depositDate)!==serviceYear) throw new Error('La rectificación debe conservar el mismo año de servicio del depósito original.');
+    }
+  }
   const dailyIntegralSalary=positiveOrZero(input.dailyIntegralSalary,'Salario diario integral histórico');
   if(days<=0||dailyIntegralSalary<=0) throw new Error('Los días y el salario diario integral deben ser mayores que cero.');
   const sourceReference=text(input.sourceReference,'Fuente o comprobante',300);
@@ -579,11 +594,14 @@ function savePayrollSeveranceDeposit(db, companyId, input) {
     if(duplicate) throw new Error('Ya existe un registro vigente de ese tipo y fecha. Para corregirlo, use la opción de rectificación.');
   }
   const id=crypto.randomUUID(),amount=Math.round((days*dailyIntegralSalary+Number.EPSILON)*100)/100;
-  db.prepare(`INSERT INTO payroll_severance_deposits
-    (id,company_id,employee_id,deposit_date,deposit_kind,days,daily_integral_salary,amount,source_reference,verified_at,note,supersedes_id)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,companyId,employeeId,depositDate,kind,days,dailyIntegralSalary,amount,sourceReference,verifiedAt,note,supersedesId);
-  db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
-    .run('payroll_severance_deposit_recorded',JSON.stringify({id,companyId,employeeId,depositDate,kind,amount,supersedesId}));
+  const persist=db.transaction(()=>{
+    db.prepare(`INSERT INTO payroll_severance_deposits
+      (id,company_id,employee_id,deposit_date,deposit_kind,days,daily_integral_salary,amount,source_reference,verified_at,note,supersedes_id)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,companyId,employeeId,depositDate,kind,days,dailyIntegralSalary,amount,sourceReference,verifiedAt,note,supersedesId);
+    db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+      .run('payroll_severance_deposit_recorded',JSON.stringify({id,companyId,employeeId,depositDate,kind,amount,supersedesId}));
+  });
+  persist();
   return {id,companyId,employeeId,depositDate,kind,days,dailyIntegralSalary,amount,sourceReference,verifiedAt,note,supersedesId};
 }
 
@@ -618,11 +636,14 @@ function savePayrollSeveranceInterestMonth(db, companyId, input) {
     if(duplicate) throw new Error('Ya existe una tasa vigente para ese trabajador, mes y régimen. Use rectificación para corregirla.');
   }
   const interest=Math.round((capital*monthlyRate+Number.EPSILON)*100)/100,id=crypto.randomUUID();
-  db.prepare(`INSERT INTO payroll_severance_interest_months
-    (id,company_id,employee_id,month,mode,capital,monthly_rate,interest,source_reference,verified_at,mode_evidence,note,supersedes_id)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,companyId,employeeId,month,mode,capital,monthlyRate,interest,sourceReference,verifiedAt,modeEvidence,note,supersedesId);
-  db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
-    .run('payroll_severance_interest_recorded',JSON.stringify({id,companyId,employeeId,month,mode,interest,supersedesId}));
+  const persist=db.transaction(()=>{
+    db.prepare(`INSERT INTO payroll_severance_interest_months
+      (id,company_id,employee_id,month,mode,capital,monthly_rate,interest,source_reference,verified_at,mode_evidence,note,supersedes_id)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,companyId,employeeId,month,mode,capital,monthlyRate,interest,sourceReference,verifiedAt,modeEvidence,note,supersedesId);
+    db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+      .run('payroll_severance_interest_recorded',JSON.stringify({id,companyId,employeeId,month,mode,interest,supersedesId}));
+  });
+  persist();
   return {id,companyId,employeeId,month,mode,capital,monthlyRate,interest,sourceReference,verifiedAt,modeEvidence,note,supersedesId};
 }
 

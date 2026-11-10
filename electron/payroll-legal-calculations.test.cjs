@@ -50,7 +50,7 @@ test('compares severance guarantee against termination calculation', () => {
   const result = calculateSeverance({
     hireDate:'2022-01-01',asOfDate:'2026-01-01',dailyIntegralSalary:100,
     quarterlyDeposits:Array.from({length:16},()=>({days:15,dailyIntegralSalary:100})),
-    additionalSeniorityDeposits:Array.from({length:3},()=>({days:2,dailyIntegralSalary:100}))
+    additionalSeniorityDeposits:Array.from({length:4},()=>({days:2,dailyIntegralSalary:100}))
   });
   assert.equal(result.completedYears,4);
   assert.equal(result.quarterlyGuaranteeDays,240);
@@ -94,13 +94,37 @@ test('values each historical quarterly and seniority deposit with its own integr
       {days:15,dailyIntegralSalary:140},{days:15,dailyIntegralSalary:150},
       {days:15,dailyIntegralSalary:160},{days:15,dailyIntegralSalary:170}
     ],
-    additionalSeniorityDeposits:[{days:2,dailyIntegralSalary:115}]
+    additionalSeniorityDeposits:[{days:2,dailyIntegralSalary:115},{days:2,dailyIntegralSalary:125}]
   });
   assert.equal(result.quarterlyGuaranteeDays,120);
   assert.equal(result.additionalSeniorityDays,2);
   assert.equal(result.guaranteeAmount,16430);
   assert.equal(result.terminationAmount,12000);
   assert.equal(result.greaterBasis,'GUARANTEE');
+});
+
+
+test('matches the TSJ reference case: 8 years, 9 months and 24 days means 35 quarters plus 16 seniority days', () => {
+  const result = calculateSeverance({
+    hireDate:'2017-01-01', asOfDate:'2025-10-25', dailyIntegralSalary:200,
+    quarterlyDeposits:Array.from({length:35},(_,index)=>({days:15,dailyIntegralSalary:100+index})),
+    additionalSeniorityDeposits:Array.from({length:8},(_,index)=>({days:2,dailyIntegralSalary:150+index}))
+  });
+  assert.equal(result.completedYears,8);
+  assert.equal(result.completedMonths,105);
+  assert.equal(result.quarterlyGuaranteeDays,525);
+  assert.equal(result.additionalSeniorityDays,16);
+  assert.equal(result.guaranteeDays,541);
+  assert.equal(result.terminationDays,270);
+  assert.equal(result.greaterBasis,'GUARANTEE');
+});
+
+test('caps annual seniority deposits at thirty days and rejects missing or excessive history', () => {
+  const common={hireDate:'2000-01-01',asOfDate:'2016-01-01',dailyIntegralSalary:100,
+    quarterlyDeposits:Array.from({length:64},()=>({days:15,dailyIntegralSalary:100}))};
+  assert.equal(calculateSeverance({...common,additionalSeniorityDeposits:Array.from({length:15},()=>({days:2,dailyIntegralSalary:100}))}).additionalSeniorityDays,30);
+  assert.throws(()=>calculateSeverance({...common,additionalSeniorityDeposits:Array.from({length:14},()=>({days:2,dailyIntegralSalary:100}))}),/15 registros anuales/);
+  assert.throws(()=>calculateSeverance({...common,additionalSeniorityDeposits:Array.from({length:15},()=>({days:3,dailyIntegralSalary:100}))}),/dos días por cada año/);
 });
 
 test('requires historical salary bases instead of revaluing all old deposits at current salary', () => {
