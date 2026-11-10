@@ -310,13 +310,13 @@ function confirmPayrollRun(db, companyId, runId, journalEntryId) {
   const now = new Date().toISOString();
   const confirm = db.transaction(() => {
     const run = db.prepare(`SELECT id,status,journal_entry_id AS journalEntryId,period_start AS periodStart,
-      period_end AS periodEnd,totals_json AS totalsJson
+      period_end AS periodEnd,totals_json AS totalsJson,confirmed_at AS confirmedAt
       FROM payroll_runs WHERE id=? AND company_id=?`).get(id, companyId);
     if (!run) throw new Error('La nómina no pertenece a la empresa activa.');
     if (run.status === 'CONFIRMED') {
       if (run.journalEntryId !== journalId) throw new Error('La nómina ya fue confirmada con otro asiento contable.');
       return { id: run.id, companyId, status: run.status, journalEntryId: run.journalEntryId,
-        periodStart: run.periodStart, periodEnd: run.periodEnd, totals: JSON.parse(run.totalsJson), confirmedAt: null, alreadyConfirmed: true };
+        periodStart: run.periodStart, periodEnd: run.periodEnd, totals: JSON.parse(run.totalsJson), confirmedAt: run.confirmedAt, alreadyConfirmed: true };
     }
     if (run.status !== 'DRAFT') throw new Error('Solo se puede confirmar una nómina en borrador.');
     const result = db.prepare(`UPDATE payroll_runs SET status='CONFIRMED',journal_entry_id=?,confirmed_at=?
