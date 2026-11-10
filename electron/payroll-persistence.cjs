@@ -307,6 +307,11 @@ function confirmPayrollRun(db, companyId, runId, journalEntryId) {
   ensureCompany(db, companyId);
   const id = text(runId, 'Nómina', 120);
   const journalId = text(journalEntryId, 'Asiento contable', 120);
+  const state = readState(db);
+  const journal = Array.isArray(state.journalEntries)
+    ? state.journalEntries.find(entry => entry && String(entry.id) === journalId && String(entry.companyId) === String(companyId) && String(entry.referenceDoc || '') === 'NOM-' + id)
+    : null;
+  if (!journal) throw new Error('No existe en la contabilidad de esta empresa el asiento correspondiente a esta nómina.');
   const now = new Date().toISOString();
   const confirm = db.transaction(() => {
     const run = db.prepare(`SELECT id,status,journal_entry_id AS journalEntryId,period_start AS periodStart,
