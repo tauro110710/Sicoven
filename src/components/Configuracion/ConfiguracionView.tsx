@@ -1318,6 +1318,9 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
                   const result = await resetFactoryData();
                   setFactoryResetStage('Verificación completada. Datos operativos eliminados.');
                   alert('RESET DE FÁBRICA verificado. Empresas eliminadas: ' + String(result.removedCompanies ?? 0) + '. Se conservaron los usuarios administradores, la licencia y la auditoría general.');
+                  // Rebuild the renderer from the verified empty SQLite registry so the header
+                  // cannot retain company names cached by AppContent.accessibleCompanies.
+                  window.location.reload();
                 } catch (error) {
                   alert(error instanceof Error ? error.message : 'No se pudo completar el reset. No se confirmó el borrado.');
                 } finally { setFactoryResetBusy(false); setFactoryResetStage(''); }
