@@ -67,7 +67,10 @@ test('preserves effective-dated salary history when a worker salary changes', ()
     assert.equal(history[0].baseSalary, 1500);
     assert.equal(history[0].source, 'SALARY_CHANGE');
     assert.equal(history[1].effectiveTo, '2025-12-31');
-    assert.equal(history[1].baseSalary, 1200);\n    assert.equal(getPayrollSalaryForDate(db, 'co-a', employee.id, '2025-06-30').baseSalary, 1200);\n    assert.equal(getPayrollSalaryForDate(db, 'co-a', employee.id, '2026-03-01').baseSalary, 1500);\n    assert.throws(() => getPayrollSalaryForDate(db, 'co-b', employee.id, '2026-03-01'), /empresa activa/);
+    assert.equal(history[1].baseSalary, 1200);
+    assert.equal(getPayrollSalaryForDate(db, 'co-a', employee.id, '2025-06-30').baseSalary, 1200);
+    assert.equal(getPayrollSalaryForDate(db, 'co-a', employee.id, '2026-03-01').baseSalary, 1500);
+    assert.throws(() => getPayrollSalaryForDate(db, 'co-b', employee.id, '2026-03-01'), /empresa activa/);
     assert.throws(() => savePayrollEmployee(db, 'co-a', { ...employee, baseSalary: 1600, salaryEffectiveFrom: '2025-12-01' }), /posterior al último cambio/);
     assert.equal(listPayrollSalaryHistory(db, 'co-a', employee.id).length, 2);
   } finally { db.close(); }
