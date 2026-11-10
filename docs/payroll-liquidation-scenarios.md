@@ -80,3 +80,8 @@ El motor separa el salario de vacaciones del bono vacacional: ambos se expresan 
 Para la fracción del ciclo anual en curso, ambos conceptos se prorratean por meses completos de servicio (art. 196). Si contrato individual, convención colectiva o condición más beneficiosa acredita días superiores, el motor acepta esos días, conserva la evidencia y nunca permite que reduzcan el mínimo legal. Los períodos anteriores deben registrarse como saldo conciliado y no se recrean sin historial de disfrute/pago.
 
 En la relación activa, el bono se paga al conceder las vacaciones (art. 192) y el salario de vacaciones al inicio del disfrute (art. 194). No se sustituye el descanso por un pago mientras continúa la relación (art. 197). En la terminación se pagan los saldos pendientes y la fracción legal, no se registra un disfrute ficticio.
+
+
+### Criterio jurisprudencial reciente sobre bono vacacional
+
+La sentencia N.º 097 de la Sala de Casación Social del TSJ, de 20-03-2026 (exp. 24-555), aplicó el artículo 192 y reconoció, según contratos que pactaban 30 días anuales, fracciones de 27,5 días por 11 meses, calculadas al último salario normal diario. También ordenó separar las porciones salariales pactadas en bolívares y divisas y convertir la porción en divisas a bolívares a la tasa oficial BCV del pago efectivo. Esto demuestra que el sistema debe admitir condiciones contractuales superiores documentadas y no imponer siempre el mínimo legal como techo. La sentencia se incorpora como criterio jurisprudencial orientador, sin sustituir la revisión de la norma y del contrato de cada trabajador.
