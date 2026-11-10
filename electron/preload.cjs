@@ -63,6 +63,7 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   listPayrollRuns: (token) => ipcRenderer.invoke('sicoven:payroll-runs-list', token),
   getPayrollRun: (token, runId) => ipcRenderer.invoke('sicoven:payroll-run-get', token, runId),
   calculatePayrollAnnualRights: (token, input) => ipcRenderer.invoke('sicoven:payroll-annual-rights-calculate', token, input),
+  calculatePayrollProfitSharing: (token, input) => ipcRenderer.invoke('sicoven:payroll-profit-sharing-calculate', token, input),
   createPayrollRun: (token, input) => ipcRenderer.invoke('sicoven:payroll-run-create', token, input),
   confirmPayrollRun: (token, runId, journalEntryId) => ipcRenderer.invoke('sicoven:payroll-run-confirm', token, runId, journalEntryId),
   listPayrollLegalRules: (token) => ipcRenderer.invoke('sicoven:payroll-rules-list', token),
