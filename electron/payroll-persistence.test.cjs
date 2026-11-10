@@ -13,7 +13,7 @@ function setup() {
   const db = new Database(':memory:');
   initializeTenantDatabase(db);
   db.prepare("INSERT INTO app_state(state_key,state_json) VALUES('accounting',?)")
-    .run(JSON.stringify({ companies: [{ id: 'co-a', inventoryBcvRateHistory: [
+    .run(JSON.stringify({ companies: [{ id: 'co-a', accountingBcvRateHistory: [
       { id: 'bcv-test-2026-07-15', rate: 100, effectiveDate: '2026-07-15',
         fetchedAt: '2026-07-15T00:00:00.000Z', source: 'BCV test fixture', provider: 'manual', mode: 'MANUAL' }
     ] }] }));
@@ -368,7 +368,7 @@ test('confirms a payroll run once with its accounting entry and is safe to retry
       ]
     };
     db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'")
-      .run(JSON.stringify({ companies: [{ id: 'co-a', inventoryBcvRateHistory: [
+      .run(JSON.stringify({ companies: [{ id: 'co-a', accountingBcvRateHistory: [
         { id: 'bcv-test-2026-07-15', rate: 100, effectiveDate: '2026-07-15',
           fetchedAt: '2026-07-15T00:00:00.000Z', source: 'BCV test fixture', provider: 'manual', mode: 'MANUAL' }
       ] }], journalEntries: [journal] }));
@@ -410,7 +410,7 @@ test('refuses to confirm a payroll with an unbalanced or wrong-date journal', ()
       ]
     };
     db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'")
-      .run(JSON.stringify({ companies: [{ id: 'co-a', inventoryBcvRateHistory: [
+      .run(JSON.stringify({ companies: [{ id: 'co-a', accountingBcvRateHistory: [
         { id: 'bcv-test-2026-07-15', rate: 100, effectiveDate: '2026-07-15',
           fetchedAt: '2026-07-15T00:00:00.000Z', source: 'BCV test fixture', provider: 'manual', mode: 'MANUAL' }
       ] }], journalEntries: [journal] }));
@@ -420,7 +420,7 @@ test('refuses to confirm a payroll with an unbalanced or wrong-date journal', ()
     journal.items[1].creditUsd = 6;
     journal.date = '2026-07-14';
     db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'")
-      .run(JSON.stringify({ companies: [{ id: 'co-a', inventoryBcvRateHistory: [
+      .run(JSON.stringify({ companies: [{ id: 'co-a', accountingBcvRateHistory: [
         { id: 'bcv-test-2026-07-15', rate: 100, effectiveDate: '2026-07-15',
           fetchedAt: '2026-07-15T00:00:00.000Z', source: 'BCV test fixture', provider: 'manual', mode: 'MANUAL' }
       ] }], journalEntries: [journal] }));
