@@ -116,6 +116,7 @@ function initializePayrollSchema(db) {
       interest REAL NOT NULL CHECK (interest >= 0),
       source_reference TEXT NOT NULL,
       verified_at TEXT NOT NULL,
+      mode_evidence TEXT NOT NULL DEFAULT '',
       note TEXT NOT NULL DEFAULT '',
       supersedes_id TEXT REFERENCES payroll_severance_interest_months(id) ON DELETE RESTRICT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -146,6 +147,10 @@ function initializePayrollSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_payroll_lines_run
       ON payroll_run_lines(run_id);
   `);
+  const interestColumns = db.pragma('table_info(payroll_severance_interest_months)');
+  if (!interestColumns.some(column => column.name === 'mode_evidence')) {
+    db.exec("ALTER TABLE payroll_severance_interest_months ADD COLUMN mode_evidence TEXT NOT NULL DEFAULT ''");
+  }
   const legalRuleColumns = db.pragma('table_info(payroll_legal_rules)');
   if (!legalRuleColumns.some(column => column.name === 'frequency_scope')) {
     db.exec("ALTER TABLE payroll_legal_rules ADD COLUMN frequency_scope TEXT NOT NULL DEFAULT 'ALL' CHECK (frequency_scope IN ('ALL','WEEKLY','BIWEEKLY'))");
