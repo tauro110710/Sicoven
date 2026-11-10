@@ -11,7 +11,7 @@ test('initializes payroll tables idempotently inside each company tenant', () =>
     const first = initializeTenantDatabase(db);
     const second = initializeTenantDatabase(db);
     assert.deepEqual(first.operationalTables, second.operationalTables);
-    for (const name of ['payroll_employees', 'payroll_legal_rules', 'payroll_runs', 'payroll_run_lines']) {
+    for (const name of ['payroll_employees', 'payroll_salary_history', 'payroll_legal_rules', 'payroll_runs', 'payroll_run_lines']) {
       assert.ok(first.operationalTables.includes(name));
       assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
     }
@@ -22,6 +22,7 @@ test('prevents duplicate employee fiscal IDs within one company and invalid payr
   const db = new Database(':memory:');
   try {
     initializeTenantDatabase(db);
+    assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='payroll_salary_history'").get());
     const insert = db.prepare(`INSERT INTO payroll_employees
       (id, company_id, fiscal_id, full_name, hire_date, frequency, base_salary)
       VALUES(?,?,?,?,?,?,?)`);
