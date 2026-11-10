@@ -59,7 +59,7 @@ if (!hasSingleInstanceLock) {
 const { migrateAuthUserRoles, hasFullSystemAccess } = require('./auth-roles.cjs');
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
 const { reconcileRestoreAudit } = require('./restore-audit-ledger.cjs');
-const { registerBackupIpc } = require('./backup-restore.cjs');
+const { registerBackupIpc, createBackup } = require('./backup-restore.cjs');
 const { registerRestoreIpc } = require('./restore-engine.cjs');
 const { recoverPendingRestore } = require('./restore-engine.cjs');
 const { registerInflationIndexIpc } = require('./inflation-indexes.cjs');
@@ -895,47 +895,79 @@ app.whenReady().then(async () => {
     });
   });
 
-  ipcMain.handle('sicoven:reset-accounting', (_event, token) => {
+  ipcMain.handle('sicoven:reset-accounting', async (_event, token) => {
+    assertOperationalReady();
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
-    if (!getActiveSession(token)) throw new Error('Sesión no válida. Inicie sesión para restablecer los datos.');
-    if (tenantController.runtime.listCompanies().length > 0) {
-      throw new Error('El reinicio global está bloqueado cuando existen bases independientes por empresa. Use el respaldo y la restauración global para recuperar una instalación completa.');
-    }
-    // El estado operativo completo vive en app_state. Vaciar la tabla dentro de
-    // una sola transacción impide dejar colecciones antiguas bajo claves adicionales.
-    // auth_users, auth_sessions y license_state son tablas separadas y no se tocan.
-    const emptyState = {
-      companies: [], currentCompanyId: '', accounts: [],
-      journalEntries: [], purchases: [], sales: [], products: [], movements: [],
-      vatVouchers: [], vatWithholdingDeclarations: [], vatWithholdingDeclarationEvents: [],
-      islrVouchers: [], islrFiscalEvents: [],
-      bankAccounts: [], bankStatementMovements: [], creditSettlements: [],
-      supplierAdvanceSettlements: [], supplierDirectAdvances: [], financialDisclosures: [],
-      displayCurrency: 'DUAL', autoSyncBcv: true, bcvSyncResult: null
+    const actor = getActiveSession(token);
+    if (!actor || actor.role !== 'admin') throw new Error('El RESET DE FÁBRICA requiere una sesión de administrador.');
+    const parentWindow = BrowserWindow.getAllWindows().find(window => !window.isDestroyed());
+    const selectionOptions = {
+      title: 'Seleccionar carpeta para el respaldo obligatorio antes del RESET DE FÁBRICA',
+      properties: ['openDirectory', 'createDirectory']
     };
-    const reset = db.transaction(() => {
-      // Conservar cualquier estado no contable; solo se sustituye la carga operativa.
-      db.prepare("DELETE FROM app_state WHERE state_key='accounting'").run();
-      db.prepare("INSERT INTO app_state(state_key,state_json,updated_at) VALUES('accounting',?,datetime('now'))")
-        .run(JSON.stringify(emptyState));
-      // El reinicio operativo no borra la pista de auditoría: se conserva todo
-      // el historial previo y se registra el reinicio como un evento adicional.
-      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
-        .run('factory_reset', JSON.stringify({ preserved: ['auth_users', 'auth_sessions', 'license_state', 'audit_events'], removed: ['app_state'] }));
-    });
-    reset();
-    const persisted = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
-    const verified = persisted ? JSON.parse(persisted.state_json) : null;
-    if (!verified || verified.companies?.length !== 0 ||
-        ['journalEntries','purchases','sales','products','movements','vatVouchers',
-        'vatWithholdingDeclarations','vatWithholdingDeclarationEvents','islrVouchers','bankAccounts',
-        'bankStatementMovements','creditSettlements','supplierAdvanceSettlements','supplierDirectAdvances',
-        'islrFiscalEvents','financialDisclosures']
-          .some(key => !Array.isArray(verified[key]) || verified[key].length !== 0)) {
-      throw new Error('La verificación posterior al reinicio detectó datos operativos residuales.');
+    const selection = parentWindow
+      ? await dialog.showOpenDialog(parentWindow, selectionOptions)
+      : await dialog.showOpenDialog(selectionOptions);
+    if (selection.canceled || !selection.filePaths?.[0]) return { ok: false, canceled: true };
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupDestination = path.join(selection.filePaths[0], 'SICOVEN-backup-antes-reset-' + stamp);
+    const release = await tenantController.operationContext.acquireMaintenanceLock();
+    try {
+      // Freeze persistence and close every company connection before creating
+      // the verified full backup and removing any registered tenant database.
+      tenantController.runtime.closeAll();
+      const backup = await createBackup({
+        db,
+        userDataDir: app.getPath('userData'),
+        destination: backupDestination
+      });
+      const tenantReset = tenantController.runtime.resetAllCompanies();
+      const emptyState = {
+        companies: [], currentCompanyId: '', accounts: [],
+        journalEntries: [], purchases: [], sales: [], products: [], customers: [],
+        suppliers: [], movements: [], fixedAssets: [], vatVouchers: [],
+        vatWithholdingDeclarations: [], vatWithholdingDeclarationEvents: [],
+        islrVouchers: [], islrFiscalEvents: [], bankAccounts: [],
+        bankStatementMovements: [], creditSettlements: [],
+        supplierAdvanceSettlements: [], supplierDirectAdvances: [],
+        financialDisclosures: [], displayCurrency: 'DUAL',
+        autoSyncBcv: true, bcvSyncResult: null
+      };
+      const reset = db.transaction(() => {
+        db.prepare('DELETE FROM app_state').run();
+        db.prepare("INSERT INTO app_state(state_key,state_json,updated_at) VALUES('accounting',?,datetime('now'))")
+          .run(JSON.stringify(emptyState));
+        db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+          .run('factory_reset', JSON.stringify({
+            actor: { userId: actor.id, username: actor.username },
+            removedCompanyCount: tenantReset.removedCompanies,
+            removedCompanyIds: tenantReset.removedCompanyIds,
+            backupDirectory: path.basename(backupDestination),
+            preserved: ['auth_users', 'auth_sessions', 'license_state', 'audit_events']
+          }));
+      });
+      reset();
+      const persisted = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+      const verified = persisted ? JSON.parse(persisted.state_json) : null;
+      const remainingCompanies = tenantController.runtime.listCompanies();
+      if (!verified || verified.companies?.length !== 0 || remainingCompanies.length !== 0 ||
+          ['journalEntries','purchases','sales','products','movements','vatVouchers',
+            'vatWithholdingDeclarations','vatWithholdingDeclarationEvents','islrVouchers',
+            'bankAccounts','bankStatementMovements','creditSettlements',
+            'supplierAdvanceSettlements','supplierDirectAdvances','islrFiscalEvents',
+            'financialDisclosures']
+            .some(key => !Array.isArray(verified[key]) || verified[key].length !== 0)) {
+        throw new Error('La verificación posterior al RESET DE FÁBRICA detectó datos operativos residuales. El respaldo previo se conserva en: ' + backupDestination);
+      }
+      return {
+        ok: true, cleared: true, verified: true,
+        removedCompanies: tenantReset.removedCompanies,
+        backupDestination
+      };
+    } finally {
+      release();
     }
-    return { ok: true, cleared: true, verified: true };
   });
 
   // Proxy dinámico: los handlers de respaldo siempre usan la conexión SQLite vigente
