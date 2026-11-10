@@ -543,7 +543,7 @@ function listPayrollSeveranceHistory(db, companyId, employeeId) {
       AND NOT EXISTS (SELECT 1 FROM payroll_severance_deposits newer WHERE newer.supersedes_id=d.id)
     ORDER BY d.deposit_date,d.created_at`).all(companyId,id);
   const interests = db.prepare(`SELECT d.id,d.month,d.mode,d.capital,d.monthly_rate AS monthlyRate,
-      d.interest,d.source_reference AS sourceReference,d.verified_at AS verifiedAt,d.note,
+      d.interest,d.source_reference AS sourceReference,d.verified_at AS verifiedAt,d.mode_evidence AS modeEvidence,d.note,
       d.supersedes_id AS supersedesId,d.created_at AS createdAt
     FROM payroll_severance_interest_months d
     WHERE d.company_id=? AND d.employee_id=?
@@ -599,6 +599,9 @@ function savePayrollSeveranceInterestMonth(db, companyId, input) {
   const monthlyRate=Number(input.monthlyRate);
   if(!Number.isFinite(monthlyRate)||monthlyRate<0||monthlyRate>1) throw new Error('La tasa mensual debe expresarse como decimal entre 0 y 1.');
   const sourceReference=text(input.sourceReference,'Fuente de la tasa',300);
+  const modeEvidence=text(input.modeEvidence,'Evidencia del régimen de intereses',500);
+  if(mode==='AUTHORIZED_BOOK_CREDIT' && !/autorizaci[oó]n|consentimiento|firma/i.test(modeEvidence)) throw new Error('Para abonar intereses en la contabilidad se requiere identificar la autorización escrita del trabajador.');
+  if(mode==='UNDEPOSITED' && !/seis|6\s*(bancos|instituciones)|bancos.*principales/i.test(modeEvidence)) throw new Error('Para intereses no depositados debe documentarse que la tasa corresponde a los seis principales bancos.');
   const verifiedAt=date(input.verifiedAt,'Fecha de verificación');
   const note=input.note?text(input.note,'Nota',500,0):'';
   const supersedesId=input.supersedesId?text(input.supersedesId,'Registro corregido',120):null;
@@ -613,11 +616,11 @@ function savePayrollSeveranceInterestMonth(db, companyId, input) {
   }
   const interest=Math.round((capital*monthlyRate+Number.EPSILON)*100)/100,id=crypto.randomUUID();
   db.prepare(`INSERT INTO payroll_severance_interest_months
-    (id,company_id,employee_id,month,mode,capital,monthly_rate,interest,source_reference,verified_at,note,supersedes_id)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,companyId,employeeId,month,mode,capital,monthlyRate,interest,sourceReference,verifiedAt,note,supersedesId);
+    (id,company_id,employee_id,month,mode,capital,monthly_rate,interest,source_reference,verified_at,mode_evidence,note,supersedes_id)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,companyId,employeeId,month,mode,capital,monthlyRate,interest,sourceReference,verifiedAt,modeEvidence,note,supersedesId);
   db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
     .run('payroll_severance_interest_recorded',JSON.stringify({id,companyId,employeeId,month,mode,interest,supersedesId}));
-  return {id,companyId,employeeId,month,mode,capital,monthlyRate,interest,sourceReference,verifiedAt,note,supersedesId};
+  return {id,companyId,employeeId,month,mode,capital,monthlyRate,interest,sourceReference,verifiedAt,modeEvidence,note,supersedesId};
 }
 
 function calculatePayrollSeverance(db, companyId, input) {
