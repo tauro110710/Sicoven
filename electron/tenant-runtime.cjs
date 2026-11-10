@@ -114,6 +114,10 @@ function createTenantRuntime({
     return manager.closeAll();
   }
 
+  function resetAllCompanies() {
+    return manager.resetAllCompanies();
+  }
+
   return Object.freeze({
     listCompanies,
     getCompanyDatabase,
