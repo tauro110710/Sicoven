@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Company,
+  AccountingBcvRateHistoryEntry,
   Account,
   CashFlowActivity,
   CashFlowIndirectTreatment,
@@ -1113,7 +1114,21 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           // La hidratación nunca elimina empresas ni movimientos históricos por identificadores o nombres.
           if (saved && typeof saved === 'object') {
             lastPersistedSnapshotRef.current = saved;
-            if (Array.isArray(saved.companies)) setCompanies(saved.companies as Company[]);
+            if (Array.isArray(saved.companies)) {
+              const loadedCompanies = saved.companies as Company[];
+              setCompanies(loadedCompanies.map(company => {
+                if (Array.isArray(company.accountingBcvRateHistory) && company.accountingBcvRateHistory.length > 0) return company;
+                if (!Number.isFinite(Number(company.bcvRate)) || Number(company.bcvRate) <= 0 ||
+                    !company.lastRateUpdate || !isValidIsoDate(company.lastRateUpdate)) return company;
+                const legacyRate: AccountingBcvRateHistoryEntry = {
+                  id: 'accounting-bcv-legacy-' + company.id + '-' + company.lastRateUpdate,
+                  rate: Number(company.bcvRate), effectiveDate: company.lastRateUpdate,
+                  recordedAt: company.lastRateUpdate + 'T00:00:00.000Z', source: 'LEGACY',
+                  note: 'Migración de la tasa contable vigente; no reconstruye tasas históricas anteriores.'
+                };
+                return { ...company, accountingBcvRateHistory: [legacyRate] };
+              }));
+            }
             if (typeof saved.currentCompanyId === 'string') setCurrentCompanyId(saved.currentCompanyId);
             if (Array.isArray(saved.accounts)) {
               const savedAccounts = saved.accounts as Account[];
@@ -1364,10 +1379,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     );
     if (!validDate) return;
 
+    const history = currentCompany.accountingBcvRateHistory || [];
+    const alreadyRecorded = history.some(item => item.effectiveDate === today && Number(item.rate) === newRate);
+    const nextHistory = alreadyRecorded ? history : [...history, {
+      id: 'accounting-bcv-' + today + '-' + Date.now(),
+      rate: newRate, effectiveDate: today, recordedAt: new Date().toISOString(),
+      source: 'MANUAL' as const, note: 'Tasa BCV registrada manualmente desde el módulo contable.'
+    }];
     updateCompany({
       ...currentCompany,
       bcvRate: newRate,
-      lastRateUpdate: today
+      lastRateUpdate: today,
+      accountingBcvRateHistory: nextHistory
     });
   };
 
@@ -1395,7 +1418,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       reason, workpaperNote
     };
     await recordCorrectionAudit(auditInput);
-    updateCompany({ ...currentCompany, bcvRate: rate, lastRateUpdate: input.effectiveDate });
+    const history = currentCompany.accountingBcvRateHistory || [];
+    const priorForDate = [...history].filter(item => item.effectiveDate === input.effectiveDate)
+      .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))[0];
+    const correction: AccountingBcvRateHistoryEntry = {
+      id: 'accounting-bcv-correction-' + input.effectiveDate + '-' + Date.now(),
+      rate, effectiveDate: input.effectiveDate, recordedAt: new Date().toISOString(),
+      source: 'CORRECTION', note: [reason, workpaperNote].filter(Boolean).join(' · '),
+      ...(priorForDate ? { correctionOfId: priorForDate.id } : {})
+    };
+    updateCompany({
+      ...currentCompany, bcvRate: rate, lastRateUpdate: input.effectiveDate,
+      accountingBcvRateHistory: [...history, correction]
+    });
     try {
       await waitForPersistence();
     } catch (error) {
