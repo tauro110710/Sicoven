@@ -80,18 +80,17 @@ function savePayrollEmployee(db, companyId, input) {
   if (salaryChanged && latestSalary && salaryEffectiveFrom <= latestSalary.effectiveFrom) {
     throw new Error('La vigencia del nuevo salario debe ser posterior al último cambio registrado (' + latestSalary.effectiveFrom + ').');
   }
-  db.prepare(`INSERT INTO payroll_employees
-    (id,company_id,fiscal_id,full_name,hire_date,position,cost_center,frequency,base_salary,active,created_at,updated_at)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-    ON CONFLICT(id) DO UPDATE SET fiscal_id=excluded.fiscal_id,full_name=excluded.full_name,
-    hire_date=excluded.hire_date,position=excluded.position,cost_center=excluded.cost_center,
-    frequency=excluded.frequency,base_salary=excluded.base_salary,active=excluded.active,updated_at=excluded.updated_at`)
-    .run(id, companyId, fiscalId, fullName, hireDate, position, costCenter, frequency, baseSalary, active,
-      existing ? now : now, now);
-  if (salaryChanged) {
-    const priorDay = new Date(salaryEffectiveFrom + 'T00:00:00.000Z');
-    priorDay.setUTCDate(priorDay.getUTCDate() - 1);
-    const saveSalary = db.transaction(() => {
+  const persistEmployee = db.transaction(() => {
+    db.prepare(`INSERT INTO payroll_employees
+      (id,company_id,fiscal_id,full_name,hire_date,position,cost_center,frequency,base_salary,active,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(id) DO UPDATE SET fiscal_id=excluded.fiscal_id,full_name=excluded.full_name,
+      hire_date=excluded.hire_date,position=excluded.position,cost_center=excluded.cost_center,
+      frequency=excluded.frequency,base_salary=excluded.base_salary,active=excluded.active,updated_at=excluded.updated_at`)
+      .run(id, companyId, fiscalId, fullName, hireDate, position, costCenter, frequency, baseSalary, active, now, now);
+    if (salaryChanged) {
+      const priorDay = new Date(salaryEffectiveFrom + 'T00:00:00.000Z');
+      priorDay.setUTCDate(priorDay.getUTCDate() - 1);
       if (latestSalary) db.prepare(`UPDATE payroll_salary_history SET effective_to=?
         WHERE company_id=? AND employee_id=? AND effective_to IS NULL`).run(
           priorDay.toISOString().slice(0,10), companyId, id);
@@ -99,12 +98,12 @@ function savePayrollEmployee(db, companyId, input) {
         (id,company_id,employee_id,effective_from,effective_to,base_salary,source)
         VALUES(?,?,?,?,NULL,?,?)`).run(crypto.randomUUID(), companyId, id, salaryEffectiveFrom, baseSalary,
           existing ? 'SALARY_CHANGE' : 'INITIAL');
-    });
-    saveSalary();
-  }
-  db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
-    .run(existing ? 'payroll_employee_updated' : 'payroll_employee_created',
-      JSON.stringify({ employeeId: id, companyId, fiscalId, fullName, salaryChanged, salaryEffectiveFrom: salaryChanged ? salaryEffectiveFrom : null, baseSalary }));
+    }
+    db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+      .run(existing ? 'payroll_employee_updated' : 'payroll_employee_created',
+        JSON.stringify({ employeeId: id, companyId, fiscalId, fullName, salaryChanged, salaryEffectiveFrom: salaryChanged ? salaryEffectiveFrom : null, baseSalary }));
+  });
+  persistEmployee();
   return listPayrollEmployees(db, companyId).find(item => item.id === id);
 }
 function listPayrollLegalRules(db, companyId) {
