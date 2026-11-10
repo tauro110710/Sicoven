@@ -282,7 +282,7 @@ test('adds the equivalent severance indemnity only to legally classified art. 80
   const art80=calculateFinalLiquidation({...base,terminationReason:'JUSTIFIED_WITHDRAWAL_ART80',legalClassificationConfirmed:true,legalEvidence:'Acta de Inspectoría'});
   const art92=calculateFinalLiquidation({...base,terminationReason:'UNJUSTIFIED_DISMISSAL_ART92',workerChoice:'NO_REENGAGEMENT',legalClassificationConfirmed:true,legalEvidence:'Constancia de opción del trabajador'});
   const resignation=calculateFinalLiquidation({...base,terminationReason:'VOLUNTARY_RESIGNATION'});
-  const justifiedDismissal=calculateFinalLiquidation({...base,terminationReason:'JUSTIFIED_DISMISSAL_ART79'});
+  const justifiedDismissal=calculateFinalLiquidation({...base,terminationReason:'JUSTIFIED_DISMISSAL_ART79',legalClassificationConfirmed:true,legalEvidence:'Causal acreditada'});
   assert.equal(art80.indemnity,10000);
   assert.equal(art92.indemnity,10000);
   assert.equal(resignation.indemnity,0);
