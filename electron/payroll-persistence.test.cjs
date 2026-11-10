@@ -116,8 +116,22 @@ test('creates an immutable draft payroll snapshot and prevents duplicate periods
     assert.throws(() => createPayrollRun(db, 'co-a', {
       frequency: 'BIWEEKLY', periodStart: '2026-06-01', periodEnd: '2026-06-15',
       employees: [{ employeeId: employee.id, earnings: [{code:'SAL',description:'Salario',amount:1000}], bases:{normalSalary:1000,integralSalary:1000,grossSalary:1000} }]
-    }), /UNIQUE constraint failed/);
+    }), /Ya existe una nómina BIWEEKLY/);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM payroll_runs').get().count, 1);
+    assert.throws(() => createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-10', periodEnd: '2026-06-25',
+      employees: [{ employeeId: employee.id, earnings: [{code:'SAL',description:'Salario',amount:1000}], bases:{normalSalary:1000,integralSalary:1000,grossSalary:1000} }]
+    }), /se cruza con 2026-06-01 al 2026-06-15/);
+    const nextPeriod = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-16', periodEnd: '2026-06-30',
+      employees: [{ employeeId: employee.id, earnings: [{code:'SAL',description:'Salario',amount:1000}], bases:{normalSalary:1000,integralSalary:1000,grossSalary:1000} }]
+    });
+    assert.equal(nextPeriod.status, 'DRAFT');
+    const weekly = createPayrollRun(db, 'co-a', {
+      frequency: 'WEEKLY', periodStart: '2026-06-10', periodEnd: '2026-06-16',
+      employees: [{ employeeId: employee.id, earnings: [{code:'SAL',description:'Salario',amount:500}], bases:{normalSalary:500,integralSalary:500,grossSalary:500} }]
+    });
+    assert.equal(weekly.status, 'DRAFT');
   } finally { db.close(); }
 });
 
