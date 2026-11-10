@@ -15,6 +15,10 @@ test('initializes payroll tables idempotently inside each company tenant', () =>
       assert.ok(first.operationalTables.includes(name));
       assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
     }
+    const legalRuleColumns = db.pragma('table_info(payroll_legal_rules)');
+    const frequencyScope = legalRuleColumns.find(column => column.name === 'frequency_scope');
+    assert.ok(frequencyScope);
+    assert.equal(frequencyScope.dflt_value, "'ALL'");
   } finally { db.close(); }
 });
 
