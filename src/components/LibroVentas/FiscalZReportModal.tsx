@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { FiscalZReportMetadata, JournalEntryItem } from '../../types/accounting';
-import { calculateFiscalZTaxBreakdown } from '../../types/fiscalZReport';
+import { buildFiscalZReferenceDoc, calculateFiscalZTaxBreakdown } from '../../types/fiscalZReport';
 
 type PaymentKey = 'cash' | 'foreignCash' | 'transfer' | 'card' | 'credit' | 'other';
 const PAYMENT_ROWS: Array<{ key: PaymentKey; label: string; defaultAccount: string }> = [
@@ -67,13 +67,13 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const sameMachineReports = journalEntries.filter(entry => entry.companyId === currentCompany.id && entry.fiscalZReport && entry.fiscalZReport.machineSerial.trim().toUpperCase() === machineSerial.trim().toUpperCase());
   const numericStart = /^\d+$/.test(invoiceStart.trim()) ? Number(invoiceStart) : null;
   const numericEnd = /^\d+$/.test(invoiceEnd.trim()) ? Number(invoiceEnd) : null;
-  const sameDayRangeOverlap = numericStart !== null && numericEnd !== null && sameMachineReports.some(entry => {
+  const sameDayRangeOverlap = sourceType === 'FISCAL_MACHINE' && numericStart !== null && numericEnd !== null && sameMachineReports.some(entry => {
     const z = entry.fiscalZReport!;
     if (z.date !== date || !/^\d+$/.test(z.invoiceStart) || !/^\d+$/.test(z.invoiceEnd)) return false;
     return numericStart <= Number(z.invoiceEnd) && numericEnd >= Number(z.invoiceStart);
   });
-  const priorNumericReport = sameMachineReports.filter(entry => entry.date < date && /^\d+$/.test(entry.fiscalZReport!.invoiceEnd))
-    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  const priorNumericReport = sourceType === 'FISCAL_MACHINE' ? sameMachineReports.filter(entry => entry.date < date && /^\d+$/.test(entry.fiscalZReport!.invoiceEnd))
+    .sort((a, b) => b.date.localeCompare(a.date))[0] : undefined;
   const priorEnd = priorNumericReport ? Number(priorNumericReport.fiscalZReport!.invoiceEnd) : null;
   const invoiceRangeWarning = numericStart !== null && priorEnd !== null && numericStart > priorEnd + 1
     ? 'Se observa un salto de numeración: el cierre anterior terminó en ' + priorEnd + ' y este comienza en ' + numericStart + '. Verifique el rango; puede continuar si el salto está justificado.'
@@ -118,7 +118,7 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
     const endNum = /^\d+$/.test(invoiceEnd.trim()) ? Number(invoiceEnd) : null;
     if (startNum !== null && endNum !== null && endNum < startNum) { setError('La factura final no puede ser menor que la inicial.'); return; }
     if (sameDayRangeOverlap) { setError('El rango de facturas se solapa con otro Reporte Z ya registrado para esta máquina y fecha. Revise el cierre existente.'); return; }
-    const referenceDoc = 'REPORTE-Z:' + machineSerial.trim().toUpperCase() + ':' + zNumber.trim().toUpperCase();
+    const referenceDoc = buildFiscalZReferenceDoc({ sourceType, machineSerial, sourceSystemName, sourceTerminalId, zNumber });
     if (journalEntries.some(entry => entry.companyId === currentCompany.id && entry.referenceDoc?.toUpperCase() === referenceDoc.toUpperCase())) {
       setError('Ese Reporte Z ya fue registrado para esta máquina fiscal.'); return;
     }
