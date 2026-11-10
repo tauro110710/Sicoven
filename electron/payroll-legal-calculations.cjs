@@ -153,10 +153,16 @@ function calculateSeverance(input) {
   if (!Array.isArray(input.additionalSeniorityDeposits)) {
     throw new Error('Para comparar la garantía se requiere el historial de depósitos adicionales por antigüedad.');
   }
+  if (input.quarterlyDeposits.length < quarters) {
+    throw new Error('El historial de garantía está incompleto: faltan depósitos trimestrales.');
+  }
+  if (input.additionalSeniorityDeposits.length < Math.max(0, years - 1)) {
+    throw new Error('El historial de garantía está incompleto: faltan depósitos adicionales por antigüedad.');
+  }
   const sumDeposits = (items, label) => items.reduce((sum, item) => {
     const days = money(item.days, label + ' — días');
     const depositDailySalary = money(item.dailyIntegralSalary, label + ' — salario diario integral');
-    if (days <= 0) throw new Error(label + ' debe registrar días mayores que cero.');
+    if (days <= 0 || depositDailySalary <= 0) throw new Error(label + ' debe registrar días y salario diario mayores que cero.');
     return sum + round2(days * depositDailySalary);
   }, 0);
   const quarterlyGuaranteeAmount = round2(sumDeposits(input.quarterlyDeposits, 'Depósito trimestral'));
