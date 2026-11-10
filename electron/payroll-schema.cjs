@@ -100,6 +100,40 @@ function initializePayrollSchema(db) {
   if (!legalRuleColumns.some(column => column.name === 'frequency_scope')) {
     db.exec("ALTER TABLE payroll_legal_rules ADD COLUMN frequency_scope TEXT NOT NULL DEFAULT 'ALL' CHECK (frequency_scope IN ('ALL','WEEKLY','BIWEEKLY'))");
   }
+  const legalRuleSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='payroll_legal_rules'").get()?.sql || '';
+  if (legalRuleSchema.includes('UNIQUE(company_id, code, effective_from)')) {
+    db.exec(`
+      DROP INDEX IF EXISTS idx_payroll_rules_company_effective;
+      CREATE TABLE payroll_legal_rules_frequency_migration (
+        id TEXT PRIMARY KEY,
+        company_id TEXT NOT NULL,
+        code TEXT NOT NULL,
+        description TEXT NOT NULL,
+        base_key TEXT NOT NULL CHECK (base_key IN ('normalSalary','integralSalary','grossSalary')),
+        frequency_scope TEXT NOT NULL DEFAULT 'ALL' CHECK (frequency_scope IN ('ALL','WEEKLY','BIWEEKLY')),
+        worker_rate REAL NOT NULL CHECK (worker_rate >= 0 AND worker_rate <= 1),
+        employer_rate REAL NOT NULL CHECK (employer_rate >= 0 AND employer_rate <= 1),
+        base_cap REAL CHECK (base_cap IS NULL OR base_cap >= 0),
+        effective_from TEXT NOT NULL,
+        effective_to TEXT,
+        source_reference TEXT NOT NULL,
+        verified_at TEXT NOT NULL,
+        applicability_json TEXT NOT NULL DEFAULT '{}',
+        active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+        UNIQUE(company_id, code, frequency_scope, effective_from)
+      );
+      INSERT INTO payroll_legal_rules_frequency_migration
+        (id,company_id,code,description,base_key,frequency_scope,worker_rate,employer_rate,base_cap,
+         effective_from,effective_to,source_reference,verified_at,applicability_json,active)
+      SELECT id,company_id,code,description,base_key,frequency_scope,worker_rate,employer_rate,base_cap,
+        effective_from,effective_to,source_reference,verified_at,applicability_json,active
+      FROM payroll_legal_rules;
+      DROP TABLE payroll_legal_rules;
+      ALTER TABLE payroll_legal_rules_frequency_migration RENAME TO payroll_legal_rules;
+      CREATE INDEX IF NOT EXISTS idx_payroll_rules_company_effective
+        ON payroll_legal_rules(company_id, active, effective_from, effective_to);
+    `);
+  }
   return Object.freeze({
     tables: ['payroll_employees', 'payroll_salary_history', 'payroll_legal_rules', 'payroll_runs', 'payroll_run_lines']
   });
