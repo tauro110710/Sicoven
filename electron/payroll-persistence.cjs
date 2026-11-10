@@ -303,6 +303,32 @@ function listPayrollRuns(db, companyId) {
     .map(row => ({...row,totals:JSON.parse(row.totalsJson)}));
 }
 
+function listConfirmedSalaryEntries(db, companyId, employeeId, fromDate, toDate) {
+  ensureCompany(db, companyId);
+  const id = text(employeeId, 'Trabajador', 120);
+  const from = date(fromDate, 'Desde');
+  const to = date(toDate, 'Hasta');
+  if (to < from) throw new Error('El rango de consulta no es válido.');
+  const employee = db.prepare('SELECT id FROM payroll_employees WHERE id=? AND company_id=?').get(id, companyId);
+  if (!employee) throw new Error('El trabajador no pertenece a la empresa activa.');
+  const rows = db.prepare(`SELECT r.id AS runId,r.frequency,r.period_start AS periodStart,
+      r.period_end AS periodEnd,l.id AS lineId,l.code,l.description,l.amount,l.calculation_json AS calculationJson
+    FROM payroll_runs r
+    JOIN payroll_run_lines l ON l.run_id=r.id
+    WHERE r.company_id=? AND r.status='CONFIRMED' AND l.employee_id=?
+      AND l.line_type='EARNING' AND r.period_start<=? AND r.period_end>=?
+    ORDER BY r.period_start,r.period_end,l.code`).all(companyId,id,to,from);
+  return rows.filter(row => {
+    let calculation;
+    try { calculation = JSON.parse(row.calculationJson || '{}'); } catch { return false; }
+    return calculation.isSalary === true;
+  }).map(row => ({
+    runId: row.runId, lineId: row.lineId, frequency: row.frequency,
+    periodStart: row.periodStart, periodEnd: row.periodEnd,
+    code: row.code, description: row.description, amount: Number(row.amount)
+  }));
+}
+
 function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
   if (!ipcMain || typeof ipcMain.handle !== 'function' || typeof getActiveSession !== 'function' || typeof withDatabase !== 'function') {
     throw new Error('No se pudo registrar el módulo de Nómina.');
@@ -328,7 +354,7 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
     authenticate(token);
     return withDatabase(token, (db, companyId) => savePayrollEmployee(db, companyId, input));
   });
-  ipcMain.handle('sicoven:payroll-run-create', async (_event, token, input) => {
+  ipcMain.handle('sicoven:payroll-salary-entries-list', async (_event, token, employeeId, fromDate, toDate) => {\n    authenticate(token);\n    return withDatabase(token, (db, companyId) => listConfirmedSalaryEntries(db, companyId, employeeId, fromDate, toDate));\n  });\n  ipcMain.handle('sicoven:payroll-run-create', async (_event, token, input) => {
     authenticate(token);
     return withDatabase(token, (db, companyId) => createPayrollRun(db, companyId, input));
   });
@@ -347,5 +373,5 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
 }
 module.exports = {
   listPayrollEmployees, listPayrollSalaryHistory, getPayrollSalaryForDate, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
-  createPayrollRun, listPayrollRuns, registerPayrollIpc
+  createPayrollRun, listPayrollRuns, listConfirmedSalaryEntries, registerPayrollIpc
 };
