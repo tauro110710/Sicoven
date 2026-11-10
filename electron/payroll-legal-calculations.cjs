@@ -194,4 +194,53 @@ function calculateSeverance(input) {
   };
 }
 
-module.exports = { completedYears, completeCalendarMonths, calculateVacationSalaryBasis, calculateSeveranceSalaryBasis, calculateAnnualLaborRights, calculateSeverance };
+
+/**
+ * LOTTT art. 143: calcula intereses a partir de una serie mensual ya validada.
+ * La tasa mensual debe venir de la fuente aplicable; aquí no se convierte una
+ * tasa anual ni se presume rendimiento bancario. El capital de cada mes debe
+ * reflejar depósitos, anticipos y, si corresponde, capitalización documentada.
+ */
+function calculateSeveranceInterest(input) {
+  const mode = String(input.mode || '');
+  const allowed = new Set(['TRUST_OR_FUND', 'AUTHORIZED_BOOK_CREDIT', 'UNDEPOSITED']);
+  if (!allowed.has(mode)) throw new Error('Indique el régimen de intereses de la garantía de prestaciones.');
+  if (!Array.isArray(input.months) || input.months.length === 0) {
+    throw new Error('Se requiere el historial mensual de capital y tasas para calcular intereses.');
+  }
+  const seen = new Set();
+  const details = input.months.map(item => {
+    const month = String(item.month || '');
+    if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(month) || seen.has(month)) {
+      throw new Error('El historial de intereses contiene un mes inválido o repetido.');
+    }
+    seen.add(month);
+    const capital = money(item.capital, 'Capital del mes ' + month);
+    const monthlyRate = Number(item.monthlyRate);
+    if (!Number.isFinite(monthlyRate) || monthlyRate < 0 || monthlyRate > 1) {
+      throw new Error('La tasa mensual de ' + month + ' debe estar expresada como decimal entre 0 y 1.');
+    }
+    const sourceReference = String(item.sourceReference || '').trim();
+    const verifiedAt = String(item.verifiedAt || '');
+    if (!sourceReference || !/^\\d{4}-\\d{2}-\\d{2}$/.test(verifiedAt) ||
+        !Number.isFinite(new Date(verifiedAt + 'T00:00:00.000Z').getTime())) {
+      throw new Error('Falta la fuente o fecha de verificación de la tasa de ' + month + '.');
+    }
+    return { month, capital, monthlyRate, interest: round2(capital * monthlyRate), sourceReference, verifiedAt };
+  }).sort((a, b) => a.month.localeCompare(b.month));
+  const totalInterest = round2(details.reduce((sum, item) => sum + item.interest, 0));
+  return {
+    mode,
+    totalInterest,
+    monthsCalculated: details.length,
+    details,
+    legalBasis: 'LOTTT art. 143; Gaceta Oficial N.º 6.076 Extraordinario, 07-05-2012',
+    note: mode === 'TRUST_OR_FUND'
+      ? 'Se utilizó el rendimiento mensual informado por el fideicomiso o fondo.'
+      : mode === 'AUTHORIZED_BOOK_CREDIT'
+        ? 'Se requiere que la tasa mensual suministrada corresponda al promedio legal entre las tasas activa y pasiva del BCV y que exista autorización escrita del trabajador.'
+        : 'Se requiere que la tasa mensual suministrada corresponda a la tasa activa legal de referencia de los seis principales bancos.'
+  };
+}
+
+module.exports = { completedYears, completeCalendarMonths, calculateVacationSalaryBasis, calculateSeveranceSalaryBasis, calculateAnnualLaborRights, calculateSeverance, calculateSeveranceInterest };
