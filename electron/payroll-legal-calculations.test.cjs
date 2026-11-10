@@ -318,19 +318,37 @@ test('applies mora only when actual payment is after the five-day statutory peri
   assert.equal(late.total,1015);
 });
 
-test('honors superior contractual vacation and vacation-bonus days with evidence', () => {
+test('covers documented contract expiration, work completion, mutual agreement, death, external cause and article 83', () => {
   const { calculateFinalLiquidation } = require('./payroll-legal-calculations.cjs');
-  const base={hireDate:'2024-01-01',terminationDate:'2026-03-01',terminationReason:'VOLUNTARY_RESIGNATION',
-    dailyNormalSalary:100,vacationDaysOutstanding:0,vacationBonusDaysOutstanding:0,vacationBalanceSource:'Libro conciliado',
-    severancePayable:0,interestStatus:'NOT_APPLICABLE',interestStatusEvidence:'Intereses conciliados',
+  const base={hireDate:'2024-01-01',terminationDate:'2026-06-30',dailyNormalSalary:100,
+    vacationDaysOutstanding:0,vacationBonusDaysOutstanding:0,vacationBalanceSource:'Registro conciliado',
+    severancePayable:1000,interestStatus:'NOT_APPLICABLE',interestStatusEvidence:'Intereses conciliados',
     profitSharingStatus:'NOT_APPLICABLE',profitSharingSourceReference:'Utilidades conciliadas'};
-  assert.throws(()=>calculateFinalLiquidation({...base,vacationBonusAnnualDays:30}),/requieren contrato o convención/);
-  const result=calculateFinalLiquidation({...base,vacationAnnualDays:20,vacationBonusAnnualDays:30,
-    vacationEntitlementEvidence:'Cláusula 18 del contrato individual'});
-  assert.equal(result.currentCycleMonths,2);
-  assert.equal(result.currentVacationAnnualDays,20);
-  assert.equal(result.fractionalVacationDays,3.33);
-  assert.equal(result.currentVacationBonusAnnualDays,30);
-  assert.equal(result.fractionalVacationBonusDays,5);
-  assert.equal(result.vacationBonusPay,500);
+  const expiration=calculateFinalLiquidation({...base,terminationReason:'CONTRACT_EXPIRATION',
+    contractEndDate:'2026-06-30',contractEvidence:'Contrato a término fijo firmado'});
+  const completion=calculateFinalLiquidation({...base,terminationReason:'WORK_COMPLETION',
+    contractEvidence:'Acta de culminación de obra'});
+  const agreement=calculateFinalLiquidation({...base,terminationReason:'MUTUAL_AGREEMENT',
+    agreedAdditionalAmount:250,agreementEvidence:'Convenio bilateral firmado'});
+  const death=calculateFinalLiquidation({...base,terminationReason:'DEATH_ART145',
+    beneficiaryEvidence:'Declaratoria y documentos de beneficiarios'});
+  const external=calculateFinalLiquidation({...base,terminationReason:'CAUSE_BEYOND_WORKER_WILL_ART92',
+    legalClassificationConfirmed:true,legalEvidence:'Expediente que acredita causa ajena a la voluntad'});
+  const forceMajeure=calculateFinalLiquidation({...base,terminationReason:'FORCE_MAJEURE_ART92',
+    legalClassificationConfirmed:true,legalEvidence:'Acta y prueba de fuerza mayor con terminación definitiva'});
+  const art83=calculateFinalLiquidation({...base,terminationReason:'EARLY_FIXED_TERM_WITHDRAWAL_ART83',
+    contractEndDate:'2026-12-31',contractEvidence:'Contrato vigente hasta diciembre',
+    legalClassificationConfirmed:true,legalEvidence:'Retiro justificado acreditado',remainingContractWages:3000});
+  assert.equal(expiration.indemnity,0);
+  assert.equal(completion.indemnity,0);
+  assert.equal(agreement.indemnity,0);
+  assert.equal(agreement.agreedAdditionalAmount,250);
+  assert.equal(death.indemnity,0);
+  assert.equal(external.indemnity,1000);
+  assert.equal(forceMajeure.indemnity,1000);
+  assert.equal(art83.remainingContractWages,3000);
+  assert.equal(art83.indemnity,4000);
+  assert.equal(art83.total,5000);
+  assert.throws(()=>calculateFinalLiquidation({...base,terminationReason:'CONTRACT_EXPIRATION',
+    contractEndDate:'2026-06-29',contractEvidence:'Contrato'}),/fecha coincidente/);
 });
