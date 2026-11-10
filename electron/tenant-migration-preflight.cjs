@@ -1,6 +1,6 @@
 'use strict';
 
-const { GLOBAL_REFERENCE_TABLES, COMPANY_TABLES, CHILD_TABLES } = require('./tenant-relational-migration.cjs');
+const { GLOBAL_REFERENCE_TABLES, COMPANY_TABLES, OPTIONAL_COMPANY_TABLES, CHILD_TABLES } = require('./tenant-relational-migration.cjs');
 
 const REQUIRED_RELATIONAL_TABLES = Object.freeze([
   ...GLOBAL_REFERENCE_TABLES,
@@ -24,6 +24,7 @@ const CLASSIFICATION = new Map([
   ...AUDIT_TABLES.map(name => [name, 'AUDIT']),
   ...GLOBAL_REFERENCE_TABLES.map(name => [name, 'GLOBAL_REFERENCE']),
   ...COMPANY_TABLES.map(item => [item.table, 'COMPANY']),
+  ...OPTIONAL_COMPANY_TABLES.map(item => [item.table, 'COMPANY']),
   ...CHILD_TABLES.map(item => [item.table, 'CHILD']),
   ...INTERNAL_TABLES.map(name => [name, 'SQLITE_INTERNAL'])
 ]);
