@@ -14,6 +14,7 @@ El motor de nómina no debe fijar tasas o bases legales por defecto. Cada regla 
 | Bono vacacional | Art. 192 | Mínimo 15 días de salario normal más un día por año hasta 30 | Tiene carácter salarial; revisar fraccionamiento al terminar |
 | Utilidades | Arts. 131–134 | Participación mínima legal sobre beneficios líquidos, límites por trabajador de 30 días a 4 meses; anticipo de fin de año conforme art. 132 | No asumir que toda empresa paga exactamente 30 días; liquidación depende de beneficio y límites |
 | Prestaciones sociales | Arts. 141–147; en especial 142 | Garantía trimestral de 15 días, días adicionales desde el segundo año y comparación con cálculo de terminación | Requiere historial salarial, antigüedad, anticipos y cálculo final comparativo |
+| Intereses de prestaciones | Arts. 141–143 | Interés mensual según el destino de la garantía: rendimiento del fideicomiso/fondo; promedio de tasas activa y pasiva del BCV si se acredita en libros con autorización escrita; o tasa activa de referencia de seis bancos cuando no se deposita | No existe una tasa única intercambiable. Se requiere el régimen aplicable, serie mensual oficial, capital por mes y evidencia de autorización o incumplimiento |
 | Base de prestaciones | Art. 122 | Último salario integral; variable: promedio de seis meses; integrar alícuotas de bono vacacional y utilidades según la norma | Debe evitarse cálculo circular de conceptos |
 
 Fuentes de consulta:
@@ -25,6 +26,20 @@ Fuentes de consulta:
 - Art. 142 (garantía y cálculo de prestaciones): https://leyteca.com/ve/lottt/articulo-142/
 - Art. 190 (vacaciones): https://leyteca.com/ve/lottt/articulo-190/
 - Art. 192 (bono vacacional): https://leyteca.com/ve/lottt/articulo-192/
+
+## Intereses de prestaciones — art. 143
+
+El texto de la Gaceta distingue tres tratamientos que no deben mezclarse:
+
+1. **Fideicomiso individual o Fondo Nacional:** los depósitos generan los intereses del rendimiento producido por el fideicomiso o fondo.
+2. **Garantía acreditada en la contabilidad de la empresa:** solo cuando el trabajador lo autorizó previamente por escrito, genera intereses a la tasa promedio entre la activa y la pasiva determinada por el BCV.
+3. **Depósitos omitidos:** la garantía genera intereses a la tasa activa determinada por el BCV tomando como referencia los seis principales bancos, sin perjuicio de sanciones.
+
+El artículo 143 indica que los intereses se calculan mensualmente y se pagan al cumplir cada año de servicio, salvo manifestación escrita del trabajador para capitalizarlos. El artículo 142(f) también prevé intereses de mora si no se paga la prestación dentro de los cinco días siguientes a la terminación. Por ello, el motor separa el cálculo de intereses de la comparación del capital garantizado: cada mes necesita capital, tasa mensual, fuente y fecha de verificación. No debe convertir por su cuenta tasas anuales ni suponer una tasa genérica; la conversión y la serie aplicable deben provenir de la fuente oficial y quedar documentadas.
+
+El helper `calculateSeveranceInterest` implementa únicamente la suma mensual sobre las tasas mensuales ya verificadas y diferencia los tres regímenes. **Todavía no está conectado al historial persistente del trabajador, anticipos, pagos, capitalización ni asiento contable**, por lo que no representa una liquidación final ni habilita la obligación en producción.
+
+Fuente primaria de consulta: LOTTT, Gaceta Oficial N.º 6.076 Extraordinario, 07-05-2012, arts. 141–143 (texto PDF en NATLEX/OIT): https://natlex.ilo.org/dyn/natlex2/natlex2/files/download/90040/VEN90040.pdf
 
 ## Aportes y contribuciones parafiscales
 
