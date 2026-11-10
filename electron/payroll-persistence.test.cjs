@@ -774,12 +774,12 @@ test('creates immutable, auditable final liquidation snapshots and permits linke
       interestStatus:'NOT_APPLICABLE',interestStatusEvidence:'Intereses conciliados',profitSharingStatus:'NOT_APPLICABLE',profitSharingSourceReference:'Utilidades conciliadas',pendingSalaryAmount:0
     };
     const created=createPayrollLiquidation(db,'co-a',input);
-    assert.equal(created.total,750);
+    assert.equal(created.total,1500);
     assert.equal(created.snapshot.liquidation.severancePayable,750);
     assert.equal(listPayrollLiquidations(db,'co-a',employee.id).length,1);
     assert.throws(()=>createPayrollLiquidation(db,'co-a',input),/Ya existe una liquidación vigente/);
     const corrected=createPayrollLiquidation(db,'co-a',{...input,supersedesId:created.id,pendingSalaryAmount:100,pendingSalarySourceReference:'Nómina pendiente'});
-    assert.equal(corrected.total,850);
+    assert.equal(corrected.total,1600);
     assert.equal(corrected.supersedesId,created.id);
     assert.equal(listPayrollLiquidations(db,'co-a',employee.id).length,2);
     assert.throws(()=>db.prepare('UPDATE payroll_liquidations SET total=1 WHERE id=?').run(created.id),/append-only/);

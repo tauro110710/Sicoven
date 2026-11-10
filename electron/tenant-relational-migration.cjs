@@ -24,7 +24,8 @@ const COMPANY_TABLES = Object.freeze([
 // Tablas opcionales añadidas en versiones posteriores de Nómina.
 const OPTIONAL_COMPANY_TABLES = Object.freeze([
   { table: 'payroll_severance_deposits', companyColumn: 'company_id' },
-  { table: 'payroll_severance_interest_months', companyColumn: 'company_id' }
+  { table: 'payroll_severance_interest_months', companyColumn: 'company_id' },
+  { table: 'payroll_liquidations', companyColumn: 'company_id' }
 ]);
 
 const CHILD_TABLES = Object.freeze([
