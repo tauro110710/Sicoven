@@ -273,6 +273,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
       const run = await window.sicovenStore.getPayrollRun(token, runId);
       const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
       const money = (value: number) => 'Bs. ' + Number(value || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const companySnapshot = run.snapshot.companySnapshot;
       run.snapshot.employees.forEach((employee, index) => {
         if (index > 0) pdf.addPage();
         let y = 18;
@@ -281,8 +282,10 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
           const rows = pdf.splitTextToSize(value, 180);
           pdf.text(rows, 15, y); y += rows.length * 5 + 2;
         };
-        write(currentCompany.name, 14, true);
-        if (currentCompany.rif) write('RIF: ' + currentCompany.rif, 9);
+        write(companySnapshot.name || currentCompany.name, 14, true);
+        if (companySnapshot.rif || currentCompany.rif) write('RIF: ' + (companySnapshot.rif || currentCompany.rif), 9);
+        if (companySnapshot.address) write(companySnapshot.address, 9);
+        if (companySnapshot.phone) write('Teléfono: ' + companySnapshot.phone, 9);
         write('RECIBO DE PAGO · ' + (run.frequency === 'WEEKLY' ? 'NÓMINA SEMANAL' : 'NÓMINA QUINCENAL'), 12, true);
         write('Período: ' + run.periodStart + ' al ' + run.periodEnd, 10);
         write('Trabajador: ' + employee.fullName + ' · Cédula/RIF: ' + employee.fiscalId, 10, true);
