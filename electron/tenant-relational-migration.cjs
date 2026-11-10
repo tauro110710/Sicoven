@@ -15,7 +15,10 @@ const COMPANY_TABLES = Object.freeze([
   { table: 'inflation_classification_decisions', companyColumn: 'company_id' },
   { table: 'inflation_source_dossiers', companyColumn: 'company_id' },
   { table: 'supporting_documents', companyColumn: 'company_id' },
-  { table: 'vat_fiscal_incidents', companyColumn: 'company_id' }
+  { table: 'vat_fiscal_incidents', companyColumn: 'company_id' },
+  { table: 'payroll_employees', companyColumn: 'company_id' },
+  { table: 'payroll_legal_rules', companyColumn: 'company_id' },
+  { table: 'payroll_runs', companyColumn: 'company_id' }
 ]);
 
 const CHILD_TABLES = Object.freeze([
@@ -26,7 +29,8 @@ const CHILD_TABLES = Object.freeze([
   { table: 'inflation_source_dossier_reviews', parentTable: 'inflation_source_dossiers', parentId: 'id', foreignKey: 'dossier_id' },
   { table: 'supporting_document_events', parentTable: 'supporting_documents', parentId: 'id', foreignKey: 'document_id' },
   { table: 'vat_fiscal_incident_events', parentTable: 'vat_fiscal_incidents', parentId: 'id', foreignKey: 'incident_id' },
-  { table: 'vat_fiscal_incident_references', parentTable: 'vat_fiscal_incidents', parentId: 'id', foreignKey: 'incident_id' }
+  { table: 'vat_fiscal_incident_references', parentTable: 'vat_fiscal_incidents', parentId: 'id', foreignKey: 'incident_id' },
+  { table: 'payroll_run_lines', parentTable: 'payroll_runs', parentId: 'id', foreignKey: 'run_id' }
 ]);
 
 const ALL_TABLES = Object.freeze([
