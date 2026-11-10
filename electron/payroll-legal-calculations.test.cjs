@@ -47,7 +47,11 @@ test('returns the LOTTT minimum annual profit-sharing floor and upper statutory 
 });
 
 test('compares severance guarantee against termination calculation', () => {
-  const result = calculateSeverance({hireDate:'2022-01-01',asOfDate:'2026-01-01',dailyIntegralSalary:100});
+  const result = calculateSeverance({
+    hireDate:'2022-01-01',asOfDate:'2026-01-01',dailyIntegralSalary:100,
+    quarterlyDeposits:Array.from({length:16},()=>({days:15,dailyIntegralSalary:100})),
+    additionalSeniorityDeposits:[{days:6,dailyIntegralSalary:100}]
+  });
   assert.equal(result.completedYears,4);
   assert.equal(result.quarterlyGuaranteeDays,240);
   assert.equal(result.additionalSeniorityDays,6);
@@ -71,7 +75,7 @@ test('prorates annual profit-sharing floor by full calendar months in the fiscal
   assert.equal(result.profitSharingMinimum,1500);
 });
 test('applies five days per month or fraction only before the three-calendar-month anniversary', () => {
-  const partial = calculateSeverance({hireDate:'2026-01-31',asOfDate:'2026-04-29',dailyIntegralSalary:100});
+  const partial = calculateSeverance({hireDate:'2026-01-31',asOfDate:'2026-04-29',dailyIntegralSalary:100,quarterlyDeposits:[],additionalSeniorityDeposits:[]});
   assert.equal(partial.completedMonths,2);
   assert.equal(partial.terminationDays,15);
   assert.equal(partial.terminationAmount,1500);
@@ -81,6 +85,28 @@ test('applies five days per month or fraction only before the three-calendar-mon
   assert.equal(exact.terminationDays,0);
   assert.equal(exact.greaterAmount,1500);
 });
+test('values each historical quarterly and seniority deposit with its own integral salary', () => {
+  const result = calculateSeverance({
+    hireDate:'2022-01-01',asOfDate:'2026-01-01',dailyIntegralSalary:200,
+    quarterlyDeposits:[
+      {days:15,dailyIntegralSalary:100},{days:15,dailyIntegralSalary:110},
+      {days:15,dailyIntegralSalary:120},{days:15,dailyIntegralSalary:130}
+    ],
+    additionalSeniorityDeposits:[{days:2,dailyIntegralSalary:115}]
+  });
+  assert.equal(result.quarterlyGuaranteeDays,60);
+  assert.equal(result.additionalSeniorityDays,2);
+  assert.equal(result.guaranteeAmount,6930);
+  assert.equal(result.terminationAmount,24000);
+  assert.equal(result.greaterBasis,'TERMINATION');
+});
+
+test('requires historical salary bases instead of revaluing all old deposits at current salary', () => {
+  assert.throws(() => calculateSeverance({
+    hireDate:'2022-01-01',asOfDate:'2026-01-01',dailyIntegralSalary:100
+  }), /historial de depósitos trimestrales/);
+});
+
 test('counts a service fraction strictly greater than six months in the termination comparison', () => {
   const exactSix = calculateSeverance({hireDate:'2025-01-31',asOfDate:'2025-07-31',dailyIntegralSalary:100});
   assert.equal(exactSix.terminationDays,0);
