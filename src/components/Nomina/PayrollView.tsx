@@ -56,6 +56,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
     sourceReference: '', verifiedAt: new Date().toISOString().slice(0,10)
   });
   const [savingRule, setSavingRule] = useState(false);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const requiredBaseFields = new Set(legalRules
     .filter(rule => rule.active && (rule.frequencyScope === 'ALL' || rule.frequencyScope === runFrequency) &&
       rule.effectiveFrom <= periodEnd && (!rule.effectiveTo || rule.effectiveTo >= periodEnd))
@@ -144,6 +145,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
     setSavingRule(true); setError(''); setSuccess('');
     try {
       await window.sicovenStore.savePayrollLegalRule(token, {
+        ...(editingRuleId ? { id: editingRuleId } : {}),
         code: ruleForm.code.trim(), description: ruleForm.description.trim(),
         base: ruleForm.base, frequencyScope: ruleForm.frequencyScope,
         workerRate: workerRate / 100, employerRate: employerRate / 100,
@@ -154,9 +156,39 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
       });
       await loadRuns();
       setSuccess('Regla legal guardada para esta empresa. Se aplicará solo en los períodos y periodicidades de su vigencia.');
+      setEditingRuleId(null);
       setRuleForm(current => ({ ...current, code: '', description: '', workerRate: '', employerRate: '', baseCap: '', effectiveTo: '', sourceReference: '' }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo guardar la regla legal.');
+    } finally { setSavingRule(false); }
+  };
+
+  const editLegalRule = (rule: PayrollLegalRule) => {
+    setEditingRuleId(rule.id);
+    setRuleForm({
+      code: rule.code, description: rule.description, base: rule.base,
+      frequencyScope: rule.frequencyScope, workerRate: String(rule.workerRate * 100),
+      employerRate: String(rule.employerRate * 100), baseCap: rule.baseCap == null ? '' : String(rule.baseCap),
+      effectiveFrom: rule.effectiveFrom, effectiveTo: rule.effectiveTo || '',
+      sourceReference: rule.sourceReference, verifiedAt: rule.verifiedAt
+    });
+  };
+
+  const deactivateLegalRule = async (rule: PayrollLegalRule) => {
+    if (!window.sicovenStore || savingRule) return;
+    setSavingRule(true); setError(''); setSuccess('');
+    try {
+      await window.sicovenStore.savePayrollLegalRule(token, {
+        id: rule.id, code: rule.code, description: rule.description, base: rule.base,
+        frequencyScope: rule.frequencyScope, workerRate: rule.workerRate, employerRate: rule.employerRate,
+        baseCap: rule.baseCap, effectiveFrom: rule.effectiveFrom, effectiveTo: rule.effectiveTo,
+        sourceReference: rule.sourceReference, verifiedAt: rule.verifiedAt, active: false
+      });
+      await loadRuns();
+      if (editingRuleId === rule.id) setEditingRuleId(null);
+      setSuccess('Regla legal desactivada. Los borradores y nóminas confirmadas conservan sus cálculos históricos.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo desactivar la regla legal.');
     } finally { setSavingRule(false); }
   };
 
