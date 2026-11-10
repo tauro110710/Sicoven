@@ -178,8 +178,8 @@ function savePayrollLegalRule(db, companyId, input) {
 function calculateEmployeeDraft(db, companyId, employee, input, periodEnd) {
   if (!input || !Array.isArray(input.earnings) || input.earnings.length === 0) throw new Error('Cada trabajador requiere al menos una asignación.');
   const salaryRecord = getPayrollSalaryForDate(db, companyId, employee.id, periodEnd);
-  const bases = { ...(input.bases || {}) };
-  for (const key of ['normalSalary', 'integralSalary', 'grossSalary']) positiveOrZero(bases[key], 'Base ' + key);
+  const suppliedBases = input.bases && typeof input.bases === 'object' && !Array.isArray(input.bases)
+    ? input.bases : {};
   const earnings = input.earnings.map(line => ({
     code: text(line.code, 'Código de asignación', 60),
     description: text(line.description, 'Descripción de asignación', 180),
@@ -197,6 +197,16 @@ function calculateEmployeeDraft(db, companyId, employee, input, periodEnd) {
     applicability_json AS applicabilityJson
     FROM payroll_legal_rules WHERE company_id=? AND active=1 AND effective_from<=?
     AND (effective_to IS NULL OR effective_to>=?) ORDER BY code`).all(companyId, periodEnd, periodEnd);
+  const requiredBases = new Set(rules.map(rule => rule.base));
+  const bases = {};
+  for (const key of ['normalSalary', 'integralSalary', 'grossSalary']) {
+    const raw = suppliedBases[key];
+    const value = raw == null || raw === '' ? 0 : positiveOrZero(raw, 'Base ' + key);
+    if (requiredBases.has(key) && value <= 0) {
+      throw new Error('La regla legal vigente requiere una base salarial positiva: ' + key + '.');
+    }
+    bases[key] = value;
+  }
   const contributions = rules.map(rule => {
     const applicability = JSON.parse(rule.applicabilityJson || '{}');
     if (Object.keys(applicability).length > 0) {
