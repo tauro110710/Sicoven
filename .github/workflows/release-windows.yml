@@ -187,7 +187,7 @@ jobs:
           }
 
       - name: Upload migration E2E screenshots
-        if: always()
+        if: always() && github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: SICOVEN-migration-E2E-screenshots
