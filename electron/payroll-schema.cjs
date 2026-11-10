@@ -87,6 +87,56 @@ function initializePayrollSchema(db) {
       calculation_json TEXT NOT NULL DEFAULT '{}'
     );
 
+    CREATE TABLE IF NOT EXISTS payroll_severance_deposits (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      employee_id TEXT NOT NULL REFERENCES payroll_employees(id) ON DELETE RESTRICT,
+      deposit_date TEXT NOT NULL,
+      deposit_kind TEXT NOT NULL CHECK (deposit_kind IN ('QUARTERLY','SENIORITY','ADVANCE')),
+      days REAL NOT NULL CHECK (days > 0),
+      daily_integral_salary REAL NOT NULL CHECK (daily_integral_salary > 0),
+      amount REAL NOT NULL CHECK (amount > 0),
+      source_reference TEXT NOT NULL,
+      verified_at TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      supersedes_id TEXT REFERENCES payroll_severance_deposits(id) ON DELETE RESTRICT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_payroll_severance_employee_date
+      ON payroll_severance_deposits(company_id, employee_id, deposit_date);
+
+    CREATE TABLE IF NOT EXISTS payroll_severance_interest_months (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      employee_id TEXT NOT NULL REFERENCES payroll_employees(id) ON DELETE RESTRICT,
+      month TEXT NOT NULL,
+      mode TEXT NOT NULL CHECK (mode IN ('TRUST_OR_FUND','AUTHORIZED_BOOK_CREDIT','UNDEPOSITED')),
+      capital REAL NOT NULL CHECK (capital >= 0),
+      monthly_rate REAL NOT NULL CHECK (monthly_rate >= 0 AND monthly_rate <= 1),
+      interest REAL NOT NULL CHECK (interest >= 0),
+      source_reference TEXT NOT NULL,
+      verified_at TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      supersedes_id TEXT REFERENCES payroll_severance_interest_months(id) ON DELETE RESTRICT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(company_id, employee_id, month, mode, id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_payroll_severance_interest_employee_month
+      ON payroll_severance_interest_months(company_id, employee_id, month);
+
+    CREATE TRIGGER IF NOT EXISTS payroll_severance_deposits_no_update
+      BEFORE UPDATE ON payroll_severance_deposits
+      BEGIN SELECT RAISE(ABORT, 'payroll severance history is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS payroll_severance_deposits_no_delete
+      BEFORE DELETE ON payroll_severance_deposits
+      BEGIN SELECT RAISE(ABORT, 'payroll severance history is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS payroll_severance_interest_no_update
+      BEFORE UPDATE ON payroll_severance_interest_months
+      BEGIN SELECT RAISE(ABORT, 'payroll interest history is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS payroll_severance_interest_no_delete
+      BEFORE DELETE ON payroll_severance_interest_months
+      BEGIN SELECT RAISE(ABORT, 'payroll interest history is append-only'); END;
+
     CREATE INDEX IF NOT EXISTS idx_payroll_employees_company_active
       ON payroll_employees(company_id, active, full_name);
     CREATE INDEX IF NOT EXISTS idx_payroll_rules_company_effective
@@ -135,7 +185,7 @@ function initializePayrollSchema(db) {
     `))();
   }
   return Object.freeze({
-    tables: ['payroll_employees', 'payroll_salary_history', 'payroll_legal_rules', 'payroll_runs', 'payroll_run_lines']
+    tables: ['payroll_employees', 'payroll_salary_history', 'payroll_legal_rules', 'payroll_runs', 'payroll_run_lines', 'payroll_severance_deposits', 'payroll_severance_interest_months']
   });
 }
 
