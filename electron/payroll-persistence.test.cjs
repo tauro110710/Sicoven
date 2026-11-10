@@ -664,13 +664,13 @@ test('stores immutable historical severance deposits and monthly interest with a
 
     const interest = savePayrollSeveranceInterestMonth(db, 'co-a', {
       employeeId: employee.id, month: '2026-03', mode: 'UNDEPOSITED',
-      capital: 930, monthlyRate: 0.02, sourceReference: 'Tasa activa BCV documentada',
+      capital: 930, monthlyRate: 0.02, sourceReference: 'Tasa activa BCV documentada', modeEvidence: 'Tasa activa promedio de los seis principales bancos',
       verifiedAt: '2026-04-05'
     });
     assert.equal(interest.interest, 18.6);
     const revised = savePayrollSeveranceInterestMonth(db, 'co-a', {
       employeeId: employee.id, month: '2026-03', mode: 'UNDEPOSITED',
-      capital: 930, monthlyRate: 0.021, sourceReference: 'Rectificación tasa BCV',
+      capital: 930, monthlyRate: 0.021, sourceReference: 'Rectificación tasa BCV', modeEvidence: 'Tasa activa promedio de los seis principales bancos',
       verifiedAt: '2026-04-06', supersedesId: interest.id
     });
     assert.equal(revised.interest, 19.53);
