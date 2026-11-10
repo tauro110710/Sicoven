@@ -30,7 +30,8 @@ const CHILD_TABLES = Object.freeze([
   { table: 'supporting_document_events', parentTable: 'supporting_documents', parentId: 'id', foreignKey: 'document_id' },
   { table: 'vat_fiscal_incident_events', parentTable: 'vat_fiscal_incidents', parentId: 'id', foreignKey: 'incident_id' },
   { table: 'vat_fiscal_incident_references', parentTable: 'vat_fiscal_incidents', parentId: 'id', foreignKey: 'incident_id' },
-  { table: 'payroll_run_lines', parentTable: 'payroll_runs', parentId: 'id', foreignKey: 'run_id' }
+  { table: 'payroll_run_lines', parentTable: 'payroll_runs', parentId: 'id', foreignKey: 'run_id' },
+  { table: 'payroll_salary_history', parentTable: 'payroll_employees', parentId: 'id', foreignKey: 'employee_id' }
 ]);
 
 const ALL_TABLES = Object.freeze([
