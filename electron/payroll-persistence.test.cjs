@@ -702,7 +702,7 @@ test('severance calculation refuses incomplete quarterly history and never estim
       verifiedAt: '2025-04-01'
     });
     assert.throws(() => calculatePayrollSeverance(db, 'co-a', {
-      employeeId: employee.id, asOfDate: '2026-03-31', dailyIntegralSalary: 60
+      employeeId: employee.id, asOfDate: '2026-03-31', salaryType: 'FIXED', lastMonthlyIntegratedSalary: 1800
     }), /historial de garantía está incompleto/);
   } finally { db.close(); }
 });
