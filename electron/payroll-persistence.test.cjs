@@ -646,6 +646,10 @@ test('stores immutable historical severance deposits and monthly interest with a
     });
     assert.equal(deposit.amount, 900);
     assert.throws(() => savePayrollSeveranceDeposit(db, 'co-a', {
+      employeeId: employee.id, depositDate: '2025-12-31', kind: 'QUARTERLY',
+      days: 15, dailyIntegralSalary: 60, sourceReference: 'Fecha anterior al ingreso', verifiedAt: '2026-04-01'
+    }), /anterior al ingreso/);
+    assert.throws(() => savePayrollSeveranceDeposit(db, 'co-a', {
       employeeId: employee.id, depositDate: '2026-03-31', kind: 'QUARTERLY',
       days: 15, dailyIntegralSalary: 65, sourceReference: 'Duplicado', verifiedAt: '2026-04-01'
     }), /Ya existe un registro vigente/);
@@ -668,6 +672,10 @@ test('stores immutable historical severance deposits and monthly interest with a
       verifiedAt: '2026-04-05'
     });
     assert.equal(interest.interest, 18.6);
+    assert.throws(() => savePayrollSeveranceInterestMonth(db, 'co-a', {
+      employeeId: employee.id, month: '2025-12', mode: 'UNDEPOSITED', capital: 930,
+      monthlyRate: 0.02, sourceReference: 'Fuente', modeEvidence: 'Tasa activa promedio de los seis principales bancos', verifiedAt: '2026-04-05'
+    }), /anterior al ingreso/);
     const revised = savePayrollSeveranceInterestMonth(db, 'co-a', {
       employeeId: employee.id, month: '2026-03', mode: 'UNDEPOSITED',
       capital: 930, monthlyRate: 0.021, sourceReference: 'Rectificación tasa BCV', modeEvidence: 'Tasa activa promedio de los seis principales bancos',
