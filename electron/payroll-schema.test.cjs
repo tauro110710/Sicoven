@@ -22,6 +22,31 @@ test('initializes payroll tables idempotently inside each company tenant', () =>
   } finally { db.close(); }
 });
 
+test('migrates existing legal rules and permits separate weekly and biweekly versions atomically', () => {
+  const db = new Database(':memory:');
+  try {
+    db.exec(`CREATE TABLE payroll_legal_rules (
+      id TEXT PRIMARY KEY, company_id TEXT NOT NULL, code TEXT NOT NULL, description TEXT NOT NULL,
+      base_key TEXT NOT NULL, worker_rate REAL NOT NULL, employer_rate REAL NOT NULL, base_cap REAL,
+      effective_from TEXT NOT NULL, effective_to TEXT, source_reference TEXT NOT NULL,
+      verified_at TEXT NOT NULL, applicability_json TEXT NOT NULL DEFAULT '{}', active INTEGER NOT NULL DEFAULT 1,
+      UNIQUE(company_id, code, effective_from)
+    )`);
+    db.prepare(`INSERT INTO payroll_legal_rules
+      (id,company_id,code,description,base_key,worker_rate,employer_rate,effective_from,source_reference,verified_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?)`).run('legacy-rule','co-a','IVSS','IVSS legado','normalSalary',0.04,0.09,'2026-01-01','Fuente histórica','2026-01-01');
+    initializeTenantDatabase(db);
+    const legacy = db.prepare('SELECT frequency_scope AS frequencyScope FROM payroll_legal_rules WHERE id=?').get('legacy-rule');
+    assert.equal(legacy.frequencyScope, 'ALL');
+    const insert = db.prepare(`INSERT INTO payroll_legal_rules
+      (id,company_id,code,description,base_key,frequency_scope,worker_rate,employer_rate,effective_from,source_reference,verified_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?)`);
+    insert.run('weekly-rule','co-a','IVSS','IVSS semanal','normalSalary','WEEKLY',0.04,0.09,'2026-01-01','Fuente semanal','2026-01-01');
+    insert.run('biweekly-rule','co-a','IVSS','IVSS quincenal','normalSalary','BIWEEKLY',0.04,0.10,'2026-01-01','Fuente quincenal','2026-01-01');
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM payroll_legal_rules WHERE company_id='co-a' AND code='IVSS'").get().count, 3);
+  } finally { db.close(); }
+});
+
 test('prevents duplicate employee fiscal IDs within one company and invalid payroll frequencies', () => {
   const db = new Database(':memory:');
   try {
