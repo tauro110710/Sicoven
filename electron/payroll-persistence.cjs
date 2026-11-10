@@ -248,7 +248,7 @@ function calculateEmployeeDraft(db, companyId, employee, input, periodEnd, frequ
   };
 }
 function createPayrollRun(db, companyId, input) {
-  ensureCompany(db, companyId);
+  const company = ensureCompany(db, companyId);
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('La nómina es inválida.');
   const frequency = String(input.frequency || '');
   if (!['WEEKLY','BIWEEKLY'].includes(frequency)) throw new Error('La periodicidad debe ser semanal o quincenal.');
@@ -286,7 +286,14 @@ function createPayrollRun(db, companyId, input) {
   }), { grossEarnings:0, workerLegalDeductions:0, otherDeductions:0, employerContributions:0, netPay:0, totalEmployerCost:0 });
   for (const key of Object.keys(totals)) totals[key] = Math.round(totals[key] * 100) / 100;
   const id = crypto.randomUUID();
-  const snapshot = { version: 1, companyId, frequency, periodStart, periodEnd, createdAt: new Date().toISOString(), employees: calculations };
+  const snapshot = {
+    version: 1, companyId, frequency, periodStart, periodEnd, createdAt: new Date().toISOString(),
+    companySnapshot: {
+      name: String(company.name || ''), rif: String(company.rif || ''),
+      address: String(company.address || ''), phone: String(company.phone || '')
+    },
+    employees: calculations
+  };
   const insert = db.transaction(() => {
     db.prepare(`INSERT INTO payroll_runs
       (id,company_id,frequency,period_start,period_end,status,calculation_snapshot_json,totals_json)
