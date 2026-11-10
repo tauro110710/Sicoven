@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { calculateVacationSalaryBasis, calculateAnnualLaborRights } = require('./payroll-legal-calculations.cjs');
+const { calculateVacationSalaryBasis, calculateAnnualLaborRights, calculateProfitSharingDistribution } = require('./payroll-legal-calculations.cjs');
 
 function text(value, label, max = 240, min = 1) {
   const result = String(value ?? '').trim();
@@ -330,6 +330,73 @@ function calculatePayrollAnnualRights(db, companyId, input) {
   return { employeeId, fullName: employee.fullName, asOfDate: input.asOfDate, salaryBasis: basis, ...rights };
 }
 
+
+function calculatePayrollProfitSharing(db, companyId, input) {
+  ensureCompany(db, companyId);
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Los datos de utilidades son inválidos.');
+  const fiscalYearStart = date(input.fiscalYearStart, 'Inicio del ejercicio');
+  const fiscalYearEnd = date(input.fiscalYearEnd, 'Cierre del ejercicio');
+  if (fiscalYearEnd < fiscalYearStart) throw new Error('El cierre del ejercicio no puede ser anterior a su inicio.');
+  const sourceReference = text(input.sourceReference, 'Fuente de beneficios líquidos', 300);
+  const verifiedAt = date(input.verifiedAt, 'Fecha de verificación de beneficios líquidos');
+  const overlappingRuns = db.prepare(`SELECT id,period_start AS periodStart,period_end AS periodEnd
+    FROM payroll_runs WHERE company_id=? AND status='CONFIRMED'
+      AND period_start<=? AND period_end>=?`).all(companyId, fiscalYearEnd, fiscalYearStart);
+  const crossing = overlappingRuns.find(run => run.periodStart < fiscalYearStart || run.periodEnd > fiscalYearEnd);
+  if (crossing) {
+    throw new Error('La nómina confirmada ' + crossing.periodStart + ' al ' + crossing.periodEnd +
+      ' cruza los límites del ejercicio. Ajuste el período antes de distribuir utilidades; no se prorratean importes sin evidencia.');
+  }
+  const salaryRows = db.prepare(`SELECT e.id AS employeeId,e.full_name AS fullName,
+      r.period_start AS periodStart,r.period_end AS periodEnd,
+      l.amount,l.calculation_json AS calculationJson
+    FROM payroll_employees e
+    JOIN payroll_runs r ON r.company_id=e.company_id AND r.status='CONFIRMED'
+      AND r.period_start>=? AND r.period_end<=?
+    JOIN payroll_run_lines l ON l.run_id=r.id AND l.employee_id=e.id AND l.line_type='EARNING'
+    WHERE e.company_id=?
+    ORDER BY e.full_name,r.period_start,r.period_end`).all(fiscalYearStart, fiscalYearEnd, companyId);
+  const wageTotals = new Map();
+  const employeeNames = new Map();
+  for (const row of salaryRows) {
+    let calculation;
+    try { calculation = JSON.parse(row.calculationJson || '{}'); }
+    catch { throw new Error('Una línea de nómina confirmada contiene clasificación salarial inválida.'); }
+    if (calculation.isSalary !== true) continue;
+    const amount = positiveOrZero(row.amount, 'Salario devengado');
+    wageTotals.set(row.employeeId, Math.round(((wageTotals.get(row.employeeId) || 0) + amount + Number.EPSILON) * 100) / 100);
+    employeeNames.set(row.employeeId, row.fullName);
+  }
+  const salaryBasis = input.employees;
+  if (!Array.isArray(salaryBasis) || salaryBasis.length === 0) {
+    throw new Error('Indique el salario normal mensual y meses trabajados de cada trabajador con nóminas confirmadas.');
+  }
+  const suppliedIds = new Set();
+  const distributionEmployees = [];
+  for (const item of salaryBasis) {
+    const employeeId = text(item.employeeId, 'Trabajador', 120);
+    if (suppliedIds.has(employeeId)) throw new Error('Un trabajador aparece más de una vez en las bases de utilidades.');
+    suppliedIds.add(employeeId);
+    if (!wageTotals.has(employeeId)) throw new Error('El trabajador indicado no tiene salarios salariales confirmados en el ejercicio de esta empresa.');
+    distributionEmployees.push({
+      employeeId, wagesEarned: wageTotals.get(employeeId),
+      monthlyNormalSalary: item.monthlyNormalSalary, monthsWorked: item.monthsWorked
+    });
+  }
+  const missing = [...wageTotals.keys()].filter(id => !suppliedIds.has(id));
+  if (missing.length) {
+    throw new Error('Falta indicar el salario normal y los meses trabajados de todos los trabajadores con salarios confirmados (' +
+      missing.length + ' pendiente(s)).');
+  }
+  const result = calculateProfitSharingDistribution({ netProfits: input.netProfits, employees: distributionEmployees });
+  return {
+    ...result,
+    fiscalYearStart, fiscalYearEnd, sourceReference, verifiedAt,
+    employees: result.employees.map(item => ({ ...item, fullName: employeeNames.get(item.employeeId) || item.employeeId })),
+    salaryEvidence: 'Nóminas CONFIRMED de esta empresa; se excluyen borradores, anuladas y conceptos no salariales.'
+  };
+}
+
 function listPayrollRuns(db, companyId) {
   ensureCompany(db, companyId);
   return db.prepare(`SELECT id,company_id AS companyId,frequency,period_start AS periodStart,
@@ -500,6 +567,10 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
     authenticate(token);
     return withDatabase(token, (db, companyId) => calculatePayrollAnnualRights(db, companyId, input));
   });
+  ipcMain.handle('sicoven:payroll-profit-sharing-calculate', async (_event, token, input) => {
+    authenticate(token);
+    return withDatabase(token, (db, companyId) => calculatePayrollProfitSharing(db, companyId, input));
+  });
   ipcMain.handle('sicoven:payroll-run-create', async (_event, token, input) => {
     authenticate(token);
     return withDatabase(token, (db, companyId) => createPayrollRun(db, companyId, input));
@@ -520,5 +591,5 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
 module.exports = {
   listPayrollEmployees, listPayrollSalaryHistory, getPayrollSalaryForDate, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
   createPayrollRun, listPayrollRuns, getPayrollRun, confirmPayrollRun, listConfirmedSalaryEntries,
-  calculatePayrollAnnualRights, registerPayrollIpc
+  calculatePayrollAnnualRights, calculatePayrollProfitSharing, registerPayrollIpc
 };
