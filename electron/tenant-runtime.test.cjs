@@ -71,3 +71,25 @@ test('exposes explicit lifecycle methods and closes tenant connections without d
   assert.equal(runtime.isCompanyOpen('runtime-e'), false);
   assert.equal(fs.existsSync(file), true);
 });
+
+
+test('exposes factory reset through the tenant runtime and removes only registered company data', async t => {
+  const { runtime, controlDb } = fixture(t);
+  await runtime.createCompany({ id: 'runtime-reset-a', name: 'Empresa Reset A', rif: 'J-12345678-9' });
+  await runtime.createCompany({ id: 'runtime-reset-b', name: 'Empresa Reset B', rif: 'J-98765432-1' });
+  const registeredDirectory = path.dirname(runtime.getCompanyDatabasePath('runtime-reset-a'));
+  const orphanDirectory = path.join(path.dirname(registeredDirectory), 'orphan-company');
+  fs.mkdirSync(orphanDirectory, { recursive: true });
+  fs.writeFileSync(path.join(registeredDirectory, 'documento-asociado.txt'), 'documento');
+  fs.writeFileSync(path.join(orphanDirectory, 'conservar.txt'), 'no registrado');
+
+  assert.equal(typeof runtime.resetAllCompanies, 'function');
+  const result = runtime.resetAllCompanies();
+
+  assert.deepEqual(result.removedCompanyIds.sort(), ['runtime-reset-a', 'runtime-reset-b']);
+  assert.equal(result.removedCompanies, 2);
+  assert.equal(runtime.listCompanies().length, 0);
+  assert.equal(fs.existsSync(registeredDirectory), false);
+  assert.equal(fs.readFileSync(path.join(orphanDirectory, 'conservar.txt'), 'utf8'), 'no registrado');
+  assert.equal(controlDb.open, true);
+});
