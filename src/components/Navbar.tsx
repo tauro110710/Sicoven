@@ -23,6 +23,7 @@ import {
   Scale,
   Landmark,
   Undo2,
+  Users,
   Menu,
   X
 } from 'lucide-react';
@@ -74,6 +75,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, []);
 
   const tabs = [
+    { id: 'nomina', label: 'Nómina', icon: Users },
     { id: 'diario', label: 'Libro Diario', icon: BookOpen },
     { id: 'mayor', label: 'Libro Mayor', icon: ListTree },
     { id: 'balances', label: 'Balances VEN-NIF', icon: Scale },
