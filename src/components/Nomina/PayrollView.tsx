@@ -79,8 +79,8 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   const [severanceBusy, setSeveranceBusy] = useState<string | null>(null);
   const [severanceResult, setSeveranceResult] = useState<Record<string, Record<string,unknown>>>({});
   const [interestResult, setInterestResult] = useState<Record<string, Record<string,unknown>>>({});
-  const [depositForm, setDepositForm] = useState({depositDate:new Date().toISOString().slice(0,10),kind:'QUARTERLY' as 'QUARTERLY'|'SENIORITY'|'ADVANCE',days:'15',dailyIntegralSalary:'',sourceReference:'',modeEvidence:'',verifiedAt:new Date().toISOString().slice(0,10)});
-  const [interestForm, setInterestForm] = useState({month:new Date().toISOString().slice(0,7),mode:'UNDEPOSITED' as 'TRUST_OR_FUND'|'AUTHORIZED_BOOK_CREDIT'|'UNDEPOSITED',capital:'',monthlyRate:'',sourceReference:'',verifiedAt:new Date().toISOString().slice(0,10)});
+  const [depositForm, setDepositForm] = useState({depositDate:new Date().toISOString().slice(0,10),kind:'QUARTERLY' as 'QUARTERLY'|'SENIORITY'|'ADVANCE',days:'15',dailyIntegralSalary:'',sourceReference:'',verifiedAt:new Date().toISOString().slice(0,10)});
+  const [interestForm, setInterestForm] = useState({month:new Date().toISOString().slice(0,7),mode:'UNDEPOSITED' as 'TRUST_OR_FUND'|'AUTHORIZED_BOOK_CREDIT'|'UNDEPOSITED',capital:'',monthlyRate:'',sourceReference:'',modeEvidence:'',verifiedAt:new Date().toISOString().slice(0,10)});
   const [severanceCalcForm, setSeveranceCalcForm] = useState({asOfDate:new Date().toISOString().slice(0,10),dailyIntegralSalary:''});
 
   const requiredBaseFields = new Set(legalRules
