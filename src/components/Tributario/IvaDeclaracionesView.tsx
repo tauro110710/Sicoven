@@ -3,7 +3,7 @@ import { CalendarDays, FileText, Receipt, ShoppingCart, AlertTriangle, CheckCirc
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs } from '../../utils/formatters';
 
-const money = (value: number) => Number.isFinite(value) ? value : 0;
+const money = (value: number | undefined) => Number.isFinite(value) ? Number(value) : 0;
 const signedDocument = (type: '01' | '02' | '03') => type === '03' ? -1 : 1;
 
 export const IvaDeclaracionesView: React.FC = () => {
@@ -29,13 +29,16 @@ export const IvaDeclaracionesView: React.FC = () => {
     const z = entry.fiscalZReport!;
     return sum + money(z.vat16Bs) + money(z.vat8Bs) + money(z.vat31Bs);
   }, 0);
-  const outputVat = salesDebit + zDebit;
+  // Una factura individual y el Reporte Z que la resume pueden representar la misma venta.
+  // Si coexisten ambos orígenes, no se suman automáticamente: se exige conciliación para evitar duplicar el débito.
+  const hasMixedSalesSources = monthSales.length > 0 && monthZ.length > 0;
+  const outputVat = hasMixedSalesSources ? null : salesDebit + zDebit;
 
   const purchaseCredit = monthPurchases.reduce((sum, item) =>
     sum + signedDocument(item.documentType) * money(item.vatAmountBs), 0);
   const receivedWithholdings = monthSales.reduce((sum, item) =>
     sum + signedDocument(item.documentType) * money(item.vatWithheldBs), 0);
-  const preliminaryBalance = outputVat - purchaseCredit - receivedWithholdings;
+  const preliminaryBalance = outputVat === null ? null : outputVat - purchaseCredit - receivedWithholdings;
 
   const zSources = monthZ.map(entry => ({
     id: entry.id,
@@ -72,7 +75,7 @@ export const IvaDeclaracionesView: React.FC = () => {
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-xl border border-emerald-200 bg-white p-4">
           <p className="text-xs font-semibold text-emerald-800">IVA débito · Ventas y Z</p>
-          <p className="mt-2 text-xl font-black text-slate-900">{format(outputVat)}</p>
+          <p className="mt-2 text-xl font-black text-slate-900">{outputVat === null ? 'Pendiente' : format(outputVat)}</p>
           <p className="mt-1 text-xs text-slate-500">{monthSales.length} documentos · {monthZ.length} reportes Z</p>
         </article>
         <article className="rounded-xl border border-sky-200 bg-white p-4">
@@ -87,8 +90,8 @@ export const IvaDeclaracionesView: React.FC = () => {
         </article>
         <article className={`rounded-xl border p-4 ${preliminaryBalance >= 0 ? 'border-amber-300 bg-amber-50/50' : 'border-teal-300 bg-teal-50/50'}`}>
           <p className="text-xs font-semibold text-slate-700">Saldo preliminar del período</p>
-          <p className="mt-2 text-xl font-black text-slate-900">{format(Math.abs(preliminaryBalance))}</p>
-          <p className="mt-1 text-xs font-semibold text-slate-600">{preliminaryBalance >= 0 ? 'Estimación por pagar' : 'Saldo a favor preliminar'}</p>
+          <p className="mt-2 text-xl font-black text-slate-900">{preliminaryBalance === null ? 'Conciliar' : format(Math.abs(preliminaryBalance))}</p>
+          <p className="mt-1 text-xs font-semibold text-slate-600">{preliminaryBalance === null ? 'No se calcula para evitar doble conteo' : preliminaryBalance >= 0 ? 'Estimación por pagar' : 'Saldo a favor preliminar'}</p>
         </article>
       </section>
 
@@ -97,7 +100,8 @@ export const IvaDeclaracionesView: React.FC = () => {
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
           <div className="text-sm text-amber-950">
             <p className="font-bold">Control previo a la declaración; no es todavía una declaración SENIAT ni un pago registrado.</p>
-            <p className="mt-1">El crédito fiscal de compras y las retenciones deben validarse contra sus comprobantes, requisitos de deducibilidad y período fiscal. Los reportes Z de POS externo se muestran como soporte operativo y requieren conciliación con los documentos fiscales exigibles. Este saldo no sustituye la revisión del contador ni la Forma 30.</p>
+            {hasMixedSalesSources && <p className="mt-2 font-bold">Conciliación obligatoria: existen facturas individuales y reportes Z en el mismo período. Pueden resumir las mismas operaciones; SICOVEN no los suma automáticamente para evitar duplicar el IVA débito. Conciliá rangos y operaciones antes de determinar el saldo.</p>}
+            <p className="mt-1">El crédito fiscal de compras y las retenciones deben validarse contra sus comprobantes, requisitos de deducibilidad y período fiscal. Los reportes Z de POS externo se muestran como soporte operativo y requieren conciliación con los documentos fiscales exigibles. Si también se registraron esas mismas facturas individualmente, no deben computarse dos veces. Este saldo no sustituye la revisión del contador ni la Forma 30.</p>
           </div>
         </div>
       </section>
