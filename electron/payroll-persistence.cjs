@@ -569,7 +569,10 @@ function savePayrollSeveranceDeposit(db, companyId, input) {
   const serviceYear=kind==='SENIORITY'?Number(input.serviceYear):null;
   if(kind==='SENIORITY') {
     const completedAtDeposit=completedYears(employee.hireDate,depositDate);
-    if(!Number.isInteger(serviceYear) || serviceYear<1 || serviceYear>15 || serviceYear>completedAtDeposit) throw new Error('Indique el año de servicio real (1 a 15); el año debe estar cumplido para la fecha del depósito.');
+    if(!Number.isInteger(serviceYear) || serviceYear<1 || serviceYear>15 || serviceYear>completedAtDeposit) {
+      if(Number.isInteger(serviceYear) && serviceYear>15) throw new Error('La antigüedad adicional está limitada a quince años y treinta días acumulados.');
+      throw new Error('Indique el año de servicio real (1 a 15); el año debe estar cumplido para la fecha del depósito.');
+    }
     if(Math.abs(days-2)>0.001) throw new Error('El depósito adicional por antigüedad debe ser exactamente de dos días por año.');
     const priorRows=db.prepare(`SELECT id,service_year AS serviceYear,deposit_date AS depositDate FROM payroll_severance_deposits
       WHERE company_id=? AND employee_id=? AND deposit_kind='SENIORITY'`).all(companyId,employeeId);
