@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { CalendarDays, FileText, Receipt, ShoppingCart, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
-import { formatBs, formatUsd } from '../../utils/formatters';
+import { formatBs } from '../../utils/formatters';
 
 const money = (value: number) => Number.isFinite(value) ? value : 0;
 const signedDocument = (type: '01' | '02' | '03') => type === '03' ? -1 : 1;
 
 export const IvaDeclaracionesView: React.FC = () => {
-  const { currentCompany, sales, purchases, journalEntries, displayCurrency } = useAccounting();
+  const { currentCompany, sales, purchases, journalEntries } = useAccounting();
   const today = new Date();
   const [period, setPeriod] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`);
 
@@ -51,9 +51,6 @@ export const IvaDeclaracionesView: React.FC = () => {
   }));
 
   const format = (value: number) => formatBs(value);
-  const displayAmount = (value: number) => displayCurrency === 'BS'
-    ? format(value)
-    : `${format(value)} · ${formatUsd(value / (currentCompany.accountingBcvRateHistory?.slice(-1)[0]?.rate || 1))}`;
 
   return (
     <div className="space-y-5">
