@@ -50,7 +50,7 @@ test('compares severance guarantee against termination calculation', () => {
   const result = calculateSeverance({
     hireDate:'2022-01-01',asOfDate:'2026-01-01',dailyIntegralSalary:100,
     quarterlyDeposits:Array.from({length:16},()=>({days:15,dailyIntegralSalary:100})),
-    additionalSeniorityDeposits:[{days:6,dailyIntegralSalary:100}]
+    additionalSeniorityDeposits:Array.from({length:3},()=>({days:2,dailyIntegralSalary:100}))
   });
   assert.equal(result.completedYears,4);
   assert.equal(result.quarterlyGuaranteeDays,240);
@@ -87,18 +87,20 @@ test('applies five days per month or fraction only before the three-calendar-mon
 });
 test('values each historical quarterly and seniority deposit with its own integral salary', () => {
   const result = calculateSeverance({
-    hireDate:'2022-01-01',asOfDate:'2026-01-01',dailyIntegralSalary:200,
+    hireDate:'2024-01-01',asOfDate:'2026-01-01',dailyIntegralSalary:200,
     quarterlyDeposits:[
       {days:15,dailyIntegralSalary:100},{days:15,dailyIntegralSalary:110},
-      {days:15,dailyIntegralSalary:120},{days:15,dailyIntegralSalary:130}
+      {days:15,dailyIntegralSalary:120},{days:15,dailyIntegralSalary:130},
+      {days:15,dailyIntegralSalary:140},{days:15,dailyIntegralSalary:150},
+      {days:15,dailyIntegralSalary:160},{days:15,dailyIntegralSalary:170}
     ],
     additionalSeniorityDeposits:[{days:2,dailyIntegralSalary:115}]
   });
-  assert.equal(result.quarterlyGuaranteeDays,60);
+  assert.equal(result.quarterlyGuaranteeDays,120);
   assert.equal(result.additionalSeniorityDays,2);
-  assert.equal(result.guaranteeAmount,6930);
-  assert.equal(result.terminationAmount,24000);
-  assert.equal(result.greaterBasis,'TERMINATION');
+  assert.equal(result.guaranteeAmount,16430);
+  assert.equal(result.terminationAmount,12000);
+  assert.equal(result.greaterBasis,'GUARANTEE');
 });
 
 test('requires historical salary bases instead of revaluing all old deposits at current salary', () => {
@@ -108,19 +110,19 @@ test('requires historical salary bases instead of revaluing all old deposits at 
 });
 
 test('counts a service fraction strictly greater than six months in the termination comparison', () => {
-  const exactSix = calculateSeverance({hireDate:'2025-01-31',asOfDate:'2025-07-31',dailyIntegralSalary:100,quarterlyDeposits:[],additionalSeniorityDeposits:[]});
+  const exactSix = calculateSeverance({hireDate:'2025-01-31',asOfDate:'2025-07-31',dailyIntegralSalary:100,quarterlyDeposits:Array.from({length:2},()=>({days:15,dailyIntegralSalary:100})),additionalSeniorityDeposits:[]});
   assert.equal(exactSix.terminationDays,0);
-  const overSix = calculateSeverance({hireDate:'2025-01-31',asOfDate:'2025-08-01',dailyIntegralSalary:100,quarterlyDeposits:[],additionalSeniorityDeposits:[]});
+  const overSix = calculateSeverance({hireDate:'2025-01-31',asOfDate:'2025-08-01',dailyIntegralSalary:100,quarterlyDeposits:Array.from({length:2},()=>({days:15,dailyIntegralSalary:100})),additionalSeniorityDeposits:[]});
   assert.equal(overSix.terminationDays,30);
-  const oneYearAndSixMonths = calculateSeverance({hireDate:'2024-01-31',asOfDate:'2025-07-31',dailyIntegralSalary:100,quarterlyDeposits:[],additionalSeniorityDeposits:[]});
+  const oneYearAndSixMonths = calculateSeverance({hireDate:'2024-01-31',asOfDate:'2025-07-31',dailyIntegralSalary:100,quarterlyDeposits:Array.from({length:6},()=>({days:15,dailyIntegralSalary:100})),additionalSeniorityDeposits:[{days:2,dailyIntegralSalary:100}]});
   assert.equal(oneYearAndSixMonths.terminationDays,30);
-  const oneYearAndMoreThanSix = calculateSeverance({hireDate:'2024-01-31',asOfDate:'2025-08-01',dailyIntegralSalary:100,quarterlyDeposits:[],additionalSeniorityDeposits:[]});
+  const oneYearAndMoreThanSix = calculateSeverance({hireDate:'2024-01-31',asOfDate:'2025-08-01',dailyIntegralSalary:100,quarterlyDeposits:Array.from({length:6},()=>({days:15,dailyIntegralSalary:100})),additionalSeniorityDeposits:[{days:2,dailyIntegralSalary:100}]});
   assert.equal(oneYearAndMoreThanSix.terminationDays,60);
 });
 
 test('uses clamped calendar anniversaries for month-end and leap-day service', () => {
   assert.equal(completedYears('2024-02-29','2025-02-27'),0);
   assert.equal(completedYears('2024-02-29','2025-02-28'),1);
-  const result = calculateSeverance({hireDate:'2026-01-31',asOfDate:'2026-04-30',dailyIntegralSalary:100,quarterlyDeposits:[],additionalSeniorityDeposits:[]});
+  const result = calculateSeverance({hireDate:'2026-01-31',asOfDate:'2026-04-30',dailyIntegralSalary:100,quarterlyDeposits:[{days:15,dailyIntegralSalary:100}],additionalSeniorityDeposits:[]});
   assert.equal(result.completedMonths,3);
 });
