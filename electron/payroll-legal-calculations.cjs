@@ -103,9 +103,10 @@ function calculateSeverance(input) {
   const beforeThreeMonths = asOf < addMonthsClamped(hire, 3);
   const completedMonthDate = addMonthsClamped(hire, monthsElapsed);
   const serviceMonthsForFirstThree = monthsElapsed + (asOf > completedMonthDate ? 1 : 0);
+  const exceedsSixMonthFraction = asOf > addMonthsClamped(hire, years * 12 + 6);
   const terminationDays = beforeThreeMonths
     ? serviceMonthsForFirstThree * 5
-    : (years + (monthsElapsed % 12 > 6 ? 1 : 0)) * 30;
+    : (years + (exceedsSixMonthFraction ? 1 : 0)) * 30;
   const guaranteeAmount = round2(guaranteeDays * daily);
   const terminationAmount = round2(terminationDays * daily);
   return {
