@@ -348,8 +348,23 @@ function calculateFinalLiquidation(input) {
   const completedServiceYears = completedYears(input.hireDate, input.terminationDate);
   const currentCycleStart = addMonthsClamped(hire, completedServiceYears * 12);
   const currentCycleMonths = completedCalendarMonths(currentCycleStart, end);
-  const currentVacationAnnualDays = 15 + Math.min(15, completedServiceYears);
-  const currentVacationBonusAnnualDays = 15 + Math.min(15, completedServiceYears);
+  const statutoryAnnualDays = 15 + Math.min(15, completedServiceYears);
+  const vacationAnnualDays = input.vacationAnnualDays === undefined || input.vacationAnnualDays === null || input.vacationAnnualDays === ''
+    ? statutoryAnnualDays : money(input.vacationAnnualDays, 'Días anuales de vacaciones');
+  const vacationBonusAnnualDays = input.vacationBonusAnnualDays === undefined || input.vacationBonusAnnualDays === null || input.vacationBonusAnnualDays === ''
+    ? statutoryAnnualDays : money(input.vacationBonusAnnualDays, 'Días anuales de bono vacacional');
+  const entitlementEvidence = String(input.vacationEntitlementEvidence || '').trim();
+  if (vacationAnnualDays < statutoryAnnualDays || vacationBonusAnnualDays < statutoryAnnualDays) {
+    throw new Error('Los días anuales pactados no pueden ser inferiores al mínimo legal aplicable.');
+  }
+  if (vacationAnnualDays > 365 || vacationBonusAnnualDays > 365) {
+    throw new Error('Los días anuales pactados exceden un límite razonable; revise el convenio y su soporte.');
+  }
+  if ((vacationAnnualDays > statutoryAnnualDays || vacationBonusAnnualDays > statutoryAnnualDays) && !entitlementEvidence) {
+    throw new Error('Los días superiores al mínimo legal requieren contrato o convención colectiva como soporte.');
+  }
+  const currentVacationAnnualDays = vacationAnnualDays;
+  const currentVacationBonusAnnualDays = vacationBonusAnnualDays;
   const fractionalVacationDays = round2(currentVacationAnnualDays * currentCycleMonths / 12);
   const fractionalVacationBonusDays = round2(currentVacationBonusAnnualDays * currentCycleMonths / 12);
   const vacationDaysPayable = round2(vacationDaysOutstanding + fractionalVacationDays);

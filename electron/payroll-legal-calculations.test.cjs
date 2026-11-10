@@ -317,3 +317,20 @@ test('applies mora only when actual payment is after the five-day statutory peri
   assert.equal(late.lateInterestDays,1);
   assert.equal(late.total,1015);
 });
+
+test('honors superior contractual vacation and vacation-bonus days with evidence', () => {
+  const { calculateFinalLiquidation } = require('./payroll-legal-calculations.cjs');
+  const base={hireDate:'2024-01-01',terminationDate:'2026-03-01',terminationReason:'VOLUNTARY_RESIGNATION',
+    dailyNormalSalary:100,vacationDaysOutstanding:0,vacationBonusDaysOutstanding:0,vacationBalanceSource:'Libro conciliado',
+    severancePayable:0,interestStatus:'NOT_APPLICABLE',interestStatusEvidence:'Intereses conciliados',
+    profitSharingStatus:'NOT_APPLICABLE',profitSharingSourceReference:'Utilidades conciliadas'};
+  assert.throws(()=>calculateFinalLiquidation({...base,vacationBonusAnnualDays:30}),/requieren contrato o convención/);
+  const result=calculateFinalLiquidation({...base,vacationAnnualDays:20,vacationBonusAnnualDays:30,
+    vacationEntitlementEvidence:'Cláusula 18 del contrato individual'});
+  assert.equal(result.currentCycleMonths,2);
+  assert.equal(result.currentVacationAnnualDays,20);
+  assert.equal(result.fractionalVacationDays,3.33);
+  assert.equal(result.currentVacationBonusAnnualDays,30);
+  assert.equal(result.fractionalVacationBonusDays,5);
+  assert.equal(result.vacationBonusPay,500);
+});
