@@ -694,7 +694,7 @@ test('severance calculation refuses incomplete quarterly history and never estim
       frequency: 'BIWEEKLY', baseSalary: 1800
     });
     assert.throws(() => calculatePayrollSeverance(db, 'co-a', {
-      employeeId: employee.id, asOfDate: '2026-03-31', dailyIntegralSalary: 60
+      employeeId: employee.id, asOfDate: '2026-03-31', salaryType: 'FIXED', lastMonthlyIntegratedSalary: 1800
     }), /historial de garantía está incompleto/);
     savePayrollSeveranceDeposit(db, 'co-a', {
       employeeId: employee.id, depositDate: '2025-03-31', kind: 'QUARTERLY',
