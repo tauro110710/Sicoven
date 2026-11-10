@@ -145,3 +145,73 @@ test('calculates severance interest by the applicable art. 143 regime using veri
   assert.throws(()=>calculateSeveranceInterest({mode:'UNDEPOSITED',months:[{...months[0],monthlyRate:1.2}]}),/tasa mensual/);
   assert.throws(()=>calculateSeveranceInterest({mode:'OTHER',months}),/régimen de intereses/);
 });
+
+
+test('distributes the 15% profit-sharing fund in proportion to confirmed annual wages', () => {
+  const { calculateProfitSharingDistribution } = require('./payroll-legal-calculations.cjs');
+  const result = calculateProfitSharingDistribution({
+    netProfits: 100000,
+    employees: [
+      { employeeId: 'A', wagesEarned: 60000, monthlyNormalSalary: 3000, monthsWorked: 12 },
+      { employeeId: 'B', wagesEarned: 40000, monthlyNormalSalary: 3000, monthsWorked: 12 }
+    ]
+  });
+  assert.equal(result.distributableFund, 15000);
+  assert.equal(result.totalWagesEarned, 100000);
+  assert.equal(result.employees[0].proportionalShare, 9000);
+  assert.equal(result.employees[1].proportionalShare, 6000);
+  assert.equal(result.totalPayable, 15000);
+  assert.equal(result.employerShortfall, 0);
+});
+
+test('guarantees prorated individual minimums and exposes any employer shortfall', () => {
+  const { calculateProfitSharingDistribution } = require('./payroll-legal-calculations.cjs');
+  const result = calculateProfitSharingDistribution({
+    netProfits: 10000,
+    employees: [
+      { employeeId: 'A', wagesEarned: 6000, monthlyNormalSalary: 3000, monthsWorked: 12 },
+      { employeeId: 'B', wagesEarned: 4000, monthlyNormalSalary: 3000, monthsWorked: 6 }
+    ]
+  });
+  assert.equal(result.distributableFund, 1500);
+  assert.equal(result.employees[0].minimumDays, 30);
+  assert.equal(result.employees[0].minimumAmount, 3000);
+  assert.equal(result.employees[1].minimumDays, 15);
+  assert.equal(result.employees[1].minimumAmount, 1500);
+  assert.equal(result.totalPayable, 4500);
+  assert.equal(result.employerShortfall, 3000);
+});
+
+test('does not redistribute amounts withheld by the four-month maximum', () => {
+  const { calculateProfitSharingDistribution } = require('./payroll-legal-calculations.cjs');
+  const result = calculateProfitSharingDistribution({
+    netProfits: 200000,
+    employees: [
+      { employeeId: 'A', wagesEarned: 50000, monthlyNormalSalary: 3000, monthsWorked: 12 },
+      { employeeId: 'B', wagesEarned: 50000, monthlyNormalSalary: 3000, monthsWorked: 12 }
+    ]
+  });
+  assert.equal(result.employees[0].proportionalShare, 15000);
+  assert.equal(result.employees[0].maximumAmount, 12000);
+  assert.equal(result.totalPayable, 24000);
+  assert.equal(result.undistributedRemainder, 6000);
+});
+
+test('rejects missing wage denominator, duplicate employees and invalid service months', () => {
+  const { calculateProfitSharingDistribution } = require('./payroll-legal-calculations.cjs');
+  assert.throws(() => calculateProfitSharingDistribution({
+    netProfits: 10000,
+    employees: [{ employeeId: 'A', wagesEarned: 0, monthlyNormalSalary: 1000, monthsWorked: 12 }]
+  }), /salarios devengados confirmados/);
+  assert.throws(() => calculateProfitSharingDistribution({
+    netProfits: 10000,
+    employees: [
+      { employeeId: 'A', wagesEarned: 1000, monthlyNormalSalary: 1000, monthsWorked: 12 },
+      { employeeId: 'A', wagesEarned: 1000, monthlyNormalSalary: 1000, monthsWorked: 12 }
+    ]
+  }), /identificador vacío o repetido/);
+  assert.throws(() => calculateProfitSharingDistribution({
+    netProfits: 10000,
+    employees: [{ employeeId: 'A', wagesEarned: 1000, monthlyNormalSalary: 1000, monthsWorked: 0 }]
+  }), /meses completos/);
+});
