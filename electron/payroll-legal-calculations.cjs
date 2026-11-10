@@ -211,7 +211,7 @@ function calculateSeveranceInterest(input) {
   const seen = new Set();
   const details = input.months.map(item => {
     const month = String(item.month || '');
-    if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(month) || seen.has(month)) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || seen.has(month)) {
       throw new Error('El historial de intereses contiene un mes inválido o repetido.');
     }
     seen.add(month);
