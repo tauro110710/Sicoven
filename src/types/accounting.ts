@@ -102,6 +102,16 @@ export interface Supplier {
 
 import type { InventoryBcvHistoryEntry } from './inventoryBcvRate';
 
+export interface AccountingBcvRateHistoryEntry {
+  id: string;
+  rate: number;
+  effectiveDate: string;
+  recordedAt: string;
+  source: 'MANUAL' | 'CORRECTION' | 'LEGACY';
+  note?: string;
+  correctionOfId?: string;
+}
+
 export interface Company {
   id: string;
   rif: string; // e.g., "J-40892182-3"
@@ -130,6 +140,8 @@ export interface Company {
   fiscalYear: number; // e.g. 2026
   bcvRate: number; // Tasa oficial BCV Bs/$
   lastRateUpdate?: string;
+  /** Historial contable append-only de tasas BCV; independiente del historial del módulo Inventario. */
+  accountingBcvRateHistory?: AccountingBcvRateHistoryEntry[];
   /** Tasa BCV propia del módulo Inventario; no modifica la tasa contable. */
   inventoryBcvRate?: number;
   /** Tasa EUR publicada por la misma fuente BCV; informativa para Inventario. */

@@ -7,6 +7,7 @@ const { initializeInflationClassificationSchema } = require('./inflation-classif
 const { initializeInflationSourceDossierSchema } = require('./inflation-source-dossiers.cjs');
 const { initializeDocumentVaultSchema } = require('./supporting-documents.cjs');
 const { initializeVatFiscalIncidentSchema } = require('./vat-fiscal-incidents.cjs');
+const { initializePayrollSchema } = require('./payroll-schema.cjs');
 
 function initializeTenantDatabase(db) {
   if (!db || typeof db.exec !== 'function') {
@@ -40,6 +41,7 @@ function initializeTenantDatabase(db) {
   initializeInflationSourceDossierSchema(db);
   initializeDocumentVaultSchema(db);
   initializeVatFiscalIncidentSchema(db);
+  const payroll = initializePayrollSchema(db);
 
   return Object.freeze({
     operationalTables: [
@@ -51,7 +53,8 @@ function initializeTenantDatabase(db) {
       'inflation_source_dossiers', 'inflation_source_dossier_evidence',
       'inflation_source_dossier_reviews', 'supporting_documents',
       'supporting_document_events', 'vat_fiscal_incidents',
-      'vat_fiscal_incident_events', 'vat_fiscal_incident_references'
+      'vat_fiscal_incident_events', 'vat_fiscal_incident_references',
+      ...payroll.tables
     ]
   });
 }

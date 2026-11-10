@@ -62,6 +62,7 @@ export const DEFAULT_CHART_OF_ACCOUNTS: Account[] = [
   { code: '2.1.3.01', name: 'Sueldos y Salarios por Pagar', type: 'PASIVO', level: 4, isMovement: true, parentCode: '2.1.3' },
   { code: '2.1.3.02', name: 'Prestaciones Sociales Acumuladas por Pagar', type: 'PASIVO', level: 4, isMovement: true, parentCode: '2.1.3' },
   { code: '2.1.3.03', name: 'Aportes IVSS, FAOV e INCES por Enterar', type: 'PASIVO', level: 4, isMovement: true, parentCode: '2.1.3' },
+  { code: '2.1.3.04', name: 'Otras Deducciones de Nómina por Pagar', type: 'PASIVO', level: 4, isMovement: true, parentCode: '2.1.3' },
 
   { code: '2.2', name: 'PASIVO NO CORRIENTE', type: 'PASIVO', level: 2, isMovement: false, parentCode: '2' },
   { code: '2.2.1', name: 'Obligaciones a Largo Plazo', type: 'PASIVO', level: 3, isMovement: false, parentCode: '2.2' },
@@ -113,5 +114,6 @@ export const DEFAULT_CHART_OF_ACCOUNTS: Account[] = [
   { code: '6.1.1.08', name: 'Pérdida en Diferencial Cambiario', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' },
   { code: '6.1.1.09', name: 'Artículos de Oficina y Papelería', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' },
   { code: '6.1.1.10', name: 'Tributos Municipales y Tasas Públicas', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' },
-  { code: '6.1.1.11', name: 'Gasto por IGTF en compras', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' }
+  { code: '6.1.1.11', name: 'Gasto por IGTF en compras', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' },
+  { code: '6.1.1.12', name: 'Aportes Patronales de Nómina', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' },
 ];

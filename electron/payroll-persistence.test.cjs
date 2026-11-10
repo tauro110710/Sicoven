@@ -1,0 +1,859 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const Database = require('better-sqlite3');
+const { initializeTenantDatabase } = require('./tenant-schema.cjs');
+const {
+  listPayrollEmployees, listPayrollSalaryHistory, getPayrollSalaryForDate, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
+  registerPayrollIpc, createPayrollRun, listPayrollRuns, getPayrollRun, confirmPayrollRun, listConfirmedSalaryEntries, calculatePayrollAnnualRights, calculatePayrollProfitSharing, listPayrollSeveranceHistory, savePayrollSeveranceDeposit, savePayrollSeveranceInterestMonth, calculatePayrollSeverance, calculatePayrollSeveranceInterest, listPayrollLiquidations, createPayrollLiquidation
+} = require('./payroll-persistence.cjs');
+
+function setup() {
+  const db = new Database(':memory:');
+  initializeTenantDatabase(db);
+  db.prepare("INSERT INTO app_state(state_key,state_json) VALUES('accounting',?)")
+    .run(JSON.stringify({ companies: [{ id: 'co-a', accountingBcvRateHistory: [
+      { id: 'bcv-test-2026-07-15', rate: 100, effectiveDate: '2026-07-15',
+        fetchedAt: '2026-07-15T00:00:00.000Z', source: 'BCV test fixture', provider: 'manual', mode: 'MANUAL' }
+    ] }] }));
+  return db;
+}
+
+test('saves and lists employee records scoped to the active company tenant', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'v-123', fullName: 'Pedro Pérez', hireDate: '2024-01-01',
+      position: 'Vendedor', frequency: 'BIWEEKLY', baseSalary: 1500
+    });
+    assert.equal(employee.companyId, 'co-a');
+    assert.equal(employee.fiscalId, 'V-123');
+    assert.equal(listPayrollEmployees(db, 'co-a').length, 1);
+    assert.throws(() => savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-123', fullName: 'Duplicado', hireDate: '2024-01-01',
+      frequency: 'WEEKLY', baseSalary: 100
+    }), /Ya existe un trabajador/);
+    assert.throws(() => listPayrollEmployees(db, 'co-b'), /empresa activa/);
+  } finally { db.close(); }
+});
+
+test('updates an existing worker without allowing cross-company IDs', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-123', fullName: 'Pedro Pérez', hireDate: '2024-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 1500
+    });
+    const updated = savePayrollEmployee(db, 'co-a', { ...employee, fullName: 'Pedro A. Pérez', baseSalary: 1800 });
+    assert.equal(updated.fullName, 'Pedro A. Pérez');
+    assert.equal(updated.baseSalary, 1800);
+    assert.throws(() => savePayrollEmployee(db, 'co-b', { ...employee, fullName: 'Intento' }), /empresa activa/);
+  } finally { db.close(); }
+});
+
+test('preserves effective-dated salary history when a worker salary changes', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-321', fullName: 'Elena Mora', hireDate: '2024-03-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    const first = listPayrollSalaryHistory(db, 'co-a', employee.id);
+    assert.equal(first.length, 1);
+    assert.equal(first[0].effectiveFrom, '2024-03-01');
+    assert.equal(first[0].baseSalary, 1200);
+    savePayrollEmployee(db, 'co-a', { ...employee, baseSalary: 1500, salaryEffectiveFrom: '2026-01-01' });
+    const history = listPayrollSalaryHistory(db, 'co-a', employee.id);
+    assert.equal(history.length, 2);
+    assert.equal(history[0].effectiveFrom, '2026-01-01');
+    assert.equal(history[0].baseSalary, 1500);
+    assert.equal(history[0].source, 'SALARY_CHANGE');
+    assert.equal(history[1].effectiveTo, '2025-12-31');
+    assert.equal(history[1].baseSalary, 1200);
+    assert.equal(getPayrollSalaryForDate(db, 'co-a', employee.id, '2025-06-30').baseSalary, 1200);
+    assert.equal(getPayrollSalaryForDate(db, 'co-a', employee.id, '2026-03-01').baseSalary, 1500);
+    assert.throws(() => getPayrollSalaryForDate(db, 'co-b', employee.id, '2026-03-01'), /empresa activa/);
+    assert.throws(() => savePayrollEmployee(db, 'co-a', { ...employee, baseSalary: 1600, salaryEffectiveFrom: '2025-12-01' }), /posterior al último cambio/);
+    assert.equal(listPayrollSalaryHistory(db, 'co-a', employee.id).length, 2);
+  } finally { db.close(); }
+});
+test('stores only legal rules with source and effective dates', () => {
+  const db = setup();
+  try {
+    const rule = savePayrollLegalRule(db, 'co-a', {
+      code: 'FAOV', description: 'Regla FAOV parametrizada', base: 'integralSalary',
+      workerRate: 0.01, employerRate: 0.02, effectiveFrom: '2026-01-01',
+      sourceReference: 'Gaceta por verificar', verifiedAt: '2026-01-01'
+    });
+    assert.equal(rule.code, 'FAOV');
+    assert.equal(listPayrollLegalRules(db, 'co-a').length, 1);
+    assert.throws(() => savePayrollLegalRule(db, 'co-a', {
+      code: 'BAD', description: 'Sin fuente', base: 'grossSalary',
+      workerRate: 0, employerRate: 0, effectiveFrom: '2026-01-01',
+      sourceReference: '', verifiedAt: '2026-01-01'
+    }), /Fuente normativa/);
+  } finally { db.close(); }
+});
+
+test('IPC requires an active session and scopes every request to its active tenant', async () => {
+  const db = setup();
+  try {
+    const handlers = new Map();
+    registerPayrollIpc({
+      ipcMain: { handle: (name, fn) => handlers.set(name, fn) },
+      getActiveSession: token => token === 'valid' ? { username: 'contador' } : null,
+      withDatabase: async (token, operation) => operation(db, 'co-a')
+    });
+    const list = handlers.get('sicoven:payroll-employees-list');
+    const save = handlers.get('sicoven:payroll-employee-save');
+    await assert.rejects(() => list({}, 'expired'), /sesión expiró/);
+    const result = await save({}, 'valid', {
+      fiscalId: 'V-456', fullName: 'Ana Gómez', hireDate: '2025-01-01',
+      frequency: 'WEEKLY', baseSalary: 900
+    });
+    assert.equal(result.companyId, 'co-a');
+  } finally { db.close(); }
+});
+
+test('creates an immutable draft payroll snapshot and prevents duplicate periods', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-789', fullName: 'Luis Rojas', hireDate: '2024-05-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    savePayrollLegalRule(db, 'co-a', {
+      code: 'RULE-TEST', description: 'Regla de prueba', base: 'normalSalary',
+      workerRate: 0.01, employerRate: 0.02, effectiveFrom: '2026-01-01',
+      sourceReference: 'Norma de prueba', verifiedAt: '2026-01-01'
+    });
+    const run = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-01', periodEnd: '2026-06-15',
+      employees: [{
+        employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario', amount: 1000, isSalary: true }],
+        deductions: [{ code: 'ADV', description: 'Anticipo', amount: 50 }],
+        bases: { normalSalary: 1000, integralSalary: 1100, grossSalary: 1000 }
+      }]
+    });
+    assert.equal(run.status, 'DRAFT');
+    assert.equal(run.totals.netPay, 940);
+    assert.equal(listPayrollRuns(db, 'co-a').length, 1);
+    const saved = db.prepare('SELECT calculation_snapshot_json FROM payroll_runs WHERE id=?').get(run.id);
+    assert.match(saved.calculation_snapshot_json, /RULE-TEST/);
+    const snapshot = JSON.parse(saved.calculation_snapshot_json);
+    assert.equal(snapshot.employees[0].salaryRecord.baseSalary, 1200);
+    assert.equal(snapshot.employees[0].salaryRecord.effectiveFrom, '2024-05-01');
+    assert.throws(() => createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-01', periodEnd: '2026-06-15',
+      employees: [{ employeeId: employee.id, earnings: [{code:'SAL',description:'Salario',amount:1000}], bases:{normalSalary:1000,integralSalary:1000,grossSalary:1000} }]
+    }), /Ya existe una nómina BIWEEKLY/);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM payroll_runs').get().count, 1);
+    assert.throws(() => createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-10', periodEnd: '2026-06-25',
+      employees: [{ employeeId: employee.id, earnings: [{code:'SAL',description:'Salario',amount:1000}], bases:{normalSalary:1000,integralSalary:1000,grossSalary:1000} }]
+    }), /se cruza con 2026-06-01 al 2026-06-15/);
+    const nextPeriod = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-16', periodEnd: '2026-06-30',
+      employees: [{ employeeId: employee.id, earnings: [{code:'SAL',description:'Salario',amount:1000}], bases:{normalSalary:1000,integralSalary:1000,grossSalary:1000} }]
+    });
+    assert.equal(nextPeriod.status, 'DRAFT');
+    const weeklyEmployee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-790', fullName: 'Carla Suárez', hireDate: '2024-05-01',
+      frequency: 'WEEKLY', baseSalary: 600
+    });
+    const weekly = createPayrollRun(db, 'co-a', {
+      frequency: 'WEEKLY', periodStart: '2026-06-10', periodEnd: '2026-06-16',
+      employees: [{ employeeId: weeklyEmployee.id, earnings: [{code:'SAL',description:'Salario',amount:500}], bases:{normalSalary:500,integralSalary:500,grossSalary:500} }]
+    });
+    assert.equal(weekly.status, 'DRAFT');
+  } finally { db.close(); }
+});
+
+test('calculates annual LOTTT rights for the selected worker using fixed or three-month variable salary', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-111', fullName: 'Ana Rojas', hireDate: '2024-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 1500
+    });
+    const fixed = calculatePayrollAnnualRights(db, 'co-a', {
+      employeeId: employee.id, asOfDate: '2026-01-01',
+      salaryType: 'FIXED', lastMonthNormalSalary: 3000,
+      fiscalYearStart: '2026-01-01'
+    });
+    assert.equal(fixed.salaryBasis.dailySalary, 100);
+    assert.equal(fixed.completedYears, 2);
+    assert.equal(fixed.vacationDays, 16);
+    assert.equal(fixed.vacationPay, 1600);
+    assert.equal(fixed.vacationBonus, 1600);
+    const variable = calculatePayrollAnnualRights(db, 'co-a', {
+      employeeId: employee.id, asOfDate: '2026-01-01',
+      salaryType: 'VARIABLE', previousThreeMonthsNormalSalary: [3000, 3300, 3600]
+    });
+    assert.equal(variable.salaryBasis.monthlySalary, 3300);
+    assert.equal(variable.salaryBasis.monthsAveraged, 3);
+    assert.throws(() => calculatePayrollAnnualRights(db, 'co-b', {
+      employeeId: employee.id, asOfDate: '2026-01-01', salaryType: 'FIXED', lastMonthNormalSalary: 3000
+    }), /empresa activa/);
+  } finally { db.close(); }
+});
+
+test('returns the immutable payroll snapshot only inside the active company', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-845', fullName: 'Rosa Núñez', hireDate: '2025-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 1400
+    });
+    const created = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-07-01', periodEnd: '2026-07-15',
+      employees: [{ employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario', amount: 700, isSalary: true }],
+        bases: {} }]
+    });
+    const loaded = getPayrollRun(db, 'co-a', created.id);
+    assert.equal(loaded.snapshot.employees[0].fullName, 'Rosa Núñez');
+    assert.deepEqual(loaded.snapshot.companySnapshot, { name: '', rif: '', address: '', phone: '' });
+    assert.equal(loaded.snapshot.employees[0].netPay, 700);
+    assert.equal(loaded.status, 'DRAFT');
+    assert.throws(() => getPayrollRun(db, 'co-b', created.id), /empresa activa/);
+    assert.throws(() => getPayrollRun(db, 'co-a', 'missing'), /empresa activa/);
+  } finally { db.close(); }
+});
+
+test('requires only the salary bases used by legal rules effective in the payroll period', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-991', fullName: 'Julia Méndez', hireDate: '2025-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    const ordinary = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-01', periodEnd: '2026-06-15',
+      employees: [{ employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario', amount: 500, isSalary: true }],
+        bases: {} }]
+    });
+    assert.equal(ordinary.snapshot.employees[0].bases.normalSalary, 0);
+    assert.equal(ordinary.snapshot.employees[0].netPay, 500);
+
+    savePayrollLegalRule(db, 'co-a', {
+      code: 'FAOV-TEST', description: 'Regla que utiliza salario integral', base: 'integralSalary',
+      workerRate: 0.01, employerRate: 0.02, effectiveFrom: '2026-06-16',
+      sourceReference: 'Fuente normativa de prueba', verifiedAt: '2026-06-16'
+    });
+    const legal = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-16', periodEnd: '2026-06-30',
+      employees: [{ employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario', amount: 500, isSalary: true }],
+        bases: { integralSalary: 600 } }]
+    });
+    assert.equal(legal.snapshot.employees[0].bases.integralSalary, 600);
+    assert.equal(legal.snapshot.employees[0].bases.normalSalary, 0);
+    assert.equal(legal.snapshot.employees[0].workerLegalDeductions, 6);
+
+    assert.throws(() => createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-07-01', periodEnd: '2026-07-15',
+      employees: [{ employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario', amount: 500, isSalary: true }],
+        bases: {} }]
+    }), /requiere una base salarial positiva: integralSalary/);
+  } finally { db.close(); }
+});
+
+test('rejects payroll runs that mix company employees or mismatched frequencies', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-999', fullName: 'Marta Gil', hireDate: '2025-01-01',
+      frequency: 'WEEKLY', baseSalary: 500
+    });
+    assert.throws(() => createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-01', periodEnd: '2026-06-15',
+      employees: [{ employeeId: employee.id, earnings: [{code:'SAL',description:'Salario',amount:500}], bases:{normalSalary:500,integralSalary:500,grossSalary:500} }]
+    }), /no coincide/);
+  } finally { db.close(); }
+});
+
+test('rejects overlapping effective periods for versions of the same legal rule', () => {
+  const db = setup();
+  try {
+    savePayrollLegalRule(db, 'co-a', {
+      code:'IVSS', description:'IVSS vigente', base:'normalSalary',
+      workerRate:0.04, employerRate:0.09, effectiveFrom:'2026-01-01',
+      effectiveTo:'2026-12-31', sourceReference:'Fuente normativa', verifiedAt:'2026-01-01'
+    });
+    assert.throws(() => savePayrollLegalRule(db, 'co-a', {
+      code:'IVSS', description:'IVSS duplicado', base:'normalSalary',
+      workerRate:0.04, employerRate:0.10, effectiveFrom:'2026-06-01',
+      effectiveTo:null, sourceReference:'Fuente normativa', verifiedAt:'2026-06-01'
+    }), /se solapa/);
+  } finally { db.close(); }
+});
+
+test('scopes legal rules and salary caps independently to weekly and biweekly payrolls', () => {
+  const db = setup();
+  try {
+    const weeklyEmployee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-610', fullName: 'Luis Rivas', hireDate: '2025-01-01',
+      frequency: 'WEEKLY', baseSalary: 600
+    });
+    const biweeklyEmployee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-611', fullName: 'Marta Solís', hireDate: '2025-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    savePayrollLegalRule(db, 'co-a', {
+      code: 'IVSS', description: 'IVSS semanal', base: 'normalSalary', frequencyScope: 'WEEKLY',
+      workerRate: 0.04, employerRate: 0.09, baseCap: 500,
+      effectiveFrom: '2026-01-01', sourceReference: 'Fuente legal semanal', verifiedAt: '2026-01-01'
+    });
+    savePayrollLegalRule(db, 'co-a', {
+      code: 'IVSS', description: 'IVSS quincenal', base: 'normalSalary', frequencyScope: 'BIWEEKLY',
+      workerRate: 0.04, employerRate: 0.10, baseCap: 1000,
+      effectiveFrom: '2026-01-01', sourceReference: 'Fuente legal quincenal', verifiedAt: '2026-01-01'
+    });
+    const weekly = createPayrollRun(db, 'co-a', {
+      frequency: 'WEEKLY', periodStart: '2026-06-01', periodEnd: '2026-06-07',
+      employees: [{ employeeId: weeklyEmployee.id,
+        earnings: [{ code: 'SAL', description: 'Salario', amount: 600, isSalary: true }],
+        bases: { normalSalary: 600 } }]
+    });
+    const biweekly = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-01', periodEnd: '2026-06-15',
+      employees: [{ employeeId: biweeklyEmployee.id,
+        earnings: [{ code: 'SAL', description: 'Salario', amount: 1200, isSalary: true }],
+        bases: { normalSalary: 1200 } }]
+    });
+    assert.equal(weekly.snapshot.employees[0].contributions[0].base, 500);
+    assert.equal(weekly.snapshot.employees[0].workerLegalDeductions, 20);
+    assert.equal(weekly.snapshot.employees[0].employerContributions, 45);
+    assert.equal(biweekly.snapshot.employees[0].contributions[0].base, 1000);
+    assert.equal(biweekly.snapshot.employees[0].workerLegalDeductions, 40);
+    assert.equal(biweekly.snapshot.employees[0].employerContributions, 100);
+  } finally { db.close(); }
+});
+
+test('does not silently apply a legal rule with unconfigured applicability conditions', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId:'V-202', fullName:'Rosa Díaz', hireDate:'2024-01-01',
+      frequency:'BIWEEKLY', baseSalary:1000
+    });
+    savePayrollLegalRule(db, 'co-a', {
+      code:'IVSS', description:'IVSS según riesgo', base:'normalSalary',
+      workerRate:0.04, employerRate:0.09, effectiveFrom:'2026-01-01',
+      sourceReference:'Fuente normativa', verifiedAt:'2026-01-01',
+      applicability:{ employerRiskClass:'LOW' }
+    });
+    assert.throws(() => createPayrollRun(db, 'co-a', {
+      frequency:'BIWEEKLY', periodStart:'2026-06-01', periodEnd:'2026-06-15',
+      employees:[{ employeeId:employee.id, earnings:[{code:'SAL',description:'Salario',amount:500,isSalary:true}],
+        bases:{normalSalary:500,integralSalary:500,grossSalary:500} }]
+    }), /condiciones de empresa o trabajador/);
+  } finally { db.close(); }
+});
+
+test('historical salary query reads only confirmed salary earnings for the selected worker and company', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-880', fullName: 'Nora León', hireDate: '2025-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    const run = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-01', periodEnd: '2026-06-15',
+      employees: [{
+        employeeId: employee.id,
+        earnings: [
+          { code: 'SAL', description: 'Salario base', amount: 600, isSalary: true },
+          { code: 'REIMB', description: 'Reembolso', amount: 35, isSalary: false }
+        ],
+        bases: { normalSalary: 600, integralSalary: 600, grossSalary: 635 }
+      }]
+    });
+    assert.deepEqual(listConfirmedSalaryEntries(db, 'co-a', employee.id, '2026-06-01', '2026-06-30'), []);
+    db.prepare("UPDATE payroll_runs SET status='CONFIRMED',confirmed_at=? WHERE id=?")
+      .run('2026-06-16T10:00:00.000Z', run.id);
+    const entries = listConfirmedSalaryEntries(db, 'co-a', employee.id, '2026-06-01', '2026-06-30');
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].amount, 600);
+    assert.equal(entries[0].code, 'SAL');
+    assert.equal(entries[0].runId, run.id);
+    assert.throws(() => listConfirmedSalaryEntries(db, 'co-b', employee.id, '2026-06-01', '2026-06-30'), /empresa activa/);
+    assert.throws(() => listConfirmedSalaryEntries(db, 'co-a', employee.id, '2026-07-01', '2026-06-30'), /rango de consulta/);
+  } finally { db.close(); }
+});
+
+test('confirms a payroll run once with its accounting entry and is safe to retry', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-881', fullName: 'Luis Rojas', hireDate: '2025-02-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    const run = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-07-01', periodEnd: '2026-07-15',
+      employees: [{
+        employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario base', amount: 600, isSalary: true }],
+        bases: { normalSalary: 600, integralSalary: 600, grossSalary: 600 }
+      }]
+    });
+    assert.throws(() => confirmPayrollRun(db, 'co-a', run.id, 'journal-123'), /No existe en la contabilidad/);
+    const journal = {
+      id: 'journal-123', companyId: 'co-a', referenceDoc: 'NOM-' + run.id,
+      date: '2026-07-15', bcvRate: 100, items: [
+        { accountCode: '6.1.1.01', debitBs: 600, creditBs: 0, debitUsd: 6, creditUsd: 0 },
+        { accountCode: '2.1.3.01', debitBs: 0, creditBs: 600, debitUsd: 0, creditUsd: 6 }
+      ]
+    };
+    db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'")
+      .run(JSON.stringify({ companies: [{ id: 'co-a', accountingBcvRateHistory: [
+        { id: 'bcv-test-2026-07-15', rate: 100, effectiveDate: '2026-07-15',
+          fetchedAt: '2026-07-15T00:00:00.000Z', source: 'BCV test fixture', provider: 'manual', mode: 'MANUAL' }
+      ] }], journalEntries: [journal] }));
+    const confirmed = confirmPayrollRun(db, 'co-a', run.id, 'journal-123');
+    assert.equal(confirmed.status, 'CONFIRMED');
+    assert.equal(confirmed.journalEntryId, 'journal-123');
+    assert.equal(confirmed.alreadyConfirmed, false);
+    const retry = confirmPayrollRun(db, 'co-a', run.id, 'journal-123');
+    assert.equal(retry.alreadyConfirmed, true);
+    assert.equal(retry.journalEntryId, 'journal-123');
+    assert.throws(() => confirmPayrollRun(db, 'co-a', run.id, 'journal-other'), /otro asiento/);
+    assert.throws(() => confirmPayrollRun(db, 'co-b', run.id, 'journal-123'), /empresa activa/);
+    assert.equal(listPayrollRuns(db, 'co-a').find(item => item.id === run.id).status, 'CONFIRMED');
+    assert.equal(listConfirmedSalaryEntries(db, 'co-a', employee.id, '2026-07-01', '2026-07-31').length, 1);
+  } finally { db.close(); }
+});
+
+
+test('rejects balanced USD journal amounts that do not convert at the historical BCV rate', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-885', fullName: 'Pablo León', hireDate: '2025-02-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    const run = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-07-01', periodEnd: '2026-07-15',
+      employees: [{ employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario base', amount: 600, isSalary: true }],
+        bases: {} }]
+    });
+    const journal = {
+      id: 'journal-wrong-usd', companyId: 'co-a', referenceDoc: 'NOM-' + run.id,
+      date: '2026-07-15', bcvRate: 100, items: [
+        { accountCode: '6.1.1.01', debitBs: 600, creditBs: 0, debitUsd: 5.5, creditUsd: 0 },
+        { accountCode: '2.1.3.01', debitBs: 0, creditBs: 600, debitUsd: 0, creditUsd: 5.5 }
+      ]
+    };
+    db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'")
+      .run(JSON.stringify({ companies: [{ id: 'co-a', accountingBcvRateHistory: [
+        { id: 'bcv-test-2026-07-15', rate: 100, effectiveDate: '2026-07-15',
+          recordedAt: '2026-07-15T00:00:00.000Z', source: 'LEGACY' }
+      ] }], journalEntries: [journal] }));
+    assert.throws(() => confirmPayrollRun(db, 'co-a', run.id, journal.id), /no corresponden a la tasa BCV histórica/);
+  } finally { db.close(); }
+});
+
+test('does not substitute the inventory BCV history for the accounting BCV history', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-884', fullName: 'Elena Mora', hireDate: '2025-02-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    const run = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-07-01', periodEnd: '2026-07-15',
+      employees: [{ employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario base', amount: 600, isSalary: true }],
+        bases: {} }]
+    });
+    const journal = {
+      id: 'journal-inventory-rate-only', companyId: 'co-a', referenceDoc: 'NOM-' + run.id,
+      date: '2026-07-15', bcvRate: 100, items: [
+        { accountCode: '6.1.1.01', debitBs: 600, creditBs: 0, debitUsd: 6, creditUsd: 0 },
+        { accountCode: '2.1.3.01', debitBs: 0, creditBs: 600, debitUsd: 0, creditUsd: 6 }
+      ]
+    };
+    db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'")
+      .run(JSON.stringify({ companies: [{ id: 'co-a', inventoryBcvRateHistory: [
+        { id: 'inventory-only', rate: 100, effectiveDate: '2026-07-15' }
+      ] }], journalEntries: [journal] }));
+    assert.throws(() => confirmPayrollRun(db, 'co-a', run.id, journal.id), /tasa BCV histórica guardada/);
+  } finally { db.close(); }
+});
+
+test('refuses a balanced journal whose amounts do not match the payroll snapshot', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-883', fullName: 'Mario Gil', hireDate: '2025-02-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    const run = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-07-01', periodEnd: '2026-07-15',
+      employees: [{ employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario base', amount: 600, isSalary: true }],
+        bases: {} }]
+    });
+    const journal = {
+      id: 'journal-wrong-amount', companyId: 'co-a', referenceDoc: 'NOM-' + run.id,
+      date: '2026-07-15', bcvRate: 100, items: [
+        { accountCode: '6.1.1.01', debitBs: 610, creditBs: 0, debitUsd: 6.1, creditUsd: 0 },
+        { accountCode: '2.1.3.01', debitBs: 0, creditBs: 610, debitUsd: 0, creditUsd: 6.1 }
+      ]
+    };
+    db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'")
+      .run(JSON.stringify({ companies: [{ id: 'co-a', accountingBcvRateHistory: [
+        { id: 'bcv-test-2026-07-15', rate: 100, effectiveDate: '2026-07-15',
+          recordedAt: '2026-07-15T00:00:00.000Z', source: 'LEGACY' }
+      ] }], journalEntries: [journal] }));
+    assert.throws(() => confirmPayrollRun(db, 'co-a', run.id, journal.id), /no coinciden con los totales/);
+    assert.equal(listPayrollRuns(db, 'co-a').find(item => item.id === run.id).status, 'DRAFT');
+  } finally { db.close(); }
+});
+
+test('refuses to confirm a payroll with an unbalanced or wrong-date journal', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-882', fullName: 'Ana Rivas', hireDate: '2025-02-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    const run = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-07-01', periodEnd: '2026-07-15',
+      employees: [{
+        employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario base', amount: 600, isSalary: true }],
+        bases: { normalSalary: 600, integralSalary: 600, grossSalary: 600 }
+      }]
+    });
+    const journal = {
+      id: 'journal-invalid', companyId: 'co-a', referenceDoc: 'NOM-' + run.id,
+      date: '2026-07-15', bcvRate: 100, items: [
+        { accountCode: '6.1.1.01', debitBs: 600, creditBs: 0, debitUsd: 6, creditUsd: 0 },
+        { accountCode: '2.1.3.01', debitBs: 0, creditBs: 590, debitUsd: 0, creditUsd: 5.9 }
+      ]
+    };
+    db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'")
+      .run(JSON.stringify({ companies: [{ id: 'co-a', accountingBcvRateHistory: [
+        { id: 'bcv-test-2026-07-15', rate: 100, effectiveDate: '2026-07-15',
+          fetchedAt: '2026-07-15T00:00:00.000Z', source: 'BCV test fixture', provider: 'manual', mode: 'MANUAL' }
+      ] }], journalEntries: [journal] }));
+    assert.throws(() => confirmPayrollRun(db, 'co-a', run.id, 'journal-invalid'), /debe estar cuadrado/);
+    assert.equal(listPayrollRuns(db, 'co-a').find(item => item.id === run.id).status, 'DRAFT');
+    journal.items[1].creditBs = 600;
+    journal.items[1].creditUsd = 6;
+    journal.date = '2026-07-14';
+    db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'")
+      .run(JSON.stringify({ companies: [{ id: 'co-a', accountingBcvRateHistory: [
+        { id: 'bcv-test-2026-07-15', rate: 100, effectiveDate: '2026-07-15',
+          fetchedAt: '2026-07-15T00:00:00.000Z', source: 'BCV test fixture', provider: 'manual', mode: 'MANUAL' }
+      ] }], journalEntries: [journal] }));
+    assert.throws(() => confirmPayrollRun(db, 'co-a', run.id, 'journal-invalid'), /fecha, tasa BCV/);
+    assert.equal(listPayrollRuns(db, 'co-a').find(item => item.id === run.id).status, 'DRAFT');
+  } finally { db.close(); }
+});
+
+
+test('calculates annual profit sharing only from confirmed salary earnings in the active company', () => {
+  const db = setup();
+  try {
+    const ana = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-201', fullName: 'Ana Rojas', hireDate: '2024-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 3000
+    });
+    const luis = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-202', fullName: 'Luis Pérez', hireDate: '2024-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 3000
+    });
+    const confirmed = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2025-01-01', periodEnd: '2025-01-15',
+      employees: [
+        { employeeId: ana.id, earnings: [{ code:'SAL',description:'Salario',amount:1000,isSalary:true }], bases:{} },
+        { employeeId: luis.id, earnings: [{ code:'SAL',description:'Salario',amount:2000,isSalary:true }], bases:{} }
+      ]
+    });
+    db.prepare("UPDATE payroll_runs SET status='CONFIRMED' WHERE id=?").run(confirmed.id);
+    const draft = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2025-01-16', periodEnd: '2025-01-31',
+      employees: [
+        { employeeId: ana.id, earnings: [{ code:'SAL',description:'Salario',amount:9000,isSalary:true }], bases:{} },
+        { employeeId: luis.id, earnings: [{ code:'BONO',description:'Bono no salarial',amount:5000,isSalary:false }], bases:{} }
+      ]
+    });
+    const result = calculatePayrollProfitSharing(db, 'co-a', {
+      fiscalYearStart:'2025-01-01', fiscalYearEnd:'2025-12-31',
+      netProfits:100000, sourceReference:'Declaración de beneficios 2025',
+      verifiedAt:'2026-01-31',
+      employees:[
+        { employeeId:ana.id, monthlyNormalSalary:3000, monthsWorked:12 },
+        { employeeId:luis.id, monthlyNormalSalary:3000, monthsWorked:12 }
+      ]
+    });
+    assert.equal(result.totalWagesEarned,3000);
+    assert.equal(result.distributableFund,15000);
+    assert.equal(result.employees.find(item=>item.employeeId===ana.id).wagesEarned,1000);
+    assert.equal(result.employees.find(item=>item.employeeId===luis.id).wagesEarned,2000);
+    assert.equal(result.employees.find(item=>item.employeeId===ana.id).amount,5000);
+    assert.equal(result.employees.find(item=>item.employeeId===luis.id).amount,10000);
+    assert.match(result.salaryEvidence,/CONFIRMED/);
+    assert.throws(() => calculatePayrollProfitSharing(db, 'co-b', {
+      fiscalYearStart:'2025-01-01',fiscalYearEnd:'2025-12-31',netProfits:100000,
+      sourceReference:'Declaración',verifiedAt:'2026-01-31',
+      employees:[{employeeId:ana.id,monthlyNormalSalary:3000,monthsWorked:12}]
+    }),/empresa activa/);
+    assert.equal(db.prepare("SELECT status FROM payroll_runs WHERE id=?").get(draft.id).status,'DRAFT');
+  } finally { db.close(); }
+});
+
+test('blocks profit-sharing distribution when a confirmed payroll crosses fiscal-year boundaries', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId:'V-303',fullName:'Marta Díaz',hireDate:'2024-01-01',
+      frequency:'BIWEEKLY',baseSalary:2500
+    });
+    const run = createPayrollRun(db, 'co-a', {
+      frequency:'BIWEEKLY',periodStart:'2025-12-20',periodEnd:'2026-01-05',
+      employees:[{employeeId:employee.id,earnings:[{code:'SAL',description:'Salario',amount:1200,isSalary:true}],bases:{}}]
+    });
+    db.prepare("UPDATE payroll_runs SET status='CONFIRMED' WHERE id=?").run(run.id);
+    assert.throws(() => calculatePayrollProfitSharing(db, 'co-a', {
+      fiscalYearStart:'2025-01-01',fiscalYearEnd:'2025-12-31',netProfits:100000,
+      sourceReference:'Declaración',verifiedAt:'2026-01-31',
+      employees:[{employeeId:employee.id,monthlyNormalSalary:2500,monthsWorked:12}]
+    }), /cruza los límites del ejercicio/);
+  } finally { db.close(); }
+});
+
+
+test('stores immutable historical severance deposits and monthly interest with auditable corrections', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-782', fullName: 'María Contreras', hireDate: '2026-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 1800
+    });
+    const deposit = savePayrollSeveranceDeposit(db, 'co-a', {
+      employeeId: employee.id, depositDate: '2026-04-01', kind: 'QUARTERLY', serviceQuarter: 1,
+      days: 15, dailyIntegralSalary: 60, sourceReference: 'Comprobante bancario Q1',
+      verifiedAt: '2026-04-01'
+    });
+    assert.equal(deposit.amount, 900);
+    assert.throws(() => savePayrollSeveranceDeposit(db, 'co-a', {
+      employeeId: employee.id, depositDate: '2025-12-31', kind: 'QUARTERLY',
+      days: 15, dailyIntegralSalary: 60, sourceReference: 'Fecha anterior al ingreso', verifiedAt: '2026-04-01'
+    }), /anterior al ingreso/);
+    assert.throws(() => savePayrollSeveranceDeposit(db, 'co-a', {
+      employeeId: employee.id, depositDate: '2026-04-01', kind: 'QUARTERLY', serviceQuarter: 1,
+      days: 15, dailyIntegralSalary: 65, sourceReference: 'Duplicado', verifiedAt: '2026-04-01'
+    }), /Ya existe un registro vigente/);
+    const corrected = savePayrollSeveranceDeposit(db, 'co-a', {
+      employeeId: employee.id, depositDate: '2026-04-01', kind: 'QUARTERLY', serviceQuarter: 1,
+      days: 15, dailyIntegralSalary: 62, sourceReference: 'Comprobante rectificado',
+      verifiedAt: '2026-04-02', supersedesId: deposit.id
+    });
+    assert.equal(corrected.amount, 930);
+    const history = listPayrollSeveranceHistory(db, 'co-a', employee.id);
+    assert.equal(history.deposits.length, 1);
+    assert.equal(history.deposits[0].id, corrected.id);
+    assert.equal(history.deposits[0].supersedesId, deposit.id);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM payroll_severance_deposits').get().count, 2);
+    assert.throws(() => db.prepare('UPDATE payroll_severance_deposits SET amount=1 WHERE id=?').run(deposit.id), /append-only/);
+
+    const interest = savePayrollSeveranceInterestMonth(db, 'co-a', {
+      employeeId: employee.id, month: '2026-03', mode: 'UNDEPOSITED',
+      capital: 930, monthlyRate: 0.02, sourceReference: 'Tasa activa BCV documentada', modeEvidence: 'Tasa activa promedio de los seis principales bancos',
+      verifiedAt: '2026-04-05'
+    });
+    assert.equal(interest.interest, 18.6);
+    assert.throws(() => savePayrollSeveranceInterestMonth(db, 'co-a', {
+      employeeId: employee.id, month: '2025-12', mode: 'UNDEPOSITED', capital: 930,
+      monthlyRate: 0.02, sourceReference: 'Fuente', modeEvidence: 'Tasa activa promedio de los seis principales bancos', verifiedAt: '2026-04-05'
+    }), /anterior al ingreso/);
+    const revised = savePayrollSeveranceInterestMonth(db, 'co-a', {
+      employeeId: employee.id, month: '2026-03', mode: 'UNDEPOSITED',
+      capital: 930, monthlyRate: 0.021, sourceReference: 'Rectificación tasa BCV', modeEvidence: 'Tasa activa promedio de los seis principales bancos',
+      verifiedAt: '2026-04-06', supersedesId: interest.id
+    });
+    assert.equal(revised.interest, 19.53);
+    const interestResult = calculatePayrollSeveranceInterest(db, 'co-a', { employeeId: employee.id, mode: 'UNDEPOSITED' });
+    assert.equal(interestResult.totalInterest, 19.53);
+    assert.equal(interestResult.monthsCalculated, 1);
+    assert.equal(listPayrollSeveranceHistory(db, 'co-a', employee.id).interests.length, 1);
+    assert.throws(() => listPayrollSeveranceHistory(db, 'co-b', employee.id), /empresa activa/);
+    assert.throws(() => savePayrollSeveranceInterestMonth(db, 'co-a', {
+      employeeId: employee.id, month: '2026-13', mode: 'UNDEPOSITED', capital: 10,
+      monthlyRate: 0.02, sourceReference: 'Fuente', verifiedAt: '2026-04-05'
+    }), /AAAA-MM/);
+  } finally { db.close(); }
+});
+
+
+test('validates annual seniority deposits by service year, two days each and a thirty-day cap', () => {
+  const db=setup();
+  try {
+    const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-784',fullName:'Ana Ruiz',hireDate:'2024-01-01',frequency:'BIWEEKLY',baseSalary:1800});
+    const first=savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-01-01',kind:'SENIORITY',serviceYear:1,days:2,dailyIntegralSalary:100,sourceReference:'Promedio integral año 1',verifiedAt:'2025-01-02'});
+    assert.equal(first.amount,200);
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-06-01',kind:'SENIORITY',serviceYear:1,days:2,dailyIntegralSalary:105,sourceReference:'Duplicado año 1',verifiedAt:'2025-06-02'}),/año de servicio 1/);
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2026-01-01',kind:'SENIORITY',serviceYear:2,days:3,dailyIntegralSalary:110,sourceReference:'Días inválidos',verifiedAt:'2026-01-02'}),/exactamente de dos días/);
+    const corrected=savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-02-01',kind:'SENIORITY',serviceYear:1,days:2,dailyIntegralSalary:102,sourceReference:'Promedio anual corregido',verifiedAt:'2025-02-02',supersedesId:first.id});
+    assert.equal(corrected.amount,204);
+    assert.equal(listPayrollSeveranceHistory(db,'co-a',employee.id).deposits.length,1);
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2040-01-01',kind:'SENIORITY',serviceYear:16,days:2,dailyIntegralSalary:120,sourceReference:'Año 16',verifiedAt:'2040-01-02'}),/hasta completar treinta días/);
+  } finally { db.close(); }
+});
+
+
+test('uses explicit service year when an annual seniority deposit is paid late', () => {
+  const db=setup();
+  try {
+    const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-786',fullName:'Marta Gil',hireDate:'2023-01-01',frequency:'BIWEEKLY',baseSalary:1800});
+    savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-06-01',kind:'SENIORITY',serviceYear:1,days:2,dailyIntegralSalary:100,sourceReference:'Depósito año 1 pagado tarde',verifiedAt:'2025-06-02'});
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-07-01',kind:'SENIORITY',serviceYear:1,days:2,dailyIntegralSalary:110,sourceReference:'Duplicado año 1',verifiedAt:'2025-07-02'}),/año de servicio 1/);
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-07-01',kind:'SENIORITY',days:2,dailyIntegralSalary:110,sourceReference:'Sin año',verifiedAt:'2025-07-02'}),/año de servicio real/);
+    const history=listPayrollSeveranceHistory(db,'co-a',employee.id);
+    assert.equal(history.deposits[0].serviceYear,1);
+    assert.equal(history.deposits[0].serviceYearInferred,undefined);
+  } finally { db.close(); }
+});
+
+test('rolls back severance deposit and interest records if their audit event cannot be written', () => {
+  const db=setup();
+  try {
+    const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-785',fullName:'Luis Mora',hireDate:'2025-01-01',frequency:'BIWEEKLY',baseSalary:1800});
+    db.exec(`CREATE TRIGGER fail_payroll_severance_audit BEFORE INSERT ON audit_events
+      WHEN NEW.event_type IN ('payroll_severance_deposit_recorded','payroll_severance_interest_recorded')
+      BEGIN SELECT RAISE(ABORT,'forced audit failure'); END;`);
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-04-01',kind:'QUARTERLY',serviceQuarter:1,days:15,dailyIntegralSalary:60,sourceReference:'Q1',verifiedAt:'2025-04-01'}),/forced audit failure/);
+    assert.throws(()=>savePayrollSeveranceInterestMonth(db,'co-a',{employeeId:employee.id,month:'2025-03',mode:'UNDEPOSITED',capital:900,monthlyRate:0.01,sourceReference:'Tasa BCV',modeEvidence:'Tasa activa de los seis principales bancos',verifiedAt:'2025-04-01'}),/forced audit failure/);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM payroll_severance_deposits').get().n,0);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM payroll_severance_interest_months').get().n,0);
+  } finally { db.close(); }
+});
+
+test('severance calculation refuses incomplete quarterly history and never estimates missing historical bases', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-783', fullName: 'José Rivas', hireDate: '2025-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 1800
+    });
+    assert.throws(() => calculatePayrollSeverance(db, 'co-a', {
+      employeeId: employee.id, asOfDate: '2026-03-31', salaryType: 'FIXED', lastMonthlyIntegratedSalary: 1800
+    }), /historial de garantía está incompleto/);
+    savePayrollSeveranceDeposit(db, 'co-a', {
+      employeeId: employee.id, depositDate: '2025-04-01', kind: 'QUARTERLY', serviceQuarter: 1,
+      days: 15, dailyIntegralSalary: 50, sourceReference: 'Q1 comprobante',
+      verifiedAt: '2025-04-01'
+    });
+    assert.throws(() => calculatePayrollSeverance(db, 'co-a', {
+      employeeId: employee.id, asOfDate: '2026-03-31', salaryType: 'FIXED', lastMonthlyIntegratedSalary: 1800
+    }), /historial de garantía está incompleto/);
+  } finally { db.close(); }
+});
+
+
+
+test('creates immutable, auditable final liquidation snapshots and permits linked corrections', () => {
+  const db=setup();
+  try {
+    const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-990',fullName:'Elena Pérez',hireDate:'2024-01-01',frequency:'BIWEEKLY',baseSalary:3000});
+    savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-01',kind:'QUARTERLY',serviceQuarter:1,days:15,dailyIntegralSalary:50,sourceReference:'Garantía Q1',verifiedAt:'2024-04-02'});
+    const input={
+      employeeId:employee.id,terminationDate:'2024-04-01',terminationReason:'VOLUNTARY_RESIGNATION',
+      vacationSalaryType:'FIXED',lastMonthNormalSalary:3000,
+      severanceSalaryType:'FIXED',lastMonthlyIntegratedSalary:1500,
+      vacationDaysOutstanding:0,vacationBonusDaysOutstanding:0,vacationBalanceSource:'Registro de vacaciones conciliado',
+      interestStatus:'NOT_APPLICABLE',interestStatusEvidence:'Intereses conciliados',profitSharingStatus:'NOT_APPLICABLE',profitSharingSourceReference:'Utilidades conciliadas',pendingSalaryAmount:0
+    };
+    const created=createPayrollLiquidation(db,'co-a',input);
+    assert.equal(created.total,1500);
+    assert.equal(created.snapshot.liquidation.severancePayable,750);
+    assert.equal(listPayrollLiquidations(db,'co-a',employee.id).length,1);
+    assert.throws(()=>createPayrollLiquidation(db,'co-a',input),/Ya existe una liquidación vigente/);
+    const corrected=createPayrollLiquidation(db,'co-a',{...input,supersedesId:created.id,pendingSalaryAmount:100,pendingSalarySourceReference:'Nómina pendiente'});
+    assert.equal(corrected.total,1600);
+    assert.equal(corrected.supersedesId,created.id);
+    assert.equal(listPayrollLiquidations(db,'co-a',employee.id).length,2);
+    assert.throws(()=>db.prepare('UPDATE payroll_liquidations SET total=1 WHERE id=?').run(created.id),/append-only/);
+    assert.throws(()=>db.prepare('DELETE FROM payroll_liquidations WHERE id=?').run(created.id),/append-only/);
+    assert.throws(()=>listPayrollLiquidations(db,'co-b',employee.id),/empresa activa/);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE event_type='payroll_liquidation_created'").get().n,2);
+  } finally { db.close(); }
+});
+
+test('rolls back a liquidation snapshot if its audit event cannot be written', () => {
+  const db=setup();
+  try {
+    const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-991',fullName:'Luis Pérez',hireDate:'2024-01-01',frequency:'BIWEEKLY',baseSalary:3000});
+    savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-01',kind:'QUARTERLY',serviceQuarter:1,days:15,dailyIntegralSalary:50,sourceReference:'Garantía Q1',verifiedAt:'2024-04-02'});
+    db.exec("CREATE TRIGGER fail_liquidation_audit BEFORE INSERT ON audit_events WHEN NEW.event_type='payroll_liquidation_created' BEGIN SELECT RAISE(ABORT,'forced liquidation audit failure'); END;");
+    assert.throws(()=>createPayrollLiquidation(db,'co-a',{
+      employeeId:employee.id,terminationDate:'2024-04-01',terminationReason:'VOLUNTARY_RESIGNATION',
+      vacationSalaryType:'FIXED',lastMonthNormalSalary:3000,severanceSalaryType:'FIXED',lastMonthlyIntegratedSalary:1500,
+      vacationDaysOutstanding:0,vacationBonusDaysOutstanding:0,vacationBalanceSource:'Registro conciliado',
+      interestStatus:'NOT_APPLICABLE',interestStatusEvidence:'Intereses conciliados',profitSharingStatus:'NOT_APPLICABLE',profitSharingSourceReference:'Utilidades conciliadas'
+    }),/forced liquidation audit failure/);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM payroll_liquidations').get().n,0);
+  } finally { db.close(); }
+});
+
+
+test('limits advances to 75 percent of deposited guarantee and validates art. 144 purpose', () => {
+  const db=setup();
+  try {
+    const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-992',fullName:'María López',hireDate:'2024-01-01',frequency:'BIWEEKLY',baseSalary:3000});
+    savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-01',kind:'QUARTERLY',serviceQuarter:1,days:15,dailyIntegralSalary:100,sourceReference:'Garantía Q1',verifiedAt:'2024-04-02'});
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-02',kind:'ADVANCE',days:1,dailyIntegralSalary:100,advancePurpose:'OTHER',advanceAuthorizationReference:'Autorización escrita',sourceReference:'Anticipo',verifiedAt:'2024-04-02'}),/finalidad permitida/);
+    const advance=savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-02',kind:'ADVANCE',days:10,dailyIntegralSalary:100,advancePurpose:'EDUCATION',advanceAuthorizationReference:'Autorización escrita 04-02',sourceReference:'Transferencia educación',verifiedAt:'2024-04-02'});
+    assert.equal(advance.amount,1000);
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-03',kind:'ADVANCE',days:2,dailyIntegralSalary:100,advancePurpose:'MEDICAL',advanceAuthorizationReference:'Autorización escrita 04-03',sourceReference:'Transferencia médica',verifiedAt:'2024-04-03'}),/setenta y cinco por ciento/);
+    const history=listPayrollSeveranceHistory(db,'co-a',employee.id);
+    assert.equal(history.deposits.find(item=>item.kind==='ADVANCE').advancePurpose,'EDUCATION');
+  } finally { db.close(); }
+});
+
+
+test('identifies the original service quarter, blocks duplicate and premature quarterly deposits', () => {
+  const db=setup();
+  try {
+    const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-993',fullName:'José Rivas',hireDate:'2024-01-15',frequency:'BIWEEKLY',baseSalary:3000});
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-14',kind:'QUARTERLY',serviceQuarter:1,days:15,dailyIntegralSalary:100,sourceReference:'Q1 antes de completar',verifiedAt:'2024-04-14'}),/trimestres ya cumplidos/);
+    savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-15',kind:'QUARTERLY',serviceQuarter:1,days:15,dailyIntegralSalary:100,sourceReference:'Q1',verifiedAt:'2024-04-15'});
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-05-15',kind:'QUARTERLY',serviceQuarter:1,days:15,dailyIntegralSalary:100,sourceReference:'Q1 duplicado',verifiedAt:'2024-05-15'}),/trimestre de servicio 1/);
+    savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-07-15',kind:'QUARTERLY',serviceQuarter:2,days:15,dailyIntegralSalary:100,sourceReference:'Q2',verifiedAt:'2024-07-15'});
+    const history=listPayrollSeveranceHistory(db,'co-a',employee.id);
+    assert.deepEqual(history.deposits.filter(item=>item.kind==='QUARTERLY').map(item=>item.serviceQuarter),[1,2]);
+  } finally { db.close(); }
+});
+
+test('reproduces the TSJ eight-years-nine-months case: 35 quarterly deposits plus 16 seniority days', () => {
+  const db=setup();
+  try {
+    const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-994',fullName:'Caso jurisprudencial',hireDate:'2006-01-01',frequency:'BIWEEKLY',baseSalary:3000});
+    for(let quarter=1;quarter<=35;quarter++){
+      const monthIndex=quarter*3;
+      const year=2006+Math.floor(monthIndex/12);
+      const month=(monthIndex%12)+1;
+      const depositDate=String(year)+'-'+String(month).padStart(2,'0')+'-01';
+      savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate,kind:'QUARTERLY',serviceQuarter:quarter,days:15,dailyIntegralSalary:100,sourceReference:'Garantía trimestre '+quarter,verifiedAt:depositDate});
+    }
+    for(let serviceYear=1;serviceYear<=8;serviceYear++){
+      const depositDate=String(2006+serviceYear)+'-01-01';
+      savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate,kind:'SENIORITY',serviceYear,days:2,dailyIntegralSalary:100,sourceReference:'Promedio integral año '+serviceYear,verifiedAt:depositDate});
+    }
+    const result=calculatePayrollSeverance(db,'co-a',{employeeId:employee.id,asOfDate:'2014-10-25',salaryType:'FIXED',lastMonthlyIntegratedSalary:3000});
+    assert.equal(result.completedYears,8);
+    assert.equal(result.completedMonths,105);
+    assert.equal(result.quarterlyGuaranteeDays,525);
+    assert.equal(result.additionalSeniorityDays,16);
+    assert.equal(result.guaranteeDays,541);
+  } finally { db.close(); }
+});

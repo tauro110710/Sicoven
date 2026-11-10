@@ -1,0 +1,101 @@
+# Investigación normativa inicial — Nómina venezolana
+
+**Estado: investigación preliminar; no habilita por sí sola el cálculo legal en producción.**
+
+El motor de nómina no debe fijar tasas o bases legales por defecto. Cada regla debe almacenarse por empresa con fuente, fecha de vigencia, fecha de verificación y supuestos aplicables. Antes de activar una obligación se debe contrastar el texto con la Gaceta Oficial, reglamentos y criterios oficiales vigentes a la fecha del período.
+
+## LOTTT — referencias de trabajo
+
+| Materia | Referencia | Regla a modelar | Precaución |
+|---|---|---|---|
+| Concepto y salario normal | Art. 104 | Clasificar conceptos salariales y distinguir salario normal de pagos accidentales/no salariales | No tratar todo pago como base idéntica |
+| Vacaciones | Arts. 190 y 191 | 15 días hábiles al primer año y un día adicional por año sucesivo, hasta 15 adicionales; revisar vacaciones colectivas | No confundir días hábiles de disfrute con días de salario |
+| Base de vacaciones | Art. 121 | Salario normal del mes inmediatamente anterior; variable: promedio de los tres meses anteriores | No usar automáticamente salario integral |
+| Bono vacacional | Art. 192 | Mínimo 15 días de salario normal más un día por año hasta 30 | Tiene carácter salarial; revisar fraccionamiento al terminar |
+| Utilidades | Arts. 131–134 | Participación mínima legal sobre beneficios líquidos, límites por trabajador de 30 días a 4 meses; anticipo de fin de año conforme art. 132 | No asumir que toda empresa paga exactamente 30 días; liquidación depende de beneficio y límites |
+| Prestaciones sociales | Arts. 141–147; en especial 142 | Garantía trimestral de 15 días, días adicionales desde el segundo año y comparación con cálculo de terminación | Requiere historial salarial, antigüedad, anticipos y cálculo final comparativo |
+| Intereses de prestaciones | Arts. 141–143 | Interés mensual según el destino de la garantía: rendimiento del fideicomiso/fondo; promedio de tasas activa y pasiva del BCV si se acredita en libros con autorización escrita; o tasa activa de referencia de seis bancos cuando no se deposita | No existe una tasa única intercambiable. Se requiere el régimen aplicable, serie mensual oficial, capital por mes y evidencia de autorización o incumplimiento |
+| Base de prestaciones | Art. 122 | Último salario integral; variable: promedio de seis meses; integrar alícuotas de bono vacacional y utilidades según la norma | Debe evitarse cálculo circular de conceptos |
+
+Fuentes de consulta:
+- LOTTT, Gaceta Oficial N.º 6.076 Extraordinario (07-05-2012), texto y artículos: https://leyteca.com/ve/lottt/
+- Art. 104 (salario y salario normal): https://leyteca.com/ve/lottt/articulo-104/
+- Art. 121 (base de vacaciones): https://venezuelanalysis.com/wp-content/uploads/2018/11/lott_tabloideminciweb.pdf
+- Art. 122 (base de prestaciones): https://leyteca.com/ve/lottt/articulo-122/
+- Art. 131 (utilidades): https://leyteca.com/ve/lottt/articulo-131/
+- Art. 142 (garantía y cálculo de prestaciones): https://leyteca.com/ve/lottt/articulo-142/
+- Art. 190 (vacaciones): https://leyteca.com/ve/lottt/articulo-190/
+- Art. 192 (bono vacacional): https://leyteca.com/ve/lottt/articulo-192/
+
+## Intereses de prestaciones — art. 143
+
+El texto de la Gaceta distingue tres tratamientos que no deben mezclarse:
+
+1. **Fideicomiso individual o Fondo Nacional:** los depósitos generan los intereses del rendimiento producido por el fideicomiso o fondo.
+2. **Garantía acreditada en la contabilidad de la empresa:** solo cuando el trabajador lo autorizó previamente por escrito, genera intereses a la tasa promedio entre la activa y la pasiva determinada por el BCV.
+3. **Depósitos omitidos:** la garantía genera intereses a la tasa activa determinada por el BCV tomando como referencia los seis principales bancos, sin perjuicio de sanciones.
+
+El artículo 143 indica que los intereses se calculan mensualmente y se pagan al cumplir cada año de servicio, salvo manifestación escrita del trabajador para capitalizarlos. El artículo 142(f) también prevé intereses de mora si no se paga la prestación dentro de los cinco días siguientes a la terminación. Por ello, el motor separa el cálculo de intereses de la comparación del capital garantizado: cada mes necesita capital, tasa mensual, fuente y fecha de verificación. No debe convertir por su cuenta tasas anuales ni suponer una tasa genérica; la conversión y la serie aplicable deben provenir de la fuente oficial y quedar documentadas.
+
+El helper `calculateSeveranceInterest` implementa la suma mensual sobre las tasas mensuales ya verificadas y diferencia los tres regímenes. El módulo ya persiste meses por trabajador/empresa, con modo, capital, tasa, fuente, evidencia y rectificaciones append-only; el cálculo solo suma meses registrados y debe mostrar su cobertura. **Todavía no equivale a una liquidación final completa ni está integrado con la contabilidad de liquidaciones**, por lo que no debe contabilizarse como un pasivo final sin conciliar depósitos, anticipos, capitalización y provisiones.
+
+Fuente primaria de consulta: LOTTT, Gaceta Oficial N.º 6.076 Extraordinario, 07-05-2012, arts. 141–143 (texto PDF en NATLEX/OIT): https://natlex.ilo.org/dyn/natlex2/natlex2/files/download/90040/VEN90040.pdf
+
+## Aportes y contribuciones parafiscales
+
+No existe una sola tasa patronal universal que el programa pueda aplicar a todos los comercios:
+
+- **IVSS:** el porcentaje patronal depende de la clasificación de riesgo; las fuentes secundarias consultadas muestran bandas distintas (9–11% o 11–13%) y topes/base que deben contrastarse con la normativa y el registro de cada patrono. La cotización del trabajador y la patronal deben separarse. No activar tasas hasta confirmar tabla vigente y clasificación.
+- **FAOV/BANAVIH:** referencias institucionales y académicas describen 3% distribuido entre 2% patronal y 1% trabajador, con base salarial que debe verificarse según el régimen vigente. No confundirlo con salario base de vacaciones.
+- **INCES:** no tratar como una deducción ordinaria quincenal del trabajador. La contribución patronal y cualquier aporte del trabajador tienen hechos generadores, sujetos, bases y períodos distintos. Validar número de trabajadores, naturaleza del pago y calendario antes de calcular.
+- **Protección de pensiones:** la Ley de Protección de las Pensiones de Seguridad Social y sus actos de aplicación establecieron una contribución especial patronal separada. Debe mantenerse como obligación independiente, con porcentaje, base, sujetos, exenciones y vigencia confirmados por Gaceta y SENIAT; no sumarla silenciosamente a IVSS.
+
+Fuentes de orientación inicial (no sustituyen Gaceta/consulta oficial):
+- Universidad Simón Bolívar, FAOV: https://www.dgch.usb.ve/r%C3%A9gimen-prestacional-de-vivienda-faov
+- Grant Thornton Venezuela, guía 2026 de regímenes de seguridad social: https://www.grantthornton.com.ve/globalassets/1.-member-firms/venezuela/2026/hacer-negocios-en-venezuela-2026.pdf
+- Revista FACES, tabla comparativa de aportes parafiscales: https://www.servicio.bc.uc.edu.ve/faces/revista/evol7n1/vol7n12025.pdf
+
+## Verificación comparativa más reciente de aportes (consulta 10-11-2026)
+
+La tabla comparativa de PwC para Venezuela, revisada el 30-09-2026, confirma como referencia de trabajo: IVSS 4% trabajador y 9/10/11% patronal según riesgo, con tope de cinco salarios mínimos; Régimen Prestacional de Empleo 0,5% trabajador y 2% patronal, con tope de diez salarios mínimos; FAOV 1% trabajador y 2% patronal sobre salario integral mensual; INCES 2% patronal sobre la base salarial correspondiente y 0,5% trabajador sobre utilidades; LOPCYMAT 0,75% a 10% patronal según riesgo. La fuente es comparativa secundaria y no sustituye la Gaceta ni la clasificación individual del patrono.
+
+- PwC, Venezuela — Individual, Other taxes (revisión 30-09-2026): https://taxsummaries.pwc.com/venezuela/individual/other-taxes
+- PwC, Venezuela — Corporate, Other taxes: https://taxsummaries.pwc.com/venezuela/corporate/other-taxes
+- USB, FAOV (2% patronal + 1% trabajador sobre salario integral): https://www.dgch.usb.ve/r%C3%A9gimen-prestacional-de-vivienda-faov
+- BDO, Ley de Protección de las Pensiones (referencia de alícuota patronal 9%; validar texto y actos SENIAT vigentes): https://www.bdo.com.ve/es-ve/publicaciones/boletines-informativos/ley-de-proteccion-de-las-pensiones-de-seguridad-social-venezuela
+- SENIAT / Providencia SNAT/2025/000092, calendario 2026 de la contribución de pensiones: https://lega.law/lega-informa/calendario-spe-y-pensiones-2026/
+
+Estas referencias no se convierten automáticamente en reglas activas. La clasificación de riesgo IVSS/LOPCYMAT, los topes en salarios mínimos, el número de trabajadores para INCES, el tipo de entidad y la sujeción a la contribución de pensiones son datos del patrono. Cada regla debe configurarse con su vigencia, base y frecuencia; el sistema no debe aplicar una tasa universal ni prorratear un tope mensual sin un parámetro específico para semanal/quincenal.
+
+## Reglas de producto derivadas
+
+1. Las tasas se guardan con fecha inicial/final, fuente, fecha de verificación y configuración aplicable.
+2. Un cálculo cerrado conserva una copia íntegra de las reglas y bases aplicadas; una actualización posterior no reescribe el pasado.
+3. Los aportes del trabajador, costos patronales, provisiones y pagos a terceros se muestran en grupos separados.
+4. Si falta una clasificación patronal, una base, una tasa vigente o un supuesto legal, SICOVEN debe advertirlo y bloquear únicamente el cálculo afectado; nunca completar con un porcentaje supuesto.
+5. La periodicidad semanal/quincenal de pago no cambia automáticamente la periodicidad legal de declaración y pago de cada contribución.
+6. Las vacaciones deben modelar disfrute real, días hábiles, salario base, bono vacacional y pagos fraccionados; no limitarse a provisionar una cifra genérica.
+7. Prestaciones requieren movimientos históricos y comparación de garantía acumulada con cálculo de terminación; una cifra trimestral aislada no es liquidación definitiva.
+
+**Pendiente antes de activar cálculo legal:** cotejar cada regla con el texto oficial de Gaceta y actos administrativos vigentes para el período, confirmar la situación concreta del patrono y preparar casos patrón de prueba revisados por un profesional laboral/contable venezolano.
+
+
+## Criterio jurisprudencial reciente — salario, vacaciones y bono vacacional (TSJ, 20-03-2026)
+
+La Sala de Casación Social, sentencia N.º 097, expediente 24-555, examinó una relación con una parte salarial pagada en bolívares y otra en divisas convertida a la tasa BCV. La Sala reiteró que la remuneración no se vuelve variable únicamente por la forma de pago o conversión monetaria: para calificarla como variable deben concurrir conceptos variables como comisiones, bonificaciones o incentivos ligados al trabajo. En el caso también reconoció la incidencia de componentes salariales variables en descansos, feriados, utilidades, vacaciones, bono vacacional y prestaciones.
+
+La misma sentencia ordenó pagar vacaciones vencidas y fraccionadas, así como bono vacacional vencido y fraccionado, multiplicando los días adeudados por el último salario diario normal. En ese caso particular el contrato reconocía 30 días anuales de bono vacacional; esa condición contractual no debe convertirse en un mínimo legal general. El módulo debe aplicar el mayor derecho que corresponda según LOTTT, contrato individual y convención colectiva acreditados.
+
+Consecuencias para SICOVEN:
+1. El tipo de salario se determina por la naturaleza real de sus componentes; no se debe marcar VARIABLE solo porque se pacte o pague en USD y se convierta a Bs. por BCV.
+2. En salario variable, los importes promedio deben incluir todos los conceptos salariales regulares que legalmente correspondan, incluidos descansos/feriados cuando proceda.
+3. El bono vacacional es adicional al salario de vacaciones, tiene carácter salarial y su alícuota se incorpora al salario integral para prestaciones.
+4. En liquidación se distinguen vacaciones vencidas no disfrutadas y fracción del período en curso; el bono vacacional pendiente se identifica por período y se calcula con el derecho legal/contractual acreditado.
+5. No se deben sustituir vacaciones por dinero durante la relación activa; la compensación se practica al terminar la relación o en los supuestos expresamente permitidos.
+
+Fuente de consulta de la sentencia (reproducción del fallo y enlace al TSJ): https://app.venley.ai/sentencias/sentencia-nro-097-sala-de-casacion-social-2026-jm6k1
+Fuente oficial indicada por el repositorio de sentencias: http://historico.tsj.gob.ve/decisiones/scs/marzo/354064-097-20326-2026-24-555.html
+
+## Escenarios de terminación que debe distinguir el cálculo final
+
+La matriz funcional, con el alcance y cautelas de cada supuesto, está documentada en `docs/payroll-liquidation-scenarios.md`. La liquidación nunca debe aplicar automáticamente una indemnización equivalente a prestaciones sociales a toda salida: los artículos 80 y 92 establecen supuestos concretos, y el artículo 83 contempla un supuesto especial de rescisión anticipada de contrato por tiempo determinado u obra.

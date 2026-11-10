@@ -126,7 +126,26 @@ async function main() {
   await setInput('#password', 'admin123');
   await clickButton('Iniciar sesión');
 
-  await waitFor(() => evaluate("Boolean(document.querySelector('.company-registration-modal'))"), 'No se abrió el registro inicial de empresa');
+  // El registro inicial puede abrirse automáticamente cuando termina la
+  // hidratación SQLite. Si la aplicación muestra primero la pantalla principal,
+  // seguir el flujo real del selector de empresas en lugar de asumir un modal.
+  try {
+    await waitFor(() => evaluate("Boolean(document.querySelector('.company-registration-modal')) || Boolean([...document.querySelectorAll('button')].find(button => (button.title || '').startsWith('Empresa activa:')))"),
+      'SICOVEN no mostró el selector de empresas después del acceso', 60000);
+  } catch (error) {
+    const diagnostic = await evaluate("JSON.stringify({title:document.title,body:(document.body?.innerText||'').slice(0,5000),url:location.href,companyModal:!!document.querySelector('.company-registration-modal'),companyButton:[...document.querySelectorAll('button')].some(button=>(button.title||'').startsWith('Empresa activa:')),loginForm:!!document.querySelector('#loginForm')})").catch(() => 'No se pudo leer el estado del renderer');
+    try { await capture('migration-post-login-failure.png'); } catch {}
+    throw new Error(String(error.message || error) + ' | Estado visible después del acceso: ' + diagnostic);
+  }
+  let companyModalOpen = await evaluate("Boolean(document.querySelector('.company-registration-modal'))");
+  if (!companyModalOpen) {
+    const openedSelector = await evaluate("(() => { const button = [...document.querySelectorAll('button')].find(item => (item.title || '').startsWith('Empresa activa:')); if (!button) return false; button.click(); return true; })()");
+    assert(openedSelector, 'No se pudo abrir el selector de empresas.');
+    await clickButton('Crear Nueva Empresa');
+  }
+  await waitFor(() => evaluate("Boolean(document.querySelector('.company-registration-modal'))"),
+    'No se abrió el formulario de registro de empresa', 30000);
+  console.log('E2E: formulario de empresa abierto mediante el flujo disponible en pantalla.');
   await setInput('input[placeholder="J-12345678-9"]', 'J-12345678-9');
   await setInput('input[placeholder="EJEMPLO COMERCIAL, C.A."]', 'E2E MIGRATION TEST, C.A.');
   const savedCompany = await evaluate('(() => { const form = document.querySelector(".company-registration-form"); if (!form) return false; form.querySelector("button[type=submit]")?.click(); return true; })()');

@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 const {
-  GLOBAL_REFERENCE_TABLES, COMPANY_TABLES, CHILD_TABLES, copyCompanyRelationalData
+  GLOBAL_REFERENCE_TABLES, COMPANY_TABLES, OPTIONAL_COMPANY_TABLES, CHILD_TABLES, copyCompanyRelationalData
 } = require('./tenant-relational-migration.cjs');
 
 function createSchema(db) {
@@ -23,6 +23,9 @@ function createSchema(db) {
     else if (parent === 'supporting_documents') db.exec('CREATE TABLE supporting_documents(id TEXT PRIMARY KEY, company_id TEXT NOT NULL)');
     else if (parent === 'vat_fiscal_incidents') db.exec('CREATE TABLE vat_fiscal_incidents(id TEXT PRIMARY KEY, company_id TEXT NOT NULL)');
     else db.exec('CREATE TABLE "' + parent + '"(id TEXT PRIMARY KEY, company_id TEXT NOT NULL)');
+  }
+  for (const item of OPTIONAL_COMPANY_TABLES) {
+    db.exec('CREATE TABLE "' + item.table + '"(id TEXT PRIMARY KEY, company_id TEXT NOT NULL)');
   }
   for (const item of CHILD_TABLES) {
     db.exec('CREATE TABLE "' + item.table + '"(id TEXT PRIMARY KEY, "' + item.foreignKey + '" TEXT NOT NULL REFERENCES "' +
@@ -98,4 +101,19 @@ test('rejects a missing relational table rather than silently omitting history',
   assert.throws(() => copyCompanyRelationalData(source, target, 'company-a'), /no contiene la tabla requerida/i);
   source.close();
   target.close();
+});
+
+
+test('copies optional payroll liquidation snapshots into the correct company tenant', () => {
+  const source=new Database(':memory:');
+  const target=new Database(':memory:');
+  createSchema(source);
+  createSchema(target);
+  insert(source,'payroll_liquidations',{id:'liq-a',company_id:'company-a'});
+  insert(source,'payroll_liquidations',{id:'liq-b',company_id:'company-b'});
+  const result=copyCompanyRelationalData(source,target,'company-a');
+  assert.equal(result.counts.payroll_liquidations,1);
+  assert.equal(target.prepare('SELECT COUNT(*) AS count FROM payroll_liquidations').get().count,1);
+  assert.equal(target.prepare('SELECT id FROM payroll_liquidations').get().id,'liq-a');
+  source.close(); target.close();
 });
