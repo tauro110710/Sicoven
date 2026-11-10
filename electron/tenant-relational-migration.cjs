@@ -21,6 +21,12 @@ const COMPANY_TABLES = Object.freeze([
   { table: 'payroll_runs', companyColumn: 'company_id' }
 ]);
 
+// Tablas opcionales añadidas en versiones posteriores de Nómina.
+const OPTIONAL_COMPANY_TABLES = Object.freeze([
+  { table: 'payroll_severance_deposits', companyColumn: 'company_id' },
+  { table: 'payroll_severance_interest_months', companyColumn: 'company_id' }
+]);
+
 const CHILD_TABLES = Object.freeze([
   { table: 'accounting_correction_case_events', parentTable: 'accounting_correction_cases', parentId: 'id', foreignKey: 'case_id' },
   { table: 'accounting_correction_case_workflow_events', parentTable: 'accounting_correction_cases', parentId: 'id', foreignKey: 'case_id' },
@@ -37,6 +43,7 @@ const CHILD_TABLES = Object.freeze([
 const ALL_TABLES = Object.freeze([
   ...GLOBAL_REFERENCE_TABLES,
   ...COMPANY_TABLES.map(item => item.table),
+  ...OPTIONAL_COMPANY_TABLES.map(item => item.table),
   ...CHILD_TABLES.map(item => item.table)
 ]);
 
@@ -87,7 +94,9 @@ function copyCompanyRelationalData(sourceDb, destinationDb, companyIdInput) {
     throw new TypeError('Se requieren las bases SQLite de origen y destino.');
   }
   for (const table of ALL_TABLES) {
+    const optional = OPTIONAL_COMPANY_TABLES.some(item => item.table === table);
     if (!tableExists(sourceDb, table)) {
+      if (optional) continue;
       throw new Error('La base heredada no contiene la tabla requerida para migración: ' + table + '.');
     }
     if (!tableExists(destinationDb, table)) {
@@ -102,7 +111,8 @@ function copyCompanyRelationalData(sourceDb, destinationDb, companyIdInput) {
     }
 
     const parentRows = new Map();
-    for (const definition of COMPANY_TABLES) {
+    for (const definition of [...COMPANY_TABLES, ...OPTIONAL_COMPANY_TABLES]) {
+      if (!tableExists(sourceDb, definition.table)) { counts[definition.table] = 0; parentRows.set(definition.table, []); continue; }
       const rows = readRows(sourceDb, definition.table, ' WHERE "' + definition.companyColumn + '"=?', [companyId]);
       counts[definition.table] = insertRows(destinationDb, definition.table, rows);
       parentRows.set(definition.table, rows);
@@ -140,6 +150,7 @@ function copyCompanyRelationalData(sourceDb, destinationDb, companyIdInput) {
 module.exports = {
   GLOBAL_REFERENCE_TABLES,
   COMPANY_TABLES,
+  OPTIONAL_COMPANY_TABLES,
   CHILD_TABLES,
   copyCompanyRelationalData
 };
