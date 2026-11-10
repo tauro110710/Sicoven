@@ -20,6 +20,28 @@ function initializePayrollSchema(db) {
       UNIQUE(company_id, fiscal_id)
     );
 
+    CREATE TABLE IF NOT EXISTS payroll_salary_history (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      employee_id TEXT NOT NULL REFERENCES payroll_employees(id) ON DELETE RESTRICT,
+      effective_from TEXT NOT NULL,
+      effective_to TEXT,
+      base_salary REAL NOT NULL CHECK (base_salary > 0),
+      source TEXT NOT NULL CHECK (source IN ('INITIAL','SALARY_CHANGE','LEGACY_MIGRATION')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(employee_id, effective_from),
+      CHECK (effective_to IS NULL OR effective_to >= effective_from)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_payroll_salary_history_employee
+      ON payroll_salary_history(company_id, employee_id, effective_from DESC);
+
+    INSERT INTO payroll_salary_history
+      (id, company_id, employee_id, effective_from, base_salary, source)
+    SELECT lower(hex(randomblob(16))), e.company_id, e.id, e.hire_date, e.base_salary, 'LEGACY_MIGRATION'
+    FROM payroll_employees e
+    WHERE NOT EXISTS (SELECT 1 FROM payroll_salary_history h WHERE h.employee_id=e.id);
+
     CREATE TABLE IF NOT EXISTS payroll_legal_rules (
       id TEXT PRIMARY KEY,
       company_id TEXT NOT NULL,
@@ -74,7 +96,7 @@ function initializePayrollSchema(db) {
       ON payroll_run_lines(run_id);
   `);
   return Object.freeze({
-    tables: ['payroll_employees', 'payroll_legal_rules', 'payroll_runs', 'payroll_run_lines']
+    tables: ['payroll_employees', 'payroll_salary_history', 'payroll_legal_rules', 'payroll_runs', 'payroll_run_lines']
   });
 }
 
