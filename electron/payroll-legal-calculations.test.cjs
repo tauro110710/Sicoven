@@ -126,3 +126,22 @@ test('uses clamped calendar anniversaries for month-end and leap-day service', (
   const result = calculateSeverance({hireDate:'2026-01-31',asOfDate:'2026-04-30',dailyIntegralSalary:100,quarterlyDeposits:[{days:15,dailyIntegralSalary:100}],additionalSeniorityDeposits:[]});
   assert.equal(result.completedMonths,3);
 });
+
+test('calculates severance interest by the applicable art. 143 regime using verified monthly rates', () => {
+  const { calculateSeveranceInterest } = require('./payroll-legal-calculations.cjs');
+  const months = [
+    {month:'2026-01',capital:10000,monthlyRate:0.01,sourceReference:'BCV rate record Jan 2026',verifiedAt:'2026-02-01'},
+    {month:'2026-02',capital:12000,monthlyRate:0.012,sourceReference:'BCV rate record Feb 2026',verifiedAt:'2026-03-01'}
+  ];
+  const book = calculateSeveranceInterest({mode:'AUTHORIZED_BOOK_CREDIT',months});
+  assert.equal(book.totalInterest,244);
+  assert.equal(book.monthsCalculated,2);
+  assert.match(book.note,/autorización escrita/);
+  const trust = calculateSeveranceInterest({mode:'TRUST_OR_FUND',months});
+  assert.equal(trust.totalInterest,244);
+  const overdue = calculateSeveranceInterest({mode:'UNDEPOSITED',months});
+  assert.match(overdue.note,/seis principales bancos/);
+  assert.throws(()=>calculateSeveranceInterest({mode:'AUTHORIZED_BOOK_CREDIT',months:[{...months[0],sourceReference:''}]}),/fuente o fecha/);
+  assert.throws(()=>calculateSeveranceInterest({mode:'UNDEPOSITED',months:[{...months[0],monthlyRate:1.2}]}),/tasa mensual/);
+  assert.throws(()=>calculateSeveranceInterest({mode:'OTHER',months}),/régimen de intereses/);
+});
