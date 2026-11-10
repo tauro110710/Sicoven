@@ -292,6 +292,48 @@ test('rejects overlapping effective periods for versions of the same legal rule'
   } finally { db.close(); }
 });
 
+test('scopes legal rules and salary caps independently to weekly and biweekly payrolls', () => {
+  const db = setup();
+  try {
+    const weeklyEmployee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-610', fullName: 'Luis Rivas', hireDate: '2025-01-01',
+      frequency: 'WEEKLY', baseSalary: 600
+    });
+    const biweeklyEmployee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-611', fullName: 'Marta Solís', hireDate: '2025-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    savePayrollLegalRule(db, 'co-a', {
+      code: 'IVSS', description: 'IVSS semanal', base: 'normalSalary', frequencyScope: 'WEEKLY',
+      workerRate: 0.04, employerRate: 0.09, baseCap: 500,
+      effectiveFrom: '2026-01-01', sourceReference: 'Fuente legal semanal', verifiedAt: '2026-01-01'
+    });
+    savePayrollLegalRule(db, 'co-a', {
+      code: 'IVSS', description: 'IVSS quincenal', base: 'normalSalary', frequencyScope: 'BIWEEKLY',
+      workerRate: 0.04, employerRate: 0.10, baseCap: 1000,
+      effectiveFrom: '2026-01-01', sourceReference: 'Fuente legal quincenal', verifiedAt: '2026-01-01'
+    });
+    const weekly = createPayrollRun(db, 'co-a', {
+      frequency: 'WEEKLY', periodStart: '2026-06-01', periodEnd: '2026-06-07',
+      employees: [{ employeeId: weeklyEmployee.id,
+        earnings: [{ code: 'SAL', description: 'Salario', amount: 600, isSalary: true }],
+        bases: { normalSalary: 600 } }]
+    });
+    const biweekly = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-01', periodEnd: '2026-06-15',
+      employees: [{ employeeId: biweeklyEmployee.id,
+        earnings: [{ code: 'SAL', description: 'Salario', amount: 1200, isSalary: true }],
+        bases: { normalSalary: 1200 } }]
+    });
+    assert.equal(weekly.snapshot.employees[0].contributions[0].base, 500);
+    assert.equal(weekly.snapshot.employees[0].workerLegalDeductions, 20);
+    assert.equal(weekly.snapshot.employees[0].employerContributions, 45);
+    assert.equal(biweekly.snapshot.employees[0].contributions[0].base, 1000);
+    assert.equal(biweekly.snapshot.employees[0].workerLegalDeductions, 40);
+    assert.equal(biweekly.snapshot.employees[0].employerContributions, 100);
+  } finally { db.close(); }
+});
+
 test('does not silently apply a legal rule with unconfigured applicability conditions', () => {
   const db = setup();
   try {
