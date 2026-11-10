@@ -6,7 +6,7 @@ const Database = require('better-sqlite3');
 const { initializeTenantDatabase } = require('./tenant-schema.cjs');
 const {
   listPayrollEmployees, listPayrollSalaryHistory, getPayrollSalaryForDate, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
-  registerPayrollIpc, createPayrollRun, listPayrollRuns, listConfirmedSalaryEntries
+  registerPayrollIpc, createPayrollRun, listPayrollRuns, confirmPayrollRun, listConfirmedSalaryEntries
 } = require('./payroll-persistence.cjs');
 
 function setup() {
@@ -247,5 +247,34 @@ test('historical salary query reads only confirmed salary earnings for the selec
     assert.equal(entries[0].runId, run.id);
     assert.throws(() => listConfirmedSalaryEntries(db, 'co-b', employee.id, '2026-06-01', '2026-06-30'), /empresa activa/);
     assert.throws(() => listConfirmedSalaryEntries(db, 'co-a', employee.id, '2026-07-01', '2026-06-30'), /rango de consulta/);
+  } finally { db.close(); }
+});
+
+test('confirms a payroll run once with its accounting entry and is safe to retry', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-881', fullName: 'Luis Rojas', hireDate: '2025-02-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    const run = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-07-01', periodEnd: '2026-07-15',
+      employees: [{
+        employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario base', amount: 600, isSalary: true }],
+        bases: { normalSalary: 600, integralSalary: 600, grossSalary: 600 }
+      }]
+    });
+    const confirmed = confirmPayrollRun(db, 'co-a', run.id, 'journal-123');
+    assert.equal(confirmed.status, 'CONFIRMED');
+    assert.equal(confirmed.journalEntryId, 'journal-123');
+    assert.equal(confirmed.alreadyConfirmed, false);
+    const retry = confirmPayrollRun(db, 'co-a', run.id, 'journal-123');
+    assert.equal(retry.alreadyConfirmed, true);
+    assert.equal(retry.journalEntryId, 'journal-123');
+    assert.throws(() => confirmPayrollRun(db, 'co-a', run.id, 'journal-other'), /otro asiento/);
+    assert.throws(() => confirmPayrollRun(db, 'co-b', run.id, 'journal-123'), /empresa activa/);
+    assert.equal(listPayrollRuns(db, 'co-a').find(item => item.id === run.id).status, 'CONFIRMED');
+    assert.equal(listConfirmedSalaryEntries(db, 'co-a', employee.id, '2026-07-01', '2026-07-31').length, 1);
   } finally { db.close(); }
 });
