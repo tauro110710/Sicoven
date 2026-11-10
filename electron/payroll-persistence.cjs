@@ -663,14 +663,16 @@ function calculatePayrollSeverance(db, companyId, input) {
   const applicableDeposits=history.deposits.filter(item=>item.depositDate<=asOfDate);
   const quarterlyDeposits=applicableDeposits.filter(item=>item.kind==='QUARTERLY').map(item=>({days:item.days,dailyIntegralSalary:item.dailyIntegralSalary}));
   const additionalSeniorityDeposits=applicableDeposits.filter(item=>item.kind==='SENIORITY').map(item=>({serviceYear:item.serviceYear,days:item.days,dailyIntegralSalary:item.dailyIntegralSalary}));
+  const advances=applicableDeposits.filter(item=>item.kind==='ADVANCE');
+  const salaryBasis=calculateSeveranceSalaryBasis({salaryType:input.salaryType,lastMonthlyIntegratedSalary:input.lastMonthlyIntegratedSalary,previousSixMonthsIntegratedSalary:input.previousSixMonthsIntegratedSalary});
+  // Let the statutory calculator report missing quarterly history first; only
+  // after that validate the identity and uniqueness of annual seniority years.
+  const result=calculateSeverance({hireDate:employee.hireDate,asOfDate:input.asOfDate,dailyIntegralSalary:salaryBasis.dailySalary,quarterlyDeposits,additionalSeniorityDeposits});
   const expectedSeniorityYears=Math.min(completedYears(employee.hireDate,asOfDate),15);
   const actualSeniorityYears=additionalSeniorityDeposits.map(item=>Number(item.serviceYear)).sort((a,b)=>a-b);
   if(actualSeniorityYears.length!==expectedSeniorityYears || actualSeniorityYears.some((year,index)=>year!==index+1)) {
     throw new Error('El historial debe identificar una sola vez cada año de servicio con depósito adicional. Revise los años inferidos o rectifique los registros históricos.');
   }
-  const advances=applicableDeposits.filter(item=>item.kind==='ADVANCE');
-  const salaryBasis=calculateSeveranceSalaryBasis({salaryType:input.salaryType,lastMonthlyIntegratedSalary:input.lastMonthlyIntegratedSalary,previousSixMonthsIntegratedSalary:input.previousSixMonthsIntegratedSalary});
-  const result=calculateSeverance({hireDate:employee.hireDate,asOfDate:input.asOfDate,dailyIntegralSalary:salaryBasis.dailySalary,quarterlyDeposits,additionalSeniorityDeposits});
   const advanceTotal=Math.round((advances.reduce((sum,item)=>sum+item.amount,0)+Number.EPSILON)*100)/100;
   const grossEntitlement=result.greaterAmount;
   return {...result,employeeId,fullName:employee.fullName,salaryBasis,advanceTotal,netAfterAdvances:Math.max(0,Math.round((grossEntitlement-advanceTotal+Number.EPSILON)*100)/100),
