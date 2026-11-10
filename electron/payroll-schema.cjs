@@ -102,7 +102,7 @@ function initializePayrollSchema(db) {
   }
   const legalRuleSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='payroll_legal_rules'").get()?.sql || '';
   if (legalRuleSchema.includes('UNIQUE(company_id, code, effective_from)')) {
-    db.exec(`
+    db.transaction(() => db.exec(`
       DROP INDEX IF EXISTS idx_payroll_rules_company_effective;
       CREATE TABLE payroll_legal_rules_frequency_migration (
         id TEXT PRIMARY KEY,
@@ -132,7 +132,7 @@ function initializePayrollSchema(db) {
       ALTER TABLE payroll_legal_rules_frequency_migration RENAME TO payroll_legal_rules;
       CREATE INDEX IF NOT EXISTS idx_payroll_rules_company_effective
         ON payroll_legal_rules(company_id, active, effective_from, effective_to);
-    `);
+    `))();
   }
   return Object.freeze({
     tables: ['payroll_employees', 'payroll_salary_history', 'payroll_legal_rules', 'payroll_runs', 'payroll_run_lines']
