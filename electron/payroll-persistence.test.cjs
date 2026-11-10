@@ -6,7 +6,7 @@ const Database = require('better-sqlite3');
 const { initializeTenantDatabase } = require('./tenant-schema.cjs');
 const {
   listPayrollEmployees, listPayrollSalaryHistory, getPayrollSalaryForDate, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
-  registerPayrollIpc, createPayrollRun, listPayrollRuns, getPayrollRun, confirmPayrollRun, listConfirmedSalaryEntries
+  registerPayrollIpc, createPayrollRun, listPayrollRuns, getPayrollRun, confirmPayrollRun, listConfirmedSalaryEntries, calculatePayrollAnnualRights
 } = require('./payroll-persistence.cjs');
 
 function setup() {
@@ -165,6 +165,35 @@ test('creates an immutable draft payroll snapshot and prevents duplicate periods
       employees: [{ employeeId: weeklyEmployee.id, earnings: [{code:'SAL',description:'Salario',amount:500}], bases:{normalSalary:500,integralSalary:500,grossSalary:500} }]
     });
     assert.equal(weekly.status, 'DRAFT');
+  } finally { db.close(); }
+});
+
+test('calculates annual LOTTT rights for the selected worker using fixed or three-month variable salary', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-111', fullName: 'Ana Rojas', hireDate: '2024-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 1500
+    });
+    const fixed = calculatePayrollAnnualRights(db, 'co-a', {
+      employeeId: employee.id, asOfDate: '2026-01-01',
+      salaryType: 'FIXED', lastMonthNormalSalary: 3000,
+      fiscalYearStart: '2026-01-01'
+    });
+    assert.equal(fixed.salaryBasis.dailySalary, 100);
+    assert.equal(fixed.completedYears, 2);
+    assert.equal(fixed.vacationDays, 16);
+    assert.equal(fixed.vacationPay, 1600);
+    assert.equal(fixed.vacationBonus, 1600);
+    const variable = calculatePayrollAnnualRights(db, 'co-a', {
+      employeeId: employee.id, asOfDate: '2026-01-01',
+      salaryType: 'VARIABLE', previousThreeMonthsNormalSalary: [3000, 3300, 3600]
+    });
+    assert.equal(variable.salaryBasis.monthlySalary, 3300);
+    assert.equal(variable.salaryBasis.monthsAveraged, 3);
+    assert.throws(() => calculatePayrollAnnualRights(db, 'co-b', {
+      employeeId: employee.id, asOfDate: '2026-01-01', salaryType: 'FIXED', lastMonthNormalSalary: 3000
+    }), /empresa activa/);
   } finally { db.close(); }
 });
 
