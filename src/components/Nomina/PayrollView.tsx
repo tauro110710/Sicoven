@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { jsPDF } from 'jspdf';
 import { useAccounting } from '../../context/AccountingContext';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
-import type { JournalEntryItem } from '../../types/accounting';
+import { buildPayrollJournalItems } from '../../utils/payrollAccounting';
 import { Users, UserPlus, RefreshCw, AlertCircle, CheckCircle2, Calculator, FileText, Printer, BookCheck } from 'lucide-react';
 
 type SalaryHistory = { id: string; effectiveFrom: string; effectiveTo: string | null; baseSalary: number; source: string };
@@ -130,40 +130,10 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
       if (ageDays < 0 || ageDays > 7 || !Number.isFinite(rateRecord.rate) || rateRecord.rate <= 0) {
         throw new Error('La última tasa BCV disponible (' + rateRecord.effectiveDate + ') no es suficientemente próxima al período de nómina. Verifique el historial antes de contabilizar.');
       }
-      const totals = run.totals;
-      const amountRows = [
-        { code: '6.1.1.01', debit: Number(totals.grossEarnings || 0), credit: 0, description: 'Sueldos y asignaciones de nómina' },
-        { code: '6.1.1.12', debit: Number(totals.employerContributions || 0), credit: 0, description: 'Aportes patronales de nómina' },
-        { code: '2.1.3.01', debit: 0, credit: Number(totals.netPay || 0), description: 'Neto de nómina por pagar a trabajadores' },
-        { code: '2.1.3.03', debit: 0, credit: Number(totals.workerLegalDeductions || 0) + Number(totals.employerContributions || 0), description: 'Aportes legales de trabajadores y patronales por enterar' },
-        { code: '2.1.3.04', debit: 0, credit: Number(totals.otherDeductions || 0), description: 'Otras deducciones de nómina por pagar' }
-      ].filter(row => row.debit > 0 || row.credit > 0);
-      if (!amountRows.length) throw new Error('La nómina no contiene importes que puedan contabilizarse.');
-      const accountTypes: Record<string, 'GASTOS' | 'PASIVO'> = {
-        '6.1.1.01': 'GASTOS', '6.1.1.12': 'GASTOS',
-        '2.1.3.01': 'PASIVO', '2.1.3.03': 'PASIVO', '2.1.3.04': 'PASIVO'
-      };
-      const journalItems: JournalEntryItem[] = amountRows.map(row => {
-        const account = accounts.find(item => item.code === row.code && item.isMovement && item.type === accountTypes[row.code]);
-        if (!account) throw new Error('Falta una cuenta contable activa para nómina: ' + row.code + '. Actualice el plan de cuentas antes de continuar.');
-        return {
-          accountCode: account.code, accountName: account.name,
-          debitBs: Math.round(row.debit * 100) / 100, creditBs: Math.round(row.credit * 100) / 100,
-          debitUsd: Math.round((row.debit / rateRecord.rate) * 100) / 100,
-          creditUsd: Math.round((row.credit / rateRecord.rate) * 100) / 100,
-          description: row.description
-        };
-      });
-      const debitBs = journalItems.reduce((sum, line) => sum + line.debitBs, 0);
-      const creditBs = journalItems.reduce((sum, line) => sum + line.creditBs, 0);
-      if (Math.abs(debitBs - creditBs) > 0.01) throw new Error('El asiento calculado no cuadra en bolívares. No se contabilizó la nómina.');
-      const debitUsd = journalItems.reduce((sum, line) => sum + line.debitUsd, 0);
-      const creditUsd = journalItems.reduce((sum, line) => sum + line.creditUsd, 0);
-      const usdRounding = Math.round((debitUsd - creditUsd) * 100) / 100;
-      const roundingLine = journalItems.filter(line => line.creditBs > 0).sort((a,b) => b.creditBs-a.creditBs)[0];
-      if (!roundingLine || Math.abs(usdRounding) > 0.05) throw new Error('La conversión del asiento excede la tolerancia de redondeo en USD. Revise la tasa BCV y los importes.');
-      roundingLine.creditUsd = Math.round((roundingLine.creditUsd + usdRounding) * 100) / 100;
-      if (roundingLine.creditUsd < 0) throw new Error('El redondeo de la conversión produjo un importe inválido.');
+      const journalItems = buildPayrollJournalItems(run.totals as {
+        grossEarnings: number; workerLegalDeductions: number; otherDeductions: number;
+        employerContributions: number; netPay: number;
+      }, accounts, rateRecord.rate);
       const journal = existingEntry || addJournalEntry({
         entryNumber: 0, date: run.periodEnd,
         description: 'Nómina ' + (run.frequency === 'WEEKLY' ? 'semanal' : 'quincenal') + ' ' + run.periodStart + ' al ' + run.periodEnd,
