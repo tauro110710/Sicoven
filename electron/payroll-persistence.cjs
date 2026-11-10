@@ -121,6 +121,119 @@ function savePayrollLegalRule(db, companyId, input) {
       JSON.stringify({ ruleId: id, companyId, code, effectiveFrom, effectiveTo, sourceReference }));
   return listPayrollLegalRules(db, companyId).find(item => item.id === id);
 }
+
+function calculateEmployeeDraft(db, companyId, employee, input, periodEnd) {
+  if (!input || !Array.isArray(input.earnings) || input.earnings.length === 0) throw new Error('Cada trabajador requiere al menos una asignación.');
+  const bases = input.bases || {};
+  for (const key of ['normalSalary', 'integralSalary', 'grossSalary']) positiveOrZero(bases[key], 'Base ' + key);
+  const earnings = input.earnings.map(line => ({
+    code: text(line.code, 'Código de asignación', 60),
+    description: text(line.description, 'Descripción de asignación', 180),
+    amount: positiveOrZero(line.amount, 'Importe de asignación'),
+    isSalary: line.isSalary === true
+  }));
+  const deductions = (input.deductions || []).map(line => ({
+    code: text(line.code, 'Código de deducción', 60),
+    description: text(line.description, 'Descripción de deducción', 180),
+    amount: positiveOrZero(line.amount, 'Importe de deducción')
+  }));
+  const rules = db.prepare(`SELECT code,description,base_key AS base,worker_rate AS workerRate,
+    employer_rate AS employerRate,base_cap AS baseCap,effective_from AS effectiveFrom,
+    effective_to AS effectiveTo,source_reference AS sourceReference,verified_at AS verifiedAt
+    FROM payroll_legal_rules WHERE company_id=? AND active=1 AND effective_from<=?
+    AND (effective_to IS NULL OR effective_to>=?) ORDER BY code`).all(companyId, periodEnd, periodEnd);
+  const contributions = rules.map(rule => {
+    if (!rule.sourceReference || !rule.verifiedAt || rule.verifiedAt > new Date().toISOString().slice(0,10)) {
+      throw new Error('La regla ' + rule.code + ' no tiene verificación válida.');
+    }
+    const rateWorker = Number(rule.workerRate), rateEmployer = Number(rule.employerRate);
+    if (!Number.isFinite(rateWorker) || rateWorker < 0 || rateWorker > 1 ||
+        !Number.isFinite(rateEmployer) || rateEmployer < 0 || rateEmployer > 1) throw new Error('Tasa inválida en ' + rule.code + '.');
+    const baseValue = Number(bases[rule.base]);
+    const base = Math.round(Math.min(baseValue, rule.baseCap == null ? baseValue : Number(rule.baseCap)) * 100) / 100;
+    return {
+      code: rule.code, description: rule.description, base,
+      workerAmount: Math.round(base * rateWorker * 100) / 100,
+      employerAmount: Math.round(base * rateEmployer * 100) / 100,
+      sourceReference: rule.sourceReference, verifiedAt: rule.verifiedAt,
+      effectiveFrom: rule.effectiveFrom, effectiveTo: rule.effectiveTo
+    };
+  });
+  const grossEarnings = Math.round(earnings.reduce((sum, line) => sum + line.amount, 0) * 100) / 100;
+  const salaryEarnings = Math.round(earnings.filter(line => line.isSalary).reduce((sum, line) => sum + line.amount, 0) * 100) / 100;
+  const workerLegalDeductions = Math.round(contributions.reduce((sum, line) => sum + line.workerAmount, 0) * 100) / 100;
+  const employerContributions = Math.round(contributions.reduce((sum, line) => sum + line.employerAmount, 0) * 100) / 100;
+  const otherDeductions = Math.round(deductions.reduce((sum, line) => sum + line.amount, 0) * 100) / 100;
+  const netPay = Math.round((grossEarnings - workerLegalDeductions - otherDeductions) * 100) / 100;
+  if (netPay < 0) throw new Error('Las deducciones superan las asignaciones de ' + employee.fullName + '.');
+  return {
+    employeeId: employee.id, fiscalId: employee.fiscalId, fullName: employee.fullName,
+    earnings, deductions, bases: { normalSalary: Number(bases.normalSalary), integralSalary: Number(bases.integralSalary), grossSalary: Number(bases.grossSalary) },
+    contributions, grossEarnings, salaryEarnings, workerLegalDeductions, employerContributions,
+    otherDeductions, netPay, totalEmployerCost: Math.round((grossEarnings + employerContributions) * 100) / 100
+  };
+}
+function createPayrollRun(db, companyId, input) {
+  ensureCompany(db, companyId);
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('La nómina es inválida.');
+  const frequency = String(input.frequency || '');
+  if (!['WEEKLY','BIWEEKLY'].includes(frequency)) throw new Error('La periodicidad debe ser semanal o quincenal.');
+  const periodStart = date(input.periodStart, 'Inicio del período');
+  const periodEnd = date(input.periodEnd, 'Fin del período');
+  if (periodEnd < periodStart) throw new Error('El fin del período no puede ser anterior al inicio.');
+  if (!Array.isArray(input.employees) || input.employees.length === 0) throw new Error('Seleccione al menos un trabajador.');
+  const seen = new Set();
+  const calculations = input.employees.map(item => {
+    const employeeId = text(item.employeeId, 'Trabajador', 120);
+    if (seen.has(employeeId)) throw new Error('Un trabajador aparece más de una vez en esta nómina.');
+    seen.add(employeeId);
+    const employee = db.prepare(`SELECT id,fiscal_id AS fiscalId,full_name AS fullName,frequency,active
+      FROM payroll_employees WHERE id=? AND company_id=?`).get(employeeId, companyId);
+    if (!employee || !employee.active) throw new Error('Un trabajador no pertenece a la empresa activa o está inactivo.');
+    if (employee.frequency !== frequency) throw new Error('La periodicidad de ' + employee.fullName + ' no coincide con la nómina.');
+    return calculateEmployeeDraft(db, companyId, employee, item, periodEnd);
+  });
+  const totals = calculations.reduce((sum, item) => ({
+    grossEarnings: sum.grossEarnings + item.grossEarnings,
+    workerLegalDeductions: sum.workerLegalDeductions + item.workerLegalDeductions,
+    otherDeductions: sum.otherDeductions + item.otherDeductions,
+    employerContributions: sum.employerContributions + item.employerContributions,
+    netPay: sum.netPay + item.netPay,
+    totalEmployerCost: sum.totalEmployerCost + item.totalEmployerCost
+  }), { grossEarnings:0, workerLegalDeductions:0, otherDeductions:0, employerContributions:0, netPay:0, totalEmployerCost:0 });
+  for (const key of Object.keys(totals)) totals[key] = Math.round(totals[key] * 100) / 100;
+  const id = crypto.randomUUID();
+  const snapshot = { version: 1, companyId, frequency, periodStart, periodEnd, createdAt: new Date().toISOString(), employees: calculations };
+  const insert = db.transaction(() => {
+    db.prepare(`INSERT INTO payroll_runs
+      (id,company_id,frequency,period_start,period_end,status,calculation_snapshot_json,totals_json)
+      VALUES(?,?,?,?,?,'DRAFT',?,?)`).run(id, companyId, frequency, periodStart, periodEnd, JSON.stringify(snapshot), JSON.stringify(totals));
+    const lineInsert = db.prepare(`INSERT INTO payroll_run_lines
+      (id,run_id,employee_id,line_type,code,description,amount,calculation_json)
+      VALUES(?,?,?,?,?,?,?,?)`);
+    for (const employee of calculations) {
+      for (const line of employee.earnings) lineInsert.run(crypto.randomUUID(),id,employee.employeeId,'EARNING',line.code,line.description,line.amount,JSON.stringify({isSalary:line.isSalary}));
+      for (const line of employee.deductions) lineInsert.run(crypto.randomUUID(),id,employee.employeeId,'WORKER_DEDUCTION',line.code,line.description,line.amount,'{}');
+      for (const line of employee.contributions) {
+        if (line.workerAmount) lineInsert.run(crypto.randomUUID(),id,employee.employeeId,'WORKER_DEDUCTION',line.code,line.description,line.workerAmount,JSON.stringify(line));
+        if (line.employerAmount) lineInsert.run(crypto.randomUUID(),id,employee.employeeId,'EMPLOYER_CONTRIBUTION',line.code,line.description,line.employerAmount,JSON.stringify(line));
+      }
+    }
+    db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+      .run('payroll_run_created',JSON.stringify({runId:id,companyId,frequency,periodStart,periodEnd,employeeCount:calculations.length,totals}));
+  });
+  insert();
+  return { id, companyId, frequency, periodStart, periodEnd, status:'DRAFT', employeeCount:calculations.length, totals, snapshot };
+}
+function listPayrollRuns(db, companyId) {
+  ensureCompany(db, companyId);
+  return db.prepare(`SELECT id,company_id AS companyId,frequency,period_start AS periodStart,
+    period_end AS periodEnd,status,totals_json AS totalsJson,created_at AS createdAt,
+    confirmed_at AS confirmedAt,journal_entry_id AS journalEntryId
+    FROM payroll_runs WHERE company_id=? ORDER BY period_end DESC,created_at DESC`).all(companyId)
+    .map(row => ({...row,totals:JSON.parse(row.totalsJson)}));
+}
+
 function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
   if (!ipcMain || typeof ipcMain.handle !== 'function' || typeof getActiveSession !== 'function' || typeof withDatabase !== 'function') {
     throw new Error('No se pudo registrar el módulo de Nómina.');
@@ -138,6 +251,14 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
     authenticate(token);
     return withDatabase(token, (db, companyId) => savePayrollEmployee(db, companyId, input));
   });
+  ipcMain.handle('sicoven:payroll-run-create', async (_event, token, input) => {
+    authenticate(token);
+    return withDatabase(token, (db, companyId) => createPayrollRun(db, companyId, input));
+  });
+  ipcMain.handle('sicoven:payroll-runs-list', async (_event, token) => {
+    authenticate(token);
+    return withDatabase(token, (db, companyId) => listPayrollRuns(db, companyId));
+  });
   ipcMain.handle('sicoven:payroll-rules-list', async (_event, token) => {
     authenticate(token);
     return withDatabase(token, (db, companyId) => listPayrollLegalRules(db, companyId));
@@ -149,5 +270,5 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
 }
 module.exports = {
   listPayrollEmployees, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
-  registerPayrollIpc
+  createPayrollRun, listPayrollRuns, registerPayrollIpc
 };
