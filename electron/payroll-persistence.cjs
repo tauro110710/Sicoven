@@ -381,7 +381,11 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
     authenticate(token);
     return withDatabase(token, (db, companyId) => savePayrollEmployee(db, companyId, input));
   });
-  ipcMain.handle('sicoven:payroll-run-confirm', async (_event, token, runId, journalEntryId) => {\n    authenticate(token);\n    return withDatabase(token, (db, companyId) => confirmPayrollRun(db, companyId, runId, journalEntryId));\n  });\n  ipcMain.handle('sicoven:payroll-salary-entries-list', async (_event, token, employeeId, fromDate, toDate) => {
+  ipcMain.handle('sicoven:payroll-run-confirm', async (_event, token, runId, journalEntryId) => {
+    authenticate(token);
+    return withDatabase(token, (db, companyId) => confirmPayrollRun(db, companyId, runId, journalEntryId));
+  });
+  ipcMain.handle('sicoven:payroll-salary-entries-list', async (_event, token, employeeId, fromDate, toDate) => {
     authenticate(token);
     return withDatabase(token, (db, companyId) => listConfirmedSalaryEntries(db, companyId, employeeId, fromDate, toDate));
   });
