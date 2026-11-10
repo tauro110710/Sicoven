@@ -67,6 +67,8 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   savePayrollSeveranceInterestMonth: (token, input) => ipcRenderer.invoke('sicoven:payroll-severance-interest-save', token, input),
   calculatePayrollSeverance: (token, input) => ipcRenderer.invoke('sicoven:payroll-severance-calculate', token, input),
   calculatePayrollSeveranceInterest: (token, input) => ipcRenderer.invoke('sicoven:payroll-severance-interest-calculate', token, input),
+  listPayrollLiquidations: (token, employeeId) => ipcRenderer.invoke('sicoven:payroll-liquidations-list', token, employeeId),
+  createPayrollLiquidation: (token, input) => ipcRenderer.invoke('sicoven:payroll-liquidation-create', token, input),
   calculatePayrollAnnualRights: (token, input) => ipcRenderer.invoke('sicoven:payroll-annual-rights-calculate', token, input),
   calculatePayrollProfitSharing: (token, input) => ipcRenderer.invoke('sicoven:payroll-profit-sharing-calculate', token, input),
   createPayrollRun: (token, input) => ipcRenderer.invoke('sicoven:payroll-run-create', token, input),

@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { completedYears, calculateVacationSalaryBasis, calculateAnnualLaborRights, calculateProfitSharingDistribution, calculateSeverance, calculateSeveranceInterest, calculateSeveranceSalaryBasis } = require('./payroll-legal-calculations.cjs');
+const { completedYears, calculateVacationSalaryBasis, calculateAnnualLaborRights, calculateProfitSharingDistribution, calculateSeverance, calculateSeveranceInterest, calculateSeveranceSalaryBasis, calculateFinalLiquidation } = require('./payroll-legal-calculations.cjs');
 
 function text(value, label, max = 240, min = 1) {
   const result = String(value ?? '').trim();
@@ -570,7 +570,7 @@ function savePayrollSeveranceDeposit(db, companyId, input) {
   if(kind==='SENIORITY') {
     const completedAtDeposit=completedYears(employee.hireDate,depositDate);
     if(!Number.isInteger(serviceYear) || serviceYear<1 || serviceYear>15 || serviceYear>completedAtDeposit) {
-      if(Number.isInteger(serviceYear) && serviceYear>15) throw new Error('La antigüedad adicional está limitada a quince años y treinta días acumulados.');
+      if(Number.isInteger(serviceYear) && serviceYear>15) throw new Error('La antigüedad adicional está limitada a quince años, hasta completar treinta días acumulados.');
       throw new Error('Indique el año de servicio real (1 a 15); el año debe estar cumplido para la fecha del depósito.');
     }
     if(Math.abs(days-2)>0.001) throw new Error('El depósito adicional por antigüedad debe ser exactamente de dos días por año.');
@@ -694,6 +694,86 @@ function calculatePayrollSeveranceInterest(db, companyId, input) {
   return {...result,employeeId,employeeName:db.prepare('SELECT full_name AS fullName FROM payroll_employees WHERE id=? AND company_id=?').get(employeeId,companyId).fullName,history:history.interests.filter(item=>item.mode===mode)};
 }
 
+
+function listPayrollLiquidations(db, companyId, employeeId) {
+  ensureCompany(db, companyId);
+  const id = text(employeeId, 'Trabajador', 120);
+  if (!db.prepare('SELECT id FROM payroll_employees WHERE id=? AND company_id=?').get(id, companyId)) {
+    throw new Error('El trabajador no pertenece a la empresa activa.');
+  }
+  return db.prepare(`SELECT id,termination_date AS terminationDate,termination_reason AS terminationReason,
+      total,snapshot_json AS snapshotJson,supersedes_id AS supersedesId,created_at AS createdAt
+    FROM payroll_liquidations WHERE company_id=? AND employee_id=?
+    ORDER BY created_at DESC`).all(companyId, id).map(row => ({
+      ...row, total:Number(row.total), snapshot:JSON.parse(row.snapshotJson)
+    }));
+}
+
+function createPayrollLiquidation(db, companyId, input) {
+  ensureCompany(db, companyId);
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Los datos de la liquidación son inválidos.');
+  const employeeId = text(input.employeeId, 'Trabajador', 120);
+  const employee = db.prepare(`SELECT id,full_name AS fullName,fiscal_id AS fiscalId,hire_date AS hireDate
+    FROM payroll_employees WHERE id=? AND company_id=? AND active=1`).get(employeeId, companyId);
+  if (!employee) throw new Error('El trabajador no pertenece a la empresa activa o está inactivo.');
+  const terminationDate = date(input.terminationDate, 'Fecha de terminación');
+  const vacationSalaryBasis = calculateVacationSalaryBasis({
+    salaryType:input.vacationSalaryType,
+    lastMonthNormalSalary:input.lastMonthNormalSalary,
+    previousThreeMonthsNormalSalary:input.previousThreeMonthsNormalSalary
+  });
+  const severance = calculatePayrollSeverance(db, companyId, {
+    employeeId, asOfDate:terminationDate, salaryType:input.severanceSalaryType,
+    lastMonthlyIntegratedSalary:input.lastMonthlyIntegratedSalary,
+    previousSixMonthsIntegratedSalary:input.previousSixMonthsIntegratedSalary
+  });
+  let interest = null;
+  let interestSourceReference = '';
+  if (input.interestStatus === 'SETTLED') {
+    interest = calculatePayrollSeveranceInterest(db, companyId, {employeeId, mode:input.interestMode});
+    if (!interest.monthsCalculated) throw new Error('No existen meses de intereses verificados para el régimen seleccionado.');
+    if (Number.isInteger(input.interestExpectedMonths) && interest.monthsCalculated !== input.interestExpectedMonths) {
+      throw new Error('El historial de intereses no cubre todos los meses que deben conciliarse.');
+    }
+    interestSourceReference = [...new Set(interest.history.map(item => item.sourceReference))].join('; ');
+  }
+  const liquidation = calculateFinalLiquidation({
+    ...input, hireDate:employee.hireDate, terminationDate,
+    dailyNormalSalary:vacationSalaryBasis.dailySalary,
+    severancePayable:severance.netAfterAdvances,
+    interestAmount:interest ? interest.totalInterest : 0,
+    interestSourceReference
+  });
+  const id = crypto.randomUUID();
+  const supersedesId = input.supersedesId ? text(input.supersedesId, 'Liquidación rectificada', 120) : null;
+  if (supersedesId) {
+    const previous = db.prepare('SELECT id,employee_id AS employeeId FROM payroll_liquidations WHERE id=? AND company_id=?')
+      .get(supersedesId, companyId);
+    if (!previous || previous.employeeId !== employeeId) throw new Error('La rectificación debe pertenecer al mismo trabajador y empresa.');
+    if (db.prepare('SELECT id FROM payroll_liquidations WHERE supersedes_id=?').get(supersedesId)) {
+      throw new Error('Esta liquidación ya tiene una rectificación posterior.');
+    }
+  } else {
+    const existing = db.prepare(`SELECT id FROM payroll_liquidations d WHERE company_id=? AND employee_id=?
+      AND NOT EXISTS(SELECT 1 FROM payroll_liquidations n WHERE n.supersedes_id=d.id)`).get(companyId, employeeId);
+    if (existing) throw new Error('Ya existe una liquidación vigente. Use rectificación para corregirla.');
+  }
+  const createdAt = new Date().toISOString();
+  const snapshot = {
+    version:1, companyId, employee:{employeeId,fullName:employee.fullName,fiscalId:employee.fiscalId,hireDate:employee.hireDate},
+    createdAt, vacationSalaryBasis, severance, interest, liquidation
+  };
+  const persist = db.transaction(() => {
+    db.prepare(`INSERT INTO payroll_liquidations
+      (id,company_id,employee_id,termination_date,termination_reason,total,snapshot_json,supersedes_id)
+      VALUES(?,?,?,?,?,?,?,?)`).run(id,companyId,employeeId,terminationDate,liquidation.terminationReason,liquidation.total,JSON.stringify(snapshot),supersedesId);
+    db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+      .run('payroll_liquidation_created',JSON.stringify({id,companyId,employeeId,terminationDate,reason:liquidation.terminationReason,total:liquidation.total,supersedesId}));
+  });
+  persist();
+  return {id,companyId,employeeId,terminationDate,terminationReason:liquidation.terminationReason,total:liquidation.total,snapshot,supersedesId,createdAt};
+}
+
 function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
   if (!ipcMain || typeof ipcMain.handle !== 'function' || typeof getActiveSession !== 'function' || typeof withDatabase !== 'function') {
     throw new Error('No se pudo registrar el módulo de Nómina.');
@@ -759,6 +839,14 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
     authenticate(token);
     return withDatabase(token, (db, companyId) => calculatePayrollSeveranceInterest(db, companyId, input));
   });
+  ipcMain.handle('sicoven:payroll-liquidations-list', async (_event, token, employeeId) => {
+    authenticate(token);
+    return withDatabase(token, (db, companyId) => listPayrollLiquidations(db, companyId, employeeId));
+  });
+  ipcMain.handle('sicoven:payroll-liquidation-create', async (_event, token, input) => {
+    authenticate(token);
+    return withDatabase(token, (db, companyId) => createPayrollLiquidation(db, companyId, input));
+  });
   ipcMain.handle('sicoven:payroll-run-create', async (_event, token, input) => {
     authenticate(token);
     return withDatabase(token, (db, companyId) => createPayrollRun(db, companyId, input));
@@ -779,5 +867,5 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
 module.exports = {
   listPayrollEmployees, listPayrollSalaryHistory, getPayrollSalaryForDate, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
   createPayrollRun, listPayrollRuns, getPayrollRun, confirmPayrollRun, listConfirmedSalaryEntries,
-  calculatePayrollAnnualRights, calculatePayrollProfitSharing, listPayrollSeveranceHistory, savePayrollSeveranceDeposit, savePayrollSeveranceInterestMonth, calculatePayrollSeverance, calculatePayrollSeveranceInterest, registerPayrollIpc
+  calculatePayrollAnnualRights, calculatePayrollProfitSharing, listPayrollSeveranceHistory, savePayrollSeveranceDeposit, savePayrollSeveranceInterestMonth, calculatePayrollSeverance, calculatePayrollSeveranceInterest, listPayrollLiquidations, createPayrollLiquidation, registerPayrollIpc
 };

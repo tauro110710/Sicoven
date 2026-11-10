@@ -126,6 +126,26 @@ function initializePayrollSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_payroll_severance_interest_employee_month
       ON payroll_severance_interest_months(company_id, employee_id, month);
 
+    CREATE TABLE IF NOT EXISTS payroll_liquidations (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      employee_id TEXT NOT NULL REFERENCES payroll_employees(id) ON DELETE RESTRICT,
+      termination_date TEXT NOT NULL,
+      termination_reason TEXT NOT NULL,
+      total REAL NOT NULL CHECK (total >= 0),
+      snapshot_json TEXT NOT NULL,
+      supersedes_id TEXT REFERENCES payroll_liquidations(id) ON DELETE RESTRICT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_payroll_liquidations_employee_date
+      ON payroll_liquidations(company_id, employee_id, termination_date);
+    CREATE TRIGGER IF NOT EXISTS payroll_liquidations_no_update
+      BEFORE UPDATE ON payroll_liquidations
+      BEGIN SELECT RAISE(ABORT, 'payroll liquidation snapshots are append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS payroll_liquidations_no_delete
+      BEFORE DELETE ON payroll_liquidations
+      BEGIN SELECT RAISE(ABORT, 'payroll liquidation snapshots are append-only'); END;
+
     CREATE TRIGGER IF NOT EXISTS payroll_severance_deposits_no_update
       BEFORE UPDATE ON payroll_severance_deposits
       BEGIN SELECT RAISE(ABORT, 'payroll severance history is append-only'); END;
@@ -196,7 +216,7 @@ function initializePayrollSchema(db) {
     `))();
   }
   return Object.freeze({
-    tables: ['payroll_employees', 'payroll_salary_history', 'payroll_legal_rules', 'payroll_runs', 'payroll_run_lines', 'payroll_severance_deposits', 'payroll_severance_interest_months']
+    tables: ['payroll_employees', 'payroll_salary_history', 'payroll_legal_rules', 'payroll_runs', 'payroll_run_lines', 'payroll_severance_deposits', 'payroll_severance_interest_months', 'payroll_liquidations']
   });
 }
 
