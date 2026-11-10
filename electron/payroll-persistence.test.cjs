@@ -640,7 +640,7 @@ test('stores immutable historical severance deposits and monthly interest with a
       frequency: 'BIWEEKLY', baseSalary: 1800
     });
     const deposit = savePayrollSeveranceDeposit(db, 'co-a', {
-      employeeId: employee.id, depositDate: '2026-03-31', kind: 'QUARTERLY',
+      employeeId: employee.id, depositDate: '2026-04-01', kind: 'QUARTERLY', serviceQuarter: 1,
       days: 15, dailyIntegralSalary: 60, sourceReference: 'Comprobante bancario Q1',
       verifiedAt: '2026-04-01'
     });
@@ -650,11 +650,11 @@ test('stores immutable historical severance deposits and monthly interest with a
       days: 15, dailyIntegralSalary: 60, sourceReference: 'Fecha anterior al ingreso', verifiedAt: '2026-04-01'
     }), /anterior al ingreso/);
     assert.throws(() => savePayrollSeveranceDeposit(db, 'co-a', {
-      employeeId: employee.id, depositDate: '2026-03-31', kind: 'QUARTERLY',
+      employeeId: employee.id, depositDate: '2026-04-01', kind: 'QUARTERLY', serviceQuarter: 1,
       days: 15, dailyIntegralSalary: 65, sourceReference: 'Duplicado', verifiedAt: '2026-04-01'
     }), /Ya existe un registro vigente/);
     const corrected = savePayrollSeveranceDeposit(db, 'co-a', {
-      employeeId: employee.id, depositDate: '2026-03-31', kind: 'QUARTERLY',
+      employeeId: employee.id, depositDate: '2026-04-01', kind: 'QUARTERLY', serviceQuarter: 1,
       days: 15, dailyIntegralSalary: 62, sourceReference: 'Comprobante rectificado',
       verifiedAt: '2026-04-02', supersedesId: deposit.id
     });
@@ -749,7 +749,7 @@ test('severance calculation refuses incomplete quarterly history and never estim
       employeeId: employee.id, asOfDate: '2026-03-31', salaryType: 'FIXED', lastMonthlyIntegratedSalary: 1800
     }), /historial de garantía está incompleto/);
     savePayrollSeveranceDeposit(db, 'co-a', {
-      employeeId: employee.id, depositDate: '2025-03-31', kind: 'QUARTERLY',
+      employeeId: employee.id, depositDate: '2025-04-01', kind: 'QUARTERLY', serviceQuarter: 1,
       days: 15, dailyIntegralSalary: 50, sourceReference: 'Q1 comprobante',
       verifiedAt: '2025-04-01'
     });
@@ -793,7 +793,7 @@ test('rolls back a liquidation snapshot if its audit event cannot be written', (
   const db=setup();
   try {
     const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-991',fullName:'Luis Pérez',hireDate:'2024-01-01',frequency:'BIWEEKLY',baseSalary:3000});
-    savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-01',kind:'QUARTERLY',days:15,dailyIntegralSalary:50,sourceReference:'Garantía Q1',verifiedAt:'2024-04-02'});
+    savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-01',kind:'QUARTERLY',serviceQuarter:1,days:15,dailyIntegralSalary:50,sourceReference:'Garantía Q1',verifiedAt:'2024-04-02'});
     db.exec("CREATE TRIGGER fail_liquidation_audit BEFORE INSERT ON audit_events WHEN NEW.event_type='payroll_liquidation_created' BEGIN SELECT RAISE(ABORT,'forced liquidation audit failure'); END;");
     assert.throws(()=>createPayrollLiquidation(db,'co-a',{
       employeeId:employee.id,terminationDate:'2024-04-01',terminationReason:'VOLUNTARY_RESIGNATION',
