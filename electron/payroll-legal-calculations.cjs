@@ -23,10 +23,20 @@ function completedYears(hireDate, asOfDate) {
 }
 function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
 function completeCalendarMonths(fromDate, toDate) {
-  let months = (toDate.getUTCFullYear() - fromDate.getUTCFullYear()) * 12
-    + toDate.getUTCMonth() - fromDate.getUTCMonth();
-  if (toDate.getUTCDate() < fromDate.getUTCDate()) months -= 1;
-  return Math.max(0, months);
+  let startYear = fromDate.getUTCFullYear();
+  let startMonth = fromDate.getUTCMonth();
+  if (fromDate.getUTCDate() > 1) {
+    startMonth += 1;
+    if (startMonth > 11) { startMonth = 0; startYear += 1; }
+  }
+  const lastDay = new Date(Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth() + 1, 0)).getUTCDate();
+  let endYear = toDate.getUTCFullYear();
+  let endMonth = toDate.getUTCMonth();
+  if (toDate.getUTCDate() < lastDay) {
+    endMonth -= 1;
+    if (endMonth < 0) { endMonth = 11; endYear -= 1; }
+  }
+  return Math.max(0, (endYear - startYear) * 12 + endMonth - startMonth + 1);
 }
 
 /**
