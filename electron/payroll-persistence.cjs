@@ -191,6 +191,15 @@ function createPayrollRun(db, companyId, input) {
   const periodStart = date(input.periodStart, 'Inicio del período');
   const periodEnd = date(input.periodEnd, 'Fin del período');
   if (periodEnd < periodStart) throw new Error('El fin del período no puede ser anterior al inicio.');
+  const overlappingRun = db.prepare(`SELECT period_start AS periodStart, period_end AS periodEnd
+    FROM payroll_runs
+    WHERE company_id=? AND frequency=? AND status<>'VOIDED'
+      AND period_start<=? AND period_end>=?
+    LIMIT 1`).get(companyId, frequency, periodEnd, periodStart);
+  if (overlappingRun) {
+    throw new Error('Ya existe una nómina ' + frequency + ' para un período que se cruza con ' +
+      overlappingRun.periodStart + ' al ' + overlappingRun.periodEnd + '. Revise el período antes de continuar.');
+  }
   if (!Array.isArray(input.employees) || input.employees.length === 0) throw new Error('Seleccione al menos un trabajador.');
   const seen = new Set();
   const calculations = input.employees.map(item => {
