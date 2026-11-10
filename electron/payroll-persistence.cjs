@@ -50,6 +50,20 @@ function listPayrollSalaryHistory(db, companyId, employeeId) {
     source, created_at AS createdAt FROM payroll_salary_history
     WHERE company_id=? AND employee_id=? ORDER BY effective_from DESC`).all(companyId, id);
 }
+function getPayrollSalaryForDate(db, companyId, employeeId, effectiveDate) {
+  ensureCompany(db, companyId);
+  const id = text(employeeId, 'Trabajador', 120);
+  const asOf = date(effectiveDate, 'Fecha de consulta salarial');
+  const employee = db.prepare('SELECT id FROM payroll_employees WHERE id=? AND company_id=?').get(id, companyId);
+  if (!employee) throw new Error('El trabajador no pertenece a la empresa activa.');
+  const row = db.prepare(`SELECT id, company_id AS companyId, employee_id AS employeeId,
+    effective_from AS effectiveFrom, effective_to AS effectiveTo, base_salary AS baseSalary,
+    source FROM payroll_salary_history WHERE company_id=? AND employee_id=?
+      AND effective_from<=? AND (effective_to IS NULL OR effective_to>=?)
+    ORDER BY effective_from DESC LIMIT 1`).get(companyId, id, asOf, asOf);
+  if (!row) throw new Error('No existe un salario histórico registrado para ' + asOf + '. Revise la ficha del trabajador.');
+  return row;
+}
 function savePayrollEmployee(db, companyId, input) {
   ensureCompany(db, companyId);
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('La ficha del trabajador es inválida.');
@@ -163,7 +177,9 @@ function savePayrollLegalRule(db, companyId, input) {
 
 function calculateEmployeeDraft(db, companyId, employee, input, periodEnd) {
   if (!input || !Array.isArray(input.earnings) || input.earnings.length === 0) throw new Error('Cada trabajador requiere al menos una asignación.');
-  const bases = input.bases || {};
+  const salaryRecord = getPayrollSalaryForDate(db, companyId, employee.id, periodEnd);
+  const bases = { ...(input.bases || {}) };
+  if (bases.normalSalary == null) bases.normalSalary = salaryRecord.baseSalary;
   for (const key of ['normalSalary', 'integralSalary', 'grossSalary']) positiveOrZero(bases[key], 'Base ' + key);
   const earnings = input.earnings.map(line => ({
     code: text(line.code, 'Código de asignación', 60),
@@ -211,7 +227,7 @@ function calculateEmployeeDraft(db, companyId, employee, input, periodEnd) {
   const netPay = Math.round((grossEarnings - workerLegalDeductions - otherDeductions) * 100) / 100;
   if (netPay < 0) throw new Error('Las deducciones superan las asignaciones de ' + employee.fullName + '.');
   return {
-    employeeId: employee.id, fiscalId: employee.fiscalId, fullName: employee.fullName,
+    employeeId: employee.id, fiscalId: employee.fiscalId, fullName: employee.fullName,\n    salaryRecord,
     earnings, deductions, bases: { normalSalary: Number(bases.normalSalary), integralSalary: Number(bases.integralSalary), grossSalary: Number(bases.grossSalary) },
     contributions, grossEarnings, salaryEarnings, workerLegalDeductions, employerContributions,
     otherDeductions, netPay, totalEmployerCost: Math.round((grossEarnings + employerContributions) * 100) / 100
@@ -300,7 +316,7 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
     authenticate(token);
     return withDatabase(token, (db, companyId) => listPayrollEmployees(db, companyId));
   });
-  ipcMain.handle('sicoven:payroll-salary-history-list', async (_event, token, employeeId) => {
+  ipcMain.handle('sicoven:payroll-salary-for-date', async (_event, token, employeeId, effectiveDate) => {\n    authenticate(token);\n    return withDatabase(token, (db, companyId) => getPayrollSalaryForDate(db, companyId, employeeId, effectiveDate));\n  });\n  ipcMain.handle('sicoven:payroll-salary-history-list', async (_event, token, employeeId) => {
     authenticate(token);
     return withDatabase(token, (db, companyId) => listPayrollSalaryHistory(db, companyId, employeeId));
   });
@@ -326,6 +342,6 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
   });
 }
 module.exports = {
-  listPayrollEmployees, listPayrollSalaryHistory, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
+  listPayrollEmployees, listPayrollSalaryHistory, getPayrollSalaryForDate, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
   createPayrollRun, listPayrollRuns, registerPayrollIpc
 };
