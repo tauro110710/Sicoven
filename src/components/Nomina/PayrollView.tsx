@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { jsPDF } from 'jspdf';
 import { useAccounting } from '../../context/AccountingContext';
-import { Users, UserPlus, RefreshCw, AlertCircle, CheckCircle2, Calculator, FileText } from 'lucide-react';
+import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
+import type { JournalEntryItem } from '../../types/accounting';
+import { Users, UserPlus, RefreshCw, AlertCircle, CheckCircle2, Calculator, FileText, Printer, BookCheck } from 'lucide-react';
 
 type SalaryHistory = { id: string; effectiveFrom: string; effectiveTo: string | null; baseSalary: number; source: string };
 
@@ -16,7 +19,7 @@ const emptyForm: { fiscalId: string; fullName: string; hireDate: string; positio
 };
 
 export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
-  const { currentCompany } = useAccounting();
+  const { currentCompany, accounts, journalEntries, addJournalEntry, waitForPersistence, isStorageReady } = useAccounting();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [salaryHistory, setSalaryHistory] = useState<Record<string, SalaryHistory[]>>({});
   const [historyOpen, setHistoryOpen] = useState<string | null>(null);
@@ -33,6 +36,8 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   const [periodEnd, setPeriodEnd] = useState(new Date().toISOString().slice(0,10));
   const [payInputs, setPayInputs] = useState<Record<string,{earning:string;normal:string;integral:string;gross:string}>>({});
   const [creatingRun, setCreatingRun] = useState(false);
+  const [postingRun, setPostingRun] = useState<string | null>(null);
+  const [pdfRun, setPdfRun] = useState<string | null>(null);
   const [legalRules, setLegalRules] = useState<Array<{code:string;base:'normalSalary'|'integralSalary'|'grossSalary';effectiveFrom:string;effectiveTo:string|null;active:boolean}>>([]);
   const requiredBaseFields = new Set(legalRules
     .filter(rule => rule.active && rule.effectiveFrom <= periodEnd && (!rule.effectiveTo || rule.effectiveTo >= periodEnd))
@@ -104,6 +109,123 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
     } finally { setCreatingRun(false); }
   };
 
+
+  const postPayrollRun = async (runId: string) => {
+    if (postingRun || !window.sicovenStore || !isStorageReady) return;
+    setPostingRun(runId); setError(''); setSuccess('');
+    try {
+      const run = await window.sicovenStore.getPayrollRun(token, runId);
+      if (run.status === 'CONFIRMED') {
+        setSuccess('Esta nómina ya está confirmada y vinculada a su asiento contable.');
+        await loadRuns();
+        return;
+      }
+      if (run.status !== 'DRAFT') throw new Error('Solo se puede contabilizar una nómina en borrador.');
+      const existingEntry = journalEntries.find(entry =>
+        entry.companyId === currentCompany.id && entry.referenceDoc === 'NOM-' + run.id
+      );
+      const rateRecord = resolveInventoryBcvRate(currentCompany.inventoryBcvRateHistory || [], run.periodEnd);
+      if (!rateRecord) throw new Error('No existe una tasa BCV guardada con vigencia igual o anterior al cierre del período. Actualice el historial BCV; no se utilizará una tasa posterior ni se inventará una tasa.');
+      const ageDays = Math.floor((Date.parse(run.periodEnd + 'T00:00:00Z') - Date.parse(rateRecord.effectiveDate + 'T00:00:00Z')) / 86400000);
+      if (ageDays < 0 || ageDays > 7 || !Number.isFinite(rateRecord.rate) || rateRecord.rate <= 0) {
+        throw new Error('La última tasa BCV disponible (' + rateRecord.effectiveDate + ') no es suficientemente próxima al período de nómina. Verifique el historial antes de contabilizar.');
+      }
+      const totals = run.totals;
+      const amountRows = [
+        { code: '6.1.1.01', debit: Number(totals.grossEarnings || 0), credit: 0, description: 'Sueldos y asignaciones de nómina' },
+        { code: '6.1.1.12', debit: Number(totals.employerContributions || 0), credit: 0, description: 'Aportes patronales de nómina' },
+        { code: '2.1.3.01', debit: 0, credit: Number(totals.netPay || 0), description: 'Neto de nómina por pagar a trabajadores' },
+        { code: '2.1.3.03', debit: 0, credit: Number(totals.workerLegalDeductions || 0) + Number(totals.employerContributions || 0), description: 'Aportes legales de trabajadores y patronales por enterar' },
+        { code: '2.1.3.04', debit: 0, credit: Number(totals.otherDeductions || 0), description: 'Otras deducciones de nómina por pagar' }
+      ].filter(row => row.debit > 0 || row.credit > 0);
+      if (!amountRows.length) throw new Error('La nómina no contiene importes que puedan contabilizarse.');
+      const accountTypes: Record<string, 'GASTOS' | 'PASIVO'> = {
+        '6.1.1.01': 'GASTOS', '6.1.1.12': 'GASTOS',
+        '2.1.3.01': 'PASIVO', '2.1.3.03': 'PASIVO', '2.1.3.04': 'PASIVO'
+      };
+      const journalItems: JournalEntryItem[] = amountRows.map(row => {
+        const account = accounts.find(item => item.code === row.code && item.isMovement && item.type === accountTypes[row.code]);
+        if (!account) throw new Error('Falta una cuenta contable activa para nómina: ' + row.code + '. Actualice el plan de cuentas antes de continuar.');
+        return {
+          accountCode: account.code, accountName: account.name,
+          debitBs: Math.round(row.debit * 100) / 100, creditBs: Math.round(row.credit * 100) / 100,
+          debitUsd: Math.round((row.debit / rateRecord.rate) * 100) / 100,
+          creditUsd: Math.round((row.credit / rateRecord.rate) * 100) / 100,
+          description: row.description
+        };
+      });
+      const debitBs = journalItems.reduce((sum, line) => sum + line.debitBs, 0);
+      const creditBs = journalItems.reduce((sum, line) => sum + line.creditBs, 0);
+      if (Math.abs(debitBs - creditBs) > 0.01) throw new Error('El asiento calculado no cuadra en bolívares. No se contabilizó la nómina.');
+      const debitUsd = journalItems.reduce((sum, line) => sum + line.debitUsd, 0);
+      const creditUsd = journalItems.reduce((sum, line) => sum + line.creditUsd, 0);
+      const usdRounding = Math.round((debitUsd - creditUsd) * 100) / 100;
+      const roundingLine = journalItems.filter(line => line.creditBs > 0).sort((a,b) => b.creditBs-a.creditBs)[0];
+      if (!roundingLine || Math.abs(usdRounding) > 0.05) throw new Error('La conversión del asiento excede la tolerancia de redondeo en USD. Revise la tasa BCV y los importes.');
+      roundingLine.creditUsd = Math.round((roundingLine.creditUsd + usdRounding) * 100) / 100;
+      if (roundingLine.creditUsd < 0) throw new Error('El redondeo de la conversión produjo un importe inválido.');
+      const journal = existingEntry || addJournalEntry({
+        entryNumber: 0, date: run.periodEnd,
+        description: 'Nómina ' + (run.frequency === 'WEEKLY' ? 'semanal' : 'quincenal') + ' ' + run.periodStart + ' al ' + run.periodEnd,
+        type: 'MANUAL', bcvRate: rateRecord.rate, items: journalItems,
+        referenceDoc: 'NOM-' + run.id,
+        workpaperNote: 'Tasa BCV ' + rateRecord.rate + ' Bs/USD, vigente ' + rateRecord.effectiveDate + '. Fuente: ' + rateRecord.source + '. Nómina ' + run.id + '.'
+      }, accounts, currentCompany.id);
+      if (!existingEntry) await waitForPersistence();
+      await window.sicovenStore.confirmPayrollRun(token, run.id, journal.id);
+      await loadRuns();
+      setSuccess('Nómina contabilizada y confirmada. Asiento ' + journal.entryNumber + ' · Tasa BCV ' + rateRecord.rate + ' Bs/USD (' + rateRecord.effectiveDate + ').');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo contabilizar la nómina.');
+    } finally { setPostingRun(null); }
+  };
+
+  const exportPayrollReceipts = async (runId: string) => {
+    if (pdfRun || !window.sicovenStore) return;
+    setPdfRun(runId); setError(''); setSuccess('');
+    try {
+      const run = await window.sicovenStore.getPayrollRun(token, runId);
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+      const money = (value: number) => 'Bs. ' + Number(value || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      run.snapshot.employees.forEach((employee, index) => {
+        if (index > 0) pdf.addPage();
+        let y = 18;
+        const write = (value: string, size = 10, bold = false) => {
+          pdf.setFont('helvetica', bold ? 'bold' : 'normal'); pdf.setFontSize(size);
+          const rows = pdf.splitTextToSize(value, 180);
+          pdf.text(rows, 15, y); y += rows.length * 5 + 2;
+        };
+        write(currentCompany.name, 14, true);
+        if (currentCompany.rif) write('RIF: ' + currentCompany.rif, 9);
+        write('RECIBO DE PAGO · ' + (run.frequency === 'WEEKLY' ? 'NÓMINA SEMANAL' : 'NÓMINA QUINCENAL'), 12, true);
+        write('Período: ' + run.periodStart + ' al ' + run.periodEnd, 10);
+        write('Trabajador: ' + employee.fullName + ' · Cédula/RIF: ' + employee.fiscalId, 10, true);
+        write('Salario base registrado: ' + money(employee.salaryRecord.baseSalary) + ' · Vigente desde: ' + employee.salaryRecord.effectiveFrom, 9);
+        y += 2; pdf.line(15, y, 195, y); y += 7;
+        write('ASIGNACIONES', 10, true);
+        employee.earnings.forEach(line => write(line.description + ' (' + line.code + '): ' + money(line.amount), 9));
+        write('Total asignaciones: ' + money(employee.grossEarnings), 10, true);
+        y += 2; write('DEDUCCIONES DEL TRABAJADOR', 10, true);
+        employee.contributions.filter(line => line.workerAmount > 0).forEach(line => write(line.description + ' (' + line.code + '): ' + money(line.workerAmount), 9));
+        employee.deductions.forEach(line => write(line.description + ' (' + line.code + '): ' + money(line.amount), 9));
+        write('Total deducciones: ' + money(employee.workerLegalDeductions + employee.otherDeductions), 10, true);
+        y += 3; pdf.line(15, y, 195, y); y += 8;
+        write('NETO A RECIBIR: ' + money(employee.netPay), 14, true);
+        y += 6; write('Recibí conforme el importe neto indicado.', 9);
+        write('Firma del trabajador: ____________________________________', 9);
+        write('Fecha de recepción: ____ / ____ / ______', 9);
+        y = Math.max(y, 265); pdf.setFontSize(8); pdf.setTextColor(110);
+        pdf.text('Comprobante generado por SICOVEN · ' + new Date().toLocaleDateString('es-VE'), 15, Math.min(y, 285));
+      });
+      const dataUri = pdf.output('datauristring');
+      const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
+      const saved = await window.sicovenStore.savePdf({ fileName: 'Recibos-Nomina-' + run.periodEnd + '.pdf', base64 });
+      if (saved?.ok) setSuccess('Recibos PDF preparados para imprimir o guardar.');
+      else if (!saved?.canceled) throw new Error('No se pudo guardar el PDF de recibos.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudieron generar los recibos PDF.');
+    } finally { setPdfRun(null); }
+  };
 
   const toggleSalaryHistory = async (employeeId: string) => {
     if (historyOpen === employeeId) { setHistoryOpen(null); return; }
@@ -268,12 +390,16 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
         {runs.length===0 ? <p className="text-sm text-slate-500">Todavía no hay nóminas procesadas en esta empresa.</p> :
           <div className="divide-y divide-slate-100">{runs.map(run=><div key={run.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
             <div><p className="font-semibold text-slate-800">{run.periodStart} al {run.periodEnd} · {run.frequency==='WEEKLY'?'Semanal':'Quincenal'}</p><p className="text-xs text-slate-500">Neto: Bs. {(run.totals.netPay||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})} · {run.id.slice(0,8)}</p></div>
-            <span className={run.status==='CONFIRMED'?'rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800':'rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800'}>{run.status==='CONFIRMED'?'Confirmada':run.status==='VOIDED'?'Anulada':'Borrador'}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={run.status==='CONFIRMED'?'rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800':'rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800'}>{run.status==='CONFIRMED'?'Confirmada':run.status==='VOIDED'?'Anulada':'Borrador'}</span>
+              <button type="button" onClick={() => void exportPayrollReceipts(run.id)} disabled={pdfRun===run.id || run.status==='VOIDED'} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"><Printer size={14}/>{pdfRun===run.id?'Generando…':'Recibos PDF'}</button>
+              {run.status==='DRAFT' && <button type="button" onClick={() => void postPayrollRun(run.id)} disabled={postingRun!==null} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50"><BookCheck size={14}/>{postingRun===run.id?'Contabilizando…':'Contabilizar y confirmar'}</button>}
+            </div>
           </div>)}</div>}
       </div>
     </section>
     <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
-      La ficha del trabajador ya se guarda en la base SQLite independiente de esta empresa. Los cálculos legales, recibos y contabilización se habilitarán cuando sus reglas vigentes hayan sido verificadas; no se aplican tasas supuestas.
+      Los borradores conservan sus bases y reglas aplicadas. La confirmación genera un asiento balanceado en ambas monedas con la tasa BCV histórica del período; los recibos PDF incluyen asignaciones, deducciones y neto por trabajador.
     </div>
   </div>;
 };
