@@ -526,6 +526,64 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
       </section>
     </div>
 
+
+    <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div>
+        <h2 className="font-bold text-slate-900">Distribución anual de utilidades</h2>
+        <p className="mt-1 text-xs text-slate-600">Aplica el 15% de los beneficios líquidos y distribuye proporcionalmente según salarios devengados en nóminas confirmadas. Excluye borradores y conceptos no salariales.</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <label className="space-y-1 text-xs font-medium text-slate-700">Inicio del ejercicio
+          <input type="date" value={profitSharingInputs.fiscalYearStart} onChange={e=>setProfitSharingInputs(v=>({...v,fiscalYearStart:e.target.value}))} className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
+        </label>
+        <label className="space-y-1 text-xs font-medium text-slate-700">Cierre del ejercicio
+          <input type="date" value={profitSharingInputs.fiscalYearEnd} onChange={e=>setProfitSharingInputs(v=>({...v,fiscalYearEnd:e.target.value}))} className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
+        </label>
+        <label className="space-y-1 text-xs font-medium text-slate-700">Beneficios líquidos declarados (Bs.)
+          <input type="number" min="0" step="0.01" value={profitSharingInputs.netProfits} onChange={e=>setProfitSharingInputs(v=>({...v,netProfits:e.target.value}))} className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
+        </label>
+        <label className="space-y-1 text-xs font-medium text-slate-700">Verificados el
+          <input type="date" value={profitSharingInputs.verifiedAt} onChange={e=>setProfitSharingInputs(v=>({...v,verifiedAt:e.target.value}))} className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
+        </label>
+        <label className="space-y-1 text-xs font-medium text-slate-700 sm:col-span-2 lg:col-span-4">Fuente de beneficios líquidos
+          <input maxLength={300} value={profitSharingInputs.sourceReference} onChange={e=>setProfitSharingInputs(v=>({...v,sourceReference:e.target.value}))} placeholder="Ej. Declaración ISLR o estados financieros del ejercicio" className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
+        </label>
+      </div>
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-slate-700">Salario normal mensual y meses completos trabajados</p>
+        {employees.map(employee => {
+          const values = profitSharingBases[employee.id] || {monthlyNormalSalary:'',monthsWorked:''};
+          return <div key={employee.id} className="grid gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-[minmax(0,1fr)_1fr_1fr] sm:items-center">
+            <div><p className="text-sm font-semibold text-slate-800">{employee.fullName}</p><p className="text-xs text-slate-500">{employee.fiscalId}{employee.active?'':' · Inactivo'}</p></div>
+            <label className="space-y-1 text-xs text-slate-600">Salario normal mensual (Bs.)
+              <input type="number" min="0.01" step="0.01" value={values.monthlyNormalSalary} onChange={e=>setProfitSharingBases(v=>({...v,[employee.id]:{...values,monthlyNormalSalary:e.target.value}}))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
+            </label>
+            <label className="space-y-1 text-xs text-slate-600">Meses completos (1–12)
+              <input type="number" min="1" max="12" step="1" value={values.monthsWorked} onChange={e=>setProfitSharingBases(v=>({...v,[employee.id]:{...values,monthsWorked:e.target.value}}))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
+            </label>
+          </div>;
+        })}
+      </div>
+      <button type="button" onClick={()=>void calculateProfitSharing()} disabled={profitSharingLoading || loading || employees.length===0} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
+        <Calculator size={16}/>{profitSharingLoading?'Calculando…':'Calcular distribución legal'}
+      </button>
+      {profitSharingResult && <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50/40 p-3">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Fondo legal · 15%</p><p className="font-bold text-slate-900">Bs. {profitSharingResult.distributableFund.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p></div>
+          <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Total a distribuir</p><p className="font-bold text-slate-900">Bs. {profitSharingResult.totalPayable.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p></div>
+          <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Diferencia patronal por mínimos</p><p className="font-bold text-slate-900">Bs. {profitSharingResult.employerShortfall.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p></div>
+          <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Excedente no distribuido</p><p className="font-bold text-slate-900">Bs. {profitSharingResult.undistributedRemainder.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p></div>
+        </div>
+        <div className="divide-y divide-slate-200 rounded-lg bg-white">
+          {profitSharingResult.employees.map(item=><div key={item.employeeId} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
+            <div><p className="font-semibold text-slate-800">{item.fullName}</p><p className="text-xs text-slate-500">Salarios devengados: Bs. {item.wagesEarned.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})} · Proporción: Bs. {item.proportionalShare.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p></div>
+            <div className="text-right"><p className="font-bold text-slate-900">Bs. {item.amount.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p><p className="text-xs text-slate-500">Mín. {item.minimumDays} días · Máx. {item.maximumDays} días</p></div>
+          </div>)}
+        </div>
+        <p className="text-xs text-slate-600">Fuente: {profitSharingResult.sourceReference} · Verificada: {profitSharingResult.verifiedAt}. {profitSharingResult.salaryEvidence} La diferencia patronal y el excedente quedan identificados sin redistribución arbitraria.</p>
+      </div>}
+    </section>
+
     <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <summary className="cursor-pointer font-bold text-slate-900">Configurar obligaciones legales de esta empresa</summary>
       <p className="mt-2 text-xs text-slate-600">Configuración única por empresa. Registre cada obligación por separado, con su base, periodicidad, vigencia y fuente. Las tasas se expresan en porcentaje; no se aplican valores supuestos ni reglas de otra empresa.</p>
