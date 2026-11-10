@@ -222,10 +222,10 @@ function calculateSeveranceInterest(input) {
     }
     const sourceReference = String(item.sourceReference || '').trim();
     const verifiedAt = String(item.verifiedAt || '');
-    if (!sourceReference || !/^\\d{4}-\\d{2}-\\d{2}$/.test(verifiedAt) ||
-        !Number.isFinite(new Date(verifiedAt + 'T00:00:00.000Z').getTime())) {
+    if (!sourceReference) {
       throw new Error('Falta la fuente o fecha de verificación de la tasa de ' + month + '.');
     }
+    validDate(verifiedAt, 'Fecha de verificación de la tasa de ' + month);
     return { month, capital, monthlyRate, interest: round2(capital * monthlyRate), sourceReference, verifiedAt };
   }).sort((a, b) => a.month.localeCompare(b.month));
   const totalInterest = round2(details.reduce((sum, item) => sum + item.interest, 0));
