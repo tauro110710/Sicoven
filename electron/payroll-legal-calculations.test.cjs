@@ -258,7 +258,7 @@ test('calculates final settlement vacation, bonus, salary arrears, profit sharin
     vacationDaysOutstanding:5, vacationBonusDaysOutstanding:3,
     vacationBalanceSource:'Registro de vacaciones 2024-2026',
     severancePayable:12000, interestStatus:'SETTLED', interestAmount:120,
-    interestSourceReference:'Intereses mensuales verificados',
+    interestSourceReference:'Intereses mensuales verificados',interestStatusEvidence:'Historial mensual conciliado',
     profitSharingStatus:'SETTLED', profitSharingAmount:800,
     profitSharingSourceReference:'Cálculo anual confirmado',
     pendingSalaryAmount:500, pendingSalarySourceReference:'Nómina pendiente'
@@ -278,7 +278,7 @@ test('adds the equivalent severance indemnity only to legally classified art. 80
   const { calculateFinalLiquidation } = require('./payroll-legal-calculations.cjs');
   const base={hireDate:'2020-01-01',terminationDate:'2026-01-01',dailyNormalSalary:100,
     vacationDaysOutstanding:0,vacationBonusDaysOutstanding:0,vacationBalanceSource:'Registro conciliado',
-    severancePayable:10000,interestStatus:'NOT_APPLICABLE',profitSharingStatus:'NOT_APPLICABLE'};
+    severancePayable:10000,interestStatus:'NOT_APPLICABLE',interestStatusEvidence:'Intereses conciliados',profitSharingStatus:'NOT_APPLICABLE',profitSharingSourceReference:'Utilidades pagadas o no causadas'};
   const art80=calculateFinalLiquidation({...base,terminationReason:'JUSTIFIED_WITHDRAWAL_ART80',legalClassificationConfirmed:true,legalEvidence:'Acta de Inspectoría'});
   const art92=calculateFinalLiquidation({...base,terminationReason:'UNJUSTIFIED_DISMISSAL_ART92',workerChoice:'NO_REENGAGEMENT',legalClassificationConfirmed:true,legalEvidence:'Constancia de opción del trabajador'});
   const resignation=calculateFinalLiquidation({...base,terminationReason:'VOLUNTARY_RESIGNATION'});
@@ -293,7 +293,7 @@ test('fails closed for unresolved dismissal, suspension, missing evidence and un
   const { calculateFinalLiquidation } = require('./payroll-legal-calculations.cjs');
   const base={hireDate:'2024-01-01',terminationDate:'2026-01-01',dailyNormalSalary:100,
     vacationDaysOutstanding:0,vacationBonusDaysOutstanding:0,vacationBalanceSource:'Registro',
-    severancePayable:1000,interestStatus:'NOT_APPLICABLE',profitSharingStatus:'NOT_APPLICABLE'};
+    severancePayable:1000,interestStatus:'NOT_APPLICABLE',interestStatusEvidence:'Sin intereses pendientes',profitSharingStatus:'NOT_APPLICABLE',profitSharingSourceReference:'Utilidades conciliadas'};
   assert.throws(()=>calculateFinalLiquidation({...base,terminationReason:'UNJUSTIFIED_DISMISSAL_ART92'}),/no solicitará reenganche/);
   assert.throws(()=>calculateFinalLiquidation({...base,terminationReason:'TEMPORARY_SUSPENSION'}),/no termina la relación/);
   assert.throws(()=>calculateFinalLiquidation({...base,terminationReason:'JUSTIFIED_WITHDRAWAL_ART80'}),/clasificación legal confirmada/);

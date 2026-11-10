@@ -731,18 +731,25 @@ function createPayrollLiquidation(db, companyId, input) {
   let interestSourceReference = '';
   if (input.interestStatus === 'SETTLED') {
     interest = calculatePayrollSeveranceInterest(db, companyId, {employeeId, mode:input.interestMode});
-    if (!interest.monthsCalculated) throw new Error('No existen meses de intereses verificados para el régimen seleccionado.');
-    if (Number.isInteger(input.interestExpectedMonths) && interest.monthsCalculated !== input.interestExpectedMonths) {
-      throw new Error('El historial de intereses no cubre todos los meses que deben conciliarse.');
+    const cutoffMonth = terminationDate.slice(0,7);
+    const applicableInterestMonths = interest.history.filter(item => item.month <= cutoffMonth);
+    if (!applicableInterestMonths.length) throw new Error('No existen meses de intereses verificados para el régimen seleccionado antes de la terminación.');
+    if (!Number.isInteger(input.interestExpectedMonths) || input.interestExpectedMonths < 1) {
+      throw new Error('Indique cuántos meses de intereses deben estar conciliados.');
     }
-    interestSourceReference = [...new Set(interest.history.map(item => item.sourceReference))].join('; ');
+    if (applicableInterestMonths.length !== input.interestExpectedMonths) {
+      throw new Error('El historial de intereses no cubre todos los meses que deben conciliarse hasta la terminación.');
+    }
+    interest = {...interest, history:applicableInterestMonths, monthsCalculated:applicableInterestMonths.length,
+      totalInterest:Math.round((applicableInterestMonths.reduce((sum,item)=>sum+Number(item.interest),0)+Number.EPSILON)*100)/100};
+    interestSourceReference = [...new Set(applicableInterestMonths.map(item => item.sourceReference))].join('; ');
   }
   const liquidation = calculateFinalLiquidation({
     ...input, hireDate:employee.hireDate, terminationDate,
     dailyNormalSalary:vacationSalaryBasis.dailySalary,
     severancePayable:severance.netAfterAdvances,
     interestAmount:interest ? interest.totalInterest : 0,
-    interestSourceReference
+    interestSourceReference, interestStatusEvidence:input.interestStatusEvidence
   });
   const id = crypto.randomUUID();
   const supersedesId = input.supersedesId ? text(input.supersedesId, 'Liquidación rectificada', 120) : null;

@@ -49,9 +49,13 @@
 - Respetar condiciones más favorables del contrato individual o convención colectiva, siempre que estén acreditadas. La sentencia TSJ N.º 097 de 20-03-2026, expediente 24-555, reconoció vacaciones y bonos vencidos/fraccionados de acuerdo con las condiciones contractuales del caso y último salario diario normal.
 - La sentencia TSJ N.º 097 también reafirmó que una remuneración fija pagada en divisas y convertida a bolívares por tasa BCV no se vuelve variable por esa sola circunstancia; la variabilidad se determina por la composición real (comisiones, bonificaciones/incentivos, destajo, etc.). Para salario variable, incluir las incidencias salariales que correspondan en descansos y feriados.
 
-## Pendiente de automatización antes de cerrar la liquidación integral
+## Liquidación final implementada y controles pendientes
 
-El motor de prestaciones y el historial de intereses existen, pero la liquidación final aún debe consolidar en un snapshot inmutable, por trabajador y empresa, los conceptos anteriores, saldos de vacaciones por período, pagos previos, utilidades del ejercicio, causal de terminación, elección sobre reenganche cuando aplique, indemnizaciones y evidencia. El asiento contable debe distinguir provisiones previas, depósitos en fideicomiso, anticipos y pagos para no duplicar gasto o pasivo. No generar asientos genéricos ni declarar completa la liquidación hasta probar estos escenarios con casos revisados.
+El módulo incorpora un calculador consolidado que clasifica la causal, separa vacaciones y bono vacacional, integra prestaciones netas de anticipos, intereses mensuales, utilidades conciliadas y salarios pendientes, y conserva snapshots inmutables por trabajador/empresa con auditoría atómica y rectificaciones enlazadas. La base de vacaciones se calcula con salario normal (art. 121), y la fracción del año en curso con meses completos (art. 196). Los saldos de períodos anteriores se introducen desde el registro de vacaciones conciliado; el sistema exige la fuente y no inventa días disfrutados/pagados.
+
+La indemnización del art. 80/92 solo se agrega con clasificación confirmada y evidencia; el despido injustificado exige la elección expresa de no solicitar reenganche. El art. 83 exige contrato, causal y vencimiento acreditados. Mutuo acuerdo, vencimiento de contrato, culminación de obra y fallecimiento exigen sus soportes y no activan automáticamente el doble de prestaciones. Una suspensión se rechaza como liquidación final.
+
+Pendiente para cierre completo: libro estructurado de vacaciones por período (hoy se concilia el saldo desde el registro existente), integración de asiento contable específico con conciliación de provisiones/depósitos/anticipos, liquidación de intereses de mora posterior al plazo de cinco días, PDF de liquidación y pruebas E2E de todos los escenarios con casos patrón revisados. No generar asientos genéricos ni declarar terminada la liquidación hasta completar estos controles.
 
 ## Fuentes normativas y jurisprudenciales
 

@@ -771,7 +771,7 @@ test('creates immutable, auditable final liquidation snapshots and permits linke
       vacationSalaryType:'FIXED',lastMonthNormalSalary:3000,
       severanceSalaryType:'FIXED',lastMonthlyIntegratedSalary:1500,
       vacationDaysOutstanding:0,vacationBonusDaysOutstanding:0,vacationBalanceSource:'Registro de vacaciones conciliado',
-      interestStatus:'NOT_APPLICABLE',profitSharingStatus:'NOT_APPLICABLE',pendingSalaryAmount:0
+      interestStatus:'NOT_APPLICABLE',interestStatusEvidence:'Intereses conciliados',profitSharingStatus:'NOT_APPLICABLE',profitSharingSourceReference:'Utilidades conciliadas',pendingSalaryAmount:0
     };
     const created=createPayrollLiquidation(db,'co-a',input);
     assert.equal(created.total,750);
@@ -799,7 +799,7 @@ test('rolls back a liquidation snapshot if its audit event cannot be written', (
       employeeId:employee.id,terminationDate:'2024-04-01',terminationReason:'VOLUNTARY_RESIGNATION',
       vacationSalaryType:'FIXED',lastMonthNormalSalary:3000,severanceSalaryType:'FIXED',lastMonthlyIntegratedSalary:1500,
       vacationDaysOutstanding:0,vacationBonusDaysOutstanding:0,vacationBalanceSource:'Registro conciliado',
-      interestStatus:'NOT_APPLICABLE',profitSharingStatus:'NOT_APPLICABLE'
+      interestStatus:'NOT_APPLICABLE',interestStatusEvidence:'Intereses conciliados',profitSharingStatus:'NOT_APPLICABLE',profitSharingSourceReference:'Utilidades conciliadas'
     }),/forced liquidation audit failure/);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM payroll_liquidations').get().n,0);
   } finally { db.close(); }

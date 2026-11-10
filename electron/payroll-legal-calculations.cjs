@@ -335,7 +335,7 @@ function calculateFinalLiquidation(input) {
     'VOLUNTARY_RESIGNATION','JUSTIFIED_WITHDRAWAL_ART80','JUSTIFIED_DISMISSAL_ART79',
     'UNJUSTIFIED_DISMISSAL_ART92','CAUSE_BEYOND_WORKER_WILL_ART92',
     'MUTUAL_AGREEMENT','CONTRACT_EXPIRATION','WORK_COMPLETION',
-    'EARLY_FIXED_TERM_WITHDRAWAL_ART83','DEATH_ART145','TEMPORARY_SUSPENSION'
+    'EARLY_FIXED_TERM_WITHDRAWAL_ART83','DEATH_ART145','FORCE_MAJEURE_ART92','TEMPORARY_SUSPENSION'
   ];
   if (!allowed.includes(reason)) throw new Error('Seleccione una causal de terminación reconocida.');
   if (reason === 'TEMPORARY_SUSPENSION') throw new Error('Una suspensión no termina la relación laboral y no genera liquidación final.');
@@ -362,10 +362,11 @@ function calculateFinalLiquidation(input) {
   const profitSharingStatus = String(input.profitSharingStatus || '');
   if (!['SETTLED','NOT_APPLICABLE'].includes(interestStatus)) throw new Error('Debe conciliar los intereses de prestaciones o marcar documentadamente que no están pendientes.');
   if (!['SETTLED','NOT_APPLICABLE'].includes(profitSharingStatus)) throw new Error('Debe conciliar las utilidades pendientes o marcar documentadamente que no corresponden.');
+  if (!String(input.interestStatusEvidence || '').trim()) throw new Error('Indique el soporte del estado de los intereses de prestaciones.');
+  if (!String(input.profitSharingSourceReference || '').trim()) throw new Error('Indique el soporte del estado de las utilidades pendientes o ya pagadas.');
   const interestAmount = interestStatus === 'SETTLED' ? money(input.interestAmount, 'Intereses de prestaciones') : 0;
   const profitSharingAmount = profitSharingStatus === 'SETTLED' ? money(input.profitSharingAmount, 'Utilidades pendientes') : 0;
   if (interestAmount > 0 && !String(input.interestSourceReference || '').trim()) throw new Error('Indique la fuente de los intereses reconocidos.');
-  if (profitSharingAmount > 0 && !String(input.profitSharingSourceReference || '').trim()) throw new Error('Indique la fuente del cálculo de utilidades.');
   const pendingSalaryAmount = money(input.pendingSalaryAmount || 0, 'Salarios y conceptos causados pendientes');
   if (pendingSalaryAmount > 0 && !String(input.pendingSalarySourceReference || '').trim()) throw new Error('Indique el soporte de salarios y conceptos pendientes.');
 
@@ -384,7 +385,7 @@ function calculateFinalLiquidation(input) {
   const classificationConfirmed = input.legalClassificationConfirmed === true;
   let indemnity = 0;
   let remainingContractWages = 0;
-  if (reason === 'JUSTIFIED_WITHDRAWAL_ART80' || reason === 'CAUSE_BEYOND_WORKER_WILL_ART92') {
+  if (reason === 'JUSTIFIED_WITHDRAWAL_ART80' || reason === 'CAUSE_BEYOND_WORKER_WILL_ART92' || reason === 'FORCE_MAJEURE_ART92') {
     if (!classificationConfirmed || !legalEvidence) throw new Error('La causal indemnizable requiere clasificación legal confirmada y evidencia.');
     indemnity = severancePayable;
   }
@@ -408,9 +409,21 @@ function calculateFinalLiquidation(input) {
   let agreedAdditionalAmount = 0;
   if (reason === 'MUTUAL_AGREEMENT') {
     agreedAdditionalAmount = money(input.agreedAdditionalAmount || 0, 'Monto adicional convenido');
-    if (agreedAdditionalAmount > 0 && !String(input.agreementEvidence || '').trim()) {
-      throw new Error('El monto adicional del mutuo acuerdo requiere convenio escrito y soporte.');
+    if (!String(input.agreementEvidence || '').trim()) {
+      throw new Error('El mutuo acuerdo requiere convenio escrito y soporte de la terminación.');
     }
+  }
+  if (reason === 'JUSTIFIED_DISMISSAL_ART79' && (!classificationConfirmed || !legalEvidence)) {
+    throw new Error('El despido justificado requiere causal documentada y clasificación confirmada.');
+  }
+  if (reason === 'CONTRACT_EXPIRATION') {
+    const contractEndDate = validDate(input.contractEndDate, 'Vencimiento del contrato');
+    if (contractEndDate !== end || !String(input.contractEvidence || '').trim()) {
+      throw new Error('El vencimiento de contrato requiere fecha coincidente con la terminación y contrato verificable.');
+    }
+  }
+  if (reason === 'WORK_COMPLETION' && !String(input.contractEvidence || '').trim()) {
+    throw new Error('La culminación de obra requiere acta o soporte verificable de finalización.');
   }
   if (reason === 'DEATH_ART145' && !String(input.beneficiaryEvidence || '').trim()) {
     throw new Error('El pago por fallecimiento requiere acreditar a los beneficiarios conforme al artículo 145.');
