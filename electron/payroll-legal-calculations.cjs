@@ -22,6 +22,12 @@ function completedYears(hireDate, asOfDate) {
   return years;
 }
 function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
+function completeCalendarMonths(fromDate, toDate) {
+  let months = (toDate.getUTCFullYear() - fromDate.getUTCFullYear()) * 12
+    + toDate.getUTCMonth() - fromDate.getUTCMonth();
+  if (toDate.getUTCDate() < fromDate.getUTCDate()) months -= 1;
+  return Math.max(0, months);
+}
 
 /**
  * LOTTT annual rights for fixed or variable salary.
@@ -33,8 +39,16 @@ function calculateAnnualLaborRights(input) {
   const daily = money(input.dailyNormalSalary, 'Salario diario normal');
   const vacationDays = years < 1 ? 0 : 15 + Math.min(15, Math.max(0, years - 1));
   const vacationBonusDays = years < 1 ? 0 : 15 + Math.min(15, Math.max(0, years - 1));
-  const profitSharingMinimumDays = years < 1 ? 0 : 30;
-  const profitSharingMaximumDays = years < 1 ? 0 : 120;
+  const fiscalYearStart = input.fiscalYearStart
+    ? validDate(input.fiscalYearStart, 'Inicio del ejercicio')
+    : new Date(Date.UTC(validDate(input.asOfDate, 'Fecha de corte').getUTCFullYear(), 0, 1));
+  const asOf = validDate(input.asOfDate, 'Fecha de corte');
+  if (asOf < fiscalYearStart) throw new Error('El corte no puede ser anterior al inicio del ejercicio.');
+  const serviceStartInYear = validDate(input.hireDate, 'Fecha de ingreso') > fiscalYearStart
+    ? validDate(input.hireDate, 'Fecha de ingreso') : fiscalYearStart;
+  const monthsInFiscalYear = Math.min(12, completeCalendarMonths(serviceStartInYear, asOf));
+  const profitSharingMinimumDays = round2(30 * monthsInFiscalYear / 12);
+  const profitSharingMaximumDays = round2(120 * monthsInFiscalYear / 12);
   return {
     completedYears: years,
     vacationDays,
@@ -68,8 +82,11 @@ function calculateSeverance(input) {
   const quarterlyGuaranteeDays = quarters * 15;
   const additionalSeniorityDays = years > 1 ? Math.min(30, (years - 1) * 2) : 0;
   const guaranteeDays = quarterlyGuaranteeDays + additionalSeniorityDays;
-  const terminationDays = years === 0
-    ? (monthsElapsed > 0 ? Math.max(5, monthsElapsed * 5) : 0)
+  const daysWorked = Math.floor((asOf.getTime() - hire.getTime()) / 86400000);
+  const hasPartialMonth = asOf.getUTCDate() !== hire.getUTCDate();
+  const serviceMonthsForFirstThree = monthsElapsed + (hasPartialMonth ? 1 : 0);
+  const terminationDays = daysWorked < 90
+    ? serviceMonthsForFirstThree * 5
     : (years + (monthsElapsed % 12 > 6 ? 1 : 0)) * 30;
   const guaranteeAmount = round2(guaranteeDays * daily);
   const terminationAmount = round2(terminationDays * daily);
@@ -88,4 +105,4 @@ function calculateSeverance(input) {
   };
 }
 
-module.exports = { completedYears, calculateAnnualLaborRights, calculateSeverance };
+module.exports = { completedYears, completeCalendarMonths, calculateAnnualLaborRights, calculateSeverance };
