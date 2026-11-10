@@ -227,7 +227,8 @@ function calculateEmployeeDraft(db, companyId, employee, input, periodEnd) {
   const netPay = Math.round((grossEarnings - workerLegalDeductions - otherDeductions) * 100) / 100;
   if (netPay < 0) throw new Error('Las deducciones superan las asignaciones de ' + employee.fullName + '.');
   return {
-    employeeId: employee.id, fiscalId: employee.fiscalId, fullName: employee.fullName,\n    salaryRecord,
+    employeeId: employee.id, fiscalId: employee.fiscalId, fullName: employee.fullName,
+    salaryRecord,
     earnings, deductions, bases: { normalSalary: Number(bases.normalSalary), integralSalary: Number(bases.integralSalary), grossSalary: Number(bases.grossSalary) },
     contributions, grossEarnings, salaryEarnings, workerLegalDeductions, employerContributions,
     otherDeductions, netPay, totalEmployerCost: Math.round((grossEarnings + employerContributions) * 100) / 100
@@ -316,7 +317,11 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
     authenticate(token);
     return withDatabase(token, (db, companyId) => listPayrollEmployees(db, companyId));
   });
-  ipcMain.handle('sicoven:payroll-salary-for-date', async (_event, token, employeeId, effectiveDate) => {\n    authenticate(token);\n    return withDatabase(token, (db, companyId) => getPayrollSalaryForDate(db, companyId, employeeId, effectiveDate));\n  });\n  ipcMain.handle('sicoven:payroll-salary-history-list', async (_event, token, employeeId) => {
+  ipcMain.handle('sicoven:payroll-salary-for-date', async (_event, token, employeeId, effectiveDate) => {
+    authenticate(token);
+    return withDatabase(token, (db, companyId) => getPayrollSalaryForDate(db, companyId, employeeId, effectiveDate));
+  });
+  ipcMain.handle('sicoven:payroll-salary-history-list', async (_event, token, employeeId) => {
     authenticate(token);
     return withDatabase(token, (db, companyId) => listPayrollSalaryHistory(db, companyId, employeeId));
   });
