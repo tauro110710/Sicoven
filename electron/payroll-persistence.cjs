@@ -40,6 +40,16 @@ function listPayrollEmployees(db, companyId) {
     WHERE company_id=? ORDER BY active DESC, full_name COLLATE NOCASE`).all(companyId)
     .map(row => ({ ...row, active: Boolean(row.active) }));
 }
+function listPayrollSalaryHistory(db, companyId, employeeId) {
+  ensureCompany(db, companyId);
+  const id = text(employeeId, 'Trabajador', 120);
+  const employee = db.prepare('SELECT id FROM payroll_employees WHERE id=? AND company_id=?').get(id, companyId);
+  if (!employee) throw new Error('El trabajador no pertenece a la empresa activa.');
+  return db.prepare(`SELECT id, company_id AS companyId, employee_id AS employeeId,
+    effective_from AS effectiveFrom, effective_to AS effectiveTo, base_salary AS baseSalary,
+    source, created_at AS createdAt FROM payroll_salary_history
+    WHERE company_id=? AND employee_id=? ORDER BY effective_from DESC`).all(companyId, id);
+}
 function savePayrollEmployee(db, companyId, input) {
   ensureCompany(db, companyId);
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('La ficha del trabajador es inválida.');
@@ -52,6 +62,7 @@ function savePayrollEmployee(db, companyId, input) {
   const frequency = String(input.frequency || '');
   if (!['WEEKLY', 'BIWEEKLY'].includes(frequency)) throw new Error('La periodicidad debe ser semanal o quincenal.');
   const baseSalary = positiveOrZero(input.baseSalary, 'Salario base');
+  const salaryEffectiveFrom = date(input.salaryEffectiveFrom || (input.id ? new Date().toISOString().slice(0,10) : hireDate), 'Vigencia del salario');
   if (baseSalary <= 0) throw new Error('El salario base debe ser mayor que cero.');
   const active = input.active === false ? 0 : 1;
   const existing = db.prepare('SELECT id FROM payroll_employees WHERE id=? AND company_id=?').get(id, companyId);
@@ -59,6 +70,16 @@ function savePayrollEmployee(db, companyId, input) {
   if (fiscalDuplicate) throw new Error('Ya existe un trabajador con esa cédula/RIF en la empresa activa.');
   if (input.id && !existing) throw new Error('El trabajador no existe en la empresa activa.');
   const now = new Date().toISOString();
+  const previousSalary = existing
+    ? db.prepare('SELECT base_salary AS baseSalary FROM payroll_employees WHERE id=? AND company_id=?').get(id, companyId)
+    : null;
+  const salaryChanged = !existing || Number(previousSalary.baseSalary) !== baseSalary;
+  const latestSalary = existing
+    ? db.prepare('SELECT effective_from AS effectiveFrom FROM payroll_salary_history WHERE company_id=? AND employee_id=? ORDER BY effective_from DESC LIMIT 1').get(companyId, id)
+    : null;
+  if (salaryChanged && latestSalary && salaryEffectiveFrom <= latestSalary.effectiveFrom) {
+    throw new Error('La vigencia del nuevo salario debe ser posterior al último cambio registrado (' + latestSalary.effectiveFrom + ').');
+  }
   db.prepare(`INSERT INTO payroll_employees
     (id,company_id,fiscal_id,full_name,hire_date,position,cost_center,frequency,base_salary,active,created_at,updated_at)
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
@@ -67,9 +88,23 @@ function savePayrollEmployee(db, companyId, input) {
     frequency=excluded.frequency,base_salary=excluded.base_salary,active=excluded.active,updated_at=excluded.updated_at`)
     .run(id, companyId, fiscalId, fullName, hireDate, position, costCenter, frequency, baseSalary, active,
       existing ? now : now, now);
+  if (salaryChanged) {
+    const priorDay = new Date(salaryEffectiveFrom + 'T00:00:00.000Z');
+    priorDay.setUTCDate(priorDay.getUTCDate() - 1);
+    const saveSalary = db.transaction(() => {
+      if (latestSalary) db.prepare(`UPDATE payroll_salary_history SET effective_to=?
+        WHERE company_id=? AND employee_id=? AND effective_to IS NULL`).run(
+          priorDay.toISOString().slice(0,10), companyId, id);
+      db.prepare(`INSERT INTO payroll_salary_history
+        (id,company_id,employee_id,effective_from,effective_to,base_salary,source)
+        VALUES(?,?,?,?,NULL,?,?)`).run(crypto.randomUUID(), companyId, id, salaryEffectiveFrom, baseSalary,
+          existing ? 'SALARY_CHANGE' : 'INITIAL');
+    });
+    saveSalary();
+  }
   db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
     .run(existing ? 'payroll_employee_updated' : 'payroll_employee_created',
-      JSON.stringify({ employeeId: id, companyId, fiscalId, fullName }));
+      JSON.stringify({ employeeId: id, companyId, fiscalId, fullName, salaryChanged, salaryEffectiveFrom: salaryChanged ? salaryEffectiveFrom : null, baseSalary }));
   return listPayrollEmployees(db, companyId).find(item => item.id === id);
 }
 function listPayrollLegalRules(db, companyId) {
@@ -266,6 +301,10 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
     authenticate(token);
     return withDatabase(token, (db, companyId) => listPayrollEmployees(db, companyId));
   });
+  ipcMain.handle('sicoven:payroll-salary-history-list', async (_event, token, employeeId) => {
+    authenticate(token);
+    return withDatabase(token, (db, companyId) => listPayrollSalaryHistory(db, companyId, employeeId));
+  });
   ipcMain.handle('sicoven:payroll-employee-save', async (_event, token, input) => {
     authenticate(token);
     return withDatabase(token, (db, companyId) => savePayrollEmployee(db, companyId, input));
@@ -288,6 +327,6 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
   });
 }
 module.exports = {
-  listPayrollEmployees, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
+  listPayrollEmployees, listPayrollSalaryHistory, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
   createPayrollRun, listPayrollRuns, registerPayrollIpc
 };
