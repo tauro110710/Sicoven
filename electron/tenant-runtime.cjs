@@ -128,6 +128,7 @@ function createTenantRuntime({
     updateCompanyMetadata,
     closeCompany,
     closeAll,
+    resetAllCompanies,
     isCompanyOpen: companyId => manager.isOpen(companyId),
     getCompanyDatabasePath: companyId => manager.getDatabasePath(companyId),
     // Control DB is intentionally exposed only for auth, licensing and registry operations.
