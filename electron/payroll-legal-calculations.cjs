@@ -243,4 +243,67 @@ function calculateSeveranceInterest(input) {
   };
 }
 
-module.exports = { completedYears, completeCalendarMonths, calculateVacationSalaryBasis, calculateSeveranceSalaryBasis, calculateAnnualLaborRights, calculateSeverance, calculateSeveranceInterest };
+
+/**
+ * LOTTT arts. 131, 132 and 136: distributes 15% of declared net profits
+ * in proportion to each worker's salary earned during the fiscal year.
+ * The 30-day minimum and four-month maximum are prorated by full service
+ * months. If minimums exceed the fund, the employer shortfall is explicit;
+ * if caps leave a remainder, it is not assigned arbitrarily.
+ *
+ * monthlyNormalSalary must already be resolved under the applicable salary
+ * rules (fixed previous month or three-month variable average).
+ */
+function calculateProfitSharingDistribution(input) {
+  const netProfits = money(input.netProfits, 'Beneficios líquidos del ejercicio');
+  if (!Array.isArray(input.employees) || input.employees.length === 0) {
+    throw new Error('Se requiere al menos un trabajador para distribuir utilidades.');
+  }
+  const seen = new Set();
+  const employees = input.employees.map(item => {
+    const employeeId = String(item.employeeId || '').trim();
+    if (!employeeId || seen.has(employeeId)) throw new Error('La lista de trabajadores contiene un identificador vacío o repetido.');
+    seen.add(employeeId);
+    const wagesEarned = money(item.wagesEarned, 'Salarios devengados de ' + employeeId);
+    const monthlyNormalSalary = money(item.monthlyNormalSalary, 'Salario normal mensual de ' + employeeId);
+    const monthsWorked = Number(item.monthsWorked);
+    if (!Number.isInteger(monthsWorked) || monthsWorked < 1 || monthsWorked > 12) {
+      throw new Error('Los meses completos trabajados por ' + employeeId + ' deben estar entre 1 y 12.');
+    }
+    if (monthlyNormalSalary <= 0) throw new Error('El salario normal mensual de ' + employeeId + ' debe ser mayor que cero.');
+    const minimumDays = round2(30 * monthsWorked / 12);
+    const maximumDays = round2(120 * monthsWorked / 12);
+    return {
+      employeeId, wagesEarned, monthlyNormalSalary, monthsWorked,
+      minimumDays, maximumDays,
+      minimumAmount: round2(monthlyNormalSalary * monthsWorked / 12),
+      maximumAmount: round2(monthlyNormalSalary * 4 * monthsWorked / 12)
+    };
+  });
+  const totalWagesEarned = round2(employees.reduce((sum, item) => sum + item.wagesEarned, 0));
+  if (totalWagesEarned <= 0) throw new Error('No hay salarios devengados confirmados para distribuir las utilidades.');
+  const distributableFund = round2(netProfits * 0.15);
+  const results = employees.map(item => {
+    const proportionalShare = round2(distributableFund * item.wagesEarned / totalWagesEarned);
+    const amount = round2(Math.max(item.minimumAmount, Math.min(proportionalShare, item.maximumAmount)));
+    return { ...item, proportionalShare, amount };
+  });
+  const totalMinimum = round2(results.reduce((sum, item) => sum + item.minimumAmount, 0));
+  const totalMaximum = round2(results.reduce((sum, item) => sum + item.maximumAmount, 0));
+  const totalPayable = round2(results.reduce((sum, item) => sum + item.amount, 0));
+  return {
+    netProfits, statutoryRate: 0.15, distributableFund, totalWagesEarned,
+    totalMinimum, totalMaximum, totalPayable,
+    employerShortfall: round2(Math.max(0, totalPayable - distributableFund)),
+    undistributedRemainder: round2(Math.max(0, distributableFund - totalPayable)),
+    employees: results,
+    legalBasis: 'LOTTT arts. 131, 132 y 136; Gaceta Oficial N.º 6.076 Extraordinario, 07-05-2012',
+    notes: [
+      'La participación proporcional se calcula sobre salarios efectivamente devengados en nóminas confirmadas.',
+      'El mínimo individual se garantiza; cualquier insuficiencia del fondo queda identificada como obligación patronal adicional.',
+      'El excedente que resulte por límites máximos queda sin distribuir hasta que exista criterio legal aplicable.'
+    ]
+  };
+}
+
+module.exports = { completedYears, completeCalendarMonths, calculateVacationSalaryBasis, calculateSeveranceSalaryBasis, calculateAnnualLaborRights, calculateSeverance, calculateSeveranceInterest, calculateProfitSharingDistribution };
