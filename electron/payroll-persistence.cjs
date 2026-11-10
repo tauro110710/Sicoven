@@ -627,9 +627,11 @@ function calculatePayrollSeverance(db, companyId, input) {
   const employee=db.prepare('SELECT id,full_name AS fullName,hire_date AS hireDate FROM payroll_employees WHERE id=? AND company_id=? AND active=1').get(employeeId,companyId);
   if(!employee) throw new Error('El trabajador no pertenece a la empresa activa o está inactivo.');
   const history=listPayrollSeveranceHistory(db,companyId,employeeId);
-  const quarterlyDeposits=history.deposits.filter(item=>item.kind==='QUARTERLY').map(item=>({days:item.days,dailyIntegralSalary:item.dailyIntegralSalary}));
-  const additionalSeniorityDeposits=history.deposits.filter(item=>item.kind==='SENIORITY').map(item=>({days:item.days,dailyIntegralSalary:item.dailyIntegralSalary}));
-  const advances=history.deposits.filter(item=>item.kind==='ADVANCE');
+  const asOfDate=date(input.asOfDate,'Fecha de corte');
+  const applicableDeposits=history.deposits.filter(item=>item.depositDate<=asOfDate);
+  const quarterlyDeposits=applicableDeposits.filter(item=>item.kind==='QUARTERLY').map(item=>({days:item.days,dailyIntegralSalary:item.dailyIntegralSalary}));
+  const additionalSeniorityDeposits=applicableDeposits.filter(item=>item.kind==='SENIORITY').map(item=>({days:item.days,dailyIntegralSalary:item.dailyIntegralSalary}));
+  const advances=applicableDeposits.filter(item=>item.kind==='ADVANCE');
   const result=calculateSeverance({hireDate:employee.hireDate,asOfDate:input.asOfDate,dailyIntegralSalary:input.dailyIntegralSalary,quarterlyDeposits,additionalSeniorityDeposits});
   const advanceTotal=Math.round((advances.reduce((sum,item)=>sum+item.amount,0)+Number.EPSILON)*100)/100;
   const grossEntitlement=result.greaterAmount;
