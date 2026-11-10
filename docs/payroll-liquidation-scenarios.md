@@ -71,3 +71,12 @@ Pendiente para cierre completo: libro estructurado de vacaciones por período (h
 - Art. 196, vacaciones fraccionadas: https://www.ley.com.ve/laboral/lottt-articulo-196-vacaciones-fraccionadas
 - TSJ, Sala de Casación Social, sentencia 097, 20-03-2026, exp. 24-555: https://app.venley.ai/sentencias/sentencia-nro-097-sala-de-casacion-social-2026-jm6k1
 - TSJ, Sala de Casación Social, sentencia 0357, 14-04-2016, caso 0357 (criterio de depósitos trimestrales y adicionales): fuente consultada previamente en el repositorio jurisprudencial TSJ.
+
+
+## Bono vacacional y vacaciones en liquidación (LOTTT arts. 190, 192, 194–197)
+
+El motor separa el salario de vacaciones del bono vacacional: ambos se expresan en días y se multiplican por el salario normal diario vigente a la terminación cuando son períodos vencidos no disfrutados (art. 195). El bono legal anual parte de 15 días y aumenta un día por año de servicio hasta 30 (art. 192). Las vacaciones anuales parten de 15 días hábiles y aumentan un día por año hasta el límite legal correspondiente (art. 190). El bono es salarial, pero eso no autoriza a usar salario integral como base del propio bono: se usa salario normal (art. 192).
+
+Para la fracción del ciclo anual en curso, ambos conceptos se prorratean por meses completos de servicio (art. 196). Si contrato individual, convención colectiva o condición más beneficiosa acredita días superiores, el motor acepta esos días, conserva la evidencia y nunca permite que reduzcan el mínimo legal. Los períodos anteriores deben registrarse como saldo conciliado y no se recrean sin historial de disfrute/pago.
+
+En la relación activa, el bono se paga al conceder las vacaciones (art. 192) y el salario de vacaciones al inicio del disfrute (art. 194). No se sustituye el descanso por un pago mientras continúa la relación (art. 197). En la terminación se pagan los saldos pendientes y la fracción legal, no se registra un disfrute ficticio.

@@ -348,8 +348,23 @@ function calculateFinalLiquidation(input) {
   const completedServiceYears = completedYears(input.hireDate, input.terminationDate);
   const currentCycleStart = addMonthsClamped(hire, completedServiceYears * 12);
   const currentCycleMonths = completedCalendarMonths(currentCycleStart, end);
-  const currentVacationAnnualDays = 15 + Math.min(15, completedServiceYears);
-  const currentVacationBonusAnnualDays = 15 + Math.min(15, completedServiceYears);
+  const statutoryVacationAnnualDays = 15 + Math.min(15, completedServiceYears);
+  const statutoryVacationBonusAnnualDays = 15 + Math.min(15, completedServiceYears);
+  const hasContractualVacationDays = input.vacationAnnualDays !== undefined && input.vacationAnnualDays !== null && input.vacationAnnualDays !== '';
+  const hasContractualBonusDays = input.vacationBonusAnnualDays !== undefined && input.vacationBonusAnnualDays !== null && input.vacationBonusAnnualDays !== '';
+  if ((hasContractualVacationDays || hasContractualBonusDays) && !String(input.vacationEntitlementEvidence || '').trim()) {
+    throw new Error('Los días superiores de vacaciones o bono vacacional requieren contrato, convención colectiva o fuente normativa verificable.');
+  }
+  const currentVacationAnnualDays = hasContractualVacationDays
+    ? money(input.vacationAnnualDays, 'Días anuales de vacaciones') : statutoryVacationAnnualDays;
+  const currentVacationBonusAnnualDays = hasContractualBonusDays
+    ? money(input.vacationBonusAnnualDays, 'Días anuales de bono vacacional') : statutoryVacationBonusAnnualDays;
+  if (currentVacationAnnualDays < statutoryVacationAnnualDays || currentVacationBonusAnnualDays < statutoryVacationBonusAnnualDays) {
+    throw new Error('La condición contractual no puede reducir los mínimos legales de vacaciones o bono vacacional.');
+  }
+  if (currentVacationAnnualDays > 365 || currentVacationBonusAnnualDays > 365) {
+    throw new Error('Los días anuales de vacaciones o bono vacacional exceden un límite válido.');
+  }
   const fractionalVacationDays = round2(currentVacationAnnualDays * currentCycleMonths / 12);
   const fractionalVacationBonusDays = round2(currentVacationBonusAnnualDays * currentCycleMonths / 12);
   const vacationDaysPayable = round2(vacationDaysOutstanding + fractionalVacationDays);
@@ -437,7 +452,7 @@ function calculateFinalLiquidation(input) {
   }
   if (reason === 'CONTRACT_EXPIRATION') {
     const contractEndDate = validDate(input.contractEndDate, 'Vencimiento del contrato');
-    if (contractEndDate !== end || !String(input.contractEvidence || '').trim()) {
+    if (contractEndDate.getTime() !== end.getTime() || !String(input.contractEvidence || '').trim()) {
       throw new Error('El vencimiento de contrato requiere fecha coincidente con la terminación y contrato verificable.');
     }
   }
