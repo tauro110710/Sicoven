@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { calculateVacationSalaryBasis, calculateAnnualLaborRights } = require('./payroll-legal-calculations.cjs');
 
 function text(value, label, max = 240, min = 1) {
   const result = String(value ?? '').trim();
@@ -304,6 +305,21 @@ function createPayrollRun(db, companyId, input) {
   insert();
   return { id, companyId, frequency, periodStart, periodEnd, status:'DRAFT', employeeCount:calculations.length, totals, snapshot };
 }
+function calculatePayrollAnnualRights(db, companyId, input) {
+  ensureCompany(db, companyId);
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Los datos del cálculo legal son inválidos.');
+  const employeeId = text(input.employeeId, 'Trabajador', 120);
+  const employee = db.prepare('SELECT id,full_name AS fullName,hire_date AS hireDate FROM payroll_employees WHERE id=? AND company_id=? AND active=1')
+    .get(employeeId, companyId);
+  if (!employee) throw new Error('El trabajador no pertenece a la empresa activa o está inactivo.');
+  const basis = calculateVacationSalaryBasis(input);
+  const rights = calculateAnnualLaborRights({
+    hireDate: employee.hireDate, asOfDate: input.asOfDate,
+    dailyNormalSalary: basis.dailySalary, fiscalYearStart: input.fiscalYearStart
+  });
+  return { employeeId, fullName: employee.fullName, asOfDate: input.asOfDate, salaryBasis: basis, ...rights };
+}
+
 function listPayrollRuns(db, companyId) {
   ensureCompany(db, companyId);
   return db.prepare(`SELECT id,company_id AS companyId,frequency,period_start AS periodStart,
@@ -440,6 +456,10 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
     authenticate(token);
     return withDatabase(token, (db, companyId) => listConfirmedSalaryEntries(db, companyId, employeeId, fromDate, toDate));
   });
+  ipcMain.handle('sicoven:payroll-annual-rights-calculate', async (_event, token, input) => {
+    authenticate(token);
+    return withDatabase(token, (db, companyId) => calculatePayrollAnnualRights(db, companyId, input));
+  });
   ipcMain.handle('sicoven:payroll-run-create', async (_event, token, input) => {
     authenticate(token);
     return withDatabase(token, (db, companyId) => createPayrollRun(db, companyId, input));
@@ -459,5 +479,6 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
 }
 module.exports = {
   listPayrollEmployees, listPayrollSalaryHistory, getPayrollSalaryForDate, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
-  createPayrollRun, listPayrollRuns, getPayrollRun, confirmPayrollRun, listConfirmedSalaryEntries, registerPayrollIpc
+  createPayrollRun, listPayrollRuns, getPayrollRun, confirmPayrollRun, listConfirmedSalaryEntries,
+  calculatePayrollAnnualRights, registerPayrollIpc
 };
