@@ -6,7 +6,7 @@ const Database = require('better-sqlite3');
 const { initializeTenantDatabase } = require('./tenant-schema.cjs');
 const {
   listPayrollEmployees, listPayrollSalaryHistory, getPayrollSalaryForDate, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
-  registerPayrollIpc, createPayrollRun, listPayrollRuns, getPayrollRun, confirmPayrollRun, listConfirmedSalaryEntries, calculatePayrollAnnualRights, calculatePayrollProfitSharing, listPayrollSeveranceHistory, savePayrollSeveranceDeposit, savePayrollSeveranceInterestMonth, calculatePayrollSeverance, calculatePayrollSeveranceInterest
+  registerPayrollIpc, createPayrollRun, listPayrollRuns, getPayrollRun, confirmPayrollRun, listConfirmedSalaryEntries, calculatePayrollAnnualRights, calculatePayrollProfitSharing, listPayrollSeveranceHistory, savePayrollSeveranceDeposit, savePayrollSeveranceInterestMonth, calculatePayrollSeverance, calculatePayrollSeveranceInterest, listPayrollLiquidations, createPayrollLiquidation
 } = require('./payroll-persistence.cjs');
 
 function setup() {
@@ -759,3 +759,48 @@ test('severance calculation refuses incomplete quarterly history and never estim
   } finally { db.close(); }
 });
 
+
+
+test('creates immutable, auditable final liquidation snapshots and permits linked corrections', () => {
+  const db=setup();
+  try {
+    const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-990',fullName:'Elena Pérez',hireDate:'2024-01-01',frequency:'BIWEEKLY',baseSalary:3000});
+    savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-01',kind:'QUARTERLY',days:15,dailyIntegralSalary:50,sourceReference:'Garantía Q1',verifiedAt:'2024-04-02'});
+    const input={
+      employeeId:employee.id,terminationDate:'2024-04-01',terminationReason:'VOLUNTARY_RESIGNATION',
+      vacationSalaryType:'FIXED',lastMonthNormalSalary:3000,
+      severanceSalaryType:'FIXED',lastMonthlyIntegratedSalary:1500,
+      vacationDaysOutstanding:0,vacationBonusDaysOutstanding:0,vacationBalanceSource:'Registro de vacaciones conciliado',
+      interestStatus:'NOT_APPLICABLE',profitSharingStatus:'NOT_APPLICABLE',pendingSalaryAmount:0
+    };
+    const created=createPayrollLiquidation(db,'co-a',input);
+    assert.equal(created.total,750);
+    assert.equal(created.snapshot.liquidation.severancePayable,750);
+    assert.equal(listPayrollLiquidations(db,'co-a',employee.id).length,1);
+    assert.throws(()=>createPayrollLiquidation(db,'co-a',input),/Ya existe una liquidación vigente/);
+    const corrected=createPayrollLiquidation(db,'co-a',{...input,supersedesId:created.id,pendingSalaryAmount:100,pendingSalarySourceReference:'Nómina pendiente'});
+    assert.equal(corrected.total,850);
+    assert.equal(corrected.supersedesId,created.id);
+    assert.equal(listPayrollLiquidations(db,'co-a',employee.id).length,2);
+    assert.throws(()=>db.prepare('UPDATE payroll_liquidations SET total=1 WHERE id=?').run(created.id),/append-only/);
+    assert.throws(()=>db.prepare('DELETE FROM payroll_liquidations WHERE id=?').run(created.id),/append-only/);
+    assert.throws(()=>listPayrollLiquidations(db,'co-b',employee.id),/empresa activa/);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE event_type='payroll_liquidation_created'").get().n,2);
+  } finally { db.close(); }
+});
+
+test('rolls back a liquidation snapshot if its audit event cannot be written', () => {
+  const db=setup();
+  try {
+    const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-991',fullName:'Luis Pérez',hireDate:'2024-01-01',frequency:'BIWEEKLY',baseSalary:3000});
+    savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-01',kind:'QUARTERLY',days:15,dailyIntegralSalary:50,sourceReference:'Garantía Q1',verifiedAt:'2024-04-02'});
+    db.exec("CREATE TRIGGER fail_liquidation_audit BEFORE INSERT ON audit_events WHEN NEW.event_type='payroll_liquidation_created' BEGIN SELECT RAISE(ABORT,'forced liquidation audit failure'); END;");
+    assert.throws(()=>createPayrollLiquidation(db,'co-a',{
+      employeeId:employee.id,terminationDate:'2024-04-01',terminationReason:'VOLUNTARY_RESIGNATION',
+      vacationSalaryType:'FIXED',lastMonthNormalSalary:3000,severanceSalaryType:'FIXED',lastMonthlyIntegratedSalary:1500,
+      vacationDaysOutstanding:0,vacationBonusDaysOutstanding:0,vacationBalanceSource:'Registro conciliado',
+      interestStatus:'NOT_APPLICABLE',profitSharingStatus:'NOT_APPLICABLE'
+    }),/forced liquidation audit failure/);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM payroll_liquidations').get().n,0);
+  } finally { db.close(); }
+});

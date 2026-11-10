@@ -83,6 +83,22 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   const [interestForm, setInterestForm] = useState({month:new Date().toISOString().slice(0,7),mode:'UNDEPOSITED' as 'TRUST_OR_FUND'|'AUTHORIZED_BOOK_CREDIT'|'UNDEPOSITED',capital:'',monthlyRate:'',sourceReference:'',modeEvidence:'',verifiedAt:new Date().toISOString().slice(0,10),supersedesId:''});
   const [severanceCalcForm, setSeveranceCalcForm] = useState({asOfDate:new Date().toISOString().slice(0,10),salaryType:'FIXED' as 'FIXED'|'VARIABLE',lastMonthlyIntegratedSalary:'',month1:'',month2:'',month3:'',month4:'',month5:'',month6:''});
 
+  const [liquidationForm,setLiquidationForm] = useState({
+    terminationDate:new Date().toISOString().slice(0,10),
+    terminationReason:'VOLUNTARY_RESIGNATION' as 'VOLUNTARY_RESIGNATION'|'JUSTIFIED_WITHDRAWAL_ART80'|'JUSTIFIED_DISMISSAL_ART79'|'UNJUSTIFIED_DISMISSAL_ART92'|'CAUSE_BEYOND_WORKER_WILL_ART92'|'MUTUAL_AGREEMENT'|'CONTRACT_EXPIRATION'|'WORK_COMPLETION'|'EARLY_FIXED_TERM_WITHDRAWAL_ART83'|'DEATH_ART145'|'TEMPORARY_SUSPENSION',
+    vacationSalaryType:'FIXED' as 'FIXED'|'VARIABLE',lastMonthNormalSalary:'',vacationMonth1:'',vacationMonth2:'',vacationMonth3:'',
+    vacationDaysOutstanding:'0',vacationBonusDaysOutstanding:'0',vacationBalanceSource:'',
+    interestStatus:'NOT_APPLICABLE' as 'SETTLED'|'NOT_APPLICABLE',interestMode:'UNDEPOSITED' as 'TRUST_OR_FUND'|'AUTHORIZED_BOOK_CREDIT'|'UNDEPOSITED',interestExpectedMonths:'',
+    profitSharingStatus:'NOT_APPLICABLE' as 'SETTLED'|'NOT_APPLICABLE',profitSharingAmount:'0',profitSharingSourceReference:'',
+    pendingSalaryAmount:'0',pendingSalarySourceReference:'',workerChoice:'NO_REENGAGEMENT',
+    legalClassificationConfirmed:false,legalEvidence:'',contractEndDate:'',remainingContractWages:'0',contractEvidence:'',
+    beneficiaryEvidence:'',agreedAdditionalAmount:'0',agreementEvidence:''
+  });
+  const [liquidationResults,setLiquidationResults] = useState<Record<string,Record<string,any>>>({});
+  const [liquidationHistory,setLiquidationHistory] = useState<Record<string,Array<Record<string,any>>>>({});
+  const [liquidationSupersedesId,setLiquidationSupersedesId] = useState('');
+
+
   const requiredBaseFields = new Set(legalRules
     .filter(rule => rule.active && (rule.frequencyScope === 'ALL' || rule.frequencyScope === runFrequency) &&
       rule.effectiveFrom <= periodEnd && (!rule.effectiveTo || rule.effectiveTo >= periodEnd))
@@ -399,8 +415,12 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
     if (severanceHistory[employeeId] || !window.sicovenStore) return;
     setSeveranceBusy(employeeId); setError('');
     try {
-      const history = await window.sicovenStore.listPayrollSeveranceHistory(token, employeeId);
+      const [history, liquidations] = await Promise.all([
+        window.sicovenStore.listPayrollSeveranceHistory(token, employeeId),
+        window.sicovenStore.listPayrollLiquidations(token, employeeId)
+      ]);
       setSeveranceHistory(current => ({...current,[employeeId]:history}));
+      setLiquidationHistory(current => ({...current,[employeeId]:liquidations as Array<Record<string,any>>}));
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo consultar el historial de prestaciones.'); }
     finally { setSeveranceBusy(null); }
   };
@@ -456,6 +476,61 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
       const result=await window.sicovenStore.calculatePayrollSeveranceInterest(token,{employeeId,mode:interestForm.mode});
       setInterestResult(current=>({...current,[employeeId]:result as Record<string,unknown>}));
     } catch(e) { setError(e instanceof Error?e.message:'No se pudo calcular los intereses.'); }
+    finally { setSeveranceBusy(null); }
+  };
+
+
+  const createLiquidationForEmployee = async (employeeId:string) => {
+    if (severanceBusy || !window.sicovenStore) return;
+    const vacationSalaryValues = liquidationForm.vacationSalaryType==='FIXED'
+      ? [liquidationForm.lastMonthNormalSalary]
+      : [liquidationForm.vacationMonth1,liquidationForm.vacationMonth2,liquidationForm.vacationMonth3];
+    if (vacationSalaryValues.some(value=>!value.trim()||!Number.isFinite(Number(value))||Number(value)<=0)) {
+      setError(liquidationForm.vacationSalaryType==='FIXED'?'Indique el salario normal del mes anterior.':'Indique los tres salarios normales mensuales anteriores.');
+      return;
+    }
+    const integratedValues=severanceCalcForm.salaryType==='FIXED'
+      ? [severanceCalcForm.lastMonthlyIntegratedSalary]
+      : [severanceCalcForm.month1,severanceCalcForm.month2,severanceCalcForm.month3,severanceCalcForm.month4,severanceCalcForm.month5,severanceCalcForm.month6];
+    if (integratedValues.some(value=>!value.trim()||!Number.isFinite(Number(value))||Number(value)<=0)) {
+      setError(severanceCalcForm.salaryType==='FIXED'?'Complete el último salario mensual integrado en el bloque de prestaciones.':'Complete los seis salarios integrales mensuales en el bloque de prestaciones.');
+      return;
+    }
+    if (!liquidationForm.vacationBalanceSource.trim()) { setError('Indique el registro conciliado de vacaciones y bonos ya disfrutados/pagados.'); return; }
+    setSeveranceBusy(employeeId); setError(''); setSuccess('');
+    try {
+      const result=await window.sicovenStore.createPayrollLiquidation(token,{
+        employeeId,terminationDate:liquidationForm.terminationDate,terminationReason:liquidationForm.terminationReason,
+        vacationSalaryType:liquidationForm.vacationSalaryType,
+        ...(liquidationForm.vacationSalaryType==='FIXED'
+          ? {lastMonthNormalSalary:Number(liquidationForm.lastMonthNormalSalary)}
+          : {previousThreeMonthsNormalSalary:[liquidationForm.vacationMonth1,liquidationForm.vacationMonth2,liquidationForm.vacationMonth3].map(Number)}),
+        severanceSalaryType:severanceCalcForm.salaryType,
+        ...(severanceCalcForm.salaryType==='FIXED'
+          ? {lastMonthlyIntegratedSalary:Number(severanceCalcForm.lastMonthlyIntegratedSalary)}
+          : {previousSixMonthsIntegratedSalary:integratedValues.map(Number)}),
+        vacationDaysOutstanding:Number(liquidationForm.vacationDaysOutstanding),
+        vacationBonusDaysOutstanding:Number(liquidationForm.vacationBonusDaysOutstanding),
+        vacationBalanceSource:liquidationForm.vacationBalanceSource,
+        interestStatus:liquidationForm.interestStatus,interestMode:liquidationForm.interestMode,
+        ...(liquidationForm.interestExpectedMonths.trim()?{interestExpectedMonths:Number(liquidationForm.interestExpectedMonths)}:{}),
+        profitSharingStatus:liquidationForm.profitSharingStatus,profitSharingAmount:Number(liquidationForm.profitSharingAmount),
+        profitSharingSourceReference:liquidationForm.profitSharingSourceReference,
+        pendingSalaryAmount:Number(liquidationForm.pendingSalaryAmount),
+        pendingSalarySourceReference:liquidationForm.pendingSalarySourceReference,
+        workerChoice:liquidationForm.workerChoice,
+        legalClassificationConfirmed:liquidationForm.legalClassificationConfirmed,legalEvidence:liquidationForm.legalEvidence,
+        contractEndDate:liquidationForm.contractEndDate,remainingContractWages:Number(liquidationForm.remainingContractWages),
+        contractEvidence:liquidationForm.contractEvidence,beneficiaryEvidence:liquidationForm.beneficiaryEvidence,
+        agreedAdditionalAmount:Number(liquidationForm.agreedAdditionalAmount),agreementEvidence:liquidationForm.agreementEvidence,
+        ...(liquidationSupersedesId?{supersedesId:liquidationSupersedesId}:{})
+      });
+      setLiquidationResults(current=>({...current,[employeeId]:result as Record<string,any>}));
+      const rows=await window.sicovenStore.listPayrollLiquidations(token,employeeId);
+      setLiquidationHistory(current=>({...current,[employeeId]:rows as Array<Record<string,any>>}));
+      setLiquidationSupersedesId('');
+      setSuccess('Liquidación final guardada con snapshot inmutable y auditoría para '+result.snapshot.employee.fullName+'.');
+    } catch(e) { setError(e instanceof Error?e.message:'No se pudo guardar la liquidación final.'); }
     finally { setSeveranceBusy(null); }
   };
 
@@ -591,6 +666,36 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
               <div className="border-t border-amber-200 pt-3"><p className="text-xs font-bold text-slate-700">Historial vigente · Depósitos {severanceHistory[employee.id]?.deposits.length||0} · Meses de intereses {severanceHistory[employee.id]?.interests.length||0}</p>
                 {(severanceHistory[employee.id]?.deposits||[]).map((item:any)=><div key={String(item.id)} className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600"><span>{String(item.depositDate)} · {String(item.kind)} · {Number(item.days)} días × Bs. {Number(item.dailyIntegralSalary).toFixed(2)} · Bs. {Number(item.amount).toFixed(2)} · {String(item.sourceReference)}</span><button type="button" onClick={()=>setDepositForm({depositDate:String(item.depositDate),kind:item.kind as 'QUARTERLY'|'SENIORITY'|'ADVANCE',days:String(item.days),serviceYear:String(item.serviceYear||'1'),dailyIntegralSalary:String(item.dailyIntegralSalary),sourceReference:String(item.sourceReference),verifiedAt:String(item.verifiedAt||new Date().toISOString().slice(0,10)),supersedesId:String(item.id)})} className="rounded border border-amber-300 px-2 py-1 font-semibold text-amber-900">Rectificar</button></div>)}
                 {(severanceHistory[employee.id]?.interests||[]).map((item:any)=><div key={String(item.id)} className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600"><span>{String(item.month)} · {String(item.mode)} · tasa {(Number(item.monthlyRate)*100).toFixed(4)}% · interés Bs. {Number(item.interest).toFixed(2)} · {String(item.sourceReference)}</span><button type="button" onClick={()=>setInterestForm({month:String(item.month),mode:item.mode as 'TRUST_OR_FUND'|'AUTHORIZED_BOOK_CREDIT'|'UNDEPOSITED',capital:String(item.capital),monthlyRate:String(Number(item.monthlyRate)*100),sourceReference:String(item.sourceReference),modeEvidence:String(item.modeEvidence||''),verifiedAt:String(item.verifiedAt||new Date().toISOString().slice(0,10)),supersedesId:String(item.id)})} className="rounded border border-amber-300 px-2 py-1 font-semibold text-amber-900">Rectificar</button></div>)}
+              </div>
+              <div className="border-t border-amber-200 pt-3 space-y-3">
+                <div><p className="font-semibold text-slate-800">Liquidación final del trabajador</p><p className="text-xs text-slate-600">Consolida prestaciones, vacaciones vencidas/fraccionadas, bono vacacional, utilidades, intereses y la indemnización que corresponda. Verifique los saldos de vacaciones con el registro histórico antes de guardar.</p></div>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <label className="space-y-1 text-xs text-slate-700">Fecha de terminación<input type="date" value={liquidationForm.terminationDate} onChange={e=>setLiquidationForm(v=>({...v,terminationDate:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
+                  <label className="space-y-1 text-xs text-slate-700">Causal<select value={liquidationForm.terminationReason} onChange={e=>setLiquidationForm(v=>({...v,terminationReason:e.target.value as typeof v.terminationReason}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2">
+                    <option value="VOLUNTARY_RESIGNATION">Renuncia voluntaria</option><option value="JUSTIFIED_WITHDRAWAL_ART80">Retiro justificado (art. 80)</option><option value="JUSTIFIED_DISMISSAL_ART79">Despido justificado (art. 79)</option><option value="UNJUSTIFIED_DISMISSAL_ART92">Despido injustificado (art. 92)</option><option value="CAUSE_BEYOND_WORKER_WILL_ART92">Causa ajena a voluntad (art. 92)</option><option value="MUTUAL_AGREEMENT">Mutuo acuerdo</option><option value="CONTRACT_EXPIRATION">Vencimiento de contrato</option><option value="WORK_COMPLETION">Culminación de obra</option><option value="EARLY_FIXED_TERM_WITHDRAWAL_ART83">Retiro justificado anticipado (art. 83)</option><option value="DEATH_ART145">Fallecimiento (art. 145)</option><option value="TEMPORARY_SUSPENSION">Suspensión (no liquidar)</option>
+                  </select></label>
+                  <label className="space-y-1 text-xs text-slate-700">Salario vacaciones<select value={liquidationForm.vacationSalaryType} onChange={e=>setLiquidationForm(v=>({...v,vacationSalaryType:e.target.value as 'FIXED'|'VARIABLE'}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"><option value="FIXED">Fijo</option><option value="VARIABLE">Variable</option></select></label>
+                  {liquidationForm.vacationSalaryType==='FIXED'
+                    ? <label className="space-y-1 text-xs text-slate-700">Salario normal mes anterior (Bs.)<input type="number" min="0.01" step="0.01" value={liquidationForm.lastMonthNormalSalary} onChange={e=>setLiquidationForm(v=>({...v,lastMonthNormalSalary:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
+                    : <><label className="space-y-1 text-xs text-slate-700">Salario normal mes -1<input type="number" min="0.01" step="0.01" value={liquidationForm.vacationMonth1} onChange={e=>setLiquidationForm(v=>({...v,vacationMonth1:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label><label className="space-y-1 text-xs text-slate-700">Salario normal mes -2<input type="number" min="0.01" step="0.01" value={liquidationForm.vacationMonth2} onChange={e=>setLiquidationForm(v=>({...v,vacationMonth2:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label><label className="space-y-1 text-xs text-slate-700">Salario normal mes -3<input type="number" min="0.01" step="0.01" value={liquidationForm.vacationMonth3} onChange={e=>setLiquidationForm(v=>({...v,vacationMonth3:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label></>}
+                  <label className="space-y-1 text-xs text-slate-700">Vacaciones vencidas pendientes (días)<input type="number" min="0" step="0.01" value={liquidationForm.vacationDaysOutstanding} onChange={e=>setLiquidationForm(v=>({...v,vacationDaysOutstanding:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
+                  <label className="space-y-1 text-xs text-slate-700">Bono vacacional vencido pendiente (días)<input type="number" min="0" step="0.01" value={liquidationForm.vacationBonusDaysOutstanding} onChange={e=>setLiquidationForm(v=>({...v,vacationBonusDaysOutstanding:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
+                  <label className="space-y-1 text-xs text-slate-700 sm:col-span-2">Fuente del registro conciliado de vacaciones/bonos<input value={liquidationForm.vacationBalanceSource} onChange={e=>setLiquidationForm(v=>({...v,vacationBalanceSource:e.target.value}))} placeholder="Libro de vacaciones, recibos o registro del patrono" className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
+                  <label className="space-y-1 text-xs text-slate-700">Intereses prestaciones<select value={liquidationForm.interestStatus} onChange={e=>setLiquidationForm(v=>({...v,interestStatus:e.target.value as 'SETTLED'|'NOT_APPLICABLE'}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"><option value="NOT_APPLICABLE">No pendientes / conciliados fuera</option><option value="SETTLED">Incluir historial registrado</option></select></label>
+                  {liquidationForm.interestStatus==='SETTLED' && <><label className="space-y-1 text-xs text-slate-700">Régimen<select value={liquidationForm.interestMode} onChange={e=>setLiquidationForm(v=>({...v,interestMode:e.target.value as typeof v.interestMode}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"><option value="TRUST_OR_FUND">Fideicomiso/fondo</option><option value="AUTHORIZED_BOOK_CREDIT">Abono contable autorizado</option><option value="UNDEPOSITED">No depositado</option></select></label><label className="space-y-1 text-xs text-slate-700">Meses esperados de intereses<input type="number" min="1" step="1" value={liquidationForm.interestExpectedMonths} onChange={e=>setLiquidationForm(v=>({...v,interestExpectedMonths:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label></>}
+                  <label className="space-y-1 text-xs text-slate-700">Utilidades pendientes<select value={liquidationForm.profitSharingStatus} onChange={e=>setLiquidationForm(v=>({...v,profitSharingStatus:e.target.value as 'SETTLED'|'NOT_APPLICABLE'}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"><option value="NOT_APPLICABLE">No pendientes / conciliadas fuera</option><option value="SETTLED">Incluir monto verificado</option></select></label>
+                  {liquidationForm.profitSharingStatus==='SETTLED' && <><label className="space-y-1 text-xs text-slate-700">Utilidades pendientes (Bs.)<input type="number" min="0" step="0.01" value={liquidationForm.profitSharingAmount} onChange={e=>setLiquidationForm(v=>({...v,profitSharingAmount:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label><label className="space-y-1 text-xs text-slate-700 sm:col-span-2">Fuente utilidades<input value={liquidationForm.profitSharingSourceReference} onChange={e=>setLiquidationForm(v=>({...v,profitSharingSourceReference:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label></>}
+                  <label className="space-y-1 text-xs text-slate-700">Salarios/conceptos pendientes (Bs.)<input type="number" min="0" step="0.01" value={liquidationForm.pendingSalaryAmount} onChange={e=>setLiquidationForm(v=>({...v,pendingSalaryAmount:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
+                  {Number(liquidationForm.pendingSalaryAmount)>0 && <label className="space-y-1 text-xs text-slate-700 sm:col-span-2">Soporte de salarios pendientes<input value={liquidationForm.pendingSalarySourceReference} onChange={e=>setLiquidationForm(v=>({...v,pendingSalarySourceReference:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>}
+                  {['JUSTIFIED_WITHDRAWAL_ART80','UNJUSTIFIED_DISMISSAL_ART92','CAUSE_BEYOND_WORKER_WILL_ART92','EARLY_FIXED_TERM_WITHDRAWAL_ART83'].includes(liquidationForm.terminationReason) && <><label className="flex items-center gap-2 text-xs text-slate-700"><input type="checkbox" checked={liquidationForm.legalClassificationConfirmed} onChange={e=>setLiquidationForm(v=>({...v,legalClassificationConfirmed:e.target.checked}))}/> Causal verificada con soporte</label><label className="space-y-1 text-xs text-slate-700 sm:col-span-2">Evidencia legal / expediente<input value={liquidationForm.legalEvidence} onChange={e=>setLiquidationForm(v=>({...v,legalEvidence:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label></>}
+                  {liquidationForm.terminationReason==='UNJUSTIFIED_DISMISSAL_ART92' && <label className="space-y-1 text-xs text-slate-700">Decisión sobre reenganche<select value={liquidationForm.workerChoice} onChange={e=>setLiquidationForm(v=>({...v,workerChoice:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"><option value="NO_REENGAGEMENT">No solicitará reenganche</option><option value="REENGAGEMENT">Solicitará reenganche (no liquidar art. 92)</option></select></label>}
+                  {liquidationForm.terminationReason==='EARLY_FIXED_TERM_WITHDRAWAL_ART83' && <><label className="space-y-1 text-xs text-slate-700">Vencimiento del contrato<input type="date" value={liquidationForm.contractEndDate} onChange={e=>setLiquidationForm(v=>({...v,contractEndDate:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label><label className="space-y-1 text-xs text-slate-700">Salarios hasta vencimiento (Bs.)<input type="number" min="0" step="0.01" value={liquidationForm.remainingContractWages} onChange={e=>setLiquidationForm(v=>({...v,remainingContractWages:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label><label className="space-y-1 text-xs text-slate-700 sm:col-span-2">Contrato y soporte<input value={liquidationForm.contractEvidence} onChange={e=>setLiquidationForm(v=>({...v,contractEvidence:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label></>}
+                  {liquidationForm.terminationReason==='DEATH_ART145' && <label className="space-y-1 text-xs text-slate-700 sm:col-span-2">Acreditación de beneficiarios<input value={liquidationForm.beneficiaryEvidence} onChange={e=>setLiquidationForm(v=>({...v,beneficiaryEvidence:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>}
+                  {liquidationForm.terminationReason==='MUTUAL_AGREEMENT' && <><label className="space-y-1 text-xs text-slate-700">Monto adicional acordado (Bs.)<input type="number" min="0" step="0.01" value={liquidationForm.agreedAdditionalAmount} onChange={e=>setLiquidationForm(v=>({...v,agreedAdditionalAmount:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label><label className="space-y-1 text-xs text-slate-700 sm:col-span-2">Convenio escrito / soporte<input value={liquidationForm.agreementEvidence} onChange={e=>setLiquidationForm(v=>({...v,agreementEvidence:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label></>}
+                </div>
+                <div className="flex flex-wrap gap-2"><button type="button" onClick={()=>void createLiquidationForEmployee(employee.id)} disabled={severanceBusy===employee.id} className="rounded-lg bg-rose-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{liquidationSupersedesId?'Guardar rectificación de liquidación':'Calcular y guardar liquidación final'}</button>{liquidationSupersedesId && <button type="button" onClick={()=>setLiquidationSupersedesId('')} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">Cancelar rectificación</button>}</div>
+                {(liquidationHistory[employee.id]||[]).map((item:any)=><div key={String(item.id)} className="flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 pt-2 text-xs text-slate-600"><span>{String(item.terminationDate)} · {String(item.terminationReason)} · Bs. {Number(item.total).toFixed(2)}</span><button type="button" onClick={()=>setLiquidationSupersedesId(String(item.id))} className="rounded border border-amber-300 px-2 py-1 font-semibold text-amber-900">Rectificar</button></div>)}
+                {liquidationResults[employee.id] && <div className="rounded-lg border border-emerald-200 bg-white p-3 text-sm"><p className="font-bold text-slate-800">Liquidación guardada · Bs. {Number(liquidationResults[employee.id].total).toFixed(2)}</p><p className="text-xs text-slate-600">Prestaciones Bs. {Number(liquidationResults[employee.id].snapshot.liquidation.severancePayable).toFixed(2)} · Vacaciones Bs. {Number(liquidationResults[employee.id].snapshot.liquidation.vacationPay).toFixed(2)} · Bono vacacional Bs. {Number(liquidationResults[employee.id].snapshot.liquidation.vacationBonusPay).toFixed(2)} · Indemnización Bs. {Number(liquidationResults[employee.id].snapshot.liquidation.indemnity).toFixed(2)}</p></div>}
               </div>
             </div>}
             {legalCalcOpen === employee.id && <div className="mt-3 space-y-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
