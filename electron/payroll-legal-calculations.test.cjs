@@ -54,8 +54,8 @@ test('compares severance guarantee against termination calculation', () => {
   });
   assert.equal(result.completedYears,4);
   assert.equal(result.quarterlyGuaranteeDays,240);
-  assert.equal(result.additionalSeniorityDays,6);
-  assert.equal(result.guaranteeAmount,24600);
+  assert.equal(result.additionalSeniorityDays,8);
+  assert.equal(result.guaranteeAmount,24800);
   assert.equal(result.terminationDays,120);
   assert.equal(result.greaterBasis,'GUARANTEE');
 });
@@ -97,12 +97,21 @@ test('values each historical quarterly and seniority deposit with its own integr
     additionalSeniorityDeposits:[{days:2,dailyIntegralSalary:115},{days:2,dailyIntegralSalary:125}]
   });
   assert.equal(result.quarterlyGuaranteeDays,120);
-  assert.equal(result.additionalSeniorityDays,2);
-  assert.equal(result.guaranteeAmount,16430);
+  assert.equal(result.additionalSeniorityDays,4);
+  assert.equal(result.guaranteeAmount,16680);
   assert.equal(result.terminationAmount,12000);
   assert.equal(result.greaterBasis,'GUARANTEE');
 });
 
+
+
+test('rejects missing, duplicated or non-fifteen-day quarterly deposits', () => {
+  const input={hireDate:'2025-01-01',asOfDate:'2025-07-01',dailyIntegralSalary:100,
+    additionalSeniorityDeposits:[],quarterlyDeposits:[{days:15,dailyIntegralSalary:100},{days:15,dailyIntegralSalary:100}]};
+  assert.equal(calculateSeverance(input).quarterlyGuaranteeDays,30);
+  assert.throws(()=>calculateSeverance({...input,quarterlyDeposits:[...input.quarterlyDeposits,{days:15,dailyIntegralSalary:100}]}),/duplicados/);
+  assert.throws(()=>calculateSeverance({...input,quarterlyDeposits:[{days:10,dailyIntegralSalary:100},{days:20,dailyIntegralSalary:100}]}),/quince días/);
+});
 
 test('matches the TSJ reference case: 8 years, 9 months and 24 days means 35 quarters plus 16 seniority days', () => {
   const result = calculateSeverance({

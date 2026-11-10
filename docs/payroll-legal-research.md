@@ -37,7 +37,7 @@ El texto de la Gaceta distingue tres tratamientos que no deben mezclarse:
 
 El artículo 143 indica que los intereses se calculan mensualmente y se pagan al cumplir cada año de servicio, salvo manifestación escrita del trabajador para capitalizarlos. El artículo 142(f) también prevé intereses de mora si no se paga la prestación dentro de los cinco días siguientes a la terminación. Por ello, el motor separa el cálculo de intereses de la comparación del capital garantizado: cada mes necesita capital, tasa mensual, fuente y fecha de verificación. No debe convertir por su cuenta tasas anuales ni suponer una tasa genérica; la conversión y la serie aplicable deben provenir de la fuente oficial y quedar documentadas.
 
-El helper `calculateSeveranceInterest` implementa únicamente la suma mensual sobre las tasas mensuales ya verificadas y diferencia los tres regímenes. **Todavía no está conectado al historial persistente del trabajador, anticipos, pagos, capitalización ni asiento contable**, por lo que no representa una liquidación final ni habilita la obligación en producción.
+El helper `calculateSeveranceInterest` implementa la suma mensual sobre las tasas mensuales ya verificadas y diferencia los tres regímenes. El módulo ya persiste meses por trabajador/empresa, con modo, capital, tasa, fuente, evidencia y rectificaciones append-only; el cálculo solo suma meses registrados y debe mostrar su cobertura. **Todavía no equivale a una liquidación final completa ni está integrado con la contabilidad de liquidaciones**, por lo que no debe contabilizarse como un pasivo final sin conciliar depósitos, anticipos, capitalización y provisiones.
 
 Fuente primaria de consulta: LOTTT, Gaceta Oficial N.º 6.076 Extraordinario, 07-05-2012, arts. 141–143 (texto PDF en NATLEX/OIT): https://natlex.ilo.org/dyn/natlex2/natlex2/files/download/90040/VEN90040.pdf
 
@@ -78,3 +78,24 @@ Estas referencias no se convierten automáticamente en reglas activas. La clasif
 7. Prestaciones requieren movimientos históricos y comparación de garantía acumulada con cálculo de terminación; una cifra trimestral aislada no es liquidación definitiva.
 
 **Pendiente antes de activar cálculo legal:** cotejar cada regla con el texto oficial de Gaceta y actos administrativos vigentes para el período, confirmar la situación concreta del patrono y preparar casos patrón de prueba revisados por un profesional laboral/contable venezolano.
+
+
+## Criterio jurisprudencial reciente — salario, vacaciones y bono vacacional (TSJ, 20-03-2026)
+
+La Sala de Casación Social, sentencia N.º 097, expediente 24-555, examinó una relación con una parte salarial pagada en bolívares y otra en divisas convertida a la tasa BCV. La Sala reiteró que la remuneración no se vuelve variable únicamente por la forma de pago o conversión monetaria: para calificarla como variable deben concurrir conceptos variables como comisiones, bonificaciones o incentivos ligados al trabajo. En el caso también reconoció la incidencia de componentes salariales variables en descansos, feriados, utilidades, vacaciones, bono vacacional y prestaciones.
+
+La misma sentencia ordenó pagar vacaciones vencidas y fraccionadas, así como bono vacacional vencido y fraccionado, multiplicando los días adeudados por el último salario diario normal. En ese caso particular el contrato reconocía 30 días anuales de bono vacacional; esa condición contractual no debe convertirse en un mínimo legal general. El módulo debe aplicar el mayor derecho que corresponda según LOTTT, contrato individual y convención colectiva acreditados.
+
+Consecuencias para SICOVEN:
+1. El tipo de salario se determina por la naturaleza real de sus componentes; no se debe marcar VARIABLE solo porque se pacte o pague en USD y se convierta a Bs. por BCV.
+2. En salario variable, los importes promedio deben incluir todos los conceptos salariales regulares que legalmente correspondan, incluidos descansos/feriados cuando proceda.
+3. El bono vacacional es adicional al salario de vacaciones, tiene carácter salarial y su alícuota se incorpora al salario integral para prestaciones.
+4. En liquidación se distinguen vacaciones vencidas no disfrutadas y fracción del período en curso; el bono vacacional pendiente se identifica por período y se calcula con el derecho legal/contractual acreditado.
+5. No se deben sustituir vacaciones por dinero durante la relación activa; la compensación se practica al terminar la relación o en los supuestos expresamente permitidos.
+
+Fuente de consulta de la sentencia (reproducción del fallo y enlace al TSJ): https://app.venley.ai/sentencias/sentencia-nro-097-sala-de-casacion-social-2026-jm6k1
+Fuente oficial indicada por el repositorio de sentencias: http://historico.tsj.gob.ve/decisiones/scs/marzo/354064-097-20326-2026-24-555.html
+
+## Escenarios de terminación que debe distinguir el cálculo final
+
+La matriz funcional, con el alcance y cautelas de cada supuesto, está documentada en `docs/payroll-liquidation-scenarios.md`. La liquidación nunca debe aplicar automáticamente una indemnización equivalente a prestaciones sociales a toda salida: los artículos 80 y 92 establecen supuestos concretos, y el artículo 83 contempla un supuesto especial de rescisión anticipada de contrato por tiempo determinado u obra.

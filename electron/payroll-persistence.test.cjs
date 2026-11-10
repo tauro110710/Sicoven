@@ -694,6 +694,36 @@ test('stores immutable historical severance deposits and monthly interest with a
   } finally { db.close(); }
 });
 
+
+test('validates annual seniority deposits by service year, two days each and a thirty-day cap', () => {
+  const db=setup();
+  try {
+    const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-784',fullName:'Ana Ruiz',hireDate:'2024-01-01',frequency:'BIWEEKLY',baseSalary:1800});
+    const first=savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-01-01',kind:'SENIORITY',days:2,dailyIntegralSalary:100,sourceReference:'Promedio integral año 1',verifiedAt:'2025-01-02'});
+    assert.equal(first.amount,200);
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-06-01',kind:'SENIORITY',days:2,dailyIntegralSalary:105,sourceReference:'Duplicado año 1',verifiedAt:'2025-06-02'}),/año de servicio 1/);
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2026-01-01',kind:'SENIORITY',days:3,dailyIntegralSalary:110,sourceReference:'Días inválidos',verifiedAt:'2026-01-02'}),/exactamente de dos días/);
+    const corrected=savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-02-01',kind:'SENIORITY',days:2,dailyIntegralSalary:102,sourceReference:'Promedio anual corregido',verifiedAt:'2025-02-02',supersedesId:first.id});
+    assert.equal(corrected.amount,204);
+    assert.equal(listPayrollSeveranceHistory(db,'co-a',employee.id).deposits.length,1);
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2040-01-01',kind:'SENIORITY',days:2,dailyIntegralSalary:120,sourceReference:'Año 16',verifiedAt:'2040-01-02'}),/hasta completar treinta días/);
+  } finally { db.close(); }
+});
+
+test('rolls back severance deposit and interest records if their audit event cannot be written', () => {
+  const db=setup();
+  try {
+    const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-785',fullName:'Luis Mora',hireDate:'2025-01-01',frequency:'BIWEEKLY',baseSalary:1800});
+    db.exec(`CREATE TRIGGER fail_payroll_severance_audit BEFORE INSERT ON audit_events
+      WHEN NEW.event_type IN ('payroll_severance_deposit_recorded','payroll_severance_interest_recorded')
+      BEGIN SELECT RAISE(ABORT,'forced audit failure'); END;`);
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-03-31',kind:'QUARTERLY',days:15,dailyIntegralSalary:60,sourceReference:'Q1',verifiedAt:'2025-04-01'}),/forced audit failure/);
+    assert.throws(()=>savePayrollSeveranceInterestMonth(db,'co-a',{employeeId:employee.id,month:'2025-03',mode:'UNDEPOSITED',capital:900,monthlyRate:0.01,sourceReference:'Tasa BCV',modeEvidence:'Tasa activa de los seis principales bancos',verifiedAt:'2025-04-01'}),/forced audit failure/);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM payroll_severance_deposits').get().n,0);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM payroll_severance_interest_months').get().n,0);
+  } finally { db.close(); }
+});
+
 test('severance calculation refuses incomplete quarterly history and never estimates missing historical bases', () => {
   const db = setup();
   try {

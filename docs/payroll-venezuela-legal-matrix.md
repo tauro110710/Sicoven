@@ -46,3 +46,14 @@ La contabilización genera el asiento desde los totales del snapshot, con cuenta
 El panel de cálculo bajo LOTTT conecta el art. 121 con el salario normal del mes anterior o el promedio de tres meses para salario variable, y muestra vacaciones, bono vacacional y límites individuales mínimo/máximo de utilidades conforme a antigüedad y meses completos del ejercicio. No presenta el mínimo o máximo de utilidades como la participación real en beneficios líquidos.
 
 Siguen pendientes antes de declarar Nómina completa: integración verificable de prestaciones sociales art. 142 y sus intereses art. 143 con historial trimestral/mensual de depósitos y salarios integrales; cálculo de utilidades reales según beneficios líquidos de la empresa; automatización de obligaciones parafiscales con sus condiciones y calendarios de declaración/pago; y validación manual de recibos y asientos en la aplicación Windows. No se activa ninguna obligación cuyo supuesto patronal o base crítica no esté configurado.
+
+
+## Antigüedad: depósitos adicionales correctos
+
+El literal b) del artículo 142 exige, después del primer año de servicio, dos días por cada año, acumulativos hasta treinta días. Por tanto, para ocho años cumplidos deben existir ocho registros anuales de dos días (16 días), no siete. El tope se alcanza con quince años. Cada registro debe conservar su propio salario integral diario promedio del año al que corresponde; la rectificación crea un nuevo registro enlazado, sin sobrescribir el original. El cálculo rechaza años faltantes, registros duplicados y días que no correspondan a la regla.
+
+La referencia jurisprudencial del TSJ (Sala de Casación Social, 14-04-2016, caso 0357) computó, para 8 años, 9 meses y 24 días, 35 trimestres (525 días) más 16 días adicionales (541 días). Ese caso se incorpora como prueba patrón del motor.
+
+## Liquidación final: alcance por escenario
+
+Consultar `docs/payroll-liquidation-scenarios.md` para la matriz de renuncia, despidos justificados e injustificados, retiro justificado, mutuo acuerdo, causas ajenas a la voluntad, contratos por tiempo determinado/obra, muerte y suspensión. La aplicación debe calcular por separado prestaciones, intereses, vacaciones vencidas, vacaciones fraccionadas, bono vacacional pendiente/fraccionado, utilidades, salarios y conceptos adicionales; no debe asumir que todos los escenarios generan la indemnización del artículo 92.
