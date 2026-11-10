@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { Users, UserPlus, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
 
+type SalaryHistory = { id: string; effectiveFrom: string; effectiveTo: string | null; baseSalary: number; source: string };
+
 type Employee = {
   id: string; companyId: string; fiscalId: string; fullName: string; hireDate: string;
   position: string; costCenter: string | null; frequency: 'WEEKLY' | 'BIWEEKLY';
@@ -15,7 +17,7 @@ const emptyForm: { fiscalId: string; fullName: string; hireDate: string; positio
 
 export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   const { currentCompany } = useAccounting();
-  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);\n  const [salaryHistory, setSalaryHistory] = useState<Record<string, SalaryHistory[]>>({});\n  const [historyOpen, setHistoryOpen] = useState<string | null>(null);\n  const [historyLoading, setHistoryLoading] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -32,6 +34,19 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   }, [token]);
 
   useEffect(() => { void loadEmployees(); }, [loadEmployees]);
+
+  const toggleSalaryHistory = async (employeeId: string) => {
+    if (historyOpen === employeeId) { setHistoryOpen(null); return; }
+    setHistoryOpen(employeeId);
+    if (salaryHistory[employeeId]) return;
+    if (!window.sicovenStore) return;
+    setHistoryLoading(employeeId);
+    try {
+      const rows = await window.sicovenStore.listPayrollSalaryHistory(token, employeeId);
+      setSalaryHistory(current => ({ ...current, [employeeId]: rows }));
+    } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo consultar el historial salarial.'); setHistoryOpen(null); }
+    finally { setHistoryLoading(null); }
+  };
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -112,9 +127,21 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
         </div>
         {loading ? <p className="py-8 text-center text-sm text-slate-500">Cargando trabajadores…</p> :
           employees.length === 0 ? <p className="py-8 text-center text-sm text-slate-500">Todavía no hay trabajadores registrados en esta empresa.</p> :
-          <div className="divide-y divide-slate-100">{employees.map(employee=><div key={employee.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
-            <div><p className="font-semibold text-slate-900">{employee.fullName}</p><p className="text-xs text-slate-500">{employee.fiscalId} · {employee.position || 'Sin cargo indicado'}</p></div>
-            <div className="flex items-center gap-3"><div className="text-right"><p className="text-sm font-semibold text-slate-800">Bs. {employee.baseSalary.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p><p className="text-xs text-slate-500">{employee.frequency === 'WEEKLY' ? 'Semanal' : 'Quincenal'}</p></div><button type="button" onClick={() => { setEditingId(employee.id); setForm({ fiscalId: employee.fiscalId, fullName: employee.fullName, hireDate: employee.hireDate, position: employee.position || '', costCenter: employee.costCenter || '', frequency: employee.frequency, baseSalary: String(employee.baseSalary), salaryEffectiveFrom: new Date().toISOString().slice(0,10) }); setError(''); setSuccess(''); }} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Editar</button></div>
+          <div className="divide-y divide-slate-100">{employees.map(employee=><div key={employee.id} className="py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div><p className="font-semibold text-slate-900">{employee.fullName}</p><p className="text-xs text-slate-500">{employee.fiscalId} · {employee.position || 'Sin cargo indicado'}</p></div>
+              <div className="flex flex-wrap items-center gap-2"><div className="text-right"><p className="text-sm font-semibold text-slate-800">Bs. {employee.baseSalary.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p><p className="text-xs text-slate-500">{employee.frequency === 'WEEKLY' ? 'Semanal' : 'Quincenal'}</p></div>
+                <button type="button" onClick={() => void toggleSalaryHistory(employee.id)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">{historyLoading === employee.id ? 'Cargando…' : historyOpen === employee.id ? 'Ocultar historial' : 'Historial'}</button>
+                <button type="button" onClick={() => { setEditingId(employee.id); setForm({ fiscalId: employee.fiscalId, fullName: employee.fullName, hireDate: employee.hireDate, position: employee.position || '', costCenter: employee.costCenter || '', frequency: employee.frequency, baseSalary: String(employee.baseSalary), salaryEffectiveFrom: new Date().toISOString().slice(0,10) }); setError(''); setSuccess(''); }} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Editar</button>
+              </div>
+            </div>
+            {historyOpen === employee.id && <div className="mt-3 rounded-lg bg-slate-50 p-3">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">Historial de salarios</p>
+              {(salaryHistory[employee.id] || []).map(item=><div key={item.id} className="flex flex-wrap justify-between gap-2 border-t border-slate-200 py-2 text-sm">
+                <span className="text-slate-600">{item.effectiveFrom} – {item.effectiveTo || 'Vigente'}</span>
+                <span className="font-semibold text-slate-800">Bs. {item.baseSalary.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+              </div>)}
+            </div>}
           </div>)}</div>}
       </section>
     </div>
