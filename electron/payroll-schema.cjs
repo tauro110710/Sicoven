@@ -48,6 +48,7 @@ function initializePayrollSchema(db) {
       code TEXT NOT NULL,
       description TEXT NOT NULL,
       base_key TEXT NOT NULL CHECK (base_key IN ('normalSalary','integralSalary','grossSalary')),
+      frequency_scope TEXT NOT NULL DEFAULT 'ALL' CHECK (frequency_scope IN ('ALL','WEEKLY','BIWEEKLY')),
       worker_rate REAL NOT NULL CHECK (worker_rate >= 0 AND worker_rate <= 1),
       employer_rate REAL NOT NULL CHECK (employer_rate >= 0 AND employer_rate <= 1),
       base_cap REAL CHECK (base_cap IS NULL OR base_cap >= 0),
@@ -95,6 +96,10 @@ function initializePayrollSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_payroll_lines_run
       ON payroll_run_lines(run_id);
   `);
+  const legalRuleColumns = db.pragma('table_info(payroll_legal_rules)');
+  if (!legalRuleColumns.some(column => column.name === 'frequency_scope')) {
+    db.exec("ALTER TABLE payroll_legal_rules ADD COLUMN frequency_scope TEXT NOT NULL DEFAULT 'ALL' CHECK (frequency_scope IN ('ALL','WEEKLY','BIWEEKLY'))");
+  }
   return Object.freeze({
     tables: ['payroll_employees', 'payroll_salary_history', 'payroll_legal_rules', 'payroll_runs', 'payroll_run_lines']
   });
