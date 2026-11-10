@@ -377,7 +377,9 @@ function calculatePayrollProfitSharing(db, companyId, input) {
     const employeeId = text(item.employeeId, 'Trabajador', 120);
     if (suppliedIds.has(employeeId)) throw new Error('Un trabajador aparece más de una vez en las bases de utilidades.');
     suppliedIds.add(employeeId);
-    if (!wageTotals.has(employeeId)) throw new Error('El trabajador indicado no tiene salarios salariales confirmados en el ejercicio de esta empresa.');
+    const belongsToCompany = db.prepare('SELECT id FROM payroll_employees WHERE id=? AND company_id=?').get(employeeId, companyId);
+    if (!belongsToCompany) throw new Error('Un trabajador indicado no pertenece a la empresa activa.');
+    if (!wageTotals.has(employeeId)) continue;
     distributionEmployees.push({
       employeeId, wagesEarned: wageTotals.get(employeeId),
       monthlyNormalSalary: item.monthlyNormalSalary, monthsWorked: item.monthsWorked
