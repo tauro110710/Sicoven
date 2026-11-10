@@ -8,9 +8,9 @@ type Employee = {
   baseSalary: number; active: boolean;
 };
 
-const emptyForm: { fiscalId: string; fullName: string; hireDate: string; position: string; costCenter: string; frequency: 'WEEKLY' | 'BIWEEKLY'; baseSalary: string } = {
+const emptyForm: { fiscalId: string; fullName: string; hireDate: string; position: string; costCenter: string; frequency: 'WEEKLY' | 'BIWEEKLY'; baseSalary: string; salaryEffectiveFrom: string } = {
   fiscalId: '', fullName: '', hireDate: new Date().toISOString().slice(0, 10),
-  position: '', costCenter: '', frequency: 'BIWEEKLY' as const, baseSalary: ''
+  position: '', costCenter: '', frequency: 'BIWEEKLY' as const, baseSalary: '', salaryEffectiveFrom: new Date().toISOString().slice(0,10)
 };
 
 export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
@@ -42,7 +42,8 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
         ...(editingId ? { id: editingId } : {}),
         fiscalId: form.fiscalId, fullName: form.fullName, hireDate: form.hireDate,
         position: form.position, costCenter: form.costCenter || undefined,
-        frequency: form.frequency, baseSalary: Number(form.baseSalary)
+        frequency: form.frequency, baseSalary: Number(form.baseSalary),
+        salaryEffectiveFrom: editingId ? form.salaryEffectiveFrom : form.hireDate
       });
       setForm(emptyForm);
       setEditingId(null);
@@ -83,6 +84,9 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
           <label className="space-y-1 text-sm font-medium text-slate-700">Salario base (Bs.) *
             <input required type="number" min="0.01" step="0.01" value={form.baseSalary} onChange={e=>setForm(v=>({...v,baseSalary:e.target.value}))} className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
           </label>
+          {editingId && <label className="space-y-1 text-sm font-medium text-slate-700">Salario vigente desde *
+            <input required type="date" value={form.salaryEffectiveFrom} onChange={e=>setForm(v=>({...v,salaryEffectiveFrom:e.target.value}))} className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
+          </label>}
           <label className="space-y-1 text-sm font-medium text-slate-700">Periodicidad *
             <select value={form.frequency} onChange={e=>setForm(v=>({...v,frequency:e.target.value as 'WEEKLY'|'BIWEEKLY'}))} className="w-full rounded-lg border border-slate-300 px-3 py-2">
               <option value="WEEKLY">Semanal</option><option value="BIWEEKLY">Quincenal</option>
@@ -110,7 +114,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
           employees.length === 0 ? <p className="py-8 text-center text-sm text-slate-500">Todavía no hay trabajadores registrados en esta empresa.</p> :
           <div className="divide-y divide-slate-100">{employees.map(employee=><div key={employee.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
             <div><p className="font-semibold text-slate-900">{employee.fullName}</p><p className="text-xs text-slate-500">{employee.fiscalId} · {employee.position || 'Sin cargo indicado'}</p></div>
-            <div className="flex items-center gap-3"><div className="text-right"><p className="text-sm font-semibold text-slate-800">Bs. {employee.baseSalary.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p><p className="text-xs text-slate-500">{employee.frequency === 'WEEKLY' ? 'Semanal' : 'Quincenal'}</p></div><button type="button" onClick={() => { setEditingId(employee.id); setForm({ fiscalId: employee.fiscalId, fullName: employee.fullName, hireDate: employee.hireDate, position: employee.position || '', costCenter: employee.costCenter || '', frequency: employee.frequency, baseSalary: String(employee.baseSalary) }); setError(''); setSuccess(''); }} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Editar</button></div>
+            <div className="flex items-center gap-3"><div className="text-right"><p className="text-sm font-semibold text-slate-800">Bs. {employee.baseSalary.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p><p className="text-xs text-slate-500">{employee.frequency === 'WEEKLY' ? 'Semanal' : 'Quincenal'}</p></div><button type="button" onClick={() => { setEditingId(employee.id); setForm({ fiscalId: employee.fiscalId, fullName: employee.fullName, hireDate: employee.hireDate, position: employee.position || '', costCenter: employee.costCenter || '', frequency: employee.frequency, baseSalary: String(employee.baseSalary), salaryEffectiveFrom: new Date().toISOString().slice(0,10) }); setError(''); setSuccess(''); }} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Editar</button></div>
           </div>)}</div>}
       </section>
     </div>
