@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateFiscalZTaxBreakdown } from './fiscalZReport';
+import { buildFiscalZReferenceDoc, calculateFiscalZTaxBreakdown } from './fiscalZReport';
 
 describe('Reporte Z fiscal tax breakdown', () => {
   it('separates the combined 31% rate into 16% VAT and 15% additional luxury tax', () => {
@@ -43,5 +43,20 @@ describe('Reporte Z fiscal tax breakdown', () => {
     assert.equal(result.vat8Bs, 0.8);
     assert.equal(result.vat31Bs, 1.6);
     assert.equal(result.additionalLuxuryTaxBs, 1.5);
+  });
+});
+
+
+describe('identificación del origen del cierre', () => {
+  it('identifica cierres de máquina fiscal por serial y número', () => {
+    assert.equal(buildFiscalZReferenceDoc({ sourceType: 'FISCAL_MACHINE', machineSerial: 'SER-01', zNumber: '0007' }), 'CIERRE-VENTAS:FISCAL_MACHINE:SER-01:0007');
+  });
+  it('distingue cajas distintas del mismo sistema POS', () => {
+    const first = buildFiscalZReferenceDoc({ sourceType: 'POS', sourceSystemName: 'SICOVEN POS', sourceTerminalId: 'CAJA 01', zNumber: 'Z-15' });
+    const second = buildFiscalZReferenceDoc({ sourceType: 'POS', sourceSystemName: 'SICOVEN POS', sourceTerminalId: 'CAJA 02', zNumber: 'Z-15' });
+    assert.notEqual(first, second);
+  });
+  it('normaliza identificadores de plataforma digital', () => {
+    assert.equal(buildFiscalZReferenceDoc({ sourceType: 'DIGITAL', sourceSystemName: 'Proveedor Digital', zNumber: ' lote-9 ' }), 'CIERRE-VENTAS:DIGITAL:PROVEEDOR DIGITAL:LOTE-9');
   });
 });

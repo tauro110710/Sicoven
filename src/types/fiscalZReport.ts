@@ -32,3 +32,20 @@ export function calculateFiscalZTaxBreakdown(input: FiscalZTaxInput): FiscalZTax
   );
   return { vat16Bs, vat8Bs, vat31Bs, additionalLuxuryTaxBs, totalSalesBs };
 }
+
+
+export type FiscalZSourceType = 'FISCAL_MACHINE' | 'POS' | 'DIGITAL';
+
+/** Identificador idempotente por origen: no mezcla seriales fiscales con cajas o plataformas POS. */
+export function buildFiscalZReferenceDoc(input: {
+  sourceType: FiscalZSourceType;
+  zNumber: string;
+  machineSerial?: string;
+  sourceSystemName?: string;
+  sourceTerminalId?: string;
+}): string {
+  const identity = input.sourceType === 'FISCAL_MACHINE'
+    ? (input.machineSerial || '').trim()
+    : [input.sourceSystemName, input.sourceTerminalId].filter(Boolean).join(':').trim();
+  return 'CIERRE-VENTAS:' + input.sourceType + ':' + identity.toUpperCase() + ':' + input.zNumber.trim().toUpperCase();
+}

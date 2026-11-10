@@ -382,7 +382,7 @@ export const LibroVentasView: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-xs">
             <thead className="bg-slate-100 text-slate-700"><tr>
-              <th className="px-3 py-2">Fecha</th><th className="px-3 py-2">Reporte Z</th><th className="px-3 py-2">Máquina / Serial</th><th className="px-3 py-2">Facturas</th><th className="px-3 py-2">N.º control (si aplica)</th><th className="px-3 py-2 text-right">Base gravada</th><th className="px-3 py-2 text-right">IVA</th><th className="px-3 py-2 text-right">Imp. lujo</th><th className="px-3 py-2 text-right">Exento</th><th className="px-3 py-2 text-right">IGTF</th><th className="px-3 py-2 text-right">Total cierre</th><th className="px-3 py-2">Asiento / Soportes</th>
+              <th className="px-3 py-2">Fecha</th><th className="px-3 py-2">Cierre / N.º</th><th className="px-3 py-2">Origen / Sistema</th><th className="px-3 py-2">Documentos</th><th className="px-3 py-2">N.º control (si aplica)</th><th className="px-3 py-2 text-right">Base gravada</th><th className="px-3 py-2 text-right">IVA</th><th className="px-3 py-2 text-right">Imp. lujo</th><th className="px-3 py-2 text-right">Exento</th><th className="px-3 py-2 text-right">IGTF</th><th className="px-3 py-2 text-right">Total cierre</th><th className="px-3 py-2">Asiento / Soportes</th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100">
               {filteredZReports.length === 0 ? <tr><td colSpan={12} className="px-3 py-8 text-center text-slate-400">Todavía no hay Reportes Z registrados para este período.</td></tr> : filteredZReports.map(entry => {
@@ -392,8 +392,8 @@ export const LibroVentasView: React.FC = () => {
                 return <tr key={entry.id} className="hover:bg-slate-50">
                   <td className="whitespace-nowrap px-3 py-2">{formatDate(z.date)}</td>
                   <td className="px-3 py-2 font-mono font-bold">{z.zNumber}</td>
-                  <td className="px-3 py-2">{[z.machineBrand,z.machineModel].filter(Boolean).join(' ') || 'Máquina fiscal'}<span className="block font-mono text-[10px] text-slate-500">{z.machineSerial}</span></td>
-                  <td className="px-3 py-2 font-mono">{z.invoiceStart} – {z.invoiceEnd}</td>
+                  <td className="px-3 py-2">{(z.sourceType || 'FISCAL_MACHINE') === 'FISCAL_MACHINE' ? ([z.machineBrand,z.machineModel].filter(Boolean).join(' ') || 'Máquina fiscal') : (z.sourceType === 'POS' ? 'Sistema POS' : 'Facturación digital') + ' · ' + (z.sourceSystemName || 'Sistema no especificado')}<span className="block font-mono text-[10px] text-slate-500">{(z.sourceType || 'FISCAL_MACHINE') === 'FISCAL_MACHINE' ? z.machineSerial : (z.sourceTerminalId ? 'Terminal ' + z.sourceTerminalId : 'Sin terminal informada')}</span></td>
+                  <td className="px-3 py-2 font-mono">{z.invoiceStart && z.invoiceEnd ? z.invoiceStart + ' – ' + z.invoiceEnd : 'No informado'}</td>
                   <td className="px-3 py-2 font-mono">{z.controlStart ? z.controlStart + ' – ' + z.controlEnd : '—'}</td>
                   <td className="px-3 py-2 text-right font-mono">{formatBs(taxable)}</td>
                   <td className="px-3 py-2 text-right font-mono">{formatBs(vat)}</td>

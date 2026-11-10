@@ -200,6 +200,10 @@ export type EntryType =
 export interface FiscalZReportMetadata {
   date: string;
   zNumber: string;
+  /** Origen del resumen; ausente en cierres históricos, interpretados como máquina fiscal. */
+  sourceType?: 'FISCAL_MACHINE' | 'POS' | 'DIGITAL';
+  sourceSystemName?: string;
+  sourceTerminalId?: string;
   machineBrand?: string;
   machineModel?: string;
   machineSerial: string;
