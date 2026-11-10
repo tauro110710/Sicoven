@@ -307,12 +307,6 @@ function confirmPayrollRun(db, companyId, runId, journalEntryId) {
   ensureCompany(db, companyId);
   const id = text(runId, 'Nómina', 120);
   const journalId = text(journalEntryId, 'Asiento contable', 120);
-  const state = readState(db);
-  const journal = Array.isArray(state.journalEntries)
-    ? state.journalEntries.find(entry => entry && String(entry.id) === journalId && String(entry.companyId) === String(companyId) && String(entry.referenceDoc || '') === 'NOM-' + id)
-    : null;
-  if (!journal) throw new Error('No existe en la contabilidad de esta empresa el asiento correspondiente a esta nómina.');
-  const now = new Date().toISOString();
   const confirm = db.transaction(() => {
     const run = db.prepare(`SELECT id,status,journal_entry_id AS journalEntryId,period_start AS periodStart,
       period_end AS periodEnd,totals_json AS totalsJson,confirmed_at AS confirmedAt
@@ -324,6 +318,34 @@ function confirmPayrollRun(db, companyId, runId, journalEntryId) {
         periodStart: run.periodStart, periodEnd: run.periodEnd, totals: JSON.parse(run.totalsJson), confirmedAt: run.confirmedAt, alreadyConfirmed: true };
     }
     if (run.status !== 'DRAFT') throw new Error('Solo se puede confirmar una nómina en borrador.');
+
+    // The accounting snapshot and payroll tables share this tenant database.
+    // Validate the persisted journal before changing the payroll status.
+    const state = readState(db);
+    const journal = Array.isArray(state.journalEntries)
+      ? state.journalEntries.find(entry => entry && String(entry.id) === journalId &&
+          String(entry.companyId) === String(companyId) && String(entry.referenceDoc || '') === 'NOM-' + id)
+      : null;
+    if (!journal) throw new Error('No existe en la contabilidad de esta empresa el asiento correspondiente a esta nómina.');
+    if (journal.date !== run.periodEnd || !Array.isArray(journal.items) || journal.items.length < 2 ||
+        !Number.isFinite(Number(journal.bcvRate)) || Number(journal.bcvRate) <= 0) {
+      throw new Error('El asiento de nómina no tiene fecha, tasa BCV o líneas contables válidas para el período.');
+    }
+    let debitBs = 0, creditBs = 0, debitUsd = 0, creditUsd = 0;
+    for (const item of journal.items) {
+      const values = ['debitBs','creditBs','debitUsd','creditUsd'].map(key => Number(item[key]));
+      if (!item.accountCode || values.some(value => !Number.isFinite(value) || value < 0) ||
+          (values[0] > 0 && values[1] > 0) || (values[2] > 0 && values[3] > 0)) {
+        throw new Error('El asiento de nómina contiene líneas contables inválidas.');
+      }
+      debitBs += values[0]; creditBs += values[1]; debitUsd += values[2]; creditUsd += values[3];
+    }
+    const balanced = (debit, credit) => debit > 0 && credit > 0 && Math.abs(debit - credit) <= 0.01;
+    if (!balanced(debitBs, creditBs) || !balanced(debitUsd, creditUsd)) {
+      throw new Error('El asiento de nómina debe estar cuadrado en bolívares y dólares antes de confirmarse.');
+    }
+
+    const now = new Date().toISOString();
     const result = db.prepare(`UPDATE payroll_runs SET status='CONFIRMED',journal_entry_id=?,confirmed_at=?
       WHERE id=? AND company_id=? AND status='DRAFT'`).run(journalId, now, id, companyId);
     if (result.changes !== 1) throw new Error('La nómina cambió mientras se confirmaba. Actualice e intente nuevamente.');
@@ -334,7 +356,6 @@ function confirmPayrollRun(db, companyId, runId, journalEntryId) {
   });
   return confirm();
 }
-
 function listConfirmedSalaryEntries(db, companyId, employeeId, fromDate, toDate) {
   ensureCompany(db, companyId);
   const id = text(employeeId, 'Trabajador', 120);
