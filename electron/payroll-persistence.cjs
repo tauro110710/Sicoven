@@ -556,9 +556,10 @@ function savePayrollSeveranceDeposit(db, companyId, input) {
   ensureCompany(db, companyId);
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('El depósito de prestaciones es inválido.');
   const employeeId=text(input.employeeId,'Trabajador',120);
-  const employee=db.prepare('SELECT id FROM payroll_employees WHERE id=? AND company_id=?').get(employeeId,companyId);
+  const employee=db.prepare('SELECT id,hire_date AS hireDate FROM payroll_employees WHERE id=? AND company_id=?').get(employeeId,companyId);
   if(!employee) throw new Error('El trabajador no pertenece a la empresa activa.');
   const depositDate=date(input.depositDate,'Fecha del depósito');
+  if(depositDate<employee.hireDate) throw new Error('La fecha del depósito no puede ser anterior al ingreso del trabajador.');
   const kind=String(input.kind||'');
   if(!['QUARTERLY','SENIORITY','ADVANCE'].includes(kind)) throw new Error('Indique si el registro es trimestral, adicional por antigüedad o anticipo.');
   const days=positiveOrZero(input.days,'Días reconocidos');
