@@ -1386,10 +1386,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       rate: newRate, effectiveDate: today, recordedAt: new Date().toISOString(),
       source: 'MANUAL' as const, note: 'Tasa BCV registrada manualmente desde el módulo contable.'
     }];
+    const isCurrentRate = !currentCompany.lastRateUpdate || today >= currentCompany.lastRateUpdate;
     updateCompany({
       ...currentCompany,
-      bcvRate: newRate,
-      lastRateUpdate: today,
+      ...(isCurrentRate ? { bcvRate: newRate, lastRateUpdate: today } : {}),
       accountingBcvRateHistory: nextHistory
     });
   };
@@ -1427,8 +1427,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       source: 'CORRECTION', note: [reason, workpaperNote].filter(Boolean).join(' · '),
       ...(priorForDate ? { correctionOfId: priorForDate.id } : {})
     };
+    const isCurrentRate = !currentCompany.lastRateUpdate || input.effectiveDate >= currentCompany.lastRateUpdate;
     updateCompany({
-      ...currentCompany, bcvRate: rate, lastRateUpdate: input.effectiveDate,
+      ...currentCompany,
+      ...(isCurrentRate ? { bcvRate: rate, lastRateUpdate: input.effectiveDate } : {}),
       accountingBcvRateHistory: [...history, correction]
     });
     try {
