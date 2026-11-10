@@ -6,7 +6,7 @@ const Database = require('better-sqlite3');
 const { initializeTenantDatabase } = require('./tenant-schema.cjs');
 const {
   listPayrollEmployees, listPayrollSalaryHistory, getPayrollSalaryForDate, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
-  registerPayrollIpc, createPayrollRun, listPayrollRuns, confirmPayrollRun, listConfirmedSalaryEntries
+  registerPayrollIpc, createPayrollRun, listPayrollRuns, getPayrollRun, confirmPayrollRun, listConfirmedSalaryEntries
 } = require('./payroll-persistence.cjs');
 
 function setup() {
@@ -165,6 +165,28 @@ test('creates an immutable draft payroll snapshot and prevents duplicate periods
       employees: [{ employeeId: weeklyEmployee.id, earnings: [{code:'SAL',description:'Salario',amount:500}], bases:{normalSalary:500,integralSalary:500,grossSalary:500} }]
     });
     assert.equal(weekly.status, 'DRAFT');
+  } finally { db.close(); }
+});
+
+test('returns the immutable payroll snapshot only inside the active company', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-845', fullName: 'Rosa Núñez', hireDate: '2025-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 1400
+    });
+    const created = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-07-01', periodEnd: '2026-07-15',
+      employees: [{ employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario', amount: 700, isSalary: true }],
+        bases: {} }]
+    });
+    const loaded = getPayrollRun(db, 'co-a', created.id);
+    assert.equal(loaded.snapshot.employees[0].fullName, 'Rosa Núñez');
+    assert.equal(loaded.snapshot.employees[0].netPay, 700);
+    assert.equal(loaded.status, 'DRAFT');
+    assert.throws(() => getPayrollRun(db, 'co-b', created.id), /empresa activa/);
+    assert.throws(() => getPayrollRun(db, 'co-a', 'missing'), /empresa activa/);
   } finally { db.close(); }
 });
 
