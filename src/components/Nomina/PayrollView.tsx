@@ -10,7 +10,7 @@ type PayrollLegalRule = {
   id: string; code: string; description: string; base: 'normalSalary'|'integralSalary'|'grossSalary';
   frequencyScope: 'ALL'|'WEEKLY'|'BIWEEKLY'; workerRate: number; employerRate: number;
   baseCap: number|null; effectiveFrom: string; effectiveTo: string|null;
-  sourceReference: string; verifiedAt: string; active: boolean;
+  sourceReference: string; verifiedAt: string; applicability: Record<string, unknown>; active: boolean;
 };
 
 type Employee = {
@@ -152,6 +152,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
         baseCap: ruleForm.baseCap.trim() ? Number(ruleForm.baseCap) : null,
         effectiveFrom: ruleForm.effectiveFrom, effectiveTo: ruleForm.effectiveTo || null,
         sourceReference: ruleForm.sourceReference.trim(), verifiedAt: ruleForm.verifiedAt,
+        applicability: legalRules.find(rule => rule.id === editingRuleId)?.applicability || {},
         active: true
       });
       await loadRuns();
@@ -182,7 +183,8 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
         id: rule.id, code: rule.code, description: rule.description, base: rule.base,
         frequencyScope: rule.frequencyScope, workerRate: rule.workerRate, employerRate: rule.employerRate,
         baseCap: rule.baseCap, effectiveFrom: rule.effectiveFrom, effectiveTo: rule.effectiveTo,
-        sourceReference: rule.sourceReference, verifiedAt: rule.verifiedAt, active: false
+        sourceReference: rule.sourceReference, verifiedAt: rule.verifiedAt,
+        applicability: rule.applicability, active: false
       });
       await loadRuns();
       if (editingRuleId === rule.id) setEditingRuleId(null);
