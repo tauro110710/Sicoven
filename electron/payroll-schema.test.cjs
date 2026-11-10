@@ -75,3 +75,24 @@ test('requires unique payroll period and retains calculation snapshot on the run
     assert.equal(db.prepare('SELECT calculation_snapshot_json FROM payroll_runs WHERE id=?').get('r1').calculation_snapshot_json, '{"rule":"v1"}');
   } finally { db.close(); }
 });
+
+
+test('adds service_year to legacy severance deposits without rewriting historical rows', () => {
+  const db = new Database(':memory:');
+  try {
+    db.exec(`CREATE TABLE payroll_severance_deposits (
+      id TEXT PRIMARY KEY, company_id TEXT NOT NULL, employee_id TEXT NOT NULL,
+      deposit_date TEXT NOT NULL, deposit_kind TEXT NOT NULL, days REAL NOT NULL,
+      daily_integral_salary REAL NOT NULL, amount REAL NOT NULL, source_reference TEXT NOT NULL,
+      verified_at TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', supersedes_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    db.prepare(`INSERT INTO payroll_severance_deposits
+      (id,company_id,employee_id,deposit_date,deposit_kind,days,daily_integral_salary,amount,source_reference,verified_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?)`).run('legacy-deposit','co-a','legacy-employee','2025-01-01','SENIORITY',2,100,200,'Archivo legado','2025-01-02');
+    initializeTenantDatabase(db);
+    const columns=db.pragma('table_info(payroll_severance_deposits)');
+    assert.ok(columns.some(column=>column.name==='service_year'));
+    assert.equal(db.prepare('SELECT amount FROM payroll_severance_deposits WHERE id=?').get('legacy-deposit').amount,200);
+  } finally { db.close(); }
+});

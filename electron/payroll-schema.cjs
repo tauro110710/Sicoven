@@ -93,6 +93,7 @@ function initializePayrollSchema(db) {
       employee_id TEXT NOT NULL REFERENCES payroll_employees(id) ON DELETE RESTRICT,
       deposit_date TEXT NOT NULL,
       deposit_kind TEXT NOT NULL CHECK (deposit_kind IN ('QUARTERLY','SENIORITY','ADVANCE')),
+      service_year INTEGER,
       days REAL NOT NULL CHECK (days > 0),
       daily_integral_salary REAL NOT NULL CHECK (daily_integral_salary > 0),
       amount REAL NOT NULL CHECK (amount > 0),
@@ -155,6 +156,11 @@ function initializePayrollSchema(db) {
   if (!legalRuleColumns.some(column => column.name === 'frequency_scope')) {
     db.exec("ALTER TABLE payroll_legal_rules ADD COLUMN frequency_scope TEXT NOT NULL DEFAULT 'ALL' CHECK (frequency_scope IN ('ALL','WEEKLY','BIWEEKLY'))");
   }
+  const severanceColumns = db.pragma('table_info(payroll_severance_deposits)');
+  if (!severanceColumns.some(column => column.name === 'service_year')) {
+    db.exec('ALTER TABLE payroll_severance_deposits ADD COLUMN service_year INTEGER');
+  }
+
   const legalRuleSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='payroll_legal_rules'").get()?.sql || '';
   if (legalRuleSchema.includes('UNIQUE(company_id, code, effective_from)')) {
     db.transaction(() => db.exec(`

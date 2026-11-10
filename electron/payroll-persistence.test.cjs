@@ -699,14 +699,28 @@ test('validates annual seniority deposits by service year, two days each and a t
   const db=setup();
   try {
     const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-784',fullName:'Ana Ruiz',hireDate:'2024-01-01',frequency:'BIWEEKLY',baseSalary:1800});
-    const first=savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-01-01',kind:'SENIORITY',days:2,dailyIntegralSalary:100,sourceReference:'Promedio integral año 1',verifiedAt:'2025-01-02'});
+    const first=savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-01-01',kind:'SENIORITY',serviceYear:1,days:2,dailyIntegralSalary:100,sourceReference:'Promedio integral año 1',verifiedAt:'2025-01-02'});
     assert.equal(first.amount,200);
-    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-06-01',kind:'SENIORITY',days:2,dailyIntegralSalary:105,sourceReference:'Duplicado año 1',verifiedAt:'2025-06-02'}),/año de servicio 1/);
-    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2026-01-01',kind:'SENIORITY',days:3,dailyIntegralSalary:110,sourceReference:'Días inválidos',verifiedAt:'2026-01-02'}),/exactamente de dos días/);
-    const corrected=savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-02-01',kind:'SENIORITY',days:2,dailyIntegralSalary:102,sourceReference:'Promedio anual corregido',verifiedAt:'2025-02-02',supersedesId:first.id});
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-06-01',kind:'SENIORITY',serviceYear:1,days:2,dailyIntegralSalary:105,sourceReference:'Duplicado año 1',verifiedAt:'2025-06-02'}),/año de servicio 1/);
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2026-01-01',kind:'SENIORITY',serviceYear:2,days:3,dailyIntegralSalary:110,sourceReference:'Días inválidos',verifiedAt:'2026-01-02'}),/exactamente de dos días/);
+    const corrected=savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-02-01',kind:'SENIORITY',serviceYear:1,days:2,dailyIntegralSalary:102,sourceReference:'Promedio anual corregido',verifiedAt:'2025-02-02',supersedesId:first.id});
     assert.equal(corrected.amount,204);
     assert.equal(listPayrollSeveranceHistory(db,'co-a',employee.id).deposits.length,1);
-    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2040-01-01',kind:'SENIORITY',days:2,dailyIntegralSalary:120,sourceReference:'Año 16',verifiedAt:'2040-01-02'}),/hasta completar treinta días/);
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2040-01-01',kind:'SENIORITY',serviceYear:16,days:2,dailyIntegralSalary:120,sourceReference:'Año 16',verifiedAt:'2040-01-02'}),/hasta completar treinta días/);
+  } finally { db.close(); }
+});
+
+
+test('uses explicit service year when an annual seniority deposit is paid late', () => {
+  const db=setup();
+  try {
+    const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-786',fullName:'Marta Gil',hireDate:'2023-01-01',frequency:'BIWEEKLY',baseSalary:1800});
+    savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-06-01',kind:'SENIORITY',serviceYear:1,days:2,dailyIntegralSalary:100,sourceReference:'Depósito año 1 pagado tarde',verifiedAt:'2025-06-02'});
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-07-01',kind:'SENIORITY',serviceYear:1,days:2,dailyIntegralSalary:110,sourceReference:'Duplicado año 1',verifiedAt:'2025-07-02'}),/año de servicio 1/);
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-07-01',kind:'SENIORITY',days:2,dailyIntegralSalary:110,sourceReference:'Sin año',verifiedAt:'2025-07-02'}),/año de servicio real/);
+    const history=listPayrollSeveranceHistory(db,'co-a',employee.id);
+    assert.equal(history.deposits[0].serviceYear,1);
+    assert.equal(history.deposits[0].serviceYearInferred,undefined);
   } finally { db.close(); }
 });
 
