@@ -19,6 +19,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -38,13 +39,15 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
     setSaving(true); setError(''); setSuccess('');
     try {
       await window.sicovenStore.savePayrollEmployee(token, {
+        ...(editingId ? { id: editingId } : {}),
         fiscalId: form.fiscalId, fullName: form.fullName, hireDate: form.hireDate,
         position: form.position, costCenter: form.costCenter || undefined,
         frequency: form.frequency, baseSalary: Number(form.baseSalary)
       });
       setForm(emptyForm);
+      setEditingId(null);
       await loadEmployees();
-      setSuccess('Trabajador registrado correctamente.');
+      setSuccess(editingId ? 'Ficha del trabajador actualizada.' : 'Trabajador registrado correctamente.');
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar el trabajador.'); }
     finally { setSaving(false); }
   };
@@ -66,7 +69,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
 
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
       <form onSubmit={save} className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex items-center gap-2 border-b border-slate-100 pb-3"><UserPlus className="text-emerald-700"/><h2 className="font-bold text-slate-900">Registrar trabajador</h2></div>
+        <div className="flex items-center gap-2 border-b border-slate-100 pb-3"><UserPlus className="text-emerald-700"/><h2 className="font-bold text-slate-900">{editingId ? 'Editar trabajador' : 'Registrar trabajador'}</h2></div>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="space-y-1 text-sm font-medium text-slate-700">Cédula / RIF *
             <input required maxLength={40} value={form.fiscalId} onChange={e=>setForm(v=>({...v,fiscalId:e.target.value}))} className="w-full rounded-lg border border-slate-300 px-3 py-2"/>
@@ -93,9 +96,9 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
           </label>
         </div>
         <button disabled={saving} className="w-full rounded-lg bg-emerald-700 px-4 py-2.5 font-bold text-white hover:bg-emerald-800 disabled:opacity-60">
-          {saving ? 'Guardando…' : 'Guardar trabajador'}
+          {saving ? 'Guardando…' : editingId ? 'Guardar cambios' : 'Guardar trabajador'}
         </button>
-      </form>
+        {editingId && <button type="button" onClick={() => { setEditingId(null); setForm(emptyForm); }} className="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Cancelar edición</button>}\n      </form>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
