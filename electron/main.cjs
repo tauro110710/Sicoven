@@ -59,7 +59,7 @@ if (!hasSingleInstanceLock) {
 const { migrateAuthUserRoles, hasFullSystemAccess } = require('./auth-roles.cjs');
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
 const { reconcileRestoreAudit } = require('./restore-audit-ledger.cjs');
-const { registerBackupIpc, createBackup } = require('./backup-restore.cjs');
+const { registerBackupIpc } = require('./backup-restore.cjs');
 const { registerRestoreIpc } = require('./restore-engine.cjs');
 const { recoverPendingRestore } = require('./restore-engine.cjs');
 const { registerInflationIndexIpc } = require('./inflation-indexes.cjs');
@@ -895,33 +895,21 @@ app.whenReady().then(async () => {
     });
   });
 
-  ipcMain.handle('sicoven:reset-accounting', async (_event, token) => {
+  ipcMain.handle('sicoven:reset-accounting', async (_event, token, options = {}) => {
     assertOperationalReady();
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const actor = getActiveSession(token);
     if (!actor || actor.role !== 'admin') throw new Error('El RESET DE FÁBRICA requiere una sesión de administrador.');
-    const parentWindow = BrowserWindow.getAllWindows().find(window => !window.isDestroyed());
-    const selectionOptions = {
-      title: 'Seleccionar carpeta para el respaldo obligatorio antes del RESET DE FÁBRICA',
-      properties: ['openDirectory', 'createDirectory']
-    };
-    const selection = parentWindow
-      ? await dialog.showOpenDialog(parentWindow, selectionOptions)
-      : await dialog.showOpenDialog(selectionOptions);
-    if (selection.canceled || !selection.filePaths?.[0]) return { ok: false, canceled: true };
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupDestination = path.join(selection.filePaths[0], 'SICOVEN-backup-antes-reset-' + stamp);
+    if (options?.backupConfirmed !== true) {
+      throw new Error('Antes del RESET DE FÁBRICA debe crear y verificar un Respaldo global. Confirme que ya lo hizo para continuar.');
+    }
     const release = await tenantController.operationContext.acquireMaintenanceLock();
     try {
-      // Freeze persistence and close every company connection before creating
-      // the verified full backup and removing any registered tenant database.
+      // Freeze persistence and close every company connection before removing
+      // registered tenant databases. The global backup is created separately
+      // by the user through the normal Respaldo global action.
       tenantController.runtime.closeAll();
-      const backup = await createBackup({
-        db,
-        userDataDir: app.getPath('userData'),
-        destination: backupDestination
-      });
       const tenantReset = tenantController.runtime.resetAllCompanies();
       const emptyState = {
         companies: [], currentCompanyId: '', accounts: [],
@@ -943,7 +931,7 @@ app.whenReady().then(async () => {
             actor: { userId: actor.id, username: actor.username },
             removedCompanyCount: tenantReset.removedCompanies,
             removedCompanyIds: tenantReset.removedCompanyIds,
-            backupDirectory: path.basename(backupDestination),
+            backupRequiredAndConfirmedByUser: true,
             preserved: ['auth_users', 'auth_sessions', 'license_state', 'audit_events']
           }));
       });
@@ -962,8 +950,7 @@ app.whenReady().then(async () => {
       }
       return {
         ok: true, cleared: true, verified: true,
-        removedCompanies: tenantReset.removedCompanies,
-        backupDestination
+        removedCompanies: tenantReset.removedCompanies
       };
     } finally {
       release();
