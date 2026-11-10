@@ -368,7 +368,7 @@ function confirmPayrollRun(db, companyId, runId, journalEntryId) {
         !Number.isFinite(Number(journal.bcvRate)) || Number(journal.bcvRate) <= 0) {
       throw new Error('El asiento de nómina no tiene fecha, tasa BCV o líneas contables válidas para el período.');
     }
-    const rates = Array.isArray(company.inventoryBcvRateHistory) ? company.inventoryBcvRateHistory
+    const rates = Array.isArray(company.accountingBcvRateHistory) ? company.accountingBcvRateHistory
       .filter(item => item && item.effectiveDate <= run.periodEnd && Number.isFinite(Number(item.rate)) && Number(item.rate) > 0)
       .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate) || String(b.fetchedAt || '').localeCompare(String(a.fetchedAt || ''))) : [];
     const applicableRate = rates[0];
