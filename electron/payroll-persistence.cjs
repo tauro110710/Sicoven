@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { calculateVacationSalaryBasis, calculateAnnualLaborRights, calculateProfitSharingDistribution } = require('./payroll-legal-calculations.cjs');
+const { calculateVacationSalaryBasis, calculateAnnualLaborRights, calculateProfitSharingDistribution, calculateSeverance, calculateSeveranceInterest } = require('./payroll-legal-calculations.cjs');
 
 function text(value, label, max = 240, min = 1) {
   const result = String(value ?? '').trim();
@@ -528,6 +528,127 @@ function listConfirmedSalaryEntries(db, companyId, employeeId, fromDate, toDate)
   }));
 }
 
+
+function listPayrollSeveranceHistory(db, companyId, employeeId) {
+  ensureCompany(db, companyId);
+  const id = text(employeeId, 'Trabajador', 120);
+  if (!db.prepare('SELECT id FROM payroll_employees WHERE id=? AND company_id=?').get(id, companyId)) {
+    throw new Error('El trabajador no pertenece a la empresa activa.');
+  }
+  const deposits = db.prepare(`SELECT d.id,d.deposit_date AS depositDate,d.deposit_kind AS kind,d.days,
+      d.daily_integral_salary AS dailyIntegralSalary,d.amount,d.source_reference AS sourceReference,
+      d.verified_at AS verifiedAt,d.note,d.supersedes_id AS supersedesId,d.created_at AS createdAt
+    FROM payroll_severance_deposits d
+    WHERE d.company_id=? AND d.employee_id=?
+      AND NOT EXISTS (SELECT 1 FROM payroll_severance_deposits newer WHERE newer.supersedes_id=d.id)
+    ORDER BY d.deposit_date,d.created_at`).all(companyId,id);
+  const interests = db.prepare(`SELECT d.id,d.month,d.mode,d.capital,d.monthly_rate AS monthlyRate,
+      d.interest,d.source_reference AS sourceReference,d.verified_at AS verifiedAt,d.note,
+      d.supersedes_id AS supersedesId,d.created_at AS createdAt
+    FROM payroll_severance_interest_months d
+    WHERE d.company_id=? AND d.employee_id=?
+      AND NOT EXISTS (SELECT 1 FROM payroll_severance_interest_months newer WHERE newer.supersedes_id=d.id)
+    ORDER BY d.month,d.created_at`).all(companyId,id);
+  return { deposits, interests };
+}
+
+function savePayrollSeveranceDeposit(db, companyId, input) {
+  ensureCompany(db, companyId);
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('El depósito de prestaciones es inválido.');
+  const employeeId=text(input.employeeId,'Trabajador',120);
+  const employee=db.prepare('SELECT id FROM payroll_employees WHERE id=? AND company_id=?').get(employeeId,companyId);
+  if(!employee) throw new Error('El trabajador no pertenece a la empresa activa.');
+  const depositDate=date(input.depositDate,'Fecha del depósito');
+  const kind=String(input.kind||'');
+  if(!['QUARTERLY','SENIORITY','ADVANCE'].includes(kind)) throw new Error('Indique si el registro es trimestral, adicional por antigüedad o anticipo.');
+  const days=positiveOrZero(input.days,'Días reconocidos');
+  const dailyIntegralSalary=positiveOrZero(input.dailyIntegralSalary,'Salario diario integral histórico');
+  if(days<=0||dailyIntegralSalary<=0) throw new Error('Los días y el salario diario integral deben ser mayores que cero.');
+  const sourceReference=text(input.sourceReference,'Fuente o comprobante',300);
+  const verifiedAt=date(input.verifiedAt,'Fecha de verificación');
+  const note=input.note?text(input.note,'Nota',500,0):'';
+  const supersedesId=input.supersedesId?text(input.supersedesId,'Registro corregido',120):null;
+  if(supersedesId){
+    const previous=db.prepare('SELECT id,employee_id AS employeeId,deposit_kind AS kind FROM payroll_severance_deposits WHERE id=? AND company_id=?').get(supersedesId,companyId);
+    if(!previous||previous.employeeId!==employeeId||previous.kind!==kind) throw new Error('El registro que intenta corregir no corresponde al trabajador y tipo indicados.');
+    if(db.prepare('SELECT id FROM payroll_severance_deposits WHERE supersedes_id=?').get(supersedesId)) throw new Error('Ese registro ya tiene una corrección posterior.');
+  } else {
+    const duplicate=db.prepare(`SELECT id FROM payroll_severance_deposits WHERE company_id=? AND employee_id=? AND deposit_date=? AND deposit_kind=?
+      AND NOT EXISTS(SELECT 1 FROM payroll_severance_deposits n WHERE n.supersedes_id=payroll_severance_deposits.id)`).get(companyId,employeeId,depositDate,kind);
+    if(duplicate) throw new Error('Ya existe un registro vigente de ese tipo y fecha. Para corregirlo, use la opción de rectificación.');
+  }
+  const id=crypto.randomUUID(),amount=Math.round((days*dailyIntegralSalary+Number.EPSILON)*100)/100;
+  db.prepare(`INSERT INTO payroll_severance_deposits
+    (id,company_id,employee_id,deposit_date,deposit_kind,days,daily_integral_salary,amount,source_reference,verified_at,note,supersedes_id)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,companyId,employeeId,depositDate,kind,days,dailyIntegralSalary,amount,sourceReference,verifiedAt,note,supersedesId);
+  db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+    .run('payroll_severance_deposit_recorded',JSON.stringify({id,companyId,employeeId,depositDate,kind,amount,supersedesId}));
+  return {id,companyId,employeeId,depositDate,kind,days,dailyIntegralSalary,amount,sourceReference,verifiedAt,note,supersedesId};
+}
+
+function savePayrollSeveranceInterestMonth(db, companyId, input) {
+  ensureCompany(db, companyId);
+  if(!input||typeof input!=='object'||Array.isArray(input)) throw new Error('El interés mensual es inválido.');
+  const employeeId=text(input.employeeId,'Trabajador',120);
+  if(!db.prepare('SELECT id FROM payroll_employees WHERE id=? AND company_id=?').get(employeeId,companyId)) throw new Error('El trabajador no pertenece a la empresa activa.');
+  const month=text(input.month,'Mes de cálculo',7);
+  if(!/^\\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('El mes debe usar AAAA-MM.');
+  const mode=String(input.mode||'');
+  if(!['TRUST_OR_FUND','AUTHORIZED_BOOK_CREDIT','UNDEPOSITED'].includes(mode)) throw new Error('Seleccione el régimen de intereses aplicable.');
+  const capital=positiveOrZero(input.capital,'Capital del mes');
+  const monthlyRate=Number(input.monthlyRate);
+  if(!Number.isFinite(monthlyRate)||monthlyRate<0||monthlyRate>1) throw new Error('La tasa mensual debe expresarse como decimal entre 0 y 1.');
+  const sourceReference=text(input.sourceReference,'Fuente de la tasa',300);
+  const verifiedAt=date(input.verifiedAt,'Fecha de verificación');
+  const note=input.note?text(input.note,'Nota',500,0):'';
+  const supersedesId=input.supersedesId?text(input.supersedesId,'Registro corregido',120):null;
+  if(supersedesId){
+    const previous=db.prepare('SELECT id,employee_id AS employeeId,month,mode FROM payroll_severance_interest_months WHERE id=? AND company_id=?').get(supersedesId,companyId);
+    if(!previous||previous.employeeId!==employeeId||previous.month!==month||previous.mode!==mode) throw new Error('El registro que intenta corregir no corresponde al trabajador, mes y régimen indicados.');
+    if(db.prepare('SELECT id FROM payroll_severance_interest_months WHERE supersedes_id=?').get(supersedesId)) throw new Error('Ese registro ya tiene una corrección posterior.');
+  } else {
+    const duplicate=db.prepare(`SELECT id FROM payroll_severance_interest_months d WHERE company_id=? AND employee_id=? AND month=? AND mode=?
+      AND NOT EXISTS(SELECT 1 FROM payroll_severance_interest_months n WHERE n.supersedes_id=d.id)`).get(companyId,employeeId,month,mode);
+    if(duplicate) throw new Error('Ya existe una tasa vigente para ese trabajador, mes y régimen. Use rectificación para corregirla.');
+  }
+  const interest=Math.round((capital*monthlyRate+Number.EPSILON)*100)/100,id=crypto.randomUUID();
+  db.prepare(`INSERT INTO payroll_severance_interest_months
+    (id,company_id,employee_id,month,mode,capital,monthly_rate,interest,source_reference,verified_at,note,supersedes_id)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,companyId,employeeId,month,mode,capital,monthlyRate,interest,sourceReference,verifiedAt,note,supersedesId);
+  db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+    .run('payroll_severance_interest_recorded',JSON.stringify({id,companyId,employeeId,month,mode,interest,supersedesId}));
+  return {id,companyId,employeeId,month,mode,capital,monthlyRate,interest,sourceReference,verifiedAt,note,supersedesId};
+}
+
+function calculatePayrollSeverance(db, companyId, input) {
+  ensureCompany(db,companyId);
+  if(!input||typeof input!=='object'||Array.isArray(input)) throw new Error('Los datos del cálculo de prestaciones son inválidos.');
+  const employeeId=text(input.employeeId,'Trabajador',120);
+  const employee=db.prepare('SELECT id,full_name AS fullName,hire_date AS hireDate FROM payroll_employees WHERE id=? AND company_id=? AND active=1').get(employeeId,companyId);
+  if(!employee) throw new Error('El trabajador no pertenece a la empresa activa o está inactivo.');
+  const history=listPayrollSeveranceHistory(db,companyId,employeeId);
+  const quarterlyDeposits=history.deposits.filter(item=>item.kind==='QUARTERLY').map(item=>({days:item.days,dailyIntegralSalary:item.dailyIntegralSalary}));
+  const additionalSeniorityDeposits=history.deposits.filter(item=>item.kind==='SENIORITY').map(item=>({days:item.days,dailyIntegralSalary:item.dailyIntegralSalary}));
+  const advances=history.deposits.filter(item=>item.kind==='ADVANCE');
+  const result=calculateSeverance({hireDate:employee.hireDate,asOfDate:input.asOfDate,dailyIntegralSalary:input.dailyIntegralSalary,quarterlyDeposits,additionalSeniorityDeposits});
+  const advanceTotal=Math.round((advances.reduce((sum,item)=>sum+item.amount,0)+Number.EPSILON)*100)/100;
+  const grossEntitlement=result.greaterAmount;
+  return {...result,employeeId,fullName:employee.fullName,advanceTotal,netAfterAdvances:Math.max(0,Math.round((grossEntitlement-advanceTotal+Number.EPSILON)*100)/100),
+    advanceExcess:Math.max(0,Math.round((advanceTotal-grossEntitlement+Number.EPSILON)*100)/100),depositHistory:history.deposits};
+}
+
+function calculatePayrollSeveranceInterest(db, companyId, input) {
+  ensureCompany(db,companyId);
+  if(!input||typeof input!=='object'||Array.isArray(input)) throw new Error('Los datos de intereses son inválidos.');
+  const employeeId=text(input.employeeId,'Trabajador',120);
+  if(!db.prepare('SELECT id FROM payroll_employees WHERE id=? AND company_id=?').get(employeeId,companyId)) throw new Error('El trabajador no pertenece a la empresa activa.');
+  const history=listPayrollSeveranceHistory(db,companyId,employeeId);
+  const mode=String(input.mode||'');
+  const months=history.interests.filter(item=>item.mode===mode).map(item=>({month:item.month,capital:item.capital,monthlyRate:item.monthlyRate,sourceReference:item.sourceReference,verifiedAt:item.verifiedAt}));
+  const result=calculateSeveranceInterest({mode,months});
+  return {...result,employeeId,employeeName:db.prepare('SELECT full_name AS fullName FROM payroll_employees WHERE id=? AND company_id=?').get(employeeId,companyId).fullName,history:history.interests.filter(item=>item.mode===mode)};
+}
+
 function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
   if (!ipcMain || typeof ipcMain.handle !== 'function' || typeof getActiveSession !== 'function' || typeof withDatabase !== 'function') {
     throw new Error('No se pudo registrar el módulo de Nómina.');
@@ -573,6 +694,26 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
     authenticate(token);
     return withDatabase(token, (db, companyId) => calculatePayrollProfitSharing(db, companyId, input));
   });
+  ipcMain.handle('sicoven:payroll-severance-history-list', async (_event, token, employeeId) => {
+    authenticate(token);
+    return withDatabase(token, (db, companyId) => listPayrollSeveranceHistory(db, companyId, employeeId));
+  });
+  ipcMain.handle('sicoven:payroll-severance-deposit-save', async (_event, token, input) => {
+    authenticate(token);
+    return withDatabase(token, (db, companyId) => savePayrollSeveranceDeposit(db, companyId, input));
+  });
+  ipcMain.handle('sicoven:payroll-severance-interest-save', async (_event, token, input) => {
+    authenticate(token);
+    return withDatabase(token, (db, companyId) => savePayrollSeveranceInterestMonth(db, companyId, input));
+  });
+  ipcMain.handle('sicoven:payroll-severance-calculate', async (_event, token, input) => {
+    authenticate(token);
+    return withDatabase(token, (db, companyId) => calculatePayrollSeverance(db, companyId, input));
+  });
+  ipcMain.handle('sicoven:payroll-severance-interest-calculate', async (_event, token, input) => {
+    authenticate(token);
+    return withDatabase(token, (db, companyId) => calculatePayrollSeveranceInterest(db, companyId, input));
+  });
   ipcMain.handle('sicoven:payroll-run-create', async (_event, token, input) => {
     authenticate(token);
     return withDatabase(token, (db, companyId) => createPayrollRun(db, companyId, input));
@@ -593,5 +734,5 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
 module.exports = {
   listPayrollEmployees, listPayrollSalaryHistory, getPayrollSalaryForDate, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
   createPayrollRun, listPayrollRuns, getPayrollRun, confirmPayrollRun, listConfirmedSalaryEntries,
-  calculatePayrollAnnualRights, calculatePayrollProfitSharing, registerPayrollIpc
+  calculatePayrollAnnualRights, calculatePayrollProfitSharing, listPayrollSeveranceHistory, savePayrollSeveranceDeposit, savePayrollSeveranceInterestMonth, calculatePayrollSeverance, calculatePayrollSeveranceInterest, registerPayrollIpc
 };
