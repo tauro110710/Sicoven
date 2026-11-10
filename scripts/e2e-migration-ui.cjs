@@ -126,7 +126,15 @@ async function main() {
   await setInput('#password', 'admin123');
   await clickButton('Iniciar sesión');
 
-  await waitFor(() => evaluate("Boolean(document.querySelector('.company-registration-modal'))"), 'No se abrió el registro inicial de empresa');
+  // Diagnosticar cualquier estado intermedio del renderer en vez de esperar
+  // únicamente el modal y ocultar el motivo real del bloqueo.
+  await waitFor(() => evaluate("Boolean(document.querySelector('.company-registration-modal')) || Boolean(document.querySelector('[role=alert]')) || document.body.innerText.includes('Verificando empresas locales') || document.body.innerText.includes('Iniciando SICOVEN') || document.body.innerText.includes('Bases locales independientes por empresa')"),
+    'SICOVEN no mostró un estado posterior al inicio de sesión', 60000);
+  const postLoginState = await evaluate("(() => ({ companyModal: Boolean(document.querySelector('.company-registration-modal')), alerts: [...document.querySelectorAll('[role=alert]')].map(node => node.innerText.trim()), body: (document.body?.innerText || '').slice(0, 5000) }))()");
+  console.log('E2E post-login diagnostic:', JSON.stringify(postLoginState));
+  if (!postLoginState.companyModal) {
+    throw new Error('No se abrió el registro inicial de empresa. Estado visible: ' + JSON.stringify({ alerts: postLoginState.alerts, body: postLoginState.body }));
+  }
   await setInput('input[placeholder="J-12345678-9"]', 'J-12345678-9');
   await setInput('input[placeholder="EJEMPLO COMERCIAL, C.A."]', 'E2E MIGRATION TEST, C.A.');
   const savedCompany = await evaluate('(() => { const form = document.querySelector(".company-registration-form"); if (!form) return false; form.querySelector("button[type=submit]")?.click(); return true; })()');
