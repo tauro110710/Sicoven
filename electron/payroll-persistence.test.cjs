@@ -288,3 +288,40 @@ test('confirms a payroll run once with its accounting entry and is safe to retry
     assert.equal(listConfirmedSalaryEntries(db, 'co-a', employee.id, '2026-07-01', '2026-07-31').length, 1);
   } finally { db.close(); }
 });
+
+
+test('refuses to confirm a payroll with an unbalanced or wrong-date journal', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-882', fullName: 'Ana Rivas', hireDate: '2025-02-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    const run = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-07-01', periodEnd: '2026-07-15',
+      employees: [{
+        employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario base', amount: 600, isSalary: true }],
+        bases: { normalSalary: 600, integralSalary: 600, grossSalary: 600 }
+      }]
+    });
+    const journal = {
+      id: 'journal-invalid', companyId: 'co-a', referenceDoc: 'NOM-' + run.id,
+      date: '2026-07-15', bcvRate: 100, items: [
+        { accountCode: '6.1.1.01', debitBs: 60000, creditBs: 0, debitUsd: 600, creditUsd: 0 },
+        { accountCode: '2.1.3.01', debitBs: 0, creditBs: 59000, debitUsd: 0, creditUsd: 590 }
+      ]
+    };
+    db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'")
+      .run(JSON.stringify({ companies: [{ id: 'co-a' }], journalEntries: [journal] }));
+    assert.throws(() => confirmPayrollRun(db, 'co-a', run.id, 'journal-invalid'), /debe estar cuadrado/);
+    assert.equal(listPayrollRuns(db, 'co-a').find(item => item.id === run.id).status, 'DRAFT');
+    journal.items[1].creditBs = 60000;
+    journal.items[1].creditUsd = 600;
+    journal.date = '2026-07-14';
+    db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'")
+      .run(JSON.stringify({ companies: [{ id: 'co-a' }], journalEntries: [journal] }));
+    assert.throws(() => confirmPayrollRun(db, 'co-a', run.id, 'journal-invalid'), /fecha, tasa BCV/);
+    assert.equal(listPayrollRuns(db, 'co-a').find(item => item.id === run.id).status, 'DRAFT');
+  } finally { db.close(); }
+});
