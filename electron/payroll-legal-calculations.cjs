@@ -319,4 +319,121 @@ function calculateProfitSharingDistribution(input) {
   };
 }
 
-module.exports = { completedYears, completeCalendarMonths, calculateVacationSalaryBasis, calculateSeveranceSalaryBasis, calculateAnnualLaborRights, calculateSeverance, calculateSeveranceInterest, calculateProfitSharingDistribution };
+
+/**
+ * Builds the legally classified final settlement components.
+ * Outstanding vacation balances are entered only after checking the
+ * employer's vacation register; the current service-year fraction is derived
+ * from complete months under LOTTT art. 196. No unsupported deductions.
+ */
+function calculateFinalLiquidation(input) {
+  const hire = validDate(input.hireDate, 'Fecha de ingreso');
+  const end = validDate(input.terminationDate, 'Fecha de terminación');
+  if (end < hire) throw new Error('La terminación no puede ser anterior al ingreso.');
+  const reason = String(input.terminationReason || '');
+  const allowed = [
+    'VOLUNTARY_RESIGNATION','JUSTIFIED_WITHDRAWAL_ART80','JUSTIFIED_DISMISSAL_ART79',
+    'UNJUSTIFIED_DISMISSAL_ART92','CAUSE_BEYOND_WORKER_WILL_ART92',
+    'MUTUAL_AGREEMENT','CONTRACT_EXPIRATION','WORK_COMPLETION',
+    'EARLY_FIXED_TERM_WITHDRAWAL_ART83','DEATH_ART145','TEMPORARY_SUSPENSION'
+  ];
+  if (!allowed.includes(reason)) throw new Error('Seleccione una causal de terminación reconocida.');
+  if (reason === 'TEMPORARY_SUSPENSION') throw new Error('Una suspensión no termina la relación laboral y no genera liquidación final.');
+  const dailyNormalSalary = money(input.dailyNormalSalary, 'Salario diario normal a la terminación');
+  if (dailyNormalSalary <= 0) throw new Error('El salario diario normal debe ser mayor que cero.');
+  const vacationDaysOutstanding = money(input.vacationDaysOutstanding, 'Días de vacaciones vencidas pendientes');
+  const vacationBonusDaysOutstanding = money(input.vacationBonusDaysOutstanding, 'Días de bono vacacional vencidos pendientes');
+  const vacationBalanceSource = String(input.vacationBalanceSource || '').trim();
+  if (!vacationBalanceSource) throw new Error('Indique la fuente del registro de vacaciones y bonos ya disfrutados/pagados.');
+  const completedServiceYears = completedYears(input.hireDate, input.terminationDate);
+  const currentCycleStart = addMonthsClamped(hire, completedServiceYears * 12);
+  const currentCycleMonths = completedCalendarMonths(currentCycleStart, end);
+  const currentVacationAnnualDays = 15 + Math.min(15, completedServiceYears);
+  const currentVacationBonusAnnualDays = 15 + Math.min(15, completedServiceYears);
+  const fractionalVacationDays = round2(currentVacationAnnualDays * currentCycleMonths / 12);
+  const fractionalVacationBonusDays = round2(currentVacationBonusAnnualDays * currentCycleMonths / 12);
+  const vacationDaysPayable = round2(vacationDaysOutstanding + fractionalVacationDays);
+  const vacationBonusDaysPayable = round2(vacationBonusDaysOutstanding + fractionalVacationBonusDays);
+  const vacationPay = round2(vacationDaysPayable * dailyNormalSalary);
+  const vacationBonusPay = round2(vacationBonusDaysPayable * dailyNormalSalary);
+
+  const severancePayable = money(input.severancePayable, 'Prestaciones sociales netas de anticipos');
+  const interestStatus = String(input.interestStatus || '');
+  const profitSharingStatus = String(input.profitSharingStatus || '');
+  if (!['SETTLED','NOT_APPLICABLE'].includes(interestStatus)) throw new Error('Debe conciliar los intereses de prestaciones o marcar documentadamente que no están pendientes.');
+  if (!['SETTLED','NOT_APPLICABLE'].includes(profitSharingStatus)) throw new Error('Debe conciliar las utilidades pendientes o marcar documentadamente que no corresponden.');
+  const interestAmount = interestStatus === 'SETTLED' ? money(input.interestAmount, 'Intereses de prestaciones') : 0;
+  const profitSharingAmount = profitSharingStatus === 'SETTLED' ? money(input.profitSharingAmount, 'Utilidades pendientes') : 0;
+  if (interestAmount > 0 && !String(input.interestSourceReference || '').trim()) throw new Error('Indique la fuente de los intereses reconocidos.');
+  if (profitSharingAmount > 0 && !String(input.profitSharingSourceReference || '').trim()) throw new Error('Indique la fuente del cálculo de utilidades.');
+  const pendingSalaryAmount = money(input.pendingSalaryAmount || 0, 'Salarios y conceptos causados pendientes');
+  if (pendingSalaryAmount > 0 && !String(input.pendingSalarySourceReference || '').trim()) throw new Error('Indique el soporte de salarios y conceptos pendientes.');
+
+  const additionalEarnings = Array.isArray(input.additionalEarnings) ? input.additionalEarnings : [];
+  const earningCodes = new Set();
+  const additionalEarningsTotal = round2(additionalEarnings.reduce((sum, item) => {
+    const code = String(item.code || '').trim();
+    if (!code || earningCodes.has(code)) throw new Error('Los conceptos adicionales deben tener códigos no vacíos y no repetidos.');
+    earningCodes.add(code);
+    const amount = money(item.amount, 'Concepto adicional');
+    if (amount > 0 && !String(item.sourceReference || '').trim()) throw new Error('Cada concepto adicional debe tener un comprobante o fuente.');
+    return sum + amount;
+  }, 0));
+
+  const legalEvidence = String(input.legalEvidence || '').trim();
+  const classificationConfirmed = input.legalClassificationConfirmed === true;
+  let indemnity = 0;
+  let remainingContractWages = 0;
+  if (reason === 'JUSTIFIED_WITHDRAWAL_ART80' || reason === 'CAUSE_BEYOND_WORKER_WILL_ART92') {
+    if (!classificationConfirmed || !legalEvidence) throw new Error('La causal indemnizable requiere clasificación legal confirmada y evidencia.');
+    indemnity = severancePayable;
+  }
+  if (reason === 'UNJUSTIFIED_DISMISSAL_ART92') {
+    const choice = String(input.workerChoice || '');
+    if (choice !== 'NO_REENGAGEMENT') {
+      throw new Error('No se puede cerrar la liquidación hasta documentar que el trabajador no solicitará reenganche (art. 92).');
+    }
+    if (!classificationConfirmed || !legalEvidence) throw new Error('El despido injustificado requiere constancia de la elección del trabajador y evidencia.');
+    indemnity = severancePayable;
+  }
+  if (reason === 'EARLY_FIXED_TERM_WITHDRAWAL_ART83') {
+    const contractEndDate = validDate(input.contractEndDate, 'Vencimiento del contrato');
+    if (contractEndDate <= end) throw new Error('El vencimiento contractual debe ser posterior a la fecha de retiro.');
+    if (!classificationConfirmed || !legalEvidence || !String(input.contractEvidence || '').trim()) {
+      throw new Error('El supuesto del artículo 83 requiere contrato, causal justificada y evidencia verificable.');
+    }
+    remainingContractWages = money(input.remainingContractWages, 'Salarios hasta el vencimiento del contrato');
+    indemnity = round2(severancePayable + remainingContractWages);
+  }
+  let agreedAdditionalAmount = 0;
+  if (reason === 'MUTUAL_AGREEMENT') {
+    agreedAdditionalAmount = money(input.agreedAdditionalAmount || 0, 'Monto adicional convenido');
+    if (agreedAdditionalAmount > 0 && !String(input.agreementEvidence || '').trim()) {
+      throw new Error('El monto adicional del mutuo acuerdo requiere convenio escrito y soporte.');
+    }
+  }
+  if (reason === 'DEATH_ART145' && !String(input.beneficiaryEvidence || '').trim()) {
+    throw new Error('El pago por fallecimiento requiere acreditar a los beneficiarios conforme al artículo 145.');
+  }
+
+  const total = round2(severancePayable + vacationPay + vacationBonusPay + interestAmount +
+    profitSharingAmount + pendingSalaryAmount + additionalEarningsTotal + indemnity + agreedAdditionalAmount);
+  return {
+    terminationDate: input.terminationDate, terminationReason: reason, completedServiceYears,
+    currentCycleMonths, currentVacationAnnualDays, currentVacationBonusAnnualDays,
+    vacationDaysOutstanding, vacationDaysPayable, fractionalVacationDays, vacationPay,
+    vacationBonusDaysOutstanding, vacationBonusDaysPayable, fractionalVacationBonusDays, vacationBonusPay,
+    dailyNormalSalary, vacationBalanceSource, severancePayable, interestAmount, interestStatus,
+    profitSharingAmount, profitSharingStatus, pendingSalaryAmount, additionalEarnings,
+    additionalEarningsTotal, indemnity, remainingContractWages, agreedAdditionalAmount, total,
+    legalBases: ['LOTTT arts. 19, 80, 83, 92, 121, 122, 142, 145, 190, 192, 195, 196; GO 6.076 Extraordinario'],
+    notes: [
+      'Vacaciones y bono vacacional se calculan separadamente con salario normal diario.',
+      'La fracción del período en curso utiliza meses completos; las condiciones contractuales/colectivas superiores deben prevalecer si están acreditadas.',
+      'No se aplicaron deducciones automáticas ni se descontó preaviso omitido.',
+      reason === 'DEATH_ART145' ? 'El pago se entrega únicamente a beneficiarios acreditados conforme al artículo 145.' : ''
+    ].filter(Boolean)
+  };
+}
+
+module.exports = { completedYears, completeCalendarMonths, calculateVacationSalaryBasis, calculateSeveranceSalaryBasis, calculateAnnualLaborRights, calculateSeverance, calculateSeveranceInterest, calculateProfitSharingDistribution, calculateFinalLiquidation };

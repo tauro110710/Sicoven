@@ -248,3 +248,56 @@ test('rejects missing wage denominator, duplicate employees and invalid service 
     employees: [{ employeeId: 'A', wagesEarned: 1000, monthlyNormalSalary: 1000, monthsWorked: 0 }]
   }), /meses completos/);
 });
+
+
+test('calculates final settlement vacation, bonus, salary arrears, profit sharing and severance separately', () => {
+  const { calculateFinalLiquidation } = require('./payroll-legal-calculations.cjs');
+  const result = calculateFinalLiquidation({
+    hireDate:'2024-01-01', terminationDate:'2026-07-01',
+    terminationReason:'VOLUNTARY_RESIGNATION', dailyNormalSalary:100,
+    vacationDaysOutstanding:5, vacationBonusDaysOutstanding:3,
+    vacationBalanceSource:'Registro de vacaciones 2024-2026',
+    severancePayable:12000, interestStatus:'SETTLED', interestAmount:120,
+    interestSourceReference:'Intereses mensuales verificados',
+    profitSharingStatus:'SETTLED', profitSharingAmount:800,
+    profitSharingSourceReference:'Cálculo anual confirmado',
+    pendingSalaryAmount:500, pendingSalarySourceReference:'Nómina pendiente'
+  });
+  assert.equal(result.currentCycleMonths,6);
+  assert.equal(result.currentVacationAnnualDays,17);
+  assert.equal(result.fractionalVacationDays,8.5);
+  assert.equal(result.vacationPay,1350);
+  assert.equal(result.currentVacationBonusAnnualDays,17);
+  assert.equal(result.fractionalVacationBonusDays,8.5);
+  assert.equal(result.vacationBonusPay,1150);
+  assert.equal(result.indemnity,0);
+  assert.equal(result.total,15920);
+});
+
+test('adds the equivalent severance indemnity only to legally classified art. 80 and art. 92 exits', () => {
+  const { calculateFinalLiquidation } = require('./payroll-legal-calculations.cjs');
+  const base={hireDate:'2020-01-01',terminationDate:'2026-01-01',dailyNormalSalary:100,
+    vacationDaysOutstanding:0,vacationBonusDaysOutstanding:0,vacationBalanceSource:'Registro conciliado',
+    severancePayable:10000,interestStatus:'NOT_APPLICABLE',profitSharingStatus:'NOT_APPLICABLE'};
+  const art80=calculateFinalLiquidation({...base,terminationReason:'JUSTIFIED_WITHDRAWAL_ART80',legalClassificationConfirmed:true,legalEvidence:'Acta de Inspectoría'});
+  const art92=calculateFinalLiquidation({...base,terminationReason:'UNJUSTIFIED_DISMISSAL_ART92',workerChoice:'NO_REENGAGEMENT',legalClassificationConfirmed:true,legalEvidence:'Constancia de opción del trabajador'});
+  const resignation=calculateFinalLiquidation({...base,terminationReason:'VOLUNTARY_RESIGNATION'});
+  const justifiedDismissal=calculateFinalLiquidation({...base,terminationReason:'JUSTIFIED_DISMISSAL_ART79'});
+  assert.equal(art80.indemnity,10000);
+  assert.equal(art92.indemnity,10000);
+  assert.equal(resignation.indemnity,0);
+  assert.equal(justifiedDismissal.indemnity,0);
+});
+
+test('fails closed for unresolved dismissal, suspension, missing evidence and unproven special cases', () => {
+  const { calculateFinalLiquidation } = require('./payroll-legal-calculations.cjs');
+  const base={hireDate:'2024-01-01',terminationDate:'2026-01-01',dailyNormalSalary:100,
+    vacationDaysOutstanding:0,vacationBonusDaysOutstanding:0,vacationBalanceSource:'Registro',
+    severancePayable:1000,interestStatus:'NOT_APPLICABLE',profitSharingStatus:'NOT_APPLICABLE'};
+  assert.throws(()=>calculateFinalLiquidation({...base,terminationReason:'UNJUSTIFIED_DISMISSAL_ART92'}),/no solicitará reenganche/);
+  assert.throws(()=>calculateFinalLiquidation({...base,terminationReason:'TEMPORARY_SUSPENSION'}),/no termina la relación/);
+  assert.throws(()=>calculateFinalLiquidation({...base,terminationReason:'JUSTIFIED_WITHDRAWAL_ART80'}),/clasificación legal confirmada/);
+  assert.throws(()=>calculateFinalLiquidation({...base,terminationReason:'DEATH_ART145'}),/beneficiarios/);
+  assert.throws(()=>calculateFinalLiquidation({...base,terminationReason:'EARLY_FIXED_TERM_WITHDRAWAL_ART83'}),/Vencimiento del contrato/);
+  assert.throws(()=>calculateFinalLiquidation({...base,terminationReason:'VOLUNTARY_RESIGNATION',profitSharingStatus:'PENDING'}),/utilidades pendientes/);
+});
