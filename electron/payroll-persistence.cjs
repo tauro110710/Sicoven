@@ -179,7 +179,6 @@ function calculateEmployeeDraft(db, companyId, employee, input, periodEnd) {
   if (!input || !Array.isArray(input.earnings) || input.earnings.length === 0) throw new Error('Cada trabajador requiere al menos una asignación.');
   const salaryRecord = getPayrollSalaryForDate(db, companyId, employee.id, periodEnd);
   const bases = { ...(input.bases || {}) };
-  if (bases.normalSalary == null) bases.normalSalary = salaryRecord.baseSalary;
   for (const key of ['normalSalary', 'integralSalary', 'grossSalary']) positiveOrZero(bases[key], 'Base ' + key);
   const earnings = input.earnings.map(line => ({
     code: text(line.code, 'Código de asignación', 60),
