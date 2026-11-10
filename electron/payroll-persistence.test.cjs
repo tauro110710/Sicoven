@@ -215,6 +215,7 @@ test('returns the immutable payroll snapshot only inside the active company', ()
     });
     const loaded = getPayrollRun(db, 'co-a', created.id);
     assert.equal(loaded.snapshot.employees[0].fullName, 'Rosa Núñez');
+    assert.deepEqual(loaded.snapshot.companySnapshot, { name: '', rif: '', address: '', phone: '' });
     assert.equal(loaded.snapshot.employees[0].netPay, 700);
     assert.equal(loaded.status, 'DRAFT');
     assert.throws(() => getPayrollRun(db, 'co-b', created.id), /empresa activa/);
