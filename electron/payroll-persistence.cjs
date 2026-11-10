@@ -380,7 +380,7 @@ function confirmPayrollRun(db, companyId, runId, journalEntryId) {
     }
     const rates = Array.isArray(company.accountingBcvRateHistory) ? company.accountingBcvRateHistory
       .filter(item => item && item.effectiveDate <= run.periodEnd && Number.isFinite(Number(item.rate)) && Number(item.rate) > 0)
-      .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate) || String(b.fetchedAt || '').localeCompare(String(a.fetchedAt || ''))) : [];
+      .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate) || String(b.recordedAt || '').localeCompare(String(a.recordedAt || ''))) : [];
     const applicableRate = rates[0];
     const rateAgeDays = applicableRate
       ? Math.floor((Date.parse(run.periodEnd + 'T00:00:00Z') - Date.parse(applicableRate.effectiveDate + 'T00:00:00Z')) / 86400000)
