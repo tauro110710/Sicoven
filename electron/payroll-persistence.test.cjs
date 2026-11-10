@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 const { initializeTenantDatabase } = require('./tenant-schema.cjs');
 const {
-  listPayrollEmployees, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
+  listPayrollEmployees, listPayrollSalaryHistory, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
   registerPayrollIpc, createPayrollRun, listPayrollRuns
 } = require('./payroll-persistence.cjs');
 
@@ -49,6 +49,29 @@ test('updates an existing worker without allowing cross-company IDs', () => {
   } finally { db.close(); }
 });
 
+test('preserves effective-dated salary history when a worker salary changes', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-321', fullName: 'Elena Mora', hireDate: '2024-03-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    const first = listPayrollSalaryHistory(db, 'co-a', employee.id);
+    assert.equal(first.length, 1);
+    assert.equal(first[0].effectiveFrom, '2024-03-01');
+    assert.equal(first[0].baseSalary, 1200);
+    savePayrollEmployee(db, 'co-a', { ...employee, baseSalary: 1500, salaryEffectiveFrom: '2026-01-01' });
+    const history = listPayrollSalaryHistory(db, 'co-a', employee.id);
+    assert.equal(history.length, 2);
+    assert.equal(history[0].effectiveFrom, '2026-01-01');
+    assert.equal(history[0].baseSalary, 1500);
+    assert.equal(history[0].source, 'SALARY_CHANGE');
+    assert.equal(history[1].effectiveTo, '2025-12-31');
+    assert.equal(history[1].baseSalary, 1200);
+    assert.throws(() => savePayrollEmployee(db, 'co-a', { ...employee, baseSalary: 1600, salaryEffectiveFrom: '2025-12-01' }), /posterior al último cambio/);
+    assert.equal(listPayrollSalaryHistory(db, 'co-a', employee.id).length, 2);
+  } finally { db.close(); }
+});
 test('stores only legal rules with source and effective dates', () => {
   const db = setup();
   try {
