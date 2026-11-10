@@ -470,4 +470,4 @@ function calculateFinalLiquidation(input) {
   };
 }
 
-module.exports = { completedYears, completeCalendarMonths, calculateVacationSalaryBasis, calculateSeveranceSalaryBasis, calculateAnnualLaborRights, calculateSeverance, calculateSeveranceInterest, calculateProfitSharingDistribution, calculateFinalLiquidation };
+module.exports = { completedYears, completedCalendarMonths, completeCalendarMonths, calculateVacationSalaryBasis, calculateSeveranceSalaryBasis, calculateAnnualLaborRights, calculateSeverance, calculateSeveranceInterest, calculateProfitSharingDistribution, calculateFinalLiquidation };

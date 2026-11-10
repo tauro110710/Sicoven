@@ -731,7 +731,7 @@ test('rolls back severance deposit and interest records if their audit event can
     db.exec(`CREATE TRIGGER fail_payroll_severance_audit BEFORE INSERT ON audit_events
       WHEN NEW.event_type IN ('payroll_severance_deposit_recorded','payroll_severance_interest_recorded')
       BEGIN SELECT RAISE(ABORT,'forced audit failure'); END;`);
-    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-03-31',kind:'QUARTERLY',days:15,dailyIntegralSalary:60,sourceReference:'Q1',verifiedAt:'2025-04-01'}),/forced audit failure/);
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2025-04-01',kind:'QUARTERLY',serviceQuarter:1,days:15,dailyIntegralSalary:60,sourceReference:'Q1',verifiedAt:'2025-04-01'}),/forced audit failure/);
     assert.throws(()=>savePayrollSeveranceInterestMonth(db,'co-a',{employeeId:employee.id,month:'2025-03',mode:'UNDEPOSITED',capital:900,monthlyRate:0.01,sourceReference:'Tasa BCV',modeEvidence:'Tasa activa de los seis principales bancos',verifiedAt:'2025-04-01'}),/forced audit failure/);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM payroll_severance_deposits').get().n,0);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM payroll_severance_interest_months').get().n,0);
@@ -765,7 +765,7 @@ test('creates immutable, auditable final liquidation snapshots and permits linke
   const db=setup();
   try {
     const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-990',fullName:'Elena Pérez',hireDate:'2024-01-01',frequency:'BIWEEKLY',baseSalary:3000});
-    savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-01',kind:'QUARTERLY',days:15,dailyIntegralSalary:50,sourceReference:'Garantía Q1',verifiedAt:'2024-04-02'});
+    savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-01',kind:'QUARTERLY',serviceQuarter:1,days:15,dailyIntegralSalary:50,sourceReference:'Garantía Q1',verifiedAt:'2024-04-02'});
     const input={
       employeeId:employee.id,terminationDate:'2024-04-01',terminationReason:'VOLUNTARY_RESIGNATION',
       vacationSalaryType:'FIXED',lastMonthNormalSalary:3000,
@@ -817,5 +817,43 @@ test('limits advances to 75 percent of deposited guarantee and validates art. 14
     assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-03',kind:'ADVANCE',days:2,dailyIntegralSalary:100,advancePurpose:'MEDICAL',advanceAuthorizationReference:'Autorización escrita 04-03',sourceReference:'Transferencia médica',verifiedAt:'2024-04-03'}),/setenta y cinco por ciento/);
     const history=listPayrollSeveranceHistory(db,'co-a',employee.id);
     assert.equal(history.deposits.find(item=>item.kind==='ADVANCE').advancePurpose,'EDUCATION');
+  } finally { db.close(); }
+});
+
+
+test('identifies the original service quarter, blocks duplicate and premature quarterly deposits', () => {
+  const db=setup();
+  try {
+    const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-993',fullName:'José Rivas',hireDate:'2024-01-15',frequency:'BIWEEKLY',baseSalary:3000});
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-14',kind:'QUARTERLY',serviceQuarter:1,days:15,dailyIntegralSalary:100,sourceReference:'Q1 antes de completar',verifiedAt:'2024-04-14'}),/trimestres ya cumplidos/);
+    savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-04-15',kind:'QUARTERLY',serviceQuarter:1,days:15,dailyIntegralSalary:100,sourceReference:'Q1',verifiedAt:'2024-04-15'});
+    assert.throws(()=>savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-05-15',kind:'QUARTERLY',serviceQuarter:1,days:15,dailyIntegralSalary:100,sourceReference:'Q1 duplicado',verifiedAt:'2024-05-15'}),/trimestre de servicio 1/);
+    savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate:'2024-07-15',kind:'QUARTERLY',serviceQuarter:2,days:15,dailyIntegralSalary:100,sourceReference:'Q2',verifiedAt:'2024-07-15'});
+    const history=listPayrollSeveranceHistory(db,'co-a',employee.id);
+    assert.deepEqual(history.deposits.filter(item=>item.kind==='QUARTERLY').map(item=>item.serviceQuarter),[1,2]);
+  } finally { db.close(); }
+});
+
+test('reproduces the TSJ eight-years-nine-months case: 35 quarterly deposits plus 16 seniority days', () => {
+  const db=setup();
+  try {
+    const employee=savePayrollEmployee(db,'co-a',{fiscalId:'V-994',fullName:'Caso jurisprudencial',hireDate:'2006-01-01',frequency:'BIWEEKLY',baseSalary:3000});
+    for(let quarter=1;quarter<=35;quarter++){
+      const monthIndex=quarter*3;
+      const year=2006+Math.floor(monthIndex/12);
+      const month=(monthIndex%12)+1;
+      const depositDate=String(year)+'-'+String(month).padStart(2,'0')+'-01';
+      savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate,kind:'QUARTERLY',serviceQuarter:quarter,days:15,dailyIntegralSalary:100,sourceReference:'Garantía trimestre '+quarter,verifiedAt:depositDate});
+    }
+    for(let serviceYear=1;serviceYear<=8;serviceYear++){
+      const depositDate=String(2006+serviceYear)+'-01-01';
+      savePayrollSeveranceDeposit(db,'co-a',{employeeId:employee.id,depositDate,kind:'SENIORITY',serviceYear,days:2,dailyIntegralSalary:100,sourceReference:'Promedio integral año '+serviceYear,verifiedAt:depositDate});
+    }
+    const result=calculatePayrollSeverance(db,'co-a',{employeeId:employee.id,asOfDate:'2014-10-25',salaryType:'FIXED',lastMonthlyIntegratedSalary:3000});
+    assert.equal(result.completedYears,8);
+    assert.equal(result.completedMonths,105);
+    assert.equal(result.quarterlyGuaranteeDays,525);
+    assert.equal(result.additionalSeniorityDays,16);
+    assert.equal(result.guaranteeDays,541);
   } finally { db.close(); }
 });

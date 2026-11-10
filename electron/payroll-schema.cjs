@@ -94,6 +94,7 @@ function initializePayrollSchema(db) {
       deposit_date TEXT NOT NULL,
       deposit_kind TEXT NOT NULL CHECK (deposit_kind IN ('QUARTERLY','SENIORITY','ADVANCE')),
       service_year INTEGER,
+      service_quarter INTEGER,
       advance_purpose TEXT,
       advance_authorization_reference TEXT,
       days REAL NOT NULL CHECK (days > 0),
@@ -183,6 +184,9 @@ function initializePayrollSchema(db) {
     db.exec('ALTER TABLE payroll_severance_deposits ADD COLUMN service_year INTEGER');
   }
   const advanceColumns = db.pragma('table_info(payroll_severance_deposits)');
+  if (!advanceColumns.some(column => column.name === 'service_quarter')) {
+    db.exec('ALTER TABLE payroll_severance_deposits ADD COLUMN service_quarter INTEGER');
+  }
   if (!advanceColumns.some(column => column.name === 'advance_purpose')) {
     db.exec('ALTER TABLE payroll_severance_deposits ADD COLUMN advance_purpose TEXT');
   }

@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { completedYears, calculateVacationSalaryBasis, calculateAnnualLaborRights, calculateProfitSharingDistribution, calculateSeverance, calculateSeveranceInterest, calculateSeveranceSalaryBasis, calculateFinalLiquidation } = require('./payroll-legal-calculations.cjs');
+const { completedYears, completedCalendarMonths, calculateVacationSalaryBasis, calculateAnnualLaborRights, calculateProfitSharingDistribution, calculateSeverance, calculateSeveranceInterest, calculateSeveranceSalaryBasis, calculateFinalLiquidation } = require('./payroll-legal-calculations.cjs');
 
 function text(value, label, max = 240, min = 1) {
   const result = String(value ?? '').trim();
@@ -561,7 +561,7 @@ function listPayrollSeveranceHistory(db, companyId, employeeId) {
     throw new Error('El trabajador no pertenece a la empresa activa.');
   }
   const employee = db.prepare('SELECT hire_date AS hireDate FROM payroll_employees WHERE id=? AND company_id=?').get(id,companyId);
-  const deposits = db.prepare(`SELECT d.id,d.deposit_date AS depositDate,d.deposit_kind AS kind,d.service_year AS serviceYear,d.days,
+  const deposits = db.prepare(`SELECT d.id,d.deposit_date AS depositDate,d.deposit_kind AS kind,d.service_year AS serviceYear,d.service_quarter AS serviceQuarter,d.days,
       d.daily_integral_salary AS dailyIntegralSalary,d.amount,d.advance_purpose AS advancePurpose,
       d.advance_authorization_reference AS advanceAuthorizationReference,d.source_reference AS sourceReference,
       d.verified_at AS verifiedAt,d.note,d.supersedes_id AS supersedesId,d.created_at AS createdAt
@@ -593,7 +593,14 @@ function savePayrollSeveranceDeposit(db, companyId, input) {
   if(!['QUARTERLY','SENIORITY','ADVANCE'].includes(kind)) throw new Error('Indique si el registro es trimestral, adicional por antigüedad o anticipo.');
   const days=positiveOrZero(input.days,'Días reconocidos');
   const serviceYear=kind==='SENIORITY'?Number(input.serviceYear):null;
+  const serviceQuarter=kind==='QUARTERLY'?Number(input.serviceQuarter):null;
   if(kind==='QUARTERLY' && Math.abs(days-15)>0.001) throw new Error('Cada depósito trimestral debe representar exactamente quince días de salario.');
+  if(kind==='QUARTERLY') {
+    const completedQuarterCount=Math.floor(completedCalendarMonths(new Date(employee.hireDate+'T00:00:00.000Z'),new Date(depositDate+'T00:00:00.000Z'))/3);
+    if(!Number.isInteger(serviceQuarter)||serviceQuarter<1||serviceQuarter>completedQuarterCount) {
+      throw new Error('Indique el trimestre de servicio real; solo pueden registrarse trimestres ya cumplidos a la fecha del depósito.');
+    }
+  }
   if(kind==='SENIORITY') {
     const completedAtDeposit=completedYears(employee.hireDate,depositDate);
     if(!Number.isInteger(serviceYear) || serviceYear<1 || serviceYear>15 || serviceYear>completedAtDeposit) {
@@ -633,6 +640,20 @@ function savePayrollSeveranceDeposit(db, companyId, input) {
       AND NOT EXISTS(SELECT 1 FROM payroll_severance_deposits n WHERE n.supersedes_id=payroll_severance_deposits.id)`).get(companyId,employeeId,depositDate,kind);
     if(duplicate) throw new Error('Ya existe un registro vigente de ese tipo y fecha. Para corregirlo, use la opción de rectificación.');
   }
+  if(kind==='QUARTERLY') {
+    const priorQuarterRows=db.prepare(`SELECT id,service_quarter AS serviceQuarter FROM payroll_severance_deposits
+      WHERE company_id=? AND employee_id=? AND deposit_kind='QUARTERLY'`).all(companyId,employeeId);
+    const duplicateQuarter=priorQuarterRows.find(row=>row.id!==supersedesId &&
+      !db.prepare('SELECT id FROM payroll_severance_deposits WHERE supersedes_id=?').get(row.id) &&
+      Number(row.serviceQuarter)===serviceQuarter);
+    if(duplicateQuarter) throw new Error('Ya existe el depósito trimestral correspondiente al trimestre de servicio '+serviceQuarter+'. Use rectificación si el registro está equivocado.');
+    if(supersedesId) {
+      const previousQuarter=db.prepare('SELECT service_quarter AS serviceQuarter FROM payroll_severance_deposits WHERE id=? AND company_id=?').get(supersedesId,companyId);
+      if(previousQuarter && previousQuarter.serviceQuarter!=null && Number(previousQuarter.serviceQuarter)!==serviceQuarter) {
+        throw new Error('La rectificación debe conservar el mismo trimestre de servicio del depósito original.');
+      }
+    }
+  }
   const amount=Math.round((days*dailyIntegralSalary+Number.EPSILON)*100)/100;
   const activeLedger=db.prepare(`SELECT d.id,d.deposit_kind AS kind,d.deposit_date AS depositDate,d.amount,
       d.advance_purpose AS advancePurpose,d.advance_authorization_reference AS advanceAuthorizationReference
@@ -644,13 +665,13 @@ function savePayrollSeveranceDeposit(db, companyId, input) {
   const id=crypto.randomUUID();
   const persist=db.transaction(()=>{
     db.prepare(`INSERT INTO payroll_severance_deposits
-      (id,company_id,employee_id,deposit_date,deposit_kind,service_year,advance_purpose,advance_authorization_reference,days,daily_integral_salary,amount,source_reference,verified_at,note,supersedes_id)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,companyId,employeeId,depositDate,kind,serviceYear,advancePurpose,advanceAuthorizationReference,days,dailyIntegralSalary,amount,sourceReference,verifiedAt,note,supersedesId);
+      (id,company_id,employee_id,deposit_date,deposit_kind,service_year,service_quarter,advance_purpose,advance_authorization_reference,days,daily_integral_salary,amount,source_reference,verified_at,note,supersedes_id)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,companyId,employeeId,depositDate,kind,serviceYear,serviceQuarter,advancePurpose,advanceAuthorizationReference,days,dailyIntegralSalary,amount,sourceReference,verifiedAt,note,supersedesId);
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
       .run('payroll_severance_deposit_recorded',JSON.stringify({id,companyId,employeeId,depositDate,kind,amount,supersedesId}));
   });
   persist();
-  return {id,companyId,employeeId,depositDate,kind,serviceYear,days,dailyIntegralSalary,amount,sourceReference,verifiedAt,note,supersedesId};
+  return {id,companyId,employeeId,depositDate,kind,serviceYear,serviceQuarter,days,dailyIntegralSalary,amount,sourceReference,verifiedAt,note,supersedesId};
 }
 
 function savePayrollSeveranceInterestMonth(db, companyId, input) {
@@ -704,7 +725,7 @@ function calculatePayrollSeverance(db, companyId, input) {
   const history=listPayrollSeveranceHistory(db,companyId,employeeId);
   const asOfDate=date(input.asOfDate,'Fecha de corte');
   const applicableDeposits=history.deposits.filter(item=>item.depositDate<=asOfDate);
-  const quarterlyDeposits=applicableDeposits.filter(item=>item.kind==='QUARTERLY').map(item=>({days:item.days,dailyIntegralSalary:item.dailyIntegralSalary}));
+  const quarterlyDeposits=applicableDeposits.filter(item=>item.kind==='QUARTERLY').map(item=>({serviceQuarter:item.serviceQuarter,days:item.days,dailyIntegralSalary:item.dailyIntegralSalary}));
   const additionalSeniorityDeposits=applicableDeposits.filter(item=>item.kind==='SENIORITY').map(item=>({serviceYear:item.serviceYear,days:item.days,dailyIntegralSalary:item.dailyIntegralSalary}));
   const advances=applicableDeposits.filter(item=>item.kind==='ADVANCE');
   const advanceCompliance=validateAdvanceLedger(applicableDeposits);
@@ -712,6 +733,11 @@ function calculatePayrollSeverance(db, companyId, input) {
   // Let the statutory calculator report missing quarterly history first; only
   // after that validate the identity and uniqueness of annual seniority years.
   const result=calculateSeverance({hireDate:employee.hireDate,asOfDate:input.asOfDate,dailyIntegralSalary:salaryBasis.dailySalary,quarterlyDeposits,additionalSeniorityDeposits});
+  const expectedQuarters=Math.floor(completedCalendarMonths(new Date(employee.hireDate+'T00:00:00.000Z'),new Date(asOfDate+'T00:00:00.000Z'))/3);
+  const actualQuarters=quarterlyDeposits.map(item=>Number(item.serviceQuarter)).sort((a,b)=>a-b);
+  if(actualQuarters.length!==expectedQuarters || actualQuarters.some((quarter,index)=>quarter!==index+1)) {
+    throw new Error('El historial debe identificar una sola vez cada trimestre de servicio completo. Rectifique los depósitos históricos sin trimestre asignado.');
+  }
   const expectedSeniorityYears=Math.min(completedYears(employee.hireDate,asOfDate),15);
   const actualSeniorityYears=additionalSeniorityDeposits.map(item=>Number(item.serviceYear)).sort((a,b)=>a-b);
   if(actualSeniorityYears.length!==expectedSeniorityYears || actualSeniorityYears.some((year,index)=>year!==index+1)) {
