@@ -257,3 +257,28 @@ test('does not activate a company in the control registry when initial operation
   assert.equal(orphan.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ledger_rows'").get(), undefined);
   orphan.close();
 });
+
+
+test('factory reset removes each registered company database and its supporting documents', t => {
+  const { userDataDir, manager, controlDb } = fixture(t);
+  manager.registerCompany({ id: 'comp-reset', rif: 'J-12345678-9', name: 'Empresa para reset' });
+  const databaseFile = manager.getDatabasePath('comp-reset');
+  const companyDirectory = path.dirname(databaseFile);
+  const documentsDirectory = path.join(companyDirectory, 'supporting-documents');
+  fs.mkdirSync(documentsDirectory, { recursive: true });
+  fs.writeFileSync(path.join(documentsDirectory, 'documento.pdf'), 'contenido de prueba');
+  const orphanDirectory = path.join(userDataDir, 'companies', 'orphan-company');
+  fs.mkdirSync(orphanDirectory, { recursive: true });
+  fs.writeFileSync(path.join(orphanDirectory, 'keep.txt'), 'no borrar: sin registro');
+  manager.closeAll();
+
+  const result = manager.resetAllCompanies();
+
+  assert.deepEqual(result.removedCompanyIds, ['comp-reset']);
+  assert.equal(result.removedCompanies, 1);
+  assert.equal(fs.existsSync(companyDirectory), false);
+  assert.equal(fs.existsSync(orphanDirectory), true);
+  assert.equal(fs.readFileSync(path.join(orphanDirectory, 'keep.txt'), 'utf8'), 'no borrar: sin registro');
+  assert.deepEqual(manager.listCompanies(), []);
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_database_registry').get().count, 0);
+});

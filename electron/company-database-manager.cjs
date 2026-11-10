@@ -371,8 +371,19 @@ function createCompanyDatabaseManager({
         fs.rmSync(candidate);
       }
     }
-    for (const directory of [...new Set(targets.map(item => item.directory))]) {
-      if (fs.existsSync(directory) && fs.readdirSync(directory).length === 0) fs.rmdirSync(directory);
+    // A factory reset must also remove company-scoped supporting documents
+    // and any other files stored beside the registered SQLite database.
+    // Delete only the exact registered company directory under companiesRoot.
+    for (const target of targets) {
+      const directory = path.resolve(target.directory);
+      if (path.dirname(directory) !== path.resolve(companiesRoot) ||
+          path.basename(directory) !== normalizeCompanyId(target.id)) {
+        throw new Error('La carpeta registrada de la empresa no coincide con su ubicación autorizada. Se bloqueó el RESET DE FÁBRICA.');
+      }
+      if (fs.existsSync(directory)) {
+        assertSafeDirectory(directory, 'La carpeta de la empresa');
+        fs.rmSync(directory, { recursive: true, force: false });
+      }
     }
     const removeRegistry = controlDb.transaction(() => {
       controlDb.prepare('DELETE FROM ' + REGISTRY_TABLE).run();

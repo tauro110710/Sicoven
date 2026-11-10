@@ -1307,15 +1307,17 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
             <button
               disabled={factoryResetBusy}
               onClick={async () => {
-                const first = window.confirm('RESET DE FÁBRICA SICOVEN\n\nSe solicitará una carpeta externa para crear y verificar un respaldo completo antes de borrar. Se eliminarán todas las empresas y sus bases SQLite locales, asientos, compras, ventas, inventario, retenciones, conciliaciones y demás datos operativos. Se conservarán los usuarios administradores, la licencia y la auditoría general. Esta acción no se puede deshacer. ¿Deseas continuar?');
+                const first = window.confirm('RESET DE FÁBRICA SICOVEN\n\nSe recomienda crear un Respaldo global antes de borrar, pero no es obligatorio. Si no tienes respaldo, puedes continuar igualmente. Se eliminarán todas las empresas y sus bases SQLite locales, asientos, compras, ventas, inventario, retenciones, conciliaciones y demás datos operativos. Se conservarán los usuarios, la licencia y la auditoría general. Esta acción no se puede deshacer. ¿Deseas continuar?');
                 if (!first) return;
+                const confirmDelete = window.confirm('CONFIRMAR BORRADO\n\n¿Confirmas que deseas ejecutar el RESET DE FÁBRICA y eliminar definitivamente todos los datos operativos?');
+                if (!confirmDelete) return;
                 setFactoryResetBusy(true);
-                setFactoryResetStage('Verificando sesión y preparando el reinicio…');
+                setFactoryResetStage('Preparando el reinicio…');
                 try {
                   setFactoryResetStage('Eliminando datos operativos y empresas de SQLite…');
                   const result = await resetFactoryData();
                   setFactoryResetStage('Verificación completada. Datos operativos eliminados.');
-                  alert('RESET DE FÁBRICA verificado. Empresas eliminadas: ' + String(result.removedCompanies ?? 0) + '. Respaldo previo: ' + String(result.backupDestination || 'no aplica') + '. Se conservaron usuarios administradores, licencia y auditoría general.');
+                  alert('RESET DE FÁBRICA verificado. Empresas eliminadas: ' + String(result.removedCompanies ?? 0) + '. Se conservaron los usuarios administradores, la licencia y la auditoría general.');
                 } catch (error) {
                   alert(error instanceof Error ? error.message : 'No se pudo completar el reset. No se confirmó el borrado.');
                 } finally { setFactoryResetBusy(false); setFactoryResetStage(''); }
