@@ -6,7 +6,7 @@ const Database = require('better-sqlite3');
 const { initializeTenantDatabase } = require('./tenant-schema.cjs');
 const {
   listPayrollEmployees, listPayrollSalaryHistory, getPayrollSalaryForDate, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
-  registerPayrollIpc, createPayrollRun, listPayrollRuns
+  registerPayrollIpc, createPayrollRun, listPayrollRuns, listConfirmedSalaryEntries
 } = require('./payroll-persistence.cjs');
 
 function setup() {
@@ -216,5 +216,36 @@ test('does not silently apply a legal rule with unconfigured applicability condi
       employees:[{ employeeId:employee.id, earnings:[{code:'SAL',description:'Salario',amount:500,isSalary:true}],
         bases:{normalSalary:500,integralSalary:500,grossSalary:500} }]
     }), /condiciones de empresa o trabajador/);
+  } finally { db.close(); }
+});
+
+test('historical salary query reads only confirmed salary earnings for the selected worker and company', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-880', fullName: 'Nora León', hireDate: '2025-01-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    const run = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-01', periodEnd: '2026-06-15',
+      employees: [{
+        employeeId: employee.id,
+        earnings: [
+          { code: 'SAL', description: 'Salario base', amount: 600, isSalary: true },
+          { code: 'REIMB', description: 'Reembolso', amount: 35, isSalary: false }
+        ],
+        bases: { normalSalary: 600, integralSalary: 600, grossSalary: 635 }
+      }]
+    });
+    assert.deepEqual(listConfirmedSalaryEntries(db, 'co-a', employee.id, '2026-06-01', '2026-06-30'), []);
+    db.prepare("UPDATE payroll_runs SET status='CONFIRMED',confirmed_at=? WHERE id=?")
+      .run('2026-06-16T10:00:00.000Z', run.id);
+    const entries = listConfirmedSalaryEntries(db, 'co-a', employee.id, '2026-06-01', '2026-06-30');
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].amount, 600);
+    assert.equal(entries[0].code, 'SAL');
+    assert.equal(entries[0].runId, run.id);
+    assert.throws(() => listConfirmedSalaryEntries(db, 'co-b', employee.id, '2026-06-01', '2026-06-30'), /empresa activa/);
+    assert.throws(() => listConfirmedSalaryEntries(db, 'co-a', employee.id, '2026-07-01', '2026-06-30'), /rango de consulta/);
   } finally { db.close(); }
 });
