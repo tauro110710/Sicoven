@@ -946,7 +946,7 @@ app.whenReady().then(async () => {
             'supplierAdvanceSettlements','supplierDirectAdvances','islrFiscalEvents',
             'financialDisclosures']
             .some(key => !Array.isArray(verified[key]) || verified[key].length !== 0)) {
-        throw new Error('La verificación posterior al RESET DE FÁBRICA detectó datos operativos residuales. El respaldo previo se conserva en: ' + backupDestination);
+        throw new Error('La verificación posterior al RESET DE FÁBRICA detectó datos operativos residuales. No se confirmó el resultado; solicita revisión técnica antes de volver a operar.');
       }
       return {
         ok: true, cleared: true, verified: true,
