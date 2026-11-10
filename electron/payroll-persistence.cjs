@@ -105,6 +105,11 @@ function savePayrollLegalRule(db, companyId, input) {
   const active = input.active === false ? 0 : 1;
   const existing = db.prepare('SELECT id FROM payroll_legal_rules WHERE id=? AND company_id=?').get(id, companyId);
   if (input.id && !existing) throw new Error('La regla no existe en la empresa activa.');
+  const overlapping = db.prepare(`SELECT id FROM payroll_legal_rules
+    WHERE company_id=? AND code=? AND id<>?
+      AND effective_from<=COALESCE(?, '9999-12-31')
+      AND COALESCE(effective_to, '9999-12-31')>=?`).get(companyId, code, id, effectiveTo, effectiveFrom);
+  if (overlapping) throw new Error('La vigencia de esta regla se solapa con otra versión del mismo código.');
   db.prepare(`INSERT INTO payroll_legal_rules
     (id,company_id,code,description,base_key,worker_rate,employer_rate,base_cap,effective_from,effective_to,
      source_reference,verified_at,applicability_json,active)
@@ -139,10 +144,15 @@ function calculateEmployeeDraft(db, companyId, employee, input, periodEnd) {
   }));
   const rules = db.prepare(`SELECT code,description,base_key AS base,worker_rate AS workerRate,
     employer_rate AS employerRate,base_cap AS baseCap,effective_from AS effectiveFrom,
-    effective_to AS effectiveTo,source_reference AS sourceReference,verified_at AS verifiedAt
+    effective_to AS effectiveTo,source_reference AS sourceReference,verified_at AS verifiedAt,
+    applicability_json AS applicabilityJson
     FROM payroll_legal_rules WHERE company_id=? AND active=1 AND effective_from<=?
     AND (effective_to IS NULL OR effective_to>=?) ORDER BY code`).all(companyId, periodEnd, periodEnd);
   const contributions = rules.map(rule => {
+    const applicability = JSON.parse(rule.applicabilityJson || '{}');
+    if (Object.keys(applicability).length > 0) {
+      throw new Error('La regla ' + rule.code + ' depende de condiciones de empresa o trabajador aún no configuradas; no se aplicó automáticamente.');
+    }
     if (!rule.sourceReference || !rule.verifiedAt || rule.verifiedAt > new Date().toISOString().slice(0,10)) {
       throw new Error('La regla ' + rule.code + ' no tiene verificación válida.');
     }
