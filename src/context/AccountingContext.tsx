@@ -227,7 +227,7 @@ interface AccountingContextType {
 
   // Respaldo
   resetToSampleData: () => Promise<void>;
-  resetFactoryData: () => Promise<void>;
+  resetFactoryData: () => Promise<{ backupDestination?: string; removedCompanies?: number }>;
   exportBackupJson: () => string;
   restoreBackupJson: (jsonData: string) => Promise<boolean>;
 }
@@ -6180,14 +6180,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     await waitForPersistence();
   };
 
-  const resetFactoryData = async () => {
+  const resetFactoryData = async (): Promise<{ backupDestination?: string; removedCompanies?: number }> => {
     assertSQLitePersistenceReady('Restablecer SICOVEN de fábrica');
-    // En escritorio, borrar primero el estado persistido en SQLite de forma atómica.
-    // No se muestra éxito hasta que la base de datos confirma la operación.
+    let resetResult: { backupDestination?: string; removedCompanies?: number } = {};
     if (window.sicovenStore) {
       if (!storageReady) throw new Error('La base de datos todavía se está inicializando. Intente nuevamente.');
       const result = await window.sicovenStore.resetAccounting(token);
-      if (!result?.ok || !result.cleared || result.verified !== true) throw new Error('SQLite no confirmó y verificó el reinicio de fábrica.');
+      if (result?.canceled) throw new Error('El RESET DE FÁBRICA fue cancelado. No se modificaron los datos.');
+      if (!result?.ok || !result.cleared || result.verified !== true) {
+        throw new Error('SQLite no confirmó y verificó el RESET DE FÁBRICA.');
+      }
+      resetResult = {
+        backupDestination: result.backupDestination,
+        removedCompanies: result.removedCompanies
+      };
     }
     setCompanies([]);
     setCurrentCompanyId('');
@@ -6196,6 +6202,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setPurchases([]);
     setSales([]);
     setProducts([]);
+    setCustomers([]);
+    setSuppliers([]);
     setMovements([]);
     setFixedAssets([]);
     setVatVouchers([]);
@@ -6210,9 +6218,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setIslrFiscalEvents([]);
     setFinancialDisclosures([]);
     setDisplayCurrency('DUAL');
-    // No informar que terminó hasta que el nuevo estado vacío también quede
-    // confirmado por la cola de persistencia SQLite.
     if (window.sicovenStore) await waitForPersistence();
+    return resetResult;
   };
 
   const exportBackupJson = (): string => {

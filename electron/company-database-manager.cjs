@@ -350,6 +350,37 @@ function createCompanyDatabaseManager({
     return ids.length;
   }
 
+  function resetAllCompanies() {
+    const records = listCompanies();
+    closeAll();
+    const targets = records.map(item => {
+      const record = getRecord(item.id);
+      const file = resolveRegisteredPath(record);
+      return { id: item.id, file, directory: path.dirname(file) };
+    });
+    // Remove only database files explicitly registered by SICOVEN. Never
+    // recursively delete the userData or companies root during a factory reset.
+    for (const target of targets) {
+      for (const suffix of ['', '-wal', '-shm']) {
+        const candidate = target.file + suffix;
+        if (!fs.existsSync(candidate)) continue;
+        const stat = fs.lstatSync(candidate);
+        if (stat.isSymbolicLink() || !stat.isFile()) {
+          throw new Error('Se encontró un archivo SQLite auxiliar no seguro para ' + target.id + '. Se canceló el reinicio.');
+        }
+        fs.rmSync(candidate);
+      }
+    }
+    for (const directory of [...new Set(targets.map(item => item.directory))]) {
+      if (fs.existsSync(directory) && fs.readdirSync(directory).length === 0) fs.rmdirSync(directory);
+    }
+    const removeRegistry = controlDb.transaction(() => {
+      controlDb.prepare('DELETE FROM ' + REGISTRY_TABLE).run();
+    });
+    removeRegistry();
+    return { removedCompanies: records.length, removedCompanyIds: records.map(item => item.id) };
+  }
+
   return Object.freeze({
     registerCompany,
     registerExistingCompanies,
@@ -359,6 +390,7 @@ function createCompanyDatabaseManager({
     archiveCompany,
     listCompanies,
     closeAll,
+    resetAllCompanies,
     isOpen: companyId => openDatabases.has(normalizeCompanyId(companyId)),
     getOpenDatabase: companyId => openDatabases.get(normalizeCompanyId(companyId)) || null,
     getDatabasePath: companyId => resolveRegisteredPath(getRecord(companyId))
