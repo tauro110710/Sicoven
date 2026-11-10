@@ -74,6 +74,15 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   const [profitSharingBases, setProfitSharingBases] = useState<Record<string,{monthlyNormalSalary:string;monthsWorked:string}>>({});
   const [profitSharingLoading, setProfitSharingLoading] = useState(false);
   const [profitSharingResult, setProfitSharingResult] = useState<ProfitSharingResult | null>(null);
+  const [severanceOpen, setSeveranceOpen] = useState<string | null>(null);
+  const [severanceHistory, setSeveranceHistory] = useState<Record<string, {deposits:Array<Record<string,unknown>>;interests:Array<Record<string,unknown>>}>>({});
+  const [severanceBusy, setSeveranceBusy] = useState<string | null>(null);
+  const [severanceResult, setSeveranceResult] = useState<Record<string, Record<string,unknown>>>({});
+  const [interestResult, setInterestResult] = useState<Record<string, Record<string,unknown>>>({});
+  const [depositForm, setDepositForm] = useState({depositDate:new Date().toISOString().slice(0,10),kind:'QUARTERLY' as 'QUARTERLY'|'SENIORITY'|'ADVANCE',days:'15',dailyIntegralSalary:'',sourceReference:'',verifiedAt:new Date().toISOString().slice(0,10)});
+  const [interestForm, setInterestForm] = useState({month:new Date().toISOString().slice(0,7),mode:'UNDEPOSITED' as 'TRUST_OR_FUND'|'AUTHORIZED_BOOK_CREDIT'|'UNDEPOSITED',capital:'',monthlyRate:'',sourceReference:'',verifiedAt:new Date().toISOString().slice(0,10)});
+  const [severanceCalcForm, setSeveranceCalcForm] = useState({asOfDate:new Date().toISOString().slice(0,10),dailyIntegralSalary:''});
+
   const requiredBaseFields = new Set(legalRules
     .filter(rule => rule.active && (rule.frequencyScope === 'ALL' || rule.frequencyScope === runFrequency) &&
       rule.effectiveFrom <= periodEnd && (!rule.effectiveTo || rule.effectiveTo >= periodEnd))
@@ -382,6 +391,66 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
     finally { setHistoryLoading(null); }
   };
 
+
+  const openSeverance = async (employeeId: string) => {
+    if (severanceOpen === employeeId) { setSeveranceOpen(null); return; }
+    setSeveranceOpen(employeeId);
+    if (severanceHistory[employeeId] || !window.sicovenStore) return;
+    setSeveranceBusy(employeeId); setError('');
+    try {
+      const history = await window.sicovenStore.listPayrollSeveranceHistory(token, employeeId);
+      setSeveranceHistory(current => ({...current,[employeeId]:history}));
+    } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo consultar el historial de prestaciones.'); }
+    finally { setSeveranceBusy(null); }
+  };
+
+  const saveSeveranceDeposit = async (employeeId: string) => {
+    if (severanceBusy || !window.sicovenStore) return;
+    if (!depositForm.dailyIntegralSalary.trim() || !depositForm.sourceReference.trim()) { setError('Indique el salario integral histórico y el comprobante del depósito.'); return; }
+    setSeveranceBusy(employeeId); setError(''); setSuccess('');
+    try {
+      await window.sicovenStore.savePayrollSeveranceDeposit(token,{employeeId,...depositForm,days:Number(depositForm.days),dailyIntegralSalary:Number(depositForm.dailyIntegralSalary)});
+      const history=await window.sicovenStore.listPayrollSeveranceHistory(token,employeeId);
+      setSeveranceHistory(current=>({...current,[employeeId]:history}));
+      setSuccess('Registro histórico de prestaciones guardado sin alterar los anteriores.');
+    } catch(e) { setError(e instanceof Error?e.message:'No se pudo guardar el depósito.'); }
+    finally { setSeveranceBusy(null); }
+  };
+
+  const saveSeveranceInterest = async (employeeId: string) => {
+    if (severanceBusy || !window.sicovenStore) return;
+    if (!interestForm.capital.trim() || !interestForm.monthlyRate.trim() || !interestForm.sourceReference.trim()) { setError('Indique capital mensual, tasa verificada y fuente.'); return; }
+    setSeveranceBusy(employeeId); setError(''); setSuccess('');
+    try {
+      await window.sicovenStore.savePayrollSeveranceInterestMonth(token,{employeeId,...interestForm,capital:Number(interestForm.capital),monthlyRate:Number(interestForm.monthlyRate)/100});
+      const history=await window.sicovenStore.listPayrollSeveranceHistory(token,employeeId);
+      setSeveranceHistory(current=>({...current,[employeeId]:history}));
+      setSuccess('Interés mensual guardado con su fuente y verificación.');
+    } catch(e) { setError(e instanceof Error?e.message:'No se pudo guardar el interés mensual.'); }
+    finally { setSeveranceBusy(null); }
+  };
+
+  const calculateSeveranceForEmployee = async (employeeId: string) => {
+    if (severanceBusy || !window.sicovenStore) return;
+    if (!severanceCalcForm.dailyIntegralSalary.trim()) { setError('Indique el salario diario integral vigente a la fecha de corte.'); return; }
+    setSeveranceBusy(employeeId); setError('');
+    try {
+      const result=await window.sicovenStore.calculatePayrollSeverance(token,{employeeId,asOfDate:severanceCalcForm.asOfDate,dailyIntegralSalary:Number(severanceCalcForm.dailyIntegralSalary)});
+      setSeveranceResult(current=>({...current,[employeeId]:result as Record<string,unknown>}));
+    } catch(e) { setSeveranceResult(current=>({...current,[employeeId]:{error:e instanceof Error?e.message:'No se pudo calcular las prestaciones.'}})); }
+    finally { setSeveranceBusy(null); }
+  };
+
+  const calculateInterestForEmployee = async (employeeId: string) => {
+    if (severanceBusy || !window.sicovenStore) return;
+    setSeveranceBusy(employeeId); setError('');
+    try {
+      const result=await window.sicovenStore.calculatePayrollSeveranceInterest(token,{employeeId,mode:interestForm.mode});
+      setInterestResult(current=>({...current,[employeeId]:result as Record<string,unknown>}));
+    } catch(e) { setError(e instanceof Error?e.message:'No se pudo calcular los intereses.'); }
+    finally { setSeveranceBusy(null); }
+  };
+
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
     if (saving || !window.sicovenStore) return;
@@ -467,6 +536,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
               <div className="flex flex-wrap items-center gap-2"><div className="text-right"><p className="text-sm font-semibold text-slate-800">Bs. {employee.baseSalary.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p><p className="text-xs text-slate-500">{employee.frequency === 'WEEKLY' ? 'Semanal' : 'Quincenal'}</p></div>
                 <button type="button" onClick={() => void toggleSalaryHistory(employee.id)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">{historyLoading === employee.id ? 'Cargando…' : historyOpen === employee.id ? 'Ocultar historial' : 'Historial'}</button>
                 <button type="button" onClick={() => setLegalCalcOpen(current => current === employee.id ? null : employee.id)} className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-50">{legalCalcOpen === employee.id ? 'Cerrar cálculos' : 'Cálculos LOTTT'}</button>
+                <button type="button" onClick={() => void openSeverance(employee.id)} className="rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50">{severanceOpen === employee.id ? 'Cerrar prestaciones' : 'Prestaciones e intereses'}</button>
                 <button type="button" onClick={() => { setEditingId(employee.id); setForm({ fiscalId: employee.fiscalId, fullName: employee.fullName, hireDate: employee.hireDate, position: employee.position || '', costCenter: employee.costCenter || '', frequency: employee.frequency, baseSalary: String(employee.baseSalary), salaryEffectiveFrom: new Date().toISOString().slice(0,10) }); setError(''); setSuccess(''); }} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Editar</button>
               </div>
             </div>
@@ -476,6 +546,40 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
                 <span className="text-slate-600">{item.effectiveFrom} – {item.effectiveTo || 'Vigente'}</span>
                 <span className="font-semibold text-slate-800">Bs. {item.baseSalary.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
               </div>)}
+            </div>}
+
+            {severanceOpen === employee.id && <div className="mt-3 space-y-4 rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+              <div><p className="font-semibold text-slate-800">Prestaciones sociales e intereses · LOTTT arts. 142 y 143</p><p className="text-xs text-slate-600">Registre cada depósito con los días y el salario integral histórico del momento. Los registros son inmutables; las correcciones se agregan como rectificaciones. No se estiman datos faltantes.</p></div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <label className="space-y-1 text-xs text-slate-700">Fecha del depósito<input type="date" value={depositForm.depositDate} onChange={e=>setDepositForm(v=>({...v,depositDate:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
+                <label className="space-y-1 text-xs text-slate-700">Tipo<select value={depositForm.kind} onChange={e=>setDepositForm(v=>({...v,kind:e.target.value as typeof v.kind}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"><option value="QUARTERLY">Garantía trimestral</option><option value="SENIORITY">Adicional por antigüedad</option><option value="ADVANCE">Anticipo pagado</option></select></label>
+                <label className="space-y-1 text-xs text-slate-700">Días reconocidos<input type="number" min="0.01" step="0.01" value={depositForm.days} onChange={e=>setDepositForm(v=>({...v,days:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
+                <label className="space-y-1 text-xs text-slate-700">Salario diario integral histórico (Bs.)<input type="number" min="0.01" step="0.01" value={depositForm.dailyIntegralSalary} onChange={e=>setDepositForm(v=>({...v,dailyIntegralSalary:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
+                <label className="space-y-1 text-xs text-slate-700 sm:col-span-2">Comprobante / fuente<input value={depositForm.sourceReference} onChange={e=>setDepositForm(v=>({...v,sourceReference:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2" placeholder="Referencia bancaria, fideicomiso o recibo"/></label>
+                <label className="space-y-1 text-xs text-slate-700">Verificado el<input type="date" value={depositForm.verifiedAt} onChange={e=>setDepositForm(v=>({...v,verifiedAt:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
+              </div>
+              <button type="button" onClick={()=>void saveSeveranceDeposit(employee.id)} disabled={severanceBusy===employee.id} className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Guardar depósito histórico</button>
+              <div className="border-t border-amber-200 pt-3"><p className="mb-2 text-xs font-bold text-slate-700">Intereses mensuales (art. 143)</p>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <label className="space-y-1 text-xs text-slate-700">Mes<input type="month" value={interestForm.month} onChange={e=>setInterestForm(v=>({...v,month:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
+                  <label className="space-y-1 text-xs text-slate-700">Régimen<select value={interestForm.mode} onChange={e=>setInterestForm(v=>({...v,mode:e.target.value as typeof v.mode}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"><option value="TRUST_OR_FUND">Fideicomiso o fondo</option><option value="AUTHORIZED_BOOK_CREDIT">Abono contable autorizado</option><option value="UNDEPOSITED">No depositado</option></select></label>
+                  <label className="space-y-1 text-xs text-slate-700">Capital del mes (Bs.)<input type="number" min="0" step="0.01" value={interestForm.capital} onChange={e=>setInterestForm(v=>({...v,capital:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
+                  <label className="space-y-1 text-xs text-slate-700">Tasa mensual (%)<input type="number" min="0" max="100" step="0.0001" value={interestForm.monthlyRate} onChange={e=>setInterestForm(v=>({...v,monthlyRate:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
+                  <label className="space-y-1 text-xs text-slate-700 sm:col-span-2">Fuente de tasa verificada<input value={interestForm.sourceReference} onChange={e=>setInterestForm(v=>({...v,sourceReference:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2" placeholder="BCV, banco, fideicomiso o fondo"/></label>
+                  <label className="space-y-1 text-xs text-slate-700">Verificada el<input type="date" value={interestForm.verifiedAt} onChange={e=>setInterestForm(v=>({...v,verifiedAt:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={()=>void saveSeveranceInterest(employee.id)} disabled={severanceBusy===employee.id} className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Guardar interés del mes</button><button type="button" onClick={()=>void calculateInterestForEmployee(employee.id)} disabled={severanceBusy===employee.id} className="rounded-lg border border-amber-400 px-3 py-2 text-sm font-semibold text-amber-900 disabled:opacity-50">Calcular intereses registrados</button></div>
+                {interestResult[employee.id] && <p className="mt-2 text-sm font-semibold text-slate-800">Intereses acumulados registrados: Bs. {Number(interestResult[employee.id].totalInterest||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</p>}
+              </div>
+              <div className="border-t border-amber-200 pt-3"><p className="mb-2 text-xs font-bold text-slate-700">Comparar garantía y terminación (art. 142)</p>
+                <div className="grid gap-2 sm:grid-cols-2"><label className="space-y-1 text-xs text-slate-700">Fecha de corte<input type="date" value={severanceCalcForm.asOfDate} onChange={e=>setSeveranceCalcForm(v=>({...v,asOfDate:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label><label className="space-y-1 text-xs text-slate-700">Salario diario integral a la fecha (Bs.)<input type="number" min="0.01" step="0.01" value={severanceCalcForm.dailyIntegralSalary} onChange={e=>setSeveranceCalcForm(v=>({...v,dailyIntegralSalary:e.target.value}))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2"/></label></div>
+                <button type="button" onClick={()=>void calculateSeveranceForEmployee(employee.id)} disabled={severanceBusy===employee.id} className="mt-2 rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Calcular prestaciones</button>
+                {severanceResult[employee.id] && <div className="mt-2 rounded-lg bg-white p-3 text-sm">{severanceResult[employee.id].error ? <p className="text-rose-700">{String(severanceResult[employee.id].error)}</p> : <div className="grid gap-2 sm:grid-cols-2"><p>Garantía histórica: <strong>Bs. {Number(severanceResult[employee.id].guaranteeAmount||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p><p>Terminación: <strong>Bs. {Number(severanceResult[employee.id].terminationAmount||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p><p>Mayor importe legal: <strong>Bs. {Number(severanceResult[employee.id].greaterAmount||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p><p>Anticipos: <strong>Bs. {Number(severanceResult[employee.id].advanceTotal||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p><p>Saldo luego de anticipos: <strong>Bs. {Number(severanceResult[employee.id].netAfterAdvances||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p></div>}</div>}
+              </div>
+              <div className="border-t border-amber-200 pt-3"><p className="text-xs font-bold text-slate-700">Historial vigente · Depósitos {severanceHistory[employee.id]?.deposits.length||0} · Meses de intereses {severanceHistory[employee.id]?.interests.length||0}</p>
+                {(severanceHistory[employee.id]?.deposits||[]).map((item:any)=><p key={String(item.id)} className="mt-1 text-xs text-slate-600">{String(item.depositDate)} · {String(item.kind)} · {Number(item.days)} días × Bs. {Number(item.dailyIntegralSalary).toFixed(2)} · Bs. {Number(item.amount).toFixed(2)} · {String(item.sourceReference)}</p>)}
+                {(severanceHistory[employee.id]?.interests||[]).map((item:any)=><p key={String(item.id)} className="mt-1 text-xs text-slate-600">{String(item.month)} · {String(item.mode)} · tasa {(Number(item.monthlyRate)*100).toFixed(4)}% · interés Bs. {Number(item.interest).toFixed(2)} · {String(item.sourceReference)}</p>)}
+              </div>
             </div>}
             {legalCalcOpen === employee.id && <div className="mt-3 space-y-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
               <div><p className="font-semibold text-slate-800">Vacaciones, bono vacacional y utilidades</p><p className="text-xs text-slate-600">Cálculo bajo LOTTT. Introduzca el salario normal aplicable; el salario contractual semanal/quincenal no se convierte automáticamente.</p></div>
