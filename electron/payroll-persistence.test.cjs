@@ -6,7 +6,7 @@ const Database = require('better-sqlite3');
 const { initializeTenantDatabase } = require('./tenant-schema.cjs');
 const {
   listPayrollEmployees, savePayrollEmployee, listPayrollLegalRules, savePayrollLegalRule,
-  registerPayrollIpc
+  registerPayrollIpc, createPayrollRun, listPayrollRuns
 } = require('./payroll-persistence.cjs');
 
 function setup() {
@@ -84,5 +84,53 @@ test('IPC requires an active session and scopes every request to its active tena
       frequency: 'WEEKLY', baseSalary: 900
     });
     assert.equal(result.companyId, 'co-a');
+  } finally { db.close(); }
+});
+
+test('creates an immutable draft payroll snapshot and prevents duplicate periods', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-789', fullName: 'Luis Rojas', hireDate: '2024-05-01',
+      frequency: 'BIWEEKLY', baseSalary: 1200
+    });
+    savePayrollLegalRule(db, 'co-a', {
+      code: 'RULE-TEST', description: 'Regla de prueba', base: 'normalSalary',
+      workerRate: 0.01, employerRate: 0.02, effectiveFrom: '2026-01-01',
+      sourceReference: 'Norma de prueba', verifiedAt: '2026-01-01'
+    });
+    const run = createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-01', periodEnd: '2026-06-15',
+      employees: [{
+        employeeId: employee.id,
+        earnings: [{ code: 'SAL', description: 'Salario', amount: 1000, isSalary: true }],
+        deductions: [{ code: 'ADV', description: 'Anticipo', amount: 50 }],
+        bases: { normalSalary: 1000, integralSalary: 1100, grossSalary: 1000 }
+      }]
+    });
+    assert.equal(run.status, 'DRAFT');
+    assert.equal(run.totals.netPay, 940);
+    assert.equal(listPayrollRuns(db, 'co-a').length, 1);
+    const saved = db.prepare('SELECT calculation_snapshot_json FROM payroll_runs WHERE id=?').get(run.id);
+    assert.match(saved.calculation_snapshot_json, /RULE-TEST/);
+    assert.throws(() => createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-01', periodEnd: '2026-06-15',
+      employees: [{ employeeId: employee.id, earnings: [{code:'SAL',description:'Salario',amount:1000}], bases:{normalSalary:1000,integralSalary:1000,grossSalary:1000} }]
+    }), /UNIQUE constraint failed/);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM payroll_runs').get().count, 1);
+  } finally { db.close(); }
+});
+
+test('rejects payroll runs that mix company employees or mismatched frequencies', () => {
+  const db = setup();
+  try {
+    const employee = savePayrollEmployee(db, 'co-a', {
+      fiscalId: 'V-999', fullName: 'Marta Gil', hireDate: '2025-01-01',
+      frequency: 'WEEKLY', baseSalary: 500
+    });
+    assert.throws(() => createPayrollRun(db, 'co-a', {
+      frequency: 'BIWEEKLY', periodStart: '2026-06-01', periodEnd: '2026-06-15',
+      employees: [{ employeeId: employee.id, earnings: [{code:'SAL',description:'Salario',amount:500}], bases:{normalSalary:500,integralSalary:500,grossSalary:500} }]
+    }), /no coincide/);
   } finally { db.close(); }
 });
