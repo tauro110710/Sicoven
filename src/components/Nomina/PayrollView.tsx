@@ -33,7 +33,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   const [periodEnd, setPeriodEnd] = useState(new Date().toISOString().slice(0,10));
   const [payInputs, setPayInputs] = useState<Record<string,{earning:string;normal:string;integral:string;gross:string}>>({});
   const [creatingRun, setCreatingRun] = useState(false);
-  const [rulesCount, setRulesCount] = useState(0);
+  const [legalRules, setLegalRules] = useState<Array<{code:string;base:'normalSalary'|'integralSalary'|'grossSalary';effectiveFrom:string;effectiveTo:string|null;active:boolean}>>([]);
 
 
   const loadEmployees = useCallback(async () => {
@@ -53,7 +53,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
         window.sicovenStore.listPayrollLegalRules(token)
       ]);
       setRuns(items);
-      setRulesCount(rules.length);
+      setLegalRules(rules);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo consultar el historial de nóminas.');
     }
@@ -73,11 +73,17 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
     if (creatingRun || !window.sicovenStore) return;
     const selected = employees.filter(employee => employee.active && employee.frequency === runFrequency);
     if (selected.length === 0) { setError('No hay trabajadores activos con esta periodicidad.'); return; }
+    const requiredBaseFields = new Set(legalRules
+      .filter(rule => rule.active && rule.effectiveFrom <= periodEnd && (!rule.effectiveTo || rule.effectiveTo >= periodEnd))
+      .map(rule => rule.base));
     const missing = selected.find(employee => {
       const values = payInputs[employee.id];
-      return !values || (['earning','normal','integral','gross'] as const).some(key => !Number.isFinite(Number(values[key])) || Number(values[key]) <= 0);
+      if (!values || !Number.isFinite(Number(values.earning)) || Number(values.earning) <= 0) return true;
+      const requiredFields = [['normalSalary','normal'],['integralSalary','integral'],['grossSalary','gross']] as const;
+      return requiredFields.some(([base, field]) => requiredBaseFields.has(base) &&
+        (!Number.isFinite(Number(values[field])) || Number(values[field]) <= 0));
     });
-    if (missing) { setError('Complete asignación del período y las tres bases salariales para ' + missing.fullName + '. No se asumirán equivalencias entre salario semanal, quincenal, normal e integral.'); return; }
+    if (missing) { setError('Complete la asignación del período y las bases que requieren las reglas legales vigentes para ' + missing.fullName + '. No se asumirán equivalencias salariales.'); return; }
     setCreatingRun(true); setError(''); setSuccess('');
     try {
       const result = await window.sicovenStore.createPayrollRun(token, {
@@ -229,8 +235,9 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
           </label>
         </div>
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          {rulesCount > 0 ? rulesCount + ' regla(s) legal(es) registradas. Solo se aplicarán las vigentes, verificadas y aplicables a esta empresa.' : 'No hay reglas legales configuradas. El borrador mostrará asignaciones y neto sin inventar retenciones ni aportes.'}
-          Las bases normal, integral y bruta se solicitan por separado: no se deducen de la ficha salarial.
+          {requiredBaseFields.size > 0
+            ? 'Hay reglas legales vigentes para este período. Indique únicamente las bases que esas reglas necesitan; no se asumirán equivalencias salariales.'
+            : 'No hay reglas legales vigentes para este período. Solo debe indicar la asignación; no se inventarán retenciones ni aportes.'}
         </div>
         {employees.filter(employee=>employee.active && employee.frequency===runFrequency).length === 0
           ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">Registre trabajadores activos con periodicidad {runFrequency==='WEEKLY'?'semanal':'quincenal'} para procesar este período.</p>
@@ -241,11 +248,11 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><p className="font-semibold text-slate-900">{employee.fullName}</p><span className="text-xs text-slate-500">{employee.fiscalId}</span></div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   {([
-                    ['earning','Asignación del período'],
-                    ['normal','Base salario normal'],
-                    ['integral','Base salario integral'],
-                    ['gross','Base salario bruto']
-                  ] as const).map(([field,label])=><label key={field} className="space-y-1 text-xs font-medium text-slate-600">{label} (Bs.)
+                    ['earning','Asignación del período',true],
+                    ['normal','Base salario normal',requiredBaseFields.has('normalSalary')],
+                    ['integral','Base salario integral',requiredBaseFields.has('integralSalary')],
+                    ['gross','Base salario bruto',requiredBaseFields.has('grossSalary')]
+                  ] as const).filter(([, , required]) => required).map(([field,label])=><label key={field} className="space-y-1 text-xs font-medium text-slate-600">{label} (Bs.)
                     <input required type="number" min="0.01" step="0.01" value={values[field]} onChange={e=>updatePayInput(employee.id,field,e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
                   </label>)}
                 </div>
