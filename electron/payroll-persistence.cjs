@@ -618,7 +618,7 @@ function savePayrollSeveranceDeposit(db, companyId, input) {
   const advancePurpose=kind==='ADVANCE'?String(input.advancePurpose||''):null;
   const advanceAuthorizationReference=kind==='ADVANCE'?text(input.advanceAuthorizationReference,'Autorización o soporte del anticipo',300):null;
   if(kind==='ADVANCE' && !['HOUSING','MORTGAGE','EDUCATION','MEDICAL'].includes(advancePurpose)) {
-    throw new Error('El anticipo solo procede para vivienda, liberación de hipoteca, educación o atención médica/hospitalaria (art. 144).');
+    throw new Error('El anticipo solo procede para una finalidad permitida por el artículo 144: vivienda, liberación de hipoteca, educación o atención médica/hospitalaria.');
   }
   const sourceReference=text(input.sourceReference,'Fuente o comprobante',300);
   const verifiedAt=date(input.verifiedAt,'Fecha de verificación');
