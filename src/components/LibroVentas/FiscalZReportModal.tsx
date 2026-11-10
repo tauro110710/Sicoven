@@ -3,12 +3,14 @@ import { useAccounting } from '../../context/AccountingContext';
 import { FiscalZReportMetadata, JournalEntryItem } from '../../types/accounting';
 import { buildFiscalZReferenceDoc, calculateFiscalZTaxBreakdown } from '../../types/fiscalZReport';
 
-type PaymentKey = 'cash' | 'foreignCash' | 'transfer' | 'card' | 'credit' | 'other';
+type PaymentKey = 'cash' | 'foreignCash' | 'transfer' | 'card' | 'zelle' | 'biopago' | 'credit' | 'other';
 const PAYMENT_ROWS: Array<{ key: PaymentKey; label: string; defaultAccount: string }> = [
   { key: 'cash', label: 'Efectivo en bolívares', defaultAccount: '1.1.1.01' },
   { key: 'foreignCash', label: 'Efectivo en divisas', defaultAccount: '1.1.1.02' },
   { key: 'transfer', label: 'Transferencias / depósitos', defaultAccount: '1.1.1.03' },
   { key: 'card', label: 'Tarjetas / punto de venta', defaultAccount: '1.1.1.03' },
+  { key: 'zelle', label: 'Zelle (equivalente en Bs. a la tasa del cierre)', defaultAccount: '1.1.1.03' },
+  { key: 'biopago', label: 'Biopago', defaultAccount: '1.1.1.03' },
   { key: 'credit', label: 'Ventas a crédito / cuentas por cobrar', defaultAccount: '1.1.2.01' },
   { key: 'other', label: 'Otros medios de cobro', defaultAccount: '1.1.1.01' }
 ];
@@ -23,6 +25,9 @@ interface Props { isOpen: boolean; onClose: () => void; }
 export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const { currentCompany, accounts, journalEntries, addJournalEntry, waitForPersistence } = useAccounting();
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [sourceType, setSourceType] = useState<'FISCAL_MACHINE' | 'POS' | 'DIGITAL'>('FISCAL_MACHINE');
+  const [sourceSystemName, setSourceSystemName] = useState('');
+  const [sourceTerminalId, setSourceTerminalId] = useState('');
   const [zNumber, setZNumber] = useState('');
   const [machineBrand, setMachineBrand] = useState('');
   const [machineModel, setMachineModel] = useState('');
@@ -37,9 +42,9 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [exempt, setExempt] = useState('');
   const [igtf, setIgtf] = useState('');
   const [rateInput, setRateInput] = useState(String(currentCompany.bcvRate || '').replace('.', ','));
-  const [payments, setPayments] = useState<Record<PaymentKey, string>>({ cash: '', foreignCash: '', transfer: '', card: '', credit: '', other: '' });
+  const [payments, setPayments] = useState<Record<PaymentKey, string>>({ cash: '', foreignCash: '', transfer: '', card: '', zelle: '', biopago: '', credit: '', other: '' });
   const [paymentAccounts, setPaymentAccounts] = useState<Record<PaymentKey, string>>({
-    cash: '1.1.1.01', foreignCash: '1.1.1.02', transfer: '1.1.1.03', card: '1.1.1.03', credit: '1.1.2.01', other: '1.1.1.01'
+    cash: '1.1.1.01', foreignCash: '1.1.1.02', transfer: '1.1.1.03', card: '1.1.1.03', zelle: '1.1.1.03', biopago: '1.1.1.03', credit: '1.1.2.01', other: '1.1.1.01'
   });
   const [observations, setObservations] = useState('');
   const [saving, setSaving] = useState(false);
@@ -64,7 +69,7 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const paymentTotal = money(PAYMENT_ROWS.reduce((sum, row) => sum + parseAmount(payments[row.key]), 0));
   const diff = money(totalSales - paymentTotal);
   const fmt = (value: number) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
-  const sameMachineReports = journalEntries.filter(entry => entry.companyId === currentCompany.id && entry.fiscalZReport && entry.fiscalZReport.machineSerial.trim().toUpperCase() === machineSerial.trim().toUpperCase());
+  const sameMachineReports = journalEntries.filter(entry => entry.companyId === currentCompany.id && entry.fiscalZReport && (entry.fiscalZReport.sourceType || 'FISCAL_MACHINE') === 'FISCAL_MACHINE' && entry.fiscalZReport.machineSerial.trim().toUpperCase() === machineSerial.trim().toUpperCase());
   const numericStart = /^\d+$/.test(invoiceStart.trim()) ? Number(invoiceStart) : null;
   const numericEnd = /^\d+$/.test(invoiceEnd.trim()) ? Number(invoiceEnd) : null;
   const sameDayRangeOverlap = sourceType === 'FISCAL_MACHINE' && numericStart !== null && numericEnd !== null && sameMachineReports.some(entry => {
@@ -97,8 +102,15 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
     event.preventDefault();
     setError('');
     if (!window.sicovenStore?.save) { setError('El registro de Reporte Z requiere SICOVEN de escritorio con SQLite disponible.'); return; }
-    if (!date || !zNumber.trim() || !machineSerial.trim() || !invoiceStart.trim() || !invoiceEnd.trim()) {
-      setError('Complete fecha, número Z, serial de máquina fiscal y rango de facturas.'); return;
+    if (!date || !zNumber.trim()) { setError('Complete la fecha y el identificador del cierre.'); return; }
+    if (sourceType === 'FISCAL_MACHINE' && (!machineSerial.trim() || !invoiceStart.trim() || !invoiceEnd.trim())) {
+      setError('Para un cierre de máquina fiscal son obligatorios el serial y el rango de facturas.'); return;
+    }
+    if (sourceType !== 'FISCAL_MACHINE' && !sourceSystemName.trim()) {
+      setError('Indique el nombre del sistema POS o de la plataforma de facturación digital.'); return;
+    }
+    if (Boolean(invoiceStart.trim()) !== Boolean(invoiceEnd.trim())) {
+      setError('Si registra rango de documentos, complete el número inicial y el final.'); return;
     }
     if (currentCompany.closedThroughDate && date <= currentCompany.closedThroughDate) {
       setError('El período está cerrado hasta ' + currentCompany.closedThroughDate + '.'); return;
@@ -150,8 +162,12 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
       addLine(items, igtfAccount, ig, 'credit', 'IGTF percibido informado en Reporte Z ' + zNumber.trim());
 
       const metadata: FiscalZReportMetadata = {
-        date, zNumber: zNumber.trim(), machineBrand: machineBrand.trim() || undefined,
-        machineModel: machineModel.trim() || undefined, machineSerial: machineSerial.trim(),
+        date, zNumber: zNumber.trim(), sourceType,
+        sourceSystemName: sourceType === 'FISCAL_MACHINE' ? undefined : sourceSystemName.trim(),
+        sourceTerminalId: sourceTerminalId.trim() || undefined,
+        machineBrand: sourceType === 'FISCAL_MACHINE' ? machineBrand.trim() || undefined : undefined,
+        machineModel: sourceType === 'FISCAL_MACHINE' ? machineModel.trim() || undefined : undefined,
+        machineSerial: sourceType === 'FISCAL_MACHINE' ? machineSerial.trim() : '',
         invoiceStart: invoiceStart.trim(), invoiceEnd: invoiceEnd.trim(),
         controlStart: controlStart.trim() || undefined, controlEnd: controlEnd.trim() || undefined,
         taxableBase16Bs: b16, vat16Bs: v16, taxableBase8Bs: b8, vat8Bs: v8,
@@ -163,7 +179,7 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
       };
       const entry = addJournalEntry({
         entryNumber: 0, date,
-        description: 'Cierre diario de ventas por Reporte Z N° ' + zNumber.trim() + ' · Máquina ' + machineSerial.trim(),
+        description: 'Cierre diario de ventas ' + (sourceType === 'FISCAL_MACHINE' ? 'por Reporte Z fiscal' : sourceType === 'POS' ? 'por sistema POS' : 'por facturación digital') + ' N° ' + zNumber.trim() + (sourceType === 'FISCAL_MACHINE' ? ' · Máquina ' + machineSerial.trim() : ' · ' + sourceSystemName.trim()),
         type: 'VENTA', bcvRate: rate, referenceDoc, items, fiscalZReport: metadata
       });
       await waitForPersistence();
@@ -179,27 +195,33 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
   return <div className="fixed inset-0 z-[70] overflow-y-auto bg-slate-950/60 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Registrar Reporte Z">
     <div className="mx-auto my-4 max-w-5xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
       <header className="flex items-center justify-between gap-3 bg-slate-900 px-5 py-4 text-white">
-        <div><h2 className="text-base font-bold">Registrar ventas por Reporte Z</h2><p className="mt-1 text-xs text-slate-300">Cierre diario de máquina fiscal · asiento contable integrado</p></div>
+        <div><h2 className="text-base font-bold">Registrar ventas por cierre diario</h2><p className="mt-1 text-xs text-slate-300">Máquina fiscal, sistema POS o facturación digital · asiento contable integrado</p></div>
         <button type="button" onClick={onClose} disabled={saving} className="rounded-lg px-3 py-2 text-sm hover:bg-slate-700">Cerrar</button>
       </header>
       <form onSubmit={handleSubmit} className="space-y-5 p-4 sm:p-6 text-xs">
         <section className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-3">
+          <label className="font-semibold text-slate-700">Origen del cierre<select value={sourceType} onChange={event => setSourceType(event.target.value as 'FISCAL_MACHINE' | 'POS' | 'DIGITAL')} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 font-normal"><option value="FISCAL_MACHINE">Máquina fiscal — Reporte Z</option><option value="POS">Sistema POS — cierre diario</option><option value="DIGITAL">Facturación digital — resumen / lote</option></select></label>
           <label className="font-semibold text-slate-700">Fecha del cierre<input type="date" value={date} onChange={event => setDate(event.target.value)} required className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
           <label className="font-semibold text-slate-700">Número de Reporte Z<input value={zNumber} onChange={event => setZNumber(event.target.value)} required placeholder="Ej. 001258" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
-          <label className="font-semibold text-slate-700">Serial de máquina fiscal<input value={machineSerial} onChange={event => setMachineSerial(event.target.value)} required placeholder="Serial impreso en equipo" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
-          <label className="font-semibold text-slate-700">Marca<input value={machineBrand} onChange={event => setMachineBrand(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
-          <label className="font-semibold text-slate-700">Modelo<input value={machineModel} onChange={event => setMachineModel(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
+          {sourceType === 'FISCAL_MACHINE' ? <>
+            <label className="font-semibold text-slate-700">Serial de máquina fiscal<input value={machineSerial} onChange={event => setMachineSerial(event.target.value)} required placeholder="Serial impreso en equipo" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
+            <label className="font-semibold text-slate-700">Marca<input value={machineBrand} onChange={event => setMachineBrand(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
+            <label className="font-semibold text-slate-700">Modelo<input value={machineModel} onChange={event => setMachineModel(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
+          </> : <>
+            <label className="font-semibold text-slate-700">{sourceType === 'POS' ? 'Nombre del sistema POS' : 'Plataforma / proveedor digital'}<input value={sourceSystemName} onChange={event => setSourceSystemName(event.target.value)} required placeholder={sourceType === 'POS' ? 'Ej. SICOVEN POS, otro sistema' : 'Nombre de la plataforma autorizada'} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
+            <label className="font-semibold text-slate-700">Terminal / caja (si aplica)<input value={sourceTerminalId} onChange={event => setSourceTerminalId(event.target.value)} placeholder="Ej. Caja 01" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
+          </>}
           <label className="font-semibold text-slate-700">Tasa BCV del cierre<input inputMode="decimal" value={rateInput} onChange={event => setRateInput(event.target.value)} required placeholder="Ej. 889,67" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
         </section>
         <section className="rounded-xl border border-slate-200 p-4">
           <h3 className="mb-3 font-bold text-slate-800">Rango de documentos emitidos</h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-            <label className="font-semibold">Factura inicial<input value={invoiceStart} onChange={event => setInvoiceStart(event.target.value)} required className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
-            <label className="font-semibold">Factura final<input value={invoiceEnd} onChange={event => setInvoiceEnd(event.target.value)} required className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
+            <label className="font-semibold">Documento inicial<input value={invoiceStart} onChange={event => setInvoiceStart(event.target.value)} required={sourceType === 'FISCAL_MACHINE'} placeholder="Opcional según el sistema" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
+            <label className="font-semibold">Documento final<input value={invoiceEnd} onChange={event => setInvoiceEnd(event.target.value)} required={sourceType === 'FISCAL_MACHINE'} placeholder="Opcional según el sistema" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
             <label className="font-semibold">Control inicial (si aplica)<input value={controlStart} onChange={event => setControlStart(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
             <label className="font-semibold">Control final (si aplica)<input value={controlEnd} onChange={event => setControlEnd(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
           </div>
-          <p className="mt-2 text-[11px] text-slate-500">Los números de control son opcionales y solo se completan cuando corresponden al sistema documental utilizado.</p>
+          <p className="mt-2 text-[11px] text-slate-500">El serial y la numeración fiscal son obligatorios únicamente para cierres de máquina fiscal. En POS y facturación digital se registra el rango si el sistema lo proporciona.</p>
           {sameDayRangeOverlap && <p role="alert" className="mt-2 rounded-lg bg-rose-50 p-2 text-[11px] text-rose-700">El rango se solapa con otro cierre de esta máquina en la misma fecha.</p>}
           {invoiceRangeWarning && <p role="status" className="mt-2 rounded-lg bg-amber-50 p-2 text-[11px] text-amber-800">{invoiceRangeWarning}</p>}
         </section>
@@ -218,7 +240,7 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
         </section>
         <section className="rounded-xl border border-slate-200 p-4">
           <h3 className="mb-1 font-bold text-slate-800">Distribución de cobros y cuentas contables</h3>
-          <p className="mb-3 text-[11px] text-slate-500">Distribuya el total entre los medios realmente recibidos y ventas a crédito. Seleccione la cuenta contable que corresponda a cada medio.</p>
+          <p className="mb-3 text-[11px] text-slate-500">Distribuya el total entre los medios realmente recibidos y ventas a crédito. Zelle se registra en su equivalente en bolívares a la tasa del cierre; Biopago puede asociarse a una cuenta bancaria o transitoria de liquidación configurada en el plan de cuentas.</p>
           <div className="space-y-3">
             {PAYMENT_ROWS.map(row => <div key={row.key} className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[1fr_150px_1.5fr]">
               <label className="font-medium text-slate-700">{row.label}<input inputMode="decimal" value={payments[row.key]} onChange={event => updatePayment(row.key, event.target.value)} placeholder="0,00" className="mt-1 w-full rounded-lg border border-slate-300 p-2"/></label>
@@ -232,7 +254,7 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
         <label className="block font-semibold text-slate-700">Observaciones del contador (opcional)<textarea value={observations} onChange={event => setObservations(event.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[11px] text-emerald-900"><strong>Soportes documentales opcionales.</strong> Puede registrar y contabilizar el cierre sin adjuntar PDF, fotografía ni otro archivo. La ausencia de soportes no bloquea el registro.</div>
         {error && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-rose-800">{error}</div>}
-        <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4"><button type="button" onClick={onClose} disabled={saving} className="rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700">Cancelar</button><button type="submit" disabled={saving} className="rounded-lg bg-emerald-600 px-5 py-2 font-bold text-white disabled:opacity-50">{saving ? 'Guardando…' : 'Registrar Reporte Z y generar asiento'}</button></div>
+        <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4"><button type="button" onClick={onClose} disabled={saving} className="rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700">Cancelar</button><button type="submit" disabled={saving} className="rounded-lg bg-emerald-600 px-5 py-2 font-bold text-white disabled:opacity-50">{saving ? 'Guardando…' : 'Registrar cierre y generar asiento'}</button></div>
       </form>
     </div>
   </div>;
