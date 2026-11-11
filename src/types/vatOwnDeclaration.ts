@@ -574,7 +574,10 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     ];
     if (originalFields) {
       for (const [field, label, tolerance] of fiscalCaps) {
-        const cap = Number(originalFields[field] || 0);
+        // Older filed snapshots may predate these extended fiscal fields. Only
+        // enforce a ceiling when the original document actually preserved it.
+        if (originalFields[field] === undefined || originalFields[field] === null) continue;
+        const cap = Number(originalFields[field]);
         const accumulated = noteSnapshots.reduce((sum, note) => sum + Number(note[field] || 0), 0);
         if (!Number.isFinite(cap) || cap < 0 || !Number.isFinite(accumulated) || accumulated - cap > tolerance) {
           throw new Error('Las notas de crédito acumuladas superan el ' + label + ' de la factura original ' +
