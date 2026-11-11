@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { Company, JournalEntry, PurchaseRecord, SaleRecord } from '../types/accounting';
 import { formatBs, formatUsd, formatDate, formatNumberVe } from './formatters';
 import { DEFAULT_LOGO_LOS_ANDES } from '../data/defaultLogos';
+import { resolveVatOwnDailySalesSources } from '../types/vatOwnDeclaration';
 
 /**
  * Descarga explícita del PDF para Chromium y Electron.
@@ -295,6 +296,11 @@ export async function exportDiarioPdf(
     margin: { left: 14, right: 14, bottom: 20 }
   });
 
+  if (unresolvedDates.size > 0) {
+    doc.setFontSize(8);
+    doc.setTextColor(180, 83, 9);
+    doc.text('ATENCIÓN: hay fechas con doble modalidad. Las filas marcadas PENDIENTE no se incluyen en los totales hasta seleccionar Reporte Z o ventas individuales.', 14, startY - 3);
+  }
   const finalY = (doc as any).lastAutoTable.finalY || 100;
   addSignatureBlock(doc, finalY, company);
   addPdfFooter(doc);
@@ -902,7 +908,8 @@ export async function exportVentasPdf(
   company: Company,
   sales: SaleRecord[],
   monthFilter?: string,
-  zReportEntries: JournalEntry[] = []
+  zReportEntries: JournalEntry[] = [],
+  sourceChoices: Record<string, 'Z' | 'INDIVIDUAL'> = {}
 ) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
 
@@ -926,18 +933,39 @@ export async function exportVentasPdf(
   let totalIgtf = 0;
   let totalLuxuryTax = 0;
 
+  const fiscalZEntries = zReportEntries.filter(entry => entry.companyId === company.id && entry.fiscalZReport);
+  const sourceResolution = resolveVatOwnDailySalesSources({
+    zReports: fiscalZEntries.map(entry => ({
+      id: entry.id, date: entry.fiscalZReport!.date || entry.date,
+      taxableBase16Bs: entry.fiscalZReport!.taxableBase16Bs, vat16Bs: entry.fiscalZReport!.vat16Bs,
+      taxableBase8Bs: entry.fiscalZReport!.taxableBase8Bs, vat8Bs: entry.fiscalZReport!.vat8Bs,
+      taxableBase31Bs: entry.fiscalZReport!.taxableBase31Bs, vat31Bs: entry.fiscalZReport!.vat31Bs,
+      exemptSalesBs: entry.fiscalZReport!.exemptSalesBs
+    })),
+    sales: sales.filter(s => !s.isCancelled).map(s => ({
+      id: s.id, date: s.invoiceDate, documentType: s.documentType, taxableBaseBs: s.taxableBaseBs,
+      taxRate: s.taxRate, vatAmountBs: s.vatAmountBs, exemptAmountBs: s.exemptAmountBs
+    })),
+    choices: sourceChoices
+  });
+  const selectedIndividualIds = new Set(sourceResolution.days.filter(day => day.source === 'INDIVIDUAL').flatMap(day => day.sourceIds));
+  const selectedZIds = new Set(sourceResolution.days.filter(day => day.source === 'Z').flatMap(day => day.sourceIds));
+  const unresolvedDates = new Set(sourceResolution.unresolvedDates);
   const hasSalesCorrectionNotes = sales.some(s => s.documentType === '02' || s.documentType === '03');
   const tableBody: any[] = sales.map(s => {
     const sign = s.documentType === '03' ? -1 : 1;
-    totalMonto += sign * (s.totalAmountBs || 0);
-    totalMontoUsd += sign * (s.totalAmountUsd || 0);
-    totalExento += sign * (s.exemptAmountBs || 0);
-    totalBase += sign * (s.taxableBaseBs || 0);
-    const saleLuxuryTax = s.taxRate === 31 ? (s.taxableBaseBs || 0) * 0.15 : 0;
-    totalLuxuryTax += sign * saleLuxuryTax;
-    totalIva += sign * (s.taxRate === 31 ? Math.max(0, (s.taxableBaseBs || 0) * 0.16) : (s.vatAmountBs || 0));
-    totalRetenido += sign * (s.vatWithheldBs || 0);
-    totalIgtf += sign * (s.igtfAmountBs || 0);
+    const included = selectedIndividualIds.has(s.id);
+    if (included) {
+      totalMonto += sign * (s.totalAmountBs || 0);
+      totalMontoUsd += sign * (s.totalAmountUsd || 0);
+      totalExento += sign * (s.exemptAmountBs || 0);
+      totalBase += sign * (s.taxableBaseBs || 0);
+      const saleLuxuryTax = s.taxRate === 31 ? (s.additionalLuxuryTaxBs ?? (s.taxableBaseBs || 0) * 0.15) : 0;
+      totalLuxuryTax += sign * saleLuxuryTax;
+      totalIva += sign * (s.taxRate === 31 ? Math.max(0, (s.taxableBaseBs || 0) * 0.16) : (s.vatAmountBs || 0));
+      totalRetenido += sign * (s.vatWithheldBs || 0);
+      totalIgtf += sign * (s.igtfAmountBs || 0);
+    }
 
     return [
       s.opNumber,
@@ -958,23 +986,26 @@ export async function exportVentasPdf(
       s.retentionVoucherNumber || '-',
       s.retentionVoucherDate ? formatDate(s.retentionVoucherDate) : '-',
       (s.igtfAmountBs || 0) > 0 ? formatNumberVe(sign * (s.igtfAmountBs || 0)) : '-',
-      s.bcvRate > 0 ? formatNumberVe(s.bcvRate) : '—'
+      s.bcvRate > 0 ? formatNumberVe(s.bcvRate) : '—',
+      included ? 'INCLUIDO' : unresolvedDates.has(s.invoiceDate) ? 'PENDIENTE' : s.isCancelled ? 'ANULADA' : 'FUENTE ALTERNATIVA'
     ];
   });
 
   // Los cierres Z se incorporan como renglones consolidados; no se simulan facturas ni RIF individuales.
-  const fiscalZEntries = zReportEntries.filter(entry => entry.companyId === company.id && entry.fiscalZReport);
   fiscalZEntries.forEach(entry => {
     const z = entry.fiscalZReport!;
     const base = z.taxableBase16Bs + z.taxableBase8Bs + z.taxableBase31Bs;
     const vat = z.vat16Bs + z.vat8Bs + z.vat31Bs;
-    totalMonto += z.totalSalesBs;
-    totalMontoUsd += entry.bcvRate > 0 ? z.totalSalesBs / entry.bcvRate : 0;
-    totalExento += z.exemptSalesBs;
-    totalBase += base;
-    totalIva += vat;
-    totalLuxuryTax += z.additionalLuxuryTaxBs || 0;
-    totalIgtf += z.igtfBs;
+    const included = selectedZIds.has(entry.id);
+    if (included) {
+      totalMonto += z.totalSalesBs;
+      totalMontoUsd += entry.bcvRate > 0 ? z.totalSalesBs / entry.bcvRate : 0;
+      totalExento += z.exemptSalesBs;
+      totalBase += base;
+      totalIva += vat;
+      totalLuxuryTax += z.additionalLuxuryTaxBs || 0;
+      totalIgtf += z.igtfBs;
+    }
     tableBody.push([
       'Z-' + entry.entryNumber,
       formatDate(z.date),
@@ -992,7 +1023,8 @@ export async function exportVentasPdf(
       (z.additionalLuxuryTaxBs || 0) > 0 ? formatNumberVe(z.additionalLuxuryTaxBs) : '-',
       '-', '-', '-',
       z.igtfBs > 0 ? formatNumberVe(z.igtfBs) : '-',
-      entry.bcvRate > 0 ? formatNumberVe(entry.bcvRate) : '—'
+      entry.bcvRate > 0 ? formatNumberVe(entry.bcvRate) : '—',
+      included ? 'INCLUIDO' : unresolvedDates.has(z.date) ? 'PENDIENTE' : 'FUENTE ALTERNATIVA'
     ]);
   });
 
@@ -1012,6 +1044,7 @@ export async function exportVentasPdf(
     { content: '', styles: { fillColor: [15, 23, 42] } },
     { content: '', styles: { fillColor: [15, 23, 42] } },
     { content: formatNumberVe(totalIgtf), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [125, 211, 252] } },
+    { content: '', styles: { fillColor: [15, 23, 42] } },
     { content: '', styles: { fillColor: [15, 23, 42] } }
   ]);
 
@@ -1036,7 +1069,8 @@ export async function exportVentasPdf(
       'Comprobante Ret.',
       'Fecha Ret.',
       'IGTF (Bs.)',
-      'Tasa BCV'
+      'Tasa BCV',
+      'Cómputo fiscal'
     ]],
     body: tableBody,
     theme: 'grid',
@@ -1061,7 +1095,8 @@ export async function exportVentasPdf(
       15: { cellWidth: 20, font: 'courier' },
       16: { cellWidth: 16, font: 'courier' },
       17: { cellWidth: 18, halign: 'right', font: 'courier' },
-      18: { cellWidth: 14, halign: 'right', font: 'courier' }
+      18: { cellWidth: 14, halign: 'right', font: 'courier' },
+      19: { cellWidth: 22, halign: 'center', fontStyle: 'bold' }
     },
     margin: { left: 14, right: 14, bottom: 20 }
   });
