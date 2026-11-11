@@ -1152,3 +1152,58 @@ test('customer VAT withholdings are retained even when daily sales are sourced f
   const rows = getReceivedVatWithholdingSales(sales, 'co-1', '2026-11');
   assert.deepEqual(rows.map(item => item.id), ['pos-invoice', 'prior-invoice']);
 });
+
+
+test('limits cumulative partial supplier credit notes by original fiscal amounts and returned quantities', () => {
+  const original = {
+    id: 'purchase-return-limit-original', companyId: 'company-a', invoiceDate: '2026-10-05',
+    supplierRif: 'J-12345678-9', invoiceNumber: 'F-RETURN-1', documentType: '01',
+    taxRate: 16, totalAmountBs: 116, taxableBaseBs: 100, exemptAmountBs: 0,
+    vatAmountBs: 16, additionalLuxuryTaxBs: 0, vatCreditTreatment: 'TAXABLE',
+    inventoryLines: [{ productId: 'product-a', quantity: 1, unitCostBs: 100 }]
+  } as PurchaseRecord;
+  const priorNote = {
+    id: 'purchase-return-limit-prior-note', companyId: 'company-a', invoiceDate: '2026-11-05',
+    supplierRif: 'J-12345678-9', invoiceNumber: 'NC-RETURN-1', documentType: '03',
+    taxRate: 16, totalAmountBs: 58, taxableBaseBs: 50, exemptAmountBs: 0, vatAmountBs: 8,
+    originalPurchaseId: original.id,
+    creditNoteLines: [{ productId: 'product-a', originalMovementId: 'original-move', movementId: 'return-move-1', quantity: 0.5, unitCostBs: 100, inventoryCostBs: 50 }]
+  } as PurchaseRecord;
+  const originalSnapshot = JSON.stringify({
+    kind: 'PURCHASE', id: original.id, documentType: '01', supplierRif: original.supplierRif,
+    invoiceNumber: original.invoiceNumber, vatCreditTreatment: 'TAXABLE', taxRate: 16,
+    totalAmountBs: 116, taxableBaseBs: 100, exemptAmountBs: 0, vatAmountBs: 16,
+    additionalLuxuryTaxBs: 0, inventoryLines: original.inventoryLines
+  });
+  const priorNoteSnapshot = JSON.stringify({
+    kind: 'PURCHASE', id: priorNote.id, documentType: '03', supplierRif: priorNote.supplierRif,
+    taxRate: 16, totalAmountBs: 58, taxableBaseBs: 50, exemptAmountBs: 0, vatAmountBs: 8,
+    originalPurchaseId: original.id, creditNoteLines: priorNote.creditNoteLines
+  });
+  const filedOriginal = {
+    ...declaration, period: '2026-10', status: 'FILED' as const,
+    sourceIds: [original.id], sourceSnapshots: { [original.id]: originalSnapshot }
+  };
+  const filedPriorNote = {
+    ...declaration, period: '2026-11', status: 'FILED' as const,
+    sourceIds: [priorNote.id], relatedSourceIds: [original.id],
+    sourceSnapshots: { [priorNote.id]: priorNoteSnapshot, [original.id]: originalSnapshot }
+  };
+  const currentNote = {
+    id: 'purchase-return-limit-current-note', companyId: 'company-a', invoiceDate: '2026-12-05',
+    supplierRif: 'J-12345678-9', invoiceNumber: 'NC-RETURN-2', documentType: '03',
+    taxRate: 16, totalAmountBs: 58, taxableBaseBs: 50, exemptAmountBs: 0, vatAmountBs: 8,
+    originalPurchaseId: original.id,
+    creditNoteLines: [{ productId: 'product-a', originalMovementId: 'original-move', movementId: 'return-move-2', quantity: 0.6, unitCostBs: 100, inventoryCostBs: 60 }]
+  } as PurchaseRecord;
+  const input = {
+    companyId: 'company-a', period: '2026-12', purchases: [currentNote],
+    allPurchases: [original, priorNote, currentNote],
+    priorDeclarations: [filedOriginal, filedPriorNote],
+    taxableSalesBaseBs: 1000, exemptSalesBaseBs: 0
+  };
+  assert.throws(() => calculateVatOwnPurchaseCreditSummary(input), /exceden la cantidad comprada/);
+  assert.throws(() => calculateVatOwnPurchaseCreditSummary({
+    ...input, purchases: [{ ...currentNote, creditNoteLines: [{ ...currentNote.creditNoteLines![0], quantity: 0.5 }], totalAmountBs: 60, taxableBaseBs: 52, vatAmountBs: 8 }]
+  }), /superan el importe total/);
+});
