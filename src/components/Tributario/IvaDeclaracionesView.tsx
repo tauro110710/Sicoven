@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { CalendarDays, FileText, Receipt, ShoppingCart, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs } from '../../utils/formatters';
-import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, resolveVatOwnProrationRate } from '../../types/vatOwnDeclaration';
+import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, resolveVatOwnProrationRate, resolveVatOwnPurchaseCreditTreatment } from '../../types/vatOwnDeclaration';
 
 const money = (value: number | undefined) => Number.isFinite(value) ? Number(value) : 0;
 const parseLocalizedNumber = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
@@ -69,7 +69,7 @@ export const IvaDeclaracionesView: React.FC = () => {
     sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
   const exemptSalesBase = dailySalesResolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
   const hasCommonPurchases = monthPurchases.some(item =>
-    (item.vatCreditTreatment || 'COMMON') === 'COMMON' && money(item.vatAmountBs) > 0
+    resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment) === 'COMMON' && money(item.vatAmountBs) > 0
   );
   const prorationRate = resolveVatOwnProrationRate({
     taxableSalesBaseBs: taxableSalesBase, exemptSalesBaseBs: exemptSalesBase, hasCommonPurchases
@@ -77,7 +77,7 @@ export const IvaDeclaracionesView: React.FC = () => {
   const purchaseCreditEligible = outputVat === null || prorationRate === null ? null : Math.max(0, monthPurchases
     .filter(item => item.taxRate !== 8)
     .reduce((sum, item) => {
-      const treatment = item.vatCreditTreatment || 'COMMON';
+      const treatment = resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment);
       const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : prorationRate;
       return sum + signedDocument(item.documentType) * money(item.vatAmountBs) * factor;
     }, 0)) + Math.max(0, monthPurchases
