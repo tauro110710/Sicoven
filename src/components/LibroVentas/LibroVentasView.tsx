@@ -43,6 +43,32 @@ export const LibroVentasView: React.FC = () => {
   const [monthFilter, setMonthFilter] = useState('');
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
+  const handleExportCsv = () => {
+    const headers = ['Fecha','RIF / C.I.','Razón Social / Nombre','Tipo','N° Factura','N° Control','N° NC','Total USD','Total Facturado Bs.','Exento Bs.','Base 16% Bs.','IVA 16% Bs.','Base 8% Bs.','IVA 8% Bs.','Base 31% Bs.','IVA componente 16% Bs.','Impuesto adicional 15% Bs.','IGTF 3% Bs.','Tasa BCV','Origen'];
+    const esc = (value: unknown) => '"' + String(value ?? '').replace(/"/g, '""') + '"';
+    const rows: (string | number)[][] = filteredSales.map(s => {
+      const sign = s.documentType === '03' ? -1 : 1;
+      const base16 = s.taxRate === 16 || s.taxRate === 31 ? s.taxableBaseBs : 0;
+      const base8 = s.taxRate === 8 ? s.taxableBaseBs : 0;
+      const base31 = s.taxRate === 31 ? s.taxableBaseBs : 0;
+      const iva16 = s.taxRate === 16 ? s.vatAmountBs : s.taxRate === 31 ? s.taxableBaseBs * 0.16 : 0;
+      const iva8 = s.taxRate === 8 ? s.vatAmountBs : 0;
+      return [s.invoiceDate,s.customerRif,s.customerName,s.documentType === '03' ? 'NOTA DE CRÉDITO' : s.documentType === '02' ? 'NOTA DE DÉBITO' : 'FACTURA',s.invoiceNumber,s.controlNumber,s.creditNoteNumber || (s.documentType === '03' ? s.invoiceNumber : ''),sign * s.totalAmountUsd,sign * s.totalAmountBs,sign * s.exemptAmountBs,sign * base16,sign * iva16,sign * base8,sign * iva8,sign * base31,sign * (s.taxRate === 31 ? s.taxableBaseBs * 0.16 : 0),sign * (s.taxRate === 31 ? (s.additionalLuxuryTaxBs ?? s.taxableBaseBs * 0.15) : 0),sign * (s.igtfAmountBs || 0),s.bcvRate,'VENTA INDIVIDUAL'];
+    });
+    filteredZReports.forEach(entry => {
+      const z = entry.fiscalZReport!;
+      rows.push([z.date,'','VENTAS CONSOLIDADAS · ' + (z.sourceSystemName || z.machineBrand || 'Reporte Z'),'REPORTE Z',z.zNumber,z.controlStart || '', '', '',z.totalSalesBs,z.exemptSalesBs,z.taxableBase16Bs,z.vat16Bs,z.taxableBase8Bs,z.vat8Bs,z.taxableBase31Bs,z.taxableBase31Bs * 0.16,z.additionalLuxuryTaxBs,z.igtfBs,entry.bcvRate,'CIERRE Z']);
+    });
+    const csv = '\uFEFF' + [headers,...rows].map(row => row.map(esc).join(';')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'Libro_Ventas_' + (monthFilter || 'todos') + '.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleExportPdf = async () => {
     try {
       setIsExportingPdf(true);
@@ -131,7 +157,7 @@ export const LibroVentasView: React.FC = () => {
             <span className="text-emerald-700 font-medium">Libro Fiscal Reglamentario</span>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5">\n            <button onClick={handleExportCsv} disabled={filteredSales.length === 0 && filteredZReports.length === 0} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-300"><Download className="w-3.5 h-3.5" /> Exportar CSV</button>
             <button
               onClick={handleExportPdf}
               disabled={isExportingPdf || (filteredSales.length === 0 && filteredZReports.length === 0)}
@@ -202,7 +228,7 @@ export const LibroVentasView: React.FC = () => {
                 <th className="py-2.5 px-3 w-28">RIF Cliente</th>
                 <th className="py-2.5 px-3 min-w-[200px]">Nombre o Razón Social</th>
                 <th className="py-2.5 px-3 w-28">N° Factura</th>
-                <th className="py-2.5 px-3 w-28">N° Control</th>
+                <th className="py-2.5 px-3 w-24">Tipo</th>\n                <th className="py-2.5 px-3 w-28">N° Control</th>
                 <th className="py-2.5 px-3 text-right w-32">Total Ventas (Bs.)</th>
                 <th className="py-2.5 px-3 text-right w-28">Exento (Bs.)</th>
                 <th className="py-2.5 px-3 text-right w-32">Base Imponible</th>
@@ -212,14 +238,14 @@ export const LibroVentasView: React.FC = () => {
                 <th className="py-2.5 px-3 text-right w-28 text-purple-800">IVA Retenido</th>
                 <th className="py-2.5 px-3 w-32">N° Comprobante Ret.</th>
                 <th className="py-2.5 px-3 w-28">Fecha Ret.</th>
-                <th className="py-2.5 px-3 text-right w-28">IGTF (Bs.)</th>
+                <th className="py-2.5 px-3 text-right w-28">IGTF (Bs.)</th>\n                <th className="py-2.5 px-3 text-right w-24">Tasa BCV</th>
                 <th className="py-2.5 px-2 text-center w-12 no-print">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredSales.length === 0 ? (
                 <tr>
-                  <td colSpan={18} className="py-12 text-center text-slate-400">
+                  <td colSpan={20} className="py-12 text-center text-slate-400">
                     <TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-40" />
                     No hay facturas de ventas emitidas en este período.
                   </td>
@@ -249,6 +275,7 @@ export const LibroVentasView: React.FC = () => {
                       {s.originalSaleId && <div className="text-[9px] text-slate-500">Afecta: {s.affectedInvoiceNumber}</div>}
                       {s.isCancelled && <span title={s.cancellationNote || 'Pendiente regularización fiscal'} className="ml-1 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">REVERSADA CONTABLE</span>}
                     </td>
+                    <td className="py-2 px-3 whitespace-nowrap"><span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold">{s.documentType === '03' ? 'NC' : s.documentType === '02' ? 'ND' : 'FACTURA'}</span></td>
                     <td className="py-2 px-3 font-mono text-slate-600 whitespace-nowrap">
                       {s.controlNumber}
                     </td>
@@ -303,6 +330,7 @@ export const LibroVentasView: React.FC = () => {
                     <td className="py-2 px-3 text-right font-mono text-sky-700 whitespace-nowrap">
                       {(s.igtfAmountBs || 0) > 0 ? formatBs(s.igtfAmountBs || 0) : '-'}
                     </td>
+                    <td className="py-2 px-3 text-right font-mono text-slate-600 whitespace-nowrap">{s.bcvRate > 0 ? s.bcvRate.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '—'}</td>
                     <td className="py-2 px-2 text-center no-print">
                       <button onClick={() => setDocumentTarget({ id: s.id, title: 'Factura de venta ' + s.invoiceNumber })} className="mr-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100">Soportes</button>
                       {s.documentType === '01' && s.paymentTerm === 'CREDITO' && !s.isCancelled && <button onClick={() => setSettlementTarget({id:s.id, number:s.invoiceNumber, party:s.customerName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar cobro parcial o total">Cobrar</button>}
@@ -331,7 +359,7 @@ export const LibroVentasView: React.FC = () => {
             </tbody>
             <tfoot>
               <tr className="bg-slate-900 text-white font-bold border-t border-slate-800 whitespace-nowrap">
-                <td colSpan={7} className="py-3 px-3 text-right text-slate-300">
+                <td colSpan={8} className="py-3 px-3 text-right text-slate-300">
                   TOTALES LIBRO DE VENTAS (SENIAT):
                 </td>
                 <td className="py-3 px-3 text-right font-mono text-emerald-400">
