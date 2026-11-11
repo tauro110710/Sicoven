@@ -290,6 +290,20 @@ export const IvaDeclaracionesView: React.FC = () => {
           </div>
           <p className="text-xs text-slate-500">El impuesto adicional del 15% y el IGTF se mantienen separados del IVA acreditable y del débito fiscal; no se suman como IVA en la declaración mensual.</p>
           <p className="text-xs text-slate-500">El asiento de determinación reclasifica el IVA no acreditable hacia las mismas cuentas de inventario, costo, gasto o activo utilizadas por las compras de origen. Líneas de reclasificación: {savedDeclaration.purchaseVatReclassificationItems?.length || 0}.</p>
+          {(savedDeclaration.purchaseVatReclassificationItems?.length || 0) > 0 && <details className="rounded-lg border border-slate-200 p-3 text-xs">
+            <summary className="cursor-pointer font-bold text-slate-700">Ver detalle de reclasificación por cuenta</summary>
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full min-w-[560px] text-left">
+                <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-2">Cuenta de origen</th><th className="px-2 py-2">Concepto</th><th className="px-2 py-2 text-right">Debe Bs.</th><th className="px-2 py-2 text-right">Haber Bs.</th></tr></thead>
+                <tbody className="divide-y divide-slate-100">{savedDeclaration.purchaseVatReclassificationItems!.map((item,index)=><tr key={item.accountCode+'-'+index}>
+                  <td className="px-2 py-2"><strong>{item.accountCode}</strong><p className="text-slate-500">{item.accountName}</p></td>
+                  <td className="px-2 py-2">{item.description}</td>
+                  <td className="px-2 py-2 text-right font-mono">{item.debitBs>0?format(item.debitBs):'—'}</td>
+                  <td className="px-2 py-2 text-right font-mono">{item.creditBs>0?format(item.creditBs):'—'}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+          </details>}
           {savedDeclaration.status==='DRAFT' ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
             <p className="text-sm font-semibold text-amber-950">Al presentar, SICOVEN registra el número oficial y el asiento de determinación mensual. El borrador y sus documentos fuente permanecen conservados.</p>
             <div className="flex flex-wrap gap-2"><input value={declarationNumber} onChange={event=>setDeclarationNumber(event.target.value)} placeholder="Número oficial de declaración" className="min-w-[220px] flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
