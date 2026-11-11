@@ -759,6 +759,59 @@ test('allocates non-creditable VAT proportionally across multiple original debit
   assert.equal(items.reduce((sum, item) => sum + item.creditUsd, 0), 0.4);
 });
 
+test('balances fractional multi-account VAT reclassifications in Bs and USD in both directions', () => {
+  const original = {
+    id: 'purchase-fractional-multi-account', companyId: 'company-a', invoiceDate: '2026-11-02',
+    documentType: '01', taxRate: 16, vatAmountBs: 24.68, taxableBaseBs: 1000,
+    exemptAmountBs: 0, journalEntryId: 'purchase-fractional-journal', invoiceNumber: 'FC-FRAC-1'
+  } as PurchaseRecord;
+  const sourceJournal = {
+    id: 'purchase-fractional-journal', companyId: 'company-a', date: '2026-11-02',
+    entryNumber: 3, description: 'Compra con distribución', type: 'COMPRA', bcvRate: 333.33,
+    createdAt: '2026-11-02T10:00:00.000Z',
+    items: [
+      { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 700, creditBs: 0, debitUsd: 2.100021, creditUsd: 0 },
+      { accountCode: '6.1.1.01', accountName: 'Gasto operativo', debitBs: 300, creditBs: 0, debitUsd: 0.900009, creditUsd: 0 },
+      { accountCode: '1.1.3.01', accountName: 'IVA crédito', debitBs: 24.68, creditBs: 0, debitUsd: 0.074041, creditUsd: 0 }
+    ]
+  } as JournalEntry;
+  const createItems = (signedAmount: number) => buildVatOwnPurchaseVatReclassificationItems({
+    companyId: 'company-a', period: '2026-11', bcvRate: 333.33,
+    allPurchases: [original], journalEntries: [sourceJournal],
+    summary: {
+      prorationRate: 0.5, gross16Bs: 24.68, gross8Bs: 0,
+      eligible16Bs: 12.34, eligible8Bs: 0, nonEligible16Bs: 12.34, nonEligible8Bs: 0,
+      priorReversalEligible16Bs: 0, priorReversalEligible8Bs: 0,
+      priorReversalNonEligible16Bs: 0, priorReversalNonEligible8Bs: 0,
+      relatedPurchaseIds: [],
+      reclassifications: [{
+        purchaseId: original.id, basePurchaseId: original.id,
+        taxRate: 16, nonEligibleSignedBs: signedAmount
+      }]
+    }
+  });
+  const forward = createItems(12.34);
+  assert.deepEqual(forward.map(item => [item.accountCode, item.debitBs, item.creditBs]), [
+    ['1.1.4.01', 8.63, 0],
+    ['6.1.1.01', 3.71, 0],
+    ['1.1.3.01', 0, 12.34]
+  ]);
+  assert.ok(Math.abs(forward.reduce((sum, item) => sum + item.debitUsd, 0) -
+    forward.reduce((sum, item) => sum + item.creditUsd, 0)) < 1e-10);
+  for (const item of forward) {
+    assert.ok(Math.abs(item.debitUsd - item.debitBs / 333.33) < 1e-10);
+    assert.ok(Math.abs(item.creditUsd - item.creditBs / 333.33) < 1e-10);
+  }
+  const reversal = createItems(-12.34);
+  assert.deepEqual(reversal.map(item => [item.accountCode, item.debitBs, item.creditBs]), [
+    ['1.1.4.01', 0, 8.63],
+    ['6.1.1.01', 0, 3.71],
+    ['1.1.3.01', 12.34, 0]
+  ]);
+  assert.ok(Math.abs(reversal.reduce((sum, item) => sum + item.debitUsd, 0) -
+    reversal.reduce((sum, item) => sum + item.creditUsd, 0)) < 1e-10);
+});
+
 test('reverses the prior non-creditable VAT reclassification when a prior-period purchase is credited', () => {
   const original = {
     id: 'purchase-reclass-old', companyId: 'company-a', invoiceDate: '2026-10-02',
