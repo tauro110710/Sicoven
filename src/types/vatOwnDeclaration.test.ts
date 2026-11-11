@@ -236,6 +236,26 @@ test('reverses a prior-period common purchase credit using the original declarat
   assert.deepEqual(result.relatedPurchaseIds, [original.id]);
 });
 
+test('requires an original purchase journal even when its VAT is fully creditable', () => {
+  const purchase = {
+    id: 'purchase-taxable-no-journal', companyId: 'company-a', invoiceDate: '2026-11-05',
+    supplierRif: 'J-12345678-9', invoiceNumber: 'FC-100', documentType: '01',
+    taxRate: 16, vatAmountBs: 160, taxableBaseBs: 1000, vatCreditTreatment: 'TAXABLE'
+  } as PurchaseRecord;
+  assert.throws(() => buildVatOwnPurchaseVatReclassificationItems({
+    companyId: 'company-a', period: '2026-11', bcvRate: 200,
+    allPurchases: [purchase], journalEntries: [],
+    summary: {
+      prorationRate: 1, gross16Bs: 160, gross8Bs: 0,
+      eligible16Bs: 160, eligible8Bs: 0, nonEligible16Bs: 0, nonEligible8Bs: 0,
+      priorReversalEligible16Bs: 0, priorReversalEligible8Bs: 0,
+      priorReversalNonEligible16Bs: 0, priorReversalNonEligible8Bs: 0,
+      relatedPurchaseIds: [],
+      reclassifications: [{ purchaseId: purchase.id, basePurchaseId: purchase.id, taxRate: 16, nonEligibleSignedBs: 0 }]
+    }
+  }), /no conserva su asiento de compra/);
+});
+
 test('reclassifies non-creditable VAT to the original inventory/expense debit account', () => {
   const original = {
     id: 'purchase-reclass', companyId: 'company-a', invoiceDate: '2026-11-02', supplierRif: 'J-12345678-9',
