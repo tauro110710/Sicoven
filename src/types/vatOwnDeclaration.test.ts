@@ -157,3 +157,20 @@ test('requires the accountant to choose one source when Z and individual sales o
   assert.equal(resolved.days[0].outputVatBs, 160);
   assert.equal(resolved.days[0].sourceIds.length, 1);
 });
+
+test('treats the 31% Z alícuota as 16% IVA plus a separate non-IVA additional tax', () => {
+  const result = resolveVatOwnDailySalesSources({
+    zReports: [{
+      id: 'z-31', date: '2026-10-05',
+      taxableBase16Bs: 1000, vat16Bs: 160,
+      taxableBase8Bs: 500, vat8Bs: 40,
+      taxableBase31Bs: 100, vat31Bs: 16,
+      exemptSalesBs: 0
+    }],
+    sales: []
+  });
+  assert.equal(result.unresolvedDates.length, 0);
+  assert.equal(result.days[0].outputVat16Bs, 176);
+  assert.equal(result.days[0].outputVat8Bs, 40);
+  assert.equal(result.days[0].outputVatBs, 216);
+});
