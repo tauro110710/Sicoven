@@ -5814,6 +5814,46 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         allPurchases: purchases, priorDeclarations: vatOwnDeclarations,
         taxableSalesBaseBs: currentTaxableBase, exemptSalesBaseBs: currentExemptBase
       });
+      const currentOutputVat16Raw = resolution.days.reduce((sum, day) => sum + day.outputVat16Bs, 0);
+      const currentOutputVat8Raw = resolution.days.reduce((sum, day) => sum + day.outputVat8Bs, 0);
+      const currentOutputVat16 = Math.max(0, currentOutputVat16Raw);
+      const currentOutputVat8 = Math.max(0, currentOutputVat8Raw);
+      const currentWithholdingRows = getReceivedVatWithholdingSales(sales, currentCompany.id, declaration.period);
+      const currentWithholdingRaw = currentWithholdingRows.reduce((sum, item) =>
+        sum + (item.documentType === '03' ? -1 : 1) * Number(item.vatWithheldBs || 0), 0);
+      const currentWithholding = Math.max(0, currentWithholdingRaw);
+      const currentPriorCredit = vatOwnDeclarations.filter(item =>
+        item.companyId === currentCompany.id && item.status === 'FILED' && item.period < declaration.period
+      ).sort((a, b) => b.period.localeCompare(a.period))[0]?.position.creditCarryForwardBs || 0;
+      const currentPosition = calculateVatOwnPosition({
+        outputVatBs: currentOutputVat16 + currentOutputVat8,
+        outputVat16Bs: currentOutputVat16, outputVat8Bs: currentOutputVat8,
+        purchaseCreditBs: currentPurchaseSummary.eligible16Bs + currentPurchaseSummary.eligible8Bs,
+        purchaseCredit16Bs: currentPurchaseSummary.eligible16Bs,
+        purchaseCredit8Bs: currentPurchaseSummary.eligible8Bs,
+        purchaseCreditGrossBs: currentPurchaseSummary.gross16Bs + currentPurchaseSummary.gross8Bs,
+        purchaseCreditGross16Bs: currentPurchaseSummary.gross16Bs,
+        purchaseCreditGross8Bs: currentPurchaseSummary.gross8Bs,
+        purchaseCreditNonEligibleBs: currentPurchaseSummary.nonEligible16Bs + currentPurchaseSummary.nonEligible8Bs,
+        purchaseCreditReversalBs: currentPurchaseSummary.priorReversalEligible16Bs + currentPurchaseSummary.priorReversalEligible8Bs,
+        purchaseCreditReversal16Bs: currentPurchaseSummary.priorReversalEligible16Bs,
+        purchaseCreditReversal8Bs: currentPurchaseSummary.priorReversalEligible8Bs,
+        purchaseCreditReversalNonEligibleBs: currentPurchaseSummary.priorReversalNonEligible16Bs + currentPurchaseSummary.priorReversalNonEligible8Bs,
+        purchaseCreditReversalNonEligible16Bs: currentPurchaseSummary.priorReversalNonEligible16Bs,
+        purchaseCreditReversalNonEligible8Bs: currentPurchaseSummary.priorReversalNonEligible8Bs,
+        prorationRate: currentPurchaseSummary.prorationRate,
+        taxableSalesBaseBs: currentTaxableBase, exemptSalesBaseBs: currentExemptBase,
+        receivedWithholdingsBs: currentWithholding, priorCreditBs: currentPriorCredit,
+        debitAdjustmentsBs: Math.max(0, -currentWithholdingRaw),
+        creditAdjustmentsBs: Math.max(0, -currentOutputVat16Raw) + Math.max(0, -currentOutputVat8Raw)
+      });
+      const positionChanged = (Object.keys(currentPosition) as Array<keyof typeof currentPosition>).some(field => {
+        const tolerance = field === 'prorationRate' ? 0.000001 : 0.02;
+        return Math.abs(currentPosition[field] - declaration.position[field]) > tolerance;
+      });
+      if (positionChanged) {
+        throw new Error('No se puede presentar: los importes fiscales o el saldo cambiaron desde que se preparó el borrador, aunque las fuentes conserven sus identificadores. Actualícelo y revise la nueva conciliación.');
+      }
       const currentReclassificationItems = buildVatOwnPurchaseVatReclassificationItems({
         companyId: currentCompany.id, period: declaration.period,
         bcvRate: Number(declaration.bcvRate), allPurchases: purchases,
