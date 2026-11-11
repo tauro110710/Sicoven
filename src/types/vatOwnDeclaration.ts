@@ -35,7 +35,7 @@ export function findExistingVatOwnPaymentReversal<T extends {
 }
 
 export function resolveVatOwnPaymentBcvRate(
-  history: readonly Array<{ rate: number; effectiveDate: string; recordedAt: string }>,
+  history: ReadonlyArray<{ rate: number; effectiveDate: string; recordedAt: string }>,
   paymentDate: string
 ): number | null {
   const isCalendarDate = (value: string) => {
