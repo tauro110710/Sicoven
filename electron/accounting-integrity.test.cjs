@@ -2176,6 +2176,19 @@ test('SQLite rejects IVA reclassification lines whose USD values do not match th
   }), /conversión Bs\/USD inconsistente/);
 });
 
+test('SQLite accepts a 100% immaterial proration when no common purchases exist', () => {
+  const fixture = vatOwnDeclarationFixture();
+  const declaration = {
+    ...fixture.vatOwnDeclarations[0],
+    position: vatOwnPositionFixture({
+      taxableSalesBaseBs: 500, exemptSalesBaseBs: 500, prorationRate: 1
+    })
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), {
+    ...fixture, vatOwnDeclarations: [declaration]
+  }));
+});
+
 test('SQLite rejects negative monetary components in an IVA declaration position', () => {
   const fixture = vatOwnDeclarationFixture();
   const declaration = {
