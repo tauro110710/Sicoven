@@ -757,6 +757,10 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     .filter(entry => entry.reversalOfEntryId).map(entry => String(entry.reversalOfEntryId)));
   const activityPeriodsByCompany = new Map();
   const addActivityDate = (companyId, date) => {
+    // Historical accounting rows may predate the fiscal-date field. Missing dates
+    // are not evidence of monthly tax activity and must not brick unrelated writes.
+    // Any supplied date remains strict: malformed or impossible calendar dates fail.
+    if (date === undefined || date === null || date === '') return;
     if (!validVatDeclarationDate(date)) {
       throw new Error('SQLite rechazó una fecha fiscal inválida al comprobar la continuidad de declaraciones IVA.');
     }
@@ -806,7 +810,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
       }
     }
     if (missingPeriods.length > 0) {
-      throw new Error('SQLite bloqueó la declaración IVA: existen períodos mensuales anteriores sin declaración presentada (' + missingPeriods.join(', ') + ').');
+      throw new Error('SQLite bloqueó la declaración IVA: existen períodos anteriores con actividad fiscal sin presentar; faltan declaraciones mensuales (' + missingPeriods.join(', ') + ').');
     }
     const laterFiled = declarations.some(item =>
       item.companyId === declaration.companyId && item.status === 'FILED' && item.period > declaration.period
