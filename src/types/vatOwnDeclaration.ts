@@ -12,7 +12,7 @@ export function getReceivedVatWithholdingSales<T extends {
   retentionVoucherDate?: string;
   vatWithheldBs?: number;
 }>(sales: readonly T[], companyId: string, period: string): T[] {
-  if (!companyId.trim() || !/^\\d{4}-(0[1-9]|1[0-2])$/.test(period)) return [];
+  if (!companyId.trim() || !/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return [];
   return sales.filter(item => item.companyId === companyId && item.isCancelled !== true &&
     typeof item.retentionVoucherDate === 'string' && item.retentionVoucherDate.startsWith(period) &&
     Number.isFinite(Number(item.vatWithheldBs || 0)) && Number(item.vatWithheldBs || 0) > 0);
