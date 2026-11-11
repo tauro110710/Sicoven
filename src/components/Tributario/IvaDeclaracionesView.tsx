@@ -275,8 +275,8 @@ export const IvaDeclaracionesView: React.FC = () => {
             <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">Retenciones recibidas</p><strong>{format(savedDeclaration.position.receivedWithholdingsBs)}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">IVA por enterar</p><strong>{format(savedDeclaration.position.amountDueBs)}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">Crédito trasladable</p><strong>{format(savedDeclaration.position.creditCarryForwardBs)}</strong></div>
-            <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">Reversión crédito previo</p><strong>{format(savedDeclaration.position.purchaseCreditReversalBs)}</strong></div>
-            <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">IVA no acreditable reclasificado</p><strong>{format(savedDeclaration.position.purchaseCreditNonEligibleBs + savedDeclaration.position.purchaseCreditReversalNonEligibleBs)}</strong></div>
+            <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">Reversión crédito previo</p><strong>{format(Number(savedDeclaration.position.purchaseCreditReversalBs || 0))}</strong></div>
+            <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">IVA no acreditable reclasificado</p><strong>{format(Number(savedDeclaration.position.purchaseCreditNonEligibleBs || 0) + Number(savedDeclaration.position.purchaseCreditReversalNonEligibleBs || 0))}</strong></div>
           </div>
           <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-100 p-3 text-xs sm:grid-cols-2">
             <div><strong>Desglose del débito fiscal:</strong> IVA 16% (incluye base 31%): {format(savedDeclaration.position.outputVat16Bs)} · IVA 8%: {format(savedDeclaration.position.outputVat8Bs)}</div>
