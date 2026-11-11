@@ -18,6 +18,22 @@ export function areVatOwnDeclarationSourcesCurrent(
   return saved.every((id, index) => id === current[index]);
 }
 
+export function findExistingVatOwnPaymentReversal<T extends {
+  id: string;
+  companyId: string;
+  reversalOfEntryId?: string;
+}>(
+  journalEntries: readonly T[],
+  companyId: string,
+  originalJournalEntryId: string
+): T | null {
+  const matches = journalEntries.filter(entry =>
+    entry.companyId === companyId && entry.reversalOfEntryId === originalJournalEntryId
+  );
+  if (matches.length > 1) throw new Error('La reversión del pago de IVA tiene más de un contra-asiento asociado. Requiere conciliación manual.');
+  return matches[0] || null;
+}
+
 export function isValidVatOwnDeclarationPeriod(period: string): boolean {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(period);
 }
