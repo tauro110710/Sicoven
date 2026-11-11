@@ -169,7 +169,8 @@ export const IvaDeclaracionesView: React.FC = () => {
         taxableSalesBaseBs: taxableSalesBase, exemptSalesBaseBs: exemptSalesBase,
         receivedWithholdingsBs: Math.max(0, withholdingRaw), priorCreditBs: priorCredit,
         debitAdjustmentsBs: Math.max(0, -withholdingRaw),
-        creditAdjustmentsBs: Math.max(0, -output16Raw) + Math.max(0, -output8Raw)
+        creditAdjustmentsBs: Math.max(0, -output16Raw) + Math.max(0, -output8Raw),
+        creditAdjustments16Bs: Math.max(0, -output16Raw), creditAdjustments8Bs: Math.max(0, -output8Raw)
       });
     } catch {
       return null;
