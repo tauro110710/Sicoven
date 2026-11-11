@@ -244,7 +244,7 @@ export function resolveVatOwnDailySalesSources(input: {
   }
   for (const sale of input.sales) {
     const day = ensure(sale.date);
-    if (!day.individual) day.individual = { date: sale.date, source: 'INDIVIDUAL', sourceIds: [], outputVatBs: 0, taxableBase16Bs: 0, taxableBase8Bs: 0, taxableBase31Bs: 0, exemptSalesBs: 0 };
+    if (!day.individual) day.individual = { date: sale.date, source: 'INDIVIDUAL', sourceIds: [], outputVatBs: 0, outputVat16Bs: 0, outputVat8Bs: 0, taxableBase16Bs: 0, taxableBase8Bs: 0, taxableBase31Bs: 0, exemptSalesBs: 0 };
     const target = day.individual;
     const sign = sale.documentType === '03' ? -1 : 1;
     target.sourceIds.push(sale.id);
