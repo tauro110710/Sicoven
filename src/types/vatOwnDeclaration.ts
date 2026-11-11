@@ -1,4 +1,4 @@
-import type { JournalEntry, JournalEntryItem, PurchaseRecord } from './accounting';
+import type { JournalEntry, JournalEntryItem, PurchaseRecord, SaleRecord } from './accounting';
 
 export type VatOwnDeclarationStatus = 'DRAFT' | 'FILED';
 
@@ -68,6 +68,66 @@ export function areVatOwnSourceSnapshotsCurrent(
   const currentIds = Object.keys(current).sort();
   if (savedIds.length !== currentIds.length || !savedIds.every((id, index) => id === currentIds[index])) return false;
   return savedIds.every(id => typeof saved[id] === 'string' && saved[id] === current[id]);
+}
+
+export function buildVatOwnSourceSnapshots(input: {
+  companyId: string;
+  sourceIds: readonly string[];
+  sales: readonly SaleRecord[];
+  purchases: readonly PurchaseRecord[];
+  journalEntries: readonly JournalEntry[];
+}): Record<string, string> {
+  const snapshots: Record<string, string> = {};
+  const journalSnapshot = (entry: JournalEntry | undefined) => entry ? {
+    id: entry.id, date: entry.date, referenceDoc: entry.referenceDoc, type: entry.type,
+    reversalOfEntryId: entry.reversalOfEntryId || null, reversedByEntryId: entry.reversedByEntryId || null,
+    items: entry.items.map(line => ({
+      accountCode: line.accountCode, debitBs: line.debitBs, creditBs: line.creditBs,
+      debitUsd: line.debitUsd, creditUsd: line.creditUsd, description: line.description
+    }))
+  } : null;
+  for (const id of [...new Set(input.sourceIds)].sort()) {
+    const sale = input.sales.find(item => item.id === id && item.companyId === input.companyId);
+    if (sale) {
+      snapshots[id] = JSON.stringify({
+        kind: 'SALE', id: sale.id, invoiceDate: sale.invoiceDate, documentType: sale.documentType,
+        invoiceNumber: sale.invoiceNumber, controlNumber: sale.controlNumber, customerRif: sale.customerRif,
+        totalAmountBs: sale.totalAmountBs, totalAmountUsd: sale.totalAmountUsd, taxableBaseBs: sale.taxableBaseBs, taxableBaseUsd: sale.taxableBaseUsd,
+        exemptAmountBs: sale.exemptAmountBs, exemptAmountUsd: sale.exemptAmountUsd || 0, taxRate: sale.taxRate,
+        vatAmountBs: sale.vatAmountBs, vatAmountUsd: sale.vatAmountUsd, additionalLuxuryTaxBs: sale.additionalLuxuryTaxBs || 0,
+        vatWithheldBs: sale.vatWithheldBs, vatWithheldUsd: sale.vatWithheldUsd, retentionRate: sale.retentionRate || 0,
+        retentionVoucherNumber: sale.retentionVoucherNumber || null, retentionVoucherDate: sale.retentionVoucherDate || null,
+        bcvRate: sale.bcvRate, originalSaleId: sale.originalSaleId || null,
+        affectedInvoiceNumber: sale.affectedInvoiceNumber || null, affectedInvoiceDate: sale.affectedInvoiceDate || null,
+        affectedInvoiceControlNumber: sale.affectedInvoiceControlNumber || null, isCancelled: Boolean(sale.isCancelled),
+        journal: journalSnapshot(input.journalEntries.find(entry => entry.id === sale.journalEntryId && entry.companyId === input.companyId))
+      });
+      continue;
+    }
+    const purchase = input.purchases.find(item => item.id === id && item.companyId === input.companyId);
+    if (purchase) {
+      snapshots[id] = JSON.stringify({
+        kind: 'PURCHASE', id: purchase.id, invoiceDate: purchase.invoiceDate, accountCreditDate: purchase.accountCreditDate || null,
+        documentType: purchase.documentType, invoiceNumber: purchase.invoiceNumber, controlNumber: purchase.controlNumber,
+        supplierRif: purchase.supplierRif, totalAmountBs: purchase.totalAmountBs, totalAmountUsd: purchase.totalAmountUsd,
+        taxableBaseBs: purchase.taxableBaseBs, taxableBaseUsd: purchase.taxableBaseUsd, exemptAmountBs: purchase.exemptAmountBs,
+        exemptAmountUsd: purchase.exemptAmountUsd || 0, taxRate: purchase.taxRate, vatAmountBs: purchase.vatAmountBs, vatAmountUsd: purchase.vatAmountUsd,
+        additionalLuxuryTaxBs: purchase.additionalLuxuryTaxBs || 0, vatCreditTreatment: purchase.vatCreditTreatment || 'COMMON',
+        vatWithheldBs: purchase.vatWithheldBs, vatWithheldUsd: purchase.vatWithheldUsd, retentionRate: purchase.retentionRate || 0,
+        voucherNumber: purchase.voucherNumber || null, bcvRate: purchase.bcvRate, originalPurchaseId: purchase.originalPurchaseId || null,
+        affectedInvoiceNumber: purchase.affectedInvoiceNumber || null, affectedInvoiceDate: purchase.affectedInvoiceDate || null,
+        affectedInvoiceControlNumber: purchase.affectedInvoiceControlNumber || null, isCancelled: Boolean(purchase.isCancelled),
+        journal: journalSnapshot(input.journalEntries.find(entry => entry.id === purchase.journalEntryId && entry.companyId === input.companyId))
+      });
+      continue;
+    }
+    const zEntry = input.journalEntries.find(entry => entry.id === id && entry.companyId === input.companyId && Boolean(entry.fiscalZReport));
+    snapshots[id] = zEntry ? JSON.stringify({
+      kind: 'Z', id: zEntry.id, date: zEntry.date, referenceDoc: zEntry.referenceDoc,
+      fiscalZReport: zEntry.fiscalZReport, journal: journalSnapshot(zEntry)
+    }) : JSON.stringify({ kind: 'MISSING', id });
+  }
+  return snapshots;
 }
 
 export function findExistingVatOwnPaymentReversal<T extends {
