@@ -4922,7 +4922,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const { expectedBalanceQty: _expectedBalanceQty, ...movementDraft } = row;
       const movement: InventoryMovement = {
         ...movementDraft, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
-        companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: unitCostBs / rate, additionalLandedCostsBs: landedCostsBs,
+        companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: row.type === 'AJUSTE' && product.costingMethod === 'PEPS' ? adjustmentUsd! / movementQuantity : unitCostBs / rate, additionalLandedCostsBs: landedCostsBs,
         totalCostBs, totalCostUsd, balanceQty: newStock,
         balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
         balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
