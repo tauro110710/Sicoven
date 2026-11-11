@@ -50,7 +50,7 @@ export function calculateSaleCorrectionNote(request: SaleCorrectionNoteRequest):
   const { sourceSale } = request;
   const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
   const usd = (value: number) => Math.round((value + Number.EPSILON) * 1000000) / 1000000;
-  const normalize = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
+  const normalize = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
 
   if (sourceSale.documentType !== '01' || sourceSale.isCancelled) {
     throw new Error('La nota debe afectar una factura de venta vigente tipo 01.');
