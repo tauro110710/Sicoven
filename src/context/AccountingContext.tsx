@@ -5823,8 +5823,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         addLine(liability8, output8, 0, 'Cierre débito fiscal IVA 8% · ' + declaration.period);
         addLine(input16, 0, purchase16, 'Aplicación crédito fiscal compras 16% · ' + declaration.period);
         addLine(input8, 0, purchase8, 'Aplicación crédito fiscal compras 8% · ' + declaration.period);
-        addLine(input16, declaration.position.purchaseCreditReversal16Bs, 0, 'Reversión de crédito fiscal por notas de crédito de períodos anteriores 16% · ' + declaration.period);
-        addLine(input8, declaration.position.purchaseCreditReversal8Bs, 0, 'Reversión de crédito fiscal por notas de crédito de períodos anteriores 8% · ' + declaration.period);
+        addLine(input16, Number(declaration.position.purchaseCreditReversal16Bs || 0), 0, 'Reversión de crédito fiscal por notas de crédito de períodos anteriores 16% · ' + declaration.period);
+        addLine(input8, Number(declaration.position.purchaseCreditReversal8Bs || 0), 0, 'Reversión de crédito fiscal por notas de crédito de períodos anteriores 8% · ' + declaration.period);
         for (const reclassification of declaration.purchaseVatReclassificationItems || []) {
           const account = accounts.find(item => item.code === reclassification.accountCode && item.isMovement);
           if (!account) throw new Error('La cuenta ' + reclassification.accountCode + ' de una reclasificación de IVA no acreditable ya no está disponible.');
