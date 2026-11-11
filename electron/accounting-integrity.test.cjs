@@ -2207,7 +2207,8 @@ test('SQLite accepts one linked IVA payment reversal and rejects duplicate or un
   const reversalJournal = {
     id: 'entry-iva-reversal', companyId: 'company-1', entryNumber: 3,
     date: '2026-11-11', description: 'Reversión de pago IVA', type: 'AJUSTE',
-    bcvRate: 874, referenceDoc: 'REV-IVA-PAGO-1', reversalOfEntryId: paymentJournal.id,
+    bcvRate: 874, referenceDoc: 'REV-2', reversalOfEntryId: paymentJournal.id,
+    reversalReason: 'Reversión de pago por referencia incorrecta', workpaperNote: 'Soporte bancario revisado y conciliado',
     items: [
       { accountCode: '1.1.1.01', debitBs: 50, creditBs: 0, debitUsd: 50 / 874, creditUsd: 0 },
       { accountCode: '2.1.2.09', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 50 / 874 }
@@ -2221,7 +2222,7 @@ test('SQLite accepts one linked IVA payment reversal and rejects duplicate or un
     note: 'Reversión por referencia bancaria incorrecta'
   };
   const reversed = {
-    ...paid, journalEntries: [...paid.journalEntries, reversalJournal],
+    ...paid, journalEntries: [...paid.journalEntries.map(item => item.id === paymentJournal.id ? { ...item, reversedByEntryId: reversalJournal.id, isAdjusted: true } : item), reversalJournal],
     vatOwnDeclarationEvents: [...paid.vatOwnDeclarationEvents, reversal]
   };
   assert.doesNotThrow(() => validateAccountingSnapshot(paid, reversed));
