@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   getReceivedVatWithholdingSales,
+  isValidVatOwnDeclarationPeriod,
   calculateVatOwnPosition,
   getVatOwnOutstandingBalance,
   resolveVatOwnDailySalesSources,
@@ -10,6 +11,16 @@ import {
   type VatOwnDeclaration,
   type VatOwnDeclarationEvent
 } from './vatOwnDeclaration';
+
+test('accepts valid monthly declaration periods and rejects malformed months', () => {
+  assert.equal(isValidVatOwnDeclarationPeriod('2026-11'), true);
+  assert.equal(isValidVatOwnDeclarationPeriod('2026-01'), true);
+  assert.equal(isValidVatOwnDeclarationPeriod('2026-12'), true);
+  assert.equal(isValidVatOwnDeclarationPeriod('2026-00'), false);
+  assert.equal(isValidVatOwnDeclarationPeriod('2026-13'), false);
+  assert.equal(isValidVatOwnDeclarationPeriod('2026-1'), false);
+  assert.equal(isValidVatOwnDeclarationPeriod(''), false);
+});
 
 const declaration: VatOwnDeclaration = {
   id: 'iva-own-2026-01-company-a',
