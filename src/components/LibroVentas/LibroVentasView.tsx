@@ -21,6 +21,7 @@ import { JournalReversalModal } from '../LibroDiario/JournalReversalModal';
 import { SaleCorrectionNoteModal } from './SaleCorrectionNoteModal';
 import { FiscalZReportModal } from './FiscalZReportModal';
 import { resolveVatOwnDailySalesSources } from '../../types/vatOwnDeclaration';
+import { filterCompanyFiscalDocuments } from '../../types/companyFiscalDocuments';
 
 export const LibroVentasView: React.FC = () => {
   const {
@@ -83,7 +84,7 @@ export const LibroVentasView: React.FC = () => {
     }
   };
 
-  const filteredSales = sales
+  const filteredSales = filterCompanyFiscalDocuments(sales, currentCompany.id)
     .filter(s => {
       if (monthFilter && !s.invoiceDate.startsWith(monthFilter)) return false;
       if (searchTerm.trim()) {
