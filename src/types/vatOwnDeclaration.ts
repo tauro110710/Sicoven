@@ -7,6 +7,11 @@ export interface VatOwnPositionInput {
   purchaseCreditBs: number;
   purchaseCredit16Bs?: number;
   purchaseCredit8Bs?: number;
+  purchaseCreditGrossBs?: number;
+  purchaseCreditGross16Bs?: number;
+  purchaseCreditGross8Bs?: number;
+  purchaseCreditNonEligibleBs?: number;
+  prorationRate?: number;
   receivedWithholdingsBs: number;
   priorCreditBs?: number;
   debitAdjustmentsBs?: number;
@@ -20,6 +25,11 @@ export interface VatOwnPosition {
   purchaseCreditBs: number;
   purchaseCredit16Bs: number;
   purchaseCredit8Bs: number;
+  purchaseCreditGrossBs: number;
+  purchaseCreditGross16Bs: number;
+  purchaseCreditGross8Bs: number;
+  purchaseCreditNonEligibleBs: number;
+  prorationRate: number;
   receivedWithholdingsBs: number;
   priorCreditAppliedBs: number;
   debitAdjustmentsBs: number;
@@ -76,10 +86,20 @@ export function calculateVatOwnPosition(input: VatOwnPositionInput): VatOwnPosit
   if (Math.abs(outputVat16Bs + outputVat8Bs - outputVatBs) > 0.02) {
     throw new Error('El desglose de IVA 16% y 8% no concilia con el débito fiscal total.');
   }
-  const purchaseCreditBs = amount(input.purchaseCreditBs, 'Crédito fiscal de compras');
-  const purchaseCredit16Bs = amount(input.purchaseCredit16Bs ?? purchaseCreditBs, 'Crédito fiscal 16%');
-  const purchaseCredit8Bs = amount(input.purchaseCredit8Bs, 'Crédito fiscal 8%');
-  if (Math.abs(purchaseCredit16Bs + purchaseCredit8Bs - purchaseCreditBs) > 0.02) throw new Error('El desglose del crédito fiscal 16% y 8% no concilia con el total.');
+  const purchaseCreditBs = amount(input.purchaseCreditBs, 'Crédito fiscal acreditable de compras');
+  const purchaseCredit16Bs = amount(input.purchaseCredit16Bs ?? purchaseCreditBs, 'Crédito fiscal acreditable 16%');
+  const purchaseCredit8Bs = amount(input.purchaseCredit8Bs, 'Crédito fiscal acreditable 8%');
+  const purchaseCreditGrossBs = amount(input.purchaseCreditGrossBs ?? purchaseCreditBs, 'Crédito fiscal bruto de compras');
+  const purchaseCreditGross16Bs = amount(input.purchaseCreditGross16Bs ?? purchaseCredit16Bs, 'Crédito fiscal bruto 16%');
+  const purchaseCreditGross8Bs = amount(input.purchaseCreditGross8Bs ?? purchaseCredit8Bs, 'Crédito fiscal bruto 8%');
+  const purchaseCreditNonEligibleBs = amount(input.purchaseCreditNonEligibleBs ?? Math.max(0, purchaseCreditGrossBs - purchaseCreditBs), 'IVA no acreditable por prorrata');
+  const prorationRate = Number(input.prorationRate ?? 1);
+  if (!Number.isFinite(prorationRate) || prorationRate < 0 || prorationRate > 1) throw new Error('El porcentaje de prorrata debe estar entre 0% y 100%.');
+  if (Math.abs(purchaseCredit16Bs + purchaseCredit8Bs - purchaseCreditBs) > 0.02 ||
+      Math.abs(purchaseCreditGross16Bs + purchaseCreditGross8Bs - purchaseCreditGrossBs) > 0.02 ||
+      Math.abs(purchaseCreditGrossBs - purchaseCreditBs - purchaseCreditNonEligibleBs) > 0.02) {
+    throw new Error('El desglose de crédito fiscal acreditable, bruto y no acreditable no concilia.');
+  }
   const receivedWithholdingsBs = amount(input.receivedWithholdingsBs, 'Retenciones de IVA recibidas');
   const priorCreditAvailableBs = amount(input.priorCreditBs, 'Crédito de períodos anteriores');
   const debitAdjustmentsBs = amount(input.debitAdjustmentsBs, 'Ajustes al débito');
@@ -91,7 +111,9 @@ export function calculateVatOwnPosition(input: VatOwnPositionInput): VatOwnPosit
   const netTaxBs = balanceBeforePriorCredit - priorCreditAppliedBs;
   return {
     outputVatBs, outputVat16Bs, outputVat8Bs,
-    purchaseCreditBs, purchaseCredit16Bs, purchaseCredit8Bs, receivedWithholdingsBs,
+    purchaseCreditBs, purchaseCredit16Bs, purchaseCredit8Bs,
+    purchaseCreditGrossBs, purchaseCreditGross16Bs, purchaseCreditGross8Bs,
+    purchaseCreditNonEligibleBs, prorationRate, receivedWithholdingsBs,
     priorCreditAppliedBs, debitAdjustmentsBs, creditAdjustmentsBs,
     netTaxBs, amountDueBs: Math.max(0, netTaxBs),
     creditCarryForwardBs: Math.max(0, -netTaxBs) + unusedPriorCreditBs
