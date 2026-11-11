@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import type { PurchaseRecord } from './accounting';
 import {
   getReceivedVatWithholdingSales,
   isValidVatOwnDeclarationPeriod,
   calculateVatOwnPosition,
+  calculateVatOwnPurchaseCreditSummary,
   getVatOwnOutstandingBalance,
   resolveVatOwnDailySalesSources,
   resolveVatOwnProrationRate,
@@ -138,6 +140,73 @@ test('snapshots a draft revision without sharing mutable source arrays or positi
   assert.notEqual(revision.position.amountDueBs, 999);
   assert.equal(revision.reason, 'Actualizar fuentes antes de presentar');
   assert.throws(() => snapshotVatOwnDeclarationRevision(declaration, '2026-02-02T10:00:00.000Z', 'No debe versionar una presentada'), /borrador no presentado/);
+});
+
+test('reverses a prior-period common purchase credit using the original declaration proration', () => {
+  const original = {
+    id: 'purchase-old', companyId: 'company-a', invoiceDate: '2026-10-05',
+    documentType: '01', taxRate: 16, vatAmountBs: 160, vatCreditTreatment: 'COMMON'
+  } as PurchaseRecord;
+  const note = {
+    id: 'purchase-credit-note', companyId: 'company-a', invoiceDate: '2026-11-05',
+    documentType: '03', taxRate: 16, vatAmountBs: 80, originalPurchaseId: original.id,
+    vatCreditTreatment: 'COMMON'
+  } as PurchaseRecord;
+  const prior = {
+    ...declaration, period: '2026-10', sourceIds: [original.id],
+    position: calculateVatOwnPosition({
+      outputVatBs: 0, purchaseCreditBs: 80, purchaseCredit16Bs: 80,
+      purchaseCreditGrossBs: 160, purchaseCreditGross16Bs: 160,
+      purchaseCreditNonEligibleBs: 80, receivedWithholdingsBs: 0,
+      prorationRate: 0.5
+    })
+  };
+  const result = calculateVatOwnPurchaseCreditSummary({
+    companyId: 'company-a', period: '2026-11', purchases: [note],
+    allPurchases: [original, note], priorDeclarations: [prior],
+    taxableSalesBaseBs: 0, exemptSalesBaseBs: 0
+  });
+  assert.equal(result.gross16Bs, 0);
+  assert.equal(result.priorReversalEligible16Bs, 40);
+  assert.equal(result.priorReversalNonEligible16Bs, 40);
+  assert.deepEqual(result.relatedPurchaseIds, [original.id]);
+});
+
+test('blocks a prior-period purchase credit note when its original invoice was never included in a filed declaration', () => {
+  const original = {
+    id: 'purchase-unfiled', companyId: 'company-a', invoiceDate: '2026-10-05',
+    documentType: '01', taxRate: 16, vatAmountBs: 160, vatCreditTreatment: 'TAXABLE'
+  } as PurchaseRecord;
+  const note = {
+    id: 'purchase-credit-note-unfiled', companyId: 'company-a', invoiceDate: '2026-11-05',
+    documentType: '03', taxRate: 16, vatAmountBs: 80, originalPurchaseId: original.id
+  } as PurchaseRecord;
+  assert.throws(() => calculateVatOwnPurchaseCreditSummary({
+    companyId: 'company-a', period: '2026-11', purchases: [note],
+    allPurchases: [original, note], priorDeclarations: [],
+    taxableSalesBaseBs: 0, exemptSalesBaseBs: 0
+  }), /no aparece en una única declaración IVA anterior presentada/);
+});
+
+test('nets same-period purchase credit notes using the source invoice treatment and current proration', () => {
+  const original = {
+    id: 'purchase-current', companyId: 'company-a', invoiceDate: '2026-11-02',
+    documentType: '01', taxRate: 16, vatAmountBs: 160, vatCreditTreatment: 'COMMON'
+  } as PurchaseRecord;
+  const note = {
+    id: 'purchase-credit-note-current', companyId: 'company-a', invoiceDate: '2026-11-20',
+    documentType: '03', taxRate: 16, vatAmountBs: 40, originalPurchaseId: original.id,
+    vatCreditTreatment: 'TAXABLE'
+  } as PurchaseRecord;
+  const result = calculateVatOwnPurchaseCreditSummary({
+    companyId: 'company-a', period: '2026-11', purchases: [original, note],
+    allPurchases: [original, note], priorDeclarations: [],
+    taxableSalesBaseBs: 500, exemptSalesBaseBs: 500
+  });
+  assert.equal(result.prorationRate, 0.5);
+  assert.equal(result.gross16Bs, 120);
+  assert.equal(result.eligible16Bs, 60);
+  assert.equal(result.nonEligible16Bs, 60);
 });
 
 test('calculates debit, credits, prior credit, payable and carry-forward', () => {
