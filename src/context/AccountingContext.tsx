@@ -53,7 +53,7 @@ import { FinancialDisclosure, validateFinancialDisclosure } from '../types/finan
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
-import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, findExistingVatOwnPaymentReversal, resolveVatOwnPaymentBcvRate, getUnfiledVatOwnActivityPeriods, getVatOwnFiledLaterPeriods, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
+import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, areVatOwnSourceSnapshotsCurrent, findExistingVatOwnPaymentReversal, resolveVatOwnPaymentBcvRate, getUnfiledVatOwnActivityPeriods, getVatOwnFiledLaterPeriods, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
 import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
@@ -5618,6 +5618,60 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     ];
   };
 
+  const getVatOwnSourceSnapshots = (companyId: string, sourceIds: readonly string[]): Record<string, string> => {
+    const snapshots: Record<string, string> = {};
+    const journalSnapshot = (entry: JournalEntry | undefined) => entry ? {
+      id: entry.id, date: entry.date, referenceDoc: entry.referenceDoc, type: entry.type,
+      reversalOfEntryId: entry.reversalOfEntryId || null, reversedByEntryId: entry.reversedByEntryId || null,
+      items: entry.items.map(line => ({
+        accountCode: line.accountCode, debitBs: line.debitBs, creditBs: line.creditBs,
+        debitUsd: line.debitUsd, creditUsd: line.creditUsd, description: line.description
+      }))
+    } : null;
+    for (const id of [...new Set(sourceIds)].sort()) {
+      const sale = sales.find(item => item.id === id && item.companyId === companyId);
+      if (sale) {
+        snapshots[id] = JSON.stringify({
+          kind: 'SALE', id: sale.id, invoiceDate: sale.invoiceDate, documentType: sale.documentType,
+          invoiceNumber: sale.invoiceNumber, controlNumber: sale.controlNumber, customerRif: sale.customerRif,
+          taxableBaseBs: sale.taxableBaseBs, exemptAmountBs: sale.exemptAmountBs, taxRate: sale.taxRate,
+          vatAmountBs: sale.vatAmountBs, additionalLuxuryTaxBs: sale.additionalLuxuryTaxBs || 0,
+          vatWithheldBs: sale.vatWithheldBs, retentionVoucherNumber: sale.retentionVoucherNumber || null,
+          retentionVoucherDate: sale.retentionVoucherDate || null, bcvRate: sale.bcvRate,
+          originalSaleId: sale.originalSaleId || null, affectedInvoiceNumber: sale.affectedInvoiceNumber || null,
+          affectedInvoiceDate: sale.affectedInvoiceDate || null, affectedInvoiceControlNumber: sale.affectedInvoiceControlNumber || null,
+          isCancelled: Boolean(sale.isCancelled), journal: journalSnapshot(journalEntries.find(entry => entry.id === sale.journalEntryId && entry.companyId === companyId))
+        });
+        continue;
+      }
+      const purchase = purchases.find(item => item.id === id && item.companyId === companyId);
+      if (purchase) {
+        snapshots[id] = JSON.stringify({
+          kind: 'PURCHASE', id: purchase.id, invoiceDate: purchase.invoiceDate, accountCreditDate: purchase.accountCreditDate || null,
+          documentType: purchase.documentType, invoiceNumber: purchase.invoiceNumber, controlNumber: purchase.controlNumber,
+          supplierRif: purchase.supplierRif, taxableBaseBs: purchase.taxableBaseBs, exemptAmountBs: purchase.exemptAmountBs,
+          taxRate: purchase.taxRate, vatAmountBs: purchase.vatAmountBs, additionalLuxuryTaxBs: purchase.additionalLuxuryTaxBs || 0,
+          vatCreditTreatment: purchase.vatCreditTreatment || 'COMMON', vatWithheldBs: purchase.vatWithheldBs,
+          bcvRate: purchase.bcvRate, originalPurchaseId: purchase.originalPurchaseId || null,
+          affectedInvoiceNumber: purchase.affectedInvoiceNumber || null, affectedInvoiceDate: purchase.affectedInvoiceDate || null,
+          affectedInvoiceControlNumber: purchase.affectedInvoiceControlNumber || null,
+          isCancelled: Boolean(purchase.isCancelled), journal: journalSnapshot(journalEntries.find(entry => entry.id === purchase.journalEntryId && entry.companyId === companyId))
+        });
+        continue;
+      }
+      const zEntry = journalEntries.find(entry => entry.id === id && entry.companyId === companyId && Boolean(entry.fiscalZReport));
+      if (zEntry) {
+        snapshots[id] = JSON.stringify({
+          kind: 'Z', id: zEntry.id, date: zEntry.date, referenceDoc: zEntry.referenceDoc,
+          fiscalZReport: zEntry.fiscalZReport, journal: journalSnapshot(zEntry)
+        });
+        continue;
+      }
+      snapshots[id] = JSON.stringify({ kind: 'MISSING', id });
+    }
+    return snapshots;
+  };
+
   const getVatOwnInconsistentSalesSources = (companyId: string, relevantSaleIds: ReadonlySet<string>): SaleRecord[] => sales.filter(sale => {
     if (sale.companyId !== companyId || sale.isCancelled || !relevantSaleIds.has(sale.id)) return false;
     if (!sale.journalEntryId) return true;
@@ -5745,13 +5799,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         ...monthPurchases.map(item => item.id),
         ...withholdingRows.map(item => item.id)
       ])];
+      const relatedSourceIds = purchaseSummary.relatedPurchaseIds.filter(id => !sourceIds.includes(id));
+      const sourceSnapshots = getVatOwnSourceSnapshots(currentCompany.id, [...sourceIds, ...relatedSourceIds]);
       const priorRevision = existingDraft
         ? snapshotVatOwnDeclarationRevision(existingDraft, createdAt, 'Actualización del borrador por conciliación de nuevas fuentes contables')
         : null;
       const declaration: VatOwnDeclaration = {
         id: existingDraft?.id || 'vat-own-' + currentCompany.id + '-' + input.period,
         companyId: currentCompany.id, period: input.period, status: 'DRAFT',
-        position, sourceIds, relatedSourceIds: purchaseSummary.relatedPurchaseIds.filter(id => !sourceIds.includes(id)), bcvRate: Number(currentCompany.bcvRate) || 0,
+        position, sourceIds, relatedSourceIds, sourceSnapshots, bcvRate: Number(currentCompany.bcvRate) || 0,
         dailySourceChoices: { ...(input.choices || {}) },
         purchaseVatReclassificationItems,
         createdAt: existingDraft?.createdAt || createdAt,
@@ -5913,6 +5969,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ])];
       if (!areVatOwnDeclarationSourcesCurrent([...new Set([...declaration.sourceIds, ...(declaration.relatedSourceIds || [])])], currentSourceIds)) {
         throw new Error('No se puede presentar: los libros cambiaron después de preparar el borrador. Actualícelo para conservar la nueva versión y sus fuentes antes de registrar la presentación.');
+      }
+      const currentSourceSnapshots = getVatOwnSourceSnapshots(currentCompany.id, currentSourceIds);
+      if (!areVatOwnSourceSnapshotsCurrent(declaration.sourceSnapshots, currentSourceSnapshots)) {
+        throw new Error('No se puede presentar: cambió la información documental o contable de una fuente original después de preparar el borrador, aunque los importes calculados no hayan variado. Actualice el borrador y revise su historial de versiones.');
       }
     }
 
