@@ -52,6 +52,35 @@ export function calculateBankAvailableBalance(input: BankBalanceInput): number {
   return Math.round(ledgerBalance * scale) / scale;
 }
 
+/** Cash accounts have no BankAccount auxiliary; their availability comes directly from the posted ledger. */
+export function calculateCashAccountAvailableBalance(input: {
+  companyId: string;
+  accountCode: '1.1.1.01' | '1.1.1.02';
+  asOfDate: string;
+  journalEntries: Pick<JournalEntry, 'companyId' | 'date' | 'items'>[];
+}): number {
+  const parsedDate = new Date(String(input.asOfDate || '') + 'T00:00:00.000Z');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(input.asOfDate || '')) ||
+      !Number.isFinite(parsedDate.getTime()) ||
+      parsedDate.toISOString().slice(0, 10) !== input.asOfDate) {
+    throw new Error('La fecha de corte para consultar el saldo de caja no es válida.');
+  }
+  const currency = input.accountCode === '1.1.1.02' ? 'USD' : 'BS';
+  const decimals = currency === 'USD' ? 6 : 2;
+  const scale = 10 ** decimals;
+  const balance = input.journalEntries.reduce((total, entry) => {
+    if (entry.companyId !== input.companyId || entry.date > input.asOfDate) return total;
+    for (const item of entry.items) {
+      if (item.accountCode !== input.accountCode) continue;
+      total += currency === 'USD'
+        ? Number(item.debitUsd || 0) - Number(item.creditUsd || 0)
+        : Number(item.debitBs || 0) - Number(item.creditBs || 0);
+    }
+    return total;
+  }, 0);
+  return Math.round(balance * scale) / scale;
+}
+
 /** Rejects an outgoing bank movement when it exceeds the posted balance at its effective date. */
 export function validateBankOutgoingAvailability(input: {
   availableBalance: number;
