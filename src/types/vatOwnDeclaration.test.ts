@@ -280,7 +280,7 @@ test('reverses a prior-period common purchase credit using the original declarat
   const prior = {
     ...declaration, period: '2026-10', sourceIds: [original.id],
     sourceSnapshots: {
-      [original.id]: JSON.stringify({ kind: 'PURCHASE', id: original.id, vatCreditTreatment: 'COMMON', taxRate: 16 })
+      [original.id]: JSON.stringify({ kind: 'PURCHASE', id: original.id, vatCreditTreatment: 'COMMON', taxRate: 16, vatAmountBs: 160 })
     },
     position: calculateVatOwnPosition({
       outputVatBs: 0, purchaseCreditBs: 80, purchaseCredit16Bs: 80,
@@ -474,7 +474,7 @@ test('blocks a prior-period credit note when the filed snapshot has no historica
     companyId: 'company-a', period: '2026-11', purchases: [note],
     allPurchases: [original, note], priorDeclarations: [prior],
     taxableSalesBaseBs: 0, exemptSalesBaseBs: 0
-  }), /tratamiento fiscal y la alícuota histórica/);
+  }), /tratamiento, la alícuota y el IVA bruto históricos/);
 });
 
 test('requires an original purchase journal even when its VAT is fully creditable', () => {
