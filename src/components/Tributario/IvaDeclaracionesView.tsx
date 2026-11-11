@@ -88,7 +88,7 @@ export const IvaDeclaracionesView: React.FC = () => {
           <p className="mt-2 text-xl font-black text-slate-900">{format(receivedWithholdings)}</p>
           <p className="mt-1 text-xs text-slate-500">IVA retenido por clientes registrado en ventas</p>
         </article>
-        <article className={`rounded-xl border p-4 ${preliminaryBalance >= 0 ? 'border-amber-300 bg-amber-50/50' : 'border-teal-300 bg-teal-50/50'}`}>
+        <article className={`rounded-xl border p-4 ${preliminaryBalance !== null && preliminaryBalance >= 0 ? 'border-amber-300 bg-amber-50/50' : 'border-teal-300 bg-teal-50/50'}`}>
           <p className="text-xs font-semibold text-slate-700">Saldo preliminar del período</p>
           <p className="mt-2 text-xl font-black text-slate-900">{preliminaryBalance === null ? 'Conciliar' : format(Math.abs(preliminaryBalance))}</p>
           <p className="mt-1 text-xs font-semibold text-slate-600">{preliminaryBalance === null ? 'No se calcula para evitar doble conteo' : preliminaryBalance >= 0 ? 'Estimación por pagar' : 'Saldo a favor preliminar'}</p>
