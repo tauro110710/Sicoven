@@ -185,6 +185,11 @@ test('requires earlier months with fiscal activity to be filed before preparing 
     companyId: 'company-a', targetPeriod: '2026-12',
     activityDates: [], declarations: [filedOctober]
   }), ['2026-11']);
+  const draftNovember = { ...declaration, companyId: 'company-a', period: '2026-11', status: 'DRAFT' as const };
+  assert.deepEqual(getUnfiledVatOwnActivityPeriods({
+    companyId: 'company-a', targetPeriod: '2026-12',
+    activityDates: [], declarations: [filedOctober, draftNovember]
+  }), ['2026-11']);
   assert.deepEqual(getUnfiledVatOwnActivityPeriods({
     companyId: 'company-a', targetPeriod: '2026-12',
     activityDates: [], declarations: []
