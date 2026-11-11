@@ -5995,7 +5995,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         addLine(netPayable, 0, declaration.position.amountDueBs, 'IVA neto por enterar · ' + declaration.period);
         const debitBs = items.reduce((sum,item)=>sum+item.debitBs,0);
         const creditBs = items.reduce((sum,item)=>sum+item.creditBs,0);
-        if (Math.abs(debitBs-creditBs)>0.02) throw new Error('El asiento de cierre de IVA no cuadra. Revise la conciliación de fuentes y créditos fiscales.');
+        const debitUsd = items.reduce((sum,item)=>sum+item.debitUsd,0);
+        const creditUsd = items.reduce((sum,item)=>sum+item.creditUsd,0);
+        if (Math.abs(debitBs-creditBs)>0.02 || Math.abs(debitUsd-creditUsd)>0.0001) {
+          throw new Error('El asiento de cierre de IVA no cuadra en Bs y USD. Revise la conciliación de fuentes y créditos fiscales.');
+        }
         if (items.length) journal = addJournalEntry({
           entryNumber: 0, date: draft.occurredAt.slice(0,10),
           description: 'Determinación mensual del IVA · ' + declaration.period,
