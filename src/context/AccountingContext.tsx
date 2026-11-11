@@ -2872,7 +2872,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!Number.isFinite(rate) || rate <= 0) throw new Error('La tasa BCV manual debe ser mayor que cero.');
     const amounts = [
       purchaseData.totalAmountBs, purchaseData.taxableBaseBs, purchaseData.exemptAmountBs,
-      purchaseData.vatAmountBs, purchaseData.vatWithheldBs, purchaseData.islrWithheldBs || 0,
+      purchaseData.vatAmountBs, purchaseData.additionalLuxuryTaxBs || 0, purchaseData.vatWithheldBs, purchaseData.islrWithheldBs || 0,
       purchaseData.igtfAmountBs || 0
     ];
     if (amounts.some(value => !Number.isFinite(value) || value < 0) || purchaseData.totalAmountBs <= 0) {
@@ -2930,7 +2930,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         !Number.isFinite(purchaseData.retentionRate) || purchaseData.retentionRate < 0 || purchaseData.retentionRate > 100) {
       throw new Error('La alícuota de IVA o la tasa de retención no es válida.');
     }
-    const expectedVat = Math.round(purchaseData.taxableBaseBs * purchaseData.taxRate) / 100;
+    const expectedVatRate = purchaseData.taxRate === 31 ? 16 : purchaseData.taxRate;
+    const expectedVat = Math.round(purchaseData.taxableBaseBs * expectedVatRate) / 100;
+    const expectedLuxuryTax = purchaseData.taxRate === 31 ? Math.round(purchaseData.taxableBaseBs * 15) / 100 : 0;
+    if (Math.abs(expectedLuxuryTax - Number(purchaseData.additionalLuxuryTaxBs || 0)) > 0.01) throw new Error('El impuesto adicional del 15% no coincide con la alícuota combinada de la compra.');
     if (Math.abs(expectedVat - purchaseData.vatAmountBs) > 0.01) {
       throw new Error('El IVA no coincide con la base imponible y la alícuota declarada.');
     }
@@ -2941,7 +2944,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const snapshot = purchaseData.ivaRetentionDecision;
       const expectedBuyerAgentStatus = resolveIvaBuyerAgentStatus({ agentBasis: targetCompany.ivaRetentionAgentBasis, taxpayerType: targetCompany.taxpayerType, rif: targetCompany.rif, isPersonalFirm: targetCompany.isPersonalFirm });
       if (snapshot.buyerAgentStatus !== expectedBuyerAgentStatus) throw new Error('La condición de agente de retención de la empresa cambió o no coincide. Actualice la evaluación antes de registrar.');
-      const expectedOperationAmountBs = Math.round((Number(purchaseData.taxableBaseBs) + Number(purchaseData.exemptAmountBs) + Number(purchaseData.vatAmountBs) + Number.EPSILON) * 100) / 100;
+      const expectedOperationAmountBs = Math.round((Number(purchaseData.taxableBaseBs) + Number(purchaseData.exemptAmountBs) + Number(purchaseData.vatAmountBs) + Number(purchaseData.additionalLuxuryTaxBs || 0) + Number.EPSILON) * 100) / 100;
       const fiscalPeriodStart = getPurchaseAccountCreditDate(purchaseData).slice(0, 7);
       const expectedUnitTaxValueBs = getIslrUnitTaxValueForPeriod(fiscalPeriodStart) ?? undefined;
       if (snapshot.operationAmountBs != null && Math.abs(snapshot.operationAmountBs - expectedOperationAmountBs) > 0.01) {
@@ -2986,7 +2989,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!eligibleIgtfMethods.includes(purchaseData.paymentMethod || '')) {
         throw new Error('El medio de pago seleccionado no corresponde a los medios configurados para IGTF.');
       }
-      const expectedIgtf = Math.round((purchaseData.taxableBaseBs + purchaseData.exemptAmountBs + purchaseData.vatAmountBs) * 0.03 * 100) / 100;
+      const expectedIgtf = Math.round((purchaseData.taxableBaseBs + purchaseData.exemptAmountBs + purchaseData.vatAmountBs + Number(purchaseData.additionalLuxuryTaxBs || 0)) * 0.03 * 100) / 100;
       if (Math.abs(igtfAmount - expectedIgtf) > 0.01 || Number(purchaseData.igtfRate || 0) !== 3) {
         throw new Error('El importe o la tasa del IGTF no coincide con el cálculo confirmado del 3%.');
       }
@@ -2996,7 +2999,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     const expectedTotal = Math.round((
       purchaseData.taxableBaseBs + purchaseData.exemptAmountBs +
-      purchaseData.vatAmountBs + igtfAmount
+      purchaseData.vatAmountBs + Number(purchaseData.additionalLuxuryTaxBs || 0) + igtfAmount
     ) * 100) / 100;
     if (Math.abs(expectedTotal - purchaseData.totalAmountBs) > 0.01) {
       throw new Error('El total de la compra no coincide con base imponible, exento, IVA e IGTF.');
@@ -3138,6 +3141,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         creditUsd: 0,
         description: `IVA ${purchaseData.taxRate}% Fac. ${purchaseData.invoiceNumber}`
       });
+    }
+
+    // Debe: impuesto suntuario 15% no recuperable como crédito fiscal IVA.
+    if (Number(purchaseData.additionalLuxuryTaxBs || 0) > 0) {
+      const luxuryExpense = accounts.find(account => account.code === '6.1.1.13' && account.isMovement && account.type === 'GASTOS');
+      if (!luxuryExpense) throw new Error('Falta la cuenta de gasto 6.1.1.13 para el impuesto adicional no recuperable.');
+      const amountBs = Number(purchaseData.additionalLuxuryTaxBs);
+      items.push({ accountCode: luxuryExpense.code, accountName: luxuryExpense.name, debitBs: amountBs, creditBs: 0,
+        debitUsd: amountBs / rate, creditUsd: 0, description: 'Impuesto adicional al consumo suntuario 15% Fac. ' + purchaseData.invoiceNumber });
     }
 
     // Debe: IGTF de compra explícitamente confirmado por el usuario.
