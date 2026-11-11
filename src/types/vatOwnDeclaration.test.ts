@@ -334,6 +334,37 @@ test('reverses only the 16% VAT component of a prior 31% combined-rate purchase 
   assert.equal(result.reclassifications[0].taxRate, 31);
 });
 
+test('routes a prior-period 8% credit note reversal to the 8% VAT bucket', () => {
+  const original = {
+    id: 'purchase-prior-8', companyId: 'company-a', invoiceDate: '2026-10-05',
+    supplierRif: 'J-12345678-9', invoiceNumber: 'FC-8-OLD', documentType: '01',
+    taxRate: 8, vatAmountBs: 80, vatCreditTreatment: 'TAXABLE'
+  } as PurchaseRecord;
+  const note = {
+    id: 'purchase-prior-8-note', companyId: 'company-a', invoiceDate: '2026-11-05',
+    supplierRif: 'J-12345678-9', invoiceNumber: 'NC-8-OLD', documentType: '03',
+    taxRate: 8, vatAmountBs: 40, originalPurchaseId: original.id
+  } as PurchaseRecord;
+  const prior = {
+    ...declaration, period: '2026-10', sourceIds: [original.id],
+    sourceSnapshots: {
+      [original.id]: JSON.stringify({
+        kind: 'PURCHASE', id: original.id, documentType: '01',
+        vatCreditTreatment: 'TAXABLE', taxRate: 8, vatAmountBs: 80
+      })
+    }
+  };
+  const result = calculateVatOwnPurchaseCreditSummary({
+    companyId: 'company-a', period: '2026-11', purchases: [note],
+    allPurchases: [original, note], priorDeclarations: [prior],
+    taxableSalesBaseBs: 0, exemptSalesBaseBs: 0
+  });
+  assert.equal(result.priorReversalEligible8Bs, 40);
+  assert.equal(result.priorReversalEligible16Bs, 0);
+  assert.equal(result.priorReversalNonEligible8Bs, 0);
+  assert.equal(result.reclassifications[0].taxRate, 8);
+});
+
 test('blocks a prior-period credit note when the filed original declaration has no fiscal treatment snapshot', () => {
   const original = {
     id: 'purchase-missing-historical-snapshot', companyId: 'company-a', invoiceDate: '2026-10-05',
