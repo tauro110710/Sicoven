@@ -695,8 +695,17 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
         item.companyId === companyId && item.status === 'FILED' && item.period < period
       ).sort((a, b) => b.period.localeCompare(a.period))[0];
       const priorCreditAvailable = Number(previousFiled?.position?.creditCarryForwardBs || 0);
-      const expectedProrationRate = Number(p.taxableSalesBaseBs) + Number(p.exemptSalesBaseBs) > 0
-        ? Number(p.taxableSalesBaseBs) / (Number(p.taxableSalesBaseBs) + Number(p.exemptSalesBaseBs)) : 1;
+      const hasCommonCurrentPurchases = asArray(declaration.sourceIds).some(sourceId => {
+        const raw = declaration.sourceSnapshots?.[sourceId];
+        if (typeof raw !== 'string') return false;
+        let snapshot;
+        try { snapshot = JSON.parse(raw); } catch { return false; }
+        return snapshot?.kind === 'PURCHASE' && ['01', '02'].includes(String(snapshot.documentType)) &&
+          snapshot.vatCreditTreatment === 'COMMON' && Number(snapshot.vatAmountBs || 0) > 0;
+      });
+      const salesBase = Number(p.taxableSalesBaseBs) + Number(p.exemptSalesBaseBs);
+      const expectedProrationRate = !hasCommonCurrentPurchases ? 1
+        : salesBase > 0 ? Number(p.taxableSalesBaseBs) / salesBase : null;
       const balanceBeforePriorCredit = Number(p.outputVatBs) + Number(p.debitAdjustmentsBs) +
         Number(p.purchaseCreditReversalBs) - Number(p.purchaseCreditBs) -
         Number(p.receivedWithholdingsBs) - Number(p.creditAdjustmentsBs);
@@ -710,7 +719,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           !near(p.purchaseCreditReversal16Bs + p.purchaseCreditReversal8Bs, p.purchaseCreditReversalBs) ||
           !near(p.purchaseCreditReversalNonEligible16Bs + p.purchaseCreditReversalNonEligible8Bs, p.purchaseCreditReversalNonEligibleBs) ||
           !near(p.creditAdjustments16Bs + p.creditAdjustments8Bs, p.creditAdjustmentsBs) ||
-          !near(p.prorationRate, expectedProrationRate, 0.000001) ||
+          expectedProrationRate === null || !near(p.prorationRate, expectedProrationRate, 0.000001) ||
           !near(p.priorCreditAppliedBs, expectedPriorApplied) ||
           !near(p.netTaxBs, expectedNetTax) ||
           !near(p.amountDueBs, Math.max(0, expectedNetTax)) ||
