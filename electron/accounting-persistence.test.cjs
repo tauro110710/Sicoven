@@ -14,11 +14,97 @@ function emptyState() {
     ],
     journalEntries: [], purchases: [], sales: [], products: [], movements: [],
     vatVouchers: [], vatWithholdingDeclarations: [], vatWithholdingDeclarationEvents: [],
+    vatOwnDeclarations: [], vatOwnDeclarationEvents: [],
     islrVouchers: [], bankAccounts: [], bankStatementMovements: [],
     creditSettlements: [], supplierAdvanceSettlements: [], supplierDirectAdvances: [],
     islrFiscalEvents: [], financialDisclosures: [], displayCurrency: 'DUAL'
   };
 }
+
+
+test('SQLite persists IVA own-account filing atomically and refuses later mutation of its filed history', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE app_state (
+      state_key TEXT PRIMARY KEY, state_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL,
+      details_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  try {
+    const prior = emptyState();
+    prior.accounts.push(
+      { code: '2.1.2.01', name: 'IVA débito', type: 'PASIVO', level: 4, isMovement: true },
+      { code: '2.1.2.09', name: 'IVA por enterar', type: 'PASIVO', level: 4, isMovement: true }
+    );
+    persistAccountingSnapshot(db, prior, { id: 1, username: 'admin', role: 'admin' });
+    const position = {
+      outputVatBs: 100, outputVat16Bs: 100, outputVat8Bs: 0,
+      purchaseCreditBs: 0, purchaseCredit16Bs: 0, purchaseCredit8Bs: 0,
+      purchaseCreditGrossBs: 0, purchaseCreditGross16Bs: 0, purchaseCreditGross8Bs: 0,
+      purchaseCreditNonEligibleBs: 0, purchaseCreditReversalBs: 0,
+      purchaseCreditReversal16Bs: 0, purchaseCreditReversal8Bs: 0,
+      purchaseCreditReversalNonEligibleBs: 0, purchaseCreditReversalNonEligible16Bs: 0,
+      purchaseCreditReversalNonEligible8Bs: 0, prorationRate: 1,
+      taxableSalesBaseBs: 625, exemptSalesBaseBs: 0, receivedWithholdingsBs: 0,
+      priorCreditAppliedBs: 0, debitAdjustmentsBs: 0, creditAdjustmentsBs: 0,
+      creditAdjustments16Bs: 0, creditAdjustments8Bs: 0,
+      netTaxBs: 100, amountDueBs: 100, creditCarryForwardBs: 0
+    };
+    const draft = {
+      id: 'vat-own-atomic', companyId: 'company-1', period: '2026-11', status: 'DRAFT',
+      position, sourceIds: [], relatedSourceIds: [], sourceSnapshots: {}, bcvRate: 874,
+      dailySourceChoices: {}, purchaseVatReclassificationItems: [],
+      createdAt: '2026-11-11T10:00:00.000Z'
+    };
+    const withDraft = { ...prior, vatOwnDeclarations: [draft] };
+    persistAccountingSnapshot(db, withDraft, { id: 1, username: 'admin', role: 'admin' });
+
+    const journal = {
+      id: 'entry-iva-atomic', companyId: 'company-1', entryNumber: 1,
+      date: '2026-11-11', description: 'Determinación mensual del IVA',
+      type: 'AJUSTE', bcvRate: 874, referenceDoc: 'IVA-MENSUAL:2026-11',
+      items: [
+        { accountCode: '2.1.2.01', accountName: 'IVA débito', debitBs: 100, creditBs: 0, debitUsd: 100 / 874, creditUsd: 0 },
+        { accountCode: '2.1.2.09', accountName: 'IVA por enterar', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 100 / 874 }
+      ], createdAt: '2026-11-11T16:00:00.000Z'
+    };
+    const filedAt = '2026-11-11T12:00:00.000-04:00';
+    const filed = {
+      ...draft, status: 'FILED', declarationNumber: 'IVA-2026-001', filedAt
+    };
+    const event = {
+      id: 'vat-own-event-atomic', declarationId: draft.id, companyId: draft.companyId,
+      eventType: 'FILED', occurredAt: filedAt, recordedAt: '2026-11-11T16:00:00.000Z',
+      declarationNumber: filed.declarationNumber, idempotencyKey: 'FILED:' + draft.id,
+      journalEntryId: journal.id
+    };
+    const finalState = {
+      ...withDraft, vatOwnDeclarations: [filed],
+      vatOwnDeclarationEvents: [event], journalEntries: [journal]
+    };
+    assert.equal(persistAccountingSnapshot(db, finalState, { id: 1, username: 'admin', role: 'admin' }).ok, true);
+    const committed = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json;
+    const auditCount = db.prepare('SELECT COUNT(*) AS n FROM audit_events').get().n;
+    assert.equal(JSON.parse(committed).vatOwnDeclarations[0].status, 'FILED');
+    assert.equal(JSON.parse(committed).vatOwnDeclarationEvents.length, 1);
+
+    assert.throws(() => persistAccountingSnapshot(db, {
+      ...finalState,
+      vatOwnDeclarations: [{ ...filed, declarationNumber: 'ALTERADA' }]
+    }, { id: 1, username: 'admin', role: 'admin' }), /declaración IVA ya presentada/);
+    assert.throws(() => persistAccountingSnapshot(db, {
+      ...finalState, vatOwnDeclarationEvents: []
+    }, { id: 1, username: 'admin', role: 'admin' }), /eliminación del registro histórico en vatOwnDeclarationEvents/);
+    assert.equal(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json, committed);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM audit_events').get().n, auditCount);
+  } finally {
+    db.close();
+  }
+});
 
 test('accounting snapshot and its audit events commit or roll back as one SQLite transaction', () => {
   const db = new Database(':memory:');
