@@ -561,10 +561,10 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     // current-period notes. A credit note cannot refund more than the original
     // invoice's total, taxable/exempt bases, VAT or luxury tax.
     const originalSnapshot = originalSnapshotById.get(originalId);
-    const originalFields = originalSnapshot || original as unknown as Record<string, unknown> | undefined;
-    const noteSnapshots = [
+    const originalFields = originalSnapshot || (original as unknown as Record<string, unknown> | undefined);
+    const noteSnapshots: Array<Record<string, unknown>> = [
       ...(priorFiledNotesByOriginal.get(originalId) || []),
-      ...periodPurchases.filter(note => originalByNoteId.get(note.id)?.id === originalId)
+      ...(periodPurchases.filter(note => originalByNoteId.get(note.id)?.id === originalId) as unknown as Array<Record<string, unknown>>)
     ];
     const fiscalCaps: Array<[string, string, number]> = [
       ['totalAmountBs', 'importe total', 0.02], ['taxableBaseBs', 'base imponible', 0.02],
