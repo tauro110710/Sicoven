@@ -547,6 +547,231 @@ function validateVatDeclarationLedger(previousState, nextState) {
 }
 
 
+
+function validateVatOwnDeclarationLedger(previousState, nextState) {
+  const priorDeclarations = asArray(previousState.vatOwnDeclarations);
+  const declarations = asArray(nextState.vatOwnDeclarations);
+  const events = asArray(nextState.vatOwnDeclarationEvents);
+  const companies = new Map(asArray(nextState.companies).map(item => [String(item.id), item]));
+  const journals = new Map(asArray(nextState.journalEntries).map(item => [String(item.id), item]));
+  const declarationById = new Map();
+  const periodKeys = new Set();
+  const filedNumbers = new Set();
+  const timestampIsValid = value => typeof value === 'string' &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+    Number.isFinite(Date.parse(value)) && validVatDeclarationDate(value.slice(0, 10));
+  const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const normalizeRevisions = value => Array.isArray(value) ? value : [];
+
+  for (const declaration of declarations) {
+    const id = String(declaration.id || '');
+    const companyId = String(declaration.companyId || '');
+    const period = String(declaration.period || '');
+    if (!id || declarationById.has(id) || !companies.has(companyId) ||
+        !/^\d{4}-(0[1-9]|1[0-2])$/.test(period) ||
+        !['DRAFT', 'FILED'].includes(declaration.status) ||
+        !timestampIsValid(declaration.createdAt)) {
+      throw new Error('SQLite rechazó una declaración mensual de IVA propia con empresa, período, estado o identificador inválido.');
+    }
+    const periodKey = companyId + ':' + period;
+    if (periodKeys.has(periodKey)) throw new Error('SQLite rechazó dos declaraciones mensuales de IVA propio para la misma empresa y período.');
+    periodKeys.add(periodKey);
+    declarationById.set(id, declaration);
+
+    const sourceIds = asArray(declaration.sourceIds).map(String);
+    const relatedIds = asArray(declaration.relatedSourceIds).map(String);
+    if (sourceIds.some(value => !value.trim()) || new Set(sourceIds).size !== sourceIds.length ||
+        relatedIds.some(value => !value.trim()) || new Set(relatedIds).size !== relatedIds.length ||
+        relatedIds.some(value => sourceIds.includes(value))) {
+      throw new Error('SQLite rechazó fuentes fiscales duplicadas, vacías o mezcladas en la declaración IVA propia.');
+    }
+    if (!Number.isFinite(Number(declaration.bcvRate)) || Number(declaration.bcvRate) <= 0) {
+      throw new Error('SQLite rechazó una declaración IVA propia sin tasa BCV válida.');
+    }
+    const position = declaration.position;
+    if (!position || typeof position !== 'object' ||
+        Object.values(position).some(value => typeof value !== 'number' || !Number.isFinite(value)) ||
+        position.amountDueBs < 0 || position.creditCarryForwardBs < 0 ||
+        position.prorationRate < 0 || position.prorationRate > 1 ||
+        (position.amountDueBs > 0.02 && position.creditCarryForwardBs > 0.02)) {
+      throw new Error('SQLite rechazó una posición fiscal IVA con importes no finitos, negativos o incompatibles.');
+    }
+    const reclassifications = asArray(declaration.purchaseVatReclassificationItems);
+    let debitBs = 0, creditBs = 0, debitUsd = 0, creditUsd = 0;
+    for (const line of reclassifications) {
+      const values = [line.debitBs, line.creditBs, line.debitUsd, line.creditUsd].map(Number);
+      if (!String(line.accountCode || '').trim() || values.some(value => !Number.isFinite(value) || value < 0) ||
+          (values[0] > 0 && values[1] > 0) || (values[2] > 0 && values[3] > 0)) {
+        throw new Error('SQLite rechazó una línea inválida de reclasificación de IVA no acreditable.');
+      }
+      debitBs += values[0]; creditBs += values[1]; debitUsd += values[2]; creditUsd += values[3];
+    }
+    if (Math.abs(debitBs - creditBs) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.000001) {
+      throw new Error('SQLite rechazó reclasificaciones de IVA no acreditable que no cuadran en ambas monedas.');
+    }
+    if (declaration.sourceSnapshots !== undefined) {
+      const snapshots = declaration.sourceSnapshots;
+      const expectedIds = [...new Set([...sourceIds, ...relatedIds])].sort();
+      if (!snapshots || typeof snapshots !== 'object' || Array.isArray(snapshots) ||
+          !equal(Object.keys(snapshots).sort(), expectedIds)) {
+        throw new Error('SQLite rechazó huellas documentales IVA que no corresponden exactamente a las fuentes del borrador.');
+      }
+      for (const value of Object.values(snapshots)) {
+        if (typeof value !== 'string') throw new Error('SQLite rechazó una huella fiscal de IVA no válida.');
+        let parsed;
+        try { parsed = JSON.parse(value); } catch { throw new Error('SQLite rechazó una huella fiscal IVA ilegible.'); }
+        if (!parsed || !['SALE', 'PURCHASE', 'Z'].includes(parsed.kind)) {
+          throw new Error('SQLite rechazó una huella fiscal IVA sin tipo de documento reconocido.');
+        }
+      }
+    }
+    const revisions = normalizeRevisions(declaration.revisions);
+    if (revisions.some((revision, index) => revision.revision !== index + 1 ||
+        !timestampIsValid(revision.revisedAt) || !String(revision.reason || '').trim() ||
+        !revision.position || !Array.isArray(revision.sourceIds))) {
+      throw new Error('SQLite rechazó el historial de versiones del borrador IVA.');
+    }
+    if (declaration.status === 'FILED') {
+      if (!String(declaration.declarationNumber || '').trim() || !timestampIsValid(declaration.filedAt)) {
+        throw new Error('SQLite rechazó una declaración IVA presentada sin número oficial o fecha válida.');
+      }
+      const numberKey = companyId + ':' + String(declaration.declarationNumber).trim();
+      if (filedNumbers.has(numberKey)) throw new Error('SQLite rechazó un número oficial de declaración IVA duplicado en la empresa.');
+      filedNumbers.add(numberKey);
+    } else if (declaration.declarationNumber || declaration.filedAt) {
+      throw new Error('SQLite rechazó un borrador IVA que conserva número oficial o fecha de presentación.');
+    }
+  }
+
+  const priorById = new Map(priorDeclarations.map(item => [String(item.id), item]));
+  for (const old of priorDeclarations) {
+    const next = declarationById.get(String(old.id));
+    if (!next) throw new Error('SQLite bloqueó la eliminación de una declaración IVA histórica; debe conservarse y corregirse mediante el procedimiento fiscal correspondiente.');
+    if (old.status === 'FILED') {
+      if (!equal(old, next)) throw new Error('SQLite bloqueó la modificación de una declaración IVA ya presentada; el original es inmutable.');
+      continue;
+    }
+    if (old.status !== 'DRAFT') throw new Error('SQLite detectó un estado previo no reconocido en la declaración IVA.');
+    if (next.status === 'FILED') {
+      const stripFiling = item => {
+        const copy = { ...item };
+        delete copy.status; delete copy.declarationNumber; delete copy.filedAt;
+        return copy;
+      };
+      if (!equal(stripFiling(old), stripFiling(next))) {
+        throw new Error('SQLite bloqueó cambios al contenido fiscal del borrador durante su presentación.');
+      }
+      continue;
+    }
+    if (next.status !== 'DRAFT') throw new Error('SQLite bloqueó una transición inválida del estado de declaración IVA.');
+    if (!equal(old, next)) {
+      const oldRevisions = normalizeRevisions(old.revisions);
+      const nextRevisions = normalizeRevisions(next.revisions);
+      const revision = nextRevisions[nextRevisions.length - 1];
+      const revisionMatchesOld = revision &&
+        revision.revision === oldRevisions.length + 1 &&
+        revision.createdAt === old.createdAt &&
+        equal(revision.position, old.position) &&
+        equal(revision.sourceIds, old.sourceIds) &&
+        equal(revision.relatedSourceIds || [], old.relatedSourceIds || []) &&
+        Number(revision.bcvRate || 0) === Number(old.bcvRate || 0) &&
+        equal(revision.dailySourceChoices || {}, old.dailySourceChoices || {}) &&
+        equal(revision.purchaseVatReclassificationItems || [], old.purchaseVatReclassificationItems || []) &&
+        equal(revision.sourceSnapshots || {}, old.sourceSnapshots || {}) &&
+        equal(nextRevisions.slice(0, -1), oldRevisions);
+      if (!revisionMatchesOld || nextRevisions.length !== oldRevisions.length + 1) {
+        throw new Error('SQLite bloqueó la actualización del borrador IVA porque no conserva una versión íntegra del contenido anterior.');
+      }
+    }
+  }
+  for (const declaration of declarations) {
+    if (!priorById.has(String(declaration.id)) && declaration.status !== 'DRAFT') {
+      throw new Error('SQLite no permite insertar directamente una declaración IVA como presentada; primero debe existir el borrador y su evento de presentación.');
+    }
+  }
+
+  assertAppendOnlyCollection(previousState, nextState, 'vatOwnDeclarationEvents');
+  const timeline = new Map();
+  const idempotencyKeys = new Set();
+  const paymentReferences = new Set();
+  const eventIds = new Set();
+  const filedEvents = new Map();
+  for (const event of events) {
+    const id = String(event.id || '');
+    const declaration = declarationById.get(String(event.declarationId || ''));
+    if (!id || eventIds.has(id) || !declaration ||
+        String(event.companyId) !== String(declaration.companyId) ||
+        !String(event.idempotencyKey || '').trim() ||
+        !timestampIsValid(event.occurredAt) || !timestampIsValid(event.recordedAt) ||
+        !['FILED', 'PAYMENT', 'REVERSAL'].includes(event.eventType)) {
+      throw new Error('SQLite rechazó un evento fiscal IVA propio con referencia, fecha, empresa o tipo inválido.');
+    }
+    eventIds.add(id);
+    const idempotencyKey = String(event.companyId) + ':' + String(event.idempotencyKey);
+    if (idempotencyKeys.has(idempotencyKey)) throw new Error('SQLite rechazó una clave de idempotencia IVA duplicada en la empresa.');
+    idempotencyKeys.add(idempotencyKey);
+    const history = timeline.get(declaration.id) || [];
+    const eventDate = event.occurredAt.slice(0, 10);
+    const journal = event.journalEntryId ? journals.get(String(event.journalEntryId)) : undefined;
+    if (event.journalEntryId && (!journal || journal.companyId !== declaration.companyId ||
+        journal.type !== 'AJUSTE' || journal.date !== eventDate)) {
+      throw new Error('SQLite rechazó un evento IVA cuyo asiento no existe o no coincide en empresa, tipo y fecha.');
+    }
+    if (event.eventType === 'FILED') {
+      if (history.some(item => item.eventType === 'FILED') ||
+          declaration.status !== 'FILED' ||
+          String(declaration.declarationNumber || '').trim() !== String(event.declarationNumber || '').trim() ||
+          declaration.filedAt.slice(0, 10) !== eventDate ||
+          eventDate < declaration.period + '-01' ||
+          (journal && String(journal.referenceDoc || '') !== 'IVA-MENSUAL:' + declaration.period)) {
+        throw new Error('SQLite rechazó la presentación IVA sin borrador presentado, número, fecha o asiento de determinación coincidente.');
+      }
+      if (journal) {
+        const debit = asArray(journal.items).reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
+        const credit = asArray(journal.items).reduce((sum, line) => sum + Number(line.creditBs || 0), 0);
+        if (Math.abs(debit - credit) > 0.02) throw new Error('SQLite rechazó el asiento de determinación IVA desequilibrado.');
+      }
+      filedEvents.set(declaration.id, (filedEvents.get(declaration.id) || 0) + 1);
+    } else if (event.eventType === 'PAYMENT') {
+      const amount = Number(event.amountBs);
+      const reference = String(event.reference || '').trim();
+      const referenceKey = String(event.companyId) + ':' + reference;
+      const priorPayments = history.filter(item => item.eventType === 'PAYMENT');
+      const reversedPrior = new Set(history.filter(item => item.eventType === 'REVERSAL').map(item => item.reversalOfEventId));
+      const paid = priorPayments.filter(item => !reversedPrior.has(item.id)).reduce((sum, item) => sum + Number(item.amountBs || 0), 0);
+      if (declaration.status !== 'FILED' || !history.some(item => item.eventType === 'FILED') ||
+          !Number.isFinite(amount) || amount <= 0 ||
+          amount > Number(declaration.position.amountDueBs || 0) - paid + 0.000001 ||
+          !reference || paymentReferences.has(referenceKey) ||
+          !String(event.treasuryAccountCode || '').startsWith('1.1.1.') ||
+          !Number.isFinite(Number(event.bcvRate)) || Number(event.bcvRate) <= 0 ||
+          !journal || String(journal.referenceDoc || '') !== 'IVA-PAGO:' + declaration.id + ':' + event.idempotencyKey ||
+          !asArray(journal.items).some(line => String(line.accountCode) === String(event.treasuryAccountCode) &&
+            Math.abs(Number(line.creditBs || 0) - amount) <= 0.02)) {
+        throw new Error('SQLite rechazó un pago IVA sin saldo disponible, referencia única, tasa, cuenta de tesorería o asiento correspondiente.');
+      }
+      paymentReferences.add(referenceKey);
+    } else if (event.eventType === 'REVERSAL') {
+      const original = history.find(item => item.id === event.reversalOfEventId && item.eventType === 'PAYMENT');
+      const alreadyReversed = history.some(item => item.eventType === 'REVERSAL' && item.reversalOfEventId === original?.id);
+      if (!original || alreadyReversed || eventDate < original.occurredAt.slice(0, 10) ||
+          !journal || !original.journalEntryId || journal.reversalOfEntryId !== original.journalEntryId ||
+          String(event.note || '').trim().length < 3) {
+        throw new Error('SQLite rechazó la reversión de un pago IVA sin pago original, fecha, motivo o contra-asiento vinculado.');
+      }
+    }
+    history.push(event);
+    timeline.set(declaration.id, history);
+  }
+  for (const declaration of declarations) {
+    const filedCount = filedEvents.get(declaration.id) || 0;
+    if ((declaration.status === 'FILED' && filedCount !== 1) ||
+        (declaration.status === 'DRAFT' && filedCount !== 0)) {
+      throw new Error('SQLite rechazó el estado de una declaración IVA que no coincide con su evento de presentación.');
+    }
+  }
+}
+
 function saleJournalMatchesInvoice(sale, entry, company) {
   if (!sale || !entry || entry.type !== 'VENTA' || entry.companyId !== sale.companyId ||
       entry.date !== sale.invoiceDate ||
@@ -1194,6 +1419,7 @@ function validateAccountingSnapshot(previousState, nextState) {
   assertAppendOnlyCollection(priorState, nextState, 'vatWithholdingDeclarations');
   assertAppendOnlyCollection(priorState, nextState, 'vatWithholdingDeclarationEvents');
   validateVatDeclarationLedger(priorState, nextState);
+  validateVatOwnDeclarationLedger(priorState, nextState);
   assertAppendOnlyCollection(priorState, nextState, 'vatVouchers',
     ['requiresFiscalCorrection', 'correctionEntryId', 'correctionEntryIds', 'correctionNote',
       'deliveryDate', 'deliveryMethod', 'electronicDeliveryAgreed'],
