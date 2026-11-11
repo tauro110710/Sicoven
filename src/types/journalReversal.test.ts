@@ -194,6 +194,33 @@ test('permite una devolución física parcial cuando cantidad, costo histórico 
   assert.equal(result.returnedMovementCount, 1);
 });
 
+test('acumula varias NC parciales sin exigir devolver de nuevo la cantidad de notas anteriores', () => {
+  const firstReturn = {
+    ...customerReturnMovement, id: 'return-1', quantity: 1, totalCostBs: 100, totalCostUsd: 1,
+    balanceQty: 1, balanceTotalBs: 100, balanceTotalUsd: 1
+  };
+  const secondReturn = {
+    ...customerReturnMovement, id: 'return-2', quantity: 1, totalCostBs: 100, totalCostUsd: 1,
+    balanceQty: 1, balanceTotalBs: 100, balanceTotalUsd: 1
+  };
+  const firstEntry: JournalEntry = {
+    ...customerReturnEntry,
+    items: [
+      { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '5.1.1.01', accountName: 'Costo de ventas', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+    ]
+  };
+  const secondEntry: JournalEntry = { ...firstEntry, id: 'return-entry-2', entryNumber: 3 };
+  const result = validateSaleInventoryReturnReconciliation({
+    companyId: 'c-1', invoiceNumber: '100', source: saleInvoice,
+    movements: [originalSaleMovement, firstReturn, secondReturn], products: [inventoryProduct],
+    journalEntries: [saleInvoice, originalSaleCostEntry, firstEntry, secondEntry],
+    expectedReturnQuantities: { 'p-1': 2 }
+  });
+  assert.equal(result.ready, true);
+  assert.equal(result.returnedMovementCount, 2);
+});
+
 test('bloquea devoluciones parciales y asientos de costo no balanceados', () => {
   const partial = { ...customerReturnMovement, quantity: 1 };
   const partialResult = validateSaleInventoryReturnReconciliation({
