@@ -1348,6 +1348,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       localStorage.setItem(`${STORAGE_KEY}_vatVouchers`, JSON.stringify(vatVouchers));
       localStorage.setItem(`${STORAGE_KEY}_vatWithholdingDeclarations`, JSON.stringify(vatWithholdingDeclarations));
       localStorage.setItem(`${STORAGE_KEY}_vatWithholdingDeclarationEvents`, JSON.stringify(vatWithholdingDeclarationEvents));
+      localStorage.setItem(`${STORAGE_KEY}_vatOwnDeclarations`, JSON.stringify(vatOwnDeclarations));
+      localStorage.setItem(`${STORAGE_KEY}_vatOwnDeclarationEvents`, JSON.stringify(vatOwnDeclarationEvents));
       localStorage.setItem(`${STORAGE_KEY}_islrVouchers`, JSON.stringify(islrVouchers));
       localStorage.setItem(`${STORAGE_KEY}_bankAccounts`, JSON.stringify(bankAccounts));
       localStorage.setItem(`${STORAGE_KEY}_statementMovements`, JSON.stringify(bankStatementMovements));
@@ -1357,7 +1359,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       console.error('Error guardando datos locales de desarrollo:', normalized);
       waitersForSnapshot.forEach(waiter => waiter.reject(normalized));
     }
-  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, customers, suppliers, movements, fixedAssets, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency]);
+  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, customers, suppliers, movements, fixedAssets, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, vatOwnDeclarations, vatOwnDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency]);
 
   const addCompany = async (comp: Omit<Company, 'id'>): Promise<Company> => {
     assertSQLitePersistenceReady('Registrar la empresa');
