@@ -23,6 +23,18 @@ import {
   type VatOwnDeclarationEvent
 } from './vatOwnDeclaration';
 
+test('posts customer withholding adjustments in the month of the corrective sales document', () => {
+  const rows = [
+    { id: 'sale-original', companyId: 'company-a', documentType: '01' as const, invoiceDate: '2026-10-01', retentionVoucherDate: '2026-10-20', vatWithheldBs: 100 },
+    { id: 'sale-credit-note', companyId: 'company-a', documentType: '03' as const, invoiceDate: '2026-11-05', retentionVoucherDate: '2026-10-20', vatWithheldBs: 20 },
+    { id: 'sale-debit-note', companyId: 'company-a', documentType: '02' as const, invoiceDate: '2026-11-06', retentionVoucherDate: '2026-10-20', vatWithheldBs: 10 },
+    { id: 'sale-current', companyId: 'company-a', documentType: '01' as const, invoiceDate: '2026-11-07', retentionVoucherDate: '2026-11-12', vatWithheldBs: 30 }
+  ];
+  const received = getReceivedVatWithholdingSales(rows, 'company-a', '2026-11');
+  assert.deepEqual(received.map(item => item.id), ['sale-credit-note', 'sale-debit-note', 'sale-current']);
+  assert.equal(received.reduce((sum, item) => sum + (item.documentType === '03' ? -1 : 1) * item.vatWithheldBs, 0), 20);
+});
+
 test('accepts valid monthly declaration periods and rejects malformed months', () => {
   assert.equal(isValidVatOwnDeclarationPeriod('2026-11'), true);
   assert.equal(isValidVatOwnDeclarationPeriod('2026-01'), true);
