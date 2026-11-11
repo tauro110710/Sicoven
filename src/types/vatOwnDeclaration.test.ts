@@ -7,6 +7,7 @@ import {
   calculateVatOwnPosition,
   calculateVatOwnPurchaseCreditSummary,
   getUnfiledVatOwnActivityPeriods,
+  areVatOwnSourceSnapshotsCurrent,
   getVatOwnFiledLaterPeriods,
   buildVatOwnPurchaseVatReclassificationItems,
   getVatOwnOutstandingBalance,
@@ -155,6 +156,16 @@ test('snapshots a draft revision without sharing mutable source arrays or positi
   assert.notEqual(revision.position.amountDueBs, 999);
   assert.equal(revision.reason, 'Actualizar fuentes antes de presentar');
   assert.throws(() => snapshotVatOwnDeclarationRevision(declaration, '2026-02-02T10:00:00.000Z', 'No debe versionar una presentada'), /borrador no presentado/);
+});
+
+test('requires fiscal source snapshots to match before presenting a declaration', () => {
+  const original = { sale1: JSON.stringify({ invoice: 'F-001', base: 100, control: '0001' }), z1: JSON.stringify({ date: '2026-11-01', vat: 16 }) };
+  assert.equal(areVatOwnSourceSnapshotsCurrent(original, { ...original }), true);
+  assert.equal(areVatOwnSourceSnapshotsCurrent(original, {
+    ...original, sale1: JSON.stringify({ invoice: 'F-001', base: 100, control: '0002' })
+  }), false);
+  assert.equal(areVatOwnSourceSnapshotsCurrent(original, { sale1: original.sale1 }), false);
+  assert.equal(areVatOwnSourceSnapshotsCurrent(undefined, original), false);
 });
 
 test('requires earlier months with fiscal activity to be filed before preparing a later month', () => {
