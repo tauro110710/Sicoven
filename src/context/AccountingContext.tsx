@@ -5945,7 +5945,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         if ((output16 > 0 && !liability16) || (output8 > 0 && !liability8) ||
             (declaration.position.creditAdjustments16Bs > 0 && !liability16) ||
             (declaration.position.creditAdjustments8Bs > 0 && !liability8) ||
-            (purchase16 > 0 && !input16) || (purchase8 > 0 && !input8) ||
+            ((purchase16 > 0 || declaration.position.purchaseCreditReversal16Bs > 0 ||
+              declaration.position.priorCreditAppliedBs > 0 || declaration.position.creditCarryForwardBs > 0) && !input16) ||
+            ((purchase8 > 0 || declaration.position.purchaseCreditReversal8Bs > 0) && !input8) ||
             ((declaration.position.receivedWithholdingsBs > 0 || declaration.position.debitAdjustmentsBs > 0) && !withholding)) {
           throw new Error('Faltan cuentas de movimiento para conciliar los débitos y créditos fiscales de la declaración.');
         }
