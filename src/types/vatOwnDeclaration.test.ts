@@ -11,6 +11,7 @@ import {
   getVatOwnFiledLaterPeriods,
   buildVatOwnPurchaseVatReclassificationItems,
   getVatOwnOutstandingBalance,
+  getVatOwnNewCreditCarryForward,
   resolveVatOwnDailySalesSources,
   resolveVatOwnProrationRate,
   areVatOwnDeclarationSourcesCurrent,
@@ -34,6 +35,24 @@ test('posts customer withholding adjustments in the month of the corrective sale
   const received = getReceivedVatWithholdingSales(rows, 'company-a', '2026-11');
   assert.deepEqual(received.map(item => item.id), ['sale-credit-note', 'sale-debit-note', 'sale-current']);
   assert.equal(received.reduce((sum, item) => sum + (item.documentType === '03' ? -1 : 1) * item.vatWithheldBs, 0), 20);
+});
+
+test('does not repost unused prior IVA credit when carrying the remaining balance forward', () => {
+  assert.equal(getVatOwnNewCreditCarryForward({
+    priorCreditAvailableBs: 100, priorCreditAppliedBs: 50, totalCreditCarryForwardBs: 50
+  }), 0);
+  assert.equal(getVatOwnNewCreditCarryForward({
+    priorCreditAvailableBs: 100, priorCreditAppliedBs: 0, totalCreditCarryForwardBs: 150
+  }), 50);
+  assert.equal(getVatOwnNewCreditCarryForward({
+    priorCreditAvailableBs: 100, priorCreditAppliedBs: 100, totalCreditCarryForwardBs: 0
+  }), 0);
+  assert.equal(getVatOwnNewCreditCarryForward({
+    priorCreditAvailableBs: 0, priorCreditAppliedBs: 0, totalCreditCarryForwardBs: 75
+  }), 75);
+  assert.throws(() => getVatOwnNewCreditCarryForward({
+    priorCreditAvailableBs: 20, priorCreditAppliedBs: 30, totalCreditCarryForwardBs: 0
+  }), /supera el saldo anterior/);
 });
 
 test('accepts valid monthly declaration periods and rejects malformed months', () => {
