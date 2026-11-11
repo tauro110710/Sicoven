@@ -12,6 +12,7 @@ export interface PurchaseCreditNoteAmounts {
   taxableBaseBs: number;
   exemptAmountBs: number;
   vatAmountBs: number;
+  additionalLuxuryTaxBs: number;
   vatWithheldBs: number;
   islrWithheldBs: number;
   igtfAmountBs: number;
@@ -22,6 +23,7 @@ export interface PurchaseCreditNoteAmounts {
   taxableBaseUsd: number;
   exemptAmountUsd: number;
   vatAmountUsd: number;
+  additionalLuxuryTaxUsd: number;
   vatWithheldUsd: number;
   islrWithheldUsd: number;
   igtfAmountUsd: number;
@@ -108,12 +110,16 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
       Number(purchase.islrWithheldBs ?? 0) > Number(purchase.taxableBaseBs) + 0.02) {
     throw new Error('Las retenciones originales superan su base o impuesto de referencia.');
   }
-  const expectedOriginalVat = money(Number(purchase.taxableBaseBs) * Number(purchase.taxRate) / 100);
+  const effectiveVatRate = Number(purchase.taxRate) === 31 ? 16 : Number(purchase.taxRate);
+  const expectedOriginalVat = money(Number(purchase.taxableBaseBs) * effectiveVatRate / 100);
+  const expectedOriginalLuxury = Number(purchase.taxRate) === 31 ? money(Number(purchase.taxableBaseBs) * 0.15) : 0;
+  const originalLuxuryTax = Number(purchase.additionalLuxuryTaxBs ?? Math.max(0, Number(purchase.vatAmountBs) - expectedOriginalVat));
+  if (Math.abs(originalLuxuryTax - expectedOriginalLuxury) > 0.02) throw new Error('El impuesto adicional del 15% de la factura original no concilia.');
   if (!Number.isFinite(expectedOriginalVat) || Math.abs(expectedOriginalVat - Number(purchase.vatAmountBs)) > 0.02) {
     throw new Error('El IVA original no concilia con la base imponible y la alícuota registrada.');
   }
   const expectedOriginalTotal = money(Number(purchase.taxableBaseBs) + Number(purchase.exemptAmountBs) +
-    Number(purchase.vatAmountBs) + Number(purchase.igtfAmountBs ?? 0));
+    Number(purchase.vatAmountBs) + originalLuxuryTax + Number(purchase.igtfAmountBs ?? 0));
   if (!Number.isFinite(expectedOriginalTotal) || Math.abs(expectedOriginalTotal - Number(purchase.totalAmountBs)) > 0.02) {
     throw new Error('El total de la factura original no concilia con sus bases, IVA e IGTF.');
   }
@@ -229,23 +235,24 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
   inventoryCostBs = money(inventoryCostBs);
   taxableBaseBs = money(taxableBaseBs);
   exemptAmountBs = money(exemptAmountBs);
-  const vatAmountBs = taxableBaseBs > 0 ? money(taxableBaseBs * Number(purchase.taxRate) / 100) : 0;
+  const vatAmountBs = taxableBaseBs > 0 ? money(taxableBaseBs * effectiveVatRate / 100) : 0;
+  const additionalLuxuryTaxBs = Number(purchase.taxRate) === 31 ? money(taxableBaseBs * 0.15) : 0;
   const vatWithheldBs = Number(purchase.vatAmountBs) > 0
     ? money(Number(purchase.vatWithheldBs ?? 0) * vatAmountBs / Number(purchase.vatAmountBs)) : 0;
   const islrWithheldBs = Number(purchase.taxableBaseBs) > 0
     ? money(Number(purchase.islrWithheldBs ?? 0) * taxableBaseBs / Number(purchase.taxableBaseBs)) : 0;
-  const originalIgtfBase = Number(purchase.taxableBaseBs) + Number(purchase.exemptAmountBs) + Number(purchase.vatAmountBs);
+  const originalIgtfBase = Number(purchase.taxableBaseBs) + Number(purchase.exemptAmountBs) + Number(purchase.vatAmountBs) + originalLuxuryTax;
   const igtfAmountBs = originalIgtfBase > 0
-    ? money(Number(purchase.igtfAmountBs ?? 0) * (taxableBaseBs + exemptAmountBs + vatAmountBs) / originalIgtfBase) : 0;
-  const totalAmountBs = money(inventoryCostBs + vatAmountBs + igtfAmountBs);
+    ? money(Number(purchase.igtfAmountBs ?? 0) * (taxableBaseBs + exemptAmountBs + vatAmountBs + additionalLuxuryTaxBs) / originalIgtfBase) : 0;
+  const totalAmountBs = money(inventoryCostBs + vatAmountBs + additionalLuxuryTaxBs + igtfAmountBs);
   const netPayableReductionBs = money(totalAmountBs - vatWithheldBs - islrWithheldBs);
   if (netPayableReductionBs <= 0) throw new Error('El efecto neto de la nota no reduce CxP; requiere tratamiento fiscal especial.');
   const toUsd = (value: number) => Math.round((value / rate + Number.EPSILON) * 1000000) / 1000000;
   return {
-    inventoryCostBs, taxableBaseBs, exemptAmountBs, vatAmountBs, vatWithheldBs,
+    inventoryCostBs, taxableBaseBs, exemptAmountBs, vatAmountBs, additionalLuxuryTaxBs, vatWithheldBs,
     islrWithheldBs, igtfAmountBs, totalAmountBs, netPayableReductionBs, bcvRate: rate,
     inventoryCostUsd: toUsd(inventoryCostBs), taxableBaseUsd: toUsd(taxableBaseBs),
-    exemptAmountUsd: toUsd(exemptAmountBs), vatAmountUsd: toUsd(vatAmountBs),
+    exemptAmountUsd: toUsd(exemptAmountBs), vatAmountUsd: toUsd(vatAmountBs), additionalLuxuryTaxUsd: toUsd(additionalLuxuryTaxBs),
     vatWithheldUsd: toUsd(vatWithheldBs), islrWithheldUsd: toUsd(islrWithheldBs),
     igtfAmountUsd: toUsd(igtfAmountBs), totalAmountUsd: toUsd(totalAmountBs),
     netPayableReductionUsd: toUsd(netPayableReductionBs), lines: lineAmounts
