@@ -5,6 +5,24 @@ export function isValidVatOwnDeclarationPeriod(period: string): boolean {
 }
 
 /**
+ * Returns the monthly VAT proration for common purchases. A zero/invalid sales
+ * denominator cannot justify a 100% credit when common purchase VAT exists.
+ * When there are no common purchases, the rate is immaterial and defaults to 1.
+ */
+export function resolveVatOwnProrationRate(input: {
+  taxableSalesBaseBs: number;
+  exemptSalesBaseBs: number;
+  hasCommonPurchases: boolean;
+}): number | null {
+  const taxable = Number(input.taxableSalesBaseBs);
+  const exempt = Number(input.exemptSalesBaseBs);
+  if (!Number.isFinite(taxable) || !Number.isFinite(exempt) || taxable < 0 || exempt < 0) return null;
+  const denominator = taxable + exempt;
+  if (denominator <= 0) return input.hasCommonPurchases ? null : 1;
+  return taxable / denominator;
+}
+
+/**
  * Customer VAT withholdings are a separate fiscal event from the daily sales source.
  * A day may use a consolidated Z report for taxable sales while the individual
  * invoice still carries the withholding voucher that must be credited in the
