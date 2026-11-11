@@ -427,6 +427,35 @@ test('uses the original filed declaration snapshot if a purchase VAT treatment w
   assert.equal(result.reclassifications[0].taxRate, 16);
 });
  
+test('blocks a prior-period credit note when the live supplier RIF differs from the filed invoice identity', () => {
+  const original = {
+    id: 'purchase-rif-history', companyId: 'company-a', invoiceDate: '2026-10-05',
+    supplierRif: 'J-87654321-0', documentType: '01', taxRate: 16,
+    vatAmountBs: 160, vatCreditTreatment: 'TAXABLE'
+  } as PurchaseRecord;
+  const note = {
+    id: 'purchase-rif-history-note', companyId: 'company-a', invoiceDate: '2026-11-05',
+    supplierRif: 'J-87654321-0', documentType: '03', taxRate: 16,
+    vatAmountBs: 80, originalPurchaseId: original.id
+  } as PurchaseRecord;
+  const prior = {
+    ...declaration, period: '2026-10', status: 'FILED' as const,
+    sourceIds: [original.id],
+    sourceSnapshots: {
+      [original.id]: JSON.stringify({
+        kind: 'PURCHASE', id: original.id, documentType: '01',
+        supplierRif: 'J-12345678-9', vatCreditTreatment: 'TAXABLE',
+        taxRate: 16, vatAmountBs: 160
+      })
+    }
+  };
+  assert.throws(() => calculateVatOwnPurchaseCreditSummary({
+    companyId: 'company-a', period: '2026-11', purchases: [note],
+    allPurchases: [original, note], priorDeclarations: [prior],
+    taxableSalesBaseBs: 1000, exemptSalesBaseBs: 0
+  }), /RIF del proveedor de la nota de crédito no coincide con la huella histórica/);
+});
+
 test('blocks cumulative reversal when a previously filed credit note has no immutable snapshot', () => {
   const original = {
     id: 'purchase-cumulative-legacy-original', companyId: 'company-a', invoiceDate: '2026-10-05',
