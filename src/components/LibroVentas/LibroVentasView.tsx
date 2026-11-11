@@ -420,9 +420,9 @@ export const LibroVentasView: React.FC = () => {
                 </td>
                 <td className="py-3 px-3 text-right font-mono text-amber-300 bg-slate-850">{formatBs(totalLuxuryTaxBs)}<div className="text-[10px] text-slate-400">{formatUsd(totalLuxuryTaxUsd)}</div></td>
                 <td className="py-3 px-3 text-right font-mono text-purple-300 bg-slate-850">
-                  {sourceSelectionPending ? 'Pendiente' : formatBs(selectedWithholdingBs)}
+                  {formatBs(totalIvaRetenidoBs)}
                   {(
-                    <div className="text-[10px] text-slate-400">{sourceSelectionPending ? '—' : formatUsd(selectedWithholdingUsd)}</div>
+                    <div className="text-[10px] text-slate-400">{formatUsd(totalIvaRetenidoUsd)}</div>
                   )}
                 </td>
                 <td></td>
@@ -516,8 +516,8 @@ export const LibroVentasView: React.FC = () => {
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">IVA retenido por clientes:</span>
-            <span className="text-base font-bold text-purple-300 mt-1 block">{formatBs(totalIvaRetenidoBs)}</span>
-            <span className="text-[10px] text-slate-400">{formatUsd(totalIvaRetenidoUsd)}</span>
+            <span className="text-base font-bold text-purple-300 mt-1 block">{sourceSelectionPending ? 'Pendiente' : formatBs(selectedWithholdingBs)}</span>
+            <span className="text-[10px] text-slate-400">{sourceSelectionPending ? '—' : formatUsd(selectedWithholdingUsd)}</span>
           </div>
         </div>
       </div>
