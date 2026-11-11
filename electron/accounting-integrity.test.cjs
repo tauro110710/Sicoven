@@ -2162,6 +2162,21 @@ test('SQLite rechecks fiscal source snapshots at the exact moment an IVA draft i
   }), /huellas fiscales del borrador ya no coinciden/);
 });
 
+test('SQLite rejects negative monetary components in an IVA declaration position', () => {
+  const fixture = vatOwnDeclarationFixture();
+  const declaration = {
+    ...fixture.vatOwnDeclarations[0],
+    position: vatOwnPositionFixture({
+      purchaseCreditBs: -1, purchaseCredit16Bs: -1,
+      purchaseCreditGrossBs: -1, purchaseCreditGross16Bs: -1,
+      purchaseCreditNonEligibleBs: 0
+    })
+  };
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...fixture, vatOwnDeclarations: [declaration]
+  }), /posición fiscal IVA con importes no finitos, negativos o incompatibles/);
+});
+
 test('SQLite accepts a new IVA own-account draft with exact fiscal source snapshots', () => {
   assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), vatOwnDeclarationFixture()));
 });
