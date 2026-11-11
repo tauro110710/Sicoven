@@ -421,7 +421,11 @@ test('allows partial payment and computes remaining balance', () => {
 test('rejects IVA payments dated before the declaration was filed', () => {
   assert.throws(() => validateVatOwnEvent({
     declaration, events: [], draft: payment({ occurredAt: '2026-02-09T10:00:00.000Z' })
-  }), /no puede ser anterior a la presentación/);
+  }), /no puede ser anterior al día de presentación/);
+  assert.doesNotThrow(() => validateVatOwnEvent({
+    declaration: { ...declaration, filedAt: '2026-02-10T12:00:00-04:00' },
+    events: [], draft: payment({ occurredAt: '2026-02-10T12:00:00.000Z' })
+  }));
 });
 
 test('rejects overpayment, duplicate idempotency keys and cross-company events', () => {
