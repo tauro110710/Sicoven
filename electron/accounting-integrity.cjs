@@ -609,6 +609,34 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     if (Math.abs(debitBs - creditBs) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.000001) {
       throw new Error('SQLite rechazó reclasificaciones de IVA no acreditable que no cuadran en ambas monedas.');
     }
+    if (declaration.sourceSnapshots) {
+      const p = position;
+      const near = (actual, expected, tolerance = 0.02) =>
+        Number.isFinite(Number(actual)) && Math.abs(Number(actual) - Number(expected)) <= tolerance;
+      const previousFiled = declarations.filter(item =>
+        item.companyId === companyId && item.status === 'FILED' && item.period < period
+      ).sort((a, b) => b.period.localeCompare(a.period))[0];
+      const priorCreditAvailable = Number(previousFiled?.position?.creditCarryForwardBs || 0);
+      const balanceBeforePriorCredit = Number(p.outputVatBs) + Number(p.debitAdjustmentsBs) +
+        Number(p.purchaseCreditReversalBs) - Number(p.purchaseCreditBs) -
+        Number(p.receivedWithholdingsBs) - Number(p.creditAdjustmentsBs);
+      const expectedPriorApplied = Math.min(priorCreditAvailable, Math.max(0, balanceBeforePriorCredit));
+      const expectedNetTax = balanceBeforePriorCredit - expectedPriorApplied;
+      const expectedCarryForward = Math.max(0, -expectedNetTax) + (priorCreditAvailable - expectedPriorApplied);
+      if (!near(p.outputVat16Bs + p.outputVat8Bs, p.outputVatBs) ||
+          !near(p.purchaseCredit16Bs + p.purchaseCredit8Bs, p.purchaseCreditBs) ||
+          !near(p.purchaseCreditGross16Bs + p.purchaseCreditGross8Bs, p.purchaseCreditGrossBs) ||
+          !near(p.purchaseCreditGrossBs - p.purchaseCreditBs, p.purchaseCreditNonEligibleBs) ||
+          !near(p.purchaseCreditReversal16Bs + p.purchaseCreditReversal8Bs, p.purchaseCreditReversalBs) ||
+          !near(p.purchaseCreditReversalNonEligible16Bs + p.purchaseCreditReversalNonEligible8Bs, p.purchaseCreditReversalNonEligibleBs) ||
+          !near(p.creditAdjustments16Bs + p.creditAdjustments8Bs, p.creditAdjustmentsBs) ||
+          !near(p.priorCreditAppliedBs, expectedPriorApplied) ||
+          !near(p.netTaxBs, expectedNetTax) ||
+          !near(p.amountDueBs, Math.max(0, expectedNetTax)) ||
+          !near(p.creditCarryForwardBs, expectedCarryForward)) {
+        throw new Error('SQLite rechazó una posición IVA cuyo desglose, crédito anterior, impuesto por enterar o saldo trasladable no concilia.');
+      }
+    }
     if (declaration.sourceSnapshots !== undefined) {
       const snapshots = declaration.sourceSnapshots;
       const expectedIds = [...new Set([...sourceIds, ...relatedIds])].sort();
@@ -620,7 +648,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
         if (typeof value !== 'string') throw new Error('SQLite rechazó una huella fiscal de IVA no válida.');
         let parsed;
         try { parsed = JSON.parse(value); } catch { throw new Error('SQLite rechazó una huella fiscal IVA ilegible.'); }
-        if (!parsed || !['SALE', 'PURCHASE', 'Z'].includes(parsed.kind)) {
+        if (!parsed || !['SALE', 'PURCHASE', 'Z'].includes(parsed.kind) || String(parsed.id || '') !== String(Object.keys(snapshots).find(key => snapshots[key] === value) || '')) {
           throw new Error('SQLite rechazó una huella fiscal IVA sin tipo de documento reconocido.');
         }
       }
