@@ -8,6 +8,7 @@ import {
   resolveVatOwnDailySalesSources,
   resolveVatOwnProrationRate,
   areVatOwnDeclarationSourcesCurrent,
+  findExistingVatOwnPaymentReversal,
   resolveVatOwnPurchaseCreditTreatment,
   snapshotVatOwnDeclarationRevision,
   validateVatOwnDeclarationDraft,
@@ -92,6 +93,18 @@ test('detects changed declaration source sets without depending on array order',
   assert.equal(areVatOwnDeclarationSourcesCurrent(['sale-1', 'purchase-1'], ['purchase-1', 'sale-1']), true);
   assert.equal(areVatOwnDeclarationSourcesCurrent(['sale-1'], ['sale-1', 'sale-2']), false);
   assert.equal(areVatOwnDeclarationSourcesCurrent(['sale-1', 'sale-2'], ['sale-1']), false);
+});
+
+test('recovers an already persisted payment contra-entry without creating a duplicate', () => {
+  const reversal = { id: 'reverse-1', companyId: 'company-a', reversalOfEntryId: 'journal-payment-1' };
+  assert.deepEqual(
+    findExistingVatOwnPaymentReversal([reversal], 'company-a', 'journal-payment-1'),
+    reversal
+  );
+  assert.equal(findExistingVatOwnPaymentReversal([], 'company-a', 'journal-payment-1'), null);
+  assert.throws(() => findExistingVatOwnPaymentReversal([
+    reversal, { ...reversal, id: 'reverse-2' }
+  ], 'company-a', 'journal-payment-1'), /más de un contra-asiento/);
 });
 
 test('snapshots a draft revision without sharing mutable source arrays or position objects', () => {
