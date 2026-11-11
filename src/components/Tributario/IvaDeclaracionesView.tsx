@@ -215,7 +215,7 @@ export const IvaDeclaracionesView: React.FC = () => {
   ));
   const draftNeedsRefresh = savedDeclaration?.status === 'DRAFT' && (
     sourceIdsChanged || sourceSnapshotsChanged || sourceChoicesChanged || bcvRateChanged || purchaseReclassificationChanged || positionSummaryChanged ||
-    Boolean(purchaseSummaryError) || unfiledActivityPeriods.length > 0 || laterFiledPeriods.length > 0 || Boolean(activityPeriodError) || dailySalesResolution.unresolvedDates.length > 0
+    Boolean(purchaseSummaryError) || laterFiledPeriods.length > 0 || Boolean(activityPeriodError) || dailySalesResolution.unresolvedDates.length > 0
   );
 
   const includedZSourceIds = new Set(dailySalesResolution.days
@@ -283,7 +283,7 @@ export const IvaDeclaracionesView: React.FC = () => {
           <div className="text-sm text-amber-950">
             <p className="font-bold">Control previo a la declaración; no es todavía una declaración SENIAT ni un pago registrado.</p>
             {dailySalesResolution.unresolvedDates.length > 0 && <p className="mt-2 font-bold">Selecciona para cada fecha coincidente si el contador registró las ventas mediante el Reporte Z o mediante facturas individuales. SICOVEN incluirá una sola fuente por día.</p>}
-            {unfiledActivityPeriods.length > 0 && <p className="mt-2 font-bold text-rose-800">Hay períodos mensuales anteriores sin declaración presentada: {unfiledActivityPeriods.join(', ')}. Debes completar esos períodos antes de preparar o presentar este mes.</p>}
+            {unfiledActivityPeriods.length > 0 && <p className="mt-2 font-bold text-rose-800">Hay períodos mensuales anteriores sin declaración presentada: {unfiledActivityPeriods.join(', ')}. Puedes preparar y revisar este borrador; antes de registrar la presentación, completa o regulariza esos períodos.</p>}
             {laterFiledPeriods.length > 0 && <p className="mt-2 font-bold text-rose-800">Ya existen declaraciones posteriores presentadas: {laterFiledPeriods.join(', ')}. No se permite alterar este mes directamente; utiliza el procedimiento de rectificación para conservar la secuencia fiscal.</p>}
             {activityPeriodError && <p className="mt-2 font-bold text-rose-800">{activityPeriodError}</p>}
             <p className="mt-1">El IVA bruto de compras no equivale automáticamente al crédito acreditable: el estimado aplica el tratamiento gravado/exento/común y la prorrata sobre las ventas seleccionadas. El cálculo definitivo se conserva en el borrador. El crédito fiscal y las retenciones deben validarse contra sus comprobantes, requisitos de deducibilidad y período fiscal. Los reportes Z de POS externo se muestran como soporte operativo y requieren conciliación con los documentos fiscales exigibles. Si también se registraron esas mismas facturas individualmente, no deben computarse dos veces. Este saldo no sustituye la revisión del contador ni la Forma 30.</p>
@@ -341,7 +341,7 @@ export const IvaDeclaracionesView: React.FC = () => {
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h2 className="text-lg font-bold text-slate-900">Declaración mensual · Control y presentación</h2><p className="mt-1 text-sm text-slate-600">Prepara un borrador desde los libros, conserva las fuentes elegidas y registra presentación y enteramientos con su asiento contable.</p></div>
-          {!savedDeclaration && <button type="button" disabled={!isStorageReady || !isValidVatOwnDeclarationPeriod(period) || outputVat === null || !currentPositionPreview || prorationRate === null || Boolean(purchaseSummaryError) || unfiledActivityPeriods.length > 0 || laterFiledPeriods.length > 0 || Boolean(activityPeriodError)} onClick={async()=>{
+          {!savedDeclaration && <button type="button" disabled={!isStorageReady || !isValidVatOwnDeclarationPeriod(period) || outputVat === null || !currentPositionPreview || prorationRate === null || Boolean(purchaseSummaryError) || laterFiledPeriods.length > 0 || Boolean(activityPeriodError)} onClick={async()=>{
             setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
             try { await createVatOwnDeclaration({period,choices:activeSourceChoices});setWorkflowMessage('Borrador de declaración guardado y confirmado en SQLite.'); }
             catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo preparar la declaración.');}
