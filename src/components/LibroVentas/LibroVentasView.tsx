@@ -169,6 +169,31 @@ export const LibroVentasView: React.FC = () => {
 
   return (
     <div className="space-y-6">
+    <section className="no-print rounded-2xl border border-sky-200 bg-sky-50/70 p-4 sm:p-5">
+      <h3 className="flex items-center gap-2 text-sm font-bold text-sky-950"><span aria-hidden="true">❓</span> Preguntas frecuentes · Notas de crédito (NC) y débito (ND)</h3>
+      <details className="mt-3 rounded-xl border border-sky-100 bg-white p-3" open>
+        <summary className="cursor-pointer text-sm font-semibold text-slate-900">¿Dónde y cómo hago una nota de crédito o una nota de débito?</summary>
+        <div className="mt-3 space-y-2 text-xs leading-5 text-slate-700">
+          <p>La nota se inicia desde la factura original: <strong>Libro de Ventas → busca la factura → columna Acción → NC o ND</strong>. SICOVEN abre el formulario asociado a esa factura.</p>
+          <p>Completa la <strong>fecha de la nota</strong>, <strong>número de nota</strong>, <strong>número de control</strong>, <strong>tasa BCV</strong>, <strong>base imponible afectada</strong> y <strong>monto exento afectado</strong>. Selecciona el <strong>medio de emisión fiscal</strong> y confirma si es el mismo de la factura original. Indica el <strong>motivo</strong> y, si lo necesitas, agrega el <strong>papel de trabajo</strong>. El total se calcula automáticamente.</p>
+          <p>Al guardar, SICOVEN registra la nota como un documento independiente vinculado a la factura original, genera el asiento contable de ajuste y conserva la factura original y la trazabilidad de la operación. <strong>No requiere autorización ni aprobación de otra persona:</strong> el contador realiza directamente el registro.</p>
+        </div>
+      </details>
+      <details className="mt-2 rounded-xl border border-sky-100 bg-white p-3">
+        <summary className="cursor-pointer text-sm font-semibold text-slate-900">¿Cuál es la diferencia entre NC y ND?</summary>
+        <p className="mt-3 text-xs leading-5 text-slate-700">La <strong>nota de crédito (NC)</strong> disminuye el importe de la factura, los ingresos, los impuestos que correspondan y la cuenta por cobrar pendiente. La <strong>nota de débito (ND)</strong> aumenta el importe adeudado, los ingresos y los impuestos que correspondan. Ambas quedan relacionadas con la factura afectada; no se elimina ni se modifica el documento original.</p>
+      </details>
+      <details className="mt-2 rounded-xl border border-sky-100 bg-white p-3">
+        <summary className="cursor-pointer text-sm font-semibold text-slate-900">¿Qué condiciones y limitaciones debo tener presentes?</summary>
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-xs leading-5 text-slate-700">
+          <li>El flujo disponible actualmente se inicia desde facturas vigentes tipo 01 y está habilitado para facturas a crédito; todavía no contempla facturas de contado.</li>
+          <li>Para una NC de mercancía con inventario, debe registrarse y conciliarse la devolución física en el Kardex y su asiento de costo. El flujo actual admite devolución total, no parcial.</li>
+          <li>El flujo actual no admite facturas con retención de IVA ni IGTF.</li>
+          <li>Las operaciones con alícuota combinada del 31% requieren completar y verificar el desglose entre IVA del 16% e impuesto adicional del 15% antes de utilizar notas sobre esos documentos.</li>
+          <li>La NC está limitada por el saldo de la cuenta por cobrar pendiente; los casos con cobros previos y reembolso necesitan completar el circuito de devolución y conciliación.</li>
+        </ul>
+      </details>
+    </section>
       {/* Official SENIAT Header with Company Logo */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 print:border-none print:shadow-none print:p-0">
         <CompanyLogoHeader
