@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   calculateVatOwnPosition,
   getVatOwnOutstandingBalance,
+  resolveVatOwnDailySalesSources,
   validateVatOwnDeclarationDraft,
   validateVatOwnEvent,
   type VatOwnDeclaration,
