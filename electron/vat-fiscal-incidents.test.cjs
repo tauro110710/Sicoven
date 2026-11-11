@@ -227,6 +227,7 @@ test('requires a documented decision and permits either full-access role', () =>
 test('allows the accountant to record an action directly without a separate review step', () => {
   const { db } = fixture();
   const created = createVatFiscalIncident(db, createInput(), actor);
+  assert.equal(created.status, 'OPEN');
   const acted = recordVatFiscalIncidentEvent(db, {
     incidentId: created.id, eventType: 'ACTION_RECORDED',
     decisionText: 'El contador registró directamente la actuación y su referencia externa para seguimiento.',
