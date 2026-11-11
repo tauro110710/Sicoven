@@ -51,7 +51,7 @@ test('creates a purchase credit-note incident linked to its original invoice, vo
   const { db } = fixture();
   const before = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json;
   const incident = createVatFiscalIncident(db, createInput(), actor);
-  assert.equal(incident.status, 'PENDING_REVIEW');
+  assert.equal(incident.status, 'OPEN');
   assert.equal(incident.resolved, false);
   assert.equal(incident.originalPurchaseId, 'invoice-1');
   assert.deepEqual(incident.declarationEventIds, ['filed-1', 'payment-1']);
