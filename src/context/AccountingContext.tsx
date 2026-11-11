@@ -53,7 +53,7 @@ import { FinancialDisclosure, validateFinancialDisclosure } from '../types/finan
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
-import { getReceivedVatWithholdingSales, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnProrationRate, resolveVatOwnPurchaseCreditTreatment, validateVatOwnEvent } from '../types/vatOwnDeclaration';
+import { getReceivedVatWithholdingSales, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnProrationRate, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
 import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
@@ -5603,11 +5603,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
-  const createVatOwnDeclaration = async (input: { period: string; choices?: Record<string, 'Z' | 'INDIVIDUAL'> }): Promise<VatOwnDeclaration> => {
-    assertSQLitePersistenceReady('Preparar declaración mensual de IVA');
+  const createVatOwnDeclaration = async (input: { period: string; choices?: Record<string, 'Z' | 'INDIVIDUAL'>; refresh?: boolean }): Promise<VatOwnDeclaration> => {
+    assertSQLitePersistenceReady(input.refresh ? 'Actualizar borrador de declaración mensual de IVA' : 'Preparar declaración mensual de IVA');
     if (!isValidVatOwnDeclarationPeriod(input.period)) throw new Error('Seleccione un período mensual válido.');
-    if (vatOwnDeclarations.some(item => item.companyId === currentCompany.id && item.period === input.period)) {
+    const existingDraft = vatOwnDeclarations.find(item => item.companyId === currentCompany.id && item.period === input.period);
+    if (existingDraft && (existingDraft.status !== 'DRAFT' || input.refresh !== true)) {
       throw new Error('Ya existe una declaración mensual para ese período. Abra la existente para continuar.');
+    }
+    if (!existingDraft && input.refresh) throw new Error('No existe un borrador que pueda actualizarse para ese período.');
+    if (existingDraft && vatOwnDeclarationEvents.some(event => event.companyId === currentCompany.id && event.declarationId === existingDraft.id)) {
+      throw new Error('El borrador ya tiene eventos fiscales asociados y no puede recalcularse.');
     }
     const lockKey = 'own:' + currentCompany.id + ':' + input.period;
     if (vatDeclarationCreationInFlightRef.current.has(lockKey)) throw new Error('La declaración de ese período ya se está preparando.');
@@ -5692,16 +5697,26 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         ...monthPurchases.map(item => item.id),
         ...withholdingRows.map(item => item.id)
       ])];
+      const priorRevision = existingDraft
+        ? snapshotVatOwnDeclarationRevision(existingDraft, createdAt, 'Actualización del borrador por conciliación de nuevas fuentes contables')
+        : null;
       const declaration: VatOwnDeclaration = {
-        id: 'vat-own-' + currentCompany.id + '-' + input.period,
+        id: existingDraft?.id || 'vat-own-' + currentCompany.id + '-' + input.period,
         companyId: currentCompany.id, period: input.period, status: 'DRAFT',
         position, sourceIds, bcvRate: Number(currentCompany.bcvRate) || 0,
-        dailySourceChoices: { ...(input.choices || {}) }, createdAt
+        dailySourceChoices: { ...(input.choices || {}) },
+        createdAt: existingDraft?.createdAt || createdAt,
+        ...(existingDraft ? {
+          updatedAt: createdAt,
+          revisions: [...(existingDraft.revisions || []), priorRevision!]
+        } : {})
       };
       validateVatOwnDeclarationDraft(declaration);
       if (!Number.isFinite(Number(declaration.bcvRate)) || Number(declaration.bcvRate) <= 0) throw new Error('La empresa no conserva una tasa BCV válida para respaldar la declaración.');
       const confirmation = waitForPersistence();
-      setVatOwnDeclarations(prev => [...prev, declaration]);
+      setVatOwnDeclarations(prev => existingDraft
+        ? prev.map(item => item.id === existingDraft.id ? declaration : item)
+        : [...prev, declaration]);
       await confirmation;
       return declaration;
     } finally {
