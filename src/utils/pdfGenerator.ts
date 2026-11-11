@@ -793,7 +793,6 @@ export async function exportComprasPdf(
   );
 
   let totalMonto = 0;
-  let totalMontoUsd = 0;
   let totalExento = 0;
   let totalBase = 0;
   let totalIva = 0;
@@ -833,9 +832,8 @@ export async function exportComprasPdf(
 
   // Totals row
   tableBody.push([
-    { content: hasCorrectionNotes ? 'TOTALES AJUSTADOS DEL PERÍODO:' : 'TOTALES DEL PERÍODO:', colSpan: 7, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+    { content: hasCorrectionNotes ? 'TOTALES AJUSTADOS DEL PERÍODO:' : 'TOTALES DEL PERÍODO:', colSpan: 6, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: formatNumberVe(totalMonto), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
-    { content: formatUsd(totalMontoUsd), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: formatNumberVe(totalIgtf), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [251, 191, 36] } },
     { content: formatNumberVe(totalExento), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: formatNumberVe(totalBase), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
@@ -931,7 +929,6 @@ export async function exportVentasPdf(
   const tableBody: any[] = sales.map(s => {
     const sign = s.documentType === '03' ? -1 : 1;
     totalMonto += sign * (s.totalAmountBs || 0);
-    totalMontoUsd += sign * (s.totalAmountUsd || 0);
     totalExento += sign * (s.exemptAmountBs || 0);
     totalBase += sign * (s.taxableBaseBs || 0);
     const saleLuxuryTax = s.taxRate === 31 ? (s.taxableBaseBs || 0) * 0.15 : 0;
@@ -946,10 +943,8 @@ export async function exportVentasPdf(
       s.customerRif,
       s.customerName.slice(0, 32),
       (s.documentType === '03' ? 'NC ' : s.documentType === '02' ? 'ND ' : '') + s.invoiceNumber + (s.affectedInvoiceNumber ? ' / FAC ' + s.affectedInvoiceNumber : ''),
-      s.documentType === '03' ? 'NOTA CRÉDITO' : s.documentType === '02' ? 'NOTA DÉBITO' : 'FACTURA',
       s.controlNumber,
       formatNumberVe(sign * s.totalAmountBs),
-      formatUsd(sign * (s.totalAmountUsd || 0)),
       s.exemptAmountBs > 0 ? formatNumberVe(sign * s.exemptAmountBs) : '-',
       formatNumberVe(sign * s.taxableBaseBs),
       `${s.taxRate}%`,
@@ -958,8 +953,7 @@ export async function exportVentasPdf(
       s.vatWithheldBs > 0 ? formatNumberVe(sign * s.vatWithheldBs) : '-',
       s.retentionVoucherNumber || '-',
       s.retentionVoucherDate ? formatDate(s.retentionVoucherDate) : '-',
-      (s.igtfAmountBs || 0) > 0 ? formatNumberVe(sign * (s.igtfAmountBs || 0)) : '-',
-      s.bcvRate > 0 ? formatNumberVe(s.bcvRate) : '—'
+      (s.igtfAmountBs || 0) > 0 ? formatNumberVe(sign * (s.igtfAmountBs || 0)) : '-'
     ];
   });
 
@@ -970,7 +964,6 @@ export async function exportVentasPdf(
     const base = z.taxableBase16Bs + z.taxableBase8Bs + z.taxableBase31Bs;
     const vat = z.vat16Bs + z.vat8Bs + z.vat31Bs;
     totalMonto += z.totalSalesBs;
-    totalMontoUsd += entry.bcvRate > 0 ? z.totalSalesBs / entry.bcvRate : 0;
     totalExento += z.exemptSalesBs;
     totalBase += base;
     totalIva += vat;
@@ -982,18 +975,15 @@ export async function exportVentasPdf(
       '—',
       'VENTAS CONSOLIDADAS · MÁQUINA FISCAL',
       'Z ' + z.zNumber + ' · FAC. ' + z.invoiceStart + '–' + z.invoiceEnd,
-      'REPORTE Z',
       z.controlStart ? z.controlStart + '–' + z.controlEnd : '—',
       formatNumberVe(z.totalSalesBs),
-      entry.bcvRate > 0 ? formatUsd(z.totalSalesBs / entry.bcvRate) : '—',
       z.exemptSalesBs > 0 ? formatNumberVe(z.exemptSalesBs) : '-',
       formatNumberVe(base),
       '16 / 8 / 31',
       formatNumberVe(vat),
       (z.additionalLuxuryTaxBs || 0) > 0 ? formatNumberVe(z.additionalLuxuryTaxBs) : '-',
       '-', '-', '-',
-      z.igtfBs > 0 ? formatNumberVe(z.igtfBs) : '-',
-      entry.bcvRate > 0 ? formatNumberVe(entry.bcvRate) : '—'
+      z.igtfBs > 0 ? formatNumberVe(z.igtfBs) : '-'
     ]);
   });
 
@@ -1011,8 +1001,7 @@ export async function exportVentasPdf(
     { content: formatNumberVe(totalRetenido), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [192, 132, 252] } },
     { content: '', styles: { fillColor: [15, 23, 42] } },
     { content: '', styles: { fillColor: [15, 23, 42] } },
-    { content: formatNumberVe(totalIgtf), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [125, 211, 252] } },
-    { content: '', styles: { fillColor: [15, 23, 42] } }
+    { content: formatNumberVe(totalIgtf), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [125, 211, 252] } }
   ]);
 
   autoTable(doc, {
@@ -1023,10 +1012,8 @@ export async function exportVentasPdf(
       'RIF Cliente',
       'Nombre o Razón Social',
       'N° Factura',
-      'Tipo',
       'N° Control',
       'Total Ventas (Bs.)',
-      'Total USD',
       'Exento (Bs.)',
       'Base Imp. (Bs.)',
       '% Alíc.',
@@ -1035,8 +1022,7 @@ export async function exportVentasPdf(
       'IVA Retenido (Bs.)',
       'Comprobante Ret.',
       'Fecha Ret.',
-      'IGTF (Bs.)',
-      'Tasa BCV'
+      'IGTF (Bs.)'
     ]],
     body: tableBody,
     theme: 'grid',
@@ -1047,20 +1033,18 @@ export async function exportVentasPdf(
       1: { cellWidth: 18, font: 'courier' },
       2: { cellWidth: 22, font: 'courier' },
       3: { cellWidth: 'auto' },
-      4: { cellWidth: 18, font: 'courier' },
-      5: { cellWidth: 16 },
-      6: { cellWidth: 18, font: 'courier' },
-      7: { cellWidth: 22, halign: 'right', font: 'courier', fontStyle: 'bold' },
-      8: { cellWidth: 17, halign: 'right', font: 'courier' },
-      9: { cellWidth: 17, halign: 'right', font: 'courier' },
-      10: { cellWidth: 24, halign: 'right', font: 'courier' },
-      11: { cellWidth: 12, halign: 'center' },
-      12: { cellWidth: 25, halign: 'right', font: 'courier' },
-      13: { cellWidth: 18, halign: 'right', font: 'courier' },
-      14: { cellWidth: 20, halign: 'right', font: 'courier' },
-      15: { cellWidth: 20, font: 'courier' },
-      16: { cellWidth: 16, font: 'courier' },
-      17: { cellWidth: 18, halign: 'right', font: 'courier' }
+      4: { cellWidth: 20, font: 'courier' },
+      5: { cellWidth: 20, font: 'courier' },
+      6: { cellWidth: 24, halign: 'right', font: 'courier', fontStyle: 'bold' },
+      7: { cellWidth: 20, halign: 'right', font: 'courier' },
+      8: { cellWidth: 22, halign: 'right', font: 'courier' },
+      9: { cellWidth: 12, halign: 'center' },
+      10: { cellWidth: 22, halign: 'right', font: 'courier' },
+      11: { cellWidth: 20, halign: 'right', font: 'courier' },
+      12: { cellWidth: 22, halign: 'right', font: 'courier' },
+      13: { cellWidth: 24, font: 'courier' },
+      14: { cellWidth: 18, font: 'courier' },
+      15: { cellWidth: 18, halign: 'right', font: 'courier' }
     },
     margin: { left: 14, right: 14, bottom: 20 }
   });
