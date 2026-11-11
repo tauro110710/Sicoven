@@ -204,7 +204,7 @@ export function resolveVatOwnDailySalesSources(input: {
 }): { days: VatOwnDailySalesSource[]; conflicts: VatOwnDailySourceConflict[]; unresolvedDates: string[] } {
   const byDate = new Map<string, { z: VatOwnDailySalesSource | null; individual: VatOwnDailySalesSource | null }>();
   const ensure = (date: string) => {
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) throw new Error('La fecha de origen del IVA no es válida.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('La fecha de origen del IVA no es válida.');
     if (!byDate.has(date)) byDate.set(date, { z: null, individual: null });
     return byDate.get(date)!;
   };
