@@ -644,7 +644,10 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
     }
     const historicalJournal = historicalSource?.journal as Record<string, unknown> | undefined;
     const sourceJournalId = String(historicalSource?.journalEntryId || sourcePurchase.journalEntryId || '');
-    const requiresPurchaseJournal = Math.abs(signedAmount) >= 0.01 || Number(sourcePurchase.vatAmountBs || 0) > 0;
+    const originalVatForJournal = historicalSource
+      ? Number(historicalSource.vatAmountBs)
+      : Number(sourcePurchase.vatAmountBs || 0);
+    const requiresPurchaseJournal = Math.abs(signedAmount) >= 0.01 || originalVatForJournal > 0;
     if (!requiresPurchaseJournal) continue;
     if (!sourceJournalId) {
       throw new Error('No se puede conciliar el IVA del documento ' + adjustment.purchaseId + ': la factura original no conserva su asiento de compra.');
