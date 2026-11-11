@@ -2238,7 +2238,7 @@ test('SQLite enforces prior-period continuity and blocks a later filing before a
   };
   assert.throws(() => validateAccountingSnapshot(prior, {
     ...prior, vatOwnDeclarations: [octoberFiled, decemberDraft]
-  }), /períodos mensuales anteriores sin declaración presentada/);
+  }), /períodos anteriores con actividad fiscal sin presentar/);
 
   const novemberFiled = {
     ...novemberDraft, id: 'vat-own-2026-10-later', period: '2026-10',
@@ -2269,7 +2269,7 @@ test('SQLite validates partial IVA payments, prevents overpayment and protects t
   const paymentJournal = {
     id: 'entry-iva-payment', companyId: 'company-1', entryNumber: 2,
     date: '2026-11-11', description: 'Pago IVA mensual', type: 'AJUSTE',
-    bcvRate: 874, referenceDoc: 'IVA-PAGO:vat-own-1:PAYMENT:TRX-001',
+    bcvRate: 874, referenceDoc: 'IVA-PAGO:vat-own-1:TRX-001',
     items: [
       { accountCode: '2.1.2.09', debitBs: 50, creditBs: 0, debitUsd: 50 / 874, creditUsd: 0 },
       { accountCode: '1.1.1.01', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 50 / 874 }
@@ -2305,7 +2305,7 @@ test('SQLite accepts one linked IVA payment reversal and rejects duplicate or un
   const paymentJournal = {
     id: 'entry-iva-payment', companyId: 'company-1', entryNumber: 2,
     date: '2026-11-11', description: 'Pago IVA mensual', type: 'AJUSTE',
-    bcvRate: 874, referenceDoc: 'IVA-PAGO:vat-own-1:PAYMENT:TRX-001',
+    bcvRate: 874, referenceDoc: 'IVA-PAGO:vat-own-1:TRX-001',
     items: [
       { accountCode: '2.1.2.09', debitBs: 50, creditBs: 0, debitUsd: 50 / 874, creditUsd: 0 },
       { accountCode: '1.1.1.01', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 50 / 874 }
