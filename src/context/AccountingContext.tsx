@@ -5619,7 +5619,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const getVatOwnInconsistentPurchaseSources = (companyId: string): PurchaseRecord[] => purchases.filter(purchase => {
-    if (purchase.companyId !== companyId || purchase.isCancelled || !purchase.journalEntryId) return false;
+    if (purchase.companyId !== companyId || purchase.isCancelled) return false;
+    if (Number(purchase.vatAmountBs || 0) > 0 && !purchase.journalEntryId) return true;
+    if (!purchase.journalEntryId) return false;
     const source = journalEntries.find(entry => entry.id === purchase.journalEntryId && entry.companyId === companyId);
     if (!source) return true;
     return Boolean(source.reversalOfEntryId || source.reversedByEntryId ||
