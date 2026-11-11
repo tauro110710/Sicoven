@@ -2328,8 +2328,8 @@ test('SQLite accepts one linked IVA payment reversal and rejects duplicate or un
     bcvRate: 874, referenceDoc: 'REV-2', reversalOfEntryId: paymentJournal.id,
     reversalReason: 'Reversión de pago por referencia incorrecta', workpaperNote: 'Soporte bancario revisado y conciliado',
     items: [
-      { accountCode: '1.1.1.01', debitBs: 50, creditBs: 0, debitUsd: 50 / 874, creditUsd: 0 },
-      { accountCode: '2.1.2.09', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 50 / 874 }
+      { accountCode: '2.1.2.09', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 50 / 874 },
+      { accountCode: '1.1.1.01', debitBs: 50, creditBs: 0, debitUsd: 50 / 874, creditUsd: 0 }
     ], createdAt: '2026-11-11T18:00:00.000Z'
   };
   const reversal = {
