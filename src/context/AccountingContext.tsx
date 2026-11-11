@@ -5638,7 +5638,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       activityDates: getVatOwnActivityDates(currentCompany.id), declarations: vatOwnDeclarations
     });
     if (unfiledActivityPeriods.length > 0) {
-      throw new Error('No se puede preparar esta declaración: existen períodos anteriores con actividad fiscal sin presentar (' + unfiledActivityPeriods.join(', ') + '). Complete esos meses primero para no omitir débito, crédito ni prorrata.');
+      throw new Error('No se puede preparar esta declaración: existen períodos mensuales anteriores sin declaración presentada (' + unfiledActivityPeriods.join(', ') + '). Complete esos meses primero para no omitir débito, crédito ni prorrata.');
     }
     const laterFiledPeriods = getVatOwnFiledLaterPeriods({
       companyId: currentCompany.id, targetPeriod: input.period, declarations: vatOwnDeclarations
@@ -5799,7 +5799,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         activityDates: getVatOwnActivityDates(currentCompany.id), declarations: vatOwnDeclarations
       });
       if (unfiledActivityPeriods.length > 0) {
-        throw new Error('No se puede presentar: existen períodos anteriores con actividad fiscal sin presentar (' + unfiledActivityPeriods.join(', ') + '). Complete la secuencia antes de registrar esta declaración.');
+        throw new Error('No se puede presentar: existen períodos mensuales anteriores sin declaración presentada (' + unfiledActivityPeriods.join(', ') + '). Complete la secuencia antes de registrar esta declaración.');
       }
       const laterFiledPeriods = getVatOwnFiledLaterPeriods({
         companyId: currentCompany.id, targetPeriod: declaration.period, declarations: vatOwnDeclarations
