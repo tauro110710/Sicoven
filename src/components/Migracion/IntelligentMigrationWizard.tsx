@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
-import ExcelJS from 'exceljs';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
 import { analyzePosvenBackupMapping, detectImportSourceSystem, detectUniversalImportFormat, extractUniversalJsonCollections, resolveUniversalPartyReference, resolveUniversalPurchaseDetailRows, prepareUniversalSaleInventoryLines, prepareUniversalPurchaseInventoryLines, classifyUniversalInvoiceRows, groupUniversalJournalRows, isUniversalMovementTypeConceptValid, normalizeUniversalDocumentReference, findUniversalInvoiceJournalCollision, buildUniversalInvoiceIdentity, mapUniversalInventoryMovementType, mapUniversalInventoryMovementConcept, mapUniversalInventoryCostingMethod, mapUniversalInventoryVatTreatment, planUniversalInvoiceSettlements, validateUniversalSettlementDestination, mapUniversalInvoiceSettlementDrafts, mapUniversalSupplierDirectAdvanceDraft, mapUniversalSupplierAdvanceSettlementDraft, selectUniversalRowsByStableKeys, selectUniversalInvoiceSettlements, mapUniversalInventoryItemType, isUniversalProductCollectionPath, getUniversalJsonValueAtPath, shouldUseGenericUniversalAdapters } from '../../types/universalImport';
 import { useAccounting } from '../../context/AccountingContext';
@@ -68,6 +67,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  const downloadTemplate = async (kind: UniversalMasterTemplateKind) => {
   try {
    const template = getUniversalMasterTemplate(kind);
+   const ExcelJS = (await import('exceljs')).default;
    const workbook = new ExcelJS.Workbook();
    workbook.creator = 'SICOVEN';
    workbook.subject = 'Plantilla universal de maestros';
@@ -444,6 +444,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     }else if(ext==='csv'||ext==='tsv'||ext==='txt'){
      parsed=parseCsv(await file.text());
     }else if(ext==='xlsx'||ext==='xlsm'){
+     const ExcelJS = (await import('exceljs')).default;
      const wb=new ExcelJS.Workbook(); await wb.xlsx.load(await file.arrayBuffer());
      if(!wb.worksheets.length)throw new Error(file.name+': no contiene hojas.');
      const sheetRows: Row[] = [];
