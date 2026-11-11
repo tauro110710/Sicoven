@@ -803,6 +803,10 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     idempotencyKeys.add(idempotencyKey);
     const history = timeline.get(declaration.id) || [];
     const eventDate = event.occurredAt.slice(0, 10);
+    if (eventDate < String(declaration.createdAt).slice(0, 10) ||
+        Date.parse(event.recordedAt) < Date.parse(event.occurredAt)) {
+      throw new Error('SQLite rechazó un evento IVA fechado antes de crear el borrador o registrado antes de su fecha efectiva.');
+    }
     const localNow = new Date();
     const localToday = localNow.getFullYear() + '-' + String(localNow.getMonth() + 1).padStart(2, '0') + '-' + String(localNow.getDate()).padStart(2, '0');
     if (eventDate > localToday) throw new Error('SQLite rechazó un evento IVA con fecha futura.');
