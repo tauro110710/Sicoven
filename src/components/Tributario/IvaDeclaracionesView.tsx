@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { CalendarDays, FileText, Receipt, ShoppingCart, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs } from '../../utils/formatters';
-import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, resolveVatOwnPaymentBcvRate } from '../../types/vatOwnDeclaration';
+import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, getUnfiledVatOwnActivityPeriods, resolveVatOwnPaymentBcvRate } from '../../types/vatOwnDeclaration';
 
 const money = (value: number | undefined) => Number.isFinite(value) ? Number(value) : 0;
 const parseLocalizedNumber = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
@@ -35,9 +35,32 @@ export const IvaDeclaracionesView: React.FC = () => {
     item.companyId === currentCompany.id && item.invoiceDate?.startsWith(period) && !item.isCancelled
   ), [purchases, currentCompany.id, period]);
 
+  const reversedJournalIds = useMemo(() => new Set(journalEntries
+    .filter(entry => Boolean(entry.reversalOfEntryId))
+    .map(entry => entry.reversalOfEntryId as string)), [journalEntries]);
   const monthZ = useMemo(() => journalEntries.filter(entry =>
-    entry.companyId === currentCompany.id && Boolean(entry.fiscalZReport) && String(entry.fiscalZReport?.date || entry.date).startsWith(period)
-  ).sort((a, b) => String(a.fiscalZReport?.date || a.date).localeCompare(String(b.fiscalZReport?.date || b.date)) || a.entryNumber - b.entryNumber), [journalEntries, currentCompany.id, period]);
+    entry.companyId === currentCompany.id && Boolean(entry.fiscalZReport) && !reversedJournalIds.has(entry.id) &&
+    String(entry.fiscalZReport?.date || entry.date).startsWith(period)
+  ).sort((a, b) => String(a.fiscalZReport?.date || a.date).localeCompare(String(b.fiscalZReport?.date || b.date)) || a.entryNumber - b.entryNumber), [journalEntries, currentCompany.id, period, reversedJournalIds]);
+  const activityContinuity = useMemo(() => {
+    const activityDates = [
+      ...sales.filter(item => item.companyId === currentCompany.id && !item.isCancelled)
+        .flatMap(item => [item.invoiceDate, item.retentionVoucherDate].filter((date): date is string => Boolean(date))),
+      ...purchases.filter(item => item.companyId === currentCompany.id && !item.isCancelled).map(item => item.invoiceDate),
+      ...journalEntries.filter(entry => entry.companyId === currentCompany.id && Boolean(entry.fiscalZReport) && !reversedJournalIds.has(entry.id))
+        .map(entry => entry.fiscalZReport!.date || entry.date)
+    ];
+    try {
+      return {
+        missing: getUnfiledVatOwnActivityPeriods({
+          companyId: currentCompany.id, targetPeriod: period, activityDates, declarations: vatOwnDeclarations
+        }),
+        error: null
+      };
+    } catch (error) {
+      return { missing: [], error: error instanceof Error ? error.message : 'No se pudo verificar la continuidad de períodos IVA.' };
+    }
+  }, [sales, purchases, journalEntries, currentCompany.id, period, vatOwnDeclarations, reversedJournalIds]);
   const savedDeclaration = vatOwnDeclarations.find(item => item.companyId === currentCompany.id && item.period === period);
   const activeSourceChoices = useMemo(() => savedDeclaration?.status === 'FILED'
     ? savedDeclaration.dailySourceChoices || {}
@@ -90,6 +113,8 @@ export const IvaDeclaracionesView: React.FC = () => {
   }, [currentCompany.id, period, monthPurchases, purchases, vatOwnDeclarations, journalEntries, currentCompany.bcvRate, taxableSalesBase, exemptSalesBase, dailySalesResolution.unresolvedDates]);
   const purchaseSummary = purchaseSummaryResult.summary;
   const purchaseSummaryError = purchaseSummaryResult.error;
+  const unfiledActivityPeriods = activityContinuity.missing;
+  const activityPeriodError = activityContinuity.error;
   const prorationUnavailable = Boolean(purchaseSummaryError?.toLowerCase().includes('prorrata'));
   const purchaseReclassificationItems = purchaseSummaryResult.reclassifications || [];
   const prorationRate = purchaseSummary?.prorationRate ?? null;
@@ -126,7 +151,7 @@ export const IvaDeclaracionesView: React.FC = () => {
     JSON.stringify(purchaseReclassificationItems) !== JSON.stringify(savedDeclaration.purchaseVatReclassificationItems || []));
   const draftNeedsRefresh = savedDeclaration?.status === 'DRAFT' && (
     sourceIdsChanged || sourceChoicesChanged || bcvRateChanged || purchaseReclassificationChanged ||
-    Boolean(purchaseSummaryError) || dailySalesResolution.unresolvedDates.length > 0
+    Boolean(purchaseSummaryError) || unfiledActivityPeriods.length > 0 || Boolean(activityPeriodError) || dailySalesResolution.unresolvedDates.length > 0
   );
 
   const includedZSourceIds = new Set(dailySalesResolution.days
@@ -194,6 +219,8 @@ export const IvaDeclaracionesView: React.FC = () => {
           <div className="text-sm text-amber-950">
             <p className="font-bold">Control previo a la declaración; no es todavía una declaración SENIAT ni un pago registrado.</p>
             {dailySalesResolution.unresolvedDates.length > 0 && <p className="mt-2 font-bold">Selecciona para cada fecha coincidente si el contador registró las ventas mediante el Reporte Z o mediante facturas individuales. SICOVEN incluirá una sola fuente por día.</p>}
+            {unfiledActivityPeriods.length > 0 && <p className="mt-2 font-bold text-rose-800">Hay meses anteriores con actividad fiscal sin declaración presentada: {unfiledActivityPeriods.join(', ')}. Debes completar esos períodos antes de preparar o presentar este mes.</p>}
+            {activityPeriodError && <p className="mt-2 font-bold text-rose-800">{activityPeriodError}</p>}
             <p className="mt-1">El IVA bruto de compras no equivale automáticamente al crédito acreditable: el estimado aplica el tratamiento gravado/exento/común y la prorrata sobre las ventas seleccionadas. El cálculo definitivo se conserva en el borrador. El crédito fiscal y las retenciones deben validarse contra sus comprobantes, requisitos de deducibilidad y período fiscal. Los reportes Z de POS externo se muestran como soporte operativo y requieren conciliación con los documentos fiscales exigibles. Si también se registraron esas mismas facturas individualmente, no deben computarse dos veces. Este saldo no sustituye la revisión del contador ni la Forma 30.</p>
           </div>
         </div>
@@ -249,7 +276,7 @@ export const IvaDeclaracionesView: React.FC = () => {
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h2 className="text-lg font-bold text-slate-900">Declaración mensual · Control y presentación</h2><p className="mt-1 text-sm text-slate-600">Prepara un borrador desde los libros, conserva las fuentes elegidas y registra presentación y enteramientos con su asiento contable.</p></div>
-          {!savedDeclaration && <button type="button" disabled={!isStorageReady || outputVat === null || prorationRate === null || Boolean(purchaseSummaryError)} onClick={async()=>{
+          {!savedDeclaration && <button type="button" disabled={!isStorageReady || outputVat === null || prorationRate === null || Boolean(purchaseSummaryError) || unfiledActivityPeriods.length > 0 || Boolean(activityPeriodError)} onClick={async()=>{
             setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
             try { await createVatOwnDeclaration({period,choices:activeSourceChoices});setWorkflowMessage('Borrador de declaración guardado y confirmado en SQLite.'); }
             catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo preparar la declaración.');}
@@ -261,7 +288,7 @@ export const IvaDeclaracionesView: React.FC = () => {
           {savedDeclaration.status === 'DRAFT' && draftNeedsRefresh && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
             <p className="text-sm font-semibold text-amber-950">El borrador quedó desactualizado frente a los libros o la tasa BCV vigente. Revisa las fuentes diarias pendientes y actualízalo antes de presentarlo. La versión anterior se conservará en el historial.</p>
             {dailySalesResolution.unresolvedDates.length > 0 && <p className="text-xs text-amber-900">Fechas que requieren elegir una fuente: {dailySalesResolution.unresolvedDates.join(', ')}</p>}
-            <button type="button" disabled={workflowBusy || outputVat === null || prorationRate === null || Boolean(purchaseSummaryError) || dailySalesResolution.unresolvedDates.length > 0} onClick={async()=>{
+            <button type="button" disabled={workflowBusy || outputVat === null || prorationRate === null || Boolean(purchaseSummaryError) || unfiledActivityPeriods.length > 0 || Boolean(activityPeriodError) || dailySalesResolution.unresolvedDates.length > 0} onClick={async()=>{
               setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
               try { await createVatOwnDeclaration({period,choices:activeSourceChoices,refresh:true});setWorkflowMessage('Borrador actualizado. La versión anterior quedó conservada en el historial.'); }
               catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo actualizar el borrador.');}
