@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { SaleRecord } from '../../types/accounting';
 import type { SaleCorrectionNoteRequest } from '../../types/saleCorrectionNote';
+import type { Account } from '../../types/accounting';
 
 type Draft = Omit<SaleCorrectionNoteRequest, 'sourceSale' | 'priorCreditNotes' | 'closedThroughDate'> & { sourceSaleId: string };
 
@@ -8,22 +9,27 @@ interface Props {
   sourceSale: SaleRecord;
   kind: 'CREDIT' | 'DEBIT';
   bcvRate: number;
+  treasuryAccounts: Account[];
   onClose: () => void;
   onSubmit: (draft: Draft) => Promise<unknown>;
 }
 
-export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcvRate, onClose, onSubmit }) => {
+export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcvRate, treasuryAccounts, onClose, onSubmit }) => {
   const today = new Date().toISOString().slice(0, 10);
   const [noteDate, setNoteDate] = useState(today);
-  const [noteBcvRate, setNoteBcvRate] = useState('');
-  const [fiscalEmissionMedium, setFiscalEmissionMedium] = useState<'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | ''>('');
-  const [sameMediumAsOriginal, setSameMediumAsOriginal] = useState(false);
+  const [noteBcvRate, setNoteBcvRate] = useState(String(bcvRate || sourceSale.bcvRate || ''));
+  const [fiscalEmissionMedium, setFiscalEmissionMedium] = useState<'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | ''>(sourceSale.fiscalEmissionMedium || '');
+  const [sameMediumAsOriginal, setSameMediumAsOriginal] = useState(sourceSale.sameMediumAsOriginal === true);
   const [noteNumber, setNoteNumber] = useState('');
   const [controlNumber, setControlNumber] = useState('');
   const [taxableBaseBs, setTaxableBaseBs] = useState('0');
   const [exemptAmountBs, setExemptAmountBs] = useState('0');
   const [reason, setReason] = useState('');
   const [workpaperNote, setWorkpaperNote] = useState('');
+  const [treasuryAccountCode, setTreasuryAccountCode] = useState('');
+  const [returnedInventoryQuantities, setReturnedInventoryQuantities] = useState<Record<string, string>>(() =>
+    Object.fromEntries([...new Set((sourceSale.inventoryLines || []).map(line => line.productId))].map(id => [id, '0']))
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
@@ -38,7 +44,9 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
         kind, sourceSaleId: sourceSale.id, noteDate, noteNumber, controlNumber,
         taxableBaseBs: parseAmount(taxableBaseBs), exemptAmountBs: parseAmount(exemptAmountBs),
         bcvRate: parseAmount(noteBcvRate), reason, workpaperNote,
-        fiscalEmissionMedium: fiscalEmissionMedium as 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY', sameMediumAsOriginal
+        fiscalEmissionMedium: fiscalEmissionMedium as 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY', sameMediumAsOriginal,
+        treasuryAccountCode: treasuryAccountCode || undefined,
+        returnedInventoryQuantities: inventoryReturnOptions.length ? Object.fromEntries(Object.entries(returnedInventoryQuantities).map(([id, value]) => [id, parseAmount(value)])) : undefined
       });
       onClose();
     } catch (cause) {
@@ -60,7 +68,7 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
           <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg border px-3 py-1.5 text-xs">Cerrar</button>
         </div>
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
-          Se habilita para facturas a crédito sin retención IVA ni IGTF. Si la factura contiene mercancía, la NC solo se confirma después de la devolución física total y de conciliar el Kardex y el asiento de costo en Bs y USD. Los cobros previos limitan la NC al saldo exigible; ventas de contado y reembolsos requieren un circuito separado.
+          La nota conserva el vínculo con la factura original. Las retenciones, el impuesto adicional del 15% y el IGTF se calculan por separado. En mercancía, indique las unidades realmente devueltas; SICOVEN las concilia con el Kardex y el costo histórico. Si el cliente ya pagó, puede registrarse el reembolso desde la cuenta de tesorería seleccionada.
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="text-xs font-semibold text-slate-700">Fecha de emisión
@@ -82,6 +90,22 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
             <input required type="text" inputMode="decimal" value={exemptAmountBs} onChange={e=>setExemptAmountBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
           </label>
         </div>
+        {kind === 'CREDIT' && inventoryReturnOptions.length > 0 && <section className="rounded-xl border border-slate-200 p-3">
+          <h3 className="text-xs font-bold text-slate-800">Mercancía devuelta físicamente</h3>
+          <p className="mt-1 text-[11px] text-slate-500">Indique la cantidad por artículo. La base y el exento se calculan automáticamente según las líneas originales.</p>
+          <div className="mt-2 space-y-2">
+            {inventoryReturnOptions.map(line => <label key={line.productId} className="grid grid-cols-[1fr_100px] items-center gap-3 text-xs">
+              <span>{line.productName}<span className="ml-1 text-slate-500">({line.quantity} vendidas)</span></span>
+              <input type="number" min="0" max={line.quantity} step="0.001" value={returnedInventoryQuantities[line.productId] || '0'} onChange={event=>updateReturnedQuantity(line.productId,event.target.value)} className="w-full rounded-lg border p-2 text-right" />
+            </label>)}
+          </div>
+        </section>}
+        <label className="block text-xs font-semibold text-slate-700">Cuenta de tesorería para cobro o reembolso (cuando aplique)
+          <select value={treasuryAccountCode} onChange={event=>setTreasuryAccountCode(event.target.value)} required={sourceSale.paymentTerm === 'CONTADO'} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal">
+            <option value="">Seleccione cuenta si aplica…</option>
+            {treasuryAccounts.map(account=><option key={account.code} value={account.code}>{account.code} · {account.name}</option>)}
+          </select>
+        </label>
         <label className="block text-xs font-semibold text-slate-700">Medio de emisión utilizado por la factura original
           <select required value={fiscalEmissionMedium} onChange={e=>setFiscalEmissionMedium(e.target.value as 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | '')} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal">
             <option value="">Seleccione el medio original…</option><option value="DIGITAL">Digital / electrónico</option><option value="FISCAL_MACHINE">Máquina fiscal</option><option value="CONTINGENCY">Formato de contingencia autorizado</option>
@@ -94,12 +118,12 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
           <textarea required minLength={10} value={reason} onChange={e=>setReason(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
         </label>
         <label className="block text-xs font-semibold text-slate-700">Papel de trabajo y soporte revisado
-          <textarea required minLength={10} value={workpaperNote} onChange={e=>setWorkpaperNote(e.target.value)} rows={3} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
+          <textarea value={workpaperNote} onChange={e=>setWorkpaperNote(e.target.value)} rows={3} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
         </label>
         {error && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</div>}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button>
-          <button type="submit" disabled={submitting || !fiscalEmissionMedium || !sameMediumAsOriginal} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{submitting ? 'Confirmando SQLite…' : 'Registrar y confirmar'}</button>
+          <button type="submit" disabled={submitting || !fiscalEmissionMedium || !sameMediumAsOriginal || (sourceSale.paymentTerm === 'CONTADO' && !treasuryAccountCode)} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{submitting ? 'Confirmando SQLite…' : 'Registrar y confirmar'}</button>
         </div>
       </form>
     </div>
