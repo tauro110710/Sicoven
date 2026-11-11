@@ -4323,6 +4323,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const source = sales.find(item => item.id === draft.sourceSaleId && item.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró la factura original de venta en la empresa activa.');
     if (source.documentType !== '01' || source.isCancelled) throw new Error('Solo se pueden corregir facturas de venta vigentes tipo 01.');
+    const priorCreditNotes = sales.filter(item => item.companyId === currentCompany.id &&
+      item.originalSaleId === source.id && item.documentType === '03' && !item.isCancelled);
 
     const sourceEntry = journalEntries.find(item => item.id === source.journalEntryId && item.companyId === currentCompany.id);
     const hasLinkedInventoryJournal = journalEntries.some(entry =>
@@ -4336,8 +4338,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     ));
     const linkedInventory = hasInventoryAccountingFootprint || movements.some(item => item.companyId === currentCompany.id &&
       (item.journalEntryId === source.journalEntryId ||
-       item.documentRef.trim().toUpperCase().replace(/\\s+/g, '') ===
-       ('FAC-' + source.invoiceNumber).trim().toUpperCase().replace(/\\s+/g, '')));
+       item.documentRef.trim().toUpperCase().replace(/\s+/g, '') ===
+       ('FAC-' + source.invoiceNumber).trim().toUpperCase().replace(/\s+/g, '')));
     if (linkedInventory && draft.kind === 'CREDIT') {
       if (!sourceEntry) throw new Error('La factura con inventario no conserva su asiento original verificable.');
       const cumulativeReturnQuantities: Record<string, number> = {};
@@ -4358,13 +4360,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
     }
     const number = String(draft.noteNumber || '').trim();
-    const normalizedNumber = number.toUpperCase().replace(/\\s+/g, '');
+    const normalizedNumber = number.toUpperCase().replace(/\s+/g, '');
     if (sales.some(item => item.companyId === currentCompany.id &&
-      String(item.invoiceNumber || '').trim().toUpperCase().replace(/\\s+/g, '') === normalizedNumber)) {
+      String(item.invoiceNumber || '').trim().toUpperCase().replace(/\s+/g, '') === normalizedNumber)) {
       throw new Error('El número fiscal de la nota ya está registrado en esta empresa.');
     }
-    const priorCreditNotes = sales.filter(item => item.companyId === currentCompany.id &&
-      item.originalSaleId === source.id && item.documentType === '03' && !item.isCancelled);
     const amounts = calculateSaleCorrectionNote({
       ...draft, sourceSale: source, priorCreditNotes,
       closedThroughDate: currentCompany.closedThroughDate || undefined
