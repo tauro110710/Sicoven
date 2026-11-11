@@ -366,6 +366,7 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
   const originalByNoteId = new Map<string, PurchaseRecord>();
   const priorNotes: Array<{ item: PurchaseRecord; original: PurchaseRecord; prior: VatOwnDeclaration; treatment: VatOwnPurchaseCreditTreatment; taxRate: number; originalVatAmountBs: number; supplierRif: string }> = [];
   const historicalOriginalVatById = new Map<string, number>();
+  const originalSnapshotById = new Map<string, Record<string, unknown>>();
   const getFiledPurchaseSnapshot = (declaration: VatOwnDeclaration, original: PurchaseRecord): {
     treatment: VatOwnPurchaseCreditTreatment;
     taxRate: number;
@@ -455,7 +456,6 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
   // immutable snapshots of filed declarations, never from mutable live records.
   const priorFiledNoteVatByOriginal = new Map<string, number>();
   const priorFiledNotesByOriginal = new Map<string, Array<Record<string, unknown>>>();
-  const originalSnapshotById = new Map<string, Record<string, unknown>>();
   const countedPriorNoteIds = new Set<string>();
   for (const filed of input.priorDeclarations) {
     if (filed.companyId !== input.companyId || filed.status !== 'FILED' || filed.period >= input.period) continue;
