@@ -112,7 +112,7 @@ export const IvaDeclaracionesView: React.FC = () => {
     ...(purchaseSummary?.relatedPurchaseIds || []),
     ...receivedWithholdingRows.map(item => item.id)
   ])].sort();
-  const savedSourceIds = [...(savedDeclaration?.sourceIds || [])].sort();
+  const savedSourceIds = [...(savedDeclaration?.sourceIds || []), ...(savedDeclaration?.relatedSourceIds || [])].sort();
   const sourceIdsChanged = Boolean(savedDeclaration && JSON.stringify(currentSourceIds) !== JSON.stringify(savedSourceIds));
   const sourceChoicesChanged = Boolean(savedDeclaration?.status === 'DRAFT' && dailySalesResolution.conflicts.some(conflict =>
     activeSourceChoices[conflict.date] !== savedDeclaration.dailySourceChoices?.[conflict.date]
@@ -250,7 +250,7 @@ export const IvaDeclaracionesView: React.FC = () => {
           }} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{workflowBusy?'Guardando…':'Preparar declaración mensual'}</button>}
         </div>
         {savedDeclaration ? <>
-          <div className="flex flex-wrap items-center gap-2 text-xs"><span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700">{savedDeclaration.period}</span><span className={`rounded-full px-3 py-1 font-bold ${savedDeclaration.status==='FILED'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}`}>{savedDeclaration.status==='FILED'?'PRESENTADA':'BORRADOR'}</span>{savedDeclaration.declarationNumber && <span className="font-mono text-slate-600">N° {savedDeclaration.declarationNumber}</span>}<span className="text-slate-500">Fuentes vinculadas: {savedDeclaration.sourceIds.length}</span></div>
+          <div className="flex flex-wrap items-center gap-2 text-xs"><span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700">{savedDeclaration.period}</span><span className={`rounded-full px-3 py-1 font-bold ${savedDeclaration.status==='FILED'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}`}>{savedDeclaration.status==='FILED'?'PRESENTADA':'BORRADOR'}</span>{savedDeclaration.declarationNumber && <span className="font-mono text-slate-600">N° {savedDeclaration.declarationNumber}</span>}<span className="text-slate-500">Fuentes fiscales: {savedDeclaration.sourceIds.length} · Facturas relacionadas: {savedDeclaration.relatedSourceIds?.length || 0}</span></div>
           {savedDeclaration.status === 'DRAFT' && draftNeedsRefresh && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
             <p className="text-sm font-semibold text-amber-950">El borrador quedó desactualizado frente a los libros o la tasa BCV vigente. Revisa las fuentes diarias pendientes y actualízalo antes de presentarlo. La versión anterior se conservará en el historial.</p>
             {dailySalesResolution.unresolvedDates.length > 0 && <p className="text-xs text-amber-900">Fechas que requieren elegir una fuente: {dailySalesResolution.unresolvedDates.join(', ')}</p>}
@@ -265,7 +265,7 @@ export const IvaDeclaracionesView: React.FC = () => {
             <summary className="cursor-pointer font-bold text-slate-700">Historial de versiones del borrador ({savedDeclaration.revisions!.length})</summary>
             <div className="mt-2 space-y-2">{savedDeclaration.revisions!.map(revision=><div key={revision.revision} className="rounded-md bg-slate-50 p-2">
               <p className="font-semibold">Versión anterior {revision.revision} · {revision.revisedAt.slice(0,10)}</p>
-              <p>IVA por enterar: {format(revision.position.amountDueBs)} · Crédito trasladable: {format(revision.position.creditCarryForwardBs)} · Fuentes: {revision.sourceIds.length}</p>
+              <p>IVA por enterar: {format(revision.position.amountDueBs)} · Crédito trasladable: {format(revision.position.creditCarryForwardBs)} · Fuentes: {revision.sourceIds.length} · Relacionadas: {revision.relatedSourceIds?.length || 0}</p>
               <p className="text-slate-500">{revision.reason}</p>
             </div>)}</div>
           </details>}
