@@ -201,6 +201,7 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     item.companyId === input.companyId && item.invoiceDate.startsWith(input.period) && !item.isCancelled
   );
   const relatedPurchaseIds: string[] = [];
+  const originalByNoteId = new Map<string, PurchaseRecord>();
   const priorNotes: Array<{ item: PurchaseRecord; original: PurchaseRecord; prior: VatOwnDeclaration }> = [];
   for (const item of periodPurchases) {
     if (item.documentType !== '03') continue;
@@ -216,6 +217,7 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
       throw new Error('La nota de crédito de compras ' + item.invoiceNumber + ' no tiene una factura original única y verificable. Vincule la factura antes de declarar.');
     }
     const original = candidates[0];
+    originalByNoteId.set(item.id, original);
     relatedPurchaseIds.push(original.id);
     if (original.invoiceDate.slice(0, 7) >= input.period) {
       if (original.invoiceDate.slice(0, 7) !== input.period) {
@@ -233,15 +235,12 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     priorNotes.push({ item, original, prior: matches[0] });
   }
   const hasCommonCurrentPurchases = periodPurchases.some(item => {
-    if (item.documentType === '03') {
-      const original = input.allPurchases.find(source => source.id === item.originalPurchaseId ||
-        (!item.originalPurchaseId && source.companyId === input.companyId &&
-          source.invoiceNumber === item.affectedInvoiceNumber &&
-          (!item.affectedInvoiceDate || source.invoiceDate === item.affectedInvoiceDate)));
-      if (original && original.invoiceDate.slice(0, 7) < input.period) return false;
-    }
-    return resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment) === 'COMMON' &&
-      Number(item.vatAmountBs || 0) > 0;
+    const original = originalByNoteId.get(item.id);
+    if (original && original.invoiceDate.slice(0, 7) < input.period) return false;
+    const treatment = original
+      ? resolveVatOwnPurchaseCreditTreatment(original.vatCreditTreatment)
+      : resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment);
+    return treatment === 'COMMON' && Number(item.vatAmountBs || 0) > 0;
   });
   const prorationRate = resolveVatOwnProrationRate({
     taxableSalesBaseBs: input.taxableSalesBaseBs,
@@ -293,7 +292,10 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
       }
     }
     const sign = item.documentType === '03' ? -1 : 1;
-    const treatment = resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment);
+    const original = originalByNoteId.get(item.id);
+    const treatment = original
+      ? resolveVatOwnPurchaseCreditTreatment(original.vatCreditTreatment)
+      : resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment);
     const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : prorationRate;
     add('gross', sign * amountBs);
     add('eligible', sign * amountBs * factor);
