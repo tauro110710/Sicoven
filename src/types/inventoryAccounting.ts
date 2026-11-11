@@ -297,6 +297,35 @@ export function calculateFifoIssue(layersInput: CostLayer[], quantityToIssue: nu
   };
 }
 
+export interface FifoAdjustmentResult extends InventoryCostResult {
+  remainingLayers: CostLayer[];
+  balanceTotalBs: number;
+  balanceTotalUsd: number;
+}
+
+/** Applies a signed stock adjustment directly to PEPS layers. */
+export function applyFifoAdjustment(layersInput: CostLayer[], delta: number, unitCostBs: number, unitCostUsd: number, date: string, documentRef?: string): FifoAdjustmentResult {
+  if (!Array.isArray(layersInput) || !Number.isFinite(delta) || Math.abs(delta) <= 1e-8 || !validNonNegative(unitCostBs) || !validNonNegative(unitCostUsd) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) !== date) throw new Error('Los datos del ajuste PEPS no son válidos.');
+  const layers = layersInput.map(layer => ({ ...layer })).sort((x, y) => String(x.date || '').localeCompare(String(y.date || '')));
+  const available = layers.reduce((sum, layer) => sum + Number(layer.quantity), 0);
+  if (!Number.isFinite(available) || layers.some(layer => !validPositive(Number(layer.quantity)) || !validNonNegative(Number(layer.unitCostBs)) || !validNonNegative(Number(layer.unitCostUsd)))) throw new Error('Las capas PEPS disponibles contienen datos inválidos.');
+  const quantity = Math.abs(delta);
+  let totalCostBs = 0; let totalCostUsd = 0;
+  if (delta > 0) {
+    totalCostBs = cents(quantity * unitCostBs); totalCostUsd = usdPrecision(quantity * unitCostUsd);
+    layers.push({ quantity, unitCostBs, unitCostUsd, date, documentRef });
+  } else {
+    if (quantity - available > 1e-8) throw new Error('Existencia insuficiente para PEPS: disponibles ' + available + ', solicitadas ' + quantity + '.');
+    const fifo = calculateFifoIssue(layers, quantity); totalCostBs = fifo.totalCostBs; totalCostUsd = fifo.totalCostUsd;
+    let remaining = quantity;
+    for (const layer of layers) { if (remaining <= 1e-8) break; const consumed = Math.min(layer.quantity, remaining); layer.quantity -= consumed; remaining -= consumed; }
+    if (remaining > 1e-8) throw new Error('No se pudo conciliar la reducción del ajuste con las capas PEPS.');
+  }
+  const remainingLayers = layers.filter(layer => layer.quantity > 1e-8);
+  const balanceTotalBs = cents(remainingLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0));
+  const balanceTotalUsd = usdPrecision(remainingLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0));
+  return { quantity, totalCostBs, totalCostUsd, unitCostBs: totalCostBs / quantity, unitCostUsd: totalCostUsd / quantity, remainingLayers, balanceTotalBs, balanceTotalUsd };
+}
 /** Valida los datos comunes antes de aceptar un movimiento del libro de inventario. */
 export function validateInventoryMovement(input: {
   date: string;
