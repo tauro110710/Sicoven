@@ -6475,6 +6475,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setVatVouchers([]);
     setVatWithholdingDeclarations([]);
     setVatWithholdingDeclarationEvents([]);
+    setVatOwnDeclarations([]);
+    setVatOwnDeclarationEvents([]);
     setIslrVouchers([]);
     setBankAccounts([]);
     setBankStatementMovements([]);
@@ -6513,6 +6515,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setVatVouchers([]);
     setVatWithholdingDeclarations([]);
     setVatWithholdingDeclarationEvents([]);
+    setVatOwnDeclarations([]);
+    setVatOwnDeclarationEvents([]);
     setIslrVouchers([]);
     setBankAccounts([]);
     setBankStatementMovements([]);
