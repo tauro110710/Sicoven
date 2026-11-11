@@ -33,6 +33,19 @@ export function getUnfiledVatOwnActivityPeriods(input: {
   return [...activityPeriods].filter(period => !filedPeriods.has(period)).sort();
 }
 
+export function getVatOwnFiledLaterPeriods(input: {
+  companyId: string;
+  targetPeriod: string;
+  declarations: readonly VatOwnDeclaration[];
+}): string[] {
+  if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(input.targetPeriod)) {
+    throw new Error('El período objetivo de IVA no es válido.');
+  }
+  return [...new Set(input.declarations
+    .filter(item => item.companyId === input.companyId && item.status === 'FILED' && item.period > input.targetPeriod)
+    .map(item => item.period))].sort();
+}
+
 export function areVatOwnDeclarationSourcesCurrent(
   declarationSourceIds: readonly string[],
   currentSourceIds: readonly string[]
