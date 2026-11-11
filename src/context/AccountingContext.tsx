@@ -5687,7 +5687,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         addLine(input16, declaration.position.creditCarryForwardBs, 0, 'Crédito fiscal trasladable al período siguiente · ' + declaration.period);
         const netPayable = accounts.find(item => item.code === '2.1.2.09' && item.type === 'PASIVO' && item.isMovement);
         if (declaration.position.amountDueBs > 0 && !netPayable) throw new Error('Falta la cuenta 2.1.2.09 para IVA neto por enterar.');
-        addLine(liability16, declaration.position.debitAdjustmentsBs, declaration.position.creditAdjustmentsBs, 'Ajustes fiscales de IVA · ' + declaration.period);
+        addLine(liability16, declaration.position.debitAdjustmentsBs, 0, 'Ajustes que incrementan el débito fiscal · ' + declaration.period);
+        addLine(liability16, 0, declaration.position.creditAdjustmentsBs, 'Ajustes que reducen el débito fiscal · ' + declaration.period);
         addLine(netPayable, 0, declaration.position.amountDueBs, 'IVA neto por enterar · ' + declaration.period);
         const debitBs = items.reduce((sum,item)=>sum+item.debitBs,0);
         const creditBs = items.reduce((sum,item)=>sum+item.creditBs,0);
