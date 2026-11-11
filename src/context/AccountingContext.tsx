@@ -53,7 +53,7 @@ import { FinancialDisclosure, validateFinancialDisclosure } from '../types/finan
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
-import { getReceivedVatWithholdingSales, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, validateVatOwnEvent } from '../types/vatOwnDeclaration';
+import { getReceivedVatWithholdingSales, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnProrationRate, validateVatOwnEvent } from '../types/vatOwnDeclaration';
 import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
@@ -5644,8 +5644,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const taxableSalesBaseBs = resolution.days.reduce((sum, day) =>
         sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
       const exemptSalesBaseBs = resolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
-      const salesDenominator = taxableSalesBaseBs + exemptSalesBaseBs;
-      const prorationRate = salesDenominator > 0 ? taxableSalesBaseBs / salesDenominator : 1;
+      const hasCommonPurchases = monthPurchases.some(item =>
+        (item.vatCreditTreatment || 'COMMON') === 'COMMON' && Number(item.vatAmountBs || 0) > 0
+      );
+      const prorationRate = resolveVatOwnProrationRate({
+        taxableSalesBaseBs, exemptSalesBaseBs, hasCommonPurchases
+      });
+      if (prorationRate === null) {
+        throw new Error('No se puede determinar la prorrata del IVA de compras comunes: el período no tiene una base válida de ventas gravadas y exentas. Concílielas o clasifique cada compra según su destino fiscal antes de preparar la declaración.');
+      }
       const purchaseRows = monthPurchases.map(item => {
         const sign = item.documentType === '03' ? -1 : 1;
         const gross = Number(item.vatAmountBs || 0);
