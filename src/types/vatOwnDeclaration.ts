@@ -238,7 +238,7 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
   const reclassifications: VatOwnPurchaseCreditSummary['reclassifications'] = [];
   const originalByNoteId = new Map<string, PurchaseRecord>();
   const priorNotes: Array<{ item: PurchaseRecord; original: PurchaseRecord; prior: VatOwnDeclaration }> = [];
-  const normalizeFiscalReference = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
+  const normalizeFiscalReference = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
   for (const item of periodPurchases) {
     if (item.documentType !== '03') continue;
     const supplierRif = normalizeFiscalReference(item.supplierRif);
