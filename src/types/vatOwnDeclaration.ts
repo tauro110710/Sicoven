@@ -2,6 +2,8 @@ export type VatOwnDeclarationStatus = 'DRAFT' | 'FILED';
 
 export interface VatOwnPositionInput {
   outputVatBs: number;
+  outputVat16Bs?: number;
+  outputVat8Bs?: number;
   purchaseCreditBs: number;
   receivedWithholdingsBs: number;
   priorCreditBs?: number;
@@ -11,6 +13,8 @@ export interface VatOwnPositionInput {
 
 export interface VatOwnPosition {
   outputVatBs: number;
+  outputVat16Bs: number;
+  outputVat8Bs: number;
   purchaseCreditBs: number;
   receivedWithholdingsBs: number;
   priorCreditAppliedBs: number;
@@ -59,23 +63,27 @@ const amount = (value: number | undefined, field: string): number => {
 
 export function calculateVatOwnPosition(input: VatOwnPositionInput): VatOwnPosition {
   const outputVatBs = amount(input.outputVatBs, 'IVA débito');
+  const outputVat16Bs = amount(input.outputVat16Bs ?? outputVatBs, 'IVA débito 16%');
+  const outputVat8Bs = amount(input.outputVat8Bs, 'IVA débito 8%');
+  if (Math.abs(outputVat16Bs + outputVat8Bs - outputVatBs) > 0.02) {
+    throw new Error('El desglose de IVA 16% y 8% no concilia con el débito fiscal total.');
+  }
   const purchaseCreditBs = amount(input.purchaseCreditBs, 'Crédito fiscal de compras');
   const receivedWithholdingsBs = amount(input.receivedWithholdingsBs, 'Retenciones de IVA recibidas');
-  const priorCreditBs = amount(input.priorCreditBs, 'Crédito de períodos anteriores');
+  const priorCreditAvailableBs = amount(input.priorCreditBs, 'Crédito de períodos anteriores');
   const debitAdjustmentsBs = amount(input.debitAdjustmentsBs, 'Ajustes al débito');
   const creditAdjustmentsBs = amount(input.creditAdjustmentsBs, 'Ajustes al crédito');
-  const netTaxBs = outputVatBs + debitAdjustmentsBs - purchaseCreditBs -
-    receivedWithholdingsBs - creditAdjustmentsBs - priorCreditBs;
+  const balanceBeforePriorCredit = outputVatBs + debitAdjustmentsBs - purchaseCreditBs -
+    receivedWithholdingsBs - creditAdjustmentsBs;
+  const priorCreditAppliedBs = Math.min(priorCreditAvailableBs, Math.max(0, balanceBeforePriorCredit));
+  const unusedPriorCreditBs = priorCreditAvailableBs - priorCreditAppliedBs;
+  const netTaxBs = balanceBeforePriorCredit - priorCreditAppliedBs;
   return {
-    outputVatBs,
-    purchaseCreditBs,
-    receivedWithholdingsBs,
-    priorCreditAppliedBs: priorCreditBs,
-    debitAdjustmentsBs,
-    creditAdjustmentsBs,
-    netTaxBs,
-    amountDueBs: Math.max(0, netTaxBs),
-    creditCarryForwardBs: Math.max(0, -netTaxBs)
+    outputVatBs, outputVat16Bs, outputVat8Bs,
+    purchaseCreditBs, receivedWithholdingsBs,
+    priorCreditAppliedBs, debitAdjustmentsBs, creditAdjustmentsBs,
+    netTaxBs, amountDueBs: Math.max(0, netTaxBs),
+    creditCarryForwardBs: Math.max(0, -netTaxBs) + unusedPriorCreditBs
   };
 }
 
@@ -173,6 +181,8 @@ export interface VatOwnDailySalesSource {
   source: 'Z' | 'INDIVIDUAL';
   sourceIds: string[];
   outputVatBs: number;
+  outputVat16Bs: number;
+  outputVat8Bs: number;
   taxableBase16Bs: number;
   taxableBase8Bs: number;
   taxableBase31Bs: number;
@@ -210,13 +220,15 @@ export function resolveVatOwnDailySalesSources(input: {
   };
   for (const report of input.zReports) {
     const day = ensure(report.date);
-    if (!day.z) day.z = { date: report.date, source: 'Z', sourceIds: [], outputVatBs: 0, taxableBase16Bs: 0, taxableBase8Bs: 0, taxableBase31Bs: 0, exemptSalesBs: 0 };
+    if (!day.z) day.z = { date: report.date, source: 'Z', sourceIds: [], outputVatBs: 0, outputVat16Bs: 0, outputVat8Bs: 0, taxableBase16Bs: 0, taxableBase8Bs: 0, taxableBase31Bs: 0, exemptSalesBs: 0 };
     const target = day.z;
     target.sourceIds.push(report.id);
     target.taxableBase16Bs += amount(report.taxableBase16Bs, 'Base 16% del Z');
     target.taxableBase8Bs += amount(report.taxableBase8Bs, 'Base 8% del Z');
     target.taxableBase31Bs += amount(report.taxableBase31Bs, 'Base 31% del Z');
-    target.outputVatBs += amount(report.vat16Bs, 'IVA 16% del Z') + amount(report.vat8Bs, 'IVA 8% del Z') + amount(report.vat31Bs, 'IVA 31% del Z');
+    target.outputVat16Bs += amount(report.vat16Bs, 'IVA 16% del Z') + amount(report.vat31Bs, 'IVA 16% de base 31% del Z');
+    target.outputVat8Bs += amount(report.vat8Bs, 'IVA 8% del Z');
+    target.outputVatBs += amount(report.vat16Bs, 'IVA 16% del Z') + amount(report.vat8Bs, 'IVA 8% del Z') + amount(report.vat31Bs, 'IVA 16% de base 31% del Z');
     target.exemptSalesBs += amount(report.exemptSalesBs, 'Ventas exentas del Z');
   }
   for (const sale of input.sales) {
@@ -226,6 +238,8 @@ export function resolveVatOwnDailySalesSources(input: {
     const sign = sale.documentType === '03' ? -1 : 1;
     target.sourceIds.push(sale.id);
     target.outputVatBs += sign * amount(sale.vatAmountBs, 'IVA de venta');
+    if (sale.taxRate === 8) target.outputVat8Bs += sign * amount(sale.vatAmountBs, 'IVA 8% de venta');
+    else target.outputVat16Bs += sign * amount(sale.vatAmountBs, 'IVA 16% de venta');
     target.exemptSalesBs += sign * amount(sale.exemptAmountBs, 'Venta exenta');
     if (sale.taxRate === 16) target.taxableBase16Bs += sign * amount(sale.taxableBaseBs, 'Base 16%');
     else if (sale.taxRate === 8) target.taxableBase8Bs += sign * amount(sale.taxableBaseBs, 'Base 8%');
