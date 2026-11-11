@@ -466,6 +466,8 @@ test('allocates non-creditable VAT proportionally across multiple original debit
   ]);
   assert.equal(items.reduce((sum, item) => sum + item.debitBs, 0), 80);
   assert.equal(items.reduce((sum, item) => sum + item.creditBs, 0), 80);
+  assert.equal(items.reduce((sum, item) => sum + item.debitUsd, 0), 0.4);
+  assert.equal(items.reduce((sum, item) => sum + item.creditUsd, 0), 0.4);
 });
 
 test('reverses the prior non-creditable VAT reclassification when a prior-period purchase is credited', () => {
@@ -495,6 +497,8 @@ test('reverses the prior non-creditable VAT reclassification when a prior-period
   assert.equal(items[0].creditBs, 40);
   assert.equal(items[1].accountCode, '1.1.3.01');
   assert.equal(items[1].debitBs, 40);
+  assert.equal(items.reduce((sum, item) => sum + item.debitUsd, 0), 0.2);
+  assert.equal(items.reduce((sum, item) => sum + item.creditUsd, 0), 0.2);
 });
 
 test('blocks a prior-period purchase credit note when its original invoice was never included in a filed declaration', () => {
