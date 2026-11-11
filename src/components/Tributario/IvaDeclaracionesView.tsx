@@ -248,7 +248,7 @@ export const IvaDeclaracionesView: React.FC = () => {
           <label className="flex items-center gap-2 rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
             <CalendarDays className="h-4 w-4" />
             <span>Período</span>
-            <input aria-label="Período mensual" type="month" value={period} onChange={event => setPeriod(event.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-1" />
+            <input aria-label="Período mensual" type="month" value={period} onChange={event => setPeriod(event.target.value.trim())} className="rounded-md border border-slate-300 bg-white px-2 py-1" />
           </label>
         </div>
       </section>
