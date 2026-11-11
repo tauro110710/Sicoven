@@ -53,6 +53,8 @@ import { FinancialDisclosure, validateFinancialDisclosure } from '../types/finan
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
+import { calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, validateVatOwnEvent } from '../types/vatOwnDeclaration';
+import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
@@ -199,6 +201,10 @@ interface AccountingContextType {
   vatVouchers: VatRetentionVoucher[];
   vatWithholdingDeclarations: VatWithholdingDeclaration[];
   vatWithholdingDeclarationEvents: VatWithholdingDeclarationEvent[];
+  vatOwnDeclarations: VatOwnDeclaration[];
+  vatOwnDeclarationEvents: VatOwnDeclarationEvent[];
+  createVatOwnDeclaration: (input: { period: string; choices?: Record<string, 'Z' | 'INDIVIDUAL'> }) => Promise<VatOwnDeclaration>;
+  recordVatOwnDeclarationEvent: (declarationId: string, draft: Omit<VatOwnDeclarationEvent, 'id' | 'declarationId' | 'recordedAt' | 'journalEntryId'>) => Promise<VatOwnDeclarationEvent>;
   createVatWithholdingDeclaration: (input: { year: number; month: number; window: VatDeclarationWindow; zeroOperations?: boolean; legacyFiscalDates?: Record<string, { fiscalDate: string; note: string }> }) => Promise<VatWithholdingDeclaration>;
   recordVatWithholdingDeclarationEvent: (declarationId: string, draft: Omit<VatWithholdingDeclarationEvent, 'id' | 'declarationId' | 'recordedAt'>) => Promise<VatWithholdingDeclarationEvent>;
   islrVouchers: IslrRetentionVoucher[];
@@ -347,6 +353,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const saved = readBrowserStorage(`${STORAGE_KEY}_vatWithholdingDeclarationEvents`);
       return saved ? JSON.parse(saved) : [];
     } catch { return []; }
+  });
+
+  const [vatOwnDeclarations, setVatOwnDeclarations] = useState<VatOwnDeclaration[]>(() => {
+    try { const saved = readBrowserStorage(`${STORAGE_KEY}_vatOwnDeclarations`); return saved ? JSON.parse(saved) : []; }
+    catch { return []; }
+  });
+  const [vatOwnDeclarationEvents, setVatOwnDeclarationEvents] = useState<VatOwnDeclarationEvent[]>(() => {
+    try { const saved = readBrowserStorage(`${STORAGE_KEY}_vatOwnDeclarationEvents`); return saved ? JSON.parse(saved) : []; }
+    catch { return []; }
   });
 
   const [islrVouchers, setIslrVouchers] = useState<IslrRetentionVoucher[]>(() => {
@@ -1094,7 +1109,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, fixedAssets,
-    customers, suppliers, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency
+    customers, suppliers, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, vatOwnDeclarations, vatOwnDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency
   };
 
   useEffect(() => {
@@ -1145,6 +1160,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             if (Array.isArray(saved.vatVouchers)) setVatVouchers(saved.vatVouchers as VatRetentionVoucher[]);
             if (Array.isArray(saved.vatWithholdingDeclarations)) setVatWithholdingDeclarations(saved.vatWithholdingDeclarations as VatWithholdingDeclaration[]);
             if (Array.isArray(saved.vatWithholdingDeclarationEvents)) setVatWithholdingDeclarationEvents(saved.vatWithholdingDeclarationEvents as VatWithholdingDeclarationEvent[]);
+            if (Array.isArray(saved.vatOwnDeclarations)) setVatOwnDeclarations(saved.vatOwnDeclarations as VatOwnDeclaration[]);
+            if (Array.isArray(saved.vatOwnDeclarationEvents)) setVatOwnDeclarationEvents(saved.vatOwnDeclarationEvents as VatOwnDeclarationEvent[]);
             if (Array.isArray(saved.islrVouchers)) setIslrVouchers(saved.islrVouchers as IslrRetentionVoucher[]);
             if (Array.isArray(saved.bankAccounts)) setBankAccounts(saved.bankAccounts as BankAccount[]);
             if (Array.isArray(saved.bankStatementMovements)) setBankStatementMovements(saved.bankStatementMovements as BankStatementMovement[]);
@@ -1170,6 +1187,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             setVatVouchers([]);
             setVatWithholdingDeclarations([]);
             setVatWithholdingDeclarationEvents([]);
+    setVatOwnDeclarations([]);
+    setVatOwnDeclarationEvents([]);
             setIslrVouchers([]);
             setBankAccounts([]);
             setBankStatementMovements([]);
@@ -1195,6 +1214,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               vatVouchers: [],
               vatWithholdingDeclarations: [],
               vatWithholdingDeclarationEvents: [],
+              vatOwnDeclarations: [],
+              vatOwnDeclarationEvents: [],
               islrVouchers: [],
               bankAccounts: [],
               bankStatementMovements: [],
@@ -5530,6 +5551,214 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
+  const createVatOwnDeclaration = async (input: { period: string; choices?: Record<string, 'Z' | 'INDIVIDUAL'> }): Promise<VatOwnDeclaration> => {
+    assertSQLitePersistenceReady('Preparar declaración mensual de IVA');
+    if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(input.period)) throw new Error('Seleccione un período mensual válido.');
+    if (vatOwnDeclarations.some(item => item.companyId === currentCompany.id && item.period === input.period)) {
+      throw new Error('Ya existe una declaración mensual para ese período. Abra la existente para continuar.');
+    }
+    const lockKey = 'own:' + currentCompany.id + ':' + input.period;
+    if (vatDeclarationCreationInFlightRef.current.has(lockKey)) throw new Error('La declaración de ese período ya se está preparando.');
+    vatDeclarationCreationInFlightRef.current.add(lockKey);
+    try {
+      const monthSales = sales.filter(item => item.companyId === currentCompany.id && item.invoiceDate.startsWith(input.period) && !item.isCancelled);
+      const monthPurchases = purchases.filter(item => item.companyId === currentCompany.id && item.invoiceDate.startsWith(input.period) && !item.isCancelled);
+      const monthZ = journalEntries.filter(entry => entry.companyId === currentCompany.id &&
+        Boolean(entry.fiscalZReport) && String(entry.fiscalZReport!.date || entry.date).startsWith(input.period));
+      const resolution = resolveVatOwnDailySalesSources({
+        zReports: monthZ.map(entry => ({
+          id: entry.id, date: entry.fiscalZReport!.date || entry.date,
+          taxableBase16Bs: entry.fiscalZReport!.taxableBase16Bs, vat16Bs: entry.fiscalZReport!.vat16Bs,
+          taxableBase8Bs: entry.fiscalZReport!.taxableBase8Bs, vat8Bs: entry.fiscalZReport!.vat8Bs,
+          taxableBase31Bs: entry.fiscalZReport!.taxableBase31Bs, vat31Bs: entry.fiscalZReport!.vat31Bs,
+          exemptSalesBs: entry.fiscalZReport!.exemptSalesBs
+        })),
+        sales: monthSales.map(item => ({
+          id: item.id, date: item.invoiceDate, documentType: item.documentType,
+          taxableBaseBs: item.taxableBaseBs, taxRate: item.taxRate,
+          vatAmountBs: item.vatAmountBs, exemptAmountBs: item.exemptAmountBs
+        })),
+        choices: input.choices
+      });
+      if (resolution.unresolvedDates.length) {
+        throw new Error('Resuelva primero los días con Reporte Z y ventas individuales simultáneas: ' + resolution.unresolvedDates.join(', '));
+      }
+      const outputVat16Raw = resolution.days.reduce((sum, day) => sum + day.outputVat16Bs, 0);
+      const outputVat8Raw = resolution.days.reduce((sum, day) => sum + day.outputVat8Bs, 0);
+      const outputVat16Bs = Math.max(0, outputVat16Raw);
+      const outputVat8Bs = Math.max(0, outputVat8Raw);
+      const includedIndividualIds = new Set(resolution.days.filter(day => day.source === 'INDIVIDUAL').flatMap(day => day.sourceIds));
+      const withholdingRows = sales.filter(item => item.companyId === currentCompany.id &&
+        item.retentionVoucherDate?.startsWith(input.period) && Number(item.vatWithheldBs || 0) > 0 &&
+        (!item.invoiceDate.startsWith(input.period) || includedIndividualIds.has(item.id)));
+      const withholdingRaw = withholdingRows.reduce((sum, item) =>
+        sum + (item.documentType === '03' ? -1 : 1) * Number(item.vatWithheldBs || 0), 0);
+      const withholdingBs = Math.max(0, withholdingRaw);
+      const purchase16Raw = monthPurchases.filter(item => item.taxRate !== 8).reduce((sum, item) =>
+        sum + (item.documentType === '03' ? -1 : 1) * Number(item.vatAmountBs || 0), 0);
+      const purchase8Raw = monthPurchases.filter(item => item.taxRate === 8).reduce((sum, item) =>
+        sum + (item.documentType === '03' ? -1 : 1) * Number(item.vatAmountBs || 0), 0);
+      const purchase16Bs = Math.max(0, purchase16Raw);
+      const purchase8Bs = Math.max(0, purchase8Raw);
+      const prior = vatOwnDeclarations.filter(item => item.companyId === currentCompany.id &&
+        item.status === 'FILED' && item.period < input.period).sort((a,b)=>b.period.localeCompare(a.period))[0];
+      const debitAdjustmentsBs = Math.max(0, -purchase16Raw) + Math.max(0, -purchase8Raw) + Math.max(0, -withholdingRaw);
+      const creditAdjustmentsBs = Math.max(0, -outputVat16Raw) + Math.max(0, -outputVat8Raw);
+      const position = calculateVatOwnPosition({
+        outputVatBs: outputVat16Bs + outputVat8Bs, outputVat16Bs, outputVat8Bs,
+        purchaseCreditBs: purchase16Bs + purchase8Bs, purchaseCredit16Bs: purchase16Bs, purchaseCredit8Bs: purchase8Bs,
+        receivedWithholdingsBs: withholdingBs, priorCreditBs: prior?.position.creditCarryForwardBs || 0,
+        debitAdjustmentsBs, creditAdjustmentsBs
+      });
+      const createdAt = new Date().toISOString();
+      const sourceIds = [...new Set([
+        ...resolution.days.flatMap(day => day.sourceIds),
+        ...monthPurchases.map(item => item.id),
+        ...withholdingRows.map(item => item.id)
+      ])];
+      const declaration: VatOwnDeclaration = {
+        id: 'vat-own-' + currentCompany.id + '-' + input.period,
+        companyId: currentCompany.id, period: input.period, status: 'DRAFT',
+        position, sourceIds, bcvRate: Number(currentCompany.bcvRate) || 0,
+        dailySourceChoices: { ...(input.choices || {}) }, createdAt
+      };
+      validateVatOwnDeclarationDraft(declaration);
+      if (!Number.isFinite(declaration.bcvRate) || declaration.bcvRate <= 0) throw new Error('La empresa no conserva una tasa BCV válida para respaldar la declaración.');
+      const confirmation = waitForPersistence();
+      setVatOwnDeclarations(prev => [...prev, declaration]);
+      await confirmation;
+      return declaration;
+    } finally {
+      vatDeclarationCreationInFlightRef.current.delete(lockKey);
+    }
+  };
+
+  const recordVatOwnDeclarationEvent = async (
+    declarationId: string,
+    draft: Omit<VatOwnDeclarationEvent, 'id' | 'declarationId' | 'recordedAt' | 'journalEntryId'>
+  ): Promise<VatOwnDeclarationEvent> => {
+    assertSQLitePersistenceReady('Registrar evento de declaración mensual de IVA');
+    const declaration = vatOwnDeclarations.find(item => item.id === declarationId && item.companyId === currentCompany.id);
+    if (!declaration) throw new Error('No se encontró la declaración mensual de la empresa activa.');
+    const history = vatOwnDeclarationEvents.filter(item => item.declarationId === declarationId);
+    const fullDraft = { ...draft, declarationId, companyId: currentCompany.id };
+    validateVatOwnEvent({
+      declaration, events: history, draft: fullDraft,
+      sameCompanyDeclarationNumbers: vatOwnDeclarationEvents.filter(event =>
+        vatOwnDeclarations.some(item => item.id === event.declarationId && item.companyId === currentCompany.id)
+      ).map(event => event.declarationNumber || '').filter(Boolean)
+    });
+    const lockKey = 'own-declaration-event:' + declarationId;
+    if (vatPaymentInFlightRef.current.has(lockKey)) throw new Error('Ya hay un evento en proceso para esta declaración.');
+    vatPaymentInFlightRef.current.add(lockKey);
+    try {
+      let journal: JournalEntry | undefined;
+      if (draft.eventType === 'FILED') {
+        const output16 = declaration.position.outputVat16Bs;
+        const output8 = declaration.position.outputVat8Bs;
+        const purchase16 = declaration.position.purchaseCredit16Bs;
+        const purchase8 = declaration.position.purchaseCredit8Bs;
+        const liability16 = accounts.find(item => item.code === '2.1.2.01' && item.type === 'PASIVO' && item.isMovement);
+        const liability8 = accounts.find(item => item.code === '2.1.2.02' && item.type === 'PASIVO' && item.isMovement);
+        const input16 = accounts.find(item => item.code === '1.1.3.01' && item.type === 'ACTIVO' && item.isMovement);
+        const input8 = accounts.find(item => item.code === '1.1.3.02' && item.type === 'ACTIVO' && item.isMovement);
+        const withholding = accounts.find(item => item.code === '1.1.3.03' && item.type === 'ACTIVO' && item.isMovement);
+        if ((output16 > 0 && !liability16) || (output8 > 0 && !liability8) ||
+            (purchase16 > 0 && !input16) || (purchase8 > 0 && !input8) ||
+            (declaration.position.receivedWithholdingsBs > 0 && !withholding)) {
+          throw new Error('Faltan cuentas de movimiento para conciliar los débitos y créditos fiscales de la declaración.');
+        }
+        const items: JournalEntryItem[] = [];
+        const addLine = (account: Account | undefined, debit: number, credit: number, description: string) => {
+          if (!account || debit + credit <= 0) return;
+          items.push({
+            accountCode: account.code, accountName: account.name,
+            debitBs: debit, creditBs: credit,
+            debitUsd: debit / declaration.bcvRate, creditUsd: credit / declaration.bcvRate,
+            description
+          });
+        };
+        addLine(liability16, output16, 0, 'Cierre débito fiscal IVA 16% · ' + declaration.period);
+        addLine(liability8, output8, 0, 'Cierre débito fiscal IVA 8% · ' + declaration.period);
+        addLine(input16, 0, purchase16, 'Aplicación crédito fiscal compras 16% · ' + declaration.period);
+        addLine(input8, 0, purchase8, 'Aplicación crédito fiscal compras 8% · ' + declaration.period);
+        addLine(withholding, 0, declaration.position.receivedWithholdingsBs, 'Aplicación retenciones IVA recibidas · ' + declaration.period);
+        addLine(input16, 0, declaration.position.priorCreditAppliedBs, 'Aplicación de crédito fiscal de períodos anteriores · ' + declaration.period);
+        addLine(input16, declaration.position.creditCarryForwardBs, 0, 'Crédito fiscal trasladable al período siguiente · ' + declaration.period);
+        addLine(liability16, 0, declaration.position.amountDueBs, 'IVA neto por enterar · ' + declaration.period);
+        const debitBs = items.reduce((sum,item)=>sum+item.debitBs,0);
+        const creditBs = items.reduce((sum,item)=>sum+item.creditBs,0);
+        if (Math.abs(debitBs-creditBs)>0.02) throw new Error('El asiento de cierre de IVA no cuadra. Revise la conciliación de fuentes y créditos fiscales.');
+        const confirmation = waitForPersistence();
+        journal = addJournalEntry({
+          entryNumber: 0, date: declaration.period + '-01',
+          description: 'Determinación mensual del IVA · ' + declaration.period,
+          type: 'AJUSTE', bcvRate: declaration.bcvRate,
+          referenceDoc: 'IVA-MENSUAL:' + declaration.period,
+          items
+        });
+        await confirmation;
+      } else if (draft.eventType === 'PAYMENT') {
+        const amountBs = Number(draft.amountBs || 0);
+        const rate = Number(draft.bcvRate || 0);
+        const treasury = accounts.find(item => item.code === draft.treasuryAccountCode &&
+          item.type === 'ACTIVO' && item.isMovement && item.code.startsWith('1.1.1.'));
+        const liability = accounts.find(item => item.code === '2.1.2.01' && item.type === 'PASIVO' && item.isMovement);
+        if (!treasury || !liability || !Number.isFinite(rate) || rate <= 0) throw new Error('Seleccione una cuenta de tesorería válida e indique la tasa BCV del pago.');
+        const priorPaid = history.filter(item => item.eventType === 'PAYMENT' &&
+          !history.some(reversal => reversal.eventType === 'REVERSAL' && reversal.reversalOfEventId === item.id)
+        ).reduce((sum,item)=>sum+Number(item.amountBs || 0),0);
+        const historicalUsd = amountBs / declaration.bcvRate;
+        const paymentUsd = amountBs / rate;
+        const fx = historicalUsd - paymentUsd;
+        const items: JournalEntryItem[] = [
+          { accountCode: liability.code, accountName: liability.name, debitBs: amountBs, creditBs: 0,
+            debitUsd: historicalUsd, creditUsd: 0, description: 'Aplicación de pago a IVA mensual ' + declaration.period },
+          { accountCode: treasury.code, accountName: treasury.name, debitBs: 0, creditBs: amountBs,
+            debitUsd: 0, creditUsd: paymentUsd, description: 'Pago de IVA · ' + (draft.reference || '') }
+        ];
+        if (fx > 0.000001) {
+          const gain = accounts.find(item => item.code === '4.2.1.01' && item.type === 'INGRESOS' && item.isMovement);
+          if (!gain) throw new Error('Falta la cuenta de ganancia por diferencial cambiario 4.2.1.01.');
+          items.push({ accountCode: gain.code, accountName: gain.name, debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: fx, description: 'Ganancia cambiaria en pago de IVA' });
+        } else if (fx < -0.000001) {
+          const loss = accounts.find(item => item.code === '6.1.1.08' && item.type === 'GASTOS' && item.isMovement);
+          if (!loss) throw new Error('Falta la cuenta de pérdida por diferencial cambiario 6.1.1.08.');
+          items.push({ accountCode: loss.code, accountName: loss.name, debitBs: 0, creditBs: 0, debitUsd: Math.abs(fx), creditUsd: 0, description: 'Pérdida cambiaria en pago de IVA' });
+        }
+        const confirmation = waitForPersistence();
+        journal = addJournalEntry({
+          entryNumber: 0, date: draft.occurredAt.slice(0,10),
+          description: 'Pago de IVA mensual · ' + declaration.period,
+          type: 'AJUSTE', bcvRate: rate,
+          referenceDoc: 'IVA-PAGO:' + declaration.id + ':' + draft.idempotencyKey,
+          items
+        });
+        await confirmation;
+      } else if (draft.eventType === 'REVERSAL') {
+        const original = history.find(item => item.id === draft.reversalOfEventId && item.eventType === 'PAYMENT');
+        if (!original?.journalEntryId) throw new Error('El pago original no conserva asiento contable para revertir.');
+        journal = await reverseJournalEntry(original.journalEntryId, draft.occurredAt.slice(0,10), draft.note || 'Reversión de pago de IVA', 'Reversión de evento fiscal ' + original.id);
+      }
+      const event: VatOwnDeclarationEvent = {
+        ...fullDraft, ...(journal ? { journalEntryId: journal.id } : {}),
+        id: 'vat-own-event-' + Date.now() + '-' + Math.floor(Math.random() * 1000000),
+        declarationId, recordedAt: new Date().toISOString()
+      };
+      const confirmation = waitForPersistence();
+      setVatOwnDeclarationEvents(prev => [...prev, event]);
+      if (draft.eventType === 'FILED') {
+        setVatOwnDeclarations(prev => prev.map(item => item.id === declarationId
+          ? { ...item, status: 'FILED', declarationNumber: String(draft.declarationNumber || '').trim(), filedAt: draft.occurredAt }
+          : item));
+      }
+      await confirmation;
+      return event;
+    } finally {
+      vatPaymentInFlightRef.current.delete(lockKey);
+    }
+  };
+
   const recordVatVoucherDelivery = async (
     id: string,
     draft: { deliveryDate: string; deliveryMethod: 'PHYSICAL' | 'ELECTRONIC'; electronicDeliveryAgreed?: boolean }
@@ -6315,6 +6544,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       vatVouchers,
       vatWithholdingDeclarations,
       vatWithholdingDeclarationEvents,
+      vatOwnDeclarations,
+      vatOwnDeclarationEvents,
       islrVouchers,
       bankAccounts,
       bankStatementMovements,
@@ -6340,6 +6571,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ['movimientos de inventario', 'movements', movements], ['activos fijos', 'fixedAssets', fixedAssets], ['comprobantes IVA', 'vatVouchers', vatVouchers],
       ['declaraciones IVA', 'vatWithholdingDeclarations', vatWithholdingDeclarations],
       ['eventos de declaraciones IVA', 'vatWithholdingDeclarationEvents', vatWithholdingDeclarationEvents],
+      ['declaraciones mensuales de IVA', 'vatOwnDeclarations', vatOwnDeclarations],
+      ['eventos de declaraciones mensuales de IVA', 'vatOwnDeclarationEvents', vatOwnDeclarationEvents],
       ['comprobantes ISLR', 'islrVouchers', islrVouchers], ['cuentas bancarias', 'bankAccounts', bankAccounts],
       ['movimientos bancarios', 'bankStatementMovements', bankStatementMovements],
       ['cobros y pagos', 'creditSettlements', creditSettlements],
@@ -6705,6 +6938,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setVatVouchers(data.vatVouchers);
       setVatWithholdingDeclarations(vatWithholdingDeclarations);
       setVatWithholdingDeclarationEvents(vatWithholdingDeclarationEvents);
+      setVatOwnDeclarations(Array.isArray(data.vatOwnDeclarations) ? data.vatOwnDeclarations : []);
+      setVatOwnDeclarationEvents(Array.isArray(data.vatOwnDeclarationEvents) ? data.vatOwnDeclarationEvents : []);
       setIslrVouchers(data.islrVouchers);
       setBankAccounts(data.bankAccounts);
       setBankStatementMovements(data.bankStatementMovements);
@@ -6741,6 +6976,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const declarationIds = new Set(visibleVatDeclarations.map(item => item.id));
     return vatWithholdingDeclarationEvents.filter(event => declarationIds.has(event.declarationId));
   }, [vatWithholdingDeclarationEvents, visibleVatDeclarations]);
+  const visibleVatOwnDeclarations = useMemo(() => vatOwnDeclarations.filter(item => item.companyId === activeCompanyId), [vatOwnDeclarations, activeCompanyId]);
+  const visibleVatOwnDeclarationEvents = useMemo(() => {
+    const ids = new Set(visibleVatOwnDeclarations.map(item => item.id));
+    return vatOwnDeclarationEvents.filter(event => ids.has(event.declarationId));
+  }, [vatOwnDeclarationEvents, visibleVatOwnDeclarations]);
   const visibleIslrVouchers = useMemo(() => islrVouchers.filter(item => item.companyId === activeCompanyId), [islrVouchers, activeCompanyId]);
   const visibleIslrFiscalEvents = useMemo(() => islrFiscalEvents.filter(item => item.companyId === activeCompanyId), [islrFiscalEvents, activeCompanyId]);
   const visibleFinancialDisclosures = useMemo(() => financialDisclosures.filter(item => item.companyId === activeCompanyId), [financialDisclosures, activeCompanyId]);
@@ -6836,6 +7076,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         vatVouchers: visibleVatVouchers,
         vatWithholdingDeclarations: visibleVatDeclarations,
         vatWithholdingDeclarationEvents: visibleVatDeclarationEvents,
+        vatOwnDeclarations: visibleVatOwnDeclarations,
+        vatOwnDeclarationEvents: visibleVatOwnDeclarationEvents,
+        createVatOwnDeclaration,
+        recordVatOwnDeclarationEvent,
         createVatWithholdingDeclaration,
         recordVatWithholdingDeclarationEvent,
         islrVouchers: visibleIslrVouchers,
