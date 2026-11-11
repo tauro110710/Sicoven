@@ -242,7 +242,8 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     }
     const matches = input.priorDeclarations.filter(declaration =>
       declaration.companyId === input.companyId && declaration.status === 'FILED' &&
-      declaration.period < input.period && declaration.sourceIds.includes(original.id)
+      declaration.period === original.invoiceDate.slice(0, 7) && declaration.period < input.period &&
+      declaration.sourceIds.includes(original.id)
     );
     if (matches.length !== 1) {
       throw new Error('La factura original de la nota de crédito no aparece en una única declaración IVA anterior presentada. Debe conciliarse o rectificarse el período original antes de declarar esta nota.');
