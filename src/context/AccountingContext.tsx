@@ -53,7 +53,7 @@ import { FinancialDisclosure, validateFinancialDisclosure } from '../types/finan
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
-import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, findExistingVatOwnPaymentReversal, resolveVatOwnPaymentBcvRate, getUnfiledVatOwnActivityPeriods, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
+import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, findExistingVatOwnPaymentReversal, resolveVatOwnPaymentBcvRate, getUnfiledVatOwnActivityPeriods, getVatOwnFiledLaterPeriods, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
 import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
@@ -5628,6 +5628,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (unfiledActivityPeriods.length > 0) {
       throw new Error('No se puede preparar esta declaración: existen períodos anteriores con actividad fiscal sin presentar (' + unfiledActivityPeriods.join(', ') + '). Complete esos meses primero para no omitir débito, crédito ni prorrata.');
     }
+    const laterFiledPeriods = getVatOwnFiledLaterPeriods({
+      companyId: currentCompany.id, targetPeriod: input.period, declarations: vatOwnDeclarations
+    });
+    if (laterFiledPeriods.length > 0) {
+      throw new Error('No se puede preparar ni corregir directamente este período: ya existen declaraciones posteriores presentadas (' + laterFiledPeriods.join(', ') + '). Use el procedimiento de rectificación y conserve la secuencia fiscal.');
+    }
     const existingDraft = vatOwnDeclarations.find(item => item.companyId === currentCompany.id && item.period === input.period);
     if (existingDraft && (existingDraft.status !== 'DRAFT' || input.refresh !== true)) {
       throw new Error('Ya existe una declaración mensual para ese período. Abra la existente para continuar.');
@@ -5769,6 +5775,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
       if (unfiledActivityPeriods.length > 0) {
         throw new Error('No se puede presentar: existen períodos anteriores con actividad fiscal sin presentar (' + unfiledActivityPeriods.join(', ') + '). Complete la secuencia antes de registrar esta declaración.');
+      }
+      const laterFiledPeriods = getVatOwnFiledLaterPeriods({
+        companyId: currentCompany.id, targetPeriod: declaration.period, declarations: vatOwnDeclarations
+      });
+      if (laterFiledPeriods.length > 0) {
+        throw new Error('No se puede presentar ni alterar directamente este período: ya existen declaraciones posteriores presentadas (' + laterFiledPeriods.join(', ') + '). Use el procedimiento de rectificación fiscal.');
       }
       if (!Number.isFinite(Number(declaration.bcvRate)) || !Number.isFinite(Number(currentCompany.bcvRate)) || Math.abs(Number(declaration.bcvRate) - Number(currentCompany.bcvRate)) > 0.000001) {
         throw new Error('No se puede presentar: la tasa BCV cambió desde que se preparó el borrador. Actualícelo para conservar la tasa vigente y su historial antes de presentar.');
