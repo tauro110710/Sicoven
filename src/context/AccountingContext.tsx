@@ -53,7 +53,7 @@ import { FinancialDisclosure, validateFinancialDisclosure } from '../types/finan
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
-import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, findExistingVatOwnPaymentReversal, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnProrationRate, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
+import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, findExistingVatOwnPaymentReversal, resolveVatOwnPaymentBcvRate, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnProrationRate, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
 import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
@@ -5838,6 +5838,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       } else if (draft.eventType === 'PAYMENT') {
         const amountBs = Number(draft.amountBs || 0);
         const rate = Number(draft.bcvRate || 0);
+        const paymentDate = draft.occurredAt.slice(0,10);
+        const officialPaymentRate = resolveVatOwnPaymentBcvRate(
+          currentCompany.accountingBcvRateHistory || [], paymentDate
+        );
+        if (officialPaymentRate === null) {
+          throw new Error('No existe una tasa BCV histórica registrada y vigente para la fecha del pago. Registre o corrija primero la tasa contable de ese día.');
+        }
+        if (Math.abs(rate - officialPaymentRate) > 0.000001) {
+          throw new Error('La tasa indicada no coincide con la tasa BCV histórica efectiva para la fecha del pago (' + officialPaymentRate + ' Bs/USD).');
+        }
         const treasury = accounts.find(item => item.code === draft.treasuryAccountCode &&
           item.type === 'ACTIVO' && item.isMovement && item.code.startsWith('1.1.1.'));
         const liability = accounts.find(item => item.code === '2.1.2.09' && item.type === 'PASIVO' && item.isMovement);
