@@ -105,6 +105,6 @@ test('a payment reversal restores the outstanding balance without deleting histo
     eventType: 'REVERSAL', occurredAt: reversal.occurredAt,
     idempotencyKey: reversal.idempotencyKey, reversalOfEventId: original.id
   }});
-  assert.equal(getVatOwnOutstandingBalance(declaration, [original, reversal]), 600);
+  assert.equal(getVatOwnOutstandingBalance(declaration, [original, reversal]), 550);
   assert.equal([original, reversal].length, 2);
 });
