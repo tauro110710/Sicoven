@@ -476,9 +476,9 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
       if (historicalCandidates.length !== 1) {
         throw new Error('Una nota de crédito ya presentada tiene una factura original ambigua; no se puede validar su reversión acumulada.');
       }
-      const noteVat = Number(snapshot.vatAmountBs || 0);
+      const noteVat = Number(snapshot.vatAmountBs);
       if (snapshot.id !== noteId || !Number.isFinite(noteVat) || noteVat < 0) {
-        throw new Error('Una declaración anterior conserva importes inválidos en una nota de crédito de compras.');
+        throw new Error('Una declaración anterior no conserva el IVA bruto histórico válido de una nota de crédito de compras.');
       }
       const originalId = historicalCandidates[0].id;
       priorFiledNoteVatByOriginal.set(originalId, (priorFiledNoteVatByOriginal.get(originalId) || 0) + noteVat);
