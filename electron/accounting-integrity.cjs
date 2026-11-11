@@ -666,6 +666,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     const position = declaration.position;
     if (!position || typeof position !== 'object' ||
         Object.values(position).some(value => typeof value !== 'number' || !Number.isFinite(value)) ||
+        Object.entries(position).some(([field, value]) => field !== 'netTaxBs' && Number(value) < 0) ||
         position.amountDueBs < 0 || position.creditCarryForwardBs < 0 ||
         position.prorationRate < 0 || position.prorationRate > 1 ||
         (position.amountDueBs > 0.02 && position.creditCarryForwardBs > 0.02)) {
