@@ -144,8 +144,6 @@ export const IvaDeclaracionesView: React.FC = () => {
     .sort((a,b)=>b.period.localeCompare(a.period))[0]?.position.creditCarryForwardBs || 0;
   const receivedWithholdingRows = useMemo(() => getReceivedVatWithholdingSales(sales, currentCompany.id, period), [sales, currentCompany.id, period]);
   const receivedWithholdings = receivedWithholdingRows.reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatWithheldBs), 0);
-  const preliminaryBalance = outputVat === null || purchaseCreditEligible === null
-    ? null : outputVat - purchaseCreditEligible - receivedWithholdings - priorCredit + purchaseCreditReversal;
   const currentPositionPreview = useMemo(() => {
     if (outputVat === null || !purchaseSummary) return null;
     try {
@@ -177,6 +175,11 @@ export const IvaDeclaracionesView: React.FC = () => {
       return null;
     }
   }, [outputVat, purchaseSummary, dailySalesResolution.days, receivedWithholdingRows, taxableSalesBase, exemptSalesBase, priorCredit]);
+  const preliminaryBalance = currentPositionPreview
+    ? currentPositionPreview.amountDueBs > 0.01
+      ? currentPositionPreview.amountDueBs
+      : -currentPositionPreview.creditCarryForwardBs
+    : null;
   const currentSourceIds = [...new Set([
     ...dailySalesResolution.days.flatMap(day => day.sourceIds),
     ...monthPurchases.map(item => item.id),
