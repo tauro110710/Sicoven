@@ -315,7 +315,7 @@ test('reverses only the 16% VAT component of a prior 31% combined-rate purchase 
     ...declaration, period: '2026-10', sourceIds: [original.id],
     sourceSnapshots: {
       [original.id]: JSON.stringify({
-        kind: 'PURCHASE', id: original.id, documentType: '01',
+        kind: 'PURCHASE', id: original.id, documentType: '01', supplierRif: 'J-12345678-9',
         vatCreditTreatment: 'TAXABLE', taxRate: 31, vatAmountBs: 160,
         additionalLuxuryTaxBs: 150
       })
@@ -349,7 +349,7 @@ test('routes a prior-period 8% credit note reversal to the 8% VAT bucket', () =>
     ...declaration, period: '2026-10', sourceIds: [original.id],
     sourceSnapshots: {
       [original.id]: JSON.stringify({
-        kind: 'PURCHASE', id: original.id, documentType: '01',
+        kind: 'PURCHASE', id: original.id, documentType: '01', supplierRif: 'J-12345678-9',
         vatCreditTreatment: 'TAXABLE', taxRate: 8, vatAmountBs: 80
       })
     }
