@@ -280,7 +280,7 @@ test('reverses a prior-period common purchase credit using the original declarat
   const prior = {
     ...declaration, period: '2026-10', sourceIds: [original.id],
     sourceSnapshots: {
-      [original.id]: JSON.stringify({ kind: 'PURCHASE', id: original.id, vatCreditTreatment: 'COMMON' })
+      [original.id]: JSON.stringify({ kind: 'PURCHASE', id: original.id, vatCreditTreatment: 'COMMON', taxRate: 16 })
     },
     position: calculateVatOwnPosition({
       outputVatBs: 0, purchaseCreditBs: 80, purchaseCredit16Bs: 80,
@@ -330,8 +330,8 @@ test('blocks a prior-period credit note when the filed original declaration has 
 test('uses the original filed declaration snapshot if a purchase VAT treatment was later edited', () => {
   const original = {
     id: 'purchase-historical-treatment', companyId: 'company-a', invoiceDate: '2026-10-05',
-    supplierRif: 'J-12345678-9', documentType: '01', taxRate: 16,
-    vatAmountBs: 160, vatCreditTreatment: 'EXEMPT'
+    supplierRif: 'J-12345678-9', documentType: '01', taxRate: 8,
+    vatAmountBs: 80, vatCreditTreatment: 'EXEMPT'
   } as PurchaseRecord;
   const note = {
     id: 'purchase-historical-treatment-note', companyId: 'company-a', invoiceDate: '2026-11-05',
@@ -359,6 +359,30 @@ test('uses the original filed declaration snapshot if a purchase VAT treatment w
   });
   assert.equal(result.priorReversalEligible16Bs, 80);
   assert.equal(result.priorReversalNonEligible16Bs, 0);
+  assert.equal(result.reclassifications[0].taxRate, 16);
+});
+ 
+test('blocks a prior-period credit note when the filed snapshot has no historical tax rate', () => {
+  const original = {
+    id: 'purchase-missing-historical-rate', companyId: 'company-a', invoiceDate: '2026-10-05',
+    supplierRif: 'J-12345678-9', documentType: '01', taxRate: 16, vatAmountBs: 160
+  } as PurchaseRecord;
+  const note = {
+    id: 'purchase-note-missing-historical-rate', companyId: 'company-a', invoiceDate: '2026-11-05',
+    supplierRif: 'J-12345678-9', documentType: '03', taxRate: 16, vatAmountBs: 80,
+    originalPurchaseId: original.id
+  } as PurchaseRecord;
+  const prior = {
+    ...declaration, period: '2026-10', sourceIds: [original.id],
+    sourceSnapshots: {
+      [original.id]: JSON.stringify({ kind: 'PURCHASE', id: original.id, vatCreditTreatment: 'TAXABLE' })
+    }
+  };
+  assert.throws(() => calculateVatOwnPurchaseCreditSummary({
+    companyId: 'company-a', period: '2026-11', purchases: [note],
+    allPurchases: [original, note], priorDeclarations: [prior],
+    taxableSalesBaseBs: 0, exemptSalesBaseBs: 0
+  }), /tratamiento fiscal y la alícuota histórica/);
 });
 
 test('requires an original purchase journal even when its VAT is fully creditable', () => {
