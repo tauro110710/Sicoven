@@ -7,6 +7,7 @@ import {
   calculateVatOwnPosition,
   calculateVatOwnPurchaseCreditSummary,
   getUnfiledVatOwnActivityPeriods,
+  getVatOwnFiledLaterPeriods,
   buildVatOwnPurchaseVatReclassificationItems,
   getVatOwnOutstandingBalance,
   resolveVatOwnDailySalesSources,
@@ -155,6 +156,14 @@ test('requires earlier months with fiscal activity to be filed before preparing 
   assert.deepEqual(getUnfiledVatOwnActivityPeriods({
     companyId: 'company-a', targetPeriod: '2026-12',
     activityDates: ['2026-10-05', '2026-12-01'],
+    declarations: [filedOctober]
+  }), []);
+  assert.deepEqual(getVatOwnFiledLaterPeriods({
+    companyId: 'company-a', targetPeriod: '2026-09',
+    declarations: [filedOctober, ...drafts]
+  }), ['2026-10']);
+  assert.deepEqual(getVatOwnFiledLaterPeriods({
+    companyId: 'company-a', targetPeriod: '2026-10',
     declarations: [filedOctober]
   }), []);
   assert.throws(() => getUnfiledVatOwnActivityPeriods({
