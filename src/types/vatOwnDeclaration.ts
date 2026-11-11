@@ -341,7 +341,7 @@ export interface VatOwnPurchaseCreditSummary {
   priorReversalNonEligible16Bs: number;
   priorReversalNonEligible8Bs: number;
   relatedPurchaseIds: string[];
-  reclassifications: Array<{ purchaseId: string; basePurchaseId: string; taxRate: number; nonEligibleSignedBs: number }>;
+  reclassifications: Array<{ purchaseId: string; basePurchaseId: string; taxRate: number; nonEligibleSignedBs: number; sourcePurchaseSnapshot?: string }>;
 }
 
 export function calculateVatOwnPurchaseCreditSummary(input: {
@@ -561,7 +561,8 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
         const nonEligible = amountBs - eligible;
         reclassifications.push({
           purchaseId: item.id, basePurchaseId: priorNote.original.id,
-          taxRate: effectiveTaxRate, nonEligibleSignedBs: -nonEligible
+          taxRate: effectiveTaxRate, nonEligibleSignedBs: -nonEligible,
+          sourcePurchaseSnapshot: priorNote.prior.sourceSnapshots?.[priorNote.original.id]
         });
         if (isEight) {
           priorReversalEligible8Bs += eligible;
@@ -623,36 +624,64 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
     if (!sourcePurchase) {
       throw new Error('No se encontró la factura de compra original del documento ' + adjustment.purchaseId + '.');
     }
+    let historicalSource: Record<string, unknown> | undefined;
+    if (adjustment.sourcePurchaseSnapshot) {
+      try { historicalSource = JSON.parse(adjustment.sourcePurchaseSnapshot) as Record<string, unknown>; }
+      catch { throw new Error('La huella fiscal histórica de la factura original no se puede leer para distribuir su IVA no acreditable.'); }
+      if (historicalSource.kind !== 'PURCHASE' || historicalSource.id !== adjustment.basePurchaseId ||
+          Number(historicalSource.taxRate) !== adjustment.taxRate ||
+          !Number.isFinite(Number(historicalSource.taxableBaseBs)) ||
+          !Number.isFinite(Number(historicalSource.exemptAmountBs || 0)) ||
+          !String(historicalSource.journalEntryId || '') || !historicalSource.journal ||
+          typeof historicalSource.journal !== 'object') {
+        throw new Error('La huella fiscal histórica de la factura original no conserva su asiento y bases de compra verificables.');
+      }
+    }
+    const historicalJournal = historicalSource?.journal as Record<string, unknown> | undefined;
+    const sourceJournalId = String(historicalSource?.journalEntryId || sourcePurchase.journalEntryId || '');
     const requiresPurchaseJournal = Math.abs(signedAmount) >= 0.01 || Number(sourcePurchase.vatAmountBs || 0) > 0;
     if (!requiresPurchaseJournal) continue;
-    if (!sourcePurchase.journalEntryId) {
+    if (!sourceJournalId) {
       throw new Error('No se puede conciliar el IVA del documento ' + adjustment.purchaseId + ': la factura original no conserva su asiento de compra.');
     }
     const sourceEntries = input.journalEntries.filter(entry =>
-      entry.id === sourcePurchase.journalEntryId && entry.companyId === input.companyId
+      entry.id === sourceJournalId && entry.companyId === input.companyId
     );
     if (sourceEntries.length !== 1) {
       throw new Error('No se encontró un único asiento contable de origen para distribuir el IVA no acreditable de la factura ' + sourcePurchase.invoiceNumber + '.');
     }
-    const sourceEntry = sourceEntries[0];
-    if (sourceEntry.reversalOfEntryId || sourceEntry.reversedByEntryId ||
-        input.journalEntries.some(entry => entry.companyId === input.companyId && entry.reversalOfEntryId === sourceEntry.id)) {
+    const liveSourceEntry = sourceEntries[0];
+    if (liveSourceEntry.reversalOfEntryId || liveSourceEntry.reversedByEntryId ||
+        input.journalEntries.some(entry => entry.companyId === input.companyId && entry.reversalOfEntryId === sourceJournalId)) {
       throw new Error('No se puede conciliar el IVA de una factura cuyo asiento de compra fue revertido. Reconcilie primero el estado fiscal del documento.');
+    }
+    const sourceEntry = historicalJournal
+      ? { ...historicalJournal, items: historicalJournal.items as JournalEntryItem[] }
+      : liveSourceEntry;
+    if (historicalJournal && (historicalJournal.id !== sourceJournalId || !Array.isArray(historicalJournal.items))) {
+      throw new Error('La huella fiscal histórica no coincide con el asiento contable original de la factura.');
     }
     if (Math.abs(signedAmount) < 0.01) continue;
     const grouped = new Map<string, { accountName: string; amountBs: number }>();
     for (const item of sourceEntry.items) {
       if (Number(item.debitBs || 0) <= 0 || excludedDebitAccounts.has(item.accountCode)) continue;
-      const current = grouped.get(item.accountCode) || { accountName: item.accountName, amountBs: 0 };
+      const liveLine = liveSourceEntry.items.find(line => line.accountCode === item.accountCode);
+      const current = grouped.get(item.accountCode) || {
+        accountName: item.accountName || liveLine?.accountName || item.accountCode,
+        amountBs: 0
+      };
       current.amountBs += Number(item.debitBs || 0);
       grouped.set(item.accountCode, current);
     }
     const destinations = [...grouped.entries()].filter(([, value]) => value.amountBs > 0);
     const totalDestinationBase = destinations.reduce((sum, [, value]) => sum + value.amountBs, 0);
-    const expectedBase = Number(sourcePurchase.taxableBaseBs || 0) + Number(sourcePurchase.exemptAmountBs || 0);
+    const expectedBase = historicalSource
+      ? Number(historicalSource.taxableBaseBs) + Number(historicalSource.exemptAmountBs || 0)
+      : Number(sourcePurchase.taxableBaseBs || 0) + Number(sourcePurchase.exemptAmountBs || 0);
+    const invoiceNumber = String(historicalSource?.invoiceNumber || sourcePurchase.invoiceNumber || adjustment.basePurchaseId);
     if (!Number.isFinite(expectedBase) || expectedBase <= 0 || totalDestinationBase <= 0 ||
         Math.abs(totalDestinationBase - expectedBase) > 0.05) {
-      throw new Error('El asiento de la factura ' + sourcePurchase.invoiceNumber + ' no permite distribuir de forma verificable el IVA no acreditable entre sus cuentas de costo, inventario o gasto.');
+      throw new Error('El asiento de la factura ' + invoiceNumber + ' no permite distribuir de forma verificable el IVA no acreditable entre sus cuentas de costo, inventario o gasto.');
     }
     const absoluteAmount = Math.abs(signedAmount);
     const totalCents = Math.round(absoluteAmount * 100);
