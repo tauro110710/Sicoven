@@ -757,6 +757,11 @@ export function validateVatOwnEvent(input: {
   }
   if (draft.eventType === 'FILED') {
     if (declaration.status !== 'DRAFT') throw new Error('La declaración ya fue presentada.');
+    const [periodYear, periodMonth] = declaration.period.split('-').map(Number);
+    const periodEndDate = new Date(Date.UTC(periodYear, periodMonth, 0)).toISOString().slice(0, 10);
+    if (eventDatePart <= periodEndDate) {
+      throw new Error('No se puede presentar una declaración mensual antes de que finalice el período fiscal seleccionado (' + periodEndDate + ').');
+    }
     if (!draft.declarationNumber?.trim()) throw new Error('Indique el número oficial de declaración.');
     if (input.sameCompanyDeclarationNumbers?.includes(draft.declarationNumber.trim())) {
       throw new Error('El número oficial ya está asociado a otra declaración de esta empresa.');
