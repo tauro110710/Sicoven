@@ -961,6 +961,60 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
         if (Math.abs(debit - credit) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.0001) {
           throw new Error('SQLite rechazó el asiento de determinación IVA desequilibrado en Bs y USD.');
         }
+        if (!priorEventIds.has(id) && declaration.sourceSnapshots) {
+          const p = declaration.position;
+          const rate = Number(declaration.bcvRate);
+          const previousFiled = declarations.filter(item =>
+            item.companyId === declaration.companyId && item.status === 'FILED' && item.period < declaration.period
+          ).sort((a, b) => b.period.localeCompare(a.period))[0];
+          const priorAvailable = Number(previousFiled?.position?.creditCarryForwardBs || 0);
+          const priorApplied = Number(p.priorCreditAppliedBs || 0);
+          const unusedPrior = Math.max(0, priorAvailable - priorApplied);
+          const newlyGeneratedCarry = Math.max(0, Number(p.creditCarryForwardBs || 0) - unusedPrior);
+          const expectedByAccount = new Map();
+          const addExpected = (code, debitBs = 0, creditBs = 0, debitUsd = debitBs / rate, creditUsd = creditBs / rate) => {
+            const current = expectedByAccount.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+            current.debitBs += debitBs; current.creditBs += creditBs;
+            current.debitUsd += debitUsd; current.creditUsd += creditUsd;
+            expectedByAccount.set(code, current);
+          };
+          addExpected('2.1.2.01', Number(p.outputVat16Bs || 0), 0);
+          addExpected('2.1.2.02', Number(p.outputVat8Bs || 0), 0);
+          addExpected('1.1.3.01', 0, Number(p.purchaseCredit16Bs || 0));
+          addExpected('1.1.3.02', 0, Number(p.purchaseCredit8Bs || 0));
+          addExpected('1.1.3.01', Number(p.purchaseCreditReversal16Bs || 0), 0);
+          addExpected('1.1.3.02', Number(p.purchaseCreditReversal8Bs || 0), 0);
+          for (const line of asArray(declaration.purchaseVatReclassificationItems)) {
+            addExpected(String(line.accountCode || ''), Number(line.debitBs || 0), Number(line.creditBs || 0),
+              Number(line.debitUsd || 0), Number(line.creditUsd || 0));
+          }
+          addExpected('1.1.3.03', 0, Number(p.receivedWithholdingsBs || 0));
+          addExpected('1.1.3.03', Number(p.debitAdjustmentsBs || 0), 0);
+          addExpected('1.1.3.01', 0, priorApplied);
+          addExpected('1.1.3.01', newlyGeneratedCarry, 0);
+          addExpected('2.1.2.09', 0, Number(p.amountDueBs || 0));
+          addExpected('2.1.2.01', 0, Number(p.creditAdjustments16Bs || 0));
+          addExpected('2.1.2.02', 0, Number(p.creditAdjustments8Bs || 0));
+          const actualByAccount = new Map();
+          for (const line of asArray(journal.items)) {
+            const code = String(line.accountCode || '');
+            const current = actualByAccount.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+            current.debitBs += Number(line.debitBs || 0); current.creditBs += Number(line.creditBs || 0);
+            current.debitUsd += Number(line.debitUsd || 0); current.creditUsd += Number(line.creditUsd || 0);
+            actualByAccount.set(code, current);
+          }
+          const codes = new Set([...expectedByAccount.keys(), ...actualByAccount.keys()]);
+          for (const code of codes) {
+            const expected = expectedByAccount.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+            const actual = actualByAccount.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+            if (Math.abs(actual.debitBs - expected.debitBs) > 0.02 ||
+                Math.abs(actual.creditBs - expected.creditBs) > 0.02 ||
+                Math.abs(actual.debitUsd - expected.debitUsd) > 0.0001 ||
+                Math.abs(actual.creditUsd - expected.creditUsd) > 0.0001) {
+              throw new Error('SQLite rechazó el asiento IVA: las líneas por cuenta no coinciden con la posición fiscal y las reclasificaciones aprobadas.');
+            }
+          }
+        }
       }
       filedEvents.set(declaration.id, (filedEvents.get(declaration.id) || 0) + 1);
     } else if (event.eventType === 'PAYMENT') {
