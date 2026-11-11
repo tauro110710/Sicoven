@@ -5628,8 +5628,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       journalEntries.some(entry => entry.companyId === companyId && entry.reversalOfEntryId === source.id));
   });
 
-  const getVatOwnInconsistentSalesSources = (companyId: string): SaleRecord[] => sales.filter(sale => {
-    if (sale.companyId !== companyId || sale.isCancelled || !sale.journalEntryId) return false;
+  const getVatOwnInconsistentSalesSources = (companyId: string, relevantSaleIds: ReadonlySet<string>): SaleRecord[] => sales.filter(sale => {
+    if (sale.companyId !== companyId || sale.isCancelled || !relevantSaleIds.has(sale.id)) return false;
+    if (!sale.journalEntryId) return true;
     const source = journalEntries.find(entry => entry.id === sale.journalEntryId && entry.companyId === companyId);
     if (!source) return true;
     return Boolean(source.reversalOfEntryId || source.reversedByEntryId ||
@@ -5653,11 +5654,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('No se puede preparar ni corregir directamente este período: ya existen declaraciones posteriores presentadas (' + laterFiledPeriods.join(', ') + '). Use el procedimiento de rectificación y conserve la secuencia fiscal.');
     }
     const inconsistentPurchaseSources = getVatOwnInconsistentPurchaseSources(currentCompany.id);
-    const inconsistentSalesSources = getVatOwnInconsistentSalesSources(currentCompany.id);
-    if (inconsistentPurchaseSources.length > 0 || inconsistentSalesSources.length > 0) {
-      throw new Error('No se puede preparar IVA: hay documentos fiscales activos con asientos de origen inexistentes o revertidos. Compras: ' +
-        inconsistentPurchaseSources.map(item => item.invoiceNumber).join(', ') + '. Ventas: ' +
-        inconsistentSalesSources.map(item => item.invoiceNumber).join(', ') + '. Concilie el estado documental antes de declarar.');
+    if (inconsistentPurchaseSources.length > 0) {
+      throw new Error('No se puede preparar IVA: hay compras con IVA activo sin asiento de origen o vinculadas a un asiento inexistente o revertido (' +
+        inconsistentPurchaseSources.map(item => item.invoiceNumber).join(', ') + '). Concilie el estado documental antes de declarar.');
     }
     const existingDraft = vatOwnDeclarations.find(item => item.companyId === currentCompany.id && item.period === input.period);
     if (existingDraft && (existingDraft.status !== 'DRAFT' || input.refresh !== true)) {
@@ -5702,6 +5701,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const outputVat16Bs = Math.max(0, outputVat16Raw);
       const outputVat8Bs = Math.max(0, outputVat8Raw);
       const withholdingRows = getReceivedVatWithholdingSales(sales, currentCompany.id, input.period);
+      const relevantSaleIds = new Set([
+        ...resolution.days.filter(day => day.source === 'INDIVIDUAL').flatMap(day => day.sourceIds),
+        ...withholdingRows.map(item => item.id)
+      ]);
+      const inconsistentSalesSources = getVatOwnInconsistentSalesSources(currentCompany.id, relevantSaleIds);
+      if (inconsistentSalesSources.length > 0) {
+        throw new Error('No se puede preparar IVA: hay ventas seleccionadas o retenciones de clientes vinculadas a asientos de origen inexistentes o revertidos (' +
+          inconsistentSalesSources.map(item => item.invoiceNumber).join(', ') + '). Concilie el documento antes de declarar.');
+      }
       const withholdingRaw = withholdingRows.reduce((sum, item) =>
         sum + (item.documentType === '03' ? -1 : 1) * Number(item.vatWithheldBs || 0), 0);
       const withholdingBs = Math.max(0, withholdingRaw);
@@ -5818,11 +5826,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         throw new Error('No se puede presentar: la tasa BCV del borrador no coincide con la tasa histórica efectiva en la fecha de presentación. Actualice el borrador con la tasa correspondiente.');
       }
       const inconsistentPurchaseSources = getVatOwnInconsistentPurchaseSources(currentCompany.id);
-      const inconsistentSalesSources = getVatOwnInconsistentSalesSources(currentCompany.id);
-      if (inconsistentPurchaseSources.length > 0 || inconsistentSalesSources.length > 0) {
-        throw new Error('No se puede presentar IVA: hay documentos fiscales activos con asientos de origen inexistentes o revertidos. Compras: ' +
-          inconsistentPurchaseSources.map(item => item.invoiceNumber).join(', ') + '. Ventas: ' +
-          inconsistentSalesSources.map(item => item.invoiceNumber).join(', ') + '. Concilie el estado documental y actualice el borrador.');
+      if (inconsistentPurchaseSources.length > 0) {
+        throw new Error('No se puede presentar IVA: hay compras con IVA activo sin asiento de origen o vinculadas a un asiento inexistente o revertido (' +
+          inconsistentPurchaseSources.map(item => item.invoiceNumber).join(', ') + '). Concilie el estado documental y actualice el borrador.');
       }
       const periodSales = sales.filter(item => item.companyId === currentCompany.id &&
         item.invoiceDate.startsWith(declaration.period) && !item.isCancelled);
@@ -5865,6 +5871,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const currentOutputVat16 = Math.max(0, currentOutputVat16Raw);
       const currentOutputVat8 = Math.max(0, currentOutputVat8Raw);
       const currentWithholdingRows = getReceivedVatWithholdingSales(sales, currentCompany.id, declaration.period);
+      const relevantSaleIds = new Set([
+        ...resolution.days.filter(day => day.source === 'INDIVIDUAL').flatMap(day => day.sourceIds),
+        ...currentWithholdingRows.map(item => item.id)
+      ]);
+      const inconsistentSalesSources = getVatOwnInconsistentSalesSources(currentCompany.id, relevantSaleIds);
+      if (inconsistentSalesSources.length > 0) {
+        throw new Error('No se puede presentar IVA: hay ventas seleccionadas o retenciones de clientes vinculadas a asientos de origen inexistentes o revertidos (' +
+          inconsistentSalesSources.map(item => item.invoiceNumber).join(', ') + '). Actualice la conciliación antes de presentar.');
+      }
       const currentWithholdingRaw = currentWithholdingRows.reduce((sum, item) =>
         sum + (item.documentType === '03' ? -1 : 1) * Number(item.vatWithheldBs || 0), 0);
       const currentWithholding = Math.max(0, currentWithholdingRaw);
