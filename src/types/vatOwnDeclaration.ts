@@ -427,6 +427,10 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
       throw new Error('No se encontró un único asiento contable de origen para distribuir el IVA no acreditable de la factura ' + sourcePurchase.invoiceNumber + '.');
     }
     const sourceEntry = sourceEntries[0];
+    if (sourceEntry.reversalOfEntryId || sourceEntry.reversedByEntryId ||
+        input.journalEntries.some(entry => entry.companyId === input.companyId && entry.reversalOfEntryId === sourceEntry.id)) {
+      throw new Error('No se puede reclasificar el IVA de una factura cuyo asiento de compra fue revertido. Reconcilie primero el estado fiscal del documento.');
+    }
     const grouped = new Map<string, { accountName: string; amountBs: number }>();
     for (const item of sourceEntry.items) {
       if (Number(item.debitBs || 0) <= 0 || excludedDebitAccounts.has(item.accountCode)) continue;
