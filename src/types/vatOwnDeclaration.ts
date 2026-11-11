@@ -364,9 +364,10 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
   const relatedPurchaseIds: string[] = [];
   const reclassifications: VatOwnPurchaseCreditSummary['reclassifications'] = [];
   const originalByNoteId = new Map<string, PurchaseRecord>();
+  const originalSnapshotById = new Map<string, Record<string, unknown>>();
   const priorNotes: Array<{ item: PurchaseRecord; original: PurchaseRecord; prior: VatOwnDeclaration; treatment: VatOwnPurchaseCreditTreatment; taxRate: number; originalVatAmountBs: number; supplierRif: string }> = [];
   const historicalOriginalVatById = new Map<string, number>();
-  const originalSnapshotById = new Map<string, Record<string, unknown>>();
+
   const getFiledPurchaseSnapshot = (declaration: VatOwnDeclaration, original: PurchaseRecord): {
     treatment: VatOwnPurchaseCreditTreatment;
     taxRate: number;
