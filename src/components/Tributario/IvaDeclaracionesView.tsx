@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { CalendarDays, FileText, Receipt, ShoppingCart, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs } from '../../utils/formatters';
-import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, calculateVatOwnPosition, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, getUnfiledVatOwnActivityPeriods, getVatOwnFiledLaterPeriods, resolveVatOwnPaymentBcvRate } from '../../types/vatOwnDeclaration';
+import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, calculateVatOwnPosition, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, buildVatOwnSourceSnapshots, areVatOwnSourceSnapshotsCurrent, getUnfiledVatOwnActivityPeriods, getVatOwnFiledLaterPeriods, resolveVatOwnPaymentBcvRate } from '../../types/vatOwnDeclaration';
 
 const money = (value: number | undefined) => Number.isFinite(value) ? Number(value) : 0;
 const parseLocalizedNumber = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
@@ -189,6 +189,11 @@ export const IvaDeclaracionesView: React.FC = () => {
   ])].sort();
   const savedSourceIds = [...new Set([...(savedDeclaration?.sourceIds || []), ...(savedDeclaration?.relatedSourceIds || [])])].sort();
   const sourceIdsChanged = Boolean(savedDeclaration && JSON.stringify(currentSourceIds) !== JSON.stringify(savedSourceIds));
+  const currentSourceSnapshots = buildVatOwnSourceSnapshots({
+    companyId: currentCompany.id, sourceIds: currentSourceIds, sales, purchases, journalEntries
+  });
+  const sourceSnapshotsChanged = Boolean(savedDeclaration &&
+    !areVatOwnSourceSnapshotsCurrent(savedDeclaration.sourceSnapshots, currentSourceSnapshots));
   const sourceChoicesChanged = Boolean(savedDeclaration?.status === 'DRAFT' && dailySalesResolution.conflicts.some(conflict =>
     activeSourceChoices[conflict.date] !== savedDeclaration.dailySourceChoices?.[conflict.date]
   ));
@@ -204,7 +209,7 @@ export const IvaDeclaracionesView: React.FC = () => {
     })
   ));
   const draftNeedsRefresh = savedDeclaration?.status === 'DRAFT' && (
-    sourceIdsChanged || sourceChoicesChanged || bcvRateChanged || purchaseReclassificationChanged || positionSummaryChanged ||
+    sourceIdsChanged || sourceSnapshotsChanged || sourceChoicesChanged || bcvRateChanged || purchaseReclassificationChanged || positionSummaryChanged ||
     Boolean(purchaseSummaryError) || unfiledActivityPeriods.length > 0 || laterFiledPeriods.length > 0 || Boolean(activityPeriodError) || dailySalesResolution.unresolvedDates.length > 0
   );
 
