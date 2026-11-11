@@ -5,7 +5,7 @@ import { formatBs } from '../../utils/formatters';
 import { getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources } from '../../types/vatOwnDeclaration';
 
 const money = (value: number | undefined) => Number.isFinite(value) ? Number(value) : 0;
-const parseLocalizedNumber = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\\./g, '').replace(',', '.') : raw); };
+const parseLocalizedNumber = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
 const signedDocument = (type: '01' | '02' | '03') => type === '03' ? -1 : 1;
 
 export const IvaDeclaracionesView: React.FC = () => {
