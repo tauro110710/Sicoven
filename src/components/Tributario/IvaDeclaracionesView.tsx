@@ -160,8 +160,18 @@ export const IvaDeclaracionesView: React.FC = () => {
   const bcvRateChanged = Boolean(savedDeclaration && (!Number.isFinite(Number(savedDeclaration.bcvRate)) || Math.abs(Number(savedDeclaration.bcvRate) - Number(currentCompany.bcvRate)) > 0.000001));
   const purchaseReclassificationChanged = Boolean(savedDeclaration &&
     JSON.stringify(purchaseReclassificationItems) !== JSON.stringify(savedDeclaration.purchaseVatReclassificationItems || []));
+  const positionSummaryChanged = Boolean(savedDeclaration && (
+    outputVat === null ||
+    Math.abs(money(outputVat) - money(savedDeclaration.position.outputVatBs)) > 0.02 ||
+    purchaseCreditEligible === null ||
+    Math.abs(money(purchaseCreditEligible) - money(savedDeclaration.position.purchaseCreditBs)) > 0.02 ||
+    Math.abs(purchaseCreditReversal - money(savedDeclaration.position.purchaseCreditReversalBs)) > 0.02 ||
+    Math.abs(money(receivedWithholdings) - money(savedDeclaration.position.receivedWithholdingsBs)) > 0.02 ||
+    prorationRate === null ||
+    Math.abs(money(prorationRate) - money(savedDeclaration.position.prorationRate)) > 0.000001
+  ));
   const draftNeedsRefresh = savedDeclaration?.status === 'DRAFT' && (
-    sourceIdsChanged || sourceChoicesChanged || bcvRateChanged || purchaseReclassificationChanged ||
+    sourceIdsChanged || sourceChoicesChanged || bcvRateChanged || purchaseReclassificationChanged || positionSummaryChanged ||
     Boolean(purchaseSummaryError) || unfiledActivityPeriods.length > 0 || laterFiledPeriods.length > 0 || Boolean(activityPeriodError) || dailySalesResolution.unresolvedDates.length > 0
   );
 
