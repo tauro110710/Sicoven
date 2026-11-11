@@ -479,6 +479,23 @@ test('rejects invalid amounts and duplicate source identifiers', () => {
   }), /importes inválidos/);
 });
 
+test('does not allow presenting a monthly IVA declaration before its fiscal month closes', () => {
+  const draftDeclaration = { ...declaration, status: 'DRAFT' as const, declarationNumber: undefined, filedAt: undefined };
+  const filing = {
+    declarationId: draftDeclaration.id, companyId: draftDeclaration.companyId,
+    eventType: 'FILED' as const, declarationNumber: 'F30-001',
+    idempotencyKey: 'FILED:' + draftDeclaration.id
+  };
+  assert.throws(() => validateVatOwnEvent({
+    declaration: draftDeclaration, events: [],
+    draft: { ...filing, occurredAt: '2026-01-31T23:00:00.000Z' }
+  }), /antes de que finalice el período fiscal seleccionado/);
+  assert.doesNotThrow(() => validateVatOwnEvent({
+    declaration: draftDeclaration, events: [],
+    draft: { ...filing, occurredAt: '2026-02-01T00:01:00.000Z' }
+  }));
+});
+
 test('rejects future-dated IVA payments', () => {
   const future = new Date();
   future.setDate(future.getDate() + 1);
