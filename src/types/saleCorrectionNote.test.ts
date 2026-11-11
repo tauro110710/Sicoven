@@ -52,7 +52,7 @@ test('blocks a credit note that exceeds the remaining original taxable base', ()
 
 test('distributes VAT withholding proportionally without blocking the correction', () => {
   const result = calculateSaleCorrectionNote(draft({
-    sourceSale: { ...source, vatWithheldBs: 4 }
+    sourceSale: { ...source, vatWithheldBs: 40 }
   }));
   assert.equal(result.vatAmountBs, 8);
   assert.equal(result.vatWithheldBs, 2);
