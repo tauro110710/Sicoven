@@ -79,7 +79,8 @@ export function buildVatOwnSourceSnapshots(input: {
 }): Record<string, string> {
   const snapshots: Record<string, string> = {};
   const journalSnapshot = (entry: JournalEntry | undefined) => entry ? {
-    id: entry.id, date: entry.date, referenceDoc: entry.referenceDoc, type: entry.type,
+    id: entry.id, entryNumber: entry.entryNumber, date: entry.date, referenceDoc: entry.referenceDoc, type: entry.type,
+    bcvRate: entry.bcvRate, description: entry.description,
     reversalOfEntryId: entry.reversalOfEntryId || null, reversedByEntryId: entry.reversedByEntryId || null,
     items: entry.items.map(line => ({
       accountCode: line.accountCode, debitBs: line.debitBs, creditBs: line.creditBs,
@@ -99,7 +100,7 @@ export function buildVatOwnSourceSnapshots(input: {
         igtfAmountBs: sale.igtfAmountBs || 0, igtfAmountUsd: sale.igtfAmountUsd || 0,
         vatWithheldBs: sale.vatWithheldBs, vatWithheldUsd: sale.vatWithheldUsd, retentionRate: sale.retentionRate || 0,
         retentionVoucherNumber: sale.retentionVoucherNumber || null, retentionVoucherDate: sale.retentionVoucherDate || null,
-        bcvRate: sale.bcvRate, originalSaleId: sale.originalSaleId || null,
+        bcvRate: sale.bcvRate, journalEntryId: sale.journalEntryId || null, originalSaleId: sale.originalSaleId || null,
         affectedInvoiceNumber: sale.affectedInvoiceNumber || null, affectedInvoiceDate: sale.affectedInvoiceDate || null,
         affectedInvoiceControlNumber: sale.affectedInvoiceControlNumber || null, isCancelled: Boolean(sale.isCancelled),
         journal: journalSnapshot(input.journalEntries.find(entry => entry.id === sale.journalEntryId && entry.companyId === input.companyId))
@@ -119,7 +120,7 @@ export function buildVatOwnSourceSnapshots(input: {
         igtfAmountBs: purchase.igtfAmountBs || 0, igtfAmountUsd: purchase.igtfAmountUsd || 0,
         vatCreditTreatment: purchase.vatCreditTreatment || 'COMMON',
         vatWithheldBs: purchase.vatWithheldBs, vatWithheldUsd: purchase.vatWithheldUsd, retentionRate: purchase.retentionRate || 0,
-        voucherNumber: purchase.voucherNumber || null, bcvRate: purchase.bcvRate, originalPurchaseId: purchase.originalPurchaseId || null,
+        voucherNumber: purchase.voucherNumber || null, bcvRate: purchase.bcvRate, journalEntryId: purchase.journalEntryId || null, originalPurchaseId: purchase.originalPurchaseId || null,
         affectedInvoiceNumber: purchase.affectedInvoiceNumber || null, affectedInvoiceDate: purchase.affectedInvoiceDate || null,
         affectedInvoiceControlNumber: purchase.affectedInvoiceControlNumber || null, isCancelled: Boolean(purchase.isCancelled),
         journal: journalSnapshot(input.journalEntries.find(entry => entry.id === purchase.journalEntryId && entry.companyId === input.companyId))
