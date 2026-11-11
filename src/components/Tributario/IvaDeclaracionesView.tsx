@@ -67,7 +67,10 @@ export const IvaDeclaracionesView: React.FC = () => {
   const receivedWithholdings = getReceivedVatWithholdingSales(sales, currentCompany.id, period).reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatWithheldBs), 0);
   const preliminaryBalance = outputVat === null ? null : outputVat - purchaseCredit - receivedWithholdings - priorCredit;
 
-  const zSources = monthZ.map(entry => ({
+  const includedZSourceIds = new Set(dailySalesResolution.days
+    .filter(day => day.source === 'Z')
+    .flatMap(day => day.sourceIds));
+  const zSources = monthZ.filter(entry => includedZSourceIds.has(entry.id)).map(entry => ({
     id: entry.id,
     date: entry.date,
     number: entry.fiscalZReport?.zNumber || entry.referenceDoc || entry.entryNumber.toString(),
@@ -151,7 +154,7 @@ export const IvaDeclaracionesView: React.FC = () => {
           <FileText className="h-4 w-4 text-slate-600" />
           <h2 className="font-bold text-slate-900">Reportes Z incluidos en el débito fiscal</h2>
         </div>
-        {zSources.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">No hay reportes Z registrados para este período.</p> : (
+        {zSources.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">No hay reportes Z seleccionados como fuente del débito fiscal para este período. Si existen días coincidentes, revisa la fuente elegida en cada fecha.</p> : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[650px] text-left text-xs">
               <thead className="bg-slate-50 text-slate-600"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Reporte Z</th><th className="px-4 py-3">Origen</th><th className="px-4 py-3 text-right">Base gravada</th><th className="px-4 py-3 text-right">IVA reportado</th></tr></thead>
