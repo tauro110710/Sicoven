@@ -107,7 +107,7 @@ export const IvaDeclaracionesView: React.FC = () => {
   const sourceChoicesChanged = Boolean(savedDeclaration?.status === 'DRAFT' && dailySalesResolution.conflicts.some(conflict =>
     activeSourceChoices[conflict.date] !== savedDeclaration.dailySourceChoices?.[conflict.date]
   ));
-  const bcvRateChanged = Boolean(savedDeclaration && Math.abs(Number(savedDeclaration.bcvRate) - Number(currentCompany.bcvRate)) > 0.000001);
+  const bcvRateChanged = Boolean(savedDeclaration && (!Number.isFinite(Number(savedDeclaration.bcvRate)) || Math.abs(Number(savedDeclaration.bcvRate) - Number(currentCompany.bcvRate)) > 0.000001));
   const draftNeedsRefresh = savedDeclaration?.status === 'DRAFT' && (
     sourceIdsChanged || sourceChoicesChanged || bcvRateChanged || dailySalesResolution.unresolvedDates.length > 0
   );
