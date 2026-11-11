@@ -781,12 +781,29 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     const previous = priorById.get(String(declaration.id));
     const newlyPresented = declaration.status === 'FILED' && previous?.status === 'DRAFT';
     if (!declaration.sourceSnapshots || (declaration.status !== 'DRAFT' && !newlyPresented)) continue;
-    const activityPeriods = [...(activityPeriodsByCompany.get(String(declaration.companyId)) || [])];
-    const missingPeriods = activityPeriods
-      .filter(period => period < declaration.period && !filedPeriodKeys.has(String(declaration.companyId) + ':' + period))
-      .sort();
+    const companyId = String(declaration.companyId);
+    const knownPeriods = new Set([...(activityPeriodsByCompany.get(companyId) || [])]
+      .filter(period => period < declaration.period));
+    for (const key of filedPeriodKeys) {
+      const separator = key.lastIndexOf(':');
+      if (key.slice(0, separator) === companyId) {
+        const filedPeriod = key.slice(separator + 1);
+        if (filedPeriod < declaration.period) knownPeriods.add(filedPeriod);
+      }
+    }
+    const missingPeriods: string[] = [];
+    if (knownPeriods.size > 0) {
+      let cursor = [...knownPeriods].sort()[0];
+      while (cursor < declaration.period) {
+        if (!filedPeriodKeys.has(companyId + ':' + cursor)) missingPeriods.push(cursor);
+        const [year, month] = cursor.split('-').map(Number);
+        const nextYear = month === 12 ? year + 1 : year;
+        const nextMonth = month === 12 ? 1 : month + 1;
+        cursor = String(nextYear).padStart(4, '0') + '-' + String(nextMonth).padStart(2, '0');
+      }
+    }
     if (missingPeriods.length > 0) {
-      throw new Error('SQLite bloqueó la declaración IVA: existen períodos anteriores con actividad fiscal sin presentar (' + missingPeriods.join(', ') + ').');
+      throw new Error('SQLite bloqueó la declaración IVA: existen períodos mensuales anteriores sin declaración presentada (' + missingPeriods.join(', ') + ').');
     }
     const laterFiled = declarations.some(item =>
       item.companyId === declaration.companyId && item.status === 'FILED' && item.period > declaration.period
