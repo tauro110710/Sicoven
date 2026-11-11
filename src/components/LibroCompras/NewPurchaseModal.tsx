@@ -78,10 +78,12 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
 
   // Real-time calculations
   const effectiveTaxableBaseBs = vatNotDiscriminated && taxRate > 0 ? Math.round((taxableGrossBs / (1 + taxRate / 100) + Number.EPSILON) * 100) / 100 : taxableBaseBs;
-  const vatAmountBs = Math.round(effectiveTaxableBaseBs * (taxRate / 100) * 100) / 100;
+  const effectiveVatRate = taxRate === 31 ? 16 : taxRate;
+  const vatAmountBs = Math.round(effectiveTaxableBaseBs * (effectiveVatRate / 100) * 100) / 100;
+  const additionalLuxuryTaxBs = taxRate === 31 ? Math.round(effectiveTaxableBaseBs * 0.15 * 100) / 100 : 0;
   const selectedMonthKey = String(accountCreditDate || invoiceDate || '').slice(0, 7);
   const islrUnitTaxValueBs = getIslrUnitTaxValueForPeriod(selectedMonthKey);
-  const operationAmountBs = Math.round((effectiveTaxableBaseBs + exemptAmountBs + vatAmountBs + Number.EPSILON) * 100) / 100;
+  const operationAmountBs = Math.round((effectiveTaxableBaseBs + exemptAmountBs + vatAmountBs + additionalLuxuryTaxBs + Number.EPSILON) * 100) / 100;
   const supplierRifKeyForProfile = String(supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
   const supplierProfilePurchase = purchases.filter(item => item.companyId === currentCompany.id && String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierRifKeyForProfile && item.supplierTaxStatus).sort((a, b) => b.opNumber - a.opNumber)[0];
   const resolvedSupplierTaxStatus: IvaSupplierTaxStatus = supplierTaxStatus === 'AUTO' ? (supplierProfilePurchase?.supplierTaxStatus || 'UNKNOWN') : supplierTaxStatus;
@@ -194,7 +196,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       window.alert('El total de la factura debe ser un importe válido mayor que cero.');
       return;
     }
-    if (![effectiveTaxableBaseBs, exemptAmountBs, vatAmountBs, igtfAmountBs, vatWithheldBs, islrWithheldBs].every(value => Number.isFinite(value) && value >= 0)) {
+    if (![effectiveTaxableBaseBs, exemptAmountBs, vatAmountBs, additionalLuxuryTaxBs, igtfAmountBs, vatWithheldBs, islrWithheldBs].every(value => Number.isFinite(value) && value >= 0)) {
       window.alert('Hay importes fiscales inválidos. Revisa base imponible, exento, IVA, IGTF y retenciones.');
       return;
     }
@@ -255,6 +257,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       taxableBaseBs: effectiveTaxableBaseBs,
       taxRate,
       vatAmountBs,
+      additionalLuxuryTaxBs,
+      additionalLuxuryTaxUsd: bcvRate > 0 ? additionalLuxuryTaxBs / bcvRate : 0,
       retentionRate,
       vatWithheldBs,
       supplierTaxStatus: resolvedSupplierTaxStatus,
