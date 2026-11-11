@@ -627,6 +627,8 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
         item.companyId === companyId && item.status === 'FILED' && item.period < period
       ).sort((a, b) => b.period.localeCompare(a.period))[0];
       const priorCreditAvailable = Number(previousFiled?.position?.creditCarryForwardBs || 0);
+      const expectedProrationRate = Number(p.taxableSalesBaseBs) + Number(p.exemptSalesBaseBs) > 0
+        ? Number(p.taxableSalesBaseBs) / (Number(p.taxableSalesBaseBs) + Number(p.exemptSalesBaseBs)) : 1;
       const balanceBeforePriorCredit = Number(p.outputVatBs) + Number(p.debitAdjustmentsBs) +
         Number(p.purchaseCreditReversalBs) - Number(p.purchaseCreditBs) -
         Number(p.receivedWithholdingsBs) - Number(p.creditAdjustmentsBs);
@@ -640,6 +642,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           !near(p.purchaseCreditReversal16Bs + p.purchaseCreditReversal8Bs, p.purchaseCreditReversalBs) ||
           !near(p.purchaseCreditReversalNonEligible16Bs + p.purchaseCreditReversalNonEligible8Bs, p.purchaseCreditReversalNonEligibleBs) ||
           !near(p.creditAdjustments16Bs + p.creditAdjustments8Bs, p.creditAdjustmentsBs) ||
+          !near(p.prorationRate, expectedProrationRate, 0.000001) ||
           !near(p.priorCreditAppliedBs, expectedPriorApplied) ||
           !near(p.netTaxBs, expectedNetTax) ||
           !near(p.amountDueBs, Math.max(0, expectedNetTax)) ||
