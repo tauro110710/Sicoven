@@ -791,7 +791,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
         if (filedPeriod < declaration.period) knownPeriods.add(filedPeriod);
       }
     }
-    const missingPeriods: string[] = [];
+    const missingPeriods = [];
     if (knownPeriods.size > 0) {
       let cursor = [...knownPeriods].sort()[0];
       while (cursor < declaration.period) {
