@@ -455,6 +455,8 @@ export interface SaleRecord {
   journalEntryId?: string;
   /** Vínculo append-only de NC/ND de cliente con la factura que corrige. */
   originalSaleId?: string;
+  /** Cantidades acumulables de devolución física por producto en cada NC. */
+  returnedInventoryQuantities?: Record<string, number>;
   affectedInvoiceDate?: string;
   affectedInvoiceControlNumber?: string;
   affectedInvoiceTotalAmountBs?: number;
