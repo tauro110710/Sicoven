@@ -5632,21 +5632,25 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const createVatOwnDeclaration = async (input: { period: string; choices?: Record<string, 'Z' | 'INDIVIDUAL'>; refresh?: boolean }): Promise<VatOwnDeclaration> => {
     assertSQLitePersistenceReady(input.refresh ? 'Actualizar borrador de declaración mensual de IVA' : 'Preparar declaración mensual de IVA');
-    if (!isValidVatOwnDeclarationPeriod(input.period)) throw new Error('Seleccione un período mensual válido.');
+    const rawPeriod = input.period;
+    const period = typeof rawPeriod === 'string' ? rawPeriod.trim() : '';
+    if (!isValidVatOwnDeclarationPeriod(period)) {
+      throw new Error('Seleccione un período mensual válido en formato AAAA-MM. Valor recibido: ' + JSON.stringify(rawPeriod));
+    }
     const unfiledActivityPeriods = getUnfiledVatOwnActivityPeriods({
-      companyId: currentCompany.id, targetPeriod: input.period,
+      companyId: currentCompany.id, targetPeriod: period,
       activityDates: getVatOwnActivityDates(currentCompany.id), declarations: vatOwnDeclarations
     });
     if (unfiledActivityPeriods.length > 0) {
       throw new Error('No se puede preparar esta declaración: existen períodos mensuales anteriores sin declaración presentada (' + unfiledActivityPeriods.join(', ') + '). Complete esos meses primero para no omitir débito, crédito ni prorrata.');
     }
     const laterFiledPeriods = getVatOwnFiledLaterPeriods({
-      companyId: currentCompany.id, targetPeriod: input.period, declarations: vatOwnDeclarations
+      companyId: currentCompany.id, targetPeriod: period, declarations: vatOwnDeclarations
     });
     if (laterFiledPeriods.length > 0) {
       throw new Error('No se puede preparar ni corregir directamente este período: ya existen declaraciones posteriores presentadas (' + laterFiledPeriods.join(', ') + '). Use el procedimiento de rectificación y conserve la secuencia fiscal.');
     }
-    const existingDraft = vatOwnDeclarations.find(item => item.companyId === currentCompany.id && item.period === input.period);
+    const existingDraft = vatOwnDeclarations.find(item => item.companyId === currentCompany.id && item.period === period);
     if (existingDraft && (existingDraft.status !== 'DRAFT' || input.refresh !== true)) {
       throw new Error('Ya existe una declaración mensual para ese período. Abra la existente para continuar.');
     }
@@ -5654,18 +5658,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (existingDraft && vatOwnDeclarationEvents.some(event => event.companyId === currentCompany.id && event.declarationId === existingDraft.id)) {
       throw new Error('El borrador ya tiene eventos fiscales asociados y no puede recalcularse.');
     }
-    const lockKey = 'own:' + currentCompany.id + ':' + input.period;
+    const lockKey = 'own:' + currentCompany.id + ':' + period;
     if (vatDeclarationCreationInFlightRef.current.has(lockKey)) throw new Error('La declaración de ese período ya se está preparando.');
     vatDeclarationCreationInFlightRef.current.add(lockKey);
     try {
-      const monthSales = sales.filter(item => item.companyId === currentCompany.id && item.invoiceDate.startsWith(input.period) && !item.isCancelled);
-      const monthPurchases = purchases.filter(item => item.companyId === currentCompany.id && item.invoiceDate.startsWith(input.period) && !item.isCancelled);
+      const monthSales = sales.filter(item => item.companyId === currentCompany.id && item.invoiceDate.startsWith(period) && !item.isCancelled);
+      const monthPurchases = purchases.filter(item => item.companyId === currentCompany.id && item.invoiceDate.startsWith(period) && !item.isCancelled);
       const reversedJournalIds = new Set(journalEntries
         .filter(entry => Boolean(entry.reversalOfEntryId))
         .map(entry => entry.reversalOfEntryId as string));
       const monthZ = journalEntries.filter(entry => entry.companyId === currentCompany.id &&
         Boolean(entry.fiscalZReport) && !reversedJournalIds.has(entry.id) &&
-        String(entry.fiscalZReport!.date || entry.date).startsWith(input.period));
+        String(entry.fiscalZReport!.date || entry.date).startsWith(period));
       const resolution = resolveVatOwnDailySalesSources({
         zReports: monthZ.map(entry => ({
           id: entry.id, date: entry.fiscalZReport!.date || entry.date,
@@ -5688,7 +5692,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const outputVat8Raw = resolution.days.reduce((sum, day) => sum + day.outputVat8Bs, 0);
       const outputVat16Bs = Math.max(0, outputVat16Raw);
       const outputVat8Bs = Math.max(0, outputVat8Raw);
-      const withholdingRows = getReceivedVatWithholdingSales(sales, currentCompany.id, input.period);
+      const withholdingRows = getReceivedVatWithholdingSales(sales, currentCompany.id, period);
       const relevantSaleIds = new Set([
         ...resolution.days.filter(day => day.source === 'INDIVIDUAL').flatMap(day => day.sourceIds),
         ...withholdingRows.map(item => item.id)
@@ -5705,7 +5709,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
       const exemptSalesBaseBs = resolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
       const purchaseSummary = calculateVatOwnPurchaseCreditSummary({
-        companyId: currentCompany.id, period: input.period, purchases: monthPurchases,
+        companyId: currentCompany.id, period: period, purchases: monthPurchases,
         allPurchases: purchases, priorDeclarations: vatOwnDeclarations,
         taxableSalesBaseBs, exemptSalesBaseBs
       });
@@ -5722,11 +5726,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const purchaseCreditReversalNonEligible8Bs = purchaseSummary.priorReversalNonEligible8Bs;
       const purchaseCreditReversalNonEligibleBs = purchaseCreditReversalNonEligible16Bs + purchaseCreditReversalNonEligible8Bs;
       const purchaseVatReclassificationItems = buildVatOwnPurchaseVatReclassificationItems({
-        companyId: currentCompany.id, period: input.period, bcvRate: Number(currentCompany.bcvRate),
+        companyId: currentCompany.id, period: period, bcvRate: Number(currentCompany.bcvRate),
         allPurchases: purchases, journalEntries, summary: purchaseSummary
       });
       const prior = vatOwnDeclarations.filter(item => item.companyId === currentCompany.id &&
-        item.status === 'FILED' && item.period < input.period).sort((a,b)=>b.period.localeCompare(a.period))[0];
+        item.status === 'FILED' && item.period < period).sort((a,b)=>b.period.localeCompare(a.period))[0];
       const debitAdjustmentsBs = Math.max(0, -withholdingRaw);
       const creditAdjustmentsBs = Math.max(0, -outputVat16Raw) + Math.max(0, -outputVat8Raw);
       const position = calculateVatOwnPosition({
@@ -5754,8 +5758,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         ? snapshotVatOwnDeclarationRevision(existingDraft, createdAt, 'Actualización del borrador por conciliación de nuevas fuentes contables')
         : null;
       const declaration: VatOwnDeclaration = {
-        id: existingDraft?.id || 'vat-own-' + currentCompany.id + '-' + input.period,
-        companyId: currentCompany.id, period: input.period, status: 'DRAFT',
+        id: existingDraft?.id || 'vat-own-' + currentCompany.id + '-' + period,
+        companyId: currentCompany.id, period: period, status: 'DRAFT',
         position, sourceIds, relatedSourceIds, sourceSnapshots, bcvRate: Number(currentCompany.bcvRate) || 0,
         dailySourceChoices: { ...(input.choices || {}) },
         purchaseVatReclassificationItems,
