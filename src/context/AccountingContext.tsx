@@ -5861,7 +5861,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
       const positionChanged = (Object.keys(currentPosition) as Array<keyof typeof currentPosition>).some(field => {
         const tolerance = field === 'prorationRate' ? 0.000001 : 0.02;
-        return Math.abs(currentPosition[field] - declaration.position[field]) > tolerance;
+        const savedValue = Number(declaration.position[field] ?? 0);
+        return !Number.isFinite(savedValue) || Math.abs(currentPosition[field] - savedValue) > tolerance;
       });
       if (positionChanged) {
         throw new Error('No se puede presentar: los importes fiscales o el saldo cambiaron desde que se preparó el borrador, aunque las fuentes conserven sus identificadores. Actualícelo y revise la nueva conciliación.');
