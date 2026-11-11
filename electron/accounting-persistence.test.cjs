@@ -60,7 +60,7 @@ test('SQLite persists IVA own-account filing atomically and refuses later mutati
       netTaxBs: 100, amountDueBs: 100, creditCarryForwardBs: 0
     };
     const draft = {
-      id: 'vat-own-atomic', companyId: 'company-1', period: '2026-11', status: 'DRAFT',
+      id: 'vat-own-atomic', companyId: 'company-1', period: '2026-10', status: 'DRAFT',
       position, sourceIds: [], relatedSourceIds: [], sourceSnapshots: {}, bcvRate: 874,
       dailySourceChoices: {}, purchaseVatReclassificationItems: [],
       createdAt: '2026-11-11T10:00:00.000Z'
@@ -71,7 +71,7 @@ test('SQLite persists IVA own-account filing atomically and refuses later mutati
     const journal = {
       id: 'entry-iva-atomic', companyId: 'company-1', entryNumber: 1,
       date: '2026-11-11', description: 'Determinación mensual del IVA',
-      type: 'AJUSTE', bcvRate: 874, referenceDoc: 'IVA-MENSUAL:2026-11',
+      type: 'AJUSTE', bcvRate: 874, referenceDoc: 'IVA-MENSUAL:2026-10',
       items: [
         { accountCode: '2.1.2.01', accountName: 'IVA débito', debitBs: 100, creditBs: 0, debitUsd: 100 / 874, creditUsd: 0 },
         { accountCode: '2.1.2.09', accountName: 'IVA por enterar', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 100 / 874 }
