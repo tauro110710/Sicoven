@@ -529,7 +529,7 @@ test('blocks cumulative reversal when a previously filed credit note has no immu
     allPurchases: [original, previousNote, currentNote],
     priorDeclarations: [filedOriginal, filedNovember],
     taxableSalesBaseBs: 0, exemptSalesBaseBs: 0
-  }), /nota de crédito ya presentada no conserva su huella fiscal histórica/);
+  }), /no conserva su huella fiscal histórica/);
 });
 
 test('blocks cumulative prior-period credit notes that exceed the original invoice VAT', () => {
