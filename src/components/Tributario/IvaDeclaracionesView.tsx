@@ -36,9 +36,10 @@ export const IvaDeclaracionesView: React.FC = () => {
     entry.companyId === currentCompany.id && Boolean(entry.fiscalZReport) && String(entry.fiscalZReport?.date || entry.date).startsWith(period)
   ).sort((a, b) => String(a.fiscalZReport?.date || a.date).localeCompare(String(b.fiscalZReport?.date || b.date)) || a.entryNumber - b.entryNumber), [journalEntries, currentCompany.id, period]);
   const savedDeclaration = vatOwnDeclarations.find(item => item.companyId === currentCompany.id && item.period === period);
-  const activeSourceChoices = savedDeclaration?.status === 'FILED'
+  const activeSourceChoices = useMemo(() => savedDeclaration?.status === 'FILED'
     ? savedDeclaration.dailySourceChoices || {}
-    : { ...(savedDeclaration?.dailySourceChoices || {}), ...dailySourceChoices };
+    : { ...(savedDeclaration?.dailySourceChoices || {}), ...dailySourceChoices },
+  [savedDeclaration?.status, savedDeclaration?.dailySourceChoices, dailySourceChoices]);
   const declarationEvents = savedDeclaration ? vatOwnDeclarationEvents.filter(event => event.declarationId === savedDeclaration.id) : [];
   const declarationOutstanding = savedDeclaration ? getVatOwnOutstandingBalance(savedDeclaration, declarationEvents) : 0;
 
