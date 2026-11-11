@@ -68,6 +68,7 @@ export const IvaDeclaracionesView: React.FC = () => {
   const purchaseCreditGross8 = monthPurchases.filter(item => item.taxRate === 8)
     .reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatAmountBs), 0);
   const purchaseCredit = purchaseCreditGross16 + purchaseCreditGross8;
+  const purchaseCreditGrossInvalid = purchaseCreditGross16 < -0.02 || purchaseCreditGross8 < -0.02;
   const taxableSalesBase = dailySalesResolution.days.reduce((sum, day) =>
     sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
   const exemptSalesBase = dailySalesResolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
@@ -109,7 +110,7 @@ export const IvaDeclaracionesView: React.FC = () => {
   ));
   const bcvRateChanged = Boolean(savedDeclaration && (!Number.isFinite(Number(savedDeclaration.bcvRate)) || Math.abs(Number(savedDeclaration.bcvRate) - Number(currentCompany.bcvRate)) > 0.000001));
   const draftNeedsRefresh = savedDeclaration?.status === 'DRAFT' && (
-    sourceIdsChanged || sourceChoicesChanged || bcvRateChanged || dailySalesResolution.unresolvedDates.length > 0
+    sourceIdsChanged || sourceChoicesChanged || bcvRateChanged || purchaseCreditGrossInvalid || dailySalesResolution.unresolvedDates.length > 0
   );
 
   const includedZSourceIds = new Set(dailySalesResolution.days
@@ -218,6 +219,7 @@ export const IvaDeclaracionesView: React.FC = () => {
           <p className="mt-2 text-sm text-slate-600">El IVA bruto se separa del monto acreditable. El estimado aplica el tratamiento gravado (100%), exento (0%) o común (prorrata según ventas gravadas y exentas).</p>
           <p className="mt-3 text-lg font-black text-sky-800">{purchaseCreditEligible === null ? 'Pendiente de conciliar' : format(purchaseCreditEligible)}</p>
           {prorationRate === null && <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs font-semibold text-amber-900">No existe una base válida de ventas gravadas y exentas para determinar la prorrata de las compras comunes. No se calculará el crédito ni se permitirá preparar la declaración hasta conciliar el período o definir correctamente el destino fiscal de las compras.</p>}
+          {purchaseCreditGrossInvalid && <p className="mt-2 rounded-lg bg-rose-50 p-2 text-xs font-semibold text-rose-900">Las notas de crédito superan el IVA bruto de compras de una alícuota del período. Debe conciliarse la factura original y el arrastre del crédito antes de preparar o actualizar el borrador.</p>}
           <p className="mt-1 text-xs text-slate-500">IVA bruto: {format(purchaseCredit)} · No acreditable estimado: {purchaseCreditNonEligible === null ? '—' : format(purchaseCreditNonEligible)}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-4">
@@ -230,7 +232,7 @@ export const IvaDeclaracionesView: React.FC = () => {
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h2 className="text-lg font-bold text-slate-900">Declaración mensual · Control y presentación</h2><p className="mt-1 text-sm text-slate-600">Prepara un borrador desde los libros, conserva las fuentes elegidas y registra presentación y enteramientos con su asiento contable.</p></div>
-          {!savedDeclaration && <button type="button" disabled={!isStorageReady || outputVat === null || prorationRate === null} onClick={async()=>{
+          {!savedDeclaration && <button type="button" disabled={!isStorageReady || outputVat === null || prorationRate === null || purchaseCreditGrossInvalid} onClick={async()=>{
             setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
             try { await createVatOwnDeclaration({period,choices:activeSourceChoices});setWorkflowMessage('Borrador de declaración guardado y confirmado en SQLite.'); }
             catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo preparar la declaración.');}
@@ -242,7 +244,7 @@ export const IvaDeclaracionesView: React.FC = () => {
           {savedDeclaration.status === 'DRAFT' && draftNeedsRefresh && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
             <p className="text-sm font-semibold text-amber-950">El borrador quedó desactualizado frente a los libros o la tasa BCV vigente. Revisa las fuentes diarias pendientes y actualízalo antes de presentarlo. La versión anterior se conservará en el historial.</p>
             {dailySalesResolution.unresolvedDates.length > 0 && <p className="text-xs text-amber-900">Fechas que requieren elegir una fuente: {dailySalesResolution.unresolvedDates.join(', ')}</p>}
-            <button type="button" disabled={workflowBusy || outputVat === null || prorationRate === null || dailySalesResolution.unresolvedDates.length > 0} onClick={async()=>{
+            <button type="button" disabled={workflowBusy || outputVat === null || prorationRate === null || purchaseCreditGrossInvalid || dailySalesResolution.unresolvedDates.length > 0} onClick={async()=>{
               setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
               try { await createVatOwnDeclaration({period,choices:activeSourceChoices,refresh:true});setWorkflowMessage('Borrador actualizado. La versión anterior quedó conservada en el historial.'); }
               catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo actualizar el borrador.');}
