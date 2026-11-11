@@ -5771,6 +5771,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!Number.isFinite(Number(declaration.bcvRate)) || !Number.isFinite(Number(currentCompany.bcvRate)) || Math.abs(Number(declaration.bcvRate) - Number(currentCompany.bcvRate)) > 0.000001) {
         throw new Error('No se puede presentar: la tasa BCV cambió desde que se preparó el borrador. Actualícelo para conservar la tasa vigente y su historial antes de presentar.');
       }
+      const filingDate = draft.occurredAt.slice(0, 10);
+      const officialFilingRate = resolveVatOwnPaymentBcvRate(currentCompany.accountingBcvRateHistory || [], filingDate);
+      if (officialFilingRate === null || Math.abs(Number(declaration.bcvRate) - officialFilingRate) > 0.000001) {
+        throw new Error('No se puede presentar: la tasa BCV del borrador no coincide con la tasa histórica efectiva en la fecha de presentación. Actualice el borrador con la tasa correspondiente.');
+      }
       const periodSales = sales.filter(item => item.companyId === currentCompany.id &&
         item.invoiceDate.startsWith(declaration.period) && !item.isCancelled);
       const periodPurchases = purchases.filter(item => item.companyId === currentCompany.id &&
