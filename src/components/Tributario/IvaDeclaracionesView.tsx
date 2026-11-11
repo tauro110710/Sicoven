@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { CalendarDays, FileText, Receipt, ShoppingCart, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs } from '../../utils/formatters';
-import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources } from '../../types/vatOwnDeclaration';
+import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, resolveVatOwnProrationRate } from '../../types/vatOwnDeclaration';
 
 const money = (value: number | undefined) => Number.isFinite(value) ? Number(value) : 0;
 const parseLocalizedNumber = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
@@ -68,9 +68,13 @@ export const IvaDeclaracionesView: React.FC = () => {
   const taxableSalesBase = dailySalesResolution.days.reduce((sum, day) =>
     sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
   const exemptSalesBase = dailySalesResolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
-  const salesDenominator = taxableSalesBase + exemptSalesBase;
-  const prorationRate = salesDenominator > 0 ? taxableSalesBase / salesDenominator : 1;
-  const purchaseCreditEligible = outputVat === null ? null : Math.max(0, monthPurchases
+  const hasCommonPurchases = monthPurchases.some(item =>
+    (item.vatCreditTreatment || 'COMMON') === 'COMMON' && money(item.vatAmountBs) > 0
+  );
+  const prorationRate = resolveVatOwnProrationRate({
+    taxableSalesBaseBs: taxableSalesBase, exemptSalesBaseBs: exemptSalesBase, hasCommonPurchases
+  });
+  const purchaseCreditEligible = outputVat === null || prorationRate === null ? null : Math.max(0, monthPurchases
     .filter(item => item.taxRate !== 8)
     .reduce((sum, item) => {
       const treatment = item.vatCreditTreatment || 'COMMON';
@@ -193,8 +197,9 @@ export const IvaDeclaracionesView: React.FC = () => {
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <article className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2"><ShoppingCart className="h-4 w-4 text-sky-700" /><h2 className="font-bold text-slate-900">Crédito fiscal de compras</h2></div>
-          <p className="mt-2 text-sm text-slate-600">El IVA bruto se separa del monto acreditable. El estimado aplica el tratamiento gravado (100%), exento (0%) o común (prorrata según ventas gravadas y exentas); queda pendiente si hay días de ventas sin resolver.</p>
+          <p className="mt-2 text-sm text-slate-600">El IVA bruto se separa del monto acreditable. El estimado aplica el tratamiento gravado (100%), exento (0%) o común (prorrata según ventas gravadas y exentas).</p>
           <p className="mt-3 text-lg font-black text-sky-800">{purchaseCreditEligible === null ? 'Pendiente de conciliar' : format(purchaseCreditEligible)}</p>
+          {prorationRate === null && <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs font-semibold text-amber-900">No existe una base válida de ventas gravadas y exentas para determinar la prorrata de las compras comunes. No se calculará el crédito ni se permitirá preparar la declaración hasta conciliar el período o definir correctamente el destino fiscal de las compras.</p>}
           <p className="mt-1 text-xs text-slate-500">IVA bruto: {format(purchaseCredit)} · No acreditable estimado: {purchaseCreditNonEligible === null ? '—' : format(purchaseCreditNonEligible)}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-4">
