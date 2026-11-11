@@ -573,7 +573,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     };
     if (!store?.recordAuditCorrection) throw new Error('La auditoría local de correcciones no está disponible. No se ejecutó la operación.');
     const result = await store.recordAuditCorrection(token, {...input,reason:String(input.reason || 'Corrección contable'),workpaperNote:String(input.workpaperNote || '')});
-    if (!result?.ok) throw new Error(result?.message || 'SQLite no pudo registrar la autorización de la corrección.');
+    if (!result?.ok) throw new Error(result?.message || 'SQLite no pudo registrar el evento de auditoría de la corrección.');
   };
 
   const requireApprovedCorrectionCase = async (
