@@ -477,7 +477,7 @@ test('blocks cumulative reversal when a previously filed credit note has no immu
     sourceIds: [original.id],
     sourceSnapshots: {
       [original.id]: JSON.stringify({
-        kind: 'PURCHASE', id: original.id, documentType: '01',
+        kind: 'PURCHASE', id: original.id, documentType: '01', supplierRif: 'J-12345678-9',
         vatCreditTreatment: 'TAXABLE', taxRate: 16, vatAmountBs: 160
       })
     }
@@ -487,7 +487,7 @@ test('blocks cumulative reversal when a previously filed credit note has no immu
     sourceIds: [previousNote.id], relatedSourceIds: [original.id],
     sourceSnapshots: {
       [original.id]: JSON.stringify({
-        kind: 'PURCHASE', id: original.id, documentType: '01',
+        kind: 'PURCHASE', id: original.id, documentType: '01', supplierRif: 'J-12345678-9',
         vatCreditTreatment: 'TAXABLE', taxRate: 16, vatAmountBs: 160
       })
     }
