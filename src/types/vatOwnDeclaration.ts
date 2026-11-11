@@ -359,8 +359,11 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
   const relatedPurchaseIds: string[] = [];
   const reclassifications: VatOwnPurchaseCreditSummary['reclassifications'] = [];
   const originalByNoteId = new Map<string, PurchaseRecord>();
-  const priorNotes: Array<{ item: PurchaseRecord; original: PurchaseRecord; prior: VatOwnDeclaration; treatment: VatOwnPurchaseCreditTreatment }> = [];
-  const getFiledPurchaseTreatment = (declaration: VatOwnDeclaration, original: PurchaseRecord): VatOwnPurchaseCreditTreatment => {
+  const priorNotes: Array<{ item: PurchaseRecord; original: PurchaseRecord; prior: VatOwnDeclaration; treatment: VatOwnPurchaseCreditTreatment; taxRate: number }> = [];
+  const getFiledPurchaseSnapshot = (declaration: VatOwnDeclaration, original: PurchaseRecord): {
+    treatment: VatOwnPurchaseCreditTreatment;
+    taxRate: number;
+  } => {
     const saved = declaration.sourceSnapshots?.[original.id];
     if (!saved) {
       throw new Error('La declaración anterior no conserva la huella fiscal de la factura original ' + original.invoiceNumber + '. No es seguro inferir su tratamiento IVA actual para revertir un período presentado.');
@@ -368,11 +371,16 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     let snapshot: Record<string, unknown>;
     try { snapshot = JSON.parse(saved) as Record<string, unknown>; }
     catch { throw new Error('La huella fiscal de la factura original ' + original.invoiceNumber + ' no se puede leer para revertir su crédito IVA.'); }
+    const historicalTaxRate = Number(snapshot.taxRate);
     if (snapshot.kind !== 'PURCHASE' || snapshot.id !== original.id ||
-        !['TAXABLE', 'EXEMPT', 'COMMON'].includes(String(snapshot.vatCreditTreatment))) {
-      throw new Error('La declaración anterior no conserva el tratamiento fiscal de la factura original ' + original.invoiceNumber + '.');
+        !['TAXABLE', 'EXEMPT', 'COMMON'].includes(String(snapshot.vatCreditTreatment)) ||
+        !Number.isFinite(historicalTaxRate) || ![8, 16, 31].includes(historicalTaxRate)) {
+      throw new Error('La declaración anterior no conserva el tratamiento fiscal y la alícuota histórica de la factura original ' + original.invoiceNumber + '.');
     }
-    return resolveVatOwnPurchaseCreditTreatment(snapshot.vatCreditTreatment as VatOwnPurchaseCreditTreatment);
+    return {
+      treatment: resolveVatOwnPurchaseCreditTreatment(snapshot.vatCreditTreatment as VatOwnPurchaseCreditTreatment),
+      taxRate: historicalTaxRate
+    };
   };
   const normalizeFiscalReference = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
   for (const item of periodPurchases) {
@@ -394,14 +402,14 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
       throw new Error('La nota de crédito de compras ' + item.invoiceNumber + ' no tiene una factura original única y verificable. Vincule la factura antes de declarar.');
     }
     const original = candidates[0];
-    if (item.taxRate !== original.taxRate) {
-      throw new Error('La nota de crédito de compras ' + item.invoiceNumber + ' no conserva la alícuota de su factura original.');
-    }
     originalByNoteId.set(item.id, original);
     relatedPurchaseIds.push(original.id);
     if (original.invoiceDate.slice(0, 7) >= input.period) {
       if (original.invoiceDate.slice(0, 7) !== input.period) {
         throw new Error('La nota de crédito de compras no puede corregir una factura de un período futuro.');
+      }
+      if (item.taxRate !== original.taxRate) {
+        throw new Error('La nota de crédito de compras ' + item.invoiceNumber + ' no conserva la alícuota de su factura original.');
       }
       continue;
     }
@@ -413,7 +421,11 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     if (matches.length !== 1) {
       throw new Error('La factura original de la nota de crédito no aparece en una única declaración IVA anterior presentada. Debe conciliarse o rectificarse el período original antes de declarar esta nota.');
     }
-    priorNotes.push({ item, original, prior: matches[0], treatment: getFiledPurchaseTreatment(matches[0], original) });
+    const historical = getFiledPurchaseSnapshot(matches[0], original);
+    if (item.taxRate !== historical.taxRate) {
+      throw new Error('La nota de crédito de compras ' + item.invoiceNumber + ' no conserva la alícuota de la factura según la declaración original presentada.');
+    }
+    priorNotes.push({ item, original, prior: matches[0], ...historical });
   }
   const hasCommonCurrentPurchases = periodPurchases.some(item => {
     const original = originalByNoteId.get(item.id);
@@ -442,7 +454,11 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     if (amountBs > 0 && ![8, 16, 31].includes(item.taxRate)) {
       throw new Error('Una compra del período contiene IVA con una alícuota no reconocida.');
     }
-    const isEight = item.taxRate === 8;
+    const priorNote = item.documentType === '03'
+      ? priorNotes.find(row => row.item.id === item.id)
+      : undefined;
+    const effectiveTaxRate = priorNote?.taxRate ?? item.taxRate;
+    const isEight = effectiveTaxRate === 8;
     const add = (bucket: 'gross' | 'eligible' | 'nonEligible', value: number) => {
       if (isEight) {
         if (bucket === 'gross') gross8Bs += value;
@@ -455,7 +471,6 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
       }
     };
     if (item.documentType === '03') {
-      const priorNote = priorNotes.find(row => row.item.id === item.id);
       if (priorNote) {
         const treatment = priorNote.treatment;
         const priorRate = Number(priorNote.prior.position.prorationRate);
@@ -470,7 +485,7 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
         const nonEligible = amountBs - eligible;
         reclassifications.push({
           purchaseId: item.id, basePurchaseId: priorNote.original.id,
-          taxRate: item.taxRate, nonEligibleSignedBs: -nonEligible
+          taxRate: effectiveTaxRate, nonEligibleSignedBs: -nonEligible
         });
         if (isEight) {
           priorReversalEligible8Bs += eligible;
