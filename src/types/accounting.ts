@@ -343,6 +343,9 @@ export interface PurchaseRecord {
   taxableBaseBs: number;
   taxRate: number; // e.g., 16, 8, 31, 0
   vatAmountBs: number;
+  /** Impuesto adicional al consumo suntuario 15%; no integra el crédito fiscal IVA. */
+  additionalLuxuryTaxBs?: number;
+  additionalLuxuryTaxUsd?: number;
   retentionRate: number; // 0, 75, 100
   vatWithheldBs: number;
   // ISLR opcional
