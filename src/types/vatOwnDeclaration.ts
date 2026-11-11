@@ -8,6 +8,16 @@ export function resolveVatOwnPurchaseCreditTreatment(
   return treatment || 'COMMON';
 }
 
+export function areVatOwnDeclarationSourcesCurrent(
+  declarationSourceIds: readonly string[],
+  currentSourceIds: readonly string[]
+): boolean {
+  if (declarationSourceIds.length !== currentSourceIds.length) return false;
+  const saved = [...declarationSourceIds].sort();
+  const current = [...currentSourceIds].sort();
+  return saved.every((id, index) => id === current[index]);
+}
+
 export function isValidVatOwnDeclarationPeriod(period: string): boolean {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(period);
 }
