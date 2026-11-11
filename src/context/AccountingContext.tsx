@@ -53,7 +53,7 @@ import { FinancialDisclosure, validateFinancialDisclosure } from '../types/finan
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
-import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnProrationRate, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
+import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, findExistingVatOwnPaymentReversal, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnProrationRate, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
 import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
@@ -5882,7 +5882,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       } else if (draft.eventType === 'REVERSAL') {
         const original = history.find(item => item.id === draft.reversalOfEventId && item.eventType === 'PAYMENT');
         if (!original?.journalEntryId) throw new Error('El pago original no conserva asiento contable para revertir.');
-        journal = await reverseJournalEntry(original.journalEntryId, draft.occurredAt.slice(0,10), draft.note || 'Reversión de pago de IVA', 'Reversión de evento fiscal ' + original.id);
+        journal = findExistingVatOwnPaymentReversal(
+          journalEntries, currentCompany.id, original.journalEntryId
+        ) || await reverseJournalEntry(
+          original.journalEntryId, draft.occurredAt.slice(0,10),
+          draft.note || 'Reversión de pago de IVA', 'Reversión de evento fiscal ' + original.id
+        );
       }
       const event: VatOwnDeclarationEvent = {
         ...fullDraft, ...(journal ? { journalEntryId: journal.id } : {}),
