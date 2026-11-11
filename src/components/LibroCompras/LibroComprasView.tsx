@@ -26,6 +26,7 @@ import { SupplierAdvanceSettlementModal } from './SupplierAdvanceSettlementModal
 import { getPurchaseAccountCreditDate, type PurchaseRecord } from '../../types/accounting';
 import { SupportingDocumentsPanel } from '../shared/SupportingDocumentsPanel';
 import { JournalReversalModal } from '../LibroDiario/JournalReversalModal';
+import { filterCompanyFiscalDocuments } from '../../types/companyFiscalDocuments';
 
 export const LibroComprasView: React.FC = () => {
   const {
@@ -62,7 +63,7 @@ export const LibroComprasView: React.FC = () => {
     }
   };
 
-  const filteredPurchases = purchases
+  const filteredPurchases = filterCompanyFiscalDocuments(purchases, currentCompany.id)
     .filter(p => {
       if (monthFilter && !p.invoiceDate.startsWith(monthFilter)) return false;
       if (searchTerm.trim()) {
