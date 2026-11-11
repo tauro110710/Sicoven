@@ -293,8 +293,11 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
       if (priorNote) {
         const treatment = resolveVatOwnPurchaseCreditTreatment(priorNote.original.vatCreditTreatment);
         const priorRate = Number(priorNote.prior.position.prorationRate);
-        if (treatment === 'COMMON' && (!Number.isFinite(priorRate) || priorRate < 0 || priorRate > 1)) {
-          throw new Error('La declaración anterior no conserva una prorrata válida para revertir el crédito de la factura original.');
+        const priorSalesBase = Number(priorNote.prior.position.taxableSalesBaseBs || 0) +
+          Number(priorNote.prior.position.exemptSalesBaseBs || 0);
+        if (treatment === 'COMMON' && (!Number.isFinite(priorRate) || priorRate < 0 || priorRate > 1 ||
+            !Number.isFinite(priorSalesBase) || priorSalesBase <= 0)) {
+          throw new Error('La declaración anterior no conserva una prorrata sustentada por una base válida de ventas para revertir el crédito de la factura original.');
         }
         const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : priorRate;
         const eligible = amountBs * factor;
