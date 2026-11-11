@@ -600,7 +600,7 @@ test('reverses the prior non-creditable VAT reclassification when a prior-period
   } as JournalEntry;
   const sourcePurchaseSnapshot = JSON.stringify({
     kind: 'PURCHASE', id: original.id, invoiceNumber: 'FC-OLD',
-    taxRate: 16, taxableBaseBs: 1000, exemptAmountBs: 0,
+    taxRate: 16, vatAmountBs: 160, taxableBaseBs: 1000, exemptAmountBs: 0,
     journalEntryId: sourceJournal.id,
     journal: {
       id: sourceJournal.id, date: sourceJournal.date, type: sourceJournal.type,
