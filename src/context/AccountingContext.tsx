@@ -5667,7 +5667,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         dailySourceChoices: { ...(input.choices || {}) }, createdAt
       };
       validateVatOwnDeclarationDraft(declaration);
-      if (!Number.isFinite(declaration.bcvRate) || declaration.bcvRate <= 0) throw new Error('La empresa no conserva una tasa BCV válida para respaldar la declaración.');
+      if (!Number.isFinite(Number(declaration.bcvRate)) || Number(declaration.bcvRate) <= 0) throw new Error('La empresa no conserva una tasa BCV válida para respaldar la declaración.');
       const confirmation = waitForPersistence();
       setVatOwnDeclarations(prev => [...prev, declaration]);
       await confirmation;
@@ -5747,7 +5747,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         if (items.length) journal = addJournalEntry({
           entryNumber: 0, date: draft.occurredAt.slice(0,10),
           description: 'Determinación mensual del IVA · ' + declaration.period,
-          type: 'AJUSTE', bcvRate: declaration.bcvRate,
+          type: 'AJUSTE', bcvRate: Number(declaration.bcvRate),
           referenceDoc: 'IVA-MENSUAL:' + declaration.period,
           items
         });
