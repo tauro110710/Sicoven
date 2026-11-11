@@ -16,24 +16,31 @@ export function getUnfiledVatOwnActivityPeriods(input: {
   activityDates: readonly string[];
   declarations: readonly VatOwnDeclaration[];
 }): string[] {
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(input.targetPeriod)) {
+  if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(input.targetPeriod)) {
     throw new Error('El período objetivo de IVA no es válido.');
   }
   const filedPeriods = new Set(input.declarations
-    .filter(item => item.companyId === input.companyId && item.status === 'FILED')
+    .filter(item => item.companyId === input.companyId && item.status === 'FILED' && item.period < input.targetPeriod)
     .map(item => item.period));
-  const activityPeriods = new Set<string>();
+  const knownPeriods = new Set<string>(filedPeriods);
   for (const date of input.activityDates) {
-    const dateText = String(date || '');
-    const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(dateText)
-      ? new Date(dateText + 'T00:00:00.000Z') : null;
-    if (!parsedDate || !Number.isFinite(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== dateText) {
+    const period = String(date || '').slice(0, 7);
+    if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(period)) {
       throw new Error('Existe una fecha fiscal inválida que impide verificar la continuidad de las declaraciones de IVA.');
     }
-    const period = dateText.slice(0, 7);
-    if (period < input.targetPeriod) activityPeriods.add(period);
+    if (period < input.targetPeriod) knownPeriods.add(period);
   }
-  return [...activityPeriods].filter(period => !filedPeriods.has(period)).sort();
+  if (knownPeriods.size === 0) return [];
+  let cursor = [...knownPeriods].sort()[0];
+  const missing: string[] = [];
+  while (cursor < input.targetPeriod) {
+    if (!filedPeriods.has(cursor)) missing.push(cursor);
+    const [year, month] = cursor.split('-').map(Number);
+    const nextYear = month === 12 ? year + 1 : year;
+    const nextMonth = month === 12 ? 1 : month + 1;
+    cursor = String(nextYear).padStart(4, '0') + '-' + String(nextMonth).padStart(2, '0');
+  }
+  return missing;
 }
 
 export function getVatOwnFiledLaterPeriods(input: {
