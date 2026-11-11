@@ -317,6 +317,9 @@ export function validateVatOwnEvent(input: {
     if (declaration.status !== 'FILED') throw new Error('Presente la declaración antes de registrar su pago.');
     const payment = amount(draft.amountBs, 'El pago');
     if (payment <= 0) throw new Error('El pago debe ser mayor que cero.');
+    if (declaration.filedAt && Date.parse(draft.occurredAt) < Date.parse(declaration.filedAt)) {
+      throw new Error('La fecha del pago no puede ser anterior a la presentación de la declaración.');
+    }
     if (!draft.reference?.trim()) throw new Error('El pago requiere referencia del comprobante o movimiento bancario.');
     if (events.some(event =>
       event.companyId === declaration.companyId &&
