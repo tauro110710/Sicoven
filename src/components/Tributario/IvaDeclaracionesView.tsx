@@ -43,7 +43,6 @@ export const IvaDeclaracionesView: React.FC = () => {
   const outputVat = dailySalesResolution.unresolvedDates.length
     ? null
     : dailySalesResolution.days.reduce((sum, day) => sum + day.outputVatBs, 0);
-  const hasMixedSalesSources = dailySalesResolution.conflicts.length > 0;
 
   const purchaseCredit = monthPurchases.reduce((sum, item) =>
     sum + signedDocument(item.documentType) * money(item.vatAmountBs), 0);
