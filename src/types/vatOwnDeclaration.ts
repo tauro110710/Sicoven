@@ -436,7 +436,13 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     if (filed.companyId !== input.companyId || filed.status !== 'FILED' || filed.period >= input.period) continue;
     for (const noteId of filed.sourceIds || []) {
       const saved = filed.sourceSnapshots?.[noteId];
-      if (!saved) continue;
+      if (!saved) {
+        const liveSource = input.allPurchases.find(item => item.id === noteId && item.companyId === input.companyId);
+        if (liveSource?.documentType === '03') {
+          throw new Error('Una nota de crédito ya presentada no conserva su huella fiscal histórica. No es seguro calcular su reversión acumulada.');
+        }
+        continue;
+      }
       let snapshot: Record<string, unknown>;
       try { snapshot = JSON.parse(saved) as Record<string, unknown>; }
       catch { throw new Error('Una declaración anterior contiene una huella ilegible para una nota de crédito de compras.'); }
