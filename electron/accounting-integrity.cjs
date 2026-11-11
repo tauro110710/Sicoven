@@ -956,7 +956,11 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
       if (journal) {
         const debit = asArray(journal.items).reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
         const credit = asArray(journal.items).reduce((sum, line) => sum + Number(line.creditBs || 0), 0);
-        if (Math.abs(debit - credit) > 0.02) throw new Error('SQLite rechazó el asiento de determinación IVA desequilibrado.');
+        const debitUsd = asArray(journal.items).reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
+        const creditUsd = asArray(journal.items).reduce((sum, line) => sum + Number(line.creditUsd || 0), 0);
+        if (Math.abs(debit - credit) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.0001) {
+          throw new Error('SQLite rechazó el asiento de determinación IVA desequilibrado en Bs y USD.');
+        }
       }
       filedEvents.set(declaration.id, (filedEvents.get(declaration.id) || 0) + 1);
     } else if (event.eventType === 'PAYMENT') {
