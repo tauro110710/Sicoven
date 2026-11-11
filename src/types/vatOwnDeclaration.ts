@@ -635,6 +635,7 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
       catch { throw new Error('La huella fiscal histórica de la factura original no se puede leer para distribuir su IVA no acreditable.'); }
       if (historicalSource.kind !== 'PURCHASE' || historicalSource.id !== adjustment.basePurchaseId ||
           Number(historicalSource.taxRate) !== adjustment.taxRate ||
+          !Number.isFinite(Number(historicalSource.vatAmountBs)) || Number(historicalSource.vatAmountBs) < 0 ||
           !Number.isFinite(Number(historicalSource.taxableBaseBs)) ||
           !Number.isFinite(Number(historicalSource.exemptAmountBs || 0)) ||
           !String(historicalSource.journalEntryId || '') || !historicalSource.journal ||
