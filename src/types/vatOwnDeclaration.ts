@@ -441,12 +441,29 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
       try { snapshot = JSON.parse(saved) as Record<string, unknown>; }
       catch { throw new Error('Una declaración anterior contiene una huella ilegible para una nota de crédito de compras.'); }
       if (snapshot.kind !== 'PURCHASE' || snapshot.documentType !== '03') continue;
-      const originalId = String(snapshot.originalPurchaseId || '');
-      if (!originalId) continue;
+      const explicitOriginalId = String(snapshot.originalPurchaseId || '');
+      const snapshotSupplierRif = normalizeFiscalReference(snapshot.supplierRif);
+      const affectedNumber = normalizeFiscalReference(snapshot.affectedInvoiceNumber);
+      const historicalCandidates = input.allPurchases.filter(original =>
+        original.companyId === input.companyId && original.documentType === '01' &&
+        (explicitOriginalId
+          ? original.id === explicitOriginalId
+          : Boolean(snapshotSupplierRif && affectedNumber &&
+              normalizeFiscalReference(original.supplierRif) === snapshotSupplierRif &&
+              normalizeFiscalReference(original.invoiceNumber) === affectedNumber &&
+              (!snapshot.affectedInvoiceDate || original.invoiceDate === snapshot.affectedInvoiceDate) &&
+              (!snapshot.affectedInvoiceControlNumber ||
+                normalizeFiscalReference(original.controlNumber) === normalizeFiscalReference(snapshot.affectedInvoiceControlNumber))))
+      );
+      if (historicalCandidates.length === 0) continue;
+      if (historicalCandidates.length !== 1) {
+        throw new Error('Una nota de crédito ya presentada tiene una factura original ambigua; no se puede validar su reversión acumulada.');
+      }
       const noteVat = Number(snapshot.vatAmountBs || 0);
       if (snapshot.id !== noteId || !Number.isFinite(noteVat) || noteVat < 0) {
         throw new Error('Una declaración anterior conserva importes inválidos en una nota de crédito de compras.');
       }
+      const originalId = historicalCandidates[0].id;
       priorFiledNoteVatByOriginal.set(originalId, (priorFiledNoteVatByOriginal.get(originalId) || 0) + noteVat);
     }
   }
