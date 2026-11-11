@@ -3682,7 +3682,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id,
       entityId: purchase.id, correctionType: 'PURCHASE_INVENTORY_CREDIT_NOTE',
       sourceDocumentRef: purchase.invoiceNumber, correctionDocumentRef: request.creditNoteNumber,
-      reason: request.reason, workpaperNote: '',
+      reason: request.reason, workpaperNote: String(draft.workpaperNote || '').trim(),
       fiscalEmissionMedium: request.fiscalEmissionMedium, sameMediumAsOriginal: request.sameMediumAsOriginal
     });
     if (!window.sicovenStore?.save) {
@@ -3755,7 +3755,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         eventType: 'accounting_correction_executed', entityType: 'PURCHASE', companyId: currentCompany.id,
         entityId: purchase.id, correctionType: 'PURCHASE_INVENTORY_CREDIT_NOTE',
         sourceDocumentRef: purchase.invoiceNumber, correctionDocumentRef: request.creditNoteNumber,
-        reason: request.reason, workpaperNote: '',
+        reason: request.reason, workpaperNote: String(draft.workpaperNote || '').trim(),
         fiscalEmissionMedium: request.fiscalEmissionMedium, sameMediumAsOriginal: request.sameMediumAsOriginal,
         journalEntryId: journal.id
       });
@@ -3921,7 +3921,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id, entityId: source.id,
       correctionType: 'PURCHASE_SERVICE_CREDIT_NOTE',
       sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: String(draft.creditNoteNumber).trim(),
-      reason: String(draft.reason).trim(), workpaperNote: '',
+      reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote || '').trim(),
       fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal
     }); } catch (auditError) { correctionWorkflowInFlightRef.current = false; purchaseCreditNoteInFlightRef.current = false; throw auditError; }
     try {
@@ -3971,7 +3971,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             eventType: 'accounting_correction_executed', entityType: 'PURCHASE', companyId: currentCompany.id, entityId: source.id,
             correctionType: 'PURCHASE_SERVICE_CREDIT_NOTE',
             sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: String(draft.creditNoteNumber).trim(),
-            reason: String(draft.reason).trim(), workpaperNote: '',
+            reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote || '').trim(),
             fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal,
             journalEntryId: journal.id
           });
@@ -4026,7 +4026,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id,
           entityId: source.id, correctionType: 'PURCHASE_DEBIT_NOTE',
           sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: draft.debitNoteNumber,
-          reason: draft.reason, workpaperNote: '',
+          reason: draft.reason, workpaperNote: String(draft.workpaperNote || '').trim(),
           fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal
         });
         if (!window.sicovenStore?.save) {
@@ -4066,7 +4066,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             eventType: 'accounting_correction_executed', entityType: 'PURCHASE', companyId: currentCompany.id,
             entityId: source.id, correctionType: 'PURCHASE_DEBIT_NOTE',
             sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: draft.debitNoteNumber,
-            reason: draft.reason, workpaperNote: '',
+            reason: draft.reason, workpaperNote: String(draft.workpaperNote || '').trim(),
             fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal,
             journalEntryId: journal.id
           });
@@ -4407,7 +4407,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       eventType: 'accounting_correction_requested', entityType: 'SALE', companyId: currentCompany.id, entityId: source.id,
       correctionType: isCredit ? 'SALES_CREDIT_NOTE' : 'SALES_DEBIT_NOTE',
       sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: number,
-      reason: String(draft.reason).trim(), workpaperNote: '',
+      reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote || '').trim(),
       fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal
     }); } catch (auditError) { correctionWorkflowInFlightRef.current = false; throw auditError; }
     try {
@@ -4445,7 +4445,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           netReceivableAdjustmentBs: amounts.netReceivableAdjustmentBs,
           netReceivableAdjustmentUsd: amounts.netReceivableAdjustmentUsd,
           correctionReason: String(draft.reason).trim(),
-          correctionWorkpaper: '',
+          correctionWorkpaper: String(draft.workpaperNote || '').trim(),
           notes: 'Documento correctivo vinculado a ' + source.invoiceNumber + '. Motivo: ' + String(draft.reason).trim()
         };
         setSales(prev => [...prev, note]);
@@ -4455,7 +4455,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             eventType: 'accounting_correction_executed', entityType: 'SALE', companyId: currentCompany.id, entityId: source.id,
             correctionType: isCredit ? 'SALES_CREDIT_NOTE' : 'SALES_DEBIT_NOTE',
             sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: number,
-            reason: String(draft.reason).trim(), workpaperNote: '',
+            reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote || '').trim(),
             fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal,
             journalEntryId: journal.id
           });
