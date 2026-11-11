@@ -811,7 +811,12 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     if (event.eventType === 'FILED') {
       if (!priorEventIds.has(id)) {
         const company = companies.get(String(declaration.companyId));
+        const [periodYear, periodMonth] = declaration.period.split('-').map(Number);
+        const periodEndDate = new Date(Date.UTC(periodYear, periodMonth, 0)).toISOString().slice(0, 10);
         const historicalRate = resolveHistoricalRate(company, eventDate);
+        if (eventDate <= periodEndDate) {
+          throw new Error('SQLite rechazó la presentación IVA antes de finalizar el período fiscal mensual (' + periodEndDate + ').');
+        }
         if (!company || !Number.isFinite(Number(company.bcvRate)) ||
             Math.abs(Number(company.bcvRate) - Number(declaration.bcvRate)) > 0.000001 ||
             historicalRate === null || Math.abs(historicalRate - Number(declaration.bcvRate)) > 0.000001) {
