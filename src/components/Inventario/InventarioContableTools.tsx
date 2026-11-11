@@ -8,7 +8,6 @@ import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import ExcelJS from 'exceljs';
 
 const parseCsvLine = (line: string): string[] => {
   const fields: string[] = [];
@@ -120,6 +119,7 @@ export const InventarioContableTools: React.FC = () => {
     try {
       let matrix: string[][];
       if (file.name.toLowerCase().endsWith('.xlsx')) {
+        const ExcelJS = (await import('exceljs')).default;
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.load(await file.arrayBuffer());
         const sheet = workbook.worksheets[0];
