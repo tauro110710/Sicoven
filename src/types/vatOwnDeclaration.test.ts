@@ -358,6 +358,18 @@ test('rejects invalid amounts and duplicate source identifiers', () => {
     id: 'd1', companyId: 'company-a', period: '2026-01',
     sourceIds: ['same', 'same'], createdAt: '2026-02-01T00:00:00.000Z'
   }), /dos veces/);
+  assert.throws(() => validateVatOwnDeclarationDraft({
+    id: 'd2', companyId: 'company-a', period: '2026-01',
+    sourceIds: ['purchase-1'], relatedSourceIds: ['purchase-1'],
+    createdAt: '2026-02-01T00:00:00.000Z'
+  }), /separados de las fuentes directas/);
+  assert.throws(() => validateVatOwnDeclarationDraft({
+    id: 'd3', companyId: 'company-a', period: '2026-01', sourceIds: [],
+    purchaseVatReclassificationItems: [{
+      accountCode: '1.1.4.01', accountName: 'Inventario',
+      debitBs: -10, creditBs: 0, debitUsd: 0, creditUsd: 0
+    }], createdAt: '2026-02-01T00:00:00.000Z'
+  }), /importes inválidos/);
 });
 
 test('allows partial payment and computes remaining balance', () => {
