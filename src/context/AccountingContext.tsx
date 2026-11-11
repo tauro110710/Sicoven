@@ -53,7 +53,7 @@ import { FinancialDisclosure, validateFinancialDisclosure } from '../types/finan
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
-import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, areVatOwnSourceSnapshotsCurrent, buildVatOwnSourceSnapshots, findExistingVatOwnPaymentReversal, resolveVatOwnPaymentBcvRate, getUnfiledVatOwnActivityPeriods, getVatOwnFiledLaterPeriods, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
+import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, areVatOwnSourceSnapshotsCurrent, buildVatOwnSourceSnapshots, findExistingVatOwnPaymentReversal, resolveVatOwnPaymentBcvRate, getUnfiledVatOwnActivityPeriods, getVatOwnFiledLaterPeriods, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, getVatOwnOutstandingBalance, getVatOwnNewCreditCarryForward, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
 import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
@@ -5979,7 +5979,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         addLine(withholding, 0, declaration.position.receivedWithholdingsBs, 'Aplicación retenciones IVA recibidas · ' + declaration.period);
         addLine(withholding, declaration.position.debitAdjustmentsBs, 0, 'Reversión de retenciones IVA por notas correctivas · ' + declaration.period);
         addLine(input16, 0, declaration.position.priorCreditAppliedBs, 'Aplicación de crédito fiscal de períodos anteriores · ' + declaration.period);
-        addLine(input16, declaration.position.creditCarryForwardBs, 0, 'Crédito fiscal trasladable al período siguiente · ' + declaration.period);
+        const newlyGeneratedCreditCarryForwardBs = getVatOwnNewCreditCarryForward({
+          priorCreditAvailableBs: currentPriorCredit,
+          priorCreditAppliedBs: declaration.position.priorCreditAppliedBs,
+          totalCreditCarryForwardBs: declaration.position.creditCarryForwardBs
+        });
+        addLine(input16, newlyGeneratedCreditCarryForwardBs, 0, 'Crédito fiscal nuevo trasladable al período siguiente · ' + declaration.period);
         const netPayable = accounts.find(item => item.code === '2.1.2.09' && item.type === 'PASIVO' && item.isMovement);
         if (declaration.position.amountDueBs > 0 && !netPayable) throw new Error('Falta la cuenta 2.1.2.09 para IVA neto por enterar.');
         addLine(liability16, 0, declaration.position.creditAdjustments16Bs, 'Ajustes que reducen el débito fiscal 16% · ' + declaration.period);
