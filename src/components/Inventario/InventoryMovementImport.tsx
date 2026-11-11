@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import ExcelJS from 'exceljs';
 import { FileUp, X, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import type { InventoryMovementImportDraft } from '../../types/accounting';
@@ -44,6 +43,7 @@ const rowsFromFile = async (file: File): Promise<SourceRow[]> => {
     });
   }
   if (['xlsx', 'xlsm'].includes(extension || '')) {
+    const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(await file.arrayBuffer());
     const sheet = workbook.worksheets[0];
