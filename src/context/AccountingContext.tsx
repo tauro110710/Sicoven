@@ -5740,7 +5740,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       event.companyId === currentCompany.id && event.eventType === 'PAYMENT' && event.reference?.trim() === draft.reference?.trim()
     )) throw new Error('La referencia de pago ya fue utilizada en otra declaración mensual de esta empresa.');
     if (draft.eventType === 'FILED') {
-      if (Math.abs(Number(declaration.bcvRate) - Number(currentCompany.bcvRate)) > 0.000001) {
+      if (!Number.isFinite(Number(declaration.bcvRate)) || !Number.isFinite(Number(currentCompany.bcvRate)) || Math.abs(Number(declaration.bcvRate) - Number(currentCompany.bcvRate)) > 0.000001) {
         throw new Error('No se puede presentar: la tasa BCV cambió desde que se preparó el borrador. Actualícelo para conservar la tasa vigente y su historial antes de presentar.');
       }
       const periodSales = sales.filter(item => item.companyId === currentCompany.id &&
