@@ -3857,7 +3857,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       return Number(line.debitBs || 0) > 0 && account?.isMovement &&
         (account.type === 'COSTOS' || account.type === 'GASTOS');
     });
-    const sourceBaseBs = Number(source.taxableBaseBs) + Number(source.exemptAmountBs);
+    const sourceBaseBs = Number(source.taxableBaseBs) + Number(source.exemptAmountBs) + Number(source.additionalLuxuryTaxBs || 0);
     const expenseBaseBs = expenseLines.reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
     const expenseBaseUsd = expenseLines.reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
     if (!expenseLines.length || Math.abs(expenseBaseBs - sourceBaseBs) > 0.02 ||
@@ -3883,8 +3883,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (allocation.supplierAdvanceBs > 0.02 && !advanceAccount) {
       throw new Error('No existe la cuenta de movimiento de anticipos a proveedores para registrar el excedente de la NC.');
     }
-    const expenseBaseNoteBs = amounts.taxableBaseBs + amounts.exemptAmountBs;
-    const expenseBaseNoteUsd = amounts.taxableBaseUsd + amounts.exemptAmountUsd;
+    const expenseBaseNoteBs = amounts.taxableBaseBs + amounts.exemptAmountBs + amounts.additionalLuxuryTaxBs;
+    const expenseBaseNoteUsd = amounts.taxableBaseUsd + amounts.exemptAmountUsd + amounts.additionalLuxuryTaxUsd;
     const items: JournalEntryItem[] = [];
     if (allocation.appliedToPayableBs > 0.02 && payableCode) {
       const payable = accounts.find(item => item.code === payableCode && item.type === 'PASIVO' && item.isMovement);
@@ -3965,9 +3965,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           documentType: '03', originalPurchaseId: source.id,
           creditNoteLines: [], inventoryLines: undefined,
           taxableBaseBs: amounts.taxableBaseBs, exemptAmountBs: amounts.exemptAmountBs,
-          vatAmountBs: amounts.vatAmountBs, totalAmountBs: amounts.totalAmountBs,
+          vatAmountBs: amounts.vatAmountBs, additionalLuxuryTaxBs: amounts.additionalLuxuryTaxBs, totalAmountBs: amounts.totalAmountBs,
           taxableBaseUsd: amounts.taxableBaseUsd, exemptAmountUsd: amounts.exemptAmountUsd,
-          vatAmountUsd: amounts.vatAmountUsd, totalAmountUsd: amounts.totalAmountUsd,
+          vatAmountUsd: amounts.vatAmountUsd, additionalLuxuryTaxUsd: amounts.additionalLuxuryTaxUsd, totalAmountUsd: amounts.totalAmountUsd,
           vatWithheldBs: 0, vatWithheldUsd: 0, islrWithheldBs: 0, islrWithheldUsd: 0,
           igtfApplicable: false, igtfAmountBs: 0, igtfAmountUsd: 0,
           netPayableReductionBs: amounts.netPayableReductionBs,
