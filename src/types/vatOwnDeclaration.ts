@@ -125,8 +125,8 @@ export function resolveVatOwnProrationRate(input: {
  */
 export function getReceivedVatWithholdingSales<T extends {
   companyId: string;
-  documentType: '01' | '02' | '03';
-  invoiceDate: string;
+  documentType?: '01' | '02' | '03';
+  invoiceDate?: string;
   isCancelled?: boolean;
   retentionVoucherDate?: string;
   vatWithheldBs?: number;
@@ -137,7 +137,7 @@ export function getReceivedVatWithholdingSales<T extends {
         !Number.isFinite(Number(item.vatWithheldBs || 0)) || Number(item.vatWithheldBs || 0) <= 0) return false;
     // En notas de débito/crédito la retención se ajusta con el propio documento
     // correctivo; no debe heredarse la fecha del comprobante de la factura original.
-    const effectiveDate = item.documentType === '01' ? item.retentionVoucherDate : item.invoiceDate;
+    const effectiveDate = item.documentType === '02' || item.documentType === '03' ? item.invoiceDate : item.retentionVoucherDate;
     return typeof effectiveDate === 'string' && effectiveDate.startsWith(period);
   });
 }
