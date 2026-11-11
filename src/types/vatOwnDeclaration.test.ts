@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { PurchaseRecord } from './accounting';
+import type { JournalEntry, PurchaseRecord } from './accounting';
 import {
   getReceivedVatWithholdingSales,
   isValidVatOwnDeclarationPeriod,
   calculateVatOwnPosition,
   calculateVatOwnPurchaseCreditSummary,
+  buildVatOwnPurchaseVatReclassificationItems,
   getVatOwnOutstandingBalance,
   resolveVatOwnDailySalesSources,
   resolveVatOwnProrationRate,
@@ -170,6 +171,70 @@ test('reverses a prior-period common purchase credit using the original declarat
   assert.equal(result.priorReversalEligible16Bs, 40);
   assert.equal(result.priorReversalNonEligible16Bs, 40);
   assert.deepEqual(result.relatedPurchaseIds, [original.id]);
+});
+
+test('reclassifies non-creditable VAT to the original inventory/expense debit account', () => {
+  const original = {
+    id: 'purchase-reclass', companyId: 'company-a', invoiceDate: '2026-11-02',
+    documentType: '01', taxRate: 16, vatAmountBs: 160, taxableBaseBs: 1000,
+    exemptAmountBs: 0, journalEntryId: 'purchase-journal'
+  } as PurchaseRecord;
+  const sourceJournal = {
+    id: 'purchase-journal', companyId: 'company-a', date: '2026-11-02',
+    entryNumber: 1, description: 'Compra', type: 'COMPRA', bcvRate: 200,
+    createdAt: '2026-11-02T10:00:00.000Z',
+    items: [
+      { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 1000, creditBs: 0, debitUsd: 5, creditUsd: 0 },
+      { accountCode: '1.1.3.01', accountName: 'IVA crédito', debitBs: 160, creditBs: 0, debitUsd: 0.8, creditUsd: 0 }
+    ]
+  } as JournalEntry;
+  const items = buildVatOwnPurchaseVatReclassificationItems({
+    companyId: 'company-a', period: '2026-11', bcvRate: 200,
+    allPurchases: [original], journalEntries: [sourceJournal],
+    summary: {
+      prorationRate: 0.5, gross16Bs: 160, gross8Bs: 0,
+      eligible16Bs: 80, eligible8Bs: 0, nonEligible16Bs: 80, nonEligible8Bs: 0,
+      priorReversalEligible16Bs: 0, priorReversalEligible8Bs: 0,
+      priorReversalNonEligible16Bs: 0, priorReversalNonEligible8Bs: 0,
+      relatedPurchaseIds: [],
+      reclassifications: [{ purchaseId: original.id, basePurchaseId: original.id, taxRate: 16, nonEligibleSignedBs: 80 }]
+    }
+  });
+  assert.equal(items.length, 2);
+  assert.equal(items[0].accountCode, '1.1.4.01');
+  assert.equal(items[0].debitBs, 80);
+  assert.equal(items[1].accountCode, '1.1.3.01');
+  assert.equal(items[1].creditBs, 80);
+  assert.equal(items.reduce((sum, item) => sum + item.debitBs, 0), items.reduce((sum, item) => sum + item.creditBs, 0));
+});
+
+test('reverses the prior non-creditable VAT reclassification when a prior-period purchase is credited', () => {
+  const original = {
+    id: 'purchase-reclass-old', companyId: 'company-a', invoiceDate: '2026-10-02',
+    documentType: '01', taxRate: 16, vatAmountBs: 160, taxableBaseBs: 1000,
+    exemptAmountBs: 0, journalEntryId: 'purchase-journal-old'
+  } as PurchaseRecord;
+  const sourceJournal = {
+    id: 'purchase-journal-old', companyId: 'company-a', date: '2026-10-02',
+    entryNumber: 1, description: 'Compra', type: 'COMPRA', bcvRate: 200,
+    createdAt: '2026-10-02T10:00:00.000Z',
+    items: [{ accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 1000, creditBs: 0, debitUsd: 5, creditUsd: 0 }]
+  } as JournalEntry;
+  const items = buildVatOwnPurchaseVatReclassificationItems({
+    companyId: 'company-a', period: '2026-11', bcvRate: 200,
+    allPurchases: [original], journalEntries: [sourceJournal],
+    summary: {
+      prorationRate: 1, gross16Bs: 0, gross8Bs: 0, eligible16Bs: 0, eligible8Bs: 0,
+      nonEligible16Bs: 0, nonEligible8Bs: 0, priorReversalEligible16Bs: 40,
+      priorReversalEligible8Bs: 0, priorReversalNonEligible16Bs: 40,
+      priorReversalNonEligible8Bs: 0, relatedPurchaseIds: [original.id],
+      reclassifications: [{ purchaseId: 'credit-note-old', basePurchaseId: original.id, taxRate: 16, nonEligibleSignedBs: -40 }]
+    }
+  });
+  assert.equal(items[0].accountCode, '1.1.4.01');
+  assert.equal(items[0].creditBs, 40);
+  assert.equal(items[1].accountCode, '1.1.3.01');
+  assert.equal(items[1].debitBs, 40);
 });
 
 test('blocks a prior-period purchase credit note when its original invoice was never included in a filed declaration', () => {
