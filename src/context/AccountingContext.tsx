@@ -3130,7 +3130,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // Debe: Crédito Fiscal IVA si aplica
     if (purchaseData.vatAmountBs > 0) {
       items.push({
-        accountCode: '1.1.3.01',
+        accountCode: purchaseData.taxRate === 8 ? '1.1.3.02' : '1.1.3.01',
         accountName: `Crédito Fiscal IVA Compras (${purchaseData.taxRate}%)`,
         debitBs: purchaseData.vatAmountBs,
         creditBs: 0,
