@@ -36,6 +36,11 @@ test('SQLite persists IVA own-account filing atomically and refuses later mutati
   `);
   try {
     const prior = emptyState();
+    prior.companies[0].bcvRate = 874;
+    prior.companies[0].accountingBcvRateHistory = [
+      { id: 'bcv-oct', rate: 874, effectiveDate: '2026-10-01', recordedAt: '2026-10-01T08:00:00.000Z' },
+      { id: 'bcv-nov', rate: 874, effectiveDate: '2026-11-01', recordedAt: '2026-11-01T08:00:00.000Z' }
+    ];
     prior.accounts.push(
       { code: '2.1.2.01', name: 'IVA débito', type: 'PASIVO', level: 4, isMovement: true },
       { code: '2.1.2.09', name: 'IVA por enterar', type: 'PASIVO', level: 4, isMovement: true }
