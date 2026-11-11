@@ -377,6 +377,24 @@ test('separates IVA débito 16% and 8% for the monthly ledger', () => {
   assert.equal(position.amountDueBs, 210);
 });
 
+test('keeps negative output VAT adjustments split by rate and increases carry-forward correctly', () => {
+  const position = calculateVatOwnPosition({
+    outputVatBs: 0, outputVat16Bs: 0, outputVat8Bs: 0,
+    purchaseCreditBs: 0, receivedWithholdingsBs: 0,
+    debitAdjustmentsBs: 20, creditAdjustmentsBs: 100,
+    creditAdjustments16Bs: 0, creditAdjustments8Bs: 100
+  });
+  assert.equal(position.creditAdjustmentsBs, 100);
+  assert.equal(position.creditAdjustments16Bs, 0);
+  assert.equal(position.creditAdjustments8Bs, 100);
+  assert.equal(position.netTaxBs, -80);
+  assert.equal(position.creditCarryForwardBs, 80);
+  assert.throws(() => calculateVatOwnPosition({
+    outputVatBs: 0, purchaseCreditBs: 0, receivedWithholdingsBs: 0,
+    creditAdjustmentsBs: 100, creditAdjustments16Bs: 40, creditAdjustments8Bs: 40
+  }), /desglose de ajustes al crédito fiscal/);
+});
+
 test('adds reversal of eligible purchase credit from a prior-period credit note before applying carry-forward', () => {
   const position = calculateVatOwnPosition({
     outputVatBs: 100, purchaseCreditBs: 0, purchaseCreditReversalBs: 40,
