@@ -804,3 +804,21 @@ test('bloquea intentar reversar un contra-asiento como si fuera documento fuente
   assert.equal(result.ready, false);
   assert.match(result.blockers.join(' '), /ya es un contra-asiento/);
 });
+
+
+test('blocks generic journal reversal of an immutable fiscal Z report', () => {
+  const zEntry: JournalEntry = {
+    ...source,
+    id: 'z-report-entry',
+    type: 'VENTA',
+    referenceDoc: 'Z-000123',
+    fiscalZReport: {} as NonNullable<JournalEntry['fiscalZReport']>
+  };
+  const result = assessJournalReversal({
+    companyId: 'c-1', source: zEntry, accounts, sales: [], purchases: [],
+    movements: [], products: [], journalEntries: [zEntry],
+    bankAccounts: [], bankStatementMovements: [], creditSettlements: []
+  });
+  assert.equal(result.ready, false);
+  assert.match(result.blockers.join(' '), /Reporte Z fiscal/);
+});
