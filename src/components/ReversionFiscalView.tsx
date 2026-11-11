@@ -220,7 +220,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
       setIncidentPurchaseId('');
       setIncidentCreateReason('');
       await refreshFiscalIncidents();
-      setFeedback({kind:'success', message:'Incidencia fiscal creada y vinculada a la nota correctiva. El expediente permanece pendiente de revisión y actuación documentada.'});
+      setFeedback({kind:'success', message:'Incidencia fiscal creada y vinculada a la nota correctiva. El expediente queda abierto para documentar directamente la actuación que corresponda.'});
     } catch (error) {
       setIncidentError(error instanceof Error ? error.message : 'No se pudo crear el expediente fiscal.');
     } finally { setIncidentCreating(false); }
@@ -1193,7 +1193,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
               {purchases.filter(item=>item.companyId===currentCompany.id && item.documentType==='03' && item.originalPurchaseId && !fiscalIncidents.some(incident=>incident.purchaseId===item.id)).map(item=><option key={item.id} value={item.id}>{item.creditNoteNumber || item.invoiceNumber} · {item.affectedInvoiceNumber}</option>)}
             </select>
           </label>
-          <label className="text-xs font-semibold text-slate-700">Motivo de revisión fiscal
+          <label className="text-xs font-semibold text-slate-700">Motivo de incidencia fiscal
             <input value={incidentCreateReason} onChange={event=>setIncidentCreateReason(event.target.value)} placeholder="Explique qué comprobante o período debe rectificarse…" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-normal" />
           </label>
           <div className="sm:col-span-2"><button type="button" disabled={incidentCreating || !incidentPurchaseId || incidentCreateReason.trim().length<10} onClick={()=>void submitCreateFiscalIncident()} className="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{incidentCreating ? 'Creando expediente…' : 'Crear expediente fiscal de esta NC'}</button></div>
