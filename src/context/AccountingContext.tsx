@@ -5936,6 +5936,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     vatPaymentInFlightRef.current.add(lockKey);
     try {
       let journal: JournalEntry | undefined;
+      const currentPriorCredit = vatOwnDeclarations.filter(item =>
+        item.companyId === currentCompany.id && item.status === 'FILED' && item.period < declaration.period
+      ).sort((a, b) => b.period.localeCompare(a.period))[0]?.position.creditCarryForwardBs || 0;
       if (draft.eventType === 'FILED') {
         const output16 = declaration.position.outputVat16Bs;
         const output8 = declaration.position.outputVat8Bs;
