@@ -925,7 +925,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('Reversión bancaria bloqueada: ' + (bankReadiness.reason || 'no existe una contrapartida bancaria verificable.') +
         ' No se registró ningún contra-asiento.');
     }
-    const correctionCaseId = await authorizeCorrectionCase({entityType:'JOURNAL_ENTRY',entityId:source.id,sourceDocumentRef:source.referenceDoc || String(source.entryNumber),correctionDocumentRef:'REV-' + source.entryNumber});
     await recordCorrectionAudit({
       eventType: 'accounting_correction_requested', entityType: 'JOURNAL_ENTRY', companyId: currentCompany.id,
       entityId: source.id, correctionType: priorPeriodAdjustment ? 'PRIOR_PERIOD_ADJUSTMENT_REVERSAL' : 'JOURNAL_REVERSAL',
@@ -1028,12 +1027,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     } catch (auditError) {
       throw new Error('El contra-asiento quedó guardado en SQLite, pero falta el evento final de auditoría. No repita la reversión. Asiento: ' + reversal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
     }
-    try {
-      await executeCorrectionCase({caseId:correctionCaseId,executionRef:'REV-' + source.entryNumber,reason:correctionReason});
-    } catch (caseError) {
-      throw new Error('El contra-asiento ' + reversal.entryNumber + ' quedó guardado y auditado, pero SICOVEN no pudo cerrar el historial de la corrección. No repita la reversión; actualice el Centro de Correcciones. ' + (caseError instanceof Error ? caseError.message : 'Error al cerrar el historial.'));
-    }
-    return reversal;
+        return reversal;
     } finally {
       journalReversalInFlightRef.current = false;
       correctionWorkflowInFlightRef.current = false;
@@ -1572,15 +1566,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error(
         `Verificación de asiento fallida. Bs: Debe ${totalDebitBs.toFixed(2)} / Haber ${totalCreditBs.toFixed(2)} (dif. ${diff.toFixed(2)}); USD: Debe ${totalDebitUsd.toFixed(2)} / Haber ${totalCreditUsd.toFixed(2)} (dif. ${diffUsd.toFixed(2)}). Revise líneas, importes y cuentas.`
       );
-    }
-    if (entry.reversalOfEntryId || entry.adjustmentForEntryId) {
-      const sourceEntryId=String(entry.reversalOfEntryId || entry.adjustmentForEntryId);
-      const correctionReference=String(entry.referenceDoc || entry.entryNumber || '').trim();
-      const authorizationKey=sourceEntryId+'|'+correctionReference;
-      if(journalCorrectionAuthorizationRef.current!==authorizationKey) {
-        throw new Error('Un reverso o ajuste de asiento requiere autorización formal aprobada para el asiento fuente y la referencia correctiva.');
-      }
-      journalCorrectionAuthorizationRef.current=null;
     }
     // Domain-level backstop: every newly posted credit to a bank auxiliary is
     // an outgoing movement and must fit the available balance at its effective date.
@@ -3677,7 +3662,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       islrEventSequenceRef.current[eventKey] = nextEventSequence;
     }
     const fiscalCorrectionNote = 'La nota de crédito ' + note.creditNoteNumber + ' afecta la retención de la factura ' + purchase.invoiceNumber + '. Verifique el tratamiento del comprobante original y la rectificación que corresponda antes de declarar.';
-    const correctionCaseId = await requireApprovedCorrectionCase('PURCHASE',purchase.id,purchase.invoiceNumber,request.creditNoteNumber);
     await recordCorrectionAudit({
       eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id,
       entityId: purchase.id, correctionType: 'PURCHASE_INVENTORY_CREDIT_NOTE',
@@ -3762,12 +3746,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     } catch (auditError) {
       throw new Error('La devolución y NC quedaron guardadas en SQLite, pero falta el evento final de auditoría. No repita la operación. Asiento: ' + journal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
     }
-    try {
-      await executeCorrectionCase({caseId:correctionCaseId,executionRef:request.creditNoteNumber,reason:'Nota de crédito, devolución física, Kardex y asiento correctivo persistidos y conciliados.'});
-    } catch (caseError) {
-      throw new Error('La NC y sus efectos quedaron guardados y auditados en SQLite, pero falta cerrar su trazabilidad interna. No repita la operación. ' + (caseError instanceof Error ? caseError.message : 'Error al cerrar la corrección.'));
-    }
-    if (fiscalIncidentError) {
+        if (fiscalIncidentError) {
       throw new Error('La NC, su Kardex, el asiento y la auditoría de ejecución quedaron confirmados en SQLite, pero no se pudo abrir la incidencia fiscal automática. No repita la NC. ' + (fiscalIncidentError instanceof Error ? fiscalIncidentError.message : 'Error de incidencia fiscal.'));
     }
     return note;
@@ -3914,7 +3893,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (Math.abs(debitBs - creditBs) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.0001 || items.length < 2) {
       throw new Error('El asiento de NC de servicios no cuadra en Bs. y USD. No se registró.');
     }
-    const correctionCaseId = await requireApprovedCorrectionCase('PURCHASE',source.id,source.invoiceNumber,draft.creditNoteNumber);
     correctionWorkflowInFlightRef.current = true;
     purchaseCreditNoteInFlightRef.current = true;
     try { await recordCorrectionAudit({
@@ -3978,11 +3956,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         } catch (auditError) {
           throw new Error('La NC quedó guardada y confirmada en SQLite, pero falta registrar el evento final de auditoría. No repita el documento. Asiento: ' + journal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
         }
-        try {
-          await executeCorrectionCase({caseId:correctionCaseId,executionRef:String(draft.creditNoteNumber).trim(),reason:'Nota de crédito de servicios, asiento correctivo y auxiliar CxP persistidos.'});
-        } catch (caseError) {
-          throw new Error('La NC de servicios quedó guardada y auditada en SQLite, pero falta cerrar su trazabilidad interna. No repita el documento. ' + (caseError instanceof Error ? caseError.message : 'Error al cerrar la corrección.'));
-        }
         return note;
       });
     } finally {
@@ -4021,8 +3994,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           draft: { ...draft, companyId: currentCompany.id, closedThroughDate: currentCompany.closedThroughDate || undefined },
           purchases, accounts, sourceJournalEntry
         });
-        const correctionCaseId = await requireApprovedCorrectionCase('PURCHASE',source.id,source.invoiceNumber,draft.debitNoteNumber);
-        await recordCorrectionAudit({
+    await recordCorrectionAudit({
           eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id,
           entityId: source.id, correctionType: 'PURCHASE_DEBIT_NOTE',
           sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: draft.debitNoteNumber,
@@ -4072,11 +4044,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           });
         } catch (auditError) {
           throw new Error('La ND quedó guardada en SQLite, pero falta el evento final de auditoría. No repita el documento. Asiento: ' + journal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
-        }
-        try {
-          await executeCorrectionCase({caseId:correctionCaseId,executionRef:String(draft.debitNoteNumber).trim(),reason:'Nota de débito, asiento correctivo y auxiliar CxP persistidos.'});
-        } catch (caseError) {
-          throw new Error('La ND quedó guardada y auditada en SQLite, pero falta cerrar su trazabilidad interna. No repita el documento. ' + (caseError instanceof Error ? caseError.message : 'Error al cerrar la corrección.'));
         }
         return note;
       });
@@ -4401,7 +4368,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         debitBs: 0, creditBs: amounts.vatAmountBs, debitUsd: 0, creditUsd: amounts.vatAmountUsd,
         description: 'Incremento de débito fiscal IVA · ' + source.invoiceNumber });
     }
-    const correctionCaseId = await requireApprovedCorrectionCase('SALE',source.id,source.invoiceNumber,draft.noteNumber);
     correctionWorkflowInFlightRef.current = true;
     try { await recordCorrectionAudit({
       eventType: 'accounting_correction_requested', entityType: 'SALE', companyId: currentCompany.id, entityId: source.id,
@@ -4461,11 +4427,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           });
         } catch (auditError) {
           throw new Error('La nota quedó guardada y confirmada en SQLite, pero falta registrar el evento final de auditoría. No repita el documento. Asiento: ' + journal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
-        }
-        try {
-          await executeCorrectionCase({caseId:correctionCaseId,executionRef:number,reason:'Nota correctiva de venta, asiento y auxiliar CxC persistidos.'});
-        } catch (caseError) {
-          throw new Error('La nota de venta quedó guardada y auditada en SQLite, pero falta cerrar su trazabilidad interna. No repita el documento. ' + (caseError instanceof Error ? caseError.message : 'Error al cerrar la corrección.'));
         }
         return note;
       });
@@ -4939,13 +4900,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const inventoryCorrectionAuthorizationRef = useRef<string | null>(null);
   const journalCorrectionAuthorizationRef = useRef<string | null>(null);
   const addMovement = (movData: Omit<InventoryMovement, 'id' | 'companyId'>): InventoryMovement => {
-    if (movData.correctionForMovementId) {
-      const authorizationKey = String(movData.correctionForMovementId) + '|' + String(movData.documentRef || '').trim();
-      if (inventoryCorrectionAuthorizationRef.current !== authorizationKey) {
-        throw new Error('El movimiento correctivo requiere autorización formal aprobada para el movimiento fuente y su referencia documental.');
-      }
-      inventoryCorrectionAuthorizationRef.current = null;
-    }
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('El movimiento de inventario requiere SQLite local de escritorio disponible y lista.');
     }
