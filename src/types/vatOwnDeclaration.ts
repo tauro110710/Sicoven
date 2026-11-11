@@ -461,18 +461,23 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
       const explicitOriginalId = String(snapshot.originalPurchaseId || '');
       const snapshotSupplierRif = normalizeFiscalReference(snapshot.supplierRif);
       const affectedNumber = normalizeFiscalReference(snapshot.affectedInvoiceNumber);
+      const filedRelatedIds = (filed.relatedSourceIds || []).map(String);
+      const fallbackRelatedId = filedRelatedIds.length === 1 ? filedRelatedIds[0] : '';
       const historicalCandidates = input.allPurchases.filter(original =>
         original.companyId === input.companyId && original.documentType === '01' &&
         (explicitOriginalId
           ? original.id === explicitOriginalId
-          : Boolean(snapshotSupplierRif && affectedNumber &&
-              normalizeFiscalReference(original.supplierRif) === snapshotSupplierRif &&
+          : snapshotSupplierRif && affectedNumber
+            ? normalizeFiscalReference(original.supplierRif) === snapshotSupplierRif &&
               normalizeFiscalReference(original.invoiceNumber) === affectedNumber &&
               (!snapshot.affectedInvoiceDate || original.invoiceDate === snapshot.affectedInvoiceDate) &&
               (!snapshot.affectedInvoiceControlNumber ||
-                normalizeFiscalReference(original.controlNumber) === normalizeFiscalReference(snapshot.affectedInvoiceControlNumber))))
+                normalizeFiscalReference(original.controlNumber) === normalizeFiscalReference(snapshot.affectedInvoiceControlNumber))
+            : Boolean(fallbackRelatedId && original.id === fallbackRelatedId))
       );
-      if (historicalCandidates.length === 0) continue;
+      if (historicalCandidates.length === 0) {
+        throw new Error('Una nota de crédito ya presentada no conserva un vínculo histórico verificable con su factura original. Concilie la nota antes de declarar nuevos períodos.');
+      }
       if (historicalCandidates.length !== 1) {
         throw new Error('Una nota de crédito ya presentada tiene una factura original ambigua; no se puede validar su reversión acumulada.');
       }
