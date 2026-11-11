@@ -7,6 +7,13 @@ import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVat
 const money = (value: number | undefined) => Number.isFinite(value) ? Number(value) : 0;
 const parseLocalizedNumber = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
 const signedDocument = (type: '01' | '02' | '03') => type === '03' ? -1 : 1;
+const localIsoDateTime = (date: Date) => {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const offset = Math.abs(offsetMinutes);
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${String(date.getMilliseconds()).padStart(3, '0')}${sign}${pad(Math.floor(offset / 60))}:${pad(offset % 60)}`;
+};
 
 export const IvaDeclaracionesView: React.FC = () => {
   const { currentCompany, accounts, sales, purchases, journalEntries, vatOwnDeclarations, vatOwnDeclarationEvents, createVatOwnDeclaration, recordVatOwnDeclarationEvent, isStorageReady } = useAccounting();
