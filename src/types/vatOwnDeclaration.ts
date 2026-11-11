@@ -229,6 +229,9 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
       throw new Error('La nota de crédito de compras ' + item.invoiceNumber + ' no tiene una factura original única y verificable. Vincule la factura antes de declarar.');
     }
     const original = candidates[0];
+    if (item.taxRate !== original.taxRate) {
+      throw new Error('La nota de crédito de compras ' + item.invoiceNumber + ' no conserva la alícuota de su factura original.');
+    }
     originalByNoteId.set(item.id, original);
     relatedPurchaseIds.push(original.id);
     if (original.invoiceDate.slice(0, 7) >= input.period) {
@@ -270,6 +273,9 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
   for (const item of periodPurchases) {
     const amountBs = Number(item.vatAmountBs || 0);
     if (!Number.isFinite(amountBs) || amountBs < 0) throw new Error('Una compra del período contiene IVA bruto inválido.');
+    if (amountBs > 0 && ![8, 16, 31].includes(item.taxRate)) {
+      throw new Error('Una compra del período contiene IVA con una alícuota no reconocida.');
+    }
     const isEight = item.taxRate === 8;
     const add = (bucket: 'gross' | 'eligible' | 'nonEligible', value: number) => {
       if (isEight) {
