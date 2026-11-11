@@ -807,7 +807,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
       }
     }
     if (missingPeriods.length > 0) {
-      throw new Error('SQLite bloqueó la declaración IVA: existen períodos mensuales anteriores sin declaración presentada (' + missingPeriods.join(', ') + ').');
+      throw new Error('SQLite bloqueó la declaración IVA: existen períodos anteriores con actividad fiscal sin presentar; faltan declaraciones mensuales (' + missingPeriods.join(', ') + ').');
     }
     const laterFiled = declarations.some(item =>
       item.companyId === declaration.companyId && item.status === 'FILED' && item.period > declaration.period
