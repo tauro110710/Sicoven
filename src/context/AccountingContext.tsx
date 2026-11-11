@@ -1305,6 +1305,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
                 setVatVouchers(confirmed.vatVouchers || []);
                 setVatWithholdingDeclarations(confirmed.vatWithholdingDeclarations || []);
                 setVatWithholdingDeclarationEvents(confirmed.vatWithholdingDeclarationEvents || []);
+                setVatOwnDeclarations(confirmed.vatOwnDeclarations || []);
+                setVatOwnDeclarationEvents(confirmed.vatOwnDeclarationEvents || []);
                 setIslrVouchers(confirmed.islrVouchers || []);
                 setBankAccounts(confirmed.bankAccounts || []);
                 setBankStatementMovements(confirmed.bankStatementMovements || []);
