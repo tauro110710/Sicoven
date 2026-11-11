@@ -58,7 +58,7 @@ export const LibroVentasView: React.FC = () => {
       const z = entry.fiscalZReport!;
       rows.push([z.date,'','VENTAS CONSOLIDADAS · ' + (z.sourceSystemName || z.machineBrand || 'Reporte Z'),'REPORTE Z',z.zNumber,z.controlStart || '', '', '',z.totalSalesBs,z.exemptSalesBs,z.taxableBase16Bs,z.vat16Bs,z.taxableBase8Bs,z.vat8Bs,z.taxableBase31Bs,z.taxableBase31Bs * 0.16,z.additionalLuxuryTaxBs,z.igtfBs,entry.bcvRate,'CIERRE Z']);
     });
-    const csv = '\uFEFF' + [headers,...rows].map(row => row.map(esc).join(';')).join('\\r\\n');
+    const csv = '\uFEFF' + [headers,...rows].map(row => row.map(esc).join(';')).join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
