@@ -305,7 +305,7 @@ export interface FifoAdjustmentResult extends InventoryCostResult {
 
 /** Applies a signed stock adjustment directly to PEPS layers. */
 export function applyFifoAdjustment(layersInput: CostLayer[], delta: number, unitCostBs: number, unitCostUsd: number, date: string, documentRef?: string): FifoAdjustmentResult {
-  if (!Array.isArray(layersInput) || !Number.isFinite(delta) || Math.abs(delta) <= 1e-8 || !validNonNegative(unitCostBs) || !validNonNegative(unitCostUsd) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) !== date) throw new Error('Los datos del ajuste PEPS no son válidos.');
+  if (!Array.isArray(layersInput) || !Number.isFinite(delta) || Math.abs(delta) <= 1e-8 || !validNonNegative(unitCostBs) || !validNonNegative(unitCostUsd) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) !== date) throw new Error('Los datos del ajuste PEPS no son válidos.');
   const layers = layersInput.map(layer => ({ ...layer })).sort((x, y) => String(x.date || '').localeCompare(String(y.date || '')));
   const available = layers.reduce((sum, layer) => sum + Number(layer.quantity), 0);
   if (!Number.isFinite(available) || layers.some(layer => !validPositive(Number(layer.quantity)) || !validNonNegative(Number(layer.unitCostBs)) || !validNonNegative(Number(layer.unitCostUsd)))) throw new Error('Las capas PEPS disponibles contienen datos inválidos.');
