@@ -435,6 +435,11 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
       throw new Error('La factura original de la nota de crédito no aparece en una única declaración IVA anterior presentada. Debe conciliarse o rectificarse el período original antes de declarar esta nota.');
     }
     const historical = getFiledPurchaseSnapshot(matches[0], original);
+    const originalSnapshotText = matches[0].sourceSnapshots?.[original.id];
+    if (originalSnapshotText) {
+      try { originalSnapshotById.set(original.id, JSON.parse(originalSnapshotText) as Record<string, unknown>); }
+      catch { throw new Error('La huella fiscal histórica de la factura original no se puede leer para validar devoluciones acumuladas.'); }
+    }
     historicalOriginalVatById.set(original.id, historical.originalVatAmountBs);
     if (item.taxRate !== historical.taxRate) {
       throw new Error('La nota de crédito de compras ' + item.invoiceNumber + ' no conserva la alícuota de la factura según la declaración original presentada.');
