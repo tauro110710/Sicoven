@@ -5625,6 +5625,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       journalEntries.some(entry => entry.companyId === companyId && entry.reversalOfEntryId === source.id)));
   });
 
+  const getVatOwnInconsistentSalesSources = (companyId: string): SaleRecord[] => sales.filter(sale => {
+    if (sale.companyId !== companyId || sale.isCancelled || !sale.journalEntryId) return false;
+    const source = journalEntries.find(entry => entry.id === sale.journalEntryId && entry.companyId === companyId);
+    return Boolean(source && (source.reversalOfEntryId || source.reversedByEntryId ||
+      journalEntries.some(entry => entry.companyId === companyId && entry.reversalOfEntryId === source.id)));
+  });
+
   const createVatOwnDeclaration = async (input: { period: string; choices?: Record<string, 'Z' | 'INDIVIDUAL'>; refresh?: boolean }): Promise<VatOwnDeclaration> => {
     assertSQLitePersistenceReady(input.refresh ? 'Actualizar borrador de declaración mensual de IVA' : 'Preparar declaración mensual de IVA');
     if (!isValidVatOwnDeclarationPeriod(input.period)) throw new Error('Seleccione un período mensual válido.');
@@ -5642,8 +5649,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('No se puede preparar ni corregir directamente este período: ya existen declaraciones posteriores presentadas (' + laterFiledPeriods.join(', ') + '). Use el procedimiento de rectificación y conserve la secuencia fiscal.');
     }
     const inconsistentPurchaseSources = getVatOwnInconsistentPurchaseSources(currentCompany.id);
-    if (inconsistentPurchaseSources.length > 0) {
-      throw new Error('No se puede preparar IVA: hay compras activas vinculadas a asientos revertidos (' + inconsistentPurchaseSources.map(item => item.invoiceNumber).join(', ') + '). Concilie el estado documental antes de declarar.');
+    const inconsistentSalesSources = getVatOwnInconsistentSalesSources(currentCompany.id);
+    if (inconsistentPurchaseSources.length > 0 || inconsistentSalesSources.length > 0) {
+      throw new Error('No se puede preparar IVA: hay documentos fiscales activos vinculados a asientos revertidos. Compras: ' +
+        inconsistentPurchaseSources.map(item => item.invoiceNumber).join(', ') + '. Ventas: ' +
+        inconsistentSalesSources.map(item => item.invoiceNumber).join(', ') + '. Concilie el estado documental antes de declarar.');
     }
     const existingDraft = vatOwnDeclarations.find(item => item.companyId === currentCompany.id && item.period === input.period);
     if (existingDraft && (existingDraft.status !== 'DRAFT' || input.refresh !== true)) {
@@ -5802,8 +5812,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         throw new Error('No se puede presentar: la tasa BCV del borrador no coincide con la tasa histórica efectiva en la fecha de presentación. Actualice el borrador con la tasa correspondiente.');
       }
       const inconsistentPurchaseSources = getVatOwnInconsistentPurchaseSources(currentCompany.id);
-      if (inconsistentPurchaseSources.length > 0) {
-        throw new Error('No se puede presentar IVA: hay compras activas vinculadas a asientos revertidos (' + inconsistentPurchaseSources.map(item => item.invoiceNumber).join(', ') + '). Concilie el estado documental y actualice el borrador.');
+      const inconsistentSalesSources = getVatOwnInconsistentSalesSources(currentCompany.id);
+      if (inconsistentPurchaseSources.length > 0 || inconsistentSalesSources.length > 0) {
+        throw new Error('No se puede presentar IVA: hay documentos fiscales activos vinculados a asientos revertidos. Compras: ' +
+          inconsistentPurchaseSources.map(item => item.invoiceNumber).join(', ') + '. Ventas: ' +
+          inconsistentSalesSources.map(item => item.invoiceNumber).join(', ') + '. Concilie el estado documental y actualice el borrador.');
       }
       const periodSales = sales.filter(item => item.companyId === currentCompany.id &&
         item.invoiceDate.startsWith(declaration.period) && !item.isCancelled);
