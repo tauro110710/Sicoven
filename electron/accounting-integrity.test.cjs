@@ -2133,6 +2133,25 @@ test('SQLite accepts a versioned IVA own-account draft refresh and blocks mutati
   }), /declaración IVA ya presentada/);
 });
 
+test('SQLite preserves legacy filed IVA declarations without new source fingerprints but requires them on new filing', () => {
+  const legacyFiled = vatOwnFiledState();
+  delete legacyFiled.vatOwnDeclarations[0].sourceSnapshots;
+  assert.doesNotThrow(() => validateAccountingSnapshot(legacyFiled, legacyFiled));
+  const draft = vatOwnDeclarationFixture();
+  const declaration = {
+    ...draft.vatOwnDeclarations[0], status: 'FILED',
+    declarationNumber: 'IVA-LEGACY-TRY', filedAt: '2026-11-11T12:00:00.000-04:00'
+  };
+  assert.throws(() => validateAccountingSnapshot(draft, {
+    ...draft, vatOwnDeclarations: [declaration],
+    vatOwnDeclarationEvents: [{
+      id: 'vat-own-event-no-snapshot', declarationId: declaration.id, companyId: declaration.companyId,
+      eventType: 'FILED', occurredAt: declaration.filedAt, recordedAt: '2026-11-11T16:00:00.000Z',
+      declarationNumber: declaration.declarationNumber, idempotencyKey: 'FILED:' + declaration.id
+    }]
+  }), /huellas documentales fiscales antes de presentar/);
+});
+
 test('SQLite requires the filed IVA own-account declaration to have exactly one matching filing event and determination entry', () => {
   const filed = vatOwnFiledState();
   assert.doesNotThrow(() => validateAccountingSnapshot(vatOwnDeclarationFixture(), filed));
