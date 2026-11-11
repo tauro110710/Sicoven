@@ -59,7 +59,8 @@ export const LibroVentasView: React.FC = () => {
       const z = entry.fiscalZReport!;
       rows.push([z.date,'','VENTAS CONSOLIDADAS · ' + (z.sourceSystemName || z.machineBrand || 'Reporte Z'),'REPORTE Z',z.zNumber,z.controlStart || '', '', '',z.totalSalesBs,z.exemptSalesBs,z.taxableBase16Bs,z.vat16Bs,z.taxableBase8Bs,z.vat8Bs,z.taxableBase31Bs,z.taxableBase31Bs * 0.16,z.additionalLuxuryTaxBs,z.igtfBs,entry.bcvRate,'CIERRE Z']);
     });
-    const csv = '\uFEFF' + [headers,...rows].map(row => row.map(esc).join(';')).join('\r\n');
+    const csv = '\uFEFF' + [headers,...rows].map(row => row.map(esc).join(';')).join('\r
+');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -284,7 +285,7 @@ export const LibroVentasView: React.FC = () => {
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
                       {formatBs(s.totalAmountBs)}
-                      {displayCurrency !== 'BS' && (
+                      {(
                         <div className="text-[10px] text-slate-400 font-normal">
                           {formatUsd(s.totalAmountUsd)}
                         </div>
@@ -316,7 +317,7 @@ export const LibroVentasView: React.FC = () => {
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-amber-700 whitespace-nowrap bg-amber-50/30">
                       {s.taxRate === 31 ? formatBs(s.additionalLuxuryTaxBs ?? s.taxableBaseBs * 0.15) : '-'}
-                      {displayCurrency !== 'BS' && s.taxRate === 31 && <div className="text-[10px] text-amber-600/70 font-normal">{formatUsd(s.additionalLuxuryTaxUsd ?? (s.bcvRate > 0 ? s.taxableBaseBs * 0.15 / s.bcvRate : 0))}</div>}
+                      {s.taxRate === 31 && <div className="text-[10px] text-amber-600/70 font-normal">{formatUsd(s.additionalLuxuryTaxUsd ?? (s.bcvRate > 0 ? s.taxableBaseBs * 0.15 / s.bcvRate : 0))}</div>}
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-purple-700 whitespace-nowrap bg-purple-50/30">
                       {s.vatWithheldBs > 0 ? (
@@ -369,7 +370,7 @@ export const LibroVentasView: React.FC = () => {
                 </td>
                 <td className="py-3 px-3 text-right font-mono text-emerald-400">
                   {formatBs(totalVentasConIvaBs)}
-                  {displayCurrency !== 'BS' && (
+                  {(
                     <div className="text-[10px] text-slate-400">{formatUsd(totalVentasConIvaUsd)}</div>
                   )}
                 </td>
@@ -378,21 +379,21 @@ export const LibroVentasView: React.FC = () => {
                 </td>
                 <td className="py-3 px-3 text-right font-mono text-emerald-400">
                   {formatBs(totalBaseBs)}
-                  {displayCurrency !== 'BS' && (
+                  {(
                     <div className="text-[10px] text-slate-400">{formatUsd(totalBaseUsd)}</div>
                   )}
                 </td>
                 <td></td>
                 <td className="py-3 px-3 text-right font-mono text-emerald-400 bg-slate-850">
                   {formatBs(totalIvaDebitoBs)}
-                  {displayCurrency !== 'BS' && (
+                  {(
                     <div className="text-[10px] text-slate-400">{formatUsd(totalIvaDebitoUsd)}</div>
                   )}
                 </td>
                 <td className="py-3 px-3 text-right font-mono text-amber-300 bg-slate-850">{formatBs(totalLuxuryTaxBs)}{displayCurrency !== 'BS' && <div className="text-[10px] text-slate-400">{formatUsd(totalLuxuryTaxUsd)}</div>}</td>
                 <td className="py-3 px-3 text-right font-mono text-purple-300 bg-slate-850">
                   {formatBs(totalIvaRetenidoBs)}
-                  {displayCurrency !== 'BS' && (
+                  {(
                     <div className="text-[10px] text-slate-400">{formatUsd(totalIvaRetenidoUsd)}</div>
                   )}
                 </td>
