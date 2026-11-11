@@ -115,7 +115,7 @@ export const IvaDeclaracionesView: React.FC = () => {
     ...(purchaseSummary?.relatedPurchaseIds || []),
     ...receivedWithholdingRows.map(item => item.id)
   ])].sort();
-  const savedSourceIds = [...(savedDeclaration?.sourceIds || []), ...(savedDeclaration?.relatedSourceIds || [])].sort();
+  const savedSourceIds = [...new Set([...(savedDeclaration?.sourceIds || []), ...(savedDeclaration?.relatedSourceIds || [])])].sort();
   const sourceIdsChanged = Boolean(savedDeclaration && JSON.stringify(currentSourceIds) !== JSON.stringify(savedSourceIds));
   const sourceChoicesChanged = Boolean(savedDeclaration?.status === 'DRAFT' && dailySalesResolution.conflicts.some(conflict =>
     activeSourceChoices[conflict.date] !== savedDeclaration.dailySourceChoices?.[conflict.date]
