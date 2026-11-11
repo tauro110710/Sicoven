@@ -159,7 +159,7 @@ function getVatFiscalIncident(db, incidentId) {
       actorUserId: item.actor_user_id, actorUsername: item.actor_username, createdAt: item.created_at
     }));
   const status = events.some(item => item.eventType === 'ACTION_RECORDED') ? 'ACTION_DOCUMENTED'
-    : events.some(item => item.eventType === 'REVIEW_RECORDED') ? 'REVIEW_DOCUMENTED' : 'PENDING_REVIEW';
+    : events.some(item => item.eventType === 'REVIEW_RECORDED') ? 'REVIEW_DOCUMENTED' : 'OPEN';
   return { ...mapIncident(row), events, status, resolved: false };
 }
 function createVatFiscalIncident(db, input, actor) {
