@@ -22,7 +22,9 @@ export function getUnfiledVatOwnActivityPeriods(input: {
   const filedPeriods = new Set(input.declarations
     .filter(item => item.companyId === input.companyId && item.status === 'FILED' && item.period < input.targetPeriod)
     .map(item => item.period));
-  const knownPeriods = new Set<string>(filedPeriods);
+  const knownPeriods = new Set<string>(input.declarations
+    .filter(item => item.companyId === input.companyId && item.period < input.targetPeriod)
+    .map(item => item.period));
   for (const date of input.activityDates) {
     const period = String(date || '').slice(0, 7);
     if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(period)) {
