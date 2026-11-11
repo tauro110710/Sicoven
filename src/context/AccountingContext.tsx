@@ -5618,19 +5618,39 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const withholdingRaw = withholdingRows.reduce((sum, item) =>
         sum + (item.documentType === '03' ? -1 : 1) * Number(item.vatWithheldBs || 0), 0);
       const withholdingBs = Math.max(0, withholdingRaw);
-      const purchase16Raw = monthPurchases.filter(item => item.taxRate !== 8).reduce((sum, item) =>
-        sum + (item.documentType === '03' ? -1 : 1) * Number(item.vatAmountBs || 0), 0);
-      const purchase8Raw = monthPurchases.filter(item => item.taxRate === 8).reduce((sum, item) =>
-        sum + (item.documentType === '03' ? -1 : 1) * Number(item.vatAmountBs || 0), 0);
-      const purchase16Bs = Math.max(0, purchase16Raw);
-      const purchase8Bs = Math.max(0, purchase8Raw);
+      const taxableSalesBaseBs = resolution.days.reduce((sum, day) =>
+        sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
+      const exemptSalesBaseBs = resolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
+      const salesDenominator = taxableSalesBaseBs + exemptSalesBaseBs;
+      const prorationRate = salesDenominator > 0 ? taxableSalesBaseBs / salesDenominator : 1;
+      const purchaseRows = monthPurchases.map(item => {
+        const sign = item.documentType === '03' ? -1 : 1;
+        const gross = Number(item.vatAmountBs || 0);
+        const treatment = item.vatCreditTreatment || 'COMMON';
+        const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : prorationRate;
+        return { item, sign, gross, factor, eligible: gross * factor, nonEligible: gross * (1 - factor) };
+      });
+      const purchase16GrossRaw = purchaseRows.filter(row => row.item.taxRate !== 8).reduce((sum,row)=>sum+row.sign*row.gross,0);
+      const purchase8GrossRaw = purchaseRows.filter(row => row.item.taxRate === 8).reduce((sum,row)=>sum+row.sign*row.gross,0);
+      const purchase16EligibleRaw = purchaseRows.filter(row => row.item.taxRate !== 8).reduce((sum,row)=>sum+row.sign*row.eligible,0);
+      const purchase8EligibleRaw = purchaseRows.filter(row => row.item.taxRate === 8).reduce((sum,row)=>sum+row.sign*row.eligible,0);
+      if (purchase16GrossRaw < -0.02 || purchase8GrossRaw < -0.02) {
+        throw new Error('Las notas de crédito de compras superan el crédito fiscal bruto del período. Debe conciliarse el arrastre de la factura original antes de presentar esta declaración; no se generó un importe fiscal estimado.');
+      }
+      const purchase16GrossBs = Math.max(0, purchase16GrossRaw);
+      const purchase8GrossBs = Math.max(0, purchase8GrossRaw);
+      const purchase16Bs = Math.max(0, purchase16EligibleRaw);
+      const purchase8Bs = Math.max(0, purchase8EligibleRaw);
+      const purchaseNonEligibleBs = Math.max(0, purchase16GrossBs + purchase8GrossBs - purchase16Bs - purchase8Bs);
       const prior = vatOwnDeclarations.filter(item => item.companyId === currentCompany.id &&
         item.status === 'FILED' && item.period < input.period).sort((a,b)=>b.period.localeCompare(a.period))[0];
-      const debitAdjustmentsBs = Math.max(0, -purchase16Raw) + Math.max(0, -purchase8Raw) + Math.max(0, -withholdingRaw);
+      const debitAdjustmentsBs = Math.max(0, -withholdingRaw);
       const creditAdjustmentsBs = Math.max(0, -outputVat16Raw) + Math.max(0, -outputVat8Raw);
       const position = calculateVatOwnPosition({
         outputVatBs: outputVat16Bs + outputVat8Bs, outputVat16Bs, outputVat8Bs,
         purchaseCreditBs: purchase16Bs + purchase8Bs, purchaseCredit16Bs: purchase16Bs, purchaseCredit8Bs: purchase8Bs,
+        purchaseCreditGrossBs: purchase16GrossBs + purchase8GrossBs, purchaseCreditGross16Bs: purchase16GrossBs, purchaseCreditGross8Bs: purchase8GrossBs,
+        purchaseCreditNonEligibleBs: purchaseNonEligibleBs, prorationRate, taxableSalesBaseBs, exemptSalesBaseBs,
         receivedWithholdingsBs: withholdingBs, priorCreditBs: prior?.position.creditCarryForwardBs || 0,
         debitAdjustmentsBs, creditAdjustmentsBs
       });
