@@ -111,6 +111,9 @@ export interface VatOwnPositionInput {
   purchaseCreditReversalBs?: number;
   purchaseCreditReversal16Bs?: number;
   purchaseCreditReversal8Bs?: number;
+  purchaseCreditReversalNonEligibleBs?: number;
+  purchaseCreditReversalNonEligible16Bs?: number;
+  purchaseCreditReversalNonEligible8Bs?: number;
   prorationRate?: number;
   taxableSalesBaseBs?: number;
   exemptSalesBaseBs?: number;
@@ -134,6 +137,9 @@ export interface VatOwnPosition {
   purchaseCreditReversalBs: number;
   purchaseCreditReversal16Bs: number;
   purchaseCreditReversal8Bs: number;
+  purchaseCreditReversalNonEligibleBs: number;
+  purchaseCreditReversalNonEligible16Bs: number;
+  purchaseCreditReversalNonEligible8Bs: number;
   prorationRate: number;
   taxableSalesBaseBs: number;
   exemptSalesBaseBs: number;
@@ -154,6 +160,7 @@ export interface VatOwnDeclarationRevision {
   sourceIds: string[];
   bcvRate?: number;
   dailySourceChoices?: Record<string, 'Z' | 'INDIVIDUAL'>;
+  purchaseVatReclassificationItems?: JournalEntryItem[];
   createdAt: string;
 }
 
@@ -171,6 +178,7 @@ export interface VatOwnDeclaration {
   createdAt: string;
   updatedAt?: string;
   revisions?: VatOwnDeclarationRevision[];
+  purchaseVatReclassificationItems?: JournalEntryItem[];
 }
 
 export interface VatOwnPurchaseCreditSummary {
@@ -423,6 +431,7 @@ export function snapshotVatOwnDeclarationRevision(
     sourceIds: [...declaration.sourceIds],
     bcvRate: declaration.bcvRate,
     dailySourceChoices: { ...(declaration.dailySourceChoices || {}) },
+    purchaseVatReclassificationItems: (declaration.purchaseVatReclassificationItems || []).map(item => ({ ...item })),
     createdAt: declaration.createdAt
   };
 }
@@ -481,7 +490,11 @@ export function calculateVatOwnPosition(input: VatOwnPositionInput): VatOwnPosit
   const purchaseCreditReversalBs = amount(input.purchaseCreditReversalBs, 'Reversión de crédito fiscal de compras de períodos anteriores');
   const purchaseCreditReversal16Bs = amount(input.purchaseCreditReversal16Bs, 'Reversión de crédito fiscal de compras 16%');
   const purchaseCreditReversal8Bs = amount(input.purchaseCreditReversal8Bs, 'Reversión de crédito fiscal de compras 8%');
-  if (Math.abs(purchaseCreditReversal16Bs + purchaseCreditReversal8Bs - purchaseCreditReversalBs) > 0.02) {
+  const purchaseCreditReversalNonEligibleBs = amount(input.purchaseCreditReversalNonEligibleBs, 'Reversión de IVA no acreditable de períodos anteriores');
+  const purchaseCreditReversalNonEligible16Bs = amount(input.purchaseCreditReversalNonEligible16Bs, 'Reversión de IVA no acreditable 16%');
+  const purchaseCreditReversalNonEligible8Bs = amount(input.purchaseCreditReversalNonEligible8Bs, 'Reversión de IVA no acreditable 8%');
+  if (Math.abs(purchaseCreditReversal16Bs + purchaseCreditReversal8Bs - purchaseCreditReversalBs) > 0.02 ||
+      Math.abs(purchaseCreditReversalNonEligible16Bs + purchaseCreditReversalNonEligible8Bs - purchaseCreditReversalNonEligibleBs) > 0.02) {
     throw new Error('El desglose de reversión de crédito fiscal 16% y 8% no concilia.');
   }
   const receivedWithholdingsBs = amount(input.receivedWithholdingsBs, 'Retenciones de IVA recibidas');
@@ -498,6 +511,7 @@ export function calculateVatOwnPosition(input: VatOwnPositionInput): VatOwnPosit
     purchaseCreditBs, purchaseCredit16Bs, purchaseCredit8Bs,
     purchaseCreditGrossBs, purchaseCreditGross16Bs, purchaseCreditGross8Bs,
     purchaseCreditNonEligibleBs, purchaseCreditReversalBs, purchaseCreditReversal16Bs, purchaseCreditReversal8Bs,
+    purchaseCreditReversalNonEligibleBs, purchaseCreditReversalNonEligible16Bs, purchaseCreditReversalNonEligible8Bs,
     prorationRate, taxableSalesBaseBs, exemptSalesBaseBs, receivedWithholdingsBs,
     priorCreditAppliedBs, debitAdjustmentsBs, creditAdjustmentsBs,
     netTaxBs, amountDueBs: Math.max(0, netTaxBs),
