@@ -117,4 +117,5 @@ export const DEFAULT_CHART_OF_ACCOUNTS: Account[] = [
   { code: '6.1.1.10', name: 'Tributos Municipales y Tasas Públicas', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' },
   { code: '6.1.1.11', name: 'Gasto por IGTF en compras', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' },
   { code: '6.1.1.12', name: 'Aportes Patronales de Nómina', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' },
+  { code: '6.1.1.13', name: 'Impuesto adicional al consumo suntuario no recuperable', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' },
 ];
