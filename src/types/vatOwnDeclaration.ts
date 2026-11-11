@@ -59,6 +59,17 @@ export function areVatOwnDeclarationSourcesCurrent(
   return saved.every((id, index) => id === current[index]);
 }
 
+export function areVatOwnSourceSnapshotsCurrent(
+  saved: Record<string, string> | undefined,
+  current: Record<string, string>
+): boolean {
+  if (!saved) return false;
+  const savedIds = Object.keys(saved).sort();
+  const currentIds = Object.keys(current).sort();
+  if (savedIds.length !== currentIds.length || !savedIds.every((id, index) => id === currentIds[index])) return false;
+  return savedIds.every(id => typeof saved[id] === 'string' && saved[id] === current[id]);
+}
+
 export function findExistingVatOwnPaymentReversal<T extends {
   id: string;
   companyId: string;
@@ -212,6 +223,7 @@ export interface VatOwnDeclarationRevision {
   bcvRate?: number;
   dailySourceChoices?: Record<string, 'Z' | 'INDIVIDUAL'>;
   purchaseVatReclassificationItems?: JournalEntryItem[];
+  sourceSnapshots?: Record<string, string>;
   createdAt: string;
 }
 
@@ -231,6 +243,8 @@ export interface VatOwnDeclaration {
   updatedAt?: string;
   revisions?: VatOwnDeclarationRevision[];
   purchaseVatReclassificationItems?: JournalEntryItem[];
+  /** Fiscal identity and material fields of every source document at draft time. */
+  sourceSnapshots?: Record<string, string>;
 }
 
 export interface VatOwnPurchaseCreditSummary {
@@ -512,6 +526,7 @@ export function snapshotVatOwnDeclarationRevision(
     bcvRate: declaration.bcvRate,
     dailySourceChoices: { ...(declaration.dailySourceChoices || {}) },
     purchaseVatReclassificationItems: (declaration.purchaseVatReclassificationItems || []).map(item => ({ ...item })),
+    sourceSnapshots: declaration.sourceSnapshots ? { ...declaration.sourceSnapshots } : undefined,
     createdAt: declaration.createdAt
   };
 }
