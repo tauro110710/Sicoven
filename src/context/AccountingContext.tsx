@@ -5618,16 +5618,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     ];
   };
 
-  const getVatOwnInconsistentPurchaseSources = (companyId: string): PurchaseRecord[] => purchases.filter(purchase => {
-    if (purchase.companyId !== companyId || purchase.isCancelled) return false;
-    if (Number(purchase.vatAmountBs || 0) > 0 && !purchase.journalEntryId) return true;
-    if (!purchase.journalEntryId) return false;
-    const source = journalEntries.find(entry => entry.id === purchase.journalEntryId && entry.companyId === companyId);
-    if (!source) return true;
-    return Boolean(source.reversalOfEntryId || source.reversedByEntryId ||
-      journalEntries.some(entry => entry.companyId === companyId && entry.reversalOfEntryId === source.id));
-  });
-
   const getVatOwnInconsistentSalesSources = (companyId: string, relevantSaleIds: ReadonlySet<string>): SaleRecord[] => sales.filter(sale => {
     if (sale.companyId !== companyId || sale.isCancelled || !relevantSaleIds.has(sale.id)) return false;
     if (!sale.journalEntryId) return true;
@@ -5652,11 +5642,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     });
     if (laterFiledPeriods.length > 0) {
       throw new Error('No se puede preparar ni corregir directamente este período: ya existen declaraciones posteriores presentadas (' + laterFiledPeriods.join(', ') + '). Use el procedimiento de rectificación y conserve la secuencia fiscal.');
-    }
-    const inconsistentPurchaseSources = getVatOwnInconsistentPurchaseSources(currentCompany.id);
-    if (inconsistentPurchaseSources.length > 0) {
-      throw new Error('No se puede preparar IVA: hay compras con IVA activo sin asiento de origen o vinculadas a un asiento inexistente o revertido (' +
-        inconsistentPurchaseSources.map(item => item.invoiceNumber).join(', ') + '). Concilie el estado documental antes de declarar.');
     }
     const existingDraft = vatOwnDeclarations.find(item => item.companyId === currentCompany.id && item.period === input.period);
     if (existingDraft && (existingDraft.status !== 'DRAFT' || input.refresh !== true)) {
@@ -5824,11 +5809,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const officialFilingRate = resolveVatOwnPaymentBcvRate(currentCompany.accountingBcvRateHistory || [], filingDate);
       if (officialFilingRate === null || Math.abs(Number(declaration.bcvRate) - officialFilingRate) > 0.000001) {
         throw new Error('No se puede presentar: la tasa BCV del borrador no coincide con la tasa histórica efectiva en la fecha de presentación. Actualice el borrador con la tasa correspondiente.');
-      }
-      const inconsistentPurchaseSources = getVatOwnInconsistentPurchaseSources(currentCompany.id);
-      if (inconsistentPurchaseSources.length > 0) {
-        throw new Error('No se puede presentar IVA: hay compras con IVA activo sin asiento de origen o vinculadas a un asiento inexistente o revertido (' +
-          inconsistentPurchaseSources.map(item => item.invoiceNumber).join(', ') + '). Concilie el estado documental y actualice el borrador.');
       }
       const periodSales = sales.filter(item => item.companyId === currentCompany.id &&
         item.invoiceDate.startsWith(declaration.period) && !item.isCancelled);
