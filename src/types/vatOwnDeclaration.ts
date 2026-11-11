@@ -99,10 +99,14 @@ export function getVatOwnOutstandingBalance(
   declaration: VatOwnDeclaration,
   events: VatOwnDeclarationEvent[]
 ): number {
-  const paid = events.filter(event =>
-    event.companyId === declaration.companyId &&
-    event.declarationId === declaration.id &&
-    event.eventType === 'PAYMENT'
+  const declarationEvents = events.filter(event =>
+    event.companyId === declaration.companyId && event.declarationId === declaration.id
+  );
+  const reversedPaymentIds = new Set(declarationEvents
+    .filter(event => event.eventType === 'REVERSAL' && event.reversalOfEventId)
+    .map(event => event.reversalOfEventId));
+  const paid = declarationEvents.filter(event =>
+    event.eventType === 'PAYMENT' && !reversedPaymentIds.has(event.id)
   ).reduce((sum, event) => sum + amount(event.amountBs, 'Pago registrado'), 0);
   return Math.max(0, declaration.position.amountDueBs - paid);
 }
