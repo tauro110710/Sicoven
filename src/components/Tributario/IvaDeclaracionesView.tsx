@@ -86,7 +86,7 @@ export const IvaDeclaracionesView: React.FC = () => {
     }, 0)) + Math.max(0, monthPurchases
     .filter(item => item.taxRate === 8)
     .reduce((sum, item) => {
-      const treatment = item.vatCreditTreatment || 'COMMON';
+      const treatment = resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment);
       const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : prorationRate;
       return sum + signedDocument(item.documentType) * money(item.vatAmountBs) * factor;
     }, 0));
@@ -117,7 +117,7 @@ export const IvaDeclaracionesView: React.FC = () => {
     .flatMap(day => day.sourceIds));
   const zSources = monthZ.filter(entry => includedZSourceIds.has(entry.id)).map(entry => ({
     id: entry.id,
-    date: entry.date,
+    date: entry.fiscalZReport?.date || entry.date,
     number: entry.fiscalZReport?.zNumber || entry.referenceDoc || entry.entryNumber.toString(),
     source: entry.fiscalZReport?.sourceType === 'POS'
       ? `POS · ${entry.fiscalZReport.sourceSystemName || 'Sistema externo'}`
@@ -190,7 +190,7 @@ export const IvaDeclaracionesView: React.FC = () => {
             <span className="font-semibold">{conflict.date}</span>
             <div className="flex flex-wrap gap-2">
               <button type="button" disabled={savedDeclaration?.status === 'FILED'} onClick={() => setDailySourceChoices(prev => ({ ...prev, [conflict.date]: 'Z' }))} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${activeSourceChoices[conflict.date] === 'Z' ? 'border-emerald-700 bg-emerald-50 text-emerald-800' : 'border-slate-300 text-slate-700'}`}>Usar Reporte Z</button>
-              <button type="button" disabled={Boolean(savedDeclaration)} onClick={() => setDailySourceChoices(prev => ({ ...prev, [conflict.date]: 'INDIVIDUAL' }))} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${activeSourceChoices[conflict.date] === 'INDIVIDUAL' ? 'border-emerald-700 bg-emerald-50 text-emerald-800' : 'border-slate-300 text-slate-700'}`}>Usar ventas individuales</button>
+              <button type="button" disabled={savedDeclaration?.status === 'FILED'} onClick={() => setDailySourceChoices(prev => ({ ...prev, [conflict.date]: 'INDIVIDUAL' }))} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${activeSourceChoices[conflict.date] === 'INDIVIDUAL' ? 'border-emerald-700 bg-emerald-50 text-emerald-800' : 'border-slate-300 text-slate-700'}`}>Usar ventas individuales</button>
             </div>
           </div>)}
         </div>
