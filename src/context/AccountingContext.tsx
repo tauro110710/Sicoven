@@ -5611,7 +5611,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const outputVat8Raw = resolution.days.reduce((sum, day) => sum + day.outputVat8Bs, 0);
       const outputVat16Bs = Math.max(0, outputVat16Raw);
       const outputVat8Bs = Math.max(0, outputVat8Raw);
-      const includedIndividualIds = new Set(resolution.days.filter(day => day.source === 'INDIVIDUAL').flatMap(day => day.sourceIds));
       const withholdingRows = getReceivedVatWithholdingSales(sales, currentCompany.id, input.period);
       const withholdingRaw = withholdingRows.reduce((sum, item) =>
         sum + (item.documentType === '03' ? -1 : 1) * Number(item.vatWithheldBs || 0), 0);
