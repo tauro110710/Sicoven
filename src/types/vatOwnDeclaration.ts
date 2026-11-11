@@ -188,7 +188,7 @@ export function resolveVatOwnPaymentBcvRate(
 }
 
 export function isValidVatOwnDeclarationPeriod(period: string): boolean {
-  return /^\d{4}-(0[1-9]|1[0-2])$/.test(period);
+  return typeof period === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(period.trim());
 }
 
 /**
