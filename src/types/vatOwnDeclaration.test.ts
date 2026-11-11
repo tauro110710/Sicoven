@@ -6,6 +6,7 @@ import {
   isValidVatOwnDeclarationPeriod,
   calculateVatOwnPosition,
   calculateVatOwnPurchaseCreditSummary,
+  getUnfiledVatOwnActivityPeriods,
   buildVatOwnPurchaseVatReclassificationItems,
   getVatOwnOutstandingBalance,
   resolveVatOwnDailySalesSources,
@@ -141,6 +142,25 @@ test('snapshots a draft revision without sharing mutable source arrays or positi
   assert.notEqual(revision.position.amountDueBs, 999);
   assert.equal(revision.reason, 'Actualizar fuentes antes de presentar');
   assert.throws(() => snapshotVatOwnDeclarationRevision(declaration, '2026-02-02T10:00:00.000Z', 'No debe versionar una presentada'), /borrador no presentado/);
+});
+
+test('requires earlier months with fiscal activity to be filed before preparing a later month', () => {
+  const filedOctober = { ...declaration, period: '2026-10', status: 'FILED' as const };
+  const drafts = [{ ...declaration, period: '2026-11', status: 'DRAFT' as const }];
+  assert.deepEqual(getUnfiledVatOwnActivityPeriods({
+    companyId: 'company-a', targetPeriod: '2026-12',
+    activityDates: ['2026-10-05', '2026-11-08', '2026-12-01'],
+    declarations: [filedOctober, ...drafts]
+  }), ['2026-11']);
+  assert.deepEqual(getUnfiledVatOwnActivityPeriods({
+    companyId: 'company-a', targetPeriod: '2026-12',
+    activityDates: ['2026-10-05', '2026-12-01'],
+    declarations: [filedOctober]
+  }), []);
+  assert.throws(() => getUnfiledVatOwnActivityPeriods({
+    companyId: 'company-a', targetPeriod: '2026-12',
+    activityDates: ['not-a-date'], declarations: []
+  }), /fecha fiscal inválida/);
 });
 
 test('reverses a prior-period common purchase credit using the original declaration proration', () => {
