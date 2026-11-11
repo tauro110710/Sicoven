@@ -58,7 +58,7 @@ import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnD
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
-import { calculateFifoIssue, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
+import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 import { buildBankAuxiliaryAccounts } from '../types/bankAccountAccounting';
 import { calculateBankAvailableBalance, validateBankOutgoingAvailability } from '../types/bankAccountAvailability';
@@ -4893,15 +4893,29 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       } else {
         movementQuantity = quantity;
         newStock = targetStock;
-        if (targetStock > product.currentStock) {
-          const weighted = calculateWeightedAverageCost(product.currentStock, product.avgCostBs, targetStock - product.currentStock, requestedCost, rate);
-          newAverageBs = weighted.unitCostBs;
+        if (product.costingMethod === 'PEPS') {
+          const history = virtualMovements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
+          const layers = reconstructFifoLayers(history, product.currentStock);
+          const fifoAdjustment = applyFifoAdjustment(layers, targetStock - product.currentStock,
+            requestedCost, requestedCost / rate, row.date, row.documentRef);
+          totalCostBs = fifoAdjustment.totalCostBs;
+          unitCostBs = fifoAdjustment.unitCostBs;
+          var adjustmentUsd = fifoAdjustment.totalCostUsd;
+          newAverageBs = newStock > 0 ? fifoAdjustment.balanceTotalBs / newStock : 0;
+          var adjustmentAverageUsd = newStock > 0 ? fifoAdjustment.balanceTotalUsd / newStock : 0;
+        } else {
+          if (targetStock > product.currentStock) {
+            const weighted = calculateWeightedAverageCost(product.currentStock, product.avgCostBs, targetStock - product.currentStock, requestedCost, rate);
+            newAverageBs = weighted.unitCostBs;
+          }
+          totalCostBs = Math.round(quantity * (targetStock < product.currentStock ? product.avgCostBs : requestedCost) * 100) / 100;
+          unitCostBs = quantity > 0 ? totalCostBs / quantity : 0;
         }
-        totalCostBs = Math.round(quantity * (targetStock < product.currentStock ? product.avgCostBs : requestedCost) * 100) / 100;
-        unitCostBs = quantity > 0 ? totalCostBs / quantity : 0;
       }
-      const totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
-      const newAverageUsd = newAverageBs / rate;
+      const totalCostUsd = row.type === 'AJUSTE' && product.costingMethod === 'PEPS'
+        ? adjustmentUsd! : Math.round(totalCostBs / rate * 1000000) / 1000000;
+      const newAverageUsd = row.type === 'AJUSTE' && product.costingMethod === 'PEPS'
+        ? adjustmentAverageUsd! : newAverageBs / rate;
       if (expectedBalanceQty !== undefined && (!Number.isFinite(expectedBalanceQty) || Math.abs(expectedBalanceQty - newStock) > 0.000001)) {
         throw new Error('Fila ' + (index + 2) + ': la existencia final declarada (' + expectedBalanceQty + ') no coincide con la existencia calculada (' + newStock + ') para ' + product.code + '. Revise el orden y los movimientos previos.');
       }
@@ -5217,15 +5231,27 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const targetStock = Number(movData.balanceQty);
       if (!Number.isFinite(targetStock) || targetStock < 0) throw new Error('La existencia final del ajuste no es válida.');
       newStock = targetStock;
-      if (targetStock > prod.currentStock) {
-        const weighted = calculateWeightedAverageCost(prod.currentStock, prod.avgCostBs, targetStock - prod.currentStock, requestedCost, rate);
-        newAverageBs = weighted.unitCostBs;
-        newAverageUsd = weighted.unitCostUsd;
+      if (prod.costingMethod === 'PEPS') {
+        const layers = reconstructFifoLayers(prior, prod.currentStock);
+        const fifoAdjustment = applyFifoAdjustment(layers, targetStock - prod.currentStock,
+          requestedCost, requestedCost / rate, movData.date, movData.documentRef);
+        totalCostBs = fifoAdjustment.totalCostBs;
+        totalCostUsd = fifoAdjustment.totalCostUsd;
+        unitCostBs = fifoAdjustment.unitCostBs;
+        unitCostUsd = fifoAdjustment.unitCostUsd;
+        newAverageBs = newStock > 0 ? fifoAdjustment.balanceTotalBs / newStock : 0;
+        newAverageUsd = newStock > 0 ? fifoAdjustment.balanceTotalUsd / newStock : 0;
+      } else {
+        if (targetStock > prod.currentStock) {
+          const weighted = calculateWeightedAverageCost(prod.currentStock, prod.avgCostBs, targetStock - prod.currentStock, requestedCost, rate);
+          newAverageBs = weighted.unitCostBs;
+          newAverageUsd = weighted.unitCostUsd;
+        }
+        totalCostBs = Math.round(actualQuantity * (targetStock < prod.currentStock ? prod.avgCostBs : requestedCost) * 100) / 100;
+        totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
+        unitCostBs = actualQuantity > 0 ? totalCostBs / actualQuantity : 0;
+        unitCostUsd = unitCostBs / rate;
       }
-      totalCostBs = Math.round(actualQuantity * (targetStock < prod.currentStock ? prod.avgCostBs : requestedCost) * 100) / 100;
-      totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
-      unitCostBs = actualQuantity > 0 ? totalCostBs / actualQuantity : 0;
-      unitCostUsd = unitCostBs / rate;
     }
 
     const newMov: InventoryMovement = {
