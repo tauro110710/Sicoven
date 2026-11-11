@@ -238,20 +238,21 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
   const reclassifications: VatOwnPurchaseCreditSummary['reclassifications'] = [];
   const originalByNoteId = new Map<string, PurchaseRecord>();
   const priorNotes: Array<{ item: PurchaseRecord; original: PurchaseRecord; prior: VatOwnDeclaration }> = [];
+  const normalizeFiscalReference = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
   for (const item of periodPurchases) {
     if (item.documentType !== '03') continue;
-    const supplierRif = String(item.supplierRif || '').trim().toUpperCase().replace(/\\s+/g, '');
+    const supplierRif = normalizeFiscalReference(item.supplierRif);
     if (!supplierRif) {
       throw new Error('La nota de crédito de compras ' + item.invoiceNumber + ' no conserva el RIF del proveedor para verificar su factura original.');
     }
     const candidates = input.allPurchases.filter(original =>
       original.companyId === input.companyId && original.documentType === '01' && !original.isCancelled &&
-      String(original.supplierRif || '').trim().toUpperCase().replace(/\\s+/g, '') === supplierRif &&
+      normalizeFiscalReference(original.supplierRif) === supplierRif &&
       (item.originalPurchaseId
         ? original.id === item.originalPurchaseId
-        : Boolean(item.affectedInvoiceNumber && original.invoiceNumber === item.affectedInvoiceNumber &&
+        : Boolean(item.affectedInvoiceNumber && normalizeFiscalReference(original.invoiceNumber) === normalizeFiscalReference(item.affectedInvoiceNumber) &&
             (!item.affectedInvoiceDate || original.invoiceDate === item.affectedInvoiceDate) &&
-            (!item.affectedInvoiceControlNumber || original.controlNumber === item.affectedInvoiceControlNumber)))
+            (!item.affectedInvoiceControlNumber || normalizeFiscalReference(original.controlNumber) === normalizeFiscalReference(item.affectedInvoiceControlNumber))))
     );
     if (candidates.length !== 1) {
       throw new Error('La nota de crédito de compras ' + item.invoiceNumber + ' no tiene una factura original única y verificable. Vincule la factura antes de declarar.');
