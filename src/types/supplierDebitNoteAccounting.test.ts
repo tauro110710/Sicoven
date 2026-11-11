@@ -50,6 +50,7 @@ const build = (value = draft(), purchase = source, entry = sourceEntry, accountL
 test('builds a separate payable document and balanced dual-currency journal without changing the source invoice', () => {
   const plan = build();
   assert.equal(plan.document.documentType, '02');
+  assert.equal(plan.document.vatCreditTreatment, 'COMMON');
   assert.equal(plan.document.originalPurchaseId, source.id);
   assert.equal(plan.document.affectedInvoiceNumber, source.invoiceNumber);
   assert.equal(plan.document.paymentTerm, 'CREDITO');
@@ -61,6 +62,13 @@ test('builds a separate payable document and balanced dual-currency journal with
   assert.equal(plan.fiscalAutomationAllowed, false);
   assert.equal(plan.inventoryPostingAllowed, false);
   assert.equal(source.totalAmountBs, 116);
+});
+
+test('inherits the source invoice VAT credit treatment for supplier debit notes', () => {
+  const taxableSource = { ...source, vatCreditTreatment: 'TAXABLE' as const };
+  const exemptSource = { ...source, vatCreditTreatment: 'EXEMPT' as const };
+  assert.equal(build(draft(), taxableSource).document.vatCreditTreatment, 'TAXABLE');
+  assert.equal(build(draft(), exemptSource).document.vatCreditTreatment, 'EXEMPT');
 });
 
 test('uses the original supplier payable auxiliary for a credit invoice', () => {
