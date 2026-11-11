@@ -427,6 +427,46 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     }
     priorNotes.push({ item, original, prior: matches[0], ...historical });
   }
+
+  // A sequence of notes across different filed periods must never reverse more VAT
+  // than the original invoice actually generated. Read earlier notes only from
+  // immutable snapshots of filed declarations, never from mutable live records.
+  const priorFiledNoteVatByOriginal = new Map<string, number>();
+  for (const filed of input.priorDeclarations) {
+    if (filed.companyId !== input.companyId || filed.status !== 'FILED' || filed.period >= input.period) continue;
+    for (const noteId of filed.sourceIds || []) {
+      const saved = filed.sourceSnapshots?.[noteId];
+      if (!saved) continue;
+      let snapshot: Record<string, unknown>;
+      try { snapshot = JSON.parse(saved) as Record<string, unknown>; }
+      catch { throw new Error('Una declaración anterior contiene una huella ilegible para una nota de crédito de compras.'); }
+      if (snapshot.kind !== 'PURCHASE' || snapshot.documentType !== '03') continue;
+      const originalId = String(snapshot.originalPurchaseId || '');
+      if (!originalId) continue;
+      const noteVat = Number(snapshot.vatAmountBs || 0);
+      if (snapshot.id !== noteId || !Number.isFinite(noteVat) || noteVat < 0) {
+        throw new Error('Una declaración anterior conserva importes inválidos en una nota de crédito de compras.');
+      }
+      priorFiledNoteVatByOriginal.set(originalId, (priorFiledNoteVatByOriginal.get(originalId) || 0) + noteVat);
+    }
+  }
+  const currentNoteVatByOriginal = new Map<string, number>();
+  for (const note of periodPurchases) {
+    const original = originalByNoteId.get(note.id);
+    if (!original) continue;
+    const noteVat = Number(note.vatAmountBs || 0);
+    currentNoteVatByOriginal.set(original.id, (currentNoteVatByOriginal.get(original.id) || 0) + noteVat);
+  }
+  for (const [originalId, currentNoteVat] of currentNoteVatByOriginal) {
+    const original = input.allPurchases.find(item => item.id === originalId && item.companyId === input.companyId);
+    const originalVat = Number(original?.vatAmountBs || 0);
+    const alreadyReversed = priorFiledNoteVatByOriginal.get(originalId) || 0;
+    if (!Number.isFinite(originalVat) || originalVat < 0 || alreadyReversed + currentNoteVat - originalVat > 0.02) {
+      throw new Error('Las notas de crédito acumuladas superan el IVA de la factura original ' +
+        String(original?.invoiceNumber || originalId) + '. Concilie las notas ya presentadas antes de declarar.');
+    }
+  }
+
   const hasCommonCurrentPurchases = periodPurchases.some(item => {
     const original = originalByNoteId.get(item.id);
     if (original && original.invoiceDate.slice(0, 7) < input.period) return false;
