@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { CalendarDays, FileText, Receipt, ShoppingCart, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs } from '../../utils/formatters';
+import { resolveVatOwnDailySalesSources } from '../../types/vatOwnDeclaration';
 
 const money = (value: number | undefined) => Number.isFinite(value) ? Number(value) : 0;
 const signedDocument = (type: '01' | '02' | '03') => type === '03' ? -1 : 1;
@@ -10,6 +11,7 @@ export const IvaDeclaracionesView: React.FC = () => {
   const { currentCompany, sales, purchases, journalEntries } = useAccounting();
   const today = new Date();
   const [period, setPeriod] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`);
+  const [dailySourceChoices, setDailySourceChoices] = useState<Record<string, 'Z' | 'INDIVIDUAL'>>({});
 
   const monthSales = useMemo(() => sales.filter(item =>
     item.companyId === currentCompany.id && item.invoiceDate?.startsWith(period) && !item.isCancelled
@@ -23,16 +25,25 @@ export const IvaDeclaracionesView: React.FC = () => {
     entry.companyId === currentCompany.id && entry.date.startsWith(period) && Boolean(entry.fiscalZReport)
   ).sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber), [journalEntries, currentCompany.id, period]);
 
-  const salesDebit = monthSales.reduce((sum, item) =>
-    sum + signedDocument(item.documentType) * money(item.vatAmountBs), 0);
-  const zDebit = monthZ.reduce((sum, entry) => {
-    const z = entry.fiscalZReport!;
-    return sum + money(z.vat16Bs) + money(z.vat8Bs) + money(z.vat31Bs);
-  }, 0);
-  // Una factura individual y el Reporte Z que la resume pueden representar la misma venta.
-  // Si coexisten ambos orígenes, no se suman automáticamente: se exige conciliación para evitar duplicar el débito.
-  const hasMixedSalesSources = monthSales.length > 0 && monthZ.length > 0;
-  const outputVat = hasMixedSalesSources ? null : salesDebit + zDebit;
+  const dailySalesResolution = useMemo(() => resolveVatOwnDailySalesSources({
+    zReports: monthZ.map(entry => ({
+      id: entry.id, date: entry.fiscalZReport!.date || entry.date,
+      taxableBase16Bs: entry.fiscalZReport!.taxableBase16Bs, vat16Bs: entry.fiscalZReport!.vat16Bs,
+      taxableBase8Bs: entry.fiscalZReport!.taxableBase8Bs, vat8Bs: entry.fiscalZReport!.vat8Bs,
+      taxableBase31Bs: entry.fiscalZReport!.taxableBase31Bs, vat31Bs: entry.fiscalZReport!.vat31Bs,
+      exemptSalesBs: entry.fiscalZReport!.exemptSalesBs
+    })),
+    sales: monthSales.map(item => ({
+      id: item.id, date: item.invoiceDate, documentType: item.documentType,
+      taxableBaseBs: item.taxableBaseBs, taxRate: item.taxRate,
+      vatAmountBs: item.vatAmountBs, exemptAmountBs: item.exemptAmountBs
+    })),
+    choices: dailySourceChoices
+  }), [monthZ, monthSales, dailySourceChoices]);
+  const outputVat = dailySalesResolution.unresolvedDates.length
+    ? null
+    : dailySalesResolution.days.reduce((sum, day) => sum + day.outputVatBs, 0);
+  const hasMixedSalesSources = dailySalesResolution.conflicts.length > 0;
 
   const purchaseCredit = monthPurchases.reduce((sum, item) =>
     sum + signedDocument(item.documentType) * money(item.vatAmountBs), 0);
@@ -100,12 +111,25 @@ export const IvaDeclaracionesView: React.FC = () => {
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
           <div className="text-sm text-amber-950">
             <p className="font-bold">Control previo a la declaración; no es todavía una declaración SENIAT ni un pago registrado.</p>
-            {hasMixedSalesSources && <p className="mt-2 font-bold">Conciliación obligatoria: existen facturas individuales y reportes Z en el mismo período. Pueden resumir las mismas operaciones; SICOVEN no los suma automáticamente para evitar duplicar el IVA débito. Conciliá rangos y operaciones antes de determinar el saldo.</p>}
+            {dailySalesResolution.unresolvedDates.length > 0 && <p className="mt-2 font-bold">Selecciona para cada fecha coincidente si el contador registró las ventas mediante el Reporte Z o mediante facturas individuales. SICOVEN incluirá una sola fuente por día.</p>}
             <p className="mt-1">El crédito fiscal de compras y las retenciones deben validarse contra sus comprobantes, requisitos de deducibilidad y período fiscal. Los reportes Z de POS externo se muestran como soporte operativo y requieren conciliación con los documentos fiscales exigibles. Si también se registraron esas mismas facturas individualmente, no deben computarse dos veces. Este saldo no sustituye la revisión del contador ni la Forma 30.</p>
           </div>
         </div>
       </section>
 
+      {dailySalesResolution.conflicts.length > 0 && <section className="rounded-xl border border-amber-200 bg-white p-4">
+        <h2 className="font-bold text-slate-900">Días con más de una modalidad registrada</h2>
+        <p className="mt-1 text-sm text-slate-600">Elige qué fuente utilizó el contador en cada fecha coincidente. La otra fuente quedará fuera del cálculo de ese día para evitar duplicaciones.</p>
+        <div className="mt-3 space-y-3">
+          {dailySalesResolution.conflicts.map(conflict => <div key={conflict.date} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
+            <span className="font-semibold">{conflict.date}</span>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setDailySourceChoices(prev => ({ ...prev, [conflict.date]: 'Z' }))} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${dailySourceChoices[conflict.date] === 'Z' ? 'border-emerald-700 bg-emerald-50 text-emerald-800' : 'border-slate-300 text-slate-700'}`}>Usar Reporte Z</button>
+              <button type="button" onClick={() => setDailySourceChoices(prev => ({ ...prev, [conflict.date]: 'INDIVIDUAL' }))} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${dailySourceChoices[conflict.date] === 'INDIVIDUAL' ? 'border-emerald-700 bg-emerald-50 text-emerald-800' : 'border-slate-300 text-slate-700'}`}>Usar ventas individuales</button>
+            </div>
+          </div>)}
+        </div>
+      </section>}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
           <FileText className="h-4 w-4 text-slate-600" />
