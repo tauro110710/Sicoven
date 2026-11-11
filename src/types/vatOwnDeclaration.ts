@@ -535,6 +535,8 @@ export function validateVatOwnDeclarationDraft(input: {
   companyId: string;
   period: string;
   sourceIds: string[];
+  relatedSourceIds?: string[];
+  purchaseVatReclassificationItems?: JournalEntryItem[];
   createdAt: string;
 }): void {
   if (!input.id.trim() || !input.companyId.trim()) throw new Error('La declaración requiere identificador y empresa.');
@@ -544,6 +546,19 @@ export function validateVatOwnDeclarationDraft(input: {
     throw new Error('Una misma fuente no puede incluirse dos veces en la declaración.');
   }
   if (input.sourceIds.some(id => !id.trim())) throw new Error('La declaración contiene una fuente sin identificador.');
+  if (input.relatedSourceIds && (
+    input.relatedSourceIds.some(id => !id.trim()) ||
+    new Set(input.relatedSourceIds).size !== input.relatedSourceIds.length
+  )) throw new Error('Las facturas relacionadas deben tener identificadores únicos y válidos.');
+  const reclassifications = input.purchaseVatReclassificationItems || [];
+  const debitBs = reclassifications.reduce((sum, item) => sum + Number(item.debitBs || 0), 0);
+  const creditBs = reclassifications.reduce((sum, item) => sum + Number(item.creditBs || 0), 0);
+  const debitUsd = reclassifications.reduce((sum, item) => sum + Number(item.debitUsd || 0), 0);
+  const creditUsd = reclassifications.reduce((sum, item) => sum + Number(item.creditUsd || 0), 0);
+  if ([debitBs, creditBs, debitUsd, creditUsd].some(value => !Number.isFinite(value)) ||
+      Math.abs(debitBs - creditBs) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.000001) {
+    throw new Error('Las reclasificaciones de IVA no acreditable del borrador no cuadran en Bs y USD.');
+  }
 }
 
 export function getVatOwnOutstandingBalance(
