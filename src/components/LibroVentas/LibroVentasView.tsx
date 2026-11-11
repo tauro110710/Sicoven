@@ -27,7 +27,6 @@ export const LibroVentasView: React.FC = () => {
     sales,
     journalEntries,
     isStorageReady,
-    displayCurrency,
     addSaleCorrectionNote
   } = useAccounting();
 
@@ -301,7 +300,7 @@ export const LibroVentasView: React.FC = () => {
                         {s.taxRate === 8 && <div>Base 8%: {formatBs(s.taxableBaseBs)}</div>}
                         {s.taxRate === 31 && <div>Base 31% comp.: {formatBs(s.taxableBaseBs)}</div>}
                       </div>
-                      {displayCurrency !== 'BS' && <div className="text-[10px] text-slate-400 font-normal">{formatUsd(s.taxableBaseUsd)}</div>}
+                      <div className="text-[10px] text-slate-400 font-normal">{formatUsd(s.taxableBaseUsd)}</div>
                     </td>
                     <td className="py-2 px-2 text-center font-mono text-slate-600">
                       {s.taxRate}%
@@ -313,7 +312,7 @@ export const LibroVentasView: React.FC = () => {
                         {s.taxRate === 8 && <div>IVA 8%: {formatBs(s.vatAmountBs)}</div>}
                         {s.taxRate === 31 && <div>IVA comp. 16%: {formatBs(s.taxableBaseBs * 0.16)}</div>}
                       </div>
-                      {displayCurrency !== 'BS' && <div className="text-[10px] text-emerald-600/70 font-normal">{formatUsd(s.taxRate === 31 && s.bcvRate > 0 ? s.taxableBaseBs * 0.16 / s.bcvRate : s.vatAmountUsd)}</div>}
+                      <div className="text-[10px] text-emerald-600/70 font-normal">{formatUsd(s.taxRate === 31 && s.bcvRate > 0 ? s.taxableBaseBs * 0.16 / s.bcvRate : s.vatAmountUsd)}</div>
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-amber-700 whitespace-nowrap bg-amber-50/30">
                       {s.taxRate === 31 ? formatBs(s.additionalLuxuryTaxBs ?? s.taxableBaseBs * 0.15) : '-'}
@@ -390,7 +389,7 @@ export const LibroVentasView: React.FC = () => {
                     <div className="text-[10px] text-slate-400">{formatUsd(totalIvaDebitoUsd)}</div>
                   )}
                 </td>
-                <td className="py-3 px-3 text-right font-mono text-amber-300 bg-slate-850">{formatBs(totalLuxuryTaxBs)}{displayCurrency !== 'BS' && <div className="text-[10px] text-slate-400">{formatUsd(totalLuxuryTaxUsd)}</div>}</td>
+                <td className="py-3 px-3 text-right font-mono text-amber-300 bg-slate-850">{formatBs(totalLuxuryTaxBs)}<div className="text-[10px] text-slate-400">{formatUsd(totalLuxuryTaxUsd)}</div></td>
                 <td className="py-3 px-3 text-right font-mono text-purple-300 bg-slate-850">
                   {formatBs(totalIvaRetenidoBs)}
                   {(
