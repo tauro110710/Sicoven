@@ -6062,7 +6062,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           entryNumber: 0, date: draft.occurredAt.slice(0,10),
           description: 'Pago de IVA mensual · ' + declaration.period,
           type: 'AJUSTE', bcvRate: rate,
-          referenceDoc: 'IVA-PAGO:' + declaration.id + ':' + draft.idempotencyKey,
+          referenceDoc: 'IVA-PAGO:' + declaration.id + ':' + String(draft.reference || '').trim(),
           items
         });
       } else if (draft.eventType === 'REVERSAL') {
