@@ -51,7 +51,7 @@ test('creates a purchase credit-note incident linked to its original invoice, vo
   const { db } = fixture();
   const before = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json;
   const incident = createVatFiscalIncident(db, createInput(), actor);
-  assert.equal(incident.status, 'PENDING_REVIEW');
+  assert.equal(incident.status, 'OPEN');
   assert.equal(incident.resolved, false);
   assert.equal(incident.originalPurchaseId, 'invoice-1');
   assert.deepEqual(incident.declarationEventIds, ['filed-1', 'payment-1']);
@@ -224,19 +224,18 @@ test('requires a documented decision and permits either full-access role', () =>
   db.close();
 });
 
-test('requires review before action and verifiable evidence for an action', () => {
+test('allows the accountant to record an action directly without a separate review step', () => {
   const { db } = fixture();
   const created = createVatFiscalIncident(db, createInput(), actor);
-  assert.throws(() => recordVatFiscalIncidentEvent(db, {
+  assert.equal(created.status, 'OPEN');
+  const acted = recordVatFiscalIncidentEvent(db, {
     incidentId: created.id, eventType: 'ACTION_RECORDED',
-    decisionText: 'Se documenta una actuación sin revisión previa ni evidencia externa verificable.',
+    decisionText: 'El contador registró directamente la actuación y su referencia externa para seguimiento.',
     declarationId: 'declaration-1', externalReference: 'EXT-REF-1'
-  }, actor), /revisión profesional documentada/);
-  recordVatFiscalIncidentEvent(db, {
-    incidentId: created.id, eventType: 'REVIEW_RECORDED',
-    decisionText: 'Se realizó la revisión profesional inicial del expediente y sus documentos originales.',
-    declarationId: 'declaration-1'
   }, actor);
+  assert.equal(acted.status, 'ACTION_DOCUMENTED');
+  assert.equal(acted.events.some(event => event.eventType === 'REVIEW_RECORDED'), false);
+  assert.equal(acted.resolved, false);
   assert.throws(() => recordVatFiscalIncidentEvent(db, {
     incidentId: created.id, eventType: 'ACTION_RECORDED',
     decisionText: 'Se registra una actuación sin documento ni asiento ni referencia externa verificable.',
