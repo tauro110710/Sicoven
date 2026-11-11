@@ -457,6 +457,37 @@ test('blocks a prior-period credit note when the live supplier RIF differs from 
   }), /RIF del proveedor de la nota de crédito no coincide con la huella histórica/);
 });
 
+test('blocks an unresolved prior filed source related to the original invoice even when its live record was removed', () => {
+  const original = {
+    id: 'purchase-missing-note-source-original', companyId: 'company-a', invoiceDate: '2026-10-05',
+    supplierRif: 'J-12345678-9', invoiceNumber: 'F-300', documentType: '01',
+    taxRate: 16, vatAmountBs: 160, vatCreditTreatment: 'TAXABLE'
+  } as PurchaseRecord;
+  const currentNote = {
+    id: 'purchase-missing-note-source-current', companyId: 'company-a', invoiceDate: '2026-12-05',
+    supplierRif: 'J-12345678-9', invoiceNumber: 'NC-302', documentType: '03',
+    taxRate: 16, vatAmountBs: 40, originalPurchaseId: original.id
+  } as PurchaseRecord;
+  const originalSnapshot = JSON.stringify({
+    kind: 'PURCHASE', id: original.id, documentType: '01', supplierRif: 'J-12345678-9',
+    vatCreditTreatment: 'TAXABLE', taxRate: 16, vatAmountBs: 160
+  });
+  const filedOriginal = {
+    ...declaration, period: '2026-10', status: 'FILED' as const,
+    sourceIds: [original.id], sourceSnapshots: { [original.id]: originalSnapshot }
+  };
+  const filedNovember = {
+    ...declaration, period: '2026-11', status: 'FILED' as const,
+    sourceIds: ['purchase-deleted-credit-note'], relatedSourceIds: [original.id],
+    sourceSnapshots: { [original.id]: originalSnapshot }
+  };
+  assert.throws(() => calculateVatOwnPurchaseCreditSummary({
+    companyId: 'company-a', period: '2026-12', purchases: [currentNote],
+    allPurchases: [original, currentNote], priorDeclarations: [filedOriginal, filedNovember],
+    taxableSalesBaseBs: 1000, exemptSalesBaseBs: 0
+  }), /relacionada con la factura actual no conserva su huella fiscal histórica/);
+});
+
 test('blocks cumulative reversal when a previously filed credit note has no immutable snapshot', () => {
   const original = {
     id: 'purchase-cumulative-legacy-original', companyId: 'company-a', invoiceDate: '2026-10-05',
