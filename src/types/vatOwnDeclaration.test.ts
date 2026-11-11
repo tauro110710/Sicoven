@@ -8,6 +8,7 @@ import {
   resolveVatOwnDailySalesSources,
   resolveVatOwnProrationRate,
   resolveVatOwnPurchaseCreditTreatment,
+  snapshotVatOwnDeclarationRevision,
   validateVatOwnDeclarationDraft,
   validateVatOwnEvent,
   type VatOwnDeclaration,
@@ -84,6 +85,18 @@ test('rejects negative or non-finite sales bases for proration', () => {
   assert.equal(resolveVatOwnProrationRate({
     taxableSalesBaseBs: Number.NaN, exemptSalesBaseBs: 100, hasCommonPurchases: true
   }), null);
+});
+
+test('snapshots a draft revision without sharing mutable source arrays or position objects', () => {
+  const draft = { ...declaration, status: 'DRAFT' as const, sourceIds: ['sale-old'], revisions: [] };
+  const revision = snapshotVatOwnDeclarationRevision(draft, '2026-02-02T10:00:00.000Z', 'Actualizar fuentes antes de presentar');
+  draft.sourceIds.push('sale-new');
+  draft.position.amountDueBs = 999;
+  assert.equal(revision.revision, 1);
+  assert.deepEqual(revision.sourceIds, ['sale-old']);
+  assert.notEqual(revision.position.amountDueBs, 999);
+  assert.equal(revision.reason, 'Actualizar fuentes antes de presentar');
+  assert.throws(() => snapshotVatOwnDeclarationRevision(declaration, '2026-02-02T10:00:00.000Z', 'No debe versionar una presentada'), /borrador no presentado/);
 });
 
 test('calculates debit, credits, prior credit, payable and carry-forward', () => {
