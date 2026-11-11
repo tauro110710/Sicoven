@@ -53,7 +53,7 @@ import { FinancialDisclosure, validateFinancialDisclosure } from '../types/finan
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
-import { getReceivedVatWithholdingSales, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, validateVatOwnEvent } from '../types/vatOwnDeclaration';
+import { getReceivedVatWithholdingSales, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, validateVatOwnEvent } from '../types/vatOwnDeclaration';
 import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
@@ -5603,7 +5603,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const createVatOwnDeclaration = async (input: { period: string; choices?: Record<string, 'Z' | 'INDIVIDUAL'> }): Promise<VatOwnDeclaration> => {
     assertSQLitePersistenceReady('Preparar declaración mensual de IVA');
-    if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(input.period)) throw new Error('Seleccione un período mensual válido.');
+    if (!isValidVatOwnDeclarationPeriod(input.period)) throw new Error('Seleccione un período mensual válido.');
     if (vatOwnDeclarations.some(item => item.companyId === currentCompany.id && item.period === input.period)) {
       throw new Error('Ya existe una declaración mensual para ese período. Abra la existente para continuar.');
     }
