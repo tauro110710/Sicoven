@@ -16,20 +16,26 @@ export function getUnfiledVatOwnActivityPeriods(input: {
   activityDates: readonly string[];
   declarations: readonly VatOwnDeclaration[];
 }): string[] {
-  if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(input.targetPeriod)) {
+  if (!isValidVatOwnDeclarationPeriod(input.targetPeriod)) {
     throw new Error('El período objetivo de IVA no es válido.');
   }
+  const isCalendarDate = (value: string): boolean => {
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+    const parsed = new Date(value + 'T00:00:00.000Z');
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  };
   const filedPeriods = new Set(input.declarations
     .filter(item => item.companyId === input.companyId && item.status === 'FILED' && item.period < input.targetPeriod)
     .map(item => item.period));
   const knownPeriods = new Set<string>(input.declarations
     .filter(item => item.companyId === input.companyId && item.period < input.targetPeriod)
     .map(item => item.period));
-  for (const date of input.activityDates) {
-    const period = String(date || '').slice(0, 7);
-    if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(period)) {
+  for (const dateValue of input.activityDates) {
+    const date = String(dateValue || '');
+    if (!isCalendarDate(date)) {
       throw new Error('Existe una fecha fiscal inválida que impide verificar la continuidad de las declaraciones de IVA.');
     }
+    const period = date.slice(0, 7);
     if (period < input.targetPeriod) knownPeriods.add(period);
   }
   if (knownPeriods.size === 0) return [];
