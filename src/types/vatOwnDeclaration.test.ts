@@ -159,7 +159,7 @@ test('reverses a prior-period common purchase credit using the original declarat
       outputVatBs: 0, purchaseCreditBs: 80, purchaseCredit16Bs: 80,
       purchaseCreditGrossBs: 160, purchaseCreditGross16Bs: 160,
       purchaseCreditNonEligibleBs: 80, receivedWithholdingsBs: 0,
-      prorationRate: 0.5
+      taxableSalesBaseBs: 500, exemptSalesBaseBs: 500, prorationRate: 0.5
     })
   };
   const result = calculateVatOwnPurchaseCreditSummary({
