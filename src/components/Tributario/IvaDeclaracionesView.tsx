@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { CalendarDays, FileText, Receipt, ShoppingCart, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs } from '../../utils/formatters';
-import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, getUnfiledVatOwnActivityPeriods, getVatOwnFiledLaterPeriods, resolveVatOwnPaymentBcvRate } from '../../types/vatOwnDeclaration';
+import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, calculateVatOwnPosition, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, getUnfiledVatOwnActivityPeriods, getVatOwnFiledLaterPeriods, resolveVatOwnPaymentBcvRate } from '../../types/vatOwnDeclaration';
 
 const money = (value: number | undefined) => Number.isFinite(value) ? Number(value) : 0;
 const parseLocalizedNumber = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
@@ -146,6 +146,37 @@ export const IvaDeclaracionesView: React.FC = () => {
   const receivedWithholdings = receivedWithholdingRows.reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatWithheldBs), 0);
   const preliminaryBalance = outputVat === null || purchaseCreditEligible === null
     ? null : outputVat - purchaseCreditEligible - receivedWithholdings - priorCredit + purchaseCreditReversal;
+  const currentPositionPreview = useMemo(() => {
+    if (outputVat === null || !purchaseSummary) return null;
+    try {
+      const output16Raw = dailySalesResolution.days.reduce((sum, day) => sum + day.outputVat16Bs, 0);
+      const output8Raw = dailySalesResolution.days.reduce((sum, day) => sum + day.outputVat8Bs, 0);
+      const withholdingRaw = receivedWithholdingRows.reduce((sum, item) =>
+        sum + signedDocument(item.documentType) * money(item.vatWithheldBs), 0);
+      return calculateVatOwnPosition({
+        outputVatBs: Math.max(0, output16Raw) + Math.max(0, output8Raw),
+        outputVat16Bs: Math.max(0, output16Raw), outputVat8Bs: Math.max(0, output8Raw),
+        purchaseCreditBs: purchaseSummary.eligible16Bs + purchaseSummary.eligible8Bs,
+        purchaseCredit16Bs: purchaseSummary.eligible16Bs, purchaseCredit8Bs: purchaseSummary.eligible8Bs,
+        purchaseCreditGrossBs: purchaseSummary.gross16Bs + purchaseSummary.gross8Bs,
+        purchaseCreditGross16Bs: purchaseSummary.gross16Bs, purchaseCreditGross8Bs: purchaseSummary.gross8Bs,
+        purchaseCreditNonEligibleBs: purchaseSummary.nonEligible16Bs + purchaseSummary.nonEligible8Bs,
+        purchaseCreditReversalBs: purchaseSummary.priorReversalEligible16Bs + purchaseSummary.priorReversalEligible8Bs,
+        purchaseCreditReversal16Bs: purchaseSummary.priorReversalEligible16Bs,
+        purchaseCreditReversal8Bs: purchaseSummary.priorReversalEligible8Bs,
+        purchaseCreditReversalNonEligibleBs: purchaseSummary.priorReversalNonEligible16Bs + purchaseSummary.priorReversalNonEligible8Bs,
+        purchaseCreditReversalNonEligible16Bs: purchaseSummary.priorReversalNonEligible16Bs,
+        purchaseCreditReversalNonEligible8Bs: purchaseSummary.priorReversalNonEligible8Bs,
+        prorationRate: purchaseSummary.prorationRate,
+        taxableSalesBaseBs: taxableSalesBase, exemptSalesBaseBs: exemptSalesBase,
+        receivedWithholdingsBs: Math.max(0, withholdingRaw), priorCreditBs: priorCredit,
+        debitAdjustmentsBs: Math.max(0, -withholdingRaw),
+        creditAdjustmentsBs: Math.max(0, -output16Raw) + Math.max(0, -output8Raw)
+      });
+    } catch {
+      return null;
+    }
+  }, [outputVat, purchaseSummary, dailySalesResolution.days, receivedWithholdingRows, taxableSalesBase, exemptSalesBase, priorCredit]);
   const currentSourceIds = [...new Set([
     ...dailySalesResolution.days.flatMap(day => day.sourceIds),
     ...monthPurchases.map(item => item.id),
@@ -161,14 +192,12 @@ export const IvaDeclaracionesView: React.FC = () => {
   const purchaseReclassificationChanged = Boolean(savedDeclaration &&
     JSON.stringify(purchaseReclassificationItems) !== JSON.stringify(savedDeclaration.purchaseVatReclassificationItems || []));
   const positionSummaryChanged = Boolean(savedDeclaration && (
-    outputVat === null ||
-    Math.abs(money(outputVat) - money(savedDeclaration.position.outputVatBs)) > 0.02 ||
-    purchaseCreditEligible === null ||
-    Math.abs(money(purchaseCreditEligible) - money(savedDeclaration.position.purchaseCreditBs)) > 0.02 ||
-    Math.abs(purchaseCreditReversal - money(savedDeclaration.position.purchaseCreditReversalBs)) > 0.02 ||
-    Math.abs(money(receivedWithholdings) - money(savedDeclaration.position.receivedWithholdingsBs)) > 0.02 ||
-    prorationRate === null ||
-    Math.abs(money(prorationRate) - money(savedDeclaration.position.prorationRate)) > 0.000001
+    !currentPositionPreview ||
+    (Object.keys(currentPositionPreview) as Array<keyof typeof currentPositionPreview>).some(field => {
+      const savedValue = Number(savedDeclaration.position[field] ?? 0);
+      const tolerance = field === 'prorationRate' ? 0.000001 : 0.02;
+      return !Number.isFinite(savedValue) || Math.abs(currentPositionPreview[field] - savedValue) > tolerance;
+    })
   ));
   const draftNeedsRefresh = savedDeclaration?.status === 'DRAFT' && (
     sourceIdsChanged || sourceChoicesChanged || bcvRateChanged || purchaseReclassificationChanged || positionSummaryChanged ||
