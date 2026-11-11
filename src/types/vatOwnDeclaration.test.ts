@@ -421,6 +421,15 @@ test('rejects future-dated IVA payments', () => {
   }), /fecha del pago no puede ser futura/);
 });
 
+test('rejects malformed or impossible IVA event timestamps', () => {
+  assert.throws(() => validateVatOwnEvent({
+    declaration, events: [], draft: payment({ occurredAt: '2026-02-31T10:00:00.000Z' })
+  }), /fecha del evento no es válida/);
+  assert.throws(() => validateVatOwnEvent({
+    declaration, events: [], draft: payment({ occurredAt: '2026-02-12' })
+  }), /fecha del evento no es válida/);
+});
+
 test('allows partial payment and computes remaining balance', () => {
   const event = { ...payment(), id: 'event-1', recordedAt: '2026-02-12T10:01:00.000Z' };
   validateVatOwnEvent({ declaration, events: [], draft: payment() });
