@@ -12,6 +12,8 @@ export interface VatOwnPositionInput {
   purchaseCreditGross8Bs?: number;
   purchaseCreditNonEligibleBs?: number;
   prorationRate?: number;
+  taxableSalesBaseBs?: number;
+  exemptSalesBaseBs?: number;
   receivedWithholdingsBs: number;
   priorCreditBs?: number;
   debitAdjustmentsBs?: number;
@@ -30,6 +32,8 @@ export interface VatOwnPosition {
   purchaseCreditGross8Bs: number;
   purchaseCreditNonEligibleBs: number;
   prorationRate: number;
+  taxableSalesBaseBs: number;
+  exemptSalesBaseBs: number;
   receivedWithholdingsBs: number;
   priorCreditAppliedBs: number;
   debitAdjustmentsBs: number;
@@ -93,7 +97,11 @@ export function calculateVatOwnPosition(input: VatOwnPositionInput): VatOwnPosit
   const purchaseCreditGross16Bs = amount(input.purchaseCreditGross16Bs ?? purchaseCredit16Bs, 'Crédito fiscal bruto 16%');
   const purchaseCreditGross8Bs = amount(input.purchaseCreditGross8Bs ?? purchaseCredit8Bs, 'Crédito fiscal bruto 8%');
   const purchaseCreditNonEligibleBs = amount(input.purchaseCreditNonEligibleBs ?? Math.max(0, purchaseCreditGrossBs - purchaseCreditBs), 'IVA no acreditable por prorrata');
-  const prorationRate = Number(input.prorationRate ?? 1);
+  const taxableSalesBaseBs = amount(input.taxableSalesBaseBs, 'Base de ventas gravadas');
+  const exemptSalesBaseBs = amount(input.exemptSalesBaseBs, 'Ventas exentas');
+  const computedProration = taxableSalesBaseBs + exemptSalesBaseBs > 0
+    ? taxableSalesBaseBs / (taxableSalesBaseBs + exemptSalesBaseBs) : 1;
+  const prorationRate = Number(input.prorationRate ?? computedProration);
   if (!Number.isFinite(prorationRate) || prorationRate < 0 || prorationRate > 1) throw new Error('El porcentaje de prorrata debe estar entre 0% y 100%.');
   if (Math.abs(purchaseCredit16Bs + purchaseCredit8Bs - purchaseCreditBs) > 0.02 ||
       Math.abs(purchaseCreditGross16Bs + purchaseCreditGross8Bs - purchaseCreditGrossBs) > 0.02 ||
@@ -113,7 +121,7 @@ export function calculateVatOwnPosition(input: VatOwnPositionInput): VatOwnPosit
     outputVatBs, outputVat16Bs, outputVat8Bs,
     purchaseCreditBs, purchaseCredit16Bs, purchaseCredit8Bs,
     purchaseCreditGrossBs, purchaseCreditGross16Bs, purchaseCreditGross8Bs,
-    purchaseCreditNonEligibleBs, prorationRate, receivedWithholdingsBs,
+    purchaseCreditNonEligibleBs, prorationRate, taxableSalesBaseBs, exemptSalesBaseBs, receivedWithholdingsBs,
     priorCreditAppliedBs, debitAdjustmentsBs, creditAdjustmentsBs,
     netTaxBs, amountDueBs: Math.max(0, netTaxBs),
     creditCarryForwardBs: Math.max(0, -netTaxBs) + unusedPriorCreditBs
