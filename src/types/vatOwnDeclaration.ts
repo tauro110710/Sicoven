@@ -873,7 +873,7 @@ export function resolveVatOwnDailySalesSources(input: {
     target.outputVatBs += sign * amount(sale.vatAmountBs, 'IVA de venta');
     if (sale.taxRate === 8) target.outputVat8Bs += sign * amount(sale.vatAmountBs, 'IVA 8% de venta');
     else target.outputVat16Bs += sign * amount(sale.vatAmountBs, 'IVA 16% de venta');
-    target.exemptSalesBs += sign * amount(sale.exemptAmountBs, 'Venta exenta');
+    target.exemptSalesBs += sign * (amount(sale.exemptAmountBs, 'Venta exenta') + (sale.taxRate === 0 ? amount(sale.taxableBaseBs, 'Venta a 0% exenta') : 0));
     if (sale.taxRate === 16) target.taxableBase16Bs += sign * amount(sale.taxableBaseBs, 'Base 16%');
     else if (sale.taxRate === 8) target.taxableBase8Bs += sign * amount(sale.taxableBaseBs, 'Base 8%');
     else if (sale.taxRate === 31) target.taxableBase31Bs += sign * amount(sale.taxableBaseBs, 'Base 31%');
