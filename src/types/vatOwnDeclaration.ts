@@ -658,7 +658,12 @@ export function validateVatOwnEvent(input: {
   if (events.some(event => event.idempotencyKey === draft.idempotencyKey)) {
     throw new Error('La operación ya fue registrada; no se admite un duplicado.');
   }
-  if (!draft.occurredAt || Number.isNaN(Date.parse(draft.occurredAt))) {
+  const eventDatePart = String(draft.occurredAt || '').slice(0, 10);
+  const parsedEventDate = /^\d{4}-\d{2}-\d{2}$/.test(eventDatePart)
+    ? new Date(eventDatePart + 'T00:00:00.000Z') : null;
+  const validEventTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(String(draft.occurredAt || ''));
+  if (!validEventTimestamp || !parsedEventDate || !Number.isFinite(parsedEventDate.getTime()) ||
+      parsedEventDate.toISOString().slice(0, 10) !== eventDatePart || Number.isNaN(Date.parse(draft.occurredAt))) {
     throw new Error('La fecha del evento no es válida.');
   }
   if (draft.eventType === 'FILED') {
