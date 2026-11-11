@@ -3497,7 +3497,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const inventoryAccountCodes = [...new Set(draftLines.map(line => line.product.inventoryAccountCode || '1.1.4.01'))];
     const requiredAccounts = [...(cashPurchase ? [] : [payableAccountCode]), ...inventoryAccountCodes];
     if (supplierCredit.supplierAdvanceBs > 0.02) requiredAccounts.push('1.1.2.03');
-    if (valuation.vatAmountBs > 0) requiredAccounts.push('1.1.3.01');
+    if (valuation.vatAmountBs > 0) requiredAccounts.push(purchase.taxRate === 8 ? '1.1.3.02' : '1.1.3.01');
+    if (valuation.additionalLuxuryTaxBs > 0) requiredAccounts.push('6.1.1.13');
     if (valuation.vatWithheldBs > 0) requiredAccounts.push('2.1.2.03');
     if (valuation.islrWithheldBs > 0) requiredAccounts.push('2.1.2.04');
     if (valuation.igtfAmountBs > 0) requiredAccounts.push('6.1.1.11');
@@ -3527,7 +3528,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const code = product.inventoryAccountCode || '1.1.4.01';
       items.push(line(code, 0, returnedLine.inventoryCostBs, 'Salida de inventario · ' + product.code + ' · devolución al proveedor'));
     }
-    if (valuation.vatAmountBs > 0) items.push(line('1.1.3.01', 0, valuation.vatAmountBs, 'Reversión de crédito fiscal IVA'));
+    if (valuation.vatAmountBs > 0) items.push(line(purchase.taxRate === 8 ? '1.1.3.02' : '1.1.3.01', 0, valuation.vatAmountBs, 'Reversión de crédito fiscal IVA'));
+    if (valuation.additionalLuxuryTaxBs > 0) items.push(line('6.1.1.13', 0, valuation.additionalLuxuryTaxBs, 'Reversión de impuesto adicional al consumo suntuario no recuperable'));
     if (valuation.igtfAmountBs > 0) items.push(line('6.1.1.11', 0, valuation.igtfAmountBs, 'Reversión de gasto IGTF'));
     const debitBs = items.reduce((sum, item) => sum + item.debitBs, 0);
     const creditBs = items.reduce((sum, item) => sum + item.creditBs, 0);
@@ -3618,12 +3620,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       fiscalEmissionMedium: request.fiscalEmissionMedium, sameMediumAsOriginal: request.sameMediumAsOriginal,
       documentType: '03', totalAmountBs: valuation.totalAmountBs,
       exemptAmountBs: valuation.exemptAmountBs, taxableBaseBs: valuation.taxableBaseBs,
-      taxRate: purchase.taxRate, vatAmountBs: valuation.vatAmountBs,
+      taxRate: purchase.taxRate, vatAmountBs: valuation.vatAmountBs, additionalLuxuryTaxBs: valuation.additionalLuxuryTaxBs,
       retentionRate: purchase.retentionRate, vatWithheldBs: valuation.vatWithheldBs,
       islrConceptCode: purchase.islrConceptCode, islrConceptName: purchase.islrConceptName,
       islrRate: purchase.islrRate, islrSubtrahendBs: 0, islrWithheldBs: valuation.islrWithheldBs,
       bcvRate: rate, totalAmountUsd: valuation.totalAmountUsd,
-      taxableBaseUsd: valuation.taxableBaseUsd, vatAmountUsd: valuation.vatAmountUsd,
+      taxableBaseUsd: valuation.taxableBaseUsd, vatAmountUsd: valuation.vatAmountUsd, additionalLuxuryTaxUsd: valuation.additionalLuxuryTaxUsd,
       vatWithheldUsd: valuation.vatWithheldUsd, islrWithheldUsd: valuation.islrWithheldUsd,
       igtfApplicable: valuation.igtfAmountBs > 0, igtfRate: purchase.igtfRate,
       igtfAmountBs: valuation.igtfAmountBs, igtfAmountUsd: valuation.igtfAmountUsd,
