@@ -661,6 +661,20 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
     if (historicalJournal && (historicalJournal.id !== sourceJournalId || !Array.isArray(historicalJournal.items))) {
       throw new Error('La huella fiscal histórica no coincide con el asiento contable original de la factura.');
     }
+    if (historicalJournal) {
+      const normalizeJournalLines = (lines: JournalEntryItem[]) => lines.map(line => ({
+        accountCode: String(line.accountCode || ''),
+        debitBs: Number(line.debitBs || 0), creditBs: Number(line.creditBs || 0),
+        debitUsd: Number(line.debitUsd || 0), creditUsd: Number(line.creditUsd || 0)
+      })).sort((a, b) => a.accountCode.localeCompare(b.accountCode));
+      const historicalLines = normalizeJournalLines(historicalJournal.items as JournalEntryItem[]);
+      const currentLines = normalizeJournalLines(liveSourceEntry.items);
+      if (JSON.stringify(historicalLines) !== JSON.stringify(currentLines) ||
+          (historicalJournal.date && historicalJournal.date !== liveSourceEntry.date) ||
+          (historicalJournal.type && historicalJournal.type !== liveSourceEntry.type)) {
+        throw new Error('El asiento de compra original difiere de la huella fiscal presentada. Reconcilie el asiento antes de revertir la nota de crédito.');
+      }
+    }
     if (Math.abs(signedAmount) < 0.01) continue;
     const grouped = new Map<string, { accountName: string; amountBs: number }>();
     for (const item of sourceEntry.items) {
