@@ -2185,7 +2185,7 @@ test('SQLite requires the filed IVA own-account declaration to have exactly one 
   assert.throws(() => validateAccountingSnapshot(priorDraft, {
     ...filed, vatOwnDeclarationEvents: []
   }), /no coincide con su evento de presentación/);
-  assert.throws(() => validateAccountingSnapshot(vatOwnDeclarationFixture(), {
+  assert.throws(() => validateAccountingSnapshot(priorDraft, {
     ...filed, vatOwnDeclarationEvents: [{
       ...filed.vatOwnDeclarationEvents[0], declarationNumber: 'OTRO-NÚMERO'
     }]
