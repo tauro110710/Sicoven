@@ -2055,6 +2055,11 @@ function vatOwnDeclarationFixture(overrides = {}) {
   };
   return {
     ...emptyState(),
+    accounts: [
+      { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', isMovement: true },
+      { code: '2.1.2.01', name: 'IVA débito', type: 'PASIVO', isMovement: true },
+      { code: '2.1.2.09', name: 'IVA por enterar', type: 'PASIVO', isMovement: true }
+    ],
     companies: [{ id: 'company-1', name: 'Empresa Uno', bcvRate: 874, accountingBcvRateHistory: [
       { id: 'bcv-oct', rate: 874, effectiveDate: '2026-10-01', recordedAt: '2026-10-01T08:00:00.000Z' },
       { id: 'bcv-nov', rate: 874, effectiveDate: '2026-11-01', recordedAt: '2026-11-01T08:00:00.000Z' }
