@@ -548,6 +548,71 @@ function validateVatDeclarationLedger(previousState, nextState) {
 
 
 
+
+function buildVatOwnSourceSnapshotsFromState(state, companyId, sourceIds) {
+  const sales = asArray(state.sales);
+  const purchases = asArray(state.purchases);
+  const journalEntries = asArray(state.journalEntries);
+  const snapshots = {};
+  const journalSnapshot = entry => entry ? {
+    id: entry.id, entryNumber: entry.entryNumber, date: entry.date, referenceDoc: entry.referenceDoc, type: entry.type,
+    bcvRate: entry.bcvRate, description: entry.description,
+    reversalOfEntryId: entry.reversalOfEntryId || null, reversedByEntryId: entry.reversedByEntryId || null,
+    items: asArray(entry.items).map(line => ({
+      accountCode: line.accountCode, debitBs: line.debitBs, creditBs: line.creditBs,
+      debitUsd: line.debitUsd, creditUsd: line.creditUsd, description: line.description
+    }))
+  } : null;
+  for (const id of [...new Set(sourceIds)].sort()) {
+    const sale = sales.find(item => item.id === id && item.companyId === companyId);
+    if (sale) {
+      snapshots[id] = JSON.stringify({
+        kind: 'SALE', id: sale.id, invoiceDate: sale.invoiceDate, documentType: sale.documentType,
+        invoiceNumber: sale.invoiceNumber, controlNumber: sale.controlNumber, customerRif: sale.customerRif, customerName: sale.customerName,
+        totalAmountBs: sale.totalAmountBs, totalAmountUsd: sale.totalAmountUsd, taxableBaseBs: sale.taxableBaseBs, taxableBaseUsd: sale.taxableBaseUsd,
+        exemptAmountBs: sale.exemptAmountBs, exemptAmountUsd: sale.exemptAmountUsd || 0, taxRate: sale.taxRate,
+        vatAmountBs: sale.vatAmountBs, vatAmountUsd: sale.vatAmountUsd, additionalLuxuryTaxBs: sale.additionalLuxuryTaxBs || 0,
+        additionalLuxuryTaxUsd: sale.additionalLuxuryTaxUsd || 0, igtfApplicable: Boolean(sale.igtfApplicable), igtfRate: sale.igtfRate || 0,
+        igtfAmountBs: sale.igtfAmountBs || 0, igtfAmountUsd: sale.igtfAmountUsd || 0,
+        vatWithheldBs: sale.vatWithheldBs, vatWithheldUsd: sale.vatWithheldUsd, retentionRate: sale.retentionRate || 0,
+        retentionVoucherNumber: sale.retentionVoucherNumber || null, retentionVoucherDate: sale.retentionVoucherDate || null,
+        bcvRate: sale.bcvRate, journalEntryId: sale.journalEntryId || null, originalSaleId: sale.originalSaleId || null,
+        affectedInvoiceNumber: sale.affectedInvoiceNumber || null, affectedInvoiceDate: sale.affectedInvoiceDate || null,
+        affectedInvoiceControlNumber: sale.affectedInvoiceControlNumber || null, isCancelled: Boolean(sale.isCancelled),
+        journal: journalSnapshot(journalEntries.find(entry => entry.id === sale.journalEntryId && entry.companyId === companyId))
+      });
+      continue;
+    }
+    const purchase = purchases.find(item => item.id === id && item.companyId === companyId);
+    if (purchase) {
+      snapshots[id] = JSON.stringify({
+        kind: 'PURCHASE', id: purchase.id, invoiceDate: purchase.invoiceDate, accountCreditDate: purchase.accountCreditDate || null,
+        documentType: purchase.documentType, invoiceNumber: purchase.invoiceNumber, controlNumber: purchase.controlNumber,
+        supplierRif: purchase.supplierRif, supplierName: purchase.supplierName, totalAmountBs: purchase.totalAmountBs, totalAmountUsd: purchase.totalAmountUsd,
+        taxableBaseBs: purchase.taxableBaseBs, taxableBaseUsd: purchase.taxableBaseUsd, exemptAmountBs: purchase.exemptAmountBs,
+        exemptAmountUsd: purchase.exemptAmountUsd || 0, taxRate: purchase.taxRate, vatAmountBs: purchase.vatAmountBs, vatAmountUsd: purchase.vatAmountUsd,
+        additionalLuxuryTaxBs: purchase.additionalLuxuryTaxBs || 0, additionalLuxuryTaxUsd: purchase.additionalLuxuryTaxUsd || 0,
+        igtfApplicable: Boolean(purchase.igtfApplicable), igtfRate: purchase.igtfRate || 0,
+        igtfAmountBs: purchase.igtfAmountBs || 0, igtfAmountUsd: purchase.igtfAmountUsd || 0,
+        vatCreditTreatment: purchase.vatCreditTreatment || 'COMMON',
+        vatWithheldBs: purchase.vatWithheldBs, vatWithheldUsd: purchase.vatWithheldUsd, retentionRate: purchase.retentionRate || 0,
+        voucherNumber: purchase.voucherNumber || null, bcvRate: purchase.bcvRate, journalEntryId: purchase.journalEntryId || null,
+        originalPurchaseId: purchase.originalPurchaseId || null, affectedInvoiceNumber: purchase.affectedInvoiceNumber || null,
+        affectedInvoiceDate: purchase.affectedInvoiceDate || null, affectedInvoiceControlNumber: purchase.affectedInvoiceControlNumber || null,
+        isCancelled: Boolean(purchase.isCancelled),
+        journal: journalSnapshot(journalEntries.find(entry => entry.id === purchase.journalEntryId && entry.companyId === companyId))
+      });
+      continue;
+    }
+    const zEntry = journalEntries.find(entry => entry.id === id && entry.companyId === companyId && Boolean(entry.fiscalZReport));
+    snapshots[id] = zEntry ? JSON.stringify({
+      kind: 'Z', id: zEntry.id, date: zEntry.date, referenceDoc: zEntry.referenceDoc,
+      fiscalZReport: zEntry.fiscalZReport, journal: journalSnapshot(zEntry)
+    }) : JSON.stringify({ kind: 'MISSING', id });
+  }
+  return snapshots;
+}
+
 function validateVatOwnDeclarationLedger(previousState, nextState) {
   const priorDeclarations = asArray(previousState.vatOwnDeclarations);
   const declarations = asArray(nextState.vatOwnDeclarations);
@@ -770,6 +835,11 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
       if (!revisionMatchesOld || nextRevisions.length !== oldRevisions.length + 1) {
         throw new Error('SQLite bloqueó la actualización del borrador IVA porque no conserva una versión íntegra del contenido anterior.');
       }
+      const currentSnapshots = buildVatOwnSourceSnapshotsFromState(nextState, next.companyId,
+        [...asArray(next.sourceIds), ...asArray(next.relatedSourceIds)]);
+      if (!equal(next.sourceSnapshots, currentSnapshots)) {
+        throw new Error('SQLite rechazó la actualización del borrador IVA: las huellas nuevas no coinciden con las fuentes actuales.');
+      }
     }
   }
   for (const declaration of declarations) {
@@ -778,6 +848,13 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     }
     if (!priorById.has(String(declaration.id)) && !declaration.sourceSnapshots) {
       throw new Error('SQLite exige huellas documentales fiscales al crear un nuevo borrador IVA.');
+    }
+    if (!priorById.has(String(declaration.id))) {
+      const currentSnapshots = buildVatOwnSourceSnapshotsFromState(nextState, declaration.companyId,
+        [...asArray(declaration.sourceIds), ...asArray(declaration.relatedSourceIds)]);
+      if (!equal(declaration.sourceSnapshots, currentSnapshots)) {
+        throw new Error('SQLite rechazó el borrador IVA: sus huellas fiscales no coinciden con los documentos y asientos originales actuales.');
+      }
     }
   }
 
@@ -817,6 +894,11 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     }
     if (event.eventType === 'FILED') {
       if (!priorEventIds.has(id)) {
+        const currentSnapshots = buildVatOwnSourceSnapshotsFromState(nextState, declaration.companyId,
+          [...asArray(declaration.sourceIds), ...asArray(declaration.relatedSourceIds)]);
+        if (!equal(declaration.sourceSnapshots, currentSnapshots)) {
+          throw new Error('SQLite bloqueó la presentación IVA: cambió un documento o asiento fuente desde que se preparó el borrador.');
+        }
         const company = companies.get(String(declaration.companyId));
         const [periodYear, periodMonth] = declaration.period.split('-').map(Number);
         const periodEndDate = new Date(Date.UTC(periodYear, periodMonth, 0)).toISOString().slice(0, 10);
