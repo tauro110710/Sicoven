@@ -223,7 +223,22 @@ export const IvaDeclaracionesView: React.FC = () => {
             {declarationOutstanding<=0.01 && <p className="text-sm font-semibold text-emerald-800">Declaración totalmente enterada o con saldo a favor. No hay pagos pendientes.</p>}
           </div>}
           <div className="space-y-2"><h3 className="text-sm font-bold text-slate-800">Historial de eventos</h3>
-            {declarationEvents.length===0 ? <p className="text-xs text-slate-500">Todavía no hay presentación ni pagos registrados.</p> : declarationEvents.map(event=><div key={event.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2 text-xs"><span className="font-semibold">{event.eventType==='FILED'?'Presentación':event.eventType==='PAYMENT'?'Pago':'Reversión'} · {event.reference || event.declarationNumber || event.note || 'Evento fiscal'}</span><span className="text-slate-500">{event.occurredAt.slice(0,10)}{event.amountBs? ' · '+format(event.amountBs):''}</span></div>)}
+            {declarationEvents.length===0 ? <p className="text-xs text-slate-500">Todavía no hay presentación ni pagos registrados.</p> : declarationEvents.map(event=>{
+              const reversed = declarationEvents.some(item=>item.eventType==='REVERSAL'&&item.reversalOfEventId===event.id);
+              return <div key={event.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2 text-xs">
+                <span className="font-semibold">{event.eventType==='FILED'?'Presentación':event.eventType==='PAYMENT'?'Pago':'Reversión'} · {event.reference || event.declarationNumber || event.note || 'Evento fiscal'}{event.journalEntryId?' · Asiento '+event.journalEntryId:''}</span>
+                <span className="flex items-center gap-2 text-slate-500">{event.occurredAt.slice(0,10)}{event.amountBs? ' · '+format(event.amountBs):''}
+                  {event.eventType==='PAYMENT'&&!reversed&&<button type="button" disabled={workflowBusy} onClick={async()=>{
+                    const reason=window.prompt('Indica el motivo de reversión del pago. El asiento original se conservará en el historial.');
+                    if(!reason?.trim())return;
+                    setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
+                    try { await recordVatOwnDeclarationEvent(savedDeclaration.id,{companyId:currentCompany.id,eventType:'REVERSAL',occurredAt:new Date().toISOString(),idempotencyKey:'REVERSAL:'+event.id,reversalOfEventId:event.id,note:reason.trim()});setWorkflowMessage('Pago revertido mediante contra-asiento.'); }
+                    catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo revertir el pago.');}
+                    finally{setWorkflowBusy(false);}
+                  }} className="font-bold text-rose-700 underline">Revertir pago</button>}
+                </span>
+              </div>;
+            })}
           </div>
         </> : <p className="text-sm text-slate-500">Todavía no existe una declaración guardada para este período. Resuelve las fechas coincidentes y prepara el borrador para conservar los importes y documentos que lo sustentan.</p>}
         {workflowError && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{workflowError}</p>}
