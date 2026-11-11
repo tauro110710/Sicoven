@@ -562,6 +562,16 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     Number.isFinite(Date.parse(value)) && validVatDeclarationDate(value.slice(0, 10));
   const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const normalizeRevisions = value => Array.isArray(value) ? value : [];
+  const priorEventIds = new Set(asArray(previousState.vatOwnDeclarationEvents).map(item => String(item.id)));
+  const resolveHistoricalRate = (company, date) => {
+    const history = asArray(company?.accountingBcvRateHistory).filter(item =>
+      validVatDeclarationDate(item.effectiveDate) && item.effectiveDate <= date &&
+      Number.isFinite(Number(item.rate)) && Number(item.rate) > 0 &&
+      Number.isFinite(Date.parse(item.recordedAt))
+    ).sort((a, b) => String(b.effectiveDate).localeCompare(String(a.effectiveDate)) ||
+      String(b.recordedAt).localeCompare(String(a.recordedAt)));
+    return history.length ? Number(history[0].rate) : null;
+  };
 
   for (const declaration of declarations) {
     const id = String(declaration.id || '');
@@ -799,6 +809,15 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
       throw new Error('SQLite rechazó un evento IVA cuyo asiento no existe o no coincide en empresa, tipo y fecha.');
     }
     if (event.eventType === 'FILED') {
+      if (!priorEventIds.has(id)) {
+        const company = companies.get(String(declaration.companyId));
+        const historicalRate = resolveHistoricalRate(company, eventDate);
+        if (!company || !Number.isFinite(Number(company.bcvRate)) ||
+            Math.abs(Number(company.bcvRate) - Number(declaration.bcvRate)) > 0.000001 ||
+            historicalRate === null || Math.abs(historicalRate - Number(declaration.bcvRate)) > 0.000001) {
+          throw new Error('SQLite rechazó la presentación IVA porque la tasa BCV no coincide con la tasa vigente e histórica de la fecha de presentación.');
+        }
+      }
       const position = declaration.position;
       const filingRequiresJournal = [position.outputVatBs, position.purchaseCreditBs, position.purchaseCreditReversalBs,
         position.purchaseCreditReversalNonEligibleBs, position.receivedWithholdingsBs, position.priorCreditAppliedBs,
@@ -820,6 +839,12 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
       filedEvents.set(declaration.id, (filedEvents.get(declaration.id) || 0) + 1);
     } else if (event.eventType === 'PAYMENT') {
       const amount = Number(event.amountBs);
+      const company = companies.get(String(declaration.companyId));
+      const historicalRate = resolveHistoricalRate(company, eventDate);
+      const treasuryAccount = asArray(nextState.accounts).find(item =>
+        String(item.code) === String(event.treasuryAccountCode) && item.type === 'ACTIVO' &&
+        item.isMovement === true && String(item.code).startsWith('1.1.1.')
+      );
       const reference = String(event.reference || '').trim();
       const referenceKey = String(event.companyId) + ':' + reference;
       const priorPayments = history.filter(item => item.eventType === 'PAYMENT');
@@ -831,7 +856,8 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           !reference || paymentReferences.has(referenceKey) ||
           !String(event.treasuryAccountCode || '').startsWith('1.1.1.') ||
           !Number.isFinite(Number(event.bcvRate)) || Number(event.bcvRate) <= 0 ||
-          eventDate < String(declaration.filedAt || '').slice(0, 10) ||
+          historicalRate === null || Math.abs(historicalRate - Number(event.bcvRate)) > 0.000001 ||
+          !treasuryAccount || eventDate < String(declaration.filedAt || '').slice(0, 10) ||
           !journal || Math.abs(Number(journal.bcvRate) - Number(event.bcvRate)) > 0.000001 ||
           String(journal.referenceDoc || '') !== 'IVA-PAGO:' + declaration.id + ':' + event.idempotencyKey ||
           !asArray(journal.items).some(line => String(line.accountCode) === '2.1.2.09' &&
