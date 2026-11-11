@@ -112,7 +112,7 @@ export const LibroVentasView: React.FC = () => {
   const signed = (document: import('../../types/accounting').SaleRecord, amount: number) =>
     (document.documentType === '03' ? -1 : 1) * Number(amount || 0);
   const totalVentasConIvaBs = activeSales.reduce((s, x) => s + signed(x, x.totalAmountBs), 0);
-  const totalExentoBs = activeSales.reduce((s, x) => s + signed(x, x.exemptAmountBs || 0), 0);
+  const totalExentoBs = activeSales.reduce((s, x) => s + signed(x, (x.exemptAmountBs || 0) + (x.taxRate === 0 ? x.taxableBaseBs : 0)), 0);
   const totalBaseBs = activeSales.reduce((s, x) => s + signed(x, x.taxableBaseBs), 0);
   const totalIvaDebitoBs = activeSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? x.taxableBaseBs * 0.16 : x.vatAmountBs), 0);
   const totalLuxuryTaxBs = activeSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? (x.additionalLuxuryTaxBs ?? x.taxableBaseBs * 0.15) : 0), 0);
