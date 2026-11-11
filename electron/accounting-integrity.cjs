@@ -672,6 +672,51 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
   }
 
   const priorById = new Map(priorDeclarations.map(item => [String(item.id), item]));
+  const filedPeriodKeys = new Set(declarations
+    .filter(item => item.status === 'FILED')
+    .map(item => String(item.companyId) + ':' + String(item.period)));
+  const reversedJournalIds = new Set(asArray(nextState.journalEntries)
+    .filter(entry => entry.reversalOfEntryId).map(entry => String(entry.reversalOfEntryId)));
+  const activityPeriodsByCompany = new Map();
+  const addActivityDate = (companyId, date) => {
+    if (!validVatDeclarationDate(date)) {
+      throw new Error('SQLite rechazó una fecha fiscal inválida al comprobar la continuidad de declaraciones IVA.');
+    }
+    const key = String(companyId);
+    if (!activityPeriodsByCompany.has(key)) activityPeriodsByCompany.set(key, new Set());
+    activityPeriodsByCompany.get(key).add(date.slice(0, 7));
+  };
+  for (const sale of asArray(nextState.sales)) {
+    if (sale.isCancelled) continue;
+    addActivityDate(sale.companyId, sale.invoiceDate);
+    if (sale.retentionVoucherDate) addActivityDate(sale.companyId, sale.retentionVoucherDate);
+  }
+  for (const purchase of asArray(nextState.purchases)) {
+    if (!purchase.isCancelled) addActivityDate(purchase.companyId, purchase.invoiceDate);
+  }
+  for (const entry of asArray(nextState.journalEntries)) {
+    if (entry.fiscalZReport && !reversedJournalIds.has(String(entry.id)) && !entry.reversalOfEntryId) {
+      addActivityDate(entry.companyId, entry.fiscalZReport.date || entry.date);
+    }
+  }
+  for (const declaration of declarations) {
+    const previous = priorById.get(String(declaration.id));
+    const newlyPresented = declaration.status === 'FILED' && previous?.status === 'DRAFT';
+    if (!declaration.sourceSnapshots || (declaration.status !== 'DRAFT' && !newlyPresented)) continue;
+    const activityPeriods = [...(activityPeriodsByCompany.get(String(declaration.companyId)) || [])];
+    const missingPeriods = activityPeriods
+      .filter(period => period < declaration.period && !filedPeriodKeys.has(String(declaration.companyId) + ':' + period))
+      .sort();
+    if (missingPeriods.length > 0) {
+      throw new Error('SQLite bloqueó la declaración IVA: existen períodos anteriores con actividad fiscal sin presentar (' + missingPeriods.join(', ') + ').');
+    }
+    const laterFiled = declarations.some(item =>
+      item.companyId === declaration.companyId && item.status === 'FILED' && item.period > declaration.period
+    );
+    if (laterFiled) {
+      throw new Error('SQLite bloqueó la declaración IVA porque ya existe un período posterior presentado; use el procedimiento de rectificación.');
+    }
+  }
   for (const old of priorDeclarations) {
     const next = declarationById.get(String(old.id));
     if (!next) throw new Error('SQLite bloqueó la eliminación de una declaración IVA histórica; debe conservarse y corregirse mediante el procedimiento fiscal correspondiente.');
