@@ -2141,6 +2141,22 @@ test('SQLite accepts a versioned IVA own-account draft refresh and blocks mutati
   }), /declaración IVA ya presentada/);
 });
 
+test('SQLite blocks filing a current-month IVA return before the month has ended', () => {
+  const prior = vatOwnDeclarationFixture();
+  const declaration = {
+    ...prior.vatOwnDeclarations[0], status: 'FILED',
+    declarationNumber: 'IVA-NOV-EARLY', filedAt: '2026-11-11T12:00:00.000-04:00'
+  };
+  const event = {
+    id: 'vat-own-event-early', declarationId: declaration.id, companyId: declaration.companyId,
+    eventType: 'FILED', occurredAt: declaration.filedAt, recordedAt: '2026-11-11T16:00:00.000Z',
+    declarationNumber: declaration.declarationNumber, idempotencyKey: 'FILED:' + declaration.id
+  };
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...prior, vatOwnDeclarations: [declaration], vatOwnDeclarationEvents: [event]
+  }), /antes de finalizar el período fiscal mensual/);
+});
+
 test('SQLite preserves legacy filed IVA declarations without new source fingerprints but requires them on new filing', () => {
   const legacyFiled = vatOwnFiledState();
   delete legacyFiled.vatOwnDeclarations[0].sourceSnapshots;
