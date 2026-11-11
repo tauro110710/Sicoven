@@ -5,6 +5,7 @@ import { formatBs } from '../../utils/formatters';
 import { getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources } from '../../types/vatOwnDeclaration';
 
 const money = (value: number | undefined) => Number.isFinite(value) ? Number(value) : 0;
+const parseLocalizedNumber = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\\./g, '').replace(',', '.') : raw); };
 const signedDocument = (type: '01' | '02' | '03') => type === '03' ? -1 : 1;
 
 export const IvaDeclaracionesView: React.FC = () => {
@@ -15,7 +16,7 @@ export const IvaDeclaracionesView: React.FC = () => {
   const [declarationNumber, setDeclarationNumber] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [paymentDate, setPaymentDate] = useState(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10));
   const [paymentBcvRate, setPaymentBcvRate] = useState(String(currentCompany.bcvRate || ''));
   const [treasuryAccountCode, setTreasuryAccountCode] = useState('');
   const [workflowBusy, setWorkflowBusy] = useState(false);
@@ -220,7 +221,7 @@ export const IvaDeclaracionesView: React.FC = () => {
               <select value={treasuryAccountCode} onChange={event=>setTreasuryAccountCode(event.target.value)} className="rounded-lg border px-3 py-2 text-sm sm:col-span-2"><option value="">Cuenta de caja o banco…</option>{accounts.filter(account=>account.isMovement&&account.type==='ACTIVO'&&account.code.startsWith('1.1.1.')).map(account=><option key={account.code} value={account.code}>{account.code} · {account.name}</option>)}</select>
               <button type="button" disabled={workflowBusy||!paymentReference.trim()||!paymentAmount.trim()||!treasuryAccountCode} onClick={async()=>{
                 setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
-                try { await recordVatOwnDeclarationEvent(savedDeclaration.id,{companyId:currentCompany.id,eventType:'PAYMENT',occurredAt:paymentDate+'T12:00:00.000Z',amountBs:Number(paymentAmount.replace(',','.')),reference:paymentReference.trim(),bcvRate:Number(paymentBcvRate.replace(',','.')),treasuryAccountCode,idempotencyKey:'PAYMENT:'+savedDeclaration.id+':'+paymentReference.trim()});setPaymentAmount('');setPaymentReference('');setWorkflowMessage('Pago registrado y contabilizado.');}
+                try { await recordVatOwnDeclarationEvent(savedDeclaration.id,{companyId:currentCompany.id,eventType:'PAYMENT',occurredAt:paymentDate+'T12:00:00.000Z',amountBs:parseLocalizedNumber(paymentAmount),reference:paymentReference.trim(),bcvRate:parseLocalizedNumber(paymentBcvRate),treasuryAccountCode,idempotencyKey:'PAYMENT:'+savedDeclaration.id+':'+paymentReference.trim()});setPaymentAmount('');setPaymentReference('');setWorkflowMessage('Pago registrado y contabilizado.');}
                 catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo registrar el pago.');}
                 finally{setWorkflowBusy(false);}
               }} className="rounded-lg bg-sky-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{workflowBusy?'Registrando…':'Registrar pago y asiento'}</button>
