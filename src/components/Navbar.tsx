@@ -13,6 +13,7 @@ import {
   Package,
   Receipt,
   FileText,
+  Calculator,
   ListTree,
   Settings,
   ChevronDown,
@@ -23,7 +24,6 @@ import {
   Scale,
   Landmark,
   Undo2,
-  Users,
   Menu,
   X
 } from 'lucide-react';
@@ -75,7 +75,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, []);
 
   const tabs = [
-    { id: 'nomina', label: 'Nómina', icon: Users },
     { id: 'diario', label: 'Libro Diario', icon: BookOpen },
     { id: 'mayor', label: 'Libro Mayor', icon: ListTree },
     { id: 'balances', label: 'Balances VEN-NIF', icon: Scale },
@@ -87,6 +86,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'cxc', label: 'Cuentas por cobrar', icon: HandCoins },
     { id: 'inventario', label: 'Inventario', icon: Package },
     { id: 'activos-fijos', label: 'Activos fijos', icon: Building2 },
+    { id: 'iva-declaraciones', label: 'IVA y Declaraciones', icon: Calculator },
     { id: 'ret-iva', label: 'Retenciones IVA & TXT', icon: Receipt },
     { id: 'ret-islr', label: 'Retenciones ISLR & XML', icon: FileText },
     { id: 'catalogo', label: 'Plan de Cuentas', icon: FileSpreadsheet },

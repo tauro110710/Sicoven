@@ -133,3 +133,12 @@ test('a buyer qualified under both articles 1 and 2 applies the correct rate by 
   assert.equal(evaluateIvaRetentionEligibility({ buyerAgentStatus, supplierTaxStatus: 'SPECIAL', article2Transaction: true, vatAmount: 160 }).retentionRate, 100);
   assert.equal(resolveIvaBuyerAgentStatus({ agentBasis: 'ARTICLE_1_AND_2', taxpayerType: 'ESPECIAL', rif: 'V-12345678-9' }), 'UNKNOWN');
 });
+
+test('reconstructs only the 16 percent VAT component from a combined 31 percent gross amount', () => {
+  const result = evaluateIvaRetentionEligibility({
+    buyerAgentStatus: 'SPECIAL_DESIGNATED', supplierTaxStatus: 'ORDINARY',
+    vatNotDiscriminated: true, taxableAmountIncludingVat: 1310, taxRate: 31
+  });
+  assert.equal(result.vatAmount, 160);
+  assert.equal(result.withheldAmount, 160);
+});

@@ -50,16 +50,36 @@ test('blocks a credit note that exceeds the remaining original taxable base', ()
   })), /supera la base imponible/);
 });
 
-test('blocks a sale correction when the source invoice has VAT withholding', () => {
-  assert.throws(() => calculateSaleCorrectionNote(draft({
-    sourceSale: { ...source, vatWithheldBs: 20 }
-  })), /retención de IVA/);
+test('distributes VAT withholding proportionally without blocking the correction', () => {
+  const result = calculateSaleCorrectionNote(draft({
+    sourceSale: { ...source, vatWithheldBs: 40 }
+  }));
+  assert.equal(result.vatAmountBs, 8);
+  assert.equal(result.vatWithheldBs, 2);
+  assert.equal(result.netReceivableAdjustmentBs, 66);
 });
 
-test('blocks cash sales until the refund and treasury workflow exists', () => {
-  assert.throws(() => calculateSaleCorrectionNote(draft({
+test('calculates cash-sale corrections; treasury selection is validated by the accounting workflow', () => {
+  const result = calculateSaleCorrectionNote(draft({
     sourceSale: { ...source, paymentTerm: 'CONTADO' }
-  })), /reembolso de tesorería/);
+  }));
+  assert.equal(result.totalAmountBs, 68);
+  assert.equal(result.netReceivableAdjustmentBs, 68);
+});
+
+test('separates 16% VAT, 15% luxury tax and 3% IGTF on combined-rate source invoices', () => {
+  const combined: SaleRecord = {
+    ...source, taxableBaseBs: 1000, exemptAmountBs: 0, taxRate: 31,
+    vatAmountBs: 160, additionalLuxuryTaxBs: 150, igtfApplicable: true,
+    igtfRate: 3, igtfAmountBs: 42.3, totalAmountBs: 1352.3
+  };
+  const result = calculateSaleCorrectionNote(draft({
+    sourceSale: combined, taxableBaseBs: 100, exemptAmountBs: 0
+  }));
+  assert.equal(result.vatAmountBs, 16);
+  assert.equal(result.additionalLuxuryTaxBs, 15);
+  assert.equal(result.igtfAmountBs, 3.93);
+  assert.equal(result.totalAmountBs, 134.93);
 });
 
 test('blocks a note dated inside a closed accounting period', () => {

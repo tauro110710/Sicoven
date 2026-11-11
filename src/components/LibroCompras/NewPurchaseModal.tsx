@@ -45,6 +45,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [exemptAmountInput, setExemptAmountInput] = useState('');
   const exemptAmountBs = parseDecimalInput(exemptAmountInput);
   const [taxRate, setTaxRate] = useState<number>(16);
+  const [vatCreditTreatment, setVatCreditTreatment] = useState<'TAXABLE' | 'EXEMPT' | 'COMMON'>('COMMON');
 
   // IVA Withholding: tasa determinada por Providencia 000054.
 
@@ -78,10 +79,12 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
 
   // Real-time calculations
   const effectiveTaxableBaseBs = vatNotDiscriminated && taxRate > 0 ? Math.round((taxableGrossBs / (1 + taxRate / 100) + Number.EPSILON) * 100) / 100 : taxableBaseBs;
-  const vatAmountBs = Math.round(effectiveTaxableBaseBs * (taxRate / 100) * 100) / 100;
+  const effectiveVatRate = taxRate === 31 ? 16 : taxRate;
+  const vatAmountBs = Math.round(effectiveTaxableBaseBs * (effectiveVatRate / 100) * 100) / 100;
+  const additionalLuxuryTaxBs = taxRate === 31 ? Math.round(effectiveTaxableBaseBs * 0.15 * 100) / 100 : 0;
   const selectedMonthKey = String(accountCreditDate || invoiceDate || '').slice(0, 7);
   const islrUnitTaxValueBs = getIslrUnitTaxValueForPeriod(selectedMonthKey);
-  const operationAmountBs = Math.round((effectiveTaxableBaseBs + exemptAmountBs + vatAmountBs + Number.EPSILON) * 100) / 100;
+  const operationAmountBs = Math.round((effectiveTaxableBaseBs + exemptAmountBs + vatAmountBs + additionalLuxuryTaxBs + Number.EPSILON) * 100) / 100;
   const supplierRifKeyForProfile = String(supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
   const supplierProfilePurchase = purchases.filter(item => item.companyId === currentCompany.id && String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierRifKeyForProfile && item.supplierTaxStatus).sort((a, b) => b.opNumber - a.opNumber)[0];
   const resolvedSupplierTaxStatus: IvaSupplierTaxStatus = supplierTaxStatus === 'AUTO' ? (supplierProfilePurchase?.supplierTaxStatus || 'UNKNOWN') : supplierTaxStatus;
@@ -194,7 +197,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       window.alert('El total de la factura debe ser un importe válido mayor que cero.');
       return;
     }
-    if (![effectiveTaxableBaseBs, exemptAmountBs, vatAmountBs, igtfAmountBs, vatWithheldBs, islrWithheldBs].every(value => Number.isFinite(value) && value >= 0)) {
+    if (![effectiveTaxableBaseBs, exemptAmountBs, vatAmountBs, additionalLuxuryTaxBs, igtfAmountBs, vatWithheldBs, islrWithheldBs].every(value => Number.isFinite(value) && value >= 0)) {
       window.alert('Hay importes fiscales inválidos. Revisa base imponible, exento, IVA, IGTF y retenciones.');
       return;
     }
@@ -254,7 +257,10 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       exemptAmountBs,
       taxableBaseBs: effectiveTaxableBaseBs,
       taxRate,
+      vatCreditTreatment,
       vatAmountBs,
+      additionalLuxuryTaxBs,
+      additionalLuxuryTaxUsd: bcvRate > 0 ? additionalLuxuryTaxBs / bcvRate : 0,
       retentionRate,
       vatWithheldBs,
       supplierTaxStatus: resolvedSupplierTaxStatus,
@@ -515,6 +521,15 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                   <option value={31}>31% (Alícuota General + Adicional Lujo)</option>
                   <option value={0}>0% (Exento)</option>
                 </select>
+              <div className="mt-3">
+                <label className="block font-semibold text-slate-700 mb-1">Destino del crédito fiscal IVA</label>
+                <select value={vatCreditTreatment} onChange={event=>setVatCreditTreatment(event.target.value as 'TAXABLE'|'EXEMPT'|'COMMON')} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm">
+                  <option value="COMMON">Común: aplicar prorrata automáticamente</option>
+                  <option value="TAXABLE">Exclusivo de operaciones gravadas: 100% acreditable</option>
+                  <option value="EXEMPT">Exclusivo de operaciones exentas: no acreditable</option>
+                </select>
+                <p className="mt-1 text-xs text-slate-500">Se conserva en la factura y en sus notas para determinar correctamente el crédito fiscal del período.</p>
+              </div>
               </div>
             </div>
 
@@ -664,9 +679,12 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
           {/* Summary Box */}
           <div className="bg-slate-900 text-white p-4 rounded-xl space-y-2">
             <div className="flex justify-between items-center text-xs">
-              <span className="text-slate-400">Total Compra con IVA:</span>
+              <span className="text-slate-400">Total de compra:</span>
               <span className="font-mono font-bold">{formatBs(totalAmountBs)} ({formatUsd(totalAmountUsd)})</span>
             </div>
+            <div className="flex justify-between items-center text-xs text-slate-300"><span>IVA acreditable ({effectiveVatRate}%):</span><span className="font-mono">{formatBs(vatAmountBs)}</span></div>
+            {additionalLuxuryTaxBs > 0 && <div className="flex justify-between items-center text-xs text-amber-200"><span>Impuesto adicional no acreditable (15%):</span><span className="font-mono">{formatBs(additionalLuxuryTaxBs)}</span></div>}
+            <div className="flex justify-between items-center text-xs text-slate-300"><span>IGTF:</span><span className="font-mono">{formatBs(igtfAmountBs)}</span></div>
             <div className="flex justify-between items-center text-xs text-rose-300">
               <span>(-) Retención IVA ({retentionRate}%):</span>
               <span className="font-mono">-{formatBs(vatWithheldBs)}</span>

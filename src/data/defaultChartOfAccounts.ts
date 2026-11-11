@@ -57,6 +57,7 @@ export const DEFAULT_CHART_OF_ACCOUNTS: Account[] = [
   { code: '2.1.2.06', name: 'Impuesto a las Grandes Transacciones Financieras (IGTF)', type: 'PASIVO', level: 4, isMovement: true, parentCode: '2.1.2' },
   { code: '2.1.2.07', name: 'Impuestos Municipales por Pagar (Alcaldía)', type: 'PASIVO', level: 4, isMovement: true, parentCode: '2.1.2' },
   { code: '2.1.2.08', name: 'Impuesto Adicional al Consumo Suntuario (15%)', type: 'PASIVO', level: 4, isMovement: true, parentCode: '2.1.2' },
+  { code: '2.1.2.09', name: 'IVA Neto por Enterar según Declaración Mensual', type: 'PASIVO', level: 4, isMovement: true, parentCode: '2.1.2' },
 
   { code: '2.1.3', name: 'Obligaciones Laborales y Parafiscales', type: 'PASIVO', level: 3, isMovement: false, parentCode: '2.1' },
   { code: '2.1.3.01', name: 'Sueldos y Salarios por Pagar', type: 'PASIVO', level: 4, isMovement: true, parentCode: '2.1.3' },
@@ -116,4 +117,5 @@ export const DEFAULT_CHART_OF_ACCOUNTS: Account[] = [
   { code: '6.1.1.10', name: 'Tributos Municipales y Tasas Públicas', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' },
   { code: '6.1.1.11', name: 'Gasto por IGTF en compras', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' },
   { code: '6.1.1.12', name: 'Aportes Patronales de Nómina', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' },
+  { code: '6.1.1.13', name: 'Impuesto adicional al consumo suntuario no recuperable', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' },
 ];

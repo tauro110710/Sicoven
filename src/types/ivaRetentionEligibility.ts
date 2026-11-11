@@ -88,7 +88,8 @@ function resolveVat(input: IvaRetentionEligibilityInput): number | null {
   const gross = Number(input.taxableAmountIncludingVat);
   const rate = Number(input.taxRate);
   if (!Number.isFinite(gross) || gross <= 0 || !Number.isFinite(rate) || rate <= 0 || rate > 100) return null;
-  return roundMoney(gross - gross / (1 + rate / 100));
+  const taxableBase = gross / (1 + rate / 100);
+  return roundMoney(taxableBase * (rate === 31 ? 16 : rate) / 100);
 }
 export function evaluateIvaRetentionEligibility(input: IvaRetentionEligibilityInput): IvaRetentionEligibilityResult {
   if (input.buyerAgentStatus === 'UNKNOWN') return decision('REVIEW', 0, null, 'Confirma la condición del comprador como agente de retención.');

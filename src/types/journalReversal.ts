@@ -80,6 +80,7 @@ export function validateSaleInventoryReturnReconciliation(input: {
   movements: InventoryMovement[];
   products: InventoryProduct[];
   journalEntries: JournalEntry[];
+  expectedReturnQuantities?: Record<string, number>;
 }): SaleInventoryReturnReadiness {
   const { companyId, invoiceNumber, source, movements, products, journalEntries } = input;
   const normalize = (value: string) => String(value || '').trim().toUpperCase();
@@ -149,14 +150,29 @@ export function validateSaleInventoryReturnReconciliation(input: {
         Math.abs(originalCostTotals.costDebitUsd - Number(original.totalCostUsd)) > 0.02) {
       return blocked('El asiento original de costo no coincide con el valor histórico del Kardex para ' + original.productCode + '.');
     }
+    const productOriginals = originals.filter(item => item.productId === original.productId);
+    const productOriginalQuantity = productOriginals.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    const requestedProductQuantity = input.expectedReturnQuantities
+      ? Number(input.expectedReturnQuantities[original.productId] ?? 0)
+      : productOriginalQuantity;
+    if (!Number.isFinite(requestedProductQuantity) || requestedProductQuantity < 0 ||
+        requestedProductQuantity > productOriginalQuantity + 1e-8 || productOriginalQuantity <= 0) {
+      return blocked('La cantidad de devolución indicada para ' + original.productCode + ' no es válida.');
+    }
+    const expectedMovementQuantity = requestedProductQuantity * Number(original.quantity) / productOriginalQuantity;
     const corrections = movements.filter(item =>
       item.companyId === companyId && item.correctionForMovementId === original.id
     );
     const returnedQuantity = corrections.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
     if (!Number.isFinite(returnedQuantity) ||
-        Math.abs(returnedQuantity - Number(original.quantity)) > 1e-8) {
-      return blocked('La salida ' + original.documentRef + ' del artículo ' + original.productCode +
-        ' no está devuelta en su totalidad. Devuelto: ' + returnedQuantity + ' de ' + original.quantity + '.');
+        Math.abs(returnedQuantity - expectedMovementQuantity) > 1e-8) {
+      return blocked('La devolución física de ' + original.productCode +
+        ' no coincide con la cantidad solicitada en la nota. Registrado: ' + returnedQuantity +
+        ' · Esperado: ' + expectedMovementQuantity + '.');
+    }
+    if (expectedMovementQuantity <= 1e-8) {
+      if (corrections.length) return blocked('Existe una entrada de devolución no incluida en la nota para ' + original.productCode + '.');
+      continue;
     }
     if (!corrections.length || corrections.some(item =>
       item.productId !== original.productId || item.type !== 'ENTRADA' ||
@@ -170,9 +186,11 @@ export function validateSaleInventoryReturnReconciliation(input: {
     }
     const returnedCostBs = corrections.reduce((sum, item) => sum + Number(item.totalCostBs), 0);
     const returnedCostUsd = corrections.reduce((sum, item) => sum + Number(item.totalCostUsd), 0);
-    if (Math.abs(returnedCostBs - Number(original.totalCostBs)) > 0.02 ||
-        Math.abs(returnedCostUsd - Number(original.totalCostUsd)) > 0.02) {
-      return blocked('El costo devuelto de ' + original.productCode + ' no coincide con el costo original del Kardex.');
+    const expectedCostBs = Number(original.totalCostBs) * expectedMovementQuantity / Number(original.quantity);
+    const expectedCostUsd = Number(original.totalCostUsd) * expectedMovementQuantity / Number(original.quantity);
+    if (Math.abs(returnedCostBs - expectedCostBs) > 0.02 ||
+        Math.abs(returnedCostUsd - expectedCostUsd) > 0.02) {
+      return blocked('El costo devuelto de ' + original.productCode + ' no coincide con el costo histórico proporcional del Kardex.');
     }
     for (const correction of corrections) {
       const entry = journalEntries.find(item => item.id === correction.journalEntryId && item.companyId === companyId);
@@ -201,6 +219,9 @@ export function validateSaleInventoryReturnReconciliation(input: {
       }
     }
     returnedMovementCount += corrections.length;
+  }
+  if (input.expectedReturnQuantities && !Object.values(input.expectedReturnQuantities).some(quantity => Number(quantity) > 0)) {
+    return blocked('La nota de crédito de mercancía debe incluir al menos una cantidad física devuelta.');
   }
   return { ready: true, originalMovementCount: originals.length, returnedMovementCount };
 }

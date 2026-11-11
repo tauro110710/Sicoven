@@ -53,6 +53,8 @@ import { FinancialDisclosure, validateFinancialDisclosure } from '../types/finan
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
+import { calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, validateVatOwnEvent } from '../types/vatOwnDeclaration';
+import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
@@ -199,6 +201,10 @@ interface AccountingContextType {
   vatVouchers: VatRetentionVoucher[];
   vatWithholdingDeclarations: VatWithholdingDeclaration[];
   vatWithholdingDeclarationEvents: VatWithholdingDeclarationEvent[];
+  vatOwnDeclarations: VatOwnDeclaration[];
+  vatOwnDeclarationEvents: VatOwnDeclarationEvent[];
+  createVatOwnDeclaration: (input: { period: string; choices?: Record<string, 'Z' | 'INDIVIDUAL'> }) => Promise<VatOwnDeclaration>;
+  recordVatOwnDeclarationEvent: (declarationId: string, draft: Omit<VatOwnDeclarationEvent, 'id' | 'declarationId' | 'recordedAt' | 'journalEntryId'>) => Promise<VatOwnDeclarationEvent>;
   createVatWithholdingDeclaration: (input: { year: number; month: number; window: VatDeclarationWindow; zeroOperations?: boolean; legacyFiscalDates?: Record<string, { fiscalDate: string; note: string }> }) => Promise<VatWithholdingDeclaration>;
   recordVatWithholdingDeclarationEvent: (declarationId: string, draft: Omit<VatWithholdingDeclarationEvent, 'id' | 'declarationId' | 'recordedAt'>) => Promise<VatWithholdingDeclarationEvent>;
   islrVouchers: IslrRetentionVoucher[];
@@ -347,6 +353,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const saved = readBrowserStorage(`${STORAGE_KEY}_vatWithholdingDeclarationEvents`);
       return saved ? JSON.parse(saved) : [];
     } catch { return []; }
+  });
+
+  const [vatOwnDeclarations, setVatOwnDeclarations] = useState<VatOwnDeclaration[]>(() => {
+    try { const saved = readBrowserStorage(`${STORAGE_KEY}_vatOwnDeclarations`); return saved ? JSON.parse(saved) : []; }
+    catch { return []; }
+  });
+  const [vatOwnDeclarationEvents, setVatOwnDeclarationEvents] = useState<VatOwnDeclarationEvent[]>(() => {
+    try { const saved = readBrowserStorage(`${STORAGE_KEY}_vatOwnDeclarationEvents`); return saved ? JSON.parse(saved) : []; }
+    catch { return []; }
   });
 
   const [islrVouchers, setIslrVouchers] = useState<IslrRetentionVoucher[]>(() => {
@@ -573,7 +588,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     };
     if (!store?.recordAuditCorrection) throw new Error('La auditoría local de correcciones no está disponible. No se ejecutó la operación.');
     const result = await store.recordAuditCorrection(token, {...input,reason:String(input.reason || 'Corrección contable'),workpaperNote:String(input.workpaperNote || '')});
-    if (!result?.ok) throw new Error(result?.message || 'SQLite no pudo registrar la autorización de la corrección.');
+    if (!result?.ok) throw new Error(result?.message || 'SQLite no pudo registrar el evento de auditoría de la corrección.');
   };
 
   const requireApprovedCorrectionCase = async (
@@ -925,7 +940,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('Reversión bancaria bloqueada: ' + (bankReadiness.reason || 'no existe una contrapartida bancaria verificable.') +
         ' No se registró ningún contra-asiento.');
     }
-    const correctionCaseId = await authorizeCorrectionCase({entityType:'JOURNAL_ENTRY',entityId:source.id,sourceDocumentRef:source.referenceDoc || String(source.entryNumber),correctionDocumentRef:'REV-' + source.entryNumber});
     await recordCorrectionAudit({
       eventType: 'accounting_correction_requested', entityType: 'JOURNAL_ENTRY', companyId: currentCompany.id,
       entityId: source.id, correctionType: priorPeriodAdjustment ? 'PRIOR_PERIOD_ADJUSTMENT_REVERSAL' : 'JOURNAL_REVERSAL',
@@ -1028,12 +1042,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     } catch (auditError) {
       throw new Error('El contra-asiento quedó guardado en SQLite, pero falta el evento final de auditoría. No repita la reversión. Asiento: ' + reversal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
     }
-    try {
-      await executeCorrectionCase({caseId:correctionCaseId,executionRef:'REV-' + source.entryNumber,reason:correctionReason});
-    } catch (caseError) {
-      throw new Error('El contra-asiento ' + reversal.entryNumber + ' quedó guardado y auditado, pero SICOVEN no pudo cerrar el historial de la corrección. No repita la reversión; actualice el Centro de Correcciones. ' + (caseError instanceof Error ? caseError.message : 'Error al cerrar el historial.'));
-    }
-    return reversal;
+        return reversal;
     } finally {
       journalReversalInFlightRef.current = false;
       correctionWorkflowInFlightRef.current = false;
@@ -1100,7 +1109,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, fixedAssets,
-    customers, suppliers, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency
+    customers, suppliers, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, vatOwnDeclarations, vatOwnDeclarationEvents, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency
   };
 
   useEffect(() => {
@@ -1151,6 +1160,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             if (Array.isArray(saved.vatVouchers)) setVatVouchers(saved.vatVouchers as VatRetentionVoucher[]);
             if (Array.isArray(saved.vatWithholdingDeclarations)) setVatWithholdingDeclarations(saved.vatWithholdingDeclarations as VatWithholdingDeclaration[]);
             if (Array.isArray(saved.vatWithholdingDeclarationEvents)) setVatWithholdingDeclarationEvents(saved.vatWithholdingDeclarationEvents as VatWithholdingDeclarationEvent[]);
+            if (Array.isArray(saved.vatOwnDeclarations)) setVatOwnDeclarations(saved.vatOwnDeclarations as VatOwnDeclaration[]);
+            if (Array.isArray(saved.vatOwnDeclarationEvents)) setVatOwnDeclarationEvents(saved.vatOwnDeclarationEvents as VatOwnDeclarationEvent[]);
             if (Array.isArray(saved.islrVouchers)) setIslrVouchers(saved.islrVouchers as IslrRetentionVoucher[]);
             if (Array.isArray(saved.bankAccounts)) setBankAccounts(saved.bankAccounts as BankAccount[]);
             if (Array.isArray(saved.bankStatementMovements)) setBankStatementMovements(saved.bankStatementMovements as BankStatementMovement[]);
@@ -1176,6 +1187,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             setVatVouchers([]);
             setVatWithholdingDeclarations([]);
             setVatWithholdingDeclarationEvents([]);
+    setVatOwnDeclarations([]);
+    setVatOwnDeclarationEvents([]);
             setIslrVouchers([]);
             setBankAccounts([]);
             setBankStatementMovements([]);
@@ -1201,6 +1214,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               vatVouchers: [],
               vatWithholdingDeclarations: [],
               vatWithholdingDeclarationEvents: [],
+              vatOwnDeclarations: [],
+              vatOwnDeclarationEvents: [],
               islrVouchers: [],
               bankAccounts: [],
               bankStatementMovements: [],
@@ -1572,15 +1587,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error(
         `Verificación de asiento fallida. Bs: Debe ${totalDebitBs.toFixed(2)} / Haber ${totalCreditBs.toFixed(2)} (dif. ${diff.toFixed(2)}); USD: Debe ${totalDebitUsd.toFixed(2)} / Haber ${totalCreditUsd.toFixed(2)} (dif. ${diffUsd.toFixed(2)}). Revise líneas, importes y cuentas.`
       );
-    }
-    if (entry.reversalOfEntryId || entry.adjustmentForEntryId) {
-      const sourceEntryId=String(entry.reversalOfEntryId || entry.adjustmentForEntryId);
-      const correctionReference=String(entry.referenceDoc || entry.entryNumber || '').trim();
-      const authorizationKey=sourceEntryId+'|'+correctionReference;
-      if(journalCorrectionAuthorizationRef.current!==authorizationKey) {
-        throw new Error('Un reverso o ajuste de asiento requiere autorización formal aprobada para el asiento fuente y la referencia correctiva.');
-      }
-      journalCorrectionAuthorizationRef.current=null;
     }
     // Domain-level backstop: every newly posted credit to a bank auxiliary is
     // an outgoing movement and must fit the available balance at its effective date.
@@ -2866,7 +2872,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!Number.isFinite(rate) || rate <= 0) throw new Error('La tasa BCV manual debe ser mayor que cero.');
     const amounts = [
       purchaseData.totalAmountBs, purchaseData.taxableBaseBs, purchaseData.exemptAmountBs,
-      purchaseData.vatAmountBs, purchaseData.vatWithheldBs, purchaseData.islrWithheldBs || 0,
+      purchaseData.vatAmountBs, purchaseData.additionalLuxuryTaxBs || 0, purchaseData.vatWithheldBs, purchaseData.islrWithheldBs || 0,
       purchaseData.igtfAmountBs || 0
     ];
     if (amounts.some(value => !Number.isFinite(value) || value < 0) || purchaseData.totalAmountBs <= 0) {
@@ -2924,7 +2930,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         !Number.isFinite(purchaseData.retentionRate) || purchaseData.retentionRate < 0 || purchaseData.retentionRate > 100) {
       throw new Error('La alícuota de IVA o la tasa de retención no es válida.');
     }
-    const expectedVat = Math.round(purchaseData.taxableBaseBs * purchaseData.taxRate) / 100;
+    if (!['TAXABLE', 'EXEMPT', 'COMMON'].includes(purchaseData.vatCreditTreatment || 'COMMON')) throw new Error('El destino del crédito fiscal IVA no es válido.');
+    const expectedVatRate = purchaseData.taxRate === 31 ? 16 : purchaseData.taxRate;
+    const expectedVat = Math.round(purchaseData.taxableBaseBs * expectedVatRate) / 100;
+    const expectedLuxuryTax = purchaseData.taxRate === 31 ? Math.round(purchaseData.taxableBaseBs * 15) / 100 : 0;
+    if (Math.abs(expectedLuxuryTax - Number(purchaseData.additionalLuxuryTaxBs || 0)) > 0.01) throw new Error('El impuesto adicional del 15% no coincide con la alícuota combinada de la compra.');
     if (Math.abs(expectedVat - purchaseData.vatAmountBs) > 0.01) {
       throw new Error('El IVA no coincide con la base imponible y la alícuota declarada.');
     }
@@ -2935,7 +2945,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const snapshot = purchaseData.ivaRetentionDecision;
       const expectedBuyerAgentStatus = resolveIvaBuyerAgentStatus({ agentBasis: targetCompany.ivaRetentionAgentBasis, taxpayerType: targetCompany.taxpayerType, rif: targetCompany.rif, isPersonalFirm: targetCompany.isPersonalFirm });
       if (snapshot.buyerAgentStatus !== expectedBuyerAgentStatus) throw new Error('La condición de agente de retención de la empresa cambió o no coincide. Actualice la evaluación antes de registrar.');
-      const expectedOperationAmountBs = Math.round((Number(purchaseData.taxableBaseBs) + Number(purchaseData.exemptAmountBs) + Number(purchaseData.vatAmountBs) + Number.EPSILON) * 100) / 100;
+      const expectedOperationAmountBs = Math.round((Number(purchaseData.taxableBaseBs) + Number(purchaseData.exemptAmountBs) + Number(purchaseData.vatAmountBs) + Number(purchaseData.additionalLuxuryTaxBs || 0) + Number.EPSILON) * 100) / 100;
       const fiscalPeriodStart = getPurchaseAccountCreditDate(purchaseData).slice(0, 7);
       const expectedUnitTaxValueBs = getIslrUnitTaxValueForPeriod(fiscalPeriodStart) ?? undefined;
       if (snapshot.operationAmountBs != null && Math.abs(snapshot.operationAmountBs - expectedOperationAmountBs) > 0.01) {
@@ -2980,7 +2990,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!eligibleIgtfMethods.includes(purchaseData.paymentMethod || '')) {
         throw new Error('El medio de pago seleccionado no corresponde a los medios configurados para IGTF.');
       }
-      const expectedIgtf = Math.round((purchaseData.taxableBaseBs + purchaseData.exemptAmountBs + purchaseData.vatAmountBs) * 0.03 * 100) / 100;
+      const expectedIgtf = Math.round((purchaseData.taxableBaseBs + purchaseData.exemptAmountBs + purchaseData.vatAmountBs + Number(purchaseData.additionalLuxuryTaxBs || 0)) * 0.03 * 100) / 100;
       if (Math.abs(igtfAmount - expectedIgtf) > 0.01 || Number(purchaseData.igtfRate || 0) !== 3) {
         throw new Error('El importe o la tasa del IGTF no coincide con el cálculo confirmado del 3%.');
       }
@@ -2990,10 +3000,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     const expectedTotal = Math.round((
       purchaseData.taxableBaseBs + purchaseData.exemptAmountBs +
-      purchaseData.vatAmountBs + igtfAmount
+      purchaseData.vatAmountBs + Number(purchaseData.additionalLuxuryTaxBs || 0) + igtfAmount
     ) * 100) / 100;
     if (Math.abs(expectedTotal - purchaseData.totalAmountBs) > 0.01) {
-      throw new Error('El total de la compra no coincide con base imponible, exento, IVA e IGTF.');
+      throw new Error('El total de la compra no coincide con base imponible, exento, IVA, impuesto adicional e IGTF.');
     }
     if ((purchaseData.vatWithheldBs || 0) + (purchaseData.islrWithheldBs || 0) > purchaseData.totalAmountBs + 0.005) {
       throw new Error('Las retenciones no pueden superar el total de la factura.');
@@ -3124,7 +3134,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // Debe: Crédito Fiscal IVA si aplica
     if (purchaseData.vatAmountBs > 0) {
       items.push({
-        accountCode: '1.1.3.01',
+        accountCode: purchaseData.taxRate === 8 ? '1.1.3.02' : '1.1.3.01',
         accountName: `Crédito Fiscal IVA Compras (${purchaseData.taxRate}%)`,
         debitBs: purchaseData.vatAmountBs,
         creditBs: 0,
@@ -3132,6 +3142,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         creditUsd: 0,
         description: `IVA ${purchaseData.taxRate}% Fac. ${purchaseData.invoiceNumber}`
       });
+    }
+
+    // Debe: impuesto suntuario 15% no recuperable como crédito fiscal IVA.
+    if (Number(purchaseData.additionalLuxuryTaxBs || 0) > 0) {
+      const luxuryExpense = accounts.find(account => account.code === '6.1.1.13' && account.isMovement && account.type === 'GASTOS');
+      if (!luxuryExpense) throw new Error('Falta la cuenta de gasto 6.1.1.13 para el impuesto adicional no recuperable.');
+      const amountBs = Number(purchaseData.additionalLuxuryTaxBs);
+      items.push({ accountCode: luxuryExpense.code, accountName: luxuryExpense.name, debitBs: amountBs, creditBs: 0,
+        debitUsd: amountBs / rate, creditUsd: 0, description: 'Impuesto adicional al consumo suntuario 15% Fac. ' + purchaseData.invoiceNumber });
     }
 
     // Debe: IGTF de compra explícitamente confirmado por el usuario.
@@ -3479,7 +3498,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const inventoryAccountCodes = [...new Set(draftLines.map(line => line.product.inventoryAccountCode || '1.1.4.01'))];
     const requiredAccounts = [...(cashPurchase ? [] : [payableAccountCode]), ...inventoryAccountCodes];
     if (supplierCredit.supplierAdvanceBs > 0.02) requiredAccounts.push('1.1.2.03');
-    if (valuation.vatAmountBs > 0) requiredAccounts.push('1.1.3.01');
+    if (valuation.vatAmountBs > 0) requiredAccounts.push(purchase.taxRate === 8 ? '1.1.3.02' : '1.1.3.01');
+    if (valuation.additionalLuxuryTaxBs > 0) requiredAccounts.push('6.1.1.13');
     if (valuation.vatWithheldBs > 0) requiredAccounts.push('2.1.2.03');
     if (valuation.islrWithheldBs > 0) requiredAccounts.push('2.1.2.04');
     if (valuation.igtfAmountBs > 0) requiredAccounts.push('6.1.1.11');
@@ -3509,7 +3529,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const code = product.inventoryAccountCode || '1.1.4.01';
       items.push(line(code, 0, returnedLine.inventoryCostBs, 'Salida de inventario · ' + product.code + ' · devolución al proveedor'));
     }
-    if (valuation.vatAmountBs > 0) items.push(line('1.1.3.01', 0, valuation.vatAmountBs, 'Reversión de crédito fiscal IVA'));
+    if (valuation.vatAmountBs > 0) items.push(line(purchase.taxRate === 8 ? '1.1.3.02' : '1.1.3.01', 0, valuation.vatAmountBs, 'Reversión de crédito fiscal IVA'));
+    if (valuation.additionalLuxuryTaxBs > 0) items.push(line('6.1.1.13', 0, valuation.additionalLuxuryTaxBs, 'Reversión de impuesto adicional al consumo suntuario no recuperable'));
     if (valuation.igtfAmountBs > 0) items.push(line('6.1.1.11', 0, valuation.igtfAmountBs, 'Reversión de gasto IGTF'));
     const debitBs = items.reduce((sum, item) => sum + item.debitBs, 0);
     const creditBs = items.reduce((sum, item) => sum + item.creditBs, 0);
@@ -3600,12 +3621,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       fiscalEmissionMedium: request.fiscalEmissionMedium, sameMediumAsOriginal: request.sameMediumAsOriginal,
       documentType: '03', totalAmountBs: valuation.totalAmountBs,
       exemptAmountBs: valuation.exemptAmountBs, taxableBaseBs: valuation.taxableBaseBs,
-      taxRate: purchase.taxRate, vatAmountBs: valuation.vatAmountBs,
+      taxRate: purchase.taxRate, vatAmountBs: valuation.vatAmountBs, additionalLuxuryTaxBs: valuation.additionalLuxuryTaxBs,
       retentionRate: purchase.retentionRate, vatWithheldBs: valuation.vatWithheldBs,
       islrConceptCode: purchase.islrConceptCode, islrConceptName: purchase.islrConceptName,
       islrRate: purchase.islrRate, islrSubtrahendBs: 0, islrWithheldBs: valuation.islrWithheldBs,
       bcvRate: rate, totalAmountUsd: valuation.totalAmountUsd,
-      taxableBaseUsd: valuation.taxableBaseUsd, vatAmountUsd: valuation.vatAmountUsd,
+      taxableBaseUsd: valuation.taxableBaseUsd, vatAmountUsd: valuation.vatAmountUsd, additionalLuxuryTaxUsd: valuation.additionalLuxuryTaxUsd,
       vatWithheldUsd: valuation.vatWithheldUsd, islrWithheldUsd: valuation.islrWithheldUsd,
       igtfApplicable: valuation.igtfAmountBs > 0, igtfRate: purchase.igtfRate,
       igtfAmountBs: valuation.igtfAmountBs, igtfAmountUsd: valuation.igtfAmountUsd,
@@ -3677,7 +3698,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       islrEventSequenceRef.current[eventKey] = nextEventSequence;
     }
     const fiscalCorrectionNote = 'La nota de crédito ' + note.creditNoteNumber + ' afecta la retención de la factura ' + purchase.invoiceNumber + '. Verifique el tratamiento del comprobante original y la rectificación que corresponda antes de declarar.';
-    const correctionCaseId = await requireApprovedCorrectionCase('PURCHASE',purchase.id,purchase.invoiceNumber,request.creditNoteNumber);
     await recordCorrectionAudit({
       eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id,
       entityId: purchase.id, correctionType: 'PURCHASE_INVENTORY_CREDIT_NOTE',
@@ -3762,12 +3782,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     } catch (auditError) {
       throw new Error('La devolución y NC quedaron guardadas en SQLite, pero falta el evento final de auditoría. No repita la operación. Asiento: ' + journal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
     }
-    try {
-      await executeCorrectionCase({caseId:correctionCaseId,executionRef:request.creditNoteNumber,reason:'Nota de crédito, devolución física, Kardex y asiento correctivo persistidos y conciliados.'});
-    } catch (caseError) {
-      throw new Error('La NC y sus efectos quedaron guardados y auditados en SQLite, pero falta cerrar su trazabilidad interna. No repita la operación. ' + (caseError instanceof Error ? caseError.message : 'Error al cerrar la corrección.'));
-    }
-    if (fiscalIncidentError) {
+        if (fiscalIncidentError) {
       throw new Error('La NC, su Kardex, el asiento y la auditoría de ejecución quedaron confirmados en SQLite, pero no se pudo abrir la incidencia fiscal automática. No repita la NC. ' + (fiscalIncidentError instanceof Error ? fiscalIncidentError.message : 'Error de incidencia fiscal.'));
     }
     return note;
@@ -3843,7 +3858,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       return Number(line.debitBs || 0) > 0 && account?.isMovement &&
         (account.type === 'COSTOS' || account.type === 'GASTOS');
     });
-    const sourceBaseBs = Number(source.taxableBaseBs) + Number(source.exemptAmountBs);
+    const sourceBaseBs = Number(source.taxableBaseBs) + Number(source.exemptAmountBs) + Number(source.additionalLuxuryTaxBs || 0);
     const expenseBaseBs = expenseLines.reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
     const expenseBaseUsd = expenseLines.reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
     if (!expenseLines.length || Math.abs(expenseBaseBs - sourceBaseBs) > 0.02 ||
@@ -3869,8 +3884,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (allocation.supplierAdvanceBs > 0.02 && !advanceAccount) {
       throw new Error('No existe la cuenta de movimiento de anticipos a proveedores para registrar el excedente de la NC.');
     }
-    const expenseBaseNoteBs = amounts.taxableBaseBs + amounts.exemptAmountBs;
-    const expenseBaseNoteUsd = amounts.taxableBaseUsd + amounts.exemptAmountUsd;
+    const expenseBaseNoteBs = amounts.taxableBaseBs + amounts.exemptAmountBs + amounts.additionalLuxuryTaxBs;
+    const expenseBaseNoteUsd = amounts.taxableBaseUsd + amounts.exemptAmountUsd + amounts.additionalLuxuryTaxUsd;
     const items: JournalEntryItem[] = [];
     if (allocation.appliedToPayableBs > 0.02 && payableCode) {
       const payable = accounts.find(item => item.code === payableCode && item.type === 'PASIVO' && item.isMovement);
@@ -3914,14 +3929,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (Math.abs(debitBs - creditBs) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.0001 || items.length < 2) {
       throw new Error('El asiento de NC de servicios no cuadra en Bs. y USD. No se registró.');
     }
-    const correctionCaseId = await requireApprovedCorrectionCase('PURCHASE',source.id,source.invoiceNumber,draft.creditNoteNumber);
     correctionWorkflowInFlightRef.current = true;
     purchaseCreditNoteInFlightRef.current = true;
     try { await recordCorrectionAudit({
       eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id, entityId: source.id,
       correctionType: 'PURCHASE_SERVICE_CREDIT_NOTE',
       sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: String(draft.creditNoteNumber).trim(),
-      reason: String(draft.reason).trim(), workpaperNote: '',
+      reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote || '').trim(),
       fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal
     }); } catch (auditError) { correctionWorkflowInFlightRef.current = false; purchaseCreditNoteInFlightRef.current = false; throw auditError; }
     try {
@@ -3952,9 +3966,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           documentType: '03', originalPurchaseId: source.id,
           creditNoteLines: [], inventoryLines: undefined,
           taxableBaseBs: amounts.taxableBaseBs, exemptAmountBs: amounts.exemptAmountBs,
-          vatAmountBs: amounts.vatAmountBs, totalAmountBs: amounts.totalAmountBs,
+          vatAmountBs: amounts.vatAmountBs, additionalLuxuryTaxBs: amounts.additionalLuxuryTaxBs, totalAmountBs: amounts.totalAmountBs,
           taxableBaseUsd: amounts.taxableBaseUsd, exemptAmountUsd: amounts.exemptAmountUsd,
-          vatAmountUsd: amounts.vatAmountUsd, totalAmountUsd: amounts.totalAmountUsd,
+          vatAmountUsd: amounts.vatAmountUsd, additionalLuxuryTaxUsd: amounts.additionalLuxuryTaxUsd, totalAmountUsd: amounts.totalAmountUsd,
           vatWithheldBs: 0, vatWithheldUsd: 0, islrWithheldBs: 0, islrWithheldUsd: 0,
           igtfApplicable: false, igtfAmountBs: 0, igtfAmountUsd: 0,
           netPayableReductionBs: amounts.netPayableReductionBs,
@@ -3971,17 +3985,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             eventType: 'accounting_correction_executed', entityType: 'PURCHASE', companyId: currentCompany.id, entityId: source.id,
             correctionType: 'PURCHASE_SERVICE_CREDIT_NOTE',
             sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: String(draft.creditNoteNumber).trim(),
-            reason: String(draft.reason).trim(), workpaperNote: '',
+            reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote || '').trim(),
             fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal,
             journalEntryId: journal.id
           });
         } catch (auditError) {
           throw new Error('La NC quedó guardada y confirmada en SQLite, pero falta registrar el evento final de auditoría. No repita el documento. Asiento: ' + journal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
-        }
-        try {
-          await executeCorrectionCase({caseId:correctionCaseId,executionRef:String(draft.creditNoteNumber).trim(),reason:'Nota de crédito de servicios, asiento correctivo y auxiliar CxP persistidos.'});
-        } catch (caseError) {
-          throw new Error('La NC de servicios quedó guardada y auditada en SQLite, pero falta cerrar su trazabilidad interna. No repita el documento. ' + (caseError instanceof Error ? caseError.message : 'Error al cerrar la corrección.'));
         }
         return note;
       });
@@ -4021,8 +4030,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           draft: { ...draft, companyId: currentCompany.id, closedThroughDate: currentCompany.closedThroughDate || undefined },
           purchases, accounts, sourceJournalEntry
         });
-        const correctionCaseId = await requireApprovedCorrectionCase('PURCHASE',source.id,source.invoiceNumber,draft.debitNoteNumber);
-        await recordCorrectionAudit({
+    await recordCorrectionAudit({
           eventType: 'accounting_correction_requested', entityType: 'PURCHASE', companyId: currentCompany.id,
           entityId: source.id, correctionType: 'PURCHASE_DEBIT_NOTE',
           sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: draft.debitNoteNumber,
@@ -4072,11 +4080,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           });
         } catch (auditError) {
           throw new Error('La ND quedó guardada en SQLite, pero falta el evento final de auditoría. No repita el documento. Asiento: ' + journal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
-        }
-        try {
-          await executeCorrectionCase({caseId:correctionCaseId,executionRef:String(draft.debitNoteNumber).trim(),reason:'Nota de débito, asiento correctivo y auxiliar CxP persistidos.'});
-        } catch (caseError) {
-          throw new Error('La ND quedó guardada y auditada en SQLite, pero falta cerrar su trazabilidad interna. No repita el documento. ' + (caseError instanceof Error ? caseError.message : 'Error al cerrar la corrección.'));
         }
         return note;
       });
@@ -4251,7 +4254,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // Haber: Débito Fiscal IVA Ventas
     if (saleData.vatAmountBs > 0) {
       items.push({
-        accountCode: '2.1.2.01',
+        accountCode: saleData.taxRate === 8 ? '2.1.2.02' : '2.1.2.01',
         accountName: `Débito Fiscal IVA Ventas (${saleData.taxRate}%)`,
         debitBs: 0,
         creditBs: saleData.vatAmountBs,
@@ -4323,6 +4326,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const source = sales.find(item => item.id === draft.sourceSaleId && item.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró la factura original de venta en la empresa activa.');
     if (source.documentType !== '01' || source.isCancelled) throw new Error('Solo se pueden corregir facturas de venta vigentes tipo 01.');
+    const priorCreditNotes = sales.filter(item => item.companyId === currentCompany.id &&
+      item.originalSaleId === source.id && item.documentType === '03' && !item.isCancelled);
+
     const sourceEntry = journalEntries.find(item => item.id === source.journalEntryId && item.companyId === currentCompany.id);
     const hasLinkedInventoryJournal = journalEntries.some(entry =>
       entry.companyId === currentCompany.id && entry.id !== source.journalEntryId && entry.type === 'INVENTARIO' &&
@@ -4335,79 +4341,168 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     ));
     const linkedInventory = hasInventoryAccountingFootprint || movements.some(item => item.companyId === currentCompany.id &&
       (item.journalEntryId === source.journalEntryId ||
-       item.documentRef.trim().toUpperCase().replace(/\\s+/g, '') ===
-       ('FAC-' + source.invoiceNumber).trim().toUpperCase().replace(/\\s+/g, '')));
+       item.documentRef.trim().toUpperCase().replace(/\s+/g, '') ===
+       ('FAC-' + source.invoiceNumber).trim().toUpperCase().replace(/\s+/g, '')));
     if (linkedInventory && draft.kind === 'CREDIT') {
       if (!sourceEntry) throw new Error('La factura con inventario no conserva su asiento original verificable.');
+      const cumulativeReturnQuantities: Record<string, number> = {};
+      for (const prior of priorCreditNotes) Object.entries(prior.returnedInventoryQuantities || {}).forEach(([productId, quantity]) => {
+        cumulativeReturnQuantities[productId] = (cumulativeReturnQuantities[productId] || 0) + Number(quantity || 0);
+      });
+      Object.entries(draft.returnedInventoryQuantities || {}).forEach(([productId, quantity]) => {
+        cumulativeReturnQuantities[productId] = (cumulativeReturnQuantities[productId] || 0) + Number(quantity || 0);
+      });
       const returnReadiness = validateSaleInventoryReturnReconciliation({
         companyId: currentCompany.id, invoiceNumber: source.invoiceNumber,
-        source: sourceEntry, movements, products, journalEntries
+        source: sourceEntry, movements, products, journalEntries,
+        expectedReturnQuantities: cumulativeReturnQuantities
       });
       if (!returnReadiness.ready) {
-        throw new Error('La NC de mercancía exige devolución física total y conciliada en Kardex, con su asiento de costo por artículo. ' +
+        throw new Error('La NC de mercancía exige que las cantidades indicadas coincidan con las entradas físicas y su costo histórico en el Kardex. ' +
           (returnReadiness.reason || 'No se registró la nota.'));
-      }
-      const originalNetBs = Number(source.taxableBaseBs || 0) + Number(source.exemptAmountBs || 0) + Number(source.vatAmountBs || 0);
-      if (Math.abs(Number(draft.taxableBaseBs) + Number(draft.exemptAmountBs) + 
-          (Number(draft.taxableBaseBs) * Number(source.taxRate || 0) / 100) - originalNetBs) > 0.02) {
-        throw new Error('La devolución de mercancía solo admite NC total mientras no exista distribución fiscal por líneas de devolución parcial. La factura original permanece intacta.');
       }
     }
     const number = String(draft.noteNumber || '').trim();
-    const normalizedNumber = number.toUpperCase().replace(/\\s+/g, '');
+    const normalizedNumber = number.toUpperCase().replace(/\s+/g, '');
     if (sales.some(item => item.companyId === currentCompany.id &&
-      String(item.invoiceNumber || '').trim().toUpperCase().replace(/\\s+/g, '') === normalizedNumber)) {
+      String(item.invoiceNumber || '').trim().toUpperCase().replace(/\s+/g, '') === normalizedNumber)) {
       throw new Error('El número fiscal de la nota ya está registrado en esta empresa.');
     }
-    const priorCreditNotes = sales.filter(item => item.companyId === currentCompany.id &&
-      item.originalSaleId === source.id && item.documentType === '03' && !item.isCancelled);
     const amounts = calculateSaleCorrectionNote({
       ...draft, sourceSale: source, priorCreditNotes,
       closedThroughDate: currentCompany.closedThroughDate || undefined
     });
-    if (draft.kind === 'CREDIT') {
-      const balance = getCreditBalance(source.id, 'SALE_COLLECTION');
-      if (amounts.netReceivableAdjustmentUsd > balance.outstandingUsd + 0.005) {
-        throw new Error('La nota de crédito supera el saldo de CxC todavía exigible. Si ya hubo cobros, debe tramitarse primero el circuito de devolución/reembolso y su conciliación bancaria.');
+    if (linkedInventory && draft.kind === 'CREDIT') {
+      if (source.inventoryLines?.length) {
+        if (!draft.returnedInventoryQuantities) throw new Error('Indique las cantidades devueltas por artículo para conciliar la NC parcial con el Kardex.');
+        const originalQtyByProduct = new Map<string, number>();
+        source.inventoryLines.forEach(line => originalQtyByProduct.set(line.productId,
+          (originalQtyByProduct.get(line.productId) || 0) + Number(line.quantity || 0)));
+        let expectedBaseBs = 0;
+        let expectedExemptBs = 0;
+        for (const line of source.inventoryLines) {
+          const originalQty = originalQtyByProduct.get(line.productId) || 0;
+          const returnedQty = Number(draft.returnedInventoryQuantities[line.productId] || 0);
+          if (!Number.isFinite(returnedQty) || returnedQty < 0 || returnedQty > originalQty + 1e-8) {
+            throw new Error('La cantidad devuelta de ' + line.productName + ' no es válida.');
+          }
+          const ratio = originalQty > 0 ? returnedQty / originalQty : 0;
+          expectedBaseBs += Number(line.netAmountBs || 0) * ratio;
+          expectedExemptBs += Number(line.exemptAmountBs || 0) * ratio;
+        }
+        if (Math.abs(amounts.taxableBaseBs - expectedBaseBs) > 0.02 ||
+            Math.abs(amounts.exemptAmountBs - expectedExemptBs) > 0.02) {
+          throw new Error('La base imponible y el exento de la NC deben corresponder exactamente a las cantidades devueltas seleccionadas.');
+        }
+      } else if (draft.returnedInventoryQuantities) {
+        throw new Error('La factura no conserva líneas de inventario para validar cantidades parciales; concilie el Kardex y registre la devolución completa.');
       }
+    }
+    const isCredit = draft.kind === 'CREDIT';
+    const isCashSale = source.paymentTerm === 'CONTADO';
+    const balance = !isCashSale ? getCreditBalance(source.id, 'SALE_COLLECTION') : null;
+    const receivablePortionUsd = isCredit && balance
+      ? Math.min(amounts.netReceivableAdjustmentUsd, balance.outstandingUsd)
+      : (isCredit && !isCashSale ? amounts.netReceivableAdjustmentUsd : 0);
+    const refundPortionUsd = isCredit ? Math.max(0, amounts.netReceivableAdjustmentUsd - receivablePortionUsd) : 0;
+    const receivablePortionBs = receivablePortionUsd * draft.bcvRate;
+    const refundPortionBs = isCredit
+      ? Math.max(0, amounts.netReceivableAdjustmentBs - receivablePortionBs)
+      : 0;
+    const treasuryRequired = isCashSale || refundPortionBs > 0.01;
+    const treasury = draft.treasuryAccountCode
+      ? accounts.find(item => item.code === draft.treasuryAccountCode && item.isMovement &&
+          item.type === 'ACTIVO' && item.code.startsWith('1.1.1.'))
+      : undefined;
+    if (treasuryRequired && !treasury) {
+      throw new Error(isCashSale
+        ? 'Seleccione la cuenta de caja o banco desde la que se hará el reembolso o en la que se recibirá el cobro.'
+        : 'La nota supera el saldo pendiente de CxC; seleccione la cuenta de caja o banco para registrar el reembolso del excedente.');
     }
     const revenue = accounts.find(item => item.code === '4.1.1.01' && item.isMovement && item.type === 'INGRESOS');
     const receivable = accounts.find(item => item.code === '1.1.2.01' && item.isMovement && item.type === 'ACTIVO');
-    const vat = accounts.find(item => item.code === '2.1.2.01' && item.isMovement && item.type === 'PASIVO');
-    if (!revenue || !receivable || (amounts.vatAmountBs > 0 && !vat)) {
-      throw new Error('Faltan cuentas de movimiento para ventas, CxC o débito fiscal IVA. No se registró la nota.');
+    const vat = accounts.find(item => item.code === (source.taxRate === 8 ? '2.1.2.02' : '2.1.2.01') && item.isMovement && item.type === 'PASIVO');
+    const luxuryTax = accounts.find(item => item.code === '2.1.2.08' && item.isMovement && item.type === 'PASIVO');
+    const igtf = accounts.find(item => item.code === '2.1.2.06' && item.isMovement && item.type === 'PASIVO');
+    const withholding = accounts.find(item => item.code === '1.1.3.03' && item.isMovement && item.type === 'ACTIVO');
+    if (!revenue || (!isCashSale && !receivable) ||
+        (amounts.vatAmountBs > 0 && !vat) ||
+        (amounts.additionalLuxuryTaxBs > 0 && !luxuryTax) ||
+        (amounts.igtfAmountBs > 0 && !igtf) ||
+        (amounts.vatWithheldBs > 0 && !withholding)) {
+      throw new Error('Faltan cuentas de movimiento para ingresos, CxC/tesorería o impuestos de la nota. No se registró el documento.');
     }
-    const isCredit = draft.kind === 'CREDIT';
     const items: JournalEntryItem[] = [];
     const baseBs = amounts.taxableBaseBs + amounts.exemptAmountBs;
     const baseUsd = amounts.taxableBaseUsd + amounts.exemptAmountUsd;
+    const pushTaxAdjustments = (direction: 'DEBIT' | 'CREDIT') => {
+      const debit = direction === 'DEBIT';
+      if (amounts.vatAmountBs > 0 && vat) items.push({
+        accountCode: vat.code, accountName: vat.name,
+        debitBs: debit ? amounts.vatAmountBs : 0, creditBs: debit ? 0 : amounts.vatAmountBs,
+        debitUsd: debit ? amounts.vatAmountUsd : 0, creditUsd: debit ? 0 : amounts.vatAmountUsd,
+        description: (debit ? 'Disminución' : 'Incremento') + ' de débito fiscal IVA · ' + source.invoiceNumber
+      });
+      if (amounts.additionalLuxuryTaxBs > 0 && luxuryTax) items.push({
+        accountCode: luxuryTax.code, accountName: luxuryTax.name,
+        debitBs: debit ? amounts.additionalLuxuryTaxBs : 0, creditBs: debit ? 0 : amounts.additionalLuxuryTaxBs,
+        debitUsd: debit ? amounts.additionalLuxuryTaxUsd : 0, creditUsd: debit ? 0 : amounts.additionalLuxuryTaxUsd,
+        description: (debit ? 'Disminución' : 'Incremento') + ' de impuesto adicional 15% · ' + source.invoiceNumber
+      });
+      if (amounts.igtfAmountBs > 0 && igtf) items.push({
+        accountCode: igtf.code, accountName: igtf.name,
+        debitBs: debit ? amounts.igtfAmountBs : 0, creditBs: debit ? 0 : amounts.igtfAmountBs,
+        debitUsd: debit ? amounts.igtfAmountUsd : 0, creditUsd: debit ? 0 : amounts.igtfAmountUsd,
+        description: (debit ? 'Reversión' : 'Percepción adicional') + ' de IGTF · ' + source.invoiceNumber
+      });
+    };
     if (isCredit) {
       items.push({ accountCode: revenue.code, accountName: revenue.name, debitBs: baseBs, creditBs: 0,
         debitUsd: baseUsd, creditUsd: 0, description: 'Reversión parcial de ingresos · ' + source.invoiceNumber });
-      if (amounts.vatAmountBs > 0 && vat) items.push({ accountCode: vat.code, accountName: vat.name,
-        debitBs: amounts.vatAmountBs, creditBs: 0, debitUsd: amounts.vatAmountUsd, creditUsd: 0,
-        description: 'Disminución de débito fiscal IVA · ' + source.invoiceNumber });
-      items.push({ accountCode: receivable.code, accountName: receivable.name,
-        debitBs: 0, creditBs: amounts.totalAmountBs, debitUsd: 0, creditUsd: amounts.totalAmountUsd,
-        description: 'Disminución de CxC por NC ' + number });
+      pushTaxAdjustments('DEBIT');
+      if (amounts.vatWithheldBs > 0 && withholding) items.push({
+        accountCode: withholding.code, accountName: withholding.name, debitBs: 0, creditBs: amounts.vatWithheldBs,
+        debitUsd: 0, creditUsd: amounts.vatWithheldUsd,
+        description: 'Reversión proporcional de retención IVA recibida · ' + source.invoiceNumber
+      });
+      if (receivablePortionBs > 0.01 && receivable) items.push({
+        accountCode: receivable.code, accountName: receivable.name, debitBs: 0, creditBs: receivablePortionBs,
+        debitUsd: 0, creditUsd: receivablePortionUsd,
+        description: 'Disminución de CxC por NC ' + number
+      });
+      if (refundPortionBs > 0.01 && treasury) items.push({
+        accountCode: treasury.code, accountName: treasury.name, debitBs: 0, creditBs: refundPortionBs,
+        debitUsd: 0, creditUsd: refundPortionUsd,
+        description: 'Reembolso al cliente por NC ' + number
+      });
     } else {
-      items.push({ accountCode: receivable.code, accountName: receivable.name,
-        debitBs: amounts.totalAmountBs, creditBs: 0, debitUsd: amounts.totalAmountUsd, creditUsd: 0,
-        description: 'Incremento de CxC por ND ' + number });
-      items.push({ accountCode: revenue.code, accountName: revenue.name,
-        debitBs: 0, creditBs: baseBs, debitUsd: 0, creditUsd: baseUsd,
-        description: 'Ingreso adicional por ND · ' + source.invoiceNumber });
-      if (amounts.vatAmountBs > 0 && vat) items.push({ accountCode: vat.code, accountName: vat.name,
-        debitBs: 0, creditBs: amounts.vatAmountBs, debitUsd: 0, creditUsd: amounts.vatAmountUsd,
-        description: 'Incremento de débito fiscal IVA · ' + source.invoiceNumber });
+      if (isCashSale && treasury) items.push({
+        accountCode: treasury.code, accountName: treasury.name,
+        debitBs: amounts.netReceivableAdjustmentBs, creditBs: 0,
+        debitUsd: amounts.netReceivableAdjustmentUsd, creditUsd: 0,
+        description: 'Cobro por nota de débito ' + number
+      });
+      else if (receivable) items.push({
+        accountCode: receivable.code, accountName: receivable.name,
+        debitBs: amounts.netReceivableAdjustmentBs, creditBs: 0,
+        debitUsd: amounts.netReceivableAdjustmentUsd, creditUsd: 0,
+        description: 'Incremento de CxC por ND ' + number
+      });
+      if (amounts.vatWithheldBs > 0 && withholding) items.push({
+        accountCode: withholding.code, accountName: withholding.name,
+        debitBs: amounts.vatWithheldBs, creditBs: 0, debitUsd: amounts.vatWithheldUsd, creditUsd: 0,
+        description: 'Retención IVA asociada a ND · ' + source.invoiceNumber
+      });
+      items.push({ accountCode: revenue.code, accountName: revenue.name, debitBs: 0, creditBs: baseBs,
+        debitUsd: 0, creditUsd: baseUsd, description: 'Ingreso adicional por ND · ' + source.invoiceNumber });
+      pushTaxAdjustments('CREDIT');
     }
-    const correctionCaseId = await requireApprovedCorrectionCase('SALE',source.id,source.invoiceNumber,draft.noteNumber);
     correctionWorkflowInFlightRef.current = true;
     try { await recordCorrectionAudit({
       eventType: 'accounting_correction_requested', entityType: 'SALE', companyId: currentCompany.id, entityId: source.id,
       correctionType: isCredit ? 'SALES_CREDIT_NOTE' : 'SALES_DEBIT_NOTE',
       sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: number,
-      reason: String(draft.reason).trim(), workpaperNote: '',
+      reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote || '').trim(),
       fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal
     }); } catch (auditError) { correctionWorkflowInFlightRef.current = false; throw auditError; }
     try {
@@ -4436,16 +4531,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       affectedInvoiceTotalAmountBs: source.totalAmountBs, affectedInvoiceTotalAmountUsd: source.totalAmountUsd,
       fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal,
           taxableBaseBs: amounts.taxableBaseBs, exemptAmountBs: amounts.exemptAmountBs,
-          vatAmountBs: amounts.vatAmountBs, totalAmountBs: amounts.totalAmountBs,
+          vatAmountBs: amounts.vatAmountBs, additionalLuxuryTaxBs: amounts.additionalLuxuryTaxBs,
+          totalAmountBs: amounts.totalAmountBs,
           bcvRate: draft.bcvRate, taxableBaseUsd: amounts.taxableBaseUsd,
           exemptAmountUsd: amounts.exemptAmountUsd, vatAmountUsd: amounts.vatAmountUsd,
-          totalAmountUsd: amounts.totalAmountUsd, vatWithheldBs: 0, vatWithheldUsd: 0,
-          igtfApplicable: false, igtfAmountBs: 0, igtfAmountUsd: 0,
-          paymentTerm: 'CREDITO', journalEntryId: journal.id,
+          additionalLuxuryTaxUsd: amounts.additionalLuxuryTaxUsd,
+          totalAmountUsd: amounts.totalAmountUsd, vatWithheldBs: amounts.vatWithheldBs, vatWithheldUsd: amounts.vatWithheldUsd,
+          igtfApplicable: amounts.igtfAmountBs > 0, igtfRate: source.igtfRate,
+          igtfAmountBs: amounts.igtfAmountBs, igtfAmountUsd: amounts.igtfAmountUsd,
+          paymentTerm: source.paymentTerm || 'CREDITO', paymentCurrency: source.paymentCurrency,
+          returnedInventoryQuantities: draft.returnedInventoryQuantities, journalEntryId: journal.id,
           netReceivableAdjustmentBs: amounts.netReceivableAdjustmentBs,
           netReceivableAdjustmentUsd: amounts.netReceivableAdjustmentUsd,
           correctionReason: String(draft.reason).trim(),
-          correctionWorkpaper: '',
+          correctionWorkpaper: String(draft.workpaperNote || '').trim(),
           notes: 'Documento correctivo vinculado a ' + source.invoiceNumber + '. Motivo: ' + String(draft.reason).trim()
         };
         setSales(prev => [...prev, note]);
@@ -4455,17 +4554,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             eventType: 'accounting_correction_executed', entityType: 'SALE', companyId: currentCompany.id, entityId: source.id,
             correctionType: isCredit ? 'SALES_CREDIT_NOTE' : 'SALES_DEBIT_NOTE',
             sourceDocumentRef: source.invoiceNumber, correctionDocumentRef: number,
-            reason: String(draft.reason).trim(), workpaperNote: '',
+            reason: String(draft.reason).trim(), workpaperNote: String(draft.workpaperNote || '').trim(),
             fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal,
             journalEntryId: journal.id
           });
         } catch (auditError) {
           throw new Error('La nota quedó guardada y confirmada en SQLite, pero falta registrar el evento final de auditoría. No repita el documento. Asiento: ' + journal.entryNumber + '. ' + (auditError instanceof Error ? auditError.message : 'Error de auditoría.'));
-        }
-        try {
-          await executeCorrectionCase({caseId:correctionCaseId,executionRef:number,reason:'Nota correctiva de venta, asiento y auxiliar CxC persistidos.'});
-        } catch (caseError) {
-          throw new Error('La nota de venta quedó guardada y auditada en SQLite, pero falta cerrar su trazabilidad interna. No repita el documento. ' + (caseError instanceof Error ? caseError.message : 'Error al cerrar la corrección.'));
         }
         return note;
       });
@@ -4939,13 +5033,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const inventoryCorrectionAuthorizationRef = useRef<string | null>(null);
   const journalCorrectionAuthorizationRef = useRef<string | null>(null);
   const addMovement = (movData: Omit<InventoryMovement, 'id' | 'companyId'>): InventoryMovement => {
-    if (movData.correctionForMovementId) {
-      const authorizationKey = String(movData.correctionForMovementId) + '|' + String(movData.documentRef || '').trim();
-      if (inventoryCorrectionAuthorizationRef.current !== authorizationKey) {
-        throw new Error('El movimiento correctivo requiere autorización formal aprobada para el movimiento fuente y su referencia documental.');
-      }
-      inventoryCorrectionAuthorizationRef.current = null;
-    }
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('El movimiento de inventario requiere SQLite local de escritorio disponible y lista.');
     }
@@ -5485,6 +5572,250 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw error;
     } finally {
       paymentLockKeys.forEach(key => vatPaymentInFlightRef.current.delete(key));
+    }
+  };
+
+  const createVatOwnDeclaration = async (input: { period: string; choices?: Record<string, 'Z' | 'INDIVIDUAL'> }): Promise<VatOwnDeclaration> => {
+    assertSQLitePersistenceReady('Preparar declaración mensual de IVA');
+    if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(input.period)) throw new Error('Seleccione un período mensual válido.');
+    if (vatOwnDeclarations.some(item => item.companyId === currentCompany.id && item.period === input.period)) {
+      throw new Error('Ya existe una declaración mensual para ese período. Abra la existente para continuar.');
+    }
+    const lockKey = 'own:' + currentCompany.id + ':' + input.period;
+    if (vatDeclarationCreationInFlightRef.current.has(lockKey)) throw new Error('La declaración de ese período ya se está preparando.');
+    vatDeclarationCreationInFlightRef.current.add(lockKey);
+    try {
+      const monthSales = sales.filter(item => item.companyId === currentCompany.id && item.invoiceDate.startsWith(input.period) && !item.isCancelled);
+      const monthPurchases = purchases.filter(item => item.companyId === currentCompany.id && item.invoiceDate.startsWith(input.period) && !item.isCancelled);
+      const monthZ = journalEntries.filter(entry => entry.companyId === currentCompany.id &&
+        Boolean(entry.fiscalZReport) && String(entry.fiscalZReport!.date || entry.date).startsWith(input.period));
+      const resolution = resolveVatOwnDailySalesSources({
+        zReports: monthZ.map(entry => ({
+          id: entry.id, date: entry.fiscalZReport!.date || entry.date,
+          taxableBase16Bs: entry.fiscalZReport!.taxableBase16Bs, vat16Bs: entry.fiscalZReport!.vat16Bs,
+          taxableBase8Bs: entry.fiscalZReport!.taxableBase8Bs, vat8Bs: entry.fiscalZReport!.vat8Bs,
+          taxableBase31Bs: entry.fiscalZReport!.taxableBase31Bs, vat31Bs: entry.fiscalZReport!.vat31Bs,
+          exemptSalesBs: entry.fiscalZReport!.exemptSalesBs
+        })),
+        sales: monthSales.map(item => ({
+          id: item.id, date: item.invoiceDate, documentType: item.documentType,
+          taxableBaseBs: item.taxableBaseBs, taxRate: item.taxRate,
+          vatAmountBs: item.vatAmountBs, exemptAmountBs: item.exemptAmountBs
+        })),
+        choices: input.choices
+      });
+      if (resolution.unresolvedDates.length) {
+        throw new Error('Resuelva primero los días con Reporte Z y ventas individuales simultáneas: ' + resolution.unresolvedDates.join(', '));
+      }
+      const outputVat16Raw = resolution.days.reduce((sum, day) => sum + day.outputVat16Bs, 0);
+      const outputVat8Raw = resolution.days.reduce((sum, day) => sum + day.outputVat8Bs, 0);
+      const outputVat16Bs = Math.max(0, outputVat16Raw);
+      const outputVat8Bs = Math.max(0, outputVat8Raw);
+      const includedIndividualIds = new Set(resolution.days.filter(day => day.source === 'INDIVIDUAL').flatMap(day => day.sourceIds));
+      const withholdingRows = sales.filter(item => item.companyId === currentCompany.id &&
+        item.retentionVoucherDate?.startsWith(input.period) && Number(item.vatWithheldBs || 0) > 0 &&
+        (!item.invoiceDate.startsWith(input.period) || includedIndividualIds.has(item.id)));
+      const withholdingRaw = withholdingRows.reduce((sum, item) =>
+        sum + (item.documentType === '03' ? -1 : 1) * Number(item.vatWithheldBs || 0), 0);
+      const withholdingBs = Math.max(0, withholdingRaw);
+      const taxableSalesBaseBs = resolution.days.reduce((sum, day) =>
+        sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
+      const exemptSalesBaseBs = resolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
+      const salesDenominator = taxableSalesBaseBs + exemptSalesBaseBs;
+      const prorationRate = salesDenominator > 0 ? taxableSalesBaseBs / salesDenominator : 1;
+      const purchaseRows = monthPurchases.map(item => {
+        const sign = item.documentType === '03' ? -1 : 1;
+        const gross = Number(item.vatAmountBs || 0);
+        const treatment = item.vatCreditTreatment || 'COMMON';
+        const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : prorationRate;
+        return { item, sign, gross, factor, eligible: gross * factor, nonEligible: gross * (1 - factor) };
+      });
+      const purchase16GrossRaw = purchaseRows.filter(row => row.item.taxRate !== 8).reduce((sum,row)=>sum+row.sign*row.gross,0);
+      const purchase8GrossRaw = purchaseRows.filter(row => row.item.taxRate === 8).reduce((sum,row)=>sum+row.sign*row.gross,0);
+      const purchase16EligibleRaw = purchaseRows.filter(row => row.item.taxRate !== 8).reduce((sum,row)=>sum+row.sign*row.eligible,0);
+      const purchase8EligibleRaw = purchaseRows.filter(row => row.item.taxRate === 8).reduce((sum,row)=>sum+row.sign*row.eligible,0);
+      if (purchase16GrossRaw < -0.02 || purchase8GrossRaw < -0.02) {
+        throw new Error('Las notas de crédito de compras superan el crédito fiscal bruto del período. Debe conciliarse el arrastre de la factura original antes de presentar esta declaración; no se generó un importe fiscal estimado.');
+      }
+      const purchase16GrossBs = Math.max(0, purchase16GrossRaw);
+      const purchase8GrossBs = Math.max(0, purchase8GrossRaw);
+      const purchase16Bs = Math.max(0, purchase16EligibleRaw);
+      const purchase8Bs = Math.max(0, purchase8EligibleRaw);
+      const purchaseNonEligibleBs = Math.max(0, purchase16GrossBs + purchase8GrossBs - purchase16Bs - purchase8Bs);
+      const prior = vatOwnDeclarations.filter(item => item.companyId === currentCompany.id &&
+        item.status === 'FILED' && item.period < input.period).sort((a,b)=>b.period.localeCompare(a.period))[0];
+      const debitAdjustmentsBs = Math.max(0, -withholdingRaw);
+      const creditAdjustmentsBs = Math.max(0, -outputVat16Raw) + Math.max(0, -outputVat8Raw);
+      const position = calculateVatOwnPosition({
+        outputVatBs: outputVat16Bs + outputVat8Bs, outputVat16Bs, outputVat8Bs,
+        purchaseCreditBs: purchase16Bs + purchase8Bs, purchaseCredit16Bs: purchase16Bs, purchaseCredit8Bs: purchase8Bs,
+        purchaseCreditGrossBs: purchase16GrossBs + purchase8GrossBs, purchaseCreditGross16Bs: purchase16GrossBs, purchaseCreditGross8Bs: purchase8GrossBs,
+        purchaseCreditNonEligibleBs: purchaseNonEligibleBs, prorationRate, taxableSalesBaseBs, exemptSalesBaseBs,
+        receivedWithholdingsBs: withholdingBs, priorCreditBs: prior?.position.creditCarryForwardBs || 0,
+        debitAdjustmentsBs, creditAdjustmentsBs
+      });
+      const createdAt = new Date().toISOString();
+      const sourceIds = [...new Set([
+        ...resolution.days.flatMap(day => day.sourceIds),
+        ...monthPurchases.map(item => item.id),
+        ...withholdingRows.map(item => item.id)
+      ])];
+      const declaration: VatOwnDeclaration = {
+        id: 'vat-own-' + currentCompany.id + '-' + input.period,
+        companyId: currentCompany.id, period: input.period, status: 'DRAFT',
+        position, sourceIds, bcvRate: Number(currentCompany.bcvRate) || 0,
+        dailySourceChoices: { ...(input.choices || {}) }, createdAt
+      };
+      validateVatOwnDeclarationDraft(declaration);
+      if (!Number.isFinite(Number(declaration.bcvRate)) || Number(declaration.bcvRate) <= 0) throw new Error('La empresa no conserva una tasa BCV válida para respaldar la declaración.');
+      const confirmation = waitForPersistence();
+      setVatOwnDeclarations(prev => [...prev, declaration]);
+      await confirmation;
+      return declaration;
+    } finally {
+      vatDeclarationCreationInFlightRef.current.delete(lockKey);
+    }
+  };
+
+  const recordVatOwnDeclarationEvent = async (
+    declarationId: string,
+    draft: Omit<VatOwnDeclarationEvent, 'id' | 'declarationId' | 'recordedAt' | 'journalEntryId'>
+  ): Promise<VatOwnDeclarationEvent> => {
+    assertSQLitePersistenceReady('Registrar evento de declaración mensual de IVA');
+    const declaration = vatOwnDeclarations.find(item => item.id === declarationId && item.companyId === currentCompany.id);
+    if (!declaration) throw new Error('No se encontró la declaración mensual de la empresa activa.');
+    const history = vatOwnDeclarationEvents.filter(item => item.declarationId === declarationId);
+    const fullDraft = { ...draft, declarationId, companyId: currentCompany.id };
+    if (vatOwnDeclarationEvents.some(event => event.companyId === currentCompany.id && event.idempotencyKey === draft.idempotencyKey)) {
+      throw new Error('La clave de operación ya fue utilizada en otra declaración de esta empresa.');
+    }
+    if (draft.eventType === 'PAYMENT' && vatOwnDeclarationEvents.some(event =>
+      event.companyId === currentCompany.id && event.eventType === 'PAYMENT' && event.reference?.trim() === draft.reference?.trim()
+    )) throw new Error('La referencia de pago ya fue utilizada en otra declaración mensual de esta empresa.');
+
+    validateVatOwnEvent({
+      declaration, events: history, draft: fullDraft,
+      sameCompanyDeclarationNumbers: vatOwnDeclarationEvents.filter(event =>
+        vatOwnDeclarations.some(item => item.id === event.declarationId && item.companyId === currentCompany.id)
+      ).map(event => event.declarationNumber || '').filter(Boolean)
+    });
+    const lockKey = 'own-declaration-event:' + declarationId;
+    if (vatPaymentInFlightRef.current.has(lockKey)) throw new Error('Ya hay un evento en proceso para esta declaración.');
+    vatPaymentInFlightRef.current.add(lockKey);
+    try {
+      let journal: JournalEntry | undefined;
+      if (draft.eventType === 'FILED') {
+        const output16 = declaration.position.outputVat16Bs;
+        const output8 = declaration.position.outputVat8Bs;
+        const purchase16 = declaration.position.purchaseCredit16Bs;
+        const purchase8 = declaration.position.purchaseCredit8Bs;
+        const liability16 = accounts.find(item => item.code === '2.1.2.01' && item.type === 'PASIVO' && item.isMovement);
+        const liability8 = accounts.find(item => item.code === '2.1.2.02' && item.type === 'PASIVO' && item.isMovement);
+        const input16 = accounts.find(item => item.code === '1.1.3.01' && item.type === 'ACTIVO' && item.isMovement);
+        const input8 = accounts.find(item => item.code === '1.1.3.02' && item.type === 'ACTIVO' && item.isMovement);
+        const withholding = accounts.find(item => item.code === '1.1.3.03' && item.type === 'ACTIVO' && item.isMovement);
+        if ((output16 > 0 && !liability16) || (output8 > 0 && !liability8) ||
+            (purchase16 > 0 && !input16) || (purchase8 > 0 && !input8) ||
+            (declaration.position.receivedWithholdingsBs > 0 && !withholding)) {
+          throw new Error('Faltan cuentas de movimiento para conciliar los débitos y créditos fiscales de la declaración.');
+        }
+        const items: JournalEntryItem[] = [];
+        const addLine = (account: Account | undefined, debit: number, credit: number, description: string) => {
+          if (!account || debit + credit <= 0) return;
+          items.push({
+            accountCode: account.code, accountName: account.name,
+            debitBs: debit, creditBs: credit,
+            debitUsd: debit / Number(declaration.bcvRate), creditUsd: credit / Number(declaration.bcvRate),
+            description
+          });
+        };
+        addLine(liability16, output16, 0, 'Cierre débito fiscal IVA 16% · ' + declaration.period);
+        addLine(liability8, output8, 0, 'Cierre débito fiscal IVA 8% · ' + declaration.period);
+        addLine(input16, 0, purchase16, 'Aplicación crédito fiscal compras 16% · ' + declaration.period);
+        addLine(input8, 0, purchase8, 'Aplicación crédito fiscal compras 8% · ' + declaration.period);
+        addLine(withholding, 0, declaration.position.receivedWithholdingsBs, 'Aplicación retenciones IVA recibidas · ' + declaration.period);
+        addLine(input16, 0, declaration.position.priorCreditAppliedBs, 'Aplicación de crédito fiscal de períodos anteriores · ' + declaration.period);
+        addLine(input16, declaration.position.creditCarryForwardBs, 0, 'Crédito fiscal trasladable al período siguiente · ' + declaration.period);
+        const netPayable = accounts.find(item => item.code === '2.1.2.09' && item.type === 'PASIVO' && item.isMovement);
+        if (declaration.position.amountDueBs > 0 && !netPayable) throw new Error('Falta la cuenta 2.1.2.09 para IVA neto por enterar.');
+        addLine(liability16, declaration.position.debitAdjustmentsBs, 0, 'Ajustes que incrementan el débito fiscal · ' + declaration.period);
+        addLine(liability16, 0, declaration.position.creditAdjustmentsBs, 'Ajustes que reducen el débito fiscal · ' + declaration.period);
+        addLine(netPayable, 0, declaration.position.amountDueBs, 'IVA neto por enterar · ' + declaration.period);
+        const debitBs = items.reduce((sum,item)=>sum+item.debitBs,0);
+        const creditBs = items.reduce((sum,item)=>sum+item.creditBs,0);
+        if (Math.abs(debitBs-creditBs)>0.02) throw new Error('El asiento de cierre de IVA no cuadra. Revise la conciliación de fuentes y créditos fiscales.');
+        if (items.length) journal = addJournalEntry({
+          entryNumber: 0, date: draft.occurredAt.slice(0,10),
+          description: 'Determinación mensual del IVA · ' + declaration.period,
+          type: 'AJUSTE', bcvRate: Number(declaration.bcvRate),
+          referenceDoc: 'IVA-MENSUAL:' + declaration.period,
+          items
+        });
+      } else if (draft.eventType === 'PAYMENT') {
+        const amountBs = Number(draft.amountBs || 0);
+        const rate = Number(draft.bcvRate || 0);
+        const treasury = accounts.find(item => item.code === draft.treasuryAccountCode &&
+          item.type === 'ACTIVO' && item.isMovement && item.code.startsWith('1.1.1.'));
+        const liability = accounts.find(item => item.code === '2.1.2.09' && item.type === 'PASIVO' && item.isMovement);
+        if (!treasury || !liability || !Number.isFinite(rate) || rate <= 0) throw new Error('Seleccione una cuenta de tesorería válida e indique la tasa BCV del pago.');
+        const declarationRate = Number(declaration.bcvRate);
+        if (!Number.isFinite(declarationRate) || declarationRate <= 0) throw new Error('La declaración no conserva una tasa BCV válida para valorar el pasivo.');
+        const bankAccount = bankAccounts.find(item => item.companyId === currentCompany.id && item.accountCode === treasury.code);
+        if (bankAccount) {
+          const availableBalance = calculateBankAvailableBalance({
+            bankAccount, companyId: currentCompany.id, asOfDate: draft.occurredAt.slice(0,10), journalEntries
+          });
+          validateBankOutgoingAvailability({
+            availableBalance, requestedAmount: bankAccount.currency === 'USD' ? amountBs / rate : amountBs,
+            currency: bankAccount.currency
+          });
+        }
+        const historicalUsd = amountBs / declarationRate;
+        const paymentUsd = amountBs / rate;
+        const fx = historicalUsd - paymentUsd;
+        const items: JournalEntryItem[] = [
+          { accountCode: liability.code, accountName: liability.name, debitBs: amountBs, creditBs: 0,
+            debitUsd: historicalUsd, creditUsd: 0, description: 'Aplicación de pago a IVA mensual ' + declaration.period },
+          { accountCode: treasury.code, accountName: treasury.name, debitBs: 0, creditBs: amountBs,
+            debitUsd: 0, creditUsd: paymentUsd, description: 'Pago de IVA · ' + (draft.reference || '') }
+        ];
+        if (fx > 0.000001) {
+          const gain = accounts.find(item => item.code === '4.2.1.01' && item.type === 'INGRESOS' && item.isMovement);
+          if (!gain) throw new Error('Falta la cuenta de ganancia por diferencial cambiario 4.2.1.01.');
+          items.push({ accountCode: gain.code, accountName: gain.name, debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: fx, description: 'Ganancia cambiaria en pago de IVA' });
+        } else if (fx < -0.000001) {
+          const loss = accounts.find(item => item.code === '6.1.1.08' && item.type === 'GASTOS' && item.isMovement);
+          if (!loss) throw new Error('Falta la cuenta de pérdida por diferencial cambiario 6.1.1.08.');
+          items.push({ accountCode: loss.code, accountName: loss.name, debitBs: 0, creditBs: 0, debitUsd: Math.abs(fx), creditUsd: 0, description: 'Pérdida cambiaria en pago de IVA' });
+        }
+        journal = addJournalEntry({
+          entryNumber: 0, date: draft.occurredAt.slice(0,10),
+          description: 'Pago de IVA mensual · ' + declaration.period,
+          type: 'AJUSTE', bcvRate: rate,
+          referenceDoc: 'IVA-PAGO:' + declaration.id + ':' + draft.idempotencyKey,
+          items
+        });
+      } else if (draft.eventType === 'REVERSAL') {
+        const original = history.find(item => item.id === draft.reversalOfEventId && item.eventType === 'PAYMENT');
+        if (!original?.journalEntryId) throw new Error('El pago original no conserva asiento contable para revertir.');
+        journal = await reverseJournalEntry(original.journalEntryId, draft.occurredAt.slice(0,10), draft.note || 'Reversión de pago de IVA', 'Reversión de evento fiscal ' + original.id);
+      }
+      const event: VatOwnDeclarationEvent = {
+        ...fullDraft, ...(journal ? { journalEntryId: journal.id } : {}),
+        id: 'vat-own-event-' + Date.now() + '-' + Math.floor(Math.random() * 1000000),
+        declarationId, recordedAt: new Date().toISOString()
+      };
+      const confirmation = waitForPersistence();
+      setVatOwnDeclarationEvents(prev => [...prev, event]);
+      if (draft.eventType === 'FILED') {
+        setVatOwnDeclarations(prev => prev.map(item => item.id === declarationId
+          ? { ...item, status: 'FILED', declarationNumber: String(draft.declarationNumber || '').trim(), filedAt: draft.occurredAt }
+          : item));
+      }
+      await confirmation;
+      return event;
+    } finally {
+      vatPaymentInFlightRef.current.delete(lockKey);
     }
   };
 
@@ -6205,6 +6536,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setVatVouchers([]);
     setVatWithholdingDeclarations([]);
     setVatWithholdingDeclarationEvents([]);
+    setVatOwnDeclarations([]);
+    setVatOwnDeclarationEvents([]);
     setIslrVouchers([]);
     setBankAccounts([]);
     setBankStatementMovements([]);
@@ -6243,6 +6576,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setVatVouchers([]);
     setVatWithholdingDeclarations([]);
     setVatWithholdingDeclarationEvents([]);
+    setVatOwnDeclarations([]);
+    setVatOwnDeclarationEvents([]);
     setIslrVouchers([]);
     setBankAccounts([]);
     setBankStatementMovements([]);
@@ -6273,6 +6608,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       vatVouchers,
       vatWithholdingDeclarations,
       vatWithholdingDeclarationEvents,
+      vatOwnDeclarations,
+      vatOwnDeclarationEvents,
       islrVouchers,
       bankAccounts,
       bankStatementMovements,
@@ -6298,6 +6635,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ['movimientos de inventario', 'movements', movements], ['activos fijos', 'fixedAssets', fixedAssets], ['comprobantes IVA', 'vatVouchers', vatVouchers],
       ['declaraciones IVA', 'vatWithholdingDeclarations', vatWithholdingDeclarations],
       ['eventos de declaraciones IVA', 'vatWithholdingDeclarationEvents', vatWithholdingDeclarationEvents],
+      ['declaraciones mensuales de IVA', 'vatOwnDeclarations', vatOwnDeclarations],
+      ['eventos de declaraciones mensuales de IVA', 'vatOwnDeclarationEvents', vatOwnDeclarationEvents],
       ['comprobantes ISLR', 'islrVouchers', islrVouchers], ['cuentas bancarias', 'bankAccounts', bankAccounts],
       ['movimientos bancarios', 'bankStatementMovements', bankStatementMovements],
       ['cobros y pagos', 'creditSettlements', creditSettlements],
@@ -6663,6 +7002,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setVatVouchers(data.vatVouchers);
       setVatWithholdingDeclarations(vatWithholdingDeclarations);
       setVatWithholdingDeclarationEvents(vatWithholdingDeclarationEvents);
+      setVatOwnDeclarations(Array.isArray(data.vatOwnDeclarations) ? data.vatOwnDeclarations : []);
+      setVatOwnDeclarationEvents(Array.isArray(data.vatOwnDeclarationEvents) ? data.vatOwnDeclarationEvents : []);
       setIslrVouchers(data.islrVouchers);
       setBankAccounts(data.bankAccounts);
       setBankStatementMovements(data.bankStatementMovements);
@@ -6699,6 +7040,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const declarationIds = new Set(visibleVatDeclarations.map(item => item.id));
     return vatWithholdingDeclarationEvents.filter(event => declarationIds.has(event.declarationId));
   }, [vatWithholdingDeclarationEvents, visibleVatDeclarations]);
+  const visibleVatOwnDeclarations = useMemo(() => vatOwnDeclarations.filter(item => item.companyId === activeCompanyId), [vatOwnDeclarations, activeCompanyId]);
+  const visibleVatOwnDeclarationEvents = useMemo(() => {
+    const ids = new Set(visibleVatOwnDeclarations.map(item => item.id));
+    return vatOwnDeclarationEvents.filter(event => ids.has(event.declarationId));
+  }, [vatOwnDeclarationEvents, visibleVatOwnDeclarations]);
   const visibleIslrVouchers = useMemo(() => islrVouchers.filter(item => item.companyId === activeCompanyId), [islrVouchers, activeCompanyId]);
   const visibleIslrFiscalEvents = useMemo(() => islrFiscalEvents.filter(item => item.companyId === activeCompanyId), [islrFiscalEvents, activeCompanyId]);
   const visibleFinancialDisclosures = useMemo(() => financialDisclosures.filter(item => item.companyId === activeCompanyId), [financialDisclosures, activeCompanyId]);
@@ -6794,6 +7140,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         vatVouchers: visibleVatVouchers,
         vatWithholdingDeclarations: visibleVatDeclarations,
         vatWithholdingDeclarationEvents: visibleVatDeclarationEvents,
+        vatOwnDeclarations: visibleVatOwnDeclarations,
+        vatOwnDeclarationEvents: visibleVatOwnDeclarationEvents,
+        createVatOwnDeclaration,
+        recordVatOwnDeclarationEvent,
         createVatWithholdingDeclaration,
         recordVatWithholdingDeclarationEvent,
         islrVouchers: visibleIslrVouchers,

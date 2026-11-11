@@ -21,10 +21,12 @@ export interface PurchaseServiceCreditNoteAmounts {
   taxableBaseBs: number;
   exemptAmountBs: number;
   vatAmountBs: number;
+  additionalLuxuryTaxBs: number;
   totalAmountBs: number;
   taxableBaseUsd: number;
   exemptAmountUsd: number;
   vatAmountUsd: number;
+  additionalLuxuryTaxUsd: number;
   totalAmountUsd: number;
   netPayableReductionBs: number;
   netPayableReductionUsd: number;
@@ -72,8 +74,18 @@ export function calculatePurchaseServiceCreditNote(request: PurchaseServiceCredi
       request.bcvRate <= 0 || purchase.taxRate < 0 || purchase.taxRate > 100) {
     throw new Error('Los importes, la alícuota o la tasa BCV de la NC no son válidos.');
   }
-  if (Math.abs(money(Number(purchase.taxableBaseBs) * Number(purchase.taxRate) / 100) - Number(purchase.vatAmountBs)) > 0.02) {
+  const effectiveVatRate = Number(purchase.taxRate) === 31 ? 16 : Number(purchase.taxRate);
+  const expectedVat = money(Number(purchase.taxableBaseBs) * effectiveVatRate / 100);
+  const expectedLuxury = Number(purchase.taxRate) === 31 ? money(Number(purchase.taxableBaseBs) * 0.15) : 0;
+  const originalLuxury = Number(purchase.additionalLuxuryTaxBs ?? Math.max(0, Number(purchase.vatAmountBs) - expectedVat));
+  if (Math.abs(originalLuxury - expectedLuxury) > 0.02) throw new Error('El impuesto adicional del 15% de la factura original no concilia.');
+  if (Math.abs(expectedVat - Number(purchase.vatAmountBs)) > 0.02) {
     throw new Error('El IVA original no concilia con la base y alícuota registradas.');
+  }
+  const expectedOriginalTotal = money(Number(purchase.taxableBaseBs) + Number(purchase.exemptAmountBs) +
+    Number(purchase.vatAmountBs) + originalLuxury + Number(purchase.igtfAmountBs || 0));
+  if (Math.abs(expectedOriginalTotal - Number(purchase.totalAmountBs)) > 0.02) {
+    throw new Error('El total original de la compra de servicios no concilia con IVA e impuesto adicional.');
   }
   const priorTaxable = request.priorCreditNotes.reduce((sum, note) => sum + Number(note.taxableBaseBs || 0), 0);
   const priorExempt = request.priorCreditNotes.reduce((sum, note) => sum + Number(note.exemptAmountBs || 0), 0);
@@ -83,15 +95,17 @@ export function calculatePurchaseServiceCreditNote(request: PurchaseServiceCredi
   }
   const taxableBaseBs = money(request.taxableBaseBs);
   const exemptAmountBs = money(request.exemptAmountBs);
-  const vatAmountBs = money(taxableBaseBs * Number(purchase.taxRate) / 100);
-  const totalAmountBs = money(taxableBaseBs + exemptAmountBs + vatAmountBs);
+  const vatAmountBs = money(taxableBaseBs * effectiveVatRate / 100);
+  const additionalLuxuryTaxBs = Number(purchase.taxRate) === 31 ? money(taxableBaseBs * 0.15) : 0;
+  const totalAmountBs = money(taxableBaseBs + exemptAmountBs + vatAmountBs + additionalLuxuryTaxBs);
   const taxableBaseUsd = usd(taxableBaseBs / request.bcvRate);
   const exemptAmountUsd = usd(exemptAmountBs / request.bcvRate);
   const vatAmountUsd = usd(vatAmountBs / request.bcvRate);
+  const additionalLuxuryTaxUsd = usd(additionalLuxuryTaxBs / request.bcvRate);
   const totalAmountUsd = usd(totalAmountBs / request.bcvRate);
   return {
-    taxableBaseBs, exemptAmountBs, vatAmountBs, totalAmountBs,
-    taxableBaseUsd, exemptAmountUsd, vatAmountUsd, totalAmountUsd,
+    taxableBaseBs, exemptAmountBs, vatAmountBs, additionalLuxuryTaxBs, totalAmountBs,
+    taxableBaseUsd, exemptAmountUsd, vatAmountUsd, additionalLuxuryTaxUsd, totalAmountUsd,
     netPayableReductionBs: totalAmountBs, netPayableReductionUsd: totalAmountUsd
   };
 }
