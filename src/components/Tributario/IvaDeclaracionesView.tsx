@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { CalendarDays, FileText, Receipt, ShoppingCart, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs } from '../../utils/formatters';
-import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, resolveVatOwnProrationRate, resolveVatOwnPurchaseCreditTreatment, resolveVatOwnPaymentBcvRate } from '../../types/vatOwnDeclaration';
+import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, calculateVatOwnPurchaseCreditSummary, resolveVatOwnPaymentBcvRate } from '../../types/vatOwnDeclaration';
 
 const money = (value: number | undefined) => Number.isFinite(value) ? Number(value) : 0;
 const parseLocalizedNumber = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
@@ -66,44 +66,50 @@ export const IvaDeclaracionesView: React.FC = () => {
     ? null
     : dailySalesResolution.days.reduce((sum, day) => sum + day.outputVatBs, 0);
 
-  const purchaseCreditGross16 = monthPurchases.filter(item => item.taxRate !== 8)
-    .reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatAmountBs), 0);
-  const purchaseCreditGross8 = monthPurchases.filter(item => item.taxRate === 8)
-    .reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatAmountBs), 0);
-  const purchaseCredit = purchaseCreditGross16 + purchaseCreditGross8;
-  const purchaseCreditGrossInvalid = purchaseCreditGross16 < -0.02 || purchaseCreditGross8 < -0.02;
   const taxableSalesBase = dailySalesResolution.days.reduce((sum, day) =>
     sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
   const exemptSalesBase = dailySalesResolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
-  const hasCommonPurchases = monthPurchases.some(item =>
-    resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment) === 'COMMON' && money(item.vatAmountBs) > 0
-  );
-  const prorationRate = resolveVatOwnProrationRate({
-    taxableSalesBaseBs: taxableSalesBase, exemptSalesBaseBs: exemptSalesBase, hasCommonPurchases
-  });
-  const purchaseCreditEligible = outputVat === null || prorationRate === null ? null : Math.max(0, monthPurchases
-    .filter(item => item.taxRate !== 8)
-    .reduce((sum, item) => {
-      const treatment = resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment);
-      const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : prorationRate;
-      return sum + signedDocument(item.documentType) * money(item.vatAmountBs) * factor;
-    }, 0)) + Math.max(0, monthPurchases
-    .filter(item => item.taxRate === 8)
-    .reduce((sum, item) => {
-      const treatment = resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment);
-      const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : prorationRate;
-      return sum + signedDocument(item.documentType) * money(item.vatAmountBs) * factor;
-    }, 0));
-  const purchaseCreditNonEligible = purchaseCreditEligible === null ? null : Math.max(0, purchaseCredit - purchaseCreditEligible);
+  const purchaseSummaryResult = useMemo(() => {
+    if (dailySalesResolution.unresolvedDates.length > 0) {
+      return { summary: null, error: 'Resuelve primero las fechas con Reporte Z y ventas individuales coincidentes.' };
+    }
+    try {
+      return {
+        summary: calculateVatOwnPurchaseCreditSummary({
+          companyId: currentCompany.id, period, purchases: monthPurchases,
+          allPurchases: purchases, priorDeclarations: vatOwnDeclarations,
+          taxableSalesBaseBs: taxableSalesBase, exemptSalesBaseBs: exemptSalesBase
+        }),
+        error: null
+      };
+    } catch (error) {
+      return { summary: null, error: error instanceof Error ? error.message : 'No se pudo conciliar el crédito fiscal de compras.' };
+    }
+  }, [currentCompany.id, period, monthPurchases, purchases, vatOwnDeclarations, taxableSalesBase, exemptSalesBase, dailySalesResolution.unresolvedDates]);
+  const purchaseSummary = purchaseSummaryResult.summary;
+  const purchaseSummaryError = purchaseSummaryResult.error;
+  const prorationRate = purchaseSummary?.prorationRate ?? null;
+  const purchaseCreditGross16 = purchaseSummary?.gross16Bs ?? 0;
+  const purchaseCreditGross8 = purchaseSummary?.gross8Bs ?? 0;
+  const purchaseCredit = purchaseCreditGross16 + purchaseCreditGross8;
+  const purchaseCreditEligible = outputVat === null || !purchaseSummary
+    ? null : purchaseSummary.eligible16Bs + purchaseSummary.eligible8Bs;
+  const purchaseCreditNonEligible = purchaseSummary
+    ? purchaseSummary.nonEligible16Bs + purchaseSummary.nonEligible8Bs : null;
+  const purchaseCreditReversal = purchaseSummary
+    ? purchaseSummary.priorReversalEligible16Bs + purchaseSummary.priorReversalEligible8Bs : 0;
+  const purchaseCreditReversalNonEligible = purchaseSummary
+    ? purchaseSummary.priorReversalNonEligible16Bs + purchaseSummary.priorReversalNonEligible8Bs : 0;
   const priorCredit = vatOwnDeclarations.filter(item => item.companyId === currentCompany.id && item.status === 'FILED' && item.period < period)
     .sort((a,b)=>b.period.localeCompare(a.period))[0]?.position.creditCarryForwardBs || 0;
   const receivedWithholdingRows = getReceivedVatWithholdingSales(sales, currentCompany.id, period);
   const receivedWithholdings = receivedWithholdingRows.reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatWithheldBs), 0);
   const preliminaryBalance = outputVat === null || purchaseCreditEligible === null
-    ? null : outputVat - purchaseCreditEligible - receivedWithholdings - priorCredit;
+    ? null : outputVat - purchaseCreditEligible - receivedWithholdings - priorCredit + purchaseCreditReversal;
   const currentSourceIds = [...new Set([
     ...dailySalesResolution.days.flatMap(day => day.sourceIds),
     ...monthPurchases.map(item => item.id),
+    ...(purchaseSummary?.relatedPurchaseIds || []),
     ...receivedWithholdingRows.map(item => item.id)
   ])].sort();
   const savedSourceIds = [...(savedDeclaration?.sourceIds || [])].sort();
@@ -113,7 +119,7 @@ export const IvaDeclaracionesView: React.FC = () => {
   ));
   const bcvRateChanged = Boolean(savedDeclaration && (!Number.isFinite(Number(savedDeclaration.bcvRate)) || Math.abs(Number(savedDeclaration.bcvRate) - Number(currentCompany.bcvRate)) > 0.000001));
   const draftNeedsRefresh = savedDeclaration?.status === 'DRAFT' && (
-    sourceIdsChanged || sourceChoicesChanged || bcvRateChanged || purchaseCreditGrossInvalid || dailySalesResolution.unresolvedDates.length > 0
+    sourceIdsChanged || sourceChoicesChanged || bcvRateChanged || Boolean(purchaseSummaryError) || dailySalesResolution.unresolvedDates.length > 0
   );
 
   const includedZSourceIds = new Set(dailySalesResolution.days
@@ -159,8 +165,8 @@ export const IvaDeclaracionesView: React.FC = () => {
         </article>
         <article className="rounded-xl border border-sky-200 bg-white p-4">
           <p className="text-xs font-semibold text-sky-800">IVA crédito bruto · Compras</p>
-          <p className="mt-2 text-xl font-black text-slate-900">{format(purchaseCredit)}</p>
-          <p className="mt-1 text-xs text-slate-600">Acreditable estimado: {purchaseCreditEligible === null ? 'Pendiente de conciliar ventas' : format(purchaseCreditEligible)}</p>
+          <p className="mt-2 text-xl font-black text-slate-900">{purchaseSummary ? format(purchaseCredit) : 'Pendiente'}</p>
+          <p className="mt-1 text-xs text-slate-600">Acreditable estimado: {purchaseCreditEligible === null ? 'Pendiente de conciliar' : format(purchaseCreditEligible)}</p>
           <p className="mt-1 text-xs text-slate-500">{monthPurchases.length} documentos · {purchaseCreditNonEligible === null ? 'prorrata pendiente' : 'No acreditable estimado: ' + format(purchaseCreditNonEligible)}</p>
         </article>
         <article className="rounded-xl border border-violet-200 bg-white p-4">
@@ -222,8 +228,9 @@ export const IvaDeclaracionesView: React.FC = () => {
           <p className="mt-2 text-sm text-slate-600">El IVA bruto se separa del monto acreditable. El estimado aplica el tratamiento gravado (100%), exento (0%) o común (prorrata según ventas gravadas y exentas).</p>
           <p className="mt-3 text-lg font-black text-sky-800">{purchaseCreditEligible === null ? 'Pendiente de conciliar' : format(purchaseCreditEligible)}</p>
           {prorationRate === null && <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs font-semibold text-amber-900">No existe una base válida de ventas gravadas y exentas para determinar la prorrata de las compras comunes. No se calculará el crédito ni se permitirá preparar la declaración hasta conciliar el período o definir correctamente el destino fiscal de las compras.</p>}
-          {purchaseCreditGrossInvalid && <p className="mt-2 rounded-lg bg-rose-50 p-2 text-xs font-semibold text-rose-900">Las notas de crédito superan el IVA bruto de compras de una alícuota del período. Debe conciliarse la factura original y el arrastre del crédito antes de preparar o actualizar el borrador.</p>}
-          <p className="mt-1 text-xs text-slate-500">IVA bruto: {format(purchaseCredit)} · No acreditable estimado: {purchaseCreditNonEligible === null ? '—' : format(purchaseCreditNonEligible)}</p>
+          {purchaseSummaryError && <p className="mt-2 rounded-lg bg-rose-50 p-2 text-xs font-semibold text-rose-900">{purchaseSummaryError}</p>}
+          {purchaseSummary && (purchaseCreditReversal > 0 || purchaseCreditReversalNonEligible > 0) && <p className="mt-2 rounded-lg bg-sky-50 p-2 text-xs font-semibold text-sky-900">Notas de crédito de períodos anteriores: reversión de crédito acreditable {format(purchaseCreditReversal)} · reversión de IVA no acreditable {format(purchaseCreditReversalNonEligible)}.</p>}
+          <p className="mt-1 text-xs text-slate-500">IVA bruto: {purchaseSummary ? format(purchaseCredit) : 'Pendiente'} · No acreditable estimado: {purchaseCreditNonEligible === null ? '—' : format(purchaseCreditNonEligible)}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-violet-700" /><h2 className="font-bold text-slate-900">Retenciones de IVA recibidas</h2></div>
@@ -235,7 +242,7 @@ export const IvaDeclaracionesView: React.FC = () => {
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h2 className="text-lg font-bold text-slate-900">Declaración mensual · Control y presentación</h2><p className="mt-1 text-sm text-slate-600">Prepara un borrador desde los libros, conserva las fuentes elegidas y registra presentación y enteramientos con su asiento contable.</p></div>
-          {!savedDeclaration && <button type="button" disabled={!isStorageReady || outputVat === null || prorationRate === null || purchaseCreditGrossInvalid} onClick={async()=>{
+          {!savedDeclaration && <button type="button" disabled={!isStorageReady || outputVat === null || prorationRate === null || Boolean(purchaseSummaryError)} onClick={async()=>{
             setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
             try { await createVatOwnDeclaration({period,choices:activeSourceChoices});setWorkflowMessage('Borrador de declaración guardado y confirmado en SQLite.'); }
             catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo preparar la declaración.');}
@@ -247,7 +254,7 @@ export const IvaDeclaracionesView: React.FC = () => {
           {savedDeclaration.status === 'DRAFT' && draftNeedsRefresh && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
             <p className="text-sm font-semibold text-amber-950">El borrador quedó desactualizado frente a los libros o la tasa BCV vigente. Revisa las fuentes diarias pendientes y actualízalo antes de presentarlo. La versión anterior se conservará en el historial.</p>
             {dailySalesResolution.unresolvedDates.length > 0 && <p className="text-xs text-amber-900">Fechas que requieren elegir una fuente: {dailySalesResolution.unresolvedDates.join(', ')}</p>}
-            <button type="button" disabled={workflowBusy || outputVat === null || prorationRate === null || purchaseCreditGrossInvalid || dailySalesResolution.unresolvedDates.length > 0} onClick={async()=>{
+            <button type="button" disabled={workflowBusy || outputVat === null || prorationRate === null || Boolean(purchaseSummaryError) || dailySalesResolution.unresolvedDates.length > 0} onClick={async()=>{
               setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
               try { await createVatOwnDeclaration({period,choices:activeSourceChoices,refresh:true});setWorkflowMessage('Borrador actualizado. La versión anterior quedó conservada en el historial.'); }
               catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo actualizar el borrador.');}
