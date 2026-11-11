@@ -57,3 +57,16 @@ test('does not require a workpaper attachment or note for a service credit note'
   const result = calculatePurchaseServiceCreditNote(draft({ workpaperNote: '' }));
   assert.equal(result.totalAmountBs, 116);
 });
+
+test('separates VAT 16% and non-creditable luxury tax 15% on a 31% service invoice', () => {
+  const combined: PurchaseRecord = {
+    ...source, taxRate: 31, taxableBaseBs: 1000, vatAmountBs: 160,
+    additionalLuxuryTaxBs: 150, totalAmountBs: 1310
+  };
+  const result = calculatePurchaseServiceCreditNote(draft({
+    purchase: combined, taxableBaseBs: 100
+  }));
+  assert.equal(result.vatAmountBs, 16);
+  assert.equal(result.additionalLuxuryTaxBs, 15);
+  assert.equal(result.totalAmountBs, 131);
+});
