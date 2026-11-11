@@ -295,22 +295,24 @@ export const LibroVentasView: React.FC = () => {
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-semibold text-slate-800 whitespace-nowrap">
                       {formatBs(s.taxableBaseBs)}
-                      {displayCurrency !== 'BS' && (
-                        <div className="text-[10px] text-slate-400 font-normal">
-                          {formatUsd(s.taxableBaseUsd)}
-                        </div>
-                      )}
+                      <div className="mt-1 space-y-0.5 text-[9px] font-normal text-slate-500">
+                        {s.taxRate === 16 && <div>Base 16%: {formatBs(s.taxableBaseBs)}</div>}
+                        {s.taxRate === 8 && <div>Base 8%: {formatBs(s.taxableBaseBs)}</div>}
+                        {s.taxRate === 31 && <div>Base 31% comp.: {formatBs(s.taxableBaseBs)}</div>}
+                      </div>
+                      {displayCurrency !== 'BS' && <div className="text-[10px] text-slate-400 font-normal">{formatUsd(s.taxableBaseUsd)}</div>}
                     </td>
                     <td className="py-2 px-2 text-center font-mono text-slate-600">
                       {s.taxRate}%
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap bg-emerald-50/30">
                       {formatBs(s.taxRate === 31 ? s.taxableBaseBs * 0.16 : s.vatAmountBs)}
-                      {displayCurrency !== 'BS' && (
-                        <div className="text-[10px] text-emerald-600/70 font-normal">
-                          {formatUsd(s.taxRate === 31 && s.bcvRate > 0 ? s.taxableBaseBs * 0.16 / s.bcvRate : s.vatAmountUsd)}
-                        </div>
-                      )}
+                      <div className="mt-1 space-y-0.5 text-[9px] font-normal text-emerald-700/80">
+                        {s.taxRate === 16 && <div>IVA 16%: {formatBs(s.vatAmountBs)}</div>}
+                        {s.taxRate === 8 && <div>IVA 8%: {formatBs(s.vatAmountBs)}</div>}
+                        {s.taxRate === 31 && <div>IVA comp. 16%: {formatBs(s.taxableBaseBs * 0.16)}</div>}
+                      </div>
+                      {displayCurrency !== 'BS' && <div className="text-[10px] text-emerald-600/70 font-normal">{formatUsd(s.taxRate === 31 && s.bcvRate > 0 ? s.taxableBaseBs * 0.16 / s.bcvRate : s.vatAmountUsd)}</div>}
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-amber-700 whitespace-nowrap bg-amber-50/30">
                       {s.taxRate === 31 ? formatBs(s.additionalLuxuryTaxBs ?? s.taxableBaseBs * 0.15) : '-'}
