@@ -5674,7 +5674,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           items.push({
             accountCode: account.code, accountName: account.name,
             debitBs: debit, creditBs: credit,
-            debitUsd: debit / declaration.bcvRate, creditUsd: credit / declaration.bcvRate,
+            debitUsd: debit / Number(declaration.bcvRate), creditUsd: credit / Number(declaration.bcvRate),
             description
           });
         };
@@ -5685,30 +5685,30 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         addLine(withholding, 0, declaration.position.receivedWithholdingsBs, 'Aplicación retenciones IVA recibidas · ' + declaration.period);
         addLine(input16, 0, declaration.position.priorCreditAppliedBs, 'Aplicación de crédito fiscal de períodos anteriores · ' + declaration.period);
         addLine(input16, declaration.position.creditCarryForwardBs, 0, 'Crédito fiscal trasladable al período siguiente · ' + declaration.period);
-        addLine(liability16, 0, declaration.position.amountDueBs, 'IVA neto por enterar · ' + declaration.period);
+        const netPayable = accounts.find(item => item.code === '2.1.2.09' && item.type === 'PASIVO' && item.isMovement);
+        if (declaration.position.amountDueBs > 0 && !netPayable) throw new Error('Falta la cuenta 2.1.2.09 para IVA neto por enterar.');
+        addLine(liability16, declaration.position.debitAdjustmentsBs, declaration.position.creditAdjustmentsBs, 'Ajustes fiscales de IVA · ' + declaration.period);
+        addLine(netPayable, 0, declaration.position.amountDueBs, 'IVA neto por enterar · ' + declaration.period);
         const debitBs = items.reduce((sum,item)=>sum+item.debitBs,0);
         const creditBs = items.reduce((sum,item)=>sum+item.creditBs,0);
         if (Math.abs(debitBs-creditBs)>0.02) throw new Error('El asiento de cierre de IVA no cuadra. Revise la conciliación de fuentes y créditos fiscales.');
-        const confirmation = waitForPersistence();
-        journal = addJournalEntry({
-          entryNumber: 0, date: declaration.period + '-01',
+        if (items.length) journal = addJournalEntry({
+          entryNumber: 0, date: draft.occurredAt.slice(0,10),
           description: 'Determinación mensual del IVA · ' + declaration.period,
           type: 'AJUSTE', bcvRate: declaration.bcvRate,
           referenceDoc: 'IVA-MENSUAL:' + declaration.period,
           items
         });
-        await confirmation;
       } else if (draft.eventType === 'PAYMENT') {
         const amountBs = Number(draft.amountBs || 0);
         const rate = Number(draft.bcvRate || 0);
         const treasury = accounts.find(item => item.code === draft.treasuryAccountCode &&
           item.type === 'ACTIVO' && item.isMovement && item.code.startsWith('1.1.1.'));
-        const liability = accounts.find(item => item.code === '2.1.2.01' && item.type === 'PASIVO' && item.isMovement);
+        const liability = accounts.find(item => item.code === '2.1.2.09' && item.type === 'PASIVO' && item.isMovement);
         if (!treasury || !liability || !Number.isFinite(rate) || rate <= 0) throw new Error('Seleccione una cuenta de tesorería válida e indique la tasa BCV del pago.');
-        const priorPaid = history.filter(item => item.eventType === 'PAYMENT' &&
-          !history.some(reversal => reversal.eventType === 'REVERSAL' && reversal.reversalOfEventId === item.id)
-        ).reduce((sum,item)=>sum+Number(item.amountBs || 0),0);
-        const historicalUsd = amountBs / declaration.bcvRate;
+        const declarationRate = Number(declaration.bcvRate);
+        if (!Number.isFinite(declarationRate) || declarationRate <= 0) throw new Error('La declaración no conserva una tasa BCV válida para valorar el pasivo.');
+        const historicalUsd = amountBs / declarationRate;
         const paymentUsd = amountBs / rate;
         const fx = historicalUsd - paymentUsd;
         const items: JournalEntryItem[] = [
@@ -5726,7 +5726,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           if (!loss) throw new Error('Falta la cuenta de pérdida por diferencial cambiario 6.1.1.08.');
           items.push({ accountCode: loss.code, accountName: loss.name, debitBs: 0, creditBs: 0, debitUsd: Math.abs(fx), creditUsd: 0, description: 'Pérdida cambiaria en pago de IVA' });
         }
-        const confirmation = waitForPersistence();
         journal = addJournalEntry({
           entryNumber: 0, date: draft.occurredAt.slice(0,10),
           description: 'Pago de IVA mensual · ' + declaration.period,
@@ -5734,7 +5733,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           referenceDoc: 'IVA-PAGO:' + declaration.id + ':' + draft.idempotencyKey,
           items
         });
-        await confirmation;
       } else if (draft.eventType === 'REVERSAL') {
         const original = history.find(item => item.id === draft.reversalOfEventId && item.eventType === 'PAYMENT');
         if (!original?.journalEntryId) throw new Error('El pago original no conserva asiento contable para revertir.');
