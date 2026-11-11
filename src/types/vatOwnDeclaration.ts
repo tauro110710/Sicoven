@@ -384,6 +384,12 @@ export function calculateVatOwnPosition(input: VatOwnPositionInput): VatOwnPosit
       Math.abs(purchaseCreditGrossBs - purchaseCreditBs - purchaseCreditNonEligibleBs) > 0.02) {
     throw new Error('El desglose de crédito fiscal acreditable, bruto y no acreditable no concilia.');
   }
+  const purchaseCreditReversalBs = amount(input.purchaseCreditReversalBs, 'Reversión de crédito fiscal de compras de períodos anteriores');
+  const purchaseCreditReversal16Bs = amount(input.purchaseCreditReversal16Bs, 'Reversión de crédito fiscal de compras 16%');
+  const purchaseCreditReversal8Bs = amount(input.purchaseCreditReversal8Bs, 'Reversión de crédito fiscal de compras 8%');
+  if (Math.abs(purchaseCreditReversal16Bs + purchaseCreditReversal8Bs - purchaseCreditReversalBs) > 0.02) {
+    throw new Error('El desglose de reversión de crédito fiscal 16% y 8% no concilia.');
+  }
   const receivedWithholdingsBs = amount(input.receivedWithholdingsBs, 'Retenciones de IVA recibidas');
   const priorCreditAvailableBs = amount(input.priorCreditBs, 'Crédito de períodos anteriores');
   const debitAdjustmentsBs = amount(input.debitAdjustmentsBs, 'Ajustes al débito');
