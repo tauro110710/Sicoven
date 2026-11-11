@@ -2028,6 +2028,212 @@ function vatDeclarationFixture(overrides = {}) {
   };
 }
 
+
+function vatOwnPositionFixture(overrides = {}) {
+  return {
+    outputVatBs: 100, outputVat16Bs: 100, outputVat8Bs: 0,
+    purchaseCreditBs: 0, purchaseCredit16Bs: 0, purchaseCredit8Bs: 0,
+    purchaseCreditGrossBs: 0, purchaseCreditGross16Bs: 0, purchaseCreditGross8Bs: 0,
+    purchaseCreditNonEligibleBs: 0, purchaseCreditReversalBs: 0,
+    purchaseCreditReversal16Bs: 0, purchaseCreditReversal8Bs: 0,
+    purchaseCreditReversalNonEligibleBs: 0, purchaseCreditReversalNonEligible16Bs: 0,
+    purchaseCreditReversalNonEligible8Bs: 0, prorationRate: 1,
+    taxableSalesBaseBs: 625, exemptSalesBaseBs: 0, receivedWithholdingsBs: 0,
+    priorCreditAppliedBs: 0, debitAdjustmentsBs: 0, creditAdjustmentsBs: 0,
+    creditAdjustments16Bs: 0, creditAdjustments8Bs: 0, netTaxBs: 100,
+    amountDueBs: 100, creditCarryForwardBs: 0, ...overrides
+  };
+}
+
+function vatOwnDeclarationFixture(overrides = {}) {
+  const declaration = {
+    id: 'vat-own-1', companyId: 'company-1', period: '2026-11',
+    status: 'DRAFT', position: vatOwnPositionFixture(),
+    sourceIds: [], relatedSourceIds: [], sourceSnapshots: {}, bcvRate: 874,
+    dailySourceChoices: {}, purchaseVatReclassificationItems: [],
+    createdAt: '2026-11-11T10:00:00.000Z'
+  };
+  return {
+    ...emptyState(),
+    companies: [{ id: 'company-1', name: 'Empresa Uno' }],
+    vatOwnDeclarations: [declaration],
+    vatOwnDeclarationEvents: [],
+    ...overrides
+  };
+}
+
+function vatOwnFilingEntry() {
+  return {
+    id: 'entry-iva-filed', companyId: 'company-1', entryNumber: 1,
+    date: '2026-11-11', description: 'Determinación mensual del IVA · 2026-11',
+    type: 'AJUSTE', bcvRate: 874, referenceDoc: 'IVA-MENSUAL:2026-11',
+    items: [
+      { accountCode: '2.1.2.01', accountName: 'IVA débito', debitBs: 100, creditBs: 0, debitUsd: 100 / 874, creditUsd: 0 },
+      { accountCode: '2.1.2.09', accountName: 'IVA por enterar', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 100 / 874 }
+    ],
+    createdAt: '2026-11-11T16:00:00.000Z'
+  };
+}
+
+function vatOwnFiledState() {
+  const base = vatOwnDeclarationFixture();
+  const journal = vatOwnFilingEntry();
+  const declaration = {
+    ...base.vatOwnDeclarations[0], status: 'FILED',
+    declarationNumber: 'IVA-2026-001', filedAt: '2026-11-11T12:00:00.000-04:00'
+  };
+  const event = {
+    id: 'vat-own-event-filed', declarationId: declaration.id, companyId: declaration.companyId,
+    eventType: 'FILED', occurredAt: declaration.filedAt, recordedAt: '2026-11-11T16:00:00.000Z',
+    declarationNumber: declaration.declarationNumber, idempotencyKey: 'FILED:' + declaration.id,
+    journalEntryId: journal.id
+  };
+  return {
+    ...base, vatOwnDeclarations: [declaration],
+    vatOwnDeclarationEvents: [event], journalEntries: [journal]
+  };
+}
+
+test('SQLite accepts a new IVA own-account draft with exact fiscal source snapshots', () => {
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), vatOwnDeclarationFixture()));
+});
+
+test('SQLite blocks deletion, direct filing and unversioned edits of IVA own-account drafts', () => {
+  const prior = vatOwnDeclarationFixture();
+  assert.throws(() => validateAccountingSnapshot(prior, { ...prior, vatOwnDeclarations: [] }), /eliminación de una declaración IVA/);
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...prior, vatOwnDeclarations: [{ ...prior.vatOwnDeclarations[0], status: 'FILED', declarationNumber: 'X', filedAt: '2026-11-11T12:00:00.000-04:00' }]
+  }), /insertar directamente una declaración IVA/);
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...prior, vatOwnDeclarations: [{ ...prior.vatOwnDeclarations[0], position: vatOwnPositionFixture({ amountDueBs: 90, netTaxBs: 90 }) }]
+  }), /no conserva una versión íntegra/);
+});
+
+test('SQLite accepts a versioned IVA own-account draft refresh and blocks mutation after filing', () => {
+  const prior = vatOwnDeclarationFixture();
+  const old = prior.vatOwnDeclarations[0];
+  const revision = {
+    revision: 1, revisedAt: '2026-11-11T11:00:00.000Z',
+    reason: 'Actualización por conciliación de documentos',
+    position: { ...old.position }, sourceIds: [...old.sourceIds],
+    relatedSourceIds: [...old.relatedSourceIds], bcvRate: old.bcvRate,
+    dailySourceChoices: { ...old.dailySourceChoices },
+    purchaseVatReclassificationItems: [], sourceSnapshots: {}, createdAt: old.createdAt
+  };
+  const updated = {
+    ...old, position: vatOwnPositionFixture({ outputVatBs: 120, outputVat16Bs: 120, netTaxBs: 120, amountDueBs: 120 }),
+    updatedAt: '2026-11-11T11:00:00.000Z', revisions: [revision]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, {
+    ...prior, vatOwnDeclarations: [updated]
+  }));
+  const filed = vatOwnFiledState();
+  assert.throws(() => validateAccountingSnapshot(filed, {
+    ...filed, vatOwnDeclarations: [{ ...filed.vatOwnDeclarations[0], declarationNumber: 'ALTERADA' }]
+  }), /declaración IVA ya presentada/);
+});
+
+test('SQLite requires the filed IVA own-account declaration to have exactly one matching filing event and determination entry', () => {
+  const filed = vatOwnFiledState();
+  assert.doesNotThrow(() => validateAccountingSnapshot(vatOwnDeclarationFixture(), filed));
+  assert.throws(() => validateAccountingSnapshot(vatOwnDeclarationFixture(), {
+    ...filed, vatOwnDeclarationEvents: []
+  }), /no coincide con su evento de presentación/);
+  assert.throws(() => validateAccountingSnapshot(vatOwnDeclarationFixture(), {
+    ...filed, vatOwnDeclarationEvents: [{
+      ...filed.vatOwnDeclarationEvents[0], declarationNumber: 'OTRO-NÚMERO'
+    }]
+  }), /número, fecha o asiento de determinación coincidente/);
+});
+
+test('SQLite validates partial IVA payments, prevents overpayment and protects their event history', () => {
+  const filed = vatOwnFiledState();
+  const paymentJournal = {
+    id: 'entry-iva-payment', companyId: 'company-1', entryNumber: 2,
+    date: '2026-11-11', description: 'Pago IVA mensual', type: 'AJUSTE',
+    bcvRate: 874, referenceDoc: 'IVA-PAGO:vat-own-1:PAYMENT:TRX-001',
+    items: [
+      { accountCode: '2.1.2.09', debitBs: 50, creditBs: 0, debitUsd: 50 / 874, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 50 / 874 }
+    ], createdAt: '2026-11-11T17:00:00.000Z'
+  };
+  const payment = {
+    id: 'vat-own-event-payment', declarationId: 'vat-own-1', companyId: 'company-1',
+    eventType: 'PAYMENT', occurredAt: '2026-11-11T13:00:00.000-04:00',
+    recordedAt: '2026-11-11T17:00:00.000Z', amountBs: 50, reference: 'TRX-001',
+    idempotencyKey: 'PAYMENT:vat-own-1:TRX-001', journalEntryId: paymentJournal.id,
+    treasuryAccountCode: '1.1.1.01', bcvRate: 874
+  };
+  const withPayment = {
+    ...filed, journalEntries: [...filed.journalEntries, paymentJournal],
+    vatOwnDeclarationEvents: [...filed.vatOwnDeclarationEvents, payment]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(filed, withPayment));
+  assert.throws(() => validateAccountingSnapshot(filed, {
+    ...withPayment,
+    vatOwnDeclarationEvents: [...withPayment.vatOwnDeclarationEvents, {
+      ...payment, id: 'vat-own-event-overpay', idempotencyKey: 'PAYMENT:OVER',
+      reference: 'TRX-002', amountBs: 60
+    }]
+  }), /saldo disponible/);
+  assert.throws(() => validateAccountingSnapshot(withPayment, {
+    ...withPayment,
+    vatOwnDeclarationEvents: withPayment.vatOwnDeclarationEvents.filter(item => item.id !== payment.id)
+  }), /eliminación del registro histórico en vatOwnDeclarationEvents/);
+});
+
+test('SQLite accepts one linked IVA payment reversal and rejects duplicate or unrelated reversals', () => {
+  const filed = vatOwnFiledState();
+  const paymentJournal = {
+    id: 'entry-iva-payment', companyId: 'company-1', entryNumber: 2,
+    date: '2026-11-11', description: 'Pago IVA mensual', type: 'AJUSTE',
+    bcvRate: 874, referenceDoc: 'IVA-PAGO:vat-own-1:PAYMENT:TRX-001',
+    items: [
+      { accountCode: '2.1.2.09', debitBs: 50, creditBs: 0, debitUsd: 50 / 874, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 50 / 874 }
+    ], createdAt: '2026-11-11T17:00:00.000Z'
+  };
+  const payment = {
+    id: 'vat-own-event-payment', declarationId: 'vat-own-1', companyId: 'company-1',
+    eventType: 'PAYMENT', occurredAt: '2026-11-11T13:00:00.000-04:00',
+    recordedAt: '2026-11-11T17:00:00.000Z', amountBs: 50, reference: 'TRX-001',
+    idempotencyKey: 'PAYMENT:vat-own-1:TRX-001', journalEntryId: paymentJournal.id,
+    treasuryAccountCode: '1.1.1.01', bcvRate: 874
+  };
+  const paid = {
+    ...filed, journalEntries: [...filed.journalEntries, paymentJournal],
+    vatOwnDeclarationEvents: [...filed.vatOwnDeclarationEvents, payment]
+  };
+  const reversalJournal = {
+    id: 'entry-iva-reversal', companyId: 'company-1', entryNumber: 3,
+    date: '2026-11-11', description: 'Reversión de pago IVA', type: 'AJUSTE',
+    bcvRate: 874, referenceDoc: 'REV-IVA-PAGO-1', reversalOfEntryId: paymentJournal.id,
+    items: [
+      { accountCode: '1.1.1.01', debitBs: 50, creditBs: 0, debitUsd: 50 / 874, creditUsd: 0 },
+      { accountCode: '2.1.2.09', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 50 / 874 }
+    ], createdAt: '2026-11-11T18:00:00.000Z'
+  };
+  const reversal = {
+    id: 'vat-own-event-reversal', declarationId: 'vat-own-1', companyId: 'company-1',
+    eventType: 'REVERSAL', occurredAt: '2026-11-11T14:00:00.000-04:00',
+    recordedAt: '2026-11-11T18:00:00.000Z', idempotencyKey: 'REVERSAL:vat-own-event-payment',
+    reversalOfEventId: payment.id, journalEntryId: reversalJournal.id,
+    note: 'Reversión por referencia bancaria incorrecta'
+  };
+  const reversed = {
+    ...paid, journalEntries: [...paid.journalEntries, reversalJournal],
+    vatOwnDeclarationEvents: [...paid.vatOwnDeclarationEvents, reversal]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(paid, reversed));
+  assert.throws(() => validateAccountingSnapshot(paid, {
+    ...reversed,
+    vatOwnDeclarationEvents: [...reversed.vatOwnDeclarationEvents, {
+      ...reversal, id: 'vat-own-event-reversal-2', idempotencyKey: 'REVERSAL:duplicate',
+      journalEntryId: reversalJournal.id
+    }]
+  }), /reversión de un pago IVA/);
+});
+
 test('SQLite accepts an immutable VAT withholding declaration snapshot with exact voucher totals', () => {
   assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), vatDeclarationFixture()));
 });
