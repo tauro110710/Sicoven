@@ -269,18 +269,21 @@ export const IvaDeclaracionesView: React.FC = () => {
               <p className="text-slate-500">{revision.reason}</p>
             </div>)}</div>
           </details>}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-7">
             <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">IVA débito</p><strong>{format(savedDeclaration.position.outputVatBs)}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">Crédito acreditable</p><strong>{format(savedDeclaration.position.purchaseCreditBs)}</strong><p className="mt-1 text-[10px] text-slate-500">Bruto: {format(savedDeclaration.position.purchaseCreditGrossBs)}</p></div>
             <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">Retenciones recibidas</p><strong>{format(savedDeclaration.position.receivedWithholdingsBs)}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">IVA por enterar</p><strong>{format(savedDeclaration.position.amountDueBs)}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">Crédito trasladable</p><strong>{format(savedDeclaration.position.creditCarryForwardBs)}</strong></div>
+            <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">Reversión crédito previo</p><strong>{format(savedDeclaration.position.purchaseCreditReversalBs)}</strong></div>
+            <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">IVA no acreditable reclasificado</p><strong>{format(savedDeclaration.position.purchaseCreditNonEligibleBs + savedDeclaration.position.purchaseCreditReversalNonEligibleBs)}</strong></div>
           </div>
           <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-100 p-3 text-xs sm:grid-cols-2">
             <div><strong>Desglose del débito fiscal:</strong> IVA 16% (incluye base 31%): {format(savedDeclaration.position.outputVat16Bs)} · IVA 8%: {format(savedDeclaration.position.outputVat8Bs)}</div>
             <div><strong>Desglose del crédito fiscal:</strong> Compras 16%: {format(savedDeclaration.position.purchaseCredit16Bs)} · Compras 8%: {format(savedDeclaration.position.purchaseCredit8Bs)}</div>
           </div>
           <p className="text-xs text-slate-500">El impuesto adicional del 15% y el IGTF se mantienen separados del IVA acreditable y del débito fiscal; no se suman como IVA en la declaración mensual.</p>
+          <p className="text-xs text-slate-500">El asiento de determinación reclasifica el IVA no acreditable hacia las mismas cuentas de inventario, costo, gasto o activo utilizadas por las compras de origen. Líneas de reclasificación: {savedDeclaration.purchaseVatReclassificationItems?.length || 0}.</p>
           {savedDeclaration.status==='DRAFT' ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
             <p className="text-sm font-semibold text-amber-950">Al presentar, SICOVEN registra el número oficial y el asiento de determinación mensual. El borrador y sus documentos fuente permanecen conservados.</p>
             <div className="flex flex-wrap gap-2"><input value={declarationNumber} onChange={event=>setDeclarationNumber(event.target.value)} placeholder="Número oficial de declaración" className="min-w-[220px] flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
