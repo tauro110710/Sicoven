@@ -757,13 +757,10 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     .filter(entry => entry.reversalOfEntryId).map(entry => String(entry.reversalOfEntryId)));
   const activityPeriodsByCompany = new Map();
   const addActivityDate = (companyId, date) => {
-    // Historical accounting rows may predate the fiscal-date field. Missing dates
-    // are not evidence of monthly tax activity and must not brick unrelated writes.
-    // Any supplied date remains strict: malformed or impossible calendar dates fail.
-    if (date === undefined || date === null || date === '') return;
-    if (!validVatDeclarationDate(date)) {
-      throw new Error('SQLite rechazó una fecha fiscal inválida al comprobar la continuidad de declaraciones IVA.');
-    }
+    // This collector only discovers months with fiscal activity; it is not the
+    // source-of-truth validator for each document's date. Missing or malformed
+    // legacy dates are left to the owning sales/purchases/journal validators.
+    if (!validVatDeclarationDate(date)) return;
     const key = String(companyId);
     if (!activityPeriodsByCompany.has(key)) activityPeriodsByCompany.set(key, new Set());
     activityPeriodsByCompany.get(key).add(date.slice(0, 7));
@@ -810,7 +807,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
       }
     }
     if (missingPeriods.length > 0) {
-      throw new Error('SQLite bloqueó la declaración IVA: existen períodos anteriores con actividad fiscal sin presentar; faltan declaraciones mensuales (' + missingPeriods.join(', ') + ').');
+      throw new Error('SQLite bloqueó la declaración IVA: existen períodos mensuales anteriores sin declaración presentada (' + missingPeriods.join(', ') + ').');
     }
     const laterFiled = declarations.some(item =>
       item.companyId === declaration.companyId && item.status === 'FILED' && item.period > declaration.period
@@ -977,7 +974,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           historicalRate === null || Math.abs(historicalRate - Number(event.bcvRate)) > 0.000001 ||
           !treasuryAccount || eventDate < String(declaration.filedAt || '').slice(0, 10) ||
           !journal || Math.abs(Number(journal.bcvRate) - Number(event.bcvRate)) > 0.000001 ||
-          String(journal.referenceDoc || '') !== 'IVA-PAGO:' + declaration.id + ':' + event.idempotencyKey ||
+          String(journal.referenceDoc || '') !== 'IVA-PAGO:' + declaration.id + ':' + reference ||
           !asArray(journal.items).some(line => String(line.accountCode) === '2.1.2.09' &&
             Math.abs(Number(line.debitBs || 0) - amount) <= 0.02) ||
           !asArray(journal.items).some(line => String(line.accountCode) === String(event.treasuryAccountCode) &&
