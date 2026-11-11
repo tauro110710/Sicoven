@@ -59,6 +59,7 @@ test('accepts valid monthly declaration periods and rejects malformed months', (
   assert.equal(isValidVatOwnDeclarationPeriod('2026-11'), true);
   assert.equal(isValidVatOwnDeclarationPeriod('2026-01'), true);
   assert.equal(isValidVatOwnDeclarationPeriod('2026-12'), true);
+  assert.equal(isValidVatOwnDeclarationPeriod(' 2026-11 '), true);
   assert.equal(isValidVatOwnDeclarationPeriod('2026-00'), false);
   assert.equal(isValidVatOwnDeclarationPeriod('2026-13'), false);
   assert.equal(isValidVatOwnDeclarationPeriod('2026-1'), false);
