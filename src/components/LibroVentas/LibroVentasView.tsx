@@ -21,7 +21,7 @@ import { JournalReversalModal } from '../LibroDiario/JournalReversalModal';
 import { SaleCorrectionNoteModal } from './SaleCorrectionNoteModal';
 import { FiscalZReportModal } from './FiscalZReportModal';
 import { resolveVatOwnDailySalesSources } from '../../types/vatOwnDeclaration';
-import { filterCompanyFiscalDocuments } from '../../types/companyFiscalDocuments';
+import { filterCompanyFiscalDocuments, filterActiveFiscalDocuments } from '../../types/companyFiscalDocuments';
 
 export const LibroVentasView: React.FC = () => {
   const {
@@ -49,7 +49,7 @@ export const LibroVentasView: React.FC = () => {
   const handleExportCsv = () => {
     const headers = ['Fecha','RIF / C.I.','Razón Social / Nombre','Tipo','N° Factura','N° Control','N° NC','Total USD','Total Facturado Bs.','Exento Bs.','Base 16% Bs.','IVA 16% Bs.','Base 8% Bs.','IVA 8% Bs.','Base 31% Bs.','IVA componente 16% Bs.','Impuesto adicional 15% Bs.','IGTF 3% Bs.','Tasa BCV','Origen','Cómputo fiscal'];
     const esc = (value: unknown) => '"' + String(value ?? '').replace(/"/g, '""') + '"';
-    const rows: (string | number)[][] = filteredSales.map(s => {
+    const rows: (string | number)[][] = activeSales.map(s => {
       const sign = s.documentType === '03' ? -1 : 1;
       const base16 = s.taxRate === 16 ? s.taxableBaseBs : 0;
       const base8 = s.taxRate === 8 ? s.taxableBaseBs : 0;
@@ -75,7 +75,7 @@ export const LibroVentasView: React.FC = () => {
   const handleExportPdf = async () => {
     try {
       setIsExportingPdf(true);
-      await exportVentasPdf(currentCompany, filteredSales, monthFilter, filteredZReports, dailySourceChoices);
+      await exportVentasPdf(currentCompany, activeSales, monthFilter, filteredZReports, dailySourceChoices);
     } catch (err) {
       console.error('Error exporting Ventas PDF:', err);
       window.alert('No se pudo generar el PDF del Libro de Ventas: ' + (err instanceof Error ? err.message : String(err)));
@@ -101,27 +101,29 @@ export const LibroVentasView: React.FC = () => {
     })
     .sort((a, b) => a.opNumber - b.opNumber);
 
+  const activeSales = filterActiveFiscalDocuments(filteredSales);
+
   const filteredZReports = journalEntries
     .filter(entry => entry.companyId === currentCompany.id && entry.fiscalZReport)
-    .filter(entry => !monthFilter || entry.date.startsWith(monthFilter))
-    .sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber);
+    .filter(entry => !monthFilter || String(entry.fiscalZReport?.date || entry.date).startsWith(monthFilter))
+    .sort((a, b) => String(a.fiscalZReport?.date || a.date).localeCompare(String(b.fiscalZReport?.date || b.date)) || a.entryNumber - b.entryNumber);
 
   // NC reduce el libro; ND incrementa sus importes. El documento original permanece intacto.
   const signed = (document: import('../../types/accounting').SaleRecord, amount: number) =>
     (document.documentType === '03' ? -1 : 1) * Number(amount || 0);
-  const totalVentasConIvaBs = filteredSales.reduce((s, x) => s + signed(x, x.totalAmountBs), 0);
-  const totalExentoBs = filteredSales.reduce((s, x) => s + signed(x, x.exemptAmountBs || 0), 0);
-  const totalBaseBs = filteredSales.reduce((s, x) => s + signed(x, x.taxableBaseBs), 0);
-  const totalIvaDebitoBs = filteredSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? x.taxableBaseBs * 0.16 : x.vatAmountBs), 0);
-  const totalLuxuryTaxBs = filteredSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? (x.additionalLuxuryTaxBs ?? x.taxableBaseBs * 0.15) : 0), 0);
-  const totalLuxuryTaxUsd = filteredSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? (x.additionalLuxuryTaxUsd ?? (x.bcvRate > 0 ? x.taxableBaseBs * 0.15 / x.bcvRate : 0)) : 0), 0);
-  const totalIvaRetenidoBs = filteredSales.reduce((s, x) => s + signed(x, x.vatWithheldBs || 0), 0);
-  const totalIgtfBs = filteredSales.reduce((s, x) => s + signed(x, x.igtfAmountBs || 0), 0);
+  const totalVentasConIvaBs = activeSales.reduce((s, x) => s + signed(x, x.totalAmountBs), 0);
+  const totalExentoBs = activeSales.reduce((s, x) => s + signed(x, x.exemptAmountBs || 0), 0);
+  const totalBaseBs = activeSales.reduce((s, x) => s + signed(x, x.taxableBaseBs), 0);
+  const totalIvaDebitoBs = activeSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? x.taxableBaseBs * 0.16 : x.vatAmountBs), 0);
+  const totalLuxuryTaxBs = activeSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? (x.additionalLuxuryTaxBs ?? x.taxableBaseBs * 0.15) : 0), 0);
+  const totalLuxuryTaxUsd = activeSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? (x.additionalLuxuryTaxUsd ?? (x.bcvRate > 0 ? x.taxableBaseBs * 0.15 / x.bcvRate : 0)) : 0), 0);
+  const totalIvaRetenidoBs = activeSales.reduce((s, x) => s + signed(x, x.vatWithheldBs || 0), 0);
+  const totalIgtfBs = activeSales.reduce((s, x) => s + signed(x, x.igtfAmountBs || 0), 0);
 
-  const totalVentasConIvaUsd = filteredSales.reduce((s, x) => s + signed(x, x.totalAmountUsd), 0);
-  const totalBaseUsd = filteredSales.reduce((s, x) => s + signed(x, x.taxableBaseUsd), 0);
-  const totalIvaDebitoUsd = filteredSales.reduce((s, x) => s + signed(x, x.taxRate === 31 && x.bcvRate > 0 ? x.taxableBaseBs * 0.16 / x.bcvRate : x.vatAmountUsd), 0);
-  const totalIvaRetenidoUsd = filteredSales.reduce((s, x) => s + signed(x, x.vatWithheldUsd || 0), 0);
+  const totalVentasConIvaUsd = activeSales.reduce((s, x) => s + signed(x, x.totalAmountUsd), 0);
+  const totalBaseUsd = activeSales.reduce((s, x) => s + signed(x, x.taxableBaseUsd), 0);
+  const totalIvaDebitoUsd = activeSales.reduce((s, x) => s + signed(x, x.taxRate === 31 && x.bcvRate > 0 ? x.taxableBaseBs * 0.16 / x.bcvRate : x.vatAmountUsd), 0);
+  const totalIvaRetenidoUsd = activeSales.reduce((s, x) => s + signed(x, x.vatWithheldUsd || 0), 0);
 
   const dailySalesResolution = useMemo(() => resolveVatOwnDailySalesSources({
     zReports: filteredZReports.map(entry => ({
@@ -131,7 +133,7 @@ export const LibroVentasView: React.FC = () => {
       taxableBase31Bs: entry.fiscalZReport!.taxableBase31Bs, vat31Bs: entry.fiscalZReport!.vat31Bs,
       exemptSalesBs: entry.fiscalZReport!.exemptSalesBs
     })),
-    sales: filteredSales.filter(item => !item.isCancelled).map(item => ({
+    sales: activeSales.map(item => ({
       id: item.id, date: item.invoiceDate, documentType: item.documentType,
       taxableBaseBs: item.taxableBaseBs, taxRate: item.taxRate,
       vatAmountBs: item.vatAmountBs, exemptAmountBs: item.exemptAmountBs
@@ -142,7 +144,7 @@ export const LibroVentasView: React.FC = () => {
     .filter(day => day.source === 'INDIVIDUAL').flatMap(day => day.sourceIds));
   const selectedZIds = new Set(dailySalesResolution.days
     .filter(day => day.source === 'Z').flatMap(day => day.sourceIds));
-  const selectedIndividualSales = filteredSales.filter(s => selectedIndividualIds.has(s.id));
+  const selectedIndividualSales = activeSales.filter(s => selectedIndividualIds.has(s.id));
   const selectedZReports = filteredZReports.filter(entry => selectedZIds.has(entry.id));
   const totalFiscalBaseBs = dailySalesResolution.days.reduce((sum, day) =>
     sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);

@@ -10,3 +10,8 @@ export function filterCompanyFiscalDocuments<T extends { companyId?: string | nu
   if (!companyId.trim()) return [];
   return records.filter(record => record.companyId === companyId);
 }
+
+/** Excludes cancelled documents from fiscal totals and active exports. */
+export function filterActiveFiscalDocuments<T extends { isCancelled?: boolean | null }>(records: readonly T[]): T[] {
+  return records.filter(record => record.isCancelled !== true);
+}

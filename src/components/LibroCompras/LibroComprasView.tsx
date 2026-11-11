@@ -26,7 +26,7 @@ import { SupplierAdvanceSettlementModal } from './SupplierAdvanceSettlementModal
 import { getPurchaseAccountCreditDate, type PurchaseRecord } from '../../types/accounting';
 import { SupportingDocumentsPanel } from '../shared/SupportingDocumentsPanel';
 import { JournalReversalModal } from '../LibroDiario/JournalReversalModal';
-import { filterCompanyFiscalDocuments } from '../../types/companyFiscalDocuments';
+import { filterCompanyFiscalDocuments, filterActiveFiscalDocuments } from '../../types/companyFiscalDocuments';
 
 export const LibroComprasView: React.FC = () => {
   const {
@@ -54,7 +54,7 @@ export const LibroComprasView: React.FC = () => {
   const handleExportPdf = async () => {
     try {
       setIsExportingPdf(true);
-      await exportComprasPdf(currentCompany, filteredPurchases, monthFilter);
+      await exportComprasPdf(currentCompany, fiscalPurchases, monthFilter);
     } catch (err) {
       console.error('Error generating PDF:', err);
       window.alert('No se pudo generar el PDF del Libro de Compras: ' + (err instanceof Error ? err.message : String(err)));
@@ -82,7 +82,7 @@ export const LibroComprasView: React.FC = () => {
 
   // Las facturas y ND aumentan los importes del período; las NC los disminuyen.
   // Se registran en el mes de emisión/recepción, conservando el documento original.
-  const fiscalPurchases = filteredPurchases.filter(p => !p.isCancelled);
+  const fiscalPurchases = filterActiveFiscalDocuments(filteredPurchases);
   const sign = (purchase: PurchaseRecord) => purchase.documentType === '03' ? -1 : 1;
   const signed = (purchase: PurchaseRecord, amount: number) => sign(purchase) * Number(amount || 0);
   const totalComprasConIvaBs = fiscalPurchases.reduce((s, p) => s + signed(p, p.totalAmountBs), 0);
