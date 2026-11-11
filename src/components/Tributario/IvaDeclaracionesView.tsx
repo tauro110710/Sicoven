@@ -60,12 +60,35 @@ export const IvaDeclaracionesView: React.FC = () => {
     ? null
     : dailySalesResolution.days.reduce((sum, day) => sum + day.outputVatBs, 0);
 
-  const purchaseCredit = monthPurchases.reduce((sum, item) =>
-    sum + signedDocument(item.documentType) * money(item.vatAmountBs), 0);
+  const purchaseCreditGross16 = monthPurchases.filter(item => item.taxRate !== 8)
+    .reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatAmountBs), 0);
+  const purchaseCreditGross8 = monthPurchases.filter(item => item.taxRate === 8)
+    .reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatAmountBs), 0);
+  const purchaseCredit = purchaseCreditGross16 + purchaseCreditGross8;
+  const taxableSalesBase = dailySalesResolution.days.reduce((sum, day) =>
+    sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
+  const exemptSalesBase = dailySalesResolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
+  const salesDenominator = taxableSalesBase + exemptSalesBase;
+  const prorationRate = salesDenominator > 0 ? taxableSalesBase / salesDenominator : 1;
+  const purchaseCreditEligible = outputVat === null ? null : Math.max(0, monthPurchases
+    .filter(item => item.taxRate !== 8)
+    .reduce((sum, item) => {
+      const treatment = item.vatCreditTreatment || 'COMMON';
+      const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : prorationRate;
+      return sum + signedDocument(item.documentType) * money(item.vatAmountBs) * factor;
+    }, 0)) + Math.max(0, monthPurchases
+    .filter(item => item.taxRate === 8)
+    .reduce((sum, item) => {
+      const treatment = item.vatCreditTreatment || 'COMMON';
+      const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : prorationRate;
+      return sum + signedDocument(item.documentType) * money(item.vatAmountBs) * factor;
+    }, 0));
+  const purchaseCreditNonEligible = purchaseCreditEligible === null ? null : Math.max(0, purchaseCredit - purchaseCreditEligible);
   const priorCredit = vatOwnDeclarations.filter(item => item.companyId === currentCompany.id && item.status === 'FILED' && item.period < period)
     .sort((a,b)=>b.period.localeCompare(a.period))[0]?.position.creditCarryForwardBs || 0;
   const receivedWithholdings = getReceivedVatWithholdingSales(sales, currentCompany.id, period).reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatWithheldBs), 0);
-  const preliminaryBalance = outputVat === null ? null : outputVat - purchaseCredit - receivedWithholdings - priorCredit;
+  const preliminaryBalance = outputVat === null || purchaseCreditEligible === null
+    ? null : outputVat - purchaseCreditEligible - receivedWithholdings - priorCredit;
 
   const includedZSourceIds = new Set(dailySalesResolution.days
     .filter(day => day.source === 'Z')
@@ -109,9 +132,10 @@ export const IvaDeclaracionesView: React.FC = () => {
           <p className="mt-1 text-xs text-slate-500">{monthSales.length} documentos · {monthZ.length} reportes Z</p>
         </article>
         <article className="rounded-xl border border-sky-200 bg-white p-4">
-          <p className="text-xs font-semibold text-sky-800">IVA crédito · Compras</p>
+          <p className="text-xs font-semibold text-sky-800">IVA crédito bruto · Compras</p>
           <p className="mt-2 text-xl font-black text-slate-900">{format(purchaseCredit)}</p>
-          <p className="mt-1 text-xs text-slate-500">{monthPurchases.length} documentos de compra</p>
+          <p className="mt-1 text-xs text-slate-600">Acreditable estimado: {purchaseCreditEligible === null ? 'Pendiente de conciliar ventas' : format(purchaseCreditEligible)}</p>
+          <p className="mt-1 text-xs text-slate-500">{monthPurchases.length} documentos · {purchaseCreditNonEligible === null ? 'prorrata pendiente' : 'No acreditable estimado: ' + format(purchaseCreditNonEligible)}</p>
         </article>
         <article className="rounded-xl border border-violet-200 bg-white p-4">
           <p className="text-xs font-semibold text-violet-800">Retenciones recibidas</p>
@@ -121,7 +145,7 @@ export const IvaDeclaracionesView: React.FC = () => {
         <article className={`rounded-xl border p-4 ${preliminaryBalance !== null && preliminaryBalance >= 0 ? 'border-amber-300 bg-amber-50/50' : 'border-teal-300 bg-teal-50/50'}`}>
           <p className="text-xs font-semibold text-slate-700">Saldo preliminar del período</p>
           <p className="mt-2 text-xl font-black text-slate-900">{preliminaryBalance === null ? 'Conciliar' : format(Math.abs(preliminaryBalance))}</p>
-          <p className="mt-1 text-xs font-semibold text-slate-600">{preliminaryBalance === null ? 'No se calcula para evitar doble conteo' : preliminaryBalance >= 0 ? 'Estimación por pagar' : 'Saldo a favor preliminar'}</p>
+          <p className="mt-1 text-xs font-semibold text-slate-600">{preliminaryBalance === null ? 'Resuelve fuentes diarias para calcular crédito acreditable' : preliminaryBalance >= 0 ? 'Estimación usando crédito acreditable y prorrata' : 'Saldo a favor preliminar usando crédito acreditable'}</p>
         </article>
       </section>
 
@@ -131,7 +155,7 @@ export const IvaDeclaracionesView: React.FC = () => {
           <div className="text-sm text-amber-950">
             <p className="font-bold">Control previo a la declaración; no es todavía una declaración SENIAT ni un pago registrado.</p>
             {dailySalesResolution.unresolvedDates.length > 0 && <p className="mt-2 font-bold">Selecciona para cada fecha coincidente si el contador registró las ventas mediante el Reporte Z o mediante facturas individuales. SICOVEN incluirá una sola fuente por día.</p>}
-            <p className="mt-1">El crédito fiscal de compras y las retenciones deben validarse contra sus comprobantes, requisitos de deducibilidad y período fiscal. Los reportes Z de POS externo se muestran como soporte operativo y requieren conciliación con los documentos fiscales exigibles. Si también se registraron esas mismas facturas individualmente, no deben computarse dos veces. Este saldo no sustituye la revisión del contador ni la Forma 30.</p>
+            <p className="mt-1">El IVA bruto de compras no equivale automáticamente al crédito acreditable: el estimado aplica el tratamiento gravado/exento/común y la prorrata sobre las ventas seleccionadas. El cálculo definitivo se conserva en el borrador. El crédito fiscal y las retenciones deben validarse contra sus comprobantes, requisitos de deducibilidad y período fiscal. Los reportes Z de POS externo se muestran como soporte operativo y requieren conciliación con los documentos fiscales exigibles. Si también se registraron esas mismas facturas individualmente, no deben computarse dos veces. Este saldo no sustituye la revisión del contador ni la Forma 30.</p>
           </div>
         </div>
       </section>
@@ -169,8 +193,9 @@ export const IvaDeclaracionesView: React.FC = () => {
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <article className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2"><ShoppingCart className="h-4 w-4 text-sky-700" /><h2 className="font-bold text-slate-900">Crédito fiscal de compras</h2></div>
-          <p className="mt-2 text-sm text-slate-600">Se calcula desde las facturas y notas registradas en el Libro de Compras para el mes seleccionado. Debe cotejarse con el libro, comprobantes y tratamiento fiscal de cada operación.</p>
-          <p className="mt-3 text-lg font-black text-sky-800">{format(purchaseCredit)}</p>
+          <p className="mt-2 text-sm text-slate-600">El IVA bruto se separa del monto acreditable. El estimado aplica el tratamiento gravado (100%), exento (0%) o común (prorrata según ventas gravadas y exentas); queda pendiente si hay días de ventas sin resolver.</p>
+          <p className="mt-3 text-lg font-black text-sky-800">{purchaseCreditEligible === null ? 'Pendiente de conciliar' : format(purchaseCreditEligible)}</p>
+          <p className="mt-1 text-xs text-slate-500">IVA bruto: {format(purchaseCredit)} · No acreditable estimado: {purchaseCreditNonEligible === null ? '—' : format(purchaseCreditNonEligible)}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-violet-700" /><h2 className="font-bold text-slate-900">Retenciones de IVA recibidas</h2></div>
@@ -193,7 +218,7 @@ export const IvaDeclaracionesView: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2 text-xs"><span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700">{savedDeclaration.period}</span><span className={`rounded-full px-3 py-1 font-bold ${savedDeclaration.status==='FILED'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}`}>{savedDeclaration.status==='FILED'?'PRESENTADA':'BORRADOR'}</span>{savedDeclaration.declarationNumber && <span className="font-mono text-slate-600">N° {savedDeclaration.declarationNumber}</span>}<span className="text-slate-500">Fuentes vinculadas: {savedDeclaration.sourceIds.length}</span></div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
             <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">IVA débito</p><strong>{format(savedDeclaration.position.outputVatBs)}</strong></div>
-            <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">Crédito de compras</p><strong>{format(savedDeclaration.position.purchaseCreditBs)}</strong></div>
+            <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">Crédito acreditable</p><strong>{format(savedDeclaration.position.purchaseCreditBs)}</strong><p className="mt-1 text-[10px] text-slate-500">Bruto: {format(savedDeclaration.position.purchaseCreditGrossBs)}</p></div>
             <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">Retenciones recibidas</p><strong>{format(savedDeclaration.position.receivedWithholdingsBs)}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">IVA por enterar</p><strong>{format(savedDeclaration.position.amountDueBs)}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">Crédito trasladable</p><strong>{format(savedDeclaration.position.creditCarryForwardBs)}</strong></div>
