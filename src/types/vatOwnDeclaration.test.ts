@@ -49,6 +49,28 @@ test('calculates debit, credits, prior credit, payable and carry-forward', () =>
   assert.equal(position.creditCarryForwardBs, 0);
 });
 
+test('separates IVA débito 16% and 8% for the monthly ledger', () => {
+  const position = calculateVatOwnPosition({
+    outputVatBs: 240, outputVat16Bs: 160, outputVat8Bs: 80,
+    purchaseCreditBs: 20, purchaseCredit16Bs: 12, purchaseCredit8Bs: 8,
+    receivedWithholdingsBs: 10
+  });
+  assert.equal(position.outputVat16Bs, 160);
+  assert.equal(position.outputVat8Bs, 80);
+  assert.equal(position.purchaseCredit16Bs, 12);
+  assert.equal(position.purchaseCredit8Bs, 8);
+  assert.equal(position.amountDueBs, 210);
+});
+
+test('applies only the prior credit needed and carries the unused balance forward', () => {
+  const position = calculateVatOwnPosition({
+    outputVatBs: 100, purchaseCreditBs: 20, receivedWithholdingsBs: 10, priorCreditBs: 1000
+  });
+  assert.equal(position.priorCreditAppliedBs, 70);
+  assert.equal(position.amountDueBs, 0);
+  assert.equal(position.creditCarryForwardBs, 930);
+});
+
 test('preserves excess credits as a carry-forward, not a negative payable', () => {
   const position = calculateVatOwnPosition({
     outputVatBs: 100,
