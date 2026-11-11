@@ -2162,6 +2162,20 @@ test('SQLite rechecks fiscal source snapshots at the exact moment an IVA draft i
   }), /huellas fiscales del borrador ya no coinciden/);
 });
 
+test('SQLite rejects IVA reclassification lines whose USD values do not match the BCV conversion', () => {
+  const fixture = vatOwnDeclarationFixture();
+  const declaration = {
+    ...fixture.vatOwnDeclarations[0],
+    purchaseVatReclassificationItems: [
+      { accountCode: '1.1.4.01', debitBs: 80, creditBs: 0, debitUsd: 0.5, creditUsd: 0 },
+      { accountCode: '1.1.3.01', debitBs: 0, creditBs: 80, debitUsd: 0, creditUsd: 0.5 }
+    ]
+  };
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...fixture, vatOwnDeclarations: [declaration]
+  }), /conversión Bs\/USD inconsistente/);
+});
+
 test('SQLite rejects negative monetary components in an IVA declaration position', () => {
   const fixture = vatOwnDeclarationFixture();
   const declaration = {
