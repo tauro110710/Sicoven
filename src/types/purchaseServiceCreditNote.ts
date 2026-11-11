@@ -82,6 +82,11 @@ export function calculatePurchaseServiceCreditNote(request: PurchaseServiceCredi
   if (Math.abs(expectedVat - Number(purchase.vatAmountBs)) > 0.02) {
     throw new Error('El IVA original no concilia con la base y alícuota registradas.');
   }
+  const expectedOriginalTotal = money(Number(purchase.taxableBaseBs) + Number(purchase.exemptAmountBs) +
+    Number(purchase.vatAmountBs) + originalLuxury + Number(purchase.igtfAmountBs || 0));
+  if (Math.abs(expectedOriginalTotal - Number(purchase.totalAmountBs)) > 0.02) {
+    throw new Error('El total original de la compra de servicios no concilia con IVA e impuesto adicional.');
+  }
   const priorTaxable = request.priorCreditNotes.reduce((sum, note) => sum + Number(note.taxableBaseBs || 0), 0);
   const priorExempt = request.priorCreditNotes.reduce((sum, note) => sum + Number(note.exemptAmountBs || 0), 0);
   if (request.taxableBaseBs > money(Number(purchase.taxableBaseBs) - priorTaxable) + 0.01 ||
