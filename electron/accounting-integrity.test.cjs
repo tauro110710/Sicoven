@@ -2233,6 +2233,12 @@ test('SQLite enforces prior-period continuity and blocks a later filing before a
   assert.doesNotThrow(() => validateAccountingSnapshot(prior, {
     ...prior, vatOwnDeclarations: [octoberFiled, novemberDraft]
   }));
+  const decemberDraft = {
+    ...vatOwnDeclarationFixture().vatOwnDeclarations[0], id: 'vat-own-2026-12', period: '2026-12'
+  };
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...prior, vatOwnDeclarations: [octoberFiled, decemberDraft]
+  }), /períodos mensuales anteriores sin declaración presentada/);
 
   const novemberFiled = {
     ...novemberDraft, id: 'vat-own-2026-10-later', period: '2026-10',
