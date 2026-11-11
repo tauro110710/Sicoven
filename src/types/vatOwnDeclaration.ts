@@ -1,5 +1,13 @@
 export type VatOwnDeclarationStatus = 'DRAFT' | 'FILED';
 
+export type VatOwnPurchaseCreditTreatment = 'TAXABLE' | 'EXEMPT' | 'COMMON';
+
+export function resolveVatOwnPurchaseCreditTreatment(
+  treatment?: VatOwnPurchaseCreditTreatment
+): VatOwnPurchaseCreditTreatment {
+  return treatment || 'COMMON';
+}
+
 export function isValidVatOwnDeclarationPeriod(period: string): boolean {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(period);
 }
