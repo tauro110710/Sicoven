@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { CalendarDays, FileText, Receipt, ShoppingCart, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs } from '../../utils/formatters';
-import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, resolveVatOwnProrationRate, resolveVatOwnPurchaseCreditTreatment } from '../../types/vatOwnDeclaration';
+import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, resolveVatOwnProrationRate, resolveVatOwnPurchaseCreditTreatment, resolveVatOwnPaymentBcvRate } from '../../types/vatOwnDeclaration';
 
 const money = (value: number | undefined) => Number.isFinite(value) ? Number(value) : 0;
 const parseLocalizedNumber = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
@@ -18,6 +18,9 @@ export const IvaDeclaracionesView: React.FC = () => {
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentDate, setPaymentDate] = useState(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10));
   const [paymentBcvRate, setPaymentBcvRate] = useState(String(currentCompany.bcvRate || ''));
+  const paymentHistoricalBcvRate = resolveVatOwnPaymentBcvRate(currentCompany.accountingBcvRateHistory || [], paymentDate);
+  const paymentRateMatchesHistory = paymentHistoricalBcvRate !== null &&
+    Math.abs(parseLocalizedNumber(paymentBcvRate) - paymentHistoricalBcvRate) <= 0.000001;
   const [treasuryAccountCode, setTreasuryAccountCode] = useState('');
   const [workflowBusy, setWorkflowBusy] = useState(false);
   const [workflowError, setWorkflowError] = useState('');
@@ -284,12 +287,12 @@ export const IvaDeclaracionesView: React.FC = () => {
           </div> : <div className="rounded-xl border border-slate-200 p-4 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">Saldo pendiente de enteramiento</strong><strong className="text-lg">{format(declarationOutstanding)}</strong></div>
             {declarationOutstanding>0.01 && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <input type="date" value={paymentDate} onChange={event=>setPaymentDate(event.target.value)} className="rounded-lg border px-3 py-2 text-sm" />
+              <input type="date" value={paymentDate} onChange={event=>{const nextDate=event.target.value;setPaymentDate(nextDate);const rate=resolveVatOwnPaymentBcvRate(currentCompany.accountingBcvRateHistory || [],nextDate);setPaymentBcvRate(rate===null?'':String(rate));}} className="rounded-lg border px-3 py-2 text-sm" />
               <input value={paymentAmount} onChange={event=>setPaymentAmount(event.target.value)} placeholder="Importe pagado en Bs." inputMode="decimal" className="rounded-lg border px-3 py-2 text-sm" />
               <input value={paymentReference} onChange={event=>setPaymentReference(event.target.value)} placeholder="Referencia del comprobante" className="rounded-lg border px-3 py-2 text-sm" />
-              <input value={paymentBcvRate} onChange={event=>setPaymentBcvRate(event.target.value)} placeholder="Tasa BCV del pago" inputMode="decimal" className="rounded-lg border px-3 py-2 text-sm" />
+              <input value={paymentBcvRate} onChange={event=>setPaymentBcvRate(event.target.value)} placeholder="Tasa BCV del pago" inputMode="decimal" className="rounded-lg border px-3 py-2 text-sm" /><p className="text-xs text-slate-500 sm:col-span-2">{paymentHistoricalBcvRate===null?'No hay tasa BCV histórica registrada para esta fecha.':`BCV histórico efectivo: ${paymentHistoricalBcvRate} Bs/USD`}</p>
               <select value={treasuryAccountCode} onChange={event=>setTreasuryAccountCode(event.target.value)} className="rounded-lg border px-3 py-2 text-sm sm:col-span-2"><option value="">Cuenta de caja o banco…</option>{accounts.filter(account=>account.isMovement&&account.type==='ACTIVO'&&account.code.startsWith('1.1.1.')).map(account=><option key={account.code} value={account.code}>{account.code} · {account.name}</option>)}</select>
-              <button type="button" disabled={workflowBusy||!paymentReference.trim()||!paymentAmount.trim()||!treasuryAccountCode} onClick={async()=>{
+              <button type="button" disabled={workflowBusy||!paymentReference.trim()||!paymentAmount.trim()||!treasuryAccountCode||!paymentRateMatchesHistory} onClick={async()=>{
                 setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
                 try { await recordVatOwnDeclarationEvent(savedDeclaration.id,{companyId:currentCompany.id,eventType:'PAYMENT',occurredAt:paymentDate+'T12:00:00.000Z',amountBs:parseLocalizedNumber(paymentAmount),reference:paymentReference.trim(),bcvRate:parseLocalizedNumber(paymentBcvRate),treasuryAccountCode,idempotencyKey:'PAYMENT:'+savedDeclaration.id+':'+paymentReference.trim()});setPaymentAmount('');setPaymentReference('');setWorkflowMessage('Pago registrado y contabilizado.');}
                 catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo registrar el pago.');}
