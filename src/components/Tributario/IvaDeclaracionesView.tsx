@@ -90,6 +90,7 @@ export const IvaDeclaracionesView: React.FC = () => {
   }, [currentCompany.id, period, monthPurchases, purchases, vatOwnDeclarations, journalEntries, currentCompany.bcvRate, taxableSalesBase, exemptSalesBase, dailySalesResolution.unresolvedDates]);
   const purchaseSummary = purchaseSummaryResult.summary;
   const purchaseSummaryError = purchaseSummaryResult.error;
+  const prorationUnavailable = Boolean(purchaseSummaryError?.toLowerCase().includes('prorrata'));
   const purchaseReclassificationItems = purchaseSummaryResult.reclassifications || [];
   const prorationRate = purchaseSummary?.prorationRate ?? null;
   const purchaseCreditGross16 = purchaseSummary?.gross16Bs ?? 0;
@@ -183,7 +184,7 @@ export const IvaDeclaracionesView: React.FC = () => {
         <article className={`rounded-xl border p-4 ${preliminaryBalance !== null && preliminaryBalance >= 0 ? 'border-amber-300 bg-amber-50/50' : 'border-teal-300 bg-teal-50/50'}`}>
           <p className="text-xs font-semibold text-slate-700">Saldo preliminar del período</p>
           <p className="mt-2 text-xl font-black text-slate-900">{preliminaryBalance === null ? 'Conciliar' : format(Math.abs(preliminaryBalance))}</p>
-          <p className="mt-1 text-xs font-semibold text-slate-600">{preliminaryBalance === null ? 'Resuelve fuentes diarias para calcular crédito acreditable' : preliminaryBalance >= 0 ? 'Estimación usando crédito acreditable y prorrata' : 'Saldo a favor preliminar usando crédito acreditable'}</p>
+          <p className="mt-1 text-xs font-semibold text-slate-600">{preliminaryBalance === null ? 'Pendiente de conciliación de fuentes y crédito fiscal' : preliminaryBalance >= 0 ? 'Estimación usando crédito acreditable y prorrata' : 'Saldo a favor preliminar usando crédito acreditable'}</p>
         </article>
       </section>
 
@@ -233,7 +234,7 @@ export const IvaDeclaracionesView: React.FC = () => {
           <div className="flex items-center gap-2"><ShoppingCart className="h-4 w-4 text-sky-700" /><h2 className="font-bold text-slate-900">Crédito fiscal de compras</h2></div>
           <p className="mt-2 text-sm text-slate-600">El IVA bruto se separa del monto acreditable. El estimado aplica el tratamiento gravado (100%), exento (0%) o común (prorrata según ventas gravadas y exentas).</p>
           <p className="mt-3 text-lg font-black text-sky-800">{purchaseCreditEligible === null ? 'Pendiente de conciliar' : format(purchaseCreditEligible)}</p>
-          {prorationRate === null && <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs font-semibold text-amber-900">No existe una base válida de ventas gravadas y exentas para determinar la prorrata de las compras comunes. No se calculará el crédito ni se permitirá preparar la declaración hasta conciliar el período o definir correctamente el destino fiscal de las compras.</p>}
+          {prorationUnavailable && <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs font-semibold text-amber-900">No existe una base válida de ventas gravadas y exentas para determinar la prorrata de las compras comunes. No se calculará el crédito ni se permitirá preparar la declaración hasta conciliar el período o definir correctamente el destino fiscal de las compras.</p>}
           {purchaseSummaryError && <p className="mt-2 rounded-lg bg-rose-50 p-2 text-xs font-semibold text-rose-900">{purchaseSummaryError}</p>}
           {purchaseSummary && (purchaseCreditReversal > 0 || purchaseCreditReversalNonEligible > 0) && <p className="mt-2 rounded-lg bg-sky-50 p-2 text-xs font-semibold text-sky-900">Notas de crédito de períodos anteriores: reversión de crédito acreditable {format(purchaseCreditReversal)} · reversión de IVA no acreditable {format(purchaseCreditReversalNonEligible)}.</p>}
           <p className="mt-1 text-xs text-slate-500">IVA bruto: {purchaseSummary ? format(purchaseCredit) : 'Pendiente'} · No acreditable estimado: {purchaseCreditNonEligible === null ? '—' : format(purchaseCreditNonEligible)}</p>
