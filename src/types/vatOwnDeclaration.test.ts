@@ -6,6 +6,7 @@ import {
   calculateVatOwnPosition,
   getVatOwnOutstandingBalance,
   resolveVatOwnDailySalesSources,
+  resolveVatOwnProrationRate,
   validateVatOwnDeclarationDraft,
   validateVatOwnEvent,
   type VatOwnDeclaration,
@@ -48,6 +49,33 @@ const payment = (overrides: Partial<Omit<VatOwnDeclarationEvent, 'id' | 'recorde
   reference: 'BANK-001',
   idempotencyKey: 'payment-001',
   ...overrides
+});
+
+test('calculates the common-purchase proration from taxable and exempt sales', () => {
+  assert.equal(resolveVatOwnProrationRate({
+    taxableSalesBaseBs: 750, exemptSalesBaseBs: 250, hasCommonPurchases: true
+  }), 0.75);
+});
+
+test('does not assume 100% credit when common purchases exist without a sales denominator', () => {
+  assert.equal(resolveVatOwnProrationRate({
+    taxableSalesBaseBs: 0, exemptSalesBaseBs: 0, hasCommonPurchases: true
+  }), null);
+});
+
+test('allows a zero denominator only when no common purchase VAT depends on proration', () => {
+  assert.equal(resolveVatOwnProrationRate({
+    taxableSalesBaseBs: 0, exemptSalesBaseBs: 0, hasCommonPurchases: false
+  }), 1);
+});
+
+test('rejects negative or non-finite sales bases for proration', () => {
+  assert.equal(resolveVatOwnProrationRate({
+    taxableSalesBaseBs: -10, exemptSalesBaseBs: 100, hasCommonPurchases: true
+  }), null);
+  assert.equal(resolveVatOwnProrationRate({
+    taxableSalesBaseBs: Number.NaN, exemptSalesBaseBs: 100, hasCommonPurchases: true
+  }), null);
 });
 
 test('calculates debit, credits, prior credit, payable and carry-forward', () => {
