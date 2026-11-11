@@ -5699,7 +5699,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const declaration: VatOwnDeclaration = {
         id: existingDraft?.id || 'vat-own-' + currentCompany.id + '-' + input.period,
         companyId: currentCompany.id, period: input.period, status: 'DRAFT',
-        position, sourceIds, bcvRate: Number(currentCompany.bcvRate) || 0,
+        position, sourceIds, relatedSourceIds: purchaseSummary.relatedPurchaseIds, bcvRate: Number(currentCompany.bcvRate) || 0,
         dailySourceChoices: { ...(input.choices || {}) },
         purchaseVatReclassificationItems,
         createdAt: existingDraft?.createdAt || createdAt,
