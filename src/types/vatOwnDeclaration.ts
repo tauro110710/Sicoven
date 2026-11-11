@@ -325,6 +325,88 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
   };
 }
 
+export function buildVatOwnPurchaseVatReclassificationItems(input: {
+  companyId: string;
+  period: string;
+  bcvRate: number;
+  allPurchases: readonly PurchaseRecord[];
+  journalEntries: readonly JournalEntry[];
+  summary: VatOwnPurchaseCreditSummary;
+}): JournalEntryItem[] {
+  const rate = Number(input.bcvRate);
+  if (!Number.isFinite(rate) || rate <= 0) throw new Error('Se requiere una tasa BCV válida para reclassificar el IVA no acreditable.');
+  const excludedDebitAccounts = new Set(['1.1.3.01', '1.1.3.02', '6.1.1.11', '6.1.1.13']);
+  const result: JournalEntryItem[] = [];
+  const round = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+  for (const adjustment of input.summary.reclassifications) {
+    const signedAmount = round(Number(adjustment.nonEligibleSignedBs));
+    if (!Number.isFinite(signedAmount)) throw new Error('Una reclassificación de IVA no acreditable contiene un importe inválido.');
+    if (Math.abs(signedAmount) < 0.01) continue;
+    const sourcePurchase = input.allPurchases.find(item =>
+      item.id === adjustment.basePurchaseId && item.companyId === input.companyId
+    );
+    if (!sourcePurchase?.journalEntryId) {
+      throw new Error('No se puede reclassificar el IVA no acreditable del documento ' + adjustment.purchaseId + ': la factura original no conserva su asiento de compra.');
+    }
+    const sourceEntries = input.journalEntries.filter(entry =>
+      entry.id === sourcePurchase.journalEntryId && entry.companyId === input.companyId
+    );
+    if (sourceEntries.length !== 1) {
+      throw new Error('No se encontró un único asiento contable de origen para distribuir el IVA no acreditable de la factura ' + sourcePurchase.invoiceNumber + '.');
+    }
+    const sourceEntry = sourceEntries[0];
+    const grouped = new Map<string, { accountName: string; amountBs: number }>();
+    for (const item of sourceEntry.items) {
+      if (Number(item.debitBs || 0) <= 0 || excludedDebitAccounts.has(item.accountCode)) continue;
+      const current = grouped.get(item.accountCode) || { accountName: item.accountName, amountBs: 0 };
+      current.amountBs += Number(item.debitBs || 0);
+      grouped.set(item.accountCode, current);
+    }
+    const destinations = [...grouped.entries()].filter(([, value]) => value.amountBs > 0);
+    const totalDestinationBase = destinations.reduce((sum, [, value]) => sum + value.amountBs, 0);
+    const expectedBase = Number(sourcePurchase.taxableBaseBs || 0) + Number(sourcePurchase.exemptAmountBs || 0);
+    if (!Number.isFinite(expectedBase) || expectedBase <= 0 || totalDestinationBase <= 0 ||
+        Math.abs(totalDestinationBase - expectedBase) > 0.05) {
+      throw new Error('El asiento de la factura ' + sourcePurchase.invoiceNumber + ' no permite distribuir de forma verificable el IVA no acreditable entre sus cuentas de costo, inventario o gasto.');
+    }
+    const absoluteAmount = Math.abs(signedAmount);
+    let remaining = absoluteAmount;
+    destinations.forEach(([accountCode, destination], index) => {
+      const allocation = index === destinations.length - 1
+        ? round(remaining)
+        : round(absoluteAmount * destination.amountBs / totalDestinationBase);
+      remaining = round(remaining - allocation);
+      if (allocation <= 0) return;
+      const isDebit = signedAmount > 0;
+      result.push({
+        accountCode, accountName: destination.accountName,
+        debitBs: isDebit ? allocation : 0, creditBs: isDebit ? 0 : allocation,
+        debitUsd: isDebit ? allocation / rate : 0, creditUsd: isDebit ? 0 : allocation / rate,
+        description: 'Reclasificación IVA no acreditable · ' + sourcePurchase.invoiceNumber + ' · ' + input.period
+      });
+    });
+    const inputVatCode = adjustment.taxRate === 8 ? '1.1.3.02' : '1.1.3.01';
+    const inputVatName = adjustment.taxRate === 8
+      ? 'Crédito Fiscal IVA Compras (Alícuota Reducida 8%)'
+      : 'Crédito Fiscal IVA Compras (Alícuota General 16%)';
+    const inputVatDebit = signedAmount < 0;
+    result.push({
+      accountCode: inputVatCode, accountName: inputVatName,
+      debitBs: inputVatDebit ? absoluteAmount : 0,
+      creditBs: inputVatDebit ? 0 : absoluteAmount,
+      debitUsd: inputVatDebit ? absoluteAmount / rate : 0,
+      creditUsd: inputVatDebit ? 0 : absoluteAmount / rate,
+      description: 'Reclasificación IVA no acreditable · Documento ' + adjustment.purchaseId + ' · ' + input.period
+    });
+  }
+  const debitBs = result.reduce((sum, item) => sum + item.debitBs, 0);
+  const creditBs = result.reduce((sum, item) => sum + item.creditBs, 0);
+  if (Math.abs(debitBs - creditBs) > 0.02) {
+    throw new Error('La reclassificación del IVA no acreditable no cuadra en Bs. No se preparó la declaración.');
+  }
+  return result;
+}
+
 export function snapshotVatOwnDeclarationRevision(
   declaration: VatOwnDeclaration,
   revisedAt: string,
