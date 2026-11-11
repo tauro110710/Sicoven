@@ -1,4 +1,4 @@
-import type { PurchaseRecord } from './accounting';
+import type { JournalEntry, JournalEntryItem, PurchaseRecord } from './accounting';
 
 export type VatOwnDeclarationStatus = 'DRAFT' | 'FILED';
 
@@ -186,6 +186,7 @@ export interface VatOwnPurchaseCreditSummary {
   priorReversalNonEligible16Bs: number;
   priorReversalNonEligible8Bs: number;
   relatedPurchaseIds: string[];
+  reclassifications: Array<{ purchaseId: string; basePurchaseId: string; taxRate: number; nonEligibleSignedBs: number }>;
 }
 
 export function calculateVatOwnPurchaseCreditSummary(input: {
@@ -201,6 +202,7 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     item.companyId === input.companyId && item.invoiceDate.startsWith(input.period) && !item.isCancelled
   );
   const relatedPurchaseIds: string[] = [];
+  const reclassifications: VatOwnPurchaseCreditSummary['reclassifications'] = [];
   const originalByNoteId = new Map<string, PurchaseRecord>();
   const priorNotes: Array<{ item: PurchaseRecord; original: PurchaseRecord; prior: VatOwnDeclaration }> = [];
   for (const item of periodPurchases) {
@@ -281,6 +283,10 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
         const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : priorRate;
         const eligible = amountBs * factor;
         const nonEligible = amountBs - eligible;
+        reclassifications.push({
+          purchaseId: item.id, basePurchaseId: priorNote.original.id,
+          taxRate: item.taxRate, nonEligibleSignedBs: -nonEligible
+        });
         if (isEight) {
           priorReversalEligible8Bs += eligible;
           priorReversalNonEligible8Bs += nonEligible;
@@ -300,6 +306,10 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     add('gross', sign * amountBs);
     add('eligible', sign * amountBs * factor);
     add('nonEligible', sign * amountBs * (1 - factor));
+    reclassifications.push({
+      purchaseId: item.id, basePurchaseId: original?.id || item.id,
+      taxRate: item.taxRate, nonEligibleSignedBs: sign * amountBs * (1 - factor)
+    });
   }
   if ([gross16Bs, gross8Bs, eligible16Bs, eligible8Bs, nonEligible16Bs, nonEligible8Bs].some(value => value < -0.02)) {
     throw new Error('Las notas de crédito del mismo período exceden el crédito fiscal de compras. Revise los documentos vinculados antes de declarar.');
@@ -311,7 +321,7 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     prorationRate, gross16Bs, gross8Bs, eligible16Bs, eligible8Bs, nonEligible16Bs, nonEligible8Bs,
     priorReversalEligible16Bs, priorReversalEligible8Bs,
     priorReversalNonEligible16Bs, priorReversalNonEligible8Bs,
-    relatedPurchaseIds: [...new Set(relatedPurchaseIds)]
+    relatedPurchaseIds: [...new Set(relatedPurchaseIds)], reclassifications
   };
 }
 
