@@ -223,9 +223,9 @@ export const IvaDeclaracionesView: React.FC = () => {
           <p className="mt-1 text-xs text-slate-500">{monthPurchases.length} documentos · {purchaseCreditNonEligible === null ? 'prorrata pendiente' : 'No acreditable estimado: ' + format(purchaseCreditNonEligible)}</p>
         </article>
         <article className="rounded-xl border border-violet-200 bg-white p-4">
-          <p className="text-xs font-semibold text-violet-800">Retenciones recibidas</p>
+          <p className="text-xs font-semibold text-violet-800">Retenciones recibidas y ajustes</p>
           <p className="mt-2 text-xl font-black text-slate-900">{format(receivedWithholdings)}</p>
-          <p className="mt-1 text-xs text-slate-500">IVA retenido por clientes registrado en ventas</p>
+          <p className="mt-1 text-xs text-slate-500">Comprobantes de retención y ajustes de notas de venta del período</p>
         </article>
         <article className={`rounded-xl border p-4 ${preliminaryBalance !== null && preliminaryBalance >= 0 ? 'border-amber-300 bg-amber-50/50' : 'border-teal-300 bg-teal-50/50'}`}>
           <p className="text-xs font-semibold text-slate-700">Saldo preliminar del período</p>
@@ -289,7 +289,7 @@ export const IvaDeclaracionesView: React.FC = () => {
           <p className="mt-1 text-xs text-slate-500">IVA bruto: {purchaseSummary ? format(purchaseCredit) : 'Pendiente'} · No acreditable estimado: {purchaseCreditNonEligible === null ? '—' : format(purchaseCreditNonEligible)}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-violet-700" /><h2 className="font-bold text-slate-900">Retenciones de IVA recibidas</h2></div>
+          <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-violet-700" /><h2 className="font-bold text-slate-900">Retenciones y ajustes de IVA</h2></div>
           <p className="mt-2 text-sm text-slate-600">Se descuentan únicamente las retenciones registradas en los documentos de venta de este período. Verifica que exista el comprobante y que corresponda al mes declarado.</p>
           <p className="mt-3 text-lg font-black text-violet-800">{format(receivedWithholdings)}</p>
         </article>
