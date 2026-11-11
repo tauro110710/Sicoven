@@ -346,6 +346,8 @@ export interface PurchaseRecord {
   /** Impuesto adicional al consumo suntuario 15%; no integra el crédito fiscal IVA. */
   additionalLuxuryTaxBs?: number;
   additionalLuxuryTaxUsd?: number;
+  /** Destino del crédito fiscal: gravado, exento o común sujeto a prorrata. */
+  vatCreditTreatment?: 'TAXABLE' | 'EXEMPT' | 'COMMON';
   retentionRate: number; // 0, 75, 100
   vatWithheldBs: number;
   // ISLR opcional
