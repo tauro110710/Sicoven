@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { CalendarDays, FileText, Receipt, ShoppingCart, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs } from '../../utils/formatters';
-import { getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources } from '../../types/vatOwnDeclaration';
+import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources } from '../../types/vatOwnDeclaration';
 
 const money = (value: number | undefined) => Number.isFinite(value) ? Number(value) : 0;
 const parseLocalizedNumber = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
@@ -65,7 +65,7 @@ export const IvaDeclaracionesView: React.FC = () => {
   const priorCredit = vatOwnDeclarations.filter(item => item.companyId === currentCompany.id && item.status === 'FILED' && item.period < period)
     .sort((a,b)=>b.period.localeCompare(a.period))[0]?.position.creditCarryForwardBs || 0;
   const includedIndividualIds = new Set(dailySalesResolution.days.filter(day => day.source === 'INDIVIDUAL').flatMap(day => day.sourceIds));
-  const receivedWithholdings = sales.filter(item => item.companyId === currentCompany.id && item.retentionVoucherDate?.startsWith(period) && money(item.vatWithheldBs) > 0 && (!item.invoiceDate.startsWith(period) || includedIndividualIds.has(item.id))).reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatWithheldBs), 0);
+  const receivedWithholdings = getReceivedVatWithholdingSales(sales, currentCompany.id, period).reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatWithheldBs), 0);
   const preliminaryBalance = outputVat === null ? null : outputVat - purchaseCredit - receivedWithholdings - priorCredit;
 
   const zSources = monthZ.map(entry => ({
