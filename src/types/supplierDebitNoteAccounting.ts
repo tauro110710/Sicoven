@@ -243,6 +243,7 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
     affectedInvoiceTotalAmountBs: source.totalAmountBs, affectedInvoiceTotalAmountUsd: source.totalAmountUsd,
     fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal,
     documentType: '02',
+    vatCreditTreatment: source.vatCreditTreatment || 'COMMON',
     totalAmountBs, taxableBaseBs, exemptAmountBs, taxRate,
     vatAmountBs, retentionRate: 0, vatWithheldBs: 0,
     bcvRate: rate, totalAmountUsd,
