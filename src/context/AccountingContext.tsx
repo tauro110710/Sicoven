@@ -5737,6 +5737,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         if (!treasury || !liability || !Number.isFinite(rate) || rate <= 0) throw new Error('Seleccione una cuenta de tesorería válida e indique la tasa BCV del pago.');
         const declarationRate = Number(declaration.bcvRate);
         if (!Number.isFinite(declarationRate) || declarationRate <= 0) throw new Error('La declaración no conserva una tasa BCV válida para valorar el pasivo.');
+        const bankAccount = bankAccounts.find(item => item.companyId === currentCompany.id && item.accountCode === treasury.code);
+        if (bankAccount) {
+          const availableBalance = calculateBankAvailableBalance({
+            bankAccount, companyId: currentCompany.id, asOfDate: draft.occurredAt.slice(0,10), journalEntries
+          });
+          validateBankOutgoingAvailability({
+            availableBalance, requestedAmount: bankAccount.currency === 'USD' ? amountBs / rate : amountBs,
+            currency: bankAccount.currency
+          });
+        }
         const historicalUsd = amountBs / declarationRate;
         const paymentUsd = amountBs / rate;
         const fx = historicalUsd - paymentUsd;
