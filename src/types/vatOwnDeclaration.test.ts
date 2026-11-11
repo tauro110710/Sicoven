@@ -576,6 +576,21 @@ test('resolves Z and individual sales on different days without blocking the who
   assert.deepEqual(result.unresolvedDates, []);
 });
 
+test('includes individual sales entered at 0% in the exempt base used by monthly IVA proration', async () => {
+  const { resolveVatOwnDailySalesSources } = await import('./vatOwnDeclaration');
+  const result = resolveVatOwnDailySalesSources({
+    zReports: [],
+    sales: [{
+      id: 'sale-exempt-0', date: '2026-01-03', documentType: '01',
+      taxableBaseBs: 500, taxRate: 0, vatAmountBs: 0, exemptAmountBs: 100
+    }]
+  });
+  assert.equal(result.days.length, 1);
+  assert.equal(result.days[0].exemptSalesBs, 600);
+  assert.equal(result.days[0].taxableBase16Bs + result.days[0].taxableBase8Bs + result.days[0].taxableBase31Bs, 0);
+  assert.equal(result.days[0].outputVatBs, 0);
+});
+
 test('requires the accountant to choose one source when Z and individual sales overlap on a date', async () => {
   const { resolveVatOwnDailySalesSources } = await import('./vatOwnDeclaration');
   const input = {
