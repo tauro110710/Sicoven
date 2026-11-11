@@ -115,7 +115,6 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   const [incidentsLoading, setIncidentsLoading] = useState(false);
   const [incidentError, setIncidentError] = useState<string | null>(null);
   const [selectedIncidentId, setSelectedIncidentId] = useState('');
-  const [incidentEventType, setIncidentEventType] = useState<'REVIEW_RECORDED' | 'ACTION_RECORDED'>('REVIEW_RECORDED');
   const [incidentDecision, setIncidentDecision] = useState('');
   const [incidentExternalReference, setIncidentExternalReference] = useState('');
   const [incidentSaving, setIncidentSaving] = useState(false);
@@ -441,7 +440,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
     setIncidentSaving(true);
     try {
       await recordVatFiscalIncidentEvent({
-        incidentId: selectedIncidentId, eventType: incidentEventType,
+        incidentId: selectedIncidentId, eventType: 'ACTION_RECORDED',
         decisionText: incidentDecision.trim(),
         declarationId: fiscalIncidents.find(item => item.id === selectedIncidentId)?.declarationId || undefined,
         declarationEventIds: fiscalIncidents.find(item => item.id === selectedIncidentId)?.declarationEventIds || [],
@@ -1207,14 +1206,13 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
             <p>Registrado por {incident.createdByUsername} · {incident.createdAt}</p>
             {incident.events.map(event => <p key={event.id} className="border-l-2 border-amber-300 pl-2 text-slate-600">{event.eventType} · {event.decisionText} {event.externalReference ? ' · Ref. ' + event.externalReference : ''} · {event.actorUsername} · {event.createdAt}</p>)}
             <div className="flex flex-wrap gap-2 pt-1">
-              <button type="button" onClick={() => {setSelectedIncidentId(incident.id);setIncidentEventType('REVIEW_RECORDED');}} className="rounded border border-slate-300 bg-white px-2 py-1 font-semibold">Registrar revisión</button>
-              <button type="button" disabled={!incident.events.some(event=>event.eventType==='REVIEW_RECORDED')} onClick={() => {setSelectedIncidentId(incident.id);setIncidentEventType('ACTION_RECORDED');}} className="rounded border border-slate-300 bg-white px-2 py-1 font-semibold disabled:opacity-40">Registrar actuación</button>
+              <button type="button" onClick={() => setSelectedIncidentId(incident.id)} className="rounded border border-slate-300 bg-white px-2 py-1 font-semibold">Documentar actuación</button>
             </div>
             {selectedIncidentId === incident.id && <div className="space-y-2 rounded border border-slate-200 bg-white p-3">
-              <p className="font-semibold">{incidentEventType === 'REVIEW_RECORDED' ? 'Documentar revisión profesional' : 'Documentar acción / rectificación externa'}</p>
-              <textarea value={incidentDecision} onChange={event=>setIncidentDecision(event.target.value)} rows={2} placeholder="Describa la revisión, decisión, trámite o resultado (mínimo 10 caracteres)…" className="w-full rounded border border-slate-300 p-2" />
+              <p className="font-semibold">Documentar acción / rectificación externa</p>
+              <textarea value={incidentDecision} onChange={event=>setIncidentDecision(event.target.value)} rows={2} placeholder="Describa la actuación o rectificación ejecutada (mínimo 20 caracteres)…" className="w-full rounded border border-slate-300 p-2" />
               <input value={incidentExternalReference} onChange={event=>setIncidentExternalReference(event.target.value)} placeholder="Referencia SENIAT / declaración / expediente (si aplica)" className="w-full rounded border border-slate-300 p-2" />
-              <div className="flex gap-2"><button type="button" disabled={incidentSaving || incidentDecision.trim().length < 10} onClick={() => void submitFiscalIncidentEvent()} className="rounded bg-slate-900 px-3 py-2 font-semibold text-white disabled:opacity-40">{incidentSaving ? 'Guardando…' : 'Guardar en SQLite'}</button><button type="button" onClick={()=>setSelectedIncidentId('')} className="rounded border px-3 py-2">Cancelar</button></div>
+              <div className="flex gap-2"><button type="button" disabled={incidentSaving || incidentDecision.trim().length < 20} onClick={() => void submitFiscalIncidentEvent()} className="rounded bg-slate-900 px-3 py-2 font-semibold text-white disabled:opacity-40">{incidentSaving ? 'Guardando…' : 'Guardar en SQLite'}</button><button type="button" onClick={()=>setSelectedIncidentId('')} className="rounded border px-3 py-2">Cancelar</button></div>
             </div>}
           </article>)}</div>}
         <p className="mt-2 text-[11px] text-slate-500">Registrar una actuación no equivale a presentar una declaración sustitutiva ni a obtener aceptación del SENIAT. SICOVEN conserva el expediente abierto para impedir que se declare resuelto sin evidencia.</p>
