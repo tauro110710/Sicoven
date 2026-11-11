@@ -5887,7 +5887,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         taxableSalesBaseBs: currentTaxableBase, exemptSalesBaseBs: currentExemptBase,
         receivedWithholdingsBs: currentWithholding, priorCreditBs: currentPriorCredit,
         debitAdjustmentsBs: Math.max(0, -currentWithholdingRaw),
-        creditAdjustmentsBs: Math.max(0, -currentOutputVat16Raw) + Math.max(0, -currentOutputVat8Raw)
+        creditAdjustmentsBs: Math.max(0, -currentOutputVat16Raw) + Math.max(0, -currentOutputVat8Raw),
+        creditAdjustments16Bs: Math.max(0, -currentOutputVat16Raw), creditAdjustments8Bs: Math.max(0, -currentOutputVat8Raw)
       });
       const positionChanged = (Object.keys(currentPosition) as Array<keyof typeof currentPosition>).some(field => {
         const tolerance = field === 'prorationRate' ? 0.000001 : 0.02;
@@ -5938,8 +5939,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const input8 = accounts.find(item => item.code === '1.1.3.02' && item.type === 'ACTIVO' && item.isMovement);
         const withholding = accounts.find(item => item.code === '1.1.3.03' && item.type === 'ACTIVO' && item.isMovement);
         if ((output16 > 0 && !liability16) || (output8 > 0 && !liability8) ||
+            (declaration.position.creditAdjustments16Bs > 0 && !liability16) ||
+            (declaration.position.creditAdjustments8Bs > 0 && !liability8) ||
             (purchase16 > 0 && !input16) || (purchase8 > 0 && !input8) ||
-            (declaration.position.receivedWithholdingsBs > 0 && !withholding)) {
+            ((declaration.position.receivedWithholdingsBs > 0 || declaration.position.debitAdjustmentsBs > 0) && !withholding)) {
           throw new Error('Faltan cuentas de movimiento para conciliar los débitos y créditos fiscales de la declaración.');
         }
         const items: JournalEntryItem[] = [];
@@ -5964,12 +5967,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           items.push({ ...reclassification, accountName: account.name });
         }
         addLine(withholding, 0, declaration.position.receivedWithholdingsBs, 'Aplicación retenciones IVA recibidas · ' + declaration.period);
+        addLine(withholding, declaration.position.debitAdjustmentsBs, 0, 'Reversión de retenciones IVA por notas correctivas · ' + declaration.period);
         addLine(input16, 0, declaration.position.priorCreditAppliedBs, 'Aplicación de crédito fiscal de períodos anteriores · ' + declaration.period);
         addLine(input16, declaration.position.creditCarryForwardBs, 0, 'Crédito fiscal trasladable al período siguiente · ' + declaration.period);
         const netPayable = accounts.find(item => item.code === '2.1.2.09' && item.type === 'PASIVO' && item.isMovement);
         if (declaration.position.amountDueBs > 0 && !netPayable) throw new Error('Falta la cuenta 2.1.2.09 para IVA neto por enterar.');
-        addLine(liability16, declaration.position.debitAdjustmentsBs, 0, 'Ajustes que incrementan el débito fiscal · ' + declaration.period);
-        addLine(liability16, 0, declaration.position.creditAdjustmentsBs, 'Ajustes que reducen el débito fiscal · ' + declaration.period);
+        addLine(liability16, 0, declaration.position.creditAdjustments16Bs, 'Ajustes que reducen el débito fiscal 16% · ' + declaration.period);
+        addLine(liability8, 0, declaration.position.creditAdjustments8Bs, 'Ajustes que reducen el débito fiscal 8% · ' + declaration.period);
         addLine(netPayable, 0, declaration.position.amountDueBs, 'IVA neto por enterar · ' + declaration.period);
         const debitBs = items.reduce((sum,item)=>sum+item.debitBs,0);
         const creditBs = items.reduce((sum,item)=>sum+item.creditBs,0);
