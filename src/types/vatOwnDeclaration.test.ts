@@ -503,10 +503,10 @@ test('blocks cumulative prior-period credit notes that exceed the original invoi
     sourceSnapshots: {
       [previousNote.id]: JSON.stringify({
         kind: 'PURCHASE', id: previousNote.id, documentType: '03',
-        originalPurchaseId: original.id, vatAmountBs: 100
+        originalPurchaseId: original.id, supplierRif: 'J-12345678-9', taxRate: 16, vatAmountBs: 100
       }),
       [original.id]: JSON.stringify({
-        kind: 'PURCHASE', id: original.id, documentType: '01',
+        kind: 'PURCHASE', id: original.id, documentType: '01', supplierRif: 'J-12345678-9',
         vatCreditTreatment: 'TAXABLE', taxRate: 16, vatAmountBs: 160
       })
     }
