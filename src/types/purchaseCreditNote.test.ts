@@ -230,3 +230,17 @@ test('calcula nota de crédito de factura pagada al contado sin crear CxP', () =
   assert.equal(result.netPayableReductionUsd, 1.0648);
   assert.equal(result.lines.length, 1);
 });
+
+test('separates 16% recoverable VAT from the 15% luxury tax on 31% purchase invoices', () => {
+  const combined: PurchaseRecord = {
+    ...purchase, taxRate: 31, taxableBaseBs: 200, vatAmountBs: 32,
+    additionalLuxuryTaxBs: 30, igtfAmountBs: 7.86, totalAmountBs: 269.86,
+    vatWithheldBs: 24
+  };
+  const result = calculatePurchaseCreditNote(draft({ purchase: combined, quantity: 1 }));
+  assert.equal(result.vatAmountBs, 16);
+  assert.equal(result.additionalLuxuryTaxBs, 15);
+  assert.equal(result.igtfAmountBs, 3.93);
+  assert.equal(result.totalAmountBs, 134.93);
+  assert.equal(result.vatWithheldBs, 12);
+});
