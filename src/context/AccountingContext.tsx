@@ -53,7 +53,7 @@ import { FinancialDisclosure, validateFinancialDisclosure } from '../types/finan
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
-import { getReceivedVatWithholdingSales, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnProrationRate, validateVatOwnEvent } from '../types/vatOwnDeclaration';
+import { getReceivedVatWithholdingSales, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnProrationRate, resolveVatOwnPurchaseCreditTreatment, validateVatOwnEvent } from '../types/vatOwnDeclaration';
 import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
@@ -3621,7 +3621,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       fiscalEmissionMedium: request.fiscalEmissionMedium, sameMediumAsOriginal: request.sameMediumAsOriginal,
       documentType: '03', totalAmountBs: valuation.totalAmountBs,
       exemptAmountBs: valuation.exemptAmountBs, taxableBaseBs: valuation.taxableBaseBs,
-      taxRate: purchase.taxRate, vatCreditTreatment: purchase.vatCreditTreatment || 'COMMON',
+      taxRate: purchase.taxRate, vatCreditTreatment: resolveVatOwnPurchaseCreditTreatment(purchase.vatCreditTreatment),
       vatAmountBs: valuation.vatAmountBs, additionalLuxuryTaxBs: valuation.additionalLuxuryTaxBs,
       retentionRate: purchase.retentionRate, vatWithheldBs: valuation.vatWithheldBs,
       islrConceptCode: purchase.islrConceptCode, islrConceptName: purchase.islrConceptName,
@@ -3965,7 +3965,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           fiscalEmissionMedium: draft.fiscalEmissionMedium,
           sameMediumAsOriginal: draft.sameMediumAsOriginal,
           documentType: '03', originalPurchaseId: source.id,
-          vatCreditTreatment: source.vatCreditTreatment || 'COMMON',
+          vatCreditTreatment: resolveVatOwnPurchaseCreditTreatment(source.vatCreditTreatment),
           creditNoteLines: [], inventoryLines: undefined,
           taxableBaseBs: amounts.taxableBaseBs, exemptAmountBs: amounts.exemptAmountBs,
           vatAmountBs: amounts.vatAmountBs, additionalLuxuryTaxBs: amounts.additionalLuxuryTaxBs, totalAmountBs: amounts.totalAmountBs,
@@ -5647,7 +5647,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
       const exemptSalesBaseBs = resolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
       const hasCommonPurchases = monthPurchases.some(item =>
-        (item.vatCreditTreatment || 'COMMON') === 'COMMON' && Number(item.vatAmountBs || 0) > 0
+        resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment) === 'COMMON' && Number(item.vatAmountBs || 0) > 0
       );
       const prorationRate = resolveVatOwnProrationRate({
         taxableSalesBaseBs, exemptSalesBaseBs, hasCommonPurchases
@@ -5658,7 +5658,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const purchaseRows = monthPurchases.map(item => {
         const sign = item.documentType === '03' ? -1 : 1;
         const gross = Number(item.vatAmountBs || 0);
-        const treatment = item.vatCreditTreatment || 'COMMON';
+        const treatment = resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment);
         const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : prorationRate;
         return { item, sign, gross, factor, eligible: gross * factor, nonEligible: gross * (1 - factor) };
       });
