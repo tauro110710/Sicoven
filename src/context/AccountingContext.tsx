@@ -5637,13 +5637,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!isValidVatOwnDeclarationPeriod(period)) {
       throw new Error('Seleccione un período mensual válido en formato AAAA-MM. Valor recibido: ' + JSON.stringify(rawPeriod));
     }
-    const unfiledActivityPeriods = getUnfiledVatOwnActivityPeriods({
-      companyId: currentCompany.id, targetPeriod: period,
-      activityDates: getVatOwnActivityDates(currentCompany.id), declarations: vatOwnDeclarations
-    });
-    if (unfiledActivityPeriods.length > 0) {
-      throw new Error('No se puede preparar esta declaración: existen períodos mensuales anteriores sin declaración presentada (' + unfiledActivityPeriods.join(', ') + '). Complete esos meses primero para no omitir débito, crédito ni prorrata.');
-    }
+    // La continuidad mensual se informa al contador, pero no bloquea la preparación
+    // ni el trabajo del borrador. La secuencia se verifica al registrar la presentación.
     const laterFiledPeriods = getVatOwnFiledLaterPeriods({
       companyId: currentCompany.id, targetPeriod: period, declarations: vatOwnDeclarations
     });
