@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  getReceivedVatWithholdingSales,
   calculateVatOwnPosition,
   getVatOwnOutstandingBalance,
   resolveVatOwnDailySalesSources,
@@ -174,4 +175,17 @@ test('treats the 31% Z alícuota as 16% IVA plus a separate non-IVA additional t
   assert.equal(result.days[0].outputVat16Bs, 176);
   assert.equal(result.days[0].outputVat8Bs, 40);
   assert.equal(result.days[0].outputVatBs, 216);
+});
+
+
+test('customer VAT withholdings are retained even when daily sales are sourced from a Z report', () => {
+  const sales = [
+    { id: 'pos-invoice', companyId: 'co-1', invoiceDate: '2026-11-05', retentionVoucherDate: '2026-11-08', vatWithheldBs: 160, isCancelled: false },
+    { id: 'prior-invoice', companyId: 'co-1', invoiceDate: '2026-10-30', retentionVoucherDate: '2026-11-02', vatWithheldBs: 80 },
+    { id: 'other-company', companyId: 'co-2', invoiceDate: '2026-11-05', retentionVoucherDate: '2026-11-08', vatWithheldBs: 90 },
+    { id: 'cancelled', companyId: 'co-1', invoiceDate: '2026-11-05', retentionVoucherDate: '2026-11-08', vatWithheldBs: 50, isCancelled: true },
+    { id: 'no-certificate', companyId: 'co-1', invoiceDate: '2026-11-05', vatWithheldBs: 40 }
+  ];
+  const rows = getReceivedVatWithholdingSales(sales, 'co-1', '2026-11');
+  assert.deepEqual(rows.map(item => item.id), ['pos-invoice', 'prior-invoice']);
 });

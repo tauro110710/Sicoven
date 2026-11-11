@@ -1,5 +1,24 @@
 export type VatOwnDeclarationStatus = 'DRAFT' | 'FILED';
 
+/**
+ * Customer VAT withholdings are a separate fiscal event from the daily sales source.
+ * A day may use a consolidated Z report for taxable sales while the individual
+ * invoice still carries the withholding voucher that must be credited in the
+ * period in which that voucher was received.
+ */
+export function getReceivedVatWithholdingSales<T extends {
+  companyId: string;
+  isCancelled?: boolean;
+  retentionVoucherDate?: string;
+  vatWithheldBs?: number;
+}>(sales: readonly T[], companyId: string, period: string): T[] {
+  if (!companyId.trim() || !/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return [];
+  return sales.filter(item => item.companyId === companyId && item.isCancelled !== true &&
+    typeof item.retentionVoucherDate === 'string' && item.retentionVoucherDate.startsWith(period) &&
+    Number.isFinite(Number(item.vatWithheldBs || 0)) && Number(item.vatWithheldBs || 0) > 0);
+}
+
+
 export interface VatOwnPositionInput {
   outputVatBs: number;
   outputVat16Bs?: number;

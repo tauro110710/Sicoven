@@ -53,7 +53,7 @@ import { FinancialDisclosure, validateFinancialDisclosure } from '../types/finan
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
-import { calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, validateVatOwnEvent } from '../types/vatOwnDeclaration';
+import { getReceivedVatWithholdingSales, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, validateVatOwnEvent } from '../types/vatOwnDeclaration';
 import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
@@ -5611,10 +5611,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const outputVat8Raw = resolution.days.reduce((sum, day) => sum + day.outputVat8Bs, 0);
       const outputVat16Bs = Math.max(0, outputVat16Raw);
       const outputVat8Bs = Math.max(0, outputVat8Raw);
-      const includedIndividualIds = new Set(resolution.days.filter(day => day.source === 'INDIVIDUAL').flatMap(day => day.sourceIds));
-      const withholdingRows = sales.filter(item => item.companyId === currentCompany.id &&
-        item.retentionVoucherDate?.startsWith(input.period) && Number(item.vatWithheldBs || 0) > 0 &&
-        (!item.invoiceDate.startsWith(input.period) || includedIndividualIds.has(item.id)));
+      const withholdingRows = getReceivedVatWithholdingSales(sales, currentCompany.id, input.period);
       const withholdingRaw = withholdingRows.reduce((sum, item) =>
         sum + (item.documentType === '03' ? -1 : 1) * Number(item.vatWithheldBs || 0), 0);
       const withholdingBs = Math.max(0, withholdingRaw);
