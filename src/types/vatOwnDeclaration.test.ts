@@ -6,6 +6,12 @@ import {
   calculateVatOwnPosition,
   getVatOwnOutstandingBalance,
   resolveVatOwnDailySalesSources,
+  resolveVatOwnProrationRate,
+  areVatOwnDeclarationSourcesCurrent,
+  findExistingVatOwnPaymentReversal,
+  resolveVatOwnPaymentBcvRate,
+  resolveVatOwnPurchaseCreditTreatment,
+  snapshotVatOwnDeclarationRevision,
   validateVatOwnDeclarationDraft,
   validateVatOwnEvent,
   type VatOwnDeclaration,
@@ -48,6 +54,90 @@ const payment = (overrides: Partial<Omit<VatOwnDeclarationEvent, 'id' | 'recorde
   reference: 'BANK-001',
   idempotencyKey: 'payment-001',
   ...overrides
+});
+
+test('preserves the source invoice VAT credit treatment for corrections and defaults legacy records to common', () => {
+  assert.equal(resolveVatOwnPurchaseCreditTreatment('TAXABLE'), 'TAXABLE');
+  assert.equal(resolveVatOwnPurchaseCreditTreatment('EXEMPT'), 'EXEMPT');
+  assert.equal(resolveVatOwnPurchaseCreditTreatment('COMMON'), 'COMMON');
+  assert.equal(resolveVatOwnPurchaseCreditTreatment(undefined), 'COMMON');
+});
+
+test('calculates the common-purchase proration from taxable and exempt sales', () => {
+  assert.equal(resolveVatOwnProrationRate({
+    taxableSalesBaseBs: 750, exemptSalesBaseBs: 250, hasCommonPurchases: true
+  }), 0.75);
+});
+
+test('does not assume 100% credit when common purchases exist without a sales denominator', () => {
+  assert.equal(resolveVatOwnProrationRate({
+    taxableSalesBaseBs: 0, exemptSalesBaseBs: 0, hasCommonPurchases: true
+  }), null);
+});
+
+test('allows a zero denominator only when no common purchase VAT depends on proration', () => {
+  assert.equal(resolveVatOwnProrationRate({
+    taxableSalesBaseBs: 0, exemptSalesBaseBs: 0, hasCommonPurchases: false
+  }), 1);
+});
+
+test('rejects negative or non-finite sales bases for proration', () => {
+  assert.equal(resolveVatOwnProrationRate({
+    taxableSalesBaseBs: -10, exemptSalesBaseBs: 100, hasCommonPurchases: true
+  }), null);
+  assert.equal(resolveVatOwnProrationRate({
+    taxableSalesBaseBs: Number.NaN, exemptSalesBaseBs: 100, hasCommonPurchases: true
+  }), null);
+});
+
+test('detects changed declaration source sets without depending on array order', () => {
+  assert.equal(areVatOwnDeclarationSourcesCurrent(['sale-1', 'purchase-1'], ['purchase-1', 'sale-1']), true);
+  assert.equal(areVatOwnDeclarationSourcesCurrent(['sale-1'], ['sale-1', 'sale-2']), false);
+  assert.equal(areVatOwnDeclarationSourcesCurrent(['sale-1', 'sale-2'], ['sale-1']), false);
+});
+
+test('resolves the latest effective BCV rate for an IVA payment date', () => {
+  const history = [
+    { rate: 100, effectiveDate: '2026-10-01', recordedAt: '2026-10-01T10:00:00.000Z' },
+    { rate: 105, effectiveDate: '2026-10-10', recordedAt: '2026-10-10T10:00:00.000Z' },
+    { rate: 106, effectiveDate: '2026-10-10', recordedAt: '2026-10-11T10:00:00.000Z' },
+    { rate: 110, effectiveDate: '2026-10-20', recordedAt: '2026-10-20T10:00:00.000Z' }
+  ];
+  assert.equal(resolveVatOwnPaymentBcvRate(history, '2026-10-15'), 106);
+  assert.equal(resolveVatOwnPaymentBcvRate(history, '2026-10-20'), 110);
+  assert.equal(resolveVatOwnPaymentBcvRate(history, '2026-09-30'), null);
+});
+
+test('rejects invalid payment dates and invalid BCV history entries', () => {
+  assert.equal(resolveVatOwnPaymentBcvRate([
+    { rate: 0, effectiveDate: '2026-10-01', recordedAt: '2026-10-01T10:00:00.000Z' },
+    { rate: 100, effectiveDate: '2026-02-31', recordedAt: '2026-10-01T10:00:00.000Z' }
+  ], '2026-10-10'), null);
+  assert.equal(resolveVatOwnPaymentBcvRate([], '2026-02-31'), null);
+});
+
+test('recovers an already persisted payment contra-entry without creating a duplicate', () => {
+  const reversal = { id: 'reverse-1', companyId: 'company-a', reversalOfEntryId: 'journal-payment-1' };
+  assert.deepEqual(
+    findExistingVatOwnPaymentReversal([reversal], 'company-a', 'journal-payment-1'),
+    reversal
+  );
+  assert.equal(findExistingVatOwnPaymentReversal([], 'company-a', 'journal-payment-1'), null);
+  assert.throws(() => findExistingVatOwnPaymentReversal([
+    reversal, { ...reversal, id: 'reverse-2' }
+  ], 'company-a', 'journal-payment-1'), /más de un contra-asiento/);
+});
+
+test('snapshots a draft revision without sharing mutable source arrays or position objects', () => {
+  const draft = { ...declaration, status: 'DRAFT' as const, position: { ...declaration.position }, sourceIds: ['sale-old'], revisions: [] };
+  const revision = snapshotVatOwnDeclarationRevision(draft, '2026-02-02T10:00:00.000Z', 'Actualizar fuentes antes de presentar');
+  draft.sourceIds.push('sale-new');
+  draft.position.amountDueBs = 999;
+  assert.equal(revision.revision, 1);
+  assert.deepEqual(revision.sourceIds, ['sale-old']);
+  assert.notEqual(revision.position.amountDueBs, 999);
+  assert.equal(revision.reason, 'Actualizar fuentes antes de presentar');
+  assert.throws(() => snapshotVatOwnDeclarationRevision(declaration, '2026-02-02T10:00:00.000Z', 'No debe versionar una presentada'), /borrador no presentado/);
 });
 
 test('calculates debit, credits, prior credit, payable and carry-forward', () => {
@@ -108,6 +198,12 @@ test('allows partial payment and computes remaining balance', () => {
   const event = { ...payment(), id: 'event-1', recordedAt: '2026-02-12T10:01:00.000Z' };
   validateVatOwnEvent({ declaration, events: [], draft: payment() });
   assert.equal(getVatOwnOutstandingBalance(declaration, [event]), 350);
+});
+
+test('rejects IVA payments dated before the declaration was filed', () => {
+  assert.throws(() => validateVatOwnEvent({
+    declaration, events: [], draft: payment({ occurredAt: '2026-02-09T10:00:00.000Z' })
+  }), /no puede ser anterior a la presentación/);
 });
 
 test('rejects overpayment, duplicate idempotency keys and cross-company events', () => {

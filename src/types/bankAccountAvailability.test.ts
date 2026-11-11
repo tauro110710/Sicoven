@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import testCase from 'node:test';
-import { calculateBankAvailableBalance, validateBankOutgoingAvailability } from './bankAccountAvailability';
+import { calculateBankAvailableBalance, calculateCashAccountAvailableBalance, validateBankOutgoingAvailability } from './bankAccountAvailability';
 import type { BankAccount, JournalEntry } from './accounting';
 
 const bank: BankAccount = {
@@ -65,6 +65,44 @@ testCase('calculates both Bs and USD book balances for a USD-denominated bank ac
   const input = { bankAccount: usdBank, companyId: 'company-a', asOfDate: '2026-11-02', journalEntries: [movement] };
   assert.equal(calculateBankAvailableBalance({ ...input, currency: 'BS' }), 750);
   assert.equal(calculateBankAvailableBalance({ ...input, currency: 'USD' }), 8.75);
+});
+
+testCase('calculates cash availability from posted Bs ledger movements and effective date', () => {
+  const entries = [
+    entry({ companyId: 'company-a', date: '2026-11-01', items: [
+      { accountCode: '1.1.1.01', accountName: 'Caja Bs.', debitBs: 500, creditBs: 0, debitUsd: 2, creditUsd: 0 }
+    ]}),
+    entry({ companyId: 'company-a', date: '2026-11-03', items: [
+      { accountCode: '1.1.1.01', accountName: 'Caja Bs.', debitBs: 0, creditBs: 120, debitUsd: 0, creditUsd: 0.48 }
+    ]}),
+    entry({ companyId: 'company-b', date: '2026-11-02', items: [
+      { accountCode: '1.1.1.01', accountName: 'Caja Bs.', debitBs: 900, creditBs: 0, debitUsd: 3.6, creditUsd: 0 }
+    ]})
+  ];
+  assert.equal(calculateCashAccountAvailableBalance({
+    companyId: 'company-a', accountCode: '1.1.1.01', asOfDate: '2026-11-02', journalEntries: entries
+  }), 500);
+  assert.equal(calculateCashAccountAvailableBalance({
+    companyId: 'company-a', accountCode: '1.1.1.01', asOfDate: '2026-11-03', journalEntries: entries
+  }), 380);
+});
+
+testCase('calculates USD cash availability from USD ledger balances', () => {
+  const usdCash = entry({ companyId: 'company-a', date: '2026-11-02', items: [
+    { accountCode: '1.1.1.02', accountName: 'Caja USD', debitBs: 0, creditBs: 250, debitUsd: 0, creditUsd: 1 }
+  ]});
+  assert.equal(calculateCashAccountAvailableBalance({
+    companyId: 'company-a', accountCode: '1.1.1.02', asOfDate: '2026-11-02',
+    journalEntries: [usdCash, { ...usdCash, id: 'later', date: '2026-11-03', items: [
+      { accountCode: '1.1.1.02', accountName: 'Caja USD', debitBs: 0, creditBs: 0, debitUsd: 2, creditUsd: 0 }
+    ]}]
+  }), -1);
+});
+
+testCase('rejects invalid dates when calculating cash availability', () => {
+  assert.throws(() => calculateCashAccountAvailableBalance({
+    companyId: 'company-a', accountCode: '1.1.1.01', asOfDate: '2026-02-31', journalEntries: []
+  }), /fecha de corte/);
 });
 
 testCase('allows an outgoing amount up to the exact available balance and rejects any excess', () => {

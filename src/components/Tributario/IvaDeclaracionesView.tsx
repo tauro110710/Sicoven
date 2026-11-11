@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { CalendarDays, FileText, Receipt, ShoppingCart, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs } from '../../utils/formatters';
-import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources } from '../../types/vatOwnDeclaration';
+import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, resolveVatOwnProrationRate, resolveVatOwnPurchaseCreditTreatment, resolveVatOwnPaymentBcvRate } from '../../types/vatOwnDeclaration';
 
 const money = (value: number | undefined) => Number.isFinite(value) ? Number(value) : 0;
 const parseLocalizedNumber = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
@@ -18,6 +18,9 @@ export const IvaDeclaracionesView: React.FC = () => {
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentDate, setPaymentDate] = useState(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10));
   const [paymentBcvRate, setPaymentBcvRate] = useState(String(currentCompany.bcvRate || ''));
+  const paymentHistoricalBcvRate = resolveVatOwnPaymentBcvRate(currentCompany.accountingBcvRateHistory || [], paymentDate);
+  const paymentRateMatchesHistory = paymentHistoricalBcvRate !== null &&
+    Math.abs(parseLocalizedNumber(paymentBcvRate) - paymentHistoricalBcvRate) <= 0.000001;
   const [treasuryAccountCode, setTreasuryAccountCode] = useState('');
   const [workflowBusy, setWorkflowBusy] = useState(false);
   const [workflowError, setWorkflowError] = useState('');
@@ -36,7 +39,10 @@ export const IvaDeclaracionesView: React.FC = () => {
     entry.companyId === currentCompany.id && Boolean(entry.fiscalZReport) && String(entry.fiscalZReport?.date || entry.date).startsWith(period)
   ).sort((a, b) => String(a.fiscalZReport?.date || a.date).localeCompare(String(b.fiscalZReport?.date || b.date)) || a.entryNumber - b.entryNumber), [journalEntries, currentCompany.id, period]);
   const savedDeclaration = vatOwnDeclarations.find(item => item.companyId === currentCompany.id && item.period === period);
-  const activeSourceChoices = savedDeclaration?.dailySourceChoices || dailySourceChoices;
+  const activeSourceChoices = useMemo(() => savedDeclaration?.status === 'FILED'
+    ? savedDeclaration.dailySourceChoices || {}
+    : { ...(savedDeclaration?.dailySourceChoices || {}), ...dailySourceChoices },
+  [savedDeclaration?.status, savedDeclaration?.dailySourceChoices, dailySourceChoices]);
   const declarationEvents = savedDeclaration ? vatOwnDeclarationEvents.filter(event => event.declarationId === savedDeclaration.id) : [];
   const declarationOutstanding = savedDeclaration ? getVatOwnOutstandingBalance(savedDeclaration, declarationEvents) : 0;
 
@@ -65,37 +71,57 @@ export const IvaDeclaracionesView: React.FC = () => {
   const purchaseCreditGross8 = monthPurchases.filter(item => item.taxRate === 8)
     .reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatAmountBs), 0);
   const purchaseCredit = purchaseCreditGross16 + purchaseCreditGross8;
+  const purchaseCreditGrossInvalid = purchaseCreditGross16 < -0.02 || purchaseCreditGross8 < -0.02;
   const taxableSalesBase = dailySalesResolution.days.reduce((sum, day) =>
     sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
   const exemptSalesBase = dailySalesResolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
-  const salesDenominator = taxableSalesBase + exemptSalesBase;
-  const prorationRate = salesDenominator > 0 ? taxableSalesBase / salesDenominator : 1;
-  const purchaseCreditEligible = outputVat === null ? null : Math.max(0, monthPurchases
+  const hasCommonPurchases = monthPurchases.some(item =>
+    resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment) === 'COMMON' && money(item.vatAmountBs) > 0
+  );
+  const prorationRate = resolveVatOwnProrationRate({
+    taxableSalesBaseBs: taxableSalesBase, exemptSalesBaseBs: exemptSalesBase, hasCommonPurchases
+  });
+  const purchaseCreditEligible = outputVat === null || prorationRate === null ? null : Math.max(0, monthPurchases
     .filter(item => item.taxRate !== 8)
     .reduce((sum, item) => {
-      const treatment = item.vatCreditTreatment || 'COMMON';
+      const treatment = resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment);
       const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : prorationRate;
       return sum + signedDocument(item.documentType) * money(item.vatAmountBs) * factor;
     }, 0)) + Math.max(0, monthPurchases
     .filter(item => item.taxRate === 8)
     .reduce((sum, item) => {
-      const treatment = item.vatCreditTreatment || 'COMMON';
+      const treatment = resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment);
       const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : prorationRate;
       return sum + signedDocument(item.documentType) * money(item.vatAmountBs) * factor;
     }, 0));
   const purchaseCreditNonEligible = purchaseCreditEligible === null ? null : Math.max(0, purchaseCredit - purchaseCreditEligible);
   const priorCredit = vatOwnDeclarations.filter(item => item.companyId === currentCompany.id && item.status === 'FILED' && item.period < period)
     .sort((a,b)=>b.period.localeCompare(a.period))[0]?.position.creditCarryForwardBs || 0;
-  const receivedWithholdings = getReceivedVatWithholdingSales(sales, currentCompany.id, period).reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatWithheldBs), 0);
+  const receivedWithholdingRows = getReceivedVatWithholdingSales(sales, currentCompany.id, period);
+  const receivedWithholdings = receivedWithholdingRows.reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatWithheldBs), 0);
   const preliminaryBalance = outputVat === null || purchaseCreditEligible === null
     ? null : outputVat - purchaseCreditEligible - receivedWithholdings - priorCredit;
+  const currentSourceIds = [...new Set([
+    ...dailySalesResolution.days.flatMap(day => day.sourceIds),
+    ...monthPurchases.map(item => item.id),
+    ...receivedWithholdingRows.map(item => item.id)
+  ])].sort();
+  const savedSourceIds = [...(savedDeclaration?.sourceIds || [])].sort();
+  const sourceIdsChanged = Boolean(savedDeclaration && JSON.stringify(currentSourceIds) !== JSON.stringify(savedSourceIds));
+  const sourceChoicesChanged = Boolean(savedDeclaration?.status === 'DRAFT' && dailySalesResolution.conflicts.some(conflict =>
+    activeSourceChoices[conflict.date] !== savedDeclaration.dailySourceChoices?.[conflict.date]
+  ));
+  const bcvRateChanged = Boolean(savedDeclaration && (!Number.isFinite(Number(savedDeclaration.bcvRate)) || Math.abs(Number(savedDeclaration.bcvRate) - Number(currentCompany.bcvRate)) > 0.000001));
+  const draftNeedsRefresh = savedDeclaration?.status === 'DRAFT' && (
+    sourceIdsChanged || sourceChoicesChanged || bcvRateChanged || purchaseCreditGrossInvalid || dailySalesResolution.unresolvedDates.length > 0
+  );
 
   const includedZSourceIds = new Set(dailySalesResolution.days
     .filter(day => day.source === 'Z')
     .flatMap(day => day.sourceIds));
   const zSources = monthZ.filter(entry => includedZSourceIds.has(entry.id)).map(entry => ({
     id: entry.id,
-    date: entry.date,
+    date: entry.fiscalZReport?.date || entry.date,
     number: entry.fiscalZReport?.zNumber || entry.referenceDoc || entry.entryNumber.toString(),
     source: entry.fiscalZReport?.sourceType === 'POS'
       ? `POS · ${entry.fiscalZReport.sourceSystemName || 'Sistema externo'}`
@@ -167,8 +193,8 @@ export const IvaDeclaracionesView: React.FC = () => {
           {dailySalesResolution.conflicts.map(conflict => <div key={conflict.date} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
             <span className="font-semibold">{conflict.date}</span>
             <div className="flex flex-wrap gap-2">
-              <button type="button" disabled={Boolean(savedDeclaration)} onClick={() => setDailySourceChoices(prev => ({ ...prev, [conflict.date]: 'Z' }))} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${activeSourceChoices[conflict.date] === 'Z' ? 'border-emerald-700 bg-emerald-50 text-emerald-800' : 'border-slate-300 text-slate-700'}`}>Usar Reporte Z</button>
-              <button type="button" disabled={Boolean(savedDeclaration)} onClick={() => setDailySourceChoices(prev => ({ ...prev, [conflict.date]: 'INDIVIDUAL' }))} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${activeSourceChoices[conflict.date] === 'INDIVIDUAL' ? 'border-emerald-700 bg-emerald-50 text-emerald-800' : 'border-slate-300 text-slate-700'}`}>Usar ventas individuales</button>
+              <button type="button" disabled={savedDeclaration?.status === 'FILED'} onClick={() => setDailySourceChoices(prev => ({ ...prev, [conflict.date]: 'Z' }))} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${activeSourceChoices[conflict.date] === 'Z' ? 'border-emerald-700 bg-emerald-50 text-emerald-800' : 'border-slate-300 text-slate-700'}`}>Usar Reporte Z</button>
+              <button type="button" disabled={savedDeclaration?.status === 'FILED'} onClick={() => setDailySourceChoices(prev => ({ ...prev, [conflict.date]: 'INDIVIDUAL' }))} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${activeSourceChoices[conflict.date] === 'INDIVIDUAL' ? 'border-emerald-700 bg-emerald-50 text-emerald-800' : 'border-slate-300 text-slate-700'}`}>Usar ventas individuales</button>
             </div>
           </div>)}
         </div>
@@ -193,8 +219,10 @@ export const IvaDeclaracionesView: React.FC = () => {
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <article className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2"><ShoppingCart className="h-4 w-4 text-sky-700" /><h2 className="font-bold text-slate-900">Crédito fiscal de compras</h2></div>
-          <p className="mt-2 text-sm text-slate-600">El IVA bruto se separa del monto acreditable. El estimado aplica el tratamiento gravado (100%), exento (0%) o común (prorrata según ventas gravadas y exentas); queda pendiente si hay días de ventas sin resolver.</p>
+          <p className="mt-2 text-sm text-slate-600">El IVA bruto se separa del monto acreditable. El estimado aplica el tratamiento gravado (100%), exento (0%) o común (prorrata según ventas gravadas y exentas).</p>
           <p className="mt-3 text-lg font-black text-sky-800">{purchaseCreditEligible === null ? 'Pendiente de conciliar' : format(purchaseCreditEligible)}</p>
+          {prorationRate === null && <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs font-semibold text-amber-900">No existe una base válida de ventas gravadas y exentas para determinar la prorrata de las compras comunes. No se calculará el crédito ni se permitirá preparar la declaración hasta conciliar el período o definir correctamente el destino fiscal de las compras.</p>}
+          {purchaseCreditGrossInvalid && <p className="mt-2 rounded-lg bg-rose-50 p-2 text-xs font-semibold text-rose-900">Las notas de crédito superan el IVA bruto de compras de una alícuota del período. Debe conciliarse la factura original y el arrastre del crédito antes de preparar o actualizar el borrador.</p>}
           <p className="mt-1 text-xs text-slate-500">IVA bruto: {format(purchaseCredit)} · No acreditable estimado: {purchaseCreditNonEligible === null ? '—' : format(purchaseCreditNonEligible)}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-4">
@@ -207,7 +235,7 @@ export const IvaDeclaracionesView: React.FC = () => {
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h2 className="text-lg font-bold text-slate-900">Declaración mensual · Control y presentación</h2><p className="mt-1 text-sm text-slate-600">Prepara un borrador desde los libros, conserva las fuentes elegidas y registra presentación y enteramientos con su asiento contable.</p></div>
-          {!savedDeclaration && <button type="button" disabled={!isStorageReady || outputVat === null} onClick={async()=>{
+          {!savedDeclaration && <button type="button" disabled={!isStorageReady || outputVat === null || prorationRate === null || purchaseCreditGrossInvalid} onClick={async()=>{
             setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
             try { await createVatOwnDeclaration({period,choices:activeSourceChoices});setWorkflowMessage('Borrador de declaración guardado y confirmado en SQLite.'); }
             catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo preparar la declaración.');}
@@ -216,6 +244,24 @@ export const IvaDeclaracionesView: React.FC = () => {
         </div>
         {savedDeclaration ? <>
           <div className="flex flex-wrap items-center gap-2 text-xs"><span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700">{savedDeclaration.period}</span><span className={`rounded-full px-3 py-1 font-bold ${savedDeclaration.status==='FILED'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}`}>{savedDeclaration.status==='FILED'?'PRESENTADA':'BORRADOR'}</span>{savedDeclaration.declarationNumber && <span className="font-mono text-slate-600">N° {savedDeclaration.declarationNumber}</span>}<span className="text-slate-500">Fuentes vinculadas: {savedDeclaration.sourceIds.length}</span></div>
+          {savedDeclaration.status === 'DRAFT' && draftNeedsRefresh && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+            <p className="text-sm font-semibold text-amber-950">El borrador quedó desactualizado frente a los libros o la tasa BCV vigente. Revisa las fuentes diarias pendientes y actualízalo antes de presentarlo. La versión anterior se conservará en el historial.</p>
+            {dailySalesResolution.unresolvedDates.length > 0 && <p className="text-xs text-amber-900">Fechas que requieren elegir una fuente: {dailySalesResolution.unresolvedDates.join(', ')}</p>}
+            <button type="button" disabled={workflowBusy || outputVat === null || prorationRate === null || purchaseCreditGrossInvalid || dailySalesResolution.unresolvedDates.length > 0} onClick={async()=>{
+              setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
+              try { await createVatOwnDeclaration({period,choices:activeSourceChoices,refresh:true});setWorkflowMessage('Borrador actualizado. La versión anterior quedó conservada en el historial.'); }
+              catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo actualizar el borrador.');}
+              finally{setWorkflowBusy(false);}
+            }} className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{workflowBusy?'Actualizando…':'Actualizar borrador'}</button>
+          </div>}
+          {(savedDeclaration.revisions?.length || 0) > 0 && <details className="rounded-lg border border-slate-200 p-3 text-xs">
+            <summary className="cursor-pointer font-bold text-slate-700">Historial de versiones del borrador ({savedDeclaration.revisions!.length})</summary>
+            <div className="mt-2 space-y-2">{savedDeclaration.revisions!.map(revision=><div key={revision.revision} className="rounded-md bg-slate-50 p-2">
+              <p className="font-semibold">Versión anterior {revision.revision} · {revision.revisedAt.slice(0,10)}</p>
+              <p>IVA por enterar: {format(revision.position.amountDueBs)} · Crédito trasladable: {format(revision.position.creditCarryForwardBs)} · Fuentes: {revision.sourceIds.length}</p>
+              <p className="text-slate-500">{revision.reason}</p>
+            </div>)}</div>
+          </details>}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
             <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">IVA débito</p><strong>{format(savedDeclaration.position.outputVatBs)}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">Crédito acreditable</p><strong>{format(savedDeclaration.position.purchaseCreditBs)}</strong><p className="mt-1 text-[10px] text-slate-500">Bruto: {format(savedDeclaration.position.purchaseCreditGrossBs)}</p></div>
@@ -231,7 +277,7 @@ export const IvaDeclaracionesView: React.FC = () => {
           {savedDeclaration.status==='DRAFT' ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
             <p className="text-sm font-semibold text-amber-950">Al presentar, SICOVEN registra el número oficial y el asiento de determinación mensual. El borrador y sus documentos fuente permanecen conservados.</p>
             <div className="flex flex-wrap gap-2"><input value={declarationNumber} onChange={event=>setDeclarationNumber(event.target.value)} placeholder="Número oficial de declaración" className="min-w-[220px] flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-              <button type="button" disabled={workflowBusy || !declarationNumber.trim()} onClick={async()=>{
+              <button type="button" disabled={workflowBusy || !declarationNumber.trim() || draftNeedsRefresh} onClick={async()=>{
                 setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
                 try { await recordVatOwnDeclarationEvent(savedDeclaration.id,{companyId:currentCompany.id,eventType:'FILED',occurredAt:new Date().toISOString(),declarationNumber:declarationNumber.trim(),idempotencyKey:'FILED:'+savedDeclaration.id});setWorkflowMessage('Presentación registrada con su asiento de determinación.'); }
                 catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo registrar la presentación.');}
@@ -241,12 +287,12 @@ export const IvaDeclaracionesView: React.FC = () => {
           </div> : <div className="rounded-xl border border-slate-200 p-4 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">Saldo pendiente de enteramiento</strong><strong className="text-lg">{format(declarationOutstanding)}</strong></div>
             {declarationOutstanding>0.01 && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <input type="date" value={paymentDate} onChange={event=>setPaymentDate(event.target.value)} className="rounded-lg border px-3 py-2 text-sm" />
+              <input type="date" value={paymentDate} onChange={event=>{const nextDate=event.target.value;setPaymentDate(nextDate);const rate=resolveVatOwnPaymentBcvRate(currentCompany.accountingBcvRateHistory || [],nextDate);setPaymentBcvRate(rate===null?'':String(rate));}} className="rounded-lg border px-3 py-2 text-sm" />
               <input value={paymentAmount} onChange={event=>setPaymentAmount(event.target.value)} placeholder="Importe pagado en Bs." inputMode="decimal" className="rounded-lg border px-3 py-2 text-sm" />
               <input value={paymentReference} onChange={event=>setPaymentReference(event.target.value)} placeholder="Referencia del comprobante" className="rounded-lg border px-3 py-2 text-sm" />
-              <input value={paymentBcvRate} onChange={event=>setPaymentBcvRate(event.target.value)} placeholder="Tasa BCV del pago" inputMode="decimal" className="rounded-lg border px-3 py-2 text-sm" />
+              <input value={paymentBcvRate} onChange={event=>setPaymentBcvRate(event.target.value)} placeholder="Tasa BCV del pago" inputMode="decimal" className="rounded-lg border px-3 py-2 text-sm" /><p className="text-xs text-slate-500 sm:col-span-2">{paymentHistoricalBcvRate===null?'No hay tasa BCV histórica registrada para esta fecha.':`BCV histórico efectivo: ${paymentHistoricalBcvRate} Bs/USD`}</p>
               <select value={treasuryAccountCode} onChange={event=>setTreasuryAccountCode(event.target.value)} className="rounded-lg border px-3 py-2 text-sm sm:col-span-2"><option value="">Cuenta de caja o banco…</option>{accounts.filter(account=>account.isMovement&&account.type==='ACTIVO'&&account.code.startsWith('1.1.1.')).map(account=><option key={account.code} value={account.code}>{account.code} · {account.name}</option>)}</select>
-              <button type="button" disabled={workflowBusy||!paymentReference.trim()||!paymentAmount.trim()||!treasuryAccountCode} onClick={async()=>{
+              <button type="button" disabled={workflowBusy||!paymentReference.trim()||!paymentAmount.trim()||!treasuryAccountCode||!paymentRateMatchesHistory} onClick={async()=>{
                 setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
                 try { await recordVatOwnDeclarationEvent(savedDeclaration.id,{companyId:currentCompany.id,eventType:'PAYMENT',occurredAt:paymentDate+'T12:00:00.000Z',amountBs:parseLocalizedNumber(paymentAmount),reference:paymentReference.trim(),bcvRate:parseLocalizedNumber(paymentBcvRate),treasuryAccountCode,idempotencyKey:'PAYMENT:'+savedDeclaration.id+':'+paymentReference.trim()});setPaymentAmount('');setPaymentReference('');setWorkflowMessage('Pago registrado y contabilizado.');}
                 catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo registrar el pago.');}

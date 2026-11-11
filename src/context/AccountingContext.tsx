@@ -53,7 +53,7 @@ import { FinancialDisclosure, validateFinancialDisclosure } from '../types/finan
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
-import { getReceivedVatWithholdingSales, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, validateVatOwnEvent } from '../types/vatOwnDeclaration';
+import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, findExistingVatOwnPaymentReversal, resolveVatOwnPaymentBcvRate, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnProrationRate, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
 import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
@@ -61,7 +61,7 @@ import { buildReversalItems, assessJournalReversal, validateBankStatementReversa
 import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 import { buildBankAuxiliaryAccounts } from '../types/bankAccountAccounting';
-import { calculateBankAvailableBalance, validateBankOutgoingAvailability } from '../types/bankAccountAvailability';
+import { calculateBankAvailableBalance, calculateCashAccountAvailableBalance, validateBankOutgoingAvailability } from '../types/bankAccountAvailability';
 import { createBankOutgoingLock } from '../types/bankOutgoingLock';
 import { removeUnusedLegacyDefaultBanks } from '../types/legacyBankAccountCleanup';
 import { resolvePurchaseVatFiscalEvent } from '../types/vatFiscalEvent';
@@ -203,7 +203,7 @@ interface AccountingContextType {
   vatWithholdingDeclarationEvents: VatWithholdingDeclarationEvent[];
   vatOwnDeclarations: VatOwnDeclaration[];
   vatOwnDeclarationEvents: VatOwnDeclarationEvent[];
-  createVatOwnDeclaration: (input: { period: string; choices?: Record<string, 'Z' | 'INDIVIDUAL'> }) => Promise<VatOwnDeclaration>;
+  createVatOwnDeclaration: (input: { period: string; choices?: Record<string, 'Z' | 'INDIVIDUAL'>; refresh?: boolean }) => Promise<VatOwnDeclaration>;
   recordVatOwnDeclarationEvent: (declarationId: string, draft: Omit<VatOwnDeclarationEvent, 'id' | 'declarationId' | 'recordedAt' | 'journalEntryId'>) => Promise<VatOwnDeclarationEvent>;
   createVatWithholdingDeclaration: (input: { year: number; month: number; window: VatDeclarationWindow; zeroOperations?: boolean; legacyFiscalDates?: Record<string, { fiscalDate: string; note: string }> }) => Promise<VatWithholdingDeclaration>;
   recordVatWithholdingDeclarationEvent: (declarationId: string, draft: Omit<VatWithholdingDeclarationEvent, 'id' | 'declarationId' | 'recordedAt'>) => Promise<VatWithholdingDeclarationEvent>;
@@ -3621,7 +3621,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       fiscalEmissionMedium: request.fiscalEmissionMedium, sameMediumAsOriginal: request.sameMediumAsOriginal,
       documentType: '03', totalAmountBs: valuation.totalAmountBs,
       exemptAmountBs: valuation.exemptAmountBs, taxableBaseBs: valuation.taxableBaseBs,
-      taxRate: purchase.taxRate, vatAmountBs: valuation.vatAmountBs, additionalLuxuryTaxBs: valuation.additionalLuxuryTaxBs,
+      taxRate: purchase.taxRate, vatCreditTreatment: resolveVatOwnPurchaseCreditTreatment(purchase.vatCreditTreatment),
+      vatAmountBs: valuation.vatAmountBs, additionalLuxuryTaxBs: valuation.additionalLuxuryTaxBs,
       retentionRate: purchase.retentionRate, vatWithheldBs: valuation.vatWithheldBs,
       islrConceptCode: purchase.islrConceptCode, islrConceptName: purchase.islrConceptName,
       islrRate: purchase.islrRate, islrSubtrahendBs: 0, islrWithheldBs: valuation.islrWithheldBs,
@@ -3964,6 +3965,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           fiscalEmissionMedium: draft.fiscalEmissionMedium,
           sameMediumAsOriginal: draft.sameMediumAsOriginal,
           documentType: '03', originalPurchaseId: source.id,
+          vatCreditTreatment: resolveVatOwnPurchaseCreditTreatment(source.vatCreditTreatment),
           creditNoteLines: [], inventoryLines: undefined,
           taxableBaseBs: amounts.taxableBaseBs, exemptAmountBs: amounts.exemptAmountBs,
           vatAmountBs: amounts.vatAmountBs, additionalLuxuryTaxBs: amounts.additionalLuxuryTaxBs, totalAmountBs: amounts.totalAmountBs,
@@ -5601,11 +5603,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
-  const createVatOwnDeclaration = async (input: { period: string; choices?: Record<string, 'Z' | 'INDIVIDUAL'> }): Promise<VatOwnDeclaration> => {
-    assertSQLitePersistenceReady('Preparar declaración mensual de IVA');
+  const createVatOwnDeclaration = async (input: { period: string; choices?: Record<string, 'Z' | 'INDIVIDUAL'>; refresh?: boolean }): Promise<VatOwnDeclaration> => {
+    assertSQLitePersistenceReady(input.refresh ? 'Actualizar borrador de declaración mensual de IVA' : 'Preparar declaración mensual de IVA');
     if (!isValidVatOwnDeclarationPeriod(input.period)) throw new Error('Seleccione un período mensual válido.');
-    if (vatOwnDeclarations.some(item => item.companyId === currentCompany.id && item.period === input.period)) {
+    const existingDraft = vatOwnDeclarations.find(item => item.companyId === currentCompany.id && item.period === input.period);
+    if (existingDraft && (existingDraft.status !== 'DRAFT' || input.refresh !== true)) {
       throw new Error('Ya existe una declaración mensual para ese período. Abra la existente para continuar.');
+    }
+    if (!existingDraft && input.refresh) throw new Error('No existe un borrador que pueda actualizarse para ese período.');
+    if (existingDraft && vatOwnDeclarationEvents.some(event => event.companyId === currentCompany.id && event.declarationId === existingDraft.id)) {
+      throw new Error('El borrador ya tiene eventos fiscales asociados y no puede recalcularse.');
     }
     const lockKey = 'own:' + currentCompany.id + ':' + input.period;
     if (vatDeclarationCreationInFlightRef.current.has(lockKey)) throw new Error('La declaración de ese período ya se está preparando.');
@@ -5644,12 +5651,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const taxableSalesBaseBs = resolution.days.reduce((sum, day) =>
         sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
       const exemptSalesBaseBs = resolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
-      const salesDenominator = taxableSalesBaseBs + exemptSalesBaseBs;
-      const prorationRate = salesDenominator > 0 ? taxableSalesBaseBs / salesDenominator : 1;
+      const hasCommonPurchases = monthPurchases.some(item =>
+        resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment) === 'COMMON' && Number(item.vatAmountBs || 0) > 0
+      );
+      const prorationRate = resolveVatOwnProrationRate({
+        taxableSalesBaseBs, exemptSalesBaseBs, hasCommonPurchases
+      });
+      if (prorationRate === null) {
+        throw new Error('No se puede determinar la prorrata del IVA de compras comunes: el período no tiene una base válida de ventas gravadas y exentas. Concílielas o clasifique cada compra según su destino fiscal antes de preparar la declaración.');
+      }
       const purchaseRows = monthPurchases.map(item => {
         const sign = item.documentType === '03' ? -1 : 1;
         const gross = Number(item.vatAmountBs || 0);
-        const treatment = item.vatCreditTreatment || 'COMMON';
+        const treatment = resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment);
         const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : prorationRate;
         return { item, sign, gross, factor, eligible: gross * factor, nonEligible: gross * (1 - factor) };
       });
@@ -5683,16 +5697,26 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         ...monthPurchases.map(item => item.id),
         ...withholdingRows.map(item => item.id)
       ])];
+      const priorRevision = existingDraft
+        ? snapshotVatOwnDeclarationRevision(existingDraft, createdAt, 'Actualización del borrador por conciliación de nuevas fuentes contables')
+        : null;
       const declaration: VatOwnDeclaration = {
-        id: 'vat-own-' + currentCompany.id + '-' + input.period,
+        id: existingDraft?.id || 'vat-own-' + currentCompany.id + '-' + input.period,
         companyId: currentCompany.id, period: input.period, status: 'DRAFT',
         position, sourceIds, bcvRate: Number(currentCompany.bcvRate) || 0,
-        dailySourceChoices: { ...(input.choices || {}) }, createdAt
+        dailySourceChoices: { ...(input.choices || {}) },
+        createdAt: existingDraft?.createdAt || createdAt,
+        ...(existingDraft ? {
+          updatedAt: createdAt,
+          revisions: [...(existingDraft.revisions || []), priorRevision!]
+        } : {})
       };
       validateVatOwnDeclarationDraft(declaration);
       if (!Number.isFinite(Number(declaration.bcvRate)) || Number(declaration.bcvRate) <= 0) throw new Error('La empresa no conserva una tasa BCV válida para respaldar la declaración.');
       const confirmation = waitForPersistence();
-      setVatOwnDeclarations(prev => [...prev, declaration]);
+      setVatOwnDeclarations(prev => existingDraft
+        ? prev.map(item => item.id === existingDraft.id ? declaration : item)
+        : [...prev, declaration]);
       await confirmation;
       return declaration;
     } finally {
@@ -5715,6 +5739,43 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (draft.eventType === 'PAYMENT' && vatOwnDeclarationEvents.some(event =>
       event.companyId === currentCompany.id && event.eventType === 'PAYMENT' && event.reference?.trim() === draft.reference?.trim()
     )) throw new Error('La referencia de pago ya fue utilizada en otra declaración mensual de esta empresa.');
+    if (draft.eventType === 'FILED') {
+      if (!Number.isFinite(Number(declaration.bcvRate)) || !Number.isFinite(Number(currentCompany.bcvRate)) || Math.abs(Number(declaration.bcvRate) - Number(currentCompany.bcvRate)) > 0.000001) {
+        throw new Error('No se puede presentar: la tasa BCV cambió desde que se preparó el borrador. Actualícelo para conservar la tasa vigente y su historial antes de presentar.');
+      }
+      const periodSales = sales.filter(item => item.companyId === currentCompany.id &&
+        item.invoiceDate.startsWith(declaration.period) && !item.isCancelled);
+      const periodPurchases = purchases.filter(item => item.companyId === currentCompany.id &&
+        item.invoiceDate.startsWith(declaration.period) && !item.isCancelled);
+      const periodZ = journalEntries.filter(entry => entry.companyId === currentCompany.id &&
+        Boolean(entry.fiscalZReport) && String(entry.fiscalZReport!.date || entry.date).startsWith(declaration.period));
+      const resolution = resolveVatOwnDailySalesSources({
+        zReports: periodZ.map(entry => ({
+          id: entry.id, date: entry.fiscalZReport!.date || entry.date,
+          taxableBase16Bs: entry.fiscalZReport!.taxableBase16Bs, vat16Bs: entry.fiscalZReport!.vat16Bs,
+          taxableBase8Bs: entry.fiscalZReport!.taxableBase8Bs, vat8Bs: entry.fiscalZReport!.vat8Bs,
+          taxableBase31Bs: entry.fiscalZReport!.taxableBase31Bs, vat31Bs: entry.fiscalZReport!.vat31Bs,
+          exemptSalesBs: entry.fiscalZReport!.exemptSalesBs
+        })),
+        sales: periodSales.map(item => ({
+          id: item.id, date: item.invoiceDate, documentType: item.documentType,
+          taxableBaseBs: item.taxableBaseBs, taxRate: item.taxRate,
+          vatAmountBs: item.vatAmountBs, exemptAmountBs: item.exemptAmountBs
+        })),
+        choices: declaration.dailySourceChoices
+      });
+      if (resolution.unresolvedDates.length) {
+        throw new Error('No se puede presentar: el borrador tiene nuevas fechas con fuentes de ventas coincidentes. Resuélvalas y actualice el borrador.');
+      }
+      const currentSourceIds = [...new Set([
+        ...resolution.days.flatMap(day => day.sourceIds),
+        ...periodPurchases.map(item => item.id),
+        ...getReceivedVatWithholdingSales(sales, currentCompany.id, declaration.period).map(item => item.id)
+      ])];
+      if (!areVatOwnDeclarationSourcesCurrent(declaration.sourceIds, currentSourceIds)) {
+        throw new Error('No se puede presentar: los libros cambiaron después de preparar el borrador. Actualícelo para conservar la nueva versión y sus fuentes antes de registrar la presentación.');
+      }
+    }
 
     validateVatOwnEvent({
       declaration, events: history, draft: fullDraft,
@@ -5777,6 +5838,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       } else if (draft.eventType === 'PAYMENT') {
         const amountBs = Number(draft.amountBs || 0);
         const rate = Number(draft.bcvRate || 0);
+        const paymentDate = draft.occurredAt.slice(0,10);
+        const officialPaymentRate = resolveVatOwnPaymentBcvRate(
+          currentCompany.accountingBcvRateHistory || [], paymentDate
+        );
+        if (officialPaymentRate === null) {
+          throw new Error('No existe una tasa BCV histórica registrada y vigente para la fecha del pago. Registre o corrija primero la tasa contable de ese día.');
+        }
+        if (Math.abs(rate - officialPaymentRate) > 0.000001) {
+          throw new Error('La tasa indicada no coincide con la tasa BCV histórica efectiva para la fecha del pago (' + officialPaymentRate + ' Bs/USD).');
+        }
         const treasury = accounts.find(item => item.code === draft.treasuryAccountCode &&
           item.type === 'ACTIVO' && item.isMovement && item.code.startsWith('1.1.1.'));
         const liability = accounts.find(item => item.code === '2.1.2.09' && item.type === 'PASIVO' && item.isMovement);
@@ -5786,12 +5857,23 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const bankAccount = bankAccounts.find(item => item.companyId === currentCompany.id && item.accountCode === treasury.code);
         if (bankAccount) {
           const availableBalance = calculateBankAvailableBalance({
-            bankAccount, companyId: currentCompany.id, asOfDate: draft.occurredAt.slice(0,10), journalEntries
+            bankAccount, companyId: currentCompany.id, asOfDate: paymentDate, journalEntries
           });
           validateBankOutgoingAvailability({
             availableBalance, requestedAmount: bankAccount.currency === 'USD' ? amountBs / rate : amountBs,
             currency: bankAccount.currency
           });
+        } else if (treasury.code === '1.1.1.01' || treasury.code === '1.1.1.02') {
+          const cashCurrency = treasury.code === '1.1.1.02' ? 'USD' : 'BS';
+          const availableBalance = calculateCashAccountAvailableBalance({
+            companyId: currentCompany.id, accountCode: treasury.code, asOfDate: paymentDate, journalEntries
+          });
+          validateBankOutgoingAvailability({
+            availableBalance, requestedAmount: cashCurrency === 'USD' ? amountBs / rate : amountBs,
+            currency: cashCurrency
+          });
+        } else {
+          throw new Error('La cuenta bancaria seleccionada no tiene una ficha de cuenta bancaria asociada. Configure su auxiliar antes de registrar el pago.');
         }
         const historicalUsd = amountBs / declarationRate;
         const paymentUsd = amountBs / rate;
@@ -5821,7 +5903,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       } else if (draft.eventType === 'REVERSAL') {
         const original = history.find(item => item.id === draft.reversalOfEventId && item.eventType === 'PAYMENT');
         if (!original?.journalEntryId) throw new Error('El pago original no conserva asiento contable para revertir.');
-        journal = await reverseJournalEntry(original.journalEntryId, draft.occurredAt.slice(0,10), draft.note || 'Reversión de pago de IVA', 'Reversión de evento fiscal ' + original.id);
+        journal = findExistingVatOwnPaymentReversal(
+          journalEntries, currentCompany.id, original.journalEntryId
+        ) || await reverseJournalEntry(
+          original.journalEntryId, draft.occurredAt.slice(0,10),
+          draft.note || 'Reversión de pago de IVA', 'Reversión de evento fiscal ' + original.id
+        );
       }
       const event: VatOwnDeclarationEvent = {
         ...fullDraft, ...(journal ? { journalEntryId: journal.id } : {}),

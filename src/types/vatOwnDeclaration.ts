@@ -1,7 +1,79 @@
 export type VatOwnDeclarationStatus = 'DRAFT' | 'FILED';
 
+export type VatOwnPurchaseCreditTreatment = 'TAXABLE' | 'EXEMPT' | 'COMMON';
+
+export function resolveVatOwnPurchaseCreditTreatment(
+  treatment?: VatOwnPurchaseCreditTreatment
+): VatOwnPurchaseCreditTreatment {
+  return treatment || 'COMMON';
+}
+
+export function areVatOwnDeclarationSourcesCurrent(
+  declarationSourceIds: readonly string[],
+  currentSourceIds: readonly string[]
+): boolean {
+  if (declarationSourceIds.length !== currentSourceIds.length) return false;
+  const saved = [...declarationSourceIds].sort();
+  const current = [...currentSourceIds].sort();
+  return saved.every((id, index) => id === current[index]);
+}
+
+export function findExistingVatOwnPaymentReversal<T extends {
+  id: string;
+  companyId: string;
+  reversalOfEntryId?: string;
+}>(
+  journalEntries: readonly T[],
+  companyId: string,
+  originalJournalEntryId: string
+): T | null {
+  const matches = journalEntries.filter(entry =>
+    entry.companyId === companyId && entry.reversalOfEntryId === originalJournalEntryId
+  );
+  if (matches.length > 1) throw new Error('La reversión del pago de IVA tiene más de un contra-asiento asociado. Requiere conciliación manual.');
+  return matches[0] || null;
+}
+
+export function resolveVatOwnPaymentBcvRate(
+  history: ReadonlyArray<{ rate: number; effectiveDate: string; recordedAt: string }>,
+  paymentDate: string
+): number | null {
+  const isCalendarDate = (value: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const parsed = new Date(value + 'T00:00:00.000Z');
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  };
+  if (!isCalendarDate(paymentDate)) return null;
+  const eligible = history.filter(item =>
+    isCalendarDate(item.effectiveDate) && item.effectiveDate <= paymentDate &&
+    Number.isFinite(Number(item.rate)) && Number(item.rate) > 0 &&
+    Number.isFinite(Date.parse(item.recordedAt))
+  ).sort((a, b) =>
+    b.effectiveDate.localeCompare(a.effectiveDate) || b.recordedAt.localeCompare(a.recordedAt)
+  );
+  return eligible.length ? Number(eligible[0].rate) : null;
+}
+
 export function isValidVatOwnDeclarationPeriod(period: string): boolean {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(period);
+}
+
+/**
+ * Returns the monthly VAT proration for common purchases. A zero/invalid sales
+ * denominator cannot justify a 100% credit when common purchase VAT exists.
+ * When there are no common purchases, the rate is immaterial and defaults to 1.
+ */
+export function resolveVatOwnProrationRate(input: {
+  taxableSalesBaseBs: number;
+  exemptSalesBaseBs: number;
+  hasCommonPurchases: boolean;
+}): number | null {
+  const taxable = Number(input.taxableSalesBaseBs);
+  const exempt = Number(input.exemptSalesBaseBs);
+  if (!Number.isFinite(taxable) || !Number.isFinite(exempt) || taxable < 0 || exempt < 0) return null;
+  const denominator = taxable + exempt;
+  if (denominator <= 0) return input.hasCommonPurchases ? null : 1;
+  return taxable / denominator;
 }
 
 /**
@@ -66,6 +138,17 @@ export interface VatOwnPosition {
   creditCarryForwardBs: number;
 }
 
+export interface VatOwnDeclarationRevision {
+  revision: number;
+  revisedAt: string;
+  reason: string;
+  position: VatOwnPosition;
+  sourceIds: string[];
+  bcvRate?: number;
+  dailySourceChoices?: Record<string, 'Z' | 'INDIVIDUAL'>;
+  createdAt: string;
+}
+
 export interface VatOwnDeclaration {
   id: string;
   companyId: string;
@@ -78,6 +161,28 @@ export interface VatOwnDeclaration {
   declarationNumber?: string;
   filedAt?: string;
   createdAt: string;
+  updatedAt?: string;
+  revisions?: VatOwnDeclarationRevision[];
+}
+
+export function snapshotVatOwnDeclarationRevision(
+  declaration: VatOwnDeclaration,
+  revisedAt: string,
+  reason: string
+): VatOwnDeclarationRevision {
+  if (declaration.status !== 'DRAFT') throw new Error('Solo se puede versionar un borrador no presentado.');
+  if (!revisedAt || Number.isNaN(Date.parse(revisedAt))) throw new Error('La fecha de revisión no es válida.');
+  if (!reason.trim()) throw new Error('La revisión del borrador requiere un motivo.');
+  return {
+    revision: (declaration.revisions?.length || 0) + 1,
+    revisedAt,
+    reason: reason.trim(),
+    position: { ...declaration.position },
+    sourceIds: [...declaration.sourceIds],
+    bcvRate: declaration.bcvRate,
+    dailySourceChoices: { ...(declaration.dailySourceChoices || {}) },
+    createdAt: declaration.createdAt
+  };
 }
 
 export interface VatOwnDeclarationEvent {
@@ -212,6 +317,9 @@ export function validateVatOwnEvent(input: {
     if (declaration.status !== 'FILED') throw new Error('Presente la declaración antes de registrar su pago.');
     const payment = amount(draft.amountBs, 'El pago');
     if (payment <= 0) throw new Error('El pago debe ser mayor que cero.');
+    if (declaration.filedAt && Date.parse(draft.occurredAt) < Date.parse(declaration.filedAt)) {
+      throw new Error('La fecha del pago no puede ser anterior a la presentación de la declaración.');
+    }
     if (!draft.reference?.trim()) throw new Error('El pago requiere referencia del comprobante o movimiento bancario.');
     if (events.some(event =>
       event.companyId === declaration.companyId &&
