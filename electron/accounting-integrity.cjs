@@ -760,7 +760,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     // This collector only discovers months with fiscal activity; it is not the
     // source-of-truth validator for each document's date. Missing or malformed
     // legacy dates are left to the owning sales/purchases/journal validators.
-    if (!validVatDeclarationDate(date)) return;
+    if (!date || !validVatDeclarationDate(date)) return;
     const key = String(companyId);
     if (!activityPeriodsByCompany.has(key)) activityPeriodsByCompany.set(key, new Set());
     activityPeriodsByCompany.get(key).add(date.slice(0, 7));
