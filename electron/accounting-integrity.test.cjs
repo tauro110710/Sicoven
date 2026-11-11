@@ -2107,8 +2107,8 @@ test('SQLite rechecks fiscal source snapshots at the exact moment an IVA draft i
     id: 'purchase-iva-source', companyId: 'company-1', invoiceDate: '2026-10-05',
     accountCreditDate: null, documentType: '01', invoiceNumber: 'FC-IVA-001', controlNumber: 'CTRL-IVA-001',
     supplierRif: 'J-12345678-9', supplierName: 'Proveedor Uno',
-    totalAmountBs: 1160, totalAmountUsd: 1.33, taxableBaseBs: 1000, taxableBaseUsd: 1.14,
-    exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 160, vatAmountUsd: 0.18,
+    totalAmountBs: 1150, totalAmountUsd: 1.33, taxableBaseBs: 1000, taxableBaseUsd: 1.14,
+    exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 150, vatAmountUsd: 0.18,
     additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,
     igtfAmountBs: 0, igtfAmountUsd: 0, vatCreditTreatment: 'TAXABLE',
     vatWithheldBs: 0, vatWithheldUsd: 0, retentionRate: 0, voucherNumber: null,
@@ -2139,7 +2139,8 @@ test('SQLite rechecks fiscal source snapshots at the exact moment an IVA draft i
       period: '2026-10', sourceIds: [purchase.id], sourceSnapshots: { [purchase.id]: snapshot }
     }]
   };
-  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), draft));
+  // The draft was prepared with the 160 Bs snapshot; the live source now has 150 Bs.
+  // Filing must detect that mismatch even though the draft itself was not edited.
   const filedDeclaration = {
     ...draft.vatOwnDeclarations[0], status: 'FILED',
     declarationNumber: 'IVA-2026-STALE', filedAt: '2026-11-11T12:00:00.000-04:00'
@@ -2154,7 +2155,7 @@ test('SQLite rechecks fiscal source snapshots at the exact moment an IVA draft i
   };
   assert.throws(() => validateAccountingSnapshot(draft, {
     ...draft,
-    purchases: [{ ...purchase, vatAmountBs: 150 }],
+    purchases: [purchase],
     vatOwnDeclarations: [filedDeclaration],
     vatOwnDeclarationEvents: [filingEvent],
     journalEntries: [filingEntry]
