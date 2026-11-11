@@ -53,7 +53,7 @@ import { FinancialDisclosure, validateFinancialDisclosure } from '../types/finan
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
-import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, findExistingVatOwnPaymentReversal, resolveVatOwnPaymentBcvRate, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
+import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, findExistingVatOwnPaymentReversal, resolveVatOwnPaymentBcvRate, getUnfiledVatOwnActivityPeriods, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
 import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
@@ -5603,9 +5603,29 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
+  const getVatOwnActivityDates = (companyId: string): string[] => {
+    const reversedJournalIds = new Set(journalEntries
+      .filter(entry => Boolean(entry.reversalOfEntryId))
+      .map(entry => entry.reversalOfEntryId as string));
+    return [
+      ...sales.filter(item => item.companyId === companyId && !item.isCancelled)
+        .flatMap(item => [item.invoiceDate, item.retentionVoucherDate].filter((date): date is string => Boolean(date))),
+      ...purchases.filter(item => item.companyId === companyId && !item.isCancelled).map(item => item.invoiceDate),
+      ...journalEntries.filter(entry => entry.companyId === companyId && Boolean(entry.fiscalZReport) && !reversedJournalIds.has(entry.id))
+        .map(entry => entry.fiscalZReport!.date || entry.date)
+    ];
+  };
+
   const createVatOwnDeclaration = async (input: { period: string; choices?: Record<string, 'Z' | 'INDIVIDUAL'>; refresh?: boolean }): Promise<VatOwnDeclaration> => {
     assertSQLitePersistenceReady(input.refresh ? 'Actualizar borrador de declaración mensual de IVA' : 'Preparar declaración mensual de IVA');
     if (!isValidVatOwnDeclarationPeriod(input.period)) throw new Error('Seleccione un período mensual válido.');
+    const unfiledActivityPeriods = getUnfiledVatOwnActivityPeriods({
+      companyId: currentCompany.id, targetPeriod: input.period,
+      activityDates: getVatOwnActivityDates(currentCompany.id), declarations: vatOwnDeclarations
+    });
+    if (unfiledActivityPeriods.length > 0) {
+      throw new Error('No se puede preparar esta declaración: existen períodos anteriores con actividad fiscal sin presentar (' + unfiledActivityPeriods.join(', ') + '). Complete esos meses primero para no omitir débito, crédito ni prorrata.');
+    }
     const existingDraft = vatOwnDeclarations.find(item => item.companyId === currentCompany.id && item.period === input.period);
     if (existingDraft && (existingDraft.status !== 'DRAFT' || input.refresh !== true)) {
       throw new Error('Ya existe una declaración mensual para ese período. Abra la existente para continuar.');
@@ -5737,6 +5757,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       event.companyId === currentCompany.id && event.eventType === 'PAYMENT' && event.reference?.trim() === draft.reference?.trim()
     )) throw new Error('La referencia de pago ya fue utilizada en otra declaración mensual de esta empresa.');
     if (draft.eventType === 'FILED') {
+      const unfiledActivityPeriods = getUnfiledVatOwnActivityPeriods({
+        companyId: currentCompany.id, targetPeriod: declaration.period,
+        activityDates: getVatOwnActivityDates(currentCompany.id), declarations: vatOwnDeclarations
+      });
+      if (unfiledActivityPeriods.length > 0) {
+        throw new Error('No se puede presentar: existen períodos anteriores con actividad fiscal sin presentar (' + unfiledActivityPeriods.join(', ') + '). Complete la secuencia antes de registrar esta declaración.');
+      }
       if (!Number.isFinite(Number(declaration.bcvRate)) || !Number.isFinite(Number(currentCompany.bcvRate)) || Math.abs(Number(declaration.bcvRate) - Number(currentCompany.bcvRate)) > 0.000001) {
         throw new Error('No se puede presentar: la tasa BCV cambió desde que se preparó el borrador. Actualícelo para conservar la tasa vigente y su historial antes de presentar.');
       }
