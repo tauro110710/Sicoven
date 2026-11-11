@@ -5765,9 +5765,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (resolution.unresolvedDates.length) {
         throw new Error('No se puede presentar: el borrador tiene nuevas fechas con fuentes de ventas coincidentes. Resuélvalas y actualice el borrador.');
       }
+      const currentTaxableBase = resolution.days.reduce((sum, day) =>
+        sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
+      const currentExemptBase = resolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
+      const currentPurchaseSummary = calculateVatOwnPurchaseCreditSummary({
+        companyId: currentCompany.id, period: declaration.period, purchases: periodPurchases,
+        allPurchases: purchases, priorDeclarations: vatOwnDeclarations,
+        taxableSalesBaseBs: currentTaxableBase, exemptSalesBaseBs: currentExemptBase
+      });
       const currentSourceIds = [...new Set([
         ...resolution.days.flatMap(day => day.sourceIds),
         ...periodPurchases.map(item => item.id),
+        ...currentPurchaseSummary.relatedPurchaseIds,
         ...getReceivedVatWithholdingSales(sales, currentCompany.id, declaration.period).map(item => item.id)
       ])];
       if (!areVatOwnDeclarationSourcesCurrent(declaration.sourceIds, currentSourceIds)) {
