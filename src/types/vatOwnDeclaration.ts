@@ -417,12 +417,16 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
   for (const adjustment of input.summary.reclassifications) {
     const signedAmount = round(Number(adjustment.nonEligibleSignedBs));
     if (!Number.isFinite(signedAmount)) throw new Error('Una reclassificación de IVA no acreditable contiene un importe inválido.');
-    if (Math.abs(signedAmount) < 0.01) continue;
     const sourcePurchase = input.allPurchases.find(item =>
       item.id === adjustment.basePurchaseId && item.companyId === input.companyId
     );
-    if (!sourcePurchase?.journalEntryId) {
-      throw new Error('No se puede reclassificar el IVA no acreditable del documento ' + adjustment.purchaseId + ': la factura original no conserva su asiento de compra.');
+    if (!sourcePurchase) {
+      throw new Error('No se encontró la factura de compra original del documento ' + adjustment.purchaseId + '.');
+    }
+    const requiresPurchaseJournal = Math.abs(signedAmount) >= 0.01 || Number(sourcePurchase.vatAmountBs || 0) > 0;
+    if (!requiresPurchaseJournal) continue;
+    if (!sourcePurchase.journalEntryId) {
+      throw new Error('No se puede conciliar el IVA del documento ' + adjustment.purchaseId + ': la factura original no conserva su asiento de compra.');
     }
     const sourceEntries = input.journalEntries.filter(entry =>
       entry.id === sourcePurchase.journalEntryId && entry.companyId === input.companyId
@@ -433,8 +437,9 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
     const sourceEntry = sourceEntries[0];
     if (sourceEntry.reversalOfEntryId || sourceEntry.reversedByEntryId ||
         input.journalEntries.some(entry => entry.companyId === input.companyId && entry.reversalOfEntryId === sourceEntry.id)) {
-      throw new Error('No se puede reclasificar el IVA de una factura cuyo asiento de compra fue revertido. Reconcilie primero el estado fiscal del documento.');
+      throw new Error('No se puede conciliar el IVA de una factura cuyo asiento de compra fue revertido. Reconcilie primero el estado fiscal del documento.');
     }
+    if (Math.abs(signedAmount) < 0.01) continue;
     const grouped = new Map<string, { accountName: string; amountBs: number }>();
     for (const item of sourceEntry.items) {
       if (Number(item.debitBs || 0) <= 0 || excludedDebitAccounts.has(item.accountCode)) continue;
