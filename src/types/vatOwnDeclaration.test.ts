@@ -598,16 +598,28 @@ test('reverses the prior non-creditable VAT reclassification when a prior-period
     createdAt: '2026-10-02T10:00:00.000Z',
     items: [{ accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 1000, creditBs: 0, debitUsd: 5, creditUsd: 0 }]
   } as JournalEntry;
+  const sourcePurchaseSnapshot = JSON.stringify({
+    kind: 'PURCHASE', id: original.id, invoiceNumber: 'FC-OLD',
+    taxRate: 16, taxableBaseBs: 1000, exemptAmountBs: 0,
+    journalEntryId: sourceJournal.id,
+    journal: {
+      id: sourceJournal.id, date: sourceJournal.date, type: sourceJournal.type,
+      items: [{ accountCode: '1.1.4.01', debitBs: 1000, creditBs: 0, debitUsd: 5, creditUsd: 0 }]
+    }
+  });
+  const summary = {
+    prorationRate: 1, gross16Bs: 0, gross8Bs: 0, eligible16Bs: 0, eligible8Bs: 0,
+    nonEligible16Bs: 0, nonEligible8Bs: 0, priorReversalEligible16Bs: 40,
+    priorReversalEligible8Bs: 0, priorReversalNonEligible16Bs: 40,
+    priorReversalNonEligible8Bs: 0, relatedPurchaseIds: [original.id],
+    reclassifications: [{
+      purchaseId: 'credit-note-old', basePurchaseId: original.id, taxRate: 16,
+      nonEligibleSignedBs: -40, sourcePurchaseSnapshot
+    }]
+  };
   const items = buildVatOwnPurchaseVatReclassificationItems({
     companyId: 'company-a', period: '2026-11', bcvRate: 200,
-    allPurchases: [original], journalEntries: [sourceJournal],
-    summary: {
-      prorationRate: 1, gross16Bs: 0, gross8Bs: 0, eligible16Bs: 0, eligible8Bs: 0,
-      nonEligible16Bs: 0, nonEligible8Bs: 0, priorReversalEligible16Bs: 40,
-      priorReversalEligible8Bs: 0, priorReversalNonEligible16Bs: 40,
-      priorReversalNonEligible8Bs: 0, relatedPurchaseIds: [original.id],
-      reclassifications: [{ purchaseId: 'credit-note-old', basePurchaseId: original.id, taxRate: 16, nonEligibleSignedBs: -40 }]
-    }
+    allPurchases: [original], journalEntries: [sourceJournal], summary
   });
   assert.equal(items[0].accountCode, '1.1.4.01');
   assert.equal(items[0].creditBs, 40);
@@ -615,6 +627,14 @@ test('reverses the prior non-creditable VAT reclassification when a prior-period
   assert.equal(items[1].debitBs, 40);
   assert.equal(items.reduce((sum, item) => sum + item.debitUsd, 0), 0.2);
   assert.equal(items.reduce((sum, item) => sum + item.creditUsd, 0), 0.2);
+  const changedJournal = {
+    ...sourceJournal,
+    items: [{ ...sourceJournal.items[0], accountCode: '6.1.1.01' }]
+  } as JournalEntry;
+  assert.throws(() => buildVatOwnPurchaseVatReclassificationItems({
+    companyId: 'company-a', period: '2026-11', bcvRate: 200,
+    allPurchases: [original], journalEntries: [changedJournal], summary
+  }), /difiere de la huella fiscal presentada/);
 });
 
 test('blocks a prior-period purchase credit note when its original invoice was never included in a filed declaration', () => {
