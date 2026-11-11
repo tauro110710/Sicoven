@@ -161,7 +161,7 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
       taxableRates.add(matchingProduct.vatTreatment === 'REDUCIDA_8' ? 8 : 16);
     }
   }
-  if (taxableRates.size > 1 || (taxableRates.size === 1 && !taxableRates.has(Number(purchase.taxRate)))) {
+  if (taxableRates.size > 1 || (taxableRates.size === 1 && !taxableRates.has(effectiveVatRate))) {
     throw new Error('La factura contiene alícuotas de IVA mixtas o distintas a la tasa registrada. No se puede prorratear la nota con un único porcentaje.');
   }
   if (Math.abs(money(taxableInvoiceLines) - money(purchase.taxableBaseBs)) > 0.02 ||
