@@ -644,11 +644,11 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           !equal(Object.keys(snapshots).sort(), expectedIds)) {
         throw new Error('SQLite rechazó huellas documentales IVA que no corresponden exactamente a las fuentes del borrador.');
       }
-      for (const value of Object.values(snapshots)) {
+      for (const [sourceId, value] of Object.entries(snapshots)) {
         if (typeof value !== 'string') throw new Error('SQLite rechazó una huella fiscal de IVA no válida.');
         let parsed;
         try { parsed = JSON.parse(value); } catch { throw new Error('SQLite rechazó una huella fiscal IVA ilegible.'); }
-        if (!parsed || !['SALE', 'PURCHASE', 'Z'].includes(parsed.kind) || String(parsed.id || '') !== String(Object.keys(snapshots).find(key => snapshots[key] === value) || '')) {
+        if (!parsed || !['SALE', 'PURCHASE', 'Z'].includes(parsed.kind) || String(parsed.id || '') !== String(sourceId)) {
           throw new Error('SQLite rechazó una huella fiscal IVA sin tipo de documento reconocido.');
         }
       }
