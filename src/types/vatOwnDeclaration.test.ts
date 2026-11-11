@@ -362,6 +362,50 @@ test('uses the original filed declaration snapshot if a purchase VAT treatment w
   assert.equal(result.reclassifications[0].taxRate, 16);
 });
  
+test('blocks cumulative reversal when a previously filed credit note has no immutable snapshot', () => {
+  const original = {
+    id: 'purchase-cumulative-legacy-original', companyId: 'company-a', invoiceDate: '2026-10-05',
+    supplierRif: 'J-12345678-9', invoiceNumber: 'F-200', documentType: '01',
+    taxRate: 16, vatAmountBs: 160, vatCreditTreatment: 'TAXABLE'
+  } as PurchaseRecord;
+  const previousNote = {
+    id: 'purchase-cumulative-legacy-note', companyId: 'company-a', invoiceDate: '2026-11-05',
+    supplierRif: 'J-12345678-9', invoiceNumber: 'NC-201', documentType: '03',
+    taxRate: 16, vatAmountBs: 100, originalPurchaseId: original.id
+  } as PurchaseRecord;
+  const currentNote = {
+    id: 'purchase-cumulative-legacy-current', companyId: 'company-a', invoiceDate: '2026-12-05',
+    supplierRif: 'J-12345678-9', invoiceNumber: 'NC-202', documentType: '03',
+    taxRate: 16, vatAmountBs: 80, originalPurchaseId: original.id
+  } as PurchaseRecord;
+  const filedOriginal = {
+    ...declaration, period: '2026-10', status: 'FILED' as const,
+    sourceIds: [original.id],
+    sourceSnapshots: {
+      [original.id]: JSON.stringify({
+        kind: 'PURCHASE', id: original.id, documentType: '01',
+        vatCreditTreatment: 'TAXABLE', taxRate: 16, vatAmountBs: 160
+      })
+    }
+  };
+  const filedNovember = {
+    ...declaration, period: '2026-11', status: 'FILED' as const,
+    sourceIds: [previousNote.id], relatedSourceIds: [original.id],
+    sourceSnapshots: {
+      [original.id]: JSON.stringify({
+        kind: 'PURCHASE', id: original.id, documentType: '01',
+        vatCreditTreatment: 'TAXABLE', taxRate: 16, vatAmountBs: 160
+      })
+    }
+  };
+  assert.throws(() => calculateVatOwnPurchaseCreditSummary({
+    companyId: 'company-a', period: '2026-12', purchases: [currentNote],
+    allPurchases: [original, previousNote, currentNote],
+    priorDeclarations: [filedOriginal, filedNovember],
+    taxableSalesBaseBs: 0, exemptSalesBaseBs: 0
+  }), /nota de crédito ya presentada no conserva su huella fiscal histórica/);
+});
+
 test('blocks cumulative prior-period credit notes that exceed the original invoice VAT', () => {
   const original = {
     id: 'purchase-cumulative-original', companyId: 'company-a', invoiceDate: '2026-10-05',
