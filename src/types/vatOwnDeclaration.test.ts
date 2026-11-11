@@ -188,6 +188,24 @@ test('requires earlier months with fiscal activity to be filed before preparing 
   }), /fecha fiscal inválida/);
 });
 
+test('classifies the 31% purchase rate as 16% creditable IVA and excludes the separate luxury tax', () => {
+  const purchase = {
+    id: 'purchase-31', companyId: 'company-a', invoiceDate: '2026-11-05',
+    supplierRif: 'J-12345678-9', documentType: '01', taxRate: 31,
+    taxableBaseBs: 1000, vatAmountBs: 160, additionalLuxuryTaxBs: 150,
+    vatCreditTreatment: 'TAXABLE'
+  } as PurchaseRecord;
+  const result = calculateVatOwnPurchaseCreditSummary({
+    companyId: 'company-a', period: '2026-11', purchases: [purchase],
+    allPurchases: [purchase], priorDeclarations: [],
+    taxableSalesBaseBs: 1000, exemptSalesBaseBs: 0
+  });
+  assert.equal(result.gross16Bs, 160);
+  assert.equal(result.eligible16Bs, 160);
+  assert.equal(result.nonEligible16Bs, 0);
+  assert.equal(result.gross8Bs, 0);
+});
+
 test('reverses a prior-period common purchase credit using the original declaration proration', () => {
   const original = {
     id: 'purchase-old', companyId: 'company-a', invoiceDate: '2026-10-05', supplierRif: 'J-12345678-9',
