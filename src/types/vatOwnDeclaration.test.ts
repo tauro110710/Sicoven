@@ -7,6 +7,7 @@ import {
   getVatOwnOutstandingBalance,
   resolveVatOwnDailySalesSources,
   resolveVatOwnProrationRate,
+  resolveVatOwnPurchaseCreditTreatment,
   validateVatOwnDeclarationDraft,
   validateVatOwnEvent,
   type VatOwnDeclaration,
@@ -49,6 +50,13 @@ const payment = (overrides: Partial<Omit<VatOwnDeclarationEvent, 'id' | 'recorde
   reference: 'BANK-001',
   idempotencyKey: 'payment-001',
   ...overrides
+});
+
+test('preserves the source invoice VAT credit treatment for corrections and defaults legacy records to common', () => {
+  assert.equal(resolveVatOwnPurchaseCreditTreatment('TAXABLE'), 'TAXABLE');
+  assert.equal(resolveVatOwnPurchaseCreditTreatment('EXEMPT'), 'EXEMPT');
+  assert.equal(resolveVatOwnPurchaseCreditTreatment('COMMON'), 'COMMON');
+  assert.equal(resolveVatOwnPurchaseCreditTreatment(undefined), 'COMMON');
 });
 
 test('calculates the common-purchase proration from taxable and exempt sales', () => {
