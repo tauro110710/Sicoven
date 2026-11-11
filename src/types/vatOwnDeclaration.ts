@@ -675,8 +675,10 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
   }
   const debitBs = result.reduce((sum, item) => sum + item.debitBs, 0);
   const creditBs = result.reduce((sum, item) => sum + item.creditBs, 0);
-  if (Math.abs(debitBs - creditBs) > 0.02) {
-    throw new Error('La reclassificación del IVA no acreditable no cuadra en Bs. No se preparó la declaración.');
+  const debitUsd = result.reduce((sum, item) => sum + item.debitUsd, 0);
+  const creditUsd = result.reduce((sum, item) => sum + item.creditUsd, 0);
+  if (Math.abs(debitBs - creditBs) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.000001) {
+    throw new Error('La reclasificación del IVA no acreditable no cuadra en Bs y USD. No se preparó la declaración.');
   }
   return result;
 }
