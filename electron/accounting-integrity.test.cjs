@@ -2073,8 +2073,8 @@ function vatOwnDeclarationFixture(overrides = {}) {
 function vatOwnFilingEntry() {
   return {
     id: 'entry-iva-filed', companyId: 'company-1', entryNumber: 1,
-    date: '2026-11-11', description: 'Determinación mensual del IVA · 2026-11',
-    type: 'AJUSTE', bcvRate: 874, referenceDoc: 'IVA-MENSUAL:2026-11',
+    date: '2026-11-11', description: 'Determinación mensual del IVA · 2026-10',
+    type: 'AJUSTE', bcvRate: 874, referenceDoc: 'IVA-MENSUAL:2026-10',
     items: [
       { accountCode: '2.1.2.01', accountName: 'IVA débito', debitBs: 100, creditBs: 0, debitUsd: 100 / 874, creditUsd: 0 },
       { accountCode: '2.1.2.09', accountName: 'IVA por enterar', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 100 / 874 }
@@ -2087,7 +2087,7 @@ function vatOwnFiledState() {
   const base = vatOwnDeclarationFixture();
   const journal = vatOwnFilingEntry();
   const declaration = {
-    ...base.vatOwnDeclarations[0], status: 'FILED',
+    ...base.vatOwnDeclarations[0], period: '2026-10', status: 'FILED',
     declarationNumber: 'IVA-2026-001', filedAt: '2026-11-11T12:00:00.000-04:00'
   };
   const event = {
@@ -2163,8 +2163,10 @@ test('SQLite preserves legacy filed IVA declarations without new source fingerpr
 
 test('SQLite requires the filed IVA own-account declaration to have exactly one matching filing event and determination entry', () => {
   const filed = vatOwnFiledState();
-  assert.doesNotThrow(() => validateAccountingSnapshot(vatOwnDeclarationFixture(), filed));
-  assert.throws(() => validateAccountingSnapshot(vatOwnDeclarationFixture(), {
+  const priorDraft = vatOwnDeclarationFixture();
+  priorDraft.vatOwnDeclarations[0].period = '2026-10';
+  assert.doesNotThrow(() => validateAccountingSnapshot(priorDraft, filed));
+  assert.throws(() => validateAccountingSnapshot(priorDraft, {
     ...filed, vatOwnDeclarationEvents: []
   }), /no coincide con su evento de presentación/);
   assert.throws(() => validateAccountingSnapshot(vatOwnDeclarationFixture(), {
@@ -2217,7 +2219,8 @@ test('SQLite enforces prior-period continuity and blocks a later filing before a
   }));
 
   const novemberFiled = {
-    ...novemberDraft, position: zeroPosition, status: 'FILED', declarationNumber: 'IVA-NOV-001',
+    ...novemberDraft, id: 'vat-own-2026-10-later', period: '2026-10',
+    position: zeroPosition, status: 'FILED', declarationNumber: 'IVA-OCT-LATER',
     filedAt: '2026-11-11T12:00:00.000-04:00'
   };
   const novemberEvent = {
@@ -2232,7 +2235,7 @@ test('SQLite enforces prior-period continuity and blocks a later filing before a
     ] }], vatOwnDeclarations: [novemberFiled], vatOwnDeclarationEvents: [novemberEvent]
   };
   const octoberDraft = {
-    ...vatOwnDeclarationFixture().vatOwnDeclarations[0], id: 'vat-own-2026-10', period: '2026-10'
+    ...vatOwnDeclarationFixture().vatOwnDeclarations[0], id: 'vat-own-2026-09', period: '2026-09'
   };
   assert.throws(() => validateAccountingSnapshot(laterFiledPrior, {
     ...laterFiledPrior, vatOwnDeclarations: [novemberFiled, octoberDraft]
