@@ -260,6 +260,40 @@ test('reverses a prior-period common purchase credit using the original declarat
   assert.deepEqual(result.relatedPurchaseIds, [original.id]);
 });
 
+test('uses the original filed declaration snapshot if a purchase VAT treatment was later edited', () => {
+  const original = {
+    id: 'purchase-historical-treatment', companyId: 'company-a', invoiceDate: '2026-10-05',
+    supplierRif: 'J-12345678-9', documentType: '01', taxRate: 16,
+    vatAmountBs: 160, vatCreditTreatment: 'EXEMPT'
+  } as PurchaseRecord;
+  const note = {
+    id: 'purchase-historical-treatment-note', companyId: 'company-a', invoiceDate: '2026-11-05',
+    supplierRif: 'J-12345678-9', documentType: '03', taxRate: 16, vatAmountBs: 80,
+    originalPurchaseId: original.id
+  } as PurchaseRecord;
+  const prior = {
+    ...declaration, period: '2026-10', sourceIds: [original.id],
+    sourceSnapshots: {
+      [original.id]: JSON.stringify({
+        kind: 'PURCHASE', id: original.id, vatCreditTreatment: 'TAXABLE', taxRate: 16, vatAmountBs: 160
+      })
+    },
+    position: calculateVatOwnPosition({
+      outputVatBs: 0, purchaseCreditBs: 80, purchaseCredit16Bs: 80,
+      purchaseCreditGrossBs: 160, purchaseCreditGross16Bs: 160,
+      purchaseCreditNonEligibleBs: 80, receivedWithholdingsBs: 0,
+      taxableSalesBaseBs: 500, exemptSalesBaseBs: 500, prorationRate: 0.5
+    })
+  };
+  const result = calculateVatOwnPurchaseCreditSummary({
+    companyId: 'company-a', period: '2026-11', purchases: [note],
+    allPurchases: [original, note], priorDeclarations: [prior],
+    taxableSalesBaseBs: 0, exemptSalesBaseBs: 0
+  });
+  assert.equal(result.priorReversalEligible16Bs, 80);
+  assert.equal(result.priorReversalNonEligible16Bs, 0);
+});
+
 test('requires an original purchase journal even when its VAT is fully creditable', () => {
   const purchase = {
     id: 'purchase-taxable-no-journal', companyId: 'company-a', invoiceDate: '2026-11-05',
