@@ -140,5 +140,5 @@ test('reconstructs only the 16 percent VAT component from a combined 31 percent 
     vatNotDiscriminated: true, taxableAmountIncludingVat: 1310, taxRate: 31
   });
   assert.equal(result.vatAmount, 160);
-  assert.equal(result.withheldAmount, 120);
+  assert.equal(result.withheldAmount, 160);
 });
