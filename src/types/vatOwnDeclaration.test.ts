@@ -170,6 +170,10 @@ test('requires earlier months with fiscal activity to be filed before preparing 
     companyId: 'company-a', targetPeriod: '2026-12',
     activityDates: ['not-a-date'], declarations: []
   }), /fecha fiscal inválida/);
+  assert.throws(() => getUnfiledVatOwnActivityPeriods({
+    companyId: 'company-a', targetPeriod: '2026-12',
+    activityDates: ['2026-02-31'], declarations: []
+  }), /fecha fiscal inválida/);
 });
 
 test('reverses a prior-period common purchase credit using the original declaration proration', () => {
