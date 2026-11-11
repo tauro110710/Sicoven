@@ -280,7 +280,7 @@ test('reverses a prior-period common purchase credit using the original declarat
   const prior = {
     ...declaration, period: '2026-10', sourceIds: [original.id],
     sourceSnapshots: {
-      [original.id]: JSON.stringify({ kind: 'PURCHASE', id: original.id, vatCreditTreatment: 'COMMON', taxRate: 16, vatAmountBs: 160 })
+      [original.id]: JSON.stringify({ kind: 'PURCHASE', id: original.id, documentType: '01', supplierRif: 'J-12345678-9', vatCreditTreatment: 'COMMON', taxRate: 16, vatAmountBs: 160 })
     },
     position: calculateVatOwnPosition({
       outputVatBs: 0, purchaseCreditBs: 80, purchaseCredit16Bs: 80,
@@ -407,7 +407,7 @@ test('uses the original filed declaration snapshot if a purchase VAT treatment w
     ...declaration, period: '2026-10', sourceIds: [original.id],
     sourceSnapshots: {
       [original.id]: JSON.stringify({
-        kind: 'PURCHASE', id: original.id, vatCreditTreatment: 'TAXABLE', taxRate: 16, vatAmountBs: 160
+        kind: 'PURCHASE', id: original.id, documentType: '01', supplierRif: 'J-12345678-9', vatCreditTreatment: 'TAXABLE', taxRate: 16, vatAmountBs: 160
       })
     },
     position: calculateVatOwnPosition({
