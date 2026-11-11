@@ -92,6 +92,17 @@ export interface VatOwnPosition {
   creditCarryForwardBs: number;
 }
 
+export interface VatOwnDeclarationRevision {
+  revision: number;
+  revisedAt: string;
+  reason: string;
+  position: VatOwnPosition;
+  sourceIds: string[];
+  bcvRate?: number;
+  dailySourceChoices?: Record<string, 'Z' | 'INDIVIDUAL'>;
+  createdAt: string;
+}
+
 export interface VatOwnDeclaration {
   id: string;
   companyId: string;
@@ -104,6 +115,28 @@ export interface VatOwnDeclaration {
   declarationNumber?: string;
   filedAt?: string;
   createdAt: string;
+  updatedAt?: string;
+  revisions?: VatOwnDeclarationRevision[];
+}
+
+export function snapshotVatOwnDeclarationRevision(
+  declaration: VatOwnDeclaration,
+  revisedAt: string,
+  reason: string
+): VatOwnDeclarationRevision {
+  if (declaration.status !== 'DRAFT') throw new Error('Solo se puede versionar un borrador no presentado.');
+  if (!revisedAt || Number.isNaN(Date.parse(revisedAt))) throw new Error('La fecha de revisión no es válida.');
+  if (!reason.trim()) throw new Error('La revisión del borrador requiere un motivo.');
+  return {
+    revision: (declaration.revisions?.length || 0) + 1,
+    revisedAt,
+    reason: reason.trim(),
+    position: { ...declaration.position },
+    sourceIds: [...declaration.sourceIds],
+    bcvRate: declaration.bcvRate,
+    dailySourceChoices: { ...(declaration.dailySourceChoices || {}) },
+    createdAt: declaration.createdAt
+  };
 }
 
 export interface VatOwnDeclarationEvent {
