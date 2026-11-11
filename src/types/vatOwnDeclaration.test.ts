@@ -165,11 +165,11 @@ test('requires earlier months with fiscal activity to be filed before preparing 
 
 test('reverses a prior-period common purchase credit using the original declaration proration', () => {
   const original = {
-    id: 'purchase-old', companyId: 'company-a', invoiceDate: '2026-10-05',
+    id: 'purchase-old', companyId: 'company-a', invoiceDate: '2026-10-05', supplierRif: 'J-12345678-9',
     documentType: '01', taxRate: 16, vatAmountBs: 160, vatCreditTreatment: 'COMMON'
   } as PurchaseRecord;
   const note = {
-    id: 'purchase-credit-note', companyId: 'company-a', invoiceDate: '2026-11-05',
+    id: 'purchase-credit-note', companyId: 'company-a', invoiceDate: '2026-11-05', supplierRif: 'J-12345678-9',
     documentType: '03', taxRate: 16, vatAmountBs: 80, originalPurchaseId: original.id,
     vatCreditTreatment: 'COMMON'
   } as PurchaseRecord;
@@ -195,7 +195,7 @@ test('reverses a prior-period common purchase credit using the original declarat
 
 test('reclassifies non-creditable VAT to the original inventory/expense debit account', () => {
   const original = {
-    id: 'purchase-reclass', companyId: 'company-a', invoiceDate: '2026-11-02',
+    id: 'purchase-reclass', companyId: 'company-a', invoiceDate: '2026-11-02', supplierRif: 'J-12345678-9',
     documentType: '01', taxRate: 16, vatAmountBs: 160, taxableBaseBs: 1000,
     exemptAmountBs: 0, journalEntryId: 'purchase-journal'
   } as PurchaseRecord;
@@ -259,11 +259,11 @@ test('reverses the prior non-creditable VAT reclassification when a prior-period
 
 test('blocks a prior-period purchase credit note when its original invoice was never included in a filed declaration', () => {
   const original = {
-    id: 'purchase-unfiled', companyId: 'company-a', invoiceDate: '2026-10-05',
+    id: 'purchase-unfiled', companyId: 'company-a', invoiceDate: '2026-10-05', supplierRif: 'J-12345678-9',
     documentType: '01', taxRate: 16, vatAmountBs: 160, vatCreditTreatment: 'TAXABLE'
   } as PurchaseRecord;
   const note = {
-    id: 'purchase-credit-note-unfiled', companyId: 'company-a', invoiceDate: '2026-11-05',
+    id: 'purchase-credit-note-unfiled', companyId: 'company-a', invoiceDate: '2026-11-05', supplierRif: 'J-12345678-9',
     documentType: '03', taxRate: 16, vatAmountBs: 80, originalPurchaseId: original.id
   } as PurchaseRecord;
   assert.throws(() => calculateVatOwnPurchaseCreditSummary({
@@ -275,11 +275,11 @@ test('blocks a prior-period purchase credit note when its original invoice was n
 
 test('nets same-period purchase credit notes using the source invoice treatment and current proration', () => {
   const original = {
-    id: 'purchase-current', companyId: 'company-a', invoiceDate: '2026-11-02',
+    id: 'purchase-current', companyId: 'company-a', invoiceDate: '2026-11-02', supplierRif: 'J-12345678-9',
     documentType: '01', taxRate: 16, vatAmountBs: 160, vatCreditTreatment: 'COMMON'
   } as PurchaseRecord;
   const note = {
-    id: 'purchase-credit-note-current', companyId: 'company-a', invoiceDate: '2026-11-20',
+    id: 'purchase-credit-note-current', companyId: 'company-a', invoiceDate: '2026-11-20', supplierRif: 'J-12345678-9',
     documentType: '03', taxRate: 16, vatAmountBs: 40, originalPurchaseId: original.id,
     vatCreditTreatment: 'TAXABLE'
   } as PurchaseRecord;
