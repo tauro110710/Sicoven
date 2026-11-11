@@ -1,3 +1,5 @@
+import type { PurchaseRecord } from './accounting';
+
 export type VatOwnDeclarationStatus = 'DRAFT' | 'FILED';
 
 export type VatOwnPurchaseCreditTreatment = 'TAXABLE' | 'EXEMPT' | 'COMMON';
@@ -106,6 +108,9 @@ export interface VatOwnPositionInput {
   purchaseCreditGross16Bs?: number;
   purchaseCreditGross8Bs?: number;
   purchaseCreditNonEligibleBs?: number;
+  purchaseCreditReversalBs?: number;
+  purchaseCreditReversal16Bs?: number;
+  purchaseCreditReversal8Bs?: number;
   prorationRate?: number;
   taxableSalesBaseBs?: number;
   exemptSalesBaseBs?: number;
@@ -126,6 +131,9 @@ export interface VatOwnPosition {
   purchaseCreditGross16Bs: number;
   purchaseCreditGross8Bs: number;
   purchaseCreditNonEligibleBs: number;
+  purchaseCreditReversalBs: number;
+  purchaseCreditReversal16Bs: number;
+  purchaseCreditReversal8Bs: number;
   prorationRate: number;
   taxableSalesBaseBs: number;
   exemptSalesBaseBs: number;
@@ -163,6 +171,146 @@ export interface VatOwnDeclaration {
   createdAt: string;
   updatedAt?: string;
   revisions?: VatOwnDeclarationRevision[];
+}
+
+export interface VatOwnPurchaseCreditSummary {
+  prorationRate: number;
+  gross16Bs: number;
+  gross8Bs: number;
+  eligible16Bs: number;
+  eligible8Bs: number;
+  nonEligible16Bs: number;
+  nonEligible8Bs: number;
+  priorReversalEligible16Bs: number;
+  priorReversalEligible8Bs: number;
+  priorReversalNonEligible16Bs: number;
+  priorReversalNonEligible8Bs: number;
+  relatedPurchaseIds: string[];
+}
+
+export function calculateVatOwnPurchaseCreditSummary(input: {
+  companyId: string;
+  period: string;
+  purchases: readonly PurchaseRecord[];
+  allPurchases: readonly PurchaseRecord[];
+  priorDeclarations: readonly VatOwnDeclaration[];
+  taxableSalesBaseBs: number;
+  exemptSalesBaseBs: number;
+}): VatOwnPurchaseCreditSummary {
+  const periodPurchases = input.purchases.filter(item =>
+    item.companyId === input.companyId && item.invoiceDate.startsWith(input.period) && !item.isCancelled
+  );
+  const relatedPurchaseIds: string[] = [];
+  const priorNotes: Array<{ item: PurchaseRecord; original: PurchaseRecord; prior: VatOwnDeclaration }> = [];
+  for (const item of periodPurchases) {
+    if (item.documentType !== '03') continue;
+    const candidates = input.allPurchases.filter(original =>
+      original.companyId === input.companyId && original.documentType === '01' && !original.isCancelled &&
+      (item.originalPurchaseId
+        ? original.id === item.originalPurchaseId
+        : Boolean(item.affectedInvoiceNumber && original.invoiceNumber === item.affectedInvoiceNumber &&
+            (!item.affectedInvoiceDate || original.invoiceDate === item.affectedInvoiceDate) &&
+            (!item.affectedInvoiceControlNumber || original.controlNumber === item.affectedInvoiceControlNumber)))
+    );
+    if (candidates.length !== 1) {
+      throw new Error('La nota de crédito de compras ' + item.invoiceNumber + ' no tiene una factura original única y verificable. Vincule la factura antes de declarar.');
+    }
+    const original = candidates[0];
+    relatedPurchaseIds.push(original.id);
+    if (original.invoiceDate.slice(0, 7) >= input.period) {
+      if (original.invoiceDate.slice(0, 7) !== input.period) {
+        throw new Error('La nota de crédito de compras no puede corregir una factura de un período futuro.');
+      }
+      continue;
+    }
+    const matches = input.priorDeclarations.filter(declaration =>
+      declaration.companyId === input.companyId && declaration.status === 'FILED' &&
+      declaration.period < input.period && declaration.sourceIds.includes(original.id)
+    );
+    if (matches.length !== 1) {
+      throw new Error('La factura original de la nota de crédito no aparece en una única declaración IVA anterior presentada. Debe conciliarse o rectificarse el período original antes de declarar esta nota.');
+    }
+    priorNotes.push({ item, original, prior: matches[0] });
+  }
+  const hasCommonCurrentPurchases = periodPurchases.some(item => {
+    if (item.documentType === '03') {
+      const original = input.allPurchases.find(source => source.id === item.originalPurchaseId ||
+        (!item.originalPurchaseId && source.companyId === input.companyId &&
+          source.invoiceNumber === item.affectedInvoiceNumber &&
+          (!item.affectedInvoiceDate || source.invoiceDate === item.affectedInvoiceDate)));
+      if (original && original.invoiceDate.slice(0, 7) < input.period) return false;
+    }
+    return resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment) === 'COMMON' &&
+      Number(item.vatAmountBs || 0) > 0;
+  });
+  const prorationRate = resolveVatOwnProrationRate({
+    taxableSalesBaseBs: input.taxableSalesBaseBs,
+    exemptSalesBaseBs: input.exemptSalesBaseBs,
+    hasCommonPurchases: hasCommonCurrentPurchases
+  });
+  if (prorationRate === null) {
+    throw new Error('No se puede determinar la prorrata del IVA de compras comunes: el período no tiene una base válida de ventas gravadas y exentas.');
+  }
+
+  let gross16Bs = 0, gross8Bs = 0, eligible16Bs = 0, eligible8Bs = 0;
+  let nonEligible16Bs = 0, nonEligible8Bs = 0;
+  let priorReversalEligible16Bs = 0, priorReversalEligible8Bs = 0;
+  let priorReversalNonEligible16Bs = 0, priorReversalNonEligible8Bs = 0;
+  for (const item of periodPurchases) {
+    const amountBs = Number(item.vatAmountBs || 0);
+    if (!Number.isFinite(amountBs) || amountBs < 0) throw new Error('Una compra del período contiene IVA bruto inválido.');
+    const isEight = item.taxRate === 8;
+    const add = (bucket: 'gross' | 'eligible' | 'nonEligible', value: number) => {
+      if (isEight) {
+        if (bucket === 'gross') gross8Bs += value;
+        else if (bucket === 'eligible') eligible8Bs += value;
+        else nonEligible8Bs += value;
+      } else {
+        if (bucket === 'gross') gross16Bs += value;
+        else if (bucket === 'eligible') eligible16Bs += value;
+        else nonEligible16Bs += value;
+      }
+    };
+    if (item.documentType === '03') {
+      const priorNote = priorNotes.find(row => row.item.id === item.id);
+      if (priorNote) {
+        const treatment = resolveVatOwnPurchaseCreditTreatment(priorNote.original.vatCreditTreatment);
+        const priorRate = Number(priorNote.prior.position.prorationRate);
+        if (treatment === 'COMMON' && (!Number.isFinite(priorRate) || priorRate < 0 || priorRate > 1)) {
+          throw new Error('La declaración anterior no conserva una prorrata válida para revertir el crédito de la factura original.');
+        }
+        const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : priorRate;
+        const eligible = amountBs * factor;
+        const nonEligible = amountBs - eligible;
+        if (isEight) {
+          priorReversalEligible8Bs += eligible;
+          priorReversalNonEligible8Bs += nonEligible;
+        } else {
+          priorReversalEligible16Bs += eligible;
+          priorReversalNonEligible16Bs += nonEligible;
+        }
+        continue;
+      }
+    }
+    const sign = item.documentType === '03' ? -1 : 1;
+    const treatment = resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment);
+    const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : prorationRate;
+    add('gross', sign * amountBs);
+    add('eligible', sign * amountBs * factor);
+    add('nonEligible', sign * amountBs * (1 - factor));
+  }
+  if ([gross16Bs, gross8Bs, eligible16Bs, eligible8Bs, nonEligible16Bs, nonEligible8Bs].some(value => value < -0.02)) {
+    throw new Error('Las notas de crédito del mismo período exceden el crédito fiscal de compras. Revise los documentos vinculados antes de declarar.');
+  }
+  gross16Bs = Math.max(0, gross16Bs); gross8Bs = Math.max(0, gross8Bs);
+  eligible16Bs = Math.max(0, eligible16Bs); eligible8Bs = Math.max(0, eligible8Bs);
+  nonEligible16Bs = Math.max(0, nonEligible16Bs); nonEligible8Bs = Math.max(0, nonEligible8Bs);
+  return {
+    prorationRate, gross16Bs, gross8Bs, eligible16Bs, eligible8Bs, nonEligible16Bs, nonEligible8Bs,
+    priorReversalEligible16Bs, priorReversalEligible8Bs,
+    priorReversalNonEligible16Bs, priorReversalNonEligible8Bs,
+    relatedPurchaseIds: [...new Set(relatedPurchaseIds)]
+  };
 }
 
 export function snapshotVatOwnDeclarationRevision(
