@@ -5691,7 +5691,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const sourceIds = [...new Set([
         ...resolution.days.flatMap(day => day.sourceIds),
         ...monthPurchases.map(item => item.id),
-        ...purchaseSummary.relatedPurchaseIds,
         ...withholdingRows.map(item => item.id)
       ])];
       const priorRevision = existingDraft
@@ -5779,7 +5778,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         ...currentPurchaseSummary.relatedPurchaseIds,
         ...getReceivedVatWithholdingSales(sales, currentCompany.id, declaration.period).map(item => item.id)
       ])];
-      if (!areVatOwnDeclarationSourcesCurrent(declaration.sourceIds, currentSourceIds)) {
+      if (!areVatOwnDeclarationSourcesCurrent([...declaration.sourceIds, ...(declaration.relatedSourceIds || [])], currentSourceIds)) {
         throw new Error('No se puede presentar: los libros cambiaron después de preparar el borrador. Actualícelo para conservar la nueva versión y sus fuentes antes de registrar la presentación.');
       }
     }
