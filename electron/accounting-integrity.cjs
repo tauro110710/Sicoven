@@ -784,6 +784,9 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     const companyId = String(declaration.companyId);
     const knownPeriods = new Set([...(activityPeriodsByCompany.get(companyId) || [])]
       .filter(period => period < declaration.period));
+    for (const item of declarations) {
+      if (String(item.companyId) === companyId && item.period < declaration.period) knownPeriods.add(item.period);
+    }
     for (const key of filedPeriodKeys) {
       const separator = key.lastIndexOf(':');
       if (key.slice(0, separator) === companyId) {
