@@ -5,6 +5,8 @@ export interface VatOwnPositionInput {
   outputVat16Bs?: number;
   outputVat8Bs?: number;
   purchaseCreditBs: number;
+  purchaseCredit16Bs?: number;
+  purchaseCredit8Bs?: number;
   receivedWithholdingsBs: number;
   priorCreditBs?: number;
   debitAdjustmentsBs?: number;
@@ -16,6 +18,8 @@ export interface VatOwnPosition {
   outputVat16Bs: number;
   outputVat8Bs: number;
   purchaseCreditBs: number;
+  purchaseCredit16Bs: number;
+  purchaseCredit8Bs: number;
   receivedWithholdingsBs: number;
   priorCreditAppliedBs: number;
   debitAdjustmentsBs: number;
@@ -32,6 +36,8 @@ export interface VatOwnDeclaration {
   status: VatOwnDeclarationStatus;
   position: VatOwnPosition;
   sourceIds: string[];
+  bcvRate?: number;
+  dailySourceChoices?: Record<string, 'Z' | 'INDIVIDUAL'>;
   declarationNumber?: string;
   filedAt?: string;
   createdAt: string;
@@ -50,6 +56,8 @@ export interface VatOwnDeclarationEvent {
   idempotencyKey: string;
   journalEntryId?: string;
   reversalOfEventId?: string;
+  treasuryAccountCode?: string;
+  bcvRate?: number;
   note?: string;
 }
 
@@ -69,6 +77,9 @@ export function calculateVatOwnPosition(input: VatOwnPositionInput): VatOwnPosit
     throw new Error('El desglose de IVA 16% y 8% no concilia con el débito fiscal total.');
   }
   const purchaseCreditBs = amount(input.purchaseCreditBs, 'Crédito fiscal de compras');
+  const purchaseCredit16Bs = amount(input.purchaseCredit16Bs ?? purchaseCreditBs, 'Crédito fiscal 16%');
+  const purchaseCredit8Bs = amount(input.purchaseCredit8Bs, 'Crédito fiscal 8%');
+  if (Math.abs(purchaseCredit16Bs + purchaseCredit8Bs - purchaseCreditBs) > 0.02) throw new Error('El desglose del crédito fiscal 16% y 8% no concilia con el total.');
   const receivedWithholdingsBs = amount(input.receivedWithholdingsBs, 'Retenciones de IVA recibidas');
   const priorCreditAvailableBs = amount(input.priorCreditBs, 'Crédito de períodos anteriores');
   const debitAdjustmentsBs = amount(input.debitAdjustmentsBs, 'Ajustes al débito');
@@ -80,7 +91,7 @@ export function calculateVatOwnPosition(input: VatOwnPositionInput): VatOwnPosit
   const netTaxBs = balanceBeforePriorCredit - priorCreditAppliedBs;
   return {
     outputVatBs, outputVat16Bs, outputVat8Bs,
-    purchaseCreditBs, receivedWithholdingsBs,
+    purchaseCreditBs, purchaseCredit16Bs, purchaseCredit8Bs, receivedWithholdingsBs,
     priorCreditAppliedBs, debitAdjustmentsBs, creditAdjustmentsBs,
     netTaxBs, amountDueBs: Math.max(0, netTaxBs),
     creditCarryForwardBs: Math.max(0, -netTaxBs) + unusedPriorCreditBs
