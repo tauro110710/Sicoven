@@ -683,7 +683,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               <span className="font-mono font-bold">{formatBs(totalAmountBs)} ({formatUsd(totalAmountUsd)})</span>
             </div>
             <div className="flex justify-between items-center text-xs text-slate-300"><span>IVA acreditable ({effectiveVatRate}%):</span><span className="font-mono">{formatBs(vatAmountBs)}</span></div>
-            {additionalLuxuryTaxBs > 0 && <div className="flex justify-between items-center text-xs text-amber-200"><span>Impuesto adicional no acreditable (15%):</span><span className="font-mono">{formatBs(additionalLuxuryTaxBs)}</span></div>
+            {additionalLuxuryTaxBs > 0 && <div className="flex justify-between items-center text-xs text-amber-200"><span>Impuesto adicional no acreditable (15%):</span><span className="font-mono">{formatBs(additionalLuxuryTaxBs)}</span></div>}
             <div className="flex justify-between items-center text-xs text-slate-300"><span>IGTF:</span><span className="font-mono">{formatBs(igtfAmountBs)}</span></div>
             <div className="flex justify-between items-center text-xs text-rose-300">
               <span>(-) Retención IVA ({retentionRate}%):</span>
