@@ -359,12 +359,13 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
   const relatedPurchaseIds: string[] = [];
   const reclassifications: VatOwnPurchaseCreditSummary['reclassifications'] = [];
   const originalByNoteId = new Map<string, PurchaseRecord>();
-  const priorNotes: Array<{ item: PurchaseRecord; original: PurchaseRecord; prior: VatOwnDeclaration; treatment: VatOwnPurchaseCreditTreatment; taxRate: number; originalVatAmountBs: number }> = [];
+  const priorNotes: Array<{ item: PurchaseRecord; original: PurchaseRecord; prior: VatOwnDeclaration; treatment: VatOwnPurchaseCreditTreatment; taxRate: number; originalVatAmountBs: number; supplierRif: string }> = [];
   const historicalOriginalVatById = new Map<string, number>();
   const getFiledPurchaseSnapshot = (declaration: VatOwnDeclaration, original: PurchaseRecord): {
     treatment: VatOwnPurchaseCreditTreatment;
     taxRate: number;
     originalVatAmountBs: number;
+    supplierRif: string;
   } => {
     const saved = declaration.sourceSnapshots?.[original.id];
     if (!saved) {
@@ -375,16 +376,18 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     catch { throw new Error('La huella fiscal de la factura original ' + original.invoiceNumber + ' no se puede leer para revertir su crédito IVA.'); }
     const historicalTaxRate = Number(snapshot.taxRate);
     const originalVatAmountBs = Number(snapshot.vatAmountBs);
+    const historicalSupplierRif = normalizeFiscalReference(snapshot.supplierRif);
     if (snapshot.kind !== 'PURCHASE' || snapshot.id !== original.id ||
         !['TAXABLE', 'EXEMPT', 'COMMON'].includes(String(snapshot.vatCreditTreatment)) ||
-        !Number.isFinite(historicalTaxRate) || ![8, 16, 31].includes(historicalTaxRate) ||
+        !historicalSupplierRif || !Number.isFinite(historicalTaxRate) || ![8, 16, 31].includes(historicalTaxRate) ||
         !Number.isFinite(originalVatAmountBs) || originalVatAmountBs < 0) {
       throw new Error('La declaración anterior no conserva el tratamiento, la alícuota y el IVA bruto históricos de la factura original ' + original.invoiceNumber + '.');
     }
     return {
       treatment: resolveVatOwnPurchaseCreditTreatment(snapshot.vatCreditTreatment as VatOwnPurchaseCreditTreatment),
       taxRate: historicalTaxRate,
-      originalVatAmountBs
+      originalVatAmountBs,
+      supplierRif: historicalSupplierRif
     };
   };
   const normalizeFiscalReference = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
@@ -430,6 +433,9 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     historicalOriginalVatById.set(original.id, historical.originalVatAmountBs);
     if (item.taxRate !== historical.taxRate) {
       throw new Error('La nota de crédito de compras ' + item.invoiceNumber + ' no conserva la alícuota de la factura según la declaración original presentada.');
+    }
+    if (normalizeFiscalReference(item.supplierRif) !== historical.supplierRif) {
+      throw new Error('El RIF del proveedor de la nota de crédito no coincide con la huella histórica de la factura original presentada.');
     }
     priorNotes.push({ item, original, prior: matches[0], ...historical });
   }
