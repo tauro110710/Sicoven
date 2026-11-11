@@ -249,6 +249,24 @@ test('classifies the 31% purchase rate as 16% creditable IVA and excludes the se
   assert.equal(result.gross8Bs, 0);
 });
 
+test('keeps the additional luxury tax outside the purchase VAT credit at the combined 31% rate', () => {
+  const purchase = {
+    id: 'purchase-luxury-tax', companyId: 'company-a', invoiceDate: '2026-11-05',
+    supplierRif: 'J-12345678-9', documentType: '01', taxRate: 31,
+    taxableBaseBs: 1000, exemptAmountBs: 0, vatAmountBs: 160,
+    additionalLuxuryTaxBs: 150, vatCreditTreatment: 'TAXABLE'
+  } as PurchaseRecord;
+  const result = calculateVatOwnPurchaseCreditSummary({
+    companyId: 'company-a', period: '2026-11', purchases: [purchase],
+    allPurchases: [purchase], priorDeclarations: [],
+    taxableSalesBaseBs: 1000, exemptSalesBaseBs: 0
+  });
+  assert.equal(result.gross16Bs, 160);
+  assert.equal(result.eligible16Bs, 160);
+  assert.equal(result.nonEligible16Bs, 0);
+  assert.equal(result.gross8Bs, 0);
+});
+
 test('reverses a prior-period common purchase credit using the original declaration proration', () => {
   const original = {
     id: 'purchase-old', companyId: 'company-a', invoiceDate: '2026-10-05', supplierRif: 'J-12345678-9',
