@@ -2250,6 +2250,16 @@ test('SQLite requires the filed IVA own-account declaration to have exactly one 
       ...filed.vatOwnDeclarationEvents[0], declarationNumber: 'OTRO-NÚMERO'
     }]
   }), /número, fecha o asiento de determinación coincidente/);
+  const unbalancedUsd = {
+    ...filed,
+    journalEntries: filed.journalEntries.map(entry => ({
+      ...entry,
+      items: entry.items.map((line, index) => index === 0
+        ? { ...line, debitUsd: Number(line.debitUsd) + 0.1 }
+        : line)
+    }))
+  };
+  assert.throws(() => validateAccountingSnapshot(priorDraft, unbalancedUsd), /desequilibrado en Bs y USD/);
 });
 
 test('SQLite enforces prior-period continuity and blocks a later filing before an earlier active month', () => {
