@@ -632,7 +632,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
       throw new Error('SQLite rechazó el historial de versiones del borrador IVA.');
     }
     if (declaration.status === 'FILED') {
-      if (!String(declaration.declarationNumber || '').trim() || !timestampIsValid(declaration.filedAt)) {
+      if (!declaration.sourceSnapshots || !String(declaration.declarationNumber || '').trim() || !timestampIsValid(declaration.filedAt)) {
         throw new Error('SQLite rechazó una declaración IVA presentada sin número oficial o fecha válida.');
       }
       const numberKey = companyId + ':' + String(declaration.declarationNumber).trim();
@@ -665,6 +665,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     }
     if (next.status !== 'DRAFT') throw new Error('SQLite bloqueó una transición inválida del estado de declaración IVA.');
     if (!equal(old, next)) {
+      if (!next.sourceSnapshots) throw new Error('SQLite exige huellas fiscales al actualizar un borrador IVA.');
       const oldRevisions = normalizeRevisions(old.revisions);
       const nextRevisions = normalizeRevisions(next.revisions);
       const revision = nextRevisions[nextRevisions.length - 1];
@@ -687,6 +688,9 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
   for (const declaration of declarations) {
     if (!priorById.has(String(declaration.id)) && declaration.status !== 'DRAFT') {
       throw new Error('SQLite no permite insertar directamente una declaración IVA como presentada; primero debe existir el borrador y su evento de presentación.');
+    }
+    if (!priorById.has(String(declaration.id)) && !declaration.sourceSnapshots) {
+      throw new Error('SQLite exige huellas documentales fiscales al crear un nuevo borrador IVA.');
     }
   }
 
@@ -712,14 +716,22 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     idempotencyKeys.add(idempotencyKey);
     const history = timeline.get(declaration.id) || [];
     const eventDate = event.occurredAt.slice(0, 10);
+    const localNow = new Date();
+    const localToday = localNow.getFullYear() + '-' + String(localNow.getMonth() + 1).padStart(2, '0') + '-' + String(localNow.getDate()).padStart(2, '0');
+    if (eventDate > localToday) throw new Error('SQLite rechazó un evento IVA con fecha futura.');
     const journal = event.journalEntryId ? journals.get(String(event.journalEntryId)) : undefined;
     if (event.journalEntryId && (!journal || journal.companyId !== declaration.companyId ||
         journal.type !== 'AJUSTE' || journal.date !== eventDate)) {
       throw new Error('SQLite rechazó un evento IVA cuyo asiento no existe o no coincide en empresa, tipo y fecha.');
     }
     if (event.eventType === 'FILED') {
+      const position = declaration.position;
+      const filingRequiresJournal = [position.outputVatBs, position.purchaseCreditBs, position.purchaseCreditReversalBs,
+        position.purchaseCreditReversalNonEligibleBs, position.receivedWithholdingsBs, position.priorCreditAppliedBs,
+        position.debitAdjustmentsBs, position.creditAdjustmentsBs, position.amountDueBs, position.creditCarryForwardBs]
+        .some(value => Number(value) > 0.01) || asArray(declaration.purchaseVatReclassificationItems).length > 0;
       if (history.some(item => item.eventType === 'FILED') ||
-          declaration.status !== 'FILED' ||
+          declaration.status !== 'FILED' || (filingRequiresJournal && !journal) ||
           String(declaration.declarationNumber || '').trim() !== String(event.declarationNumber || '').trim() ||
           declaration.filedAt.slice(0, 10) !== eventDate ||
           eventDate < declaration.period + '-01' ||
@@ -745,7 +757,11 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           !reference || paymentReferences.has(referenceKey) ||
           !String(event.treasuryAccountCode || '').startsWith('1.1.1.') ||
           !Number.isFinite(Number(event.bcvRate)) || Number(event.bcvRate) <= 0 ||
-          !journal || String(journal.referenceDoc || '') !== 'IVA-PAGO:' + declaration.id + ':' + event.idempotencyKey ||
+          eventDate < String(declaration.filedAt || '').slice(0, 10) ||
+          !journal || Math.abs(Number(journal.bcvRate) - Number(event.bcvRate)) > 0.000001 ||
+          String(journal.referenceDoc || '') !== 'IVA-PAGO:' + declaration.id + ':' + event.idempotencyKey ||
+          !asArray(journal.items).some(line => String(line.accountCode) === '2.1.2.09' &&
+            Math.abs(Number(line.debitBs || 0) - amount) <= 0.02) ||
           !asArray(journal.items).some(line => String(line.accountCode) === String(event.treasuryAccountCode) &&
             Math.abs(Number(line.creditBs || 0) - amount) <= 0.02)) {
         throw new Error('SQLite rechazó un pago IVA sin saldo disponible, referencia única, tasa, cuenta de tesorería o asiento correspondiente.');
