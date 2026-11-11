@@ -4,6 +4,7 @@ import {
   calculateWeightedAverageCost,
   calculateWeightedAverageCostDual,
   calculateFifoIssue,
+  applyFifoAdjustment,
   reconstructFifoLayers,
   validateInventoryMovement,
   normalizeProductionRecipe,
@@ -113,6 +114,21 @@ describe('motor de inventario contable', () => {
     ], 1), /Una capa PEPS contiene/);
   });
 
+  it('PEPS registra sobrantes como una nueva capa sin promediar las anteriores', () => {
+    const result = applyFifoAdjustment([{ quantity: 4, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01' }], 3, 25, 2.5, '2026-01-03', 'AJ-PLUS');
+    assert.equal(result.totalCostBs, 75); assert.equal(result.totalCostUsd, 7.5);
+    assert.equal(result.balanceTotalBs, 115); assert.equal(result.balanceTotalUsd, 11.5);
+    assert.deepEqual(result.remainingLayers.map(layer => [layer.quantity, layer.unitCostBs]), [[4, 10], [3, 25]]);
+  });
+  it('PEPS consume las capas más antiguas en ajustes negativos y conserva costos históricos', () => {
+    const result = applyFifoAdjustment([{ quantity: 5, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01' }, { quantity: 4, unitCostBs: 20, unitCostUsd: 2, date: '2026-01-02' }], -6, 0, 0, '2026-01-03', 'AJ-MINUS');
+    assert.equal(result.totalCostBs, 70); assert.equal(result.totalCostUsd, 7);
+    assert.equal(result.balanceTotalBs, 60); assert.equal(result.balanceTotalUsd, 6);
+    assert.deepEqual(result.remainingLayers.map(layer => [layer.quantity, layer.unitCostBs]), [[3, 20]]);
+  });
+  it('PEPS rechaza ajustes negativos superiores a las capas disponibles', () => {
+    assert.throws(() => applyFifoAdjustment([{ quantity: 2, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01' }], -3, 0, 0, '2026-01-02'), /Existencia insuficiente/);
+  });
   it('rechaza salidas superiores a la existencia', () => {
     assert.match(validateInventoryMovement({
       date: '2026-10-25', quantity: 3, bcvRate: 100, unitCostBs: 20,
