@@ -33,6 +33,30 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
+  const inventoryReturnOptions = Object.values((sourceSale.inventoryLines || []).reduce((groups, line) => {
+    const current = groups[line.productId] || { productId: line.productId, productName: line.productName, quantity: 0, netAmountBs: 0, exemptAmountBs: 0 };
+    current.quantity += Number(line.quantity || 0);
+    current.netAmountBs += Number(line.netAmountBs || 0);
+    current.exemptAmountBs += Number(line.exemptAmountBs || 0);
+    groups[line.productId] = current;
+    return groups;
+  }, {} as Record<string, { productId: string; productName: string; quantity: number; netAmountBs: number; exemptAmountBs: number }>));
+  const updateReturnedQuantity = (productId: string, value: string) => {
+    const next = { ...returnedInventoryQuantities, [productId]: value };
+    setReturnedInventoryQuantities(next);
+    if (kind !== 'CREDIT' || inventoryReturnOptions.length === 0) return;
+    let taxable = 0;
+    let exempt = 0;
+    for (const line of inventoryReturnOptions) {
+      const returned = Math.min(line.quantity, Math.max(0, parseAmount(next[line.productId] || '0')));
+      const ratio = line.quantity > 0 ? returned / line.quantity : 0;
+      taxable += line.netAmountBs * ratio;
+      exempt += line.exemptAmountBs * ratio;
+    }
+    setTaxableBaseBs(taxable.toFixed(2));
+    setExemptAmountBs(exempt.toFixed(2));
+  };
+
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -84,10 +108,10 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
             <input required type="text" inputMode="decimal" value={noteBcvRate} onChange={e=>setNoteBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
           </label>
           <label className="text-xs font-semibold text-slate-700">Base imponible (Bs.)
-            <input required type="text" inputMode="decimal" value={taxableBaseBs} onChange={e=>setTaxableBaseBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
+            <input required type="text" inputMode="decimal" value={taxableBaseBs} readOnly={kind === "CREDIT" && inventoryReturnOptions.length > 0} onChange={e=>setTaxableBaseBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal read-only:bg-slate-50" />
           </label>
           <label className="text-xs font-semibold text-slate-700">Monto exento (Bs.)
-            <input required type="text" inputMode="decimal" value={exemptAmountBs} onChange={e=>setExemptAmountBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
+            <input required type="text" inputMode="decimal" value={exemptAmountBs} readOnly={kind === "CREDIT" && inventoryReturnOptions.length > 0} onChange={e=>setExemptAmountBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal read-only:bg-slate-50" />
           </label>
         </div>
         {kind === 'CREDIT' && inventoryReturnOptions.length > 0 && <section className="rounded-xl border border-slate-200 p-3">
