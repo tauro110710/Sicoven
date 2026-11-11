@@ -388,7 +388,7 @@ export function calculateVatOwnPosition(input: VatOwnPositionInput): VatOwnPosit
   const priorCreditAvailableBs = amount(input.priorCreditBs, 'Crédito de períodos anteriores');
   const debitAdjustmentsBs = amount(input.debitAdjustmentsBs, 'Ajustes al débito');
   const creditAdjustmentsBs = amount(input.creditAdjustmentsBs, 'Ajustes al crédito');
-  const balanceBeforePriorCredit = outputVatBs + debitAdjustmentsBs - purchaseCreditBs -
+  const balanceBeforePriorCredit = outputVatBs + debitAdjustmentsBs + purchaseCreditReversalBs - purchaseCreditBs -
     receivedWithholdingsBs - creditAdjustmentsBs;
   const priorCreditAppliedBs = Math.min(priorCreditAvailableBs, Math.max(0, balanceBeforePriorCredit));
   const unusedPriorCreditBs = priorCreditAvailableBs - priorCreditAppliedBs;
@@ -397,7 +397,8 @@ export function calculateVatOwnPosition(input: VatOwnPositionInput): VatOwnPosit
     outputVatBs, outputVat16Bs, outputVat8Bs,
     purchaseCreditBs, purchaseCredit16Bs, purchaseCredit8Bs,
     purchaseCreditGrossBs, purchaseCreditGross16Bs, purchaseCreditGross8Bs,
-    purchaseCreditNonEligibleBs, prorationRate, taxableSalesBaseBs, exemptSalesBaseBs, receivedWithholdingsBs,
+    purchaseCreditNonEligibleBs, purchaseCreditReversalBs, purchaseCreditReversal16Bs, purchaseCreditReversal8Bs,
+    prorationRate, taxableSalesBaseBs, exemptSalesBaseBs, receivedWithholdingsBs,
     priorCreditAppliedBs, debitAdjustmentsBs, creditAdjustmentsBs,
     netTaxBs, amountDueBs: Math.max(0, netTaxBs),
     creditCarryForwardBs: Math.max(0, -netTaxBs) + unusedPriorCreditBs
