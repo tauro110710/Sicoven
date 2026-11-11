@@ -657,6 +657,7 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
     }
     const liveSourceEntry = sourceEntries[0];
     if (liveSourceEntry.reversalOfEntryId || liveSourceEntry.reversedByEntryId ||
+        historicalJournal?.reversalOfEntryId || historicalJournal?.reversedByEntryId ||
         input.journalEntries.some(entry => entry.companyId === input.companyId && entry.reversalOfEntryId === sourceJournalId)) {
       throw new Error('No se puede conciliar el IVA de una factura cuyo asiento de compra fue revertido. Reconcilie primero el estado fiscal del documento.');
     }
