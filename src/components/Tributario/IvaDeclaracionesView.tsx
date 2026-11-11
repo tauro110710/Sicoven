@@ -19,6 +19,11 @@ export const IvaDeclaracionesView: React.FC = () => {
   const { currentCompany, accounts, sales, purchases, journalEntries, vatOwnDeclarations, vatOwnDeclarationEvents, createVatOwnDeclaration, recordVatOwnDeclarationEvent, isStorageReady } = useAccounting();
   const today = new Date();
   const [period, setPeriod] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`);
+  const [periodYear, periodMonth] = period.split('-').map(Number);
+  const periodEndDate = Number.isInteger(periodYear) && Number.isInteger(periodMonth) && periodMonth >= 1 && periodMonth <= 12
+    ? new Date(Date.UTC(periodYear, periodMonth, 0)).toISOString().slice(0, 10) : '';
+  const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const periodCanBeFiled = Boolean(periodEndDate && localToday > periodEndDate);
   const [dailySourceChoices, setDailySourceChoices] = useState<Record<string, 'Z' | 'INDIVIDUAL'>>({});
   const [declarationNumber, setDeclarationNumber] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
@@ -394,8 +399,9 @@ export const IvaDeclaracionesView: React.FC = () => {
           </details>}
           {savedDeclaration.status==='DRAFT' ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
             <p className="text-sm font-semibold text-amber-950">Al presentar, SICOVEN registra el número oficial y el asiento de determinación mensual. El borrador y sus documentos fuente permanecen conservados.</p>
+            {!periodCanBeFiled && <p className="text-xs font-semibold text-amber-900">La presentación estará disponible después de finalizar el período {period} (cierre: {periodEndDate || 'fecha pendiente'}). Puedes preparar y conciliar el borrador mientras tanto.</p>}
             <div className="flex flex-wrap gap-2"><input value={declarationNumber} onChange={event=>setDeclarationNumber(event.target.value)} placeholder="Número oficial de declaración" className="min-w-[220px] flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-              <button type="button" disabled={workflowBusy || !declarationNumber.trim() || draftNeedsRefresh} onClick={async()=>{
+              <button type="button" disabled={workflowBusy || !declarationNumber.trim() || draftNeedsRefresh || !periodCanBeFiled} onClick={async()=>{
                 setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
                 try { await recordVatOwnDeclarationEvent(savedDeclaration.id,{companyId:currentCompany.id,eventType:'FILED',occurredAt:localIsoDateTime(new Date(new Date().getFullYear(),new Date().getMonth(),new Date().getDate(),12)),declarationNumber:declarationNumber.trim(),idempotencyKey:'FILED:'+savedDeclaration.id});setWorkflowMessage('Presentación registrada con su asiento de determinación.'); }
                 catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo registrar la presentación.');}
