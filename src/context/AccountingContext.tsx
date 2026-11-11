@@ -5699,7 +5699,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const declaration: VatOwnDeclaration = {
         id: existingDraft?.id || 'vat-own-' + currentCompany.id + '-' + input.period,
         companyId: currentCompany.id, period: input.period, status: 'DRAFT',
-        position, sourceIds, relatedSourceIds: purchaseSummary.relatedPurchaseIds, bcvRate: Number(currentCompany.bcvRate) || 0,
+        position, sourceIds, relatedSourceIds: purchaseSummary.relatedPurchaseIds.filter(id => !sourceIds.includes(id)), bcvRate: Number(currentCompany.bcvRate) || 0,
         dailySourceChoices: { ...(input.choices || {}) },
         purchaseVatReclassificationItems,
         createdAt: existingDraft?.createdAt || createdAt,
@@ -5786,7 +5786,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         ...currentPurchaseSummary.relatedPurchaseIds,
         ...getReceivedVatWithholdingSales(sales, currentCompany.id, declaration.period).map(item => item.id)
       ])];
-      if (!areVatOwnDeclarationSourcesCurrent([...declaration.sourceIds, ...(declaration.relatedSourceIds || [])], currentSourceIds)) {
+      if (!areVatOwnDeclarationSourcesCurrent([...new Set([...declaration.sourceIds, ...(declaration.relatedSourceIds || [])])], currentSourceIds)) {
         throw new Error('No se puede presentar: los libros cambiaron después de preparar el borrador. Actualícelo para conservar la nueva versión y sus fuentes antes de registrar la presentación.');
       }
     }
