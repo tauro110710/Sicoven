@@ -2207,12 +2207,12 @@ test('SQLite enforces prior-period continuity and blocks a later filing before a
   }));
 
   const novemberFiled = {
-    ...novemberDraft, status: 'FILED', declarationNumber: 'IVA-NOV-001',
-    filedAt: '2026-12-01T12:00:00.000-04:00'
+    ...novemberDraft, position: zeroPosition, status: 'FILED', declarationNumber: 'IVA-NOV-001',
+    filedAt: '2026-11-11T12:00:00.000-04:00'
   };
   const novemberEvent = {
     id: 'vat-own-event-november', declarationId: novemberFiled.id, companyId: 'company-1',
-    eventType: 'FILED', occurredAt: novemberFiled.filedAt, recordedAt: '2026-12-01T16:00:00.000Z',
+    eventType: 'FILED', occurredAt: novemberFiled.filedAt, recordedAt: '2026-11-11T16:00:00.000Z',
     declarationNumber: novemberFiled.declarationNumber, idempotencyKey: 'FILED:' + novemberFiled.id
   };
   const laterFiledPrior = {
