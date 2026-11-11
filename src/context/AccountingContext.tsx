@@ -5740,7 +5740,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         purchaseCreditReversalNonEligibleBs, purchaseCreditReversalNonEligible16Bs, purchaseCreditReversalNonEligible8Bs,
         prorationRate, taxableSalesBaseBs, exemptSalesBaseBs,
         receivedWithholdingsBs: withholdingBs, priorCreditBs: prior?.position.creditCarryForwardBs || 0,
-        debitAdjustmentsBs, creditAdjustmentsBs
+        debitAdjustmentsBs, creditAdjustmentsBs,
+        creditAdjustments16Bs: Math.max(0, -outputVat16Raw),
+        creditAdjustments8Bs: Math.max(0, -outputVat8Raw)
       });
       const createdAt = new Date().toISOString();
       const sourceIds = [...new Set([
