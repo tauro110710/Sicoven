@@ -743,6 +743,7 @@ export function validateVatOwnEvent(input: {
   if (draft.companyId !== declaration.companyId || draft.declarationId !== declaration.id) {
     throw new Error('El evento no pertenece a la declaración y empresa seleccionadas.');
   }
+  if (!isValidVatOwnDeclarationPeriod(declaration.period)) throw new Error('El período de la declaración no es válido.');
   if (!draft.idempotencyKey.trim()) throw new Error('El evento requiere una clave de idempotencia.');
   if (events.some(event => event.idempotencyKey === draft.idempotencyKey)) {
     throw new Error('La operación ya fue registrada; no se admite un duplicado.');
