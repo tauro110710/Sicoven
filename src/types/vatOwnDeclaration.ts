@@ -24,10 +24,13 @@ export function getUnfiledVatOwnActivityPeriods(input: {
     .map(item => item.period));
   const activityPeriods = new Set<string>();
   for (const date of input.activityDates) {
-    const period = String(date || '').slice(0, 7);
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) {
+    const dateText = String(date || '');
+    const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(dateText)
+      ? new Date(dateText + 'T00:00:00.000Z') : null;
+    if (!parsedDate || !Number.isFinite(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== dateText) {
       throw new Error('Existe una fecha fiscal inválida que impide verificar la continuidad de las declaraciones de IVA.');
     }
+    const period = dateText.slice(0, 7);
     if (period < input.targetPeriod) activityPeriods.add(period);
   }
   return [...activityPeriods].filter(period => !filedPeriods.has(period)).sort();
