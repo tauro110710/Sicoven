@@ -2166,6 +2166,67 @@ test('SQLite requires the filed IVA own-account declaration to have exactly one 
   }), /número, fecha o asiento de determinación coincidente/);
 });
 
+test('SQLite enforces prior-period continuity and blocks a later filing before an earlier active month', () => {
+  const sale = {
+    id: 'sale-october', companyId: 'company-1', invoiceDate: '2026-10-15',
+    documentType: '01', invoiceNumber: 'F-001', isCancelled: false
+  };
+  const base = {
+    ...emptyState(), companies: [{ id: 'company-1', name: 'Empresa Uno' }],
+    sales: [sale]
+  };
+  const novemberDraft = {
+    ...vatOwnDeclarationFixture().vatOwnDeclarations[0], id: 'vat-own-2026-11', period: '2026-11'
+  };
+  assert.throws(() => validateAccountingSnapshot(base, {
+    ...base, vatOwnDeclarations: [novemberDraft], vatOwnDeclarationEvents: []
+  }), /períodos anteriores con actividad fiscal sin presentar/);
+
+  const zeroPosition = vatOwnPositionFixture({
+    outputVatBs: 0, outputVat16Bs: 0, outputVat8Bs: 0,
+    netTaxBs: 0, amountDueBs: 0, creditCarryForwardBs: 0
+  });
+  const octoberFiled = {
+    id: 'vat-own-2026-10', companyId: 'company-1', period: '2026-10',
+    status: 'FILED', position: zeroPosition, sourceIds: [], relatedSourceIds: [],
+    sourceSnapshots: {}, bcvRate: 874, dailySourceChoices: {},
+    declarationNumber: 'IVA-OCT-001', filedAt: '2026-11-01T12:00:00.000-04:00',
+    createdAt: '2026-10-31T10:00:00.000Z'
+  };
+  const octoberEvent = {
+    id: 'vat-own-event-october', declarationId: octoberFiled.id, companyId: 'company-1',
+    eventType: 'FILED', occurredAt: octoberFiled.filedAt, recordedAt: '2026-11-01T16:00:00.000Z',
+    declarationNumber: octoberFiled.declarationNumber, idempotencyKey: 'FILED:' + octoberFiled.id
+  };
+  const prior = {
+    ...base, vatOwnDeclarations: [octoberFiled],
+    vatOwnDeclarationEvents: [octoberEvent]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, {
+    ...prior, vatOwnDeclarations: [octoberFiled, novemberDraft]
+  }));
+
+  const novemberFiled = {
+    ...novemberDraft, status: 'FILED', declarationNumber: 'IVA-NOV-001',
+    filedAt: '2026-12-01T12:00:00.000-04:00'
+  };
+  const novemberEvent = {
+    id: 'vat-own-event-november', declarationId: novemberFiled.id, companyId: 'company-1',
+    eventType: 'FILED', occurredAt: novemberFiled.filedAt, recordedAt: '2026-12-01T16:00:00.000Z',
+    declarationNumber: novemberFiled.declarationNumber, idempotencyKey: 'FILED:' + novemberFiled.id
+  };
+  const laterFiledPrior = {
+    ...emptyState(), companies: [{ id: 'company-1', name: 'Empresa Uno' }],
+    vatOwnDeclarations: [novemberFiled], vatOwnDeclarationEvents: [novemberEvent]
+  };
+  const octoberDraft = {
+    ...vatOwnDeclarationFixture().vatOwnDeclarations[0], id: 'vat-own-2026-10', period: '2026-10'
+  };
+  assert.throws(() => validateAccountingSnapshot(laterFiledPrior, {
+    ...laterFiledPrior, vatOwnDeclarations: [novemberFiled, octoberDraft]
+  }), /período posterior presentado/);
+});
+
 test('SQLite validates partial IVA payments, prevents overpayment and protects their event history', () => {
   const filed = vatOwnFiledState();
   const paymentJournal = {
