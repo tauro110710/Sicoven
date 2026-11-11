@@ -2055,7 +2055,10 @@ function vatOwnDeclarationFixture(overrides = {}) {
   };
   return {
     ...emptyState(),
-    companies: [{ id: 'company-1', name: 'Empresa Uno' }],
+    companies: [{ id: 'company-1', name: 'Empresa Uno', bcvRate: 874, accountingBcvRateHistory: [
+      { id: 'bcv-oct', rate: 874, effectiveDate: '2026-10-01', recordedAt: '2026-10-01T08:00:00.000Z' },
+      { id: 'bcv-nov', rate: 874, effectiveDate: '2026-11-01', recordedAt: '2026-11-01T08:00:00.000Z' }
+    ] }],
     vatOwnDeclarations: [declaration],
     vatOwnDeclarationEvents: [],
     ...overrides
@@ -2172,8 +2175,10 @@ test('SQLite enforces prior-period continuity and blocks a later filing before a
     documentType: '01', invoiceNumber: 'F-001', isCancelled: false
   };
   const base = {
-    ...emptyState(), companies: [{ id: 'company-1', name: 'Empresa Uno' }],
-    sales: [sale]
+    ...emptyState(), companies: [{ id: 'company-1', name: 'Empresa Uno', bcvRate: 874, accountingBcvRateHistory: [
+      { id: 'bcv-oct', rate: 874, effectiveDate: '2026-10-01', recordedAt: '2026-10-01T08:00:00.000Z' },
+      { id: 'bcv-nov', rate: 874, effectiveDate: '2026-11-01', recordedAt: '2026-11-01T08:00:00.000Z' }
+    ] }], sales: [sale]
   };
   const novemberDraft = {
     ...vatOwnDeclarationFixture().vatOwnDeclarations[0], id: 'vat-own-2026-11', period: '2026-11'
@@ -2216,8 +2221,10 @@ test('SQLite enforces prior-period continuity and blocks a later filing before a
     declarationNumber: novemberFiled.declarationNumber, idempotencyKey: 'FILED:' + novemberFiled.id
   };
   const laterFiledPrior = {
-    ...emptyState(), companies: [{ id: 'company-1', name: 'Empresa Uno' }],
-    vatOwnDeclarations: [novemberFiled], vatOwnDeclarationEvents: [novemberEvent]
+    ...emptyState(), companies: [{ id: 'company-1', name: 'Empresa Uno', bcvRate: 874, accountingBcvRateHistory: [
+      { id: 'bcv-oct', rate: 874, effectiveDate: '2026-10-01', recordedAt: '2026-10-01T08:00:00.000Z' },
+      { id: 'bcv-nov', rate: 874, effectiveDate: '2026-11-01', recordedAt: '2026-11-01T08:00:00.000Z' }
+    ] }], vatOwnDeclarations: [novemberFiled], vatOwnDeclarationEvents: [novemberEvent]
   };
   const octoberDraft = {
     ...vatOwnDeclarationFixture().vatOwnDeclarations[0], id: 'vat-own-2026-10', period: '2026-10'
