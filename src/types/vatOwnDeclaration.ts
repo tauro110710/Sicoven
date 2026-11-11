@@ -158,6 +158,7 @@ export interface VatOwnDeclarationRevision {
   reason: string;
   position: VatOwnPosition;
   sourceIds: string[];
+  relatedSourceIds?: string[];
   bcvRate?: number;
   dailySourceChoices?: Record<string, 'Z' | 'INDIVIDUAL'>;
   purchaseVatReclassificationItems?: JournalEntryItem[];
@@ -171,6 +172,7 @@ export interface VatOwnDeclaration {
   status: VatOwnDeclarationStatus;
   position: VatOwnPosition;
   sourceIds: string[];
+  relatedSourceIds?: string[];
   bcvRate?: number;
   dailySourceChoices?: Record<string, 'Z' | 'INDIVIDUAL'>;
   declarationNumber?: string;
@@ -431,6 +433,7 @@ export function snapshotVatOwnDeclarationRevision(
     reason: reason.trim(),
     position: { ...declaration.position },
     sourceIds: [...declaration.sourceIds],
+    relatedSourceIds: [...(declaration.relatedSourceIds || [])],
     bcvRate: declaration.bcvRate,
     dailySourceChoices: { ...(declaration.dailySourceChoices || {}) },
     purchaseVatReclassificationItems: (declaration.purchaseVatReclassificationItems || []).map(item => ({ ...item })),
