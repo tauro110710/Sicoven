@@ -783,6 +783,13 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     const newlyPresented = declaration.status === 'FILED' && previous?.status === 'DRAFT';
     if (!declaration.sourceSnapshots || (declaration.status !== 'DRAFT' && !newlyPresented)) continue;
     const companyId = String(declaration.companyId);
+    if (newlyPresented) {
+      const currentSnapshots = buildVatOwnSourceSnapshotsFromState(nextState, companyId,
+        [...asArray(declaration.sourceIds), ...asArray(declaration.relatedSourceIds)]);
+      if (!equal(declaration.sourceSnapshots, currentSnapshots)) {
+        throw new Error('SQLite bloqueó la presentación IVA: las huellas fiscales del borrador ya no coinciden con los documentos y asientos actuales.');
+      }
+    }
     const knownPeriods = new Set([...(activityPeriodsByCompany.get(companyId) || [])]
       .filter(period => period < declaration.period));
     for (const item of declarations) {
