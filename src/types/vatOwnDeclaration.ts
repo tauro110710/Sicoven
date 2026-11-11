@@ -10,6 +10,29 @@ export function resolveVatOwnPurchaseCreditTreatment(
   return treatment || 'COMMON';
 }
 
+export function getUnfiledVatOwnActivityPeriods(input: {
+  companyId: string;
+  targetPeriod: string;
+  activityDates: readonly string[];
+  declarations: readonly VatOwnDeclaration[];
+}): string[] {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(input.targetPeriod)) {
+    throw new Error('El período objetivo de IVA no es válido.');
+  }
+  const filedPeriods = new Set(input.declarations
+    .filter(item => item.companyId === input.companyId && item.status === 'FILED')
+    .map(item => item.period));
+  const activityPeriods = new Set<string>();
+  for (const date of input.activityDates) {
+    const period = String(date || '').slice(0, 7);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) {
+      throw new Error('Existe una fecha fiscal inválida que impide verificar la continuidad de las declaraciones de IVA.');
+    }
+    if (period < input.targetPeriod) activityPeriods.add(period);
+  }
+  return [...activityPeriods].filter(period => !filedPeriods.has(period)).sort();
+}
+
 export function areVatOwnDeclarationSourcesCurrent(
   declarationSourceIds: readonly string[],
   currentSourceIds: readonly string[]
