@@ -61,7 +61,7 @@ import { buildReversalItems, assessJournalReversal, validateBankStatementReversa
 import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 import { buildBankAuxiliaryAccounts } from '../types/bankAccountAccounting';
-import { calculateBankAvailableBalance, validateBankOutgoingAvailability } from '../types/bankAccountAvailability';
+import { calculateBankAvailableBalance, calculateCashAccountAvailableBalance, validateBankOutgoingAvailability } from '../types/bankAccountAvailability';
 import { createBankOutgoingLock } from '../types/bankOutgoingLock';
 import { removeUnusedLegacyDefaultBanks } from '../types/legacyBankAccountCleanup';
 import { resolvePurchaseVatFiscalEvent } from '../types/vatFiscalEvent';
@@ -5857,12 +5857,23 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const bankAccount = bankAccounts.find(item => item.companyId === currentCompany.id && item.accountCode === treasury.code);
         if (bankAccount) {
           const availableBalance = calculateBankAvailableBalance({
-            bankAccount, companyId: currentCompany.id, asOfDate: draft.occurredAt.slice(0,10), journalEntries
+            bankAccount, companyId: currentCompany.id, asOfDate: paymentDate, journalEntries
           });
           validateBankOutgoingAvailability({
             availableBalance, requestedAmount: bankAccount.currency === 'USD' ? amountBs / rate : amountBs,
             currency: bankAccount.currency
           });
+        } else if (treasury.code === '1.1.1.01' || treasury.code === '1.1.1.02') {
+          const cashCurrency = treasury.code === '1.1.1.02' ? 'USD' : 'BS';
+          const availableBalance = calculateCashAccountAvailableBalance({
+            companyId: currentCompany.id, accountCode: treasury.code, asOfDate: paymentDate, journalEntries
+          });
+          validateBankOutgoingAvailability({
+            availableBalance, requestedAmount: cashCurrency === 'USD' ? amountBs / rate : amountBs,
+            currency: cashCurrency
+          });
+        } else {
+          throw new Error('La cuenta bancaria seleccionada no tiene una ficha de cuenta bancaria asociada. Configure su auxiliar antes de registrar el pago.');
         }
         const historicalUsd = amountBs / declarationRate;
         const paymentUsd = amountBs / rate;
