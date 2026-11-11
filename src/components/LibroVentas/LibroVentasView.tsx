@@ -48,7 +48,7 @@ export const LibroVentasView: React.FC = () => {
     const esc = (value: unknown) => '"' + String(value ?? '').replace(/"/g, '""') + '"';
     const rows: (string | number)[][] = filteredSales.map(s => {
       const sign = s.documentType === '03' ? -1 : 1;
-      const base16 = s.taxRate === 16 || s.taxRate === 31 ? s.taxableBaseBs : 0;
+      const base16 = s.taxRate === 16 ? s.taxableBaseBs : 0;
       const base8 = s.taxRate === 8 ? s.taxableBaseBs : 0;
       const base31 = s.taxRate === 31 ? s.taxableBaseBs : 0;
       const iva16 = s.taxRate === 16 ? s.vatAmountBs : s.taxRate === 31 ? s.taxableBaseBs * 0.16 : 0;
@@ -59,8 +59,7 @@ export const LibroVentasView: React.FC = () => {
       const z = entry.fiscalZReport!;
       rows.push([z.date,'','VENTAS CONSOLIDADAS · ' + (z.sourceSystemName || z.machineBrand || 'Reporte Z'),'REPORTE Z',z.zNumber,z.controlStart || '', '', '',z.totalSalesBs,z.exemptSalesBs,z.taxableBase16Bs,z.vat16Bs,z.taxableBase8Bs,z.vat8Bs,z.taxableBase31Bs,z.taxableBase31Bs * 0.16,z.additionalLuxuryTaxBs,z.igtfBs,entry.bcvRate,'CIERRE Z']);
     });
-    const csv = '\uFEFF' + [headers,...rows].map(row => row.map(esc).join(';')).join('\r
-');
+    const csv = '\uFEFF' + [headers,...rows].map(row => row.map(esc).join(';')).join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
