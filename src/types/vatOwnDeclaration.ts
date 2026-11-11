@@ -125,6 +125,8 @@ export function resolveVatOwnProrationRate(input: {
  */
 export function getReceivedVatWithholdingSales<T extends {
   companyId: string;
+  documentType: '01' | '02' | '03';
+  invoiceDate: string;
   isCancelled?: boolean;
   retentionVoucherDate?: string;
   vatWithheldBs?: number;
