@@ -575,9 +575,16 @@ export function validateVatOwnDeclarationDraft(input: {
   if (input.sourceIds.some(id => !id.trim())) throw new Error('La declaración contiene una fuente sin identificador.');
   if (input.relatedSourceIds && (
     input.relatedSourceIds.some(id => !id.trim()) ||
-    new Set(input.relatedSourceIds).size !== input.relatedSourceIds.length
-  )) throw new Error('Las facturas relacionadas deben tener identificadores únicos y válidos.');
+    new Set(input.relatedSourceIds).size !== input.relatedSourceIds.length ||
+    input.relatedSourceIds.some(id => input.sourceIds.includes(id))
+  )) throw new Error('Las facturas relacionadas deben tener identificadores únicos, válidos y separados de las fuentes directas.');
   const reclassifications = input.purchaseVatReclassificationItems || [];
+  if (reclassifications.some(item =>
+    !item.accountCode?.trim() ||
+    [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].some(value => !Number.isFinite(Number(value)) || Number(value) < 0) ||
+    (Number(item.debitBs) > 0 && Number(item.creditBs) > 0) ||
+    (Number(item.debitUsd) > 0 && Number(item.creditUsd) > 0)
+  )) throw new Error('Una línea de reclasificación de IVA contiene cuenta o importes inválidos.');
   const debitBs = reclassifications.reduce((sum, item) => sum + Number(item.debitBs || 0), 0);
   const creditBs = reclassifications.reduce((sum, item) => sum + Number(item.creditBs || 0), 0);
   const debitUsd = reclassifications.reduce((sum, item) => sum + Number(item.debitUsd || 0), 0);
