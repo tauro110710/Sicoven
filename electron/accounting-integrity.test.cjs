@@ -2102,6 +2102,65 @@ function vatOwnFiledState() {
   };
 }
 
+test('SQLite rechecks fiscal source snapshots at the exact moment an IVA draft is filed', () => {
+  const purchase = {
+    id: 'purchase-iva-source', companyId: 'company-1', invoiceDate: '2026-10-05',
+    accountCreditDate: null, documentType: '01', invoiceNumber: 'FC-IVA-001', controlNumber: 'CTRL-IVA-001',
+    supplierRif: 'J-12345678-9', supplierName: 'Proveedor Uno',
+    totalAmountBs: 1160, totalAmountUsd: 1.33, taxableBaseBs: 1000, taxableBaseUsd: 1.14,
+    exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 160, vatAmountUsd: 0.18,
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,
+    igtfAmountBs: 0, igtfAmountUsd: 0, vatCreditTreatment: 'TAXABLE',
+    vatWithheldBs: 0, vatWithheldUsd: 0, retentionRate: 0, voucherNumber: null,
+    bcvRate: 874, journalEntryId: null, originalPurchaseId: null,
+    affectedInvoiceNumber: null, affectedInvoiceDate: null, affectedInvoiceControlNumber: null,
+    isCancelled: false
+  };
+  const snapshot = JSON.stringify({
+    kind: 'PURCHASE', id: purchase.id, invoiceDate: purchase.invoiceDate,
+    accountCreditDate: null, documentType: purchase.documentType, invoiceNumber: purchase.invoiceNumber,
+    controlNumber: purchase.controlNumber, supplierRif: purchase.supplierRif, supplierName: purchase.supplierName,
+    totalAmountBs: purchase.totalAmountBs, totalAmountUsd: purchase.totalAmountUsd,
+    taxableBaseBs: purchase.taxableBaseBs, taxableBaseUsd: purchase.taxableBaseUsd,
+    exemptAmountBs: purchase.exemptAmountBs, exemptAmountUsd: 0,
+    taxRate: purchase.taxRate, vatAmountBs: purchase.vatAmountBs, vatAmountUsd: purchase.vatAmountUsd,
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,
+    igtfAmountBs: 0, igtfAmountUsd: 0, vatCreditTreatment: 'TAXABLE',
+    vatWithheldBs: 0, vatWithheldUsd: 0, retentionRate: 0, voucherNumber: null,
+    bcvRate: 874, journalEntryId: null, originalPurchaseId: null,
+    affectedInvoiceNumber: null, affectedInvoiceDate: null, affectedInvoiceControlNumber: null,
+    isCancelled: false, journal: null
+  });
+  const draft = {
+    ...vatOwnDeclarationFixture(),
+    purchases: [purchase],
+    vatOwnDeclarations: [{
+      ...vatOwnDeclarationFixture().vatOwnDeclarations[0],
+      period: '2026-10', sourceIds: [purchase.id], sourceSnapshots: { [purchase.id]: snapshot }
+    }]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), draft));
+  const filedDeclaration = {
+    ...draft.vatOwnDeclarations[0], status: 'FILED',
+    declarationNumber: 'IVA-2026-STALE', filedAt: '2026-11-11T12:00:00.000-04:00'
+  };
+  const filingEntry = vatOwnFilingEntry();
+  const filingEvent = {
+    id: 'vat-own-event-stale-snapshot', declarationId: filedDeclaration.id,
+    companyId: filedDeclaration.companyId, eventType: 'FILED',
+    occurredAt: filedDeclaration.filedAt, recordedAt: '2026-11-11T16:00:00.000Z',
+    declarationNumber: filedDeclaration.declarationNumber,
+    idempotencyKey: 'FILED:' + filedDeclaration.id, journalEntryId: filingEntry.id
+  };
+  assert.throws(() => validateAccountingSnapshot(draft, {
+    ...draft,
+    purchases: [{ ...purchase, vatAmountBs: 150 }],
+    vatOwnDeclarations: [filedDeclaration],
+    vatOwnDeclarationEvents: [filingEvent],
+    journalEntries: [filingEntry]
+  }), /huellas fiscales del borrador ya no coinciden/);
+});
+
 test('SQLite accepts a new IVA own-account draft with exact fiscal source snapshots', () => {
   assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), vatOwnDeclarationFixture()));
 });
