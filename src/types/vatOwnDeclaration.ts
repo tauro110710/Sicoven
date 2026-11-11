@@ -502,11 +502,13 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
       try { originalSnapshot = JSON.parse(savedOriginal) as Record<string, unknown>; }
       catch { throw new Error('La huella de la factura original de una nota de crédito presentada no se puede leer.'); }
       const originalTaxRate = Number(originalSnapshot.taxRate);
+      const historicalNoteSupplierRif = normalizeFiscalReference(snapshot.supplierRif);
+      const historicalOriginalSupplierRif = normalizeFiscalReference(originalSnapshot.supplierRif);
       if (originalSnapshot.kind !== 'PURCHASE' || originalSnapshot.id !== originalId ||
           originalSnapshot.documentType !== '01' || !Number.isFinite(originalTaxRate) ||
           ![8, 16, 31].includes(originalTaxRate) || originalTaxRate !== noteTaxRate ||
-          (snapshot.supplierRif && originalSnapshot.supplierRif &&
-            normalizeFiscalReference(snapshot.supplierRif) !== normalizeFiscalReference(originalSnapshot.supplierRif))) {
+          !historicalNoteSupplierRif || !historicalOriginalSupplierRif ||
+          historicalNoteSupplierRif !== historicalOriginalSupplierRif) {
         throw new Error('La nota de crédito presentada no coincide con la alícuota o el proveedor de la factura original según las huellas históricas.');
       }
       priorFiledNoteVatByOriginal.set(originalId, (priorFiledNoteVatByOriginal.get(originalId) || 0) + noteVat);
