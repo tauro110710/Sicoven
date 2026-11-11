@@ -234,6 +234,18 @@ test('separates IVA débito 16% and 8% for the monthly ledger', () => {
   assert.equal(position.amountDueBs, 210);
 });
 
+test('adds reversal of eligible purchase credit from a prior-period credit note before applying carry-forward', () => {
+  const position = calculateVatOwnPosition({
+    outputVatBs: 100, purchaseCreditBs: 0, purchaseCreditReversalBs: 40,
+    purchaseCreditReversal16Bs: 40, purchaseCreditReversal8Bs: 0,
+    receivedWithholdingsBs: 0, priorCreditBs: 80
+  });
+  assert.equal(position.amountDueBs, 60);
+  assert.equal(position.priorCreditAppliedBs, 80);
+  assert.equal(position.creditCarryForwardBs, 0);
+  assert.equal(position.purchaseCreditReversalBs, 40);
+});
+
 test('applies only the prior credit needed and carries the unused balance forward', () => {
   const position = calculateVatOwnPosition({
     outputVatBs: 100, purchaseCreditBs: 20, receivedWithholdingsBs: 10, priorCreditBs: 1000
