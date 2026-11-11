@@ -5621,15 +5621,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const getVatOwnInconsistentPurchaseSources = (companyId: string): PurchaseRecord[] => purchases.filter(purchase => {
     if (purchase.companyId !== companyId || purchase.isCancelled || !purchase.journalEntryId) return false;
     const source = journalEntries.find(entry => entry.id === purchase.journalEntryId && entry.companyId === companyId);
-    return Boolean(source && (source.reversalOfEntryId || source.reversedByEntryId ||
-      journalEntries.some(entry => entry.companyId === companyId && entry.reversalOfEntryId === source.id)));
+    if (!source) return true;
+    return Boolean(source.reversalOfEntryId || source.reversedByEntryId ||
+      journalEntries.some(entry => entry.companyId === companyId && entry.reversalOfEntryId === source.id));
   });
 
   const getVatOwnInconsistentSalesSources = (companyId: string): SaleRecord[] => sales.filter(sale => {
     if (sale.companyId !== companyId || sale.isCancelled || !sale.journalEntryId) return false;
     const source = journalEntries.find(entry => entry.id === sale.journalEntryId && entry.companyId === companyId);
-    return Boolean(source && (source.reversalOfEntryId || source.reversedByEntryId ||
-      journalEntries.some(entry => entry.companyId === companyId && entry.reversalOfEntryId === source.id)));
+    if (!source) return true;
+    return Boolean(source.reversalOfEntryId || source.reversedByEntryId ||
+      journalEntries.some(entry => entry.companyId === companyId && entry.reversalOfEntryId === source.id));
   });
 
   const createVatOwnDeclaration = async (input: { period: string; choices?: Record<string, 'Z' | 'INDIVIDUAL'>; refresh?: boolean }): Promise<VatOwnDeclaration> => {
