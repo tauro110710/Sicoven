@@ -95,7 +95,7 @@ test('detects changed declaration source sets without depending on array order',
 });
 
 test('snapshots a draft revision without sharing mutable source arrays or position objects', () => {
-  const draft = { ...declaration, status: 'DRAFT' as const, sourceIds: ['sale-old'], revisions: [] };
+  const draft = { ...declaration, status: 'DRAFT' as const, position: { ...declaration.position }, sourceIds: ['sale-old'], revisions: [] };
   const revision = snapshotVatOwnDeclarationRevision(draft, '2026-02-02T10:00:00.000Z', 'Actualizar fuentes antes de presentar');
   draft.sourceIds.push('sale-new');
   draft.position.amountDueBs = 999;
