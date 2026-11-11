@@ -81,7 +81,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   const isAccountant = hasFullSystemAccess;
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, vatVouchers, vatWithholdingDeclarations, vatWithholdingDeclarationEvents, addMovement, addPurchaseCreditNote, addPurchaseServiceCreditNote, addSaleCorrectionNote, addSupplierDebitNote,
-    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrVouchers, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate, authorizeCorrectionCase, listCorrectionCases, executeCorrectionCase
+    bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrVouchers, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent, correctBcvRate
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -150,9 +150,6 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   const [supplierDebitFiscalBreakdownReviewed, setSupplierDebitFiscalBreakdownReviewed] = useState(false);
   const [supplierDebitNoWithholdingConfirmed, setSupplierDebitNoWithholdingConfirmed] = useState(false);
   const [supplierDebitNoIgtfConfirmed, setSupplierDebitNoIgtfConfirmed] = useState(false);
-  const [correctionCases, setCorrectionCases] = useState<import('../context/AccountingContext').CorrectionCase[]>([]);
-  const refreshCorrectionCases = useCallback(async () => { try { setCorrectionCases(await listCorrectionCases()); } catch (error) { setFeedback({kind:'error',message:error instanceof Error?error.message:'No se pudo consultar el historial de correcciones.'}); } },[listCorrectionCases]);
-  useEffect(() => { void refreshCorrectionCases(); },[refreshCorrectionCases]);
   useEffect(() => {
     if (isAccountant && executionAssistantOpen) {
       document.getElementById('correction-execution-assistant')?.scrollIntoView({behavior:'smooth',block:'start'});
@@ -420,7 +417,6 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
       setRequestExemptAmountBs('');
       setRequestSameMediumAsOriginal(false);
       setRequestFiscalEmissionMedium('');
-      await refreshCorrectionCases();
       await refreshAuditEvents();
     } catch (error) {
       setFeedback({kind:'error',message:error instanceof Error ? error.message : 'No se pudo ejecutar la corrección en SQLite.'});
@@ -700,7 +696,6 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
     try {
       const rate = parseFiscalInput(correctionBcvRate);
       if (!Number.isFinite(rate) || rate <= 0) throw new Error('Ingrese la tasa BCV aplicable a la fecha de la devolución, por ejemplo 889,67.');
-      const correctionCaseId = await authorizeCorrectionCase({entityType:'INVENTORY_MOVEMENT',entityId:original.id,sourceDocumentRef:original.documentRef,correctionDocumentRef:correctionDocumentRef.trim()});
       addMovement({
         productId: original.productId, productName: original.productName, productCode: original.productCode,
         date: correctionDate, type: isCustomerReturn ? 'ENTRADA' : 'SALIDA',
@@ -715,7 +710,6 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
         correctionForMovementId: original.id
       });
       await waitForPersistence();
-      await executeCorrectionCase({caseId:correctionCaseId,executionRef:correctionDocumentRef.trim(),reason:'Devolución física registrada y vinculada al movimiento original del Kardex.'});
       setFeedback({kind:'success', message:'Devolución física registrada, vinculada al movimiento original del Kardex y corrección cerrada automáticamente con trazabilidad. El asistente comprobará si todas las cantidades de la factura fueron devueltas y si cada asiento de costo concilia; una devolución parcial no habilita la reversión total.'});
       setCorrectionQuantity('1');
       setCorrectionBcvRate('');
@@ -966,17 +960,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
                   : <p>Este registro requiere una operación contable vinculada. SICOVEN abrirá el asistente con su asiento original para validar los efectos cruzados antes de ejecutar.</p>}
           <button type="button" disabled={!selectedCorrectionJournalId} onClick={openExistingCorrectionFlow} className="rounded bg-indigo-700 px-3 py-2 font-semibold text-white disabled:opacity-40">Abrir reversión y validar efectos cruzados</button>
         </div>}
-        <p className="text-xs text-slate-500">Las notas se contabilizan desde el flujo especializado existente; el motivo, la sesión del contador y la fecha quedan auditados. El original nunca se sobrescribe. Los casos no cubiertos se bloquean en lugar de registrar una corrección ficticia.</p>
-      </section>
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 space-y-3">
-        <div className="flex items-center justify-between gap-2"><h2 className="font-bold text-slate-900">Historial de correcciones ({correctionCases.length})</h2><button type="button" onClick={()=>void refreshCorrectionCases()} className="rounded border px-3 py-1">Actualizar</button></div>
-        {correctionCases.length===0 ? <p className="text-sm text-slate-500">Todavía no hay correcciones registradas.</p> : correctionCases.map(item=><article key={item.id} className="rounded-lg border p-3 space-y-2 text-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2"><strong>{item.correction_type} · {item.entity_type} · {item.entity_id}</strong><span className="font-semibold">{item.status==='EXECUTED'?'EJECUTADA':item.status==='APPROVED'?'EN CURSO':item.status}</span></div>
-          <p>Origen: {item.source_ref} · Correctivo: {item.correction_ref}</p><p>{item.reason || 'Sin motivo adicional.'}</p>
-          <p className="text-slate-500">Contador: {item.requested_by_name} · Registro: {item.created_at} · Ejecución: {item.executed_at || 'Pendiente'}</p>
-
-          <div className="border-t pt-2"><strong>Historial inalterable</strong>{item.events.map(ev=><p key={ev.id}>{ev.event_type==='REQUESTED'?'INICIADA':ev.event_type==='APPROVED'?'VALIDACIÓN AUTOMÁTICA':ev.event_type==='EXECUTED'?'EJECUTADA':ev.event_type} · {ev.actor_name} · {ev.created_at} · {ev.reason}</p>)}</div>
-        </article>)}
+        <p className="text-xs text-slate-500">El contador ejecuta directamente las correcciones compatibles, sin autorizaciones ni expedientes previos. SICOVEN conserva el original, registra la sesión y la fecha en auditoría y valida automáticamente los efectos contables para evitar asientos ficticios.</p>
       </section>
       </>}
       {executionAssistantOpen && <section id="correction-execution-assistant" className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
