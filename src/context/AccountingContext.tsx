@@ -5653,7 +5653,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const inconsistentPurchaseSources = getVatOwnInconsistentPurchaseSources(currentCompany.id);
     const inconsistentSalesSources = getVatOwnInconsistentSalesSources(currentCompany.id);
     if (inconsistentPurchaseSources.length > 0 || inconsistentSalesSources.length > 0) {
-      throw new Error('No se puede preparar IVA: hay documentos fiscales activos vinculados a asientos revertidos. Compras: ' +
+      throw new Error('No se puede preparar IVA: hay documentos fiscales activos con asientos de origen inexistentes o revertidos. Compras: ' +
         inconsistentPurchaseSources.map(item => item.invoiceNumber).join(', ') + '. Ventas: ' +
         inconsistentSalesSources.map(item => item.invoiceNumber).join(', ') + '. Concilie el estado documental antes de declarar.');
     }
@@ -5816,7 +5816,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const inconsistentPurchaseSources = getVatOwnInconsistentPurchaseSources(currentCompany.id);
       const inconsistentSalesSources = getVatOwnInconsistentSalesSources(currentCompany.id);
       if (inconsistentPurchaseSources.length > 0 || inconsistentSalesSources.length > 0) {
-        throw new Error('No se puede presentar IVA: hay documentos fiscales activos vinculados a asientos revertidos. Compras: ' +
+        throw new Error('No se puede presentar IVA: hay documentos fiscales activos con asientos de origen inexistentes o revertidos. Compras: ' +
           inconsistentPurchaseSources.map(item => item.invoiceNumber).join(', ') + '. Ventas: ' +
           inconsistentSalesSources.map(item => item.invoiceNumber).join(', ') + '. Concilie el estado documental y actualice el borrador.');
       }
