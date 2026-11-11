@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { CalendarDays, FileText, Receipt, ShoppingCart, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs } from '../../utils/formatters';
-import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, calculateVatOwnPosition, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, buildVatOwnSourceSnapshots, areVatOwnSourceSnapshotsCurrent, getUnfiledVatOwnActivityPeriods, getVatOwnFiledLaterPeriods, resolveVatOwnPaymentBcvRate } from '../../types/vatOwnDeclaration';
+import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, calculateVatOwnPosition, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, buildVatOwnSourceSnapshots, areVatOwnSourceSnapshotsCurrent, getUnfiledVatOwnActivityPeriods, getVatOwnFiledLaterPeriods, resolveVatOwnPaymentBcvRate, isValidVatOwnDeclarationPeriod } from '../../types/vatOwnDeclaration';
 
 const money = (value: number | undefined) => Number.isFinite(value) ? Number(value) : 0;
 const parseLocalizedNumber = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
@@ -341,7 +341,7 @@ export const IvaDeclaracionesView: React.FC = () => {
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h2 className="text-lg font-bold text-slate-900">Declaración mensual · Control y presentación</h2><p className="mt-1 text-sm text-slate-600">Prepara un borrador desde los libros, conserva las fuentes elegidas y registra presentación y enteramientos con su asiento contable.</p></div>
-          {!savedDeclaration && <button type="button" disabled={!isStorageReady || outputVat === null || !currentPositionPreview || prorationRate === null || Boolean(purchaseSummaryError) || unfiledActivityPeriods.length > 0 || laterFiledPeriods.length > 0 || Boolean(activityPeriodError)} onClick={async()=>{
+          {!savedDeclaration && <button type="button" disabled={!isStorageReady || !isValidVatOwnDeclarationPeriod(period) || outputVat === null || !currentPositionPreview || prorationRate === null || Boolean(purchaseSummaryError) || unfiledActivityPeriods.length > 0 || laterFiledPeriods.length > 0 || Boolean(activityPeriodError)} onClick={async()=>{
             setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
             try { await createVatOwnDeclaration({period,choices:activeSourceChoices});setWorkflowMessage('Borrador de declaración guardado y confirmado en SQLite.'); }
             catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo preparar la declaración.');}
@@ -353,7 +353,7 @@ export const IvaDeclaracionesView: React.FC = () => {
           {savedDeclaration.status === 'DRAFT' && draftNeedsRefresh && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
             <p className="text-sm font-semibold text-amber-950">El borrador quedó desactualizado frente a los libros o la tasa BCV vigente. Revisa las fuentes diarias pendientes y actualízalo antes de presentarlo. La versión anterior se conservará en el historial.</p>
             {dailySalesResolution.unresolvedDates.length > 0 && <p className="text-xs text-amber-900">Fechas que requieren elegir una fuente: {dailySalesResolution.unresolvedDates.join(', ')}</p>}
-            <button type="button" disabled={workflowBusy || outputVat === null || !currentPositionPreview || prorationRate === null || Boolean(purchaseSummaryError) || unfiledActivityPeriods.length > 0 || laterFiledPeriods.length > 0 || Boolean(activityPeriodError) || dailySalesResolution.unresolvedDates.length > 0} onClick={async()=>{
+            <button type="button" disabled={workflowBusy || !isValidVatOwnDeclarationPeriod(period) || outputVat === null || !currentPositionPreview || prorationRate === null || Boolean(purchaseSummaryError) || unfiledActivityPeriods.length > 0 || laterFiledPeriods.length > 0 || Boolean(activityPeriodError) || dailySalesResolution.unresolvedDates.length > 0} onClick={async()=>{
               setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
               try { await createVatOwnDeclaration({period,choices:activeSourceChoices,refresh:true});setWorkflowMessage('Borrador actualizado. La versión anterior quedó conservada en el historial.'); }
               catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo actualizar el borrador.');}
