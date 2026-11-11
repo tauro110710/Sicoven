@@ -585,6 +585,7 @@ export function assessJournalReversal(input: {
   if (source.companyId !== companyId) blockers.push('El asiento no pertenece a la empresa activa.');
   if (source.isAdjusted && !source.reversedByEntryId) blockers.push('El asiento está marcado como ajustado, pero no conserva el enlace a su contra-asiento.');
   if (source.reversalOfEntryId) blockers.push('El asiento seleccionado ya es un contra-asiento.');
+  if (source.fiscalZReport) blockers.push('El asiento contiene un Reporte Z fiscal. No se permite revertirlo con un contra-asiento genérico; cualquier incidencia debe resolverse mediante el procedimiento fiscal del equipo emisor y su evidencia documental.');
   if (source.reversedByEntryId || journalEntries.some(item =>
     item.companyId === companyId && item.reversalOfEntryId === source.id)) {
     blockers.push('El asiento original ya tiene una reversión registrada.');
