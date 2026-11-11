@@ -251,6 +251,21 @@ test('reclassifies non-creditable VAT to the original inventory/expense debit ac
   assert.equal(items[1].accountCode, '1.1.3.01');
   assert.equal(items[1].creditBs, 80);
   assert.equal(items.reduce((sum, item) => sum + item.debitBs, 0), items.reduce((sum, item) => sum + item.creditBs, 0));
+  assert.throws(() => buildVatOwnPurchaseVatReclassificationItems({
+    companyId: 'company-a', period: '2026-11', bcvRate: 200,
+    allPurchases: [original], journalEntries: [
+      sourceJournal,
+      { id: 'purchase-journal-reversal', companyId: 'company-a', reversalOfEntryId: sourceJournal.id } as JournalEntry
+    ],
+    summary: {
+      prorationRate: 0.5, gross16Bs: 160, gross8Bs: 0,
+      eligible16Bs: 80, eligible8Bs: 0, nonEligible16Bs: 80, nonEligible8Bs: 0,
+      priorReversalEligible16Bs: 0, priorReversalEligible8Bs: 0,
+      priorReversalNonEligible16Bs: 0, priorReversalNonEligible8Bs: 0,
+      relatedPurchaseIds: [],
+      reclassifications: [{ purchaseId: original.id, basePurchaseId: original.id, taxRate: 16, nonEligibleSignedBs: 80 }]
+    }
+  }), /asiento de compra fue revertido/);
 });
 
 test('reverses the prior non-creditable VAT reclassification when a prior-period purchase is credited', () => {
