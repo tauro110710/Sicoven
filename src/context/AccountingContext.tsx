@@ -5642,6 +5642,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!declaration) throw new Error('No se encontró la declaración mensual de la empresa activa.');
     const history = vatOwnDeclarationEvents.filter(item => item.declarationId === declarationId);
     const fullDraft = { ...draft, declarationId, companyId: currentCompany.id };
+    if (vatOwnDeclarationEvents.some(event => event.companyId === currentCompany.id && event.idempotencyKey === draft.idempotencyKey)) {
+      throw new Error('La clave de operación ya fue utilizada en otra declaración de esta empresa.');
+    }
+    if (draft.eventType === 'PAYMENT' && vatOwnDeclarationEvents.some(event =>
+      event.companyId === currentCompany.id && event.eventType === 'PAYMENT' && event.reference?.trim() === draft.reference?.trim()
+    )) throw new Error('La referencia de pago ya fue utilizada en otra declaración mensual de esta empresa.');
+
     validateVatOwnEvent({
       declaration, events: history, draft: fullDraft,
       sameCompanyDeclarationNumbers: vatOwnDeclarationEvents.filter(event =>
