@@ -549,6 +549,53 @@ test('blocks cumulative prior-period credit notes that exceed the original invoi
   }), /notas de crédito acumuladas superan el IVA histórico de la factura original/);
 });
 
+test('accepts partial credit notes across filed periods up to the original VAT limit', () => {
+  const original = {
+    id: 'purchase-cumulative-valid-original', companyId: 'company-a', invoiceDate: '2026-10-05',
+    supplierRif: 'J-12345678-9', invoiceNumber: 'F-150', documentType: '01',
+    taxRate: 16, vatAmountBs: 160, vatCreditTreatment: 'TAXABLE'
+  } as PurchaseRecord;
+  const previousNote = {
+    id: 'purchase-cumulative-valid-note-nov', companyId: 'company-a', invoiceDate: '2026-11-05',
+    supplierRif: 'J-12345678-9', invoiceNumber: 'NC-151', documentType: '03',
+    taxRate: 16, vatAmountBs: 80, originalPurchaseId: original.id
+  } as PurchaseRecord;
+  const currentNote = {
+    id: 'purchase-cumulative-valid-note-dec', companyId: 'company-a', invoiceDate: '2026-12-05',
+    supplierRif: 'J-12345678-9', invoiceNumber: 'NC-152', documentType: '03',
+    taxRate: 16, vatAmountBs: 80, originalPurchaseId: original.id
+  } as PurchaseRecord;
+  const originalSnapshot = JSON.stringify({
+    kind: 'PURCHASE', id: original.id, documentType: '01', supplierRif: 'J-12345678-9',
+    vatCreditTreatment: 'TAXABLE', taxRate: 16, vatAmountBs: 160
+  });
+  const filedOriginal = {
+    ...declaration, period: '2026-10', status: 'FILED' as const,
+    sourceIds: [original.id], sourceSnapshots: { [original.id]: originalSnapshot }
+  };
+  const filedNovember = {
+    ...declaration, period: '2026-11', status: 'FILED' as const,
+    sourceIds: [previousNote.id], relatedSourceIds: [original.id],
+    sourceSnapshots: {
+      [previousNote.id]: JSON.stringify({
+        kind: 'PURCHASE', id: previousNote.id, documentType: '03',
+        originalPurchaseId: original.id, supplierRif: 'J-12345678-9', taxRate: 16, vatAmountBs: 80
+      }),
+      [original.id]: originalSnapshot
+    }
+  };
+  const result = calculateVatOwnPurchaseCreditSummary({
+    companyId: 'company-a', period: '2026-12', purchases: [currentNote],
+    allPurchases: [original, previousNote, currentNote],
+    priorDeclarations: [filedOriginal, filedNovember],
+    taxableSalesBaseBs: 1000, exemptSalesBaseBs: 0
+  });
+  assert.equal(result.priorReversalEligible16Bs, 80);
+  assert.equal(result.priorReversalNonEligible16Bs, 0);
+  assert.equal(result.reclassifications.length, 1);
+  assert.equal(result.reclassifications[0].basePurchaseId, original.id);
+});
+
 test('blocks a prior-period credit note when the filed snapshot has no historical tax rate', () => {
   const original = {
     id: 'purchase-missing-historical-rate', companyId: 'company-a', invoiceDate: '2026-10-05',
