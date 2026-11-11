@@ -412,6 +412,15 @@ test('rejects invalid amounts and duplicate source identifiers', () => {
   }), /importes inválidos/);
 });
 
+test('rejects future-dated IVA payments', () => {
+  const future = new Date();
+  future.setDate(future.getDate() + 1);
+  const futureDate = future.getFullYear() + '-' + String(future.getMonth() + 1).padStart(2, '0') + '-' + String(future.getDate()).padStart(2, '0');
+  assert.throws(() => validateVatOwnEvent({
+    declaration, events: [], draft: payment({ occurredAt: futureDate + 'T12:00:00.000Z' })
+  }), /fecha del pago no puede ser futura/);
+});
+
 test('allows partial payment and computes remaining balance', () => {
   const event = { ...payment(), id: 'event-1', recordedAt: '2026-02-12T10:01:00.000Z' };
   validateVatOwnEvent({ declaration, events: [], draft: payment() });
