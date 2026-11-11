@@ -451,7 +451,7 @@ test('blocks cumulative prior-period credit notes that exceed the original invoi
     allPurchases: [original, previousNote, currentNote],
     priorDeclarations: [filedOriginal, filedNovember],
     taxableSalesBaseBs: 0, exemptSalesBaseBs: 0
-  }), /notas de crédito acumuladas superan el IVA de la factura original/);
+  }), /notas de crédito acumuladas superan el IVA histórico de la factura original/);
 });
 
 test('blocks a prior-period credit note when the filed snapshot has no historical tax rate', () => {
