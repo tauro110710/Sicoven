@@ -25,6 +25,7 @@ import { resolveVatOwnDailySalesSources } from '../../types/vatOwnDeclaration';
 export const LibroVentasView: React.FC = () => {
   const {
     currentCompany,
+    accounts,
     sales,
     journalEntries,
     isStorageReady,
@@ -582,7 +583,9 @@ export const LibroVentasView: React.FC = () => {
       {settlementTarget && <CreditSettlementModal documentId={settlementTarget.id} documentNumber={settlementTarget.number} partyName={settlementTarget.party} kind="SALE_COLLECTION" onClose={() => setSettlementTarget(null)} />}
       <JournalReversalModal source={reversalTarget} onClose={() => setReversalTarget(null)} />
       {correctionTarget && <SaleCorrectionNoteModal sourceSale={correctionTarget.sale} kind={correctionTarget.kind}
-        bcvRate={currentCompany.bcvRate} onClose={() => setCorrectionTarget(null)} onSubmit={addSaleCorrectionNote} />}
+        bcvRate={currentCompany.bcvRate}
+        treasuryAccounts={accounts.filter(account => account.isMovement && account.type === 'ACTIVO' && account.code.startsWith('1.1.1.'))}
+        onClose={() => setCorrectionTarget(null)} onSubmit={addSaleCorrectionNote} />}
     </div>
   );
 };
