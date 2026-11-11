@@ -2930,6 +2930,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         !Number.isFinite(purchaseData.retentionRate) || purchaseData.retentionRate < 0 || purchaseData.retentionRate > 100) {
       throw new Error('La alícuota de IVA o la tasa de retención no es válida.');
     }
+    if (!['TAXABLE', 'EXEMPT', 'COMMON'].includes(purchaseData.vatCreditTreatment || 'COMMON')) throw new Error('El destino del crédito fiscal IVA no es válido.');
     const expectedVatRate = purchaseData.taxRate === 31 ? 16 : purchaseData.taxRate;
     const expectedVat = Math.round(purchaseData.taxableBaseBs * expectedVatRate) / 100;
     const expectedLuxuryTax = purchaseData.taxRate === 31 ? Math.round(purchaseData.taxableBaseBs * 15) / 100 : 0;
