@@ -108,3 +108,30 @@ test('a payment reversal restores the outstanding balance without deleting histo
   assert.equal(getVatOwnOutstandingBalance(declaration, [original, reversal]), 550);
   assert.equal([original, reversal].length, 2);
 });
+
+
+test('resolves Z and individual sales on different days without blocking the whole month', async () => {
+  const { resolveVatOwnDailySalesSources } = await import('./vatOwnDeclaration');
+  const result = resolveVatOwnDailySalesSources({
+    zReports: [{ id: 'z-1', date: '2026-01-01', taxableBase16Bs: 1000, vat16Bs: 160, taxableBase8Bs: 0, vat8Bs: 0, taxableBase31Bs: 0, vat31Bs: 0, exemptSalesBs: 100 }],
+    sales: [{ id: 'sale-1', date: '2026-01-02', documentType: '01', taxableBaseBs: 500, taxRate: 16, vatAmountBs: 80, exemptAmountBs: 0 }]
+  });
+  assert.equal(result.days.length, 2);
+  assert.equal(result.days.reduce((sum, day) => sum + day.outputVatBs, 0), 240);
+  assert.deepEqual(result.unresolvedDates, []);
+});
+
+test('requires the accountant to choose one source when Z and individual sales overlap on a date', async () => {
+  const { resolveVatOwnDailySalesSources } = await import('./vatOwnDeclaration');
+  const input = {
+    zReports: [{ id: 'z-1', date: '2026-01-01', taxableBase16Bs: 1000, vat16Bs: 160, taxableBase8Bs: 0, vat8Bs: 0, taxableBase31Bs: 0, vat31Bs: 0, exemptSalesBs: 0 }],
+    sales: [{ id: 'sale-1', date: '2026-01-01', documentType: '01' as const, taxableBaseBs: 1000, taxRate: 16, vatAmountBs: 160, exemptAmountBs: 0 }]
+  };
+  const pending = resolveVatOwnDailySalesSources(input);
+  assert.deepEqual(pending.unresolvedDates, ['2026-01-01']);
+  assert.equal(pending.days.length, 0);
+  const resolved = resolveVatOwnDailySalesSources({ ...input, choices: { '2026-01-01': 'Z' } });
+  assert.equal(resolved.days.length, 1);
+  assert.equal(resolved.days[0].outputVatBs, 160);
+  assert.equal(resolved.days[0].sourceIds.length, 1);
+});
