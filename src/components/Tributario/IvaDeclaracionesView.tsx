@@ -142,7 +142,7 @@ export const IvaDeclaracionesView: React.FC = () => {
     ? purchaseSummary.priorReversalNonEligible16Bs + purchaseSummary.priorReversalNonEligible8Bs : 0;
   const priorCredit = vatOwnDeclarations.filter(item => item.companyId === currentCompany.id && item.status === 'FILED' && item.period < period)
     .sort((a,b)=>b.period.localeCompare(a.period))[0]?.position.creditCarryForwardBs || 0;
-  const receivedWithholdingRows = getReceivedVatWithholdingSales(sales, currentCompany.id, period);
+  const receivedWithholdingRows = useMemo(() => getReceivedVatWithholdingSales(sales, currentCompany.id, period), [sales, currentCompany.id, period]);
   const receivedWithholdings = receivedWithholdingRows.reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatWithheldBs), 0);
   const preliminaryBalance = outputVat === null || purchaseCreditEligible === null
     ? null : outputVat - purchaseCreditEligible - receivedWithholdings - priorCredit + purchaseCreditReversal;
