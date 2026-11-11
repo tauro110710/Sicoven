@@ -59,7 +59,8 @@ export const LibroVentasView: React.FC = () => {
       const z = entry.fiscalZReport!;
       rows.push([z.date,'','VENTAS CONSOLIDADAS · ' + (z.sourceSystemName || z.machineBrand || 'Reporte Z'),'REPORTE Z',z.zNumber,z.controlStart || '', '', '',z.totalSalesBs,z.exemptSalesBs,z.taxableBase16Bs,z.vat16Bs,z.taxableBase8Bs,z.vat8Bs,z.taxableBase31Bs,z.taxableBase31Bs * 0.16,z.additionalLuxuryTaxBs,z.igtfBs,entry.bcvRate,'CIERRE Z']);
     });
-    const csv = '\uFEFF' + [headers,...rows].map(row => row.map(esc).join(';')).join('\r\n');
+    const csv = '\uFEFF' + [headers,...rows].map(row => row.map(esc).join(';')).join('\r
+');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -157,7 +158,8 @@ export const LibroVentasView: React.FC = () => {
             <span className="text-emerald-700 font-medium">Libro Fiscal Reglamentario</span>
           </div>
 
-          <div className="flex items-center gap-2.5">\n            <button onClick={handleExportCsv} disabled={filteredSales.length === 0 && filteredZReports.length === 0} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-300"><Download className="w-3.5 h-3.5" /> Exportar CSV</button>
+          <div className="flex items-center gap-2.5">
+            <button onClick={handleExportCsv} disabled={filteredSales.length === 0 && filteredZReports.length === 0} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-300"><Download className="w-3.5 h-3.5" /> Exportar CSV</button>
             <button
               onClick={handleExportPdf}
               disabled={isExportingPdf || (filteredSales.length === 0 && filteredZReports.length === 0)}
@@ -228,7 +230,8 @@ export const LibroVentasView: React.FC = () => {
                 <th className="py-2.5 px-3 w-28">RIF Cliente</th>
                 <th className="py-2.5 px-3 min-w-[200px]">Nombre o Razón Social</th>
                 <th className="py-2.5 px-3 w-28">N° Factura</th>
-                <th className="py-2.5 px-3 w-24">Tipo</th>\n                <th className="py-2.5 px-3 w-28">N° Control</th>
+                <th className="py-2.5 px-3 w-24">Tipo</th>
+                <th className="py-2.5 px-3 w-28">N° Control</th>
                 <th className="py-2.5 px-3 text-right w-32">Total Ventas (Bs.)</th>
                 <th className="py-2.5 px-3 text-right w-28">Exento (Bs.)</th>
                 <th className="py-2.5 px-3 text-right w-32">Base Imponible</th>
@@ -238,7 +241,8 @@ export const LibroVentasView: React.FC = () => {
                 <th className="py-2.5 px-3 text-right w-28 text-purple-800">IVA Retenido</th>
                 <th className="py-2.5 px-3 w-32">N° Comprobante Ret.</th>
                 <th className="py-2.5 px-3 w-28">Fecha Ret.</th>
-                <th className="py-2.5 px-3 text-right w-28">IGTF (Bs.)</th>\n                <th className="py-2.5 px-3 text-right w-24">Tasa BCV</th>
+                <th className="py-2.5 px-3 text-right w-28">IGTF (Bs.)</th>
+                <th className="py-2.5 px-3 text-right w-24">Tasa BCV</th>
                 <th className="py-2.5 px-2 text-center w-12 no-print">Acción</th>
               </tr>
             </thead>
