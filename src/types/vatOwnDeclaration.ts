@@ -673,6 +673,11 @@ export function validateVatOwnEvent(input: {
     if (declaration.status !== 'FILED') throw new Error('Presente la declaración antes de registrar su pago.');
     const payment = amount(draft.amountBs, 'El pago');
     if (payment <= 0) throw new Error('El pago debe ser mayor que cero.');
+    const now = new Date();
+    const localToday = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    if (draft.occurredAt.slice(0, 10) > localToday) {
+      throw new Error('La fecha del pago no puede ser futura.');
+    }
     if (declaration.filedAt && draft.occurredAt.slice(0, 10) < declaration.filedAt.slice(0, 10)) {
       throw new Error('La fecha del pago no puede ser anterior al día de presentación de la declaración.');
     }
