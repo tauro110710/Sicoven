@@ -4239,7 +4239,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // Haber: Débito Fiscal IVA Ventas
     if (saleData.vatAmountBs > 0) {
       items.push({
-        accountCode: '2.1.2.01',
+        accountCode: saleData.taxRate === 8 ? '2.1.2.02' : '2.1.2.01',
         accountName: `Débito Fiscal IVA Ventas (${saleData.taxRate}%)`,
         debitBs: 0,
         creditBs: saleData.vatAmountBs,
@@ -4398,7 +4398,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const revenue = accounts.find(item => item.code === '4.1.1.01' && item.isMovement && item.type === 'INGRESOS');
     const receivable = accounts.find(item => item.code === '1.1.2.01' && item.isMovement && item.type === 'ACTIVO');
-    const vat = accounts.find(item => item.code === '2.1.2.01' && item.isMovement && item.type === 'PASIVO');
+    const vat = accounts.find(item => item.code === (source.taxRate === 8 ? '2.1.2.02' : '2.1.2.01') && item.isMovement && item.type === 'PASIVO');
     const luxuryTax = accounts.find(item => item.code === '2.1.2.08' && item.isMovement && item.type === 'PASIVO');
     const igtf = accounts.find(item => item.code === '2.1.2.06' && item.isMovement && item.type === 'PASIVO');
     const withholding = accounts.find(item => item.code === '1.1.3.03' && item.isMovement && item.type === 'ACTIVO');
