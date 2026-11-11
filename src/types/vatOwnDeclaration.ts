@@ -482,10 +482,27 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
         throw new Error('Una nota de crédito ya presentada tiene una factura original ambigua; no se puede validar su reversión acumulada.');
       }
       const noteVat = Number(snapshot.vatAmountBs);
-      if (snapshot.id !== noteId || !Number.isFinite(noteVat) || noteVat < 0) {
-        throw new Error('Una declaración anterior no conserva el IVA bruto histórico válido de una nota de crédito de compras.');
+      const noteTaxRate = Number(snapshot.taxRate);
+      if (snapshot.id !== noteId || !Number.isFinite(noteVat) || noteVat < 0 ||
+          !Number.isFinite(noteTaxRate) || ![8, 16, 31].includes(noteTaxRate)) {
+        throw new Error('Una declaración anterior no conserva el IVA bruto y la alícuota histórica válidos de una nota de crédito de compras.');
       }
       const originalId = historicalCandidates[0].id;
+      const savedOriginal = filed.sourceSnapshots?.[originalId];
+      if (!savedOriginal) {
+        throw new Error('La declaración de una nota de crédito presentada no conserva la huella de su factura original.');
+      }
+      let originalSnapshot: Record<string, unknown>;
+      try { originalSnapshot = JSON.parse(savedOriginal) as Record<string, unknown>; }
+      catch { throw new Error('La huella de la factura original de una nota de crédito presentada no se puede leer.'); }
+      const originalTaxRate = Number(originalSnapshot.taxRate);
+      if (originalSnapshot.kind !== 'PURCHASE' || originalSnapshot.id !== originalId ||
+          originalSnapshot.documentType !== '01' || !Number.isFinite(originalTaxRate) ||
+          ![8, 16, 31].includes(originalTaxRate) || originalTaxRate !== noteTaxRate ||
+          (snapshot.supplierRif && originalSnapshot.supplierRif &&
+            normalizeFiscalReference(snapshot.supplierRif) !== normalizeFiscalReference(originalSnapshot.supplierRif))) {
+        throw new Error('La nota de crédito presentada no coincide con la alícuota o el proveedor de la factura original según las huellas históricas.');
+      }
       priorFiledNoteVatByOriginal.set(originalId, (priorFiledNoteVatByOriginal.get(originalId) || 0) + noteVat);
     }
   }
