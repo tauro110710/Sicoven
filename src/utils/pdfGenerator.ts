@@ -917,7 +917,7 @@ export async function exportVentasPdf(
     `${periodLabel} • Providencia Administrativa SNAT/2015/0049 • SENIAT`
   );
 
-  let totalMonto = 0;\n  let totalMontoUsd = 0;
+  let totalMonto = 0;
   let totalExento = 0;
   let totalBase = 0;
   let totalIva = 0;
@@ -928,7 +928,7 @@ export async function exportVentasPdf(
   const hasSalesCorrectionNotes = sales.some(s => s.documentType === '02' || s.documentType === '03');
   const tableBody: any[] = sales.map(s => {
     const sign = s.documentType === '03' ? -1 : 1;
-    totalMonto += sign * (s.totalAmountBs || 0);\n    totalMontoUsd += sign * (s.totalAmountUsd || 0);
+    totalMonto += sign * (s.totalAmountBs || 0);
     totalExento += sign * (s.exemptAmountBs || 0);
     totalBase += sign * (s.taxableBaseBs || 0);
     const saleLuxuryTax = s.taxRate === 31 ? (s.taxableBaseBs || 0) * 0.15 : 0;
@@ -963,7 +963,7 @@ export async function exportVentasPdf(
     const z = entry.fiscalZReport!;
     const base = z.taxableBase16Bs + z.taxableBase8Bs + z.taxableBase31Bs;
     const vat = z.vat16Bs + z.vat8Bs + z.vat31Bs;
-    totalMonto += z.totalSalesBs;\n    totalMontoUsd += entry.bcvRate > 0 ? z.totalSalesBs / entry.bcvRate : 0;
+    totalMonto += z.totalSalesBs;
     totalExento += z.exemptSalesBs;
     totalBase += base;
     totalIva += vat;
@@ -991,8 +991,8 @@ export async function exportVentasPdf(
 
   // Totals row
   tableBody.push([
-    { content: (hasSalesCorrectionNotes ? 'TOTALES AJUSTADOS' : 'TOTALES') + (fiscalZEntries.length ? ' · INCLUYE REPORTES Z:' : ' DEL PERÍODO:'), colSpan: 7, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
-    { content: formatNumberVe(totalMonto), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },\n    { content: formatUsd(totalMontoUsd), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+    { content: (hasSalesCorrectionNotes ? 'TOTALES AJUSTADOS' : 'TOTALES') + (fiscalZEntries.length ? ' · INCLUYE REPORTES Z:' : ' DEL PERÍODO:'), colSpan: 6, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+    { content: formatNumberVe(totalMonto), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: formatNumberVe(totalExento), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: formatNumberVe(totalBase), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: '', styles: { fillColor: [15, 23, 42] } },
@@ -1001,7 +1001,7 @@ export async function exportVentasPdf(
     { content: formatNumberVe(totalRetenido), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [192, 132, 252] } },
     { content: '', styles: { fillColor: [15, 23, 42] } },
     { content: '', styles: { fillColor: [15, 23, 42] } },
-    { content: formatNumberVe(totalIgtf), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [125, 211, 252] } },\n    { content: '', styles: { fillColor: [15, 23, 42] } }
+    { content: formatNumberVe(totalIgtf), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [125, 211, 252] } }
   ]);
 
   autoTable(doc, {
