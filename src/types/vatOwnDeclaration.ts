@@ -119,9 +119,9 @@ export function resolveVatOwnProrationRate(input: {
 
 /**
  * Customer VAT withholdings are a separate fiscal event from the daily sales source.
- * A day may use a consolidated Z report for taxable sales while the individual
- * invoice still carries the withholding voucher that must be credited in the
- * period in which that voucher was received.
+ * Ordinary invoices use the received-voucher date; debit/credit notes adjust the
+ * withholding in the period of the corrective document, never the original invoice's
+ * inherited voucher date.
  */
 export function getReceivedVatWithholdingSales<T extends {
   companyId: string;
