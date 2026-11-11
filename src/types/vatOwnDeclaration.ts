@@ -359,10 +359,12 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
   const relatedPurchaseIds: string[] = [];
   const reclassifications: VatOwnPurchaseCreditSummary['reclassifications'] = [];
   const originalByNoteId = new Map<string, PurchaseRecord>();
-  const priorNotes: Array<{ item: PurchaseRecord; original: PurchaseRecord; prior: VatOwnDeclaration; treatment: VatOwnPurchaseCreditTreatment; taxRate: number }> = [];
+  const priorNotes: Array<{ item: PurchaseRecord; original: PurchaseRecord; prior: VatOwnDeclaration; treatment: VatOwnPurchaseCreditTreatment; taxRate: number; originalVatAmountBs: number }> = [];
+  const historicalOriginalVatById = new Map<string, number>();
   const getFiledPurchaseSnapshot = (declaration: VatOwnDeclaration, original: PurchaseRecord): {
     treatment: VatOwnPurchaseCreditTreatment;
     taxRate: number;
+    originalVatAmountBs: number;
   } => {
     const saved = declaration.sourceSnapshots?.[original.id];
     if (!saved) {
@@ -372,14 +374,17 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     try { snapshot = JSON.parse(saved) as Record<string, unknown>; }
     catch { throw new Error('La huella fiscal de la factura original ' + original.invoiceNumber + ' no se puede leer para revertir su crédito IVA.'); }
     const historicalTaxRate = Number(snapshot.taxRate);
+    const originalVatAmountBs = Number(snapshot.vatAmountBs);
     if (snapshot.kind !== 'PURCHASE' || snapshot.id !== original.id ||
         !['TAXABLE', 'EXEMPT', 'COMMON'].includes(String(snapshot.vatCreditTreatment)) ||
-        !Number.isFinite(historicalTaxRate) || ![8, 16, 31].includes(historicalTaxRate)) {
-      throw new Error('La declaración anterior no conserva el tratamiento fiscal y la alícuota histórica de la factura original ' + original.invoiceNumber + '.');
+        !Number.isFinite(historicalTaxRate) || ![8, 16, 31].includes(historicalTaxRate) ||
+        !Number.isFinite(originalVatAmountBs) || originalVatAmountBs < 0) {
+      throw new Error('La declaración anterior no conserva el tratamiento, la alícuota y el IVA bruto históricos de la factura original ' + original.invoiceNumber + '.');
     }
     return {
       treatment: resolveVatOwnPurchaseCreditTreatment(snapshot.vatCreditTreatment as VatOwnPurchaseCreditTreatment),
-      taxRate: historicalTaxRate
+      taxRate: historicalTaxRate,
+      originalVatAmountBs
     };
   };
   const normalizeFiscalReference = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
@@ -422,6 +427,7 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
       throw new Error('La factura original de la nota de crédito no aparece en una única declaración IVA anterior presentada. Debe conciliarse o rectificarse el período original antes de declarar esta nota.');
     }
     const historical = getFiledPurchaseSnapshot(matches[0], original);
+    historicalOriginalVatById.set(original.id, historical.originalVatAmountBs);
     if (item.taxRate !== historical.taxRate) {
       throw new Error('La nota de crédito de compras ' + item.invoiceNumber + ' no conserva la alícuota de la factura según la declaración original presentada.');
     }
@@ -432,6 +438,7 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
   // than the original invoice actually generated. Read earlier notes only from
   // immutable snapshots of filed declarations, never from mutable live records.
   const priorFiledNoteVatByOriginal = new Map<string, number>();
+  const countedPriorNoteIds = new Set<string>();
   for (const filed of input.priorDeclarations) {
     if (filed.companyId !== input.companyId || filed.status !== 'FILED' || filed.period >= input.period) continue;
     for (const noteId of filed.sourceIds || []) {
@@ -447,6 +454,10 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
       try { snapshot = JSON.parse(saved) as Record<string, unknown>; }
       catch { throw new Error('Una declaración anterior contiene una huella ilegible para una nota de crédito de compras.'); }
       if (snapshot.kind !== 'PURCHASE' || snapshot.documentType !== '03') continue;
+      if (countedPriorNoteIds.has(String(noteId))) {
+        throw new Error('Una nota de crédito aparece presentada más de una vez en el historial IVA. Concilie las declaraciones anteriores.');
+      }
+      countedPriorNoteIds.add(String(noteId));
       const explicitOriginalId = String(snapshot.originalPurchaseId || '');
       const snapshotSupplierRif = normalizeFiscalReference(snapshot.supplierRif);
       const affectedNumber = normalizeFiscalReference(snapshot.affectedInvoiceNumber);
@@ -482,10 +493,12 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
   }
   for (const [originalId, currentNoteVat] of currentNoteVatByOriginal) {
     const original = input.allPurchases.find(item => item.id === originalId && item.companyId === input.companyId);
-    const originalVat = Number(original?.vatAmountBs || 0);
+    const originalVat = historicalOriginalVatById.has(originalId)
+      ? Number(historicalOriginalVatById.get(originalId))
+      : Number(original?.vatAmountBs || 0);
     const alreadyReversed = priorFiledNoteVatByOriginal.get(originalId) || 0;
     if (!Number.isFinite(originalVat) || originalVat < 0 || alreadyReversed + currentNoteVat - originalVat > 0.02) {
-      throw new Error('Las notas de crédito acumuladas superan el IVA de la factura original ' +
+      throw new Error('Las notas de crédito acumuladas superan el IVA histórico de la factura original ' +
         String(original?.invoiceNumber || originalId) + '. Concilie las notas ya presentadas antes de declarar.');
     }
   }
