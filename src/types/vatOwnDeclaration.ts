@@ -378,12 +378,14 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
       throw new Error('El asiento de la factura ' + sourcePurchase.invoiceNumber + ' no permite distribuir de forma verificable el IVA no acreditable entre sus cuentas de costo, inventario o gasto.');
     }
     const absoluteAmount = Math.abs(signedAmount);
-    let remaining = absoluteAmount;
+    const totalCents = Math.round(absoluteAmount * 100);
+    let allocatedCents = 0;
     destinations.forEach(([accountCode, destination], index) => {
-      const allocation = index === destinations.length - 1
-        ? round(remaining)
-        : round(absoluteAmount * destination.amountBs / totalDestinationBase);
-      remaining = round(remaining - allocation);
+      const allocationCents = index === destinations.length - 1
+        ? totalCents - allocatedCents
+        : Math.floor(totalCents * destination.amountBs / totalDestinationBase);
+      allocatedCents += allocationCents;
+      const allocation = allocationCents / 100;
       if (allocation <= 0) return;
       const isDebit = signedAmount > 0;
       result.push({
