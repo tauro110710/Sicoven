@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { CalendarDays, FileText, Receipt, ShoppingCart, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs } from '../../utils/formatters';
-import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, calculateVatOwnPurchaseCreditSummary, resolveVatOwnPaymentBcvRate } from '../../types/vatOwnDeclaration';
+import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, resolveVatOwnPaymentBcvRate } from '../../types/vatOwnDeclaration';
 
 const money = (value: number | undefined) => Number.isFinite(value) ? Number(value) : 0;
 const parseLocalizedNumber = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
@@ -71,23 +71,26 @@ export const IvaDeclaracionesView: React.FC = () => {
   const exemptSalesBase = dailySalesResolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
   const purchaseSummaryResult = useMemo(() => {
     if (dailySalesResolution.unresolvedDates.length > 0) {
-      return { summary: null, error: 'Resuelve primero las fechas con Reporte Z y ventas individuales coincidentes.' };
+      return { summary: null, reclassifications: null, error: 'Resuelve primero las fechas con Reporte Z y ventas individuales coincidentes.' };
     }
     try {
-      return {
-        summary: calculateVatOwnPurchaseCreditSummary({
-          companyId: currentCompany.id, period, purchases: monthPurchases,
-          allPurchases: purchases, priorDeclarations: vatOwnDeclarations,
-          taxableSalesBaseBs: taxableSalesBase, exemptSalesBaseBs: exemptSalesBase
-        }),
-        error: null
-      };
+      const summary = calculateVatOwnPurchaseCreditSummary({
+        companyId: currentCompany.id, period, purchases: monthPurchases,
+        allPurchases: purchases, priorDeclarations: vatOwnDeclarations,
+        taxableSalesBaseBs: taxableSalesBase, exemptSalesBaseBs: exemptSalesBase
+      });
+      const reclassifications = buildVatOwnPurchaseVatReclassificationItems({
+        companyId: currentCompany.id, period, bcvRate: Number(currentCompany.bcvRate),
+        allPurchases: purchases, journalEntries, summary
+      });
+      return { summary, reclassifications, error: null };
     } catch (error) {
-      return { summary: null, error: error instanceof Error ? error.message : 'No se pudo conciliar el crédito fiscal de compras.' };
+      return { summary: null, reclassifications: null, error: error instanceof Error ? error.message : 'No se pudo conciliar el crédito fiscal de compras.' };
     }
-  }, [currentCompany.id, period, monthPurchases, purchases, vatOwnDeclarations, taxableSalesBase, exemptSalesBase, dailySalesResolution.unresolvedDates]);
+  }, [currentCompany.id, period, monthPurchases, purchases, vatOwnDeclarations, journalEntries, currentCompany.bcvRate, taxableSalesBase, exemptSalesBase, dailySalesResolution.unresolvedDates]);
   const purchaseSummary = purchaseSummaryResult.summary;
   const purchaseSummaryError = purchaseSummaryResult.error;
+  const purchaseReclassificationItems = purchaseSummaryResult.reclassifications || [];
   const prorationRate = purchaseSummary?.prorationRate ?? null;
   const purchaseCreditGross16 = purchaseSummary?.gross16Bs ?? 0;
   const purchaseCreditGross8 = purchaseSummary?.gross8Bs ?? 0;
@@ -118,8 +121,11 @@ export const IvaDeclaracionesView: React.FC = () => {
     activeSourceChoices[conflict.date] !== savedDeclaration.dailySourceChoices?.[conflict.date]
   ));
   const bcvRateChanged = Boolean(savedDeclaration && (!Number.isFinite(Number(savedDeclaration.bcvRate)) || Math.abs(Number(savedDeclaration.bcvRate) - Number(currentCompany.bcvRate)) > 0.000001));
+  const purchaseReclassificationChanged = Boolean(savedDeclaration &&
+    JSON.stringify(purchaseReclassificationItems) !== JSON.stringify(savedDeclaration.purchaseVatReclassificationItems || []));
   const draftNeedsRefresh = savedDeclaration?.status === 'DRAFT' && (
-    sourceIdsChanged || sourceChoicesChanged || bcvRateChanged || Boolean(purchaseSummaryError) || dailySalesResolution.unresolvedDates.length > 0
+    sourceIdsChanged || sourceChoicesChanged || bcvRateChanged || purchaseReclassificationChanged ||
+    Boolean(purchaseSummaryError) || dailySalesResolution.unresolvedDates.length > 0
   );
 
   const includedZSourceIds = new Set(dailySalesResolution.days
