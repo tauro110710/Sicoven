@@ -7,6 +7,7 @@ import {
   getVatOwnOutstandingBalance,
   resolveVatOwnDailySalesSources,
   resolveVatOwnProrationRate,
+  areVatOwnDeclarationSourcesCurrent,
   resolveVatOwnPurchaseCreditTreatment,
   snapshotVatOwnDeclarationRevision,
   validateVatOwnDeclarationDraft,
@@ -85,6 +86,12 @@ test('rejects negative or non-finite sales bases for proration', () => {
   assert.equal(resolveVatOwnProrationRate({
     taxableSalesBaseBs: Number.NaN, exemptSalesBaseBs: 100, hasCommonPurchases: true
   }), null);
+});
+
+test('detects changed declaration source sets without depending on array order', () => {
+  assert.equal(areVatOwnDeclarationSourcesCurrent(['sale-1', 'purchase-1'], ['purchase-1', 'sale-1']), true);
+  assert.equal(areVatOwnDeclarationSourcesCurrent(['sale-1'], ['sale-1', 'sale-2']), false);
+  assert.equal(areVatOwnDeclarationSourcesCurrent(['sale-1', 'sale-2'], ['sale-1']), false);
 });
 
 test('snapshots a draft revision without sharing mutable source arrays or position objects', () => {
