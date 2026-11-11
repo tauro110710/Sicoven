@@ -13,6 +13,6 @@ test('fiscal books only include documents belonging to the selected company', ()
 });
 
 test('an empty company selection never exposes unscoped fiscal documents', () => {
-  assert.deepEqual(filterCompanyFiscalDocuments([{ id: 'legacy', total: 1 }], ''), []);
-  assert.deepEqual(filterCompanyFiscalDocuments([{ id: 'legacy', total: 1 }], 'company-a'), []);
+  assert.deepEqual(filterCompanyFiscalDocuments<{ id: string; companyId?: string; total: number }>([{ id: 'legacy', total: 1 }], ''), []);
+  assert.deepEqual(filterCompanyFiscalDocuments<{ id: string; companyId?: string; total: number }>([{ id: 'legacy', total: 1 }], 'company-a'), []);
 });
