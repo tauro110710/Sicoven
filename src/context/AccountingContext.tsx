@@ -5640,8 +5640,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     try {
       const monthSales = sales.filter(item => item.companyId === currentCompany.id && item.invoiceDate.startsWith(input.period) && !item.isCancelled);
       const monthPurchases = purchases.filter(item => item.companyId === currentCompany.id && item.invoiceDate.startsWith(input.period) && !item.isCancelled);
+      const reversedJournalIds = new Set(journalEntries
+        .filter(entry => Boolean(entry.reversalOfEntryId))
+        .map(entry => entry.reversalOfEntryId as string));
       const monthZ = journalEntries.filter(entry => entry.companyId === currentCompany.id &&
-        Boolean(entry.fiscalZReport) && String(entry.fiscalZReport!.date || entry.date).startsWith(input.period));
+        Boolean(entry.fiscalZReport) && !reversedJournalIds.has(entry.id) &&
+        String(entry.fiscalZReport!.date || entry.date).startsWith(input.period));
       const resolution = resolveVatOwnDailySalesSources({
         zReports: monthZ.map(entry => ({
           id: entry.id, date: entry.fiscalZReport!.date || entry.date,
@@ -5771,8 +5775,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         item.invoiceDate.startsWith(declaration.period) && !item.isCancelled);
       const periodPurchases = purchases.filter(item => item.companyId === currentCompany.id &&
         item.invoiceDate.startsWith(declaration.period) && !item.isCancelled);
+      const reversedJournalIds = new Set(journalEntries
+        .filter(entry => Boolean(entry.reversalOfEntryId))
+        .map(entry => entry.reversalOfEntryId as string));
       const periodZ = journalEntries.filter(entry => entry.companyId === currentCompany.id &&
-        Boolean(entry.fiscalZReport) && String(entry.fiscalZReport!.date || entry.date).startsWith(declaration.period));
+        Boolean(entry.fiscalZReport) && !reversedJournalIds.has(entry.id) &&
+        String(entry.fiscalZReport!.date || entry.date).startsWith(declaration.period));
       const resolution = resolveVatOwnDailySalesSources({
         zReports: periodZ.map(entry => ({
           id: entry.id, date: entry.fiscalZReport!.date || entry.date,
