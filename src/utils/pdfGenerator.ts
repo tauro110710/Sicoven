@@ -296,11 +296,6 @@ export async function exportDiarioPdf(
     margin: { left: 14, right: 14, bottom: 20 }
   });
 
-  if (unresolvedDates.size > 0) {
-    doc.setFontSize(8);
-    doc.setTextColor(180, 83, 9);
-    doc.text('ATENCIÓN: hay fechas con doble modalidad. Las filas marcadas PENDIENTE no se incluyen en los totales hasta seleccionar Reporte Z o ventas individuales.', 14, startY - 3);
-  }
   const finalY = (doc as any).lastAutoTable.finalY || 100;
   addSignatureBlock(doc, finalY, company);
   addPdfFooter(doc);
@@ -955,12 +950,12 @@ export async function exportVentasPdf(
   const tableBody: any[] = sales.map(s => {
     const sign = s.documentType === '03' ? -1 : 1;
     const included = selectedIndividualIds.has(s.id);
+    const saleLuxuryTax = s.taxRate === 31 ? (s.additionalLuxuryTaxBs ?? (s.taxableBaseBs || 0) * 0.15) : 0;
     if (included) {
       totalMonto += sign * (s.totalAmountBs || 0);
       totalMontoUsd += sign * (s.totalAmountUsd || 0);
       totalExento += sign * (s.exemptAmountBs || 0);
       totalBase += sign * (s.taxableBaseBs || 0);
-      const saleLuxuryTax = s.taxRate === 31 ? (s.additionalLuxuryTaxBs ?? (s.taxableBaseBs || 0) * 0.15) : 0;
       totalLuxuryTax += sign * saleLuxuryTax;
       totalIva += sign * (s.taxRate === 31 ? Math.max(0, (s.taxableBaseBs || 0) * 0.16) : (s.vatAmountBs || 0));
       totalRetenido += sign * (s.vatWithheldBs || 0);
