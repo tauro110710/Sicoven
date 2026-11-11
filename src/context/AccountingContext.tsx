@@ -4308,16 +4308,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!sourceEntry) throw new Error('La factura con inventario no conserva su asiento original verificable.');
       const returnReadiness = validateSaleInventoryReturnReconciliation({
         companyId: currentCompany.id, invoiceNumber: source.invoiceNumber,
-        source: sourceEntry, movements, products, journalEntries
+        source: sourceEntry, movements, products, journalEntries,
+        expectedReturnQuantities: draft.returnedInventoryQuantities
       });
       if (!returnReadiness.ready) {
-        throw new Error('La NC de mercancía exige devolución física total y conciliada en Kardex, con su asiento de costo por artículo. ' +
+        throw new Error('La NC de mercancía exige que las cantidades indicadas coincidan con las entradas físicas y su costo histórico en el Kardex. ' +
           (returnReadiness.reason || 'No se registró la nota.'));
-      }
-      const originalNetBs = Number(source.taxableBaseBs || 0) + Number(source.exemptAmountBs || 0) + Number(source.vatAmountBs || 0);
-      if (Math.abs(Number(draft.taxableBaseBs) + Number(draft.exemptAmountBs) + 
-          (Number(draft.taxableBaseBs) * Number(source.taxRate || 0) / 100) - originalNetBs) > 0.02) {
-        throw new Error('La devolución de mercancía solo admite NC total mientras no exista distribución fiscal por líneas de devolución parcial. La factura original permanece intacta.');
       }
     }
     const number = String(draft.noteNumber || '').trim();
@@ -4332,41 +4328,130 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ...draft, sourceSale: source, priorCreditNotes,
       closedThroughDate: currentCompany.closedThroughDate || undefined
     });
-    if (draft.kind === 'CREDIT') {
-      const balance = getCreditBalance(source.id, 'SALE_COLLECTION');
-      if (amounts.netReceivableAdjustmentUsd > balance.outstandingUsd + 0.005) {
-        throw new Error('La nota de crédito supera el saldo de CxC todavía exigible. Si ya hubo cobros, debe tramitarse primero el circuito de devolución/reembolso y su conciliación bancaria.');
+    if (linkedInventory && draft.kind === 'CREDIT') {
+      if (source.inventoryLines?.length) {
+        if (!draft.returnedInventoryQuantities) throw new Error('Indique las cantidades devueltas por artículo para conciliar la NC parcial con el Kardex.');
+        const originalQtyByProduct = new Map<string, number>();
+        source.inventoryLines.forEach(line => originalQtyByProduct.set(line.productId,
+          (originalQtyByProduct.get(line.productId) || 0) + Number(line.quantity || 0)));
+        let expectedBaseBs = 0;
+        let expectedExemptBs = 0;
+        for (const line of source.inventoryLines) {
+          const originalQty = originalQtyByProduct.get(line.productId) || 0;
+          const returnedQty = Number(draft.returnedInventoryQuantities[line.productId] || 0);
+          if (!Number.isFinite(returnedQty) || returnedQty < 0 || returnedQty > originalQty + 1e-8) {
+            throw new Error('La cantidad devuelta de ' + line.productName + ' no es válida.');
+          }
+          const ratio = originalQty > 0 ? returnedQty / originalQty : 0;
+          expectedBaseBs += Number(line.netAmountBs || 0) * ratio;
+          expectedExemptBs += Number(line.exemptAmountBs || 0) * ratio;
+        }
+        if (Math.abs(amounts.taxableBaseBs - expectedBaseBs) > 0.02 ||
+            Math.abs(amounts.exemptAmountBs - expectedExemptBs) > 0.02) {
+          throw new Error('La base imponible y el exento de la NC deben corresponder exactamente a las cantidades devueltas seleccionadas.');
+        }
+      } else if (draft.returnedInventoryQuantities) {
+        throw new Error('La factura no conserva líneas de inventario para validar cantidades parciales; concilie el Kardex y registre la devolución completa.');
       }
+    }
+    const isCredit = draft.kind === 'CREDIT';
+    const isCashSale = source.paymentTerm === 'CONTADO';
+    const balance = !isCashSale ? getCreditBalance(source.id, 'SALE_COLLECTION') : null;
+    const receivablePortionUsd = isCredit && balance
+      ? Math.min(amounts.netReceivableAdjustmentUsd, balance.outstandingUsd)
+      : (isCredit && !isCashSale ? amounts.netReceivableAdjustmentUsd : 0);
+    const refundPortionUsd = isCredit ? Math.max(0, amounts.netReceivableAdjustmentUsd - receivablePortionUsd) : 0;
+    const receivablePortionBs = receivablePortionUsd * draft.bcvRate;
+    const refundPortionBs = isCredit
+      ? Math.max(0, amounts.netReceivableAdjustmentBs - receivablePortionBs)
+      : 0;
+    const treasuryRequired = isCashSale || refundPortionBs > 0.01;
+    const treasury = draft.treasuryAccountCode
+      ? accounts.find(item => item.code === draft.treasuryAccountCode && item.isMovement &&
+          item.type === 'ACTIVO' && item.code.startsWith('1.1.1.'))
+      : undefined;
+    if (treasuryRequired && !treasury) {
+      throw new Error(isCashSale
+        ? 'Seleccione la cuenta de caja o banco desde la que se hará el reembolso o en la que se recibirá el cobro.'
+        : 'La nota supera el saldo pendiente de CxC; seleccione la cuenta de caja o banco para registrar el reembolso del excedente.');
     }
     const revenue = accounts.find(item => item.code === '4.1.1.01' && item.isMovement && item.type === 'INGRESOS');
     const receivable = accounts.find(item => item.code === '1.1.2.01' && item.isMovement && item.type === 'ACTIVO');
     const vat = accounts.find(item => item.code === '2.1.2.01' && item.isMovement && item.type === 'PASIVO');
-    if (!revenue || !receivable || (amounts.vatAmountBs > 0 && !vat)) {
-      throw new Error('Faltan cuentas de movimiento para ventas, CxC o débito fiscal IVA. No se registró la nota.');
+    const luxuryTax = accounts.find(item => item.code === '2.1.2.08' && item.isMovement && item.type === 'PASIVO');
+    const igtf = accounts.find(item => item.code === '2.1.2.06' && item.isMovement && item.type === 'PASIVO');
+    const withholding = accounts.find(item => item.code === '1.1.3.03' && item.isMovement && item.type === 'ACTIVO');
+    if (!revenue || (!isCashSale && !receivable) ||
+        (amounts.vatAmountBs > 0 && !vat) ||
+        (amounts.additionalLuxuryTaxBs > 0 && !luxuryTax) ||
+        (amounts.igtfAmountBs > 0 && !igtf) ||
+        (amounts.vatWithheldBs > 0 && !withholding)) {
+      throw new Error('Faltan cuentas de movimiento para ingresos, CxC/tesorería o impuestos de la nota. No se registró el documento.');
     }
-    const isCredit = draft.kind === 'CREDIT';
     const items: JournalEntryItem[] = [];
     const baseBs = amounts.taxableBaseBs + amounts.exemptAmountBs;
     const baseUsd = amounts.taxableBaseUsd + amounts.exemptAmountUsd;
+    const pushTaxAdjustments = (direction: 'DEBIT' | 'CREDIT') => {
+      const debit = direction === 'DEBIT';
+      if (amounts.vatAmountBs > 0 && vat) items.push({
+        accountCode: vat.code, accountName: vat.name,
+        debitBs: debit ? amounts.vatAmountBs : 0, creditBs: debit ? 0 : amounts.vatAmountBs,
+        debitUsd: debit ? amounts.vatAmountUsd : 0, creditUsd: debit ? 0 : amounts.vatAmountUsd,
+        description: (debit ? 'Disminución' : 'Incremento') + ' de débito fiscal IVA · ' + source.invoiceNumber
+      });
+      if (amounts.additionalLuxuryTaxBs > 0 && luxuryTax) items.push({
+        accountCode: luxuryTax.code, accountName: luxuryTax.name,
+        debitBs: debit ? amounts.additionalLuxuryTaxBs : 0, creditBs: debit ? 0 : amounts.additionalLuxuryTaxBs,
+        debitUsd: debit ? amounts.additionalLuxuryTaxUsd : 0, creditUsd: debit ? 0 : amounts.additionalLuxuryTaxUsd,
+        description: (debit ? 'Disminución' : 'Incremento') + ' de impuesto adicional 15% · ' + source.invoiceNumber
+      });
+      if (amounts.igtfAmountBs > 0 && igtf) items.push({
+        accountCode: igtf.code, accountName: igtf.name,
+        debitBs: debit ? amounts.igtfAmountBs : 0, creditBs: debit ? 0 : amounts.igtfAmountBs,
+        debitUsd: debit ? amounts.igtfAmountUsd : 0, creditUsd: debit ? 0 : amounts.igtfAmountUsd,
+        description: (debit ? 'Reversión' : 'Percepción adicional') + ' de IGTF · ' + source.invoiceNumber
+      });
+    };
     if (isCredit) {
       items.push({ accountCode: revenue.code, accountName: revenue.name, debitBs: baseBs, creditBs: 0,
         debitUsd: baseUsd, creditUsd: 0, description: 'Reversión parcial de ingresos · ' + source.invoiceNumber });
-      if (amounts.vatAmountBs > 0 && vat) items.push({ accountCode: vat.code, accountName: vat.name,
-        debitBs: amounts.vatAmountBs, creditBs: 0, debitUsd: amounts.vatAmountUsd, creditUsd: 0,
-        description: 'Disminución de débito fiscal IVA · ' + source.invoiceNumber });
-      items.push({ accountCode: receivable.code, accountName: receivable.name,
-        debitBs: 0, creditBs: amounts.totalAmountBs, debitUsd: 0, creditUsd: amounts.totalAmountUsd,
-        description: 'Disminución de CxC por NC ' + number });
+      pushTaxAdjustments('DEBIT');
+      if (amounts.vatWithheldBs > 0 && withholding) items.push({
+        accountCode: withholding.code, accountName: withholding.name, debitBs: 0, creditBs: amounts.vatWithheldBs,
+        debitUsd: 0, creditUsd: amounts.vatWithheldUsd,
+        description: 'Reversión proporcional de retención IVA recibida · ' + source.invoiceNumber
+      });
+      if (receivablePortionBs > 0.01 && receivable) items.push({
+        accountCode: receivable.code, accountName: receivable.name, debitBs: 0, creditBs: receivablePortionBs,
+        debitUsd: 0, creditUsd: receivablePortionUsd,
+        description: 'Disminución de CxC por NC ' + number
+      });
+      if (refundPortionBs > 0.01 && treasury) items.push({
+        accountCode: treasury.code, accountName: treasury.name, debitBs: 0, creditBs: refundPortionBs,
+        debitUsd: 0, creditUsd: refundPortionUsd,
+        description: 'Reembolso al cliente por NC ' + number
+      });
     } else {
-      items.push({ accountCode: receivable.code, accountName: receivable.name,
-        debitBs: amounts.totalAmountBs, creditBs: 0, debitUsd: amounts.totalAmountUsd, creditUsd: 0,
-        description: 'Incremento de CxC por ND ' + number });
-      items.push({ accountCode: revenue.code, accountName: revenue.name,
-        debitBs: 0, creditBs: baseBs, debitUsd: 0, creditUsd: baseUsd,
-        description: 'Ingreso adicional por ND · ' + source.invoiceNumber });
-      if (amounts.vatAmountBs > 0 && vat) items.push({ accountCode: vat.code, accountName: vat.name,
-        debitBs: 0, creditBs: amounts.vatAmountBs, debitUsd: 0, creditUsd: amounts.vatAmountUsd,
-        description: 'Incremento de débito fiscal IVA · ' + source.invoiceNumber });
+      if (isCashSale && treasury) items.push({
+        accountCode: treasury.code, accountName: treasury.name,
+        debitBs: amounts.netReceivableAdjustmentBs, creditBs: 0,
+        debitUsd: amounts.netReceivableAdjustmentUsd, creditUsd: 0,
+        description: 'Cobro por nota de débito ' + number
+      });
+      else if (receivable) items.push({
+        accountCode: receivable.code, accountName: receivable.name,
+        debitBs: amounts.netReceivableAdjustmentBs, creditBs: 0,
+        debitUsd: amounts.netReceivableAdjustmentUsd, creditUsd: 0,
+        description: 'Incremento de CxC por ND ' + number
+      });
+      if (amounts.vatWithheldBs > 0 && withholding) items.push({
+        accountCode: withholding.code, accountName: withholding.name,
+        debitBs: amounts.vatWithheldBs, creditBs: 0, debitUsd: amounts.vatWithheldUsd, creditUsd: 0,
+        description: 'Retención IVA asociada a ND · ' + source.invoiceNumber
+      });
+      items.push({ accountCode: revenue.code, accountName: revenue.name, debitBs: 0, creditBs: baseBs,
+        debitUsd: 0, creditUsd: baseUsd, description: 'Ingreso adicional por ND · ' + source.invoiceNumber });
+      pushTaxAdjustments('CREDIT');
     }
     correctionWorkflowInFlightRef.current = true;
     try { await recordCorrectionAudit({
@@ -4402,12 +4487,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       affectedInvoiceTotalAmountBs: source.totalAmountBs, affectedInvoiceTotalAmountUsd: source.totalAmountUsd,
       fiscalEmissionMedium: draft.fiscalEmissionMedium, sameMediumAsOriginal: draft.sameMediumAsOriginal,
           taxableBaseBs: amounts.taxableBaseBs, exemptAmountBs: amounts.exemptAmountBs,
-          vatAmountBs: amounts.vatAmountBs, totalAmountBs: amounts.totalAmountBs,
+          vatAmountBs: amounts.vatAmountBs, additionalLuxuryTaxBs: amounts.additionalLuxuryTaxBs,
+          totalAmountBs: amounts.totalAmountBs,
           bcvRate: draft.bcvRate, taxableBaseUsd: amounts.taxableBaseUsd,
           exemptAmountUsd: amounts.exemptAmountUsd, vatAmountUsd: amounts.vatAmountUsd,
-          totalAmountUsd: amounts.totalAmountUsd, vatWithheldBs: 0, vatWithheldUsd: 0,
-          igtfApplicable: false, igtfAmountBs: 0, igtfAmountUsd: 0,
-          paymentTerm: 'CREDITO', journalEntryId: journal.id,
+          additionalLuxuryTaxUsd: amounts.additionalLuxuryTaxUsd,
+          totalAmountUsd: amounts.totalAmountUsd, vatWithheldBs: amounts.vatWithheldBs, vatWithheldUsd: amounts.vatWithheldUsd,
+          igtfApplicable: amounts.igtfAmountBs > 0, igtfRate: source.igtfRate,
+          igtfAmountBs: amounts.igtfAmountBs, igtfAmountUsd: amounts.igtfAmountUsd,
+          paymentTerm: source.paymentTerm || 'CREDITO', paymentCurrency: source.paymentCurrency, journalEntryId: journal.id,
           netReceivableAdjustmentBs: amounts.netReceivableAdjustmentBs,
           netReceivableAdjustmentUsd: amounts.netReceivableAdjustmentUsd,
           correctionReason: String(draft.reason).trim(),
