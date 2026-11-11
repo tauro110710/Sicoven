@@ -33,7 +33,7 @@ export const IvaDeclaracionesView: React.FC = () => {
   ), [purchases, currentCompany.id, period]);
 
   const monthZ = useMemo(() => journalEntries.filter(entry =>
-    entry.companyId === currentCompany.id && Boolean(entry.fiscalZReport) && String(entry.fiscalZReport.date || entry.date).startsWith(period)
+    entry.companyId === currentCompany.id && Boolean(entry.fiscalZReport) && String(entry.fiscalZReport?.date || entry.date).startsWith(period)
   ).sort((a, b) => String(a.fiscalZReport?.date || a.date).localeCompare(String(b.fiscalZReport?.date || b.date)) || a.entryNumber - b.entryNumber), [journalEntries, currentCompany.id, period]);
   const savedDeclaration = vatOwnDeclarations.find(item => item.companyId === currentCompany.id && item.period === period);
   const activeSourceChoices = savedDeclaration?.dailySourceChoices || dailySourceChoices;
