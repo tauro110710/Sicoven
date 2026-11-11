@@ -45,6 +45,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [exemptAmountInput, setExemptAmountInput] = useState('');
   const exemptAmountBs = parseDecimalInput(exemptAmountInput);
   const [taxRate, setTaxRate] = useState<number>(16);
+  const [vatCreditTreatment, setVatCreditTreatment] = useState<'TAXABLE' | 'EXEMPT' | 'COMMON'>('COMMON');
 
   // IVA Withholding: tasa determinada por Providencia 000054.
 
@@ -256,6 +257,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       exemptAmountBs,
       taxableBaseBs: effectiveTaxableBaseBs,
       taxRate,
+      vatCreditTreatment,
       vatAmountBs,
       additionalLuxuryTaxBs,
       additionalLuxuryTaxUsd: bcvRate > 0 ? additionalLuxuryTaxBs / bcvRate : 0,
@@ -519,6 +521,15 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                   <option value={31}>31% (Alícuota General + Adicional Lujo)</option>
                   <option value={0}>0% (Exento)</option>
                 </select>
+              <div className="mt-3">
+                <label className="block font-semibold text-slate-700 mb-1">Destino del crédito fiscal IVA</label>
+                <select value={vatCreditTreatment} onChange={event=>setVatCreditTreatment(event.target.value as 'TAXABLE'|'EXEMPT'|'COMMON')} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm">
+                  <option value="COMMON">Común: aplicar prorrata automáticamente</option>
+                  <option value="TAXABLE">Exclusivo de operaciones gravadas: 100% acreditable</option>
+                  <option value="EXEMPT">Exclusivo de operaciones exentas: no acreditable</option>
+                </select>
+                <p className="mt-1 text-xs text-slate-500">Se conserva en la factura y en sus notas para determinar correctamente el crédito fiscal del período.</p>
+              </div>
               </div>
             </div>
 
