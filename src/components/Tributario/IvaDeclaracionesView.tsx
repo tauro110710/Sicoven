@@ -64,7 +64,6 @@ export const IvaDeclaracionesView: React.FC = () => {
     sum + signedDocument(item.documentType) * money(item.vatAmountBs), 0);
   const priorCredit = vatOwnDeclarations.filter(item => item.companyId === currentCompany.id && item.status === 'FILED' && item.period < period)
     .sort((a,b)=>b.period.localeCompare(a.period))[0]?.position.creditCarryForwardBs || 0;
-  const includedIndividualIds = new Set(dailySalesResolution.days.filter(day => day.source === 'INDIVIDUAL').flatMap(day => day.sourceIds));
   const receivedWithholdings = getReceivedVatWithholdingSales(sales, currentCompany.id, period).reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatWithheldBs), 0);
   const preliminaryBalance = outputVat === null ? null : outputVat - purchaseCredit - receivedWithholdings - priorCredit;
 
