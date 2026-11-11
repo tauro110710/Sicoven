@@ -38,7 +38,7 @@ export function getVatOwnFiledLaterPeriods(input: {
   targetPeriod: string;
   declarations: readonly VatOwnDeclaration[];
 }): string[] {
-  if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(input.targetPeriod)) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(input.targetPeriod)) {
     throw new Error('El período objetivo de IVA no es válido.');
   }
   return [...new Set(input.declarations
