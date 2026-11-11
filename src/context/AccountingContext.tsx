@@ -5772,6 +5772,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         allPurchases: purchases, priorDeclarations: vatOwnDeclarations,
         taxableSalesBaseBs: currentTaxableBase, exemptSalesBaseBs: currentExemptBase
       });
+      const currentReclassificationItems = buildVatOwnPurchaseVatReclassificationItems({
+        companyId: currentCompany.id, period: declaration.period,
+        bcvRate: Number(declaration.bcvRate), allPurchases: purchases,
+        journalEntries, summary: currentPurchaseSummary
+      });
+      if (JSON.stringify(currentReclassificationItems) !== JSON.stringify(declaration.purchaseVatReclassificationItems || [])) {
+        throw new Error('No se puede presentar: cambió la distribución contable del IVA no acreditable desde que se preparó el borrador. Actualícelo para conservar el nuevo detalle.');
+      }
       const currentSourceIds = [...new Set([
         ...resolution.days.flatMap(day => day.sourceIds),
         ...periodPurchases.map(item => item.id),
