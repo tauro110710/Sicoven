@@ -166,3 +166,83 @@ export function validateVatOwnEvent(input: {
     return;
   }
 }
+
+
+export interface VatOwnDailySalesSource {
+  date: string;
+  source: 'Z' | 'INDIVIDUAL';
+  sourceIds: string[];
+  outputVatBs: number;
+  taxableBase16Bs: number;
+  taxableBase8Bs: number;
+  taxableBase31Bs: number;
+  exemptSalesBs: number;
+}
+
+export interface VatOwnDailySourceConflict {
+  date: string;
+  zSourceIds: string[];
+  individualSourceIds: string[];
+}
+
+/**
+ * Combina días registrados por Z con días registrados por factura individual.
+ * Si ambas fuentes existen el mismo día, no elige una ni suma ambas: exige decisión
+ * expresa del contador para evitar duplicar las mismas ventas.
+ */
+export function resolveVatOwnDailySalesSources(input: {
+  zReports: Array<{
+    id: string; date: string; taxableBase16Bs: number; vat16Bs: number;
+    taxableBase8Bs: number; vat8Bs: number; taxableBase31Bs: number; vat31Bs: number;
+    exemptSalesBs: number;
+  }>;
+  sales: Array<{
+    id: string; date: string; documentType: '01' | '02' | '03';
+    taxableBaseBs: number; taxRate: number; vatAmountBs: number; exemptAmountBs: number;
+  }>;
+  choices?: Record<string, 'Z' | 'INDIVIDUAL'>;
+}): { days: VatOwnDailySalesSource[]; conflicts: VatOwnDailySourceConflict[]; unresolvedDates: string[] } {
+  const byDate = new Map<string, { z: VatOwnDailySalesSource | null; individual: VatOwnDailySalesSource | null }>();
+  const ensure = (date: string) => {
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) throw new Error('La fecha de origen del IVA no es válida.');
+    if (!byDate.has(date)) byDate.set(date, { z: null, individual: null });
+    return byDate.get(date)!;
+  };
+  for (const report of input.zReports) {
+    const day = ensure(report.date);
+    if (!day.z) day.z = { date: report.date, source: 'Z', sourceIds: [], outputVatBs: 0, taxableBase16Bs: 0, taxableBase8Bs: 0, taxableBase31Bs: 0, exemptSalesBs: 0 };
+    const target = day.z;
+    target.sourceIds.push(report.id);
+    target.taxableBase16Bs += amount(report.taxableBase16Bs, 'Base 16% del Z');
+    target.taxableBase8Bs += amount(report.taxableBase8Bs, 'Base 8% del Z');
+    target.taxableBase31Bs += amount(report.taxableBase31Bs, 'Base 31% del Z');
+    target.outputVatBs += amount(report.vat16Bs, 'IVA 16% del Z') + amount(report.vat8Bs, 'IVA 8% del Z') + amount(report.vat31Bs, 'IVA 31% del Z');
+    target.exemptSalesBs += amount(report.exemptSalesBs, 'Ventas exentas del Z');
+  }
+  for (const sale of input.sales) {
+    const day = ensure(sale.date);
+    if (!day.individual) day.individual = { date: sale.date, source: 'INDIVIDUAL', sourceIds: [], outputVatBs: 0, taxableBase16Bs: 0, taxableBase8Bs: 0, taxableBase31Bs: 0, exemptSalesBs: 0 };
+    const target = day.individual;
+    const sign = sale.documentType === '03' ? -1 : 1;
+    target.sourceIds.push(sale.id);
+    target.outputVatBs += sign * amount(sale.vatAmountBs, 'IVA de venta');
+    target.exemptSalesBs += sign * amount(sale.exemptAmountBs, 'Venta exenta');
+    if (sale.taxRate === 16) target.taxableBase16Bs += sign * amount(sale.taxableBaseBs, 'Base 16%');
+    else if (sale.taxRate === 8) target.taxableBase8Bs += sign * amount(sale.taxableBaseBs, 'Base 8%');
+    else if (sale.taxRate === 31) target.taxableBase31Bs += sign * amount(sale.taxableBaseBs, 'Base 31%');
+  }
+  const days: VatOwnDailySalesSource[] = [];
+  const conflicts: VatOwnDailySourceConflict[] = [];
+  const unresolvedDates: string[] = [];
+  for (const [date, sources] of [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    if (sources.z && sources.individual) {
+      conflicts.push({ date, zSourceIds: sources.z.sourceIds, individualSourceIds: sources.individual.sourceIds });
+      const choice = input.choices?.[date];
+      if (!choice) { unresolvedDates.push(date); continue; }
+      days.push(choice === 'Z' ? sources.z : sources.individual);
+    } else if (sources.z || sources.individual) {
+      days.push((sources.z || sources.individual)!);
+    }
+  }
+  return { days, conflicts, unresolvedDates };
+}
