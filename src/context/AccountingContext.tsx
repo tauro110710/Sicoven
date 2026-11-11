@@ -3002,7 +3002,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       purchaseData.vatAmountBs + Number(purchaseData.additionalLuxuryTaxBs || 0) + igtfAmount
     ) * 100) / 100;
     if (Math.abs(expectedTotal - purchaseData.totalAmountBs) > 0.01) {
-      throw new Error('El total de la compra no coincide con base imponible, exento, IVA e IGTF.');
+      throw new Error('El total de la compra no coincide con base imponible, exento, IVA, impuesto adicional e IGTF.');
     }
     if ((purchaseData.vatWithheldBs || 0) + (purchaseData.islrWithheldBs || 0) > purchaseData.totalAmountBs + 0.005) {
       throw new Error('Las retenciones no pueden superar el total de la factura.');
