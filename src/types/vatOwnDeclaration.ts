@@ -1,5 +1,9 @@
 export type VatOwnDeclarationStatus = 'DRAFT' | 'FILED';
 
+export function isValidVatOwnDeclarationPeriod(period: string): boolean {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(period);
+}
+
 /**
  * Customer VAT withholdings are a separate fiscal event from the daily sales source.
  * A day may use a consolidated Z report for taxable sales while the individual
