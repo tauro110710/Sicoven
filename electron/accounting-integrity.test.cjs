@@ -2105,7 +2105,7 @@ test('SQLite blocks deletion, direct filing and unversioned edits of IVA own-acc
     ...prior, vatOwnDeclarations: [{ ...prior.vatOwnDeclarations[0], status: 'FILED', declarationNumber: 'X', filedAt: '2026-11-11T12:00:00.000-04:00' }]
   }), /insertar directamente una declaración IVA/);
   assert.throws(() => validateAccountingSnapshot(prior, {
-    ...prior, vatOwnDeclarations: [{ ...prior.vatOwnDeclarations[0], position: vatOwnPositionFixture({ amountDueBs: 90, netTaxBs: 90 }) }]
+    ...prior, vatOwnDeclarations: [{ ...prior.vatOwnDeclarations[0], position: vatOwnPositionFixture({ outputVatBs: 90, outputVat16Bs: 90, amountDueBs: 90, netTaxBs: 90 }) }]
   }), /no conserva una versión íntegra/);
 });
 
@@ -2142,6 +2142,7 @@ test('SQLite preserves legacy filed IVA declarations without new source fingerpr
     ...draft.vatOwnDeclarations[0], status: 'FILED',
     declarationNumber: 'IVA-LEGACY-TRY', filedAt: '2026-11-11T12:00:00.000-04:00'
   };
+  delete declaration.sourceSnapshots;
   assert.throws(() => validateAccountingSnapshot(draft, {
     ...draft, vatOwnDeclarations: [declaration],
     vatOwnDeclarationEvents: [{
