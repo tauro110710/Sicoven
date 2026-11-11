@@ -58,7 +58,7 @@ export const LibroVentasView: React.FC = () => {
     });
     filteredZReports.forEach(entry => {
       const z = entry.fiscalZReport!;
-      rows.push([z.date,'','VENTAS CONSOLIDADAS · ' + (z.sourceSystemName || z.machineBrand || 'Reporte Z'),'REPORTE Z',z.zNumber,z.controlStart || '', '', '',z.totalSalesBs,z.exemptSalesBs,z.taxableBase16Bs,z.vat16Bs,z.taxableBase8Bs,z.vat8Bs,z.taxableBase31Bs,z.taxableBase31Bs * 0.16,z.additionalLuxuryTaxBs,z.igtfBs,entry.bcvRate > 0 ? z.totalSalesBs / entry.bcvRate : '',entry.bcvRate,'CIERRE Z',selectedZIds.has(entry.id) ? 'INCLUIDO' : dailySalesResolution.unresolvedDates.includes(z.date) ? 'PENDIENTE DE SELECCIÓN' : 'FUENTE ALTERNATIVA']);
+      rows.push([z.date,'','VENTAS CONSOLIDADAS · ' + (z.sourceSystemName || z.machineBrand || 'Reporte Z'),'REPORTE Z',z.zNumber,z.controlStart || '', '',entry.bcvRate > 0 ? z.totalSalesBs / entry.bcvRate : '',z.totalSalesBs,z.exemptSalesBs,z.taxableBase16Bs,z.vat16Bs,z.taxableBase8Bs,z.vat8Bs,z.taxableBase31Bs,z.taxableBase31Bs * 0.16,z.additionalLuxuryTaxBs,z.igtfBs,entry.bcvRate,'CIERRE Z',selectedZIds.has(entry.id) ? 'INCLUIDO' : dailySalesResolution.unresolvedDates.includes(z.date) ? 'PENDIENTE DE SELECCIÓN' : 'FUENTE ALTERNATIVA']);
     });
     const csv = '\uFEFF' + [headers,...rows].map(row => row.map(esc).join(';')).join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
