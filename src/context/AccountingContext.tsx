@@ -4323,6 +4323,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const source = sales.find(item => item.id === draft.sourceSaleId && item.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró la factura original de venta en la empresa activa.');
     if (source.documentType !== '01' || source.isCancelled) throw new Error('Solo se pueden corregir facturas de venta vigentes tipo 01.');
+
     const sourceEntry = journalEntries.find(item => item.id === source.journalEntryId && item.companyId === currentCompany.id);
     const hasLinkedInventoryJournal = journalEntries.some(entry =>
       entry.companyId === currentCompany.id && entry.id !== source.journalEntryId && entry.type === 'INVENTARIO' &&
@@ -4339,10 +4340,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
        ('FAC-' + source.invoiceNumber).trim().toUpperCase().replace(/\\s+/g, '')));
     if (linkedInventory && draft.kind === 'CREDIT') {
       if (!sourceEntry) throw new Error('La factura con inventario no conserva su asiento original verificable.');
+      const cumulativeReturnQuantities: Record<string, number> = {};
+      for (const prior of priorCreditNotes) Object.entries(prior.returnedInventoryQuantities || {}).forEach(([productId, quantity]) => {
+        cumulativeReturnQuantities[productId] = (cumulativeReturnQuantities[productId] || 0) + Number(quantity || 0);
+      });
+      Object.entries(draft.returnedInventoryQuantities || {}).forEach(([productId, quantity]) => {
+        cumulativeReturnQuantities[productId] = (cumulativeReturnQuantities[productId] || 0) + Number(quantity || 0);
+      });
       const returnReadiness = validateSaleInventoryReturnReconciliation({
         companyId: currentCompany.id, invoiceNumber: source.invoiceNumber,
         source: sourceEntry, movements, products, journalEntries,
-        expectedReturnQuantities: draft.returnedInventoryQuantities
+        expectedReturnQuantities: cumulativeReturnQuantities
       });
       if (!returnReadiness.ready) {
         throw new Error('La NC de mercancía exige que las cantidades indicadas coincidan con las entradas físicas y su costo histórico en el Kardex. ' +
@@ -4528,7 +4536,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           totalAmountUsd: amounts.totalAmountUsd, vatWithheldBs: amounts.vatWithheldBs, vatWithheldUsd: amounts.vatWithheldUsd,
           igtfApplicable: amounts.igtfAmountBs > 0, igtfRate: source.igtfRate,
           igtfAmountBs: amounts.igtfAmountBs, igtfAmountUsd: amounts.igtfAmountUsd,
-          paymentTerm: source.paymentTerm || 'CREDITO', paymentCurrency: source.paymentCurrency, journalEntryId: journal.id,
+          paymentTerm: source.paymentTerm || 'CREDITO', paymentCurrency: source.paymentCurrency,
+          returnedInventoryQuantities: draft.returnedInventoryQuantities, journalEntryId: journal.id,
           netReceivableAdjustmentBs: amounts.netReceivableAdjustmentBs,
           netReceivableAdjustmentUsd: amounts.netReceivableAdjustmentUsd,
           correctionReason: String(draft.reason).trim(),
