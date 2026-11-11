@@ -32,8 +32,8 @@ export const IvaDeclaracionesView: React.FC = () => {
   ), [purchases, currentCompany.id, period]);
 
   const monthZ = useMemo(() => journalEntries.filter(entry =>
-    entry.companyId === currentCompany.id && entry.date.startsWith(period) && Boolean(entry.fiscalZReport)
-  ).sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber), [journalEntries, currentCompany.id, period]);
+    entry.companyId === currentCompany.id && Boolean(entry.fiscalZReport) && String(entry.fiscalZReport.date || entry.date).startsWith(period)
+  ).sort((a, b) => String(a.fiscalZReport?.date || a.date).localeCompare(String(b.fiscalZReport?.date || b.date)) || a.entryNumber - b.entryNumber), [journalEntries, currentCompany.id, period]);
   const savedDeclaration = vatOwnDeclarations.find(item => item.companyId === currentCompany.id && item.period === period);
   const activeSourceChoices = savedDeclaration?.dailySourceChoices || dailySourceChoices;
   const declarationEvents = savedDeclaration ? vatOwnDeclarationEvents.filter(event => event.declarationId === savedDeclaration.id) : [];
@@ -61,9 +61,11 @@ export const IvaDeclaracionesView: React.FC = () => {
 
   const purchaseCredit = monthPurchases.reduce((sum, item) =>
     sum + signedDocument(item.documentType) * money(item.vatAmountBs), 0);
+  const priorCredit = vatOwnDeclarations.filter(item => item.companyId === currentCompany.id && item.status === 'FILED' && item.period < period)
+    .sort((a,b)=>b.period.localeCompare(a.period))[0]?.position.creditCarryForwardBs || 0;
   const includedIndividualIds = new Set(dailySalesResolution.days.filter(day => day.source === 'INDIVIDUAL').flatMap(day => day.sourceIds));
   const receivedWithholdings = sales.filter(item => item.companyId === currentCompany.id && item.retentionVoucherDate?.startsWith(period) && money(item.vatWithheldBs) > 0 && (!item.invoiceDate.startsWith(period) || includedIndividualIds.has(item.id))).reduce((sum, item) => sum + signedDocument(item.documentType) * money(item.vatWithheldBs), 0);
-  const preliminaryBalance = outputVat === null ? null : outputVat - purchaseCredit - receivedWithholdings;
+  const preliminaryBalance = outputVat === null ? null : outputVat - purchaseCredit - receivedWithholdings - priorCredit;
 
   const zSources = monthZ.map(entry => ({
     id: entry.id,
