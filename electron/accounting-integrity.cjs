@@ -632,7 +632,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
       throw new Error('SQLite rechazó el historial de versiones del borrador IVA.');
     }
     if (declaration.status === 'FILED') {
-      if (!declaration.sourceSnapshots || !String(declaration.declarationNumber || '').trim() || !timestampIsValid(declaration.filedAt)) {
+      if (!String(declaration.declarationNumber || '').trim() || !timestampIsValid(declaration.filedAt)) {
         throw new Error('SQLite rechazó una declaración IVA presentada sin número oficial o fecha válida.');
       }
       const numberKey = companyId + ':' + String(declaration.declarationNumber).trim();
@@ -653,6 +653,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     }
     if (old.status !== 'DRAFT') throw new Error('SQLite detectó un estado previo no reconocido en la declaración IVA.');
     if (next.status === 'FILED') {
+      if (!next.sourceSnapshots) throw new Error('SQLite exige huellas documentales fiscales antes de presentar un borrador IVA.');
       const stripFiling = item => {
         const copy = { ...item };
         delete copy.status; delete copy.declarationNumber; delete copy.filedAt;
