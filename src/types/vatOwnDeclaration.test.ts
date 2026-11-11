@@ -9,6 +9,7 @@ import {
   resolveVatOwnProrationRate,
   areVatOwnDeclarationSourcesCurrent,
   findExistingVatOwnPaymentReversal,
+  resolveVatOwnPaymentBcvRate,
   resolveVatOwnPurchaseCreditTreatment,
   snapshotVatOwnDeclarationRevision,
   validateVatOwnDeclarationDraft,
@@ -93,6 +94,26 @@ test('detects changed declaration source sets without depending on array order',
   assert.equal(areVatOwnDeclarationSourcesCurrent(['sale-1', 'purchase-1'], ['purchase-1', 'sale-1']), true);
   assert.equal(areVatOwnDeclarationSourcesCurrent(['sale-1'], ['sale-1', 'sale-2']), false);
   assert.equal(areVatOwnDeclarationSourcesCurrent(['sale-1', 'sale-2'], ['sale-1']), false);
+});
+
+test('resolves the latest effective BCV rate for an IVA payment date', () => {
+  const history = [
+    { rate: 100, effectiveDate: '2026-10-01', recordedAt: '2026-10-01T10:00:00.000Z' },
+    { rate: 105, effectiveDate: '2026-10-10', recordedAt: '2026-10-10T10:00:00.000Z' },
+    { rate: 106, effectiveDate: '2026-10-10', recordedAt: '2026-10-11T10:00:00.000Z' },
+    { rate: 110, effectiveDate: '2026-10-20', recordedAt: '2026-10-20T10:00:00.000Z' }
+  ];
+  assert.equal(resolveVatOwnPaymentBcvRate(history, '2026-10-15'), 106);
+  assert.equal(resolveVatOwnPaymentBcvRate(history, '2026-10-20'), 110);
+  assert.equal(resolveVatOwnPaymentBcvRate(history, '2026-09-30'), null);
+});
+
+test('rejects invalid payment dates and invalid BCV history entries', () => {
+  assert.equal(resolveVatOwnPaymentBcvRate([
+    { rate: 0, effectiveDate: '2026-10-01', recordedAt: '2026-10-01T10:00:00.000Z' },
+    { rate: 100, effectiveDate: '2026-02-31', recordedAt: '2026-10-01T10:00:00.000Z' }
+  ], '2026-10-10'), null);
+  assert.equal(resolveVatOwnPaymentBcvRate([], '2026-02-31'), null);
 });
 
 test('recovers an already persisted payment contra-entry without creating a duplicate', () => {
