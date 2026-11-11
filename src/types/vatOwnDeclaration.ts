@@ -137,7 +137,12 @@ export function buildVatOwnSourceSnapshots(input: {
         vatWithheldBs: purchase.vatWithheldBs, vatWithheldUsd: purchase.vatWithheldUsd, retentionRate: purchase.retentionRate || 0,
         voucherNumber: purchase.voucherNumber || null, bcvRate: purchase.bcvRate, journalEntryId: purchase.journalEntryId || null, originalPurchaseId: purchase.originalPurchaseId || null,
         affectedInvoiceNumber: purchase.affectedInvoiceNumber || null, affectedInvoiceDate: purchase.affectedInvoiceDate || null,
-        affectedInvoiceControlNumber: purchase.affectedInvoiceControlNumber || null, isCancelled: Boolean(purchase.isCancelled),
+        affectedInvoiceControlNumber: purchase.affectedInvoiceControlNumber || null,
+        affectedInvoiceTotalAmountBs: purchase.affectedInvoiceTotalAmountBs ?? null,
+        affectedInvoiceTotalAmountUsd: purchase.affectedInvoiceTotalAmountUsd ?? null,
+        inventoryLines: (purchase.inventoryLines || []).map(line => ({ ...line })),
+        creditNoteLines: (purchase.creditNoteLines || []).map(line => ({ ...line })),
+        isCancelled: Boolean(purchase.isCancelled),
         journal: journalSnapshot(input.journalEntries.find(entry => entry.id === purchase.journalEntryId && entry.companyId === input.companyId))
       });
       continue;
@@ -444,6 +449,8 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
   // than the original invoice actually generated. Read earlier notes only from
   // immutable snapshots of filed declarations, never from mutable live records.
   const priorFiledNoteVatByOriginal = new Map<string, number>();
+  const priorFiledNotesByOriginal = new Map<string, Array<Record<string, unknown>>>();
+  const originalSnapshotById = new Map<string, Record<string, unknown>>();
   const countedPriorNoteIds = new Set<string>();
   for (const filed of input.priorDeclarations) {
     if (filed.companyId !== input.companyId || filed.status !== 'FILED' || filed.period >= input.period) continue;
@@ -511,6 +518,10 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
       try { originalSnapshot = JSON.parse(savedOriginal) as Record<string, unknown>; }
       catch { throw new Error('La huella de la factura original de una nota de crédito presentada no se puede leer.'); }
       const originalTaxRate = Number(originalSnapshot.taxRate);
+      originalSnapshotById.set(originalId, originalSnapshot);
+      const filedNotes = priorFiledNotesByOriginal.get(originalId) || [];
+      filedNotes.push(snapshot);
+      priorFiledNotesByOriginal.set(originalId, filedNotes);
       const historicalNoteSupplierRif = normalizeFiscalReference(snapshot.supplierRif);
       const historicalOriginalSupplierRif = normalizeFiscalReference(originalSnapshot.supplierRif);
       if (originalSnapshot.kind !== 'PURCHASE' || originalSnapshot.id !== originalId ||
@@ -539,6 +550,62 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     if (!Number.isFinite(originalVat) || originalVat < 0 || alreadyReversed + currentNoteVat - originalVat > 0.02) {
       throw new Error('Las notas de crédito acumuladas superan el IVA histórico de la factura original ' +
         String(original?.invoiceNumber || originalId) + '. Concilie las notas ya presentadas antes de declarar.');
+    }
+
+    // Fiscal ceilings are checked cumulatively across previously filed notes and
+    // current-period notes. A credit note cannot refund more than the original
+    // invoice's total, taxable/exempt bases, VAT or luxury tax.
+    const originalSnapshot = originalSnapshotById.get(originalId);
+    const originalFields = originalSnapshot || original as unknown as Record<string, unknown> | undefined;
+    const noteSnapshots = [
+      ...(priorFiledNotesByOriginal.get(originalId) || []),
+      ...periodPurchases.filter(note => originalByNoteId.get(note.id)?.id === originalId)
+    ];
+    const fiscalCaps: Array<[string, string, number]> = [
+      ['totalAmountBs', 'importe total', 0.02], ['taxableBaseBs', 'base imponible', 0.02],
+      ['exemptAmountBs', 'base exenta', 0.02], ['vatAmountBs', 'IVA', 0.02],
+      ['additionalLuxuryTaxBs', 'impuesto al consumo suntuario', 0.02]
+    ];
+    if (originalFields) {
+      for (const [field, label, tolerance] of fiscalCaps) {
+        const cap = Number(originalFields[field] || 0);
+        const accumulated = noteSnapshots.reduce((sum, note) => sum + Number(note[field] || 0), 0);
+        if (!Number.isFinite(cap) || cap < 0 || !Number.isFinite(accumulated) || accumulated - cap > tolerance) {
+          throw new Error('Las notas de crédito acumuladas superan el ' + label + ' de la factura original ' +
+            String(original?.invoiceNumber || originalId) + '. Revise las devoluciones parciales antes de declarar.');
+        }
+      }
+      const originalLines = Array.isArray(originalFields.inventoryLines) ? originalFields.inventoryLines as Array<Record<string, unknown>> : [];
+      const noteLines = noteSnapshots.flatMap(note => Array.isArray(note.creditNoteLines)
+        ? note.creditNoteLines as Array<Record<string, unknown>> : []);
+      if (noteLines.length) {
+        if (!originalLines.length) {
+          throw new Error('La factura original no conserva el detalle de inventario necesario para validar las cantidades devueltas.');
+        }
+        const originalQuantities = new Map<string, number>();
+        const returnedQuantities = new Map<string, number>();
+        for (const line of originalLines) {
+          const productId = String(line.productId || '');
+          const quantity = Number(line.quantity);
+          if (!productId || !Number.isFinite(quantity) || quantity < 0) {
+            throw new Error('El detalle de inventario histórico de la factura original no permite validar cantidades devueltas.');
+          }
+          originalQuantities.set(productId, (originalQuantities.get(productId) || 0) + quantity);
+        }
+        for (const line of noteLines) {
+          const productId = String(line.productId || '');
+          const quantity = Number(line.quantity);
+          if (!productId || !Number.isFinite(quantity) || quantity <= 0) {
+            throw new Error('Una nota de crédito contiene una cantidad devuelta inválida.');
+          }
+          returnedQuantities.set(productId, (returnedQuantities.get(productId) || 0) + quantity);
+        }
+        for (const [productId, quantity] of returnedQuantities) {
+          if (quantity - (originalQuantities.get(productId) || 0) > 0.000001) {
+            throw new Error('Las notas de crédito acumuladas exceden la cantidad comprada del artículo ' + productId + '.');
+          }
+        }
+      }
     }
   }
 
