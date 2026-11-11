@@ -677,8 +677,10 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     for (const line of reclassifications) {
       const values = [line.debitBs, line.creditBs, line.debitUsd, line.creditUsd].map(Number);
       if (!String(line.accountCode || '').trim() || values.some(value => !Number.isFinite(value) || value < 0) ||
-          (values[0] > 0 && values[1] > 0) || (values[2] > 0 && values[3] > 0)) {
-        throw new Error('SQLite rechazó una línea inválida de reclasificación de IVA no acreditable.');
+          (values[0] > 0 && values[1] > 0) || (values[2] > 0 && values[3] > 0) ||
+          Math.abs(values[2] - values[0] / Number(declaration.bcvRate)) > 0.0001 ||
+          Math.abs(values[3] - values[1] / Number(declaration.bcvRate)) > 0.0001) {
+        throw new Error('SQLite rechazó una línea inválida de reclasificación de IVA no acreditable o con conversión Bs/USD inconsistente.');
       }
       debitBs += values[0]; creditBs += values[1]; debitUsd += values[2]; creditUsd += values[3];
     }
