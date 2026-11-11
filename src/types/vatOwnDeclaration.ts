@@ -362,7 +362,9 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
   const priorNotes: Array<{ item: PurchaseRecord; original: PurchaseRecord; prior: VatOwnDeclaration; treatment: VatOwnPurchaseCreditTreatment }> = [];
   const getFiledPurchaseTreatment = (declaration: VatOwnDeclaration, original: PurchaseRecord): VatOwnPurchaseCreditTreatment => {
     const saved = declaration.sourceSnapshots?.[original.id];
-    if (!saved) return resolveVatOwnPurchaseCreditTreatment(original.vatCreditTreatment);
+    if (!saved) {
+      throw new Error('La declaración anterior no conserva la huella fiscal de la factura original ' + original.invoiceNumber + '. No es seguro inferir su tratamiento IVA actual para revertir un período presentado.');
+    }
     let snapshot: Record<string, unknown>;
     try { snapshot = JSON.parse(saved) as Record<string, unknown>; }
     catch { throw new Error('La huella fiscal de la factura original ' + original.invoiceNumber + ' no se puede leer para revertir su crédito IVA.'); }
