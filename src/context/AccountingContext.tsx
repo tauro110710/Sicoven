@@ -53,7 +53,7 @@ import { FinancialDisclosure, validateFinancialDisclosure } from '../types/finan
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
-import { getReceivedVatWithholdingSales, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnProrationRate, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
+import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnProrationRate, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
 import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
@@ -5739,6 +5739,40 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (draft.eventType === 'PAYMENT' && vatOwnDeclarationEvents.some(event =>
       event.companyId === currentCompany.id && event.eventType === 'PAYMENT' && event.reference?.trim() === draft.reference?.trim()
     )) throw new Error('La referencia de pago ya fue utilizada en otra declaración mensual de esta empresa.');
+    if (draft.eventType === 'FILED') {
+      const periodSales = sales.filter(item => item.companyId === currentCompany.id &&
+        item.invoiceDate.startsWith(declaration.period) && !item.isCancelled);
+      const periodPurchases = purchases.filter(item => item.companyId === currentCompany.id &&
+        item.invoiceDate.startsWith(declaration.period) && !item.isCancelled);
+      const periodZ = journalEntries.filter(entry => entry.companyId === currentCompany.id &&
+        Boolean(entry.fiscalZReport) && String(entry.fiscalZReport!.date || entry.date).startsWith(declaration.period));
+      const resolution = resolveVatOwnDailySalesSources({
+        zReports: periodZ.map(entry => ({
+          id: entry.id, date: entry.fiscalZReport!.date || entry.date,
+          taxableBase16Bs: entry.fiscalZReport!.taxableBase16Bs, vat16Bs: entry.fiscalZReport!.vat16Bs,
+          taxableBase8Bs: entry.fiscalZReport!.taxableBase8Bs, vat8Bs: entry.fiscalZReport!.vat8Bs,
+          taxableBase31Bs: entry.fiscalZReport!.taxableBase31Bs, vat31Bs: entry.fiscalZReport!.vat31Bs,
+          exemptSalesBs: entry.fiscalZReport!.exemptSalesBs
+        })),
+        sales: periodSales.map(item => ({
+          id: item.id, date: item.invoiceDate, documentType: item.documentType,
+          taxableBaseBs: item.taxableBaseBs, taxRate: item.taxRate,
+          vatAmountBs: item.vatAmountBs, exemptAmountBs: item.exemptAmountBs
+        })),
+        choices: declaration.dailySourceChoices
+      });
+      if (resolution.unresolvedDates.length) {
+        throw new Error('No se puede presentar: el borrador tiene nuevas fechas con fuentes de ventas coincidentes. Resuélvalas y actualice el borrador.');
+      }
+      const currentSourceIds = [...new Set([
+        ...resolution.days.flatMap(day => day.sourceIds),
+        ...periodPurchases.map(item => item.id),
+        ...getReceivedVatWithholdingSales(sales, currentCompany.id, declaration.period).map(item => item.id)
+      ])];
+      if (!areVatOwnDeclarationSourcesCurrent(declaration.sourceIds, currentSourceIds)) {
+        throw new Error('No se puede presentar: los libros cambiaron después de preparar el borrador. Actualícelo para conservar la nueva versión y sus fuentes antes de registrar la presentación.');
+      }
+    }
 
     validateVatOwnEvent({
       declaration, events: history, draft: fullDraft,
