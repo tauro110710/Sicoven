@@ -353,7 +353,19 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
   const relatedPurchaseIds: string[] = [];
   const reclassifications: VatOwnPurchaseCreditSummary['reclassifications'] = [];
   const originalByNoteId = new Map<string, PurchaseRecord>();
-  const priorNotes: Array<{ item: PurchaseRecord; original: PurchaseRecord; prior: VatOwnDeclaration }> = [];
+  const priorNotes: Array<{ item: PurchaseRecord; original: PurchaseRecord; prior: VatOwnDeclaration; treatment: VatOwnPurchaseCreditTreatment }> = [];
+  const getFiledPurchaseTreatment = (declaration: VatOwnDeclaration, original: PurchaseRecord): VatOwnPurchaseCreditTreatment => {
+    const saved = declaration.sourceSnapshots?.[original.id];
+    if (!saved) return resolveVatOwnPurchaseCreditTreatment(original.vatCreditTreatment);
+    let snapshot: Record<string, unknown>;
+    try { snapshot = JSON.parse(saved) as Record<string, unknown>; }
+    catch { throw new Error('La huella fiscal de la factura original ' + original.invoiceNumber + ' no se puede leer para revertir su crédito IVA.'); }
+    if (snapshot.kind !== 'PURCHASE' || snapshot.id !== original.id ||
+        !['TAXABLE', 'EXEMPT', 'COMMON'].includes(String(snapshot.vatCreditTreatment))) {
+      throw new Error('La declaración anterior no conserva el tratamiento fiscal de la factura original ' + original.invoiceNumber + '.');
+    }
+    return resolveVatOwnPurchaseCreditTreatment(snapshot.vatCreditTreatment as VatOwnPurchaseCreditTreatment);
+  };
   const normalizeFiscalReference = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
   for (const item of periodPurchases) {
     if (item.documentType !== '03') continue;
@@ -393,7 +405,7 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     if (matches.length !== 1) {
       throw new Error('La factura original de la nota de crédito no aparece en una única declaración IVA anterior presentada. Debe conciliarse o rectificarse el período original antes de declarar esta nota.');
     }
-    priorNotes.push({ item, original, prior: matches[0] });
+    priorNotes.push({ item, original, prior: matches[0], treatment: getFiledPurchaseTreatment(matches[0], original) });
   }
   const hasCommonCurrentPurchases = periodPurchases.some(item => {
     const original = originalByNoteId.get(item.id);
@@ -437,7 +449,7 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
     if (item.documentType === '03') {
       const priorNote = priorNotes.find(row => row.item.id === item.id);
       if (priorNote) {
-        const treatment = resolveVatOwnPurchaseCreditTreatment(priorNote.original.vatCreditTreatment);
+        const treatment = priorNote.treatment;
         const priorRate = Number(priorNote.prior.position.prorationRate);
         const priorSalesBase = Number(priorNote.prior.position.taxableSalesBaseBs || 0) +
           Number(priorNote.prior.position.exemptSalesBaseBs || 0);
