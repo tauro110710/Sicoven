@@ -445,7 +445,8 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
       const saved = filed.sourceSnapshots?.[noteId];
       if (!saved) {
         const liveSource = input.allPurchases.find(item => item.id === noteId && item.companyId === input.companyId);
-        if (liveSource?.documentType === '03') {
+        if (liveSource && (liveSource.documentType === '03' || liveSource.originalPurchaseId ||
+            liveSource.affectedInvoiceNumber || liveSource.affectedInvoiceDate || liveSource.affectedInvoiceControlNumber)) {
           throw new Error('Una nota de crédito ya presentada no conserva su huella fiscal histórica. No es seguro calcular su reversión acumulada.');
         }
         continue;
@@ -453,7 +454,12 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
       let snapshot: Record<string, unknown>;
       try { snapshot = JSON.parse(saved) as Record<string, unknown>; }
       catch { throw new Error('Una declaración anterior contiene una huella ilegible para una nota de crédito de compras.'); }
-      if (snapshot.kind !== 'PURCHASE' || snapshot.documentType !== '03') continue;
+      if (snapshot.kind !== 'PURCHASE') continue;
+      const historicalDocumentType = String(snapshot.documentType || '');
+      if (!['01', '02', '03'].includes(historicalDocumentType)) {
+        throw new Error('Una compra ya presentada no conserva el tipo documental histórico necesario para conciliar notas de crédito posteriores.');
+      }
+      if (historicalDocumentType !== '03') continue;
       if (countedPriorNoteIds.has(String(noteId))) {
         throw new Error('Una nota de crédito aparece presentada más de una vez en el historial IVA. Concilie las declaraciones anteriores.');
       }
