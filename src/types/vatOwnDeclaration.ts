@@ -712,6 +712,27 @@ export function calculateVatOwnPosition(input: VatOwnPositionInput): VatOwnPosit
   };
 }
 
+export function getVatOwnNewCreditCarryForward(input: {
+  priorCreditAvailableBs: number;
+  priorCreditAppliedBs: number;
+  totalCreditCarryForwardBs: number;
+}): number {
+  const values = [input.priorCreditAvailableBs, input.priorCreditAppliedBs, input.totalCreditCarryForwardBs].map(Number);
+  if (values.some(value => !Number.isFinite(value) || value < 0)) {
+    throw new Error('El arrastre de crédito fiscal contiene importes inválidos.');
+  }
+  const [priorAvailable, priorApplied, totalCarryForward] = values;
+  if (priorApplied - priorAvailable > 0.02) {
+    throw new Error('El crédito fiscal aplicado supera el saldo anterior disponible.');
+  }
+  const unusedPriorCredit = Math.max(0, priorAvailable - priorApplied);
+  const newlyGeneratedCredit = totalCarryForward - unusedPriorCredit;
+  if (newlyGeneratedCredit < -0.02) {
+    throw new Error('El saldo trasladable no concilia con el crédito fiscal anterior no utilizado.');
+  }
+  return Math.max(0, newlyGeneratedCredit);
+}
+
 export function validateVatOwnDeclarationDraft(input: {
   id: string;
   companyId: string;
