@@ -53,7 +53,7 @@ import { FinancialDisclosure, validateFinancialDisclosure } from '../types/finan
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
-import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, findExistingVatOwnPaymentReversal, resolveVatOwnPaymentBcvRate, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnProrationRate, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
+import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, findExistingVatOwnPaymentReversal, resolveVatOwnPaymentBcvRate, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, getVatOwnOutstandingBalance, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
 import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
@@ -5651,34 +5651,27 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const taxableSalesBaseBs = resolution.days.reduce((sum, day) =>
         sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
       const exemptSalesBaseBs = resolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
-      const hasCommonPurchases = monthPurchases.some(item =>
-        resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment) === 'COMMON' && Number(item.vatAmountBs || 0) > 0
-      );
-      const prorationRate = resolveVatOwnProrationRate({
-        taxableSalesBaseBs, exemptSalesBaseBs, hasCommonPurchases
+      const purchaseSummary = calculateVatOwnPurchaseCreditSummary({
+        companyId: currentCompany.id, period: input.period, purchases: monthPurchases,
+        allPurchases: purchases, priorDeclarations: vatOwnDeclarations,
+        taxableSalesBaseBs, exemptSalesBaseBs
       });
-      if (prorationRate === null) {
-        throw new Error('No se puede determinar la prorrata del IVA de compras comunes: el período no tiene una base válida de ventas gravadas y exentas. Concílielas o clasifique cada compra según su destino fiscal antes de preparar la declaración.');
-      }
-      const purchaseRows = monthPurchases.map(item => {
-        const sign = item.documentType === '03' ? -1 : 1;
-        const gross = Number(item.vatAmountBs || 0);
-        const treatment = resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment);
-        const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : prorationRate;
-        return { item, sign, gross, factor, eligible: gross * factor, nonEligible: gross * (1 - factor) };
+      const prorationRate = purchaseSummary.prorationRate;
+      const purchase16GrossBs = purchaseSummary.gross16Bs;
+      const purchase8GrossBs = purchaseSummary.gross8Bs;
+      const purchase16Bs = purchaseSummary.eligible16Bs;
+      const purchase8Bs = purchaseSummary.eligible8Bs;
+      const purchaseNonEligibleBs = purchaseSummary.nonEligible16Bs + purchaseSummary.nonEligible8Bs;
+      const purchaseCreditReversal16Bs = purchaseSummary.priorReversalEligible16Bs;
+      const purchaseCreditReversal8Bs = purchaseSummary.priorReversalEligible8Bs;
+      const purchaseCreditReversalBs = purchaseCreditReversal16Bs + purchaseCreditReversal8Bs;
+      const purchaseCreditReversalNonEligible16Bs = purchaseSummary.priorReversalNonEligible16Bs;
+      const purchaseCreditReversalNonEligible8Bs = purchaseSummary.priorReversalNonEligible8Bs;
+      const purchaseCreditReversalNonEligibleBs = purchaseCreditReversalNonEligible16Bs + purchaseCreditReversalNonEligible8Bs;
+      const purchaseVatReclassificationItems = buildVatOwnPurchaseVatReclassificationItems({
+        companyId: currentCompany.id, period: input.period, bcvRate: Number(currentCompany.bcvRate),
+        allPurchases: purchases, journalEntries, summary: purchaseSummary
       });
-      const purchase16GrossRaw = purchaseRows.filter(row => row.item.taxRate !== 8).reduce((sum,row)=>sum+row.sign*row.gross,0);
-      const purchase8GrossRaw = purchaseRows.filter(row => row.item.taxRate === 8).reduce((sum,row)=>sum+row.sign*row.gross,0);
-      const purchase16EligibleRaw = purchaseRows.filter(row => row.item.taxRate !== 8).reduce((sum,row)=>sum+row.sign*row.eligible,0);
-      const purchase8EligibleRaw = purchaseRows.filter(row => row.item.taxRate === 8).reduce((sum,row)=>sum+row.sign*row.eligible,0);
-      if (purchase16GrossRaw < -0.02 || purchase8GrossRaw < -0.02) {
-        throw new Error('Las notas de crédito de compras superan el crédito fiscal bruto del período. Debe conciliarse el arrastre de la factura original antes de presentar esta declaración; no se generó un importe fiscal estimado.');
-      }
-      const purchase16GrossBs = Math.max(0, purchase16GrossRaw);
-      const purchase8GrossBs = Math.max(0, purchase8GrossRaw);
-      const purchase16Bs = Math.max(0, purchase16EligibleRaw);
-      const purchase8Bs = Math.max(0, purchase8EligibleRaw);
-      const purchaseNonEligibleBs = Math.max(0, purchase16GrossBs + purchase8GrossBs - purchase16Bs - purchase8Bs);
       const prior = vatOwnDeclarations.filter(item => item.companyId === currentCompany.id &&
         item.status === 'FILED' && item.period < input.period).sort((a,b)=>b.period.localeCompare(a.period))[0];
       const debitAdjustmentsBs = Math.max(0, -withholdingRaw);
@@ -5687,7 +5680,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         outputVatBs: outputVat16Bs + outputVat8Bs, outputVat16Bs, outputVat8Bs,
         purchaseCreditBs: purchase16Bs + purchase8Bs, purchaseCredit16Bs: purchase16Bs, purchaseCredit8Bs: purchase8Bs,
         purchaseCreditGrossBs: purchase16GrossBs + purchase8GrossBs, purchaseCreditGross16Bs: purchase16GrossBs, purchaseCreditGross8Bs: purchase8GrossBs,
-        purchaseCreditNonEligibleBs: purchaseNonEligibleBs, prorationRate, taxableSalesBaseBs, exemptSalesBaseBs,
+        purchaseCreditNonEligibleBs: purchaseNonEligibleBs,
+        purchaseCreditReversalBs, purchaseCreditReversal16Bs, purchaseCreditReversal8Bs,
+        purchaseCreditReversalNonEligibleBs, purchaseCreditReversalNonEligible16Bs, purchaseCreditReversalNonEligible8Bs,
+        prorationRate, taxableSalesBaseBs, exemptSalesBaseBs,
         receivedWithholdingsBs: withholdingBs, priorCreditBs: prior?.position.creditCarryForwardBs || 0,
         debitAdjustmentsBs, creditAdjustmentsBs
       });
@@ -5695,6 +5691,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const sourceIds = [...new Set([
         ...resolution.days.flatMap(day => day.sourceIds),
         ...monthPurchases.map(item => item.id),
+        ...purchaseSummary.relatedPurchaseIds,
         ...withholdingRows.map(item => item.id)
       ])];
       const priorRevision = existingDraft
@@ -5705,6 +5702,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         companyId: currentCompany.id, period: input.period, status: 'DRAFT',
         position, sourceIds, bcvRate: Number(currentCompany.bcvRate) || 0,
         dailySourceChoices: { ...(input.choices || {}) },
+        purchaseVatReclassificationItems,
         createdAt: existingDraft?.createdAt || createdAt,
         ...(existingDraft ? {
           updatedAt: createdAt,
