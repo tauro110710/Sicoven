@@ -195,6 +195,11 @@ export const IvaDeclaracionesView: React.FC = () => {
             <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">IVA por enterar</p><strong>{format(savedDeclaration.position.amountDueBs)}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-slate-500">Crédito trasladable</p><strong>{format(savedDeclaration.position.creditCarryForwardBs)}</strong></div>
           </div>
+          <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-100 p-3 text-xs sm:grid-cols-2">
+            <div><strong>Desglose del débito fiscal:</strong> IVA 16% (incluye base 31%): {format(savedDeclaration.position.outputVat16Bs)} · IVA 8%: {format(savedDeclaration.position.outputVat8Bs)}</div>
+            <div><strong>Desglose del crédito fiscal:</strong> Compras 16%: {format(savedDeclaration.position.purchaseCredit16Bs)} · Compras 8%: {format(savedDeclaration.position.purchaseCredit8Bs)}</div>
+          </div>
+          <p className="text-xs text-slate-500">El impuesto adicional del 15% y el IGTF se mantienen separados del IVA acreditable y del débito fiscal; no se suman como IVA en la declaración mensual.</p>
           {savedDeclaration.status==='DRAFT' ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
             <p className="text-sm font-semibold text-amber-950">Al presentar, SICOVEN registra el número oficial y el asiento de determinación mensual. El borrador y sus documentos fuente permanecen conservados.</p>
             <div className="flex flex-wrap gap-2"><input value={declarationNumber} onChange={event=>setDeclarationNumber(event.target.value)} placeholder="Número oficial de declaración" className="min-w-[220px] flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
