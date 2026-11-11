@@ -167,6 +167,8 @@ export interface VatOwnPositionInput {
   priorCreditBs?: number;
   debitAdjustmentsBs?: number;
   creditAdjustmentsBs?: number;
+  creditAdjustments16Bs?: number;
+  creditAdjustments8Bs?: number;
 }
 
 export interface VatOwnPosition {
@@ -193,6 +195,8 @@ export interface VatOwnPosition {
   priorCreditAppliedBs: number;
   debitAdjustmentsBs: number;
   creditAdjustmentsBs: number;
+  creditAdjustments16Bs: number;
+  creditAdjustments8Bs: number;
   netTaxBs: number;
   amountDueBs: number;
   creditCarryForwardBs: number;
@@ -572,6 +576,11 @@ export function calculateVatOwnPosition(input: VatOwnPositionInput): VatOwnPosit
   const priorCreditAvailableBs = amount(input.priorCreditBs, 'Crédito de períodos anteriores');
   const debitAdjustmentsBs = amount(input.debitAdjustmentsBs, 'Ajustes al débito');
   const creditAdjustmentsBs = amount(input.creditAdjustmentsBs, 'Ajustes al crédito');
+  const creditAdjustments16Bs = amount(input.creditAdjustments16Bs ?? creditAdjustmentsBs, 'Ajustes al crédito IVA 16%');
+  const creditAdjustments8Bs = amount(input.creditAdjustments8Bs, 'Ajustes al crédito IVA 8%');
+  if (Math.abs(creditAdjustments16Bs + creditAdjustments8Bs - creditAdjustmentsBs) > 0.02) {
+    throw new Error('El desglose de ajustes al crédito fiscal 16% y 8% no concilia.');
+  }
   const balanceBeforePriorCredit = outputVatBs + debitAdjustmentsBs + purchaseCreditReversalBs - purchaseCreditBs -
     receivedWithholdingsBs - creditAdjustmentsBs;
   const priorCreditAppliedBs = Math.min(priorCreditAvailableBs, Math.max(0, balanceBeforePriorCredit));
@@ -584,7 +593,7 @@ export function calculateVatOwnPosition(input: VatOwnPositionInput): VatOwnPosit
     purchaseCreditNonEligibleBs, purchaseCreditReversalBs, purchaseCreditReversal16Bs, purchaseCreditReversal8Bs,
     purchaseCreditReversalNonEligibleBs, purchaseCreditReversalNonEligible16Bs, purchaseCreditReversalNonEligible8Bs,
     prorationRate, taxableSalesBaseBs, exemptSalesBaseBs, receivedWithholdingsBs,
-    priorCreditAppliedBs, debitAdjustmentsBs, creditAdjustmentsBs,
+    priorCreditAppliedBs, debitAdjustmentsBs, creditAdjustmentsBs, creditAdjustments16Bs, creditAdjustments8Bs,
     netTaxBs, amountDueBs: Math.max(0, netTaxBs),
     creditCarryForwardBs: Math.max(0, -netTaxBs) + unusedPriorCreditBs
   };
