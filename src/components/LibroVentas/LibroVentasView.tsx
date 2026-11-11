@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import {
   TrendingUp,
@@ -20,6 +20,7 @@ import { SupportingDocumentsPanel } from '../shared/SupportingDocumentsPanel';
 import { JournalReversalModal } from '../LibroDiario/JournalReversalModal';
 import { SaleCorrectionNoteModal } from './SaleCorrectionNoteModal';
 import { FiscalZReportModal } from './FiscalZReportModal';
+import { resolveVatOwnDailySalesSources } from '../../types/vatOwnDeclaration';
 
 export const LibroVentasView: React.FC = () => {
   const {
@@ -41,6 +42,7 @@ export const LibroVentasView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [dailySourceChoices, setDailySourceChoices] = useState<Record<string, 'Z' | 'INDIVIDUAL'>>({});
 
   const handleExportCsv = () => {
     const headers = ['Fecha','RIF / C.I.','Razón Social / Nombre','Tipo','N° Factura','N° Control','N° NC','Total USD','Total Facturado Bs.','Exento Bs.','Base 16% Bs.','IVA 16% Bs.','Base 8% Bs.','IVA 8% Bs.','Base 31% Bs.','IVA componente 16% Bs.','Impuesto adicional 15% Bs.','IGTF 3% Bs.','Tasa BCV','Origen'];
@@ -119,23 +121,51 @@ export const LibroVentasView: React.FC = () => {
   const totalIvaDebitoUsd = filteredSales.reduce((s, x) => s + signed(x, x.taxRate === 31 && x.bcvRate > 0 ? x.taxableBaseBs * 0.16 / x.bcvRate : x.vatAmountUsd), 0);
   const totalIvaRetenidoUsd = filteredSales.reduce((s, x) => s + signed(x, x.vatWithheldUsd || 0), 0);
 
-  const zBaseBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.taxableBase16Bs || 0) + (entry.fiscalZReport?.taxableBase8Bs || 0) + (entry.fiscalZReport?.taxableBase31Bs || 0), 0);
-  const zVatBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.vat16Bs || 0) + (entry.fiscalZReport?.vat8Bs || 0) + (entry.fiscalZReport?.vat31Bs || 0), 0);
-  const zLuxuryTaxBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.additionalLuxuryTaxBs || 0), 0);
-  const saleLuxuryTaxBs = filteredSales.reduce((sum, sale) => sum + (sale.taxRate === 31 ? sale.taxableBaseBs * 0.15 : 0), 0);
-  const zBaseUsd = filteredZReports.reduce((sum, entry) => sum + ((entry.fiscalZReport?.taxableBase16Bs || 0) + (entry.fiscalZReport?.taxableBase8Bs || 0) + (entry.fiscalZReport?.taxableBase31Bs || 0)) / entry.bcvRate, 0);
-  const zVatUsd = filteredZReports.reduce((sum, entry) => sum + ((entry.fiscalZReport?.vat16Bs || 0) + (entry.fiscalZReport?.vat8Bs || 0) + (entry.fiscalZReport?.vat31Bs || 0)) / entry.bcvRate, 0);
-  const zExemptBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.exemptSalesBs || 0), 0);
-  const zIgtfBs = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.igtfBs || 0), 0);
-  const totalFiscalBaseBs = totalBaseBs + zBaseBs;
-  const totalFiscalBaseUsd = totalBaseUsd + zBaseUsd;
-  const totalFiscalIvaBs = totalIvaDebitoBs + zVatBs;
-  const totalFiscalIvaUsd = totalIvaDebitoUsd + zVatUsd;
-  const zLuxuryTaxUsd = filteredZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.additionalLuxuryTaxBs || 0) / entry.bcvRate, 0);
-  const totalFiscalLuxuryTaxBs = saleLuxuryTaxBs + zLuxuryTaxBs;
-  const totalFiscalLuxuryTaxUsd = totalLuxuryTaxUsd + zLuxuryTaxUsd;
-  const totalFiscalExemptBs = totalExentoBs + zExemptBs;
-  const totalFiscalIgtfBs = totalIgtfBs + zIgtfBs;
+  const dailySalesResolution = useMemo(() => resolveVatOwnDailySalesSources({
+    zReports: filteredZReports.map(entry => ({
+      id: entry.id, date: entry.fiscalZReport!.date || entry.date,
+      taxableBase16Bs: entry.fiscalZReport!.taxableBase16Bs, vat16Bs: entry.fiscalZReport!.vat16Bs,
+      taxableBase8Bs: entry.fiscalZReport!.taxableBase8Bs, vat8Bs: entry.fiscalZReport!.vat8Bs,
+      taxableBase31Bs: entry.fiscalZReport!.taxableBase31Bs, vat31Bs: entry.fiscalZReport!.vat31Bs,
+      exemptSalesBs: entry.fiscalZReport!.exemptSalesBs
+    })),
+    sales: filteredSales.filter(item => !item.isCancelled).map(item => ({
+      id: item.id, date: item.invoiceDate, documentType: item.documentType,
+      taxableBaseBs: item.taxableBaseBs, taxRate: item.taxRate,
+      vatAmountBs: item.vatAmountBs, exemptAmountBs: item.exemptAmountBs
+    })),
+    choices: dailySourceChoices
+  }), [filteredZReports, filteredSales, dailySourceChoices]);
+  const selectedIndividualIds = new Set(dailySalesResolution.days
+    .filter(day => day.source === 'INDIVIDUAL').flatMap(day => day.sourceIds));
+  const selectedZIds = new Set(dailySalesResolution.days
+    .filter(day => day.source === 'Z').flatMap(day => day.sourceIds));
+  const selectedIndividualSales = filteredSales.filter(s => selectedIndividualIds.has(s.id));
+  const selectedZReports = filteredZReports.filter(entry => selectedZIds.has(entry.id));
+  const totalFiscalBaseBs = dailySalesResolution.days.reduce((sum, day) =>
+    sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
+  const totalFiscalBaseUsd = selectedIndividualSales.reduce((sum, sale) => sum + signed(sale, sale.taxableBaseUsd), 0) +
+    selectedZReports.reduce((sum, entry) => sum + ((entry.fiscalZReport?.taxableBase16Bs || 0) +
+      (entry.fiscalZReport?.taxableBase8Bs || 0) + (entry.fiscalZReport?.taxableBase31Bs || 0)) /
+      (entry.bcvRate > 0 ? entry.bcvRate : 1), 0);
+  const totalFiscalIvaBs = dailySalesResolution.days.reduce((sum, day) => sum + day.outputVatBs, 0);
+  const totalFiscalIvaUsd = selectedIndividualSales.reduce((sum, sale) =>
+    sum + signed(sale, sale.taxRate === 31 && sale.bcvRate > 0 ? sale.taxableBaseBs * 0.16 / sale.bcvRate : sale.vatAmountUsd), 0) +
+    selectedZReports.reduce((sum, entry) => sum + ((entry.fiscalZReport?.vat16Bs || 0) +
+      (entry.fiscalZReport?.vat8Bs || 0) + (entry.fiscalZReport?.vat31Bs || 0)) /
+      (entry.bcvRate > 0 ? entry.bcvRate : 1), 0);
+  const totalFiscalExemptBs = dailySalesResolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
+  const totalFiscalLuxuryTaxBs = selectedIndividualSales.reduce((sum, sale) =>
+    sum + signed(sale, sale.taxRate === 31 ? (sale.additionalLuxuryTaxBs ?? sale.taxableBaseBs * 0.15) : 0), 0) +
+    selectedZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.additionalLuxuryTaxBs || 0), 0);
+  const totalFiscalLuxuryTaxUsd = selectedIndividualSales.reduce((sum, sale) =>
+    sum + signed(sale, sale.additionalLuxuryTaxUsd ?? (sale.bcvRate > 0 ? sale.taxableBaseBs * 0.15 / sale.bcvRate : 0)), 0) +
+    selectedZReports.reduce((sum, entry) => sum + (entry.bcvRate > 0 ? (entry.fiscalZReport?.additionalLuxuryTaxBs || 0) / entry.bcvRate : 0), 0);
+  const totalFiscalIgtfBs = selectedIndividualSales.reduce((sum, sale) => sum + signed(sale, sale.igtfAmountBs || 0), 0) +
+    selectedZReports.reduce((sum, entry) => sum + (entry.fiscalZReport?.igtfBs || 0), 0);
+  const selectedWithholdingBs = selectedIndividualSales.reduce((sum, sale) => sum + signed(sale, sale.vatWithheldBs || 0), 0);
+  const selectedWithholdingUsd = selectedIndividualSales.reduce((sum, sale) => sum + signed(sale, sale.vatWithheldUsd || 0), 0);
+  const sourceSelectionPending = dailySalesResolution.unresolvedDates.length > 0;
 
   return (
     <div className="space-y-6">
@@ -390,9 +420,9 @@ export const LibroVentasView: React.FC = () => {
                 </td>
                 <td className="py-3 px-3 text-right font-mono text-amber-300 bg-slate-850">{formatBs(totalLuxuryTaxBs)}<div className="text-[10px] text-slate-400">{formatUsd(totalLuxuryTaxUsd)}</div></td>
                 <td className="py-3 px-3 text-right font-mono text-purple-300 bg-slate-850">
-                  {formatBs(totalIvaRetenidoBs)}
+                  {sourceSelectionPending ? 'Pendiente' : formatBs(selectedWithholdingBs)}
                   {(
-                    <div className="text-[10px] text-slate-400">{formatUsd(totalIvaRetenidoUsd)}</div>
+                    <div className="text-[10px] text-slate-400">{sourceSelectionPending ? '—' : formatUsd(selectedWithholdingUsd)}</div>
                   )}
                 </td>
                 <td></td>
@@ -441,6 +471,20 @@ export const LibroVentasView: React.FC = () => {
         </div>
       </section>
 
+      {dailySalesResolution.conflicts.length > 0 && <section className="rounded-xl border border-amber-200 bg-white p-4">
+        <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 text-amber-700" /><div>
+          <h4 className="text-sm font-bold text-slate-900">Días con dos modalidades de registro</h4>
+          <p className="mt-1 text-xs text-slate-600">Selecciona la fuente que representa las ventas de cada fecha. SICOVEN incluirá una sola modalidad por día en el resumen fiscal; no sumará automáticamente el Z y las facturas individuales.</p>
+        </div></div>
+        <div className="mt-3 space-y-2">{dailySalesResolution.conflicts.map(conflict => <div key={conflict.date} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
+          <strong className="text-sm">{formatDate(conflict.date)}</strong><div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => setDailySourceChoices(prev => ({...prev,[conflict.date]:'Z'}))} className={dailySourceChoices[conflict.date] === 'Z' ? 'rounded-lg border border-emerald-700 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800' : 'rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold'}>Usar Reporte Z</button>
+            <button type="button" onClick={() => setDailySourceChoices(prev => ({...prev,[conflict.date]:'INDIVIDUAL'}))} className={dailySourceChoices[conflict.date] === 'INDIVIDUAL' ? 'rounded-lg border border-emerald-700 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800' : 'rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold'}>Usar ventas individuales</button>
+          </div>
+        </div>)}</div>
+      </section>}
+      {sourceSelectionPending && <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-900">El resumen de la Forma 30 queda pendiente hasta que el contador seleccione una sola fuente para cada día coincidente.</p>}
+
       {/* Forma 30 SENIAT Summary Card */}
       <div className="bg-gradient-to-r from-slate-900 to-slate-850 text-white p-5 rounded-2xl shadow-md border border-slate-800">
         <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-3 flex items-center gap-2">
@@ -450,25 +494,25 @@ export const LibroVentasView: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 text-xs font-mono-nums">
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Bases imponibles gravadas:</span>
-            <span className="text-base font-bold text-white mt-1 block">{formatBs(totalFiscalBaseBs)}</span>
-            <span className="text-[10px] text-slate-400">{formatUsd(totalFiscalBaseUsd)}</span>
+            <span className="text-base font-bold text-white mt-1 block">{sourceSelectionPending ? 'Pendiente de selección' : formatBs(totalFiscalBaseBs)}</span>
+            <span className="text-[10px] text-slate-400">{sourceSelectionPending ? '—' : formatUsd(totalFiscalBaseUsd)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Ventas exentas / exoneradas:</span>
-            <span className="text-base font-bold text-white mt-1 block">{formatBs(totalFiscalExemptBs)}</span>
+            <span className="text-base font-bold text-white mt-1 block">{sourceSelectionPending ? 'Pendiente de selección' : formatBs(totalFiscalExemptBs)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Débito fiscal IVA:</span>
-            <span className="text-base font-bold text-emerald-400 mt-1 block">{formatBs(totalFiscalIvaBs)}</span>
-            <span className="text-[10px] text-slate-400">{formatUsd(totalFiscalIvaUsd)}</span>
+            <span className="text-base font-bold text-emerald-400 mt-1 block">{sourceSelectionPending ? 'Pendiente de selección' : formatBs(totalFiscalIvaBs)}</span>
+            <span className="text-[10px] text-slate-400">{sourceSelectionPending ? '—' : formatUsd(totalFiscalIvaUsd)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Impuesto adicional al consumo suntuario (15%):</span>
-            <span className="text-base font-bold text-amber-300 mt-1 block">{formatBs(totalFiscalLuxuryTaxBs)}</span><span className="text-[10px] text-slate-400">{formatUsd(totalFiscalLuxuryTaxUsd)}</span>
+            <span className="text-base font-bold text-amber-300 mt-1 block">{sourceSelectionPending ? 'Pendiente' : formatBs(totalFiscalLuxuryTaxBs)}</span><span className="text-[10px] text-slate-400">{sourceSelectionPending ? '—' : formatUsd(totalFiscalLuxuryTaxUsd)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">IGTF percibido:</span>
-            <span className="text-base font-bold text-sky-300 mt-1 block">{formatBs(totalFiscalIgtfBs)}</span>
+            <span className="text-base font-bold text-sky-300 mt-1 block">{sourceSelectionPending ? 'Pendiente' : formatBs(totalFiscalIgtfBs)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">IVA retenido por clientes:</span>
