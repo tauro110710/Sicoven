@@ -337,7 +337,7 @@ export const IvaDeclaracionesView: React.FC = () => {
             <div className="flex flex-wrap gap-2"><input value={declarationNumber} onChange={event=>setDeclarationNumber(event.target.value)} placeholder="Número oficial de declaración" className="min-w-[220px] flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
               <button type="button" disabled={workflowBusy || !declarationNumber.trim() || draftNeedsRefresh} onClick={async()=>{
                 setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
-                try { await recordVatOwnDeclarationEvent(savedDeclaration.id,{companyId:currentCompany.id,eventType:'FILED',occurredAt:new Date().toISOString(),declarationNumber:declarationNumber.trim(),idempotencyKey:'FILED:'+savedDeclaration.id});setWorkflowMessage('Presentación registrada con su asiento de determinación.'); }
+                try { await recordVatOwnDeclarationEvent(savedDeclaration.id,{companyId:currentCompany.id,eventType:'FILED',occurredAt:new Date(new Date().getFullYear(),new Date().getMonth(),new Date().getDate(),12).toISOString(),declarationNumber:declarationNumber.trim(),idempotencyKey:'FILED:'+savedDeclaration.id});setWorkflowMessage('Presentación registrada con su asiento de determinación.'); }
                 catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo registrar la presentación.');}
                 finally{setWorkflowBusy(false);}
               }} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{workflowBusy?'Procesando…':'Registrar presentación'}</button>
