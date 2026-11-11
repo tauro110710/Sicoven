@@ -279,6 +279,9 @@ test('reverses a prior-period common purchase credit using the original declarat
   } as PurchaseRecord;
   const prior = {
     ...declaration, period: '2026-10', sourceIds: [original.id],
+    sourceSnapshots: {
+      [original.id]: JSON.stringify({ kind: 'PURCHASE', id: original.id, vatCreditTreatment: 'COMMON' })
+    },
     position: calculateVatOwnPosition({
       outputVatBs: 0, purchaseCreditBs: 80, purchaseCredit16Bs: 80,
       purchaseCreditGrossBs: 160, purchaseCreditGross16Bs: 160,
@@ -295,6 +298,33 @@ test('reverses a prior-period common purchase credit using the original declarat
   assert.equal(result.priorReversalEligible16Bs, 40);
   assert.equal(result.priorReversalNonEligible16Bs, 40);
   assert.deepEqual(result.relatedPurchaseIds, [original.id]);
+});
+
+test('blocks a prior-period credit note when the filed original declaration has no fiscal treatment snapshot', () => {
+  const original = {
+    id: 'purchase-missing-historical-snapshot', companyId: 'company-a', invoiceDate: '2026-10-05',
+    supplierRif: 'J-12345678-9', documentType: '01', taxRate: 16,
+    vatAmountBs: 160, vatCreditTreatment: 'TAXABLE'
+  } as PurchaseRecord;
+  const note = {
+    id: 'purchase-note-missing-historical-snapshot', companyId: 'company-a', invoiceDate: '2026-11-05',
+    supplierRif: 'J-12345678-9', documentType: '03', taxRate: 16, vatAmountBs: 80,
+    originalPurchaseId: original.id, vatCreditTreatment: 'TAXABLE'
+  } as PurchaseRecord;
+  const prior = {
+    ...declaration, period: '2026-10', sourceIds: [original.id],
+    position: calculateVatOwnPosition({
+      outputVatBs: 0, purchaseCreditBs: 80, purchaseCredit16Bs: 80,
+      purchaseCreditGrossBs: 160, purchaseCreditGross16Bs: 160,
+      purchaseCreditNonEligibleBs: 80, receivedWithholdingsBs: 0,
+      taxableSalesBaseBs: 500, exemptSalesBaseBs: 500, prorationRate: 0.5
+    })
+  };
+  assert.throws(() => calculateVatOwnPurchaseCreditSummary({
+    companyId: 'company-a', period: '2026-11', purchases: [note],
+    allPurchases: [original, note], priorDeclarations: [prior],
+    taxableSalesBaseBs: 0, exemptSalesBaseBs: 0
+  }), /no conserva la huella fiscal de la factura original/);
 });
 
 test('uses the original filed declaration snapshot if a purchase VAT treatment was later edited', () => {
