@@ -1144,12 +1144,41 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           historicalRate === null || Math.abs(historicalRate - Number(event.bcvRate)) > 0.000001 ||
           !treasuryAccount || eventDate < String(declaration.filedAt || '').slice(0, 10) ||
           !journal || Math.abs(Number(journal.bcvRate) - Number(event.bcvRate)) > 0.000001 ||
-          String(journal.referenceDoc || '') !== 'IVA-PAGO:' + declaration.id + ':' + reference ||
-          !asArray(journal.items).some(line => String(line.accountCode) === '2.1.2.09' &&
-            Math.abs(Number(line.debitBs || 0) - amount) <= 0.02) ||
-          !asArray(journal.items).some(line => String(line.accountCode) === String(event.treasuryAccountCode) &&
-            Math.abs(Number(line.creditBs || 0) - amount) <= 0.02)) {
+          String(journal.referenceDoc || '') !== 'IVA-PAGO:' + declaration.id + ':' + reference) {
         throw new Error('SQLite rechazó un pago IVA sin saldo disponible, referencia única, tasa, cuenta de tesorería o asiento correspondiente.');
+      }
+      // El contra-asiento debe cancelar exactamente el pasivo y acreditar la
+      // cuenta de tesorería indicada; no se admiten líneas compensatorias extra.
+      const expectedPaymentLines = new Map([
+        ['2.1.2.09', { debitBs: amount, creditBs: 0, debitUsd: amount / Number(event.bcvRate), creditUsd: 0 }],
+        [String(event.treasuryAccountCode), { debitBs: 0, creditBs: amount, debitUsd: 0, creditUsd: amount / Number(event.bcvRate) }]
+      ]);
+      const actualPaymentLines = new Map();
+      for (const line of asArray(journal.items)) {
+        const code = String(line.accountCode || '');
+        const values = {
+          debitBs: Number(line.debitBs || 0), creditBs: Number(line.creditBs || 0),
+          debitUsd: Number(line.debitUsd || 0), creditUsd: Number(line.creditUsd || 0)
+        };
+        if (!code || Object.values(values).some(value => !Number.isFinite(value) || value < 0) ||
+            (values.debitBs > 0 && values.creditBs > 0) ||
+            (values.debitUsd > 0 && values.creditUsd > 0)) {
+          throw new Error('SQLite rechazó el asiento de pago IVA: contiene líneas inválidas.');
+        }
+        const current = actualPaymentLines.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+        for (const key of Object.keys(current)) current[key] += values[key];
+        actualPaymentLines.set(code, current);
+      }
+      const paymentCodes = new Set([...expectedPaymentLines.keys(), ...actualPaymentLines.keys()]);
+      for (const code of paymentCodes) {
+        const expected = expectedPaymentLines.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+        const actual = actualPaymentLines.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+        if (Math.abs(actual.debitBs - expected.debitBs) > 0.02 ||
+            Math.abs(actual.creditBs - expected.creditBs) > 0.02 ||
+            Math.abs(actual.debitUsd - expected.debitUsd) > 0.0001 ||
+            Math.abs(actual.creditUsd - expected.creditUsd) > 0.0001) {
+          throw new Error('SQLite rechazó el asiento de pago IVA: las líneas por cuenta no coinciden exactamente con el pasivo cancelado y la tesorería.');
+        }
       }
       paymentReferences.add(referenceKey);
     } else if (event.eventType === 'REVERSAL') {
