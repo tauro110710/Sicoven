@@ -565,10 +565,12 @@ function validateVatDeclarationLedger(previousState, nextState) {
           const usd = Number(movement?.amountUsd);
           const rate = Number(movement?.bcvRate);
           if (!bank || !account || !Number.isFinite(bs) || bs <= 0 ||
+              String(movement.date || '') !== String(event.occurredAt).slice(0, 10) ||
               (hasHistoricalUsd && (!Number.isFinite(usd) || usd <= 0 ||
                 !Number.isFinite(rate) || rate <= 0 ||
+                Math.abs(rate - Number(journal.bcvRate)) > 0.000001 ||
                 Math.abs(cents(bs) - cents(usd * rate)) > 0.02))) {
-            throw new Error('SQLite rechazó el enteramiento: un débito bancario carece de cuenta contable o equivalencia histórica válida.');
+            throw new Error('SQLite rechazó el enteramiento: cada débito debe coincidir con la fecha y tasa BCV del asiento, tener cuenta contable y conservar su equivalencia histórica válida.');
           }
           if (hasHistoricalUsd) bankUsd += usd;
           addExpected(String(bank.accountCode), { creditBs: bs, ...(hasHistoricalUsd ? { creditUsd: usd } : {}) });
