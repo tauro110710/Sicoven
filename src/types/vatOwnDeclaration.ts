@@ -208,7 +208,8 @@ export function resolveVatOwnProrationRate(input: {
 }): number | null {
   const taxable = Number(input.taxableSalesBaseBs);
   const exempt = Number(input.exemptSalesBaseBs);
-  if (!Number.isFinite(taxable) || !Number.isFinite(exempt) || taxable < 0 || exempt < 0) return null;
+  if (!Number.isFinite(taxable) || !Number.isFinite(exempt)) return null;
+  if (taxable < 0 || exempt < 0) return input.hasCommonPurchases ? null : 1;
   const denominator = taxable + exempt;
   if (denominator <= 0) return input.hasCommonPurchases ? null : 1;
   return taxable / denominator;
