@@ -781,6 +781,13 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
       throw new Error('SQLite rechazó reclasificaciones de IVA no acreditable que no cuadran en ambas monedas.');
     }
     const sourceSnapshots = declaration.sourceSnapshots || {};
+    const addFiscalAmount = (value, label) => {
+      const normalized = Number(value ?? 0);
+      if (!Number.isFinite(normalized) || normalized < 0) {
+        throw new Error('SQLite rechazó un importe fiscal inválido en las fuentes IVA (' + label + ').');
+      }
+      return normalized;
+    };
     if (declaration.sourceSnapshots) {
       const p = position;
       const near = (actual, expected, tolerance = 0.02) =>
@@ -801,13 +808,6 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
       // A balanced position is not sufficient if its sales/VAT components do not
       // correspond to the selected daily Z or individual-invoice sources.
       const dailySales = new Map();
-      const addFiscalAmount = (value, label) => {
-        const normalized = Number(value ?? 0);
-        if (!Number.isFinite(normalized) || normalized < 0) {
-          throw new Error('SQLite rechazó un importe fiscal inválido en las fuentes de ventas IVA (' + label + ').');
-        }
-        return normalized;
-      };
       const getDaily = date => {
         if (!validVatDeclarationDate(date) || String(date).slice(0, 7) !== period) {
           throw new Error('SQLite rechazó una fuente de ventas IVA con fecha fuera del período declarado.');
