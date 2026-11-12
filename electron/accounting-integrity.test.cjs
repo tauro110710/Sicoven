@@ -2332,7 +2332,14 @@ test('SQLite accepts a prior-month sale selected only for a current-month receiv
     affectedInvoiceDate: null, affectedInvoiceControlNumber: null,
     isCancelled: false, journal: null
   });
-  const priorFiled = vatOwnFiledState();
+  const priorFiledBase = vatOwnFiledState();
+  const priorFiled = {
+    ...priorFiledBase,
+    vatOwnDeclarations: [{
+      ...priorFiledBase.vatOwnDeclarations[0],
+      sourceIds: [sale.id], sourceSnapshots: { [sale.id]: snapshot }
+    }]
+  };
   const declaration = {
     ...fixture.vatOwnDeclarations[0],
     id: 'vat-own-2026-11-prior-retention', period: '2026-11',
