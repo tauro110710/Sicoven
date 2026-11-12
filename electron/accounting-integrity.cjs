@@ -796,12 +796,13 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
         item.companyId === companyId && item.status === 'FILED' && item.period < period
       ).sort((a, b) => b.period.localeCompare(a.period))[0];
       const priorCreditAvailable = Number(previousFiled?.position?.creditCarryForwardBs || 0);
-      const hasCommonCurrentPurchases = asArray(declaration.sourceIds).some(sourceId => {
+      const hasCommonCurrentPurchases = [...new Set([...sourceIds, ...relatedIds])].some(sourceId => {
         const raw = declaration.sourceSnapshots?.[sourceId];
         if (typeof raw !== 'string') return false;
         let snapshot;
         try { snapshot = JSON.parse(raw); } catch { return false; }
         return snapshot?.kind === 'PURCHASE' && ['01', '02'].includes(String(snapshot.documentType)) &&
+          String(snapshot.invoiceDate || '').slice(0, 7) === period &&
           snapshot.vatCreditTreatment === 'COMMON' && Number(snapshot.vatAmountBs || 0) > 0;
       });
       // Rebuild the monthly sales position from immutable fiscal source snapshots.
