@@ -2829,6 +2829,64 @@ test('SQLite validates partial IVA payments, prevents overpayment and protects t
   }), /eliminación del registro histórico en vatOwnDeclarationEvents/);
 });
 
+test('SQLite reconciles IVA payment FX gain and loss against the historical liability value', () => {
+  for (const paymentRate of [1000, 700]) {
+    const filed = vatOwnFiledState();
+    const declarationRate = Number(filed.vatOwnDeclarations[0].bcvRate);
+    const amountBs = 50;
+    const historicalUsd = amountBs / declarationRate;
+    const paymentUsd = amountBs / paymentRate;
+    const fxDifferenceUsd = historicalUsd - paymentUsd;
+    const company = filed.companies[0];
+    const nextCompany = {
+      ...company,
+      accountingBcvRateHistory: [
+        ...company.accountingBcvRateHistory,
+        { id: 'bcv-payment-day-' + paymentRate, rate: paymentRate, effectiveDate: '2026-11-12', recordedAt: '2026-11-12T08:00:00.000Z' }
+      ]
+    };
+    const items = [
+      { accountCode: '2.1.2.09', debitBs: amountBs, creditBs: 0, debitUsd: historicalUsd, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: paymentUsd }
+    ];
+    if (fxDifferenceUsd > 0.000001) {
+      items.push({ accountCode: '4.2.1.01', debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: fxDifferenceUsd });
+    } else if (fxDifferenceUsd < -0.000001) {
+      items.push({ accountCode: '6.1.1.08', debitBs: 0, creditBs: 0, debitUsd: Math.abs(fxDifferenceUsd), creditUsd: 0 });
+    }
+    const journal = {
+      id: 'entry-iva-fx-' + paymentRate, companyId: 'company-1', entryNumber: 2,
+      date: '2026-11-12', description: 'Pago IVA con diferencial cambiario', type: 'AJUSTE',
+      bcvRate: paymentRate, referenceDoc: 'IVA-PAGO:vat-own-1:FX-' + paymentRate,
+      items, createdAt: '2026-11-12T17:00:00.000Z'
+    };
+    const event = {
+      id: 'vat-own-event-fx-' + paymentRate, declarationId: 'vat-own-1', companyId: 'company-1',
+      eventType: 'PAYMENT', occurredAt: '2026-11-12T13:00:00.000-04:00',
+      recordedAt: '2026-11-12T17:00:00.000Z', amountBs, reference: 'FX-' + paymentRate,
+      idempotencyKey: 'PAYMENT:vat-own-1:FX-' + paymentRate, journalEntryId: journal.id,
+      treasuryAccountCode: '1.1.1.01', bcvRate: paymentRate
+    };
+    const next = {
+      ...filed,
+      companies: [nextCompany],
+      accounts: [
+        ...filed.accounts,
+        { code: '4.2.1.01', name: 'Ganancia cambiaria', type: 'INGRESOS', isMovement: true },
+        { code: '6.1.1.08', name: 'Pérdida cambiaria', type: 'GASTOS', isMovement: true }
+      ],
+      journalEntries: [...filed.journalEntries, journal],
+      vatOwnDeclarationEvents: [...filed.vatOwnDeclarationEvents, event]
+    };
+    assert.doesNotThrow(() => validateAccountingSnapshot(filed, next));
+    const withoutFxLine = {
+      ...next,
+      journalEntries: [...filed.journalEntries, { ...journal, items: journal.items.slice(0, 2) }]
+    };
+    assert.throws(() => validateAccountingSnapshot(filed, withoutFxLine), /líneas por cuenta no coinciden exactamente/);
+  }
+});
+
 test('SQLite accepts one linked IVA payment reversal and rejects duplicate or unrelated reversals', () => {
   const filed = vatOwnFiledState();
   const paymentJournal = {
