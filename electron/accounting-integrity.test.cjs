@@ -2640,6 +2640,10 @@ test('SQLite enforces review, filing receipt and supported payment event order f
   const wrongBankAccount = structuredClone(successfulState);
   wrongBankAccount.journalEntries[0].items[1].accountCode = '1.1.1.99';
   assert.throws(() => validateAccountingSnapshot(emptyState(), wrongBankAccount), /cuentas o importes del asiento/);
+
+  const wrongMovementDate = structuredClone(successfulState);
+  wrongMovementDate.bankStatementMovements[0].date = '2026-10-17';
+  assert.throws(() => validateAccountingSnapshot(emptyState(), wrongMovementDate), /fecha y tasa BCV del asiento/);
 });
 
 test('SQLite blocks review of VAT declarations with pending fiscal corrections or unacknowledged legacy dates', () => {
