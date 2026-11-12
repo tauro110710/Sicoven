@@ -2296,7 +2296,7 @@ test('SQLite recalculates IVA sales position from selected original fiscal docum
   };
   assert.throws(() => validateAccountingSnapshot(priorWithSale, {
     ...valid, vatOwnDeclarations: [internallyBalancedButMisstated]
-  }), /débito fiscal, las bases gravadas o las ventas exentas no corresponden/);
+  }), /débito fiscal, sus ajustes al crédito, las bases gravadas/);
 });
 
 test('SQLite accepts a prior-month sale selected only for a current-month received VAT withholding', () => {
