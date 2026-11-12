@@ -941,7 +941,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
         );
         const currentNotes = directPurchaseSnapshots.filter(item => String(item.documentType) === '03');
         const currentOrdinary = directPurchaseSnapshots.filter(item => ['01', '02'].includes(String(item.documentType)));
-        const relatedPurchaseIds = relatedIds.filter(sourceId => currentPurchasesById.get(sourceId)?.kind === 'PURCHASE');
+        const relatedPurchaseIds = [...new Set([...relatedIds, ...sourceIds])].filter(sourceId => currentPurchasesById.get(sourceId)?.kind === 'PURCHASE');
         const resolveOriginal = note => {
           const explicitId = String(note.originalPurchaseId || '');
           const candidates = relatedPurchaseIds.filter(sourceId => {
