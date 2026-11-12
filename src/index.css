@@ -192,7 +192,7 @@ div.fixed.inset-0[class*="z-"] > div {
   gap: 0.85rem;
 }
 .sicoven-modal-content > div:nth-child(-n+3),
-.sicoven-modal-content > div:has(> .rounded-xl.border-emerald-200) {
+.sicoven-modal-content > div.rounded-xl.border-emerald-200 {
   grid-column: 1 / -1;
 }
 .sicoven-modal-content,
