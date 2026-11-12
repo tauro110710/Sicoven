@@ -2318,8 +2318,10 @@ test('SQLite accepts a prior-month sale selected only for a current-month receiv
     retentionVoucherNumber: sale.retentionVoucherNumber,
     retentionVoucherDate: sale.retentionVoucherDate, isCancelled: false
   });
+  const priorFiled = vatOwnFiledState();
   const declaration = {
     ...fixture.vatOwnDeclarations[0],
+    id: 'vat-own-2026-11-prior-retention', period: '2026-11',
     sourceIds: [sale.id], relatedSourceIds: [],
     sourceSnapshots: { [sale.id]: snapshot },
     position: vatOwnPositionFixture({
@@ -2329,8 +2331,11 @@ test('SQLite accepts a prior-month sale selected only for a current-month receiv
       amountDueBs: 0, creditCarryForwardBs: 40
     })
   };
-  const previous = { ...emptyState(), sales: [sale] };
-  const next = { ...fixture, sales: [sale], vatOwnDeclarations: [declaration] };
+  const previous = { ...priorFiled, sales: [sale] };
+  const next = {
+    ...priorFiled, sales: [sale],
+    vatOwnDeclarations: [...priorFiled.vatOwnDeclarations, declaration]
+  };
   assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
   assert.throws(() => validateAccountingSnapshot(previous, {
     ...next,
@@ -2914,8 +2919,14 @@ test('SQLite reconciles IVA payment FX gain and loss against the historical liab
       companies: [nextCompany],
       accounts: [
         ...filed.accounts,
-        { code: '4.2.1.01', name: 'Ganancia cambiaria', type: 'INGRESOS', isMovement: true },
-        { code: '6.1.1.08', name: 'Pérdida cambiaria', type: 'GASTOS', isMovement: true }
+        { code: '4', name: 'Ingresos', type: 'INGRESOS', level: 1, isMovement: false },
+        { code: '4.2', name: 'Otros ingresos', type: 'INGRESOS', level: 2, parentCode: '4', isMovement: false },
+        { code: '4.2.1', name: 'Ingresos financieros', type: 'INGRESOS', level: 3, parentCode: '4.2', isMovement: false },
+        { code: '4.2.1.01', name: 'Ganancia cambiaria', type: 'INGRESOS', level: 4, parentCode: '4.2.1', isMovement: true },
+        { code: '6', name: 'Gastos', type: 'GASTOS', level: 1, isMovement: false },
+        { code: '6.1', name: 'Otros gastos', type: 'GASTOS', level: 2, parentCode: '6', isMovement: false },
+        { code: '6.1.1', name: 'Gastos financieros', type: 'GASTOS', level: 3, parentCode: '6.1', isMovement: false },
+        { code: '6.1.1.08', name: 'Pérdida cambiaria', type: 'GASTOS', level: 4, parentCode: '6.1.1', isMovement: true }
       ],
       journalEntries: [...filed.journalEntries, journal],
       vatOwnDeclarationEvents: [...filed.vatOwnDeclarationEvents, event]
