@@ -2433,9 +2433,9 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
     sourceIds: [note.id], relatedSourceIds: [original.id],
     sourceSnapshots: { [note.id]: noteSnapshot, [original.id]: originalSnapshot },
     position: vatOwnPositionFixture({
-      purchaseCreditReversalBs: 30, purchaseCreditReversal16Bs: 30,
-      purchaseCreditReversalNonEligibleBs: 30, purchaseCreditReversalNonEligible16Bs: 30,
-      netTaxBs: 130, amountDueBs: 130
+      purchaseCreditReversalBs: 20, purchaseCreditReversal16Bs: 20,
+      purchaseCreditReversalNonEligibleBs: 20, purchaseCreditReversalNonEligible16Bs: 20,
+      netTaxBs: 120, amountDueBs: 120
     })
   };
   const previous = {
