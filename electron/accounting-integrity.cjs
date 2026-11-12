@@ -933,7 +933,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
         return snapshot.kind === 'PURCHASE' ? snapshot : null;
       }).filter(Boolean);
       const hasPurchaseCreditNotes = directPurchaseSnapshots.some(item => String(item.documentType) === '03');
-      if (directPurchaseSnapshots.length && !hasPurchaseCreditNotes) {
+      if (declaration.status === 'DRAFT' && directPurchaseSnapshots.length && !hasPurchaseCreditNotes) {
         let gross16 = 0, gross8 = 0, eligible16 = 0, eligible8 = 0;
         let nonEligible16 = 0, nonEligible8 = 0;
         for (const purchase of directPurchaseSnapshots) {
