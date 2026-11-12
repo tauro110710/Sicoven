@@ -2173,6 +2173,27 @@ test('SQLite rechecks fiscal source snapshots at the exact moment an IVA draft i
   const stableFiledDeclaration = { ...filedDeclaration, sourceSnapshots: { [purchase.id]: matchingSnapshot } };
   assertFilingRejectsChangedSource(stableDraft, stableFiledDeclaration, { ...purchase, inventoryLines: [{ ...purchase.inventoryLines[0], quantity: 1 }] });
   assertFilingRejectsChangedSource(stableDraft, stableFiledDeclaration, { ...purchase, creditNoteLines: [{ productId: 'product-iva-1', quantity: 1 }] });
+
+  const priorPeriodPurchase = { ...purchase, invoiceDate: '2026-09-30' };
+  const priorPeriodSnapshot = JSON.stringify({ ...JSON.parse(matchingSnapshot), invoiceDate: priorPeriodPurchase.invoiceDate });
+  const priorPeriodDraft = {
+    ...stableDraft,
+    purchases: [priorPeriodPurchase],
+    vatOwnDeclarations: [{
+      ...stableDraft.vatOwnDeclarations[0],
+      sourceSnapshots: { [purchase.id]: priorPeriodSnapshot }
+    }]
+  };
+  const priorPeriodFiled = {
+    ...stableFiledDeclaration,
+    sourceSnapshots: { [purchase.id]: priorPeriodSnapshot }
+  };
+  assert.throws(() => validateAccountingSnapshot(priorPeriodDraft, {
+    ...priorPeriodDraft,
+    vatOwnDeclarations: [priorPeriodFiled],
+    vatOwnDeclarationEvents: [filingEvent],
+    journalEntries: [filingEntry]
+  }), /fuente directa IVA cuya fecha fiscal no pertenece al período mensual declarado/);
 });
 
 test('SQLite rejects IVA reclassification lines whose USD values do not match the BCV conversion', () => {
