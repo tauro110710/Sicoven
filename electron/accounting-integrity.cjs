@@ -834,6 +834,12 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
         if (!parsed || !['SALE', 'PURCHASE', 'Z'].includes(parsed.kind) || String(parsed.id || '') !== String(sourceId)) {
           throw new Error('SQLite rechazó una huella fiscal IVA sin tipo de documento reconocido.');
         }
+        if (sourceIds.includes(String(sourceId))) {
+          const sourceDate = parsed.kind === 'Z' ? String(parsed.date || '') : String(parsed.invoiceDate || '');
+          if (!validVatDeclarationDate(sourceDate) || sourceDate.slice(0, 7) !== period) {
+            throw new Error('SQLite rechazó una fuente directa IVA cuya fecha fiscal no pertenece al período mensual declarado.');
+          }
+        }
       }
     }
     const revisions = normalizeRevisions(declaration.revisions);
