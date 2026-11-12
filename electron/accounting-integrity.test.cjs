@@ -2575,6 +2575,7 @@ test('SQLite applies only the latest filed IVA credit carry-forward to the next 
   };
   const currentDeclaration = {
     ...vatOwnDeclarationFixture().vatOwnDeclarations[0],
+    id: 'vat-own-2026-11-carry-forward',
     sourceIds: [], relatedSourceIds: [], sourceSnapshots: {},
     position: vatOwnPositionFixture({
       priorCreditAppliedBs: 50, netTaxBs: 50, amountDueBs: 50
