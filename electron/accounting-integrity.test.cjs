@@ -2453,6 +2453,76 @@ test('SQLite reconstructs withholding increases and reversals issued by current-
   }), /retenciones IVA recibidas y sus ajustes/);
 });
 
+test('SQLite turns a sales credit note exceeding current-month VAT into a credit adjustment and carry-forward', () => {
+  const fixture = vatOwnDeclarationFixture();
+  const creditNote = {
+    id: 'sale-credit-note-exceeds-month-vat', companyId: 'company-1',
+    invoiceDate: '2026-11-10', documentType: '03',
+    invoiceNumber: 'NC-PRIOR-PERIOD-SALE', controlNumber: 'CTRL-NC-PRIOR-PERIOD',
+    customerRif: 'J-12345678-9', customerName: 'Cliente Uno',
+    totalAmountBs: 217.5, totalAmountUsd: 0.25,
+    taxableBaseBs: 187.5, taxableBaseUsd: 0.21,
+    exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16,
+    vatAmountBs: 30, vatAmountUsd: 0.03,
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0,
+    igtfApplicable: false, igtfRate: 0, igtfAmountBs: 0, igtfAmountUsd: 0,
+    vatWithheldBs: 0, vatWithheldUsd: 0, retentionRate: 0,
+    retentionVoucherNumber: null, retentionVoucherDate: null,
+    bcvRate: 874, journalEntryId: null, originalSaleId: 'sale-original-october',
+    affectedInvoiceNumber: 'F-ORIGINAL-OCTOBER', affectedInvoiceDate: '2026-10-20',
+    affectedInvoiceControlNumber: 'CTRL-ORIGINAL-OCTOBER', isCancelled: false
+  };
+  const snapshot = JSON.stringify({
+    kind: 'SALE', id: creditNote.id, invoiceDate: creditNote.invoiceDate,
+    documentType: creditNote.documentType, invoiceNumber: creditNote.invoiceNumber,
+    controlNumber: creditNote.controlNumber, customerRif: creditNote.customerRif,
+    customerName: creditNote.customerName, totalAmountBs: creditNote.totalAmountBs,
+    totalAmountUsd: creditNote.totalAmountUsd, taxableBaseBs: creditNote.taxableBaseBs,
+    taxableBaseUsd: creditNote.taxableBaseUsd, exemptAmountBs: creditNote.exemptAmountBs,
+    exemptAmountUsd: 0, taxRate: creditNote.taxRate, vatAmountBs: creditNote.vatAmountBs,
+    vatAmountUsd: creditNote.vatAmountUsd, additionalLuxuryTaxBs: 0,
+    additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,
+    igtfAmountBs: 0, igtfAmountUsd: 0, vatWithheldBs: 0, vatWithheldUsd: 0,
+    retentionRate: 0, retentionVoucherNumber: null, retentionVoucherDate: null,
+    bcvRate: 874, journalEntryId: null, originalSaleId: creditNote.originalSaleId,
+    affectedInvoiceNumber: creditNote.affectedInvoiceNumber,
+    affectedInvoiceDate: creditNote.affectedInvoiceDate,
+    affectedInvoiceControlNumber: creditNote.affectedInvoiceControlNumber,
+    isCancelled: false, journal: null
+  });
+  const declaration = {
+    ...fixture.vatOwnDeclarations[0],
+    id: 'vat-own-2026-11-sales-credit-adjustment', period: '2026-11',
+    sourceIds: [creditNote.id], relatedSourceIds: [],
+    sourceSnapshots: { [creditNote.id]: snapshot },
+    position: vatOwnPositionFixture({
+      outputVatBs: 0, outputVat16Bs: 0, outputVat8Bs: 0,
+      taxableSalesBaseBs: 0, exemptSalesBaseBs: 0,
+      creditAdjustmentsBs: 30, creditAdjustments16Bs: 30,
+      netTaxBs: -30, amountDueBs: 0, creditCarryForwardBs: 30
+    })
+  };
+  const priorFiled = vatOwnFiledState();
+  const previous = { ...priorFiled, sales: [creditNote] };
+  const next = {
+    ...priorFiled, sales: [creditNote],
+    vatOwnDeclarations: [...priorFiled.vatOwnDeclarations, declaration]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next,
+    vatOwnDeclarations: [{
+      ...declaration,
+      position: vatOwnPositionFixture({
+        outputVatBs: 0, outputVat16Bs: 0, outputVat8Bs: 0,
+        taxableSalesBaseBs: 0, exemptSalesBaseBs: 0,
+        creditAdjustmentsBs: 0, creditAdjustments16Bs: 0,
+        netTaxBs: 0, amountDueBs: 0, creditCarryForwardBs: 0
+      })
+    }]
+  }), /ajustes al crédito, las bases gravadas/);
+});
+
 test('SQLite recalculates ordinary purchase credit from immutable invoice snapshots and proration', () => {
   const fixture = vatOwnDeclarationFixture();
   const purchase = {
