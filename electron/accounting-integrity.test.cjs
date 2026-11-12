@@ -2015,7 +2015,7 @@ function vatDeclarationFixture(overrides = {}) {
       taxableBaseBs: 1000, vatAmountBs: 160, vatWithheldBs: 120,
       requiresFiscalCorrection: false
     }],
-    totalTaxableBaseBs: 1000, totalVatAmountBs: 160, totalWithheldBs: 120,
+    totalTaxableBaseBs: 1000, totalVatAmountBs: 160, totalWithheldBs: 120, totalWithheldUsd: 1.2,
     createdAt: '2026-10-16T10:00:00.000Z'
   };
   return {
@@ -2601,6 +2601,45 @@ test('SQLite enforces review, filing receipt and supported payment event order f
   assert.throws(() => validateAccountingSnapshot(emptyState(), {
     ...state, ...paymentBankSupport, vatWithholdingDeclarationEvents: [reviewed, filed, payment]
   }), /asiento contable IVA correspondiente/);
+
+  const bankAccount = {
+    id: 'vat-bank-account', companyId: declaration.companyId, currency: 'BS',
+    accountCode: '1.1.1.01', bankName: 'Banco de prueba', accountNumber: '0001'
+  };
+  const accounts = [
+    { code: '2.1.2.03', name: 'Retenciones IVA por enterar', type: 'PASIVO', isMovement: true },
+    { code: '1.1.1.01', name: 'Banco de prueba', type: 'ACTIVO', isMovement: true }
+  ];
+  const movement = {
+    ...paymentBankSupport.bankStatementMovements[0], amountUsd: 1.2, bcvRate: 100,
+    isReconciled: true, reconciledWithJournalEntryId: 'vat-payment-entry',
+    reconciledJournalEntryIds: ['vat-payment-entry']
+  };
+  const journal = {
+    id: 'vat-payment-entry', companyId: declaration.companyId, entryNumber: 1,
+    date: '2026-10-18', description: 'Enteramiento IVA', type: 'RETENCION_IVA',
+    bcvRate: 100, referenceDoc: 'IVA-ENTERAMIENTO:vat-decl-1:TRX-001',
+    items: [
+      { accountCode: '2.1.2.03', debitBs: 120, creditBs: 0, debitUsd: 1.2, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 120, debitUsd: 0, creditUsd: 1.2 }
+    ],
+    createdAt: '2026-10-18T11:00:00.000Z'
+  };
+  const paidEvent = { ...payment, journalEntryId: journal.id };
+  const successfulState = {
+    ...state, accounts, bankAccounts: [bankAccount], bankStatementMovements: [movement],
+    journalEntries: [journal], vatWithholdingDeclarationEvents: [reviewed, filed, paidEvent]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), successfulState));
+
+  const wrongLiability = structuredClone(successfulState);
+  wrongLiability.journalEntries[0].items[0].debitBs = 119;
+  wrongLiability.journalEntries[0].items[1].creditBs = 119;
+  assert.throws(() => validateAccountingSnapshot(emptyState(), wrongLiability), /cuentas o importes del asiento/);
+
+  const wrongBankAccount = structuredClone(successfulState);
+  wrongBankAccount.journalEntries[0].items[1].accountCode = '1.1.1.99';
+  assert.throws(() => validateAccountingSnapshot(emptyState(), wrongBankAccount), /cuentas o importes del asiento/);
 });
 
 test('SQLite blocks review of VAT declarations with pending fiscal corrections or unacknowledged legacy dates', () => {
