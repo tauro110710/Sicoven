@@ -177,6 +177,7 @@ div.fixed.inset-0.z-50 > div {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow-y: auto;
 }
 .sicoven-modal-header {
   position: sticky;
