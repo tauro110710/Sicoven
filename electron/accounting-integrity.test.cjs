@@ -2243,14 +2243,30 @@ test('SQLite recalculates IVA sales position from selected original fiscal docum
   const sale = {
     id: 'sale-iva-trace-1', companyId: 'company-1', invoiceDate: '2026-11-05',
     documentType: '01', invoiceNumber: 'F-IVA-TRACE-1', controlNumber: 'CTRL-IVA-TRACE-1',
-    taxableBaseBs: 625, exemptAmountBs: 0, taxRate: 16, vatAmountBs: 100,
-    vatWithheldBs: 0, retentionVoucherDate: null, isCancelled: false
+    customerRif: 'J-12345678-9', customerName: 'Cliente Uno',
+    totalAmountBs: 725, totalAmountUsd: 0.83, taxableBaseBs: 625, taxableBaseUsd: 0.71,
+    exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 100, vatAmountUsd: 0.11,
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,
+    igtfAmountBs: 0, igtfAmountUsd: 0, vatWithheldBs: 0, vatWithheldUsd: 0,
+    retentionRate: 0, retentionVoucherNumber: null, retentionVoucherDate: null,
+    bcvRate: 874, journalEntryId: null, originalSaleId: null,
+    affectedInvoiceNumber: null, affectedInvoiceDate: null, affectedInvoiceControlNumber: null,
+    isCancelled: false
   };
   const snapshot = JSON.stringify({
     kind: 'SALE', id: sale.id, invoiceDate: sale.invoiceDate, documentType: sale.documentType,
     invoiceNumber: sale.invoiceNumber, controlNumber: sale.controlNumber,
-    taxableBaseBs: sale.taxableBaseBs, exemptAmountBs: sale.exemptAmountBs,
-    taxRate: sale.taxRate, vatAmountBs: sale.vatAmountBs
+    customerRif: sale.customerRif, customerName: sale.customerName,
+    totalAmountBs: sale.totalAmountBs, totalAmountUsd: sale.totalAmountUsd,
+    taxableBaseBs: sale.taxableBaseBs, taxableBaseUsd: sale.taxableBaseUsd,
+    exemptAmountBs: sale.exemptAmountBs, exemptAmountUsd: 0, taxRate: sale.taxRate,
+    vatAmountBs: sale.vatAmountBs, vatAmountUsd: sale.vatAmountUsd,
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,
+    igtfAmountBs: 0, igtfAmountUsd: 0, vatWithheldBs: sale.vatWithheldBs,
+    vatWithheldUsd: sale.vatWithheldUsd, retentionRate: 0, retentionVoucherNumber: null,
+    retentionVoucherDate: null, bcvRate: sale.bcvRate, journalEntryId: null,
+    originalSaleId: null, affectedInvoiceNumber: null, affectedInvoiceDate: null,
+    affectedInvoiceControlNumber: null, isCancelled: false, journal: null
   });
   const declaration = {
     ...fixture.vatOwnDeclarations[0],
