@@ -879,6 +879,30 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           throw new Error('SQLite rechazó la posición IVA: el débito fiscal, las bases gravadas o las ventas exentas no corresponden a los reportes Z y facturas individuales seleccionados.');
         }
       }
+      // Customer VAT withholdings are recognized by the received certificate date,
+      // independently of the invoice date used to select daily sales.
+      let expectedReceivedWithholdings = 0;
+      for (const [sourceId, raw] of Object.entries(sourceSnapshots)) {
+        if (typeof raw !== 'string') continue;
+        let source;
+        try { source = JSON.parse(raw); } catch { continue; }
+        if (source?.kind !== 'SALE' || source.isCancelled === true) continue;
+        const withheld = addFiscalAmount(source.vatWithheldBs, 'retención IVA recibida');
+        if (withheld <= 0) continue;
+        const documentType = String(source.documentType || '01');
+        if (documentType !== '01') {
+          throw new Error('SQLite rechazó una retención IVA recibida asociada a una nota de débito o crédito que no conserva un comprobante independiente válido.');
+        }
+        const voucherDate = String(source.retentionVoucherDate || '');
+        const voucherNumber = String(source.retentionVoucherNumber || '').trim();
+        if (!validVatDeclarationDate(voucherDate) || !voucherNumber) {
+          throw new Error('SQLite rechazó una retención IVA recibida sin número y fecha válidos de comprobante.');
+        }
+        if (voucherDate.slice(0, 7) === period) expectedReceivedWithholdings += withheld;
+      }
+      if (!near(p.receivedWithholdingsBs, expectedReceivedWithholdings)) {
+        throw new Error('SQLite rechazó las retenciones IVA recibidas: el importe declarado no corresponde a los comprobantes de retención seleccionados y fechados en el período.');
+      }
       const salesBase = Number(p.taxableSalesBaseBs) + Number(p.exemptSalesBaseBs);
       const expectedProrationRate = !hasCommonCurrentPurchases ? 1
         : salesBase > 0 ? Number(p.taxableSalesBaseBs) / salesBase : null;
