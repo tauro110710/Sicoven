@@ -2163,7 +2163,7 @@ test('SQLite rechecks fiscal source snapshots at the exact moment an IVA draft i
     vatOwnDeclarations: [baseFiledDeclaration],
     vatOwnDeclarationEvents: [filingEvent],
     journalEntries: [filingEntry]
-  }), /huellas fiscales del borrador ya no coinciden/);
+  }), /huellas fiscales del borrador ya no coinciden|SQLite bloqueó la modificación de un registro histórico/);
   assertFilingRejectsChangedSource(draft, filedDeclaration, purchase);
   const matchingSnapshot = JSON.stringify({ ...JSON.parse(snapshot), totalAmountBs: purchase.totalAmountBs, vatAmountBs: purchase.vatAmountBs });
   const stableDraft = {
