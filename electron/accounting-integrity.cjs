@@ -878,6 +878,58 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           throw new Error('SQLite rechazó la posición IVA: el débito fiscal, las bases gravadas o las ventas exentas no corresponden a los reportes Z y facturas individuales seleccionados.');
         }
       }
+      // Rebuild ordinary current-period purchase credit directly from immutable
+      // invoice snapshots. Credit-note chains are handled by the dedicated
+      // historical reconciliation path; do not approximate those cases here.
+      const directPurchaseSnapshots = sourceIds.map(sourceId => {
+        const raw = sourceSnapshots[sourceId];
+        if (typeof raw !== 'string') return null;
+        const snapshot = JSON.parse(raw);
+        return snapshot.kind === 'PURCHASE' ? snapshot : null;
+      }).filter(Boolean);
+      const hasPurchaseCreditNotes = directPurchaseSnapshots.some(item => String(item.documentType) === '03');
+      if (directPurchaseSnapshots.length && !hasPurchaseCreditNotes) {
+        let gross16 = 0, gross8 = 0, eligible16 = 0, eligible8 = 0;
+        let nonEligible16 = 0, nonEligible8 = 0;
+        for (const purchase of directPurchaseSnapshots) {
+          if (!['01', '02'].includes(String(purchase.documentType))) {
+            throw new Error('SQLite rechazó una fuente de compras IVA con tipo documental no reconocido.');
+          }
+          const vat = addFiscalAmount(purchase.vatAmountBs, 'IVA bruto de compra');
+          const rate = Number(purchase.taxRate);
+          const treatment = String(purchase.vatCreditTreatment || 'COMMON');
+          if (vat > 0 && ![8, 16, 31].includes(rate)) {
+            throw new Error('SQLite rechazó una compra con alícuota de IVA no reconocida.');
+          }
+          if (!['TAXABLE', 'EXEMPT', 'COMMON'].includes(treatment)) {
+            throw new Error('SQLite rechazó una compra con tratamiento de crédito fiscal no reconocido.');
+          }
+          const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : Number(p.prorationRate);
+          if (!Number.isFinite(factor) || factor < 0 || factor > 1) {
+            throw new Error('SQLite rechazó la prorrata aplicada al crédito fiscal de compras.');
+          }
+          if (rate === 8) {
+            gross8 += vat; eligible8 += vat * factor; nonEligible8 += vat * (1 - factor);
+          } else {
+            gross16 += vat; eligible16 += vat * factor; nonEligible16 += vat * (1 - factor);
+          }
+        }
+        if (!near(p.purchaseCreditGross16Bs, gross16) ||
+            !near(p.purchaseCreditGross8Bs, gross8) ||
+            !near(p.purchaseCreditGrossBs, gross16 + gross8) ||
+            !near(p.purchaseCredit16Bs, eligible16) ||
+            !near(p.purchaseCredit8Bs, eligible8) ||
+            !near(p.purchaseCreditBs, eligible16 + eligible8) ||
+            !near(p.purchaseCreditNonEligibleBs, nonEligible16 + nonEligible8) ||
+            !near(p.purchaseCreditReversalBs, 0) ||
+            !near(p.purchaseCreditReversal16Bs, 0) ||
+            !near(p.purchaseCreditReversal8Bs, 0) ||
+            !near(p.purchaseCreditReversalNonEligibleBs, 0) ||
+            !near(p.purchaseCreditReversalNonEligible16Bs, 0) ||
+            !near(p.purchaseCreditReversalNonEligible8Bs, 0)) {
+          throw new Error('SQLite rechazó el crédito fiscal de compras: los importes brutos, acreditables y no acreditables no corresponden a las facturas seleccionadas.');
+        }
+      }
       const salesBase = Number(p.taxableSalesBaseBs) + Number(p.exemptSalesBaseBs);
       const expectedProrationRate = !hasCommonCurrentPurchases ? 1
         : salesBase > 0 ? Number(p.taxableSalesBaseBs) / salesBase : null;
