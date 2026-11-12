@@ -534,24 +534,26 @@ function validateVatDeclarationLedger(previousState, nextState) {
         const priorPaidBs = paid;
         const totalWithheldBs = Number(declaration.totalWithheldBs);
         const totalWithheldUsd = Number(declaration.totalWithheldUsd);
-        if (!Number.isFinite(totalWithheldUsd) || totalWithheldUsd <= 0 ||
-            !Number.isFinite(totalWithheldBs) || totalWithheldBs <= 0) {
-          throw new Error('SQLite rechazó el enteramiento: la declaración no conserva el pasivo histórico completo en Bs. y USD.');
+        const hasHistoricalUsd = Number.isFinite(totalWithheldUsd) && totalWithheldUsd > 0;
+        if (!Number.isFinite(totalWithheldBs) || totalWithheldBs <= 0) {
+          throw new Error('SQLite rechazó el enteramiento: la declaración no conserva el pasivo histórico en bolívares.');
         }
         const cents = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
         const micros = value => Math.round((Number(value) + Number.EPSILON) * 1000000) / 1000000;
         const cumulativeBs = cents(priorPaidBs + amount);
-        const cumulativeUsd = Math.abs(cumulativeBs - cents(totalWithheldBs)) < 0.0001
-          ? micros(totalWithheldUsd) : micros(totalWithheldUsd * cumulativeBs / totalWithheldBs);
-        const priorUsd = micros(totalWithheldUsd * priorPaidBs / totalWithheldBs);
-        const liabilityUsd = micros(cumulativeUsd - priorUsd);
+        const cumulativeUsd = hasHistoricalUsd
+          ? (Math.abs(cumulativeBs - cents(totalWithheldBs)) < 0.0001
+            ? micros(totalWithheldUsd) : micros(totalWithheldUsd * cumulativeBs / totalWithheldBs))
+          : null;
+        const priorUsd = hasHistoricalUsd ? micros(totalWithheldUsd * priorPaidBs / totalWithheldBs) : null;
+        const liabilityUsd = hasHistoricalUsd ? micros(cumulativeUsd - priorUsd) : null;
         const expectedLines = new Map();
         const addExpected = (code, values) => {
           const current = expectedLines.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
           for (const key of Object.keys(current)) current[key] += Number(values[key] || 0);
           expectedLines.set(code, current);
         };
-        addExpected('2.1.2.03', { debitBs: amount, debitUsd: liabilityUsd });
+        addExpected('2.1.2.03', { debitBs: amount, ...(hasHistoricalUsd ? { debitUsd: liabilityUsd } : {}) });
         let bankUsd = 0;
         const bankAccounts = new Map(asArray(nextState.bankAccounts).map(item => [String(item.id), item]));
         for (const movementId of movementIds) {
@@ -570,13 +572,13 @@ function validateVatDeclarationLedger(previousState, nextState) {
           bankUsd += usd;
           addExpected(String(bank.accountCode), { creditBs: bs, creditUsd: usd });
         }
-        const fxDifferenceUsd = micros(liabilityUsd - micros(bankUsd));
-        if (fxDifferenceUsd > 0.0000005) {
+        const fxDifferenceUsd = hasHistoricalUsd ? micros(liabilityUsd - micros(bankUsd)) : 0;
+        if (hasHistoricalUsd && fxDifferenceUsd > 0.0000005) {
           const fxAccount = asArray(nextState.accounts).find(item =>
             String(item.code) === '4.2.1.01' && item.type === 'INGRESOS' && item.isMovement === true);
           if (!fxAccount) throw new Error('SQLite rechazó el enteramiento: falta la cuenta de ganancia cambiaria.');
           addExpected('4.2.1.01', { creditUsd: fxDifferenceUsd });
-        } else if (fxDifferenceUsd < -0.0000005) {
+        } else if (hasHistoricalUsd && fxDifferenceUsd < -0.0000005) {
           const fxAccount = asArray(nextState.accounts).find(item =>
             String(item.code) === '6.1.1.08' && item.type === 'GASTOS' && item.isMovement === true);
           if (!fxAccount) throw new Error('SQLite rechazó el enteramiento: falta la cuenta de pérdida cambiaria.');
@@ -604,7 +606,7 @@ function validateVatDeclarationLedger(previousState, nextState) {
           const actual = actualLines.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
           if (Math.abs(actual.debitBs - expected.debitBs) > 0.01 ||
               Math.abs(actual.creditBs - expected.creditBs) > 0.01 ||
-              Math.abs(actual.debitUsd - expected.debitUsd) > 0.000001 ||
+              (hasHistoricalUsd && Math.abs(actual.debitUsd - expected.debitUsd) > 0.000001) ||
               Math.abs(actual.creditUsd - expected.creditUsd) > 0.000001) {
             throw new Error('SQLite rechazó el enteramiento: las cuentas o importes del asiento no corresponden al pasivo y a los débitos bancarios vinculados.');
           }
