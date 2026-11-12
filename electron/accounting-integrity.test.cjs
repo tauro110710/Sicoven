@@ -2102,6 +2102,70 @@ function vatOwnFiledState() {
   };
 }
 
+test('SQLite posts IVA debit and credit adjustments to the correct asset and liability accounts', () => {
+  const fixture = vatOwnDeclarationFixture();
+  const position = vatOwnPositionFixture({
+    outputVatBs: 100, outputVat16Bs: 100, outputVat8Bs: 0,
+    receivedWithholdingsBs: 0, debitAdjustmentsBs: 20,
+    creditAdjustmentsBs: 30, creditAdjustments16Bs: 30,
+    creditAdjustments8Bs: 0, netTaxBs: 90, amountDueBs: 90,
+    creditCarryForwardBs: 0
+  });
+  const draft = {
+    ...fixture.vatOwnDeclarations[0],
+    period: '2026-10', createdAt: '2026-10-31T10:00:00.000Z',
+    position, sourceIds: [], relatedSourceIds: [], sourceSnapshots: {}
+  };
+  const withholdingAccount = {
+    code: '1.1.3.03', name: 'Retenciones IVA recibidas',
+    type: 'ACTIVO', isMovement: true
+  };
+  const previous = {
+    ...fixture, accounts: [...fixture.accounts, withholdingAccount],
+    vatOwnDeclarations: [draft]
+  };
+  const declaration = {
+    ...draft, status: 'FILED', declarationNumber: 'IVA-ADJ-2026-10',
+    filedAt: '2026-11-11T12:00:00.000-04:00'
+  };
+  const rate = declaration.bcvRate;
+  const journal = {
+    id: 'entry-iva-adjustment-signs', companyId: 'company-1', entryNumber: 1,
+    date: '2026-11-11', description: 'Determinación IVA con ajustes de período',
+    type: 'AJUSTE', bcvRate: rate, referenceDoc: 'IVA-MENSUAL:2026-10',
+    items: [
+      { accountCode: '2.1.2.01', debitBs: 100, creditBs: 0, debitUsd: 100 / rate, creditUsd: 0 },
+      { accountCode: '1.1.3.03', debitBs: 20, creditBs: 0, debitUsd: 20 / rate, creditUsd: 0 },
+      { accountCode: '2.1.2.01', debitBs: 0, creditBs: 30, debitUsd: 0, creditUsd: 30 / rate },
+      { accountCode: '2.1.2.09', debitBs: 0, creditBs: 90, debitUsd: 0, creditUsd: 90 / rate }
+    ], createdAt: '2026-11-11T16:00:00.000Z'
+  };
+  const event = {
+    id: 'event-iva-adjustment-signs', declarationId: declaration.id,
+    companyId: declaration.companyId, eventType: 'FILED',
+    occurredAt: declaration.filedAt, recordedAt: '2026-11-11T16:01:00.000Z',
+    declarationNumber: declaration.declarationNumber,
+    idempotencyKey: 'FILED:' + declaration.id, journalEntryId: journal.id
+  };
+  const next = {
+    ...previous, vatOwnDeclarations: [declaration],
+    journalEntries: [journal], vatOwnDeclarationEvents: [event]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
+  const wrongJournal = {
+    ...journal,
+    items: [
+      { accountCode: '2.1.2.01', debitBs: 100, creditBs: 0, debitUsd: 100 / rate, creditUsd: 0 },
+      { accountCode: '1.1.3.03', debitBs: 0, creditBs: 20, debitUsd: 0, creditUsd: 20 / rate },
+      { accountCode: '2.1.2.01', debitBs: 30, creditBs: 0, debitUsd: 30 / rate, creditUsd: 0 },
+      { accountCode: '2.1.2.09', debitBs: 0, creditBs: 110, debitUsd: 0, creditUsd: 110 / rate }
+    ]
+  };
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next, journalEntries: [wrongJournal]
+  }), /líneas por cuenta no coinciden con la posición fiscal/);
+});
+
 test('SQLite rechecks fiscal source snapshots at the exact moment an IVA draft is filed', () => {
   const purchase = {
     id: 'purchase-iva-source', companyId: 'company-1', invoiceDate: '2026-10-05',
