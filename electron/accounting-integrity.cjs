@@ -1083,11 +1083,40 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
               let filedNote;
               try { filedNote = JSON.parse(raw); } catch { continue; }
               if (filedNote?.kind !== 'PURCHASE' || String(filedNote.documentType) !== '03') continue;
-              const linked = String(filedNote.originalPurchaseId || '') === originalId ||
-                asArray(filed.relatedSourceIds).map(String).includes(originalId);
+              const filedRelatedIds = asArray(filed.relatedSourceIds).map(String);
+              const explicitOriginalId = String(filedNote.originalPurchaseId || '');
+              const linked = explicitOriginalId
+                ? explicitOriginalId === originalId
+                : filedRelatedIds.includes(originalId);
               if (!linked) continue;
               if (counted.has(filedId)) {
                 throw new Error('SQLite rechazó una nota de crédito histórica presentada más de una vez.');
+              }
+              const historicalNoteDate = String(filedNote.invoiceDate || '');
+              const historicalNoteVat = Number(filedNote.vatAmountBs);
+              const historicalNoteRate = Number(filedNote.taxRate);
+              const originalSupplierRif = normalizeRif(originalFields.supplierRif);
+              if (String(filedNote.id || '') !== String(filedId) ||
+                  !validVatDeclarationDate(historicalNoteDate) ||
+                  historicalNoteDate.slice(0, 7) !== String(filed.period) ||
+                  !Number.isFinite(historicalNoteVat) || historicalNoteVat < 0 ||
+                  !Number.isFinite(historicalNoteRate) || historicalNoteRate !== Number(originalFields.taxRate) ||
+                  !originalSupplierRif || normalizeRif(filedNote.supplierRif) !== originalSupplierRif ||
+                  (explicitOriginalId && explicitOriginalId !== originalId) ||
+                  (!explicitOriginalId && !filedRelatedIds.includes(originalId)) ||
+                  (filedNote.affectedInvoiceNumber &&
+                    normalizeRif(filedNote.affectedInvoiceNumber) !== normalizeRif(originalFields.invoiceNumber)) ||
+                  (filedNote.affectedInvoiceDate && filedNote.affectedInvoiceDate !== originalFields.invoiceDate) ||
+                  (filedNote.affectedInvoiceControlNumber &&
+                    normalizeRif(filedNote.affectedInvoiceControlNumber) !== normalizeRif(originalFields.controlNumber))) {
+                throw new Error('SQLite rechazó una nota de crédito histórica cuya huella no coincide con el proveedor, alícuota, factura original o período presentado.');
+              }
+              for (const field of ['totalAmountBs', 'taxableBaseBs', 'exemptAmountBs', 'additionalLuxuryTaxBs']) {
+                if (filedNote[field] === undefined || filedNote[field] === null) continue;
+                const amount = Number(filedNote[field]);
+                if (!Number.isFinite(amount) || amount < 0) {
+                  throw new Error('SQLite rechazó importes históricos inválidos en una nota de crédito de compras presentada.');
+                }
               }
               counted.add(filedId);
               priorNotes.push(filedNote);
