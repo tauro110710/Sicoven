@@ -2238,6 +2238,40 @@ test('SQLite rejects negative monetary components in an IVA declaration position
   }), /posición fiscal IVA con importes no finitos, negativos o incompatibles/);
 });
 
+test('SQLite recalculates IVA sales position from selected original fiscal documents', () => {
+  const fixture = vatOwnDeclarationFixture();
+  const sale = {
+    id: 'sale-iva-trace-1', companyId: 'company-1', invoiceDate: '2026-11-05',
+    documentType: '01', invoiceNumber: 'F-IVA-TRACE-1', controlNumber: 'CTRL-IVA-TRACE-1',
+    taxableBaseBs: 625, exemptAmountBs: 0, taxRate: 16, vatAmountBs: 100,
+    vatWithheldBs: 0, retentionVoucherDate: null, isCancelled: false
+  };
+  const snapshot = JSON.stringify({
+    kind: 'SALE', id: sale.id, invoiceDate: sale.invoiceDate, documentType: sale.documentType,
+    invoiceNumber: sale.invoiceNumber, controlNumber: sale.controlNumber,
+    taxableBaseBs: sale.taxableBaseBs, exemptAmountBs: sale.exemptAmountBs,
+    taxRate: sale.taxRate, vatAmountBs: sale.vatAmountBs
+  });
+  const declaration = {
+    ...fixture.vatOwnDeclarations[0],
+    sourceIds: [sale.id], sourceSnapshots: { [sale.id]: snapshot },
+    position: vatOwnPositionFixture()
+  };
+  const valid = { ...fixture, sales: [sale], vatOwnDeclarations: [declaration] };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), valid));
+
+  const internallyBalancedButMisstated = {
+    ...declaration,
+    position: vatOwnPositionFixture({
+      outputVatBs: 90, outputVat16Bs: 90, taxableSalesBaseBs: 562.5,
+      netTaxBs: 90, amountDueBs: 90
+    })
+  };
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...valid, vatOwnDeclarations: [internallyBalancedButMisstated]
+  }), /débito fiscal, las bases gravadas o las ventas exentas no corresponden/);
+});
+
 test('SQLite accepts a new IVA own-account draft with exact fiscal source snapshots', () => {
   assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), vatOwnDeclarationFixture()));
 });
