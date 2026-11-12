@@ -2325,6 +2325,40 @@ test('SQLite requires the filed IVA own-account declaration to have exactly one 
     }))
   };
   assert.throws(() => validateAccountingSnapshot(priorDraft, balancedWrongAccounts), /líneas por cuenta no coinciden con la posición fiscal/);
+
+  const nonFiniteLine = {
+    ...filed,
+    journalEntries: filed.journalEntries.map(entry => ({
+      ...entry,
+      items: entry.items.map((line, index) => index === 0
+        ? { ...line, debitUsd: 'NaN' }
+        : line)
+    }))
+  };
+  assert.throws(() => validateAccountingSnapshot(priorDraft, nonFiniteLine), /contiene líneas contables inválidas/);
+
+  const blankAccountLine = {
+    ...filed,
+    journalEntries: filed.journalEntries.map(entry => ({
+      ...entry,
+      items: [...entry.items, {
+        accountCode: ' ', debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0
+      }]
+    }))
+  };
+  assert.throws(() => validateAccountingSnapshot(priorDraft, blankAccountLine), /contiene líneas contables inválidas/);
+
+  const compensatedNegativeLine = {
+    ...filed,
+    journalEntries: filed.journalEntries.map(entry => ({
+      ...entry,
+      items: [...entry.items,
+        { accountCode: '2.1.2.01', debitBs: -1, creditBs: 0, debitUsd: -1 / 874, creditUsd: 0 },
+        { accountCode: '2.1.2.01', debitBs: 1, creditBs: 0, debitUsd: 1 / 874, creditUsd: 0 }
+      ]
+    }))
+  };
+  assert.throws(() => validateAccountingSnapshot(priorDraft, compensatedNegativeLine), /contiene líneas contables inválidas/);
 });
 
 test('SQLite enforces prior-period continuity and blocks a later filing before an earlier active month', () => {
