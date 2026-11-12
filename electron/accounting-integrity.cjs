@@ -780,6 +780,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     if (Math.abs(debitBs - creditBs) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.000001) {
       throw new Error('SQLite rechazó reclasificaciones de IVA no acreditable que no cuadran en ambas monedas.');
     }
+    const sourceSnapshots = declaration.sourceSnapshots || {};
     if (declaration.sourceSnapshots) {
       const p = position;
       const near = (actual, expected, tolerance = 0.02) =>
@@ -799,7 +800,6 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
       // Rebuild the monthly sales position from immutable fiscal source snapshots.
       // A balanced position is not sufficient if its sales/VAT components do not
       // correspond to the selected daily Z or individual-invoice sources.
-      const sourceSnapshots = declaration.sourceSnapshots || {};
       const dailySales = new Map();
       const addFiscalAmount = (value, label) => {
         const normalized = Number(value ?? 0);
