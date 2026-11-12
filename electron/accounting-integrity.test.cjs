@@ -2362,58 +2362,70 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
     supplierRif: 'J-12345678-9', supplierName: 'Proveedor Uno',
     totalAmountBs: 1160, totalAmountUsd: 1.33, taxableBaseBs: 1000, taxableBaseUsd: 1.14,
     exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 160, vatAmountUsd: 0.18,
-    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,\n    igtfAmountBs: 0, igtfAmountUsd: 0, vatCreditTreatment: 'TAXABLE',\n    vatWithheldBs: 0, vatWithheldUsd: 0, retentionRate: 0, voucherNumber: null, bcvRate: 874, journalEntryId: null,
-    originalPurchaseId: null, affectedInvoiceNumber: null, affectedInvoiceDate: null,
-    affectedInvoiceControlNumber: null, affectedInvoiceTotalAmountBs: null, affectedInvoiceTotalAmountUsd: null,\n    inventoryLines: [], creditNoteLines: [], isCancelled: false
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,
+    igtfAmountBs: 0, igtfAmountUsd: 0, vatCreditTreatment: 'TAXABLE',
+    vatWithheldBs: 0, vatWithheldUsd: 0, retentionRate: 0, voucherNumber: null, bcvRate: 874,
+    journalEntryId: null, originalPurchaseId: null, affectedInvoiceNumber: null, affectedInvoiceDate: null,
+    affectedInvoiceControlNumber: null, affectedInvoiceTotalAmountBs: null, affectedInvoiceTotalAmountUsd: null,
+    inventoryLines: [], creditNoteLines: [], isCancelled: false
   };
-  const originalSnapshot = JSON.stringify({
-    kind: 'PURCHASE', id: original.id, invoiceDate: original.invoiceDate,
-    documentType: '01', invoiceNumber: original.invoiceNumber, controlNumber: original.controlNumber,
-    supplierRif: original.supplierRif, supplierName: original.supplierName,
-    totalAmountBs: 1160, totalAmountUsd: 1.33, taxableBaseBs: 1000, taxableBaseUsd: 1.14,
-    exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 160, vatAmountUsd: 0.18,
-    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, vatCreditTreatment: 'TAXABLE',
-    originalPurchaseId: null, affectedInvoiceNumber: null, affectedInvoiceDate: null,
-    affectedInvoiceControlNumber: null, inventoryLines: [], creditNoteLines: [], isCancelled: false
-  });
   const note = {
     id: 'purchase-prior-vat-note', companyId: 'company-1', invoiceDate: '2026-11-06',
     accountCreditDate: null, documentType: '03', invoiceNumber: 'NC-ORIGINAL-IVA', controlNumber: 'CTRL-NC-IVA',
     supplierRif: original.supplierRif, supplierName: original.supplierName,
     totalAmountBs: 290, totalAmountUsd: 0.33, taxableBaseBs: 250, taxableBaseUsd: 0.29,
     exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 40, vatAmountUsd: 0.05,
-    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,\n    igtfAmountBs: 0, igtfAmountUsd: 0, vatCreditTreatment: 'COMMON',\n    vatWithheldBs: 0, vatWithheldUsd: 0, retentionRate: 0, voucherNumber: null, bcvRate: 874, journalEntryId: null,
-    originalPurchaseId: original.id, affectedInvoiceNumber: original.invoiceNumber,
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,
+    igtfAmountBs: 0, igtfAmountUsd: 0, vatCreditTreatment: 'COMMON',
+    vatWithheldBs: 0, vatWithheldUsd: 0, retentionRate: 0, voucherNumber: null, bcvRate: 874,
+    journalEntryId: null, originalPurchaseId: original.id, affectedInvoiceNumber: original.invoiceNumber,
     affectedInvoiceDate: original.invoiceDate, affectedInvoiceControlNumber: original.controlNumber,
+    affectedInvoiceTotalAmountBs: null, affectedInvoiceTotalAmountUsd: null,
     inventoryLines: [], creditNoteLines: [], isCancelled: false
   };
-  const noteSnapshot = JSON.stringify({
-    kind: 'PURCHASE', id: note.id, invoiceDate: note.invoiceDate,
-    documentType: '03', invoiceNumber: note.invoiceNumber, controlNumber: note.controlNumber,
-    supplierRif: note.supplierRif, supplierName: note.supplierName,
-    totalAmountBs: 290, totalAmountUsd: 0.33, taxableBaseBs: 250, taxableBaseUsd: 0.29,
-    exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 40, vatAmountUsd: 0.05,
-    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, vatCreditTreatment: 'COMMON',
-    originalPurchaseId: original.id, affectedInvoiceNumber: original.invoiceNumber,
-    affectedInvoiceDate: original.invoiceDate, affectedInvoiceControlNumber: original.controlNumber,
-    inventoryLines: [], creditNoteLines: [], isCancelled: false
+  const snapshot = purchase => JSON.stringify({
+    kind: 'PURCHASE', id: purchase.id, invoiceDate: purchase.invoiceDate,
+    accountCreditDate: purchase.accountCreditDate || null, documentType: purchase.documentType,
+    invoiceNumber: purchase.invoiceNumber, controlNumber: purchase.controlNumber,
+    supplierRif: purchase.supplierRif, supplierName: purchase.supplierName,
+    totalAmountBs: purchase.totalAmountBs, totalAmountUsd: purchase.totalAmountUsd,
+    taxableBaseBs: purchase.taxableBaseBs, taxableBaseUsd: purchase.taxableBaseUsd,
+    exemptAmountBs: purchase.exemptAmountBs, exemptAmountUsd: purchase.exemptAmountUsd || 0,
+    taxRate: purchase.taxRate, vatAmountBs: purchase.vatAmountBs, vatAmountUsd: purchase.vatAmountUsd,
+    additionalLuxuryTaxBs: purchase.additionalLuxuryTaxBs || 0, additionalLuxuryTaxUsd: purchase.additionalLuxuryTaxUsd || 0,
+    igtfApplicable: Boolean(purchase.igtfApplicable), igtfRate: purchase.igtfRate || 0,
+    igtfAmountBs: purchase.igtfAmountBs || 0, igtfAmountUsd: purchase.igtfAmountUsd || 0,
+    vatCreditTreatment: purchase.vatCreditTreatment || 'COMMON',
+    vatWithheldBs: purchase.vatWithheldBs, vatWithheldUsd: purchase.vatWithheldUsd,
+    retentionRate: purchase.retentionRate || 0, voucherNumber: purchase.voucherNumber || null,
+    bcvRate: purchase.bcvRate, journalEntryId: purchase.journalEntryId || null,
+    originalPurchaseId: purchase.originalPurchaseId || null,
+    affectedInvoiceNumber: purchase.affectedInvoiceNumber || null,
+    affectedInvoiceDate: purchase.affectedInvoiceDate || null,
+    affectedInvoiceControlNumber: purchase.affectedInvoiceControlNumber || null,
+    affectedInvoiceTotalAmountBs: purchase.affectedInvoiceTotalAmountBs ?? null,
+    affectedInvoiceTotalAmountUsd: purchase.affectedInvoiceTotalAmountUsd ?? null,
+    inventoryLines: purchase.inventoryLines.map(line => ({ ...line })),
+    creditNoteLines: purchase.creditNoteLines.map(line => ({ ...line })),
+    isCancelled: Boolean(purchase.isCancelled), journal: null
   });
+  const originalSnapshot = snapshot(original);
+  const noteSnapshot = snapshot(note);
   const priorDeclaration = {
     ...filed.vatOwnDeclarations[0],
     sourceIds: [original.id], relatedSourceIds: [],
     sourceSnapshots: { [original.id]: originalSnapshot },
     position: vatOwnPositionFixture({ prorationRate: 1, creditCarryForwardBs: 0 })
   };
-  const currentPosition = vatOwnPositionFixture({
-    purchaseCreditReversalBs: 40, purchaseCreditReversal16Bs: 40,
-    netTaxBs: 140, amountDueBs: 140
-  });
   const currentDeclaration = {
     ...vatOwnDeclarationFixture().vatOwnDeclarations[0],
     id: 'vat-own-nov-credit-note',
     sourceIds: [note.id], relatedSourceIds: [original.id],
     sourceSnapshots: { [note.id]: noteSnapshot, [original.id]: originalSnapshot },
-    position: currentPosition
+    position: vatOwnPositionFixture({
+      purchaseCreditReversalBs: 40, purchaseCreditReversal16Bs: 40,
+      netTaxBs: 140, amountDueBs: 140
+    })
   };
   const previous = {
     ...filed, purchases: [original, note],
@@ -2426,18 +2438,13 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
   };
   assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
 
-  const excessiveNote = {
-    ...note, vatAmountBs: 180, totalAmountBs: 1305, taxableBaseBs: 1125
-  };
-  const excessiveSnapshot = JSON.stringify({
-    ...JSON.parse(noteSnapshot), vatAmountBs: 180, totalAmountBs: 1305, taxableBaseBs: 1125
-  });
+  const excessiveNote = { ...note, vatAmountBs: 180, totalAmountBs: 1305, taxableBaseBs: 1125 };
   assert.throws(() => validateAccountingSnapshot(previous, {
     ...next,
     purchases: [original, excessiveNote],
     vatOwnDeclarations: [priorDeclaration, {
       ...currentDeclaration,
-      sourceSnapshots: { [note.id]: excessiveSnapshot, [original.id]: originalSnapshot },
+      sourceSnapshots: { [note.id]: snapshot(excessiveNote), [original.id]: originalSnapshot },
       position: vatOwnPositionFixture({
         purchaseCreditReversalBs: 180, purchaseCreditReversal16Bs: 180,
         netTaxBs: 280, amountDueBs: 280
