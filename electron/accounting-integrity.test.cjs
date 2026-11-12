@@ -2346,6 +2346,68 @@ test('SQLite accepts a prior-month sale selected only for a current-month receiv
   }), /fecha fiscal no pertenece al período mensual declarado ni respalda una retención recibida del período/);
 });
 
+test('SQLite reconstructs withholding increases and reversals issued by current-period sales notes', () => {
+  const fixture = vatOwnDeclarationFixture();
+  const invoice = {
+    id: 'sale-withholding-adjustment-invoice', companyId: 'company-1',
+    invoiceDate: '2026-11-05', documentType: '01',
+    invoiceNumber: 'F-WITHHOLDING-BASE', taxRate: 16,
+    taxableBaseBs: 625, exemptAmountBs: 0, vatAmountBs: 100,
+    vatWithheldBs: 40, retentionVoucherNumber: 'RET-WITHHOLDING-BASE',
+    retentionVoucherDate: '2026-11-08', isCancelled: false
+  };
+  const creditNote = {
+    id: 'sale-withholding-adjustment-credit', companyId: 'company-1',
+    invoiceDate: '2026-11-10', documentType: '03',
+    invoiceNumber: 'NC-WITHHOLDING-ADJUSTMENT', taxRate: 16,
+    taxableBaseBs: 0, exemptAmountBs: 0, vatAmountBs: 0,
+    vatWithheldBs: 60, isCancelled: false
+  };
+  const snapshot = item => JSON.stringify({
+    kind: 'SALE', id: item.id, invoiceDate: item.invoiceDate,
+    documentType: item.documentType, invoiceNumber: item.invoiceNumber,
+    taxRate: item.taxRate, taxableBaseBs: item.taxableBaseBs,
+    exemptAmountBs: item.exemptAmountBs, vatAmountBs: item.vatAmountBs,
+    vatWithheldBs: item.vatWithheldBs,
+    retentionVoucherNumber: item.retentionVoucherNumber || null,
+    retentionVoucherDate: item.retentionVoucherDate || null,
+    isCancelled: false
+  });
+  const declaration = {
+    ...fixture.vatOwnDeclarations[0],
+    id: 'vat-own-2026-11-note-retention-adjustment', period: '2026-11',
+    sourceIds: [invoice.id, creditNote.id], relatedSourceIds: [],
+    sourceSnapshots: {
+      [invoice.id]: snapshot(invoice), [creditNote.id]: snapshot(creditNote)
+    },
+    position: vatOwnPositionFixture({
+      outputVatBs: 100, outputVat16Bs: 100, outputVat8Bs: 0,
+      taxableSalesBaseBs: 625, exemptSalesBaseBs: 0,
+      receivedWithholdingsBs: 0, debitAdjustmentsBs: 20,
+      netTaxBs: 120, amountDueBs: 120
+    })
+  };
+  const priorFiled = vatOwnFiledState();
+  const previous = { ...priorFiled, sales: [invoice, creditNote] };
+  const next = {
+    ...priorFiled, sales: [invoice, creditNote],
+    vatOwnDeclarations: [...priorFiled.vatOwnDeclarations, declaration]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next,
+    vatOwnDeclarations: [{
+      ...declaration,
+      position: vatOwnPositionFixture({
+        outputVatBs: 100, outputVat16Bs: 100, outputVat8Bs: 0,
+        taxableSalesBaseBs: 625, exemptSalesBaseBs: 0,
+        receivedWithholdingsBs: 0, debitAdjustmentsBs: 0,
+        netTaxBs: 100, amountDueBs: 100
+      })
+    }]
+  }), /retenciones IVA recibidas y sus ajustes/);
+});
+
 test('SQLite recalculates ordinary purchase credit from immutable invoice snapshots and proration', () => {
   const fixture = vatOwnDeclarationFixture();
   const purchase = {
