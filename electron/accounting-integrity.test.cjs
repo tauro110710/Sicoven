@@ -2305,6 +2305,12 @@ test('SQLite requires the filed IVA own-account declaration to have exactly one 
       ...filed.vatOwnDeclarationEvents[0], declarationNumber: 'OTRO-NÚMERO'
     }]
   }), /número, fecha o asiento de determinación coincidente/);
+  const wrongDeterminationRate = {
+    ...filed,
+    journalEntries: filed.journalEntries.map(entry => ({ ...entry, bcvRate: 875 }))
+  };
+  assert.throws(() => validateAccountingSnapshot(priorDraft, wrongDeterminationRate),
+    /número, fecha o asiento de determinación coincidente/);
   const unbalancedUsd = {
     ...filed,
     journalEntries: filed.journalEntries.map(entry => ({
