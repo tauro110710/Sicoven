@@ -923,7 +923,6 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           }
         }
       }
-    }
       // Rebuild ordinary current-period purchase credit directly from immutable
       // invoice snapshots. Credit-note chains are handled by the dedicated
       // historical reconciliation path; do not approximate those cases here.
@@ -976,6 +975,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           throw new Error('SQLite rechazó el crédito fiscal de compras: los importes brutos, acreditables y no acreditables no corresponden a las facturas seleccionadas.');
         }
       }
+    }
     const revisions = normalizeRevisions(declaration.revisions);
     if (revisions.some((revision, index) => revision.revision !== index + 1 ||
         !timestampIsValid(revision.revisedAt) || !String(revision.reason || '').trim() ||
