@@ -185,6 +185,16 @@ div.fixed.inset-0[class*="z-"] > div {
   z-index: 2;
   flex: 0 0 auto;
 }
+.sicoven-modal-content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 0.85rem;
+}
+.sicoven-modal-content > div:nth-child(-n+3),
+.sicoven-modal-content > div:has(> .rounded-xl.border-emerald-200) {
+  grid-column: 1 / -1;
+}
 .sicoven-modal-content,
 div.fixed.inset-0[class*="z-"] > div > form {
   min-height: 0;
@@ -219,6 +229,9 @@ div.fixed.inset-0[class*="z-"] > div > form textarea {
     max-width: 100% !important;
     max-height: calc(100dvh - 0.8rem);
     border-radius: 0.85rem;
+  }
+  .sicoven-modal-content {
+    grid-template-columns: minmax(0, 1fr);
   }
   .sicoven-modal-content,
   div.fixed.inset-0[class*="z-"] > div > form {
