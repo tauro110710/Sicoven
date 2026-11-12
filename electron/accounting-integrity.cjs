@@ -796,6 +796,88 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
         return snapshot?.kind === 'PURCHASE' && ['01', '02'].includes(String(snapshot.documentType)) &&
           snapshot.vatCreditTreatment === 'COMMON' && Number(snapshot.vatAmountBs || 0) > 0;
       });
+      // Rebuild the monthly sales position from immutable fiscal source snapshots.
+      // A balanced position is not sufficient if its sales/VAT components do not
+      // correspond to the selected daily Z or individual-invoice sources.
+      const sourceSnapshots = declaration.sourceSnapshots || {};
+      const dailySales = new Map();
+      const addFiscalAmount = (value, label) => {
+        const normalized = Number(value ?? 0);
+        if (!Number.isFinite(normalized) || normalized < 0) {
+          throw new Error('SQLite rechazó un importe fiscal inválido en las fuentes de ventas IVA (' + label + ').');
+        }
+        return normalized;
+      };
+      const getDaily = date => {
+        if (!validVatDeclarationDate(date) || String(date).slice(0, 7) !== period) {
+          throw new Error('SQLite rechazó una fuente de ventas IVA con fecha fuera del período declarado.');
+        }
+        if (!dailySales.has(date)) dailySales.set(date, { z: null, individual: null });
+        return dailySales.get(date);
+      };
+      let hasSalesSources = false;
+      for (const sourceId of sourceIds) {
+        const raw = sourceSnapshots[sourceId];
+        if (typeof raw !== 'string') continue;
+        const source = JSON.parse(raw);
+        if (source.kind === 'Z') {
+          hasSalesSources = true;
+          const report = source.fiscalZReport || {};
+          const day = getDaily(String(report.date || source.date || ''));
+          if (!day.z) day.z = { vat16: 0, vat8: 0, base16: 0, base8: 0, base31: 0, exempt: 0 };
+          day.z.base16 += addFiscalAmount(report.taxableBase16Bs, 'base Z 16%');
+          day.z.base8 += addFiscalAmount(report.taxableBase8Bs, 'base Z 8%');
+          day.z.base31 += addFiscalAmount(report.taxableBase31Bs, 'base Z 31%');
+          day.z.vat16 += addFiscalAmount(report.vat16Bs, 'IVA Z 16%') + addFiscalAmount(report.vat31Bs, 'IVA Z 31%');
+          day.z.vat8 += addFiscalAmount(report.vat8Bs, 'IVA Z 8%');
+          day.z.exempt += addFiscalAmount(report.exemptSalesBs, 'ventas exentas Z');
+        } else if (source.kind === 'SALE') {
+          hasSalesSources = true;
+          const day = getDaily(String(source.invoiceDate || ''));
+          if (!day.individual) day.individual = { vat16: 0, vat8: 0, base16: 0, base8: 0, base31: 0, exempt: 0 };
+          const target = day.individual;
+          const sign = String(source.documentType) === '03' ? -1 : 1;
+          const taxRate = Number(source.taxRate);
+          const taxableBase = addFiscalAmount(source.taxableBaseBs, 'base imponible de venta');
+          const exemptAmount = addFiscalAmount(source.exemptAmountBs, 'base exenta de venta');
+          const vatAmount = addFiscalAmount(source.vatAmountBs, 'IVA de venta');
+          if (![0, 8, 16, 31].includes(taxRate) || !['01', '02', '03'].includes(String(source.documentType))) {
+            throw new Error('SQLite rechazó una fuente de ventas IVA con tipo documental o alícuota no reconocidos.');
+          }
+          if (taxRate === 8) target.vat8 += sign * vatAmount;
+          else target.vat16 += sign * vatAmount;
+          target.exempt += sign * (exemptAmount + (taxRate === 0 ? taxableBase : 0));
+          if (taxRate === 8) target.base8 += sign * taxableBase;
+          else if (taxRate === 16) target.base16 += sign * taxableBase;
+          else if (taxRate === 31) target.base31 += sign * taxableBase;
+        }
+      }
+      if (hasSalesSources) {
+        let expectedOutputVat16 = 0, expectedOutputVat8 = 0;
+        let expectedTaxableSales = 0, expectedExemptSales = 0;
+        for (const [date, day] of dailySales) {
+          let selected = day.z || day.individual;
+          if (day.z && day.individual) {
+            const choice = declaration.dailySourceChoices?.[date];
+            if (!['Z', 'INDIVIDUAL'].includes(choice)) {
+              throw new Error('SQLite rechazó la declaración IVA: existe un día con ventas Z y facturas individuales sin selección fiscal expresa (' + date + ').');
+            }
+            selected = choice === 'Z' ? day.z : day.individual;
+          }
+          if (!selected) continue;
+          expectedOutputVat16 += selected.vat16;
+          expectedOutputVat8 += selected.vat8;
+          expectedTaxableSales += selected.base16 + selected.base8 + selected.base31;
+          expectedExemptSales += selected.exempt;
+        }
+        if (!near(p.outputVatBs, expectedOutputVat16 + expectedOutputVat8) ||
+            !near(p.outputVat16Bs, expectedOutputVat16) ||
+            !near(p.outputVat8Bs, expectedOutputVat8) ||
+            !near(p.taxableSalesBaseBs, expectedTaxableSales) ||
+            !near(p.exemptSalesBaseBs, expectedExemptSales)) {
+          throw new Error('SQLite rechazó la posición IVA: el débito fiscal, las bases gravadas o las ventas exentas no corresponden a los reportes Z y facturas individuales seleccionados.');
+        }
+      }
       const salesBase = Number(p.taxableSalesBaseBs) + Number(p.exemptSalesBaseBs);
       const expectedProrationRate = !hasCommonCurrentPurchases ? 1
         : salesBase > 0 ? Number(p.taxableSalesBaseBs) / salesBase : null;
