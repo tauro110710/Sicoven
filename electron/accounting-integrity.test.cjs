@@ -2354,6 +2354,97 @@ test('SQLite recalculates ordinary purchase credit from immutable invoice snapsh
   }), /crédito fiscal de compras: los importes brutos, acreditables y no acreditables no corresponden/);
 });
 
+test('SQLite rebuilds prior-period supplier credit-note reversals from the filed original invoice snapshot', () => {
+  const filed = vatOwnFiledState();
+  const original = {
+    id: 'purchase-prior-vat-note-original', companyId: 'company-1', invoiceDate: '2026-10-05',
+    documentType: '01', invoiceNumber: 'FC-ORIGINAL-IVA', controlNumber: 'CTRL-ORIGINAL-IVA',
+    supplierRif: 'J-12345678-9', supplierName: 'Proveedor Uno',
+    totalAmountBs: 1160, totalAmountUsd: 1.33, taxableBaseBs: 1000, taxableBaseUsd: 1.14,
+    exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 160, vatAmountUsd: 0.18,
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, vatCreditTreatment: 'TAXABLE',
+    originalPurchaseId: null, affectedInvoiceNumber: null, affectedInvoiceDate: null,
+    affectedInvoiceControlNumber: null, inventoryLines: [], creditNoteLines: [], isCancelled: false
+  };
+  const originalSnapshot = JSON.stringify({
+    kind: 'PURCHASE', id: original.id, invoiceDate: original.invoiceDate,
+    documentType: '01', invoiceNumber: original.invoiceNumber, controlNumber: original.controlNumber,
+    supplierRif: original.supplierRif, supplierName: original.supplierName,
+    totalAmountBs: 1160, totalAmountUsd: 1.33, taxableBaseBs: 1000, taxableBaseUsd: 1.14,
+    exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 160, vatAmountUsd: 0.18,
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, vatCreditTreatment: 'TAXABLE',
+    originalPurchaseId: null, affectedInvoiceNumber: null, affectedInvoiceDate: null,
+    affectedInvoiceControlNumber: null, inventoryLines: [], creditNoteLines: [], isCancelled: false
+  });
+  const note = {
+    id: 'purchase-prior-vat-note', companyId: 'company-1', invoiceDate: '2026-11-06',
+    documentType: '03', invoiceNumber: 'NC-ORIGINAL-IVA', controlNumber: 'CTRL-NC-IVA',
+    supplierRif: original.supplierRif, supplierName: original.supplierName,
+    totalAmountBs: 290, totalAmountUsd: 0.33, taxableBaseBs: 250, taxableBaseUsd: 0.29,
+    exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 40, vatAmountUsd: 0.05,
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, vatCreditTreatment: 'COMMON',
+    originalPurchaseId: original.id, affectedInvoiceNumber: original.invoiceNumber,
+    affectedInvoiceDate: original.invoiceDate, affectedInvoiceControlNumber: original.controlNumber,
+    inventoryLines: [], creditNoteLines: [], isCancelled: false
+  };
+  const noteSnapshot = JSON.stringify({
+    kind: 'PURCHASE', id: note.id, invoiceDate: note.invoiceDate,
+    documentType: '03', invoiceNumber: note.invoiceNumber, controlNumber: note.controlNumber,
+    supplierRif: note.supplierRif, supplierName: note.supplierName,
+    totalAmountBs: 290, totalAmountUsd: 0.33, taxableBaseBs: 250, taxableBaseUsd: 0.29,
+    exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 40, vatAmountUsd: 0.05,
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, vatCreditTreatment: 'COMMON',
+    originalPurchaseId: original.id, affectedInvoiceNumber: original.invoiceNumber,
+    affectedInvoiceDate: original.invoiceDate, affectedInvoiceControlNumber: original.controlNumber,
+    inventoryLines: [], creditNoteLines: [], isCancelled: false
+  });
+  const priorDeclaration = {
+    ...filed.vatOwnDeclarations[0],
+    sourceIds: [original.id], relatedSourceIds: [],
+    sourceSnapshots: { [original.id]: originalSnapshot },
+    position: vatOwnPositionFixture({ prorationRate: 1, creditCarryForwardBs: 0 })
+  };
+  const currentPosition = vatOwnPositionFixture({
+    purchaseCreditReversalBs: 40, purchaseCreditReversal16Bs: 40,
+    netTaxBs: 140, amountDueBs: 140
+  });
+  const currentDeclaration = {
+    ...vatOwnDeclarationFixture().vatOwnDeclarations[0],
+    sourceIds: [note.id], relatedSourceIds: [original.id],
+    sourceSnapshots: { [note.id]: noteSnapshot, [original.id]: originalSnapshot },
+    position: currentPosition
+  };
+  const previous = {
+    ...filed, purchases: [original],
+    vatOwnDeclarations: [priorDeclaration],
+    vatOwnDeclarationEvents: filed.vatOwnDeclarationEvents
+  };
+  const next = {
+    ...previous, purchases: [original, note],
+    vatOwnDeclarations: [priorDeclaration, currentDeclaration]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
+
+  const excessiveNote = {
+    ...note, vatAmountBs: 180, totalAmountBs: 1305, taxableBaseBs: 1125
+  };
+  const excessiveSnapshot = JSON.stringify({
+    ...JSON.parse(noteSnapshot), vatAmountBs: 180, totalAmountBs: 1305, taxableBaseBs: 1125
+  });
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next,
+    purchases: [original, excessiveNote],
+    vatOwnDeclarations: [priorDeclaration, {
+      ...currentDeclaration,
+      sourceSnapshots: { [note.id]: excessiveSnapshot, [original.id]: originalSnapshot },
+      position: vatOwnPositionFixture({
+        purchaseCreditReversalBs: 180, purchaseCreditReversal16Bs: 180,
+        netTaxBs: 280, amountDueBs: 280
+      })
+    }]
+  }), /notas de crédito acumuladas que exceden el IVA de la factura original/);
+});
+
 test('SQLite accepts a new IVA own-account draft with exact fiscal source snapshots', () => {
   assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), vatOwnDeclarationFixture()));
 });
