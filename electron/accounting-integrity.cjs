@@ -1503,16 +1503,33 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           !Number.isFinite(Number(event.bcvRate)) || Number(event.bcvRate) <= 0 ||
           historicalRate === null || Math.abs(historicalRate - Number(event.bcvRate)) > 0.000001 ||
           !treasuryAccount || eventDate < String(declaration.filedAt || '').slice(0, 10) ||
-          !journal || Math.abs(Number(journal.bcvRate) - Number(event.bcvRate)) > 0.000001 ||
+          !journal || !Number.isFinite(Number(journal.bcvRate)) || Number(journal.bcvRate) <= 0 ||
+          Math.abs(Number(journal.bcvRate) - Number(event.bcvRate)) > 0.000001 ||
           String(journal.referenceDoc || '') !== 'IVA-PAGO:' + declaration.id + ':' + reference) {
         throw new Error('SQLite rechazó un pago IVA sin saldo disponible, referencia única, tasa, cuenta de tesorería o asiento correspondiente.');
       }
       // El contra-asiento debe cancelar exactamente el pasivo y acreditar la
       // cuenta de tesorería indicada; no se admiten líneas compensatorias extra.
+      const declarationRate = Number(declaration.bcvRate);
+      const paymentRate = Number(event.bcvRate);
+      const historicalUsd = amount / declarationRate;
+      const paymentUsd = amount / paymentRate;
+      const fxDifferenceUsd = historicalUsd - paymentUsd;
       const expectedPaymentLines = new Map([
-        ['2.1.2.09', { debitBs: amount, creditBs: 0, debitUsd: amount / Number(event.bcvRate), creditUsd: 0 }],
-        [String(event.treasuryAccountCode), { debitBs: 0, creditBs: amount, debitUsd: 0, creditUsd: amount / Number(event.bcvRate) }]
+        ['2.1.2.09', { debitBs: amount, creditBs: 0, debitUsd: historicalUsd, creditUsd: 0 }],
+        [String(event.treasuryAccountCode), { debitBs: 0, creditBs: amount, debitUsd: 0, creditUsd: paymentUsd }]
       ]);
+      // La cancelación se registra al valor USD histórico del pasivo; la diferencia
+      // entre ese valor y el equivalente USD del desembolso es resultado cambiario.
+      if (fxDifferenceUsd > 0.000001) {
+        expectedPaymentLines.set('4.2.1.01', {
+          debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: fxDifferenceUsd
+        });
+      } else if (fxDifferenceUsd < -0.000001) {
+        expectedPaymentLines.set('6.1.1.08', {
+          debitBs: 0, creditBs: 0, debitUsd: Math.abs(fxDifferenceUsd), creditUsd: 0
+        });
+      }
       const actualPaymentLines = new Map();
       for (const line of asArray(journal.items)) {
         const code = String(line.accountCode || '');
