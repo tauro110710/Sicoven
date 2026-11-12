@@ -2363,7 +2363,7 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
     totalAmountBs: 1160, totalAmountUsd: 1.33, taxableBaseBs: 1000, taxableBaseUsd: 1.14,
     exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 160, vatAmountUsd: 0.18,
     additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,
-    igtfAmountBs: 0, igtfAmountUsd: 0, vatCreditTreatment: 'TAXABLE',
+    igtfAmountBs: 0, igtfAmountUsd: 0, vatCreditTreatment: 'COMMON',
     vatWithheldBs: 0, vatWithheldUsd: 0, retentionRate: 0, voucherNumber: null, bcvRate: 874,
     journalEntryId: null, originalPurchaseId: null, affectedInvoiceNumber: null, affectedInvoiceDate: null,
     affectedInvoiceControlNumber: null, affectedInvoiceTotalAmountBs: null, affectedInvoiceTotalAmountUsd: null,
@@ -2415,7 +2415,7 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
     ...filed.vatOwnDeclarations[0],
     sourceIds: [original.id], relatedSourceIds: [],
     sourceSnapshots: { [original.id]: originalSnapshot },
-    position: vatOwnPositionFixture({ prorationRate: 1, creditCarryForwardBs: 0 })
+    position: vatOwnPositionFixture({ prorationRate: 0.5, taxableSalesBaseBs: 625, exemptSalesBaseBs: 625, creditCarryForwardBs: 0 })
   };
   const currentDeclaration = {
     ...vatOwnDeclarationFixture().vatOwnDeclarations[0],
@@ -2423,8 +2423,9 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
     sourceIds: [note.id], relatedSourceIds: [original.id],
     sourceSnapshots: { [note.id]: noteSnapshot, [original.id]: originalSnapshot },
     position: vatOwnPositionFixture({
-      purchaseCreditReversalBs: 40, purchaseCreditReversal16Bs: 40,
-      netTaxBs: 140, amountDueBs: 140
+      purchaseCreditReversalBs: 20, purchaseCreditReversal16Bs: 20,
+      purchaseCreditReversalNonEligibleBs: 20, purchaseCreditReversalNonEligible16Bs: 20,
+      netTaxBs: 120, amountDueBs: 120
     })
   };
   const previous = {
@@ -2451,8 +2452,9 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
       sourceIds: [excessiveNote.id],
       sourceSnapshots: { [excessiveNote.id]: snapshot(excessiveNote), [original.id]: originalSnapshot },
       position: vatOwnPositionFixture({
-        purchaseCreditReversalBs: 180, purchaseCreditReversal16Bs: 180,
-        netTaxBs: 280, amountDueBs: 280
+        purchaseCreditReversalBs: 90, purchaseCreditReversal16Bs: 90,
+        purchaseCreditReversalNonEligibleBs: 90, purchaseCreditReversalNonEligible16Bs: 90,
+        netTaxBs: 190, amountDueBs: 190
       })
     }]
   }), /notas de crédito acumuladas que exceden el IVA de la factura original/);
