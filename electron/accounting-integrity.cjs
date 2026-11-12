@@ -884,7 +884,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
       }
       // Customer VAT withholdings are recognized by the received certificate date,
       // independently of the invoice date used to select daily sales.
-      let expectedReceivedWithholdings = 0;
+      let receivedWithholdingsRaw = 0;
       for (const [sourceId, raw] of Object.entries(sourceSnapshots)) {
         if (typeof raw !== 'string') continue;
         let source;
@@ -893,18 +893,32 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
         const withheld = addFiscalAmount(source.vatWithheldBs, 'retención IVA recibida');
         if (withheld <= 0) continue;
         const documentType = String(source.documentType || '01');
-        if (documentType !== '01') {
-          throw new Error('SQLite rechazó una retención IVA recibida asociada a una nota de débito o crédito que no conserva un comprobante independiente válido.');
+        if (documentType === '01') {
+          const voucherDate = String(source.retentionVoucherDate || '');
+          const voucherNumber = String(source.retentionVoucherNumber || '').trim();
+          if (!validVatDeclarationDate(voucherDate) || !voucherNumber) {
+            throw new Error('SQLite rechazó una retención IVA recibida sin número y fecha válidos de comprobante.');
+          }
+          if (voucherDate.slice(0, 7) === period) receivedWithholdingsRaw += withheld;
+        } else if (documentType === '02' || documentType === '03') {
+          // Las notas correctivas ajustan la retención de su propia factura en
+          // el período de emisión; no heredan el comprobante de la factura original.
+          const correctionDate = String(source.invoiceDate || '');
+          if (!validVatDeclarationDate(correctionDate)) {
+            throw new Error('SQLite rechazó un ajuste de retención IVA de nota correctiva con fecha documental inválida.');
+          }
+          if (correctionDate.slice(0, 7) === period) {
+            receivedWithholdingsRaw += (documentType === '03' ? -1 : 1) * withheld;
+          }
+        } else {
+          throw new Error('SQLite rechazó una fuente de retención IVA con tipo documental no reconocido.');
         }
-        const voucherDate = String(source.retentionVoucherDate || '');
-        const voucherNumber = String(source.retentionVoucherNumber || '').trim();
-        if (!validVatDeclarationDate(voucherDate) || !voucherNumber) {
-          throw new Error('SQLite rechazó una retención IVA recibida sin número y fecha válidos de comprobante.');
-        }
-        if (voucherDate.slice(0, 7) === period) expectedReceivedWithholdings += withheld;
       }
-      if (!near(p.receivedWithholdingsBs, expectedReceivedWithholdings)) {
-        throw new Error('SQLite rechazó las retenciones IVA recibidas: el importe declarado no corresponde a los comprobantes de retención seleccionados y fechados en el período.');
+      const expectedReceivedWithholdings = Math.max(0, receivedWithholdingsRaw);
+      const expectedDebitAdjustments = Math.max(0, -receivedWithholdingsRaw);
+      if (!near(p.receivedWithholdingsBs, expectedReceivedWithholdings) ||
+          !near(p.debitAdjustmentsBs, expectedDebitAdjustments)) {
+        throw new Error('SQLite rechazó las retenciones IVA recibidas y sus ajustes: los importes declarados no corresponden a los comprobantes y notas correctivas del período.');
       }
       const salesBase = Number(p.taxableSalesBaseBs) + Number(p.exemptSalesBaseBs);
       const expectedProrationRate = !hasCommonCurrentPurchases ? 1
