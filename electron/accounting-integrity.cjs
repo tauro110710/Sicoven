@@ -609,7 +609,8 @@ function validateVatDeclarationLedger(previousState, nextState) {
               Math.abs(actual.creditBs - expected.creditBs) > 0.01 ||
               (hasHistoricalUsd && (Math.abs(actual.debitUsd - expected.debitUsd) > 0.000001 ||
                 Math.abs(actual.creditUsd - expected.creditUsd) > 0.000001))) {
-            throw new Error('SQLite rechazó el enteramiento: las cuentas o importes del asiento no corresponden al pasivo y a los débitos bancarios vinculados.');
+            throw new Error('SQLite rechazó el enteramiento: las cuentas o importes del asiento no corresponden al pasivo y a los débitos bancarios vinculados (' +
+              code + '; esperado ' + JSON.stringify(expected) + '; recibido ' + JSON.stringify(actual) + ').');
           }
         }
         if (hasHistoricalUsd && Math.abs(Number(journal.bcvRate) - Number(bankMovementsById.get(String(movementIds[0]))?.bcvRate)) > 0.000001) {
