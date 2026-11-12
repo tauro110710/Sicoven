@@ -157,6 +157,75 @@
   }
 }
 
+
+/* SICOVEN desktop dialogs: use the available width, keep readable controls,
+   and scroll the dialog body instead of shrinking the whole application. */
+.sicoven-modal-overlay,
+div.fixed.inset-0.z-50 {
+  display: block !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  padding: clamp(0.5rem, 2vh, 1.25rem) !important;
+}
+.sicoven-modal-panel,
+div.fixed.inset-0.z-50 > div {
+  width: min(100%, 76rem) !important;
+  max-width: 76rem !important;
+  max-height: calc(100dvh - 2.5rem);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.sicoven-modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  flex: 0 0 auto;
+}
+.sicoven-modal-content,
+div.fixed.inset-0.z-50 > div > form {
+  min-height: 0;
+  max-height: calc(100dvh - 7rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+  font-size: 0.875rem;
+}
+.sicoven-modal-content label,
+div.fixed.inset-0.z-50 > div > form label {
+  line-height: 1.4;
+}
+.sicoven-modal-content input,
+.sicoven-modal-content select,
+.sicoven-modal-content textarea,
+div.fixed.inset-0.z-50 > div > form input,
+div.fixed.inset-0.z-50 > div > form select,
+div.fixed.inset-0.z-50 > div > form textarea {
+  min-height: 2.35rem;
+  font-size: 0.875rem;
+}
+@media (max-width: 720px) {
+  .sicoven-modal-overlay,
+  div.fixed.inset-0.z-50 {
+    padding: 0.4rem !important;
+  }
+  .sicoven-modal-panel,
+  div.fixed.inset-0.z-50 > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: calc(100dvh - 0.8rem);
+    border-radius: 0.85rem;
+  }
+  .sicoven-modal-content,
+  div.fixed.inset-0.z-50 > div > form {
+    max-height: calc(100dvh - 5.5rem);
+    padding: 1rem;
+  }
+}
+
 @media print {
   @page {
     size: letter;
