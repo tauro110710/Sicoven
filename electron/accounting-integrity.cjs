@@ -1055,7 +1055,9 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           String(declaration.declarationNumber || '').trim() !== String(event.declarationNumber || '').trim() ||
           declaration.filedAt.slice(0, 10) !== eventDate ||
           eventDate < declaration.period + '-01' ||
-          (journal && String(journal.referenceDoc || '') !== 'IVA-MENSUAL:' + declaration.period)) {
+          (journal && (String(journal.referenceDoc || '') !== 'IVA-MENSUAL:' + declaration.period ||
+            !Number.isFinite(Number(journal.bcvRate)) ||
+            Math.abs(Number(journal.bcvRate) - Number(declaration.bcvRate)) > 0.000001))) {
         throw new Error('SQLite rechazó la presentación IVA sin borrador presentado, número, fecha o asiento de determinación coincidente.');
       }
       if (journal) {
