@@ -44,7 +44,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   // en cada operación y queda asociada únicamente al documento que la utiliza.
   React.useEffect(() => {
     setBcvRateInput('');
-  }, [invoiceDate]);
+  }, [isOpen, invoiceDate]);
   const hasValidBcvRate = Number.isFinite(bcvRate) && bcvRate > 0;
   const [notes, setNotes] = useState<string>('');
   const [paymentTerm, setPaymentTerm] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
