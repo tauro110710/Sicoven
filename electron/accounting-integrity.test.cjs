@@ -2535,6 +2535,68 @@ test('SQLite accepts a versioned IVA own-account draft refresh and blocks mutati
   }), /declaración IVA ya presentada/);
 });
 
+test('SQLite applies only the latest filed IVA credit carry-forward to the next monthly declaration', () => {
+  const filed = vatOwnFiledState();
+  const purchase = {
+    id: 'purchase-iva-carry-forward', companyId: 'company-1',
+    invoiceDate: '2026-10-05', documentType: '01',
+    invoiceNumber: 'FC-CARRY-001', taxRate: 16,
+    vatAmountBs: 150, vatCreditTreatment: 'TAXABLE'
+  };
+  const purchaseSnapshot = JSON.stringify({
+    kind: 'PURCHASE', id: purchase.id, invoiceDate: purchase.invoiceDate,
+    documentType: purchase.documentType, invoiceNumber: purchase.invoiceNumber,
+    taxRate: purchase.taxRate, vatAmountBs: purchase.vatAmountBs,
+    vatCreditTreatment: purchase.vatCreditTreatment
+  });
+  const priorDeclaration = {
+    ...filed.vatOwnDeclarations[0],
+    sourceIds: [purchase.id], relatedSourceIds: [],
+    sourceSnapshots: { [purchase.id]: purchaseSnapshot },
+    position: vatOwnPositionFixture({
+      purchaseCreditBs: 150, purchaseCredit16Bs: 150,
+      purchaseCreditGrossBs: 150, purchaseCreditGross16Bs: 150,
+      outputVatBs: 100, outputVat16Bs: 100,
+      netTaxBs: -50, amountDueBs: 0, creditCarryForwardBs: 50
+    })
+  };
+  const priorJournal = {
+    ...filed.journalEntries[0],
+    items: [
+      { accountCode: '2.1.2.01', accountName: 'IVA débito', debitBs: 100, creditBs: 0, debitUsd: 100 / 874, creditUsd: 0 },
+      { accountCode: '1.1.3.01', accountName: 'IVA crédito fiscal', debitBs: 0, creditBs: 150, debitUsd: 0, creditUsd: 150 / 874 },
+      { accountCode: '1.1.3.01', accountName: 'IVA crédito fiscal', debitBs: 50, creditBs: 0, debitUsd: 50 / 874, creditUsd: 0 }
+    ]
+  };
+  const previous = {
+    ...filed, purchases: [purchase],
+    vatOwnDeclarations: [priorDeclaration],
+    journalEntries: [priorJournal]
+  };
+  const currentDeclaration = {
+    ...vatOwnDeclarationFixture().vatOwnDeclarations[0],
+    sourceIds: [], relatedSourceIds: [], sourceSnapshots: {},
+    position: vatOwnPositionFixture({
+      priorCreditAppliedBs: 50, netTaxBs: 50, amountDueBs: 50
+    })
+  };
+  const next = {
+    ...previous,
+    vatOwnDeclarations: [priorDeclaration, currentDeclaration]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
+
+  const wrongAppliedCredit = {
+    ...currentDeclaration,
+    position: vatOwnPositionFixture({
+      priorCreditAppliedBs: 40, netTaxBs: 60, amountDueBs: 60
+    })
+  };
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next, vatOwnDeclarations: [priorDeclaration, wrongAppliedCredit]
+  }), /crédito anterior, impuesto por enterar o saldo trasladable no concilia/);
+});
+
 test('SQLite blocks filing a current-month IVA return before the month has ended', () => {
   const prior = vatOwnDeclarationFixture();
   const declaration = {
