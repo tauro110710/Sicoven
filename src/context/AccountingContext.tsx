@@ -5700,13 +5700,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const withholdingRaw = withholdingRows.reduce((sum, item) =>
         sum + (item.documentType === '03' ? -1 : 1) * Number(item.vatWithheldBs || 0), 0);
       const withholdingBs = Math.max(0, withholdingRaw);
-      const taxableSalesBaseBs = resolution.days.reduce((sum, day) =>
+      // Las notas de crédito pueden reducir bases de períodos anteriores por
+      // encima de las ventas del mes. La base neta para prorrata no puede ser negativa.
+      const rawTaxableSalesBaseBs = resolution.days.reduce((sum, day) =>
         sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
-      const exemptSalesBaseBs = resolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
+      const rawExemptSalesBaseBs = resolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
+      const taxableSalesBaseBs = Math.max(0, rawTaxableSalesBaseBs);
+      const exemptSalesBaseBs = Math.max(0, rawExemptSalesBaseBs);
       const purchaseSummary = calculateVatOwnPurchaseCreditSummary({
         companyId: currentCompany.id, period: period, purchases: monthPurchases,
         allPurchases: purchases, priorDeclarations: vatOwnDeclarations,
-        taxableSalesBaseBs, exemptSalesBaseBs
+        taxableSalesBaseBs: rawTaxableSalesBaseBs, exemptSalesBaseBs: rawExemptSalesBaseBs
       });
       const prorationRate = purchaseSummary.prorationRate;
       const purchase16GrossBs = purchaseSummary.gross16Bs;
@@ -5842,13 +5846,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (resolution.unresolvedDates.length) {
         throw new Error('No se puede presentar: el borrador tiene nuevas fechas con fuentes de ventas coincidentes. Resuélvalas y actualice el borrador.');
       }
-      const currentTaxableBase = resolution.days.reduce((sum, day) =>
+      const currentRawTaxableBase = resolution.days.reduce((sum, day) =>
         sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
-      const currentExemptBase = resolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
+      const currentRawExemptBase = resolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
+      const currentTaxableBase = Math.max(0, currentRawTaxableBase);
+      const currentExemptBase = Math.max(0, currentRawExemptBase);
       const currentPurchaseSummary = calculateVatOwnPurchaseCreditSummary({
         companyId: currentCompany.id, period: declaration.period, purchases: periodPurchases,
         allPurchases: purchases, priorDeclarations: vatOwnDeclarations,
-        taxableSalesBaseBs: currentTaxableBase, exemptSalesBaseBs: currentExemptBase
+        taxableSalesBaseBs: currentRawTaxableBase, exemptSalesBaseBs: currentRawExemptBase
       });
       const currentOutputVat16Raw = resolution.days.reduce((sum, day) => sum + day.outputVat16Bs, 0);
       const currentOutputVat8Raw = resolution.days.reduce((sum, day) => sum + day.outputVat8Bs, 0);

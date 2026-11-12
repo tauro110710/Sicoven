@@ -780,25 +780,170 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     if (Math.abs(debitBs - creditBs) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.000001) {
       throw new Error('SQLite rechazó reclasificaciones de IVA no acreditable que no cuadran en ambas monedas.');
     }
+    const sourceSnapshots = declaration.sourceSnapshots || {};
+    const p = position;
+    const near = (actual, expected, tolerance = 0.02) =>
+      Number.isFinite(Number(actual)) && Math.abs(Number(actual) - Number(expected)) <= tolerance;
+    const addFiscalAmount = (value, label) => {
+      const normalized = Number(value ?? 0);
+      if (!Number.isFinite(normalized) || normalized < 0) {
+        throw new Error('SQLite rechazó un importe fiscal inválido en las fuentes IVA (' + label + ').');
+      }
+      return normalized;
+    };
     if (declaration.sourceSnapshots) {
-      const p = position;
-      const near = (actual, expected, tolerance = 0.02) =>
-        Number.isFinite(Number(actual)) && Math.abs(Number(actual) - Number(expected)) <= tolerance;
       const previousFiled = declarations.filter(item =>
         item.companyId === companyId && item.status === 'FILED' && item.period < period
       ).sort((a, b) => b.period.localeCompare(a.period))[0];
       const priorCreditAvailable = Number(previousFiled?.position?.creditCarryForwardBs || 0);
-      const hasCommonCurrentPurchases = asArray(declaration.sourceIds).some(sourceId => {
+      const hasCommonCurrentPurchases = [...new Set([...sourceIds, ...relatedIds])].some(sourceId => {
         const raw = declaration.sourceSnapshots?.[sourceId];
         if (typeof raw !== 'string') return false;
         let snapshot;
         try { snapshot = JSON.parse(raw); } catch { return false; }
         return snapshot?.kind === 'PURCHASE' && ['01', '02'].includes(String(snapshot.documentType)) &&
+          String(snapshot.invoiceDate || '').slice(0, 7) === period &&
           snapshot.vatCreditTreatment === 'COMMON' && Number(snapshot.vatAmountBs || 0) > 0;
       });
-      const salesBase = Number(p.taxableSalesBaseBs) + Number(p.exemptSalesBaseBs);
+      // Rebuild the monthly sales position from immutable fiscal source snapshots.
+      // A balanced position is not sufficient if its sales/VAT components do not
+      // correspond to the selected daily Z or individual-invoice sources.
+      const dailySales = new Map();
+      const getDaily = date => {
+        if (!validVatDeclarationDate(date) || String(date).slice(0, 7) !== period) {
+          throw new Error('SQLite rechazó una fuente de ventas IVA con fecha fuera del período declarado.');
+        }
+        if (!dailySales.has(date)) dailySales.set(date, { z: null, individual: null });
+        return dailySales.get(date);
+      };
+      let hasSalesSources = false;
+      let reconstructedRawTaxableSales = null;
+      let reconstructedRawExemptSales = null;
+      for (const sourceId of sourceIds) {
+        const raw = sourceSnapshots[sourceId];
+        if (typeof raw !== 'string') continue;
+        const source = JSON.parse(raw);
+        if (source.kind === 'Z') {
+          hasSalesSources = true;
+          const report = source.fiscalZReport || {};
+          const day = getDaily(String(report.date || source.date || ''));
+          if (!day.z) day.z = { vat16: 0, vat8: 0, base16: 0, base8: 0, base31: 0, exempt: 0 };
+          day.z.base16 += addFiscalAmount(report.taxableBase16Bs, 'base Z 16%');
+          day.z.base8 += addFiscalAmount(report.taxableBase8Bs, 'base Z 8%');
+          day.z.base31 += addFiscalAmount(report.taxableBase31Bs, 'base Z 31%');
+          day.z.vat16 += addFiscalAmount(report.vat16Bs, 'IVA Z 16%') + addFiscalAmount(report.vat31Bs, 'IVA Z 31%');
+          day.z.vat8 += addFiscalAmount(report.vat8Bs, 'IVA Z 8%');
+          day.z.exempt += addFiscalAmount(report.exemptSalesBs, 'ventas exentas Z');
+        } else if (source.kind === 'SALE') {
+          // Las facturas de meses anteriores pueden ser fuentes directas de una
+          // retención recibida este mes; no deben sumarse otra vez a las ventas del mes.
+          if (String(source.invoiceDate || '').slice(0, 7) !== period) continue;
+          hasSalesSources = true;
+          const day = getDaily(String(source.invoiceDate || ''));
+          if (!day.individual) day.individual = { vat16: 0, vat8: 0, base16: 0, base8: 0, base31: 0, exempt: 0 };
+          const target = day.individual;
+          const sign = String(source.documentType) === '03' ? -1 : 1;
+          const taxRate = Number(source.taxRate);
+          const taxableBase = addFiscalAmount(source.taxableBaseBs, 'base imponible de venta');
+          const exemptAmount = addFiscalAmount(source.exemptAmountBs, 'base exenta de venta');
+          const vatAmount = addFiscalAmount(source.vatAmountBs, 'IVA de venta');
+          if (![0, 8, 16, 31].includes(taxRate) || !['01', '02', '03'].includes(String(source.documentType))) {
+            throw new Error('SQLite rechazó una fuente de ventas IVA con tipo documental o alícuota no reconocidos.');
+          }
+          if (taxRate === 8) target.vat8 += sign * vatAmount;
+          else target.vat16 += sign * vatAmount;
+          target.exempt += sign * (exemptAmount + (taxRate === 0 ? taxableBase : 0));
+          if (taxRate === 8) target.base8 += sign * taxableBase;
+          else if (taxRate === 16) target.base16 += sign * taxableBase;
+          else if (taxRate === 31) target.base31 += sign * taxableBase;
+        }
+      }
+      if (hasSalesSources) {
+        let rawOutputVat16 = 0, rawOutputVat8 = 0;
+        let rawTaxableSales = 0, rawExemptSales = 0;
+        for (const [date, day] of dailySales) {
+          let selected = day.z || day.individual;
+          if (day.z && day.individual) {
+            const choice = declaration.dailySourceChoices?.[date];
+            if (!['Z', 'INDIVIDUAL'].includes(choice)) {
+              throw new Error('SQLite rechazó la declaración IVA: existe un día con ventas Z y facturas individuales sin selección fiscal expresa (' + date + ').');
+            }
+            selected = choice === 'Z' ? day.z : day.individual;
+          }
+          if (!selected) continue;
+          rawOutputVat16 += selected.vat16;
+          rawOutputVat8 += selected.vat8;
+          rawTaxableSales += selected.base16 + selected.base8 + selected.base31;
+          rawExemptSales += selected.exempt;
+        }
+        reconstructedRawTaxableSales = rawTaxableSales;
+        reconstructedRawExemptSales = rawExemptSales;
+        // Una nota de crédito puede revertir IVA/base de ventas de períodos
+        // anteriores por encima de las ventas del mes: el débito fiscal se
+        // convierte en ajuste al crédito y las bases contables del período no son negativas.
+        const expectedOutputVat16 = Math.max(0, rawOutputVat16);
+        const expectedOutputVat8 = Math.max(0, rawOutputVat8);
+        const expectedCreditAdjustment16 = Math.max(0, -rawOutputVat16);
+        const expectedCreditAdjustment8 = Math.max(0, -rawOutputVat8);
+        const expectedTaxableSales = Math.max(0, rawTaxableSales);
+        const expectedExemptSales = Math.max(0, rawExemptSales);
+        if (!near(p.outputVatBs, expectedOutputVat16 + expectedOutputVat8) ||
+            !near(p.outputVat16Bs, expectedOutputVat16) ||
+            !near(p.outputVat8Bs, expectedOutputVat8) ||
+            !near(p.creditAdjustments16Bs, expectedCreditAdjustment16) ||
+            !near(p.creditAdjustments8Bs, expectedCreditAdjustment8) ||
+            !near(p.taxableSalesBaseBs, expectedTaxableSales) ||
+            !near(p.exemptSalesBaseBs, expectedExemptSales)) {
+          throw new Error('SQLite rechazó la posición IVA: el débito fiscal, sus ajustes al crédito, las bases gravadas o las ventas exentas no corresponden a los reportes Z y facturas individuales seleccionados.');
+        }
+      }
+      // Customer VAT withholdings are recognized by the received certificate date,
+      // independently of the invoice date used to select daily sales.
+      let receivedWithholdingsRaw = 0;
+      for (const [sourceId, raw] of Object.entries(sourceSnapshots)) {
+        if (typeof raw !== 'string') continue;
+        let source;
+        try { source = JSON.parse(raw); } catch { continue; }
+        if (source?.kind !== 'SALE' || source.isCancelled === true) continue;
+        const withheld = addFiscalAmount(source.vatWithheldBs, 'retención IVA recibida');
+        if (withheld <= 0) continue;
+        const documentType = String(source.documentType || '01');
+        if (documentType === '01') {
+          const voucherDate = String(source.retentionVoucherDate || '');
+          const voucherNumber = String(source.retentionVoucherNumber || '').trim();
+          if (!validVatDeclarationDate(voucherDate) || !voucherNumber) {
+            throw new Error('SQLite rechazó una retención IVA recibida sin número y fecha válidos de comprobante.');
+          }
+          if (voucherDate.slice(0, 7) === period) receivedWithholdingsRaw += withheld;
+        } else if (documentType === '02' || documentType === '03') {
+          // Las notas correctivas ajustan la retención de su propia factura en
+          // el período de emisión; no heredan el comprobante de la factura original.
+          const correctionDate = String(source.invoiceDate || '');
+          if (!validVatDeclarationDate(correctionDate)) {
+            throw new Error('SQLite rechazó un ajuste de retención IVA de nota correctiva con fecha documental inválida.');
+          }
+          if (correctionDate.slice(0, 7) === period) {
+            receivedWithholdingsRaw += (documentType === '03' ? -1 : 1) * withheld;
+          }
+        } else {
+          throw new Error('SQLite rechazó una fuente de retención IVA con tipo documental no reconocido.');
+        }
+      }
+      const expectedReceivedWithholdings = Math.max(0, receivedWithholdingsRaw);
+      const expectedDebitAdjustments = Math.max(0, -receivedWithholdingsRaw);
+      if (!near(p.receivedWithholdingsBs, expectedReceivedWithholdings) ||
+          !near(p.debitAdjustmentsBs, expectedDebitAdjustments)) {
+        throw new Error('SQLite rechazó las retenciones IVA recibidas y sus ajustes: los importes declarados no corresponden a los comprobantes y notas correctivas del período.');
+      }
+      const prorationTaxableBase = reconstructedRawTaxableSales === null
+        ? Number(p.taxableSalesBaseBs) : reconstructedRawTaxableSales;
+      const prorationExemptBase = reconstructedRawExemptSales === null
+        ? Number(p.exemptSalesBaseBs) : reconstructedRawExemptSales;
+      const salesBase = prorationTaxableBase + prorationExemptBase;
       const expectedProrationRate = !hasCommonCurrentPurchases ? 1
-        : salesBase > 0 ? Number(p.taxableSalesBaseBs) / salesBase : null;
+        : Number.isFinite(prorationTaxableBase) && Number.isFinite(prorationExemptBase) &&
+          prorationTaxableBase >= 0 && prorationExemptBase >= 0 && salesBase > 0
+          ? prorationTaxableBase / salesBase : null;
       const balanceBeforePriorCredit = Number(p.outputVatBs) + Number(p.debitAdjustmentsBs) +
         Number(p.purchaseCreditReversalBs) - Number(p.purchaseCreditBs) -
         Number(p.receivedWithholdingsBs) - Number(p.creditAdjustmentsBs);
@@ -833,6 +978,257 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
         try { parsed = JSON.parse(value); } catch { throw new Error('SQLite rechazó una huella fiscal IVA ilegible.'); }
         if (!parsed || !['SALE', 'PURCHASE', 'Z'].includes(parsed.kind) || String(parsed.id || '') !== String(sourceId)) {
           throw new Error('SQLite rechazó una huella fiscal IVA sin tipo de documento reconocido.');
+        }
+        if (sourceIds.includes(String(sourceId))) {
+          const sourceDate = parsed.kind === 'Z' ? String(parsed.date || '') : String(parsed.invoiceDate || '');
+          const isCurrentPeriodSource = validVatDeclarationDate(sourceDate) && sourceDate.slice(0, 7) === period;
+          const isPriorSaleRetentionSource = parsed.kind === 'SALE' &&
+            validVatDeclarationDate(sourceDate) && sourceDate.slice(0, 7) < period &&
+            validVatDeclarationDate(String(parsed.retentionVoucherDate || '')) &&
+            String(parsed.retentionVoucherDate).slice(0, 7) === period &&
+            Number(parsed.vatWithheldBs || 0) > 0 &&
+            Boolean(String(parsed.retentionVoucherNumber || '').trim()) &&
+            String(parsed.documentType || '01') === '01';
+          if (!isCurrentPeriodSource && !isPriorSaleRetentionSource) {
+            throw new Error('SQLite rechazó una fuente directa IVA cuya fecha fiscal no pertenece al período mensual declarado ni respalda una retención recibida del período.');
+          }
+        }
+      }
+      // Rebuild current-period purchase credit and historical credit-note reversals
+      // from immutable invoice snapshots. Prior-period notes use the original filed
+      // declaration's treatment and proration, never today's mutable purchase data.
+      const directPurchaseSnapshots = sourceIds.map(sourceId => {
+        const raw = sourceSnapshots[sourceId];
+        if (typeof raw !== 'string') return null;
+        const snapshot = JSON.parse(raw);
+        return snapshot.kind === 'PURCHASE' ? snapshot : null;
+      }).filter(Boolean);
+      if (declaration.status === 'DRAFT' && directPurchaseSnapshots.length) {
+        const normalizeRif = value => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+        const currentPurchasesById = new Map(
+          Object.entries(sourceSnapshots).map(([key, raw]) => {
+            try { return [String(key), JSON.parse(raw)]; } catch { return [String(key), null]; }
+          })
+        );
+        const currentNotes = directPurchaseSnapshots.filter(item => String(item.documentType) === '03');
+        const currentOrdinary = directPurchaseSnapshots.filter(item => ['01', '02'].includes(String(item.documentType)));
+        const relatedPurchaseIds = [...new Set([...relatedIds, ...sourceIds])].filter(sourceId => currentPurchasesById.get(sourceId)?.kind === 'PURCHASE');
+        const resolveOriginal = note => {
+          const explicitId = String(note.originalPurchaseId || '');
+          const candidates = relatedPurchaseIds.filter(sourceId => {
+            const original = currentPurchasesById.get(sourceId);
+            if (!original || String(original.documentType) !== '01') return false;
+            if (explicitId) return String(original.id) === explicitId;
+            return normalizeRif(original.supplierRif) === normalizeRif(note.supplierRif) &&
+              Boolean(note.affectedInvoiceNumber) &&
+              normalizeRif(original.invoiceNumber) === normalizeRif(note.affectedInvoiceNumber) &&
+              (!note.affectedInvoiceDate || original.invoiceDate === note.affectedInvoiceDate) &&
+              (!note.affectedInvoiceControlNumber ||
+                normalizeRif(original.controlNumber) === normalizeRif(note.affectedInvoiceControlNumber));
+          });
+          if (candidates.length !== 1) {
+            throw new Error('SQLite rechazó una nota de crédito de compras sin una factura original única y verificable.');
+          }
+          return { id: candidates[0], snapshot: currentPurchasesById.get(candidates[0]) };
+        };
+        let gross16 = 0, gross8 = 0, eligible16 = 0, eligible8 = 0;
+        let nonEligible16 = 0, nonEligible8 = 0;
+        let reversalEligible16 = 0, reversalEligible8 = 0;
+        let reversalNonEligible16 = 0, reversalNonEligible8 = 0;
+        const addBucket = (rate, vat, factor, sign) => {
+          const isEight = Number(rate) === 8;
+          if (isEight) {
+            gross8 += sign * vat; eligible8 += sign * vat * factor;
+            nonEligible8 += sign * vat * (1 - factor);
+          } else {
+            gross16 += sign * vat; eligible16 += sign * vat * factor;
+            nonEligible16 += sign * vat * (1 - factor);
+          }
+        };
+        for (const purchase of currentOrdinary) {
+          if (!['01', '02'].includes(String(purchase.documentType))) {
+            throw new Error('SQLite rechazó una fuente de compras IVA con tipo documental no reconocido.');
+          }
+          const vat = addFiscalAmount(purchase.vatAmountBs, 'IVA bruto de compra');
+          const rate = Number(purchase.taxRate);
+          const treatment = String(purchase.vatCreditTreatment || 'COMMON');
+          if (vat > 0 && ![8, 16, 31].includes(rate)) {
+            throw new Error('SQLite rechazó una compra con alícuota de IVA no reconocida.');
+          }
+          if (!['TAXABLE', 'EXEMPT', 'COMMON'].includes(treatment)) {
+            throw new Error('SQLite rechazó una compra con tratamiento de crédito fiscal no reconocido.');
+          }
+          const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : Number(p.prorationRate);
+          if (!Number.isFinite(factor) || factor < 0 || factor > 1) {
+            throw new Error('SQLite rechazó la prorrata aplicada al crédito fiscal de compras.');
+          }
+          addBucket(rate, vat, factor, 1);
+        }
+        const currentNoteVatByOriginal = new Map();
+        const noteSnapshotsByOriginal = new Map();
+        for (const note of currentNotes) {
+          const vat = addFiscalAmount(note.vatAmountBs, 'IVA de nota de crédito de compra');
+          const { id: originalId, snapshot: currentOriginal } = resolveOriginal(note);
+          if (Number(note.taxRate) !== Number(currentOriginal.taxRate) ||
+              normalizeRif(note.supplierRif) !== normalizeRif(currentOriginal.supplierRif)) {
+            throw new Error('SQLite rechazó una nota de crédito que no coincide con la alícuota o el proveedor de su factura original.');
+          }
+          const originalDate = String(currentOriginal.invoiceDate || '');
+          if (!validVatDeclarationDate(originalDate) || originalDate.slice(0, 7) > period) {
+            throw new Error('SQLite rechazó una nota de crédito vinculada a una factura original con fecha inválida o futura.');
+          }
+          const priorFiledMatches = declarations.filter(item =>
+            item.companyId === companyId && item.status === 'FILED' &&
+            item.period === originalDate.slice(0, 7) && item.period < period &&
+            asArray(item.sourceIds).map(String).includes(originalId)
+          );
+          if (originalDate.slice(0, 7) < period && priorFiledMatches.length !== 1) {
+            throw new Error('SQLite rechazó una nota de crédito de período anterior cuya factura original no aparece en una única declaración IVA presentada.');
+          }
+          let treatment = String(currentOriginal.vatCreditTreatment || 'COMMON');
+          let originalVat = Number(currentOriginal.vatAmountBs);
+          let originalFields = currentOriginal;
+          let historicalProration = null;
+          if (originalDate.slice(0, 7) < period) {
+            const prior = priorFiledMatches[0];
+            const rawOriginal = prior.sourceSnapshots?.[originalId];
+            if (typeof rawOriginal !== 'string') {
+              throw new Error('SQLite rechazó una reversión de crédito IVA sin huella histórica de la factura original.');
+            }
+            let filedOriginal;
+            try { filedOriginal = JSON.parse(rawOriginal); } catch {
+              throw new Error('SQLite rechazó una huella histórica ilegible de la factura original.');
+            }
+            if (filedOriginal.kind !== 'PURCHASE' || String(filedOriginal.id) !== originalId ||
+                String(filedOriginal.documentType) !== '01' ||
+                Number(filedOriginal.taxRate) !== Number(note.taxRate) ||
+                normalizeRif(filedOriginal.supplierRif) !== normalizeRif(note.supplierRif) ||
+                !['TAXABLE', 'EXEMPT', 'COMMON'].includes(String(filedOriginal.vatCreditTreatment))) {
+              throw new Error('SQLite rechazó una nota de crédito que no coincide con la identidad fiscal histórica de su factura original.');
+            }
+            originalFields = filedOriginal;
+            originalVat = Number(filedOriginal.vatAmountBs);
+            treatment = String(filedOriginal.vatCreditTreatment);
+            historicalProration = Number(prior.position?.prorationRate);
+            if (treatment === 'COMMON' &&
+                (!Number.isFinite(historicalProration) || historicalProration < 0 || historicalProration > 1 ||
+                 Number(prior.position?.taxableSalesBaseBs || 0) + Number(prior.position?.exemptSalesBaseBs || 0) <= 0)) {
+              throw new Error('SQLite rechazó la reversión de una factura común sin prorrata histórica válida.');
+            }
+          }
+          if (!['TAXABLE', 'EXEMPT', 'COMMON'].includes(treatment) ||
+              !Number.isFinite(originalVat) || originalVat < 0) {
+            throw new Error('SQLite rechazó los datos históricos de crédito fiscal de la factura original.');
+          }
+          currentNoteVatByOriginal.set(originalId, (currentNoteVatByOriginal.get(originalId) || 0) + vat);
+          const list = noteSnapshotsByOriginal.get(originalId) || [];
+          list.push(note);
+          noteSnapshotsByOriginal.set(originalId, list);
+          if (originalDate.slice(0, 7) === period) {
+            const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : Number(p.prorationRate);
+            if (!Number.isFinite(factor) || factor < 0 || factor > 1) {
+              throw new Error('SQLite rechazó la prorrata aplicada a una nota de crédito del mismo período.');
+            }
+            addBucket(note.taxRate, vat, factor, -1);
+          } else {
+            const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : historicalProration;
+            const isEight = Number(note.taxRate) === 8;
+            if (isEight) {
+              reversalEligible8 += vat * factor;
+              reversalNonEligible8 += vat * (1 - factor);
+            } else {
+              reversalEligible16 += vat * factor;
+              reversalNonEligible16 += vat * (1 - factor);
+            }
+          }
+          // The original's filed snapshot is the ceiling for every return, including
+          // partial notes issued in earlier periods.
+          const priorNotes = [];
+          const counted = new Set();
+          for (const filed of declarations) {
+            if (filed.companyId !== companyId || filed.status !== 'FILED' || filed.period >= period) continue;
+            for (const filedId of asArray(filed.sourceIds).map(String)) {
+              const raw = filed.sourceSnapshots?.[filedId];
+              if (typeof raw !== 'string') continue;
+              let filedNote;
+              try { filedNote = JSON.parse(raw); } catch { continue; }
+              if (filedNote?.kind !== 'PURCHASE' || String(filedNote.documentType) !== '03') continue;
+              const filedRelatedIds = asArray(filed.relatedSourceIds).map(String);
+              const explicitOriginalId = String(filedNote.originalPurchaseId || '');
+              const linked = explicitOriginalId
+                ? explicitOriginalId === originalId
+                : filedRelatedIds.includes(originalId);
+              if (!linked) continue;
+              if (counted.has(filedId)) {
+                throw new Error('SQLite rechazó una nota de crédito histórica presentada más de una vez.');
+              }
+              const historicalNoteDate = String(filedNote.invoiceDate || '');
+              const historicalNoteVat = Number(filedNote.vatAmountBs);
+              const historicalNoteRate = Number(filedNote.taxRate);
+              const originalSupplierRif = normalizeRif(originalFields.supplierRif);
+              if (String(filedNote.id || '') !== String(filedId) ||
+                  !validVatDeclarationDate(historicalNoteDate) ||
+                  historicalNoteDate.slice(0, 7) !== String(filed.period) ||
+                  !Number.isFinite(historicalNoteVat) || historicalNoteVat < 0 ||
+                  !Number.isFinite(historicalNoteRate) || historicalNoteRate !== Number(originalFields.taxRate) ||
+                  !originalSupplierRif || normalizeRif(filedNote.supplierRif) !== originalSupplierRif ||
+                  (explicitOriginalId && explicitOriginalId !== originalId) ||
+                  (!explicitOriginalId && !filedRelatedIds.includes(originalId)) ||
+                  (filedNote.affectedInvoiceNumber &&
+                    normalizeRif(filedNote.affectedInvoiceNumber) !== normalizeRif(originalFields.invoiceNumber)) ||
+                  (filedNote.affectedInvoiceDate && filedNote.affectedInvoiceDate !== originalFields.invoiceDate) ||
+                  (filedNote.affectedInvoiceControlNumber &&
+                    normalizeRif(filedNote.affectedInvoiceControlNumber) !== normalizeRif(originalFields.controlNumber))) {
+                throw new Error('SQLite rechazó una nota de crédito histórica cuya huella no coincide con el proveedor, alícuota, factura original o período presentado.');
+              }
+              for (const field of ['totalAmountBs', 'taxableBaseBs', 'exemptAmountBs', 'additionalLuxuryTaxBs']) {
+                if (filedNote[field] === undefined || filedNote[field] === null) continue;
+                const amount = Number(filedNote[field]);
+                if (!Number.isFinite(amount) || amount < 0) {
+                  throw new Error('SQLite rechazó importes históricos inválidos en una nota de crédito de compras presentada.');
+                }
+              }
+              counted.add(filedId);
+              priorNotes.push(filedNote);
+            }
+          }
+          const accumulatedVat = priorNotes.reduce((sum, item) => sum + Number(item.vatAmountBs || 0), 0) + vat;
+          if (!Number.isFinite(accumulatedVat) || accumulatedVat - originalVat > 0.02) {
+            throw new Error('SQLite rechazó notas de crédito acumuladas que exceden el IVA de la factura original.');
+          }
+          const caps = [
+            ['totalAmountBs', 'importe total'], ['taxableBaseBs', 'base imponible'],
+            ['exemptAmountBs', 'base exenta'], ['vatAmountBs', 'IVA'],
+            ['additionalLuxuryTaxBs', 'impuesto al consumo suntuario']
+          ];
+          for (const [field, label] of caps) {
+            if (originalFields[field] === undefined || originalFields[field] === null) continue;
+            const cap = Number(originalFields[field]);
+            const accumulated = priorNotes.reduce((sum, item) => sum + Number(item[field] || 0), 0) +
+              (noteSnapshotsByOriginal.get(originalId) || []).reduce((sum, item) => sum + Number(item[field] || 0), 0);
+            if (!Number.isFinite(cap) || cap < 0 || !Number.isFinite(accumulated) || accumulated - cap > 0.02) {
+              throw new Error('SQLite rechazó notas de crédito acumuladas que exceden el ' + label + ' de la factura original.');
+            }
+          }
+        }
+        if ([gross16, gross8, eligible16, eligible8, nonEligible16, nonEligible8,
+          reversalEligible16, reversalEligible8, reversalNonEligible16, reversalNonEligible8].some(value => value < -0.02)) {
+          throw new Error('SQLite rechazó notas de crédito que exceden el crédito fiscal disponible de compras.');
+        }
+        if (!near(p.purchaseCreditGross16Bs, Math.max(0, gross16)) ||
+            !near(p.purchaseCreditGross8Bs, Math.max(0, gross8)) ||
+            !near(p.purchaseCreditGrossBs, Math.max(0, gross16) + Math.max(0, gross8)) ||
+            !near(p.purchaseCredit16Bs, Math.max(0, eligible16)) ||
+            !near(p.purchaseCredit8Bs, Math.max(0, eligible8)) ||
+            !near(p.purchaseCreditBs, Math.max(0, eligible16) + Math.max(0, eligible8)) ||
+            !near(p.purchaseCreditNonEligibleBs, Math.max(0, nonEligible16) + Math.max(0, nonEligible8)) ||
+            !near(p.purchaseCreditReversal16Bs, reversalEligible16) ||
+            !near(p.purchaseCreditReversal8Bs, reversalEligible8) ||
+            !near(p.purchaseCreditReversalBs, reversalEligible16 + reversalEligible8) ||
+            !near(p.purchaseCreditReversalNonEligible16Bs, reversalNonEligible16) ||
+            !near(p.purchaseCreditReversalNonEligible8Bs, reversalNonEligible8) ||
+            !near(p.purchaseCreditReversalNonEligibleBs, reversalNonEligible16 + reversalNonEligible8)) {
+          throw new Error('SQLite rechazó el crédito fiscal de compras: los importes brutos, acreditables y no acreditables no corresponden a las facturas y notas de crédito seleccionadas.');
         }
       }
     }
@@ -1055,7 +1451,9 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           String(declaration.declarationNumber || '').trim() !== String(event.declarationNumber || '').trim() ||
           declaration.filedAt.slice(0, 10) !== eventDate ||
           eventDate < declaration.period + '-01' ||
-          (journal && String(journal.referenceDoc || '') !== 'IVA-MENSUAL:' + declaration.period)) {
+          (journal && (String(journal.referenceDoc || '') !== 'IVA-MENSUAL:' + declaration.period ||
+            !Number.isFinite(Number(journal.bcvRate)) ||
+            Math.abs(Number(journal.bcvRate) - Number(declaration.bcvRate)) > 0.000001))) {
         throw new Error('SQLite rechazó la presentación IVA sin borrador presentado, número, fecha o asiento de determinación coincidente.');
       }
       if (journal) {
@@ -1102,10 +1500,18 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           addExpected('2.1.2.02', 0, Number(p.creditAdjustments8Bs || 0));
           const actualByAccount = new Map();
           for (const line of asArray(journal.items)) {
-            const code = String(line.accountCode || '');
+            const code = String(line.accountCode || '').trim();
+            const values = {
+              debitBs: Number(line.debitBs ?? 0), creditBs: Number(line.creditBs ?? 0),
+              debitUsd: Number(line.debitUsd ?? 0), creditUsd: Number(line.creditUsd ?? 0)
+            };
+            if (!code || Object.values(values).some(value => !Number.isFinite(value) || value < 0) ||
+                (values.debitBs > 0 && values.creditBs > 0) ||
+                (values.debitUsd > 0 && values.creditUsd > 0)) {
+              throw new Error('SQLite rechazó el asiento de determinación IVA: contiene líneas contables inválidas.');
+            }
             const current = actualByAccount.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
-            current.debitBs += Number(line.debitBs || 0); current.creditBs += Number(line.creditBs || 0);
-            current.debitUsd += Number(line.debitUsd || 0); current.creditUsd += Number(line.creditUsd || 0);
+            for (const key of Object.keys(current)) current[key] += values[key];
             actualByAccount.set(code, current);
           }
           const codes = new Set([...expectedByAccount.keys(), ...actualByAccount.keys()]);
@@ -1143,16 +1549,33 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           !Number.isFinite(Number(event.bcvRate)) || Number(event.bcvRate) <= 0 ||
           historicalRate === null || Math.abs(historicalRate - Number(event.bcvRate)) > 0.000001 ||
           !treasuryAccount || eventDate < String(declaration.filedAt || '').slice(0, 10) ||
-          !journal || Math.abs(Number(journal.bcvRate) - Number(event.bcvRate)) > 0.000001 ||
+          !journal || !Number.isFinite(Number(journal.bcvRate)) || Number(journal.bcvRate) <= 0 ||
+          Math.abs(Number(journal.bcvRate) - Number(event.bcvRate)) > 0.000001 ||
           String(journal.referenceDoc || '') !== 'IVA-PAGO:' + declaration.id + ':' + reference) {
         throw new Error('SQLite rechazó un pago IVA sin saldo disponible, referencia única, tasa, cuenta de tesorería o asiento correspondiente.');
       }
       // El contra-asiento debe cancelar exactamente el pasivo y acreditar la
       // cuenta de tesorería indicada; no se admiten líneas compensatorias extra.
+      const declarationRate = Number(declaration.bcvRate);
+      const paymentRate = Number(event.bcvRate);
+      const historicalUsd = amount / declarationRate;
+      const paymentUsd = amount / paymentRate;
+      const fxDifferenceUsd = historicalUsd - paymentUsd;
       const expectedPaymentLines = new Map([
-        ['2.1.2.09', { debitBs: amount, creditBs: 0, debitUsd: amount / Number(event.bcvRate), creditUsd: 0 }],
-        [String(event.treasuryAccountCode), { debitBs: 0, creditBs: amount, debitUsd: 0, creditUsd: amount / Number(event.bcvRate) }]
+        ['2.1.2.09', { debitBs: amount, creditBs: 0, debitUsd: historicalUsd, creditUsd: 0 }],
+        [String(event.treasuryAccountCode), { debitBs: 0, creditBs: amount, debitUsd: 0, creditUsd: paymentUsd }]
       ]);
+      // La cancelación se registra al valor USD histórico del pasivo; la diferencia
+      // entre ese valor y el equivalente USD del desembolso es resultado cambiario.
+      if (fxDifferenceUsd > 0.000001) {
+        expectedPaymentLines.set('4.2.1.01', {
+          debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: fxDifferenceUsd
+        });
+      } else if (fxDifferenceUsd < -0.000001) {
+        expectedPaymentLines.set('6.1.1.08', {
+          debitBs: 0, creditBs: 0, debitUsd: Math.abs(fxDifferenceUsd), creditUsd: 0
+        });
+      }
       const actualPaymentLines = new Map();
       for (const line of asArray(journal.items)) {
         const code = String(line.accountCode || '');
