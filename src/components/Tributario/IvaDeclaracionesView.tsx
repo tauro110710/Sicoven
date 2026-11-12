@@ -104,9 +104,9 @@ export const IvaDeclaracionesView: React.FC = () => {
     ? null
     : dailySalesResolution.days.reduce((sum, day) => sum + day.outputVatBs, 0);
 
-  const taxableSalesBase = dailySalesResolution.days.reduce((sum, day) =>
-    sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
-  const exemptSalesBase = dailySalesResolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
+  const taxableSalesBase = Math.max(0, dailySalesResolution.days.reduce((sum, day) =>
+    sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0));
+  const exemptSalesBase = Math.max(0, dailySalesResolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0));
   const purchaseSummaryResult = useMemo(() => {
     if (dailySalesResolution.unresolvedDates.length > 0) {
       return { summary: null, reclassifications: null, error: 'Resuelve primero las fechas con Reporte Z y ventas individuales coincidentes.' };
