@@ -188,6 +188,7 @@ jobs:
 
       - name: Upload migration E2E screenshots
         if: always() && github.event_name != 'pull_request'
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: SICOVEN-migration-E2E-screenshots
@@ -339,6 +340,7 @@ jobs:
 
       - name: Upload complete edition installer artifact
         if: (startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: SICOVEN-COMPLETO-Windows-x64
@@ -367,6 +369,7 @@ jobs:
 
       - name: Upload installer checksums
         if: (startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: SICOVEN-SHA256-checksums
