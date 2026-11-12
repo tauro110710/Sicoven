@@ -607,8 +607,8 @@ function validateVatDeclarationLedger(previousState, nextState) {
           const actual = actualLines.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
           if (Math.abs(actual.debitBs - expected.debitBs) > 0.01 ||
               Math.abs(actual.creditBs - expected.creditBs) > 0.01 ||
-              (hasHistoricalUsd && Math.abs(actual.debitUsd - expected.debitUsd) > 0.000001) ||
-              Math.abs(actual.creditUsd - expected.creditUsd) > 0.000001) {
+              (hasHistoricalUsd && (Math.abs(actual.debitUsd - expected.debitUsd) > 0.000001 ||
+                Math.abs(actual.creditUsd - expected.creditUsd) > 0.000001))) {
             throw new Error('SQLite rechazó el enteramiento: las cuentas o importes del asiento no corresponden al pasivo y a los débitos bancarios vinculados.');
           }
         }
