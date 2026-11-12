@@ -564,13 +564,14 @@ function validateVatDeclarationLedger(previousState, nextState) {
           const bs = Number(movement?.amountBs);
           const usd = Number(movement?.amountUsd);
           const rate = Number(movement?.bcvRate);
-          if (!bank || !account || !Number.isFinite(usd) || usd <= 0 ||
-              !Number.isFinite(rate) || rate <= 0 ||
-              Math.abs(cents(bs) - cents(usd * rate)) > 0.02) {
-            throw new Error('SQLite rechazó el enteramiento: un débito bancario carece de cuenta contable o equivalencia USD histórica válida.');
+          if (!bank || !account || !Number.isFinite(bs) || bs <= 0 ||
+              (hasHistoricalUsd && (!Number.isFinite(usd) || usd <= 0 ||
+                !Number.isFinite(rate) || rate <= 0 ||
+                Math.abs(cents(bs) - cents(usd * rate)) > 0.02))) {
+            throw new Error('SQLite rechazó el enteramiento: un débito bancario carece de cuenta contable o equivalencia histórica válida.');
           }
-          bankUsd += usd;
-          addExpected(String(bank.accountCode), { creditBs: bs, creditUsd: usd });
+          if (hasHistoricalUsd) bankUsd += usd;
+          addExpected(String(bank.accountCode), { creditBs: bs, ...(hasHistoricalUsd ? { creditUsd: usd } : {}) });
         }
         const fxDifferenceUsd = hasHistoricalUsd ? micros(liabilityUsd - micros(bankUsd)) : 0;
         if (hasHistoricalUsd && fxDifferenceUsd > 0.0000005) {
@@ -611,7 +612,7 @@ function validateVatDeclarationLedger(previousState, nextState) {
             throw new Error('SQLite rechazó el enteramiento: las cuentas o importes del asiento no corresponden al pasivo y a los débitos bancarios vinculados.');
           }
         }
-        if (Math.abs(Number(journal.bcvRate) - Number(bankMovementsById.get(String(movementIds[0]))?.bcvRate)) > 0.000001) {
+        if (hasHistoricalUsd && Math.abs(Number(journal.bcvRate) - Number(bankMovementsById.get(String(movementIds[0]))?.bcvRate)) > 0.000001) {
           throw new Error('SQLite rechazó el enteramiento: la tasa BCV del asiento no coincide con la tasa histórica de los débitos.');
         }
         for (const movementId of movementIds) {
