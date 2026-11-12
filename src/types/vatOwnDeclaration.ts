@@ -1,3 +1,5 @@
+import type { JournalEntry, JournalEntryItem, PurchaseRecord, SaleRecord } from './accounting';
+
 export type VatOwnDeclarationStatus = 'DRAFT' | 'FILED';
 
 export type VatOwnPurchaseCreditTreatment = 'TAXABLE' | 'EXEMPT' | 'COMMON';
@@ -8,6 +10,60 @@ export function resolveVatOwnPurchaseCreditTreatment(
   return treatment || 'COMMON';
 }
 
+export function getUnfiledVatOwnActivityPeriods(input: {
+  companyId: string;
+  targetPeriod: string;
+  activityDates: readonly string[];
+  declarations: readonly VatOwnDeclaration[];
+}): string[] {
+  if (!isValidVatOwnDeclarationPeriod(input.targetPeriod)) {
+    throw new Error('El período objetivo de IVA no es válido.');
+  }
+  const isCalendarDate = (value: string): boolean => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const parsed = new Date(value + 'T00:00:00.000Z');
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  };
+  const filedPeriods = new Set(input.declarations
+    .filter(item => item.companyId === input.companyId && item.status === 'FILED' && item.period < input.targetPeriod)
+    .map(item => item.period));
+  const knownPeriods = new Set<string>(input.declarations
+    .filter(item => item.companyId === input.companyId && item.period < input.targetPeriod)
+    .map(item => item.period));
+  for (const dateValue of input.activityDates) {
+    const date = String(dateValue || '');
+    if (!isCalendarDate(date)) {
+      throw new Error('Existe una fecha fiscal inválida que impide verificar la continuidad de las declaraciones de IVA.');
+    }
+    const period = date.slice(0, 7);
+    if (period < input.targetPeriod) knownPeriods.add(period);
+  }
+  if (knownPeriods.size === 0) return [];
+  let cursor = [...knownPeriods].sort()[0];
+  const missing: string[] = [];
+  while (cursor < input.targetPeriod) {
+    if (!filedPeriods.has(cursor)) missing.push(cursor);
+    const [year, month] = cursor.split('-').map(Number);
+    const nextYear = month === 12 ? year + 1 : year;
+    const nextMonth = month === 12 ? 1 : month + 1;
+    cursor = String(nextYear).padStart(4, '0') + '-' + String(nextMonth).padStart(2, '0');
+  }
+  return missing;
+}
+
+export function getVatOwnFiledLaterPeriods(input: {
+  companyId: string;
+  targetPeriod: string;
+  declarations: readonly VatOwnDeclaration[];
+}): string[] {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(input.targetPeriod)) {
+    throw new Error('El período objetivo de IVA no es válido.');
+  }
+  return [...new Set(input.declarations
+    .filter(item => item.companyId === input.companyId && item.status === 'FILED' && item.period > input.targetPeriod)
+    .map(item => item.period))].sort();
+}
+
 export function areVatOwnDeclarationSourcesCurrent(
   declarationSourceIds: readonly string[],
   currentSourceIds: readonly string[]
@@ -16,6 +72,88 @@ export function areVatOwnDeclarationSourcesCurrent(
   const saved = [...declarationSourceIds].sort();
   const current = [...currentSourceIds].sort();
   return saved.every((id, index) => id === current[index]);
+}
+
+export function areVatOwnSourceSnapshotsCurrent(
+  saved: Record<string, string> | undefined,
+  current: Record<string, string>
+): boolean {
+  if (!saved) return false;
+  const savedIds = Object.keys(saved).sort();
+  const currentIds = Object.keys(current).sort();
+  if (savedIds.length !== currentIds.length || !savedIds.every((id, index) => id === currentIds[index])) return false;
+  return savedIds.every(id => typeof saved[id] === 'string' && saved[id] === current[id]);
+}
+
+export function buildVatOwnSourceSnapshots(input: {
+  companyId: string;
+  sourceIds: readonly string[];
+  sales: readonly SaleRecord[];
+  purchases: readonly PurchaseRecord[];
+  journalEntries: readonly JournalEntry[];
+}): Record<string, string> {
+  const snapshots: Record<string, string> = {};
+  const journalSnapshot = (entry: JournalEntry | undefined) => entry ? {
+    id: entry.id, entryNumber: entry.entryNumber, date: entry.date, referenceDoc: entry.referenceDoc, type: entry.type,
+    bcvRate: entry.bcvRate, description: entry.description,
+    reversalOfEntryId: entry.reversalOfEntryId || null, reversedByEntryId: entry.reversedByEntryId || null,
+    items: entry.items.map(line => ({
+      accountCode: line.accountCode, debitBs: line.debitBs, creditBs: line.creditBs,
+      debitUsd: line.debitUsd, creditUsd: line.creditUsd, description: line.description
+    }))
+  } : null;
+  for (const id of [...new Set(input.sourceIds)].sort()) {
+    const sale = input.sales.find(item => item.id === id && item.companyId === input.companyId);
+    if (sale) {
+      snapshots[id] = JSON.stringify({
+        kind: 'SALE', id: sale.id, invoiceDate: sale.invoiceDate, documentType: sale.documentType,
+        invoiceNumber: sale.invoiceNumber, controlNumber: sale.controlNumber, customerRif: sale.customerRif, customerName: sale.customerName,
+        totalAmountBs: sale.totalAmountBs, totalAmountUsd: sale.totalAmountUsd, taxableBaseBs: sale.taxableBaseBs, taxableBaseUsd: sale.taxableBaseUsd,
+        exemptAmountBs: sale.exemptAmountBs, exemptAmountUsd: sale.exemptAmountUsd || 0, taxRate: sale.taxRate,
+        vatAmountBs: sale.vatAmountBs, vatAmountUsd: sale.vatAmountUsd, additionalLuxuryTaxBs: sale.additionalLuxuryTaxBs || 0,
+        additionalLuxuryTaxUsd: sale.additionalLuxuryTaxUsd || 0, igtfApplicable: Boolean(sale.igtfApplicable), igtfRate: sale.igtfRate || 0,
+        igtfAmountBs: sale.igtfAmountBs || 0, igtfAmountUsd: sale.igtfAmountUsd || 0,
+        vatWithheldBs: sale.vatWithheldBs, vatWithheldUsd: sale.vatWithheldUsd, retentionRate: sale.retentionRate || 0,
+        retentionVoucherNumber: sale.retentionVoucherNumber || null, retentionVoucherDate: sale.retentionVoucherDate || null,
+        bcvRate: sale.bcvRate, journalEntryId: sale.journalEntryId || null, originalSaleId: sale.originalSaleId || null,
+        affectedInvoiceNumber: sale.affectedInvoiceNumber || null, affectedInvoiceDate: sale.affectedInvoiceDate || null,
+        affectedInvoiceControlNumber: sale.affectedInvoiceControlNumber || null, isCancelled: Boolean(sale.isCancelled),
+        journal: journalSnapshot(input.journalEntries.find(entry => entry.id === sale.journalEntryId && entry.companyId === input.companyId))
+      });
+      continue;
+    }
+    const purchase = input.purchases.find(item => item.id === id && item.companyId === input.companyId);
+    if (purchase) {
+      snapshots[id] = JSON.stringify({
+        kind: 'PURCHASE', id: purchase.id, invoiceDate: purchase.invoiceDate, accountCreditDate: purchase.accountCreditDate || null,
+        documentType: purchase.documentType, invoiceNumber: purchase.invoiceNumber, controlNumber: purchase.controlNumber,
+        supplierRif: purchase.supplierRif, supplierName: purchase.supplierName, totalAmountBs: purchase.totalAmountBs, totalAmountUsd: purchase.totalAmountUsd,
+        taxableBaseBs: purchase.taxableBaseBs, taxableBaseUsd: purchase.taxableBaseUsd, exemptAmountBs: purchase.exemptAmountBs,
+        exemptAmountUsd: purchase.exemptAmountUsd || 0, taxRate: purchase.taxRate, vatAmountBs: purchase.vatAmountBs, vatAmountUsd: purchase.vatAmountUsd,
+        additionalLuxuryTaxBs: purchase.additionalLuxuryTaxBs || 0, additionalLuxuryTaxUsd: purchase.additionalLuxuryTaxUsd || 0,
+        igtfApplicable: Boolean(purchase.igtfApplicable), igtfRate: purchase.igtfRate || 0,
+        igtfAmountBs: purchase.igtfAmountBs || 0, igtfAmountUsd: purchase.igtfAmountUsd || 0,
+        vatCreditTreatment: purchase.vatCreditTreatment || 'COMMON',
+        vatWithheldBs: purchase.vatWithheldBs, vatWithheldUsd: purchase.vatWithheldUsd, retentionRate: purchase.retentionRate || 0,
+        voucherNumber: purchase.voucherNumber || null, bcvRate: purchase.bcvRate, journalEntryId: purchase.journalEntryId || null, originalPurchaseId: purchase.originalPurchaseId || null,
+        affectedInvoiceNumber: purchase.affectedInvoiceNumber || null, affectedInvoiceDate: purchase.affectedInvoiceDate || null,
+        affectedInvoiceControlNumber: purchase.affectedInvoiceControlNumber || null,
+        affectedInvoiceTotalAmountBs: purchase.affectedInvoiceTotalAmountBs ?? null,
+        affectedInvoiceTotalAmountUsd: purchase.affectedInvoiceTotalAmountUsd ?? null,
+        inventoryLines: (purchase.inventoryLines || []).map(line => ({ ...line })),
+        creditNoteLines: (purchase.creditNoteLines || []).map(line => ({ ...line })),
+        isCancelled: Boolean(purchase.isCancelled),
+        journal: journalSnapshot(input.journalEntries.find(entry => entry.id === purchase.journalEntryId && entry.companyId === input.companyId))
+      });
+      continue;
+    }
+    const zEntry = input.journalEntries.find(entry => entry.id === id && entry.companyId === input.companyId && Boolean(entry.fiscalZReport));
+    snapshots[id] = zEntry ? JSON.stringify({
+      kind: 'Z', id: zEntry.id, date: zEntry.date, referenceDoc: zEntry.referenceDoc,
+      fiscalZReport: zEntry.fiscalZReport, journal: journalSnapshot(zEntry)
+    }) : JSON.stringify({ kind: 'MISSING', id });
+  }
+  return snapshots;
 }
 
 export function findExistingVatOwnPaymentReversal<T extends {
@@ -55,7 +193,7 @@ export function resolveVatOwnPaymentBcvRate(
 }
 
 export function isValidVatOwnDeclarationPeriod(period: string): boolean {
-  return /^\d{4}-(0[1-9]|1[0-2])$/.test(period);
+  return typeof period === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(period.trim());
 }
 
 /**
@@ -78,20 +216,27 @@ export function resolveVatOwnProrationRate(input: {
 
 /**
  * Customer VAT withholdings are a separate fiscal event from the daily sales source.
- * A day may use a consolidated Z report for taxable sales while the individual
- * invoice still carries the withholding voucher that must be credited in the
- * period in which that voucher was received.
+ * Ordinary invoices use the received-voucher date; debit/credit notes adjust the
+ * withholding in the period of the corrective document, never the original invoice's
+ * inherited voucher date.
  */
 export function getReceivedVatWithholdingSales<T extends {
   companyId: string;
+  documentType?: '01' | '02' | '03';
+  invoiceDate?: string;
   isCancelled?: boolean;
   retentionVoucherDate?: string;
   vatWithheldBs?: number;
 }>(sales: readonly T[], companyId: string, period: string): T[] {
   if (!companyId.trim() || !/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return [];
-  return sales.filter(item => item.companyId === companyId && item.isCancelled !== true &&
-    typeof item.retentionVoucherDate === 'string' && item.retentionVoucherDate.startsWith(period) &&
-    Number.isFinite(Number(item.vatWithheldBs || 0)) && Number(item.vatWithheldBs || 0) > 0);
+  return sales.filter(item => {
+    if (item.companyId !== companyId || item.isCancelled === true ||
+        !Number.isFinite(Number(item.vatWithheldBs || 0)) || Number(item.vatWithheldBs || 0) <= 0) return false;
+    // En notas de débito/crédito la retención se ajusta con el propio documento
+    // correctivo; no debe heredarse la fecha del comprobante de la factura original.
+    const effectiveDate = item.documentType === '02' || item.documentType === '03' ? item.invoiceDate : item.retentionVoucherDate;
+    return typeof effectiveDate === 'string' && effectiveDate.startsWith(period);
+  });
 }
 
 
@@ -106,6 +251,12 @@ export interface VatOwnPositionInput {
   purchaseCreditGross16Bs?: number;
   purchaseCreditGross8Bs?: number;
   purchaseCreditNonEligibleBs?: number;
+  purchaseCreditReversalBs?: number;
+  purchaseCreditReversal16Bs?: number;
+  purchaseCreditReversal8Bs?: number;
+  purchaseCreditReversalNonEligibleBs?: number;
+  purchaseCreditReversalNonEligible16Bs?: number;
+  purchaseCreditReversalNonEligible8Bs?: number;
   prorationRate?: number;
   taxableSalesBaseBs?: number;
   exemptSalesBaseBs?: number;
@@ -113,6 +264,8 @@ export interface VatOwnPositionInput {
   priorCreditBs?: number;
   debitAdjustmentsBs?: number;
   creditAdjustmentsBs?: number;
+  creditAdjustments16Bs?: number;
+  creditAdjustments8Bs?: number;
 }
 
 export interface VatOwnPosition {
@@ -126,6 +279,12 @@ export interface VatOwnPosition {
   purchaseCreditGross16Bs: number;
   purchaseCreditGross8Bs: number;
   purchaseCreditNonEligibleBs: number;
+  purchaseCreditReversalBs: number;
+  purchaseCreditReversal16Bs: number;
+  purchaseCreditReversal8Bs: number;
+  purchaseCreditReversalNonEligibleBs: number;
+  purchaseCreditReversalNonEligible16Bs: number;
+  purchaseCreditReversalNonEligible8Bs: number;
   prorationRate: number;
   taxableSalesBaseBs: number;
   exemptSalesBaseBs: number;
@@ -133,6 +292,8 @@ export interface VatOwnPosition {
   priorCreditAppliedBs: number;
   debitAdjustmentsBs: number;
   creditAdjustmentsBs: number;
+  creditAdjustments16Bs: number;
+  creditAdjustments8Bs: number;
   netTaxBs: number;
   amountDueBs: number;
   creditCarryForwardBs: number;
@@ -144,8 +305,11 @@ export interface VatOwnDeclarationRevision {
   reason: string;
   position: VatOwnPosition;
   sourceIds: string[];
+  relatedSourceIds?: string[];
   bcvRate?: number;
   dailySourceChoices?: Record<string, 'Z' | 'INDIVIDUAL'>;
+  purchaseVatReclassificationItems?: JournalEntryItem[];
+  sourceSnapshots?: Record<string, string>;
   createdAt: string;
 }
 
@@ -156,6 +320,7 @@ export interface VatOwnDeclaration {
   status: VatOwnDeclarationStatus;
   position: VatOwnPosition;
   sourceIds: string[];
+  relatedSourceIds?: string[];
   bcvRate?: number;
   dailySourceChoices?: Record<string, 'Z' | 'INDIVIDUAL'>;
   declarationNumber?: string;
@@ -163,6 +328,535 @@ export interface VatOwnDeclaration {
   createdAt: string;
   updatedAt?: string;
   revisions?: VatOwnDeclarationRevision[];
+  purchaseVatReclassificationItems?: JournalEntryItem[];
+  /** Fiscal identity and material fields of every source document at draft time. */
+  sourceSnapshots?: Record<string, string>;
+}
+
+export interface VatOwnPurchaseCreditSummary {
+  prorationRate: number;
+  gross16Bs: number;
+  gross8Bs: number;
+  eligible16Bs: number;
+  eligible8Bs: number;
+  nonEligible16Bs: number;
+  nonEligible8Bs: number;
+  priorReversalEligible16Bs: number;
+  priorReversalEligible8Bs: number;
+  priorReversalNonEligible16Bs: number;
+  priorReversalNonEligible8Bs: number;
+  relatedPurchaseIds: string[];
+  reclassifications: Array<{ purchaseId: string; basePurchaseId: string; taxRate: number; nonEligibleSignedBs: number; sourcePurchaseSnapshot?: string }>;
+}
+
+export function calculateVatOwnPurchaseCreditSummary(input: {
+  companyId: string;
+  period: string;
+  purchases: readonly PurchaseRecord[];
+  allPurchases: readonly PurchaseRecord[];
+  priorDeclarations: readonly VatOwnDeclaration[];
+  taxableSalesBaseBs: number;
+  exemptSalesBaseBs: number;
+}): VatOwnPurchaseCreditSummary {
+  const periodPurchases = input.purchases.filter(item =>
+    item.companyId === input.companyId && item.invoiceDate.startsWith(input.period) && !item.isCancelled
+  );
+  const relatedPurchaseIds: string[] = [];
+  const reclassifications: VatOwnPurchaseCreditSummary['reclassifications'] = [];
+  const originalByNoteId = new Map<string, PurchaseRecord>();
+  const originalSnapshotById = new Map<string, Record<string, unknown>>();
+  const priorNotes: Array<{ item: PurchaseRecord; original: PurchaseRecord; prior: VatOwnDeclaration; treatment: VatOwnPurchaseCreditTreatment; taxRate: number; originalVatAmountBs: number; supplierRif: string }> = [];
+  const historicalOriginalVatById = new Map<string, number>();
+
+  const getFiledPurchaseSnapshot = (declaration: VatOwnDeclaration, original: PurchaseRecord): {
+    treatment: VatOwnPurchaseCreditTreatment;
+    taxRate: number;
+    originalVatAmountBs: number;
+    supplierRif: string;
+  } => {
+    const saved = declaration.sourceSnapshots?.[original.id];
+    if (!saved) {
+      throw new Error('La declaración anterior no conserva la huella fiscal de la factura original ' + original.invoiceNumber + '. No es seguro inferir su tratamiento IVA actual para revertir un período presentado.');
+    }
+    let snapshot: Record<string, unknown>;
+    try { snapshot = JSON.parse(saved) as Record<string, unknown>; }
+    catch { throw new Error('La huella fiscal de la factura original ' + original.invoiceNumber + ' no se puede leer para revertir su crédito IVA.'); }
+    const historicalTaxRate = Number(snapshot.taxRate);
+    const originalVatAmountBs = Number(snapshot.vatAmountBs);
+    const historicalSupplierRif = normalizeFiscalReference(snapshot.supplierRif);
+    if (snapshot.kind !== 'PURCHASE' || snapshot.id !== original.id ||
+        !['TAXABLE', 'EXEMPT', 'COMMON'].includes(String(snapshot.vatCreditTreatment)) ||
+        !historicalSupplierRif || !Number.isFinite(historicalTaxRate) || ![8, 16, 31].includes(historicalTaxRate) ||
+        !Number.isFinite(originalVatAmountBs) || originalVatAmountBs < 0) {
+      throw new Error('La declaración anterior no conserva el tratamiento, la alícuota y el IVA bruto históricos de la factura original ' + original.invoiceNumber + '.');
+    }
+    return {
+      treatment: resolveVatOwnPurchaseCreditTreatment(snapshot.vatCreditTreatment as VatOwnPurchaseCreditTreatment),
+      taxRate: historicalTaxRate,
+      originalVatAmountBs,
+      supplierRif: historicalSupplierRif
+    };
+  };
+  const normalizeFiscalReference = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+  for (const item of periodPurchases) {
+    if (item.documentType !== '03') continue;
+    const supplierRif = normalizeFiscalReference(item.supplierRif);
+    if (!supplierRif) {
+      throw new Error('La nota de crédito de compras ' + item.invoiceNumber + ' no conserva el RIF del proveedor para verificar su factura original.');
+    }
+    const candidates = input.allPurchases.filter(original =>
+      original.companyId === input.companyId && original.documentType === '01' && !original.isCancelled &&
+      normalizeFiscalReference(original.supplierRif) === supplierRif &&
+      (item.originalPurchaseId
+        ? original.id === item.originalPurchaseId
+        : Boolean(item.affectedInvoiceNumber && normalizeFiscalReference(original.invoiceNumber) === normalizeFiscalReference(item.affectedInvoiceNumber) &&
+            (!item.affectedInvoiceDate || original.invoiceDate === item.affectedInvoiceDate) &&
+            (!item.affectedInvoiceControlNumber || normalizeFiscalReference(original.controlNumber) === normalizeFiscalReference(item.affectedInvoiceControlNumber))))
+    );
+    if (candidates.length !== 1) {
+      throw new Error('La nota de crédito de compras ' + item.invoiceNumber + ' no tiene una factura original única y verificable. Vincule la factura antes de declarar.');
+    }
+    const original = candidates[0];
+    originalByNoteId.set(item.id, original);
+    relatedPurchaseIds.push(original.id);
+    if (original.invoiceDate.slice(0, 7) >= input.period) {
+      if (original.invoiceDate.slice(0, 7) !== input.period) {
+        throw new Error('La nota de crédito de compras no puede corregir una factura de un período futuro.');
+      }
+      if (item.taxRate !== original.taxRate) {
+        throw new Error('La nota de crédito de compras ' + item.invoiceNumber + ' no conserva la alícuota de su factura original.');
+      }
+      continue;
+    }
+    const matches = input.priorDeclarations.filter(declaration =>
+      declaration.companyId === input.companyId && declaration.status === 'FILED' &&
+      declaration.period === original.invoiceDate.slice(0, 7) && declaration.period < input.period &&
+      declaration.sourceIds.includes(original.id)
+    );
+    if (matches.length !== 1) {
+      throw new Error('La factura original de la nota de crédito no aparece en una única declaración IVA anterior presentada. Debe conciliarse o rectificarse el período original antes de declarar esta nota.');
+    }
+    const historical = getFiledPurchaseSnapshot(matches[0], original);
+    const originalSnapshotText = matches[0].sourceSnapshots?.[original.id];
+    if (originalSnapshotText) {
+      try { originalSnapshotById.set(original.id, JSON.parse(originalSnapshotText) as Record<string, unknown>); }
+      catch { throw new Error('La huella fiscal histórica de la factura original no se puede leer para validar devoluciones acumuladas.'); }
+    }
+    historicalOriginalVatById.set(original.id, historical.originalVatAmountBs);
+    if (item.taxRate !== historical.taxRate) {
+      throw new Error('La nota de crédito de compras ' + item.invoiceNumber + ' no conserva la alícuota de la factura según la declaración original presentada.');
+    }
+    if (normalizeFiscalReference(item.supplierRif) !== historical.supplierRif) {
+      throw new Error('El RIF del proveedor de la nota de crédito no coincide con la huella histórica de la factura original presentada.');
+    }
+    priorNotes.push({ item, original, prior: matches[0], ...historical });
+  }
+
+  // A sequence of notes across different filed periods must never reverse more VAT
+  // than the original invoice actually generated. Read earlier notes only from
+  // immutable snapshots of filed declarations, never from mutable live records.
+  const priorFiledNoteVatByOriginal = new Map<string, number>();
+  const priorFiledNotesByOriginal = new Map<string, Array<Record<string, unknown>>>();
+  const countedPriorNoteIds = new Set<string>();
+  for (const filed of input.priorDeclarations) {
+    if (filed.companyId !== input.companyId || filed.status !== 'FILED' || filed.period >= input.period) continue;
+    for (const noteId of filed.sourceIds || []) {
+      const saved = filed.sourceSnapshots?.[noteId];
+      if (!saved) {
+        const liveSource = input.allPurchases.find(item => item.id === noteId && item.companyId === input.companyId);
+        const relatedToCurrentOriginal = (filed.relatedSourceIds || []).some(relatedId =>
+          [...originalByNoteId.values()].some(original => original.id === String(relatedId))
+        );
+        if (relatedToCurrentOriginal || (liveSource && (liveSource.documentType === '03' || liveSource.originalPurchaseId ||
+            liveSource.affectedInvoiceNumber || liveSource.affectedInvoiceDate || liveSource.affectedInvoiceControlNumber))) {
+          throw new Error('Una nota de crédito ya presentada o relacionada con la factura actual no conserva su huella fiscal histórica. No es seguro calcular su reversión acumulada.');
+        }
+        continue;
+      }
+      let snapshot: Record<string, unknown>;
+      try { snapshot = JSON.parse(saved) as Record<string, unknown>; }
+      catch { throw new Error('Una declaración anterior contiene una huella ilegible para una nota de crédito de compras.'); }
+      if (snapshot.kind !== 'PURCHASE') continue;
+      const historicalDocumentType = String(snapshot.documentType || '');
+      if (!['01', '02', '03'].includes(historicalDocumentType)) {
+        throw new Error('Una compra ya presentada no conserva el tipo documental histórico necesario para conciliar notas de crédito posteriores.');
+      }
+      if (historicalDocumentType !== '03') continue;
+      if (countedPriorNoteIds.has(String(noteId))) {
+        throw new Error('Una nota de crédito aparece presentada más de una vez en el historial IVA. Concilie las declaraciones anteriores.');
+      }
+      countedPriorNoteIds.add(String(noteId));
+      const explicitOriginalId = String(snapshot.originalPurchaseId || '');
+      const snapshotSupplierRif = normalizeFiscalReference(snapshot.supplierRif);
+      const affectedNumber = normalizeFiscalReference(snapshot.affectedInvoiceNumber);
+      const filedRelatedIds = (filed.relatedSourceIds || []).map(String);
+      const fallbackRelatedId = filedRelatedIds.length === 1 ? filedRelatedIds[0] : '';
+      const historicalCandidates = input.allPurchases.filter(original =>
+        original.companyId === input.companyId && original.documentType === '01' &&
+        (explicitOriginalId
+          ? original.id === explicitOriginalId
+          : snapshotSupplierRif && affectedNumber
+            ? normalizeFiscalReference(original.supplierRif) === snapshotSupplierRif &&
+              normalizeFiscalReference(original.invoiceNumber) === affectedNumber &&
+              (!snapshot.affectedInvoiceDate || original.invoiceDate === snapshot.affectedInvoiceDate) &&
+              (!snapshot.affectedInvoiceControlNumber ||
+                normalizeFiscalReference(original.controlNumber) === normalizeFiscalReference(snapshot.affectedInvoiceControlNumber))
+            : Boolean(fallbackRelatedId && original.id === fallbackRelatedId))
+      );
+      if (historicalCandidates.length === 0) {
+        throw new Error('Una nota de crédito ya presentada no conserva un vínculo histórico verificable con su factura original. Concilie la nota antes de declarar nuevos períodos.');
+      }
+      if (historicalCandidates.length !== 1) {
+        throw new Error('Una nota de crédito ya presentada tiene una factura original ambigua; no se puede validar su reversión acumulada.');
+      }
+      const noteVat = Number(snapshot.vatAmountBs);
+      const noteTaxRate = Number(snapshot.taxRate);
+      if (snapshot.id !== noteId || !Number.isFinite(noteVat) || noteVat < 0 ||
+          !Number.isFinite(noteTaxRate) || ![8, 16, 31].includes(noteTaxRate)) {
+        throw new Error('Una declaración anterior no conserva el IVA bruto y la alícuota histórica válidos de una nota de crédito de compras.');
+      }
+      const originalId = historicalCandidates[0].id;
+      const savedOriginal = filed.sourceSnapshots?.[originalId];
+      if (!savedOriginal) {
+        throw new Error('La declaración de una nota de crédito presentada no conserva la huella de su factura original.');
+      }
+      let originalSnapshot: Record<string, unknown>;
+      try { originalSnapshot = JSON.parse(savedOriginal) as Record<string, unknown>; }
+      catch { throw new Error('La huella de la factura original de una nota de crédito presentada no se puede leer.'); }
+      const originalTaxRate = Number(originalSnapshot.taxRate);
+      originalSnapshotById.set(originalId, originalSnapshot);
+      const filedNotes = priorFiledNotesByOriginal.get(originalId) || [];
+      filedNotes.push(snapshot);
+      priorFiledNotesByOriginal.set(originalId, filedNotes);
+      const historicalNoteSupplierRif = normalizeFiscalReference(snapshot.supplierRif);
+      const historicalOriginalSupplierRif = normalizeFiscalReference(originalSnapshot.supplierRif);
+      if (originalSnapshot.kind !== 'PURCHASE' || originalSnapshot.id !== originalId ||
+          originalSnapshot.documentType !== '01' || !Number.isFinite(originalTaxRate) ||
+          ![8, 16, 31].includes(originalTaxRate) || originalTaxRate !== noteTaxRate ||
+          !historicalNoteSupplierRif || !historicalOriginalSupplierRif ||
+          historicalNoteSupplierRif !== historicalOriginalSupplierRif) {
+        throw new Error('La nota de crédito presentada no coincide con la alícuota o el proveedor de la factura original según las huellas históricas.');
+      }
+      priorFiledNoteVatByOriginal.set(originalId, (priorFiledNoteVatByOriginal.get(originalId) || 0) + noteVat);
+    }
+  }
+  const currentNoteVatByOriginal = new Map<string, number>();
+  for (const note of periodPurchases) {
+    const original = originalByNoteId.get(note.id);
+    if (!original) continue;
+    const noteVat = Number(note.vatAmountBs || 0);
+    currentNoteVatByOriginal.set(original.id, (currentNoteVatByOriginal.get(original.id) || 0) + noteVat);
+  }
+  for (const [originalId, currentNoteVat] of currentNoteVatByOriginal) {
+    const original = input.allPurchases.find(item => item.id === originalId && item.companyId === input.companyId);
+    const originalVat = historicalOriginalVatById.has(originalId)
+      ? Number(historicalOriginalVatById.get(originalId))
+      : Number(original?.vatAmountBs || 0);
+    const alreadyReversed = priorFiledNoteVatByOriginal.get(originalId) || 0;
+    if (!Number.isFinite(originalVat) || originalVat < 0 || alreadyReversed + currentNoteVat - originalVat > 0.02) {
+      throw new Error('Las notas de crédito acumuladas superan el IVA histórico de la factura original ' +
+        String(original?.invoiceNumber || originalId) + '. Concilie las notas ya presentadas antes de declarar.');
+    }
+
+    // Fiscal ceilings are checked cumulatively across previously filed notes and
+    // current-period notes. A credit note cannot refund more than the original
+    // invoice's total, taxable/exempt bases, VAT or luxury tax.
+    const originalSnapshot = originalSnapshotById.get(originalId);
+    const originalFields = originalSnapshot || (original as unknown as Record<string, unknown> | undefined);
+    const noteSnapshots: Array<Record<string, unknown>> = [
+      ...(priorFiledNotesByOriginal.get(originalId) || []),
+      ...(periodPurchases.filter(note => originalByNoteId.get(note.id)?.id === originalId) as unknown as Array<Record<string, unknown>>)
+    ];
+    const fiscalCaps: Array<[string, string, number]> = [
+      ['totalAmountBs', 'importe total', 0.02], ['taxableBaseBs', 'base imponible', 0.02],
+      ['exemptAmountBs', 'base exenta', 0.02], ['vatAmountBs', 'IVA', 0.02],
+      ['additionalLuxuryTaxBs', 'impuesto al consumo suntuario', 0.02]
+    ];
+    if (originalFields) {
+      for (const [field, label, tolerance] of fiscalCaps) {
+        // Older filed snapshots may predate these extended fiscal fields. Only
+        // enforce a ceiling when the original document actually preserved it.
+        if (originalFields[field] === undefined || originalFields[field] === null) continue;
+        const cap = Number(originalFields[field]);
+        const accumulated = noteSnapshots.reduce((sum, note) => sum + Number(note[field] || 0), 0);
+        if (!Number.isFinite(cap) || cap < 0 || !Number.isFinite(accumulated) || accumulated - cap > tolerance) {
+          throw new Error('Las notas de crédito acumuladas superan el ' + label + ' de la factura original ' +
+            String(original?.invoiceNumber || originalId) + '. Revise las devoluciones parciales antes de declarar.');
+        }
+      }
+      const originalLines = Array.isArray(originalFields.inventoryLines) ? originalFields.inventoryLines as Array<Record<string, unknown>> : [];
+      const noteLines = noteSnapshots.flatMap(note => Array.isArray(note.creditNoteLines)
+        ? note.creditNoteLines as Array<Record<string, unknown>> : []);
+      if (noteLines.length) {
+        if (!originalLines.length) {
+          throw new Error('La factura original no conserva el detalle de inventario necesario para validar las cantidades devueltas.');
+        }
+        const originalQuantities = new Map<string, number>();
+        const returnedQuantities = new Map<string, number>();
+        for (const line of originalLines) {
+          const productId = String(line.productId || '');
+          const quantity = Number(line.quantity);
+          if (!productId || !Number.isFinite(quantity) || quantity < 0) {
+            throw new Error('El detalle de inventario histórico de la factura original no permite validar cantidades devueltas.');
+          }
+          originalQuantities.set(productId, (originalQuantities.get(productId) || 0) + quantity);
+        }
+        for (const line of noteLines) {
+          const productId = String(line.productId || '');
+          const quantity = Number(line.quantity);
+          if (!productId || !Number.isFinite(quantity) || quantity <= 0) {
+            throw new Error('Una nota de crédito contiene una cantidad devuelta inválida.');
+          }
+          returnedQuantities.set(productId, (returnedQuantities.get(productId) || 0) + quantity);
+        }
+        for (const [productId, quantity] of returnedQuantities) {
+          if (quantity - (originalQuantities.get(productId) || 0) > 0.000001) {
+            throw new Error('Las notas de crédito acumuladas exceden la cantidad comprada del artículo ' + productId + '.');
+          }
+        }
+      }
+    }
+  }
+
+  const hasCommonCurrentPurchases = periodPurchases.some(item => {
+    const original = originalByNoteId.get(item.id);
+    if (original && original.invoiceDate.slice(0, 7) < input.period) return false;
+    const treatment = original
+      ? resolveVatOwnPurchaseCreditTreatment(original.vatCreditTreatment)
+      : resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment);
+    return treatment === 'COMMON' && Number(item.vatAmountBs || 0) > 0;
+  });
+  const prorationRate = resolveVatOwnProrationRate({
+    taxableSalesBaseBs: input.taxableSalesBaseBs,
+    exemptSalesBaseBs: input.exemptSalesBaseBs,
+    hasCommonPurchases: hasCommonCurrentPurchases
+  });
+  if (prorationRate === null) {
+    throw new Error('No se puede determinar la prorrata del IVA de compras comunes: el período no tiene una base válida de ventas gravadas y exentas.');
+  }
+
+  let gross16Bs = 0, gross8Bs = 0, eligible16Bs = 0, eligible8Bs = 0;
+  let nonEligible16Bs = 0, nonEligible8Bs = 0;
+  let priorReversalEligible16Bs = 0, priorReversalEligible8Bs = 0;
+  let priorReversalNonEligible16Bs = 0, priorReversalNonEligible8Bs = 0;
+  for (const item of periodPurchases) {
+    const amountBs = Number(item.vatAmountBs || 0);
+    if (!Number.isFinite(amountBs) || amountBs < 0) throw new Error('Una compra del período contiene IVA bruto inválido.');
+    if (amountBs > 0 && ![8, 16, 31].includes(item.taxRate)) {
+      throw new Error('Una compra del período contiene IVA con una alícuota no reconocida.');
+    }
+    const priorNote = item.documentType === '03'
+      ? priorNotes.find(row => row.item.id === item.id)
+      : undefined;
+    const effectiveTaxRate = priorNote?.taxRate ?? item.taxRate;
+    const isEight = effectiveTaxRate === 8;
+    const add = (bucket: 'gross' | 'eligible' | 'nonEligible', value: number) => {
+      if (isEight) {
+        if (bucket === 'gross') gross8Bs += value;
+        else if (bucket === 'eligible') eligible8Bs += value;
+        else nonEligible8Bs += value;
+      } else {
+        if (bucket === 'gross') gross16Bs += value;
+        else if (bucket === 'eligible') eligible16Bs += value;
+        else nonEligible16Bs += value;
+      }
+    };
+    if (item.documentType === '03') {
+      if (priorNote) {
+        const treatment = priorNote.treatment;
+        const priorRate = Number(priorNote.prior.position.prorationRate);
+        const priorSalesBase = Number(priorNote.prior.position.taxableSalesBaseBs || 0) +
+          Number(priorNote.prior.position.exemptSalesBaseBs || 0);
+        if (treatment === 'COMMON' && (!Number.isFinite(priorRate) || priorRate < 0 || priorRate > 1 ||
+            !Number.isFinite(priorSalesBase) || priorSalesBase <= 0)) {
+          throw new Error('La declaración anterior no conserva una prorrata sustentada por una base válida de ventas para revertir el crédito de la factura original.');
+        }
+        const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : priorRate;
+        const eligible = amountBs * factor;
+        const nonEligible = amountBs - eligible;
+        reclassifications.push({
+          purchaseId: item.id, basePurchaseId: priorNote.original.id,
+          taxRate: effectiveTaxRate, nonEligibleSignedBs: -nonEligible,
+          sourcePurchaseSnapshot: priorNote.prior.sourceSnapshots?.[priorNote.original.id]
+        });
+        if (isEight) {
+          priorReversalEligible8Bs += eligible;
+          priorReversalNonEligible8Bs += nonEligible;
+        } else {
+          priorReversalEligible16Bs += eligible;
+          priorReversalNonEligible16Bs += nonEligible;
+        }
+        continue;
+      }
+    }
+    const sign = item.documentType === '03' ? -1 : 1;
+    const original = originalByNoteId.get(item.id);
+    const treatment = original
+      ? resolveVatOwnPurchaseCreditTreatment(original.vatCreditTreatment)
+      : resolveVatOwnPurchaseCreditTreatment(item.vatCreditTreatment);
+    const factor = treatment === 'TAXABLE' ? 1 : treatment === 'EXEMPT' ? 0 : prorationRate;
+    add('gross', sign * amountBs);
+    add('eligible', sign * amountBs * factor);
+    add('nonEligible', sign * amountBs * (1 - factor));
+    reclassifications.push({
+      purchaseId: item.id, basePurchaseId: original?.id || item.id,
+      taxRate: item.taxRate, nonEligibleSignedBs: sign * amountBs * (1 - factor)
+    });
+  }
+  if ([gross16Bs, gross8Bs, eligible16Bs, eligible8Bs, nonEligible16Bs, nonEligible8Bs].some(value => value < -0.02)) {
+    throw new Error('Las notas de crédito del mismo período exceden el crédito fiscal de compras. Revise los documentos vinculados antes de declarar.');
+  }
+  gross16Bs = Math.max(0, gross16Bs); gross8Bs = Math.max(0, gross8Bs);
+  eligible16Bs = Math.max(0, eligible16Bs); eligible8Bs = Math.max(0, eligible8Bs);
+  nonEligible16Bs = Math.max(0, nonEligible16Bs); nonEligible8Bs = Math.max(0, nonEligible8Bs);
+  return {
+    prorationRate, gross16Bs, gross8Bs, eligible16Bs, eligible8Bs, nonEligible16Bs, nonEligible8Bs,
+    priorReversalEligible16Bs, priorReversalEligible8Bs,
+    priorReversalNonEligible16Bs, priorReversalNonEligible8Bs,
+    relatedPurchaseIds: [...new Set(relatedPurchaseIds)], reclassifications
+  };
+}
+
+export function buildVatOwnPurchaseVatReclassificationItems(input: {
+  companyId: string;
+  period: string;
+  bcvRate: number;
+  allPurchases: readonly PurchaseRecord[];
+  journalEntries: readonly JournalEntry[];
+  summary: VatOwnPurchaseCreditSummary;
+}): JournalEntryItem[] {
+  const rate = Number(input.bcvRate);
+  if (!Number.isFinite(rate) || rate <= 0) throw new Error('Se requiere una tasa BCV válida para reclassificar el IVA no acreditable.');
+  const excludedDebitAccounts = new Set(['1.1.3.01', '1.1.3.02', '6.1.1.11', '6.1.1.13']);
+  const result: JournalEntryItem[] = [];
+  const round = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+  for (const adjustment of input.summary.reclassifications) {
+    const signedAmount = round(Number(adjustment.nonEligibleSignedBs));
+    if (!Number.isFinite(signedAmount)) throw new Error('Una reclassificación de IVA no acreditable contiene un importe inválido.');
+    const sourcePurchase = input.allPurchases.find(item =>
+      item.id === adjustment.basePurchaseId && item.companyId === input.companyId
+    );
+    if (!sourcePurchase) {
+      throw new Error('No se encontró la factura de compra original del documento ' + adjustment.purchaseId + '.');
+    }
+    let historicalSource: Record<string, unknown> | undefined;
+    if (adjustment.sourcePurchaseSnapshot) {
+      try { historicalSource = JSON.parse(adjustment.sourcePurchaseSnapshot) as Record<string, unknown>; }
+      catch { throw new Error('La huella fiscal histórica de la factura original no se puede leer para distribuir su IVA no acreditable.'); }
+      if (historicalSource.kind !== 'PURCHASE' || historicalSource.id !== adjustment.basePurchaseId ||
+          Number(historicalSource.taxRate) !== adjustment.taxRate ||
+          !Number.isFinite(Number(historicalSource.vatAmountBs)) || Number(historicalSource.vatAmountBs) < 0 ||
+          !Number.isFinite(Number(historicalSource.taxableBaseBs)) ||
+          !Number.isFinite(Number(historicalSource.exemptAmountBs || 0)) ||
+          !String(historicalSource.journalEntryId || '') || !historicalSource.journal ||
+          typeof historicalSource.journal !== 'object') {
+        throw new Error('La huella fiscal histórica de la factura original no conserva su asiento y bases de compra verificables.');
+      }
+    }
+    const historicalJournal = historicalSource?.journal as Record<string, unknown> | undefined;
+    const sourceJournalId = String(historicalSource?.journalEntryId || sourcePurchase.journalEntryId || '');
+    const originalVatForJournal = historicalSource
+      ? Number(historicalSource.vatAmountBs)
+      : Number(sourcePurchase.vatAmountBs || 0);
+    const requiresPurchaseJournal = Math.abs(signedAmount) >= 0.01 || originalVatForJournal > 0;
+    if (!requiresPurchaseJournal) continue;
+    if (!sourceJournalId) {
+      throw new Error('No se puede conciliar el IVA del documento ' + adjustment.purchaseId + ': la factura original no conserva su asiento de compra.');
+    }
+    const sourceEntries = input.journalEntries.filter(entry =>
+      entry.id === sourceJournalId && entry.companyId === input.companyId
+    );
+    if (sourceEntries.length !== 1) {
+      throw new Error('No se encontró un único asiento contable de origen para distribuir el IVA no acreditable de la factura ' + sourcePurchase.invoiceNumber + '.');
+    }
+    const liveSourceEntry = sourceEntries[0];
+    if (liveSourceEntry.reversalOfEntryId || liveSourceEntry.reversedByEntryId ||
+        historicalJournal?.reversalOfEntryId || historicalJournal?.reversedByEntryId ||
+        input.journalEntries.some(entry => entry.companyId === input.companyId && entry.reversalOfEntryId === sourceJournalId)) {
+      throw new Error('No se puede conciliar el IVA de una factura cuyo asiento de compra fue revertido. Reconcilie primero el estado fiscal del documento.');
+    }
+    const sourceEntry = historicalJournal
+      ? { ...historicalJournal, items: historicalJournal.items as JournalEntryItem[] }
+      : liveSourceEntry;
+    if (historicalJournal && (historicalJournal.id !== sourceJournalId || !Array.isArray(historicalJournal.items))) {
+      throw new Error('La huella fiscal histórica no coincide con el asiento contable original de la factura.');
+    }
+    if (historicalJournal) {
+      const normalizeJournalLines = (lines: JournalEntryItem[]) => lines.map(line => ({
+        accountCode: String(line.accountCode || ''),
+        debitBs: Number(line.debitBs || 0), creditBs: Number(line.creditBs || 0),
+        debitUsd: Number(line.debitUsd || 0), creditUsd: Number(line.creditUsd || 0)
+      })).sort((a, b) => a.accountCode.localeCompare(b.accountCode));
+      const historicalLines = normalizeJournalLines(historicalJournal.items as JournalEntryItem[]);
+      const currentLines = normalizeJournalLines(liveSourceEntry.items);
+      if (JSON.stringify(historicalLines) !== JSON.stringify(currentLines) ||
+          (historicalJournal.date && historicalJournal.date !== liveSourceEntry.date) ||
+          (historicalJournal.type && historicalJournal.type !== liveSourceEntry.type)) {
+        throw new Error('El asiento de compra original difiere de la huella fiscal presentada. Reconcilie el asiento antes de revertir la nota de crédito.');
+      }
+    }
+    if (Math.abs(signedAmount) < 0.01) continue;
+    const grouped = new Map<string, { accountName: string; amountBs: number }>();
+    for (const item of sourceEntry.items) {
+      if (Number(item.debitBs || 0) <= 0 || excludedDebitAccounts.has(item.accountCode)) continue;
+      const liveLine = liveSourceEntry.items.find(line => line.accountCode === item.accountCode);
+      const current = grouped.get(item.accountCode) || {
+        accountName: item.accountName || liveLine?.accountName || item.accountCode,
+        amountBs: 0
+      };
+      current.amountBs += Number(item.debitBs || 0);
+      grouped.set(item.accountCode, current);
+    }
+    const destinations = [...grouped.entries()].filter(([, value]) => value.amountBs > 0);
+    const totalDestinationBase = destinations.reduce((sum, [, value]) => sum + value.amountBs, 0);
+    const expectedBase = historicalSource
+      ? Number(historicalSource.taxableBaseBs) + Number(historicalSource.exemptAmountBs || 0)
+      : Number(sourcePurchase.taxableBaseBs || 0) + Number(sourcePurchase.exemptAmountBs || 0);
+    const invoiceNumber = String(historicalSource?.invoiceNumber || sourcePurchase.invoiceNumber || adjustment.basePurchaseId);
+    if (!Number.isFinite(expectedBase) || expectedBase <= 0 || totalDestinationBase <= 0 ||
+        Math.abs(totalDestinationBase - expectedBase) > 0.05) {
+      throw new Error('El asiento de la factura ' + invoiceNumber + ' no permite distribuir de forma verificable el IVA no acreditable entre sus cuentas de costo, inventario o gasto.');
+    }
+    const absoluteAmount = Math.abs(signedAmount);
+    const totalCents = Math.round(absoluteAmount * 100);
+    let allocatedCents = 0;
+    destinations.forEach(([accountCode, destination], index) => {
+      const allocationCents = index === destinations.length - 1
+        ? totalCents - allocatedCents
+        : Math.floor(totalCents * destination.amountBs / totalDestinationBase);
+      allocatedCents += allocationCents;
+      const allocation = allocationCents / 100;
+      if (allocation <= 0) return;
+      const isDebit = signedAmount > 0;
+      result.push({
+        accountCode, accountName: destination.accountName,
+        debitBs: isDebit ? allocation : 0, creditBs: isDebit ? 0 : allocation,
+        debitUsd: isDebit ? allocation / rate : 0, creditUsd: isDebit ? 0 : allocation / rate,
+        description: 'Reclasificación IVA no acreditable · ' + sourcePurchase.invoiceNumber + ' · ' + input.period
+      });
+    });
+    const inputVatCode = adjustment.taxRate === 8 ? '1.1.3.02' : '1.1.3.01';
+    const inputVatName = adjustment.taxRate === 8
+      ? 'Crédito Fiscal IVA Compras (Alícuota Reducida 8%)'
+      : 'Crédito Fiscal IVA Compras (Alícuota General 16%)';
+    const inputVatDebit = signedAmount < 0;
+    result.push({
+      accountCode: inputVatCode, accountName: inputVatName,
+      debitBs: inputVatDebit ? absoluteAmount : 0,
+      creditBs: inputVatDebit ? 0 : absoluteAmount,
+      debitUsd: inputVatDebit ? absoluteAmount / rate : 0,
+      creditUsd: inputVatDebit ? 0 : absoluteAmount / rate,
+      description: 'Reclasificación IVA no acreditable · Documento ' + adjustment.purchaseId + ' · ' + input.period
+    });
+  }
+  const debitBs = result.reduce((sum, item) => sum + item.debitBs, 0);
+  const creditBs = result.reduce((sum, item) => sum + item.creditBs, 0);
+  const debitUsd = result.reduce((sum, item) => sum + item.debitUsd, 0);
+  const creditUsd = result.reduce((sum, item) => sum + item.creditUsd, 0);
+  if (Math.abs(debitBs - creditBs) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.000001) {
+    throw new Error('La reclasificación del IVA no acreditable no cuadra en Bs y USD. No se preparó la declaración.');
+  }
+  return result;
 }
 
 export function snapshotVatOwnDeclarationRevision(
@@ -179,8 +873,11 @@ export function snapshotVatOwnDeclarationRevision(
     reason: reason.trim(),
     position: { ...declaration.position },
     sourceIds: [...declaration.sourceIds],
+    relatedSourceIds: [...(declaration.relatedSourceIds || [])],
     bcvRate: declaration.bcvRate,
     dailySourceChoices: { ...(declaration.dailySourceChoices || {}) },
+    purchaseVatReclassificationItems: (declaration.purchaseVatReclassificationItems || []).map(item => ({ ...item })),
+    sourceSnapshots: declaration.sourceSnapshots ? { ...declaration.sourceSnapshots } : undefined,
     createdAt: declaration.createdAt
   };
 }
@@ -236,11 +933,26 @@ export function calculateVatOwnPosition(input: VatOwnPositionInput): VatOwnPosit
       Math.abs(purchaseCreditGrossBs - purchaseCreditBs - purchaseCreditNonEligibleBs) > 0.02) {
     throw new Error('El desglose de crédito fiscal acreditable, bruto y no acreditable no concilia.');
   }
+  const purchaseCreditReversalBs = amount(input.purchaseCreditReversalBs, 'Reversión de crédito fiscal de compras de períodos anteriores');
+  const purchaseCreditReversal16Bs = amount(input.purchaseCreditReversal16Bs, 'Reversión de crédito fiscal de compras 16%');
+  const purchaseCreditReversal8Bs = amount(input.purchaseCreditReversal8Bs, 'Reversión de crédito fiscal de compras 8%');
+  const purchaseCreditReversalNonEligibleBs = amount(input.purchaseCreditReversalNonEligibleBs, 'Reversión de IVA no acreditable de períodos anteriores');
+  const purchaseCreditReversalNonEligible16Bs = amount(input.purchaseCreditReversalNonEligible16Bs, 'Reversión de IVA no acreditable 16%');
+  const purchaseCreditReversalNonEligible8Bs = amount(input.purchaseCreditReversalNonEligible8Bs, 'Reversión de IVA no acreditable 8%');
+  if (Math.abs(purchaseCreditReversal16Bs + purchaseCreditReversal8Bs - purchaseCreditReversalBs) > 0.02 ||
+      Math.abs(purchaseCreditReversalNonEligible16Bs + purchaseCreditReversalNonEligible8Bs - purchaseCreditReversalNonEligibleBs) > 0.02) {
+    throw new Error('El desglose de reversión de crédito fiscal 16% y 8% no concilia.');
+  }
   const receivedWithholdingsBs = amount(input.receivedWithholdingsBs, 'Retenciones de IVA recibidas');
   const priorCreditAvailableBs = amount(input.priorCreditBs, 'Crédito de períodos anteriores');
   const debitAdjustmentsBs = amount(input.debitAdjustmentsBs, 'Ajustes al débito');
   const creditAdjustmentsBs = amount(input.creditAdjustmentsBs, 'Ajustes al crédito');
-  const balanceBeforePriorCredit = outputVatBs + debitAdjustmentsBs - purchaseCreditBs -
+  const creditAdjustments16Bs = amount(input.creditAdjustments16Bs ?? creditAdjustmentsBs, 'Ajustes al crédito IVA 16%');
+  const creditAdjustments8Bs = amount(input.creditAdjustments8Bs, 'Ajustes al crédito IVA 8%');
+  if (Math.abs(creditAdjustments16Bs + creditAdjustments8Bs - creditAdjustmentsBs) > 0.02) {
+    throw new Error('El desglose de ajustes al crédito fiscal 16% y 8% no concilia.');
+  }
+  const balanceBeforePriorCredit = outputVatBs + debitAdjustmentsBs + purchaseCreditReversalBs - purchaseCreditBs -
     receivedWithholdingsBs - creditAdjustmentsBs;
   const priorCreditAppliedBs = Math.min(priorCreditAvailableBs, Math.max(0, balanceBeforePriorCredit));
   const unusedPriorCreditBs = priorCreditAvailableBs - priorCreditAppliedBs;
@@ -249,11 +961,34 @@ export function calculateVatOwnPosition(input: VatOwnPositionInput): VatOwnPosit
     outputVatBs, outputVat16Bs, outputVat8Bs,
     purchaseCreditBs, purchaseCredit16Bs, purchaseCredit8Bs,
     purchaseCreditGrossBs, purchaseCreditGross16Bs, purchaseCreditGross8Bs,
-    purchaseCreditNonEligibleBs, prorationRate, taxableSalesBaseBs, exemptSalesBaseBs, receivedWithholdingsBs,
-    priorCreditAppliedBs, debitAdjustmentsBs, creditAdjustmentsBs,
+    purchaseCreditNonEligibleBs, purchaseCreditReversalBs, purchaseCreditReversal16Bs, purchaseCreditReversal8Bs,
+    purchaseCreditReversalNonEligibleBs, purchaseCreditReversalNonEligible16Bs, purchaseCreditReversalNonEligible8Bs,
+    prorationRate, taxableSalesBaseBs, exemptSalesBaseBs, receivedWithholdingsBs,
+    priorCreditAppliedBs, debitAdjustmentsBs, creditAdjustmentsBs, creditAdjustments16Bs, creditAdjustments8Bs,
     netTaxBs, amountDueBs: Math.max(0, netTaxBs),
     creditCarryForwardBs: Math.max(0, -netTaxBs) + unusedPriorCreditBs
   };
+}
+
+export function getVatOwnNewCreditCarryForward(input: {
+  priorCreditAvailableBs: number;
+  priorCreditAppliedBs: number;
+  totalCreditCarryForwardBs: number;
+}): number {
+  const values = [input.priorCreditAvailableBs, input.priorCreditAppliedBs, input.totalCreditCarryForwardBs].map(Number);
+  if (values.some(value => !Number.isFinite(value) || value < 0)) {
+    throw new Error('El arrastre de crédito fiscal contiene importes inválidos.');
+  }
+  const [priorAvailable, priorApplied, totalCarryForward] = values;
+  if (priorApplied - priorAvailable > 0.02) {
+    throw new Error('El crédito fiscal aplicado supera el saldo anterior disponible.');
+  }
+  const unusedPriorCredit = Math.max(0, priorAvailable - priorApplied);
+  const newlyGeneratedCredit = totalCarryForward - unusedPriorCredit;
+  if (newlyGeneratedCredit < -0.02) {
+    throw new Error('El saldo trasladable no concilia con el crédito fiscal anterior no utilizado.');
+  }
+  return Math.max(0, newlyGeneratedCredit);
 }
 
 export function validateVatOwnDeclarationDraft(input: {
@@ -261,6 +996,8 @@ export function validateVatOwnDeclarationDraft(input: {
   companyId: string;
   period: string;
   sourceIds: string[];
+  relatedSourceIds?: string[];
+  purchaseVatReclassificationItems?: JournalEntryItem[];
   createdAt: string;
 }): void {
   if (!input.id.trim() || !input.companyId.trim()) throw new Error('La declaración requiere identificador y empresa.');
@@ -270,6 +1007,26 @@ export function validateVatOwnDeclarationDraft(input: {
     throw new Error('Una misma fuente no puede incluirse dos veces en la declaración.');
   }
   if (input.sourceIds.some(id => !id.trim())) throw new Error('La declaración contiene una fuente sin identificador.');
+  if (input.relatedSourceIds && (
+    input.relatedSourceIds.some(id => !id.trim()) ||
+    new Set(input.relatedSourceIds).size !== input.relatedSourceIds.length ||
+    input.relatedSourceIds.some(id => input.sourceIds.includes(id))
+  )) throw new Error('Las facturas relacionadas deben tener identificadores únicos, válidos y separados de las fuentes directas.');
+  const reclassifications = input.purchaseVatReclassificationItems || [];
+  if (reclassifications.some(item =>
+    !item.accountCode?.trim() ||
+    [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].some(value => !Number.isFinite(Number(value)) || Number(value) < 0) ||
+    (Number(item.debitBs) > 0 && Number(item.creditBs) > 0) ||
+    (Number(item.debitUsd) > 0 && Number(item.creditUsd) > 0)
+  )) throw new Error('Una línea de reclasificación de IVA contiene cuenta o importes inválidos.');
+  const debitBs = reclassifications.reduce((sum, item) => sum + Number(item.debitBs || 0), 0);
+  const creditBs = reclassifications.reduce((sum, item) => sum + Number(item.creditBs || 0), 0);
+  const debitUsd = reclassifications.reduce((sum, item) => sum + Number(item.debitUsd || 0), 0);
+  const creditUsd = reclassifications.reduce((sum, item) => sum + Number(item.creditUsd || 0), 0);
+  if ([debitBs, creditBs, debitUsd, creditUsd].some(value => !Number.isFinite(value)) ||
+      Math.abs(debitBs - creditBs) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.000001) {
+    throw new Error('Las reclasificaciones de IVA no acreditable del borrador no cuadran en Bs y USD.');
+  }
 }
 
 export function getVatOwnOutstandingBalance(
@@ -298,15 +1055,26 @@ export function validateVatOwnEvent(input: {
   if (draft.companyId !== declaration.companyId || draft.declarationId !== declaration.id) {
     throw new Error('El evento no pertenece a la declaración y empresa seleccionadas.');
   }
+  if (!isValidVatOwnDeclarationPeriod(declaration.period)) throw new Error('El período de la declaración no es válido.');
   if (!draft.idempotencyKey.trim()) throw new Error('El evento requiere una clave de idempotencia.');
   if (events.some(event => event.idempotencyKey === draft.idempotencyKey)) {
     throw new Error('La operación ya fue registrada; no se admite un duplicado.');
   }
-  if (!draft.occurredAt || Number.isNaN(Date.parse(draft.occurredAt))) {
+  const eventDatePart = String(draft.occurredAt || '').slice(0, 10);
+  const parsedEventDate = /^\d{4}-\d{2}-\d{2}$/.test(eventDatePart)
+    ? new Date(eventDatePart + 'T00:00:00.000Z') : null;
+  const validEventTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(String(draft.occurredAt || ''));
+  if (!validEventTimestamp || !parsedEventDate || !Number.isFinite(parsedEventDate.getTime()) ||
+      parsedEventDate.toISOString().slice(0, 10) !== eventDatePart || Number.isNaN(Date.parse(draft.occurredAt))) {
     throw new Error('La fecha del evento no es válida.');
   }
   if (draft.eventType === 'FILED') {
     if (declaration.status !== 'DRAFT') throw new Error('La declaración ya fue presentada.');
+    const [periodYear, periodMonth] = declaration.period.split('-').map(Number);
+    const periodEndDate = new Date(Date.UTC(periodYear, periodMonth, 0)).toISOString().slice(0, 10);
+    if (eventDatePart <= periodEndDate) {
+      throw new Error('No se puede presentar una declaración mensual antes de que finalice el período fiscal seleccionado (' + periodEndDate + ').');
+    }
     if (!draft.declarationNumber?.trim()) throw new Error('Indique el número oficial de declaración.');
     if (input.sameCompanyDeclarationNumbers?.includes(draft.declarationNumber.trim())) {
       throw new Error('El número oficial ya está asociado a otra declaración de esta empresa.');
@@ -317,8 +1085,13 @@ export function validateVatOwnEvent(input: {
     if (declaration.status !== 'FILED') throw new Error('Presente la declaración antes de registrar su pago.');
     const payment = amount(draft.amountBs, 'El pago');
     if (payment <= 0) throw new Error('El pago debe ser mayor que cero.');
-    if (declaration.filedAt && Date.parse(draft.occurredAt) < Date.parse(declaration.filedAt)) {
-      throw new Error('La fecha del pago no puede ser anterior a la presentación de la declaración.');
+    const now = new Date();
+    const localToday = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    if (draft.occurredAt.slice(0, 10) > localToday) {
+      throw new Error('La fecha del pago no puede ser futura.');
+    }
+    if (declaration.filedAt && draft.occurredAt.slice(0, 10) < declaration.filedAt.slice(0, 10)) {
+      throw new Error('La fecha del pago no puede ser anterior al día de presentación de la declaración.');
     }
     if (!draft.reference?.trim()) throw new Error('El pago requiere referencia del comprobante o movimiento bancario.');
     if (events.some(event =>
@@ -412,7 +1185,7 @@ export function resolveVatOwnDailySalesSources(input: {
     target.outputVatBs += sign * amount(sale.vatAmountBs, 'IVA de venta');
     if (sale.taxRate === 8) target.outputVat8Bs += sign * amount(sale.vatAmountBs, 'IVA 8% de venta');
     else target.outputVat16Bs += sign * amount(sale.vatAmountBs, 'IVA 16% de venta');
-    target.exemptSalesBs += sign * amount(sale.exemptAmountBs, 'Venta exenta');
+    target.exemptSalesBs += sign * (amount(sale.exemptAmountBs, 'Venta exenta') + (sale.taxRate === 0 ? amount(sale.taxableBaseBs, 'Venta a 0% exenta') : 0));
     if (sale.taxRate === 16) target.taxableBase16Bs += sign * amount(sale.taxableBaseBs, 'Base 16%');
     else if (sale.taxRate === 8) target.taxableBase8Bs += sign * amount(sale.taxableBaseBs, 'Base 8%');
     else if (sale.taxRate === 31) target.taxableBase31Bs += sign * amount(sale.taxableBaseBs, 'Base 31%');

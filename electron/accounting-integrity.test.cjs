@@ -2015,7 +2015,7 @@ function vatDeclarationFixture(overrides = {}) {
       taxableBaseBs: 1000, vatAmountBs: 160, vatWithheldBs: 120,
       requiresFiscalCorrection: false
     }],
-    totalTaxableBaseBs: 1000, totalVatAmountBs: 160, totalWithheldBs: 120,
+    totalTaxableBaseBs: 1000, totalVatAmountBs: 160, totalWithheldBs: 120, totalWithheldUsd: 1.2,
     createdAt: '2026-10-16T10:00:00.000Z'
   };
   return {
@@ -2027,6 +2027,478 @@ function vatDeclarationFixture(overrides = {}) {
     ...overrides
   };
 }
+
+
+function vatOwnPositionFixture(overrides = {}) {
+  return {
+    outputVatBs: 100, outputVat16Bs: 100, outputVat8Bs: 0,
+    purchaseCreditBs: 0, purchaseCredit16Bs: 0, purchaseCredit8Bs: 0,
+    purchaseCreditGrossBs: 0, purchaseCreditGross16Bs: 0, purchaseCreditGross8Bs: 0,
+    purchaseCreditNonEligibleBs: 0, purchaseCreditReversalBs: 0,
+    purchaseCreditReversal16Bs: 0, purchaseCreditReversal8Bs: 0,
+    purchaseCreditReversalNonEligibleBs: 0, purchaseCreditReversalNonEligible16Bs: 0,
+    purchaseCreditReversalNonEligible8Bs: 0, prorationRate: 1,
+    taxableSalesBaseBs: 625, exemptSalesBaseBs: 0, receivedWithholdingsBs: 0,
+    priorCreditAppliedBs: 0, debitAdjustmentsBs: 0, creditAdjustmentsBs: 0,
+    creditAdjustments16Bs: 0, creditAdjustments8Bs: 0, netTaxBs: 100,
+    amountDueBs: 100, creditCarryForwardBs: 0, ...overrides
+  };
+}
+
+function vatOwnDeclarationFixture(overrides = {}) {
+  const declaration = {
+    id: 'vat-own-1', companyId: 'company-1', period: '2026-11',
+    status: 'DRAFT', position: vatOwnPositionFixture(),
+    sourceIds: [], relatedSourceIds: [], sourceSnapshots: {}, bcvRate: 874,
+    dailySourceChoices: {}, purchaseVatReclassificationItems: [],
+    createdAt: '2026-11-11T10:00:00.000Z'
+  };
+  return {
+    ...emptyState(),
+    accounts: [
+      { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', isMovement: true },
+      { code: '2.1.2.01', name: 'IVA débito', type: 'PASIVO', isMovement: true },
+      { code: '2.1.2.09', name: 'IVA por enterar', type: 'PASIVO', isMovement: true }
+    ],
+    companies: [{ id: 'company-1', name: 'Empresa Uno', bcvRate: 874, accountingBcvRateHistory: [
+      { id: 'bcv-oct', rate: 874, effectiveDate: '2026-10-01', recordedAt: '2026-10-01T08:00:00.000Z' },
+      { id: 'bcv-nov', rate: 874, effectiveDate: '2026-11-01', recordedAt: '2026-11-01T08:00:00.000Z' }
+    ] }],
+    vatOwnDeclarations: [declaration],
+    vatOwnDeclarationEvents: [],
+    ...overrides
+  };
+}
+
+function vatOwnFilingEntry() {
+  return {
+    id: 'entry-iva-filed', companyId: 'company-1', entryNumber: 1,
+    date: '2026-11-11', description: 'Determinación mensual del IVA · 2026-10',
+    type: 'AJUSTE', bcvRate: 874, referenceDoc: 'IVA-MENSUAL:2026-10',
+    items: [
+      { accountCode: '2.1.2.01', accountName: 'IVA débito', debitBs: 100, creditBs: 0, debitUsd: 100 / 874, creditUsd: 0 },
+      { accountCode: '2.1.2.09', accountName: 'IVA por enterar', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 100 / 874 }
+    ],
+    createdAt: '2026-11-11T16:00:00.000Z'
+  };
+}
+
+function vatOwnFiledState() {
+  const base = vatOwnDeclarationFixture();
+  const journal = vatOwnFilingEntry();
+  const declaration = {
+    ...base.vatOwnDeclarations[0], period: '2026-10', status: 'FILED',
+    declarationNumber: 'IVA-2026-001', filedAt: '2026-11-11T12:00:00.000-04:00'
+  };
+  const event = {
+    id: 'vat-own-event-filed', declarationId: declaration.id, companyId: declaration.companyId,
+    eventType: 'FILED', occurredAt: declaration.filedAt, recordedAt: '2026-11-11T16:00:00.000Z',
+    declarationNumber: declaration.declarationNumber, idempotencyKey: 'FILED:' + declaration.id,
+    journalEntryId: journal.id
+  };
+  return {
+    ...base, vatOwnDeclarations: [declaration],
+    vatOwnDeclarationEvents: [event], journalEntries: [journal]
+  };
+}
+
+test('SQLite rechecks fiscal source snapshots at the exact moment an IVA draft is filed', () => {
+  const purchase = {
+    id: 'purchase-iva-source', companyId: 'company-1', invoiceDate: '2026-10-05',
+    accountCreditDate: null, documentType: '01', invoiceNumber: 'FC-IVA-001', controlNumber: 'CTRL-IVA-001',
+    supplierRif: 'J-12345678-9', supplierName: 'Proveedor Uno',
+    totalAmountBs: 1150, totalAmountUsd: 1.33, taxableBaseBs: 1000, taxableBaseUsd: 1.14,
+    exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 150, vatAmountUsd: 0.18,
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,
+    igtfAmountBs: 0, igtfAmountUsd: 0, vatCreditTreatment: 'TAXABLE',
+    vatWithheldBs: 0, vatWithheldUsd: 0, retentionRate: 0, voucherNumber: null,
+    bcvRate: 874, journalEntryId: null, originalPurchaseId: null,
+    affectedInvoiceNumber: null, affectedInvoiceDate: null, affectedInvoiceControlNumber: null,
+    affectedInvoiceTotalAmountBs: null, affectedInvoiceTotalAmountUsd: null,
+    inventoryLines: [{ productId: 'product-iva-1', quantity: 2, unitCostBs: 500 }], creditNoteLines: [],
+    isCancelled: false
+  };
+  const snapshot = JSON.stringify({
+    kind: 'PURCHASE', id: purchase.id, invoiceDate: purchase.invoiceDate,
+    accountCreditDate: null, documentType: purchase.documentType, invoiceNumber: purchase.invoiceNumber,
+    controlNumber: purchase.controlNumber, supplierRif: purchase.supplierRif, supplierName: purchase.supplierName,
+    totalAmountBs: 1160, totalAmountUsd: purchase.totalAmountUsd,
+    taxableBaseBs: purchase.taxableBaseBs, taxableBaseUsd: purchase.taxableBaseUsd,
+    exemptAmountBs: purchase.exemptAmountBs, exemptAmountUsd: 0,
+    taxRate: purchase.taxRate, vatAmountBs: 160, vatAmountUsd: purchase.vatAmountUsd,
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,
+    igtfAmountBs: 0, igtfAmountUsd: 0, vatCreditTreatment: 'TAXABLE',
+    vatWithheldBs: 0, vatWithheldUsd: 0, retentionRate: 0, voucherNumber: null,
+    bcvRate: 874, journalEntryId: null, originalPurchaseId: null,
+    affectedInvoiceNumber: null, affectedInvoiceDate: null, affectedInvoiceControlNumber: null,
+    affectedInvoiceTotalAmountBs: null, affectedInvoiceTotalAmountUsd: null,
+    inventoryLines: purchase.inventoryLines, creditNoteLines: [],
+    isCancelled: false, journal: null
+  });
+  const draft = {
+    ...vatOwnDeclarationFixture(),
+    purchases: [purchase],
+    vatOwnDeclarations: [{
+      ...vatOwnDeclarationFixture().vatOwnDeclarations[0],
+      period: '2026-10', sourceIds: [purchase.id], sourceSnapshots: { [purchase.id]: snapshot }
+    }]
+  };
+  // The draft was prepared with the 160 Bs snapshot; the live source now has 150 Bs.
+  // Filing must detect that mismatch even though the draft itself was not edited.
+  const filedDeclaration = {
+    ...draft.vatOwnDeclarations[0], status: 'FILED',
+    declarationNumber: 'IVA-2026-STALE', filedAt: '2026-11-11T12:00:00.000-04:00'
+  };
+  const filingEntry = vatOwnFilingEntry();
+  const filingEvent = {
+    id: 'vat-own-event-stale-snapshot', declarationId: filedDeclaration.id,
+    companyId: filedDeclaration.companyId, eventType: 'FILED',
+    occurredAt: filedDeclaration.filedAt, recordedAt: '2026-11-11T16:00:00.000Z',
+    declarationNumber: filedDeclaration.declarationNumber,
+    idempotencyKey: 'FILED:' + filedDeclaration.id, journalEntryId: filingEntry.id
+  };
+  const assertFilingRejectsChangedSource = (baseDraft, baseFiledDeclaration, changedPurchase) => assert.throws(() => validateAccountingSnapshot(baseDraft, {
+    ...baseDraft,
+    purchases: [changedPurchase],
+    vatOwnDeclarations: [baseFiledDeclaration],
+    vatOwnDeclarationEvents: [filingEvent],
+    journalEntries: [filingEntry]
+  }), /huellas fiscales del borrador ya no coinciden|SQLite bloqueó la modificación de un registro histórico/);
+  assertFilingRejectsChangedSource(draft, filedDeclaration, purchase);
+  const matchingSnapshot = JSON.stringify({ ...JSON.parse(snapshot), totalAmountBs: purchase.totalAmountBs, vatAmountBs: purchase.vatAmountBs });
+  const stableDraft = {
+    ...draft,
+    vatOwnDeclarations: [{ ...draft.vatOwnDeclarations[0], sourceSnapshots: { [purchase.id]: matchingSnapshot } }]
+  };
+  const stableFiledDeclaration = { ...filedDeclaration, sourceSnapshots: { [purchase.id]: matchingSnapshot } };
+  assertFilingRejectsChangedSource(stableDraft, stableFiledDeclaration, { ...purchase, inventoryLines: [{ ...purchase.inventoryLines[0], quantity: 1 }] });
+  assertFilingRejectsChangedSource(stableDraft, stableFiledDeclaration, { ...purchase, creditNoteLines: [{ productId: 'product-iva-1', quantity: 1 }] });
+});
+
+test('SQLite rejects IVA reclassification lines whose USD values do not match the BCV conversion', () => {
+  const fixture = vatOwnDeclarationFixture();
+  const declaration = {
+    ...fixture.vatOwnDeclarations[0],
+    purchaseVatReclassificationItems: [
+      { accountCode: '1.1.4.01', debitBs: 80, creditBs: 0, debitUsd: 0.5, creditUsd: 0 },
+      { accountCode: '1.1.3.01', debitBs: 0, creditBs: 80, debitUsd: 0, creditUsd: 0.5 }
+    ]
+  };
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...fixture, vatOwnDeclarations: [declaration]
+  }), /conversión Bs\/USD inconsistente/);
+});
+
+test('SQLite accepts a 100% immaterial proration when no common purchases exist', () => {
+  const fixture = vatOwnDeclarationFixture();
+  const declaration = {
+    ...fixture.vatOwnDeclarations[0],
+    position: vatOwnPositionFixture({
+      taxableSalesBaseBs: 500, exemptSalesBaseBs: 500, prorationRate: 1
+    })
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), {
+    ...fixture, vatOwnDeclarations: [declaration]
+  }));
+});
+
+test('SQLite rejects negative monetary components in an IVA declaration position', () => {
+  const fixture = vatOwnDeclarationFixture();
+  const declaration = {
+    ...fixture.vatOwnDeclarations[0],
+    position: vatOwnPositionFixture({
+      purchaseCreditBs: -1, purchaseCredit16Bs: -1,
+      purchaseCreditGrossBs: -1, purchaseCreditGross16Bs: -1,
+      purchaseCreditNonEligibleBs: 0
+    })
+  };
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...fixture, vatOwnDeclarations: [declaration]
+  }), /posición fiscal IVA con importes no finitos, negativos o incompatibles/);
+});
+
+test('SQLite accepts a new IVA own-account draft with exact fiscal source snapshots', () => {
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), vatOwnDeclarationFixture()));
+});
+
+test('SQLite blocks deletion, direct filing and unversioned edits of IVA own-account drafts', () => {
+  const prior = vatOwnDeclarationFixture();
+  assert.throws(() => validateAccountingSnapshot(prior, { ...prior, vatOwnDeclarations: [] }), /eliminación de una declaración IVA/);
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...prior, vatOwnDeclarations: [{ ...prior.vatOwnDeclarations[0], status: 'FILED', declarationNumber: 'X', filedAt: '2026-11-11T12:00:00.000-04:00' }]
+  }), /insertar directamente una declaración IVA/);
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...prior, vatOwnDeclarations: [{ ...prior.vatOwnDeclarations[0], position: vatOwnPositionFixture({ outputVatBs: 90, outputVat16Bs: 90, amountDueBs: 90, netTaxBs: 90 }) }]
+  }), /no conserva una versión íntegra/);
+});
+
+test('SQLite accepts a versioned IVA own-account draft refresh and blocks mutation after filing', () => {
+  const prior = vatOwnDeclarationFixture();
+  const old = prior.vatOwnDeclarations[0];
+  const revision = {
+    revision: 1, revisedAt: '2026-11-11T11:00:00.000Z',
+    reason: 'Actualización por conciliación de documentos',
+    position: { ...old.position }, sourceIds: [...old.sourceIds],
+    relatedSourceIds: [...old.relatedSourceIds], bcvRate: old.bcvRate,
+    dailySourceChoices: { ...old.dailySourceChoices },
+    purchaseVatReclassificationItems: [], sourceSnapshots: {}, createdAt: old.createdAt
+  };
+  const updated = {
+    ...old, position: vatOwnPositionFixture({ outputVatBs: 120, outputVat16Bs: 120, netTaxBs: 120, amountDueBs: 120 }),
+    updatedAt: '2026-11-11T11:00:00.000Z', revisions: [revision]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, {
+    ...prior, vatOwnDeclarations: [updated]
+  }));
+  const filed = vatOwnFiledState();
+  assert.throws(() => validateAccountingSnapshot(filed, {
+    ...filed, vatOwnDeclarations: [{ ...filed.vatOwnDeclarations[0], declarationNumber: 'ALTERADA' }]
+  }), /declaración IVA ya presentada/);
+});
+
+test('SQLite blocks filing a current-month IVA return before the month has ended', () => {
+  const prior = vatOwnDeclarationFixture();
+  const declaration = {
+    ...prior.vatOwnDeclarations[0], status: 'FILED',
+    declarationNumber: 'IVA-NOV-EARLY', filedAt: '2026-11-11T12:00:00.000-04:00'
+  };
+  const event = {
+    id: 'vat-own-event-early', declarationId: declaration.id, companyId: declaration.companyId,
+    eventType: 'FILED', occurredAt: declaration.filedAt, recordedAt: '2026-11-11T16:00:00.000Z',
+    declarationNumber: declaration.declarationNumber, idempotencyKey: 'FILED:' + declaration.id
+  };
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...prior, vatOwnDeclarations: [declaration], vatOwnDeclarationEvents: [event]
+  }), /antes de finalizar el período fiscal mensual/);
+});
+
+test('SQLite preserves legacy filed IVA declarations without new source fingerprints but requires them on new filing', () => {
+  const legacyFiled = vatOwnFiledState();
+  delete legacyFiled.vatOwnDeclarations[0].sourceSnapshots;
+  assert.doesNotThrow(() => validateAccountingSnapshot(legacyFiled, legacyFiled));
+  const draft = vatOwnDeclarationFixture();
+  const declaration = {
+    ...draft.vatOwnDeclarations[0], status: 'FILED',
+    declarationNumber: 'IVA-LEGACY-TRY', filedAt: '2026-11-11T12:00:00.000-04:00'
+  };
+  delete declaration.sourceSnapshots;
+  assert.throws(() => validateAccountingSnapshot(draft, {
+    ...draft, vatOwnDeclarations: [declaration],
+    vatOwnDeclarationEvents: [{
+      id: 'vat-own-event-no-snapshot', declarationId: declaration.id, companyId: declaration.companyId,
+      eventType: 'FILED', occurredAt: declaration.filedAt, recordedAt: '2026-11-11T16:00:00.000Z',
+      declarationNumber: declaration.declarationNumber, idempotencyKey: 'FILED:' + declaration.id
+    }]
+  }), /huellas documentales fiscales antes de presentar/);
+});
+
+test('SQLite requires the filed IVA own-account declaration to have exactly one matching filing event and determination entry', () => {
+  const filed = vatOwnFiledState();
+  const priorDraft = vatOwnDeclarationFixture();
+  priorDraft.vatOwnDeclarations[0].period = '2026-10';
+  assert.doesNotThrow(() => validateAccountingSnapshot(priorDraft, filed));
+  assert.throws(() => validateAccountingSnapshot(priorDraft, {
+    ...filed, vatOwnDeclarationEvents: []
+  }), /no coincide con su evento de presentación/);
+  assert.throws(() => validateAccountingSnapshot(priorDraft, {
+    ...filed, vatOwnDeclarationEvents: [{
+      ...filed.vatOwnDeclarationEvents[0], declarationNumber: 'OTRO-NÚMERO'
+    }]
+  }), /número, fecha o asiento de determinación coincidente/);
+  const unbalancedUsd = {
+    ...filed,
+    journalEntries: filed.journalEntries.map(entry => ({
+      ...entry,
+      items: entry.items.map((line, index) => index === 0
+        ? { ...line, debitUsd: Number(line.debitUsd) + 0.1 }
+        : line)
+    }))
+  };
+  assert.throws(() => validateAccountingSnapshot(priorDraft, unbalancedUsd), /desequilibrado en Bs y USD/);
+  const balancedWrongAccounts = {
+    ...filed,
+    journalEntries: filed.journalEntries.map(entry => ({
+      ...entry,
+      items: entry.items.map((line, index) => index === 0
+        ? { ...line, accountCode: '2.1.2.09' }
+        : line)
+    }))
+  };
+  assert.throws(() => validateAccountingSnapshot(priorDraft, balancedWrongAccounts), /líneas por cuenta no coinciden con la posición fiscal/);
+});
+
+test('SQLite enforces prior-period continuity and blocks a later filing before an earlier active month', () => {
+  const sale = {
+    id: 'sale-october', companyId: 'company-1', invoiceDate: '2026-10-15',
+    documentType: '01', invoiceNumber: 'F-001', isCancelled: false
+  };
+  const base = {
+    ...emptyState(), companies: [{ id: 'company-1', name: 'Empresa Uno', bcvRate: 874, accountingBcvRateHistory: [
+      { id: 'bcv-oct', rate: 874, effectiveDate: '2026-10-01', recordedAt: '2026-10-01T08:00:00.000Z' },
+      { id: 'bcv-nov', rate: 874, effectiveDate: '2026-11-01', recordedAt: '2026-11-01T08:00:00.000Z' }
+    ] }], sales: [sale]
+  };
+  const novemberDraft = {
+    ...vatOwnDeclarationFixture().vatOwnDeclarations[0], id: 'vat-own-2026-11', period: '2026-11'
+  };
+  assert.throws(() => validateAccountingSnapshot(base, {
+    ...base, vatOwnDeclarations: [novemberDraft], vatOwnDeclarationEvents: []
+  }), /períodos anteriores con actividad fiscal sin presentar/);
+
+  const zeroPosition = vatOwnPositionFixture({
+    outputVatBs: 0, outputVat16Bs: 0, outputVat8Bs: 0,
+    netTaxBs: 0, amountDueBs: 0, creditCarryForwardBs: 0
+  });
+  const octoberFiled = {
+    id: 'vat-own-2026-10', companyId: 'company-1', period: '2026-10',
+    status: 'FILED', position: zeroPosition, sourceIds: [], relatedSourceIds: [],
+    sourceSnapshots: {}, bcvRate: 874, dailySourceChoices: {},
+    declarationNumber: 'IVA-OCT-001', filedAt: '2026-11-01T12:00:00.000-04:00',
+    createdAt: '2026-10-31T10:00:00.000Z'
+  };
+  const octoberEvent = {
+    id: 'vat-own-event-october', declarationId: octoberFiled.id, companyId: 'company-1',
+    eventType: 'FILED', occurredAt: octoberFiled.filedAt, recordedAt: '2026-11-01T16:00:00.000Z',
+    declarationNumber: octoberFiled.declarationNumber, idempotencyKey: 'FILED:' + octoberFiled.id
+  };
+  const prior = {
+    ...base, vatOwnDeclarations: [octoberFiled],
+    vatOwnDeclarationEvents: [octoberEvent]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, {
+    ...prior, vatOwnDeclarations: [octoberFiled, novemberDraft]
+  }));
+  const decemberDraft = {
+    ...vatOwnDeclarationFixture().vatOwnDeclarations[0], id: 'vat-own-2026-12', period: '2026-12'
+  };
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...prior, vatOwnDeclarations: [octoberFiled, decemberDraft]
+  }), /períodos anteriores con actividad fiscal sin presentar/);
+
+  const novemberFiled = {
+    ...novemberDraft, id: 'vat-own-2026-10-later', period: '2026-10',
+    position: zeroPosition, status: 'FILED', declarationNumber: 'IVA-OCT-LATER',
+    filedAt: '2026-11-11T12:00:00.000-04:00'
+  };
+  const novemberEvent = {
+    id: 'vat-own-event-november', declarationId: novemberFiled.id, companyId: 'company-1',
+    eventType: 'FILED', occurredAt: novemberFiled.filedAt, recordedAt: '2026-11-11T16:00:00.000Z',
+    declarationNumber: novemberFiled.declarationNumber, idempotencyKey: 'FILED:' + novemberFiled.id
+  };
+  const laterFiledPrior = {
+    ...emptyState(), companies: [{ id: 'company-1', name: 'Empresa Uno', bcvRate: 874, accountingBcvRateHistory: [
+      { id: 'bcv-oct', rate: 874, effectiveDate: '2026-10-01', recordedAt: '2026-10-01T08:00:00.000Z' },
+      { id: 'bcv-nov', rate: 874, effectiveDate: '2026-11-01', recordedAt: '2026-11-01T08:00:00.000Z' }
+    ] }], vatOwnDeclarations: [novemberFiled], vatOwnDeclarationEvents: [novemberEvent]
+  };
+  const octoberDraft = {
+    ...vatOwnDeclarationFixture().vatOwnDeclarations[0], id: 'vat-own-2026-09', period: '2026-09'
+  };
+  assert.throws(() => validateAccountingSnapshot(laterFiledPrior, {
+    ...laterFiledPrior, vatOwnDeclarations: [novemberFiled, octoberDraft]
+  }), /período posterior presentado/);
+});
+
+test('SQLite validates partial IVA payments, prevents overpayment and protects their event history', () => {
+  const filed = vatOwnFiledState();
+  const paymentJournal = {
+    id: 'entry-iva-payment', companyId: 'company-1', entryNumber: 2,
+    date: '2026-11-11', description: 'Pago IVA mensual', type: 'AJUSTE',
+    bcvRate: 874, referenceDoc: 'IVA-PAGO:vat-own-1:TRX-001',
+    items: [
+      { accountCode: '2.1.2.09', debitBs: 50, creditBs: 0, debitUsd: 50 / 874, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 50 / 874 }
+    ], createdAt: '2026-11-11T17:00:00.000Z'
+  };
+  const payment = {
+    id: 'vat-own-event-payment', declarationId: 'vat-own-1', companyId: 'company-1',
+    eventType: 'PAYMENT', occurredAt: '2026-11-11T13:00:00.000-04:00',
+    recordedAt: '2026-11-11T17:00:00.000Z', amountBs: 50, reference: 'TRX-001',
+    idempotencyKey: 'PAYMENT:vat-own-1:TRX-001', journalEntryId: paymentJournal.id,
+    treasuryAccountCode: '1.1.1.01', bcvRate: 874
+  };
+  const withPayment = {
+    ...filed, journalEntries: [...filed.journalEntries, paymentJournal],
+    vatOwnDeclarationEvents: [...filed.vatOwnDeclarationEvents, payment]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(filed, withPayment));
+  const wrongUsdPaymentJournal = {
+    ...withPayment,
+    journalEntries: withPayment.journalEntries.map(entry => entry.id !== paymentJournal.id ? entry : {
+      ...entry,
+      items: entry.items.map(line => ({
+        ...line,
+        debitUsd: Number(line.debitUsd || 0) + (line.accountCode === '2.1.2.09' ? 0.1 : 0),
+        creditUsd: Number(line.creditUsd || 0) + (line.accountCode === '1.1.1.01' ? 0.1 : 0)
+      }))
+    })
+  };
+  assert.throws(() => validateAccountingSnapshot(filed, wrongUsdPaymentJournal), /líneas por cuenta no coinciden exactamente/);
+  assert.throws(() => validateAccountingSnapshot(filed, {
+    ...withPayment,
+    vatOwnDeclarationEvents: [...withPayment.vatOwnDeclarationEvents, {
+      ...payment, id: 'vat-own-event-overpay', idempotencyKey: 'PAYMENT:OVER',
+      reference: 'TRX-002', amountBs: 60
+    }]
+  }), /saldo disponible/);
+  assert.throws(() => validateAccountingSnapshot(withPayment, {
+    ...withPayment,
+    vatOwnDeclarationEvents: withPayment.vatOwnDeclarationEvents.filter(item => item.id !== payment.id)
+  }), /eliminación del registro histórico en vatOwnDeclarationEvents/);
+});
+
+test('SQLite accepts one linked IVA payment reversal and rejects duplicate or unrelated reversals', () => {
+  const filed = vatOwnFiledState();
+  const paymentJournal = {
+    id: 'entry-iva-payment', companyId: 'company-1', entryNumber: 2,
+    date: '2026-11-11', description: 'Pago IVA mensual', type: 'AJUSTE',
+    bcvRate: 874, referenceDoc: 'IVA-PAGO:vat-own-1:TRX-001',
+    items: [
+      { accountCode: '2.1.2.09', debitBs: 50, creditBs: 0, debitUsd: 50 / 874, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 50 / 874 }
+    ], createdAt: '2026-11-11T17:00:00.000Z'
+  };
+  const payment = {
+    id: 'vat-own-event-payment', declarationId: 'vat-own-1', companyId: 'company-1',
+    eventType: 'PAYMENT', occurredAt: '2026-11-11T13:00:00.000-04:00',
+    recordedAt: '2026-11-11T17:00:00.000Z', amountBs: 50, reference: 'TRX-001',
+    idempotencyKey: 'PAYMENT:vat-own-1:TRX-001', journalEntryId: paymentJournal.id,
+    treasuryAccountCode: '1.1.1.01', bcvRate: 874
+  };
+  const paid = {
+    ...filed, journalEntries: [...filed.journalEntries, paymentJournal],
+    vatOwnDeclarationEvents: [...filed.vatOwnDeclarationEvents, payment]
+  };
+  const reversalJournal = {
+    id: 'entry-iva-reversal', companyId: 'company-1', entryNumber: 3,
+    date: '2026-11-11', description: 'Reversión de pago IVA', type: 'AJUSTE',
+    bcvRate: 874, referenceDoc: 'REV-2', reversalOfEntryId: paymentJournal.id,
+    reversalReason: 'Reversión de pago por referencia incorrecta', workpaperNote: 'Soporte bancario revisado y conciliado',
+    items: [
+      { accountCode: '2.1.2.09', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 50 / 874 },
+      { accountCode: '1.1.1.01', debitBs: 50, creditBs: 0, debitUsd: 50 / 874, creditUsd: 0 }
+    ], createdAt: '2026-11-11T18:00:00.000Z'
+  };
+  const reversal = {
+    id: 'vat-own-event-reversal', declarationId: 'vat-own-1', companyId: 'company-1',
+    eventType: 'REVERSAL', occurredAt: '2026-11-11T14:00:00.000-04:00',
+    recordedAt: '2026-11-11T18:00:00.000Z', idempotencyKey: 'REVERSAL:vat-own-event-payment',
+    reversalOfEventId: payment.id, journalEntryId: reversalJournal.id,
+    note: 'Reversión por referencia bancaria incorrecta'
+  };
+  const reversed = {
+    ...paid, journalEntries: [...paid.journalEntries.map(item => item.id === paymentJournal.id ? { ...item, reversedByEntryId: reversalJournal.id, isAdjusted: true } : item), reversalJournal],
+    vatOwnDeclarationEvents: [...paid.vatOwnDeclarationEvents, reversal]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(paid, reversed));
+  assert.throws(() => validateAccountingSnapshot(paid, {
+    ...reversed,
+    vatOwnDeclarationEvents: [...reversed.vatOwnDeclarationEvents, {
+      ...reversal, id: 'vat-own-event-reversal-2', idempotencyKey: 'REVERSAL:duplicate',
+      journalEntryId: reversalJournal.id
+    }]
+  }), /reversión de un pago IVA/);
+});
 
 test('SQLite accepts an immutable VAT withholding declaration snapshot with exact voucher totals', () => {
   assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), vatDeclarationFixture()));
@@ -2141,6 +2613,54 @@ test('SQLite enforces review, filing receipt and supported payment event order f
   assert.throws(() => validateAccountingSnapshot(emptyState(), {
     ...state, ...paymentBankSupport, vatWithholdingDeclarationEvents: [reviewed, filed, payment]
   }), /asiento contable IVA correspondiente/);
+
+  const bankAccount = {
+    id: 'vat-bank-account', companyId: declaration.companyId, currency: 'BS',
+    accountCode: '1.1.1.01', bankName: 'Banco de prueba', accountNumber: '0001'
+  };
+  const accounts = [
+    { code: '2.1.2.03', name: 'Retenciones IVA por enterar', type: 'PASIVO', isMovement: true },
+    { code: '1.1.1.01', name: 'Banco de prueba', type: 'ACTIVO', isMovement: true }
+  ];
+  const movement = {
+    ...paymentBankSupport.bankStatementMovements[0], amountUsd: 1.2, bcvRate: 100,
+    isReconciled: true, reconciledWithJournalEntryId: 'vat-payment-entry',
+    reconciledJournalEntryIds: ['vat-payment-entry']
+  };
+  const journal = {
+    id: 'vat-payment-entry', companyId: declaration.companyId, entryNumber: 1,
+    date: '2026-10-18', description: 'Enteramiento IVA', type: 'RETENCION_IVA',
+    bcvRate: 100, referenceDoc: 'IVA-ENTERAMIENTO:vat-decl-1:TRX-001',
+    items: [
+      { accountCode: '2.1.2.03', debitBs: 120, creditBs: 0, debitUsd: 1.2, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 120, debitUsd: 0, creditUsd: 1.2 }
+    ],
+    createdAt: '2026-10-18T11:00:00.000Z'
+  };
+  const paidEvent = { ...payment, journalEntryId: journal.id };
+  const successfulState = {
+    ...state, accounts, bankAccounts: [bankAccount], bankStatementMovements: [movement],
+    journalEntries: [journal], vatWithholdingDeclarationEvents: [reviewed, filed, paidEvent]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), successfulState));
+
+  const wrongLiability = structuredClone(successfulState);
+  wrongLiability.journalEntries[0].items[0].debitBs = 119;
+  wrongLiability.journalEntries[0].items[1].creditBs = 119;
+  assert.throws(() => validateAccountingSnapshot(emptyState(), wrongLiability), /cuentas o importes del asiento/);
+
+  const wrongBankAccount = structuredClone(successfulState);
+  wrongBankAccount.journalEntries[0].items[1].accountCode = '1.1.1.99';
+  assert.throws(() => validateAccountingSnapshot(emptyState(), wrongBankAccount), /cuentas o importes del asiento/);
+
+  const wrongMovementDate = structuredClone(successfulState);
+  wrongMovementDate.bankStatementMovements[0].date = '2026-10-17';
+  assert.throws(() => validateAccountingSnapshot(emptyState(), wrongMovementDate), /fecha y tasa BCV del asiento/);
+
+  const wrongMovementRate = structuredClone(successfulState);
+  wrongMovementRate.bankStatementMovements[0].bcvRate = 101;
+  wrongMovementRate.bankStatementMovements[0].amountUsd = 120 / 101;
+  assert.throws(() => validateAccountingSnapshot(emptyState(), wrongMovementRate), /fecha y tasa BCV del asiento/);
 });
 
 test('SQLite blocks review of VAT declarations with pending fiscal corrections or unacknowledged legacy dates', () => {
@@ -2723,4 +3243,94 @@ test('SQLite accepts a sales credit note only when linked merchandise was fully 
   assert.throws(() => validateAccountingSnapshot(previous, {
     ...next, movements: [originalMovement]
   }), /documento, factura original, saldo fiscal, soporte o asiento correctivo/);
+});
+
+
+test('SQLite reconciles partial VAT remittances split across multiple bank debits and historical FX differences', () => {
+  const state = vatDeclarationFixture();
+  const declaration = state.vatWithholdingDeclarations[0];
+  const reviewed = {
+    id: 'vat-partial-review', declarationId: declaration.id, eventType: 'REVIEWED',
+    occurredAt: '2026-10-16', recordedAt: '2026-10-16T11:00:00.000Z'
+  };
+  const filed = {
+    id: 'vat-partial-filed', declarationId: declaration.id, eventType: 'FILED',
+    occurredAt: '2026-10-17', recordedAt: '2026-10-17T11:00:00.000Z',
+    declarationNumber: 'DECL-PARTIAL', receiptReference: 'ACUSE-PARTIAL'
+  };
+  const bankAccounts = [
+    { id: 'vat-bank-account-1', companyId: declaration.companyId, currency: 'BS', accountCode: '1.1.1.01' },
+    { id: 'vat-bank-account-2', companyId: declaration.companyId, currency: 'BS', accountCode: '1.1.1.02' }
+  ];
+  const accounts = [
+    { code: '2.1.2.03', name: 'Retenciones IVA por enterar', type: 'PASIVO', isMovement: true },
+    { code: '1.1.1.01', name: 'Banco uno', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.1.02', name: 'Banco dos', type: 'ACTIVO', isMovement: true },
+    { code: '4.2.1.01', name: 'Ganancia cambiaria', type: 'INGRESOS', isMovement: true }
+  ];
+  const firstJournal = {
+    id: 'vat-partial-entry-1', companyId: declaration.companyId, entryNumber: 1,
+    date: '2026-10-18', description: 'Primer enteramiento parcial IVA', type: 'RETENCION_IVA',
+    bcvRate: 125, referenceDoc: 'IVA-ENTERAMIENTO:vat-decl-1:TRX-PART-1',
+    items: [
+      { accountCode: '2.1.2.03', debitBs: 50, creditBs: 0, debitUsd: 0.5, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 20, debitUsd: 0, creditUsd: 0.16 },
+      { accountCode: '1.1.1.02', debitBs: 0, creditBs: 30, debitUsd: 0, creditUsd: 0.24 },
+      { accountCode: '4.2.1.01', debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0.1 }
+    ],
+    createdAt: '2026-10-18T11:00:00.000Z'
+  };
+  const secondJournal = {
+    id: 'vat-partial-entry-2', companyId: declaration.companyId, entryNumber: 2,
+    date: '2026-10-19', description: 'Segundo enteramiento parcial IVA', type: 'RETENCION_IVA',
+    bcvRate: 140, referenceDoc: 'IVA-ENTERAMIENTO:vat-decl-1:TRX-PART-2',
+    items: [
+      { accountCode: '2.1.2.03', debitBs: 70, creditBs: 0, debitUsd: 0.7, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 70, debitUsd: 0, creditUsd: 0.5 },
+      { accountCode: '4.2.1.01', debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0.2 }
+    ],
+    createdAt: '2026-10-19T11:00:00.000Z'
+  };
+  const movements = [
+    {
+      id: 'vat-partial-bank-1', companyId: declaration.companyId, bankAccountId: bankAccounts[0].id,
+      date: '2026-10-18', type: 'DEBIT', amountBs: 20, amountUsd: 0.16, bcvRate: 125,
+      isReconciled: true, reconciledWithJournalEntryId: firstJournal.id,
+      reconciledJournalEntryIds: [firstJournal.id]
+    },
+    {
+      id: 'vat-partial-bank-2', companyId: declaration.companyId, bankAccountId: bankAccounts[1].id,
+      date: '2026-10-18', type: 'DEBIT', amountBs: 30, amountUsd: 0.24, bcvRate: 125,
+      isReconciled: true, reconciledWithJournalEntryId: firstJournal.id,
+      reconciledJournalEntryIds: [firstJournal.id]
+    },
+    {
+      id: 'vat-partial-bank-3', companyId: declaration.companyId, bankAccountId: bankAccounts[0].id,
+      date: '2026-10-19', type: 'DEBIT', amountBs: 70, amountUsd: 0.5, bcvRate: 140,
+      isReconciled: true, reconciledWithJournalEntryId: secondJournal.id,
+      reconciledJournalEntryIds: [secondJournal.id]
+    }
+  ];
+  const firstPayment = {
+    id: 'vat-partial-payment-1', declarationId: declaration.id, eventType: 'PAYMENT',
+    occurredAt: '2026-10-18T11:00:00.000Z', recordedAt: '2026-10-18T11:00:00.000Z',
+    amountBs: 50, paymentReference: 'TRX-PART-1',
+    bankStatementMovementIds: ['vat-partial-bank-1', 'vat-partial-bank-2'],
+    journalEntryId: firstJournal.id
+  };
+  const secondPayment = {
+    id: 'vat-partial-payment-2', declarationId: declaration.id, eventType: 'PAYMENT',
+    occurredAt: '2026-10-19T11:00:00.000Z', recordedAt: '2026-10-19T11:00:00.000Z',
+    amountBs: 70, paymentReference: 'TRX-PART-2',
+    bankStatementMovementIds: ['vat-partial-bank-3'],
+    journalEntryId: secondJournal.id
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), {
+    ...state,
+    accounts,
+    bankAccounts,
+    bankStatementMovements: movements,
+    journalEntries: [firstJournal, secondJournal],
+    vatWithholdingDeclarationEvents: [reviewed, filed, firstPayment, secondPayment]
+  }));
 });

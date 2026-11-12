@@ -56,7 +56,7 @@ export const LibroVentasView: React.FC = () => {
       const base31 = s.taxRate === 31 ? s.taxableBaseBs : 0;
       const iva16 = s.taxRate === 16 ? s.vatAmountBs : s.taxRate === 31 ? s.taxableBaseBs * 0.16 : 0;
       const iva8 = s.taxRate === 8 ? s.vatAmountBs : 0;
-      return [s.invoiceDate,s.customerRif,s.customerName,s.documentType === '03' ? 'NOTA DE CRÉDITO' : s.documentType === '02' ? 'NOTA DE DÉBITO' : 'FACTURA',s.invoiceNumber,s.controlNumber,s.creditNoteNumber || (s.documentType === '03' ? s.invoiceNumber : ''),sign * s.totalAmountUsd,sign * s.totalAmountBs,sign * s.exemptAmountBs,sign * base16,sign * iva16,sign * base8,sign * iva8,sign * base31,sign * (s.taxRate === 31 ? s.taxableBaseBs * 0.16 : 0),sign * (s.taxRate === 31 ? (s.additionalLuxuryTaxBs ?? s.taxableBaseBs * 0.15) : 0),sign * (s.igtfAmountBs || 0),s.bcvRate,'VENTA INDIVIDUAL',selectedIndividualIds.has(s.id) ? 'INCLUIDO' : dailySalesResolution.unresolvedDates.includes(s.invoiceDate) ? 'PENDIENTE DE SELECCIÓN' : 'FUENTE ALTERNATIVA'];
+      return [s.invoiceDate,s.customerRif,s.customerName,s.documentType === '03' ? 'NOTA DE CRÉDITO' : s.documentType === '02' ? 'NOTA DE DÉBITO' : 'FACTURA',s.invoiceNumber,s.controlNumber,s.creditNoteNumber || (s.documentType === '03' ? s.invoiceNumber : ''),sign * s.totalAmountUsd,sign * s.totalAmountBs,sign * (s.exemptAmountBs + (s.taxRate === 0 ? s.taxableBaseBs : 0)),sign * base16,sign * iva16,sign * base8,sign * iva8,sign * base31,sign * (s.taxRate === 31 ? s.taxableBaseBs * 0.16 : 0),sign * (s.taxRate === 31 ? (s.additionalLuxuryTaxBs ?? s.taxableBaseBs * 0.15) : 0),sign * (s.igtfAmountBs || 0),s.bcvRate,'VENTA INDIVIDUAL',selectedIndividualIds.has(s.id) ? 'INCLUIDO' : dailySalesResolution.unresolvedDates.includes(s.invoiceDate) ? 'PENDIENTE DE SELECCIÓN' : 'FUENTE ALTERNATIVA'];
     });
     filteredZReports.forEach(entry => {
       const z = entry.fiscalZReport!;
@@ -112,7 +112,7 @@ export const LibroVentasView: React.FC = () => {
   const signed = (document: import('../../types/accounting').SaleRecord, amount: number) =>
     (document.documentType === '03' ? -1 : 1) * Number(amount || 0);
   const totalVentasConIvaBs = activeSales.reduce((s, x) => s + signed(x, x.totalAmountBs), 0);
-  const totalExentoBs = activeSales.reduce((s, x) => s + signed(x, x.exemptAmountBs || 0), 0);
+  const totalExentoBs = activeSales.reduce((s, x) => s + signed(x, (x.exemptAmountBs || 0) + (x.taxRate === 0 ? x.taxableBaseBs : 0)), 0);
   const totalBaseBs = activeSales.reduce((s, x) => s + signed(x, x.taxableBaseBs), 0);
   const totalIvaDebitoBs = activeSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? x.taxableBaseBs * 0.16 : x.vatAmountBs), 0);
   const totalLuxuryTaxBs = activeSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? (x.additionalLuxuryTaxBs ?? x.taxableBaseBs * 0.15) : 0), 0);
@@ -349,7 +349,7 @@ export const LibroVentasView: React.FC = () => {
                       )}
                     </td>
                     <td className="py-2 px-3 text-right font-mono text-slate-600 whitespace-nowrap">
-                      {s.exemptAmountBs > 0 ? formatBs(s.exemptAmountBs) : '-'}
+                      {s.exemptAmountBs + (s.taxRate === 0 ? s.taxableBaseBs : 0) > 0 ? formatBs(s.exemptAmountBs + (s.taxRate === 0 ? s.taxableBaseBs : 0)) : '-'}
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-semibold text-slate-800 whitespace-nowrap">
                       {formatBs(s.taxableBaseBs)}
