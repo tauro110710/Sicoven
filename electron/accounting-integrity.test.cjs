@@ -2422,6 +2422,18 @@ test('SQLite validates partial IVA payments, prevents overpayment and protects t
     vatOwnDeclarationEvents: [...filed.vatOwnDeclarationEvents, payment]
   };
   assert.doesNotThrow(() => validateAccountingSnapshot(filed, withPayment));
+  const wrongUsdPaymentJournal = {
+    ...withPayment,
+    journalEntries: withPayment.journalEntries.map(entry => entry.id !== paymentJournal.id ? entry : {
+      ...entry,
+      items: entry.items.map(line => ({
+        ...line,
+        debitUsd: Number(line.debitUsd || 0) + (line.accountCode === '2.1.2.09' ? 0.1 : 0),
+        creditUsd: Number(line.creditUsd || 0) + (line.accountCode === '1.1.1.01' ? 0.1 : 0)
+      }))
+    })
+  };
+  assert.throws(() => validateAccountingSnapshot(filed, wrongUsdPaymentJournal), /líneas por cuenta no coinciden exactamente/);
   assert.throws(() => validateAccountingSnapshot(filed, {
     ...withPayment,
     vatOwnDeclarationEvents: [...withPayment.vatOwnDeclarationEvents, {
