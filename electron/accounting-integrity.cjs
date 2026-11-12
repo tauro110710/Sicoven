@@ -878,6 +878,52 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           throw new Error('SQLite rechazó la posición IVA: el débito fiscal, las bases gravadas o las ventas exentas no corresponden a los reportes Z y facturas individuales seleccionados.');
         }
       }
+      const salesBase = Number(p.taxableSalesBaseBs) + Number(p.exemptSalesBaseBs);
+      const expectedProrationRate = !hasCommonCurrentPurchases ? 1
+        : salesBase > 0 ? Number(p.taxableSalesBaseBs) / salesBase : null;
+      const balanceBeforePriorCredit = Number(p.outputVatBs) + Number(p.debitAdjustmentsBs) +
+        Number(p.purchaseCreditReversalBs) - Number(p.purchaseCreditBs) -
+        Number(p.receivedWithholdingsBs) - Number(p.creditAdjustmentsBs);
+      const expectedPriorApplied = Math.min(priorCreditAvailable, Math.max(0, balanceBeforePriorCredit));
+      const expectedNetTax = balanceBeforePriorCredit - expectedPriorApplied;
+      const expectedCarryForward = Math.max(0, -expectedNetTax) + (priorCreditAvailable - expectedPriorApplied);
+      if (!near(p.outputVat16Bs + p.outputVat8Bs, p.outputVatBs) ||
+          !near(p.purchaseCredit16Bs + p.purchaseCredit8Bs, p.purchaseCreditBs) ||
+          !near(p.purchaseCreditGross16Bs + p.purchaseCreditGross8Bs, p.purchaseCreditGrossBs) ||
+          !near(p.purchaseCreditGrossBs - p.purchaseCreditBs, p.purchaseCreditNonEligibleBs) ||
+          !near(p.purchaseCreditReversal16Bs + p.purchaseCreditReversal8Bs, p.purchaseCreditReversalBs) ||
+          !near(p.purchaseCreditReversalNonEligible16Bs + p.purchaseCreditReversalNonEligible8Bs, p.purchaseCreditReversalNonEligibleBs) ||
+          !near(p.creditAdjustments16Bs + p.creditAdjustments8Bs, p.creditAdjustmentsBs) ||
+          expectedProrationRate === null || !near(p.prorationRate, expectedProrationRate, 0.000001) ||
+          !near(p.priorCreditAppliedBs, expectedPriorApplied) ||
+          !near(p.netTaxBs, expectedNetTax) ||
+          !near(p.amountDueBs, Math.max(0, expectedNetTax)) ||
+          !near(p.creditCarryForwardBs, expectedCarryForward)) {
+        throw new Error('SQLite rechazó una posición IVA cuyo desglose, crédito anterior, impuesto por enterar o saldo trasladable no concilia.');
+      }
+    }
+    if (declaration.sourceSnapshots !== undefined) {
+      const snapshots = declaration.sourceSnapshots;
+      const expectedIds = [...new Set([...sourceIds, ...relatedIds])].sort();
+      if (!snapshots || typeof snapshots !== 'object' || Array.isArray(snapshots) ||
+          !equal(Object.keys(snapshots).sort(), expectedIds)) {
+        throw new Error('SQLite rechazó huellas documentales IVA que no corresponden exactamente a las fuentes del borrador.');
+      }
+      for (const [sourceId, value] of Object.entries(snapshots)) {
+        if (typeof value !== 'string') throw new Error('SQLite rechazó una huella fiscal de IVA no válida.');
+        let parsed;
+        try { parsed = JSON.parse(value); } catch { throw new Error('SQLite rechazó una huella fiscal IVA ilegible.'); }
+        if (!parsed || !['SALE', 'PURCHASE', 'Z'].includes(parsed.kind) || String(parsed.id || '') !== String(sourceId)) {
+          throw new Error('SQLite rechazó una huella fiscal IVA sin tipo de documento reconocido.');
+        }
+        if (sourceIds.includes(String(sourceId))) {
+          const sourceDate = parsed.kind === 'Z' ? String(parsed.date || '') : String(parsed.invoiceDate || '');
+          if (!validVatDeclarationDate(sourceDate) || sourceDate.slice(0, 7) !== period) {
+            throw new Error('SQLite rechazó una fuente directa IVA cuya fecha fiscal no pertenece al período mensual declarado.');
+          }
+        }
+      }
+    }
       // Rebuild ordinary current-period purchase credit directly from immutable
       // invoice snapshots. Credit-note chains are handled by the dedicated
       // historical reconciliation path; do not approximate those cases here.
@@ -930,52 +976,6 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           throw new Error('SQLite rechazó el crédito fiscal de compras: los importes brutos, acreditables y no acreditables no corresponden a las facturas seleccionadas.');
         }
       }
-      const salesBase = Number(p.taxableSalesBaseBs) + Number(p.exemptSalesBaseBs);
-      const expectedProrationRate = !hasCommonCurrentPurchases ? 1
-        : salesBase > 0 ? Number(p.taxableSalesBaseBs) / salesBase : null;
-      const balanceBeforePriorCredit = Number(p.outputVatBs) + Number(p.debitAdjustmentsBs) +
-        Number(p.purchaseCreditReversalBs) - Number(p.purchaseCreditBs) -
-        Number(p.receivedWithholdingsBs) - Number(p.creditAdjustmentsBs);
-      const expectedPriorApplied = Math.min(priorCreditAvailable, Math.max(0, balanceBeforePriorCredit));
-      const expectedNetTax = balanceBeforePriorCredit - expectedPriorApplied;
-      const expectedCarryForward = Math.max(0, -expectedNetTax) + (priorCreditAvailable - expectedPriorApplied);
-      if (!near(p.outputVat16Bs + p.outputVat8Bs, p.outputVatBs) ||
-          !near(p.purchaseCredit16Bs + p.purchaseCredit8Bs, p.purchaseCreditBs) ||
-          !near(p.purchaseCreditGross16Bs + p.purchaseCreditGross8Bs, p.purchaseCreditGrossBs) ||
-          !near(p.purchaseCreditGrossBs - p.purchaseCreditBs, p.purchaseCreditNonEligibleBs) ||
-          !near(p.purchaseCreditReversal16Bs + p.purchaseCreditReversal8Bs, p.purchaseCreditReversalBs) ||
-          !near(p.purchaseCreditReversalNonEligible16Bs + p.purchaseCreditReversalNonEligible8Bs, p.purchaseCreditReversalNonEligibleBs) ||
-          !near(p.creditAdjustments16Bs + p.creditAdjustments8Bs, p.creditAdjustmentsBs) ||
-          expectedProrationRate === null || !near(p.prorationRate, expectedProrationRate, 0.000001) ||
-          !near(p.priorCreditAppliedBs, expectedPriorApplied) ||
-          !near(p.netTaxBs, expectedNetTax) ||
-          !near(p.amountDueBs, Math.max(0, expectedNetTax)) ||
-          !near(p.creditCarryForwardBs, expectedCarryForward)) {
-        throw new Error('SQLite rechazó una posición IVA cuyo desglose, crédito anterior, impuesto por enterar o saldo trasladable no concilia.');
-      }
-    }
-    if (declaration.sourceSnapshots !== undefined) {
-      const snapshots = declaration.sourceSnapshots;
-      const expectedIds = [...new Set([...sourceIds, ...relatedIds])].sort();
-      if (!snapshots || typeof snapshots !== 'object' || Array.isArray(snapshots) ||
-          !equal(Object.keys(snapshots).sort(), expectedIds)) {
-        throw new Error('SQLite rechazó huellas documentales IVA que no corresponden exactamente a las fuentes del borrador.');
-      }
-      for (const [sourceId, value] of Object.entries(snapshots)) {
-        if (typeof value !== 'string') throw new Error('SQLite rechazó una huella fiscal de IVA no válida.');
-        let parsed;
-        try { parsed = JSON.parse(value); } catch { throw new Error('SQLite rechazó una huella fiscal IVA ilegible.'); }
-        if (!parsed || !['SALE', 'PURCHASE', 'Z'].includes(parsed.kind) || String(parsed.id || '') !== String(sourceId)) {
-          throw new Error('SQLite rechazó una huella fiscal IVA sin tipo de documento reconocido.');
-        }
-        if (sourceIds.includes(String(sourceId))) {
-          const sourceDate = parsed.kind === 'Z' ? String(parsed.date || '') : String(parsed.invoiceDate || '');
-          if (!validVatDeclarationDate(sourceDate) || sourceDate.slice(0, 7) !== period) {
-            throw new Error('SQLite rechazó una fuente directa IVA cuya fecha fiscal no pertenece al período mensual declarado.');
-          }
-        }
-      }
-    }
     const revisions = normalizeRevisions(declaration.revisions);
     if (revisions.some((revision, index) => revision.revision !== index + 1 ||
         !timestampIsValid(revision.revisedAt) || !String(revision.reason || '').trim() ||
