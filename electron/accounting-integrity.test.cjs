@@ -2157,13 +2157,16 @@ test('SQLite rechecks fiscal source snapshots at the exact moment an IVA draft i
     declarationNumber: filedDeclaration.declarationNumber,
     idempotencyKey: 'FILED:' + filedDeclaration.id, journalEntryId: filingEntry.id
   };
-  assert.throws(() => validateAccountingSnapshot(draft, {
+  const assertFilingRejectsChangedSource = changedPurchase => assert.throws(() => validateAccountingSnapshot(draft, {
     ...draft,
-    purchases: [purchase],
+    purchases: [changedPurchase],
     vatOwnDeclarations: [filedDeclaration],
     vatOwnDeclarationEvents: [filingEvent],
     journalEntries: [filingEntry]
   }), /huellas fiscales del borrador ya no coinciden/);
+  assertFilingRejectsChangedSource(purchase);
+  assertFilingRejectsChangedSource({ ...purchase, inventoryLines: [{ ...purchase.inventoryLines[0], quantity: 1 }] });
+  assertFilingRejectsChangedSource({ ...purchase, creditNoteLines: [{ productId: 'product-iva-1', quantity: 1 }] });
 });
 
 test('SQLite rejects IVA reclassification lines whose USD values do not match the BCV conversion', () => {
