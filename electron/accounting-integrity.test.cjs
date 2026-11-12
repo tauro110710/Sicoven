@@ -2415,12 +2415,12 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
     position: currentPosition
   };
   const previous = {
-    ...filed, purchases: [original],
+    ...filed, purchases: [original, note],
     vatOwnDeclarations: [priorDeclaration],
     vatOwnDeclarationEvents: filed.vatOwnDeclarationEvents
   };
   const next = {
-    ...previous, purchases: [original, note],
+    ...previous,
     vatOwnDeclarations: [priorDeclaration, currentDeclaration]
   };
   assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
