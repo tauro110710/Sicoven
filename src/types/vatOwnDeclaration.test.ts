@@ -119,13 +119,16 @@ test('allows a zero denominator only when no common purchase VAT depends on pror
   }), 1);
 });
 
-test('rejects negative or non-finite sales bases for proration', () => {
+test('rejects negative or non-finite sales bases for common-purchase proration', () => {
   assert.equal(resolveVatOwnProrationRate({
     taxableSalesBaseBs: -10, exemptSalesBaseBs: 100, hasCommonPurchases: true
   }), null);
   assert.equal(resolveVatOwnProrationRate({
     taxableSalesBaseBs: Number.NaN, exemptSalesBaseBs: 100, hasCommonPurchases: true
   }), null);
+  assert.equal(resolveVatOwnProrationRate({
+    taxableSalesBaseBs: -10, exemptSalesBaseBs: 100, hasCommonPurchases: false
+  }), 1);
 });
 
 test('detects changed declaration source sets without depending on array order', () => {
