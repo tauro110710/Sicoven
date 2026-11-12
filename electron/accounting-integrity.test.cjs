@@ -2357,7 +2357,7 @@ test('SQLite recalculates ordinary purchase credit from immutable invoice snapsh
 test('SQLite rebuilds prior-period supplier credit-note reversals from the filed original invoice snapshot', () => {
   const filed = vatOwnFiledState();
   const original = {
-    id: 'purchase-prior-vat-note-original', companyId: 'company-1', invoiceDate: '2026-10-05',
+    id: 'purchase-prior-vat-note-original', companyId: 'company-1', invoiceDate: '2026-09-05',
     accountCreditDate: null, documentType: '01', invoiceNumber: 'FC-ORIGINAL-IVA', controlNumber: 'CTRL-ORIGINAL-IVA',
     supplierRif: 'J-12345678-9', supplierName: 'Proveedor Uno',
     totalAmountBs: 1160, totalAmountUsd: 1.33, taxableBaseBs: 1000, taxableBaseUsd: 1.14,
@@ -2370,7 +2370,7 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
     inventoryLines: [], creditNoteLines: [], isCancelled: false
   };
   const note = {
-    id: 'purchase-prior-vat-note', companyId: 'company-1', invoiceDate: '2026-12-06',
+    id: 'purchase-prior-vat-note', companyId: 'company-1', invoiceDate: '2026-11-06',
     accountCreditDate: null, documentType: '03', invoiceNumber: 'NC-ORIGINAL-IVA', controlNumber: 'CTRL-NC-IVA',
     supplierRif: original.supplierRif, supplierName: original.supplierName,
     totalAmountBs: 290, totalAmountUsd: 0.33, taxableBaseBs: 250, taxableBaseUsd: 0.29,
@@ -2412,41 +2412,41 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
   const originalSnapshot = snapshot(original);
   const noteSnapshot = snapshot(note);
   const priorDeclaration = {
-    ...filed.vatOwnDeclarations[0],
+    ...filed.vatOwnDeclarations[0], period: '2026-09',
     sourceIds: [original.id], relatedSourceIds: [],
     sourceSnapshots: { [original.id]: originalSnapshot },
     position: vatOwnPositionFixture({ prorationRate: 0.5, taxableSalesBaseBs: 625, exemptSalesBaseBs: 625, creditCarryForwardBs: 0 })
   };
   const historicalNote = {
     ...note, id: 'purchase-prior-vat-note-filed',
-    invoiceDate: '2026-11-06', invoiceNumber: 'NC-ORIGINAL-IVA-ANTERIOR',
+    invoiceDate: '2026-10-06', invoiceNumber: 'NC-ORIGINAL-IVA-ANTERIOR',
     totalAmountBs: 145, taxableBaseBs: 125, vatAmountBs: 20
   };
   const historicalNoteDeclaration = {
-    ...priorDeclaration, id: 'vat-own-nov-prior-credit-note', period: '2026-11',
+    ...priorDeclaration, id: 'vat-own-oct-prior-credit-note', period: '2026-10',
     sourceIds: [historicalNote.id], relatedSourceIds: [original.id],
     sourceSnapshots: { [historicalNote.id]: snapshot(historicalNote), [original.id]: originalSnapshot },
     declarationNumber: 'IVA-2026-002',
-    filedAt: '2026-12-15T12:00:00.000-04:00',
+    filedAt: '2026-11-12T08:00:00.000-04:00',
     position: vatOwnPositionFixture({ prorationRate: 1 })
   };
   const historicalFilingJournal = {
     ...vatOwnFilingEntry(), id: 'entry-iva-nov-credit-note',
-    date: '2026-12-15', description: 'Determinación mensual del IVA · 2026-11',
-    referenceDoc: 'IVA-MENSUAL:2026-11'
+    date: '2026-11-12', description: 'Determinación mensual del IVA · 2026-10',
+    referenceDoc: 'IVA-MENSUAL:2026-10'
   };
   const historicalFilingEvent = {
     id: 'vat-own-event-nov-credit-note', declarationId: historicalNoteDeclaration.id,
     companyId: 'company-1', eventType: 'FILED',
     occurredAt: historicalNoteDeclaration.filedAt,
-    recordedAt: '2026-12-15T16:00:00.000Z',
+    recordedAt: '2026-11-12T12:00:00.000Z',
     declarationNumber: historicalNoteDeclaration.declarationNumber,
     idempotencyKey: 'FILED:' + historicalNoteDeclaration.id,
     journalEntryId: historicalFilingJournal.id
   };
   const currentDeclaration = {
     ...vatOwnDeclarationFixture().vatOwnDeclarations[0],
-    id: 'vat-own-dec-credit-note', period: '2026-12',
+    id: 'vat-own-nov-credit-note', period: '2026-11',
     sourceIds: [note.id], relatedSourceIds: [original.id],
     sourceSnapshots: { [note.id]: noteSnapshot, [original.id]: originalSnapshot },
     position: vatOwnPositionFixture({
@@ -2457,7 +2457,7 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
   };
   const previous = {
     ...filed, purchases: [original, historicalNote, note],
-    journalEntries: [...filed.journalEntries, historicalFilingJournal],
+    journalEntries: [...filed.journalEntries.map(entry => ({ ...entry, referenceDoc: 'IVA-MENSUAL:2026-09' })), historicalFilingJournal],
     vatOwnDeclarations: [priorDeclaration, historicalNoteDeclaration],
     vatOwnDeclarationEvents: [...filed.vatOwnDeclarationEvents, historicalFilingEvent]
   };
