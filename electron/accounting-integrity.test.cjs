@@ -2364,7 +2364,7 @@ test('SQLite accepts a prior-month sale selected only for a current-month receiv
       ...declaration,
       sourceSnapshots: { [sale.id]: JSON.stringify({ ...JSON.parse(snapshot), retentionVoucherDate: '2026-10-31' }) }
     }]
-  }), /fecha fiscal no pertenece al período mensual declarado ni respalda una retención recibida del período/);
+  }), /retenciones IVA recibidas y sus ajustes/);
 });
 
 test('SQLite reconstructs withholding increases and reversals issued by current-period sales notes', () => {
@@ -2423,7 +2423,7 @@ test('SQLite reconstructs withholding increases and reversals issued by current-
     id: 'vat-own-2026-11-note-retention-adjustment', period: '2026-11',
     sourceIds: [invoice.id, creditNote.id], relatedSourceIds: [],
     sourceSnapshots: {
-      [invoice.id]: snapshot(invoice), [creditNote.id]: snapshot(creditNote)
+      [creditNote.id]: snapshot(creditNote), [invoice.id]: snapshot(invoice)
     },
     position: vatOwnPositionFixture({
       outputVatBs: 100, outputVat16Bs: 100, outputVat8Bs: 0,
