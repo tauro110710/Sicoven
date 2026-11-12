@@ -2274,7 +2274,10 @@ test('SQLite recalculates IVA sales position from selected original fiscal docum
     position: vatOwnPositionFixture()
   };
   const valid = { ...fixture, sales: [sale], vatOwnDeclarations: [declaration] };
-  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), valid));
+  // Treat the source invoice as pre-existing: this test isolates declaration
+  // reconciliation from the separate journal-on-invoice-creation invariant.
+  const priorWithSale = { ...emptyState(), sales: [sale] };
+  assert.doesNotThrow(() => validateAccountingSnapshot(priorWithSale, valid));
 
   const internallyBalancedButMisstated = {
     ...declaration,
@@ -2283,7 +2286,7 @@ test('SQLite recalculates IVA sales position from selected original fiscal docum
       netTaxBs: 90, amountDueBs: 90
     })
   };
-  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+  assert.throws(() => validateAccountingSnapshot(priorWithSale, {
     ...valid, vatOwnDeclarations: [internallyBalancedButMisstated]
   }), /débito fiscal, las bases gravadas o las ventas exentas no corresponden/);
 });
