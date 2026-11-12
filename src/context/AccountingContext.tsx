@@ -5734,12 +5734,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const purchaseCreditReversalNonEligible16Bs = purchaseSummary?.priorReversalNonEligible16Bs ?? 0;
       const purchaseCreditReversalNonEligible8Bs = purchaseSummary?.priorReversalNonEligible8Bs ?? 0;
       const purchaseCreditReversalNonEligibleBs = purchaseCreditReversalNonEligible16Bs + purchaseCreditReversalNonEligible8Bs;
-      const purchaseVatReclassificationItems = purchaseSummary
-        ? buildVatOwnPurchaseVatReclassificationItems({
+      let purchaseVatReclassificationItems: ReturnType<typeof buildVatOwnPurchaseVatReclassificationItems> = [];
+      if (purchaseSummary) {
+        try {
+          purchaseVatReclassificationItems = buildVatOwnPurchaseVatReclassificationItems({
             companyId: currentCompany.id, period: period, bcvRate: Number(currentCompany.bcvRate),
             allPurchases: purchases, journalEntries, summary: purchaseSummary
-          })
-        : [];
+          });
+        } catch (error) {
+          pendingCalculationItems.push(error instanceof Error
+            ? error.message
+            : 'La reclasificación contable del IVA no acreditable está pendiente.');
+        }
+      }
       const prior = vatOwnDeclarations.filter(item => item.companyId === currentCompany.id &&
         item.status === 'FILED' && item.period < period).sort((a,b)=>b.period.localeCompare(a.period))[0];
       const debitAdjustmentsBs = Math.max(0, -withholdingRaw);
