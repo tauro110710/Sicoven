@@ -817,6 +817,8 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
         return dailySales.get(date);
       };
       let hasSalesSources = false;
+      let reconstructedRawTaxableSales = null;
+      let reconstructedRawExemptSales = null;
       for (const sourceId of sourceIds) {
         const raw = sourceSnapshots[sourceId];
         if (typeof raw !== 'string') continue;
@@ -874,9 +876,11 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           rawTaxableSales += selected.base16 + selected.base8 + selected.base31;
           rawExemptSales += selected.exempt;
         }
+        reconstructedRawTaxableSales = rawTaxableSales;
+        reconstructedRawExemptSales = rawExemptSales;
         // Una nota de crédito puede revertir IVA/base de ventas de períodos
         // anteriores por encima de las ventas del mes: el débito fiscal se
-        // convierte en ajuste al crédito y las bases para prorrata no son negativas.
+        // convierte en ajuste al crédito y las bases contables del período no son negativas.
         const expectedOutputVat16 = Math.max(0, rawOutputVat16);
         const expectedOutputVat8 = Math.max(0, rawOutputVat8);
         const expectedCreditAdjustment16 = Math.max(0, -rawOutputVat16);
@@ -931,9 +935,15 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           !near(p.debitAdjustmentsBs, expectedDebitAdjustments)) {
         throw new Error('SQLite rechazó las retenciones IVA recibidas y sus ajustes: los importes declarados no corresponden a los comprobantes y notas correctivas del período.');
       }
-      const salesBase = Number(p.taxableSalesBaseBs) + Number(p.exemptSalesBaseBs);
+      const prorationTaxableBase = reconstructedRawTaxableSales === null
+        ? Number(p.taxableSalesBaseBs) : reconstructedRawTaxableSales;
+      const prorationExemptBase = reconstructedRawExemptSales === null
+        ? Number(p.exemptSalesBaseBs) : reconstructedRawExemptSales;
+      const salesBase = prorationTaxableBase + prorationExemptBase;
       const expectedProrationRate = !hasCommonCurrentPurchases ? 1
-        : salesBase > 0 ? Number(p.taxableSalesBaseBs) / salesBase : null;
+        : Number.isFinite(prorationTaxableBase) && Number.isFinite(prorationExemptBase) &&
+          prorationTaxableBase >= 0 && prorationExemptBase >= 0 && salesBase > 0
+          ? prorationTaxableBase / salesBase : null;
       const balanceBeforePriorCredit = Number(p.outputVatBs) + Number(p.debitAdjustmentsBs) +
         Number(p.purchaseCreditReversalBs) - Number(p.purchaseCreditBs) -
         Number(p.receivedWithholdingsBs) - Number(p.creditAdjustmentsBs);
