@@ -2157,16 +2157,22 @@ test('SQLite rechecks fiscal source snapshots at the exact moment an IVA draft i
     declarationNumber: filedDeclaration.declarationNumber,
     idempotencyKey: 'FILED:' + filedDeclaration.id, journalEntryId: filingEntry.id
   };
-  const assertFilingRejectsChangedSource = changedPurchase => assert.throws(() => validateAccountingSnapshot(draft, {
-    ...draft,
+  const assertFilingRejectsChangedSource = (baseDraft, baseFiledDeclaration, changedPurchase) => assert.throws(() => validateAccountingSnapshot(baseDraft, {
+    ...baseDraft,
     purchases: [changedPurchase],
-    vatOwnDeclarations: [filedDeclaration],
+    vatOwnDeclarations: [baseFiledDeclaration],
     vatOwnDeclarationEvents: [filingEvent],
     journalEntries: [filingEntry]
   }), /huellas fiscales del borrador ya no coinciden/);
-  assertFilingRejectsChangedSource(purchase);
-  assertFilingRejectsChangedSource({ ...purchase, inventoryLines: [{ ...purchase.inventoryLines[0], quantity: 1 }] });
-  assertFilingRejectsChangedSource({ ...purchase, creditNoteLines: [{ productId: 'product-iva-1', quantity: 1 }] });
+  assertFilingRejectsChangedSource(draft, filedDeclaration, purchase);
+  const matchingSnapshot = JSON.stringify({ ...JSON.parse(snapshot), totalAmountBs: purchase.totalAmountBs, vatAmountBs: purchase.vatAmountBs });
+  const stableDraft = {
+    ...draft,
+    vatOwnDeclarations: [{ ...draft.vatOwnDeclarations[0], sourceSnapshots: { [purchase.id]: matchingSnapshot } }]
+  };
+  const stableFiledDeclaration = { ...filedDeclaration, sourceSnapshots: { [purchase.id]: matchingSnapshot } };
+  assertFilingRejectsChangedSource(stableDraft, stableFiledDeclaration, { ...purchase, inventoryLines: [{ ...purchase.inventoryLines[0], quantity: 1 }] });
+  assertFilingRejectsChangedSource(stableDraft, stableFiledDeclaration, { ...purchase, creditNoteLines: [{ productId: 'product-iva-1', quantity: 1 }] });
 });
 
 test('SQLite rejects IVA reclassification lines whose USD values do not match the BCV conversion', () => {
