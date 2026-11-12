@@ -2114,6 +2114,8 @@ test('SQLite rechecks fiscal source snapshots at the exact moment an IVA draft i
     vatWithheldBs: 0, vatWithheldUsd: 0, retentionRate: 0, voucherNumber: null,
     bcvRate: 874, journalEntryId: null, originalPurchaseId: null,
     affectedInvoiceNumber: null, affectedInvoiceDate: null, affectedInvoiceControlNumber: null,
+    affectedInvoiceTotalAmountBs: null, affectedInvoiceTotalAmountUsd: null,
+    inventoryLines: [{ productId: 'product-iva-1', quantity: 2, unitCostBs: 500 }], creditNoteLines: [],
     isCancelled: false
   };
   const snapshot = JSON.stringify({
@@ -2129,6 +2131,8 @@ test('SQLite rechecks fiscal source snapshots at the exact moment an IVA draft i
     vatWithheldBs: 0, vatWithheldUsd: 0, retentionRate: 0, voucherNumber: null,
     bcvRate: 874, journalEntryId: null, originalPurchaseId: null,
     affectedInvoiceNumber: null, affectedInvoiceDate: null, affectedInvoiceControlNumber: null,
+    affectedInvoiceTotalAmountBs: null, affectedInvoiceTotalAmountUsd: null,
+    inventoryLines: purchase.inventoryLines, creditNoteLines: [],
     isCancelled: false, journal: null
   });
   const draft = {
