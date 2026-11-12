@@ -311,6 +311,8 @@ export interface VatOwnDeclarationRevision {
   dailySourceChoices?: Record<string, 'Z' | 'INDIVIDUAL'>;
   purchaseVatReclassificationItems?: JournalEntryItem[];
   sourceSnapshots?: Record<string, string>;
+  calculationStatus?: 'PROVISIONAL' | 'READY';
+  pendingCalculationItems?: string[];
   createdAt: string;
 }
 
@@ -332,6 +334,9 @@ export interface VatOwnDeclaration {
   purchaseVatReclassificationItems?: JournalEntryItem[];
   /** Fiscal identity and material fields of every source document at draft time. */
   sourceSnapshots?: Record<string, string>;
+  /** A draft may be saved with known sales data while purchase credit remains unresolved. */
+  calculationStatus?: 'PROVISIONAL' | 'READY';
+  pendingCalculationItems?: string[];
 }
 
 export interface VatOwnPurchaseCreditSummary {
@@ -879,6 +884,8 @@ export function snapshotVatOwnDeclarationRevision(
     dailySourceChoices: { ...(declaration.dailySourceChoices || {}) },
     purchaseVatReclassificationItems: (declaration.purchaseVatReclassificationItems || []).map(item => ({ ...item })),
     sourceSnapshots: declaration.sourceSnapshots ? { ...declaration.sourceSnapshots } : undefined,
+    calculationStatus: declaration.calculationStatus,
+    pendingCalculationItems: [...(declaration.pendingCalculationItems || [])],
     createdAt: declaration.createdAt
   };
 }
