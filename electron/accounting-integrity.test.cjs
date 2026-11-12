@@ -2370,7 +2370,7 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
     inventoryLines: [], creditNoteLines: [], isCancelled: false
   };
   const note = {
-    id: 'purchase-prior-vat-note', companyId: 'company-1', invoiceDate: '2026-11-06',
+    id: 'purchase-prior-vat-note', companyId: 'company-1', invoiceDate: '2026-12-06',
     accountCreditDate: null, documentType: '03', invoiceNumber: 'NC-ORIGINAL-IVA', controlNumber: 'CTRL-NC-IVA',
     supplierRif: original.supplierRif, supplierName: original.supplierName,
     totalAmountBs: 290, totalAmountUsd: 0.33, taxableBaseBs: 250, taxableBaseUsd: 0.29,
@@ -2417,20 +2417,30 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
     sourceSnapshots: { [original.id]: originalSnapshot },
     position: vatOwnPositionFixture({ prorationRate: 0.5, taxableSalesBaseBs: 625, exemptSalesBaseBs: 625, creditCarryForwardBs: 0 })
   };
+  const historicalNote = {
+    ...note, id: 'purchase-prior-vat-note-filed',
+    invoiceDate: '2026-11-06', invoiceNumber: 'NC-ORIGINAL-IVA-ANTERIOR',
+    totalAmountBs: 145, taxableBaseBs: 125, vatAmountBs: 20
+  };
+  const historicalNoteDeclaration = {
+    ...priorDeclaration, id: 'vat-own-nov-prior-credit-note', period: '2026-11',
+    sourceIds: [historicalNote.id], relatedSourceIds: [original.id],
+    sourceSnapshots: { [historicalNote.id]: snapshot(historicalNote), [original.id]: originalSnapshot }
+  };
   const currentDeclaration = {
     ...vatOwnDeclarationFixture().vatOwnDeclarations[0],
-    id: 'vat-own-nov-credit-note',
+    id: 'vat-own-dec-credit-note', period: '2026-12',
     sourceIds: [note.id], relatedSourceIds: [original.id],
     sourceSnapshots: { [note.id]: noteSnapshot, [original.id]: originalSnapshot },
     position: vatOwnPositionFixture({
-      purchaseCreditReversalBs: 20, purchaseCreditReversal16Bs: 20,
-      purchaseCreditReversalNonEligibleBs: 20, purchaseCreditReversalNonEligible16Bs: 20,
-      netTaxBs: 120, amountDueBs: 120
+      purchaseCreditReversalBs: 30, purchaseCreditReversal16Bs: 30,
+      purchaseCreditReversalNonEligibleBs: 30, purchaseCreditReversalNonEligible16Bs: 30,
+      netTaxBs: 130, amountDueBs: 130
     })
   };
   const previous = {
-    ...filed, purchases: [original, note],
-    vatOwnDeclarations: [priorDeclaration],
+    ...filed, purchases: [original, historicalNote, note],
+    vatOwnDeclarations: [priorDeclaration, historicalNoteDeclaration],
     vatOwnDeclarationEvents: filed.vatOwnDeclarationEvents
   };
   const next = {
@@ -2446,7 +2456,7 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
   };
   assert.throws(() => validateAccountingSnapshot(previous, {
     ...next,
-    purchases: [original, note, excessiveNote],
+    purchases: [original, historicalNote, note, excessiveNote],
     vatOwnDeclarations: [priorDeclaration, {
       ...currentDeclaration,
       sourceIds: [excessiveNote.id],
