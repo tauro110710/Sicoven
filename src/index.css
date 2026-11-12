@@ -161,7 +161,7 @@
 /* SICOVEN desktop dialogs: use the available width, keep readable controls,
    and scroll the dialog body instead of shrinking the whole application. */
 .sicoven-modal-overlay,
-div.fixed.inset-0.z-50 {
+div.fixed.inset-0[class*="z-"] {
   display: block !important;
   overflow-x: hidden !important;
   overflow-y: auto !important;
@@ -169,7 +169,7 @@ div.fixed.inset-0.z-50 {
   padding: clamp(0.5rem, 2vh, 1.25rem) !important;
 }
 .sicoven-modal-panel,
-div.fixed.inset-0.z-50 > div {
+div.fixed.inset-0[class*="z-"] > div {
   width: min(100%, 76rem) !important;
   max-width: 76rem !important;
   max-height: calc(100dvh - 2.5rem);
@@ -186,7 +186,7 @@ div.fixed.inset-0.z-50 > div {
   flex: 0 0 auto;
 }
 .sicoven-modal-content,
-div.fixed.inset-0.z-50 > div > form {
+div.fixed.inset-0[class*="z-"] > div > form {
   min-height: 0;
   max-height: calc(100dvh - 7rem);
   overflow-y: auto;
@@ -196,32 +196,32 @@ div.fixed.inset-0.z-50 > div > form {
   font-size: 0.875rem;
 }
 .sicoven-modal-content label,
-div.fixed.inset-0.z-50 > div > form label {
+div.fixed.inset-0[class*="z-"] > div > form label {
   line-height: 1.4;
 }
 .sicoven-modal-content input,
 .sicoven-modal-content select,
 .sicoven-modal-content textarea,
-div.fixed.inset-0.z-50 > div > form input,
-div.fixed.inset-0.z-50 > div > form select,
-div.fixed.inset-0.z-50 > div > form textarea {
+div.fixed.inset-0[class*="z-"] > div > form input,
+div.fixed.inset-0[class*="z-"] > div > form select,
+div.fixed.inset-0[class*="z-"] > div > form textarea {
   min-height: 2.35rem;
   font-size: 0.875rem;
 }
 @media (max-width: 720px) {
   .sicoven-modal-overlay,
-  div.fixed.inset-0.z-50 {
+  div.fixed.inset-0[class*="z-"] {
     padding: 0.4rem !important;
   }
   .sicoven-modal-panel,
-  div.fixed.inset-0.z-50 > div {
+  div.fixed.inset-0[class*="z-"] > div {
     width: 100% !important;
     max-width: 100% !important;
     max-height: calc(100dvh - 0.8rem);
     border-radius: 0.85rem;
   }
   .sicoven-modal-content,
-  div.fixed.inset-0.z-50 > div > form {
+  div.fixed.inset-0[class*="z-"] > div > form {
     max-height: calc(100dvh - 5.5rem);
     padding: 1rem;
   }
