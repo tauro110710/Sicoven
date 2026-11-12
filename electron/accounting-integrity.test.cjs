@@ -2445,7 +2445,7 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
   };
   const next = {
     ...previous,
-    vatOwnDeclarations: [priorDeclaration, currentDeclaration]
+    vatOwnDeclarations: [priorDeclaration, historicalNoteDeclaration, currentDeclaration]
   };
   assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
 
@@ -2457,7 +2457,7 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
   assert.throws(() => validateAccountingSnapshot(previous, {
     ...next,
     purchases: [original, historicalNote, note, excessiveNote],
-    vatOwnDeclarations: [priorDeclaration, {
+    vatOwnDeclarations: [priorDeclaration, historicalNoteDeclaration, {
       ...currentDeclaration,
       sourceIds: [excessiveNote.id],
       sourceSnapshots: { [excessiveNote.id]: snapshot(excessiveNote), [original.id]: originalSnapshot },
