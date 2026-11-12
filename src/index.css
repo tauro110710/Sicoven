@@ -208,6 +208,7 @@ div.fixed.inset-0[class*="z-"] > div > form {
 .sicoven-modal-content label,
 div.fixed.inset-0[class*="z-"] > div > form label {
   line-height: 1.4;
+  font-size: 0.8125rem;
 }
 .sicoven-modal-content input,
 .sicoven-modal-content select,
