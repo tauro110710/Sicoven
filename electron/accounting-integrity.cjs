@@ -781,6 +781,9 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
       throw new Error('SQLite rechazó reclasificaciones de IVA no acreditable que no cuadran en ambas monedas.');
     }
     const sourceSnapshots = declaration.sourceSnapshots || {};
+    const p = position;
+    const near = (actual, expected, tolerance = 0.02) =>
+      Number.isFinite(Number(actual)) && Math.abs(Number(actual) - Number(expected)) <= tolerance;
     const addFiscalAmount = (value, label) => {
       const normalized = Number(value ?? 0);
       if (!Number.isFinite(normalized) || normalized < 0) {
@@ -789,9 +792,6 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
       return normalized;
     };
     if (declaration.sourceSnapshots) {
-      const p = position;
-      const near = (actual, expected, tolerance = 0.02) =>
-        Number.isFinite(Number(actual)) && Math.abs(Number(actual) - Number(expected)) <= tolerance;
       const previousFiled = declarations.filter(item =>
         item.companyId === companyId && item.status === 'FILED' && item.period < period
       ).sort((a, b) => b.period.localeCompare(a.period))[0];
