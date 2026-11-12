@@ -2438,13 +2438,18 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
   };
   assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
 
-  const excessiveNote = { ...note, vatAmountBs: 180, totalAmountBs: 1305, taxableBaseBs: 1125 };
+  const excessiveNote = {
+    ...note, id: 'purchase-prior-vat-note-excessive',
+    invoiceNumber: 'NC-ORIGINAL-IVA-EXCESSIVE',
+    vatAmountBs: 180, totalAmountBs: 1305, taxableBaseBs: 1125
+  };
   assert.throws(() => validateAccountingSnapshot(previous, {
     ...next,
-    purchases: [original, excessiveNote],
+    purchases: [original, note, excessiveNote],
     vatOwnDeclarations: [priorDeclaration, {
       ...currentDeclaration,
-      sourceSnapshots: { [note.id]: snapshot(excessiveNote), [original.id]: originalSnapshot },
+      sourceIds: [excessiveNote.id],
+      sourceSnapshots: { [excessiveNote.id]: snapshot(excessiveNote), [original.id]: originalSnapshot },
       position: vatOwnPositionFixture({
         purchaseCreditReversalBs: 180, purchaseCreditReversal16Bs: 180,
         netTaxBs: 280, amountDueBs: 280
