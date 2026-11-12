@@ -1128,7 +1128,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
             !near(p.purchaseCreditReversalNonEligible16Bs, reversalNonEligible16) ||
             !near(p.purchaseCreditReversalNonEligible8Bs, reversalNonEligible8) ||
             !near(p.purchaseCreditReversalNonEligibleBs, reversalNonEligible16 + reversalNonEligible8)) {
-          throw new Error('SQLite rechazó el crédito y las reversiones de compras: los importes no corresponden a las facturas y notas de crédito seleccionadas.');
+          throw new Error('SQLite rechazó el crédito fiscal de compras: los importes brutos, acreditables y no acreditables no corresponden a las facturas y notas de crédito seleccionadas.');
         }
       }
     }
