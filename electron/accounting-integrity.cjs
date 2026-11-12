@@ -599,6 +599,10 @@ function buildVatOwnSourceSnapshotsFromState(state, companyId, sourceIds) {
         voucherNumber: purchase.voucherNumber || null, bcvRate: purchase.bcvRate, journalEntryId: purchase.journalEntryId || null,
         originalPurchaseId: purchase.originalPurchaseId || null, affectedInvoiceNumber: purchase.affectedInvoiceNumber || null,
         affectedInvoiceDate: purchase.affectedInvoiceDate || null, affectedInvoiceControlNumber: purchase.affectedInvoiceControlNumber || null,
+        affectedInvoiceTotalAmountBs: purchase.affectedInvoiceTotalAmountBs ?? null,
+        affectedInvoiceTotalAmountUsd: purchase.affectedInvoiceTotalAmountUsd ?? null,
+        inventoryLines: asArray(purchase.inventoryLines).map(line => ({ ...line })),
+        creditNoteLines: asArray(purchase.creditNoteLines).map(line => ({ ...line })),
         isCancelled: Boolean(purchase.isCancelled),
         journal: journalSnapshot(journalEntries.find(entry => entry.id === purchase.journalEntryId && entry.companyId === companyId))
       });
