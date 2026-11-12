@@ -41,6 +41,9 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const [bcvRateInput, setBcvRateInput] = useState('');
   const [bcvRateWasManuallyEntered, setBcvRateWasManuallyEntered] = useState(false);
   const bcvRate = parseDecimalInput(bcvRateInput);
+  const hasRecordedRateForInvoiceDate = (currentCompany.accountingBcvRateHistory || []).some(
+    item => item.effectiveDate === invoiceDate && Number.isFinite(Number(item.rate)) && Number(item.rate) > 0
+  ) || (currentCompany.lastRateUpdate === invoiceDate && Number(currentCompany.bcvRate) > 0);
 
   // Resuelve la tasa histórica de la fecha del documento; nunca aplica silenciosamente
   // la última tasa vigente a una factura de una fecha distinta.
@@ -327,15 +330,16 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                   required
                   placeholder="Ej.: 944,4485"
                   value={bcvRateInput}
+                  readOnly={hasRecordedRateForInvoiceDate}
                   onChange={e => { setBcvRateInput(e.target.value); setBcvRateWasManuallyEntered(true); }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-blue-500 focus:outline-none read-only:bg-slate-100 read-only:text-slate-600"
                 />
               </div>
               <div className="text-xs text-slate-700">
                 {bcvRateWasManuallyEntered
                   ? 'La tasa se incorporará al historial contable de la empresa con esta fecha valor al guardar la factura.'
                   : hasValidBcvRate
-                    ? 'Tasa recuperada del historial BCV de la empresa para esta fecha.'
+                    ? 'Tasa recuperada del historial BCV de la empresa para esta fecha. Para corregirla, use la herramienta de corrección BCV.'
                     : 'No hay una tasa guardada para esta fecha. Consulte la publicación oficial del BCV e ingrésela aquí.'}
               </div>
             </div>
