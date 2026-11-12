@@ -2247,8 +2247,8 @@ test('SQLite recalculates IVA sales position from selected original fiscal docum
     totalAmountBs: 725, totalAmountUsd: 0.83, taxableBaseBs: 625, taxableBaseUsd: 0.71,
     exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 100, vatAmountUsd: 0.11,
     additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,
-    igtfAmountBs: 0, igtfAmountUsd: 0, vatWithheldBs: 0, vatWithheldUsd: 0,
-    retentionRate: 0, retentionVoucherNumber: null, retentionVoucherDate: null,
+    igtfAmountBs: 0, igtfAmountUsd: 0, vatWithheldBs: 40, vatWithheldUsd: 0.05,
+    retentionRate: 40, retentionVoucherNumber: 'RET-IVA-TRACE-1', retentionVoucherDate: '2026-11-08',
     bcvRate: 874, journalEntryId: null, originalSaleId: null,
     affectedInvoiceNumber: null, affectedInvoiceDate: null, affectedInvoiceControlNumber: null,
     isCancelled: false
@@ -2263,21 +2263,29 @@ test('SQLite recalculates IVA sales position from selected original fiscal docum
     vatAmountBs: sale.vatAmountBs, vatAmountUsd: sale.vatAmountUsd,
     additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,
     igtfAmountBs: 0, igtfAmountUsd: 0, vatWithheldBs: sale.vatWithheldBs,
-    vatWithheldUsd: sale.vatWithheldUsd, retentionRate: 0, retentionVoucherNumber: null,
-    retentionVoucherDate: null, bcvRate: sale.bcvRate, journalEntryId: null,
+    vatWithheldUsd: sale.vatWithheldUsd, retentionRate: sale.retentionRate,
+    retentionVoucherNumber: sale.retentionVoucherNumber,
+    retentionVoucherDate: sale.retentionVoucherDate, bcvRate: sale.bcvRate, journalEntryId: null,
     originalSaleId: null, affectedInvoiceNumber: null, affectedInvoiceDate: null,
     affectedInvoiceControlNumber: null, isCancelled: false, journal: null
   });
   const declaration = {
     ...fixture.vatOwnDeclarations[0],
     sourceIds: [sale.id], sourceSnapshots: { [sale.id]: snapshot },
-    position: vatOwnPositionFixture()
+    position: vatOwnPositionFixture({ receivedWithholdingsBs: 40, netTaxBs: 60, amountDueBs: 60 })
   };
   const valid = { ...fixture, sales: [sale], vatOwnDeclarations: [declaration] };
   // Treat the source invoice as pre-existing: this test isolates declaration
   // reconciliation from the separate journal-on-invoice-creation invariant.
   const priorWithSale = { ...emptyState(), sales: [sale] };
   assert.doesNotThrow(() => validateAccountingSnapshot(priorWithSale, valid));
+  assert.throws(() => validateAccountingSnapshot(priorWithSale, {
+    ...valid,
+    vatOwnDeclarations: [{
+      ...declaration,
+      position: vatOwnPositionFixture({ netTaxBs: 100, amountDueBs: 100 })
+    }]
+  }), /retenciones IVA recibidas: el importe declarado no corresponde/);
 
   const internallyBalancedButMisstated = {
     ...declaration,
