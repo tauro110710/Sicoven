@@ -1102,10 +1102,18 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           addExpected('2.1.2.02', 0, Number(p.creditAdjustments8Bs || 0));
           const actualByAccount = new Map();
           for (const line of asArray(journal.items)) {
-            const code = String(line.accountCode || '');
+            const code = String(line.accountCode || '').trim();
+            const values = {
+              debitBs: Number(line.debitBs ?? 0), creditBs: Number(line.creditBs ?? 0),
+              debitUsd: Number(line.debitUsd ?? 0), creditUsd: Number(line.creditUsd ?? 0)
+            };
+            if (!code || Object.values(values).some(value => !Number.isFinite(value) || value < 0) ||
+                (values.debitBs > 0 && values.creditBs > 0) ||
+                (values.debitUsd > 0 && values.creditUsd > 0)) {
+              throw new Error('SQLite rechazó el asiento de determinación IVA: contiene líneas contables inválidas.');
+            }
             const current = actualByAccount.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
-            current.debitBs += Number(line.debitBs || 0); current.creditBs += Number(line.creditBs || 0);
-            current.debitUsd += Number(line.debitUsd || 0); current.creditUsd += Number(line.creditUsd || 0);
+            for (const key of Object.keys(current)) current[key] += values[key];
             actualByAccount.set(code, current);
           }
           const codes = new Set([...expectedByAccount.keys(), ...actualByAccount.keys()]);
