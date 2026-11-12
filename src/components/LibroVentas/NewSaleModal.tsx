@@ -9,7 +9,7 @@ interface NewSaleModalProps {
 }
 
 export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, addSale, updateBcvRate, waitForPersistence } = useAccounting();
+  const { currentCompany, addSale, waitForPersistence } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
@@ -39,25 +39,12 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
 
   // Currency
   const [bcvRateInput, setBcvRateInput] = useState('');
-  const [bcvRateWasManuallyEntered, setBcvRateWasManuallyEntered] = useState(false);
   const bcvRate = parseDecimalInput(bcvRateInput);
-  const hasRecordedRateForInvoiceDate = (currentCompany.accountingBcvRateHistory || []).some(
-    item => item.effectiveDate === invoiceDate && Number.isFinite(Number(item.rate)) && Number(item.rate) > 0
-  ) || (currentCompany.lastRateUpdate === invoiceDate && Number(currentCompany.bcvRate) > 0);
-
-  // Resuelve la tasa histórica de la fecha del documento; nunca aplica silenciosamente
-  // la última tasa vigente a una factura de una fecha distinta.
+  // La tasa BCV no es una configuración de empresa: se captura manualmente
+  // en cada operación y queda asociada únicamente al documento que la utiliza.
   React.useEffect(() => {
-    const history = currentCompany.accountingBcvRateHistory || [];
-    const exactRate = [...history]
-      .filter(item => item.effectiveDate === invoiceDate && Number.isFinite(Number(item.rate)) && Number(item.rate) > 0)
-      .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))[0];
-    const currentRateMatchesDate = currentCompany.lastRateUpdate === invoiceDate &&
-      Number.isFinite(Number(currentCompany.bcvRate)) && Number(currentCompany.bcvRate) > 0;
-    const resolvedRate = exactRate?.rate ?? (currentRateMatchesDate ? currentCompany.bcvRate : null);
-    setBcvRateInput(resolvedRate == null ? '' : String(resolvedRate));
-    setBcvRateWasManuallyEntered(false);
-  }, [invoiceDate, currentCompany.id, currentCompany.bcvRate, currentCompany.lastRateUpdate, currentCompany.accountingBcvRateHistory]);
+    setBcvRateInput('');
+  }, [invoiceDate]);
   const hasValidBcvRate = Number.isFinite(bcvRate) && bcvRate > 0;
   const [notes, setNotes] = useState<string>('');
   const [paymentTerm, setPaymentTerm] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
@@ -93,7 +80,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hasValidBcvRate) {
-      window.alert('No existe una tasa BCV registrada para la fecha de emisión. Ingrese la tasa oficial correspondiente a esa fecha.');
+      window.alert('Ingrese la tasa BCV aplicable a esta operación antes de guardar la factura.');
       return;
     }
     if (!customerRif.trim() || !customerName.trim() || !invoiceNumber.trim()) return;
@@ -115,9 +102,6 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
     savingRef.current = true;
     setSaving(true);
     try {
-      // Si el contador ingresó una tasa que no existía para esta fecha, se incorpora
-      // al historial contable fechado. Las fechas anteriores no sustituyen la tasa vigente.
-      if (bcvRateWasManuallyEntered) updateBcvRate(bcvRate, invoiceDate);
       addSale({
       invoiceDate,
       customerRif: formatRif(customerRif),
@@ -316,34 +300,29 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
             </div>
           </div>
 
-          {/* Tasa BCV histórica de la fecha de emisión */}
+          {/* Tasa BCV propia de esta operación */}
           <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
             <span className="font-bold text-slate-800 uppercase tracking-wider block">
-              3. Tasa BCV aplicable a la fecha de emisión
+              3. Tasa BCV aplicada a esta operación
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Tasa oficial (Bs. por USD) · {invoiceDate} *</label>
+                <label className="block font-semibold text-slate-700 mb-1">Tasa BCV aplicada (Bs. por USD) · {invoiceDate} *</label>
                 <input
                   type="text"
                   inputMode="decimal"
                   required
                   placeholder="Ej.: 944,4485"
                   value={bcvRateInput}
-                  readOnly={hasRecordedRateForInvoiceDate}
-                  onChange={e => { setBcvRateInput(e.target.value); setBcvRateWasManuallyEntered(true); }}
+                  onChange={e => setBcvRateInput(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-blue-500 focus:outline-none read-only:bg-slate-100 read-only:text-slate-600"
                 />
               </div>
               <div className="text-xs text-slate-700">
-                {bcvRateWasManuallyEntered
-                  ? 'La tasa se incorporará al historial contable de la empresa con esta fecha valor al guardar la factura.'
-                  : hasValidBcvRate
-                    ? 'Tasa recuperada del historial BCV de la empresa para esta fecha. Para corregirla, use la herramienta de corrección BCV.'
-                    : 'No hay una tasa guardada para esta fecha. Consulte la publicación oficial del BCV e ingrésela aquí.'}
+                Ingrese manualmente la tasa oficial correspondiente a la fecha de esta factura. No existe una tasa BCV global ni se reutiliza la tasa de otra operación. El valor quedará guardado como parte de este documento y de su asiento contable.
               </div>
             </div>
-            {hasValidBcvRate && <p className="text-xs font-semibold text-blue-900">La factura conservará esta tasa como dato histórico: {bcvRate.toLocaleString('es-VE')} Bs./USD.</p>}
+            {hasValidBcvRate && <p className="text-xs font-semibold text-blue-900">Esta factura conservará exclusivamente su propia tasa BCV aplicada: {bcvRate.toLocaleString('es-VE')} Bs./USD.</p>}
           </div>
 
           {/* Client Retention */}
@@ -450,7 +429,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
               <span className="text-slate-400">Tasa BCV aplicada ({invoiceDate}):</span>
               <span className="font-mono">{hasValidBcvRate ? `${bcvRate.toLocaleString('es-VE')} Bs./USD` : 'Pendiente de ingresar'}</span>
             </div>
-            {!hasValidBcvRate && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-amber-200">No hay una tasa BCV registrada para la fecha de la factura. Ingrésela en la sección 3; quedará guardada en el historial de la empresa.</p>}
+            {!hasValidBcvRate && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-amber-200">Ingrese la tasa BCV aplicable a esta operación en la sección 3. Se guardará únicamente con esta factura.</p>}
             {additionalLuxuryTaxBs > 0 && <div className="flex justify-between items-center text-xs text-amber-300"><span>Impuesto adicional al consumo suntuario (15%):</span><span className="font-mono">{formatBs(additionalLuxuryTaxBs)} ({formatUsd(additionalLuxuryTaxUsd)})</span></div>}
             <div className="flex justify-between items-center text-xs">
               <span className="text-slate-400">Total Factura (IVA, adicional e IGTF si aplica):</span>
