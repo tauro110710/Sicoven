@@ -113,19 +113,24 @@ export const IvaDeclaracionesView: React.FC = () => {
     if (dailySalesResolution.unresolvedDates.length > 0) {
       return { summary: null, reclassifications: null, error: 'Resuelve primero las fechas con Reporte Z y ventas individuales coincidentes.' };
     }
+    let summary: ReturnType<typeof calculateVatOwnPurchaseCreditSummary>;
     try {
-      const summary = calculateVatOwnPurchaseCreditSummary({
+      summary = calculateVatOwnPurchaseCreditSummary({
         companyId: currentCompany.id, period, purchases: monthPurchases,
         allPurchases: purchases, priorDeclarations: vatOwnDeclarations,
         taxableSalesBaseBs: rawTaxableSalesBase, exemptSalesBaseBs: rawExemptSalesBase
       });
+    } catch (error) {
+      return { summary: null, reclassifications: null, error: error instanceof Error ? error.message : 'No se pudo conciliar el crédito fiscal de compras.' };
+    }
+    try {
       const reclassifications = buildVatOwnPurchaseVatReclassificationItems({
         companyId: currentCompany.id, period, bcvRate: Number(currentCompany.bcvRate),
         allPurchases: purchases, journalEntries, summary
       });
       return { summary, reclassifications, error: null };
     } catch (error) {
-      return { summary: null, reclassifications: null, error: error instanceof Error ? error.message : 'No se pudo conciliar el crédito fiscal de compras.' };
+      return { summary, reclassifications: null, error: error instanceof Error ? error.message : 'La reclasificación contable del IVA no acreditable está pendiente.' };
     }
   }, [currentCompany.id, period, monthPurchases, purchases, vatOwnDeclarations, journalEntries, currentCompany.bcvRate, rawTaxableSalesBase, rawExemptSalesBase, dailySalesResolution.unresolvedDates]);
   const purchaseSummary = purchaseSummaryResult.summary;
@@ -282,7 +287,7 @@ export const IvaDeclaracionesView: React.FC = () => {
         <article className={`rounded-xl border p-4 ${preliminaryBalance !== null && preliminaryBalance >= 0 ? 'border-amber-300 bg-amber-50/50' : 'border-teal-300 bg-teal-50/50'}`}>
           <p className="text-xs font-semibold text-slate-700">Saldo preliminar del período</p>
           <p className="mt-2 text-xl font-black text-slate-900">{preliminaryBalance === null ? 'Conciliar' : format(Math.abs(preliminaryBalance))}</p>
-          <p className="mt-1 text-xs font-semibold text-slate-600">{preliminaryBalance === null ? 'Pendiente de conciliación de fuentes y crédito fiscal' : preliminaryBalance >= 0 ? 'Estimación usando crédito acreditable y prorrata' : 'Saldo a favor preliminar usando crédito acreditable'}</p>
+          <p className="mt-1 text-xs font-semibold text-slate-600">{preliminaryBalance === null ? 'Pendiente de conciliación de fuentes y crédito fiscal' : purchaseSummaryError ? 'Saldo provisional · ' + purchaseSummaryError : preliminaryBalance >= 0 ? 'Estimación usando crédito acreditable y prorrata' : 'Saldo a favor preliminar usando crédito acreditable'}</p>
         </article>
       </section>
 
@@ -359,11 +364,11 @@ export const IvaDeclaracionesView: React.FC = () => {
         </div>
         {savedDeclaration ? <>
           <div className="flex flex-wrap items-center gap-2 text-xs"><span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700">{savedDeclaration.period}</span><span className={`rounded-full px-3 py-1 font-bold ${savedDeclaration.status==='FILED'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}`}>{savedDeclaration.status==='FILED'?'PRESENTADA':'BORRADOR'}</span>{savedDeclaration.declarationNumber && <span className="font-mono text-slate-600">N° {savedDeclaration.declarationNumber}</span>}<span className="text-slate-500">Fuentes fiscales: {savedDeclaration.sourceIds.length} · Facturas relacionadas: {savedDeclaration.relatedSourceIds?.length || 0}</span>{savedDeclaration.calculationStatus === 'PROVISIONAL' && <span className="rounded-full bg-amber-100 px-3 py-1 font-bold text-amber-900">CÁLCULO PROVISIONAL</span>}</div>
-          {savedDeclaration.calculationStatus === 'PROVISIONAL' && (savedDeclaration.pendingCalculationItems || []).length > 0 && <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><p className="font-bold">El débito fiscal se guardó; el crédito fiscal sigue pendiente.</p><ul className="mt-2 list-disc space-y-1 pl-5">{savedDeclaration.pendingCalculationItems!.map((item,index)=><li key={index}>{item}</li>)}</ul><p className="mt-2 font-semibold">El saldo mostrado es provisional y no puede presentarse al SENIAT hasta actualizar este borrador.</p></div>}
+          {savedDeclaration.calculationStatus === 'PROVISIONAL' && (savedDeclaration.pendingCalculationItems || []).length > 0 && <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><p className="font-bold">El débito fiscal se guardó. Uno o más componentes del crédito fiscal o su reclasificación contable siguen pendientes.</p><ul className="mt-2 list-disc space-y-1 pl-5">{savedDeclaration.pendingCalculationItems!.map((item,index)=><li key={index}>{item}</li>)}</ul><p className="mt-2 font-semibold">El saldo mostrado es provisional y no puede presentarse al SENIAT hasta actualizar este borrador.</p></div>}
           {savedDeclaration.status === 'DRAFT' && draftNeedsRefresh && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
             <p className="text-sm font-semibold text-amber-950">El borrador quedó desactualizado frente a los libros o la tasa BCV vigente. Revisa las fuentes diarias pendientes y actualízalo antes de presentarlo. La versión anterior se conservará en el historial.</p>
             {dailySalesResolution.unresolvedDates.length > 0 && <p className="text-xs text-amber-900">Fechas que requieren elegir una fuente: {dailySalesResolution.unresolvedDates.join(', ')}</p>}
-            <button type="button" disabled={workflowBusy || !isValidVatOwnDeclarationPeriod(period) || outputVat === null || !currentPositionPreview || prorationRate === null || Boolean(purchaseSummaryError) || unfiledActivityPeriods.length > 0 || laterFiledPeriods.length > 0 || Boolean(activityPeriodError) || dailySalesResolution.unresolvedDates.length > 0} onClick={async()=>{
+            <button type="button" disabled={workflowBusy || !isValidVatOwnDeclarationPeriod(period) || outputVat === null || !currentPositionPreview || prorationRate === null || Boolean(purchaseSummaryError) || laterFiledPeriods.length > 0 || Boolean(activityPeriodError) || dailySalesResolution.unresolvedDates.length > 0} onClick={async()=>{
               setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
               try { await createVatOwnDeclaration({period,choices:activeSourceChoices,refresh:true});setWorkflowMessage('Borrador actualizado. La versión anterior quedó conservada en el historial.'); }
               catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo actualizar el borrador.');}
