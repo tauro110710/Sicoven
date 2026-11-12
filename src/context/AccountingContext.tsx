@@ -5707,27 +5707,46 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const rawExemptSalesBaseBs = resolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
       const taxableSalesBaseBs = Math.max(0, rawTaxableSalesBaseBs);
       const exemptSalesBaseBs = Math.max(0, rawExemptSalesBaseBs);
-      const purchaseSummary = calculateVatOwnPurchaseCreditSummary({
-        companyId: currentCompany.id, period: period, purchases: monthPurchases,
-        allPurchases: purchases, priorDeclarations: vatOwnDeclarations,
-        taxableSalesBaseBs: rawTaxableSalesBaseBs, exemptSalesBaseBs: rawExemptSalesBaseBs
-      });
-      const prorationRate = purchaseSummary.prorationRate;
-      const purchase16GrossBs = purchaseSummary.gross16Bs;
-      const purchase8GrossBs = purchaseSummary.gross8Bs;
-      const purchase16Bs = purchaseSummary.eligible16Bs;
-      const purchase8Bs = purchaseSummary.eligible8Bs;
-      const purchaseNonEligibleBs = purchaseSummary.nonEligible16Bs + purchaseSummary.nonEligible8Bs;
-      const purchaseCreditReversal16Bs = purchaseSummary.priorReversalEligible16Bs;
-      const purchaseCreditReversal8Bs = purchaseSummary.priorReversalEligible8Bs;
+      let purchaseSummary: ReturnType<typeof calculateVatOwnPurchaseCreditSummary> | null = null;
+      const pendingCalculationItems: string[] = [];
+      try {
+        purchaseSummary = calculateVatOwnPurchaseCreditSummary({
+          companyId: currentCompany.id, period: period, purchases: monthPurchases,
+          allPurchases: purchases, priorDeclarations: vatOwnDeclarations,
+          taxableSalesBaseBs: rawTaxableSalesBaseBs, exemptSalesBaseBs: rawExemptSalesBaseBs
+        });
+      } catch (error) {
+        pendingCalculationItems.push(error instanceof Error
+          ? error.message
+          : 'El crédito fiscal de compras requiere conciliación.');
+      }
+      // A provisional draft preserves verified sales VAT but never assumes an
+      // unresolved purchase credit. Filing is explicitly blocked until refreshed.
+      const prorationRate = purchaseSummary?.prorationRate ?? 0;
+      const purchase16GrossBs = purchaseSummary?.gross16Bs ?? 0;
+      const purchase8GrossBs = purchaseSummary?.gross8Bs ?? 0;
+      const purchase16Bs = purchaseSummary?.eligible16Bs ?? 0;
+      const purchase8Bs = purchaseSummary?.eligible8Bs ?? 0;
+      const purchaseNonEligibleBs = (purchaseSummary?.nonEligible16Bs ?? 0) + (purchaseSummary?.nonEligible8Bs ?? 0);
+      const purchaseCreditReversal16Bs = purchaseSummary?.priorReversalEligible16Bs ?? 0;
+      const purchaseCreditReversal8Bs = purchaseSummary?.priorReversalEligible8Bs ?? 0;
       const purchaseCreditReversalBs = purchaseCreditReversal16Bs + purchaseCreditReversal8Bs;
-      const purchaseCreditReversalNonEligible16Bs = purchaseSummary.priorReversalNonEligible16Bs;
-      const purchaseCreditReversalNonEligible8Bs = purchaseSummary.priorReversalNonEligible8Bs;
+      const purchaseCreditReversalNonEligible16Bs = purchaseSummary?.priorReversalNonEligible16Bs ?? 0;
+      const purchaseCreditReversalNonEligible8Bs = purchaseSummary?.priorReversalNonEligible8Bs ?? 0;
       const purchaseCreditReversalNonEligibleBs = purchaseCreditReversalNonEligible16Bs + purchaseCreditReversalNonEligible8Bs;
-      const purchaseVatReclassificationItems = buildVatOwnPurchaseVatReclassificationItems({
-        companyId: currentCompany.id, period: period, bcvRate: Number(currentCompany.bcvRate),
-        allPurchases: purchases, journalEntries, summary: purchaseSummary
-      });
+      let purchaseVatReclassificationItems: ReturnType<typeof buildVatOwnPurchaseVatReclassificationItems> = [];
+      if (purchaseSummary) {
+        try {
+          purchaseVatReclassificationItems = buildVatOwnPurchaseVatReclassificationItems({
+            companyId: currentCompany.id, period: period, bcvRate: Number(currentCompany.bcvRate),
+            allPurchases: purchases, journalEntries, summary: purchaseSummary
+          });
+        } catch (error) {
+          pendingCalculationItems.push(error instanceof Error
+            ? error.message
+            : 'La reclasificación contable del IVA no acreditable está pendiente.');
+        }
+      }
       const prior = vatOwnDeclarations.filter(item => item.companyId === currentCompany.id &&
         item.status === 'FILED' && item.period < period).sort((a,b)=>b.period.localeCompare(a.period))[0];
       const debitAdjustmentsBs = Math.max(0, -withholdingRaw);
@@ -5751,7 +5770,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         ...monthPurchases.map(item => item.id),
         ...withholdingRows.map(item => item.id)
       ])];
-      const relatedSourceIds = purchaseSummary.relatedPurchaseIds.filter(id => !sourceIds.includes(id));
+      const relatedSourceIds = (purchaseSummary?.relatedPurchaseIds || []).filter(id => !sourceIds.includes(id));
       const sourceSnapshots = buildVatOwnSourceSnapshots({ companyId: currentCompany.id, sourceIds: [...sourceIds, ...relatedSourceIds], sales, purchases, journalEntries });
       const priorRevision = existingDraft
         ? snapshotVatOwnDeclarationRevision(existingDraft, createdAt, 'Actualización del borrador por conciliación de nuevas fuentes contables')
@@ -5762,6 +5781,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         position, sourceIds, relatedSourceIds, sourceSnapshots, bcvRate: Number(currentCompany.bcvRate) || 0,
         dailySourceChoices: { ...(input.choices || {}) },
         purchaseVatReclassificationItems,
+        calculationStatus: pendingCalculationItems.length ? 'PROVISIONAL' : 'READY',
+        pendingCalculationItems,
         createdAt: existingDraft?.createdAt || createdAt,
         ...(existingDraft ? {
           updatedAt: createdAt,
@@ -5797,6 +5818,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       event.companyId === currentCompany.id && event.eventType === 'PAYMENT' && event.reference?.trim() === draft.reference?.trim()
     )) throw new Error('La referencia de pago ya fue utilizada en otra declaración mensual de esta empresa.');
     if (draft.eventType === 'FILED') {
+      if (declaration.calculationStatus === 'PROVISIONAL' || (declaration.pendingCalculationItems || []).length > 0) {
+        throw new Error('No se puede registrar la presentación: el borrador conserva cálculos pendientes. Actualícelo después de conciliar el crédito fiscal de compras y sus documentos de respaldo.');
+      }
       const unfiledActivityPeriods = getUnfiledVatOwnActivityPeriods({
         companyId: currentCompany.id, targetPeriod: declaration.period,
         activityDates: getVatOwnActivityDates(currentCompany.id), declarations: vatOwnDeclarations
