@@ -833,6 +833,9 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
           day.z.vat8 += addFiscalAmount(report.vat8Bs, 'IVA Z 8%');
           day.z.exempt += addFiscalAmount(report.exemptSalesBs, 'ventas exentas Z');
         } else if (source.kind === 'SALE') {
+          // Las facturas de meses anteriores pueden ser fuentes directas de una
+          // retención recibida este mes; no deben sumarse otra vez a las ventas del mes.
+          if (String(source.invoiceDate || '').slice(0, 7) !== period) continue;
           hasSalesSources = true;
           const day = getDaily(String(source.invoiceDate || ''));
           if (!day.individual) day.individual = { vat16: 0, vat8: 0, base16: 0, base8: 0, base31: 0, exempt: 0 };
@@ -943,8 +946,16 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
         }
         if (sourceIds.includes(String(sourceId))) {
           const sourceDate = parsed.kind === 'Z' ? String(parsed.date || '') : String(parsed.invoiceDate || '');
-          if (!validVatDeclarationDate(sourceDate) || sourceDate.slice(0, 7) !== period) {
-            throw new Error('SQLite rechazó una fuente directa IVA cuya fecha fiscal no pertenece al período mensual declarado.');
+          const isCurrentPeriodSource = validVatDeclarationDate(sourceDate) && sourceDate.slice(0, 7) === period;
+          const isPriorSaleRetentionSource = parsed.kind === 'SALE' &&
+            validVatDeclarationDate(sourceDate) && sourceDate.slice(0, 7) < period &&
+            validVatDeclarationDate(String(parsed.retentionVoucherDate || '')) &&
+            String(parsed.retentionVoucherDate).slice(0, 7) === period &&
+            Number(parsed.vatWithheldBs || 0) > 0 &&
+            Boolean(String(parsed.retentionVoucherNumber || '').trim()) &&
+            String(parsed.documentType || '01') === '01';
+          if (!isCurrentPeriodSource && !isPriorSaleRetentionSource) {
+            throw new Error('SQLite rechazó una fuente directa IVA cuya fecha fiscal no pertenece al período mensual declarado ni respalda una retención recibida del período.');
           }
         }
       }
