@@ -2427,7 +2427,22 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
     sourceIds: [historicalNote.id], relatedSourceIds: [original.id],
     sourceSnapshots: { [historicalNote.id]: snapshot(historicalNote), [original.id]: originalSnapshot },
     declarationNumber: 'IVA-2026-002',
+    filedAt: '2026-12-15T12:00:00.000-04:00',
     position: vatOwnPositionFixture({ prorationRate: 1 })
+  };
+  const historicalFilingJournal = {
+    ...vatOwnFilingEntry(), id: 'entry-iva-nov-credit-note',
+    date: '2026-12-15', description: 'Determinación mensual del IVA · 2026-11',
+    referenceDoc: 'IVA-MENSUAL:2026-11'
+  };
+  const historicalFilingEvent = {
+    id: 'vat-own-event-nov-credit-note', declarationId: historicalNoteDeclaration.id,
+    companyId: 'company-1', eventType: 'FILED',
+    occurredAt: historicalNoteDeclaration.filedAt,
+    recordedAt: '2026-12-15T16:00:00.000Z',
+    declarationNumber: historicalNoteDeclaration.declarationNumber,
+    idempotencyKey: 'FILED:' + historicalNoteDeclaration.id,
+    journalEntryId: historicalFilingJournal.id
   };
   const currentDeclaration = {
     ...vatOwnDeclarationFixture().vatOwnDeclarations[0],
@@ -2442,8 +2457,9 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
   };
   const previous = {
     ...filed, purchases: [original, historicalNote, note],
+    journalEntries: [...filed.journalEntries, historicalFilingJournal],
     vatOwnDeclarations: [priorDeclaration, historicalNoteDeclaration],
-    vatOwnDeclarationEvents: filed.vatOwnDeclarationEvents
+    vatOwnDeclarationEvents: [...filed.vatOwnDeclarationEvents, historicalFilingEvent]
   };
   const next = {
     ...previous,
