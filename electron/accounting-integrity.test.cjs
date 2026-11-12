@@ -2455,24 +2455,69 @@ test('SQLite reconstructs withholding increases and reversals issued by current-
 
 test('SQLite turns a sales credit note exceeding current-month VAT into a credit adjustment and carry-forward', () => {
   const fixture = vatOwnDeclarationFixture();
-  const creditNote = {
-    id: 'sale-credit-note-exceeds-month-vat', companyId: 'company-1',
-    invoiceDate: '2026-11-10', documentType: '03',
-    invoiceNumber: 'NC-PRIOR-PERIOD-SALE', controlNumber: 'CTRL-NC-PRIOR-PERIOD',
+  const rate = 874;
+  const originalSale = {
+    id: 'sale-original-october-for-current-credit', companyId: 'company-1',
+    invoiceDate: '2026-10-20', documentType: '01',
+    invoiceNumber: 'F-ORIGINAL-OCTOBER', controlNumber: 'CTRL-ORIGINAL-OCTOBER',
     customerRif: 'J-12345678-9', customerName: 'Cliente Uno',
-    totalAmountBs: 217.5, totalAmountUsd: 0.25,
-    taxableBaseBs: 187.5, taxableBaseUsd: 0.21,
+    totalAmountBs: 725, totalAmountUsd: 725 / rate,
+    taxableBaseBs: 625, taxableBaseUsd: 625 / rate,
     exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16,
-    vatAmountBs: 30, vatAmountUsd: 0.03,
-    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0,
-    igtfApplicable: false, igtfRate: 0, igtfAmountBs: 0, igtfAmountUsd: 0,
+    vatAmountBs: 100, vatAmountUsd: 100 / rate,
     vatWithheldBs: 0, vatWithheldUsd: 0, retentionRate: 0,
     retentionVoucherNumber: null, retentionVoucherDate: null,
-    bcvRate: 874, journalEntryId: null, originalSaleId: 'sale-original-october',
-    affectedInvoiceNumber: 'F-ORIGINAL-OCTOBER', affectedInvoiceDate: '2026-10-20',
-    affectedInvoiceControlNumber: 'CTRL-ORIGINAL-OCTOBER', isCancelled: false
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0,
+    igtfApplicable: false, igtfRate: 0, igtfAmountBs: 0, igtfAmountUsd: 0,
+    bcvRate: rate, paymentTerm: 'CREDITO', fiscalEmissionMedium: 'DIGITAL',
+    journalEntryId: 'sale-original-october-journal', isCancelled: false
   };
-  const snapshot = JSON.stringify({
+  const originalJournal = {
+    id: originalSale.journalEntryId, companyId: 'company-1', entryNumber: 2,
+    date: originalSale.invoiceDate, description: 'Factura original de octubre',
+    type: 'VENTA', bcvRate: rate, referenceDoc: 'FAC-' + originalSale.invoiceNumber,
+    items: [
+      { accountCode: '1.1.2.01', debitBs: 725, creditBs: 0, debitUsd: 725 / rate, creditUsd: 0 },
+      { accountCode: '4.1.1.01', debitBs: 0, creditBs: 625, debitUsd: 0, creditUsd: 625 / rate },
+      { accountCode: '2.1.2.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 100 / rate }
+    ], createdAt: '2026-10-20T10:00:00.000Z'
+  };
+  const creditNote = {
+    ...originalSale, id: 'sale-credit-note-current-period',
+    invoiceDate: '2026-11-10', invoiceNumber: 'NC-100', controlNumber: 'CTRL-NC-100',
+    documentType: '03', creditNoteNumber: 'NC-100',
+    originalSaleId: originalSale.id,
+    affectedInvoiceNumber: originalSale.invoiceNumber,
+    affectedInvoiceDate: originalSale.invoiceDate,
+    affectedInvoiceControlNumber: originalSale.controlNumber,
+    affectedInvoiceTotalAmountBs: originalSale.totalAmountBs,
+    affectedInvoiceTotalAmountUsd: originalSale.totalAmountUsd,
+    fiscalEmissionMedium: 'DIGITAL', sameMediumAsOriginal: true,
+    correctionReason: 'Devolución total de mercancía vendida.',
+    correctionWorkpaper: 'Se verificó la factura original y la devolución del importe facturado.',
+    journalEntryId: 'sale-credit-note-current-journal',
+    netReceivableAdjustmentBs: 725, netReceivableAdjustmentUsd: 725 / rate
+  };
+  const noteJournal = {
+    id: creditNote.journalEntryId, companyId: 'company-1', entryNumber: 3,
+    date: creditNote.invoiceDate, description: 'Nota de crédito NC-100',
+    type: 'AJUSTE', bcvRate: rate, referenceDoc: 'NC-CLI-NC-100',
+    items: [
+      { accountCode: '4.1.1.01', debitBs: 625, creditBs: 0, debitUsd: 625 / rate, creditUsd: 0 },
+      { accountCode: '2.1.2.01', debitBs: 100, creditBs: 0, debitUsd: 100 / rate, creditUsd: 0 },
+      { accountCode: '1.1.2.01', debitBs: 0, creditBs: 725, debitUsd: 0, creditUsd: 725 / rate }
+    ], createdAt: '2026-11-10T10:00:00.000Z'
+  };
+  const journalSnapshot = entry => entry ? {
+    id: entry.id, entryNumber: entry.entryNumber, date: entry.date,
+    referenceDoc: entry.referenceDoc, type: entry.type, bcvRate: entry.bcvRate,
+    description: entry.description, reversalOfEntryId: null, reversedByEntryId: null,
+    items: entry.items.map(line => ({
+      accountCode: line.accountCode, debitBs: line.debitBs, creditBs: line.creditBs,
+      debitUsd: line.debitUsd, creditUsd: line.creditUsd, description: line.description
+    }))
+  } : null;
+  const noteSnapshot = JSON.stringify({
     kind: 'SALE', id: creditNote.id, invoiceDate: creditNote.invoiceDate,
     documentType: creditNote.documentType, invoiceNumber: creditNote.invoiceNumber,
     controlNumber: creditNote.controlNumber, customerRif: creditNote.customerRif,
@@ -2484,34 +2529,44 @@ test('SQLite turns a sales credit note exceeding current-month VAT into a credit
     additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,
     igtfAmountBs: 0, igtfAmountUsd: 0, vatWithheldBs: 0, vatWithheldUsd: 0,
     retentionRate: 0, retentionVoucherNumber: null, retentionVoucherDate: null,
-    bcvRate: 874, journalEntryId: null, originalSaleId: creditNote.originalSaleId,
+    bcvRate: rate, journalEntryId: creditNote.journalEntryId,
+    originalSaleId: creditNote.originalSaleId,
     affectedInvoiceNumber: creditNote.affectedInvoiceNumber,
     affectedInvoiceDate: creditNote.affectedInvoiceDate,
     affectedInvoiceControlNumber: creditNote.affectedInvoiceControlNumber,
-    isCancelled: false, journal: null
+    isCancelled: false, journal: journalSnapshot(noteJournal)
   });
   const declaration = {
     ...fixture.vatOwnDeclarations[0],
     id: 'vat-own-2026-11-sales-credit-adjustment', period: '2026-11',
     sourceIds: [creditNote.id], relatedSourceIds: [],
-    sourceSnapshots: { [creditNote.id]: snapshot },
+    sourceSnapshots: { [creditNote.id]: noteSnapshot },
     position: vatOwnPositionFixture({
       outputVatBs: 0, outputVat16Bs: 0, outputVat8Bs: 0,
       taxableSalesBaseBs: 0, exemptSalesBaseBs: 0,
-      creditAdjustmentsBs: 30, creditAdjustments16Bs: 30,
-      netTaxBs: -30, amountDueBs: 0, creditCarryForwardBs: 30
+      creditAdjustmentsBs: 100, creditAdjustments16Bs: 100,
+      netTaxBs: -100, amountDueBs: 0, creditCarryForwardBs: 100
     })
   };
   const priorFiled = vatOwnFiledState();
-  const previous = { ...priorFiled, sales: [creditNote] };
+  const accounts = [
+    ...priorFiled.accounts,
+    { code: '1.1.2.01', name: 'Cuentas por cobrar clientes', type: 'ACTIVO', isMovement: true },
+    { code: '4.1.1.01', name: 'Ventas', type: 'INGRESOS', isMovement: true }
+  ];
+  const previous = {
+    ...priorFiled, accounts, sales: [originalSale],
+    journalEntries: [...priorFiled.journalEntries, originalJournal]
+  };
   const next = {
-    ...priorFiled, sales: [creditNote],
-    vatOwnDeclarations: [...priorFiled.vatOwnDeclarations, declaration]
+    ...previous, sales: [originalSale, creditNote],
+    journalEntries: [...previous.journalEntries, noteJournal],
+    vatOwnDeclarations: [...previous.vatOwnDeclarations, declaration]
   };
   assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
   assert.throws(() => validateAccountingSnapshot(previous, {
     ...next,
-    vatOwnDeclarations: [{
+    vatOwnDeclarations: [...previous.vatOwnDeclarations, {
       ...declaration,
       position: vatOwnPositionFixture({
         outputVatBs: 0, outputVat16Bs: 0, outputVat8Bs: 0,
