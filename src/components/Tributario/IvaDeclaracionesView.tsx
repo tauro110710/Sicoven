@@ -104,9 +104,11 @@ export const IvaDeclaracionesView: React.FC = () => {
     ? null
     : dailySalesResolution.days.reduce((sum, day) => sum + day.outputVatBs, 0);
 
-  const taxableSalesBase = Math.max(0, dailySalesResolution.days.reduce((sum, day) =>
-    sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0));
-  const exemptSalesBase = Math.max(0, dailySalesResolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0));
+  const rawTaxableSalesBase = dailySalesResolution.days.reduce((sum, day) =>
+    sum + day.taxableBase16Bs + day.taxableBase8Bs + day.taxableBase31Bs, 0);
+  const rawExemptSalesBase = dailySalesResolution.days.reduce((sum, day) => sum + day.exemptSalesBs, 0);
+  const taxableSalesBase = Math.max(0, rawTaxableSalesBase);
+  const exemptSalesBase = Math.max(0, rawExemptSalesBase);
   const purchaseSummaryResult = useMemo(() => {
     if (dailySalesResolution.unresolvedDates.length > 0) {
       return { summary: null, reclassifications: null, error: 'Resuelve primero las fechas con Reporte Z y ventas individuales coincidentes.' };
@@ -115,7 +117,7 @@ export const IvaDeclaracionesView: React.FC = () => {
       const summary = calculateVatOwnPurchaseCreditSummary({
         companyId: currentCompany.id, period, purchases: monthPurchases,
         allPurchases: purchases, priorDeclarations: vatOwnDeclarations,
-        taxableSalesBaseBs: taxableSalesBase, exemptSalesBaseBs: exemptSalesBase
+        taxableSalesBaseBs: rawTaxableSalesBase, exemptSalesBaseBs: rawExemptSalesBase
       });
       const reclassifications = buildVatOwnPurchaseVatReclassificationItems({
         companyId: currentCompany.id, period, bcvRate: Number(currentCompany.bcvRate),
@@ -125,7 +127,7 @@ export const IvaDeclaracionesView: React.FC = () => {
     } catch (error) {
       return { summary: null, reclassifications: null, error: error instanceof Error ? error.message : 'No se pudo conciliar el crédito fiscal de compras.' };
     }
-  }, [currentCompany.id, period, monthPurchases, purchases, vatOwnDeclarations, journalEntries, currentCompany.bcvRate, taxableSalesBase, exemptSalesBase, dailySalesResolution.unresolvedDates]);
+  }, [currentCompany.id, period, monthPurchases, purchases, vatOwnDeclarations, journalEntries, currentCompany.bcvRate, rawTaxableSalesBase, rawExemptSalesBase, dailySalesResolution.unresolvedDates]);
   const purchaseSummary = purchaseSummaryResult.summary;
   const purchaseSummaryError = purchaseSummaryResult.error;
   const unfiledActivityPeriods = activityContinuity.missing;
