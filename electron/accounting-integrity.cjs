@@ -933,7 +933,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
         return snapshot.kind === 'PURCHASE' ? snapshot : null;
       }).filter(Boolean);
       if (declaration.status === 'DRAFT' && directPurchaseSnapshots.length) {
-        const normalizeRif = value => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
+        const normalizeRif = value => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
         const currentPurchasesById = new Map(
           Object.entries(sourceSnapshots).map(([key, raw]) => {
             try { return [String(key), JSON.parse(raw)]; } catch { return [String(key), null]; }
