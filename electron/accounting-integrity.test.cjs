@@ -2295,14 +2295,35 @@ test('SQLite recalculates ordinary purchase credit from immutable invoice snapsh
   const fixture = vatOwnDeclarationFixture();
   const purchase = {
     id: 'purchase-iva-trace-1', companyId: 'company-1', invoiceDate: '2026-11-06',
-    documentType: '01', invoiceNumber: 'FC-TRACE-1', supplierRif: 'J-12345678-9',
-    vatAmountBs: 160, taxRate: 16, vatCreditTreatment: 'COMMON', isCancelled: false
+    accountCreditDate: null, documentType: '01', invoiceNumber: 'FC-TRACE-1',
+    controlNumber: 'CTRL-TRACE-1', supplierRif: 'J-12345678-9', supplierName: 'Proveedor Uno',
+    totalAmountBs: 1160, totalAmountUsd: 1.33, taxableBaseBs: 1000, taxableBaseUsd: 1.14,
+    exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 160, vatAmountUsd: 0.18,
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,
+    igtfAmountBs: 0, igtfAmountUsd: 0, vatCreditTreatment: 'COMMON',
+    vatWithheldBs: 0, vatWithheldUsd: 0, retentionRate: 0, voucherNumber: null,
+    bcvRate: 874, journalEntryId: null, originalPurchaseId: null,
+    affectedInvoiceNumber: null, affectedInvoiceDate: null, affectedInvoiceControlNumber: null,
+    affectedInvoiceTotalAmountBs: null, affectedInvoiceTotalAmountUsd: null,
+    inventoryLines: [], creditNoteLines: [], isCancelled: false
   };
   const snapshot = JSON.stringify({
     kind: 'PURCHASE', id: purchase.id, invoiceDate: purchase.invoiceDate,
-    documentType: purchase.documentType, invoiceNumber: purchase.invoiceNumber,
-    supplierRif: purchase.supplierRif, vatAmountBs: purchase.vatAmountBs,
-    taxRate: purchase.taxRate, vatCreditTreatment: purchase.vatCreditTreatment
+    accountCreditDate: null, documentType: purchase.documentType,
+    invoiceNumber: purchase.invoiceNumber, controlNumber: purchase.controlNumber,
+    supplierRif: purchase.supplierRif, supplierName: purchase.supplierName,
+    totalAmountBs: purchase.totalAmountBs, totalAmountUsd: purchase.totalAmountUsd,
+    taxableBaseBs: purchase.taxableBaseBs, taxableBaseUsd: purchase.taxableBaseUsd,
+    exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: purchase.taxRate,
+    vatAmountBs: purchase.vatAmountBs, vatAmountUsd: purchase.vatAmountUsd,
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false,
+    igtfRate: 0, igtfAmountBs: 0, igtfAmountUsd: 0,
+    vatCreditTreatment: 'COMMON', vatWithheldBs: 0, vatWithheldUsd: 0,
+    retentionRate: 0, voucherNumber: null, bcvRate: 874, journalEntryId: null,
+    originalPurchaseId: null, affectedInvoiceNumber: null, affectedInvoiceDate: null,
+    affectedInvoiceControlNumber: null, affectedInvoiceTotalAmountBs: null,
+    affectedInvoiceTotalAmountUsd: null, inventoryLines: [], creditNoteLines: [],
+    isCancelled: false, journal: null
   });
   const position = vatOwnPositionFixture({
     taxableSalesBaseBs: 625, exemptSalesBaseBs: 625, prorationRate: 0.5,
