@@ -2104,40 +2104,75 @@ function vatOwnFiledState() {
 
 test('SQLite posts IVA debit and credit adjustments to the correct asset and liability accounts', () => {
   const fixture = vatOwnDeclarationFixture();
+  const rate = 874;
+  const legacyCreditNote = {
+    id: 'sale-legacy-credit-note-withholding-adjustment', companyId: 'company-1',
+    invoiceDate: '2026-10-20', documentType: '03',
+    invoiceNumber: 'NC-LEGACY-001', controlNumber: 'CTRL-NC-LEGACY-001',
+    customerRif: 'J-12345678-9', customerName: 'Cliente Uno',
+    totalAmountBs: 217.5, totalAmountUsd: 217.5 / rate,
+    taxableBaseBs: 187.5, taxableBaseUsd: 187.5 / rate,
+    exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16,
+    vatAmountBs: 30, vatAmountUsd: 30 / rate,
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0,
+    igtfApplicable: false, igtfRate: 0, igtfAmountBs: 0, igtfAmountUsd: 0,
+    vatWithheldBs: 20, vatWithheldUsd: 20 / rate, retentionRate: 40,
+    retentionVoucherNumber: null, retentionVoucherDate: null,
+    bcvRate: rate, journalEntryId: null, originalSaleId: null,
+    affectedInvoiceNumber: null, affectedInvoiceDate: null,
+    affectedInvoiceControlNumber: null, isCancelled: false
+  };
+  const sourceSnapshot = JSON.stringify({
+    kind: 'SALE', id: legacyCreditNote.id, invoiceDate: legacyCreditNote.invoiceDate,
+    documentType: legacyCreditNote.documentType, invoiceNumber: legacyCreditNote.invoiceNumber,
+    controlNumber: legacyCreditNote.controlNumber, customerRif: legacyCreditNote.customerRif,
+    customerName: legacyCreditNote.customerName, totalAmountBs: legacyCreditNote.totalAmountBs,
+    totalAmountUsd: legacyCreditNote.totalAmountUsd, taxableBaseBs: legacyCreditNote.taxableBaseBs,
+    taxableBaseUsd: legacyCreditNote.taxableBaseUsd, exemptAmountBs: 0, exemptAmountUsd: 0,
+    taxRate: 16, vatAmountBs: 30, vatAmountUsd: 30 / rate,
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false,
+    igtfRate: 0, igtfAmountBs: 0, igtfAmountUsd: 0,
+    vatWithheldBs: 20, vatWithheldUsd: 20 / rate, retentionRate: 40,
+    retentionVoucherNumber: null, retentionVoucherDate: null, bcvRate: rate,
+    journalEntryId: null, originalSaleId: null, affectedInvoiceNumber: null,
+    affectedInvoiceDate: null, affectedInvoiceControlNumber: null,
+    isCancelled: false, journal: null
+  });
   const position = vatOwnPositionFixture({
-    outputVatBs: 100, outputVat16Bs: 100, outputVat8Bs: 0,
+    outputVatBs: 0, outputVat16Bs: 0, outputVat8Bs: 0,
+    taxableSalesBaseBs: 0, exemptSalesBaseBs: 0,
     receivedWithholdingsBs: 0, debitAdjustmentsBs: 20,
     creditAdjustmentsBs: 30, creditAdjustments16Bs: 30,
-    creditAdjustments8Bs: 0, netTaxBs: 90, amountDueBs: 90,
-    creditCarryForwardBs: 0
+    creditAdjustments8Bs: 0, netTaxBs: -10, amountDueBs: 0,
+    creditCarryForwardBs: 10
   });
   const draft = {
-    ...fixture.vatOwnDeclarations[0],
-    period: '2026-10', createdAt: '2026-10-31T10:00:00.000Z',
-    position, sourceIds: [], relatedSourceIds: [], sourceSnapshots: {}
-  };
-  const withholdingAccount = {
-    code: '1.1.3.03', name: 'Retenciones IVA recibidas',
-    type: 'ACTIVO', isMovement: true
+    ...fixture.vatOwnDeclarations[0], period: '2026-10',
+    createdAt: '2026-10-31T10:00:00.000Z', position,
+    sourceIds: [legacyCreditNote.id], relatedSourceIds: [],
+    sourceSnapshots: { [legacyCreditNote.id]: sourceSnapshot }
   };
   const previous = {
-    ...fixture, accounts: [...fixture.accounts, withholdingAccount],
-    vatOwnDeclarations: [draft]
+    ...fixture,
+    accounts: [
+      ...fixture.accounts,
+      { code: '1.1.3.01', name: 'Crédito fiscal IVA compras', type: 'ACTIVO', isMovement: true },
+      { code: '1.1.3.03', name: 'Retenciones IVA recibidas', type: 'ACTIVO', isMovement: true }
+    ],
+    sales: [legacyCreditNote], vatOwnDeclarations: [draft]
   };
   const declaration = {
     ...draft, status: 'FILED', declarationNumber: 'IVA-ADJ-2026-10',
     filedAt: '2026-11-11T12:00:00.000-04:00'
   };
-  const rate = declaration.bcvRate;
   const journal = {
     id: 'entry-iva-adjustment-signs', companyId: 'company-1', entryNumber: 1,
     date: '2026-11-11', description: 'Determinación IVA con ajustes de período',
     type: 'AJUSTE', bcvRate: rate, referenceDoc: 'IVA-MENSUAL:2026-10',
     items: [
-      { accountCode: '2.1.2.01', debitBs: 100, creditBs: 0, debitUsd: 100 / rate, creditUsd: 0 },
       { accountCode: '1.1.3.03', debitBs: 20, creditBs: 0, debitUsd: 20 / rate, creditUsd: 0 },
       { accountCode: '2.1.2.01', debitBs: 0, creditBs: 30, debitUsd: 0, creditUsd: 30 / rate },
-      { accountCode: '2.1.2.09', debitBs: 0, creditBs: 90, debitUsd: 0, creditUsd: 90 / rate }
+      { accountCode: '1.1.3.01', debitBs: 10, creditBs: 0, debitUsd: 10 / rate, creditUsd: 0 }
     ], createdAt: '2026-11-11T16:00:00.000Z'
   };
   const event = {
@@ -2155,10 +2190,10 @@ test('SQLite posts IVA debit and credit adjustments to the correct asset and lia
   const wrongJournal = {
     ...journal,
     items: [
-      { accountCode: '2.1.2.01', debitBs: 100, creditBs: 0, debitUsd: 100 / rate, creditUsd: 0 },
       { accountCode: '1.1.3.03', debitBs: 0, creditBs: 20, debitUsd: 0, creditUsd: 20 / rate },
       { accountCode: '2.1.2.01', debitBs: 30, creditBs: 0, debitUsd: 30 / rate, creditUsd: 0 },
-      { accountCode: '2.1.2.09', debitBs: 0, creditBs: 110, debitUsd: 0, creditUsd: 110 / rate }
+      { accountCode: '1.1.3.01', debitBs: 10, creditBs: 0, debitUsd: 10 / rate, creditUsd: 0 },
+      { accountCode: '2.1.2.09', debitBs: 0, creditBs: 20, debitUsd: 0, creditUsd: 20 / rate }
     ]
   };
   assert.throws(() => validateAccountingSnapshot(previous, {
