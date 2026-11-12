@@ -2299,6 +2299,48 @@ test('SQLite recalculates IVA sales position from selected original fiscal docum
   }), /débito fiscal, las bases gravadas o las ventas exentas no corresponden/);
 });
 
+test('SQLite accepts a prior-month sale selected only for a current-month received VAT withholding', () => {
+  const fixture = vatOwnDeclarationFixture();
+  const sale = {
+    id: 'sale-prior-month-current-retention', companyId: 'company-1',
+    invoiceDate: '2026-10-30', documentType: '01',
+    invoiceNumber: 'F-RETENTION-PRIOR', taxRate: 16,
+    taxableBaseBs: 625, exemptAmountBs: 0, vatAmountBs: 100,
+    vatWithheldBs: 40, retentionVoucherNumber: 'RET-PRIOR-001',
+    retentionVoucherDate: '2026-11-08', isCancelled: false
+  };
+  const snapshot = JSON.stringify({
+    kind: 'SALE', id: sale.id, invoiceDate: sale.invoiceDate,
+    documentType: sale.documentType, invoiceNumber: sale.invoiceNumber,
+    taxRate: sale.taxRate, taxableBaseBs: sale.taxableBaseBs,
+    exemptAmountBs: sale.exemptAmountBs, vatAmountBs: sale.vatAmountBs,
+    vatWithheldBs: sale.vatWithheldBs,
+    retentionVoucherNumber: sale.retentionVoucherNumber,
+    retentionVoucherDate: sale.retentionVoucherDate, isCancelled: false
+  });
+  const declaration = {
+    ...fixture.vatOwnDeclarations[0],
+    sourceIds: [sale.id], relatedSourceIds: [],
+    sourceSnapshots: { [sale.id]: snapshot },
+    position: vatOwnPositionFixture({
+      outputVatBs: 0, outputVat16Bs: 0, outputVat8Bs: 0,
+      taxableSalesBaseBs: 0, exemptSalesBaseBs: 0,
+      receivedWithholdingsBs: 40, netTaxBs: -40,
+      amountDueBs: 0, creditCarryForwardBs: 40
+    })
+  };
+  const previous = { ...emptyState(), sales: [sale] };
+  const next = { ...fixture, sales: [sale], vatOwnDeclarations: [declaration] };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next,
+    vatOwnDeclarations: [{
+      ...declaration,
+      sourceSnapshots: { [sale.id]: JSON.stringify({ ...JSON.parse(snapshot), retentionVoucherDate: '2026-10-31' }) }
+    }]
+  }), /fecha fiscal no pertenece al período mensual declarado ni respalda una retención recibida del período/);
+});
+
 test('SQLite recalculates ordinary purchase credit from immutable invoice snapshots and proration', () => {
   const fixture = vatOwnDeclarationFixture();
   const purchase = {
