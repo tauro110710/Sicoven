@@ -3232,3 +3232,93 @@ test('SQLite accepts a sales credit note only when linked merchandise was fully 
     ...next, movements: [originalMovement]
   }), /documento, factura original, saldo fiscal, soporte o asiento correctivo/);
 });
+
+
+test('SQLite reconciles partial VAT remittances split across multiple bank debits and historical FX differences', () => {
+  const state = vatDeclarationFixture();
+  const declaration = state.vatWithholdingDeclarations[0];
+  const reviewed = {
+    id: 'vat-partial-review', declarationId: declaration.id, eventType: 'REVIEWED',
+    occurredAt: '2026-10-16', recordedAt: '2026-10-16T11:00:00.000Z'
+  };
+  const filed = {
+    id: 'vat-partial-filed', declarationId: declaration.id, eventType: 'FILED',
+    occurredAt: '2026-10-17', recordedAt: '2026-10-17T11:00:00.000Z',
+    declarationNumber: 'DECL-PARTIAL', receiptReference: 'ACUSE-PARTIAL'
+  };
+  const bankAccounts = [
+    { id: 'vat-bank-account-1', companyId: declaration.companyId, currency: 'BS', accountCode: '1.1.1.01' },
+    { id: 'vat-bank-account-2', companyId: declaration.companyId, currency: 'BS', accountCode: '1.1.1.02' }
+  ];
+  const accounts = [
+    { code: '2.1.2.03', name: 'Retenciones IVA por enterar', type: 'PASIVO', isMovement: true },
+    { code: '1.1.1.01', name: 'Banco uno', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.1.02', name: 'Banco dos', type: 'ACTIVO', isMovement: true },
+    { code: '4.2.1.01', name: 'Ganancia cambiaria', type: 'INGRESOS', isMovement: true }
+  ];
+  const firstJournal = {
+    id: 'vat-partial-entry-1', companyId: declaration.companyId, entryNumber: 1,
+    date: '2026-10-18', description: 'Primer enteramiento parcial IVA', type: 'RETENCION_IVA',
+    bcvRate: 125, referenceDoc: 'IVA-ENTERAMIENTO:vat-decl-1:TRX-PART-1',
+    items: [
+      { accountCode: '2.1.2.03', debitBs: 50, creditBs: 0, debitUsd: 0.5, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 20, debitUsd: 0, creditUsd: 0.16 },
+      { accountCode: '1.1.1.02', debitBs: 0, creditBs: 30, debitUsd: 0, creditUsd: 0.24 },
+      { accountCode: '4.2.1.01', debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0.1 }
+    ],
+    createdAt: '2026-10-18T11:00:00.000Z'
+  };
+  const secondJournal = {
+    id: 'vat-partial-entry-2', companyId: declaration.companyId, entryNumber: 2,
+    date: '2026-10-19', description: 'Segundo enteramiento parcial IVA', type: 'RETENCION_IVA',
+    bcvRate: 140, referenceDoc: 'IVA-ENTERAMIENTO:vat-decl-1:TRX-PART-2',
+    items: [
+      { accountCode: '2.1.2.03', debitBs: 70, creditBs: 0, debitUsd: 0.7, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 70, debitUsd: 0, creditUsd: 0.5 },
+      { accountCode: '4.2.1.01', debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0.2 }
+    ],
+    createdAt: '2026-10-19T11:00:00.000Z'
+  };
+  const movements = [
+    {
+      id: 'vat-partial-bank-1', companyId: declaration.companyId, bankAccountId: bankAccounts[0].id,
+      date: '2026-10-18', type: 'DEBIT', amountBs: 20, amountUsd: 0.16, bcvRate: 125,
+      isReconciled: true, reconciledWithJournalEntryId: firstJournal.id,
+      reconciledJournalEntryIds: [firstJournal.id]
+    },
+    {
+      id: 'vat-partial-bank-2', companyId: declaration.companyId, bankAccountId: bankAccounts[1].id,
+      date: '2026-10-18', type: 'DEBIT', amountBs: 30, amountUsd: 0.24, bcvRate: 125,
+      isReconciled: true, reconciledWithJournalEntryId: firstJournal.id,
+      reconciledJournalEntryIds: [firstJournal.id]
+    },
+    {
+      id: 'vat-partial-bank-3', companyId: declaration.companyId, bankAccountId: bankAccounts[0].id,
+      date: '2026-10-19', type: 'DEBIT', amountBs: 70, amountUsd: 0.5, bcvRate: 140,
+      isReconciled: true, reconciledWithJournalEntryId: secondJournal.id,
+      reconciledJournalEntryIds: [secondJournal.id]
+    }
+  ];
+  const firstPayment = {
+    id: 'vat-partial-payment-1', declarationId: declaration.id, eventType: 'PAYMENT',
+    occurredAt: '2026-10-18T11:00:00.000Z', recordedAt: '2026-10-18T11:00:00.000Z',
+    amountBs: 50, paymentReference: 'TRX-PART-1',
+    bankStatementMovementIds: ['vat-partial-bank-1', 'vat-partial-bank-2'],
+    journalEntryId: firstJournal.id
+  };
+  const secondPayment = {
+    id: 'vat-partial-payment-2', declarationId: declaration.id, eventType: 'PAYMENT',
+    occurredAt: '2026-10-19T11:00:00.000Z', recordedAt: '2026-10-19T11:00:00.000Z',
+    amountBs: 70, paymentReference: 'TRX-PART-2',
+    bankStatementMovementIds: ['vat-partial-bank-3'],
+    journalEntryId: secondJournal.id
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), {
+    ...state,
+    accounts,
+    bankAccounts,
+    bankStatementMovements: movements,
+    journalEntries: [firstJournal, secondJournal],
+    vatWithholdingDeclarationEvents: [reviewed, filed, firstPayment, secondPayment]
+  }));
+});
