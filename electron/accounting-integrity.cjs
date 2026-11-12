@@ -857,8 +857,8 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
         }
       }
       if (hasSalesSources) {
-        let expectedOutputVat16 = 0, expectedOutputVat8 = 0;
-        let expectedTaxableSales = 0, expectedExemptSales = 0;
+        let rawOutputVat16 = 0, rawOutputVat8 = 0;
+        let rawTaxableSales = 0, rawExemptSales = 0;
         for (const [date, day] of dailySales) {
           let selected = day.z || day.individual;
           if (day.z && day.individual) {
@@ -869,17 +869,28 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
             selected = choice === 'Z' ? day.z : day.individual;
           }
           if (!selected) continue;
-          expectedOutputVat16 += selected.vat16;
-          expectedOutputVat8 += selected.vat8;
-          expectedTaxableSales += selected.base16 + selected.base8 + selected.base31;
-          expectedExemptSales += selected.exempt;
+          rawOutputVat16 += selected.vat16;
+          rawOutputVat8 += selected.vat8;
+          rawTaxableSales += selected.base16 + selected.base8 + selected.base31;
+          rawExemptSales += selected.exempt;
         }
+        // Una nota de crédito puede revertir IVA/base de ventas de períodos
+        // anteriores por encima de las ventas del mes: el débito fiscal se
+        // convierte en ajuste al crédito y las bases para prorrata no son negativas.
+        const expectedOutputVat16 = Math.max(0, rawOutputVat16);
+        const expectedOutputVat8 = Math.max(0, rawOutputVat8);
+        const expectedCreditAdjustment16 = Math.max(0, -rawOutputVat16);
+        const expectedCreditAdjustment8 = Math.max(0, -rawOutputVat8);
+        const expectedTaxableSales = Math.max(0, rawTaxableSales);
+        const expectedExemptSales = Math.max(0, rawExemptSales);
         if (!near(p.outputVatBs, expectedOutputVat16 + expectedOutputVat8) ||
             !near(p.outputVat16Bs, expectedOutputVat16) ||
             !near(p.outputVat8Bs, expectedOutputVat8) ||
+            !near(p.creditAdjustments16Bs, expectedCreditAdjustment16) ||
+            !near(p.creditAdjustments8Bs, expectedCreditAdjustment8) ||
             !near(p.taxableSalesBaseBs, expectedTaxableSales) ||
             !near(p.exemptSalesBaseBs, expectedExemptSales)) {
-          throw new Error('SQLite rechazó la posición IVA: el débito fiscal, las bases gravadas o las ventas exentas no corresponden a los reportes Z y facturas individuales seleccionados.');
+          throw new Error('SQLite rechazó la posición IVA: el débito fiscal, sus ajustes al crédito, las bases gravadas o las ventas exentas no corresponden a los reportes Z y facturas individuales seleccionados.');
         }
       }
       // Customer VAT withholdings are recognized by the received certificate date,
