@@ -2291,6 +2291,48 @@ test('SQLite recalculates IVA sales position from selected original fiscal docum
   }), /débito fiscal, las bases gravadas o las ventas exentas no corresponden/);
 });
 
+test('SQLite recalculates ordinary purchase credit from immutable invoice snapshots and proration', () => {
+  const fixture = vatOwnDeclarationFixture();
+  const purchase = {
+    id: 'purchase-iva-trace-1', companyId: 'company-1', invoiceDate: '2026-11-06',
+    documentType: '01', invoiceNumber: 'FC-TRACE-1', supplierRif: 'J-12345678-9',
+    vatAmountBs: 160, taxRate: 16, vatCreditTreatment: 'COMMON', isCancelled: false
+  };
+  const snapshot = JSON.stringify({
+    kind: 'PURCHASE', id: purchase.id, invoiceDate: purchase.invoiceDate,
+    documentType: purchase.documentType, invoiceNumber: purchase.invoiceNumber,
+    supplierRif: purchase.supplierRif, vatAmountBs: purchase.vatAmountBs,
+    taxRate: purchase.taxRate, vatCreditTreatment: purchase.vatCreditTreatment
+  });
+  const position = vatOwnPositionFixture({
+    taxableSalesBaseBs: 625, exemptSalesBaseBs: 625, prorationRate: 0.5,
+    purchaseCreditGrossBs: 160, purchaseCreditGross16Bs: 160,
+    purchaseCreditBs: 80, purchaseCredit16Bs: 80,
+    purchaseCreditNonEligibleBs: 80, netTaxBs: 20, amountDueBs: 20
+  });
+  const declaration = {
+    ...fixture.vatOwnDeclarations[0], sourceIds: [purchase.id],
+    sourceSnapshots: { [purchase.id]: snapshot }, position
+  };
+  const next = { ...fixture, purchases: [purchase], vatOwnDeclarations: [declaration] };
+  const previous = { ...emptyState(), purchases: [purchase] };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
+
+  const overstatedCredit = {
+    ...declaration,
+    position: vatOwnPositionFixture({
+      taxableSalesBaseBs: 625, exemptSalesBaseBs: 625, prorationRate: 0.5,
+      purchaseCreditGrossBs: 160, purchaseCreditGross16Bs: 160,
+      purchaseCreditBs: 160, purchaseCredit16Bs: 160,
+      purchaseCreditNonEligibleBs: 0, netTaxBs: -60,
+      amountDueBs: 0, creditCarryForwardBs: 60
+    })
+  };
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next, vatOwnDeclarations: [overstatedCredit]
+  }), /crédito fiscal de compras: los importes brutos, acreditables y no acreditables no corresponden/);
+});
+
 test('SQLite accepts a new IVA own-account draft with exact fiscal source snapshots', () => {
   assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), vatOwnDeclarationFixture()));
 });
