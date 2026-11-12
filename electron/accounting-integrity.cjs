@@ -529,6 +529,89 @@ function validateVatDeclarationLedger(previousState, nextState) {
             String(journal.referenceDoc || '') !== expectedReference) {
           throw new Error('SQLite rechazó el enteramiento: falta el asiento contable IVA correspondiente o su referencia, empresa y fecha no coinciden.');
         }
+        // Recalcula en SQLite el asiento esperado desde la declaración y los
+        // movimientos históricos; no basta con que exista un asiento equilibrado.
+        const priorPaidBs = paid;
+        const totalWithheldBs = Number(declaration.totalWithheldBs);
+        const totalWithheldUsd = Number(declaration.totalWithheldUsd);
+        if (!Number.isFinite(totalWithheldUsd) || totalWithheldUsd <= 0 ||
+            !Number.isFinite(totalWithheldBs) || totalWithheldBs <= 0) {
+          throw new Error('SQLite rechazó el enteramiento: la declaración no conserva el pasivo histórico completo en Bs. y USD.');
+        }
+        const cents = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+        const micros = value => Math.round((Number(value) + Number.EPSILON) * 1000000) / 1000000;
+        const cumulativeBs = cents(priorPaidBs + amount);
+        const cumulativeUsd = Math.abs(cumulativeBs - cents(totalWithheldBs)) < 0.0001
+          ? micros(totalWithheldUsd) : micros(totalWithheldUsd * cumulativeBs / totalWithheldBs);
+        const priorUsd = micros(totalWithheldUsd * priorPaidBs / totalWithheldBs);
+        const liabilityUsd = micros(cumulativeUsd - priorUsd);
+        const expectedLines = new Map();
+        const addExpected = (code, values) => {
+          const current = expectedLines.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+          for (const key of Object.keys(current)) current[key] += Number(values[key] || 0);
+          expectedLines.set(code, current);
+        };
+        addExpected('2.1.2.03', { debitBs: amount, debitUsd: liabilityUsd });
+        let bankUsd = 0;
+        const bankAccounts = new Map(asArray(nextState.bankAccounts).map(item => [String(item.id), item]));
+        for (const movementId of movementIds) {
+          const movement = bankMovementsById.get(String(movementId));
+          const bank = movement ? bankAccounts.get(String(movement.bankAccountId)) : null;
+          const account = bank && asArray(nextState.accounts).find(item =>
+            String(item.code) === String(bank.accountCode) && item.type === 'ACTIVO' && item.isMovement === true);
+          const bs = Number(movement?.amountBs);
+          const usd = Number(movement?.amountUsd);
+          const rate = Number(movement?.bcvRate);
+          if (!bank || !account || !Number.isFinite(usd) || usd <= 0 ||
+              !Number.isFinite(rate) || rate <= 0 ||
+              Math.abs(cents(bs) - cents(usd * rate)) > 0.02) {
+            throw new Error('SQLite rechazó el enteramiento: un débito bancario carece de cuenta contable o equivalencia USD histórica válida.');
+          }
+          bankUsd += usd;
+          addExpected(String(bank.accountCode), { creditBs: bs, creditUsd: usd });
+        }
+        const fxDifferenceUsd = micros(liabilityUsd - micros(bankUsd));
+        if (fxDifferenceUsd > 0.0000005) {
+          const fxAccount = asArray(nextState.accounts).find(item =>
+            String(item.code) === '4.2.1.01' && item.type === 'INGRESOS' && item.isMovement === true);
+          if (!fxAccount) throw new Error('SQLite rechazó el enteramiento: falta la cuenta de ganancia cambiaria.');
+          addExpected('4.2.1.01', { creditUsd: fxDifferenceUsd });
+        } else if (fxDifferenceUsd < -0.0000005) {
+          const fxAccount = asArray(nextState.accounts).find(item =>
+            String(item.code) === '6.1.1.08' && item.type === 'GASTOS' && item.isMovement === true);
+          if (!fxAccount) throw new Error('SQLite rechazó el enteramiento: falta la cuenta de pérdida cambiaria.');
+          addExpected('6.1.1.08', { debitUsd: Math.abs(fxDifferenceUsd) });
+        }
+        const actualLines = new Map();
+        for (const line of asArray(journal.items)) {
+          const code = String(line.accountCode || '');
+          const values = {
+            debitBs: Number(line.debitBs || 0), creditBs: Number(line.creditBs || 0),
+            debitUsd: Number(line.debitUsd || 0), creditUsd: Number(line.creditUsd || 0)
+          };
+          if (!code || Object.values(values).some(value => !Number.isFinite(value) || value < 0) ||
+              (values.debitBs > 0 && values.creditBs > 0) ||
+              (values.debitUsd > 0 && values.creditUsd > 0)) {
+            throw new Error('SQLite rechazó el enteramiento: el asiento contiene líneas contables inválidas.');
+          }
+          const current = actualLines.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+          for (const key of Object.keys(current)) current[key] += values[key];
+          actualLines.set(code, current);
+        }
+        const allCodes = new Set([...expectedLines.keys(), ...actualLines.keys()]);
+        for (const code of allCodes) {
+          const expected = expectedLines.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+          const actual = actualLines.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+          if (Math.abs(actual.debitBs - expected.debitBs) > 0.01 ||
+              Math.abs(actual.creditBs - expected.creditBs) > 0.01 ||
+              Math.abs(actual.debitUsd - expected.debitUsd) > 0.000001 ||
+              Math.abs(actual.creditUsd - expected.creditUsd) > 0.000001) {
+            throw new Error('SQLite rechazó el enteramiento: las cuentas o importes del asiento no corresponden al pasivo y a los débitos bancarios vinculados.');
+          }
+        }
+        if (Math.abs(Number(journal.bcvRate) - Number(bankMovementsById.get(String(movementIds[0]))?.bcvRate)) > 0.000001) {
+          throw new Error('SQLite rechazó el enteramiento: la tasa BCV del asiento no coincide con la tasa histórica de los débitos.');
+        }
         for (const movementId of movementIds) {
           const movement = bankMovementsById.get(String(movementId));
           if (!movement || movement.isReconciled !== true ||
