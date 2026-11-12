@@ -5811,6 +5811,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       event.companyId === currentCompany.id && event.eventType === 'PAYMENT' && event.reference?.trim() === draft.reference?.trim()
     )) throw new Error('La referencia de pago ya fue utilizada en otra declaración mensual de esta empresa.');
     if (draft.eventType === 'FILED') {
+      if (declaration.calculationStatus === 'PROVISIONAL' || (declaration.pendingCalculationItems || []).length > 0) {
+        throw new Error('No se puede registrar la presentación: el borrador conserva cálculos pendientes. Actualícelo después de conciliar el crédito fiscal de compras y sus documentos de respaldo.');
+      }
       const unfiledActivityPeriods = getUnfiledVatOwnActivityPeriods({
         companyId: currentCompany.id, targetPeriod: declaration.period,
         activityDates: getVatOwnActivityDates(currentCompany.id), declarations: vatOwnDeclarations
