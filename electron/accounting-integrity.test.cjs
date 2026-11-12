@@ -2410,6 +2410,7 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
   });
   const currentDeclaration = {
     ...vatOwnDeclarationFixture().vatOwnDeclarations[0],
+    id: 'vat-own-nov-credit-note',
     sourceIds: [note.id], relatedSourceIds: [original.id],
     sourceSnapshots: { [note.id]: noteSnapshot, [original.id]: originalSnapshot },
     position: currentPosition
