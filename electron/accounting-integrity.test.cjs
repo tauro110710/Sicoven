@@ -2358,13 +2358,13 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
   const filed = vatOwnFiledState();
   const original = {
     id: 'purchase-prior-vat-note-original', companyId: 'company-1', invoiceDate: '2026-10-05',
-    documentType: '01', invoiceNumber: 'FC-ORIGINAL-IVA', controlNumber: 'CTRL-ORIGINAL-IVA',
+    accountCreditDate: null, documentType: '01', invoiceNumber: 'FC-ORIGINAL-IVA', controlNumber: 'CTRL-ORIGINAL-IVA',
     supplierRif: 'J-12345678-9', supplierName: 'Proveedor Uno',
     totalAmountBs: 1160, totalAmountUsd: 1.33, taxableBaseBs: 1000, taxableBaseUsd: 1.14,
     exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 160, vatAmountUsd: 0.18,
-    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, vatCreditTreatment: 'TAXABLE',
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,\n    igtfAmountBs: 0, igtfAmountUsd: 0, vatCreditTreatment: 'TAXABLE',\n    vatWithheldBs: 0, vatWithheldUsd: 0, retentionRate: 0, voucherNumber: null, bcvRate: 874, journalEntryId: null,
     originalPurchaseId: null, affectedInvoiceNumber: null, affectedInvoiceDate: null,
-    affectedInvoiceControlNumber: null, inventoryLines: [], creditNoteLines: [], isCancelled: false
+    affectedInvoiceControlNumber: null, affectedInvoiceTotalAmountBs: null, affectedInvoiceTotalAmountUsd: null,\n    inventoryLines: [], creditNoteLines: [], isCancelled: false
   };
   const originalSnapshot = JSON.stringify({
     kind: 'PURCHASE', id: original.id, invoiceDate: original.invoiceDate,
@@ -2378,11 +2378,11 @@ test('SQLite rebuilds prior-period supplier credit-note reversals from the filed
   });
   const note = {
     id: 'purchase-prior-vat-note', companyId: 'company-1', invoiceDate: '2026-11-06',
-    documentType: '03', invoiceNumber: 'NC-ORIGINAL-IVA', controlNumber: 'CTRL-NC-IVA',
+    accountCreditDate: null, documentType: '03', invoiceNumber: 'NC-ORIGINAL-IVA', controlNumber: 'CTRL-NC-IVA',
     supplierRif: original.supplierRif, supplierName: original.supplierName,
     totalAmountBs: 290, totalAmountUsd: 0.33, taxableBaseBs: 250, taxableBaseUsd: 0.29,
     exemptAmountBs: 0, exemptAmountUsd: 0, taxRate: 16, vatAmountBs: 40, vatAmountUsd: 0.05,
-    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, vatCreditTreatment: 'COMMON',
+    additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0, igtfApplicable: false, igtfRate: 0,\n    igtfAmountBs: 0, igtfAmountUsd: 0, vatCreditTreatment: 'COMMON',\n    vatWithheldBs: 0, vatWithheldUsd: 0, retentionRate: 0, voucherNumber: null, bcvRate: 874, journalEntryId: null,
     originalPurchaseId: original.id, affectedInvoiceNumber: original.invoiceNumber,
     affectedInvoiceDate: original.invoiceDate, affectedInvoiceControlNumber: original.controlNumber,
     inventoryLines: [], creditNoteLines: [], isCancelled: false
