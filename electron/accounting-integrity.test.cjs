@@ -64,6 +64,9 @@ test('SQLite validates direct supplier advance disbursements against the exact c
   const next = { ...emptyState([journal]), accounts, supplierDirectAdvances: [advance] };
   assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
   assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next, journalEntries: [closing]
+  }), /asiento de cierre anual/);
+  assert.throws(() => validateAccountingSnapshot(previous, {
     ...next, supplierDirectAdvances: [{ ...advance, treasuryAccountCode: '6.1.1.01' }]
   }), /cuenta de tesorería inválidos/);
   assert.throws(() => validateAccountingSnapshot(previous, {
