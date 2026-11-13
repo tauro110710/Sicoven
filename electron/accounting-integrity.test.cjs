@@ -4190,6 +4190,7 @@ test('SQLite accepts only the linked and balanced automatic year-end closing ent
     date: '2026-12-31', description: 'Cierre anual 2026', type: 'CIERRE',
     bcvRate: 100, referenceDoc: 'CIERRE:company-1:2026-12-31',
     workpaperNote: 'SICOVEN_AUTO_YEAR_CLOSE_V1',
+    annualCloseState: { previousFiscalYear: 2026, previousClosedThroughDate: null, cycleNumber: 1 },
     items: [
       { accountCode: '4.1.1', accountName: 'Ingresos', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
       { accountCode: '3.1.1', accountName: 'Resultados acumulados', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
@@ -4203,7 +4204,8 @@ test('SQLite accepts only the linked and balanced automatic year-end closing ent
     exerciseLink: {
       priorPeriodStartDate: '2026-01-01',
       priorPeriodEndDate: '2026-12-31',
-      nextPeriodStartDate: '2027-01-01'
+      nextPeriodStartDate: '2027-01-01',
+      cycleNumber: 1
     },
     items: [
       { accountCode: '1.1.1', accountName: 'Banco', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
