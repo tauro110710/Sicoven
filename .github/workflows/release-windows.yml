@@ -8,6 +8,10 @@ on:
       - 'package-lock.json'
       - '.github/workflows/release-windows.yml'
       - 'scripts/e2e-migration-ui.cjs'
+      - 'electron/accounting-integrity.cjs'
+      - 'electron/accounting-integrity.test.cjs'
+      - 'src/types/accounting.ts'
+      - 'src/types/vatOwnDeclaration.ts'
     tags:
       - 'v*'
   pull_request:
