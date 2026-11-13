@@ -1003,7 +1003,7 @@ test('does not allow presenting a monthly IVA declaration before its fiscal mont
   const draftDeclaration = { ...declaration, status: 'DRAFT' as const, declarationNumber: undefined, filedAt: undefined };
   const filing = {
     declarationId: draftDeclaration.id, companyId: draftDeclaration.companyId,
-    eventType: 'FILED' as const, declarationNumber: 'F30-001',
+    eventType: 'FILED' as const, declarationNumber: 'F30-001', bcvRate: 200,
     idempotencyKey: 'FILED:' + draftDeclaration.id
   };
   assert.throws(() => validateVatOwnEvent({
@@ -1014,6 +1014,10 @@ test('does not allow presenting a monthly IVA declaration before its fiscal mont
     declaration: draftDeclaration, events: [],
     draft: { ...filing, occurredAt: '2026-02-01T00:01:00.000Z' }
   }));
+  assert.throws(() => validateVatOwnEvent({
+    declaration: draftDeclaration, events: [],
+    draft: { ...filing, bcvRate: undefined, occurredAt: '2026-02-01T00:01:00.000Z' }
+  }), /tasa BCV histórica correspondiente/);
 });
 
 test('rejects future-dated IVA payments', () => {

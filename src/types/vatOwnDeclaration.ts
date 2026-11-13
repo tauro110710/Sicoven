@@ -726,13 +726,10 @@ export function calculateVatOwnPurchaseCreditSummary(input: {
 export function buildVatOwnPurchaseVatReclassificationItems(input: {
   companyId: string;
   period: string;
-  bcvRate: number;
   allPurchases: readonly PurchaseRecord[];
   journalEntries: readonly JournalEntry[];
   summary: VatOwnPurchaseCreditSummary;
 }): JournalEntryItem[] {
-  const rate = Number(input.bcvRate);
-  if (!Number.isFinite(rate) || rate <= 0) throw new Error('Se requiere una tasa BCV válida para reclassificar el IVA no acreditable.');
   const excludedDebitAccounts = new Set(['1.1.3.01', '1.1.3.02', '6.1.1.11', '6.1.1.13']);
   const result: JournalEntryItem[] = [];
   const round = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
@@ -802,6 +799,10 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
       }
     }
     if (Math.abs(signedAmount) < 0.01) continue;
+    const rate = Number(sourceEntry.bcvRate);
+    if (!Number.isFinite(rate) || rate <= 0) {
+      throw new Error('La factura ' + (sourcePurchase.invoiceNumber || adjustment.purchaseId) + ' no conserva una tasa BCV histórica válida en su asiento original para expresar la reclasificación en USD.');
+    }
     const grouped = new Map<string, { accountName: string; amountBs: number }>();
     for (const item of sourceEntry.items) {
       if (Number(item.debitBs || 0) <= 0 || excludedDebitAccounts.has(item.accountCode)) continue;
@@ -1082,6 +1083,9 @@ export function validateVatOwnEvent(input: {
     const periodEndDate = new Date(Date.UTC(periodYear, periodMonth, 0)).toISOString().slice(0, 10);
     if (eventDatePart <= periodEndDate) {
       throw new Error('No se puede presentar una declaración mensual antes de que finalice el período fiscal seleccionado (' + periodEndDate + ').');
+    }
+    if (!Number.isFinite(Number(draft.bcvRate)) || Number(draft.bcvRate) <= 0) {
+      throw new Error('Indique la tasa BCV histórica correspondiente a la fecha de presentación.');
     }
     if (!draft.declarationNumber?.trim()) throw new Error('Indique el número oficial de declaración.');
     if (input.sameCompanyDeclarationNumbers?.includes(draft.declarationNumber.trim())) {

@@ -5738,7 +5738,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (purchaseSummary) {
         try {
           purchaseVatReclassificationItems = buildVatOwnPurchaseVatReclassificationItems({
-            companyId: currentCompany.id, period: period, bcvRate: Number(currentCompany.bcvRate),
+            companyId: currentCompany.id, period: period,
             allPurchases: purchases, journalEntries, summary: purchaseSummary
           });
         } catch (error) {
@@ -5778,7 +5778,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const declaration: VatOwnDeclaration = {
         id: existingDraft?.id || 'vat-own-' + currentCompany.id + '-' + period,
         companyId: currentCompany.id, period: period, status: 'DRAFT',
-        position, sourceIds, relatedSourceIds, sourceSnapshots, bcvRate: Number(currentCompany.bcvRate) || 0,
+        position, sourceIds, relatedSourceIds, sourceSnapshots,
         dailySourceChoices: { ...(input.choices || {}) },
         purchaseVatReclassificationItems,
         calculationStatus: pendingCalculationItems.length ? 'PROVISIONAL' : 'READY',
@@ -5790,7 +5790,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         } : {})
       };
       validateVatOwnDeclarationDraft(declaration);
-      if (!Number.isFinite(Number(declaration.bcvRate)) || Number(declaration.bcvRate) <= 0) throw new Error('La empresa no conserva una tasa BCV válida para respaldar la declaración.');
       const confirmation = waitForPersistence();
       setVatOwnDeclarations(prev => existingDraft
         ? prev.map(item => item.id === existingDraft.id ? declaration : item)
@@ -5834,13 +5833,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (laterFiledPeriods.length > 0) {
         throw new Error('No se puede presentar ni alterar directamente este período: ya existen declaraciones posteriores presentadas (' + laterFiledPeriods.join(', ') + '). Use el procedimiento de rectificación fiscal.');
       }
-      if (!Number.isFinite(Number(declaration.bcvRate)) || !Number.isFinite(Number(currentCompany.bcvRate)) || Math.abs(Number(declaration.bcvRate) - Number(currentCompany.bcvRate)) > 0.000001) {
-        throw new Error('No se puede presentar: la tasa BCV cambió desde que se preparó el borrador. Actualícelo para conservar la tasa vigente y su historial antes de presentar.');
-      }
       const filingDate = draft.occurredAt.slice(0, 10);
       const officialFilingRate = resolveVatOwnPaymentBcvRate(currentCompany.accountingBcvRateHistory || [], filingDate);
-      if (officialFilingRate === null || Math.abs(Number(declaration.bcvRate) - officialFilingRate) > 0.000001) {
-        throw new Error('No se puede presentar: la tasa BCV del borrador no coincide con la tasa histórica efectiva en la fecha de presentación. Actualice el borrador con la tasa correspondiente.');
+      const suppliedFilingRate = Number(draft.bcvRate);
+      if (officialFilingRate === null || !Number.isFinite(suppliedFilingRate) || suppliedFilingRate <= 0 ||
+          Math.abs(suppliedFilingRate - officialFilingRate) > 0.000001) {
+        throw new Error('No se puede presentar: indique la tasa BCV histórica efectiva en la fecha de presentación.');
       }
       const periodSales = sales.filter(item => item.companyId === currentCompany.id &&
         item.invoiceDate.startsWith(declaration.period) && !item.isCancelled);
@@ -5933,7 +5931,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       const currentReclassificationItems = buildVatOwnPurchaseVatReclassificationItems({
         companyId: currentCompany.id, period: declaration.period,
-        bcvRate: Number(declaration.bcvRate), allPurchases: purchases,
+        allPurchases: purchases,
         journalEntries, summary: currentPurchaseSummary
       });
       if (JSON.stringify(currentReclassificationItems) !== JSON.stringify(declaration.purchaseVatReclassificationItems || [])) {

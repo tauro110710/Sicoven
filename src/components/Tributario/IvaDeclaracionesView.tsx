@@ -26,6 +26,14 @@ export const IvaDeclaracionesView: React.FC = () => {
   const periodCanBeFiled = Boolean(periodEndDate && localToday > periodEndDate);
   const [dailySourceChoices, setDailySourceChoices] = useState<Record<string, 'Z' | 'INDIVIDUAL'>>({});
   const [declarationNumber, setDeclarationNumber] = useState('');
+  const [filingDate, setFilingDate] = useState(localToday);
+  const [filingBcvRate, setFilingBcvRate] = useState(() => {
+    const rate = resolveVatOwnPaymentBcvRate(currentCompany.accountingBcvRateHistory || [], localToday);
+    return rate === null ? '' : String(rate);
+  });
+  const filingHistoricalBcvRate = resolveVatOwnPaymentBcvRate(currentCompany.accountingBcvRateHistory || [], filingDate);
+  const filingRateMatchesHistory = filingHistoricalBcvRate !== null &&
+    Math.abs(parseLocalizedNumber(filingBcvRate) - filingHistoricalBcvRate) <= 0.000001;
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentDate, setPaymentDate] = useState(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10));
@@ -215,7 +223,6 @@ export const IvaDeclaracionesView: React.FC = () => {
   const sourceChoicesChanged = Boolean(savedDeclaration?.status === 'DRAFT' && dailySalesResolution.conflicts.some(conflict =>
     activeSourceChoices[conflict.date] !== savedDeclaration.dailySourceChoices?.[conflict.date]
   ));
-  const bcvRateChanged = Boolean(savedDeclaration && (!Number.isFinite(Number(savedDeclaration.bcvRate)) || Math.abs(Number(savedDeclaration.bcvRate) - Number(currentCompany.bcvRate)) > 0.000001));
   const purchaseReclassificationChanged = Boolean(savedDeclaration &&
     JSON.stringify(purchaseReclassificationItems) !== JSON.stringify(savedDeclaration.purchaseVatReclassificationItems || []));
   const positionSummaryChanged = Boolean(savedDeclaration && (
@@ -228,7 +235,7 @@ export const IvaDeclaracionesView: React.FC = () => {
   ));
   const draftNeedsRefresh = savedDeclaration?.status === 'DRAFT' && (
     savedDeclaration.calculationStatus === 'PROVISIONAL' || (savedDeclaration.pendingCalculationItems || []).length > 0 ||
-    sourceIdsChanged || sourceSnapshotsChanged || sourceChoicesChanged || bcvRateChanged || purchaseReclassificationChanged || positionSummaryChanged ||
+    sourceIdsChanged || sourceSnapshotsChanged || sourceChoicesChanged || purchaseReclassificationChanged || positionSummaryChanged ||
     Boolean(purchaseSummaryError) || laterFiledPeriods.length > 0 || Boolean(activityPeriodError) || dailySalesResolution.unresolvedDates.length > 0
   );
 
@@ -415,13 +422,21 @@ export const IvaDeclaracionesView: React.FC = () => {
           {savedDeclaration.status==='DRAFT' ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
             <p className="text-sm font-semibold text-amber-950">Al presentar, SICOVEN registra el número oficial y el asiento de determinación mensual. El borrador y sus documentos fuente permanecen conservados.</p>
             {!periodCanBeFiled && <p className="text-xs font-semibold text-amber-900">La presentación estará disponible después de finalizar el período {period} (cierre: {periodEndDate || 'fecha pendiente'}). Puedes preparar y conciliar el borrador mientras tanto.</p>}
-            <div className="flex flex-wrap gap-2"><input value={declarationNumber} onChange={event=>setDeclarationNumber(event.target.value)} placeholder="Número oficial de declaración" className="min-w-[220px] flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-              <button type="button" disabled={workflowBusy || !declarationNumber.trim() || draftNeedsRefresh || !periodCanBeFiled} onClick={async()=>{
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <input type="date" aria-label="Fecha de presentación" value={filingDate} onChange={event=>{
+                const nextDate=event.target.value;setFilingDate(nextDate);
+                const rate=resolveVatOwnPaymentBcvRate(currentCompany.accountingBcvRateHistory || [],nextDate);
+                setFilingBcvRate(rate===null?'':String(rate));
+              }} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+              <input value={filingBcvRate} onChange={event=>setFilingBcvRate(event.target.value)} placeholder="Tasa BCV de presentación (Bs/USD)" inputMode="decimal" className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+              <p className="text-xs text-slate-600 sm:col-span-2">{filingHistoricalBcvRate===null?'No hay tasa BCV histórica registrada para esta fecha. Registre/corrija primero el historial de esa fecha.':'Tasa BCV histórica efectiva: '+filingHistoricalBcvRate+' Bs/USD. Se valida contra la fecha de presentación, no contra la empresa.'}</p>
+              <input value={declarationNumber} onChange={event=>setDeclarationNumber(event.target.value)} placeholder="Número oficial de declaración" className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm sm:col-span-2" />
+              <button type="button" disabled={workflowBusy || !declarationNumber.trim() || !filingRateMatchesHistory || draftNeedsRefresh || !periodCanBeFiled} onClick={async()=>{
                 setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
-                try { await recordVatOwnDeclarationEvent(savedDeclaration.id,{companyId:currentCompany.id,eventType:'FILED',occurredAt:localIsoDateTime(new Date(new Date().getFullYear(),new Date().getMonth(),new Date().getDate(),12)),declarationNumber:declarationNumber.trim(),idempotencyKey:'FILED:'+savedDeclaration.id});setWorkflowMessage('Presentación registrada con su asiento de determinación.'); }
+                try { await recordVatOwnDeclarationEvent(savedDeclaration.id,{companyId:currentCompany.id,eventType:'FILED',occurredAt:localIsoDateTime(new Date(filingDate+'T12:00:00')),bcvRate:parseLocalizedNumber(filingBcvRate),declarationNumber:declarationNumber.trim(),idempotencyKey:'FILED:'+savedDeclaration.id});setWorkflowMessage('Presentación registrada con su asiento de determinación.'); }
                 catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo registrar la presentación.');}
                 finally{setWorkflowBusy(false);}
-              }} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{workflowBusy?'Procesando…':'Registrar presentación'}</button>
+              }} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40 sm:col-span-2">{workflowBusy?'Procesando…':'Registrar presentación'}</button>
             </div>
           </div> : <div className="rounded-xl border border-slate-200 p-4 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">Saldo pendiente de enteramiento</strong><strong className="text-lg">{format(declarationOutstanding)}</strong></div>
