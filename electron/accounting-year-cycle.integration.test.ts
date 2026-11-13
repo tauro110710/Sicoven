@@ -8,7 +8,7 @@ import type { Account, JournalEntry } from '../src/types/accounting';
 
 const require = createRequire(import.meta.url);
 const { persistAccountingSnapshot, registerAccountingPersistenceHandler } =
-  require('./accounting-persistence.cjs') as typeof import('./accounting-persistence.cjs');
+  require('./accounting-persistence.cjs');
 
 const companyId = 'co-annual-cycle';
 const accounts: Account[] = [
@@ -37,6 +37,19 @@ const baseEntries: JournalEntry[] = [
 
 const makeHarness = () => {
   const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE app_state (
+      state_key TEXT PRIMARY KEY,
+      state_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_type TEXT NOT NULL,
+      details_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
   const handlers = new Map<string, (...args: any[]) => any>();
   registerAccountingPersistenceHandler({
     ipcMain: { handle: (channel: string, handler: (...args: any[]) => any) => handlers.set(channel, handler) },
