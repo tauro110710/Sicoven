@@ -1029,7 +1029,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       entry.date <= currentClosedThroughDate
     );
     if (hasAutomaticYearClose) {
-      throw new Error('Este ejercicio ya tiene un asiento de cierre anual y su apertura siguiente contabilizados. La reapertura simple de fechas no puede deshacer ese ciclo. Primero debe ejecutarse una reapertura formal del ejercicio que revierta y enlace ambos asientos; no se modificó ningún dato.');
+      if (reopenedThroughDate !== null) {
+        throw new Error('Un cierre anual solo puede reabrirse mediante la restauración completa del estado previo. Seleccione la reapertura total del ejercicio; no se modificó ningún dato.');
+      }
+      await reopenAccountingYear(reason);
+      return;
     }
     const normalizedReason = String(reason || '').trim();
     if (normalizedReason.length < 10 || normalizedReason.length > 1000) {
