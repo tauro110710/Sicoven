@@ -150,6 +150,53 @@ test('bloquea documentos retroactivos creados después del asiento de cierre', (
   db.close();
 });
 
+test('bloquea activos fijos registrados después del cierre aunque no tengan asiento nuevo', () => {
+  const { db, state } = fixture();
+  state.fixedAssets = [{
+    id: 'asset-after-close', companyId: 'co-1',
+    acquisitionDate: '2025-12-10', createdAt: '2026-01-03T10:00:00.000Z',
+    depreciationEvents: []
+  }];
+  db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'").run(JSON.stringify(state));
+  assert.throws(() => reopenAccountingYear(db, {
+    companyId: 'co-1', reason: 'Corrección del cierre anual.'
+  }, null), /activos fijos o depreciaciones/i);
+  db.close();
+});
+
+test('bloquea presentación o pago de IVA propio posterior al cierre', () => {
+  const { db, state } = fixture();
+  state.vatOwnDeclarations = [{
+    id: 'vat-own-1', companyId: 'co-1', period: '2025-12',
+    status: 'FILED', createdAt: '2025-12-31T09:00:00.000Z',
+    filedAt: '2026-01-04T10:00:00.000Z'
+  }];
+  state.vatOwnDeclarationEvents = [{
+    id: 'vat-own-event-1', declarationId: 'vat-own-1', companyId: 'co-1',
+    eventType: 'PAYMENT', occurredAt: '2026-01-05T10:00:00.000Z',
+    recordedAt: '2026-01-05T10:01:00.000Z'
+  }];
+  db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'").run(JSON.stringify(state));
+  assert.throws(() => reopenAccountingYear(db, {
+    companyId: 'co-1', reason: 'Corrección del cierre anual.'
+  }, null), /declaración de IVA propio presentada/i);
+  db.close();
+});
+
+test('bloquea notas financieras del ejercicio modificadas después del cierre', () => {
+  const { db, state } = fixture();
+  state.financialDisclosures = [{
+    id: 'disclosure-1', companyId: 'co-1', fiscalYear: 2025,
+    createdAt: '2025-12-30T10:00:00.000Z',
+    updatedAt: '2026-01-04T10:00:00.000Z'
+  }];
+  db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'").run(JSON.stringify(state));
+  assert.throws(() => reopenAccountingYear(db, {
+    companyId: 'co-1', reason: 'Corrección del cierre anual.'
+  }, null), /notas a los estados financieros/i);
+  db.close();
+});
+
 test('revierte toda la operación si falla la auditoría final', () => {
   const { db } = fixture();
   const before = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json;
