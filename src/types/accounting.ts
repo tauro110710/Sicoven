@@ -195,6 +195,8 @@ export interface JournalEntryItem {
   debitUsd: number;
   creditUsd: number;
   description?: string;
+  /** Tasa histórica usada por esta línea cuando forma parte de una reclasificación multimoneda. */
+  bcvRate?: number;
 }
 
 export type EntryType =
