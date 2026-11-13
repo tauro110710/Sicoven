@@ -64,7 +64,7 @@ test('no mezcla empresas ni movimientos fuera del ejercicio', () => {
     entry('prior', '2025-12-31', [line('1.1.1', 900, 0, 9, 0), line('4.1.1', 0, 900, 0, 9)]),
     entry('other-company', '2026-06-01', [line('1.1.1', 800, 0, 8, 0), line('4.1.1', 0, 800, 0, 8)], 'co-2')
   ];
-  const items = buildClosingEntryItems(input(journal));
+  const items = buildClosingEntryItems(input(journal, '3.1.1'));
   assert.equal(items.find(item => item.accountCode === '4.1.1')?.debitBs, 100);
 });
 
