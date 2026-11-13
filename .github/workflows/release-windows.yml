@@ -20,6 +20,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: write
 
 concurrency:
@@ -342,7 +343,8 @@ jobs:
       - name: Restore original v1.0.32 release assets
         if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
-          GH_TOKEN: ${{ secrets.SICOVEN_RELEASE_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GH_RELEASE_TOKEN: ${{ secrets.SICOVEN_RELEASE_TOKEN }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -352,6 +354,8 @@ jobs:
           New-Item -ItemType Directory -Path $restoreDir | Out-Null
           gh run download 43417119647 --repo miguel110710/Sicoven --name SICOVEN-COMPLETO-Windows-x64 --dir $restoreDir
           if ($LASTEXITCODE -ne 0) { throw 'No se pudo recuperar el artefacto original de SICOVEN 1.0.32.' }
+          # Use the release token only for writes to the separate download repository.
+          $env:GH_TOKEN = $env:GH_RELEASE_TOKEN
           $installer = Join-Path $restoreDir 'SICOVEN-Setup-1.0.32-x64.exe'
           if (-not (Test-Path $installer -PathType Leaf)) { throw 'El artefacto no contiene el instalador original esperado.' }
           $sha256 = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
