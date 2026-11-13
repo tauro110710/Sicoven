@@ -273,6 +273,7 @@ export interface JournalEntry {
     priorPeriodStartDate: string;
     priorPeriodEndDate: string;
     nextPeriodStartDate: string;
+    cycleNumber?: number;
   };
 }
 
