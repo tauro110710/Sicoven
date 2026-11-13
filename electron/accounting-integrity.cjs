@@ -240,7 +240,11 @@ function validateNoNewTransactionsInClosedPeriods(previousState, nextState) {
       if (priorIds.has(String(item.id))) continue;
       const closedThrough = closedByCompany.get(String(item.companyId));
       const transactionDate = String(item[dateField] || '');
-      if (closedThrough && /^\d{4}-\d{2}-\d{2}$/.test(transactionDate) && transactionDate <= closedThrough) {
+      const isAuthorizedYearClose = collection === 'journalEntries' &&
+        item.type === 'CIERRE' && transactionDate === closedThrough &&
+        String(item.referenceDoc || '') === 'CIERRE:' + String(item.companyId) + ':' + closedThrough;
+      if (closedThrough && !isAuthorizedYearClose &&
+          /^\d{4}-\d{2}-\d{2}$/.test(transactionDate) && transactionDate <= closedThrough) {
         const company = priorCompanies.get(String(item.companyId)) ||
           asArray(nextState.companies).find(candidate => String(candidate.id) === String(item.companyId));
         throw new Error('SQLite bloqueó el registro de ' + label + ' con fecha ' + transactionDate +
@@ -2388,6 +2392,21 @@ function validateAccountingSnapshot(previousState, nextState) {
         Math.abs(totals.debitUsd - totals.creditUsd) >= 0.01 ||
         totals.debitBs <= 0 || totals.debitUsd <= 0) {
       throw new Error('SQLite rechazó el asiento #' + entry.entryNumber + ': no cuadra simultáneamente en Bs. y USD.');
+    }
+    if (entry.type === 'CIERRE') {
+      const company = asArray(nextState.companies).find(item => String(item.id) === String(entry.companyId));
+      const expectedReference = 'CIERRE:' + String(entry.companyId) + ':' + String(entry.date || '');
+      const priorClosing = priorEntries.some(item => item.companyId === entry.companyId &&
+        item.type === 'CIERRE' && item.date === entry.date);
+      const accountByCode = new Map(asArray(nextState.accounts).map(account => [String(account.code), account]));
+      const lineAccounts = entry.items.map(item => accountByCode.get(String(item.accountCode)));
+      if (!company || String(company.closedThroughDate || '') !== String(entry.date) ||
+          !isValidIsoDate(String(entry.date || '')) || String(entry.referenceDoc || '') !== expectedReference ||
+          priorClosing || lineAccounts.some(account => !account || !account.isMovement ||
+            !['INGRESOS', 'COSTOS', 'GASTOS', 'PATRIMONIO'].includes(account.type)) ||
+          !lineAccounts.some(account => ['INGRESOS', 'COSTOS', 'GASTOS'].includes(account.type))) {
+        throw new Error('SQLite rechazó el asiento de cierre anual: debe ser único, estar vinculado al bloqueo del ejercicio y cancelar únicamente cuentas nominales contra patrimonio.');
+      }
     }
     if (entry.reversalOfEntryId) {
       const source = nextById.get(String(entry.reversalOfEntryId));
