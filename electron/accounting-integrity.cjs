@@ -2406,9 +2406,11 @@ function validateAccountingSnapshot(previousState, nextState) {
         candidate.exerciseLink?.priorPeriodEndDate === entry.date &&
         candidate.exerciseLink?.nextPeriodStartDate === nextOpeningDate);
       const priorClosing = priorEntries.some(item => item.companyId === entry.companyId &&
-        item.type === 'CIERRE' && String(item.date || '').slice(0, 4) === closingYear);
+        item.type === 'CIERRE' && !item.reversedByEntryId && item.isAdjusted !== true &&
+        String(item.date || '').slice(0, 4) === closingYear);
       const duplicateNextClosing = nextEntries.some(item => item.id !== entry.id &&
         item.companyId === entry.companyId && item.type === 'CIERRE' &&
+        !item.reversedByEntryId && item.isAdjusted !== true &&
         String(item.date || '').slice(0, 4) === closingYear);
       const accountByCode = new Map(asArray(nextState.accounts).map(account => [String(account.code), account]));
       const lineAccounts = entry.items.map(item => accountByCode.get(String(item.accountCode)));
