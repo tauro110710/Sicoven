@@ -2415,7 +2415,15 @@ function validateAccountingSnapshot(previousState, nextState) {
       const accountByCode = new Map(asArray(nextState.accounts).map(account => [String(account.code), account]));
       const lineAccounts = entry.items.map(item => accountByCode.get(String(item.accountCode)));
       const equityCodes = new Set(lineAccounts.filter(account => account?.type === 'PATRIMONIO').map(account => account.code));
-      if (!company || String(company.closedThroughDate || '') !== String(entry.date) ||
+      const closeState = entry.annualCloseState;
+      const closeStateValid = Boolean(closeState &&
+        Number.isInteger(Number(closeState.previousFiscalYear)) &&
+        Number(closeState.previousFiscalYear) === Number(closingYear) &&
+        Number.isInteger(Number(closeState.cycleNumber)) && Number(closeState.cycleNumber) >= 1 &&
+        (closeState.previousClosedThroughDate === null ||
+          (isValidIsoDate(String(closeState.previousClosedThroughDate)) &&
+           String(closeState.previousClosedThroughDate) < String(entry.date))));
+      if (!company || !closeStateValid || String(company.closedThroughDate || '') !== String(entry.date) ||
           !closingDateValid || String(entry.date) !== closingYear + '-12-31' ||
           Number(company.fiscalYear) !== Number(closingYear) + 1 || !linkedOpening ||
           String(entry.referenceDoc || '') !== expectedReference ||
