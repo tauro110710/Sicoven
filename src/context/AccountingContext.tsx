@@ -7571,6 +7571,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         deleteJournalEntry,
         reverseJournalEntry,
         closeAccountingPeriod,
+        closeAccountingYear,
         reopenAccountingPeriod,
         createAccountingYearOpening,
         creditSettlements: visibleCreditSettlements,
