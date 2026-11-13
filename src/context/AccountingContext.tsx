@@ -913,7 +913,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         annualCloseState: {
           previousFiscalYear: fiscalYear,
           previousClosedThroughDate: currentCompany.closedThroughDate || null,
-          cycleNumber: journalEntries.filter(entry =>
+          // Count against the freshly persisted ledger snapshot, not the
+          // render-time state captured before pending writes were flushed.
+          cycleNumber: confirmedEntries.filter(entry =>
             entry.companyId === currentCompany.id && entry.type === 'CIERRE' &&
             entry.date === input.periodEndDate
           ).length + 1
