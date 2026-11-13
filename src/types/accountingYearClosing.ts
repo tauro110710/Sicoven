@@ -92,10 +92,12 @@ export function buildClosingEntryItems(input: ClosingEntryBuildInput): JournalEn
     const account = accountByCode.get(code)!;
     const netBs = roundBs(totals.debitBs - totals.creditBs);
     const netUsd = roundUsd(totals.debitUsd - totals.creditUsd);
-    const debitBs = roundBs(Math.max(0, netBs));
-    const creditBs = roundBs(Math.max(0, -netBs));
-    const debitUsd = roundUsd(Math.max(0, netUsd));
-    const creditUsd = roundUsd(Math.max(0, -netUsd));
+    // The closing entry reverses the existing natural balance:
+    // credit-balance nominal accounts are debited; debit-balance accounts are credited.
+    const debitBs = roundBs(Math.max(0, -netBs));
+    const creditBs = roundBs(Math.max(0, netBs));
+    const debitUsd = roundUsd(Math.max(0, -netUsd));
+    const creditUsd = roundUsd(Math.max(0, netUsd));
     if (debitBs || creditBs || debitUsd || creditUsd) {
       items.push({
         accountCode: code, accountName: account.name,
