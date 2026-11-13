@@ -142,9 +142,11 @@ test('recorre dos ciclos anuales reales con builders, persistencia SQLite, IPC y
     assert.equal(firstReopen.company.closedThroughDate, undefined);
     assert.equal(firstReopen.reversalEntries.length, 2);
 
-    const afterFirst = JSON.parse(harness.db.prepare(
+    const afterFirstRow = harness.db.prepare(
       "SELECT state_json FROM app_state WHERE state_key='accounting'"
-    ).get().state_json);
+    ).get() as { state_json: string } | undefined;
+    assert.ok(afterFirstRow);
+    const afterFirst = JSON.parse(afterFirstRow.state_json);
     const secondCycle = buildCycle(
       afterFirst.journalEntries, 2, null,
       new Date(Date.now() + 10_000).toISOString()
@@ -165,9 +167,11 @@ test('recorre dos ciclos anuales reales con builders, persistencia SQLite, IPC y
     assert.equal(secondReopen.company.fiscalYear, 2025);
     assert.equal(secondReopen.reversalEntries.length, 2);
 
-    const finalState = JSON.parse(harness.db.prepare(
+    const finalStateRow = harness.db.prepare(
       "SELECT state_json FROM app_state WHERE state_key='accounting'"
-    ).get().state_json);
+    ).get() as { state_json: string } | undefined;
+    assert.ok(finalStateRow);
+    const finalState = JSON.parse(finalStateRow.state_json);
     const originals = finalState.journalEntries.filter((entry: JournalEntry) =>
       ['annual-close-1', 'annual-opening-1', 'annual-close-2', 'annual-opening-2'].includes(entry.id)
     );
@@ -175,15 +179,22 @@ test('recorre dos ciclos anuales reales con builders, persistencia SQLite, IPC y
     assert.equal(originals.length, 4);
     assert.ok(originals.every((entry: JournalEntry) => entry.isAdjusted === true && Boolean(entry.reversedByEntryId)));
     assert.equal(reversals.length, 4);
-    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM accounting_exercise_links').get().count, 2);
-    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM accounting_year_reopenings').get().count, 2);
-    const cycles = harness.db.prepare(
+    const exerciseLinks = harness.db.prepare(
+      'SELECT COUNT(*) AS count FROM accounting_exercise_links'
+    ).get() as { count: number };
+    const reopenings = harness.db.prepare(
+      'SELECT COUNT(*) AS count FROM accounting_year_reopenings'
+    ).get() as { count: number };
+    assert.equal(exerciseLinks.count, 2);
+    assert.equal(reopenings.count, 2);
+    const cycles = (harness.db.prepare(
       'SELECT cycle_number FROM accounting_exercise_links ORDER BY cycle_number'
-    ).all().map((row: { cycle_number: number }) => row.cycle_number);
+    ).all() as Array<{ cycle_number: number }>).map(row => row.cycle_number);
     assert.deepEqual(cycles, [1, 2]);
-    assert.equal(harness.db.prepare(
+    const auditEvents = harness.db.prepare(
       "SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_year_reopened'"
-    ).get().count, 2);
+    ).get() as { count: number };
+    assert.equal(auditEvents.count, 2);
   } finally {
     harness.db.close();
   }
