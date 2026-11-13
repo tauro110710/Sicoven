@@ -45,7 +45,7 @@ function initializeTenantDatabase(db) {
 
   return Object.freeze({
     operationalTables: [
-      'app_state', 'audit_events', 'accounting_exercise_links', 'party_masters',
+      'app_state', 'audit_events', 'accounting_exercise_links', 'accounting_year_reopenings', 'party_masters',
       'period_reopenings', 'accounting_correction_cases', 'accounting_correction_case_events',
       'accounting_correction_case_workflow_events', 'inflation_index_sources',
       'inflation_index_series', 'inflation_index_observations', 'inflation_index_approvals',
