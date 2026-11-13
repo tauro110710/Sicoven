@@ -281,3 +281,25 @@ test('does not close or clear the active tenant when logout drain fails', async 
   assert.equal(logoutOpen.has('company-a'), true);
   assert.equal(await logoutContext.withActiveDatabase((_db, companyId) => companyId), 'company-a');
 });
+
+test('clears the stale active tenant while the exclusive maintenance lock is held', async t => {
+  const { context } = makeContext(t);
+  await context.switchCompany('company-a');
+  const releaseLock = await context.acquireMaintenanceLock();
+  assert.equal(context.isSwitching(), true);
+  const result = context.clearActiveCompanyForMaintenance();
+  assert.deepEqual(result, { ok: true, previousCompanyId: 'company-a' });
+  assert.equal(context.getActiveCompanyId(), null);
+  assert.throws(
+    () => context.clearActiveCompanyForMaintenance(),
+    /Solo se puede limpiar la empresa activa durante un mantenimiento exclusivo/
+  );
+  releaseLock();
+  assert.equal(context.isSwitching(), false);
+  await assert.rejects(
+    () => context.withActiveDatabase(() => true),
+    /No hay una empresa activa/
+  );
+  await context.switchCompany('company-b');
+  assert.equal(context.getActiveCompanyId(), 'company-b');
+});
