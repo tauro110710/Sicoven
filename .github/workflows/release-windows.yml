@@ -23,6 +23,8 @@ permissions:
   actions: read
   contents: write
 
+# Release restoration uses the repository token for artifact reads and the release token for external asset writes.
+
 concurrency:
   group: sicoven-release-${{ github.ref }}
   cancel-in-progress: true
