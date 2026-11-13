@@ -114,6 +114,18 @@ function persistAccountingSnapshot(db, state, actor = null) {
         reversalReason: entry.reversalReason || null, workpaperNote: entry.workpaperNote || null,
         priorPeriodAdjustment: Boolean(entry.priorPeriodAdjustment), totals
       }));
+      if (entry.type === 'CIERRE' && String(entry.referenceDoc || '').startsWith('CIERRE:')) {
+        const opening = nextEntries.find(candidate => candidate.companyId === entry.companyId &&
+          candidate.type === 'APERTURA' && candidate.exerciseLink?.priorPeriodEndDate === entry.date);
+        auditInsert.run('accounting_year_closed', JSON.stringify({
+          closingEntryId: entry.id, closingEntryNumber: entry.entryNumber,
+          openingEntryId: opening?.id || null, openingEntryNumber: opening?.entryNumber || null,
+          companyId: entry.companyId, closingDate: entry.date,
+          resultAccountCodes: entry.items.map(item => item.accountCode),
+          actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null,
+          totals
+        }));
+      }
       if (entry.type === 'APERTURA') {
         auditInsert.run('accounting_year_opening_posted', JSON.stringify({
           entryId: entry.id, companyId: entry.companyId, entryNumber: entry.entryNumber,
