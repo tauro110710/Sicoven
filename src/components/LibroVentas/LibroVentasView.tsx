@@ -473,15 +473,16 @@ export const LibroVentasView: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-xs">
             <thead className="bg-slate-100 text-slate-700"><tr>
-              <th className="px-3 py-2">Fecha</th><th className="px-3 py-2">Cierre / N.º</th><th className="px-3 py-2">Origen / Sistema</th><th className="px-3 py-2">Documentos</th><th className="px-3 py-2">N.º control (si aplica)</th><th className="px-3 py-2 text-right">Base gravada</th><th className="px-3 py-2 text-right">IVA</th><th className="px-3 py-2 text-right">Imp. lujo</th><th className="px-3 py-2 text-right">Exento</th><th className="px-3 py-2 text-right">IGTF</th><th className="px-3 py-2 text-right">Total cierre</th><th className="px-3 py-2">Asiento / Soportes</th>
+              <th className="px-3 py-2">Fecha</th><th className="px-3 py-2 text-right">Tasa BCV (Bs/USD)</th><th className="px-3 py-2">Cierre / N.º</th><th className="px-3 py-2">Origen / Sistema</th><th className="px-3 py-2">Documentos</th><th className="px-3 py-2">N.º control (si aplica)</th><th className="px-3 py-2 text-right">Base gravada</th><th className="px-3 py-2 text-right">IVA</th><th className="px-3 py-2 text-right">Imp. lujo</th><th className="px-3 py-2 text-right">Exento</th><th className="px-3 py-2 text-right">IGTF</th><th className="px-3 py-2 text-right">Total cierre</th><th className="px-3 py-2">Asiento / Soportes</th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredZReports.length === 0 ? <tr><td colSpan={12} className="px-3 py-8 text-center text-slate-400">Todavía no hay Reportes Z registrados para este período.</td></tr> : filteredZReports.map(entry => {
+              {filteredZReports.length === 0 ? <tr><td colSpan={13} className="px-3 py-8 text-center text-slate-400">Todavía no hay Reportes Z registrados para este período.</td></tr> : filteredZReports.map(entry => {
                 const z = entry.fiscalZReport!;
                 const taxable = z.taxableBase16Bs + z.taxableBase8Bs + z.taxableBase31Bs;
                 const vat = z.vat16Bs + z.vat8Bs + z.vat31Bs;
                 return <tr key={entry.id} className="hover:bg-slate-50">
                   <td className="whitespace-nowrap px-3 py-2">{formatDate(z.date)}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{Number.isFinite(Number(entry.bcvRate)) && Number(entry.bcvRate) > 0 ? new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(Number(entry.bcvRate)) : 'No registrada'}</td>
                   <td className="px-3 py-2 font-mono font-bold">{z.zNumber}</td>
                   <td className="px-3 py-2">{(z.sourceType || 'FISCAL_MACHINE') === 'FISCAL_MACHINE' ? ([z.machineBrand,z.machineModel].filter(Boolean).join(' ') || 'Máquina fiscal') : (z.sourceType === 'POS' ? 'Sistema POS' : 'Facturación digital') + ' · ' + (z.sourceSystemName || 'Sistema no especificado')}<span className="block font-mono text-[10px] text-slate-500">{(z.sourceType || 'FISCAL_MACHINE') === 'FISCAL_MACHINE' ? z.machineSerial : (z.sourceTerminalId ? 'Terminal ' + z.sourceTerminalId : 'Sin terminal informada')}</span></td>
                   <td className="px-3 py-2 font-mono">{z.invoiceStart && z.invoiceEnd ? z.invoiceStart + ' – ' + z.invoiceEnd : 'No informado'}</td>
