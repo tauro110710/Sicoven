@@ -137,6 +137,19 @@ test('bloquea movimientos posteriores al cierre anual', () => {
   db.close();
 });
 
+test('bloquea documentos retroactivos creados después del asiento de cierre', () => {
+  const { db, state } = fixture();
+  state.sales.push({
+    id: 'sale-backdated', companyId: 'co-1',
+    invoiceDate: '2025-12-20', createdAt: '2026-01-03T10:00:00.000Z'
+  });
+  db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'").run(JSON.stringify(state));
+  assert.throws(() => reopenAccountingYear(db, {
+    companyId: 'co-1', reason: 'Corrección del cierre anual.'
+  }, null), /operaciones o dependencias posteriores/i);
+  db.close();
+});
+
 test('revierte toda la operación si falla la auditoría final', () => {
   const { db } = fixture();
   const before = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json;
