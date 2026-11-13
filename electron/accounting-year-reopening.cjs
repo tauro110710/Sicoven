@@ -209,6 +209,8 @@ function reopenAccountingYear(db, input, actor) {
     for (const priorRow of priorReopeningRows) {
       try {
         const details = JSON.parse(priorRow.details_json);
+        if (details.closingEntryId) allowedHistoricalReversalIds.add(String(details.closingEntryId));
+        if (details.openingEntryId) allowedHistoricalReversalIds.add(String(details.openingEntryId));
         if (details.closingReversalEntryId) allowedHistoricalReversalIds.add(String(details.closingReversalEntryId));
         if (details.openingReversalEntryId) allowedHistoricalReversalIds.add(String(details.openingReversalEntryId));
       } catch {
