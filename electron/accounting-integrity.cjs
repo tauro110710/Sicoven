@@ -753,9 +753,9 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
         relatedIds.some(value => sourceIds.includes(value))) {
       throw new Error('SQLite rechazó fuentes fiscales duplicadas, vacías o mezcladas en la declaración IVA propia.');
     }
-    if (!Number.isFinite(Number(declaration.bcvRate)) || Number(declaration.bcvRate) <= 0) {
-      throw new Error('SQLite rechazó una declaración IVA propia sin tasa BCV válida.');
-    }
+    // La declaración mensual no tiene una tasa BCV global: cada reclasificación
+    // conserva la tasa histórica efectiva de su documento fuente. bcvRate de la
+    // declaración solo se admite como compatibilidad con borradores antiguos.
     const position = declaration.position;
     if (!position || typeof position !== 'object' ||
         Object.values(position).some(value => typeof value !== 'number' || !Number.isFinite(value)) ||
@@ -769,10 +769,13 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
     let debitBs = 0, creditBs = 0, debitUsd = 0, creditUsd = 0;
     for (const line of reclassifications) {
       const values = [line.debitBs, line.creditBs, line.debitUsd, line.creditUsd].map(Number);
+      const lineRate = Number(line.bcvRate ?? declaration.bcvRate);
+      const hasBsAmount = values[0] > 0 || values[1] > 0;
       if (!String(line.accountCode || '').trim() || values.some(value => !Number.isFinite(value) || value < 0) ||
           (values[0] > 0 && values[1] > 0) || (values[2] > 0 && values[3] > 0) ||
-          Math.abs(values[2] - values[0] / Number(declaration.bcvRate)) > 0.0001 ||
-          Math.abs(values[3] - values[1] / Number(declaration.bcvRate)) > 0.0001) {
+          (hasBsAmount && (!Number.isFinite(lineRate) || lineRate <= 0)) ||
+          (hasBsAmount && Math.abs(values[2] - values[0] / lineRate) > 0.0001) ||
+          (hasBsAmount && Math.abs(values[3] - values[1] / lineRate) > 0.0001)) {
         throw new Error('SQLite rechazó una línea inválida de reclasificación de IVA no acreditable o con conversión Bs/USD inconsistente.');
       }
       debitBs += values[0]; creditBs += values[1]; debitUsd += values[2]; creditUsd += values[3];

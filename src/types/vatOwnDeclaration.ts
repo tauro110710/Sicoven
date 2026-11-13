@@ -878,6 +878,7 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
       creditBs: inputVatDebit ? 0 : absoluteAmount,
       debitUsd: inputVatDebit ? absoluteAmount / rate : 0,
       creditUsd: inputVatDebit ? 0 : absoluteAmount / rate,
+      bcvRate: rate,
       description: 'Reclasificación IVA no acreditable · Documento ' + adjustment.purchaseId + ' · ' + input.period
     });
   }

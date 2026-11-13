@@ -2070,6 +2070,23 @@ function vatOwnDeclarationFixture(overrides = {}) {
   };
 }
 
+test('SQLite accepts an IVA draft without a global rate and validates each reclassification at its source rate', () => {
+  const next = vatOwnDeclarationFixture();
+  const declaration = next.vatOwnDeclarations[0];
+  delete declaration.bcvRate;
+  declaration.purchaseVatReclassificationItems = [
+    { accountCode: '6.1.1.01', debitBs: 100, creditBs: 0, debitUsd: 10, creditUsd: 0, bcvRate: 10 },
+    { accountCode: '1.1.3.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 10, bcvRate: 10 },
+    { accountCode: '6.1.1.02', debitBs: 200, creditBs: 0, debitUsd: 10, creditUsd: 0, bcvRate: 20 },
+    { accountCode: '1.1.3.02', debitBs: 0, creditBs: 200, debitUsd: 0, creditUsd: 10, bcvRate: 20 }
+  ];
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), next));
+
+  const invalid = structuredClone(next);
+  invalid.vatOwnDeclarations[0].purchaseVatReclassificationItems[0].bcvRate = 20;
+  assert.throws(() => validateAccountingSnapshot(emptyState(), invalid), /conversión Bs\/USD inconsistente/);
+});
+
 function vatOwnFilingEntry() {
   return {
     id: 'entry-iva-filed', companyId: 'company-1', entryNumber: 1,
