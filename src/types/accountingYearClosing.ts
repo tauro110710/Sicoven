@@ -50,8 +50,6 @@ export function buildClosingEntryItems(input: ClosingEntryBuildInput): JournalEn
   if (!periodEntries.length) throw new Error('No existen movimientos contables en el ejercicio que se intenta cerrar.');
 
   const nominalBalances = new Map<string, Totals>();
-  let resultBs = 0;
-  let resultUsd = 0;
 
   for (const entry of periodEntries) {
     if (!Array.isArray(entry.items) || entry.items.length < 2) {
@@ -82,9 +80,6 @@ export function buildClosingEntryItems(input: ClosingEntryBuildInput): JournalEn
         current.creditUsd += Number(line.creditUsd);
         nominalBalances.set(account.code, current);
         // Result = income - costs - expenses, with each account's natural balance.
-        const sign = account.type === 'INGRESOS' ? 1 : -1;
-        resultBs += sign * (Number(line.creditBs) - Number(line.debitBs));
-        resultUsd += sign * (Number(line.creditUsd) - Number(line.debitUsd));
       }
     }
     if (!isJournalEntryBalanced(totals)) {
@@ -110,6 +105,14 @@ export function buildClosingEntryItems(input: ClosingEntryBuildInput): JournalEn
     }
   }
 
+  // Recalculate the period result from each rounded nominal-account balance.
+  // This keeps the counterpart exactly aligned with the lines being closed.
+  let resultBs = 0;
+  let resultUsd = 0;
+  for (const totals of nominalBalances.values()) {
+    resultBs += roundBs(totals.creditBs - totals.debitBs);
+    resultUsd += roundUsd(totals.creditUsd - totals.debitUsd);
+  }
   const netResultBs = roundBs(resultBs);
   const netResultUsd = roundUsd(resultUsd);
   if (Math.abs(netResultBs) > 0.01 || Math.abs(netResultUsd) > 0.000001) {
