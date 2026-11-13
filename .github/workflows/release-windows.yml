@@ -330,6 +330,15 @@ jobs:
           }
           gh release edit $tag --draft=false --repo $releaseRepo
 
+          if ($LASTEXITCODE -ne 0) {
+            throw "Los archivos se cargaron, pero no se pudo publicar la Release $tag."
+          }
+          $releaseState = gh release view $tag --repo $releaseRepo --json isDraft --jq '.isDraft'
+          if ($LASTEXITCODE -ne 0 -or $releaseState -ne 'false') {
+            throw "No se pudo confirmar que la Release $tag quedó publicada."
+          }
+          Write-Host "Release $tag publicada y verificada con instalador y latest.yml."
+
       - name: Restore original v1.0.32 release assets
         if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
@@ -374,15 +383,6 @@ releaseDate: '2026-11-13T11:34:21.000Z'
             if ($LASTEXITCODE -ne 0) { throw 'No se pudo retirar el blockmap incorrecto.' }
           }
           Write-Host "v1.0.32 restaurada: SHA256 $sha256; SHA512 $sha512; tamaño $size bytes."
-
-          if ($LASTEXITCODE -ne 0) {
-            throw "Los archivos se cargaron, pero no se pudo publicar la Release $tag."
-          }
-          $releaseState = gh release view $tag --repo $releaseRepo --json isDraft --jq '.isDraft'
-          if ($LASTEXITCODE -ne 0 -or $releaseState -ne 'false') {
-            throw "No se pudo confirmar que la Release $tag quedó publicada."
-          }
-          Write-Host "Release $tag publicada y verificada con instalador y latest.yml."
 
       - name: Upload complete edition installer artifact
         if: (startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
