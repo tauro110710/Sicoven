@@ -799,7 +799,7 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
       }
     }
     if (Math.abs(signedAmount) < 0.01) continue;
-    const rate = Number(sourceEntry.bcvRate ?? liveSourceEntry.bcvRate ?? sourcePurchase.bcvRate);
+    const rate = Number((sourceEntry as JournalEntry).bcvRate ?? liveSourceEntry.bcvRate ?? sourcePurchase.bcvRate);
     if (!Number.isFinite(rate) || rate <= 0) {
       throw new Error('La factura ' + (sourcePurchase.invoiceNumber || adjustment.purchaseId) + ' no conserva una tasa BCV histórica válida en su asiento original para expresar la reclasificación en USD.');
     }
