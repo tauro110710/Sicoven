@@ -1236,7 +1236,7 @@ test('uses the manually entered daily BCV reference only for a purchase and jour
   };
   const items = buildVatOwnPurchaseVatReclassificationItems({
     companyId: 'company-a', period: '2026-11', allPurchases: [purchase],
-    journalEntries: [journal], summary, dailyReferenceRates: { '2026-11-12': 400 },
+    journalEntries: [journal], summary, dailyReferenceRates: { '2026-11-12': 400, '2026-11-11': 390 },
     dailyReferenceBcvRate: 400, dailyReferenceDate: '2026-11-12'
   });
   assert.equal(items.reduce((sum, item) => sum + item.debitUsd, 0), 0.2);

@@ -816,7 +816,9 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
     const sourceDate = String(historicalJournal?.date || liveSourceEntry.date || sourcePurchase.invoiceDate || '');
     const sameDayReferenceApplies = Boolean(input.dailyReferenceDate &&
       sourcePurchase.invoiceDate === input.dailyReferenceDate && sourceDate === input.dailyReferenceDate);
-    const savedDailyReferenceRate = input.dailyReferenceRates?.[sourceDate];
+    const savedDailyReferenceRate = sourcePurchase.invoiceDate === sourceDate
+      ? input.dailyReferenceRates?.[sourceDate]
+      : undefined;
     const rate = Number.isFinite(storedRate) && storedRate > 0
       ? storedRate
       : Number.isFinite(savedDailyReferenceRate) && Number(savedDailyReferenceRate) > 0
