@@ -37,7 +37,8 @@ function initializeAnnualReopeningSchema(db) {
           id TEXT PRIMARY KEY, company_id TEXT NOT NULL, prior_period_start_date TEXT NOT NULL,
           prior_period_end_date TEXT NOT NULL, next_period_start_date TEXT NOT NULL,
           journal_entry_id TEXT NOT NULL UNIQUE, cycle_number INTEGER NOT NULL DEFAULT 1,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(company_id, prior_period_start_date, prior_period_end_date, cycle_number)
         )`);
         const legacyColumns = db.prepare('PRAGMA table_info(accounting_exercise_links_legacy_reopen)').all();
         const hasCreatedAt = legacyColumns.some(column => column.name === 'created_at');
@@ -62,8 +63,7 @@ function initializeAnnualReopeningSchema(db) {
     CREATE TABLE IF NOT EXISTS accounting_year_reopenings (
       id TEXT PRIMARY KEY, company_id TEXT NOT NULL, closing_entry_id TEXT NOT NULL UNIQUE,
       opening_entry_id TEXT NOT NULL UNIQUE, cycle_number INTEGER NOT NULL,
-      details_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE(company_id, prior_period_start_date, prior_period_end_date, cycle_number)
+      details_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TRIGGER IF NOT EXISTS accounting_year_reopenings_no_update
       BEFORE UPDATE ON accounting_year_reopenings
