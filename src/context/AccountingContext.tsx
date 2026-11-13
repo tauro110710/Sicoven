@@ -944,7 +944,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         exerciseLink: {
           priorPeriodStartDate: input.periodStartDate,
           priorPeriodEndDate: input.periodEndDate,
-          nextPeriodStartDate: openingDate
+          nextPeriodStartDate: openingDate,
+          cycleNumber: Number(closingEntry.annualCloseState?.cycleNumber) || 1
         },
         items: openingItems
       }, openingAccountCatalog, currentCompany.id);
