@@ -174,6 +174,9 @@ function reopenAccountingYear(db, input, actor) {
         !(evidence.previousClosedThroughDate === null || isIsoDate(evidence.previousClosedThroughDate))) {
       throw new Error('Este cierre antiguo no conserva evidencia del estado previo. No es seguro reabrirlo automáticamente.');
     }
+    if (!Number.isFinite(Date.parse(String(closing.createdAt || '')))) {
+      throw new Error('El cierre anual no conserva una marca temporal verificable para detectar operaciones registradas posteriormente.');
+    }
     if (Number(company.fiscalYear) !== Number(evidence.previousFiscalYear) + 1 ||
         String(closing.date) !== String(evidence.previousFiscalYear) + '-12-31' ||
         (evidence.previousClosedThroughDate && evidence.previousClosedThroughDate >= closingDate)) {
