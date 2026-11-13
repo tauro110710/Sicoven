@@ -1738,7 +1738,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // an outgoing movement and must fit the available balance at its effective date.
     // Reconciliation adjustments are excluded because they record bank facts that
     // have already occurred, not new payment instructions.
-    if (!entry.isAdjusted) {
+    if (!entry.isAdjusted && !['APERTURA', 'CIERRE'].includes(entry.type)) {
       const creditedBankAccounts = bankAccounts.filter(bank =>
         bank.companyId === targetCompany.id &&
         entry.items.some(item => item.accountCode === bank.accountCode &&
@@ -1773,7 +1773,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       entryNumber: nextEntryNum,
       createdAt: new Date().toISOString()
     };
-    reserveBankOutgoingAccounts(newEntry.companyId, newEntry.items);
+    if (!['APERTURA', 'CIERRE'].includes(newEntry.type)) reserveBankOutgoingAccounts(newEntry.companyId, newEntry.items);
     activeImportBatchRef.current?.journalEntries.push(newEntry);
     setJournalEntries(prev => [...prev, newEntry]);
     return newEntry;
