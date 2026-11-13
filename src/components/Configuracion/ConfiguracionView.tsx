@@ -95,7 +95,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
   const [reopenBusy, setReopenBusy] = useState(false);
   const [reopenError, setReopenError] = useState<string | null>(null);
   const [openingPeriodStart, setOpeningPeriodStart] = useState(() => String(currentCompany.fiscalYear) + '-01-01');
-  const [openingPeriodEnd, setOpeningPeriodEnd] = useState(currentCompany.closedThroughDate || (String(currentCompany.fiscalYear) + '-12-31'));
+  const [openingPeriodEnd, setOpeningPeriodEnd] = useState(String(currentCompany.fiscalYear) + '-12-31');
   const [openingDate, setOpeningDate] = useState(() => {
     const end = String(currentCompany.fiscalYear) + '-12-31';
     const date = new Date(end + 'T00:00:00.000Z');
