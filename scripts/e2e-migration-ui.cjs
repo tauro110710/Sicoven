@@ -159,7 +159,7 @@ async function main() {
   await waitFor(() => evaluate("Boolean(document.querySelector('[role=dialog] #migration-target-company'))"), 'No abrió el diálogo del importador');
   await capture('migration-wizard-open.png');
 
-  const selectedCompanyId = await evaluate('(() => { const select = document.querySelector("#migration-target-company"); const option = [...(select?.options || [])].find(item => item.value); if (!select || !option) return ""; const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set; setter.call(select, option.value); select.dispatchEvent(new Event("change", { bubbles: true })); return select.value; })()');
+  const selectedCompanyId = await evaluate('(() => { const select = document.querySelector("#migration-target-company"); const option = [...(select?.options || [])].find(item => item.value && item.textContent.includes("E2E MIGRATION TEST, C.A.") && item.textContent.includes("J-12345678-9")); if (!select || !option) return ""; const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set; setter.call(select, option.value); select.dispatchEvent(new Event("change", { bubbles: true })); return select.value; })()');
   assert(selectedCompanyId, 'El importador no presentó una empresa destino seleccionable.');
 
   const documentNode = await command('DOM.getDocument', { depth: -1, pierce: true });
@@ -177,7 +177,13 @@ async function main() {
   assert(confirmation, 'No se pudo marcar la confirmación explícita de importación.');
 
   await clickButton('Importar siguiente módulo');
-  await waitFor(() => evaluate("document.body.innerText.includes('Inventario importado en E2E MIGRATION TEST, C.A.')"), 'La interfaz no confirmó la importación del artículo de prueba', 60000);
+  try {
+    await waitFor(() => evaluate("document.body.innerText.includes('Inventario importado en E2E MIGRATION TEST, C.A.')"), 'La interfaz no confirmó la importación del artículo de prueba', 60000);
+  } catch (error) {
+    const diagnostic = await evaluate("JSON.stringify({body:(document.body?.innerText||'').slice(-7000),target:document.querySelector('#migration-target-company')?.selectedOptions?.[0]?.textContent,dialog:!!document.querySelector('[role=dialog]')})").catch(() => 'No se pudo leer el estado del renderer');
+    try { await capture('migration-import-failure.png'); } catch {}
+    throw new Error(String(error.message || error) + ' | Estado de importación: ' + diagnostic);
+  }
   await capture('migration-import-success.png');
 
   // Cada empresa opera en su propia base SQLite; el archivo raíz sicoven.sqlite
