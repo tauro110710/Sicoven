@@ -214,7 +214,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
 
   React.useEffect(() => {
     const start = String(currentCompany.fiscalYear) + '-01-01';
-    const end = currentCompany.closedThroughDate || (String(currentCompany.fiscalYear) + '-12-31');
+    const end = String(currentCompany.fiscalYear) + '-12-31';
     const next = new Date(end + 'T00:00:00.000Z');
     next.setUTCDate(next.getUTCDate() + 1);
     setOpeningPeriodStart(start);
@@ -283,13 +283,13 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
       return;
     }
     const confirmed = window.confirm(
-      'EJECUTAR CICLO CONTABLE ANUAL COMPLETO\\n\\nEmpresa: ' + currentCompany.name +
-      '\\nEjercicio: ' + currentCompany.fiscalYear +
-      '\\nCierre: ' + openingPeriodEnd +
-      '\\nApertura: ' + openingDate +
-      '\\nAsiento de cierre: ' + closingPreview.length + ' líneas' +
-      '\\nAsiento de apertura: ' + openingPreview.length + ' líneas' +
-      '\\n\\nSICOVEN contabilizará depreciaciones pendientes, registrará ambos asientos, bloqueará el ejercicio cerrado y avanzará el ejercicio activo. La operación se confirmará en una sola persistencia SQLite.\\n\\n¿Confirma la ejecución?'
+      'EJECUTAR CICLO CONTABLE ANUAL COMPLETO\n\nEmpresa: ' + currentCompany.name +
+      '\nEjercicio: ' + currentCompany.fiscalYear +
+      '\nCierre: ' + openingPeriodEnd +
+      '\nApertura: ' + openingDate +
+      '\nAsiento de cierre: ' + closingPreview.length + ' líneas' +
+      '\nAsiento de apertura: ' + openingPreview.length + ' líneas' +
+      '\n\nSICOVEN contabilizará depreciaciones pendientes, registrará ambos asientos, bloqueará el ejercicio cerrado y avanzará el ejercicio activo. La operación se confirmará en una sola persistencia SQLite.\n\n¿Confirma la ejecución?'
     );
     if (!confirmed) return;
     setOpeningBusy(true);
@@ -305,10 +305,10 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
       setClosingPreview(null);
       setOpeningPreview(null);
       alert(
-        'Ciclo contable anual ejecutado y confirmado por SQLite.\\n\\n' +
-        'Asiento de cierre #' + result.closingEntry.entryNumber + '\\n' +
-        'Asiento de apertura #' + result.openingEntry.entryNumber + '\\n' +
-        'Depreciaciones contabilizadas: ' + result.depreciationEntriesCreated + '\\n' +
+        'Ciclo contable anual ejecutado y confirmado por SQLite.\n\n' +
+        'Asiento de cierre #' + result.closingEntry.entryNumber + '\n' +
+        'Asiento de apertura #' + result.openingEntry.entryNumber + '\n' +
+        'Depreciaciones contabilizadas: ' + result.depreciationEntriesCreated + '\n' +
         'Ejercicio activo: ' + (Number(currentCompany.fiscalYear) + 1) + '.'
       );
     } catch (error) {
@@ -507,7 +507,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
   const handleRestoreGlobalBackup = async () => {
     if (!window.sicovenStore) return;
     const confirmed = window.confirm(
-      'RESTAURACIÓN GLOBAL DE SICOVEN\\n\\nSe reemplazarán la base de control, todas las bases SQLite de las empresas y sus documentos por el contenido del respaldo verificado. Se creará un snapshot de retorno antes del cambio.\\n\\n¿Deseas continuar?'
+      'RESTAURACIÓN GLOBAL DE SICOVEN\n\nSe reemplazarán la base de control, todas las bases SQLite de las empresas y sus documentos por el contenido del respaldo verificado. Se creará un snapshot de retorno antes del cambio.\n\n¿Deseas continuar?'
     );
     if (!confirmed) return;
     setBackupRestoreBusy(true);
