@@ -2396,14 +2396,20 @@ function validateAccountingSnapshot(previousState, nextState) {
     if (entry.type === 'CIERRE') {
       const company = asArray(nextState.companies).find(item => String(item.id) === String(entry.companyId));
       const expectedReference = 'CIERRE:' + String(entry.companyId) + ':' + String(entry.date || '');
+      const closingYear = String(entry.date || '').slice(0, 4);
       const priorClosing = priorEntries.some(item => item.companyId === entry.companyId &&
-        item.type === 'CIERRE' && item.date === entry.date);
+        item.type === 'CIERRE' && String(item.date || '').slice(0, 4) === closingYear);
+      const duplicateNextClosing = nextEntries.some(item => item.id !== entry.id &&
+        item.companyId === entry.companyId && item.type === 'CIERRE' &&
+        String(item.date || '').slice(0, 4) === closingYear);
       const accountByCode = new Map(asArray(nextState.accounts).map(account => [String(account.code), account]));
       const lineAccounts = entry.items.map(item => accountByCode.get(String(item.accountCode)));
+      const equityCodes = new Set(lineAccounts.filter(account => account?.type === 'PATRIMONIO').map(account => account.code));
       if (!company || String(company.closedThroughDate || '') !== String(entry.date) ||
           !isValidIsoDate(String(entry.date || '')) || String(entry.referenceDoc || '') !== expectedReference ||
           String(entry.workpaperNote || '') !== 'SICOVEN_AUTO_YEAR_CLOSE_V1' ||
-          priorClosing || lineAccounts.some(account => !account || !account.isMovement ||
+          priorClosing || duplicateNextClosing || equityCodes.size > 1 ||
+          lineAccounts.some(account => !account || !account.isMovement ||
             !['INGRESOS', 'COSTOS', 'GASTOS', 'PATRIMONIO'].includes(account.type)) ||
           !lineAccounts.some(account => ['INGRESOS', 'COSTOS', 'GASTOS'].includes(account.type))) {
         throw new Error('SQLite rechazó el asiento de cierre anual: debe ser único, estar vinculado al bloqueo del ejercicio y cancelar únicamente cuentas nominales contra patrimonio.');
