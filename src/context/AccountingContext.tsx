@@ -5661,9 +5661,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const referenceRate = input.dailyReferenceBcvRate;
     const referenceDate = input.dailyReferenceDate;
+    const parsedReferenceDate = referenceDate ? new Date(referenceDate + 'T00:00:00') : null;
+    const referenceDateIsValid = Boolean(parsedReferenceDate && Number.isFinite(parsedReferenceDate.getTime()) &&
+      parsedReferenceDate.getFullYear() + '-' + String(parsedReferenceDate.getMonth() + 1).padStart(2, '0') +
+      '-' + String(parsedReferenceDate.getDate()).padStart(2, '0') === referenceDate);
     if ((referenceRate === undefined) !== (referenceDate === undefined) ||
         (referenceRate !== undefined && (!Number.isFinite(referenceRate) || referenceRate <= 0 ||
-          !/^\\d{4}-\\d{2}-\\d{2}$/.test(referenceDate || '')))) {
+          !/^\d{4}-\d{2}-\d{2}$/.test(referenceDate || '') || !referenceDateIsValid))) {
       throw new Error('La tasa BCV de referencia diaria debe incluir una fecha válida y un importe mayor que cero.');
     }
     const now = new Date();
