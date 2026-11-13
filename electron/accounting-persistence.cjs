@@ -2,7 +2,7 @@ const crypto = require('node:crypto');
 const { validateAccountingSnapshot } = require('./accounting-integrity.cjs');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
 const { partitionAccountingSnapshot } = require('./tenant-snapshot.cjs');
-const { reopenAccountingYear } = require('./accounting-year-reopening.cjs');
+const { initializeAnnualReopeningSchema, reopenAccountingYear } = require('./accounting-year-reopening.cjs');
 
 function syncPartyMasterRows(db, state) {
   if (!Array.isArray(state.customers) && !Array.isArray(state.suppliers)) return;
@@ -87,7 +87,7 @@ function persistAccountingSnapshot(db, state, actor = null) {
         }
         const duplicate = (Array.isArray(state.journalEntries) ? state.journalEntries : []).some(item =>
           String(item.id) !== String(entry.id) && String(item.companyId) === String(entry.companyId) &&
-          item.type === 'APERTURA' && (
+          item.type === 'APERTURA' && !item.reversedByEntryId && item.isAdjusted !== true && (
             item.date === link.nextPeriodStartDate ||
             (item.exerciseLink &&
               item.exerciseLink.priorPeriodStartDate === link.priorPeriodStartDate &&
@@ -95,11 +95,12 @@ function persistAccountingSnapshot(db, state, actor = null) {
               item.exerciseLink.nextPeriodStartDate === link.nextPeriodStartDate)
           ));
         if (duplicate) throw new Error('Ya existe una apertura vinculada a este ejercicio anterior y no se permite duplicarla.');
+        const cycleNumber = Math.max(1, Number(link.cycleNumber) || 1);
         db.prepare(`INSERT INTO accounting_exercise_links
-          (id,company_id,prior_period_start_date,prior_period_end_date,next_period_start_date,journal_entry_id)
-          VALUES(?,?,?,?,?,?)`)
+          (id,company_id,prior_period_start_date,prior_period_end_date,next_period_start_date,journal_entry_id,cycle_number)
+          VALUES(?,?,?,?,?,?,?)`)
           .run(crypto.randomUUID(), String(entry.companyId), link.priorPeriodStartDate,
-            link.priorPeriodEndDate, link.nextPeriodStartDate, String(entry.id));
+            link.priorPeriodEndDate, link.nextPeriodStartDate, String(entry.id), cycleNumber);
         auditInsert.run('accounting_exercise_opening_linked', JSON.stringify({
           companyId: entry.companyId, journalEntryId: entry.id,
           priorPeriodStartDate: link.priorPeriodStartDate,
@@ -614,7 +615,8 @@ db.exec(`
   CREATE TRIGGER IF NOT EXISTS period_reopenings_no_delete
     BEFORE DELETE ON period_reopenings
     BEGIN SELECT RAISE(ABORT, 'period_reopenings is append-only'); END;
-`);
+  `);
+  initializeAnnualReopeningSchema(db);
 }
 
 function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession, withDatabase = null }) {
