@@ -112,6 +112,58 @@ function assertNoLaterActivity(state, companyId, closingDate, closingCreatedAt, 
       }
     }
   }
+
+  // Assets can be registered after the close without creating a new journal
+  // entry. Their registration and depreciation audit dates must also be
+  // considered before reopening the year.
+  for (const asset of (Array.isArray(state.fixedAssets) ? state.fixedAssets : [])) {
+    if (String(asset.companyId || '') !== companyId) continue;
+    const assetCreatedAt = Date.parse(String(asset.createdAt || ''));
+    const hasLaterDepreciation = (Array.isArray(asset.depreciationEvents) ? asset.depreciationEvents : []).some(event => {
+      const recordedAt = Date.parse(String(event.createdAt || ''));
+      return (Number.isFinite(closingCreatedAtMs) && Number.isFinite(recordedAt) && recordedAt > closingCreatedAtMs) ||
+        (isIsoDate(String(event.date || '')) && event.date > closingDate);
+    });
+    if ((Number.isFinite(closingCreatedAtMs) && Number.isFinite(assetCreatedAt) && assetCreatedAt > closingCreatedAtMs) ||
+        hasLaterDepreciation) {
+      throw new Error('No se puede reabrir: existen activos fijos o depreciaciones registrados después del cierre.');
+    }
+  }
+
+  // A filed own-VAT return and its events are external fiscal dependencies.
+  // Drafts remain editable and do not by themselves prevent reopening.
+  for (const declaration of (Array.isArray(state.vatOwnDeclarations) ? state.vatOwnDeclarations : [])) {
+    if (String(declaration.companyId || '') !== companyId) continue;
+    const filedAt = Date.parse(String(declaration.filedAt || ''));
+    if (Number.isFinite(closingCreatedAtMs) && Number.isFinite(filedAt) && filedAt > closingCreatedAtMs) {
+      throw new Error('No se puede reabrir: existe una declaración de IVA propio presentada después del cierre.');
+    }
+  }
+  const ownDeclarationIds = new Set((Array.isArray(state.vatOwnDeclarations) ? state.vatOwnDeclarations : [])
+    .filter(item => String(item.companyId || '') === companyId)
+    .map(item => String(item.id)));
+  for (const event of (Array.isArray(state.vatOwnDeclarationEvents) ? state.vatOwnDeclarationEvents : [])) {
+    if (String(event.companyId || '') !== companyId || !ownDeclarationIds.has(String(event.declarationId))) continue;
+    const recordedAt = Date.parse(String(event.recordedAt || ''));
+    const occurredDate = String(event.occurredAt || '').slice(0, 10);
+    if ((Number.isFinite(closingCreatedAtMs) && Number.isFinite(recordedAt) && recordedAt > closingCreatedAtMs) ||
+        (isIsoDate(occurredDate) && occurredDate > closingDate)) {
+      throw new Error('No se puede reabrir: existen eventos de presentación, pago o reversión de IVA propio posteriores al cierre.');
+    }
+  }
+
+  // Notes attached to the closed fiscal year are part of its reporting
+  // evidence, even when they do not create a journal entry.
+  for (const disclosure of (Array.isArray(state.financialDisclosures) ? state.financialDisclosures : [])) {
+    if (String(disclosure.companyId || '') !== companyId) continue;
+    const createdAt = Date.parse(String(disclosure.createdAt || ''));
+    const updatedAt = Date.parse(String(disclosure.updatedAt || ''));
+    if (Number(disclosure.fiscalYear) === Number(closingDate.slice(0, 4)) &&
+        ((Number.isFinite(closingCreatedAtMs) && Number.isFinite(createdAt) && createdAt > closingCreatedAtMs) ||
+         (Number.isFinite(closingCreatedAtMs) && Number.isFinite(updatedAt) && updatedAt > closingCreatedAtMs))) {
+      throw new Error('No se puede reabrir: existen notas a los estados financieros modificadas después del cierre.');
+    }
+  }
 }
 
 function assertBalancedAnnualEntry(entry, label) {
