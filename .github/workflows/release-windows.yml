@@ -360,16 +360,16 @@ jobs:
           $sha512 = (Get-FileHash -LiteralPath $installer -Algorithm SHA512).Hash.ToLowerInvariant()
           $size = (Get-Item -LiteralPath $installer).Length
           $metadata = Join-Path $restoreDir 'latest.yml'
-          $yaml = @"
-version: 1.0.32
-files:
-  - url: SICOVEN-Setup-1.0.32-x64.exe
-    sha512: $sha512
-    size: $size
-path: SICOVEN-Setup-1.0.32-x64.exe
-sha512: $sha512
-releaseDate: '2026-11-13T11:34:21.000Z'
-"@
+          $yaml = @(
+            'version: 1.0.32'
+            'files:'
+            '  - url: SICOVEN-Setup-1.0.32-x64.exe'
+            "    sha512: $sha512"
+            "    size: $size"
+            'path: SICOVEN-Setup-1.0.32-x64.exe'
+            "sha512: $sha512"
+            "releaseDate: '2026-11-13T11:34:21.000Z'"
+          ) -join [Environment]::NewLine
           Set-Content -LiteralPath $metadata -Value $yaml -Encoding utf8
           gh release upload v1.0.32 $installer $metadata --clobber --repo $releaseRepo
           if ($LASTEXITCODE -ne 0) { throw 'No se pudieron restaurar el instalador y latest.yml de v1.0.32.' }
