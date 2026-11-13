@@ -86,3 +86,23 @@ test('exige una cuenta patrimonial válida para trasladar utilidad o pérdida', 
   ])];
   assert.throws(() => buildClosingEntryItems(input(journal)), /cuenta imputable y activa de patrimonio/);
 });
+
+test('the generated closing entry makes the next opening carry the closed result only once', async () => {
+  const { buildOpeningEntryItems } = await import('./accountingYearOpening');
+  const journal = [
+    entry('income', '2026-03-01', [line('1.1.1', 1000, 0, 10, 0), line('4.1.1', 0, 1000, 0, 10)]),
+    entry('expense', '2026-05-01', [line('6.1.1', 600, 0, 6, 0), line('1.1.1', 0, 600, 0, 6)])
+  ];
+  const closingItems = buildClosingEntryItems(input(journal, '3.1.1'));
+  const closingEntry = entry('year-close', '2026-12-31', closingItems);
+  closingEntry.type = 'CIERRE';
+  const openingItems = buildOpeningEntryItems({
+    companyId: 'co-1', periodStartDate: '2026-01-01', periodEndDate: '2026-12-31',
+    openingDate: '2027-01-01', accounts, journalEntries: [...journal, closingEntry],
+    retainedEarningsAccountCode: '3.1.1'
+  });
+  assert.equal(openingItems.some(item => item.accountCode === '4.1.1' || item.accountCode === '6.1.1'), false);
+  assert.equal(openingItems.find(item => item.accountCode === '1.1.1')?.debitBs, 400);
+  assert.equal(openingItems.find(item => item.accountCode === '3.1.1')?.creditBs, 400);
+  assert.equal(openingItems.find(item => item.accountCode === '3.1.1')?.creditUsd, 4);
+});
