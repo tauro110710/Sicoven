@@ -122,6 +122,7 @@ function persistAccountingSnapshot(db, state, actor = null) {
           openingEntryId: opening?.id || null, openingEntryNumber: opening?.entryNumber || null,
           companyId: entry.companyId, closingDate: entry.date,
           resultAccountCodes: entry.items.map(item => item.accountCode),
+          annualCloseState: entry.annualCloseState || null,
           actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null,
           totals
         }));
