@@ -7,7 +7,7 @@ const { reopenAccountingYear, initializeAnnualReopeningSchema } = require('./acc
 
 function fixture({ withEvidence = true } = {}) {
   const db = new Database(':memory:');
-  db.exec(\`
+  db.exec(`
     CREATE TABLE app_state (state_key TEXT PRIMARY KEY, state_json TEXT NOT NULL, updated_at TEXT);
     CREATE TABLE audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL, details_json TEXT NOT NULL);
     CREATE TABLE accounting_exercise_links (
@@ -20,7 +20,7 @@ function fixture({ withEvidence = true } = {}) {
       BEGIN SELECT RAISE(ABORT, 'append-only'); END;
     CREATE TRIGGER accounting_exercise_links_no_delete BEFORE DELETE ON accounting_exercise_links
       BEGIN SELECT RAISE(ABORT, 'append-only'); END;
-  \`);
+  `);
   const company = { id: 'co-1', name: 'Empresa de prueba', fiscalYear: 2026, closedThroughDate: '2025-12-31' };
   const closing = {
     id: 'close-1', companyId: 'co-1', entryNumber: 20, date: '2025-12-31',
@@ -44,9 +44,9 @@ function fixture({ withEvidence = true } = {}) {
   };
   const state = { companies: [company], journalEntries: [closing, opening], sales: [], purchases: [], movements: [] };
   db.prepare('INSERT INTO app_state(state_key,state_json) VALUES(?,?)').run('accounting', JSON.stringify(state));
-  db.prepare(\`INSERT INTO accounting_exercise_links
+  db.prepare(`INSERT INTO accounting_exercise_links
     (id,company_id,prior_period_start_date,prior_period_end_date,next_period_start_date,journal_entry_id)
-    VALUES(?,?,?,?,?,?)\`).run('link-1', 'co-1', '2025-01-01', '2025-12-31', '2026-01-01', 'open-1');
+    VALUES(?,?,?,?,?,?)`).run('link-1', 'co-1', '2025-01-01', '2025-12-31', '2026-01-01', 'open-1');
   return { db, state, closing, opening };
 }
 
@@ -98,9 +98,9 @@ test('bloquea movimientos posteriores al cierre anual', () => {
 test('revierte toda la operación si falla la auditoría final', () => {
   const { db } = fixture();
   const before = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json;
-  db.exec(\`CREATE TRIGGER fail_annual_reopening_audit BEFORE INSERT ON audit_events
+  db.exec(`CREATE TRIGGER fail_annual_reopening_audit BEFORE INSERT ON audit_events
     WHEN NEW.event_type='accounting_year_reopened'
-    BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;\`);
+    BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;`);
   assert.throws(() => reopenAccountingYear(db, { companyId: 'co-1', reason: 'Corrección integral del cierre anual.' }, null), /audit unavailable/);
   assert.equal(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json, before);
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM accounting_year_reopenings').get().count, 0);
