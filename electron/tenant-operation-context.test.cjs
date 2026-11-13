@@ -290,12 +290,14 @@ test('clears the stale active tenant while the exclusive maintenance lock is hel
   const result = context.clearActiveCompanyForMaintenance();
   assert.deepEqual(result, { ok: true, previousCompanyId: 'company-a' });
   assert.equal(context.getActiveCompanyId(), null);
+  // Repeating the cleanup while the same maintenance lock is held is safe.
+  assert.deepEqual(context.clearActiveCompanyForMaintenance(), { ok: true, previousCompanyId: null });
+  releaseLock();
+  assert.equal(context.isSwitching(), false);
   assert.throws(
     () => context.clearActiveCompanyForMaintenance(),
     /Solo se puede limpiar la empresa activa durante un mantenimiento exclusivo/
   );
-  releaseLock();
-  assert.equal(context.isSwitching(), false);
   await assert.rejects(
     () => context.withActiveDatabase(() => true),
     /No hay una empresa activa/
