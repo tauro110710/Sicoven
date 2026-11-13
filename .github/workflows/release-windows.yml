@@ -8,6 +8,12 @@ on:
       - 'package-lock.json'
       - '.github/workflows/release-windows.yml'
       - 'scripts/e2e-migration-ui.cjs'
+      - 'src/**'
+      - 'electron/**'
+      - 'index.html'
+      - 'vite.config.*'
+      - 'build/**'
+      - 'scripts/**'
     tags:
       - 'v*'
   pull_request:
@@ -17,6 +23,12 @@ on:
       - 'package-lock.json'
       - '.github/workflows/release-windows.yml'
       - 'scripts/e2e-migration-ui.cjs'
+      - 'src/**'
+      - 'electron/**'
+      - 'index.html'
+      - 'vite.config.*'
+      - 'build/**'
+      - 'scripts/**'
   workflow_dispatch:
 
 permissions:
