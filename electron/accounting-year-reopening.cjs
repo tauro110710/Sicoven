@@ -72,11 +72,17 @@ function initializeAnnualReopeningSchema(db) {
   `);
 }
 
-function assertNoLaterActivity(state, companyId, closingDate, closingId, openingId, allowedHistoricalReversalIds = new Set()) {
+function assertNoLaterActivity(state, companyId, closingDate, closingCreatedAt, closingId, openingId, allowedHistoricalReversalIds = new Set()) {
   const journal = Array.isArray(state.journalEntries) ? state.journalEntries : [];
-  const laterEntry = journal.find(entry => String(entry.companyId) === companyId &&
-    ![closingId, openingId].includes(String(entry.id)) && !allowedHistoricalReversalIds.has(String(entry.id)) &&
-    String(entry.date || '') > closingDate);
+  const closingCreatedAtMs = Date.parse(String(closingCreatedAt || ''));
+  const laterEntry = journal.find(entry => {
+    if (String(entry.companyId) !== companyId ||
+        [closingId, openingId].includes(String(entry.id)) ||
+        allowedHistoricalReversalIds.has(String(entry.id))) return false;
+    const createdAtMs = Date.parse(String(entry.createdAt || ''));
+    return String(entry.date || '') > closingDate ||
+      (Number.isFinite(closingCreatedAtMs) && Number.isFinite(createdAtMs) && createdAtMs > closingCreatedAtMs);
+  });
   if (laterEntry) throw new Error('No se puede reabrir: existen asientos posteriores al cierre anual. Revise primero sus dependencias.');
   const collections = [
     ['sales', ['invoiceDate', 'date']],
@@ -95,7 +101,10 @@ function assertNoLaterActivity(state, companyId, closingDate, closingId, opening
   for (const [collectionName, dateFields] of collections) {
     for (const item of (Array.isArray(state[collectionName]) ? state[collectionName] : [])) {
       if (String(item.companyId || '') !== companyId) continue;
-      if (dateFields.some(field => isIsoDate(String(item[field] || '').slice(0, 10)) &&
+      const createdAtMs = Date.parse(String(item.createdAt || ''));
+      const createdAfterClose = Number.isFinite(closingCreatedAtMs) && Number.isFinite(createdAtMs) &&
+        createdAtMs > closingCreatedAtMs;
+      if (createdAfterClose || dateFields.some(field => isIsoDate(String(item[field] || '').slice(0, 10)) &&
           String(item[field]).slice(0, 10) > closingDate)) {
         throw new Error('No se puede reabrir: existen operaciones o dependencias posteriores al cierre en ' + collectionName + '.');
       }
@@ -200,7 +209,7 @@ function reopenAccountingYear(db, input, actor) {
         throw new Error('El historial de reaperturas anuales es ilegible; se bloqueó la operación.');
       }
     }
-    assertNoLaterActivity(state, companyId, closingDate, String(closing.id), String(opening.id), allowedHistoricalReversalIds);
+    assertNoLaterActivity(state, companyId, closingDate, closing.createdAt, String(closing.id), String(opening.id), allowedHistoricalReversalIds);
 
     const maxEntryNumber = state.journalEntries.filter(entry => String(entry.companyId) === companyId)
       .reduce((max, entry) => Math.max(max, Number(entry.entryNumber) || 0), 0);
