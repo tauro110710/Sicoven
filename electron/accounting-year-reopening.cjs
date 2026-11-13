@@ -18,12 +18,12 @@ function initializeAnnualReopeningSchema(db) {
   if (!db || typeof db.exec !== 'function') throw new TypeError('Se requiere SQLite para preparar la reapertura anual.');
   const table = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='accounting_exercise_links'").get();
   if (!table) {
-    db.exec(\`CREATE TABLE accounting_exercise_links (
+    db.exec(`CREATE TABLE accounting_exercise_links (
       id TEXT PRIMARY KEY, company_id TEXT NOT NULL, prior_period_start_date TEXT NOT NULL,
       prior_period_end_date TEXT NOT NULL, next_period_start_date TEXT NOT NULL,
       journal_entry_id TEXT NOT NULL UNIQUE, cycle_number INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )\`);
+    )`);
   } else {
     const columns = db.prepare('PRAGMA table_info(accounting_exercise_links)').all();
     const hasCycle = columns.some(column => column.name === 'cycle_number');
@@ -32,26 +32,26 @@ function initializeAnnualReopeningSchema(db) {
       const migrate = db.transaction(() => {
         db.exec('DROP TRIGGER IF EXISTS accounting_exercise_links_no_update; DROP TRIGGER IF EXISTS accounting_exercise_links_no_delete;');
         db.exec('ALTER TABLE accounting_exercise_links RENAME TO accounting_exercise_links_legacy_reopen');
-        db.exec(\`CREATE TABLE accounting_exercise_links (
+        db.exec(`CREATE TABLE accounting_exercise_links (
           id TEXT PRIMARY KEY, company_id TEXT NOT NULL, prior_period_start_date TEXT NOT NULL,
           prior_period_end_date TEXT NOT NULL, next_period_start_date TEXT NOT NULL,
           journal_entry_id TEXT NOT NULL UNIQUE, cycle_number INTEGER NOT NULL DEFAULT 1,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        )\`);
+        )`);
         const legacyColumns = db.prepare('PRAGMA table_info(accounting_exercise_links_legacy_reopen)').all();
         const hasCreatedAt = legacyColumns.some(column => column.name === 'created_at');
         const hasLegacyCycle = legacyColumns.some(column => column.name === 'cycle_number');
-        db.exec(\`INSERT INTO accounting_exercise_links
+        db.exec(`INSERT INTO accounting_exercise_links
           (id,company_id,prior_period_start_date,prior_period_end_date,next_period_start_date,journal_entry_id,cycle_number,created_at)
           SELECT id,company_id,prior_period_start_date,prior_period_end_date,next_period_start_date,journal_entry_id,
-            \${hasLegacyCycle ? 'cycle_number' : '1'}, \${hasCreatedAt ? 'created_at' : "datetime('now')"}
-          FROM accounting_exercise_links_legacy_reopen\`);
+            ${hasLegacyCycle ? 'cycle_number' : '1'}, ${hasCreatedAt ? 'created_at' : "datetime('now')"}
+          FROM accounting_exercise_links_legacy_reopen`);
         db.exec('DROP TABLE accounting_exercise_links_legacy_reopen');
       });
       migrate();
     }
   }
-  db.exec(\`
+  db.exec(`
     CREATE TRIGGER IF NOT EXISTS accounting_exercise_links_no_update
       BEFORE UPDATE ON accounting_exercise_links
       BEGIN SELECT RAISE(ABORT, 'accounting_exercise_links is append-only'); END;
@@ -69,7 +69,7 @@ function initializeAnnualReopeningSchema(db) {
     CREATE TRIGGER IF NOT EXISTS accounting_year_reopenings_no_delete
       BEFORE DELETE ON accounting_year_reopenings
       BEGIN SELECT RAISE(ABORT, 'accounting_year_reopenings is append-only'); END;
-  \`);
+  `);
 }
 
 function assertNoLaterActivity(state, companyId, closingDate, closingId, openingId) {
@@ -225,9 +225,9 @@ function reopenAccountingYear(db, input, actor) {
     if (json.length > 50 * 1024 * 1024) throw new Error('El estado contable supera el límite permitido.');
     db.prepare("UPDATE app_state SET state_json=?, updated_at=datetime('now') WHERE state_key='accounting'")
       .run(json);
-    db.prepare(\`INSERT INTO accounting_year_reopenings
+    db.prepare(`INSERT INTO accounting_year_reopenings
       (id,company_id,closing_entry_id,opening_entry_id,cycle_number,details_json)
-      VALUES(?,?,?,?,?,?)\`).run(details.id, companyId, String(closing.id), String(opening.id),
+      VALUES(?,?,?,?,?,?)`).run(details.id, companyId, String(closing.id), String(opening.id),
       Number(evidence.cycleNumber), JSON.stringify(details));
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
       .run('accounting_year_reopened', JSON.stringify(details));
