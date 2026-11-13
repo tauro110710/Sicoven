@@ -221,11 +221,13 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     setOpeningPeriodEnd(end);
     setOpeningDate(next.toISOString().slice(0, 10));
     setRetainedEarningsAccountCode('');
+    setClosingPreview(null);
     setOpeningPreview(null);
     setOpeningError(null);
   }, [currentCompany.id, currentCompany.fiscalYear, currentCompany.closedThroughDate]);
 
   React.useEffect(() => {
+    setClosingPreview(null);
     setOpeningPreview(null);
     setOpeningError(null);
   }, [accounts, journalEntries]);
