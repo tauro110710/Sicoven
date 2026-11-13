@@ -81,6 +81,46 @@ test('reabre el ciclo con dos contra-asientos exactos y restaura el estado previ
   db.close();
 });
 
+test('permite reabrir un segundo ciclo sin perder la reapertura anterior', () => {
+  const { db, state } = fixture();
+  const first = reopenAccountingYear(db, { companyId: 'co-1', reason: 'Primera reapertura anual formal.' }, null);
+  const nextState = JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
+  const secondClosing = {
+    id: 'close-2', companyId: 'co-1', entryNumber: 24, date: '2025-12-31',
+    description: 'Segundo cierre 2025', type: 'CIERRE', bcvRate: 50,
+    referenceDoc: 'CIERRE:co-1:2025-12-31', workpaperNote: 'SICOVEN_AUTO_YEAR_CLOSE_V1',
+    annualCloseState: { previousFiscalYear: 2025, previousClosedThroughDate: '2024-12-31', cycleNumber: 2 },
+    items: [
+      { accountCode: '4.1', debitBs: 100, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+      { accountCode: '3.1', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 2 }
+    ]
+  };
+  const secondOpening = {
+    id: 'open-2', companyId: 'co-1', entryNumber: 25, date: '2026-01-01',
+    description: 'Segunda apertura 2026', type: 'APERTURA', bcvRate: 50,
+    referenceDoc: 'APERTURA:co-1:2026-01-01',
+    exerciseLink: { priorPeriodStartDate: '2025-01-01', priorPeriodEndDate: '2025-12-31', nextPeriodStartDate: '2026-01-01', cycleNumber: 2 },
+    items: [
+      { accountCode: '1.1', debitBs: 100, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+      { accountCode: '3.1', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 2 }
+    ]
+  };
+  nextState.companies[0].fiscalYear = 2026;
+  nextState.companies[0].closedThroughDate = '2025-12-31';
+  nextState.journalEntries.push(secondClosing, secondOpening);
+  db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'").run(JSON.stringify(nextState));
+  db.prepare(`INSERT INTO accounting_exercise_links
+    (id,company_id,prior_period_start_date,prior_period_end_date,next_period_start_date,journal_entry_id,cycle_number)
+    VALUES(?,?,?,?,?,?,?)`).run('link-2', 'co-1', '2025-01-01', '2025-12-31', '2026-01-01', 'open-2', 2);
+  const second = reopenAccountingYear(db, { companyId: 'co-1', reason: 'Segunda reapertura anual formal.' }, null);
+  assert.equal(first.reversalEntries.length, 2);
+  assert.equal(second.reversalEntries.length, 2);
+  assert.equal(second.reopening.cycleNumber, 2);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM accounting_year_reopenings').get().count, 2);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM accounting_exercise_links').get().count, 2);
+  db.close();
+});
+
 test('bloquea cierres antiguos sin evidencia previa', () => {
   const { db } = fixture({ withEvidence: false });
   const before = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json;
