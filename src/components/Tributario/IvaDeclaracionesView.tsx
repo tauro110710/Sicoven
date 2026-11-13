@@ -133,14 +133,14 @@ export const IvaDeclaracionesView: React.FC = () => {
     }
     try {
       const reclassifications = buildVatOwnPurchaseVatReclassificationItems({
-        companyId: currentCompany.id, period, bcvRate: Number(currentCompany.bcvRate),
+        companyId: currentCompany.id, period,
         allPurchases: purchases, journalEntries, summary
       });
       return { summary, reclassifications, error: null };
     } catch (error) {
       return { summary, reclassifications: null, error: error instanceof Error ? error.message : 'La reclasificación contable del IVA no acreditable está pendiente.' };
     }
-  }, [currentCompany.id, period, monthPurchases, purchases, vatOwnDeclarations, journalEntries, currentCompany.bcvRate, rawTaxableSalesBase, rawExemptSalesBase, dailySalesResolution.unresolvedDates]);
+  }, [currentCompany.id, period, monthPurchases, purchases, vatOwnDeclarations, journalEntries, rawTaxableSalesBase, rawExemptSalesBase, dailySalesResolution.unresolvedDates]);
   const purchaseSummary = purchaseSummaryResult.summary;
   const purchaseSummaryError = purchaseSummaryResult.error;
   const creditForPreview = useMemo(() => purchaseSummary || ({
