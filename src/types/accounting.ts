@@ -258,6 +258,12 @@ export interface JournalEntry {
   reversalReason?: string;
   workpaperNote?: string;
   priorPeriodAdjustment?: boolean;
+  /** Estado de la empresa inmediatamente anterior al cierre anual; evidencia para reapertura formal. */
+  annualCloseState?: {
+    previousFiscalYear: number;
+    previousClosedThroughDate: string | null;
+    cycleNumber: number;
+  };
   /** Asiento origen de un ajuste manual; no modifica el asiento fuente. */
   adjustmentForEntryId?: string;
   adjustmentReason?: string;
