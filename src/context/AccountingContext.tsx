@@ -982,8 +982,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (normalizedReason.length < 10 || normalizedReason.length > 1000) {
       throw new Error('Explique el motivo de la reapertura (entre 10 y 1000 caracteres).');
     }
+    const currentClosedThroughDate = currentCompany.closedThroughDate;
+    if (!currentClosedThroughDate) {
+      throw new Error('La empresa seleccionada no tiene una fecha de cierre válida.');
+    }
     if (reopenedThroughDate !== null && (!isValidIsoDate(reopenedThroughDate) ||
-        reopenedThroughDate >= currentCompany.closedThroughDate)) {
+        reopenedThroughDate >= currentClosedThroughDate)) {
       throw new Error('La nueva fecha de cierre debe ser válida y anterior al cierre vigente.');
     }
     periodReopeningInFlightRef.current = true;
