@@ -17,11 +17,12 @@ import {
   CalendarCheck,
   LockKeyhole
 } from 'lucide-react';
-import { AccountingFramework, TaxpayerType, IvaRetentionAgentBasis, JournalEntryItem, AccountingCurrencyCode, FunctionalCurrencyAssessment, ExchangeabilityAssessment } from '../../types/accounting';
+import { AccountingFramework, TaxpayerType, IvaRetentionAgentBasis, JournalEntry, JournalEntryItem, AccountingCurrencyCode, FunctionalCurrencyAssessment, ExchangeabilityAssessment } from '../../types/accounting';
 import type { InventoryPricingConfiguration } from '../../types/accounting';
 import { DEFAULT_INVENTORY_PRICING } from '../../types/inventoryPricing';
 import { validateFunctionalCurrencyAssessment, validateExchangeabilityAssessment } from '../../types/functionalCurrency';
 import { buildOpeningEntryItems } from '../../types/accountingYearOpening';
+import { buildClosingEntryItems } from '../../types/accountingYearClosing';
 import { CompanyModal } from '../CompanyModal';
 import { formatBs, validateVenezuelanRif } from '../../utils/formatters';
 import { IntelligentMigrationWizard } from '../Migracion/IntelligentMigrationWizard';
@@ -38,8 +39,8 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     exportBackupJson,
     restoreBackupJson,
     closeAccountingPeriod,
+    closeAccountingYear,
     reopenAccountingPeriod,
-    createAccountingYearOpening,
     accounts,
     journalEntries,
     isStorageReady
@@ -101,8 +102,10 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     date.setUTCDate(date.getUTCDate() + 1);
     return date.toISOString().slice(0, 10);
   });
+  const [closingBcvRateInput, setClosingBcvRateInput] = useState('');
   const [openingBcvRateInput, setOpeningBcvRateInput] = useState('');
   const [retainedEarningsAccountCode, setRetainedEarningsAccountCode] = useState('');
+  const [closingPreview, setClosingPreview] = useState<JournalEntryItem[] | null>(null);
   const [openingPreview, setOpeningPreview] = useState<JournalEntryItem[] | null>(null);
   const [openingError, setOpeningError] = useState<string | null>(null);
   const [openingBusy, setOpeningBusy] = useState(false);
@@ -230,62 +233,86 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
   const handlePreviewOpening = () => {
     setOpeningError(null);
     setOpeningPreview(null);
+    setClosingPreview(null);
     try {
-      if (!currentCompany.closedThroughDate || openingPeriodEnd !== currentCompany.closedThroughDate) {
-        throw new Error('Cierre primero el ejercicio y use como fecha final el cierre confirmado de esta empresa.');
-      }
-      const preview = buildOpeningEntryItems({
+      const closingItems = buildClosingEntryItems({
+        companyId: currentCompany.id,
+        periodStartDate: openingPeriodStart,
+        periodEndDate: openingPeriodEnd,
+        accounts,
+        journalEntries,
+        retainedEarningsAccountCode: retainedEarningsAccountCode || undefined
+      });
+      const closingDraft: JournalEntry = {
+        id: 'annual-close-preview',
+        companyId: currentCompany.id,
+        entryNumber: 0,
+        date: openingPeriodEnd,
+        description: 'Vista previa del cierre anual',
+        type: 'CIERRE',
+        bcvRate: 1,
+        referenceDoc: 'CIERRE:' + currentCompany.id + ':' + openingPeriodEnd,
+        items: closingItems,
+        createdAt: new Date().toISOString()
+      };
+      const openingItems = buildOpeningEntryItems({
         companyId: currentCompany.id,
         periodStartDate: openingPeriodStart,
         periodEndDate: openingPeriodEnd,
         openingDate,
         accounts,
-        journalEntries,
+        journalEntries: [...journalEntries, closingDraft],
         retainedEarningsAccountCode: retainedEarningsAccountCode || undefined
       });
-      setOpeningPreview(preview);
+      setClosingPreview(closingItems);
+      setOpeningPreview(openingItems);
     } catch (error) {
-      setOpeningError(error instanceof Error ? error.message : 'No se pudo preparar la vista previa del asiento.');
+      setOpeningError(error instanceof Error ? error.message : 'No se pudo preparar el ciclo contable anual.');
     }
   };
 
-  const handlePostOpening = async () => {
-    const openingBcvRate = parseExchangeabilityNumber(openingBcvRateInput);
-    if (!Number.isFinite(openingBcvRate) || openingBcvRate <= 0) {
-      setOpeningError('Ingrese la tasa BCV histórica aplicable al asiento de apertura, por ejemplo 889,67.');
+  const handleExecuteAnnualCycle = async () => {
+    const closingRate = parseExchangeabilityNumber(closingBcvRateInput);
+    const openingRate = parseExchangeabilityNumber(openingBcvRateInput);
+    if (!Number.isFinite(closingRate) || closingRate <= 0 || !Number.isFinite(openingRate) || openingRate <= 0) {
+      setOpeningError('Ingrese las tasas BCV históricas válidas para la fecha de cierre y la fecha de apertura.');
       return;
     }
-    if (!openingPreview) {
-      setOpeningError('Genere y revise la vista previa antes de registrar el asiento.');
+    if (!closingPreview || !openingPreview) {
+      setOpeningError('Prepare y revise los asientos de cierre y apertura antes de ejecutar el ciclo.');
       return;
     }
-    const totals = openingPreview.reduce((sum, item) => ({
-      debitBs: sum.debitBs + item.debitBs, creditBs: sum.creditBs + item.creditBs,
-      debitUsd: sum.debitUsd + item.debitUsd, creditUsd: sum.creditUsd + item.creditUsd
-    }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
     const confirmed = window.confirm(
-      'REGISTRAR ASIENTO DE APERTURA\n\nEmpresa: ' + currentCompany.name +
-      '\nFecha: ' + openingDate +
-      '\nTasa BCV: Bs. ' + openingBcvRateInput + ' por USD' +
-      '\nTotal debe: Bs. ' + totals.debitBs.toFixed(2) + ' / $ ' + totals.debitUsd.toFixed(6) +
-      '\nTotal haber: Bs. ' + totals.creditBs.toFixed(2) + ' / $ ' + totals.creditUsd.toFixed(6) +
-      '\n\nEl asiento se guardará en SQLite y quedará registrado en la bitácora. Esta acción no se ejecuta automáticamente. ¿Confirma?'
+      'EJECUTAR CICLO CONTABLE ANUAL COMPLETO\\n\\nEmpresa: ' + currentCompany.name +
+      '\\nEjercicio: ' + currentCompany.fiscalYear +
+      '\\nCierre: ' + openingPeriodEnd +
+      '\\nApertura: ' + openingDate +
+      '\\nAsiento de cierre: ' + closingPreview.length + ' líneas' +
+      '\\nAsiento de apertura: ' + openingPreview.length + ' líneas' +
+      '\\n\\nSICOVEN contabilizará depreciaciones pendientes, registrará ambos asientos, bloqueará el ejercicio cerrado y avanzará el ejercicio activo. La operación se confirmará en una sola persistencia SQLite.\\n\\n¿Confirma la ejecución?'
     );
     if (!confirmed) return;
     setOpeningBusy(true);
     setOpeningError(null);
     try {
-      const created = await createAccountingYearOpening({
+      const result = await closeAccountingYear({
         periodStartDate: openingPeriodStart,
         periodEndDate: openingPeriodEnd,
-        openingDate,
-        bcvRate: openingBcvRate,
+        closingBcvRate: closingRate,
+        openingBcvRate: openingRate,
         retainedEarningsAccountCode: retainedEarningsAccountCode || undefined
       });
+      setClosingPreview(null);
       setOpeningPreview(null);
-      alert('Asiento de apertura #' + created.entryNumber + ' registrado y confirmado por SQLite. La bitácora fue actualizada.');
+      alert(
+        'Ciclo contable anual ejecutado y confirmado por SQLite.\\n\\n' +
+        'Asiento de cierre #' + result.closingEntry.entryNumber + '\\n' +
+        'Asiento de apertura #' + result.openingEntry.entryNumber + '\\n' +
+        'Depreciaciones contabilizadas: ' + result.depreciationEntriesCreated + '\\n' +
+        'Ejercicio activo: ' + (Number(currentCompany.fiscalYear) + 1) + '.'
+      );
     } catch (error) {
-      setOpeningError(error instanceof Error ? error.message : 'SQLite no confirmó el asiento de apertura.');
+      setOpeningError(error instanceof Error ? error.message : 'SQLite no confirmó el ciclo contable anual. No repita la operación sin revisar el Libro Diario.');
     } finally {
       setOpeningBusy(false);
     }
