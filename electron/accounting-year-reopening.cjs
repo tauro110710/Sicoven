@@ -214,6 +214,9 @@ function reopenAccountingYear(db, input, actor) {
     if (closing.reversedByEntryId || closing.isAdjusted || closing.reversalOfEntryId) {
       throw new Error('El asiento de cierre ya fue revertido o ajustado.');
     }
+    if (String(closing.workpaperNote || '') !== 'SICOVEN_AUTO_YEAR_CLOSE_V1') {
+      throw new Error('El asiento no contiene la marca de cierre anual automático reconocida por SICOVEN.');
+    }
     const openingDate = nextIsoDate(closingDate);
     const openings = state.journalEntries.filter(entry => String(entry.companyId) === companyId &&
       entry.type === 'APERTURA' && !entry.reversedByEntryId && entry.isAdjusted !== true &&
