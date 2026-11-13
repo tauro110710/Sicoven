@@ -1706,7 +1706,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     if (!isValidIsoDate(entry.date)) throw new Error('El asiento requiere una fecha válida.');
     const authorizedYearClose = allowSystemYearClosing && entry.type === 'CIERRE' &&
-      entry.date === targetCompany.closedThroughDate &&
+      entry.date === String(targetCompany.fiscalYear) + '-12-31' &&
       entry.referenceDoc === 'CIERRE:' + targetCompany.id + ':' + entry.date;
     if (targetCompany.closedThroughDate && entry.date <= targetCompany.closedThroughDate && !authorizedYearClose) {
       throw new Error('No se pueden registrar asientos en un período cerrado hasta ' + targetCompany.closedThroughDate + '.');
