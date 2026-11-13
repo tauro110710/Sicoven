@@ -858,8 +858,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('La empresa ya tiene operaciones bloqueadas después del ejercicio que intenta cerrar. Requiere revisión contable antes de continuar.');
     }
     if (journalEntries.some(entry => entry.companyId === currentCompany.id &&
-        entry.type === 'APERTURA' && entry.date === openingDate)) {
-      throw new Error('Ya existe un asiento de apertura para el ejercicio siguiente. No se ejecutará un segundo ciclo.');
+        entry.type === 'APERTURA' && entry.date === openingDate &&
+        !entry.reversedByEntryId && entry.isAdjusted !== true)) {
+      throw new Error('Ya existe un asiento de apertura vigente para el ejercicio siguiente. No se ejecutará un segundo ciclo.');
     }
     if (!Number.isFinite(Number(input.closingBcvRate)) || Number(input.closingBcvRate) <= 0 ||
         !Number.isFinite(Number(input.openingBcvRate)) || Number(input.openingBcvRate) <= 0) {
