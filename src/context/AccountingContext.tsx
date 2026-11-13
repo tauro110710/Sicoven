@@ -141,6 +141,7 @@ interface AccountingContextType {
   closeAccountingPeriod: (closedThroughDate: string) => Promise<number>;
   closeAccountingYear: (input: { periodStartDate: string; periodEndDate: string; closingBcvRate: number; openingBcvRate: number; retainedEarningsAccountCode?: string }) => Promise<{ closingEntry: JournalEntry; openingEntry: JournalEntry; depreciationEntriesCreated: number }>;
   reopenAccountingPeriod: (reopenedThroughDate: string | null, reason: string) => Promise<void>;
+  reopenAccountingYear: (reason: string) => Promise<void>;
   createAccountingYearOpening: (input: { periodStartDate: string; periodEndDate: string; openingDate: string; bcvRate: number; retainedEarningsAccountCode?: string }) => Promise<JournalEntry>;
 
   // Liquidaciones de crédito
@@ -965,6 +966,48 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     } finally {
       periodClosureInFlightRef.current = false;
       yearClosingInFlightRef.current = false;
+    }
+  };
+
+  const reopenAccountingYear = async (reason: string): Promise<void> => {
+    assertSQLitePersistenceReady('Reabrir formalmente el ejercicio anual');
+    if (periodReopeningInFlightRef.current) throw new Error('Ya hay una reapertura contable en proceso.');
+    const store = window.sicovenStore as typeof window.sicovenStore & {
+      reopenAccountingYear?: (sessionToken: string, input: { companyId: string; reason: string }) => Promise<{
+        ok: boolean; company?: Company; reversalEntries?: JournalEntry[];
+        reopening?: { closingEntryId: string; openingEntryId: string };
+      }>;
+    };
+    if (!store?.reopenAccountingYear || !storageReady || persistenceFaultRef.current) {
+      throw new Error('La reapertura anual requiere la versión de escritorio con SQLite actualizado.');
+    }
+    if (!currentCompany.id || !currentCompany.closedThroughDate) {
+      throw new Error('La empresa seleccionada no tiene un cierre anual vigente para reabrir.');
+    }
+    const normalizedReason = String(reason || '').trim();
+    if (normalizedReason.length < 10 || normalizedReason.length > 1000) {
+      throw new Error('Explique el motivo de la reapertura (entre 10 y 1000 caracteres).');
+    }
+    periodReopeningInFlightRef.current = true;
+    try {
+      await saveQueueRef.current;
+      const result = await store.reopenAccountingYear(token, {
+        companyId: currentCompany.id, reason: normalizedReason
+      });
+      if (result?.ok !== true || !result.company || !Array.isArray(result.reversalEntries) ||
+          result.reversalEntries.length !== 2) {
+        throw new Error('SQLite no confirmó la reversión conjunta del cierre y la apertura anual.');
+      }
+      const persistenceConfirmation = waitForPersistence();
+      setCompanies(prev => prev.map(company => company.id === currentCompany.id ? result.company! : company));
+      const reversalBySource = new Map(result.reversalEntries.map(entry => [String(entry.reversalOfEntryId), entry]));
+      setJournalEntries(prev => prev.map(entry => {
+        const reversal = reversalBySource.get(String(entry.id));
+        return reversal ? { ...entry, isAdjusted: true, reversedByEntryId: reversal.id } : entry;
+      }).concat(result.reversalEntries!));
+      await persistenceConfirmation;
+    } finally {
+      periodReopeningInFlightRef.current = false;
     }
   };
 
@@ -7601,6 +7644,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         closeAccountingPeriod,
         closeAccountingYear,
         reopenAccountingPeriod,
+        reopenAccountingYear,
         createAccountingYearOpening,
         creditSettlements: visibleCreditSettlements,
         getCreditBalance,
