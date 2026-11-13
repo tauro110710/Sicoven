@@ -23,7 +23,7 @@ function fixture({ withEvidence = true } = {}) {
   `);
   const company = { id: 'co-1', name: 'Empresa de prueba', fiscalYear: 2026, closedThroughDate: '2025-12-31' };
   const closing = {
-    id: 'close-1', companyId: 'co-1', entryNumber: 20, date: '2025-12-31',
+    id: 'close-1', companyId: 'co-1', entryNumber: 20, date: '2025-12-31', createdAt: '2025-12-31T10:00:00.000Z',
     description: 'Cierre 2025', type: 'CIERRE', bcvRate: 50,
     referenceDoc: 'CIERRE:co-1:2025-12-31', workpaperNote: 'SICOVEN_AUTO_YEAR_CLOSE_V1',
     ...(withEvidence ? { annualCloseState: { previousFiscalYear: 2025, previousClosedThroughDate: '2024-12-31', cycleNumber: 1 } } : {}),
@@ -33,7 +33,7 @@ function fixture({ withEvidence = true } = {}) {
     ]
   };
   const opening = {
-    id: 'open-1', companyId: 'co-1', entryNumber: 21, date: '2026-01-01',
+    id: 'open-1', companyId: 'co-1', entryNumber: 21, date: '2026-01-01', createdAt: '2025-12-31T10:00:00.000Z',
     description: 'Apertura 2026', type: 'APERTURA', bcvRate: 50,
     referenceDoc: 'APERTURA:co-1:2026-01-01',
     exerciseLink: { priorPeriodStartDate: '2025-01-01', priorPeriodEndDate: '2025-12-31', nextPeriodStartDate: '2026-01-01' },
@@ -86,7 +86,7 @@ test('permite reabrir un segundo ciclo sin perder la reapertura anterior', () =>
   const first = reopenAccountingYear(db, { companyId: 'co-1', reason: 'Primera reapertura anual formal.' }, null);
   const nextState = JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
   const secondClosing = {
-    id: 'close-2', companyId: 'co-1', entryNumber: 24, date: '2025-12-31',
+    id: 'close-2', companyId: 'co-1', entryNumber: 24, date: '2025-12-31', createdAt: '2026-01-05T10:00:00.000Z',
     description: 'Segundo cierre 2025', type: 'CIERRE', bcvRate: 50,
     referenceDoc: 'CIERRE:co-1:2025-12-31', workpaperNote: 'SICOVEN_AUTO_YEAR_CLOSE_V1',
     annualCloseState: { previousFiscalYear: 2025, previousClosedThroughDate: '2024-12-31', cycleNumber: 2 },
@@ -96,7 +96,7 @@ test('permite reabrir un segundo ciclo sin perder la reapertura anterior', () =>
     ]
   };
   const secondOpening = {
-    id: 'open-2', companyId: 'co-1', entryNumber: 25, date: '2026-01-01',
+    id: 'open-2', companyId: 'co-1', entryNumber: 25, date: '2026-01-01', createdAt: '2026-01-05T10:00:00.000Z',
     description: 'Segunda apertura 2026', type: 'APERTURA', bcvRate: 50,
     referenceDoc: 'APERTURA:co-1:2026-01-01',
     exerciseLink: { priorPeriodStartDate: '2025-01-01', priorPeriodEndDate: '2025-12-31', nextPeriodStartDate: '2026-01-01', cycleNumber: 2 },
