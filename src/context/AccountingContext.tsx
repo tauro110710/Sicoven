@@ -5991,7 +5991,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           items.push({
             accountCode: account.code, accountName: account.name,
             debitBs: debit, creditBs: credit,
-            debitUsd: debit / Number(declaration.bcvRate), creditUsd: credit / Number(declaration.bcvRate),
+            debitUsd: debit / Number(draft.bcvRate), creditUsd: credit / Number(draft.bcvRate),
             description
           });
         };
@@ -6030,7 +6030,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         if (items.length) journal = addJournalEntry({
           entryNumber: 0, date: draft.occurredAt.slice(0,10),
           description: 'Determinación mensual del IVA · ' + declaration.period,
-          type: 'AJUSTE', bcvRate: Number(declaration.bcvRate),
+          type: 'AJUSTE', bcvRate: Number(draft.bcvRate),
           referenceDoc: 'IVA-MENSUAL:' + declaration.period,
           items
         });
@@ -6118,7 +6118,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setVatOwnDeclarationEvents(prev => [...prev, event]);
       if (draft.eventType === 'FILED') {
         setVatOwnDeclarations(prev => prev.map(item => item.id === declarationId
-          ? { ...item, status: 'FILED', declarationNumber: String(draft.declarationNumber || '').trim(), filedAt: draft.occurredAt }
+          ? { ...item, status: 'FILED', declarationNumber: String(draft.declarationNumber || '').trim(), filedAt: draft.occurredAt, bcvRate: Number(draft.bcvRate) }
           : item));
       }
       await confirmation;
