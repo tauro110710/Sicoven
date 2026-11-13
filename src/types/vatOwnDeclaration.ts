@@ -308,6 +308,11 @@ export interface VatOwnDeclarationRevision {
   sourceIds: string[];
   relatedSourceIds?: string[];
   bcvRate?: number;
+  /** Daily manual reference used only for same-day source purchases lacking their own historical rate. */
+  dailyReferenceBcvRate?: number;
+  dailyReferenceDate?: string;
+  /** Immutable date-keyed history of manually entered daily references used by this draft. */
+  dailyReferenceRates?: Record<string, number>;
   dailySourceChoices?: Record<string, 'Z' | 'INDIVIDUAL'>;
   purchaseVatReclassificationItems?: JournalEntryItem[];
   sourceSnapshots?: Record<string, string>;
@@ -325,6 +330,11 @@ export interface VatOwnDeclaration {
   sourceIds: string[];
   relatedSourceIds?: string[];
   bcvRate?: number;
+  /** Daily manual reference used only for same-day source purchases lacking their own historical rate. */
+  dailyReferenceBcvRate?: number;
+  dailyReferenceDate?: string;
+  /** Immutable date-keyed history of manually entered daily references used by this draft. */
+  dailyReferenceRates?: Record<string, number>;
   dailySourceChoices?: Record<string, 'Z' | 'INDIVIDUAL'>;
   declarationNumber?: string;
   filedAt?: string;
@@ -729,6 +739,9 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
   allPurchases: readonly PurchaseRecord[];
   journalEntries: readonly JournalEntry[];
   summary: VatOwnPurchaseCreditSummary;
+  dailyReferenceBcvRate?: number;
+  dailyReferenceDate?: string;
+  dailyReferenceRates?: Record<string, number>;
 }): JournalEntryItem[] {
   const excludedDebitAccounts = new Set(['1.1.3.01', '1.1.3.02', '6.1.1.11', '6.1.1.13']);
   const result: JournalEntryItem[] = [];
@@ -799,9 +812,21 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
       }
     }
     if (Math.abs(signedAmount) < 0.01) continue;
-    const rate = Number((sourceEntry as JournalEntry).bcvRate ?? liveSourceEntry.bcvRate ?? sourcePurchase.bcvRate);
+    const storedRate = Number((sourceEntry as JournalEntry).bcvRate ?? liveSourceEntry.bcvRate ?? sourcePurchase.bcvRate);
+    const sourceDate = String(historicalJournal?.date || liveSourceEntry.date || sourcePurchase.invoiceDate || '');
+    const sameDayReferenceApplies = Boolean(input.dailyReferenceDate &&
+      sourcePurchase.invoiceDate === input.dailyReferenceDate && sourceDate === input.dailyReferenceDate);
+    const savedDailyReferenceRate = sourcePurchase.invoiceDate === sourceDate
+      ? input.dailyReferenceRates?.[sourceDate]
+      : undefined;
+    const rate = Number.isFinite(storedRate) && storedRate > 0
+      ? storedRate
+      : Number.isFinite(savedDailyReferenceRate) && Number(savedDailyReferenceRate) > 0
+        ? Number(savedDailyReferenceRate)
+        : sameDayReferenceApplies ? Number(input.dailyReferenceBcvRate) : Number.NaN;
     if (!Number.isFinite(rate) || rate <= 0) {
-      throw new Error('La factura ' + (sourcePurchase.invoiceNumber || adjustment.purchaseId) + ' no conserva una tasa BCV histórica válida en su asiento original para expresar la reclasificación en USD.');
+      throw new Error('La factura ' + (sourcePurchase.invoiceNumber || adjustment.purchaseId) +
+        ' no conserva una tasa BCV histórica válida. La tasa de referencia diaria solo puede respaldar documentos cuya fecha de factura y asiento coincidan exactamente con la fecha de referencia; corrija la tasa del documento original.');
     }
     const grouped = new Map<string, { accountName: string; amountBs: number }>();
     for (const item of sourceEntry.items) {
@@ -882,6 +907,9 @@ export function snapshotVatOwnDeclarationRevision(
     sourceIds: [...declaration.sourceIds],
     relatedSourceIds: [...(declaration.relatedSourceIds || [])],
     bcvRate: declaration.bcvRate,
+    dailyReferenceBcvRate: declaration.dailyReferenceBcvRate,
+    dailyReferenceDate: declaration.dailyReferenceDate,
+    dailyReferenceRates: declaration.dailyReferenceRates ? { ...declaration.dailyReferenceRates } : undefined,
     dailySourceChoices: { ...(declaration.dailySourceChoices || {}) },
     purchaseVatReclassificationItems: (declaration.purchaseVatReclassificationItems || []).map(item => ({ ...item })),
     sourceSnapshots: declaration.sourceSnapshots ? { ...declaration.sourceSnapshots } : undefined,

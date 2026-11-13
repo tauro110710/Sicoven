@@ -89,6 +89,31 @@ export const IvaDeclaracionesView: React.FC = () => {
     }
   }, [sales, purchases, journalEntries, currentCompany.id, period, vatOwnDeclarations, reversedJournalIds]);
   const savedDeclaration = vatOwnDeclarations.find(item => item.companyId === currentCompany.id && item.period === period);
+  const [dailyReferenceBcvRate, setDailyReferenceBcvRate] = useState<string | null>(null);
+  useEffect(() => {
+    const savedTodayRate = savedDeclaration?.dailyReferenceRates?.[localToday] ??
+      (savedDeclaration?.dailyReferenceDate === localToday ? savedDeclaration.dailyReferenceBcvRate : undefined);
+    setDailyReferenceBcvRate(savedTodayRate === undefined ? null : String(savedTodayRate));
+  }, [savedDeclaration?.id, savedDeclaration?.dailyReferenceRates, savedDeclaration?.dailyReferenceDate, savedDeclaration?.dailyReferenceBcvRate, localToday]);
+  const effectiveDailyReferenceBcvRate = dailyReferenceBcvRate === null
+    ? savedDeclaration?.dailyReferenceRates?.[localToday] ??
+      (savedDeclaration?.dailyReferenceDate === localToday ? savedDeclaration.dailyReferenceBcvRate : undefined)
+    : dailyReferenceBcvRate.trim() ? parseLocalizedNumber(dailyReferenceBcvRate) : undefined;
+  const effectiveDailyReferenceDate = localToday;
+  const effectiveDailyReferenceRates = { ...(savedDeclaration?.dailyReferenceRates || {}) };
+  if (savedDeclaration?.dailyReferenceDate && savedDeclaration.dailyReferenceBcvRate &&
+      effectiveDailyReferenceRates[savedDeclaration.dailyReferenceDate] === undefined) {
+    effectiveDailyReferenceRates[savedDeclaration.dailyReferenceDate] = savedDeclaration.dailyReferenceBcvRate;
+  }
+  if (dailyReferenceBcvRate !== null) {
+    if (Number.isFinite(effectiveDailyReferenceBcvRate) && Number(effectiveDailyReferenceBcvRate) > 0) {
+      effectiveDailyReferenceRates[localToday] = Number(effectiveDailyReferenceBcvRate);
+    } else {
+      delete effectiveDailyReferenceRates[localToday];
+    }
+  } else if (effectiveDailyReferenceBcvRate !== undefined) {
+    effectiveDailyReferenceRates[localToday] = effectiveDailyReferenceBcvRate;
+  }
   const activeSourceChoices = useMemo(() => savedDeclaration?.status === 'FILED'
     ? savedDeclaration.dailySourceChoices || {}
     : { ...(savedDeclaration?.dailySourceChoices || {}), ...dailySourceChoices },
@@ -138,13 +163,16 @@ export const IvaDeclaracionesView: React.FC = () => {
     try {
       const reclassifications = buildVatOwnPurchaseVatReclassificationItems({
         companyId: currentCompany.id, period,
-        allPurchases: purchases, journalEntries, summary
+        allPurchases: purchases, journalEntries, summary,
+        dailyReferenceBcvRate: effectiveDailyReferenceBcvRate,
+        dailyReferenceDate: effectiveDailyReferenceDate,
+        dailyReferenceRates: effectiveDailyReferenceRates
       });
       return { summary, reclassifications, error: null };
     } catch (error) {
       return { summary, reclassifications: null, error: error instanceof Error ? error.message : 'La reclasificación contable del IVA no acreditable está pendiente.' };
     }
-  }, [currentCompany.id, period, monthPurchases, purchases, vatOwnDeclarations, journalEntries, rawTaxableSalesBase, rawExemptSalesBase, dailySalesResolution.unresolvedDates]);
+  }, [currentCompany.id, period, monthPurchases, purchases, vatOwnDeclarations, journalEntries, rawTaxableSalesBase, rawExemptSalesBase, dailySalesResolution.unresolvedDates, effectiveDailyReferenceBcvRate, effectiveDailyReferenceDate]);
   const purchaseSummary = purchaseSummaryResult.summary;
   const purchaseSummaryError = purchaseSummaryResult.error;
   const creditForPreview = useMemo(() => purchaseSummary || ({
@@ -240,6 +268,8 @@ export const IvaDeclaracionesView: React.FC = () => {
   const draftNeedsRefresh = savedDeclaration?.status === 'DRAFT' && (
     savedDeclaration.calculationStatus === 'PROVISIONAL' || (savedDeclaration.pendingCalculationItems || []).length > 0 ||
     sourceIdsChanged || sourceSnapshotsChanged || sourceChoicesChanged || purchaseReclassificationChanged || positionSummaryChanged ||
+    JSON.stringify(savedDeclaration.dailyReferenceRates || {}) !== JSON.stringify(effectiveDailyReferenceRates) ||
+    (savedDeclaration.dailyReferenceBcvRate !== effectiveDailyReferenceBcvRate && savedDeclaration.dailyReferenceDate === localToday) ||
     Boolean(purchaseSummaryError) || laterFiledPeriods.length > 0 || Boolean(activityPeriodError) || dailySalesResolution.unresolvedDates.length > 0
   );
 
@@ -368,10 +398,26 @@ export const IvaDeclaracionesView: React.FC = () => {
           <div><h2 className="text-lg font-bold text-slate-900">Declaración mensual · Control y presentación</h2><p className="mt-1 text-sm text-slate-600">Prepara un borrador desde los libros, conserva las fuentes elegidas y registra presentación y enteramientos con su asiento contable.</p></div>
           {!savedDeclaration && <button type="button" disabled={!isStorageReady || !isValidVatOwnDeclarationPeriod(period) || outputVat === null || !currentPositionPreview || laterFiledPeriods.length > 0 || Boolean(activityPeriodError)} onClick={async()=>{
             setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
-            try { await createVatOwnDeclaration({period,choices:activeSourceChoices});setWorkflowMessage('Borrador de declaración guardado y confirmado en SQLite.'); }
+            try { await createVatOwnDeclaration({
+              period, choices: activeSourceChoices,
+              dailyReferenceBcvRate: Number.isFinite(effectiveDailyReferenceBcvRate) && Number(effectiveDailyReferenceBcvRate) > 0 ? Number(effectiveDailyReferenceBcvRate) : undefined,
+              dailyReferenceDate: Number.isFinite(effectiveDailyReferenceBcvRate) && Number(effectiveDailyReferenceBcvRate) > 0 ? effectiveDailyReferenceDate : undefined
+            });setWorkflowMessage('Borrador de declaración guardado y confirmado en SQLite.'); }
             catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo preparar la declaración.');}
             finally{setWorkflowBusy(false);}
           }} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{workflowBusy?'Guardando…':'Preparar declaración mensual'}</button>}
+        </div>
+        <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-3 space-y-2">
+          <label className="block text-sm font-semibold text-slate-800" htmlFor="iva-daily-bcv-reference">Tasa BCV de referencia del día (Bs/USD)</label>
+          <div className="flex flex-wrap items-center gap-2">
+            <input id="iva-daily-bcv-reference" value={dailyReferenceBcvRate === null ? String(savedDeclaration?.dailyReferenceBcvRate ?? '') : dailyReferenceBcvRate}
+              onChange={event => setDailyReferenceBcvRate(event.target.value)}
+              placeholder="Introduzca la tasa BCV de hoy" inputMode="decimal"
+              className="w-full max-w-xs rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+            <span className="text-xs text-slate-600">Fecha de referencia: {effectiveDailyReferenceDate}</span>
+          </div>
+          <p className="text-xs text-slate-600">Uso limitado: solo respalda la conversión en USD de reclasificaciones de compras cuya factura y asiento sean de esta misma fecha y no conserven tasa propia. No modifica facturas ni asientos originales y nunca se aplica a documentos de fechas anteriores.</p>
+          {Object.keys(effectiveDailyReferenceRates).length > 0 && <p className="text-xs font-medium text-sky-900">Referencias BCV conservadas en el borrador: {Object.entries(effectiveDailyReferenceRates).sort(([a], [b]) => a.localeCompare(b)).map(([date, rate]) => date + ': ' + rate + ' Bs/USD').join(' · ')}.</p>}
         </div>
         {savedDeclaration ? <>
           <div className="flex flex-wrap items-center gap-2 text-xs"><span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700">{savedDeclaration.period}</span><span className={`rounded-full px-3 py-1 font-bold ${savedDeclaration.status==='FILED'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}`}>{savedDeclaration.status==='FILED'?'PRESENTADA':'BORRADOR'}</span>{savedDeclaration.declarationNumber && <span className="font-mono text-slate-600">N° {savedDeclaration.declarationNumber}</span>}<span className="text-slate-500">Fuentes fiscales: {savedDeclaration.sourceIds.length} · Facturas relacionadas: {savedDeclaration.relatedSourceIds?.length || 0}</span>{savedDeclaration.calculationStatus === 'PROVISIONAL' && <span className="rounded-full bg-amber-100 px-3 py-1 font-bold text-amber-900">CÁLCULO PROVISIONAL</span>}</div>
@@ -381,7 +427,11 @@ export const IvaDeclaracionesView: React.FC = () => {
             {dailySalesResolution.unresolvedDates.length > 0 && <p className="text-xs text-amber-900">Fechas que requieren elegir una fuente: {dailySalesResolution.unresolvedDates.join(', ')}</p>}
             <button type="button" disabled={workflowBusy || !isValidVatOwnDeclarationPeriod(period) || outputVat === null || !currentPositionPreview || prorationRate === null || Boolean(purchaseSummaryError) || laterFiledPeriods.length > 0 || Boolean(activityPeriodError) || dailySalesResolution.unresolvedDates.length > 0} onClick={async()=>{
               setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
-              try { await createVatOwnDeclaration({period,choices:activeSourceChoices,refresh:true});setWorkflowMessage('Borrador actualizado. La versión anterior quedó conservada en el historial.'); }
+              try { await createVatOwnDeclaration({
+                period, choices: activeSourceChoices, refresh: true,
+                dailyReferenceBcvRate: Number.isFinite(effectiveDailyReferenceBcvRate) && Number(effectiveDailyReferenceBcvRate) > 0 ? Number(effectiveDailyReferenceBcvRate) : undefined,
+              dailyReferenceDate: Number.isFinite(effectiveDailyReferenceBcvRate) && Number(effectiveDailyReferenceBcvRate) > 0 ? effectiveDailyReferenceDate : undefined
+              });setWorkflowMessage('Borrador actualizado. La versión anterior quedó conservada en el historial.'); }
               catch(error){setWorkflowError(error instanceof Error?error.message:'No se pudo actualizar el borrador.');}
               finally{setWorkflowBusy(false);}
             }} className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{workflowBusy?'Actualizando…':'Actualizar borrador'}</button>
