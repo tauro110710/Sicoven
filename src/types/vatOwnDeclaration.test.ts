@@ -1214,3 +1214,36 @@ test('limits cumulative partial supplier credit notes by original fiscal amounts
     ...input, purchases: [{ ...currentNote, creditNoteLines: [{ ...currentNote.creditNoteLines![0], quantity: 0.5 }], totalAmountBs: 60, taxableBaseBs: 52, vatAmountBs: 8 }]
   }), /superan el importe total/);
 });
+
+
+test('uses the manually entered daily BCV reference only for a purchase and journal dated that same day', () => {
+  const purchase = {
+    id: 'purchase-today-ref', companyId: 'company-a', invoiceDate: '2026-11-12',
+    documentType: '01', taxRate: 16, vatAmountBs: 160, taxableBaseBs: 1000,
+    exemptAmountBs: 0, invoiceNumber: 'FC-TODAY', journalEntryId: 'journal-today-ref'
+  } as PurchaseRecord;
+  const journal = {
+    id: 'journal-today-ref', companyId: 'company-a', date: '2026-11-12',
+    entryNumber: 1, description: 'Compra del día', type: 'COMPRA',
+    items: [{ accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 1000, creditBs: 0, debitUsd: 0, creditUsd: 0 }]
+  } as JournalEntry;
+  const summary = {
+    prorationRate: 0.5, gross16Bs: 160, gross8Bs: 0, eligible16Bs: 80, eligible8Bs: 0,
+    nonEligible16Bs: 80, nonEligible8Bs: 0, priorReversalEligible16Bs: 0,
+    priorReversalEligible8Bs: 0, priorReversalNonEligible16Bs: 0,
+    priorReversalNonEligible8Bs: 0, relatedPurchaseIds: [],
+    reclassifications: [{ purchaseId: purchase.id, basePurchaseId: purchase.id, taxRate: 16, nonEligibleSignedBs: 80 }]
+  };
+  const items = buildVatOwnPurchaseVatReclassificationItems({
+    companyId: 'company-a', period: '2026-11', allPurchases: [purchase],
+    journalEntries: [journal], summary, dailyReferenceBcvRate: 400,
+    dailyReferenceDate: '2026-11-12'
+  });
+  assert.equal(items.reduce((sum, item) => sum + item.debitUsd, 0), 0.2);
+  assert.equal(items.reduce((sum, item) => sum + item.creditUsd, 0), 0.2);
+  assert.throws(() => buildVatOwnPurchaseVatReclassificationItems({
+    companyId: 'company-a', period: '2026-11', allPurchases: [purchase],
+    journalEntries: [journal], summary, dailyReferenceBcvRate: 400,
+    dailyReferenceDate: '2026-11-13'
+  }), /solo puede respaldar documentos cuya fecha de factura y asiento coincidan/);
+});
