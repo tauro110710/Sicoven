@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, FileText, Receipt, ShoppingCart, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs } from '../../utils/formatters';
@@ -34,6 +34,10 @@ export const IvaDeclaracionesView: React.FC = () => {
   const filingHistoricalBcvRate = resolveVatOwnPaymentBcvRate(currentCompany.accountingBcvRateHistory || [], filingDate);
   const filingRateMatchesHistory = filingHistoricalBcvRate !== null &&
     Math.abs(parseLocalizedNumber(filingBcvRate) - filingHistoricalBcvRate) <= 0.000001;
+  useEffect(() => {
+    const rate = resolveVatOwnPaymentBcvRate(currentCompany.accountingBcvRateHistory || [], filingDate);
+    setFilingBcvRate(rate === null ? '' : String(rate));
+  }, [currentCompany.accountingBcvRateHistory, filingDate]);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentDate, setPaymentDate] = useState(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10));
@@ -423,7 +427,7 @@ export const IvaDeclaracionesView: React.FC = () => {
             <p className="text-sm font-semibold text-amber-950">Al presentar, SICOVEN registra el número oficial y el asiento de determinación mensual. El borrador y sus documentos fuente permanecen conservados.</p>
             {!periodCanBeFiled && <p className="text-xs font-semibold text-amber-900">La presentación estará disponible después de finalizar el período {period} (cierre: {periodEndDate || 'fecha pendiente'}). Puedes preparar y conciliar el borrador mientras tanto.</p>}
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <input type="date" aria-label="Fecha de presentación" value={filingDate} onChange={event=>{
+              <input type="date" aria-label="Fecha de presentación" max={localToday} value={filingDate} onChange={event=>{
                 const nextDate=event.target.value;setFilingDate(nextDate);
                 const rate=resolveVatOwnPaymentBcvRate(currentCompany.accountingBcvRateHistory || [],nextDate);
                 setFilingBcvRate(rate===null?'':String(rate));

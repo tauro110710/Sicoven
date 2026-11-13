@@ -1084,6 +1084,9 @@ export function validateVatOwnEvent(input: {
     if (eventDatePart <= periodEndDate) {
       throw new Error('No se puede presentar una declaración mensual antes de que finalice el período fiscal seleccionado (' + periodEndDate + ').');
     }
+    const now = new Date();
+    const localToday = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    if (eventDatePart > localToday) throw new Error('La fecha de presentación no puede ser futura.');
     if (!Number.isFinite(Number(draft.bcvRate)) || Number(draft.bcvRate) <= 0) {
       throw new Error('Indique la tasa BCV histórica correspondiente a la fecha de presentación.');
     }
