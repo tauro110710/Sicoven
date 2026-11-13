@@ -36,8 +36,9 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
     accountByCode.set(account.code, account);
   }
   if (journalEntries.some(entry => entry.companyId === companyId &&
-      entry.type === 'APERTURA' && entry.date === openingDate)) {
-    throw new Error('Ya existe un asiento de apertura para esta empresa y fecha.');
+      entry.type === 'APERTURA' && entry.date === openingDate &&
+      !entry.reversedByEntryId && entry.isAdjusted !== true)) {
+    throw new Error('Ya existe un asiento de apertura vigente para esta empresa y fecha.');
   }
 
   const balances = new Map<string, Totals>();
