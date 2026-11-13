@@ -118,6 +118,43 @@ test('permite reabrir un segundo ciclo sin perder la reapertura anterior', () =>
   assert.equal(second.reopening.cycleNumber, 2);
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM accounting_year_reopenings').get().count, 2);
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM accounting_exercise_links').get().count, 2);
+
+  const thirdState = JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
+  const thirdClosing = {
+    id: 'close-3', companyId: 'co-1', entryNumber: 26, date: '2025-12-31', createdAt: '2026-01-06T10:00:00.000Z',
+    description: 'Tercer cierre 2025', type: 'CIERRE', bcvRate: 51,
+    referenceDoc: 'CIERRE:co-1:2025-12-31', workpaperNote: 'SICOVEN_AUTO_YEAR_CLOSE_V1',
+    annualCloseState: { previousFiscalYear: 2025, previousClosedThroughDate: '2024-12-31', cycleNumber: 3 },
+    items: [
+      { accountCode: '4.1', debitBs: 100, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+      { accountCode: '3.1', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 2 }
+    ]
+  };
+  const thirdOpening = {
+    id: 'open-3', companyId: 'co-1', entryNumber: 27, date: '2026-01-01', createdAt: '2026-01-06T10:00:00.000Z',
+    description: 'Tercera apertura 2026', type: 'APERTURA', bcvRate: 51,
+    referenceDoc: 'APERTURA:co-1:2026-01-01',
+    exerciseLink: { priorPeriodStartDate: '2025-01-01', priorPeriodEndDate: '2025-12-31', nextPeriodStartDate: '2026-01-01', cycleNumber: 3 },
+    items: [
+      { accountCode: '1.1', debitBs: 100, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+      { accountCode: '3.1', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 2 }
+    ]
+  };
+  thirdState.companies[0].fiscalYear = 2026;
+  thirdState.companies[0].closedThroughDate = '2025-12-31';
+  thirdState.journalEntries.push(thirdClosing, thirdOpening);
+  db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'").run(JSON.stringify(thirdState));
+  db.prepare(`INSERT INTO accounting_exercise_links
+    (id,company_id,prior_period_start_date,prior_period_end_date,next_period_start_date,journal_entry_id,cycle_number)
+    VALUES(?,?,?,?,?,?,?)`).run('link-3', 'co-1', '2025-01-01', '2025-12-31', '2026-01-01', 'open-3', 3);
+  const third = reopenAccountingYear(db, { companyId: 'co-1', reason: 'Tercera reapertura anual formal.' }, null);
+  assert.equal(third.reopening.cycleNumber, 3);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM accounting_year_reopenings').get().count, 3);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM accounting_exercise_links').get().count, 3);
+  const afterThird = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json;
+  assert.throws(() => reopenAccountingYear(db, { companyId: 'co-1', reason: 'Reintento de reapertura anual.' }, null), /cierre anual vigente/i);
+  assert.equal(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json, afterThird);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM accounting_year_reopenings').get().count, 3);
   db.close();
 });
 
@@ -231,9 +268,11 @@ test('revierte toda la operación si falla la auditoría final', () => {
 test('migra vínculos antiguos y conserva su historial append-only', () => {
   const { db } = fixture();
   initializeAnnualReopeningSchema(db);
+  initializeAnnualReopeningSchema(db);
   const columns = db.prepare('PRAGMA table_info(accounting_exercise_links)').all();
   assert.ok(columns.some(column => column.name === 'cycle_number'));
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM accounting_exercise_links').get().count, 1);
+  assert.equal(db.prepare('SELECT cycle_number FROM accounting_exercise_links WHERE id=?').get('link-1').cycle_number, 1);
   assert.throws(() => db.prepare('UPDATE accounting_exercise_links SET cycle_number=2 WHERE id=?').run('link-1'), /append-only/);
   assert.throws(() => db.prepare('DELETE FROM accounting_exercise_links WHERE id=?').run('link-1'), /append-only/);
   db.close();
