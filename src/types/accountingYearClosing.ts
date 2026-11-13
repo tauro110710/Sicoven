@@ -40,8 +40,9 @@ export function buildClosingEntryItems(input: ClosingEntryBuildInput): JournalEn
       throw new Error('El asiento #' + entry.entryNumber + ' contiene una fecha inválida; no se puede cerrar el ejercicio.');
     }
   }
-  if (companyEntries.some(entry => entry.type === 'CIERRE' && entry.date >= periodStartDate && entry.date <= periodEndDate)) {
-    throw new Error('Ya existe un asiento de cierre dentro de este ejercicio. No se permite duplicarlo.');
+  if (companyEntries.some(entry => entry.type === 'CIERRE' && !entry.reversedByEntryId &&
+      entry.isAdjusted !== true && entry.date >= periodStartDate && entry.date <= periodEndDate)) {
+    throw new Error('Ya existe un asiento de cierre vigente dentro de este ejercicio. No se permite duplicarlo.');
   }
 
   const periodEntries = companyEntries.filter(entry =>
