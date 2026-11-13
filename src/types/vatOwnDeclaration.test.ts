@@ -660,7 +660,7 @@ test('requires an original purchase journal even when its VAT is fully creditabl
     taxRate: 16, vatAmountBs: 160, taxableBaseBs: 1000, vatCreditTreatment: 'TAXABLE'
   } as PurchaseRecord;
   assert.throws(() => buildVatOwnPurchaseVatReclassificationItems({
-    companyId: 'company-a', period: '2026-11', bcvRate: 200,
+    companyId: 'company-a', period: '2026-11',
     allPurchases: [purchase], journalEntries: [],
     summary: {
       prorationRate: 1, gross16Bs: 160, gross8Bs: 0,
@@ -689,7 +689,7 @@ test('reclassifies non-creditable VAT to the original inventory/expense debit ac
     ]
   } as JournalEntry;
   const items = buildVatOwnPurchaseVatReclassificationItems({
-    companyId: 'company-a', period: '2026-11', bcvRate: 200,
+    companyId: 'company-a', period: '2026-11',
     allPurchases: [original], journalEntries: [sourceJournal],
     summary: {
       prorationRate: 0.5, gross16Bs: 160, gross8Bs: 0,
@@ -707,7 +707,7 @@ test('reclassifies non-creditable VAT to the original inventory/expense debit ac
   assert.equal(items[1].creditBs, 80);
   assert.equal(items.reduce((sum, item) => sum + item.debitBs, 0), items.reduce((sum, item) => sum + item.creditBs, 0));
   assert.throws(() => buildVatOwnPurchaseVatReclassificationItems({
-    companyId: 'company-a', period: '2026-11', bcvRate: 200,
+    companyId: 'company-a', period: '2026-11',
     allPurchases: [original], journalEntries: [
       sourceJournal,
       { id: 'purchase-journal-reversal', companyId: 'company-a', reversalOfEntryId: sourceJournal.id } as JournalEntry
@@ -740,7 +740,7 @@ test('allocates non-creditable VAT proportionally across multiple original debit
     ]
   } as JournalEntry;
   const items = buildVatOwnPurchaseVatReclassificationItems({
-    companyId: 'company-a', period: '2026-11', bcvRate: 200,
+    companyId: 'company-a', period: '2026-11',
     allPurchases: [original], journalEntries: [sourceJournal],
     summary: {
       prorationRate: 0.5, gross16Bs: 160, gross8Bs: 0,
@@ -779,7 +779,7 @@ test('balances fractional multi-account VAT reclassifications in Bs and USD in b
     ]
   } as JournalEntry;
   const createItems = (signedAmount: number) => buildVatOwnPurchaseVatReclassificationItems({
-    companyId: 'company-a', period: '2026-11', bcvRate: 333.33,
+    companyId: 'company-a', period: '2026-11',
     allPurchases: [original], journalEntries: [sourceJournal],
     summary: {
       prorationRate: 0.5, gross16Bs: 24.68, gross8Bs: 0,
@@ -847,7 +847,7 @@ test('reverses the prior non-creditable VAT reclassification when a prior-period
     }]
   };
   const items = buildVatOwnPurchaseVatReclassificationItems({
-    companyId: 'company-a', period: '2026-11', bcvRate: 200,
+    companyId: 'company-a', period: '2026-11',
     allPurchases: [original], journalEntries: [sourceJournal], summary
   });
   assert.equal(items[0].accountCode, '1.1.4.01');
@@ -861,7 +861,7 @@ test('reverses the prior non-creditable VAT reclassification when a prior-period
     items: [{ ...sourceJournal.items[0], accountCode: '6.1.1.01' }]
   } as JournalEntry;
   assert.throws(() => buildVatOwnPurchaseVatReclassificationItems({
-    companyId: 'company-a', period: '2026-11', bcvRate: 200,
+    companyId: 'company-a', period: '2026-11',
     allPurchases: [original], journalEntries: [changedJournal], summary
   }), /difiere de la huella fiscal presentada/);
 });
@@ -1003,7 +1003,7 @@ test('does not allow presenting a monthly IVA declaration before its fiscal mont
   const draftDeclaration = { ...declaration, status: 'DRAFT' as const, declarationNumber: undefined, filedAt: undefined };
   const filing = {
     declarationId: draftDeclaration.id, companyId: draftDeclaration.companyId,
-    eventType: 'FILED' as const, declarationNumber: 'F30-001',
+    eventType: 'FILED' as const, declarationNumber: 'F30-001', bcvRate: 200,
     idempotencyKey: 'FILED:' + draftDeclaration.id
   };
   assert.throws(() => validateVatOwnEvent({
@@ -1014,6 +1014,10 @@ test('does not allow presenting a monthly IVA declaration before its fiscal mont
     declaration: draftDeclaration, events: [],
     draft: { ...filing, occurredAt: '2026-02-01T00:01:00.000Z' }
   }));
+  assert.throws(() => validateVatOwnEvent({
+    declaration: draftDeclaration, events: [],
+    draft: { ...filing, bcvRate: undefined, occurredAt: '2026-02-01T00:01:00.000Z' }
+  }), /tasa BCV histórica correspondiente/);
 });
 
 test('rejects future-dated IVA payments', () => {
