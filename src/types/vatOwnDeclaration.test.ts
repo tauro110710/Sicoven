@@ -681,7 +681,7 @@ test('reclassifies non-creditable VAT to the original inventory/expense debit ac
   } as PurchaseRecord;
   const sourceJournal = {
     id: 'purchase-journal', companyId: 'company-a', date: '2026-11-02',
-    entryNumber: 1, description: 'Compra', type: 'COMPRA',
+    entryNumber: 1, description: 'Compra', type: 'COMPRA', bcvRate: 200,
     createdAt: '2026-11-02T10:00:00.000Z',
     items: [
       { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 1000, creditBs: 0, debitUsd: 5, creditUsd: 0 },
@@ -731,7 +731,7 @@ test('allocates non-creditable VAT proportionally across multiple original debit
   } as PurchaseRecord;
   const sourceJournal = {
     id: 'purchase-multi-journal', companyId: 'company-a', date: '2026-11-02',
-    entryNumber: 2, description: 'Compra distribuida', type: 'COMPRA',
+    entryNumber: 2, description: 'Compra distribuida', type: 'COMPRA', bcvRate: 200,
     createdAt: '2026-11-02T10:00:00.000Z',
     items: [
       { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 600, creditBs: 0, debitUsd: 3, creditUsd: 0 },
@@ -770,7 +770,7 @@ test('balances fractional multi-account VAT reclassifications in Bs and USD in b
   } as PurchaseRecord;
   const sourceJournal = {
     id: 'purchase-fractional-journal', companyId: 'company-a', date: '2026-11-02',
-    entryNumber: 3, description: 'Compra con distribución', type: 'COMPRA',
+    entryNumber: 3, description: 'Compra con distribución', type: 'COMPRA', bcvRate: 333.33,
     createdAt: '2026-11-02T10:00:00.000Z',
     items: [
       { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 700, creditBs: 0, debitUsd: 2.100021, creditUsd: 0 },
@@ -823,7 +823,7 @@ test('reverses the prior non-creditable VAT reclassification when a prior-period
   } as PurchaseRecord;
   const sourceJournal = {
     id: 'purchase-journal-old', companyId: 'company-a', date: '2026-10-02',
-    entryNumber: 1, description: 'Compra', type: 'COMPRA',
+    entryNumber: 1, description: 'Compra', type: 'COMPRA', bcvRate: 200,
     createdAt: '2026-10-02T10:00:00.000Z',
     items: [{ accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 1000, creditBs: 0, debitUsd: 5, creditUsd: 0 }]
   } as JournalEntry;
