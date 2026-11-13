@@ -1186,10 +1186,10 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
         </p>
         {openingError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">{openingError}</p>}
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={handlePreviewOpening} disabled={openingBusy || !isStorageReady || !currentCompany.id || currentCompany.closedThroughDate > openingPeriodEnd} className="rounded-lg bg-indigo-600 hover:bg-indigo-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={handlePreviewOpening} disabled={openingBusy || !isStorageReady || !currentCompany.id || String(currentCompany.closedThroughDate || '') > openingPeriodEnd} className="rounded-lg bg-indigo-600 hover:bg-indigo-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
             Preparar vista previa de cierre y apertura
           </button>
-          <button type="button" onClick={handleExecuteAnnualCycle} disabled={openingBusy || !closingPreview || !openingPreview || !isStorageReady || parseExchangeabilityNumber(closingBcvRateInput) <= 0 || parseExchangeabilityNumber(openingBcvRateInput) <= 0 || currentCompany.closedThroughDate > openingPeriodEnd} className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={handleExecuteAnnualCycle} disabled={openingBusy || !closingPreview || !openingPreview || !isStorageReady || parseExchangeabilityNumber(closingBcvRateInput) <= 0 || parseExchangeabilityNumber(openingBcvRateInput) <= 0 || String(currentCompany.closedThroughDate || '') > openingPeriodEnd} className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
             {openingBusy ? 'Contabilizando y confirmando SQLite…' : 'Ejecutar cierre anual y apertura'}
           </button>
         </div>
