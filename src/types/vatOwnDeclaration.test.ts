@@ -660,7 +660,7 @@ test('requires an original purchase journal even when its VAT is fully creditabl
     taxRate: 16, vatAmountBs: 160, taxableBaseBs: 1000, vatCreditTreatment: 'TAXABLE'
   } as PurchaseRecord;
   assert.throws(() => buildVatOwnPurchaseVatReclassificationItems({
-    companyId: 'company-a', period: '2026-11', bcvRate: 200,
+    companyId: 'company-a', period: '2026-11',
     allPurchases: [purchase], journalEntries: [],
     summary: {
       prorationRate: 1, gross16Bs: 160, gross8Bs: 0,
@@ -681,7 +681,7 @@ test('reclassifies non-creditable VAT to the original inventory/expense debit ac
   } as PurchaseRecord;
   const sourceJournal = {
     id: 'purchase-journal', companyId: 'company-a', date: '2026-11-02',
-    entryNumber: 1, description: 'Compra', type: 'COMPRA', bcvRate: 200,
+    entryNumber: 1, description: 'Compra', type: 'COMPRA',
     createdAt: '2026-11-02T10:00:00.000Z',
     items: [
       { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 1000, creditBs: 0, debitUsd: 5, creditUsd: 0 },
@@ -689,7 +689,7 @@ test('reclassifies non-creditable VAT to the original inventory/expense debit ac
     ]
   } as JournalEntry;
   const items = buildVatOwnPurchaseVatReclassificationItems({
-    companyId: 'company-a', period: '2026-11', bcvRate: 200,
+    companyId: 'company-a', period: '2026-11',
     allPurchases: [original], journalEntries: [sourceJournal],
     summary: {
       prorationRate: 0.5, gross16Bs: 160, gross8Bs: 0,
@@ -707,7 +707,7 @@ test('reclassifies non-creditable VAT to the original inventory/expense debit ac
   assert.equal(items[1].creditBs, 80);
   assert.equal(items.reduce((sum, item) => sum + item.debitBs, 0), items.reduce((sum, item) => sum + item.creditBs, 0));
   assert.throws(() => buildVatOwnPurchaseVatReclassificationItems({
-    companyId: 'company-a', period: '2026-11', bcvRate: 200,
+    companyId: 'company-a', period: '2026-11',
     allPurchases: [original], journalEntries: [
       sourceJournal,
       { id: 'purchase-journal-reversal', companyId: 'company-a', reversalOfEntryId: sourceJournal.id } as JournalEntry
@@ -731,7 +731,7 @@ test('allocates non-creditable VAT proportionally across multiple original debit
   } as PurchaseRecord;
   const sourceJournal = {
     id: 'purchase-multi-journal', companyId: 'company-a', date: '2026-11-02',
-    entryNumber: 2, description: 'Compra distribuida', type: 'COMPRA', bcvRate: 200,
+    entryNumber: 2, description: 'Compra distribuida', type: 'COMPRA',
     createdAt: '2026-11-02T10:00:00.000Z',
     items: [
       { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 600, creditBs: 0, debitUsd: 3, creditUsd: 0 },
@@ -740,7 +740,7 @@ test('allocates non-creditable VAT proportionally across multiple original debit
     ]
   } as JournalEntry;
   const items = buildVatOwnPurchaseVatReclassificationItems({
-    companyId: 'company-a', period: '2026-11', bcvRate: 200,
+    companyId: 'company-a', period: '2026-11',
     allPurchases: [original], journalEntries: [sourceJournal],
     summary: {
       prorationRate: 0.5, gross16Bs: 160, gross8Bs: 0,
@@ -770,7 +770,7 @@ test('balances fractional multi-account VAT reclassifications in Bs and USD in b
   } as PurchaseRecord;
   const sourceJournal = {
     id: 'purchase-fractional-journal', companyId: 'company-a', date: '2026-11-02',
-    entryNumber: 3, description: 'Compra con distribución', type: 'COMPRA', bcvRate: 333.33,
+    entryNumber: 3, description: 'Compra con distribución', type: 'COMPRA',
     createdAt: '2026-11-02T10:00:00.000Z',
     items: [
       { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 700, creditBs: 0, debitUsd: 2.100021, creditUsd: 0 },
@@ -779,7 +779,7 @@ test('balances fractional multi-account VAT reclassifications in Bs and USD in b
     ]
   } as JournalEntry;
   const createItems = (signedAmount: number) => buildVatOwnPurchaseVatReclassificationItems({
-    companyId: 'company-a', period: '2026-11', bcvRate: 333.33,
+    companyId: 'company-a', period: '2026-11',
     allPurchases: [original], journalEntries: [sourceJournal],
     summary: {
       prorationRate: 0.5, gross16Bs: 24.68, gross8Bs: 0,
@@ -823,7 +823,7 @@ test('reverses the prior non-creditable VAT reclassification when a prior-period
   } as PurchaseRecord;
   const sourceJournal = {
     id: 'purchase-journal-old', companyId: 'company-a', date: '2026-10-02',
-    entryNumber: 1, description: 'Compra', type: 'COMPRA', bcvRate: 200,
+    entryNumber: 1, description: 'Compra', type: 'COMPRA',
     createdAt: '2026-10-02T10:00:00.000Z',
     items: [{ accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 1000, creditBs: 0, debitUsd: 5, creditUsd: 0 }]
   } as JournalEntry;
@@ -847,7 +847,7 @@ test('reverses the prior non-creditable VAT reclassification when a prior-period
     }]
   };
   const items = buildVatOwnPurchaseVatReclassificationItems({
-    companyId: 'company-a', period: '2026-11', bcvRate: 200,
+    companyId: 'company-a', period: '2026-11',
     allPurchases: [original], journalEntries: [sourceJournal], summary
   });
   assert.equal(items[0].accountCode, '1.1.4.01');
@@ -861,7 +861,7 @@ test('reverses the prior non-creditable VAT reclassification when a prior-period
     items: [{ ...sourceJournal.items[0], accountCode: '6.1.1.01' }]
   } as JournalEntry;
   assert.throws(() => buildVatOwnPurchaseVatReclassificationItems({
-    companyId: 'company-a', period: '2026-11', bcvRate: 200,
+    companyId: 'company-a', period: '2026-11',
     allPurchases: [original], journalEntries: [changedJournal], summary
   }), /difiere de la huella fiscal presentada/);
 });
