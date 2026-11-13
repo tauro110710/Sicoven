@@ -46,6 +46,13 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     isStorageReady
   } = useAccounting();
 
+  const hasActiveAnnualClose = Boolean(currentCompany.closedThroughDate && journalEntries.some(entry =>
+    entry.companyId === currentCompany.id && entry.type === 'CIERRE' &&
+    entry.date === currentCompany.closedThroughDate &&
+    String(entry.referenceDoc || '') === 'CIERRE:' + currentCompany.id + ':' + entry.date &&
+    !entry.reversedByEntryId && entry.isAdjusted !== true
+  ));
+
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [showUniversalMigrationWizard, setShowUniversalMigrationWizard] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -601,11 +608,14 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
       setReopenError('Explique el motivo de la reapertura con al menos 10 caracteres.');
       return;
     }
-    const target = reopenThroughDate.trim() || null;
-    const scope = target
-      ? 'Se conservará el bloqueo hasta ' + target + ' y se habilitarán operaciones posteriores.'
-      : 'Se reabrirá íntegramente el período, sin eliminar el registro histórico del cierre.';
-    if (!window.confirm('REAPERTURA FORMAL DE PERÍODO\n\nEmpresa: ' + currentCompany.name +
+    const target = hasActiveAnnualClose ? null : (reopenThroughDate.trim() || null);
+    const scope = hasActiveAnnualClose
+      ? 'Se revertirán los dos asientos enlazados (cierre y apertura), se restaurará el ejercicio y su límite previo desde la evidencia guardada y se conservará el historial.'
+      : target
+        ? 'Se conservará el bloqueo hasta ' + target + ' y se habilitarán operaciones posteriores.'
+        : 'Se reabrirá íntegramente el período, sin eliminar el registro histórico del cierre.';
+    const heading = hasActiveAnnualClose ? 'REAPERTURA FORMAL DEL EJERCICIO ANUAL' : 'REAPERTURA FORMAL DE PERÍODO';
+    if (!window.confirm(heading + '\n\nEmpresa: ' + currentCompany.name +
         '\nCierre vigente: ' + currentCompany.closedThroughDate + '\n' + scope +
         '\n\nMotivo: ' + reason + '\n\nLa operación quedará registrada en la bitácora inmutable. ¿Confirma?')) return;
     setReopenBusy(true);
@@ -613,7 +623,9 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     try {
       await reopenAccountingPeriod(target, reason);
       setReopenReason('');
-      alert('Reapertura confirmada por SQLite. El cierre original y su historial permanecen conservados.');
+      alert(hasActiveAnnualClose
+        ? 'Reapertura anual confirmada por SQLite. Los dos asientos originales permanecen en el historial, enlazados a sus contra-asientos exactos.'
+        : 'Reapertura confirmada por SQLite. El cierre original y su historial permanecen conservados.');
     } catch (error) {
       setReopenError(error instanceof Error ? error.message : 'SQLite no confirmó la reapertura.');
     } finally {
@@ -1081,25 +1093,39 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
             <div>
               <h4 className="text-xs font-bold text-rose-900">Reapertura formal y auditada</h4>
               <p className="mt-1 text-[11px] text-rose-800">
-                Exclusiva del administrador autenticado. La fecha indicada será el nuevo límite de cierre; déjela vacía para reabrir todo el período. El cierre original nunca se elimina.
+                Exclusiva del administrador o contador autenticado. {hasActiveAnnualClose
+                  ? 'Se detectó un cierre anual: solo se permite la reapertura integral, con reversión exacta del cierre y de su apertura enlazada. El sistema restaurará el ejercicio previo y conservará ambos asientos originales.'
+                  : 'La fecha indicada será el nuevo límite de cierre; déjela vacía para reabrir todo el período. El cierre original nunca se elimina.'}
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Mantener cerrado hasta (opcional)</label>
-                <input
-                  type="date"
-                  value={reopenThroughDate}
-                  max={(() => {
-                    const date = new Date(currentCompany.closedThroughDate + 'T00:00:00.000Z');
-                    date.setUTCDate(date.getUTCDate() - 1);
-                    return date.toISOString().slice(0, 10);
-                  })()}
-                  onChange={e => setReopenThroughDate(e.target.value)}
-                  disabled={reopenBusy || !isStorageReady}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100"
-                />
-                <p className="mt-1 text-[10px] text-slate-500">Vacío = reapertura integral desde el inicio del historial.</p>
+                {hasActiveAnnualClose ? (
+                  <>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Alcance de reapertura</label>
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-3 text-xs text-amber-900">
+                      Reapertura anual completa. No se admite una fecha parcial porque dejaría sin efecto coherente el cierre o la apertura del ejercicio.
+                    </div>
+                    <p className="mt-1 text-[10px] text-slate-500">Se restaurará el estado exacto anterior al cierre.</p>
+                  </>
+                ) : (
+                  <>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Mantener cerrado hasta (opcional)</label>
+                    <input
+                      type="date"
+                      value={reopenThroughDate}
+                      max={(() => {
+                        const date = new Date(currentCompany.closedThroughDate + 'T00:00:00.000Z');
+                        date.setUTCDate(date.getUTCDate() - 1);
+                        return date.toISOString().slice(0, 10);
+                      })()}
+                      onChange={e => setReopenThroughDate(e.target.value)}
+                      disabled={reopenBusy || !isStorageReady}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100"
+                    />
+                    <p className="mt-1 text-[10px] text-slate-500">Vacío = reapertura integral desde el inicio del historial.</p>
+                  </>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Motivo obligatorio y soporte de referencia</label>
