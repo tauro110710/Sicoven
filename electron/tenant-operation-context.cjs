@@ -148,6 +148,16 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
     }
   }
 
+  function clearActiveCompanyForMaintenance() {
+    if (!maintenanceLockHeld || !switching) {
+      throw new Error('Solo se puede limpiar la empresa activa durante un mantenimiento exclusivo.');
+    }
+    const previousId = activeCompanyId;
+    if (previousId && runtime.isCompanyOpen(previousId)) runtime.closeCompany(previousId);
+    activeCompanyId = '';
+    return { ok: true, previousCompanyId: previousId || null };
+  }
+
   async function clearActiveCompany(options = {}) {
     if (switching) throw new Error('Ya hay un cambio de empresa en curso.');
     const skipFlush = options?.skipFlush === true;
@@ -174,6 +184,7 @@ function createTenantOperationContext({ runtime, flushPendingWrites }) {
   return Object.freeze({
     switchCompany,
     clearActiveCompany,
+    clearActiveCompanyForMaintenance,
     acquireMaintenanceLock,
     withActiveDatabase,
     withPersistenceDatabase,
