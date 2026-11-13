@@ -190,7 +190,7 @@ function reopenAccountingYear(db, input, actor) {
 
     const maxEntryNumber = state.journalEntries.filter(entry => String(entry.companyId) === companyId)
       .reduce((max, entry) => Math.max(max, Number(entry.entryNumber) || 0), 0);
-    const closingReversal = invertEntry(closing, maxEntryNumber + 1, openingDate, reason, evidence.cycleNumber);
+    const closingReversal = invertEntry(closing, maxEntryNumber + 1, closingDate, reason, evidence.cycleNumber);
     const openingReversal = invertEntry(opening, maxEntryNumber + 2, openingDate, reason, evidence.cycleNumber);
     const journalEntries = state.journalEntries.map(entry => {
       if (String(entry.id) === String(closing.id)) return { ...entry, isAdjusted: true, reversedByEntryId: closingReversal.id };
