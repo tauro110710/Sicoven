@@ -114,6 +114,33 @@ function assertNoLaterActivity(state, companyId, closingDate, closingCreatedAt, 
   }
 }
 
+function assertBalancedAnnualEntry(entry, label) {
+  if (!Number.isFinite(Number(entry.bcvRate)) || Number(entry.bcvRate) <= 0 ||
+      !Array.isArray(entry.items) || entry.items.length < 2) {
+    throw new Error('El asiento de ' + label + ' no conserva tasa BCV o líneas contables válidas.');
+  }
+  const totals = { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+  for (const item of entry.items) {
+    if (!String(item.accountCode || '').trim()) {
+      throw new Error('El asiento de ' + label + ' contiene una línea sin cuenta contable.');
+    }
+    const values = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(value => Number(value || 0));
+    if (values.some(value => !Number.isFinite(value) || value < 0) ||
+        (values[0] > 0 && values[1] > 0) || (values[2] > 0 && values[3] > 0)) {
+      throw new Error('El asiento de ' + label + ' contiene importes inválidos.');
+    }
+    totals.debitBs += values[0];
+    totals.creditBs += values[1];
+    totals.debitUsd += values[2];
+    totals.creditUsd += values[3];
+  }
+  if (Math.abs(totals.debitBs - totals.creditBs) > 0.01 ||
+      Math.abs(totals.debitUsd - totals.creditUsd) > 0.01 ||
+      totals.debitBs + totals.creditBs + totals.debitUsd + totals.creditUsd <= 0) {
+    throw new Error('El asiento de ' + label + ' no cuadra en Bs. y USD; se bloqueó la reapertura.');
+  }
+}
+
 function invertEntry(source, entryNumber, date, reason, cycleNumber) {
   if (!Array.isArray(source.items) || source.items.length < 2) {
     throw new Error('El asiento anual no contiene líneas suficientes para una reversión exacta.');
@@ -198,9 +225,21 @@ function reopenAccountingYear(db, input, actor) {
     if (opening.reversedByEntryId || opening.isAdjusted || opening.reversalOfEntryId) {
       throw new Error('El asiento de apertura ya fue revertido o ajustado.');
     }
+    if (String(opening.referenceDoc || '') !== 'APERTURA:' + companyId + ':' + openingDate ||
+        opening.exerciseLink?.priorPeriodStartDate !== closingDate.slice(0, 4) + '-01-01' ||
+        (opening.exerciseLink?.cycleNumber !== undefined &&
+          Number(opening.exerciseLink.cycleNumber) !== Number(evidence.cycleNumber))) {
+      throw new Error('La apertura no conserva la referencia y el ciclo exactos del ejercicio cerrado.');
+    }
+    assertBalancedAnnualEntry(closing, 'cierre anual');
+    assertBalancedAnnualEntry(opening, 'apertura anual');
     const link = db.prepare('SELECT * FROM accounting_exercise_links WHERE journal_entry_id=? AND company_id=?')
       .get(String(opening.id), companyId);
-    if (!link) throw new Error('El vínculo SQLite entre cierre y apertura no existe; se bloqueó la reapertura.');
+    if (!link || link.prior_period_start_date !== closingDate.slice(0, 4) + '-01-01' ||
+        link.prior_period_end_date !== closingDate || link.next_period_start_date !== openingDate ||
+        Number(link.cycle_number) !== Number(evidence.cycleNumber)) {
+      throw new Error('El vínculo SQLite entre cierre, apertura y número de ciclo no coincide; se bloqueó la reapertura.');
+    }
     const existing = db.prepare('SELECT id FROM accounting_year_reopenings WHERE closing_entry_id=? OR opening_entry_id=?')
       .get(String(closing.id), String(opening.id));
     if (existing) throw new Error('Este ciclo anual ya tiene una reapertura formal registrada.');
