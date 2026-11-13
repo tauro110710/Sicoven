@@ -120,6 +120,7 @@ function invertEntry(source, entryNumber, date, reason, cycleNumber) {
     id: crypto.randomUUID(),
     companyId: source.companyId,
     entryNumber,
+    createdAt: new Date().toISOString(),
     date,
     description: 'Reversión formal de ' + (source.type === 'CIERRE' ? 'cierre' : 'apertura') +
       ' del ejercicio ' + cycleNumber,
