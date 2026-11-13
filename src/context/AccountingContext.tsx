@@ -894,6 +894,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         retainedEarningsAccountCode: input.retainedEarningsAccountCode
       });
       const closingReference = 'CIERRE:' + currentCompany.id + ':' + input.periodEndDate;
+      // Los saldos de cuentas nominales inactivadas también deben cancelarse.
+      // El catálogo real permanece inalterado; solo este asiento de cierre recibe
+      // autorización interna para mover los saldos históricos.
+      const closingAccountCatalog = accounts.map(account => closingItems.some(item => item.accountCode === account.code)
+        ? { ...account, isActive: true }
+        : account);
       closingEntry = addJournalEntry({
         entryNumber: 0,
         date: input.periodEndDate,
@@ -903,7 +909,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         referenceDoc: closingReference,
         workpaperNote: 'SICOVEN_AUTO_YEAR_CLOSE_V1',
         items: closingItems
-      }, accounts, currentCompany.id, true);
+      }, closingAccountCatalog, currentCompany.id, true);
 
       const openingItems = buildOpeningEntryItems({
         companyId: currentCompany.id,
@@ -914,6 +920,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         journalEntries: [...confirmedEntries, closingEntry],
         retainedEarningsAccountCode: input.retainedEarningsAccountCode
       });
+      // Los saldos de balance de cuentas históricas inactivas también se arrastran;
+      // no se reactiva ninguna cuenta en el catálogo al generar la apertura.
+      const openingAccountCatalog = accounts.map(account => openingItems.some(item => item.accountCode === account.code)
+        ? { ...account, isActive: true }
+        : account);
       openingEntry = addJournalEntry({
         entryNumber: 0,
         date: openingDate,
@@ -927,7 +938,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           nextPeriodStartDate: openingDate
         },
         items: openingItems
-      }, accounts, currentCompany.id);
+      }, openingAccountCatalog, currentCompany.id);
 
       // El cierre, ambos asientos y el cambio de ejercicio se confirman juntos en un snapshot SQLite.
       const persistenceConfirmation = waitForPersistence();
