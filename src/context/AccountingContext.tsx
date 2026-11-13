@@ -908,6 +908,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         bcvRate: Number(input.closingBcvRate),
         referenceDoc: closingReference,
         workpaperNote: 'SICOVEN_AUTO_YEAR_CLOSE_V1',
+        annualCloseState: {
+          previousFiscalYear: fiscalYear,
+          previousClosedThroughDate: currentCompany.closedThroughDate || null,
+          cycleNumber: journalEntries.filter(entry =>
+            entry.companyId === currentCompany.id && entry.type === 'CIERRE' &&
+            entry.date === input.periodEndDate
+          ).length + 1
+        },
         items: closingItems
       }, closingAccountCatalog, currentCompany.id, true);
 
