@@ -970,10 +970,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!currentCompany.id || !currentCompany.closedThroughDate) {
       throw new Error('La empresa seleccionada no tiene un cierre vigente para reabrir.');
     }
+    const currentClosedThroughDate = currentCompany.closedThroughDate;
     const hasAutomaticYearClose = journalEntries.some(entry =>
       entry.companyId === currentCompany.id && entry.type === 'CIERRE' &&
       String(entry.referenceDoc || '') === 'CIERRE:' + currentCompany.id + ':' + String(entry.date || '') &&
-      entry.date <= currentCompany.closedThroughDate
+      entry.date <= currentClosedThroughDate
     );
     if (hasAutomaticYearClose) {
       throw new Error('Este ejercicio ya tiene un asiento de cierre anual y su apertura siguiente contabilizados. La reapertura simple de fechas no puede deshacer ese ciclo. Primero debe ejecutarse una reapertura formal del ejercicio que revierta y enlace ambos asientos; no se modificó ningún dato.');
@@ -981,10 +982,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const normalizedReason = String(reason || '').trim();
     if (normalizedReason.length < 10 || normalizedReason.length > 1000) {
       throw new Error('Explique el motivo de la reapertura (entre 10 y 1000 caracteres).');
-    }
-    const currentClosedThroughDate = currentCompany.closedThroughDate;
-    if (!currentClosedThroughDate) {
-      throw new Error('La empresa seleccionada no tiene una fecha de cierre válida.');
     }
     if (reopenedThroughDate !== null && (!isValidIsoDate(reopenedThroughDate) ||
         reopenedThroughDate >= currentClosedThroughDate)) {
