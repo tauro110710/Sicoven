@@ -1236,14 +1236,14 @@ test('uses the manually entered daily BCV reference only for a purchase and jour
   };
   const items = buildVatOwnPurchaseVatReclassificationItems({
     companyId: 'company-a', period: '2026-11', allPurchases: [purchase],
-    journalEntries: [journal], summary, dailyReferenceBcvRate: 400,
-    dailyReferenceDate: '2026-11-12'
+    journalEntries: [journal], summary, dailyReferenceRates: { '2026-11-12': 400 },
+    dailyReferenceBcvRate: 400, dailyReferenceDate: '2026-11-12'
   });
   assert.equal(items.reduce((sum, item) => sum + item.debitUsd, 0), 0.2);
   assert.equal(items.reduce((sum, item) => sum + item.creditUsd, 0), 0.2);
   assert.throws(() => buildVatOwnPurchaseVatReclassificationItems({
     companyId: 'company-a', period: '2026-11', allPurchases: [purchase],
-    journalEntries: [journal], summary, dailyReferenceBcvRate: 400,
-    dailyReferenceDate: '2026-11-13'
+    journalEntries: [journal], summary, dailyReferenceRates: { '2026-11-13': 400 },
+    dailyReferenceBcvRate: 400, dailyReferenceDate: '2026-11-13'
   }), /solo puede respaldar documentos cuya fecha de factura y asiento coincidan/);
 });

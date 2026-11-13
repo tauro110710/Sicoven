@@ -311,6 +311,8 @@ export interface VatOwnDeclarationRevision {
   /** Daily manual reference used only for same-day source purchases lacking their own historical rate. */
   dailyReferenceBcvRate?: number;
   dailyReferenceDate?: string;
+  /** Immutable date-keyed history of manually entered daily references used by this draft. */
+  dailyReferenceRates?: Record<string, number>;
   dailySourceChoices?: Record<string, 'Z' | 'INDIVIDUAL'>;
   purchaseVatReclassificationItems?: JournalEntryItem[];
   sourceSnapshots?: Record<string, string>;
@@ -331,6 +333,8 @@ export interface VatOwnDeclaration {
   /** Daily manual reference used only for same-day source purchases lacking their own historical rate. */
   dailyReferenceBcvRate?: number;
   dailyReferenceDate?: string;
+  /** Immutable date-keyed history of manually entered daily references used by this draft. */
+  dailyReferenceRates?: Record<string, number>;
   dailySourceChoices?: Record<string, 'Z' | 'INDIVIDUAL'>;
   declarationNumber?: string;
   filedAt?: string;
@@ -737,6 +741,7 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
   summary: VatOwnPurchaseCreditSummary;
   dailyReferenceBcvRate?: number;
   dailyReferenceDate?: string;
+  dailyReferenceRates?: Record<string, number>;
 }): JournalEntryItem[] {
   const excludedDebitAccounts = new Set(['1.1.3.01', '1.1.3.02', '6.1.1.11', '6.1.1.13']);
   const result: JournalEntryItem[] = [];
@@ -811,9 +816,12 @@ export function buildVatOwnPurchaseVatReclassificationItems(input: {
     const sourceDate = String(historicalJournal?.date || liveSourceEntry.date || sourcePurchase.invoiceDate || '');
     const sameDayReferenceApplies = Boolean(input.dailyReferenceDate &&
       sourcePurchase.invoiceDate === input.dailyReferenceDate && sourceDate === input.dailyReferenceDate);
+    const savedDailyReferenceRate = input.dailyReferenceRates?.[sourceDate];
     const rate = Number.isFinite(storedRate) && storedRate > 0
       ? storedRate
-      : sameDayReferenceApplies ? Number(input.dailyReferenceBcvRate) : Number.NaN;
+      : Number.isFinite(savedDailyReferenceRate) && Number(savedDailyReferenceRate) > 0
+        ? Number(savedDailyReferenceRate)
+        : sameDayReferenceApplies ? Number(input.dailyReferenceBcvRate) : Number.NaN;
     if (!Number.isFinite(rate) || rate <= 0) {
       throw new Error('La factura ' + (sourcePurchase.invoiceNumber || adjustment.purchaseId) +
         ' no conserva una tasa BCV histórica válida. La tasa de referencia diaria solo puede respaldar documentos cuya fecha de factura y asiento coincidan exactamente con la fecha de referencia; corrija la tasa del documento original.');
@@ -899,6 +907,7 @@ export function snapshotVatOwnDeclarationRevision(
     bcvRate: declaration.bcvRate,
     dailyReferenceBcvRate: declaration.dailyReferenceBcvRate,
     dailyReferenceDate: declaration.dailyReferenceDate,
+    dailyReferenceRates: declaration.dailyReferenceRates ? { ...declaration.dailyReferenceRates } : undefined,
     dailySourceChoices: { ...(declaration.dailySourceChoices || {}) },
     purchaseVatReclassificationItems: (declaration.purchaseVatReclassificationItems || []).map(item => ({ ...item })),
     sourceSnapshots: declaration.sourceSnapshots ? { ...declaration.sourceSnapshots } : undefined,

@@ -91,13 +91,29 @@ export const IvaDeclaracionesView: React.FC = () => {
   const savedDeclaration = vatOwnDeclarations.find(item => item.companyId === currentCompany.id && item.period === period);
   const [dailyReferenceBcvRate, setDailyReferenceBcvRate] = useState<string | null>(null);
   useEffect(() => {
-    setDailyReferenceBcvRate(savedDeclaration?.dailyReferenceBcvRate === undefined
-      ? null : String(savedDeclaration.dailyReferenceBcvRate));
-  }, [savedDeclaration?.id, savedDeclaration?.dailyReferenceBcvRate]);
+    const savedTodayRate = savedDeclaration?.dailyReferenceRates?.[localToday] ??
+      (savedDeclaration?.dailyReferenceDate === localToday ? savedDeclaration.dailyReferenceBcvRate : undefined);
+    setDailyReferenceBcvRate(savedTodayRate === undefined ? null : String(savedTodayRate));
+  }, [savedDeclaration?.id, savedDeclaration?.dailyReferenceRates, savedDeclaration?.dailyReferenceDate, savedDeclaration?.dailyReferenceBcvRate, localToday]);
   const effectiveDailyReferenceBcvRate = dailyReferenceBcvRate === null
-    ? savedDeclaration?.dailyReferenceBcvRate
+    ? savedDeclaration?.dailyReferenceRates?.[localToday] ??
+      (savedDeclaration?.dailyReferenceDate === localToday ? savedDeclaration.dailyReferenceBcvRate : undefined)
     : dailyReferenceBcvRate.trim() ? parseLocalizedNumber(dailyReferenceBcvRate) : undefined;
-  const effectiveDailyReferenceDate = savedDeclaration?.dailyReferenceDate || localToday;
+  const effectiveDailyReferenceDate = localToday;
+  const effectiveDailyReferenceRates = { ...(savedDeclaration?.dailyReferenceRates || {}) };
+  if (savedDeclaration?.dailyReferenceDate && savedDeclaration.dailyReferenceBcvRate &&
+      effectiveDailyReferenceRates[savedDeclaration.dailyReferenceDate] === undefined) {
+    effectiveDailyReferenceRates[savedDeclaration.dailyReferenceDate] = savedDeclaration.dailyReferenceBcvRate;
+  }
+  if (dailyReferenceBcvRate !== null) {
+    if (Number.isFinite(effectiveDailyReferenceBcvRate) && Number(effectiveDailyReferenceBcvRate) > 0) {
+      effectiveDailyReferenceRates[localToday] = Number(effectiveDailyReferenceBcvRate);
+    } else {
+      delete effectiveDailyReferenceRates[localToday];
+    }
+  } else if (effectiveDailyReferenceBcvRate !== undefined) {
+    effectiveDailyReferenceRates[localToday] = effectiveDailyReferenceBcvRate;
+  }
   const activeSourceChoices = useMemo(() => savedDeclaration?.status === 'FILED'
     ? savedDeclaration.dailySourceChoices || {}
     : { ...(savedDeclaration?.dailySourceChoices || {}), ...dailySourceChoices },
@@ -149,7 +165,8 @@ export const IvaDeclaracionesView: React.FC = () => {
         companyId: currentCompany.id, period,
         allPurchases: purchases, journalEntries, summary,
         dailyReferenceBcvRate: effectiveDailyReferenceBcvRate,
-        dailyReferenceDate: effectiveDailyReferenceDate
+        dailyReferenceDate: effectiveDailyReferenceDate,
+        dailyReferenceRates: effectiveDailyReferenceRates
       });
       return { summary, reclassifications, error: null };
     } catch (error) {
@@ -251,8 +268,8 @@ export const IvaDeclaracionesView: React.FC = () => {
   const draftNeedsRefresh = savedDeclaration?.status === 'DRAFT' && (
     savedDeclaration.calculationStatus === 'PROVISIONAL' || (savedDeclaration.pendingCalculationItems || []).length > 0 ||
     sourceIdsChanged || sourceSnapshotsChanged || sourceChoicesChanged || purchaseReclassificationChanged || positionSummaryChanged ||
-    savedDeclaration.dailyReferenceBcvRate !== effectiveDailyReferenceBcvRate ||
-    savedDeclaration.dailyReferenceDate !== (effectiveDailyReferenceBcvRate ? effectiveDailyReferenceDate : undefined) ||
+    JSON.stringify(savedDeclaration.dailyReferenceRates || {}) !== JSON.stringify(effectiveDailyReferenceRates) ||
+    (savedDeclaration.dailyReferenceBcvRate !== effectiveDailyReferenceBcvRate && savedDeclaration.dailyReferenceDate === localToday) ||
     Boolean(purchaseSummaryError) || laterFiledPeriods.length > 0 || Boolean(activityPeriodError) || dailySalesResolution.unresolvedDates.length > 0
   );
 
@@ -395,13 +412,12 @@ export const IvaDeclaracionesView: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2">
             <input id="iva-daily-bcv-reference" value={dailyReferenceBcvRate === null ? String(savedDeclaration?.dailyReferenceBcvRate ?? '') : dailyReferenceBcvRate}
               onChange={event => setDailyReferenceBcvRate(event.target.value)}
-              disabled={Boolean(savedDeclaration?.dailyReferenceDate && savedDeclaration.dailyReferenceDate !== localToday)}
               placeholder="Introduzca la tasa BCV de hoy" inputMode="decimal"
               className="w-full max-w-xs rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
             <span className="text-xs text-slate-600">Fecha de referencia: {effectiveDailyReferenceDate}</span>
           </div>
           <p className="text-xs text-slate-600">Uso limitado: solo respalda la conversión en USD de reclasificaciones de compras cuya factura y asiento sean de esta misma fecha y no conserven tasa propia. No modifica facturas ni asientos originales y nunca se aplica a documentos de fechas anteriores.</p>
-          {savedDeclaration?.dailyReferenceBcvRate !== undefined && <p className="text-xs font-medium text-sky-900">Tasa conservada en este borrador: {savedDeclaration.dailyReferenceBcvRate} Bs/USD ({savedDeclaration.dailyReferenceDate}).</p>}
+          {Object.keys(effectiveDailyReferenceRates).length > 0 && <p className="text-xs font-medium text-sky-900">Referencias BCV conservadas en el borrador: {Object.entries(effectiveDailyReferenceRates).sort(([a], [b]) => a.localeCompare(b)).map(([date, rate]) => date + ': ' + rate + ' Bs/USD').join(' · ')}.</p>}
         </div>
         {savedDeclaration ? <>
           <div className="flex flex-wrap items-center gap-2 text-xs"><span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700">{savedDeclaration.period}</span><span className={`rounded-full px-3 py-1 font-bold ${savedDeclaration.status==='FILED'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}`}>{savedDeclaration.status==='FILED'?'PRESENTADA':'BORRADOR'}</span>{savedDeclaration.declarationNumber && <span className="font-mono text-slate-600">N° {savedDeclaration.declarationNumber}</span>}<span className="text-slate-500">Fuentes fiscales: {savedDeclaration.sourceIds.length} · Facturas relacionadas: {savedDeclaration.relatedSourceIds?.length || 0}</span>{savedDeclaration.calculationStatus === 'PROVISIONAL' && <span className="rounded-full bg-amber-100 px-3 py-1 font-bold text-amber-900">CÁLCULO PROVISIONAL</span>}</div>

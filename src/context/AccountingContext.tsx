@@ -5667,6 +5667,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const referenceRate = input.dailyReferenceBcvRate;
     const referenceDate = input.dailyReferenceDate;
+    const dailyReferenceRates: Record<string, number> = { ...(existingDraft?.dailyReferenceRates || {}) };
+    if (existingDraft?.dailyReferenceDate && Number.isFinite(existingDraft.dailyReferenceBcvRate) &&
+        Number(existingDraft.dailyReferenceBcvRate) > 0 && dailyReferenceRates[existingDraft.dailyReferenceDate] === undefined) {
+      dailyReferenceRates[existingDraft.dailyReferenceDate] = Number(existingDraft.dailyReferenceBcvRate);
+    }
     const parsedReferenceDate = referenceDate ? new Date(referenceDate + 'T00:00:00') : null;
     const referenceDateIsValid = Boolean(parsedReferenceDate && Number.isFinite(parsedReferenceDate.getTime()) &&
       parsedReferenceDate.getFullYear() + '-' + String(parsedReferenceDate.getMonth() + 1).padStart(2, '0') +
@@ -5682,6 +5687,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         (!existingDraft || referenceDate !== existingDraft.dailyReferenceDate)) {
       throw new Error('La tasa de referencia solo puede registrarse para el día actual. Un borrador existente puede conservar su fecha de referencia original.');
     }
+    if (referenceDate && referenceRate !== undefined) dailyReferenceRates[referenceDate] = referenceRate;
     const lockKey = 'own:' + currentCompany.id + ':' + period;
     if (vatDeclarationCreationInFlightRef.current.has(lockKey)) throw new Error('La declaración de ese período ya se está preparando.');
     vatDeclarationCreationInFlightRef.current.add(lockKey);
@@ -5770,7 +5776,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             companyId: currentCompany.id, period: period,
             allPurchases: purchases, journalEntries, summary: purchaseSummary,
             dailyReferenceBcvRate: referenceRate,
-            dailyReferenceDate: referenceDate
+            dailyReferenceDate: referenceDate,
+            dailyReferenceRates
           });
         } catch (error) {
           pendingCalculationItems.push(error instanceof Error
@@ -5813,6 +5820,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         dailySourceChoices: { ...(input.choices || {}) },
         dailyReferenceBcvRate: referenceRate,
         dailyReferenceDate: referenceDate,
+        dailyReferenceRates,
         purchaseVatReclassificationItems,
         calculationStatus: pendingCalculationItems.length ? 'PROVISIONAL' : 'READY',
         pendingCalculationItems,
@@ -5967,7 +5975,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         allPurchases: purchases,
         journalEntries, summary: currentPurchaseSummary,
         dailyReferenceBcvRate: declaration.dailyReferenceBcvRate,
-        dailyReferenceDate: declaration.dailyReferenceDate
+        dailyReferenceDate: declaration.dailyReferenceDate,
+        dailyReferenceRates: declaration.dailyReferenceRates
       });
       if (JSON.stringify(currentReclassificationItems) !== JSON.stringify(declaration.purchaseVatReclassificationItems || [])) {
         throw new Error('No se puede presentar: cambió la distribución contable del IVA no acreditable desde que se preparó el borrador. Actualícelo para conservar el nuevo detalle.');
