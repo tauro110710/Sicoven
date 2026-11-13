@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const { validateAccountingSnapshot } = require('./accounting-integrity.cjs');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
 const { partitionAccountingSnapshot } = require('./tenant-snapshot.cjs');
+const { reopenAccountingYear } = require('./accounting-year-reopening.cjs');
 
 function syncPartyMasterRows(db, state) {
   if (!Array.isArray(state.customers) && !Array.isArray(state.suppliers)) return;
@@ -626,6 +627,21 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
   const runWithDatabase = (token, operation) => withDatabase
     ? withDatabase(token, (activeDb, companyId) => operation(activeDb, companyId))
     : operation(db, null);
+  ipcMain.handle('sicoven:reopen-accounting-year', (_event, token, input) => {
+    const licensing = licenseView();
+    if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
+    const actor = getActiveSession(token);
+    if (!actor) throw new Error('Sesión no válida. Inicie sesión para reabrir el ejercicio anual.');
+    if (!hasFullSystemAccess(actor)) throw new Error('Permiso insuficiente para reabrir un ejercicio anual.');
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Solicitud de reapertura anual inválida.');
+    return runWithDatabase(token, (activeDb, selectedCompanyId) => {
+      const companyId = String(input.companyId || '').trim();
+      if (selectedCompanyId && selectedCompanyId !== companyId) {
+        throw new Error('La reapertura anual solicitada no pertenece a la empresa activa.');
+      }
+      return reopenAccountingYear(activeDb, input, actor);
+    });
+  });
   ipcMain.handle('sicoven:reopen-accounting-period', (_event, token, input) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
