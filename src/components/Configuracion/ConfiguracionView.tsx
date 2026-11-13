@@ -1126,100 +1126,115 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
         {!isStorageReady && <p className="text-xs text-rose-700">El almacenamiento SQLite no está disponible. El cierre permanece deshabilitado.</p>}
       </div>
 
-      {/* Preparación y registro controlado del asiento de apertura */}
+      {/* Ejecución automática del ciclo contable anual */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
         <div className="flex items-start gap-3">
           <div className="rounded-xl bg-indigo-50 border border-indigo-200 p-2">
             <CalendarCheck className="w-5 h-5 text-indigo-700" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="font-bold text-sm text-slate-900">Apertura del siguiente ejercicio</h3>
+            <h3 className="font-bold text-sm text-slate-900">Cierre anual y apertura automática del siguiente ejercicio</h3>
             <p className="text-xs text-slate-500 mt-1">
-              Prepara los saldos patrimoniales y el resultado del ejercicio cerrado. La apertura solo se registra después de revisar la vista previa y confirmar; no se genera automáticamente.
+              SICOVEN calcula el resultado, contabiliza el asiento de cierre, incorpora la depreciación pendiente, genera el asiento de apertura, bloquea las fechas históricas y avanza el ejercicio activo. Ambos asientos y el bloqueo se confirman juntos en SQLite.
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Ejercicio a cerrar</label>
+            <input type="text" value={String(currentCompany.fiscalYear)} readOnly className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-mono" />
+          </div>
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Inicio del ejercicio</label>
-            <input type="date" value={openingPeriodStart} onChange={e => { setOpeningPeriodStart(e.target.value); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
+            <input type="date" value={openingPeriodStart} readOnly className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-mono" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Cierre del ejercicio</label>
-            <input type="date" value={openingPeriodEnd} onChange={e => { setOpeningPeriodEnd(e.target.value); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady || Boolean(currentCompany.closedThroughDate)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de cierre</label>
+            <input type="date" value={openingPeriodEnd} readOnly className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-mono" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de apertura</label>
-            <input type="date" value={openingDate} onChange={e => { setOpeningDate(e.target.value); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de apertura siguiente</label>
+            <input type="date" value={openingDate} readOnly className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-mono" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) *</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Tasa BCV al cierre (Bs./USD) *</label>
+            <input type="text" inputMode="decimal" value={closingBcvRateInput} onChange={e => { setClosingBcvRateInput(e.target.value); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} placeholder="Ej.: 889,67" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Tasa BCV a la apertura (Bs./USD) *</label>
             <input type="text" inputMode="decimal" value={openingBcvRateInput} onChange={e => { setOpeningBcvRateInput(e.target.value); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} placeholder="Ej.: 889,67" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Cuenta patrimonial para resultado</label>
-            <select value={retainedEarningsAccountCode} onChange={e => { setRetainedEarningsAccountCode(e.target.value); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100">
-              <option value="">Seleccionar si hay resultado del ejercicio</option>
-              {accounts.filter(account => account.type === 'PATRIMONIO' && account.isMovement).map(account => (
+          <div className="xl:col-span-2">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Cuenta patrimonial para trasladar utilidad o pérdida</label>
+            <select value={retainedEarningsAccountCode} onChange={e => { setRetainedEarningsAccountCode(e.target.value); setClosingPreview(null); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100">
+              <option value="">Seleccionar cuenta patrimonial si el ejercicio tiene resultado</option>
+              {accounts.filter(account => account.type === 'PATRIMONIO' && account.isMovement && account.isActive !== false).map(account => (
                 <option key={account.code} value={account.code}>{account.code} — {account.name}</option>
               ))}
             </select>
           </div>
         </div>
-        {!currentCompany.closedThroughDate && (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            Para preparar la apertura, primero debe existir un cierre contable confirmado en SQLite para esta empresa.
+        {currentCompany.closedThroughDate && currentCompany.closedThroughDate > openingPeriodEnd && (
+          <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+            La empresa ya tiene bloqueadas fechas posteriores a este ejercicio. Se requiere revisión y reapertura formal antes de ejecutar el ciclo.
           </p>
         )}
+        <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+          Primero prepare y revise los dos asientos. Al ejecutar, SICOVEN vuelve a calcularlos con los datos confirmados en SQLite e incorpora las depreciaciones pendientes. Las tasas BCV se registran como datos históricos de cada asiento; no se utilizan para recalcular los saldos ya contabilizados.
+        </p>
         {openingError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">{openingError}</p>}
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={handlePreviewOpening} disabled={openingBusy || !isStorageReady || !currentCompany.closedThroughDate} className="rounded-lg bg-indigo-600 hover:bg-indigo-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
-            Preparar vista previa
+          <button type="button" onClick={handlePreviewOpening} disabled={openingBusy || !isStorageReady || !currentCompany.id || currentCompany.closedThroughDate > openingPeriodEnd} className="rounded-lg bg-indigo-600 hover:bg-indigo-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+            Preparar vista previa de cierre y apertura
           </button>
-          <button type="button" onClick={handlePostOpening} disabled={openingBusy || !openingPreview || !isStorageReady || parseExchangeabilityNumber(openingBcvRateInput) <= 0} className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
-            {openingBusy ? 'Guardando y verificando SQLite…' : 'Confirmar y registrar apertura'}
+          <button type="button" onClick={handleExecuteAnnualCycle} disabled={openingBusy || !closingPreview || !openingPreview || !isStorageReady || parseExchangeabilityNumber(closingBcvRateInput) <= 0 || parseExchangeabilityNumber(openingBcvRateInput) <= 0 || currentCompany.closedThroughDate > openingPeriodEnd} className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+            {openingBusy ? 'Contabilizando y confirmando SQLite…' : 'Ejecutar cierre anual y apertura'}
           </button>
         </div>
-        {openingPreview && (
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-xs font-bold text-slate-800">Vista previa — {openingPreview.length} líneas</p>
-              <p className="text-[11px] text-slate-500">No se ha contabilizado todavía. Revise ambas monedas antes de confirmar.</p>
-            </div>
-            <table className="w-full min-w-[720px] text-xs">
-              <thead className="bg-slate-50 text-slate-600">
-                <tr>
-                  <th className="px-3 py-2 text-left">Cuenta</th>
-                  <th className="px-3 py-2 text-right">Debe Bs.</th>
-                  <th className="px-3 py-2 text-right">Haber Bs.</th>
-                  <th className="px-3 py-2 text-right">Debe USD</th>
-                  <th className="px-3 py-2 text-right">Haber USD</th>
-                </tr>
-              </thead>
-              <tbody>
-                {openingPreview.map(item => (
-                  <tr key={item.accountCode} className="border-t border-slate-100">
-                    <td className="px-3 py-2"><span className="font-mono">{item.accountCode}</span> — {item.accountName}</td>
-                    <td className="px-3 py-2 text-right font-mono">{item.debitBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-2 text-right font-mono">{item.creditBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-2 text-right font-mono">{item.debitUsd.toFixed(6)}</td>
-                    <td className="px-3 py-2 text-right font-mono">{item.creditUsd.toFixed(6)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-bold">
-                <tr>
-                  <td className="px-3 py-2">Totales</td>
-                  <td className="px-3 py-2 text-right font-mono">{openingPreview.reduce((sum, item) => sum + item.debitBs, 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td className="px-3 py-2 text-right font-mono">{openingPreview.reduce((sum, item) => sum + item.creditBs, 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td className="px-3 py-2 text-right font-mono">{openingPreview.reduce((sum, item) => sum + item.debitUsd, 0).toFixed(6)}</td>
-                  <td className="px-3 py-2 text-right font-mono">{openingPreview.reduce((sum, item) => sum + item.creditUsd, 0).toFixed(6)}</td>
-                </tr>
-              </tfoot>
-            </table>
+        {closingPreview && openingPreview && (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {[{ title: 'Asiento de cierre', items: closingPreview }, { title: 'Asiento de apertura', items: openingPreview }].map(section => (
+              <div key={section.title} className="overflow-x-auto rounded-xl border border-slate-200">
+                <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-bold text-slate-800">{section.title} · {section.items.length} líneas</p>
+                  <p className="text-[11px] text-slate-500">Vista previa; todavía no está contabilizado.</p>
+                </div>
+                <table className="w-full min-w-[520px] text-xs">
+                  <thead className="bg-slate-50 text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Cuenta</th>
+                      <th className="px-3 py-2 text-right">Debe Bs.</th>
+                      <th className="px-3 py-2 text-right">Haber Bs.</th>
+                      <th className="px-3 py-2 text-right">Debe USD</th>
+                      <th className="px-3 py-2 text-right">Haber USD</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {section.items.map((item, index) => (
+                      <tr key={item.accountCode + '-' + index} className="border-t border-slate-100">
+                        <td className="px-3 py-2"><span className="font-mono">{item.accountCode}</span> — {item.accountName}</td>
+                        <td className="px-3 py-2 text-right font-mono">{item.debitBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-2 text-right font-mono">{item.creditBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-2 text-right font-mono">{item.debitUsd.toFixed(6)}</td>
+                        <td className="px-3 py-2 text-right font-mono">{item.creditUsd.toFixed(6)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-bold">
+                    <tr>
+                      <td className="px-3 py-2">Totales</td>
+                      <td className="px-3 py-2 text-right font-mono">{section.items.reduce((sum, item) => sum + item.debitBs, 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-2 text-right font-mono">{section.items.reduce((sum, item) => sum + item.creditBs, 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-2 text-right font-mono">{section.items.reduce((sum, item) => sum + item.debitUsd, 0).toFixed(6)}</td>
+                      <td className="px-3 py-2 text-right font-mono">{section.items.reduce((sum, item) => sum + item.creditUsd, 0).toFixed(6)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            ))}
           </div>
         )}
-        {!isStorageReady && <p className="text-xs text-rose-700">SQLite no está disponible. La preparación y el registro permanecen deshabilitados.</p>}
+        {!isStorageReady && <p className="text-xs text-rose-700">SQLite no está disponible. El ciclo anual permanece deshabilitado.</p>}
       </div>
 
       <section className="rounded-2xl border border-blue-200 bg-blue-50/50 p-5 space-y-3">
