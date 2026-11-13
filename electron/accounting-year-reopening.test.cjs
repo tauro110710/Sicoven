@@ -183,6 +183,25 @@ test('bloquea presentación o pago de IVA propio posterior al cierre', () => {
   db.close();
 });
 
+test('bloquea eventos de pago de IVA propio posteriores aunque la presentación sea anterior al cierre', () => {
+  const { db, state } = fixture();
+  state.vatOwnDeclarations = [{
+    id: 'vat-own-2', companyId: 'co-1', period: '2025-12',
+    status: 'FILED', createdAt: '2025-12-30T09:00:00.000Z',
+    filedAt: '2025-12-31T09:00:00.000Z'
+  }];
+  state.vatOwnDeclarationEvents = [{
+    id: 'vat-own-event-2', declarationId: 'vat-own-2', companyId: 'co-1',
+    eventType: 'PAYMENT', occurredAt: '2026-01-05T10:00:00.000Z',
+    recordedAt: '2026-01-05T10:01:00.000Z'
+  }];
+  db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'").run(JSON.stringify(state));
+  assert.throws(() => reopenAccountingYear(db, {
+    companyId: 'co-1', reason: 'Corrección del cierre anual.'
+  }, null), /eventos de presentación, pago o reversión de IVA propio/i);
+  db.close();
+});
+
 test('bloquea notas financieras del ejercicio modificadas después del cierre', () => {
   const { db, state } = fixture();
   state.financialDisclosures = [{
