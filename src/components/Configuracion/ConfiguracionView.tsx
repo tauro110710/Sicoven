@@ -97,7 +97,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
   const [openingPeriodStart, setOpeningPeriodStart] = useState(() => String(currentCompany.fiscalYear) + '-01-01');
   const [openingPeriodEnd, setOpeningPeriodEnd] = useState(currentCompany.closedThroughDate || (String(currentCompany.fiscalYear) + '-12-31'));
   const [openingDate, setOpeningDate] = useState(() => {
-    const end = currentCompany.closedThroughDate || (String(currentCompany.fiscalYear) + '-12-31');
+    const end = String(currentCompany.fiscalYear) + '-12-31';
     const date = new Date(end + 'T00:00:00.000Z');
     date.setUTCDate(date.getUTCDate() + 1);
     return date.toISOString().slice(0, 10);
@@ -581,7 +581,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     setPeriodCloseBusy(true);
     try {
       await closeAccountingPeriod(periodCloseDate);
-      alert('Cierre contable guardado y confirmado por SQLite hasta el ' + periodCloseDate + '.');
+      alert('Bloqueo histórico guardado y confirmado por SQLite hasta el ' + periodCloseDate + '.');
     } catch (error) {
       alert(error instanceof Error ? error.message : 'SQLite no confirmó el cierre contable. No continúe hasta revisar el estado de almacenamiento.');
     } finally {
@@ -1040,9 +1040,9 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
             <LockKeyhole className="w-5 h-5 text-amber-700" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="font-bold text-sm text-slate-900">Cierre contable y bloqueo de períodos</h3>
+            <h3 className="font-bold text-sm text-slate-900">Bloqueo de fechas históricas</h3>
             <p className="text-xs text-slate-500 mt-1">
-              El cierre se registra en SQLite para esta empresa. Las nuevas operaciones retroactivas hasta la fecha cerrada serán rechazadas en la persistencia local.
+              Este control bloquea operaciones retroactivas hasta la fecha indicada. No sustituye el cierre anual ni genera asientos de cierre o apertura.
             </p>
           </div>
         </div>
@@ -1066,13 +1066,13 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
             className="flex items-center justify-center gap-2 rounded-lg bg-amber-600 hover:bg-amber-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             <CalendarCheck className="w-4 h-4" />
-            {periodCloseBusy ? 'Confirmando en SQLite…' : currentCompany.closedThroughDate ? 'Actualizar fecha de cierre' : 'Cerrar período'}
+            {periodCloseBusy ? 'Confirmando en SQLite…' : currentCompany.closedThroughDate ? 'Actualizar bloqueo' : 'Bloquear hasta la fecha'}
           </button>
         </div>
         <div className={`rounded-lg border p-3 text-xs ${currentCompany.closedThroughDate ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
           {currentCompany.closedThroughDate
-            ? <><strong>Cierre vigente:</strong> operaciones hasta {currentCompany.closedThroughDate}. La fecha solo puede avanzarse desde esta pantalla.</>
-            : <><strong>Sin cierre registrado.</strong> La empresa todavía no tiene un período bloqueado.</>}
+            ? <><strong>Bloqueo vigente:</strong> operaciones hasta {currentCompany.closedThroughDate}. La fecha solo puede avanzarse desde esta pantalla.</>
+            : <><strong>Sin bloqueo registrado.</strong> La empresa todavía no tiene fechas históricas bloqueadas.</>}
         </div>
         {currentCompany.closedThroughDate && (
           <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4 space-y-3">
@@ -1174,7 +1174,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
             </select>
           </div>
         </div>
-        {currentCompany.closedThroughDate && currentCompany.closedThroughDate > openingPeriodEnd && (
+        {currentCompany.closedThroughDate && String(currentCompany.closedThroughDate || '') > openingPeriodEnd && (
           <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
             La empresa ya tiene bloqueadas fechas posteriores a este ejercicio. Se requiere revisión y reapertura formal antes de ejecutar el ciclo.
           </p>
