@@ -72,10 +72,11 @@ function initializeAnnualReopeningSchema(db) {
   `);
 }
 
-function assertNoLaterActivity(state, companyId, closingDate, closingId, openingId) {
+function assertNoLaterActivity(state, companyId, closingDate, closingId, openingId, allowedHistoricalReversalIds = new Set()) {
   const journal = Array.isArray(state.journalEntries) ? state.journalEntries : [];
   const laterEntry = journal.find(entry => String(entry.companyId) === companyId &&
-    ![closingId, openingId].includes(String(entry.id)) && String(entry.date || '') > closingDate);
+    ![closingId, openingId].includes(String(entry.id)) && !allowedHistoricalReversalIds.has(String(entry.id)) &&
+    String(entry.date || '') > closingDate);
   if (laterEntry) throw new Error('No se puede reabrir: existen asientos posteriores al cierre anual. Revise primero sus dependencias.');
   const collections = [
     ['sales', ['invoiceDate', 'date']],
@@ -152,7 +153,8 @@ function reopenAccountingYear(db, input, actor) {
     const closingDate = String(company.closedThroughDate || '');
     if (!isIsoDate(closingDate)) throw new Error('La empresa no tiene un cierre anual vigente y verificable.');
     const closings = state.journalEntries.filter(entry => String(entry.companyId) === companyId &&
-      entry.type === 'CIERRE' && entry.date === closingDate &&
+      entry.type === 'CIERRE' && !entry.reversedByEntryId && entry.isAdjusted !== true &&
+      entry.date === closingDate &&
       String(entry.referenceDoc || '') === 'CIERRE:' + companyId + ':' + closingDate);
     if (closings.length !== 1) throw new Error('No se encontró un único asiento de cierre anual vigente; no se modificó ningún dato.');
     const closing = closings[0];
@@ -172,7 +174,8 @@ function reopenAccountingYear(db, input, actor) {
     }
     const openingDate = nextIsoDate(closingDate);
     const openings = state.journalEntries.filter(entry => String(entry.companyId) === companyId &&
-      entry.type === 'APERTURA' && entry.date === openingDate &&
+      entry.type === 'APERTURA' && !entry.reversedByEntryId && entry.isAdjusted !== true &&
+      entry.date === openingDate &&
       entry.exerciseLink?.priorPeriodEndDate === closingDate &&
       entry.exerciseLink?.nextPeriodStartDate === openingDate);
     if (openings.length !== 1) throw new Error('No se encontró una única apertura enlazada al cierre anual.');
@@ -186,7 +189,18 @@ function reopenAccountingYear(db, input, actor) {
     const existing = db.prepare('SELECT id FROM accounting_year_reopenings WHERE closing_entry_id=? OR opening_entry_id=?')
       .get(String(closing.id), String(opening.id));
     if (existing) throw new Error('Este ciclo anual ya tiene una reapertura formal registrada.');
-    assertNoLaterActivity(state, companyId, closingDate, String(closing.id), String(opening.id));
+    const priorReopeningRows = db.prepare('SELECT details_json FROM accounting_year_reopenings WHERE company_id=?').all(companyId);
+    const allowedHistoricalReversalIds = new Set();
+    for (const priorRow of priorReopeningRows) {
+      try {
+        const details = JSON.parse(priorRow.details_json);
+        if (details.closingReversalEntryId) allowedHistoricalReversalIds.add(String(details.closingReversalEntryId));
+        if (details.openingReversalEntryId) allowedHistoricalReversalIds.add(String(details.openingReversalEntryId));
+      } catch {
+        throw new Error('El historial de reaperturas anuales es ilegible; se bloqueó la operación.');
+      }
+    }
+    assertNoLaterActivity(state, companyId, closingDate, String(closing.id), String(opening.id), allowedHistoricalReversalIds);
 
     const maxEntryNumber = state.journalEntries.filter(entry => String(entry.companyId) === companyId)
       .reduce((max, entry) => Math.max(max, Number(entry.entryNumber) || 0), 0);
