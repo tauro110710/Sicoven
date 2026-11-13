@@ -203,7 +203,13 @@ interface AccountingContextType {
   vatWithholdingDeclarationEvents: VatWithholdingDeclarationEvent[];
   vatOwnDeclarations: VatOwnDeclaration[];
   vatOwnDeclarationEvents: VatOwnDeclarationEvent[];
-  createVatOwnDeclaration: (input: { period: string; choices?: Record<string, 'Z' | 'INDIVIDUAL'>; refresh?: boolean }) => Promise<VatOwnDeclaration>;
+  createVatOwnDeclaration: (input: {
+    period: string;
+    choices?: Record<string, 'Z' | 'INDIVIDUAL'>;
+    refresh?: boolean;
+    dailyReferenceBcvRate?: number;
+    dailyReferenceDate?: string;
+  }) => Promise<VatOwnDeclaration>;
   recordVatOwnDeclarationEvent: (declarationId: string, draft: Omit<VatOwnDeclarationEvent, 'id' | 'declarationId' | 'recordedAt' | 'journalEntryId'>) => Promise<VatOwnDeclarationEvent>;
   createVatWithholdingDeclaration: (input: { year: number; month: number; window: VatDeclarationWindow; zeroOperations?: boolean; legacyFiscalDates?: Record<string, { fiscalDate: string; note: string }> }) => Promise<VatWithholdingDeclaration>;
   recordVatWithholdingDeclarationEvent: (declarationId: string, draft: Omit<VatWithholdingDeclarationEvent, 'id' | 'declarationId' | 'recordedAt'>) => Promise<VatWithholdingDeclarationEvent>;
