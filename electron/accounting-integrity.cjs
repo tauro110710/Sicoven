@@ -2402,6 +2402,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       const lineAccounts = entry.items.map(item => accountByCode.get(String(item.accountCode)));
       if (!company || String(company.closedThroughDate || '') !== String(entry.date) ||
           !isValidIsoDate(String(entry.date || '')) || String(entry.referenceDoc || '') !== expectedReference ||
+          String(entry.workpaperNote || '') !== 'SICOVEN_AUTO_YEAR_CLOSE_V1' ||
           priorClosing || lineAccounts.some(account => !account || !account.isMovement ||
             !['INGRESOS', 'COSTOS', 'GASTOS', 'PATRIMONIO'].includes(account.type)) ||
           !lineAccounts.some(account => ['INGRESOS', 'COSTOS', 'GASTOS'].includes(account.type))) {
