@@ -57,6 +57,8 @@ test('reabre el ciclo con dos contra-asientos exactos y restaura el estado previ
   assert.equal(result.company.fiscalYear, 2025);
   assert.equal(result.company.closedThroughDate, '2024-12-31');
   assert.equal(result.reversalEntries.length, 2);
+  assert.equal(result.reversalEntries.find(entry => entry.reversalOfEntryId === closing.id).date, '2025-12-31');
+  assert.equal(result.reversalEntries.find(entry => entry.reversalOfEntryId === opening.id).date, '2026-01-01');
   const state = JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
   const originalClosing = state.journalEntries.find(entry => entry.id === closing.id);
   const originalOpening = state.journalEntries.find(entry => entry.id === opening.id);
