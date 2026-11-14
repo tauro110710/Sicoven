@@ -906,6 +906,10 @@ app.whenReady().then(async () => {
       // registered tenant databases. The global backup is created separately
       // by the user through the normal Respaldo global action.
       tenantController.runtime.closeAll();
+      // Factory reset removes every tenant database. Clear the long-lived
+      // Electron operation context under the same exclusive maintenance lock
+      // so no deleted company remains active after the renderer reloads.
+      tenantController.operationContext.clearActiveCompanyForMaintenance();
       const tenantReset = tenantController.runtime.resetAllCompanies();
       const emptyState = {
         companies: [], currentCompanyId: '', accounts: [],
