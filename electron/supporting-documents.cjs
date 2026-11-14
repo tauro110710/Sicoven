@@ -139,14 +139,36 @@ function reviewDocument(db, input, actor) {
   })();
   return { ok: true, documentId: id, status: action };
 }
-function getDocument(db, { storageDir, documentId, actor }) {
+function getDocument(db, { storageDir, storageDirs, documentId, actor }) {
   if (!actor?.username) throw new Error('Sesión no válida.');
   const id = requiredText(documentId, 'Documento', 80);
   const row = db.prepare('SELECT id,storage_key,sha256,company_id,entity_type,entity_id FROM supporting_documents WHERE id=?').get(id);
   if (!row) throw new Error('El documento solicitado no existe.');
-  const root = path.resolve(storageDir), target = path.resolve(root, row.storage_key);
-  if (path.dirname(target) !== root || !/^[a-f0-9-]{36}\.(pdf|jpg|png|webp)$/.test(row.storage_key)) throw new Error('La ubicación interna del documento no es válida.');
-  const buffer = fs.readFileSync(target), digest = crypto.createHash('sha256').update(buffer).digest('hex');
+  if (!/^[a-f0-9-]{36}\.(pdf|jpg|png|webp)$/.test(row.storage_key)) throw new Error('La ubicación interna del documento no es válida.');
+  const roots = [...new Set((Array.isArray(storageDirs) ? storageDirs : [storageDir]).filter(Boolean).map(value => path.resolve(value)))];
+  if (!roots.length) throw new Error('No se configuró una ubicación documental válida.');
+  let target = null, buffer = null, lastMissing = null;
+  for (const root of roots) {
+    const candidate = path.resolve(root, row.storage_key);
+    if (path.dirname(candidate) !== root) throw new Error('La ubicación interna del documento no es válida.');
+    try {
+      const stat = fs.lstatSync(candidate);
+      if (stat.isSymbolicLink() || !stat.isFile()) throw new Error('El documento almacenado no es un archivo regular seguro.');
+      target = candidate;
+      buffer = fs.readFileSync(candidate);
+      break;
+    } catch (error) {
+      if (error.code === 'ENOENT') { lastMissing = error; continue; }
+      throw error;
+    }
+  }
+  if (!target || !buffer) {
+    const missing = new Error('No se encontró el archivo del documento en las ubicaciones actuales ni en el almacén histórico.');
+    missing.code = 'ENOENT';
+    if (lastMissing) missing.cause = lastMissing;
+    throw missing;
+  }
+  const digest = crypto.createHash('sha256').update(buffer).digest('hex');
   if (digest !== row.sha256) throw new Error('La integridad del documento no coincide con su huella SHA-256.');
   const now = new Date().toISOString();
   db.transaction(() => {
@@ -206,7 +228,12 @@ function registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, 
     const result = await runWithDatabase(token, (activeDb, companyId) => {
       const row = activeDb.prepare('SELECT company_id AS companyId FROM supporting_documents WHERE id=?').get(String(documentId || ''));
       if (!row || (companyId && String(row.companyId) !== companyId)) throw new Error('El documento no pertenece a la empresa activa.');
-      return getDocument(activeDb, { storageDir: path.join(app.getPath('userData'), 'supporting-documents', companyId || 'legacy'), documentId, actor });
+      const userDataDir = app.getPath('userData');
+      const tenantId = companyId || 'legacy';
+      return getDocument(activeDb, { storageDirs: [
+        path.join(userDataDir, 'companies', tenantId, 'supporting-documents'),
+        path.join(userDataDir, 'supporting-documents', tenantId)
+      ], documentId, actor });
     });
     const error = await shell.openPath(result.path);
     if (error) throw new Error('No se pudo abrir el documento: ' + error);
