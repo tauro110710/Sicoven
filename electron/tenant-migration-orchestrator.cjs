@@ -201,7 +201,7 @@ function createTenantMigrationOrchestrator(options) {
           if (documents.length) {
             const destinationDocuments = path.join(companyDirectory, 'supporting-documents');
             fs.mkdirSync(destinationDocuments, { recursive: false, mode: 0o700 });
-            documentResult = copyDocuments({ documents, sourceRoot: documentRoot, destinationRoot: destinationDocuments });
+            documentResult = copyDocuments({ documents, sourceRoot: documentRoot, destinationRoot: destinationDocuments, trustedRoot: root });
           }
 
           assertSqliteIntegrity(tenantDb);

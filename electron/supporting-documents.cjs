@@ -15,6 +15,32 @@ const ENTITY_COLLECTIONS = Object.freeze({
   VAT_VOUCHER: 'vatVouchers', ISLR_VOUCHER: 'islrVouchers',
   INVENTORY_MOVEMENT: 'movements', BANK_STATEMENT_MOVEMENT: 'bankStatementMovements'
 });
+function assertNoSymlinkPath(trustedRoot, target, label = 'El almacén documental') {
+  const root = path.resolve(trustedRoot);
+  const destination = path.resolve(target);
+  const relative = path.relative(root, destination);
+  if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
+    throw new Error(label + ' intenta salir de la carpeta local autorizada.');
+  }
+  const rootStat = fs.lstatSync(root);
+  if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
+    throw new Error('La carpeta raíz de datos de SICOVEN no es un directorio local seguro.');
+  }
+  let current = root;
+  for (const part of relative.split(path.sep).filter(Boolean)) {
+    current = path.join(current, part);
+    let stat;
+    try { stat = fs.lstatSync(current); }
+    catch (error) {
+      if (error.code === 'ENOENT') break;
+      throw error;
+    }
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new Error(label + ' contiene un directorio intermedio que no es seguro.');
+    }
+  }
+  return destination;
+}
 function requiredText(value, label, max = 180) {
   const result = String(value ?? '').trim();
   if (!result || result.length > max) throw new Error(label + ' es obligatorio y no puede exceder ' + max + ' caracteres.');
@@ -74,13 +100,14 @@ function currentDocumentStatus(db, documentId) {
   if (!row) return 'ATTACHED_UNREVIEWED';
   return row.event_type === 'REVIEWED' ? 'VERIFIED' : row.event_type === 'OBSERVATION_RECORDED' ? 'OBSERVATION_REQUIRED' : row.event_type === 'REPLACED' ? 'REPLACED' : 'ATTACHED_UNREVIEWED';
 }
-function attachDocument(db, { storageDir, input, buffer, actor }) {
+function attachDocument(db, { storageDir, trustedRoot = path.dirname(path.resolve(storageDir)), input, buffer, actor }) {
   if (!actor?.username) throw new Error('Sesión no válida.');
   const linked = assertLinkedEntity(db, input);
   const normalized = normalizeDocument(input, buffer);
   const id = crypto.randomUUID(), storageKey = id + normalized.extension, now = new Date().toISOString();
-  const root = path.resolve(storageDir);
+  const root = assertNoSymlinkPath(trustedRoot, storageDir, 'El almacén documental');
   fs.mkdirSync(root, { recursive: true });
+  assertNoSymlinkPath(trustedRoot, root, 'El almacén documental');
   const target = path.join(root, storageKey), temporary = path.join(root, id + '.tmp');
   let written = false;
   try {
@@ -139,13 +166,13 @@ function reviewDocument(db, input, actor) {
   })();
   return { ok: true, documentId: id, status: action };
 }
-function getDocument(db, { storageDir, storageDirs, documentId, actor }) {
+function getDocument(db, { storageDir, storageDirs, trustedRoot = path.dirname(path.resolve(storageDir || storageDirs?.[0] || '.')), documentId, actor }) {
   if (!actor?.username) throw new Error('Sesión no válida.');
   const id = requiredText(documentId, 'Documento', 80);
   const row = db.prepare('SELECT id,storage_key,sha256,company_id,entity_type,entity_id FROM supporting_documents WHERE id=?').get(id);
   if (!row) throw new Error('El documento solicitado no existe.');
   if (!/^[a-f0-9-]{36}\.(pdf|jpg|png|webp)$/.test(row.storage_key)) throw new Error('La ubicación interna del documento no es válida.');
-  const roots = [...new Set((Array.isArray(storageDirs) ? storageDirs : [storageDir]).filter(Boolean).map(value => path.resolve(value)))];
+  const roots = [...new Set((Array.isArray(storageDirs) ? storageDirs : [storageDir]).filter(Boolean).map(value => assertNoSymlinkPath(trustedRoot, value, 'La ruta del almacén documental')))];
   if (!roots.length) throw new Error('No se configuró una ubicación documental válida.');
   let target = null, buffer = null, lastMissing = null;
   for (const root of roots) {
@@ -205,7 +232,8 @@ function registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, 
     const buffer = fs.readFileSync(source);
     return runWithDatabase(token, (activeDb, companyId) => {
       if (companyId && String(input?.companyId || '') !== companyId) throw new Error('El documento no pertenece a la empresa activa.');
-      return attachDocument(activeDb, { storageDir: path.join(app.getPath('userData'), 'companies', companyId || 'legacy', 'supporting-documents'), input, buffer, actor });
+      const userDataDir = app.getPath('userData');
+      return attachDocument(activeDb, { trustedRoot: userDataDir, storageDir: path.join(userDataDir, 'companies', companyId || 'legacy', 'supporting-documents'), input, buffer, actor });
     });
   });
   ipcMain.handle('sicoven:document-list', (_event, token, filters) => {
@@ -230,7 +258,7 @@ function registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, 
       if (!row || (companyId && String(row.companyId) !== companyId)) throw new Error('El documento no pertenece a la empresa activa.');
       const userDataDir = app.getPath('userData');
       const tenantId = companyId || 'legacy';
-      return getDocument(activeDb, { storageDirs: [
+      return getDocument(activeDb, { trustedRoot: userDataDir, storageDirs: [
         path.join(userDataDir, 'companies', tenantId, 'supporting-documents'),
         path.join(userDataDir, 'supporting-documents', tenantId)
       ], documentId, actor });
@@ -240,4 +268,4 @@ function registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, 
     return { ok: true };
   });
 }
-module.exports = { MAX_DOCUMENT_BYTES, initializeDocumentVaultSchema, assertLinkedEntity, normalizeDocument, attachDocument, listDocuments, reviewDocument, getDocument, registerDocumentVaultIpc };
+module.exports = { MAX_DOCUMENT_BYTES, initializeDocumentVaultSchema, assertNoSymlinkPath, assertLinkedEntity, normalizeDocument, attachDocument, listDocuments, reviewDocument, getDocument, registerDocumentVaultIpc };
