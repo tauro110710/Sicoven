@@ -314,6 +314,14 @@ export default function App() {
           return;
         }
         setLicenseAllowed(true);
+        // Never restore a legacy seed-admin session before first-run
+        // administrator replacement has been completed.
+        const setup = await window.sicovenStore!.getAuthSetupStatus();
+        if (!mounted) return;
+        if (setup?.required) {
+          try { localStorage.removeItem('sicoven_auth_token'); } catch {}
+          return;
+        }
         let token = '';
         try { token = localStorage.getItem('sicoven_auth_token') || ''; } catch {}
         if (!token) return;
