@@ -239,6 +239,44 @@ test('bloquea eventos de pago de IVA propio posteriores aunque la presentación 
   db.close();
 });
 
+test('bloquea nóminas confirmadas posteriores aunque no exista asiento contable enlazado', () => {
+  const { db } = fixture();
+  db.exec(`CREATE TABLE payroll_runs (
+    id TEXT PRIMARY KEY, company_id TEXT, status TEXT, period_end TEXT, confirmed_at TEXT
+  )`);
+  db.prepare('INSERT INTO payroll_runs(id,company_id,status,period_end,confirmed_at) VALUES(?,?,?,?,?)')
+    .run('pay-1', 'co-1', 'CONFIRMED', '2026-01-15', '2026-01-16T10:00:00.000Z');
+  assert.throws(() => reopenAccountingYear(db, { companyId: 'co-1', reason: 'Corrección del cierre anual.' }, null), /nómina confirmada posterior/i);
+  db.close();
+});
+
+test('bloquea depósitos, intereses y liquidaciones laborales posteriores al cierre', () => {
+  const { db } = fixture();
+  db.exec(`
+    CREATE TABLE payroll_severance_deposits (
+      id TEXT PRIMARY KEY, company_id TEXT, deposit_date TEXT, created_at TEXT
+    );
+    CREATE TABLE payroll_severance_interest_months (
+      id TEXT PRIMARY KEY, company_id TEXT, month TEXT, created_at TEXT
+    );
+    CREATE TABLE payroll_liquidations (
+      id TEXT PRIMARY KEY, company_id TEXT, termination_date TEXT, created_at TEXT
+    );
+  `);
+  db.prepare('INSERT INTO payroll_severance_deposits VALUES(?,?,?,?)')
+    .run('dep-1', 'co-1', '2026-01-10', '2026-01-10T10:00:00.000Z');
+  assert.throws(() => reopenAccountingYear(db, { companyId: 'co-1', reason: 'Corrección del cierre anual.' }, null), /depósitos de prestaciones posteriores/i);
+  db.prepare('DELETE FROM payroll_severance_deposits').run();
+  db.prepare('INSERT INTO payroll_severance_interest_months VALUES(?,?,?,?)')
+    .run('int-1', 'co-1', '2026-01', '2026-01-10T10:00:00.000Z');
+  assert.throws(() => reopenAccountingYear(db, { companyId: 'co-1', reason: 'Corrección del cierre anual.' }, null), /intereses de prestaciones registrados después/i);
+  db.prepare('DELETE FROM payroll_severance_interest_months').run();
+  db.prepare('INSERT INTO payroll_liquidations VALUES(?,?,?,?)')
+    .run('liq-1', 'co-1', '2026-01-10', '2026-01-10T10:00:00.000Z');
+  assert.throws(() => reopenAccountingYear(db, { companyId: 'co-1', reason: 'Corrección del cierre anual.' }, null), /liquidaciones laborales posteriores/i);
+  db.close();
+});
+
 test('bloquea notas financieras del ejercicio modificadas después del cierre', () => {
   const { db, state } = fixture();
   state.financialDisclosures = [{
