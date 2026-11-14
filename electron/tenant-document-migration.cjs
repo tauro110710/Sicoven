@@ -4,6 +4,30 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
+function assertNoSymlinkPath(trustedRoot, target, label) {
+  const root = path.resolve(trustedRoot);
+  const destination = path.resolve(target);
+  const relative = path.relative(root, destination);
+  if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
+    throw new Error(label + ' intenta salir de la carpeta local autorizada.');
+  }
+  const rootStat = fs.lstatSync(root);
+  if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
+    throw new Error('La carpeta raíz de datos de SICOVEN no es un directorio local seguro.');
+  }
+  let current = root;
+  for (const part of relative.split(path.sep).filter(Boolean)) {
+    current = path.join(current, part);
+    let stat;
+    try { stat = fs.lstatSync(current); }
+    catch (error) { if (error.code === 'ENOENT') break; throw error; }
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new Error(label + ' contiene un directorio intermedio que no es seguro.');
+    }
+  }
+  return destination;
+}
+
 function assertSafeDirectory(directory, label) {
   const stat = fs.lstatSync(directory);
   if (stat.isSymbolicLink() || !stat.isDirectory()) {
@@ -28,7 +52,7 @@ function validateStorageKey(value) {
   return key;
 }
 
-function copyCompanyDocumentFiles({ documents, sourceRoot, destinationRoot }) {
+function copyCompanyDocumentFiles({ documents, sourceRoot, destinationRoot, trustedRoot = path.dirname(path.resolve(sourceRoot)) }) {
   if (!Array.isArray(documents)) throw new TypeError('Se requiere la lista de documentos de la empresa.');
   if (!sourceRoot || !destinationRoot || !path.isAbsolute(sourceRoot) || !path.isAbsolute(destinationRoot)) {
     throw new TypeError('Las rutas de documentos deben ser absolutas.');
@@ -88,4 +112,4 @@ function copyCompanyDocumentFiles({ documents, sourceRoot, destinationRoot }) {
   return Object.freeze({ copiedFiles: created.length, totalBytes });
 }
 
-module.exports = { copyCompanyDocumentFiles, validateStorageKey };
+module.exports = { copyCompanyDocumentFiles, validateStorageKey, assertNoSymlinkPath };
