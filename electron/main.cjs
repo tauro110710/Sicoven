@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, shell, safeStorage, dialog, Notification } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
+const { isTrustedNavigation } = require('./navigation-policy.cjs');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const sessions = new Map();
@@ -378,7 +379,7 @@ function createWindow() {
     icon: resolvedIcon,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
-      contextIsolation: true, nodeIntegration: false, sandbox: false
+      contextIsolation: true, nodeIntegration: false, sandbox: true
     }
   });
   const logLoadFailure = (kind, details) => {
@@ -420,8 +421,16 @@ function createWindow() {
       logLoadFailure('pdf-download', error instanceof Error ? error.message : String(error));
     }
   });
+  const entryPath = path.join(__dirname, '..', 'dist', 'index.html');
+  win.webContents.on('will-navigate', (event, navigationUrl) => {
+    if (!isTrustedNavigation(navigationUrl, {
+      isPackaged: app.isPackaged,
+      entryPath,
+      devServerOrigin: 'http://localhost:3000'
+    })) event.preventDefault();
+  });
   const loadPromise = app.isPackaged
-    ? win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
+    ? win.loadFile(entryPath)
     : win.loadURL('http://localhost:3000');
   loadPromise.catch(error => logLoadFailure('load-promise-rejected', error && error.stack || error));
   win.webContents.setWindowOpenHandler(({ url }) => {
