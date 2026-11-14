@@ -21,6 +21,8 @@ on:
       - 'electron/restore-staging.cjs'
       - 'electron/tenant-document-migration.cjs'
       - 'electron/tenant-document-migration.test.cjs'
+      - 'electron/tenant-migration-orchestrator.cjs'
+      - 'electron/tenant-migration-orchestrator.test.cjs'
     tags:
       - 'v*'
   pull_request:
@@ -43,6 +45,8 @@ on:
       - 'electron/restore-staging.cjs'
       - 'electron/tenant-document-migration.cjs'
       - 'electron/tenant-document-migration.test.cjs'
+      - 'electron/tenant-migration-orchestrator.cjs'
+      - 'electron/tenant-migration-orchestrator.test.cjs'
   workflow_dispatch:
     inputs:
       publish_release:
