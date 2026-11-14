@@ -104,7 +104,35 @@ function verifyDatabase(file) {
     const state = check.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     if (!state) throw new Error('El respaldo no contiene el estado contable.');
     JSON.parse(state.state_json);
-    return { integrity, companies: check.prepare("SELECT json_extract(state_json,'$.companies') AS companies FROM app_state WHERE state_key='accounting'").get()?.companies ?? null };
+    const registryTable = check.prepare(
+      "SELECT 1 FROM sqlite_master WHERE type='table' AND name='company_database_registry'"
+    ).get();
+    let companyRegistry = null;
+    if (registryTable) {
+      companyRegistry = check.prepare(
+        'SELECT company_id,relative_path,schema_version,status FROM company_database_registry ORDER BY company_id'
+      ).all().map(row => ({
+        companyId: String(row.company_id || ''),
+        relativePath: String(row.relative_path || ''),
+        schemaVersion: Number(row.schema_version),
+        status: String(row.status || '')
+      }));
+      const seen = new Set();
+      for (const item of companyRegistry) {
+        if (!/^[A-Za-z0-9_-]{1,120}$/.test(item.companyId) ||
+            item.relativePath !== COMPANIES_DIR + '/' + item.companyId + '/accounting.sqlite' ||
+            !Number.isInteger(item.schemaVersion) || item.schemaVersion < 1 ||
+            !['ACTIVE', 'ARCHIVED'].includes(item.status) || seen.has(item.companyId)) {
+          throw new Error('El registro de empresas de la base de control contiene una identidad, ruta, versión o estado inválido.');
+        }
+        seen.add(item.companyId);
+      }
+    }
+    return {
+      integrity,
+      companies: check.prepare("SELECT json_extract(state_json,'$.companies') AS companies FROM app_state WHERE state_key='accounting'").get()?.companies ?? null,
+      companyRegistry
+    };
   } finally { check.close(); }
 }
 
@@ -313,6 +341,17 @@ function verifyBackupDirectory(directory) {
   }));
   if (JSON.stringify(actualCompanyDatabases) !== JSON.stringify(expectedCompanyDatabases)) {
     throw new Error('Las bases SQLite o los documentos de las empresas no coinciden con el manifiesto global.');
+  }
+  const registry = integrity.companyRegistry;
+  if (registry === null && expectedCompanyDatabases.length > 0) {
+    throw new Error('El respaldo contiene bases de empresas, pero la base de control no contiene su registro multiempresa.');
+  }
+  if (registry !== null) {
+    const registryIds = registry.map(item => item.companyId).sort();
+    const manifestIds = expectedCompanyDatabases.map(item => item.companyId).sort();
+    if (JSON.stringify(registryIds) !== JSON.stringify(manifestIds)) {
+      throw new Error('El registro multiempresa de la base de control no coincide con las bases SQLite incluidas en el respaldo.');
+    }
   }
   const allowedRootEntries = new Set(['manifest.json', DB_FILE, DOCS_DIR, COMPANIES_DIR]);
   for (const entry of fs.readdirSync(root)) {
