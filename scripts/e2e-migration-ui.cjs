@@ -122,10 +122,10 @@ async function main() {
   if (trialButtonVisible) await clickButton('Continuar con la prueba gratuita');
 
   await waitFor(() => evaluate("Boolean(document.querySelector('#username') && document.querySelector('#password'))"), 'No apareció el formulario de acceso');
-  await setInput('#username', 'admin');
-  await setInput('#password', 'admin123');
-  await clickButton('Iniciar sesión');
-
+  // Create a unique local administrator as required on first launch.
+  await setInput('#username', 'e2e-admin');
+  await setInput('#password', 'E2E-Sicoven-Initial-Admin-2026!');
+  await clickButton('Crear administrador inicial');
   // El registro inicial puede abrirse automáticamente cuando termina la
   // hidratación SQLite. Si la aplicación muestra primero la pantalla principal,
   // seguir el flujo real del selector de empresas en lugar de asumir un modal.
