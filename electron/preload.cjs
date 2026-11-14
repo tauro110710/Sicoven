@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   listCorrectionCases: (token, companyId) => ipcRenderer.invoke('sicoven:correction-case-list', token, companyId),
   save: (token, state) => ipcRenderer.invoke('sicoven:save-state', token, state),
   reopenAccountingPeriod: (token, input) => ipcRenderer.invoke('sicoven:reopen-accounting-period', token, input),
+  reopenAccountingYear: (token, input) => ipcRenderer.invoke('sicoven:reopen-accounting-year', token, input),
   resetAccounting: (token, options) => ipcRenderer.invoke('sicoven:reset-accounting', token, options),
   listInflationIndexSeries: (token) => ipcRenderer.invoke('sicoven:inflation-index-list', token),
   previewInflationIndexImport: (token, input) => ipcRenderer.invoke('sicoven:inflation-index-preview', token, input),

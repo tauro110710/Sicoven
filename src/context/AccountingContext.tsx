@@ -28,6 +28,7 @@ import { prepareAccountForCatalog } from '../types/chartOfAccounts';
 import { validateJournalEntryAccounts, isJournalEntryBalanced } from '../types/journalEntryValidation';
 import { matchesBankStatementDualCurrency, validateBankMovementFxSnapshot, isDuplicateBankStatementMovement } from '../types/bankStatementMatching';
 import { buildOpeningEntryItems } from '../types/accountingYearOpening';
+import { buildClosingEntryItems } from '../types/accountingYearClosing';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
 import {
   INITIAL_COMPANIES,
@@ -138,7 +139,9 @@ interface AccountingContextType {
   deleteJournalEntry: (id: string) => void;
   reverseJournalEntry: (id: string, effectiveDate: string, reason: string, workpaperNote?: string, priorPeriodAdjustment?: boolean, retainedEarningsAccountCode?: string) => Promise<JournalEntry>;
   closeAccountingPeriod: (closedThroughDate: string) => Promise<number>;
+  closeAccountingYear: (input: { periodStartDate: string; periodEndDate: string; closingBcvRate: number; openingBcvRate: number; retainedEarningsAccountCode?: string }) => Promise<{ closingEntry: JournalEntry; openingEntry: JournalEntry; depreciationEntriesCreated: number }>;
   reopenAccountingPeriod: (reopenedThroughDate: string | null, reason: string) => Promise<void>;
+  reopenAccountingYear: (reason: string) => Promise<void>;
   createAccountingYearOpening: (input: { periodStartDate: string; periodEndDate: string; openingDate: string; bcvRate: number; retainedEarningsAccountCode?: string }) => Promise<JournalEntry>;
 
   // Liquidaciones de crédito
@@ -828,6 +831,190 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
+  const closeAccountingYear = async (input: {
+    periodStartDate: string;
+    periodEndDate: string;
+    closingBcvRate: number;
+    openingBcvRate: number;
+    retainedEarningsAccountCode?: string;
+  }): Promise<{ closingEntry: JournalEntry; openingEntry: JournalEntry; depreciationEntriesCreated: number }> => {
+    assertSQLitePersistenceReady('Ejecutar el cierre y apertura anual');
+    if (yearClosingInFlightRef.current || periodClosureInFlightRef.current) {
+      throw new Error('Ya hay un cierre contable en proceso para esta empresa.');
+    }
+    const fiscalYear = Number(currentCompany.fiscalYear);
+    const expectedStart = String(fiscalYear) + '-01-01';
+    const expectedEnd = String(fiscalYear) + '-12-31';
+    if (input.periodStartDate !== expectedStart || input.periodEndDate !== expectedEnd ||
+        !isValidIsoDate(input.periodStartDate) || !isValidIsoDate(input.periodEndDate)) {
+      throw new Error('El cierre anual debe abarcar el ejercicio calendario completo configurado en la empresa (' + expectedStart + ' al ' + expectedEnd + ').');
+    }
+    const nextDay = new Date(input.periodEndDate + 'T00:00:00.000Z');
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    const openingDate = nextDay.toISOString().slice(0, 10);
+    const todayDate = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    if (input.periodEndDate > todayDate) throw new Error('No se puede cerrar un ejercicio cuya fecha final todavía es futura.');
+    if (currentCompany.closedThroughDate && currentCompany.closedThroughDate > input.periodEndDate) {
+      throw new Error('La empresa ya tiene operaciones bloqueadas después del ejercicio que intenta cerrar. Requiere revisión contable antes de continuar.');
+    }
+    if (journalEntries.some(entry => entry.companyId === currentCompany.id &&
+        entry.type === 'APERTURA' && entry.date === openingDate &&
+        !entry.reversedByEntryId && entry.isAdjusted !== true)) {
+      throw new Error('Ya existe un asiento de apertura vigente para el ejercicio siguiente. No se ejecutará un segundo ciclo.');
+    }
+    if (!Number.isFinite(Number(input.closingBcvRate)) || Number(input.closingBcvRate) <= 0 ||
+        !Number.isFinite(Number(input.openingBcvRate)) || Number(input.openingBcvRate) <= 0) {
+      throw new Error('Indique las tasas BCV históricas válidas para el cierre y la apertura.');
+    }
+
+    yearClosingInFlightRef.current = true;
+    periodClosureInFlightRef.current = true;
+    let closingEntry: JournalEntry | null = null;
+    let openingEntry: JournalEntry | null = null;
+    try {
+      await flushPendingWrites();
+      if (sales.some(sale => sale.companyId === currentCompany.id &&
+          sale.invoiceDate <= input.periodEndDate && !sale.journalEntryId) ||
+          purchases.some(purchase => purchase.companyId === currentCompany.id &&
+          purchase.invoiceDate <= input.periodEndDate && !purchase.journalEntryId)) {
+        throw new Error('No se puede cerrar el ejercicio: hay facturas sin asiento contable vinculado. Regularice la integridad documental primero.');
+      }
+
+      // La depreciación financiera pendiente se contabiliza antes de calcular el resultado anual.
+      const depreciationEntriesCreated = await recordCompanyFixedAssetDepreciationThrough(input.periodEndDate);
+      await flushPendingWrites();
+      const confirmedEntries = Array.isArray(lastPersistedSnapshotRef.current?.journalEntries)
+        ? lastPersistedSnapshotRef.current.journalEntries as JournalEntry[]
+        : journalEntries;
+
+      const closingItems = buildClosingEntryItems({
+        companyId: currentCompany.id,
+        periodStartDate: input.periodStartDate,
+        periodEndDate: input.periodEndDate,
+        accounts,
+        journalEntries: confirmedEntries,
+        retainedEarningsAccountCode: input.retainedEarningsAccountCode
+      });
+      const closingReference = 'CIERRE:' + currentCompany.id + ':' + input.periodEndDate;
+      // Los saldos de cuentas nominales inactivadas también deben cancelarse.
+      // El catálogo real permanece inalterado; solo este asiento de cierre recibe
+      // autorización interna para mover los saldos históricos.
+      const closingAccountCatalog = accounts.map(account => closingItems.some(item => item.accountCode === account.code)
+        ? { ...account, isActive: true }
+        : account);
+      closingEntry = addJournalEntry({
+        entryNumber: 0,
+        date: input.periodEndDate,
+        description: 'Asiento de cierre del ejercicio ' + fiscalYear,
+        type: 'CIERRE',
+        bcvRate: Number(input.closingBcvRate),
+        referenceDoc: closingReference,
+        workpaperNote: 'SICOVEN_AUTO_YEAR_CLOSE_V1',
+        annualCloseState: {
+          previousFiscalYear: fiscalYear,
+          previousClosedThroughDate: currentCompany.closedThroughDate || null,
+          // Count against the freshly persisted ledger snapshot, not the
+          // render-time state captured before pending writes were flushed.
+          cycleNumber: confirmedEntries.filter(entry =>
+            entry.companyId === currentCompany.id && entry.type === 'CIERRE' &&
+            entry.date === input.periodEndDate
+          ).length + 1
+        },
+        items: closingItems
+      }, closingAccountCatalog, currentCompany.id, true);
+
+      const openingItems = buildOpeningEntryItems({
+        companyId: currentCompany.id,
+        periodStartDate: input.periodStartDate,
+        periodEndDate: input.periodEndDate,
+        openingDate,
+        accounts,
+        journalEntries: [...confirmedEntries, closingEntry],
+        retainedEarningsAccountCode: input.retainedEarningsAccountCode
+      });
+      // Los saldos de balance de cuentas históricas inactivas también se arrastran;
+      // no se reactiva ninguna cuenta en el catálogo al generar la apertura.
+      const openingAccountCatalog = accounts.map(account => openingItems.some(item => item.accountCode === account.code)
+        ? { ...account, isActive: true }
+        : account);
+      openingEntry = addJournalEntry({
+        entryNumber: 0,
+        date: openingDate,
+        description: 'Asiento de apertura del ejercicio ' + (fiscalYear + 1),
+        type: 'APERTURA',
+        bcvRate: Number(input.openingBcvRate),
+        referenceDoc: 'APERTURA:' + currentCompany.id + ':' + openingDate,
+        exerciseLink: {
+          priorPeriodStartDate: input.periodStartDate,
+          priorPeriodEndDate: input.periodEndDate,
+          nextPeriodStartDate: openingDate,
+          cycleNumber: Number(closingEntry.annualCloseState?.cycleNumber) || 1
+        },
+        items: openingItems
+      }, openingAccountCatalog, currentCompany.id);
+
+      // El cierre, ambos asientos y el cambio de ejercicio se confirman juntos en un snapshot SQLite.
+      const persistenceConfirmation = waitForPersistence();
+      setCompanies(prev => prev.map(company => company.id === currentCompany.id
+        ? { ...company, closedThroughDate: input.periodEndDate, fiscalYear: fiscalYear + 1 }
+        : company));
+      await persistenceConfirmation;
+      return { closingEntry, openingEntry, depreciationEntriesCreated };
+    } catch (error) {
+      // Si la segunda pieza no pudo construirse, retirar el primer asiento antes de publicar un cierre parcial.
+      if (closingEntry && !openingEntry && !persistenceFaultRef.current) {
+        setJournalEntries(prev => prev.filter(entry => entry.id !== closingEntry!.id));
+        try { await waitForPersistence(); } catch { /* El estado SQLite queda en modo de protección. */ }
+      }
+      throw error;
+    } finally {
+      periodClosureInFlightRef.current = false;
+      yearClosingInFlightRef.current = false;
+    }
+  };
+
+  const reopenAccountingYear = async (reason: string): Promise<void> => {
+    assertSQLitePersistenceReady('Reabrir formalmente el ejercicio anual');
+    if (periodReopeningInFlightRef.current) throw new Error('Ya hay una reapertura contable en proceso.');
+    const store = window.sicovenStore as typeof window.sicovenStore & {
+      reopenAccountingYear?: (sessionToken: string, input: { companyId: string; reason: string }) => Promise<{
+        ok: boolean; company?: Company; reversalEntries?: JournalEntry[];
+        reopening?: { closingEntryId: string; openingEntryId: string };
+      }>;
+    };
+    if (!store?.reopenAccountingYear || !storageReady || persistenceFaultRef.current) {
+      throw new Error('La reapertura anual requiere la versión de escritorio con SQLite actualizado.');
+    }
+    if (!currentCompany.id || !currentCompany.closedThroughDate) {
+      throw new Error('La empresa seleccionada no tiene un cierre anual vigente para reabrir.');
+    }
+    const normalizedReason = String(reason || '').trim();
+    if (normalizedReason.length < 10 || normalizedReason.length > 1000) {
+      throw new Error('Explique el motivo de la reapertura (entre 10 y 1000 caracteres).');
+    }
+    periodReopeningInFlightRef.current = true;
+    try {
+      await saveQueueRef.current;
+      const result = await store.reopenAccountingYear(token, {
+        companyId: currentCompany.id, reason: normalizedReason
+      });
+      if (result?.ok !== true || !result.company || !Array.isArray(result.reversalEntries) ||
+          result.reversalEntries.length !== 2) {
+        throw new Error('SQLite no confirmó la reversión conjunta del cierre y la apertura anual.');
+      }
+      const persistenceConfirmation = waitForPersistence();
+      setCompanies(prev => prev.map(company => company.id === currentCompany.id ? result.company! : company));
+      const reversalBySource = new Map(result.reversalEntries.map(entry => [String(entry.reversalOfEntryId), entry]));
+      setJournalEntries(prev => prev.map(entry => {
+        const reversal = reversalBySource.get(String(entry.id));
+        return reversal ? { ...entry, isAdjusted: true, reversedByEntryId: reversal.id } : entry;
+      }).concat(result.reversalEntries!));
+      await persistenceConfirmation;
+    } finally {
+      periodReopeningInFlightRef.current = false;
+    }
+  };
+
   const reopenAccountingPeriod = async (reopenedThroughDate: string | null, reason: string): Promise<void> => {
     assertSQLitePersistenceReady('Reabrir el período contable');
     if (periodReopeningInFlightRef.current) throw new Error('Ya hay una reapertura contable en proceso.');
@@ -838,12 +1025,25 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!currentCompany.id || !currentCompany.closedThroughDate) {
       throw new Error('La empresa seleccionada no tiene un cierre vigente para reabrir.');
     }
+    const currentClosedThroughDate = currentCompany.closedThroughDate;
+    const hasAutomaticYearClose = journalEntries.some(entry =>
+      entry.companyId === currentCompany.id && entry.type === 'CIERRE' &&
+      String(entry.referenceDoc || '') === 'CIERRE:' + currentCompany.id + ':' + String(entry.date || '') &&
+      entry.date <= currentClosedThroughDate
+    );
+    if (hasAutomaticYearClose) {
+      if (reopenedThroughDate !== null) {
+        throw new Error('Un cierre anual solo puede reabrirse mediante la restauración completa del estado previo. Seleccione la reapertura total del ejercicio; no se modificó ningún dato.');
+      }
+      await reopenAccountingYear(reason);
+      return;
+    }
     const normalizedReason = String(reason || '').trim();
     if (normalizedReason.length < 10 || normalizedReason.length > 1000) {
       throw new Error('Explique el motivo de la reapertura (entre 10 y 1000 caracteres).');
     }
     if (reopenedThroughDate !== null && (!isValidIsoDate(reopenedThroughDate) ||
-        reopenedThroughDate >= currentCompany.closedThroughDate)) {
+        reopenedThroughDate >= currentClosedThroughDate)) {
       throw new Error('La nueva fecha de cierre debe ser válida y anterior al cierre vigente.');
     }
     periodReopeningInFlightRef.current = true;
@@ -1073,6 +1273,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const productionInFlightRef = useRef(false);
   const fixedAssetOperationLocksRef = useRef(new Set<string>());
   const periodClosureInFlightRef = useRef(false);
+  const yearClosingInFlightRef = useRef(false);
   const periodReopeningInFlightRef = useRef(false);
   const yearOpeningInFlightRef = useRef(false);
   const persistenceWaitersRef = useRef<Array<{ resolve: () => void; reject: (error: Error) => void }>>([]);
@@ -1565,14 +1766,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     ));
   };
 
-  const addJournalEntry = (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>, accountCatalog: Account[] = accounts, targetCompanyId: string = currentCompany.id): JournalEntry => {
+  const addJournalEntry = (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>, accountCatalog: Account[] = accounts, targetCompanyId: string = currentCompany.id, allowSystemYearClosing = false): JournalEntry => {
     const targetCompany = companies.find(company => company.id === targetCompanyId);
     if (!targetCompany) throw new Error('La empresa destino del asiento no existe en SICOVEN.');
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('El asiento requiere SQLite local de escritorio disponible y lista. No se registró.');
     }
     if (!isValidIsoDate(entry.date)) throw new Error('El asiento requiere una fecha válida.');
-    if (targetCompany.closedThroughDate && entry.date <= targetCompany.closedThroughDate) {
+    const authorizedYearClose = allowSystemYearClosing && entry.type === 'CIERRE' &&
+      entry.date === String(targetCompany.fiscalYear) + '-12-31' &&
+      entry.referenceDoc === 'CIERRE:' + targetCompany.id + ':' + entry.date;
+    if (targetCompany.closedThroughDate && entry.date <= targetCompany.closedThroughDate && !authorizedYearClose) {
       throw new Error('No se pueden registrar asientos en un período cerrado hasta ' + targetCompany.closedThroughDate + '.');
     }
     if (!Array.isArray(entry.items)) throw new Error('El asiento debe contener líneas contables válidas.');
@@ -1602,7 +1806,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // an outgoing movement and must fit the available balance at its effective date.
     // Reconciliation adjustments are excluded because they record bank facts that
     // have already occurred, not new payment instructions.
-    if (!entry.isAdjusted) {
+    if (!entry.isAdjusted && !['APERTURA', 'CIERRE'].includes(entry.type)) {
       const creditedBankAccounts = bankAccounts.filter(bank =>
         bank.companyId === targetCompany.id &&
         entry.items.some(item => item.accountCode === bank.accountCode &&
@@ -1637,7 +1841,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       entryNumber: nextEntryNum,
       createdAt: new Date().toISOString()
     };
-    reserveBankOutgoingAccounts(newEntry.companyId, newEntry.items);
+    if (!['APERTURA', 'CIERRE'].includes(newEntry.type)) reserveBankOutgoingAccounts(newEntry.companyId, newEntry.items);
     activeImportBatchRef.current?.journalEntries.push(newEntry);
     setJournalEntries(prev => [...prev, newEntry]);
     return newEntry;
@@ -7446,7 +7650,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         deleteJournalEntry,
         reverseJournalEntry,
         closeAccountingPeriod,
+        closeAccountingYear,
         reopenAccountingPeriod,
+        reopenAccountingYear,
         createAccountingYearOpening,
         creditSettlements: visibleCreditSettlements,
         getCreditBalance,

@@ -31,7 +31,7 @@ export const LibroDiarioView: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [documentTarget, setDocumentTarget] = useState<{ id: string; title: string } | null>(null);
   const [reversalTarget, setReversalTarget] = useState<import('../../types/accounting').JournalEntry | null>(null);
-  const [showCorrectionCenter, setShowCorrectionCenter] = useState(true);
+  const [showCorrectionCenter, setShowCorrectionCenter] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
   const [startDate, setStartDate] = useState('');
@@ -168,12 +168,12 @@ export const LibroDiarioView: React.FC = () => {
             {showCorrectionCenter ? 'Ocultar expediente' : 'Abrir centro'}
           </button>
         </div>
-        <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4">
+        {showCorrectionCenter && <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4">
           <div className="rounded-lg bg-slate-50 p-3"><div className="text-[10px] text-slate-500">Asientos fuente sin reversión</div><div className="text-xl font-bold tabular-nums text-slate-900">{pendingReversals.length}</div></div>
           <div className="rounded-lg bg-slate-50 p-3"><div className="text-[10px] text-slate-500">Asientos reversados</div><div className="text-xl font-bold tabular-nums text-slate-900">{reversedEntries.length}</div></div>
           <div className="rounded-lg bg-slate-50 p-3"><div className="text-[10px] text-slate-500">Facturas de compra activas</div><div className="text-xl font-bold tabular-nums text-slate-900">{purchaseCorrectionsPending.length}</div></div>
           <div className="rounded-lg bg-slate-50 p-3"><div className="text-[10px] text-slate-500">Facturas de venta registradas</div><div className="text-xl font-bold tabular-nums text-slate-900">{salesWithManualCorrectionNeed.length}</div></div>
-        </div>
+        </div>}
         {showCorrectionCenter && <div className="grid gap-4 border-t border-slate-100 p-4 lg:grid-cols-2">
           <div className="space-y-2">
             <h3 className="text-xs font-bold text-slate-800">Asientos contables</h3>

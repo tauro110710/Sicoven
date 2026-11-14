@@ -240,7 +240,11 @@ function validateNoNewTransactionsInClosedPeriods(previousState, nextState) {
       if (priorIds.has(String(item.id))) continue;
       const closedThrough = closedByCompany.get(String(item.companyId));
       const transactionDate = String(item[dateField] || '');
-      if (closedThrough && /^\d{4}-\d{2}-\d{2}$/.test(transactionDate) && transactionDate <= closedThrough) {
+      const isAuthorizedYearClose = collection === 'journalEntries' &&
+        item.type === 'CIERRE' && transactionDate === closedThrough &&
+        String(item.referenceDoc || '') === 'CIERRE:' + String(item.companyId) + ':' + closedThrough;
+      if (closedThrough && !isAuthorizedYearClose &&
+          /^\d{4}-\d{2}-\d{2}$/.test(transactionDate) && transactionDate <= closedThrough) {
         const company = priorCompanies.get(String(item.companyId)) ||
           asArray(nextState.companies).find(candidate => String(candidate.id) === String(item.companyId));
         throw new Error('SQLite bloqueó el registro de ' + label + ' con fecha ' + transactionDate +
@@ -2388,6 +2392,48 @@ function validateAccountingSnapshot(previousState, nextState) {
         Math.abs(totals.debitUsd - totals.creditUsd) >= 0.01 ||
         totals.debitBs <= 0 || totals.debitUsd <= 0) {
       throw new Error('SQLite rechazó el asiento #' + entry.entryNumber + ': no cuadra simultáneamente en Bs. y USD.');
+    }
+    if (entry.type === 'CIERRE') {
+      const company = asArray(nextState.companies).find(item => String(item.id) === String(entry.companyId));
+      const expectedReference = 'CIERRE:' + String(entry.companyId) + ':' + String(entry.date || '');
+      const closingYear = String(entry.date || '').slice(0, 4);
+      const closingDateValid = isValidIsoDate(String(entry.date || ''));
+      const nextOpeningDate = closingDateValid
+        ? (() => { const date = new Date(String(entry.date) + 'T00:00:00.000Z'); date.setUTCDate(date.getUTCDate() + 1); return date.toISOString().slice(0, 10); })()
+        : '';
+      const linkedOpening = nextEntries.some(candidate => candidate.companyId === entry.companyId &&
+        candidate.type === 'APERTURA' && candidate.date === nextOpeningDate &&
+        candidate.exerciseLink?.priorPeriodEndDate === entry.date &&
+        candidate.exerciseLink?.nextPeriodStartDate === nextOpeningDate);
+      const priorClosing = priorEntries.some(item => item.companyId === entry.companyId &&
+        item.type === 'CIERRE' && !item.reversedByEntryId && item.isAdjusted !== true &&
+        String(item.date || '').slice(0, 4) === closingYear);
+      const duplicateNextClosing = nextEntries.some(item => item.id !== entry.id &&
+        item.companyId === entry.companyId && item.type === 'CIERRE' &&
+        !item.reversedByEntryId && item.isAdjusted !== true &&
+        String(item.date || '').slice(0, 4) === closingYear);
+      const accountByCode = new Map(asArray(nextState.accounts).map(account => [String(account.code), account]));
+      const lineAccounts = entry.items.map(item => accountByCode.get(String(item.accountCode)));
+      const equityCodes = new Set(lineAccounts.filter(account => account?.type === 'PATRIMONIO').map(account => account.code));
+      const closeState = entry.annualCloseState;
+      const closeStateValid = Boolean(closeState &&
+        Number.isInteger(Number(closeState.previousFiscalYear)) &&
+        Number(closeState.previousFiscalYear) === Number(closingYear) &&
+        Number.isInteger(Number(closeState.cycleNumber)) && Number(closeState.cycleNumber) >= 1 &&
+        (closeState.previousClosedThroughDate === null ||
+          (isValidIsoDate(String(closeState.previousClosedThroughDate)) &&
+           String(closeState.previousClosedThroughDate) < String(entry.date))));
+      if (!company || !closeStateValid || String(company.closedThroughDate || '') !== String(entry.date) ||
+          !closingDateValid || String(entry.date) !== closingYear + '-12-31' ||
+          Number(company.fiscalYear) !== Number(closingYear) + 1 || !linkedOpening ||
+          String(entry.referenceDoc || '') !== expectedReference ||
+          String(entry.workpaperNote || '') !== 'SICOVEN_AUTO_YEAR_CLOSE_V1' ||
+          priorClosing || duplicateNextClosing || equityCodes.size > 1 ||
+          lineAccounts.some(account => !account || !account.isMovement ||
+            !['INGRESOS', 'COSTOS', 'GASTOS', 'PATRIMONIO'].includes(account.type)) ||
+          !lineAccounts.some(account => ['INGRESOS', 'COSTOS', 'GASTOS'].includes(account.type))) {
+        throw new Error('SQLite rechazó el asiento de cierre anual: debe ser único, estar vinculado al bloqueo del ejercicio y cancelar únicamente cuentas nominales contra patrimonio.');
+      }
     }
     if (entry.reversalOfEntryId) {
       const source = nextById.get(String(entry.reversalOfEntryId));

@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const { validateAccountingSnapshot } = require('./accounting-integrity.cjs');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
 const { partitionAccountingSnapshot } = require('./tenant-snapshot.cjs');
+const { initializeAnnualReopeningSchema, reopenAccountingYear } = require('./accounting-year-reopening.cjs');
 
 function syncPartyMasterRows(db, state) {
   if (!Array.isArray(state.customers) && !Array.isArray(state.suppliers)) return;
@@ -86,7 +87,7 @@ function persistAccountingSnapshot(db, state, actor = null) {
         }
         const duplicate = (Array.isArray(state.journalEntries) ? state.journalEntries : []).some(item =>
           String(item.id) !== String(entry.id) && String(item.companyId) === String(entry.companyId) &&
-          item.type === 'APERTURA' && (
+          item.type === 'APERTURA' && !item.reversedByEntryId && item.isAdjusted !== true && (
             item.date === link.nextPeriodStartDate ||
             (item.exerciseLink &&
               item.exerciseLink.priorPeriodStartDate === link.priorPeriodStartDate &&
@@ -94,11 +95,12 @@ function persistAccountingSnapshot(db, state, actor = null) {
               item.exerciseLink.nextPeriodStartDate === link.nextPeriodStartDate)
           ));
         if (duplicate) throw new Error('Ya existe una apertura vinculada a este ejercicio anterior y no se permite duplicarla.');
+        const cycleNumber = Math.max(1, Number(link.cycleNumber) || 1);
         db.prepare(`INSERT INTO accounting_exercise_links
-          (id,company_id,prior_period_start_date,prior_period_end_date,next_period_start_date,journal_entry_id)
-          VALUES(?,?,?,?,?,?)`)
+          (id,company_id,prior_period_start_date,prior_period_end_date,next_period_start_date,journal_entry_id,cycle_number)
+          VALUES(?,?,?,?,?,?,?)`)
           .run(crypto.randomUUID(), String(entry.companyId), link.priorPeriodStartDate,
-            link.priorPeriodEndDate, link.nextPeriodStartDate, String(entry.id));
+            link.priorPeriodEndDate, link.nextPeriodStartDate, String(entry.id), cycleNumber);
         auditInsert.run('accounting_exercise_opening_linked', JSON.stringify({
           companyId: entry.companyId, journalEntryId: entry.id,
           priorPeriodStartDate: link.priorPeriodStartDate,
@@ -114,6 +116,19 @@ function persistAccountingSnapshot(db, state, actor = null) {
         reversalReason: entry.reversalReason || null, workpaperNote: entry.workpaperNote || null,
         priorPeriodAdjustment: Boolean(entry.priorPeriodAdjustment), totals
       }));
+      if (entry.type === 'CIERRE' && String(entry.referenceDoc || '').startsWith('CIERRE:')) {
+        const opening = nextEntries.find(candidate => candidate.companyId === entry.companyId &&
+          candidate.type === 'APERTURA' && candidate.exerciseLink?.priorPeriodEndDate === entry.date);
+        auditInsert.run('accounting_year_closed', JSON.stringify({
+          closingEntryId: entry.id, closingEntryNumber: entry.entryNumber,
+          openingEntryId: opening?.id || null, openingEntryNumber: opening?.entryNumber || null,
+          companyId: entry.companyId, closingDate: entry.date,
+          resultAccountCodes: entry.items.map(item => item.accountCode),
+          annualCloseState: entry.annualCloseState || null,
+          actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null,
+          totals
+        }));
+      }
       if (entry.type === 'APERTURA') {
         auditInsert.run('accounting_year_opening_posted', JSON.stringify({
           entryId: entry.id, companyId: entry.companyId, entryNumber: entry.entryNumber,
@@ -600,7 +615,8 @@ db.exec(`
   CREATE TRIGGER IF NOT EXISTS period_reopenings_no_delete
     BEFORE DELETE ON period_reopenings
     BEGIN SELECT RAISE(ABORT, 'period_reopenings is append-only'); END;
-`);
+  `);
+  initializeAnnualReopeningSchema(db);
 }
 
 function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession, withDatabase = null }) {
@@ -613,6 +629,21 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
   const runWithDatabase = (token, operation) => withDatabase
     ? withDatabase(token, (activeDb, companyId) => operation(activeDb, companyId))
     : operation(db, null);
+  ipcMain.handle('sicoven:reopen-accounting-year', (_event, token, input) => {
+    const licensing = licenseView();
+    if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
+    const actor = getActiveSession(token);
+    if (!actor) throw new Error('Sesión no válida. Inicie sesión para reabrir el ejercicio anual.');
+    if (!hasFullSystemAccess(actor)) throw new Error('Permiso insuficiente para reabrir un ejercicio anual.');
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Solicitud de reapertura anual inválida.');
+    return runWithDatabase(token, (activeDb, selectedCompanyId) => {
+      const companyId = String(input.companyId || '').trim();
+      if (selectedCompanyId && selectedCompanyId !== companyId) {
+        throw new Error('La reapertura anual solicitada no pertenece a la empresa activa.');
+      }
+      return reopenAccountingYear(activeDb, input, actor);
+    });
+  });
   ipcMain.handle('sicoven:reopen-accounting-period', (_event, token, input) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');

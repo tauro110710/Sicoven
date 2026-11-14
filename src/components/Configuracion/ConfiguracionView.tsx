@@ -17,11 +17,12 @@ import {
   CalendarCheck,
   LockKeyhole
 } from 'lucide-react';
-import { AccountingFramework, TaxpayerType, IvaRetentionAgentBasis, JournalEntryItem, AccountingCurrencyCode, FunctionalCurrencyAssessment, ExchangeabilityAssessment } from '../../types/accounting';
+import { AccountingFramework, TaxpayerType, IvaRetentionAgentBasis, JournalEntry, JournalEntryItem, AccountingCurrencyCode, FunctionalCurrencyAssessment, ExchangeabilityAssessment } from '../../types/accounting';
 import type { InventoryPricingConfiguration } from '../../types/accounting';
 import { DEFAULT_INVENTORY_PRICING } from '../../types/inventoryPricing';
 import { validateFunctionalCurrencyAssessment, validateExchangeabilityAssessment } from '../../types/functionalCurrency';
 import { buildOpeningEntryItems } from '../../types/accountingYearOpening';
+import { buildClosingEntryItems } from '../../types/accountingYearClosing';
 import { CompanyModal } from '../CompanyModal';
 import { formatBs, validateVenezuelanRif } from '../../utils/formatters';
 import { IntelligentMigrationWizard } from '../Migracion/IntelligentMigrationWizard';
@@ -38,12 +39,19 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     exportBackupJson,
     restoreBackupJson,
     closeAccountingPeriod,
+    closeAccountingYear,
     reopenAccountingPeriod,
-    createAccountingYearOpening,
     accounts,
     journalEntries,
     isStorageReady
   } = useAccounting();
+
+  const hasActiveAnnualClose = Boolean(currentCompany.closedThroughDate && journalEntries.some(entry =>
+    entry.companyId === currentCompany.id && entry.type === 'CIERRE' &&
+    entry.date === currentCompany.closedThroughDate &&
+    String(entry.referenceDoc || '') === 'CIERRE:' + currentCompany.id + ':' + entry.date &&
+    !entry.reversedByEntryId && entry.isAdjusted !== true
+  ));
 
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [showUniversalMigrationWizard, setShowUniversalMigrationWizard] = useState(false);
@@ -94,15 +102,17 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
   const [reopenBusy, setReopenBusy] = useState(false);
   const [reopenError, setReopenError] = useState<string | null>(null);
   const [openingPeriodStart, setOpeningPeriodStart] = useState(() => String(currentCompany.fiscalYear) + '-01-01');
-  const [openingPeriodEnd, setOpeningPeriodEnd] = useState(currentCompany.closedThroughDate || (String(currentCompany.fiscalYear) + '-12-31'));
+  const [openingPeriodEnd, setOpeningPeriodEnd] = useState(String(currentCompany.fiscalYear) + '-12-31');
   const [openingDate, setOpeningDate] = useState(() => {
-    const end = currentCompany.closedThroughDate || (String(currentCompany.fiscalYear) + '-12-31');
+    const end = String(currentCompany.fiscalYear) + '-12-31';
     const date = new Date(end + 'T00:00:00.000Z');
     date.setUTCDate(date.getUTCDate() + 1);
     return date.toISOString().slice(0, 10);
   });
+  const [closingBcvRateInput, setClosingBcvRateInput] = useState('');
   const [openingBcvRateInput, setOpeningBcvRateInput] = useState('');
   const [retainedEarningsAccountCode, setRetainedEarningsAccountCode] = useState('');
+  const [closingPreview, setClosingPreview] = useState<JournalEntryItem[] | null>(null);
   const [openingPreview, setOpeningPreview] = useState<JournalEntryItem[] | null>(null);
   const [openingError, setOpeningError] = useState<string | null>(null);
   const [openingBusy, setOpeningBusy] = useState(false);
@@ -211,18 +221,20 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
 
   React.useEffect(() => {
     const start = String(currentCompany.fiscalYear) + '-01-01';
-    const end = currentCompany.closedThroughDate || (String(currentCompany.fiscalYear) + '-12-31');
+    const end = String(currentCompany.fiscalYear) + '-12-31';
     const next = new Date(end + 'T00:00:00.000Z');
     next.setUTCDate(next.getUTCDate() + 1);
     setOpeningPeriodStart(start);
     setOpeningPeriodEnd(end);
     setOpeningDate(next.toISOString().slice(0, 10));
     setRetainedEarningsAccountCode('');
+    setClosingPreview(null);
     setOpeningPreview(null);
     setOpeningError(null);
   }, [currentCompany.id, currentCompany.fiscalYear, currentCompany.closedThroughDate]);
 
   React.useEffect(() => {
+    setClosingPreview(null);
     setOpeningPreview(null);
     setOpeningError(null);
   }, [accounts, journalEntries]);
@@ -230,62 +242,86 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
   const handlePreviewOpening = () => {
     setOpeningError(null);
     setOpeningPreview(null);
+    setClosingPreview(null);
     try {
-      if (!currentCompany.closedThroughDate || openingPeriodEnd !== currentCompany.closedThroughDate) {
-        throw new Error('Cierre primero el ejercicio y use como fecha final el cierre confirmado de esta empresa.');
-      }
-      const preview = buildOpeningEntryItems({
+      const closingItems = buildClosingEntryItems({
+        companyId: currentCompany.id,
+        periodStartDate: openingPeriodStart,
+        periodEndDate: openingPeriodEnd,
+        accounts,
+        journalEntries,
+        retainedEarningsAccountCode: retainedEarningsAccountCode || undefined
+      });
+      const closingDraft: JournalEntry = {
+        id: 'annual-close-preview',
+        companyId: currentCompany.id,
+        entryNumber: 0,
+        date: openingPeriodEnd,
+        description: 'Vista previa del cierre anual',
+        type: 'CIERRE',
+        bcvRate: 1,
+        referenceDoc: 'CIERRE:' + currentCompany.id + ':' + openingPeriodEnd,
+        items: closingItems,
+        createdAt: new Date().toISOString()
+      };
+      const openingItems = buildOpeningEntryItems({
         companyId: currentCompany.id,
         periodStartDate: openingPeriodStart,
         periodEndDate: openingPeriodEnd,
         openingDate,
         accounts,
-        journalEntries,
+        journalEntries: [...journalEntries, closingDraft],
         retainedEarningsAccountCode: retainedEarningsAccountCode || undefined
       });
-      setOpeningPreview(preview);
+      setClosingPreview(closingItems);
+      setOpeningPreview(openingItems);
     } catch (error) {
-      setOpeningError(error instanceof Error ? error.message : 'No se pudo preparar la vista previa del asiento.');
+      setOpeningError(error instanceof Error ? error.message : 'No se pudo preparar el ciclo contable anual.');
     }
   };
 
-  const handlePostOpening = async () => {
-    const openingBcvRate = parseExchangeabilityNumber(openingBcvRateInput);
-    if (!Number.isFinite(openingBcvRate) || openingBcvRate <= 0) {
-      setOpeningError('Ingrese la tasa BCV histórica aplicable al asiento de apertura, por ejemplo 889,67.');
+  const handleExecuteAnnualCycle = async () => {
+    const closingRate = parseExchangeabilityNumber(closingBcvRateInput);
+    const openingRate = parseExchangeabilityNumber(openingBcvRateInput);
+    if (!Number.isFinite(closingRate) || closingRate <= 0 || !Number.isFinite(openingRate) || openingRate <= 0) {
+      setOpeningError('Ingrese las tasas BCV históricas válidas para la fecha de cierre y la fecha de apertura.');
       return;
     }
-    if (!openingPreview) {
-      setOpeningError('Genere y revise la vista previa antes de registrar el asiento.');
+    if (!closingPreview || !openingPreview) {
+      setOpeningError('Prepare y revise los asientos de cierre y apertura antes de ejecutar el ciclo.');
       return;
     }
-    const totals = openingPreview.reduce((sum, item) => ({
-      debitBs: sum.debitBs + item.debitBs, creditBs: sum.creditBs + item.creditBs,
-      debitUsd: sum.debitUsd + item.debitUsd, creditUsd: sum.creditUsd + item.creditUsd
-    }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
     const confirmed = window.confirm(
-      'REGISTRAR ASIENTO DE APERTURA\n\nEmpresa: ' + currentCompany.name +
-      '\nFecha: ' + openingDate +
-      '\nTasa BCV: Bs. ' + openingBcvRateInput + ' por USD' +
-      '\nTotal debe: Bs. ' + totals.debitBs.toFixed(2) + ' / $ ' + totals.debitUsd.toFixed(6) +
-      '\nTotal haber: Bs. ' + totals.creditBs.toFixed(2) + ' / $ ' + totals.creditUsd.toFixed(6) +
-      '\n\nEl asiento se guardará en SQLite y quedará registrado en la bitácora. Esta acción no se ejecuta automáticamente. ¿Confirma?'
+      'EJECUTAR CICLO CONTABLE ANUAL COMPLETO\n\nEmpresa: ' + currentCompany.name +
+      '\nEjercicio: ' + currentCompany.fiscalYear +
+      '\nCierre: ' + openingPeriodEnd +
+      '\nApertura: ' + openingDate +
+      '\nAsiento de cierre: ' + closingPreview.length + ' líneas' +
+      '\nAsiento de apertura: ' + openingPreview.length + ' líneas' +
+      '\n\nSICOVEN contabilizará depreciaciones pendientes, registrará ambos asientos, bloqueará el ejercicio cerrado y avanzará el ejercicio activo. La operación se confirmará en una sola persistencia SQLite.\n\n¿Confirma la ejecución?'
     );
     if (!confirmed) return;
     setOpeningBusy(true);
     setOpeningError(null);
     try {
-      const created = await createAccountingYearOpening({
+      const result = await closeAccountingYear({
         periodStartDate: openingPeriodStart,
         periodEndDate: openingPeriodEnd,
-        openingDate,
-        bcvRate: openingBcvRate,
+        closingBcvRate: closingRate,
+        openingBcvRate: openingRate,
         retainedEarningsAccountCode: retainedEarningsAccountCode || undefined
       });
+      setClosingPreview(null);
       setOpeningPreview(null);
-      alert('Asiento de apertura #' + created.entryNumber + ' registrado y confirmado por SQLite. La bitácora fue actualizada.');
+      alert(
+        'Ciclo contable anual ejecutado y confirmado por SQLite.\n\n' +
+        'Asiento de cierre #' + result.closingEntry.entryNumber + '\n' +
+        'Asiento de apertura #' + result.openingEntry.entryNumber + '\n' +
+        'Depreciaciones contabilizadas: ' + result.depreciationEntriesCreated + '\n' +
+        'Ejercicio activo: ' + (Number(currentCompany.fiscalYear) + 1) + '.'
+      );
     } catch (error) {
-      setOpeningError(error instanceof Error ? error.message : 'SQLite no confirmó el asiento de apertura.');
+      setOpeningError(error instanceof Error ? error.message : 'SQLite no confirmó el ciclo contable anual. No repita la operación sin revisar el Libro Diario.');
     } finally {
       setOpeningBusy(false);
     }
@@ -480,7 +516,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
   const handleRestoreGlobalBackup = async () => {
     if (!window.sicovenStore) return;
     const confirmed = window.confirm(
-      'RESTAURACIÓN GLOBAL DE SICOVEN\\n\\nSe reemplazarán la base de control, todas las bases SQLite de las empresas y sus documentos por el contenido del respaldo verificado. Se creará un snapshot de retorno antes del cambio.\\n\\n¿Deseas continuar?'
+      'RESTAURACIÓN GLOBAL DE SICOVEN\n\nSe reemplazarán la base de control, todas las bases SQLite de las empresas y sus documentos por el contenido del respaldo verificado. Se creará un snapshot de retorno antes del cambio.\n\n¿Deseas continuar?'
     );
     if (!confirmed) return;
     setBackupRestoreBusy(true);
@@ -554,7 +590,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     setPeriodCloseBusy(true);
     try {
       await closeAccountingPeriod(periodCloseDate);
-      alert('Cierre contable guardado y confirmado por SQLite hasta el ' + periodCloseDate + '.');
+      alert('Bloqueo histórico guardado y confirmado por SQLite hasta el ' + periodCloseDate + '.');
     } catch (error) {
       alert(error instanceof Error ? error.message : 'SQLite no confirmó el cierre contable. No continúe hasta revisar el estado de almacenamiento.');
     } finally {
@@ -572,11 +608,14 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
       setReopenError('Explique el motivo de la reapertura con al menos 10 caracteres.');
       return;
     }
-    const target = reopenThroughDate.trim() || null;
-    const scope = target
-      ? 'Se conservará el bloqueo hasta ' + target + ' y se habilitarán operaciones posteriores.'
-      : 'Se reabrirá íntegramente el período, sin eliminar el registro histórico del cierre.';
-    if (!window.confirm('REAPERTURA FORMAL DE PERÍODO\n\nEmpresa: ' + currentCompany.name +
+    const target = hasActiveAnnualClose ? null : (reopenThroughDate.trim() || null);
+    const scope = hasActiveAnnualClose
+      ? 'Se revertirán los dos asientos enlazados (cierre y apertura), se restaurará el ejercicio y su límite previo desde la evidencia guardada y se conservará el historial.'
+      : target
+        ? 'Se conservará el bloqueo hasta ' + target + ' y se habilitarán operaciones posteriores.'
+        : 'Se reabrirá íntegramente el período, sin eliminar el registro histórico del cierre.';
+    const heading = hasActiveAnnualClose ? 'REAPERTURA FORMAL DEL EJERCICIO ANUAL' : 'REAPERTURA FORMAL DE PERÍODO';
+    if (!window.confirm(heading + '\n\nEmpresa: ' + currentCompany.name +
         '\nCierre vigente: ' + currentCompany.closedThroughDate + '\n' + scope +
         '\n\nMotivo: ' + reason + '\n\nLa operación quedará registrada en la bitácora inmutable. ¿Confirma?')) return;
     setReopenBusy(true);
@@ -584,7 +623,9 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     try {
       await reopenAccountingPeriod(target, reason);
       setReopenReason('');
-      alert('Reapertura confirmada por SQLite. El cierre original y su historial permanecen conservados.');
+      alert(hasActiveAnnualClose
+        ? 'Reapertura anual confirmada por SQLite. Los dos asientos originales permanecen en el historial, enlazados a sus contra-asientos exactos.'
+        : 'Reapertura confirmada por SQLite. El cierre original y su historial permanecen conservados.');
     } catch (error) {
       setReopenError(error instanceof Error ? error.message : 'SQLite no confirmó la reapertura.');
     } finally {
@@ -1013,9 +1054,9 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
             <LockKeyhole className="w-5 h-5 text-amber-700" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="font-bold text-sm text-slate-900">Cierre contable y bloqueo de períodos</h3>
+            <h3 className="font-bold text-sm text-slate-900">Bloqueo de fechas históricas</h3>
             <p className="text-xs text-slate-500 mt-1">
-              El cierre se registra en SQLite para esta empresa. Las nuevas operaciones retroactivas hasta la fecha cerrada serán rechazadas en la persistencia local.
+              Este control bloquea operaciones retroactivas hasta la fecha indicada. No sustituye el cierre anual ni genera asientos de cierre o apertura.
             </p>
           </div>
         </div>
@@ -1039,38 +1080,52 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
             className="flex items-center justify-center gap-2 rounded-lg bg-amber-600 hover:bg-amber-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             <CalendarCheck className="w-4 h-4" />
-            {periodCloseBusy ? 'Confirmando en SQLite…' : currentCompany.closedThroughDate ? 'Actualizar fecha de cierre' : 'Cerrar período'}
+            {periodCloseBusy ? 'Confirmando en SQLite…' : currentCompany.closedThroughDate ? 'Actualizar bloqueo' : 'Bloquear hasta la fecha'}
           </button>
         </div>
         <div className={`rounded-lg border p-3 text-xs ${currentCompany.closedThroughDate ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
           {currentCompany.closedThroughDate
-            ? <><strong>Cierre vigente:</strong> operaciones hasta {currentCompany.closedThroughDate}. La fecha solo puede avanzarse desde esta pantalla.</>
-            : <><strong>Sin cierre registrado.</strong> La empresa todavía no tiene un período bloqueado.</>}
+            ? <><strong>Bloqueo vigente:</strong> operaciones hasta {currentCompany.closedThroughDate}. La fecha solo puede avanzarse desde esta pantalla.</>
+            : <><strong>Sin bloqueo registrado.</strong> La empresa todavía no tiene fechas históricas bloqueadas.</>}
         </div>
         {currentCompany.closedThroughDate && (
           <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4 space-y-3">
             <div>
               <h4 className="text-xs font-bold text-rose-900">Reapertura formal y auditada</h4>
               <p className="mt-1 text-[11px] text-rose-800">
-                Exclusiva del administrador autenticado. La fecha indicada será el nuevo límite de cierre; déjela vacía para reabrir todo el período. El cierre original nunca se elimina.
+                Exclusiva del administrador o contador autenticado. {hasActiveAnnualClose
+                  ? 'Se detectó un cierre anual: solo se permite la reapertura integral, con reversión exacta del cierre y de su apertura enlazada. El sistema restaurará el ejercicio previo y conservará ambos asientos originales.'
+                  : 'La fecha indicada será el nuevo límite de cierre; déjela vacía para reabrir todo el período. El cierre original nunca se elimina.'}
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Mantener cerrado hasta (opcional)</label>
-                <input
-                  type="date"
-                  value={reopenThroughDate}
-                  max={(() => {
-                    const date = new Date(currentCompany.closedThroughDate + 'T00:00:00.000Z');
-                    date.setUTCDate(date.getUTCDate() - 1);
-                    return date.toISOString().slice(0, 10);
-                  })()}
-                  onChange={e => setReopenThroughDate(e.target.value)}
-                  disabled={reopenBusy || !isStorageReady}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100"
-                />
-                <p className="mt-1 text-[10px] text-slate-500">Vacío = reapertura integral desde el inicio del historial.</p>
+                {hasActiveAnnualClose ? (
+                  <>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Alcance de reapertura</label>
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-3 text-xs text-amber-900">
+                      Reapertura anual completa. No se admite una fecha parcial porque dejaría sin efecto coherente el cierre o la apertura del ejercicio.
+                    </div>
+                    <p className="mt-1 text-[10px] text-slate-500">Se restaurará el estado exacto anterior al cierre.</p>
+                  </>
+                ) : (
+                  <>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Mantener cerrado hasta (opcional)</label>
+                    <input
+                      type="date"
+                      value={reopenThroughDate}
+                      max={(() => {
+                        const date = new Date(currentCompany.closedThroughDate + 'T00:00:00.000Z');
+                        date.setUTCDate(date.getUTCDate() - 1);
+                        return date.toISOString().slice(0, 10);
+                      })()}
+                      onChange={e => setReopenThroughDate(e.target.value)}
+                      disabled={reopenBusy || !isStorageReady}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100"
+                    />
+                    <p className="mt-1 text-[10px] text-slate-500">Vacío = reapertura integral desde el inicio del historial.</p>
+                  </>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Motivo obligatorio y soporte de referencia</label>
@@ -1099,100 +1154,115 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
         {!isStorageReady && <p className="text-xs text-rose-700">El almacenamiento SQLite no está disponible. El cierre permanece deshabilitado.</p>}
       </div>
 
-      {/* Preparación y registro controlado del asiento de apertura */}
+      {/* Ejecución automática del ciclo contable anual */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
         <div className="flex items-start gap-3">
           <div className="rounded-xl bg-indigo-50 border border-indigo-200 p-2">
             <CalendarCheck className="w-5 h-5 text-indigo-700" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="font-bold text-sm text-slate-900">Apertura del siguiente ejercicio</h3>
+            <h3 className="font-bold text-sm text-slate-900">Cierre anual y apertura automática del siguiente ejercicio</h3>
             <p className="text-xs text-slate-500 mt-1">
-              Prepara los saldos patrimoniales y el resultado del ejercicio cerrado. La apertura solo se registra después de revisar la vista previa y confirmar; no se genera automáticamente.
+              SICOVEN calcula el resultado, contabiliza el asiento de cierre, incorpora la depreciación pendiente, genera el asiento de apertura, bloquea las fechas históricas y avanza el ejercicio activo. Ambos asientos y el bloqueo se confirman juntos en SQLite.
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Ejercicio a cerrar</label>
+            <input type="text" value={String(currentCompany.fiscalYear)} readOnly className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-mono" />
+          </div>
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Inicio del ejercicio</label>
-            <input type="date" value={openingPeriodStart} onChange={e => { setOpeningPeriodStart(e.target.value); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
+            <input type="date" value={openingPeriodStart} readOnly className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-mono" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Cierre del ejercicio</label>
-            <input type="date" value={openingPeriodEnd} onChange={e => { setOpeningPeriodEnd(e.target.value); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady || Boolean(currentCompany.closedThroughDate)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de cierre</label>
+            <input type="date" value={openingPeriodEnd} readOnly className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-mono" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de apertura</label>
-            <input type="date" value={openingDate} onChange={e => { setOpeningDate(e.target.value); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de apertura siguiente</label>
+            <input type="date" value={openingDate} readOnly className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-mono" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) *</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Tasa BCV al cierre (Bs./USD) *</label>
+            <input type="text" inputMode="decimal" value={closingBcvRateInput} onChange={e => { setClosingBcvRateInput(e.target.value); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} placeholder="Ej.: 889,67" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Tasa BCV a la apertura (Bs./USD) *</label>
             <input type="text" inputMode="decimal" value={openingBcvRateInput} onChange={e => { setOpeningBcvRateInput(e.target.value); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} placeholder="Ej.: 889,67" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Cuenta patrimonial para resultado</label>
-            <select value={retainedEarningsAccountCode} onChange={e => { setRetainedEarningsAccountCode(e.target.value); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100">
-              <option value="">Seleccionar si hay resultado del ejercicio</option>
-              {accounts.filter(account => account.type === 'PATRIMONIO' && account.isMovement).map(account => (
+          <div className="xl:col-span-2">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Cuenta patrimonial para trasladar utilidad o pérdida</label>
+            <select value={retainedEarningsAccountCode} onChange={e => { setRetainedEarningsAccountCode(e.target.value); setClosingPreview(null); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100">
+              <option value="">Seleccionar cuenta patrimonial si el ejercicio tiene resultado</option>
+              {accounts.filter(account => account.type === 'PATRIMONIO' && account.isMovement && account.isActive !== false).map(account => (
                 <option key={account.code} value={account.code}>{account.code} — {account.name}</option>
               ))}
             </select>
           </div>
         </div>
-        {!currentCompany.closedThroughDate && (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            Para preparar la apertura, primero debe existir un cierre contable confirmado en SQLite para esta empresa.
+        {currentCompany.closedThroughDate && String(currentCompany.closedThroughDate || '') > openingPeriodEnd && (
+          <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+            La empresa ya tiene bloqueadas fechas posteriores a este ejercicio. Se requiere revisión y reapertura formal antes de ejecutar el ciclo.
           </p>
         )}
+        <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+          Primero prepare y revise los dos asientos. Al ejecutar, SICOVEN vuelve a calcularlos con los datos confirmados en SQLite e incorpora las depreciaciones pendientes. Las tasas BCV se registran como datos históricos de cada asiento; no se utilizan para recalcular los saldos ya contabilizados.
+        </p>
         {openingError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">{openingError}</p>}
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={handlePreviewOpening} disabled={openingBusy || !isStorageReady || !currentCompany.closedThroughDate} className="rounded-lg bg-indigo-600 hover:bg-indigo-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
-            Preparar vista previa
+          <button type="button" onClick={handlePreviewOpening} disabled={openingBusy || !isStorageReady || !currentCompany.id || String(currentCompany.closedThroughDate || '') > openingPeriodEnd} className="rounded-lg bg-indigo-600 hover:bg-indigo-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+            Preparar vista previa de cierre y apertura
           </button>
-          <button type="button" onClick={handlePostOpening} disabled={openingBusy || !openingPreview || !isStorageReady || parseExchangeabilityNumber(openingBcvRateInput) <= 0} className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
-            {openingBusy ? 'Guardando y verificando SQLite…' : 'Confirmar y registrar apertura'}
+          <button type="button" onClick={handleExecuteAnnualCycle} disabled={openingBusy || !closingPreview || !openingPreview || !isStorageReady || parseExchangeabilityNumber(closingBcvRateInput) <= 0 || parseExchangeabilityNumber(openingBcvRateInput) <= 0 || String(currentCompany.closedThroughDate || '') > openingPeriodEnd} className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+            {openingBusy ? 'Contabilizando y confirmando SQLite…' : 'Ejecutar cierre anual y apertura'}
           </button>
         </div>
-        {openingPreview && (
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-xs font-bold text-slate-800">Vista previa — {openingPreview.length} líneas</p>
-              <p className="text-[11px] text-slate-500">No se ha contabilizado todavía. Revise ambas monedas antes de confirmar.</p>
-            </div>
-            <table className="w-full min-w-[720px] text-xs">
-              <thead className="bg-slate-50 text-slate-600">
-                <tr>
-                  <th className="px-3 py-2 text-left">Cuenta</th>
-                  <th className="px-3 py-2 text-right">Debe Bs.</th>
-                  <th className="px-3 py-2 text-right">Haber Bs.</th>
-                  <th className="px-3 py-2 text-right">Debe USD</th>
-                  <th className="px-3 py-2 text-right">Haber USD</th>
-                </tr>
-              </thead>
-              <tbody>
-                {openingPreview.map(item => (
-                  <tr key={item.accountCode} className="border-t border-slate-100">
-                    <td className="px-3 py-2"><span className="font-mono">{item.accountCode}</span> — {item.accountName}</td>
-                    <td className="px-3 py-2 text-right font-mono">{item.debitBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-2 text-right font-mono">{item.creditBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-2 text-right font-mono">{item.debitUsd.toFixed(6)}</td>
-                    <td className="px-3 py-2 text-right font-mono">{item.creditUsd.toFixed(6)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-bold">
-                <tr>
-                  <td className="px-3 py-2">Totales</td>
-                  <td className="px-3 py-2 text-right font-mono">{openingPreview.reduce((sum, item) => sum + item.debitBs, 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td className="px-3 py-2 text-right font-mono">{openingPreview.reduce((sum, item) => sum + item.creditBs, 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td className="px-3 py-2 text-right font-mono">{openingPreview.reduce((sum, item) => sum + item.debitUsd, 0).toFixed(6)}</td>
-                  <td className="px-3 py-2 text-right font-mono">{openingPreview.reduce((sum, item) => sum + item.creditUsd, 0).toFixed(6)}</td>
-                </tr>
-              </tfoot>
-            </table>
+        {closingPreview && openingPreview && (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {[{ title: 'Asiento de cierre', items: closingPreview }, { title: 'Asiento de apertura', items: openingPreview }].map(section => (
+              <div key={section.title} className="overflow-x-auto rounded-xl border border-slate-200">
+                <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-bold text-slate-800">{section.title} · {section.items.length} líneas</p>
+                  <p className="text-[11px] text-slate-500">Vista previa; todavía no está contabilizado.</p>
+                </div>
+                <table className="w-full min-w-[520px] text-xs">
+                  <thead className="bg-slate-50 text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Cuenta</th>
+                      <th className="px-3 py-2 text-right">Debe Bs.</th>
+                      <th className="px-3 py-2 text-right">Haber Bs.</th>
+                      <th className="px-3 py-2 text-right">Debe USD</th>
+                      <th className="px-3 py-2 text-right">Haber USD</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {section.items.map((item, index) => (
+                      <tr key={item.accountCode + '-' + index} className="border-t border-slate-100">
+                        <td className="px-3 py-2"><span className="font-mono">{item.accountCode}</span> — {item.accountName}</td>
+                        <td className="px-3 py-2 text-right font-mono">{item.debitBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-2 text-right font-mono">{item.creditBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-2 text-right font-mono">{item.debitUsd.toFixed(6)}</td>
+                        <td className="px-3 py-2 text-right font-mono">{item.creditUsd.toFixed(6)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-bold">
+                    <tr>
+                      <td className="px-3 py-2">Totales</td>
+                      <td className="px-3 py-2 text-right font-mono">{section.items.reduce((sum, item) => sum + item.debitBs, 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-2 text-right font-mono">{section.items.reduce((sum, item) => sum + item.creditBs, 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-2 text-right font-mono">{section.items.reduce((sum, item) => sum + item.debitUsd, 0).toFixed(6)}</td>
+                      <td className="px-3 py-2 text-right font-mono">{section.items.reduce((sum, item) => sum + item.creditUsd, 0).toFixed(6)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            ))}
           </div>
         )}
-        {!isStorageReady && <p className="text-xs text-rose-700">SQLite no está disponible. La preparación y el registro permanecen deshabilitados.</p>}
+        {!isStorageReady && <p className="text-xs text-rose-700">SQLite no está disponible. El ciclo anual permanece deshabilitado.</p>}
       </div>
 
       <section className="rounded-2xl border border-blue-200 bg-blue-50/50 p-5 space-y-3">

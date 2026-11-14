@@ -15,7 +15,7 @@ const emptyState = () => ({
   creditSettlements: [], displayCurrency: 'DUAL'
 });
 
-function createHarness({ authorized = true, validSession = true, dbPath = ':memory:' } = {}) {
+function createHarness({ authorized = true, validSession = true, role = 'admin', dbPath = ':memory:' } = {}) {
   const db = new Database(dbPath);
   db.exec(`
     CREATE TABLE app_state (
@@ -41,10 +41,10 @@ function createHarness({ authorized = true, validSession = true, dbPath = ':memo
     },
     getActiveSession: token => {
       calls.session.push(token);
-      return validSession && token === 'valid-session' ? { id: 1, username: 'auditor', role: 'admin' } : null;
+      return validSession && token === 'valid-session' ? { id: 1, username: 'auditor', role } : null;
     }
   });
-  return { db, handler: handlers.get('sicoven:save-state'), reopenHandler: handlers.get('sicoven:reopen-accounting-period'), calls };
+  return { db, handler: handlers.get('sicoven:save-state'), reopenHandler: handlers.get('sicoven:reopen-accounting-period'), reopenYearHandler: handlers.get('sicoven:reopen-accounting-year'), calls };
 }
 
 test('Electron IPC rejects persistence without an authorized license', () => {
@@ -236,6 +236,79 @@ function persistClosedCompanyFixture(db) {
   persistAccountingSnapshot(db, openState);
   persistAccountingSnapshot(db, state);
 }
+
+test('annual reopening IPC requires authorization and executes the complete SQLite cycle', () => {
+  const deniedLicense = createHarness({ authorized: false });
+  try {
+    assert.throws(() => deniedLicense.reopenYearHandler({}, 'valid-session', {
+      companyId: 'company-1', reason: 'Reapertura formal del ejercicio.'
+    }), /Licencia no autorizada/);
+  } finally { deniedLicense.db.close(); }
+
+  const expired = createHarness({ validSession: false });
+  try {
+    assert.throws(() => expired.reopenYearHandler({}, 'expired-session', {
+      companyId: 'company-1', reason: 'Reapertura formal del ejercicio.'
+    }), /Sesión no válida/);
+  } finally { expired.db.close(); }
+
+  const operator = createHarness({ role: 'operator' });
+  try {
+    assert.throws(() => operator.reopenYearHandler({}, 'valid-session', {
+      companyId: 'company-1', reason: 'Reapertura formal del ejercicio.'
+    }), /Permiso insuficiente/);
+  } finally { operator.db.close(); }
+
+  const harness = createHarness();
+  try {
+    const state = {
+      ...emptyState(),
+      companies: [{ id: 'company-1', name: 'Empresa anual', fiscalYear: 2027, closedThroughDate: '2026-12-31' }],
+      journalEntries: [
+        {
+          id: 'year-close-ipc', companyId: 'company-1', entryNumber: 10,
+          date: '2026-12-31', createdAt: '2026-12-31T10:00:00.000Z',
+          description: 'Cierre anual 2026', type: 'CIERRE', bcvRate: 100,
+          referenceDoc: 'CIERRE:company-1:2026-12-31',
+          workpaperNote: 'SICOVEN_AUTO_YEAR_CLOSE_V1',
+          annualCloseState: { previousFiscalYear: 2026, previousClosedThroughDate: '2025-12-31', cycleNumber: 1 },
+          items: [
+            { accountCode: '4.1.1', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+            { accountCode: '3.1.1', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+          ]
+        },
+        {
+          id: 'year-open-ipc', companyId: 'company-1', entryNumber: 11,
+          date: '2027-01-01', createdAt: '2026-12-31T10:00:00.000Z',
+          description: 'Apertura 2027', type: 'APERTURA', bcvRate: 100,
+          referenceDoc: 'APERTURA:company-1:2027-01-01',
+          exerciseLink: {
+            priorPeriodStartDate: '2026-01-01', priorPeriodEndDate: '2026-12-31',
+            nextPeriodStartDate: '2027-01-01', cycleNumber: 1
+          },
+          items: [
+            { accountCode: '1.1.1', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+            { accountCode: '3.1.1', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+          ]
+        }
+      ]
+    };
+    harness.db.prepare('INSERT INTO app_state(state_key,state_json) VALUES(?,?)')
+      .run('accounting', JSON.stringify(state));
+    harness.db.prepare(`INSERT INTO accounting_exercise_links
+      (id,company_id,prior_period_start_date,prior_period_end_date,next_period_start_date,journal_entry_id,cycle_number)
+      VALUES(?,?,?,?,?,?,?)`).run('year-link-ipc', 'company-1', '2026-01-01', '2026-12-31',
+      '2027-01-01', 'year-open-ipc', 1);
+    const result = harness.reopenYearHandler({}, 'valid-session', {
+      companyId: 'company-1', reason: 'Reapertura formal para corregir el ejercicio.'
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.reversalEntries.length, 2);
+    assert.equal(result.company.fiscalYear, 2026);
+    assert.equal(result.company.closedThroughDate, '2025-12-31');
+    assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_year_reopened'").get().count, 1);
+  } finally { harness.db.close(); }
+});
 
 test('period reopening IPC permits both full-access roles and rejects unknown roles', () => {
   const unauthorized = createHarness({ validSession: false });

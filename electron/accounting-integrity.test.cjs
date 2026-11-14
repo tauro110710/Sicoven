@@ -4176,3 +4176,54 @@ test('SQLite reconciles partial VAT remittances split across multiple bank debit
     vatWithholdingDeclarationEvents: [reviewed, filed, firstPayment, secondPayment]
   }));
 });
+
+test('SQLite accepts only the linked and balanced automatic year-end closing entry in the newly closed period', () => {
+  const accounts = [
+    { code: '1.1.1', name: 'Banco', type: 'ACTIVO', isMovement: true },
+    { code: '3.1.1', name: 'Resultados acumulados', type: 'PATRIMONIO', isMovement: true },
+    { code: '4.1.1', name: 'Ingresos', type: 'INGRESOS', isMovement: true }
+  ];
+  const company = { id: 'company-1', name: 'Empresa de prueba' };
+  const previous = { ...emptyState(), companies: [company], accounts };
+  const closing = {
+    id: 'year-close-1', companyId: 'company-1', entryNumber: 1,
+    date: '2026-12-31', description: 'Cierre anual 2026', type: 'CIERRE',
+    bcvRate: 100, referenceDoc: 'CIERRE:company-1:2026-12-31',
+    workpaperNote: 'SICOVEN_AUTO_YEAR_CLOSE_V1',
+    annualCloseState: { previousFiscalYear: 2026, previousClosedThroughDate: null, cycleNumber: 1 },
+    items: [
+      { accountCode: '4.1.1', accountName: 'Ingresos', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '3.1.1', accountName: 'Resultados acumulados', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+    ],
+    createdAt: '2026-12-31T23:00:00.000Z'
+  };
+  const opening = {
+    id: 'year-opening-1', companyId: 'company-1', entryNumber: 2,
+    date: '2027-01-01', description: 'Apertura del ejercicio 2027', type: 'APERTURA',
+    bcvRate: 100, referenceDoc: 'APERTURA:company-1:2027-01-01',
+    exerciseLink: {
+      priorPeriodStartDate: '2026-01-01',
+      priorPeriodEndDate: '2026-12-31',
+      nextPeriodStartDate: '2027-01-01',
+      cycleNumber: 1
+    },
+    items: [
+      { accountCode: '1.1.1', accountName: 'Banco', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '3.1.1', accountName: 'Resultados acumulados', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+    ],
+    createdAt: '2027-01-01T00:00:00.000Z'
+  };
+  const next = {
+    ...previous,
+    companies: [{ ...company, closedThroughDate: '2026-12-31', fiscalYear: 2027 }],
+    journalEntries: [closing, opening]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next, journalEntries: [{ ...closing, workpaperNote: '' }]
+  }), /asiento de cierre anual/);
+  const ordinaryEntry = { ...closing, id: 'manual-entry', type: 'MANUAL', referenceDoc: 'MANUAL-1', workpaperNote: '' };
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next, journalEntries: [ordinaryEntry]
+  }), /período cerrado/);
+});
