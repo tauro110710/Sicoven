@@ -8,6 +8,12 @@ on:
       - 'package-lock.json'
       - '.github/workflows/release-windows.yml'
       - 'scripts/e2e-migration-ui.cjs'
+      - 'electron/main.cjs'
+      - 'electron/preload.cjs'
+      - 'electron/auth-setup-policy.cjs'
+      - 'src/App.tsx'
+      - 'src/components/LoginScreen.tsx'
+      - 'scripts/test-auth-hardening.cjs'
     tags:
       - 'v*'
   pull_request:
@@ -17,6 +23,12 @@ on:
       - 'package-lock.json'
       - '.github/workflows/release-windows.yml'
       - 'scripts/e2e-migration-ui.cjs'
+      - 'electron/main.cjs'
+      - 'electron/preload.cjs'
+      - 'electron/auth-setup-policy.cjs'
+      - 'src/App.tsx'
+      - 'src/components/LoginScreen.tsx'
+      - 'scripts/test-auth-hardening.cjs'
   workflow_dispatch:
     inputs:
       publish_release:
