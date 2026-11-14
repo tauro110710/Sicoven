@@ -19,6 +19,7 @@ test('Reportes Z displays the historical BCV rate stored on its journal entry', 
 
 test('Reportes Z table column count and empty-state colspan stay aligned', () => {
   assert.match(source, /<td colSpan=\{13\}/);
-  const header = source.match(/<thead[\s\S]*?<\/thead>/)?.[0] || '';
+  const zSection = source.split('Reportes Z · Ventas consolidadas')[1]?.split('</section>')[0] || '';
+  const header = zSection.match(/<thead[\s\S]*?<\/thead>/)?.[0] || '';
   assert.equal((header.match(/<th\b/g) || []).length, 13);
 });
