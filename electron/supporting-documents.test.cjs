@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const Database = require('better-sqlite3');
 const {
-  initializeDocumentVaultSchema, attachDocument, listDocuments, reviewDocument, getDocument,
+  initializeDocumentVaultSchema, assertNoSymlinkPath, attachDocument, listDocuments, reviewDocument, getDocument,
   registerDocumentVaultIpc
 } = require('./supporting-documents.cjs');
 
@@ -194,5 +194,19 @@ test('document vault IPC reads and writes through the selected tenant database',
   } finally {
     control.close();
     tenant.close();
+  }
+});
+
+test('document vault rejects symlinked parent directories before opening or writing files', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-doc-parent-'));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-doc-outside-'));
+  try {
+    const linkedParent = path.join(root, 'companies');
+    fs.symlinkSync(outside, linkedParent, 'dir');
+    const storageDir = path.join(linkedParent, 'co-1', 'supporting-documents');
+    assert.throws(() => assertNoSymlinkPath(root, storageDir, 'El almacén documental'), /directorio intermedio.*seguro/i);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
   }
 });
