@@ -12,7 +12,10 @@ assert.match(login, /initializeAdmin/);
 assert.match(login, /Crear administrador inicial/);
 
 const app = read('src/App.tsx');
+assert.match(app, /getAuthSetupStatus/);
 assert.match(app, /restoreSession\(token\)/);
+assert.ok(app.indexOf('getAuthSetupStatus()') < app.indexOf('restoreSession(token)'),
+  'first-run setup must be checked before restoring a legacy session');
 assert.match(app, /if \(!auth\) return/);
 assert.ok(app.indexOf('if (!auth) return') < app.lastIndexOf('<AccountingProvider token={auth.token}>'),
   'AccountingProvider must mount only after authentication');
