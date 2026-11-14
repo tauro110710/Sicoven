@@ -683,6 +683,17 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
       if (!/^\d{4}-\d{2}-\d{2}$/.test(previousClosedThroughDate)) {
         throw new Error('La empresa no tiene un cierre contable vigente para reabrir.');
       }
+      const activeAutomaticAnnualClose = (Array.isArray(state.journalEntries) ? state.journalEntries : []).some(entry =>
+        String(entry.companyId) === companyId &&
+        entry.type === 'CIERRE' &&
+        String(entry.date || '') === previousClosedThroughDate &&
+        String(entry.workpaperNote || '') === 'SICOVEN_AUTO_YEAR_CLOSE_V1' &&
+        entry.reversedByEntryId == null &&
+        entry.isAdjusted !== true
+      );
+      if (activeAutomaticAnnualClose) {
+        throw new Error('Este cierre anual automático requiere la reapertura integral del ejercicio; no puede reabrirse mediante el procedimiento ordinario por fecha.');
+      }
       if (reopenedThroughDate !== null && reopenedThroughDate >= previousClosedThroughDate) {
         throw new Error('La nueva fecha debe ser anterior al cierre vigente para que exista una reapertura efectiva.');
       }
