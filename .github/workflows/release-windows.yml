@@ -14,6 +14,13 @@ on:
       - 'src/App.tsx'
       - 'src/components/LoginScreen.tsx'
       - 'scripts/test-auth-hardening.cjs'
+      - 'electron/supporting-documents.cjs'
+      - 'electron/supporting-documents.test.cjs'
+      - 'electron/backup-restore.cjs'
+      - 'electron/restore-engine.cjs'
+      - 'electron/restore-staging.cjs'
+      - 'electron/tenant-document-migration.cjs'
+      - 'electron/tenant-document-migration.test.cjs'
     tags:
       - 'v*'
   pull_request:
@@ -29,6 +36,13 @@ on:
       - 'src/App.tsx'
       - 'src/components/LoginScreen.tsx'
       - 'scripts/test-auth-hardening.cjs'
+      - 'electron/supporting-documents.cjs'
+      - 'electron/supporting-documents.test.cjs'
+      - 'electron/backup-restore.cjs'
+      - 'electron/restore-engine.cjs'
+      - 'electron/restore-staging.cjs'
+      - 'electron/tenant-document-migration.cjs'
+      - 'electron/tenant-document-migration.test.cjs'
   workflow_dispatch:
     inputs:
       publish_release:
