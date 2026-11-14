@@ -18,6 +18,12 @@ on:
       - '.github/workflows/release-windows.yml'
       - 'scripts/e2e-migration-ui.cjs'
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publicar la versión en el repositorio de descargas (solo después de validar)'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: read
@@ -283,7 +289,7 @@ jobs:
           Write-Host "Actualización desde v1.0.17 verificada sobre $($database.FullName): marcador preservado e integridad correcta."
 
       - name: Publish installer and updater metadata to the existing download release
-        if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release == true)
         env:
           GH_TOKEN: ${{ secrets.SICOVEN_RELEASE_TOKEN }}
           REF_NAME: ${{ github.ref_name }}
@@ -341,54 +347,6 @@ jobs:
             throw "No se pudo confirmar que la Release $tag quedó publicada."
           }
           Write-Host "Release $tag publicada y verificada con instalador y latest.yml."
-
-      - name: Restore original v1.0.32 release assets
-        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_RELEASE_TOKEN: ${{ secrets.SICOVEN_RELEASE_TOKEN }}
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $releaseRepo = 'fenixlife1978/sicoven-descargas'
-          $restoreDir = Join-Path $env:RUNNER_TEMP 'SICOVEN-v1.0.32-original'
-          if (Test-Path $restoreDir) { Remove-Item -LiteralPath $restoreDir -Recurse -Force }
-          New-Item -ItemType Directory -Path $restoreDir | Out-Null
-          gh run download 43417119647 --repo miguel110710/Sicoven --name SICOVEN-COMPLETO-Windows-x64 --dir $restoreDir
-          if ($LASTEXITCODE -ne 0) { throw 'No se pudo recuperar el artefacto original de SICOVEN 1.0.32.' }
-          # Use the release token only for writes to the separate download repository.
-          $env:GH_TOKEN = $env:GH_RELEASE_TOKEN
-          $installer = Join-Path $restoreDir 'SICOVEN-Setup-1.0.32-x64.exe'
-          if (-not (Test-Path $installer -PathType Leaf)) { throw 'El artefacto no contiene el instalador original esperado.' }
-          $sha256 = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-          $expectedSha256 = '9e52dc574447e7a398e5c1e8e02e6252121d062338ec13e3056e6d2ca70ac2d5'
-          if ($sha256 -ne $expectedSha256) { throw "SHA-256 original no coincide: $sha256. No se modificará v1.0.32." }
-          $sha512 = (Get-FileHash -LiteralPath $installer -Algorithm SHA512).Hash.ToLowerInvariant()
-          $size = (Get-Item -LiteralPath $installer).Length
-          $metadata = Join-Path $restoreDir 'latest.yml'
-          $yaml = @(
-            'version: 1.0.32'
-            'files:'
-            '  - url: SICOVEN-Setup-1.0.32-x64.exe'
-            "    sha512: $sha512"
-            "    size: $size"
-            'path: SICOVEN-Setup-1.0.32-x64.exe'
-            "sha512: $sha512"
-            "releaseDate: '2026-11-13T11:34:21.000Z'"
-          ) -join [Environment]::NewLine
-          Set-Content -LiteralPath $metadata -Value $yaml -Encoding utf8
-          gh release upload v1.0.32 $installer $metadata --clobber --repo $releaseRepo
-          if ($LASTEXITCODE -ne 0) { throw 'No se pudieron restaurar el instalador y latest.yml de v1.0.32.' }
-          $assets = gh release view v1.0.32 --repo $releaseRepo --json assets | ConvertFrom-Json
-          $restoredInstaller = $assets.assets | Where-Object { $_.name -eq 'SICOVEN-Setup-1.0.32-x64.exe' }
-          $restoredMetadata = $assets.assets | Where-Object { $_.name -eq 'latest.yml' }
-          $obsoleteBlockmap = $assets.assets | Where-Object { $_.name -eq 'SICOVEN-Setup-1.0.32-x64.exe.blockmap' }
-          if (-not $restoredInstaller -or $restoredInstaller.size -ne $size -or -not $restoredMetadata) { throw 'Falló la verificación de activos restaurados.' }
-          if ($obsoleteBlockmap) {
-            gh release delete-asset v1.0.32 'SICOVEN-Setup-1.0.32-x64.exe.blockmap' --yes --repo $releaseRepo
-            if ($LASTEXITCODE -ne 0) { throw 'No se pudo retirar el blockmap incorrecto.' }
-          }
-          Write-Host "v1.0.32 restaurada: SHA256 $sha256; SHA512 $sha512; tamaño $size bytes."
 
       - name: Upload complete edition installer artifact
         if: (startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
