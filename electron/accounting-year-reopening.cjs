@@ -166,6 +166,45 @@ function assertNoLaterActivity(state, companyId, closingDate, closingCreatedAt, 
   }
 }
 
+function assertNoLaterPayrollActivity(db, companyId, closingDate, closingCreatedAt) {
+  const hasTable = table => Boolean(db.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?"
+  ).get(table));
+  const closingCreatedAtMs = Date.parse(String(closingCreatedAt || ''));
+  if (hasTable('payroll_runs')) {
+    const laterRun = db.prepare(`SELECT id FROM payroll_runs
+      WHERE company_id=? AND status='CONFIRMED'
+      AND (period_end>? OR (? IS NOT NULL AND julianday(confirmed_at)>julianday(?)))
+      LIMIT 1`).get(companyId, closingDate,
+        Number.isFinite(closingCreatedAtMs) ? closingCreatedAt : null, closingCreatedAt);
+    if (laterRun) throw new Error('No se puede reabrir: existe una nómina confirmada posterior al cierre anual.');
+  }
+  if (hasTable('payroll_severance_deposits')) {
+    const laterDeposit = db.prepare(`SELECT id FROM payroll_severance_deposits
+      WHERE company_id=? AND (deposit_date>? OR
+        (? IS NOT NULL AND julianday(created_at)>julianday(?))) LIMIT 1`)
+      .get(companyId, closingDate,
+        Number.isFinite(closingCreatedAtMs) ? closingCreatedAt : null, closingCreatedAt);
+    if (laterDeposit) throw new Error('No se puede reabrir: existen depósitos de prestaciones posteriores al cierre anual.');
+  }
+  if (hasTable('payroll_severance_interest_months')) {
+    const laterInterest = db.prepare(`SELECT id FROM payroll_severance_interest_months
+      WHERE company_id=? AND (substr(month,1,7)>substr(?,1,7) OR
+        (? IS NOT NULL AND julianday(created_at)>julianday(?))) LIMIT 1`)
+      .get(companyId, closingDate,
+        Number.isFinite(closingCreatedAtMs) ? closingCreatedAt : null, closingCreatedAt);
+    if (laterInterest) throw new Error('No se puede reabrir: existen intereses de prestaciones registrados después del cierre anual.');
+  }
+  if (hasTable('payroll_liquidations')) {
+    const laterLiquidation = db.prepare(`SELECT id FROM payroll_liquidations
+      WHERE company_id=? AND (termination_date>? OR
+        (? IS NOT NULL AND julianday(created_at)>julianday(?))) LIMIT 1`)
+      .get(companyId, closingDate,
+        Number.isFinite(closingCreatedAtMs) ? closingCreatedAt : null, closingCreatedAt);
+    if (laterLiquidation) throw new Error('No se puede reabrir: existen liquidaciones laborales posteriores al cierre anual.');
+  }
+}
+
 function assertBalancedAnnualEntry(entry, label) {
   if (!Number.isFinite(Number(entry.bcvRate)) || Number(entry.bcvRate) <= 0 ||
       !Array.isArray(entry.items) || entry.items.length < 2) {
@@ -312,6 +351,7 @@ function reopenAccountingYear(db, input, actor) {
       }
     }
     assertNoLaterActivity(state, companyId, closingDate, closing.createdAt, String(closing.id), String(opening.id), allowedHistoricalReversalIds);
+    assertNoLaterPayrollActivity(db, companyId, closingDate, closing.createdAt);
 
     const maxEntryNumber = state.journalEntries.filter(entry => String(entry.companyId) === companyId)
       .reduce((max, entry) => Math.max(max, Number(entry.entryNumber) || 0), 0);
