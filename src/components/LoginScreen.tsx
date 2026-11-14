@@ -37,6 +37,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     let mounted = true;
     const setupStatus = window.sicovenStore?.getAuthSetupStatus;
     if (!setupStatus) {
+      setSetupRequired(true);
       setSetupStatusLoaded(true);
       return () => { mounted = false; };
     }
@@ -45,7 +46,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         if (mounted) setSetupRequired(Boolean(result?.required));
       })
       .catch(() => {
-        if (mounted) setSetupRequired(false);
+        // Fail closed: a setup-status IPC failure must not expose a legacy seed login.
+        if (mounted) setSetupRequired(true);
       })
       .finally(() => {
         if (mounted) setSetupStatusLoaded(true);
