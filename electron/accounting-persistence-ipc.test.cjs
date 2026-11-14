@@ -310,6 +310,43 @@ test('annual reopening IPC requires authorization and executes the complete SQLi
   } finally { harness.db.close(); }
 });
 
+test('ordinary period reopening cannot partially or fully undo an automatic annual close', () => {
+  const harness = createHarness();
+  try {
+    const state = {
+      ...emptyState(),
+      companies: [{ id: 'company-1', name: 'Empresa anual', fiscalYear: 2027, closedThroughDate: '2026-12-31' }],
+      journalEntries: [{
+        id: 'automatic-close-1', companyId: 'company-1', entryNumber: 10,
+        date: '2026-12-31', createdAt: '2026-12-31T10:00:00.000Z',
+        description: 'Cierre anual 2026', type: 'CIERRE', bcvRate: 100,
+        referenceDoc: 'CIERRE:company-1:2026-12-31',
+        workpaperNote: 'SICOVEN_AUTO_YEAR_CLOSE_V1',
+        annualCloseState: { previousFiscalYear: 2026, previousClosedThroughDate: null, cycleNumber: 1 },
+        items: [
+          { accountCode: '4.1.1', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+          { accountCode: '3.1.1', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+        ]
+      }]
+    };
+    const before = JSON.stringify(state);
+    harness.db.prepare('INSERT INTO app_state(state_key,state_json) VALUES(?,?)').run('accounting', before);
+
+    for (const reopenedThroughDate of ['2026-09-30', null]) {
+      assert.throws(() => harness.reopenHandler({}, 'valid-session', {
+        companyId: 'company-1',
+        reopenedThroughDate,
+        reason: 'Corrección documentada del ejercicio anual.'
+      }), /requiere la reapertura integral del ejercicio/i);
+    }
+
+    const saved = harness.db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json;
+    assert.equal(saved, before);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM period_reopenings').get().count, 0);
+    assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_period_reopened'").get().count, 0);
+  } finally { harness.db.close(); }
+});
+
 test('period reopening IPC permits both full-access roles and rejects unknown roles', () => {
   const unauthorized = createHarness({ validSession: false });
   try {
