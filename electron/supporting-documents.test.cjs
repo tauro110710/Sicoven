@@ -143,7 +143,7 @@ test('document vault IPC reads and writes through the selected tenant database',
     db: control.db,
     licenseView: () => ({ authorized: true }),
     getActiveSession: token => token === 'tenant-token' ? actor : null,
-    dialog: {},
+    dialog: { showOpenDialog: async () => ({ canceled: false, filePaths: [path.join(tenant.storageDir, 'source.pdf')] }) },
     shell: {},
     app: { getPath: () => tenant.storageDir },
     getWindow: () => null,
@@ -156,6 +156,41 @@ test('document vault IPC reads and writes through the selected tenant database',
     const rows = await handlers.get('sicoven:document-list')({}, 'tenant-token', {});
     assert.deepEqual(rows, []);
     assert.equal(control.db.prepare('SELECT COUNT(*) AS n FROM supporting_documents').get().n, 0);
+
+    const sourceFile = path.join(tenant.storageDir, 'source.pdf');
+    fs.writeFileSync(sourceFile, pdf);
+    const attachResult = await handlers.get('sicoven:document-attach')({}, 'tenant-token', {
+      companyId: 'co-1', entityType: 'PURCHASE', entityId: 'purchase-1',
+      documentType: 'FACTURA_COMPRA', title: 'Factura LAN', fileName: 'factura.pdf'
+    });
+    assert.equal(attachResult.ok, true);
+    const canonicalPath = path.join(tenant.storageDir, 'companies', 'co-1', 'supporting-documents', attachResult.document.id + '.pdf');
+    assert.equal(fs.existsSync(canonicalPath), true);
+    let openedPath = null;
+    const shell = { openPath: async filePath => { openedPath = filePath; return ''; } };
+    const openHandlers = new Map();
+    registerDocumentVaultIpc({
+      ipcMain: { handle: (channel, handler) => openHandlers.set(channel, handler) },
+      db: control.db,
+      licenseView: () => ({ authorized: true }),
+      getActiveSession: token => token === 'tenant-token' ? actor : null,
+      dialog,
+      shell,
+      app: { getPath: () => tenant.storageDir },
+      getWindow: () => null,
+      withDatabase: async (token, operation) => operation(tenant.db, 'co-1')
+    });
+    await openHandlers.get('sicoven:document-open')({}, 'tenant-token', attachResult.document.id);
+    assert.equal(openedPath, canonicalPath);
+
+    const historicalDir = path.join(tenant.storageDir, 'supporting-documents', 'co-1');
+    fs.mkdirSync(historicalDir, { recursive: true });
+    const historicalPath = path.join(historicalDir, attachResult.document.id + '.pdf');
+    fs.renameSync(canonicalPath, historicalPath);
+    openedPath = null;
+    await openHandlers.get('sicoven:document-open')({}, 'tenant-token', attachResult.document.id);
+    assert.equal(openedPath, historicalPath);
+    assert.equal(fs.existsSync(historicalPath), true);
   } finally {
     control.close();
     tenant.close();
