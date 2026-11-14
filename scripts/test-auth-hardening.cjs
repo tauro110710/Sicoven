@@ -5,6 +5,8 @@ const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
 const login = read('src/components/LoginScreen.tsx');
+assert.match(login, /setSetupRequired\(true\)/);
+assert.match(login, /Fail closed/);
 assert.match(login, /El acceso web no está habilitado/);
 assert.doesNotMatch(login, /onLogin\(['"]session-token['"]/);
 assert.doesNotMatch(login, /Admin123|handleQuickFill|quick-credentials-btn/);
