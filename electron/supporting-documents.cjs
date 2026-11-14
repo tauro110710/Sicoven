@@ -19,7 +19,7 @@ function assertNoSymlinkPath(trustedRoot, target, label = 'El almacén documenta
   const root = path.resolve(trustedRoot);
   const destination = path.resolve(target);
   const relative = path.relative(root, destination);
-  if (!path.isAbsolute(root) && (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative))) {
+  if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
     throw new Error(label + ' intenta salir de la carpeta local autorizada.');
   }
   const rootStat = fs.lstatSync(root);
