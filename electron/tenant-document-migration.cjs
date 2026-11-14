@@ -57,10 +57,12 @@ function copyCompanyDocumentFiles({ documents, sourceRoot, destinationRoot, trus
   if (!sourceRoot || !destinationRoot || !path.isAbsolute(sourceRoot) || !path.isAbsolute(destinationRoot)) {
     throw new TypeError('Las rutas de documentos deben ser absolutas.');
   }
-  const source = path.resolve(sourceRoot);
-  const destination = path.resolve(destinationRoot);
+  const source = assertNoSymlinkPath(trustedRoot, sourceRoot, 'El almacén legado de documentos');
+  const destination = assertNoSymlinkPath(trustedRoot, destinationRoot, 'El almacén de documentos de la empresa');
   ensureSafeDirectory(source, 'El almacén legado de documentos');
   ensureSafeDirectory(destination, 'El almacén de documentos de la empresa');
+  assertNoSymlinkPath(trustedRoot, source, 'El almacén legado de documentos');
+  assertNoSymlinkPath(trustedRoot, destination, 'El almacén de documentos de la empresa');
 
   const keys = new Set();
   const created = [];
