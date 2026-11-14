@@ -332,6 +332,24 @@ function makeCompanyDatabase(userData, companyId, marker) {
   fs.writeFileSync(path.join(documents, 'support.txt'), 'document-' + marker, { flag: 'wx' });
 }
 
+function registerCompanyDatabase(db, companyId) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_database_registry (
+      company_id TEXT PRIMARY KEY,
+      rif TEXT NOT NULL,
+      name TEXT NOT NULL,
+      relative_path TEXT NOT NULL UNIQUE,
+      schema_version INTEGER NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('ACTIVE','ARCHIVED'))
+    );
+  `);
+  db.prepare(`
+    INSERT INTO company_database_registry
+      (company_id,rif,name,relative_path,schema_version,status)
+    VALUES(?,?,?,?,?,'ACTIVE')
+  `).run(companyId, 'J-12345678-9', companyId, 'companies/' + companyId + '/accounting.sqlite', 1);
+}
+
 test('global backup and restore include every independent company SQLite database', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-global-tenant-restore-'));
   const userData = path.join(root, 'active');
@@ -345,6 +363,10 @@ test('global backup and restore include every independent company SQLite databas
   makeCompanyDatabase(sourceData, 'company-b', 'source-b');
   makeCompanyDatabase(userData, 'company-a', 'active-a');
   makeCompanyDatabase(userData, 'company-old', 'must-be-replaced');
+  registerCompanyDatabase(sourceDb, 'company-a');
+  registerCompanyDatabase(sourceDb, 'company-b');
+  registerCompanyDatabase(activeDb, 'company-a');
+  registerCompanyDatabase(activeDb, 'company-old');
   try {
     const backup = await createBackup({ db: sourceDb, userDataDir: sourceData, destination: backupDir });
     assert.equal(verifyBackupDirectory(backupDir).ok, true);
