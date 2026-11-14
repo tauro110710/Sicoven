@@ -105,8 +105,9 @@ function attachDocument(db, { storageDir, trustedRoot = path.dirname(path.resolv
   const linked = assertLinkedEntity(db, input);
   const normalized = normalizeDocument(input, buffer);
   const id = crypto.randomUUID(), storageKey = id + normalized.extension, now = new Date().toISOString();
-  const root = path.resolve(storageDir);
+  const root = assertNoSymlinkPath(trustedRoot, storageDir, 'El almacén documental');
   fs.mkdirSync(root, { recursive: true });
+  assertNoSymlinkPath(trustedRoot, root, 'El almacén documental');
   const target = path.join(root, storageKey), temporary = path.join(root, id + '.tmp');
   let written = false;
   try {
