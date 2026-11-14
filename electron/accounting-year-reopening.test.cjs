@@ -279,3 +279,30 @@ test('migra vínculos antiguos y conserva su historial append-only', () => {
   assert.throws(() => db.prepare('DELETE FROM accounting_exercise_links WHERE id=?').run('link-1'), /append-only/);
   db.close();
 });
+
+test('no bloquea la reapertura por actividad de otra empresa ni por borradores de IVA propio', () => {
+  const { db, state } = fixture();
+  state.companies.push({
+    id: 'co-2', name: 'Empresa distinta', fiscalYear: 2026,
+    closedThroughDate: '2025-12-31'
+  });
+  state.sales.push({
+    id: 'sale-other-company', companyId: 'co-2',
+    invoiceDate: '2026-01-10', createdAt: '2026-01-10T10:00:00.000Z'
+  });
+  state.vatOwnDeclarations = [{
+    id: 'vat-own-draft', companyId: 'co-1', period: '2025-12',
+    status: 'DRAFT', createdAt: '2026-01-10T10:00:00.000Z'
+  }];
+  db.prepare("UPDATE app_state SET state_json=? WHERE state_key='accounting'")
+    .run(JSON.stringify(state));
+
+  const result = reopenAccountingYear(db, {
+    companyId: 'co-1', reason: 'Reapertura por corrección profesional.'
+  }, null);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.company.fiscalYear, 2025);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM accounting_year_reopenings').get().count, 1);
+  db.close();
+});
