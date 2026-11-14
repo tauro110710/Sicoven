@@ -232,7 +232,8 @@ function registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, 
     const buffer = fs.readFileSync(source);
     return runWithDatabase(token, (activeDb, companyId) => {
       if (companyId && String(input?.companyId || '') !== companyId) throw new Error('El documento no pertenece a la empresa activa.');
-      const userDataDir = app.getPath('userData');\n      return attachDocument(activeDb, { trustedRoot: userDataDir, storageDir: path.join(userDataDir, 'companies', companyId || 'legacy', 'supporting-documents'), input, buffer, actor });
+      const userDataDir = app.getPath('userData');
+      return attachDocument(activeDb, { trustedRoot: userDataDir, storageDir: path.join(userDataDir, 'companies', companyId || 'legacy', 'supporting-documents'), input, buffer, actor });
     });
   });
   ipcMain.handle('sicoven:document-list', (_event, token, filters) => {
