@@ -132,22 +132,10 @@ function openDatabase() {
     db.prepare('UPDATE license_state SET trial_started_at=? WHERE id=1 AND trial_started_at IS NULL').run(new Date().toISOString());
   }
 
-  // La instalación nueva inicia con el administrador semilla histórico.
-  // Solo habilita la prueba local; al activar una licencia se sustituye
-  // obligatoriamente por las credenciales definitivas del cliente.
-  const userCount = Number(db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count);
-  if (userCount === 0) {
-    const credential = hashPassword('admin123');
-    const createSeed = db.transaction(() => {
-      const currentCount = Number(db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count);
-      if (currentCount !== 0) return;
-      db.prepare('INSERT INTO auth_users(username,password_hash,password_salt,role,is_seed) VALUES(?,?,?,?,1)')
-        .run('admin', credential.hash, credential.salt, 'admin');
-      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
-        .run('seed_admin_created', JSON.stringify({ username: 'admin', purpose: '120-hour-trial' }));
-    });
-    createSeed();
-  }
+  // New installations start without a shared/default credential. The login
+  // screen requires the customer to create the first administrator locally.
+  // Existing installations containing the historical seed are routed through
+  // the same setup flow and replace it transactionally before login.
 }
 
 function readLicenseRow() {
