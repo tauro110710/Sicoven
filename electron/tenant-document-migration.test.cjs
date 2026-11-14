@@ -15,7 +15,7 @@ function fixture(t) {
   fs.mkdirSync(sourceRoot);
   fs.mkdirSync(destinationRoot);
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  return { sourceRoot, destinationRoot };
+  return { root, sourceRoot, destinationRoot };
 }
 
 function addDocument(sourceRoot, storageKey, content) {
@@ -75,4 +75,22 @@ test('rejects path traversal, symlinks, and duplicate storage keys', t => {
   assert.throws(() => copyCompanyDocumentFiles({
     documents: [{ ...document, storage_key: symlinkKey }], sourceRoot, destinationRoot
   }), /archivo regular/i);
+});
+
+test('rejects a symlink in an intermediate parent directory', t => {
+  const { root, sourceRoot, destinationRoot } = fixture(t);
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-document-outside-'));
+  t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+  const realParent = path.join(outside, 'legacy-parent');
+  fs.mkdirSync(realParent);
+  const linkedParent = path.join(root, 'legacy-parent');
+  fs.symlinkSync(realParent, linkedParent, 'dir');
+  const linkedSource = path.join(linkedParent, 'legacy');
+  fs.mkdirSync(linkedSource);
+  const key = '123e4567-e89b-12d3-a456-426614174002.pdf';
+  const document = addDocument(linkedSource, key, Buffer.from('content'));
+  assert.throws(() => copyCompanyDocumentFiles({
+    documents: [document], sourceRoot: linkedSource, destinationRoot, trustedRoot: root
+  }), /directorio intermedio.*seguro/i);
+  assert.equal(fs.existsSync(path.join(destinationRoot, key)), false);
 });
