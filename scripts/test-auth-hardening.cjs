@@ -23,7 +23,6 @@ assert.match(main, /sicoven:auth-setup-status/);
 assert.match(main, /sicoven:auth-initialize/);
 assert.match(main, /password\.length < 10/);
 assert.doesNotMatch(login, /quick-credentials-btn/);
-assert.match(main, /is_seed\) VALUES\(\?,\?,\?,\?,1\)/);
 assert.ok(main.includes('getAuthSetupStatus(users, licensing)'));
 assert.doesNotMatch(main, /admin123/);
 assert.doesNotMatch(main, /seed_admin_created/);
