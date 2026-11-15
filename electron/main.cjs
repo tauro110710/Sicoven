@@ -982,6 +982,7 @@ app.whenReady().then(async () => {
     getDb: () => db, closeDatabase, reopenDatabase,
     getWindow: () => BrowserWindow.getFocusedWindow(),
     operationContext: tenantController.operationContext,
+    companySessionContext: tenantController.companySessionContext,
     runtime: tenantController.runtime,
     onRestored: () => { restoreReloadPending = true; },
     assertOperationalReady
