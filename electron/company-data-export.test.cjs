@@ -89,3 +89,36 @@ test('refuses company handover when any tenant table contains another company da
   );
   assert.equal(fs.existsSync(destination), false);
 });
+
+
+test('refuses company handover when a parent directory of the document store is a symlink', async t => {
+  const { root, runtime, company } = fixture(t);
+  await runtime.createCompany(company);
+  const db = runtime.getCompanyDatabase(company.id);
+  const trustedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-export-trusted-'));
+  const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-export-outside-'));
+  t.after(() => {
+    fs.rmSync(trustedRoot, { recursive: true, force: true });
+    fs.rmSync(outsideRoot, { recursive: true, force: true });
+  });
+
+  const outsideCompanyDir = path.join(outsideRoot, 'companies', company.id, 'supporting-documents');
+  fs.mkdirSync(outsideCompanyDir, { recursive: true });
+  const storageKey = '123e4567-e89b-42d3-a456-426614174099.pdf';
+  const bytes = Buffer.from('%PDF-1.4 outside document');
+  fs.writeFileSync(path.join(outsideCompanyDir, storageKey), bytes);
+  db.prepare('INSERT INTO supporting_documents(id,company_id,entity_type,entity_id,document_type,title,description,original_file_name,mime_type,extension,storage_key,sha256,byte_size,uploaded_by_user_id,uploaded_by_username,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run('doc-outside', company.id, 'JOURNAL_ENTRY', 'entry-a', 'INVOICE', 'Factura fuera', null, 'factura.pdf', 'application/pdf', '.pdf', storageKey, require('node:crypto').createHash('sha256').update(bytes).digest('hex'), bytes.length, null, 'contador', new Date().toISOString());
+
+  const companiesPath = path.join(trustedRoot, 'companies');
+  fs.symlinkSync(path.join(outsideRoot, 'companies'), companiesPath, process.platform === 'win32' ? 'junction' : 'dir');
+
+  for (const format of ['json', 'sqlite']) {
+    const destination = path.join(root, 'blocked-export-' + format + (format === 'json' ? '.json' : ''));
+    await assert.rejects(
+      exportCompanyData({ db, company, userDataDir: trustedRoot, destination, format }),
+      /directorio intermedio.*seguro/i
+    );
+    assert.equal(fs.existsSync(destination), false);
+  }
+});
