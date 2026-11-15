@@ -17,6 +17,8 @@ on:
     paths:
       - 'electron/backup-restore.cjs'
       - 'electron/backup-restore.test.cjs'
+      - 'electron/company-session-context.cjs'
+      - 'electron/company-session-context.test.cjs'
       - 'electron/restore-*.cjs'
       - '.github/workflows/g13-restore.yml'
       - 'package.json'
