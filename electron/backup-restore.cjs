@@ -32,6 +32,17 @@ function assertDirectory(directory, label) {
   return stat;
 }
 
+function assertSafeSqliteSidecars(file, label) {
+  // SQLite may follow WAL/SHM siblings automatically when a database is opened.
+  // Inspect them before every open so backup/restore never follows a pre-existing link.
+  for (const suffix of ['-wal', '-shm']) {
+    const sidecar = lstatIfExists(file + suffix);
+    if (sidecar && (!sidecar.isFile() || sidecar.isSymbolicLink())) {
+      throw new Error(label + ' contiene un archivo auxiliar SQLite no seguro; se bloqueó el acceso.');
+    }
+  }
+}
+
 function sha256File(file) {
   const hash = crypto.createHash('sha256');
   const fd = fs.openSync(file, 'r');
@@ -98,6 +109,7 @@ function collectDirectories(root, relative = '') {
 }
 
 function verifyDatabase(file) {
+  assertSafeSqliteSidecars(file, 'La base SQLite del respaldo');
   const check = new Database(file, { readonly: true, fileMustExist: true });
   try {
     const integrity = assertSqliteIntegrity(check);
@@ -149,6 +161,7 @@ function collectCompanyDatabases(root) {
     const relative = COMPANIES_DIR + '/' + entry.name + '/accounting.sqlite';
     const file = path.join(root, ...relative.split('/'));
     assertRegularFile(file, 'La base SQLite de ' + entry.name);
+    assertSafeSqliteSidecars(file, 'La base SQLite de ' + entry.name);
     const check = new Database(file, { readonly: true, fileMustExist: true });
     try {
       assertSqliteIntegrity(check);
@@ -180,14 +193,16 @@ async function copyCompanyDatabaseTree(source, destination) {
     assertDirectory(fromDir, 'La carpeta de empresa');
     fs.mkdirSync(toDir, { recursive: false });
     const entries = fs.readdirSync(fromDir);
-    if (entries.some(name => !['accounting.sqlite', 'supporting-documents'].includes(name))) {
-      throw new Error('La carpeta de una empresa contiene archivos inesperados.');
-    }
     const from = path.join(fromDir, 'accounting.sqlite'), to = path.join(toDir, 'accounting.sqlite');
     assertRegularFile(from, 'La base SQLite de ' + entry.name);
+    assertSafeSqliteSidecars(from, 'La base SQLite de ' + entry.name);
+    if (entries.some(name => !['accounting.sqlite', 'accounting.sqlite-wal', 'accounting.sqlite-shm', 'supporting-documents'].includes(name))) {
+      throw new Error('La carpeta de una empresa contiene archivos inesperados.');
+    }
     const tenantDb = new Database(from);
     try { await tenantDb.backup(to); }
     finally { if (tenantDb.open) tenantDb.close(); }
+    assertSafeSqliteSidecars(to, 'La copia SQLite de ' + entry.name);
     const check = new Database(to, { readonly: true, fileMustExist: true });
     try {
       assertSqliteIntegrity(check);
