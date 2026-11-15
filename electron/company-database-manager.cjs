@@ -78,8 +78,19 @@ function createCompanyDatabaseManager({
         throw new Error('El archivo SQLite registrado no es un archivo local regular; se bloqueó la apertura.');
       }
     } catch (error) {
-      if (error && error.code === 'ENOENT') return;
-      throw error;
+      if (!error || error.code !== 'ENOENT') throw error;
+    }
+    // SQLite WAL mode opens these sibling files automatically. Reject links
+    // before SQLite can follow one outside the registered company directory.
+    for (const suffix of ['-wal', '-shm']) {
+      try {
+        const sidecar = fs.lstatSync(filePath + suffix);
+        if (sidecar.isSymbolicLink() || !sidecar.isFile()) {
+          throw new Error('Un archivo auxiliar SQLite contiene un enlace o elemento no regular; se bloqueó la apertura.');
+        }
+      } catch (error) {
+        if (!error || error.code !== 'ENOENT') throw error;
+      }
     }
   }
 
@@ -213,8 +224,8 @@ function createCompanyDatabaseManager({
     const companyDirectory = path.dirname(filePath);
     fs.mkdirSync(companyDirectory, { recursive: true });
     assertSafeDirectory(companyDirectory, 'La carpeta de la empresa');
+    assertSafeDatabaseFile(filePath);
     if (fs.existsSync(filePath)) {
-      assertSafeDatabaseFile(filePath);
       throw new Error('Existe un archivo SQLite sin registro para esta empresa. Se conserva intacto y requiere inspección; no se sobrescribió.');
     }
 
