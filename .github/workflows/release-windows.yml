@@ -33,6 +33,8 @@ on:
       - 'electron/tenant-document-migration.test.cjs'
       - 'electron/tenant-migration-orchestrator.cjs'
       - 'electron/tenant-migration-orchestrator.test.cjs'
+      - 'electron/company-database-manager.cjs'
+      - 'electron/company-database-manager.test.cjs'
     tags:
       - 'v*'
   pull_request:
@@ -67,6 +69,8 @@ on:
       - 'electron/tenant-document-migration.test.cjs'
       - 'electron/tenant-migration-orchestrator.cjs'
       - 'electron/tenant-migration-orchestrator.test.cjs'
+      - 'electron/company-database-manager.cjs'
+      - 'electron/company-database-manager.test.cjs'
   workflow_dispatch:
     inputs:
       publish_release:

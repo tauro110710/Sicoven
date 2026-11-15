@@ -171,6 +171,25 @@ test('rolls back a failed tenant migration and does not advance the registry', t
   tenantDb.close();
 });
 
+test('rejects symlinked SQLite WAL and SHM sidecars before opening a company database', t => {
+  const { manager } = fixture(t);
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-sidecar-outside-'));
+  t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+  manager.registerCompany({ id: 'comp-sidecar-link', rif: 'J-12345678-9', name: 'Empresa con sidecar enlazado' });
+  manager.closeCompany('comp-sidecar-link');
+  const databaseFile = manager.getDatabasePath('comp-sidecar-link');
+  const outsideFile = path.join(outside, 'outside.sqlite-wal');
+  fs.writeFileSync(outsideFile, 'external-sidecar');
+  try {
+    fs.symlinkSync(outsideFile, databaseFile + '-wal', 'file');
+  } catch (error) {
+    if (['EPERM', 'EACCES', 'ENOTSUP'].includes(error.code)) return t.skip('El sistema no permite crear enlaces simbólicos en este entorno.');
+    throw error;
+  }
+  assert.throws(() => manager.openCompany('comp-sidecar-link'), /archivo auxiliar SQLite.*enlace/i);
+  assert.equal(fs.readFileSync(outsideFile, 'utf8'), 'external-sidecar');
+});
+
 test('rejects a symlinked company directory instead of opening a database outside userData', t => {
   const { userDataDir, manager } = fixture(t);
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-outside-'));
