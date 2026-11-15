@@ -1,3 +1,5 @@
+const fs = require('node:fs');
+
 function assertSqliteIntegrity(db) {
   if (!db || typeof db.pragma !== 'function') {
     throw new TypeError('Se requiere una conexión SQLite válida para comprobar la integridad.');
@@ -22,4 +24,19 @@ function assertSqliteIntegrity(db) {
   return { ok: true, quickCheck: 'ok', foreignKeyViolations: 0 };
 }
 
-module.exports = { assertSqliteIntegrity };
+function assertSafeSqliteSidecars(file, label = 'La base SQLite') {
+  for (const suffix of ['-wal', '-shm']) {
+    let sidecar;
+    try {
+      sidecar = fs.lstatSync(file + suffix);
+    } catch (error) {
+      if (error && error.code === 'ENOENT') continue;
+      throw error;
+    }
+    if (sidecar.isSymbolicLink() || !sidecar.isFile()) {
+      throw new Error(label + ' contiene un archivo auxiliar SQLite no seguro; se bloqueó la apertura.');
+    }
+  }
+}
+
+module.exports = { assertSqliteIntegrity, assertSafeSqliteSidecars };
