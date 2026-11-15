@@ -5,7 +5,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { isDeepStrictEqual } = require('node:util');
 const DatabaseDefault = require('better-sqlite3');
-const { assertSqliteIntegrity: assertSqliteIntegrityDefault } = require('./sqlite-integrity.cjs');
+const { assertSqliteIntegrity: assertSqliteIntegrityDefault, assertSafeSqliteSidecars } = require('./sqlite-integrity.cjs');
 const { initializeTenantDatabase: initializeTenantDatabaseDefault } = require('./tenant-schema.cjs');
 const { partitionAccountingSnapshot } = require('./tenant-snapshot.cjs');
 const { persistAccountingSnapshot } = require('./accounting-persistence.cjs');
@@ -125,6 +125,7 @@ function createTenantMigrationOrchestrator(options) {
       throw new Error('El respaldo SQLite consistente no se generó como archivo regular.');
     }
 
+    assertSafeSqliteSidecars(backupPath, 'El respaldo SQLite de migración');
     const backupDb = new Database(backupPath, { readonly: true, fileMustExist: true });
     let backupHash;
     try {
@@ -175,6 +176,7 @@ function createTenantMigrationOrchestrator(options) {
         fs.mkdirSync(companyDirectory, { recursive: false, mode: 0o700 });
         assertSafeDirectory(companyDirectory, 'La carpeta de datos de ' + companyId);
         const databasePath = path.join(companyDirectory, 'accounting.sqlite');
+        assertSafeSqliteSidecars(databasePath, 'La nueva base SQLite de empresa');
         const tenantDb = new Database(databasePath);
         let relationalResult;
         let auditCount = 0;
@@ -229,6 +231,7 @@ function createTenantMigrationOrchestrator(options) {
       for (const result of companyResults) {
         const companyId = result.companyId;
         const databasePath = path.join(companiesRoot, companyId, 'accounting.sqlite');
+        assertSafeSqliteSidecars(databasePath, 'La base SQLite de empresa migrada');
         const verifyDb = new Database(databasePath, { readonly: true, fileMustExist: true });
         try {
           assertSqliteIntegrity(verifyDb);
