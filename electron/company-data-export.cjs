@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Database = require('better-sqlite3');
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
+const { assertNoSymlinkPath } = require('./supporting-documents.cjs');
 
 const MAX_JSON_BYTES = 250 * 1024 * 1024;
 const HASH_RE = /^[a-f0-9]{64}$/;
@@ -61,7 +62,10 @@ function verifyCompanyIdentity(db, companyId, expectedRif) {
 function collectDocuments(db, userDataDir, companyId) {
   const table = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='supporting_documents'").get();
   if (!table) return [];
-  const root = path.join(path.resolve(userDataDir), 'companies', String(companyId), 'supporting-documents');
+  const trustedRoot = path.resolve(userDataDir);
+  const root = assertNoSymlinkPath(trustedRoot,
+    path.join(trustedRoot, 'companies', String(companyId), 'supporting-documents'),
+    'El almacén documental de la exportación');
   return db.prepare('SELECT id,company_id,entity_type,entity_id,document_type,title,description,original_file_name,mime_type,storage_key,sha256,byte_size,uploaded_by_username,created_at FROM supporting_documents ORDER BY created_at,id')
     .all().map(row => {
       const storageKey = String(row.storage_key || '');
