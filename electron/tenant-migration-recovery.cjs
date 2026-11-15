@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const DatabaseDefault = require('better-sqlite3');
-const { assertSqliteIntegrity: assertSqliteIntegrityDefault } = require('./sqlite-integrity.cjs');
+const { assertSqliteIntegrity: assertSqliteIntegrityDefault, assertSafeSqliteSidecars } = require('./sqlite-integrity.cjs');
 const { readTenantSnapshot: readTenantSnapshotDefault } = require('./tenant-persistence.cjs');
 const { createTenantMigrationJournal } = require('./tenant-migration-journal.cjs');
 const { normalizeCompanyId } = require('./company-database-manager.cjs');
@@ -59,6 +59,7 @@ function inspectTenantMigrationRecovery(options) {
     }
     assertRegularFile(backupPath, 'El respaldo de origen');
     if (sha256File(backupPath) !== record.sourceBackupSha256) throw new Error('El SHA-256 del respaldo no coincide con el journal.');
+    assertSafeSqliteSidecars(backupPath, 'El respaldo SQLite de recuperación');
     const backupDb = new Database(backupPath, { readonly: true, fileMustExist: true });
     try { assertSqliteIntegrity(backupDb); } finally { backupDb.close(); }
     backup.valid = true;
@@ -80,6 +81,7 @@ function inspectTenantMigrationRecovery(options) {
       assertDirectory(companiesRoot, 'La carpeta companies');
       assertDirectory(companyDirectory, 'La carpeta de ' + companyId);
       assertRegularFile(databasePath, 'La base de ' + companyId);
+      assertSafeSqliteSidecars(databasePath, 'La base SQLite recuperada de ' + companyId);
       const db = new Database(databasePath, { readonly: true, fileMustExist: true });
       try {
         assertSqliteIntegrity(db);
