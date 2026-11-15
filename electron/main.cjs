@@ -59,7 +59,7 @@ if (!hasSingleInstanceLock) {
 }
 
 const { migrateAuthUserRoles, hasFullSystemAccess } = require('./auth-roles.cjs');
-const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
+const { assertSqliteIntegrity, assertSafeSqliteSidecars } = require('./sqlite-integrity.cjs');
 const { reconcileRestoreAudit } = require('./restore-audit-ledger.cjs');
 const { registerBackupIpc } = require('./backup-restore.cjs');
 const { registerRestoreIpc } = require('./restore-engine.cjs');
@@ -88,7 +88,9 @@ function withOperationalDatabase(token, operation) {
 function openDatabase() {
   const dataDir = app.getPath('userData');
   fs.mkdirSync(dataDir, { recursive: true });
-  db = new Database(path.join(dataDir, 'sicoven.sqlite'));
+  const databasePath = path.join(dataDir, 'sicoven.sqlite');
+  assertSafeSqliteSidecars(databasePath, 'La base SQLite global');
+  db = new Database(databasePath);
   // Comprobar la base existente antes de cambiar pragmas persistentes, ejecutar
   // DDL o migraciones. Nunca se repara, borra ni sustituye automáticamente.
   assertSqliteIntegrity(db);
