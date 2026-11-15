@@ -110,7 +110,6 @@ test('refuses company handover when a parent directory of the document store is 
   db.prepare('INSERT INTO supporting_documents(id,company_id,entity_type,entity_id,document_type,title,description,original_file_name,mime_type,extension,storage_key,sha256,byte_size,uploaded_by_user_id,uploaded_by_username,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run('doc-outside', company.id, 'JOURNAL_ENTRY', 'entry-a', 'INVOICE', 'Factura fuera', null, 'factura.pdf', 'application/pdf', '.pdf', storageKey, require('node:crypto').createHash('sha256').update(bytes).digest('hex'), bytes.length, null, 'contador', new Date().toISOString());
 
-  fs.mkdirSync(trustedRoot);
   const companiesPath = path.join(trustedRoot, 'companies');
   fs.symlinkSync(path.join(outsideRoot, 'companies'), companiesPath, process.platform === 'win32' ? 'junction' : 'dir');
 
