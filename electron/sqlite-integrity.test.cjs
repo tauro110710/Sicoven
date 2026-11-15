@@ -41,6 +41,7 @@ test('SQLite sidecar validation accepts absent or regular WAL/SHM files', () => 
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-sqlite-sidecars-'));
   const databasePath = path.join(directory, 'sicoven.sqlite');
   try {
+    assert.equal(assertSafeSqliteSidecars(databasePath), undefined);
     fs.writeFileSync(databasePath + '-wal', 'regular wal');
     fs.writeFileSync(databasePath + '-shm', 'regular shm');
     assert.equal(assertSafeSqliteSidecars(databasePath), undefined);
