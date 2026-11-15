@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'electron/backup-restore.cjs'
+      - 'electron/backup-restore.test.cjs'
       - 'electron/restore-*.cjs'
       - '.github/workflows/g13-restore.yml'
       - 'package.json'
@@ -13,6 +14,7 @@ on:
       - 'certificacion/**'
     paths:
       - 'electron/backup-restore.cjs'
+      - 'electron/backup-restore.test.cjs'
       - 'electron/restore-*.cjs'
       - '.github/workflows/g13-restore.yml'
       - 'package.json'
@@ -45,4 +47,4 @@ jobs:
       - name: Install locked dependencies
         run: npm install --no-audit --no-fund
       - name: Run G13 restore and recovery tests
-        run: npx tsx --test electron/restore-engine.test.cjs electron/restore-journal.test.cjs electron/restore-audit-ledger.test.cjs
+        run: npx tsx --test electron/backup-restore.test.cjs electron/restore-engine.test.cjs electron/restore-journal.test.cjs electron/restore-audit-ledger.test.cjs
