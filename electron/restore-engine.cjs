@@ -336,11 +336,14 @@ async function executeRestore(args) {
 
 function registerRestoreIpc({
   ipcMain, app, dialog, licenseView, getActiveSession, getDb,
-  closeDatabase, reopenDatabase, getWindow, operationContext = null, runtime = null, onRestored = null, assertOperationalReady = () => {}
+  closeDatabase, reopenDatabase, getWindow, operationContext = null, runtime = null, companySessionContext = null, onRestored = null, assertOperationalReady = () => {}
 }) {
   if (typeof assertOperationalReady !== 'function') throw new TypeError('La verificación del estado de restauración global no es válida.');
   if (operationContext && typeof operationContext.acquireMaintenanceLock !== 'function') {
     throw new TypeError('La restauración global requiere un bloqueo de mantenimiento válido.');
+  }
+  if (companySessionContext && typeof companySessionContext.clearForMaintenance !== 'function') {
+    throw new TypeError('La restauración global requiere limpiar el contexto de sesión de empresa.');
   }
   if (runtime && typeof runtime.rebindControlDatabase !== 'function') {
     throw new TypeError('La restauración global requiere un runtime capaz de reabrir el registro de empresas.');
@@ -383,6 +386,7 @@ function registerRestoreIpc({
         db: getDb(), getDb, closeDatabase, reopenDatabase,
         actor: actor.username
       });
+      companySessionContext?.clearForMaintenance();
       reconcileRestoreAudit({ db: getDb(), userDataDir: app.getPath('userData') });
       if (typeof onRestored === 'function') onRestored(result);
       return { ...result, reloadRequired: true };
