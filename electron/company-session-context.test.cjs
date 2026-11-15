@@ -30,6 +30,12 @@ function fixture(overrides = {}) {
       calls.push(['clear', previous]);
       return { ok: true, previousCompanyId: previous };
     },
+    clearActiveCompanyForMaintenance() {
+      const previous = activeCompanyId;
+      activeCompanyId = null;
+      calls.push(['clear-maintenance', previous]);
+      return { ok: true, previousCompanyId: previous };
+    },
     getActiveCompanyId: () => activeCompanyId,
     withActiveDatabase(operation) {
       return Promise.resolve(operation({ marker: activeCompanyId }, activeCompanyId));
@@ -130,6 +136,18 @@ test('clears the active database as well as every session binding on license shu
   assert.equal(operationContext.getActiveCompanyId(), null);
   assert.equal(calls.at(-1)[0], 'clear');
   assert.throws(() => context.getSelectedCompanyId(tokenA), /no tiene una empresa/i);
+});
+
+test('clears the active tenant and every session binding during exclusive maintenance', async () => {
+  const { context, calls, operationContext } = fixture();
+  await context.selectCompany(tokenA, 'company-a');
+  const result = context.clearForMaintenance();
+  assert.deepEqual(result, { ok: true, previousCompanyId: 'company-a' });
+  assert.equal(operationContext.getActiveCompanyId(), null);
+  assert.equal(calls.at(-1)[0], 'clear-maintenance');
+  assert.throws(() => context.getSelectedCompanyId(tokenA), /no tiene una empresa/i);
+  await context.selectCompany(tokenB, 'company-b');
+  assert.equal(context.getSelectedCompanyId(tokenB), 'company-b');
 });
 
 test('revalidates session and permissions after a delayed tenant switch', async () => {

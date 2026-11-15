@@ -132,6 +132,16 @@ function createCompanySessionContext({ runtime, operationContext, getActiveSessi
     return { ok: true, changed: true, previousCompanyId: result.previousCompanyId || null };
   }
 
+  function clearForMaintenance() {
+    if (typeof operationContext.clearActiveCompanyForMaintenance !== 'function') {
+      throw new Error('El contexto operativo no permite limpiar la empresa durante el mantenimiento.');
+    }
+    const result = operationContext.clearActiveCompanyForMaintenance();
+    selectedByToken.clear();
+    activeSessionToken = null;
+    return { ok: true, previousCompanyId: result?.previousCompanyId || null };
+  }
+
   async function clearAllSessions() {
     try {
       if (operationContext.getActiveCompanyId()) await operationContext.clearActiveCompany({ skipFlush: true });
@@ -142,7 +152,7 @@ function createCompanySessionContext({ runtime, operationContext, getActiveSessi
     return { ok: true };
   }
 
-  return Object.freeze({ listAccessibleCompanies, selectCompany, getSelectedCompanyId, withSelectedDatabase, clearSession, clearAllSessions });
+  return Object.freeze({ listAccessibleCompanies, selectCompany, getSelectedCompanyId, withSelectedDatabase, clearSession, clearAllSessions, clearForMaintenance });
 }
 
 module.exports = { createCompanySessionContext };
