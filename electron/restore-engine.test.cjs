@@ -16,6 +16,27 @@ function sha256(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
 
+test('restore engine rejects symbolic links in company SQLite WAL and SHM sidecars', () => {
+  const { assertSafeSqliteSidecars } = require('./restore-engine.cjs');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-restore-sidecars-'));
+  const database = path.join(root, 'accounting.sqlite');
+  const outside = path.join(root, 'outside.bin');
+  fs.writeFileSync(database, 'sqlite-placeholder');
+  fs.writeFileSync(outside, 'external-data-must-remain-untouched');
+  try {
+    for (const suffix of ['-wal', '-shm']) {
+      const sidecar = database + suffix;
+      fs.symlinkSync(outside, sidecar, 'file');
+      assert.throws(() => assertSafeSqliteSidecars(database, 'Base SQLite de empresa'), /sidecar SQLite no regular o un enlace simbólico/);
+      assert.equal(fs.readFileSync(outside, 'utf8'), 'external-data-must-remain-untouched');
+      fs.unlinkSync(sidecar);
+    }
+    assert.doesNotThrow(() => assertSafeSqliteSidecars(database));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('rolled_back recovery refuses to clean evidence when active SQLite differs from verified rollback', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-rolled-back-recovery-'));
   const userData = path.join(root, 'user-data');

@@ -19,6 +19,17 @@ function exists(p) { try { fs.lstatSync(p); return true; } catch (e) { if (e.cod
 function realDir(p, label) { const s=fs.lstatSync(p); if(!s.isDirectory()||s.isSymbolicLink()) throw new Error(label+' no es un directorio real.'); }
 function realFile(p, label) { const s=fs.lstatSync(p); if(!s.isFile()||s.isSymbolicLink()) throw new Error(label+' no es un archivo regular.'); }
 function hashFile(file) { const h=crypto.createHash('sha256'); h.update(fs.readFileSync(file)); return h.digest('hex'); }
+function assertSafeSqliteSidecars(file, label = 'Base SQLite') {
+  for (const suffix of ['-wal', '-shm']) {
+    const sidecar = file + suffix;
+    let stat;
+    try { stat = fs.lstatSync(sidecar); }
+    catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink()) {
+      throw new Error(label + ' contiene un sidecar SQLite no regular o un enlace simbólico: ' + path.basename(sidecar));
+    }
+  }
+}
 function clearSqliteSidecars(userDataDir) {
   for (const suffix of ['-wal','-shm']) {
     const file=path.join(userDataDir,DB+suffix);
@@ -44,6 +55,7 @@ function verifyCompanyTree(directory, manifest) {
     const file=path.join(root,entry.name,'accounting.sqlite');
     realFile(file,'Base SQLite de empresa');
     if (fs.statSync(file).size !== item.size || hashFile(file) !== item.sha256) throw new Error('La base SQLite de ' + item.companyId + ' no coincide con el respaldo.');
+    assertSafeSqliteSidecars(file, 'Base SQLite de empresa');
     const Database=require('better-sqlite3');
     const db=new Database(file,{readonly:true,fileMustExist:true});
     try {
@@ -399,5 +411,5 @@ function registerRestoreIpc({
     }
   });
 }
-module.exports={executeRestore,recoverPendingRestore,registerRestoreIpc,restoreRollback};
+module.exports={executeRestore,recoverPendingRestore,registerRestoreIpc,restoreRollback,assertSafeSqliteSidecars};
 
