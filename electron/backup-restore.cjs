@@ -193,12 +193,12 @@ async function copyCompanyDatabaseTree(source, destination) {
     assertDirectory(fromDir, 'La carpeta de empresa');
     fs.mkdirSync(toDir, { recursive: false });
     const entries = fs.readdirSync(fromDir);
-    if (entries.some(name => !['accounting.sqlite', 'supporting-documents'].includes(name))) {
-      throw new Error('La carpeta de una empresa contiene archivos inesperados.');
-    }
     const from = path.join(fromDir, 'accounting.sqlite'), to = path.join(toDir, 'accounting.sqlite');
     assertRegularFile(from, 'La base SQLite de ' + entry.name);
     assertSafeSqliteSidecars(from, 'La base SQLite de ' + entry.name);
+    if (entries.some(name => !['accounting.sqlite', 'accounting.sqlite-wal', 'accounting.sqlite-shm', 'supporting-documents'].includes(name))) {
+      throw new Error('La carpeta de una empresa contiene archivos inesperados.');
+    }
     const tenantDb = new Database(from);
     try { await tenantDb.backup(to); }
     finally { if (tenantDb.open) tenantDb.close(); }
