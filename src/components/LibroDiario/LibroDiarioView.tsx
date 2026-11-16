@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { isJournalEntryBalanced } from '../../types/journalEntryValidation';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
@@ -33,17 +33,40 @@ export const LibroDiarioView: React.FC = () => {
   const [documentTarget, setDocumentTarget] = useState<{ id: string; title: string } | null>(null);
   const [reversalTarget, setReversalTarget] = useState<import('../../types/accounting').JournalEntry | null>(null);
   const [showCorrectionCenter, setShowCorrectionCenter] = useState(false);
+  const correctionTriggerRef = useRef<HTMLButtonElement>(null);
+  const correctionDialogRef = useRef<HTMLElement>(null);
+  const correctionCloseRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!showCorrectionCenter) return;
     const previousOverflow = document.body.style.overflow;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setShowCorrectionCenter(false);
+      if (event.key === 'Escape') {
+        setShowCorrectionCenter(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const dialog = correctionDialogRef.current;
+      const focusable = dialog?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.body.style.overflow = 'hidden';
+    correctionCloseRef.current?.focus();
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', handleKeyDown);
+      correctionTriggerRef.current?.focus();
     };
   }, [showCorrectionCenter]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -173,19 +196,19 @@ export const LibroDiarioView: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-end print:hidden">
-        <button type="button" onClick={() => setShowCorrectionCenter(true)} aria-haspopup="dialog" aria-expanded={showCorrectionCenter} className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-900 shadow-sm transition hover:bg-amber-100">
+        <button ref={correctionTriggerRef} type="button" onClick={() => setShowCorrectionCenter(true)} aria-haspopup="dialog" aria-expanded={showCorrectionCenter} className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-900 shadow-sm transition hover:bg-amber-100">
           <ShieldCheck className="h-4 w-4" /> Ver centro de correcciones
         </button>
       </div>
       {showCorrectionCenter && (
         <div className="fixed inset-0 z-[70] overflow-y-auto bg-slate-950/55 p-3 sm:p-6 print:hidden" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setShowCorrectionCenter(false); }}>
-          <section role="dialog" aria-modal="true" aria-labelledby="correction-center-title" className="mx-auto my-4 max-h-[calc(100vh-2rem)] max-w-5xl overflow-y-auto rounded-2xl border border-amber-200 bg-white shadow-2xl sm:my-8 sm:max-h-[calc(100vh-4rem)]">
+          <section ref={correctionDialogRef} role="dialog" aria-modal="true" aria-labelledby="correction-center-title" className="mx-auto my-4 max-h-[calc(100vh-2rem)] max-w-5xl overflow-y-auto rounded-2xl border border-amber-200 bg-white shadow-2xl sm:my-8 sm:max-h-[calc(100vh-4rem)]">
             <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-amber-100 bg-amber-50 px-4 py-3">
               <div>
                 <h2 id="correction-center-title" className="text-sm font-bold text-slate-900">Centro de Correcciones y Ajustes</h2>
                 <p className="mt-1 text-[11px] text-slate-600">Conserva los originales y localiza los asientos que requieren revisión o reversión.</p>
               </div>
-              <button type="button" onClick={() => setShowCorrectionCenter(false)} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-900 transition hover:bg-amber-100"><X className="h-3.5 w-3.5" /> Cerrar</button>
+              <button ref={correctionCloseRef} type="button" onClick={() => setShowCorrectionCenter(false)} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-900 transition hover:bg-amber-100"><X className="h-3.5 w-3.5" /> Cerrar</button>
             </div>
             <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4">
               <div className="rounded-lg bg-slate-50 p-3"><div className="text-[10px] text-slate-500">Asientos fuente sin reversión</div><div className="text-xl font-bold tabular-nums text-slate-900">{pendingReversals.length}</div></div>
