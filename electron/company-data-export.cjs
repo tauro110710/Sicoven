@@ -4,7 +4,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const Database = require('better-sqlite3');
-const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
+const { assertSqliteIntegrity, assertSafeSqliteSidecars } = require('./sqlite-integrity.cjs');
 const { assertNoSymlinkPath } = require('./supporting-documents.cjs');
 
 const MAX_JSON_BYTES = 250 * 1024 * 1024;
@@ -133,6 +133,7 @@ async function writeSqliteExport({ db, company, userDataDir, destination }) {
   try {
     const databaseFile = path.join(staging, 'accounting.sqlite');
     await db.backup(databaseFile);
+    assertSafeSqliteSidecars(databaseFile, 'La base SQLite exportada');
     const check = new Database(databaseFile, { readonly: true, fileMustExist: true });
     try { verifyCompanyIdentity(check, company.id, company.rif); }
     finally { check.close(); }
