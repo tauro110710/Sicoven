@@ -147,6 +147,18 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
  * define una fila sintética para representar una declaración sin operaciones.
  */
 
+function formatSeniatIslrInvoiceNumber(value: unknown): string {
+  const normalized = String(value ?? '').replace(/[^A-Za-z0-9]/g, '');
+  return (normalized || '0').slice(-10);
+}
+
+function formatSeniatIslrControlNumber(value: unknown): string {
+  const source = String(value ?? '').trim();
+  if (/^NA$/i.test(source)) return 'NA';
+  const normalized = source.replace(/[^0-9]/g, '');
+  return normalized ? normalized.slice(-10) : 'NA';
+}
+
 /**
  * Genera el archivo XML oficial de Retenciones de ISLR para el portal SENIAT
  */
@@ -164,8 +176,8 @@ export function generateSeniatIslrXml(company: Company, vouchers: IslrRetentionV
 
     xml += `  <DetalleRetencion>\n`;
     xml += `    <RifRetenido>${retRif}</RifRetenido>\n`;
-    xml += `    <NumeroFactura>${v.invoiceNumber}</NumeroFactura>\n`;
-    xml += `    <NumeroControl>${v.controlNumber}</NumeroControl>\n`;
+    xml += `    <NumeroFactura>${formatSeniatIslrInvoiceNumber(v.invoiceNumber)}</NumeroFactura>\n`;
+    xml += `    <NumeroControl>${formatSeniatIslrControlNumber(v.controlNumber)}</NumeroControl>\n`;
     xml += `    <FechaOperacion>${formattedDate}</FechaOperacion>\n`;
     xml += `    <CodigoConcepto>${v.conceptCode.padStart(3, '0')}</CodigoConcepto>\n`;
     xml += `    <MontoOperacion>${v.baseAmountBs.toFixed(2)}</MontoOperacion>\n`;
@@ -264,8 +276,8 @@ export function generateSeniatIslrOperationsXml(
     const date = parts.length === 3 ? parts[2] + '/' + parts[1] + '/' + parts[0] : row.invoiceDate;
     xml += '  <DetalleRetencion>\n';
     xml += '    <RifRetenido>' + esc(cleanRif(row.supplierRif)) + '</RifRetenido>\n';
-    xml += '    <NumeroFactura>' + esc(row.invoiceNumber) + '</NumeroFactura>\n';
-    xml += '    <NumeroControl>' + esc(row.controlNumber) + '</NumeroControl>\n';
+    xml += '    <NumeroFactura>' + formatSeniatIslrInvoiceNumber(row.invoiceNumber) + '</NumeroFactura>\n';
+    xml += '    <NumeroControl>' + formatSeniatIslrControlNumber(row.controlNumber) + '</NumeroControl>\n';
     xml += '    <FechaOperacion>' + esc(date) + '</FechaOperacion>\n';
     xml += '    <CodigoConcepto>' + esc(row.conceptCode.padStart(3, '0')) + '</CodigoConcepto>\n';
     xml += '    <MontoOperacion>' + row.baseAmountBs.toFixed(2) + '</MontoOperacion>\n';
