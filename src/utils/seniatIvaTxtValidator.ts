@@ -132,6 +132,7 @@ export function validateSeniatIvaTxt(content: string): SeniatIvaTxtValidation {
         add(line, 'INVALID_NUMERIC_FORMAT', 'El campo debe contener un número entero, sin separadores de miles ni decimales.', index + 1);
       }
     });
+    // El TXT no incluye retentionRate; se contrasta el importe entero exportado con el IVA total redondeado.
     if (supplierRif === '0' && /^\d+$/.test(base) && /^\d+$/.test(withheld) && /^\d+$/.test(rate)) {
       const expectedFullWithholding = Math.round(Number(base) * Number(rate) / 100);
       if (Number(withheld) !== expectedFullWithholding) {
