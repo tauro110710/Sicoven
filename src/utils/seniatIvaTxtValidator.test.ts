@@ -52,6 +52,7 @@ test('SENIAT IVA preflight validates numeric fields, voucher period and unique s
   first[8] = '1.160,00';
   first[12] = '20260900000001';
   const second = validRow.split('\t');
+  second[12] = '20260900000001';
   const result = validateSeniatIvaTxt(first.join('\t') + '\r\n' + second.join('\t'));
   assert.ok(result.issues.some(issue => issue.code === 'INVALID_NUMERIC_FORMAT'));
   assert.ok(result.issues.some(issue => issue.code === 'VOUCHER_PERIOD_MISMATCH'));
@@ -79,4 +80,12 @@ test('SENIAT IVA preflight enforces one agent and one period per file', () => {
   const result = validateSeniatIvaTxt(validRow + '\r\n' + second.join('\t'));
   assert.ok(result.issues.some(issue => issue.code === 'MIXED_AGENT_RIF'));
   assert.ok(result.issues.some(issue => issue.code === 'MIXED_PERIODS'));
+});
+
+
+test('SENIAT IVA preflight permits supplier RIF 0 as allowed by the generator for 100% retention cases', () => {
+  const fields = validRow.split('\\t');
+  fields[5] = '0';
+  const result = validateSeniatIvaTxt(fields.join('\\t'));
+  assert.equal(result.issues.some(issue => issue.code === 'INVALID_SUPPLIER_RIF'), false);
 });
