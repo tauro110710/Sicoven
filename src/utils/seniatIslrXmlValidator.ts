@@ -80,15 +80,17 @@ export function validateSeniatIslrXml(content: string): SeniatIslrXmlValidation 
   }
 
   const attributes: Record<string, string> = {};
+  const seenAttributes = new Set<string>();
+  let duplicateAttribute = false;
   const attributeText = rootMatch[1];
   const attributeRegex = /([A-Za-z_:][A-Za-z0-9_.:-]*)\s*=\s*(["'])(.*?)\2/g;
   let attributeMatch: RegExpExecArray | null;
-  let consumed = '';
   while ((attributeMatch = attributeRegex.exec(attributeText))) {
-    consumed += attributeMatch[0];
+    if (seenAttributes.has(attributeMatch[1])) duplicateAttribute = true;
+    seenAttributes.add(attributeMatch[1]);
     attributes[attributeMatch[1]] = attributeMatch[3];
   }
-  if (attributeText.replace(attributeRegex, '').trim() !== '' ||
+  if (duplicateAttribute || attributeText.replace(attributeRegex, '').trim() !== '' ||
       Object.keys(attributes).length !== 2 ||
       !Object.prototype.hasOwnProperty.call(attributes, 'RifAgente') ||
       !Object.prototype.hasOwnProperty.call(attributes, 'Periodo')) {
