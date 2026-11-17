@@ -189,7 +189,7 @@ export const RetencionesIslrView: React.FC = () => {
               Comprobantes de Retención de ISLR & Archivos SENIAT (XML / TXT)
             </h1>
             <p className="text-xs text-slate-500 max-w-2xl mt-0.5">
-              Conforme al Decreto 1808 (Reglamento de Retenciones de ISLR) para personas naturales, jurídicas y formato XML oficial para el portal SENIAT.
+              Conforme al Decreto 1808 (Reglamento de Retenciones de ISLR), con exportación XML mensual basada en el Manual Técnico SENIAT v3.1. La aceptación debe confirmarse en el Portal Fiscal.
             </p>
           </div>
 
@@ -277,7 +277,7 @@ export const RetencionesIslrView: React.FC = () => {
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-indigo-400" />
                 <span className="text-xs font-bold text-indigo-300">
-                  Estructura XML Oficial SENIAT para Carga Masiva de Retenciones de ISLR
+                  XML mensual de Retenciones de ISLR · esquema Salarios y Otras Retenciones
                 </span>
               </div>
               <button
@@ -303,7 +303,7 @@ export const RetencionesIslrView: React.FC = () => {
               {generatedXml}
             </pre>
             <p className="text-[10px] text-slate-400 italic">
-              Etiquetas requeridas por el portal: &lt;RelacionRetencionesISLR RifAgente Periodo&gt; • &lt;DetalleRetencion&gt; • RifRetenido • NumeroFactura • NumeroControl • FechaOperacion • CodigoConcepto • MontoOperacion • PorcentajeRetencion
+              Etiquetas y orden del esquema técnico consultado: &lt;RelacionRetencionesISLR RifAgente Periodo&gt; • &lt;DetalleRetencion&gt; • RifRetenido • NumeroFactura • NumeroControl • FechaOperacion • CodigoConcepto • MontoOperacion • PorcentajeRetencion
             </p>
           </div>
         )}
