@@ -48,12 +48,13 @@ test('SENIAT XML preserves legacy voucher-only records without duplicating linke
   assert.equal((legacy.match(/<DetalleRetencion>/g) || []).length, 1);
 });
 
-test('SENIAT XML escapes invoice text and limits output to selected period', () => {
+test('SENIAT XML normalizes invoice and control numbers to the SENIAT schema and limits the selected period', () => {
   const xml = generateSeniatIslrOperationsXml(company, [
-    purchase({ invoiceNumber: 'F&<002>' }),
+    purchase({ invoiceNumber: 'F-002', controlNumber: '00-123' }),
     purchase({ id: 'p2', invoiceDate: '2026-09-30', invoiceNumber: 'SEP' })
   ], [], '202610');
-  assert.match(xml, /F&amp;&lt;002&gt;/);
+  assert.match(xml, /<NumeroFactura>F002<\/NumeroFactura>/);
+  assert.match(xml, /<NumeroControl>00123<\/NumeroControl>/);
   assert.doesNotMatch(xml, /SEP/);
 });
 
