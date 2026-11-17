@@ -17,6 +17,7 @@ import {
   generateSeniatIslrOperationsTxt,
   downloadFile
 } from '../../utils/seniatGenerators';
+import { validateSeniatIslrXml } from '../../utils/seniatIslrXmlValidator';
 
 export const RetencionesIslrView: React.FC = () => {
   const { currentCompany, islrVouchers, purchases, islrFiscalEvents, displayCurrency, recordIslrVoucherDelivery } = useAccounting();
@@ -129,6 +130,7 @@ export const RetencionesIslrView: React.FC = () => {
   const totalBaseBs = periodPurchases.reduce((sum, purchase) => sum + Number(purchase.taxableBaseBs || 0), 0) + legacyVouchers.reduce((sum, voucher) => sum + voucher.baseAmountBs, 0);
 
   const generatedXml = hasIncompleteFiscalOperation ? '' : generateSeniatIslrOperationsXml(currentCompany, periodPurchases, periodVouchers, activePeriod, islrFiscalEvents);
+  const xmlValidation = generatedXml ? validateSeniatIslrXml(generatedXml) : null;
   const generatedTxt = hasIncompleteFiscalOperation ? '' : generateSeniatIslrOperationsTxt(currentCompany, periodPurchases, periodVouchers, activePeriod, islrFiscalEvents);
 
   const handleDownloadXml = () => {
@@ -138,6 +140,15 @@ export const RetencionesIslrView: React.FC = () => {
     }
     if (!hasFiscalOperations) {
       alert('No hay retenciones de ISLR para generar el archivo XML.');
+      return;
+    }
+    if (hasIncompleteFiscalOperation) {
+      alert('Exportación bloqueada: hay operaciones ISLR incompletas. Complete la clasificación fiscal antes de generar el XML.');
+      return;
+    }
+    if (xmlValidation && !xmlValidation.isValid) {
+      alert('Exportación bloqueada: la validación local del XML detectó errores. Revise el informe de validación en la vista previa.');
+      setShowXmlPreview(true);
       return;
     }
     const cleanR = cleanRif(currentCompany.rif);
@@ -203,7 +214,7 @@ export const RetencionesIslrView: React.FC = () => {
             </button>
             <button
               onClick={handleDownloadXml}
-              disabled={!hasFiscalOperations || hasPendingFiscalCorrection}
+              disabled={!hasFiscalOperations || hasPendingFiscalCorrection || hasIncompleteFiscalOperation || Boolean(xmlValidation && !xmlValidation.isValid)}
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 rounded-xl transition shadow cursor-pointer"
             >
               <Download className="w-4 h-4" />
@@ -271,11 +282,22 @@ export const RetencionesIslrView: React.FC = () => {
               </div>
               <button
                 onClick={handleDownloadXml}
-                disabled={hasPendingFiscalCorrection}
+                disabled={hasPendingFiscalCorrection || hasIncompleteFiscalOperation || Boolean(xmlValidation && !xmlValidation.isValid)}
                 className="text-xs text-emerald-400 hover:underline flex items-center gap-1 font-semibold cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" /> Descargar XML
               </button>
+            </div>
+            <div className={xmlValidation?.isValid ? 'rounded-lg border border-emerald-700 bg-emerald-950/50 p-3 text-xs text-emerald-200' : 'rounded-lg border border-rose-700 bg-rose-950/50 p-3 text-xs text-rose-200'} role="status" aria-live="polite">
+              <strong>{xmlValidation?.isValid ? 'Validación local aprobada' : 'Validación local con observaciones'}</strong>
+              <p className="mt-1">{xmlValidation?.rowCount || 0} registros revisados. La validación no consulta el SENIAT ni confirma que los RIF o códigos existan en su base de datos.</p>
+              {xmlValidation && xmlValidation.issues.length > 0 && (
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {xmlValidation.issues.map((item, index) => (
+                    <li key={item.code + '-' + index}>Línea {item.line} · {item.field}: {item.message}</li>
+                  ))}
+                </ul>
+              )}
             </div>
             <pre className="p-3 bg-black/60 rounded-lg text-[11px] font-mono text-emerald-400 overflow-x-auto whitespace-pre max-h-52 border border-slate-800">
               {generatedXml}
