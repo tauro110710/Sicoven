@@ -15,6 +15,7 @@ import { formatBs, formatUsd, formatDate, cleanRif } from '../../utils/formatter
 import { VatRetentionVoucher } from '../../types/accounting';
 import { VatVoucherModal } from './VatVoucherModal';
 import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators';
+import { validateSeniatIvaTxt } from '../../utils/seniatIvaTxtValidator';
 import { VatWithholdingDeclarationsPanel } from './VatWithholdingDeclarationsPanel';
 import { getVatDeclarationStatus } from '../../types/vatWithholdingDeclaration';
 import { getVatVoucherDeliveryControl } from '../../utils/vatVoucherDelivery';
@@ -120,6 +121,8 @@ export const RetencionesIvaView: React.FC = () => {
     }
   }
 
+  const txtValidation = generatedTxt ? validateSeniatIvaTxt(generatedTxt) : null;
+
   const handleDownloadTxt = () => {
     if (hasPendingFiscalCorrection) {
       alert('Exportación bloqueada: hay comprobantes afectados por notas de crédito o reversiones. Registre y concilie la rectificación fiscal antes de generar el archivo SENIAT.');
@@ -127,6 +130,11 @@ export const RetencionesIvaView: React.FC = () => {
     }
     if (txtGenerationError) {
       alert('Exportación bloqueada: ' + txtGenerationError);
+      return;
+    }
+    if (txtValidation && !txtValidation.isValid) {
+      alert('Exportación bloqueada: la validación local detectó errores. Revise el informe de validación en la vista previa.');
+      setShowTxtPreview(true);
       return;
     }
     if (periodVouchers.length === 0) {
@@ -238,7 +246,7 @@ export const RetencionesIvaView: React.FC = () => {
             </button>
             <button
               onClick={handleDownloadTxt}
-              disabled={periodVouchers.length === 0 || hasPendingFiscalCorrection}
+              disabled={periodVouchers.length === 0 || hasPendingFiscalCorrection || Boolean(txtGenerationError) || Boolean(txtValidation && !txtValidation.isValid)}
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-40 rounded-xl transition shadow cursor-pointer"
             >
               <Download className="w-4 h-4" />
@@ -317,6 +325,29 @@ export const RetencionesIvaView: React.FC = () => {
                   ? '// No hay registros de retención de IVA para este período'
                   : generatedTxt}
             </pre>
+            {txtValidation && (
+              <div role={txtValidation.isValid ? 'status' : 'alert'}
+                className={`rounded-lg border p-3 text-xs ${txtValidation.isValid ? 'border-emerald-700 bg-emerald-950/60 text-emerald-200' : 'border-amber-600 bg-amber-950/60 text-amber-100'}`}>
+                <strong className="block">
+                  {txtValidation.isValid ? 'Validación local aprobada' : 'Validación local: exportación bloqueada'}
+                </strong>
+                <span className="mt-1 block">
+                  {txtValidation.rowCount} registro(s) revisado(s); 16 campos por fila, tabuladores, longitudes y reglas estructurales.
+                </span>
+                {txtValidation.issues.length > 0 && (
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {txtValidation.issues.map((issue, index) => (
+                      <li key={`${issue.line}-${issue.column || 0}-${issue.code}-${index}`}>
+                        Línea {issue.line}{issue.column ? `, columna ${issue.column} (${issue.field})` : ''}: {issue.message}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="mt-2 text-[10px] opacity-80">
+                  Esta revisión es local y estructural. No consulta el SENIAT ni certifica la aceptación del archivo en el Portal Fiscal.
+                </p>
+              </div>
+            )}
             <p className="text-[10px] text-slate-400 italic">
               Campos: RIF agente • Período • Fecha • Operación • Tipo de documento • RIF proveedor • Número de documento • Control • Total • Base imponible • IVA retenido • Documento afectado • Comprobante • Exento • Alícuota • Expediente
             </p>
