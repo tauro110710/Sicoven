@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { encodeIso88591, generateSeniatIvaTxt as generateSeniatIvaTxtRaw, generateSeniatIslrOperationsXml, generateSeniatIslrOperationsTxt } from './seniatGenerators';
+import { validateSeniatIslrXml } from './seniatIslrXmlValidator';
 import type { Company, PurchaseRecord, IslrRetentionVoucher, VatRetentionVoucher } from '../types/accounting';
 import type { IslrFiscalEvent } from '../types/islrFiscalEvent';
 import { resolvePurchaseVatFiscalEvent } from '../types/vatFiscalEvent';
@@ -54,7 +55,7 @@ test('SENIAT XML normalizes invoice and control numbers to the SENIAT schema and
     purchase({ id: 'p2', invoiceDate: '2026-09-30', invoiceNumber: 'SEP' })
   ], [], '202610');
   assert.match(xml, /<NumeroFactura>F002<\/NumeroFactura>/);
-  assert.match(xml, /<NumeroControl>00123<\/NumeroControl>/);
+  assert.match(xml, /<NumeroControl>00123<\/NumeroControl>/);\n  assert.equal(validateSeniatIslrXml(xml).isValid, true);
   assert.doesNotMatch(xml, /SEP/);
 });
 
