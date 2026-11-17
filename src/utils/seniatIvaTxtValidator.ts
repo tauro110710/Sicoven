@@ -132,6 +132,12 @@ export function validateSeniatIvaTxt(content: string): SeniatIvaTxtValidation {
         add(line, 'INVALID_NUMERIC_FORMAT', 'El campo debe contener un número entero, sin separadores de miles ni decimales.', index + 1);
       }
     });
+    if (supplierRif === '0' && /^\d+$/.test(base) && /^\d+$/.test(withheld) && /^\d+$/.test(rate)) {
+      const expectedFullWithholding = Math.round(Number(base) * Number(rate) / 100);
+      if (Number(withheld) !== expectedFullWithholding) {
+        add(line, 'SUPPLIER_RIF_ZERO_REQUIRES_FULL_WITHHOLDING', 'El RIF proveedor 0 solo se admite cuando el IVA retenido equivale al 100% del IVA calculado sobre la base y alícuota exportadas.', 6);
+      }
+    }
     if (/^\d+$/.test(total) && /^\d+$/.test(base) && /^\d+$/.test(exempt) && Number(total) < Number(base) + Number(exempt)) {
       add(line, 'TOTAL_BELOW_BASES', 'El monto total no puede ser inferior a la suma de la base imponible y el monto exento.', 9);
     }
