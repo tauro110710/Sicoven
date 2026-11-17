@@ -9,6 +9,7 @@ SICOVEN genera el archivo de operaciones de Retenciones IVA con 16 campos por re
 - Ningún campo vacío; se utiliza `0` cuando el dato no aplica.
 - Longitudes máximas y ausencia de espacios periféricos/caracteres de control.
 - RIF, período AAAAMM, fecha real AAAA-MM-DD, operación C/V y tipo documental 01/02/03.
+- El RIF de proveedor `0` solo se admite cuando el importe exportado como IVA retenido equivale al 100 % del IVA calculado con la base y alícuota exportadas.
 - Importes y alícuota en enteros sin separadores de miles ni decimales, conforme al comportamiento operativo de carga reportado para este archivo.
 - Comprobante de 14 dígitos cuyo prefijo coincide con el período.
 - Un solo agente y un solo período por archivo; comprobantes no repetidos.
