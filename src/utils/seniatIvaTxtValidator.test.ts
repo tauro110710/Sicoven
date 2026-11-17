@@ -83,9 +83,16 @@ test('SENIAT IVA preflight enforces one agent and one period per file', () => {
 });
 
 
-test('SENIAT IVA preflight permits supplier RIF 0 as allowed by the generator for 100% retention cases', () => {
-  const fields = validRow.split('\\t');
-  fields[5] = '0';
-  const result = validateSeniatIvaTxt(fields.join('\\t'));
-  assert.equal(result.issues.some(issue => issue.code === 'INVALID_SUPPLIER_RIF'), false);
-});
+test('SENIAT IVA preflight permits supplier RIF 0 only when the exported withholding is 100% of VAT', () => {
+  const fullRetention = validRow.split('\t');
+  fullRetention[5] = '0';
+  fullRetention[10] = '160';
+  const accepted = validateSeniatIvaTxt(fullRetention.join('\t'));
+  assert.equal(accepted.isValid, true);
+  assert.deepEqual(accepted.issues, []);
+
+  const partialRetention = validRow.split('\t');
+  partialRetention[5] = '0';
+  const rejected = validateSeniatIvaTxt(partialRetention.join('\t'));
+  assert.ok(rejected.issues.some(issue => issue.code === 'SUPPLIER_RIF_ZERO_REQUIRES_FULL_WITHHOLDING'));
+});;
