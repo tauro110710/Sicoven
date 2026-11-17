@@ -95,4 +95,4 @@ test('SENIAT IVA preflight permits supplier RIF 0 only when the exported withhol
   partialRetention[5] = '0';
   const rejected = validateSeniatIvaTxt(partialRetention.join('\t'));
   assert.ok(rejected.issues.some(issue => issue.code === 'SUPPLIER_RIF_ZERO_REQUIRES_FULL_WITHHOLDING'));
-});;
+});
