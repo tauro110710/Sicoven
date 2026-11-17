@@ -276,8 +276,8 @@ export function generateSeniatIslrOperationsXml(
     const date = parts.length === 3 ? parts[2] + '/' + parts[1] + '/' + parts[0] : row.invoiceDate;
     xml += '  <DetalleRetencion>\n';
     xml += '    <RifRetenido>' + esc(cleanRif(row.supplierRif)) + '</RifRetenido>\n';
-    xml += '    <NumeroFactura>' + esc(row.invoiceNumber) + '</NumeroFactura>\n';
-    xml += '    <NumeroControl>' + esc(row.controlNumber) + '</NumeroControl>\n';
+    xml += '    <NumeroFactura>' + formatSeniatIslrInvoiceNumber(row.invoiceNumber) + '</NumeroFactura>\n';
+    xml += '    <NumeroControl>' + formatSeniatIslrControlNumber(row.controlNumber) + '</NumeroControl>\n';
     xml += '    <FechaOperacion>' + esc(date) + '</FechaOperacion>\n';
     xml += '    <CodigoConcepto>' + esc(row.conceptCode.padStart(3, '0')) + '</CodigoConcepto>\n';
     xml += '    <MontoOperacion>' + row.baseAmountBs.toFixed(2) + '</MontoOperacion>\n';
