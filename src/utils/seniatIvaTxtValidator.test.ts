@@ -15,6 +15,18 @@ test('SENIAT IVA preflight accepts a valid 16-column row', () => {
   assert.deepEqual(result.issues, []);
 });
 
+test('SENIAT IVA preflight accepts the exact one-row sample confirmed by the Portal Fiscal test upload', () => {
+  const portalAcceptedRow = [
+    'J303396496', '202609', '2026-09-29', 'C', '01', 'J308687073',
+    '20316', '00-00015066', '351334.07', '302874.20', '36344.90', '0',
+    '20260900000001', '0.00', '16.00', '0'
+  ].join('\\t');
+  const result = validateSeniatIvaTxt(portalAcceptedRow);
+  assert.equal(result.isValid, true, JSON.stringify(result.issues));
+  assert.equal(result.rowCount, 1);
+  assert.deepEqual(result.issues, []);
+});
+
 test('SENIAT IVA preflight accepts two-decimal amounts and rejects integer serialization', () => {
   const valid = validateSeniatIvaTxt(validRow);
   assert.equal(valid.isValid, true);
