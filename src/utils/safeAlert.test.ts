@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   installNonBlockingAlerts,
   requestNonBlockingConfirm,
@@ -287,7 +288,7 @@ test('requestNonBlockingPrompt returns submitted text or null on cancel and rest
 });
 
 test('renderer components contain no raw native window.confirm or window.prompt calls', () => {
-  const srcRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+  const srcRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const offending: string[] = [];
   const walk = (dir: string) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
