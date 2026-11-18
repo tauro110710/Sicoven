@@ -159,7 +159,7 @@ const generateSeniatIvaTxt = (
 
 test('IVA TXT exports only real voucher identifiers and the supplied amounts', () => {
   const txt = generateSeniatIvaTxt(company, [ivaVoucher()], [purchase()]);
-  assert.match(txt, /^J123456789\t202610\t2026-10-05\tC\t01\tJ987654321\tF-001\t00-123\t1160\t1000\t120/);
+  assert.match(txt, /^J123456789\t202610\t2026-10-05\tC\t01\tJ987654321\tF-001\t00-123\t1160\.00\t1000\.00\t120\.00/);
   assert.match(txt, /20261000000001/);
   assert.equal(txt.split('\t').length, 16);
 });
@@ -352,13 +352,13 @@ test('IVA TXT conserva el orden y significado de los 16 campos del instructivo h
     'J987654321',       // 6 RIF proveedor
     'F-001',            // 7 número de documento
     '00-123',           // 8 número de control
-    '1160',          // 9 monto del documento
-    '1000',          // 10 base imponible
-    '120',           // 11 IVA retenido por el agente (75%)
+    '1160.00',       // 9 monto del documento
+    '1000.00',       // 10 base imponible
+    '120.00',        // 11 IVA retenido por el agente (75%)
     '0',                // 12 documento afectado: no aplica a factura
     '20261000000001',   // 13 número de comprobante
-    '0',             // 14 monto exento
-    '16',            // 15 alícuota
+    '0.00',          // 14 monto exento
+    '16.00',         // 15 alícuota
     '0'                 // 16 expediente de importación: no aplica
   ]);
 });
@@ -400,7 +400,7 @@ test('IVA TXT accepts a supplier without RIF only when withholding is 100 percen
     supplierRif: '0', retentionRate: 100, vatWithheldBs: 160, vatWithheldUsd: 160
   })], [purchase({ supplierRif: '0' })]).split('\t');
   assert.equal(fields[5], '0');
-  assert.equal(fields[10], '160');
+  assert.equal(fields[10], '160.00');
   assert.throws(() => generateSeniatIvaTxt(company, [ivaVoucher({
     supplierRif: '0', retentionRate: 75, vatWithheldBs: 120
   })], [purchase({ supplierRif: '0' })]), /incompleto o inválido/);
@@ -412,20 +412,20 @@ test('IVA TXT covers reduced rate with 75% retention and general rate with 100% 
     taxableBaseBs: 1250, taxRate: 8, vatAmountBs: 100,
     retentionRate: 75, vatWithheldBs: 75, totalAmountBs: 1350
   })], [purchase({ id: 'p-reduced', invoiceNumber: 'F-001' })]).split('\t');
-  assert.equal(reduced[9], '1250');
-  assert.equal(reduced[10], '75'); // IVA retenido al 75%.
-  assert.equal(reduced[14], '8');
+  assert.equal(reduced[9], '1250.00');
+  assert.equal(reduced[10], '75.00'); // IVA retenido al 75%.
+  assert.equal(reduced[14], '8.00');
 
   const full = generateSeniatIvaTxt(company, [ivaVoucher({
     id: 'iva-full', purchaseRecordId: 'p-full', voucherNumber: '20261000000012',
     taxableBaseBs: 500, taxRate: 16, vatAmountBs: 80,
     retentionRate: 100, vatWithheldBs: 80, totalAmountBs: 580
   })], [purchase({ id: 'p-full', invoiceNumber: 'F-001' })]).split('\t');
-  assert.equal(full[10], '80');
-  assert.equal(full[14], '16');
+  assert.equal(full[10], '80.00');
+  assert.equal(full[14], '16.00');
 });
 
-test('IVA TXT rounds exported monetary amounts to integers without mutating source vouchers', () => {
+test('IVA TXT preserves two-decimal monetary precision without mutating source vouchers', () => {
   const sourceVoucher = ivaVoucher({
     totalAmountBs: 1161.07,
     taxableBaseBs: 1000.5,
@@ -433,14 +433,13 @@ test('IVA TXT rounds exported monetary amounts to integers without mutating sour
     vatWithheldBs: 120.06,
     exemptAmountBs: 0.49
   });
-  // Las validaciones y cálculos fiscales conservan precisión decimal;
-  // únicamente la representación del archivo se redondea a enteros.
+  // El archivo conserva dos decimales sin modificar los comprobantes originales.
   const fields = generateSeniatIvaTxt(company, [sourceVoucher], [purchase()]).split('\t');
-  assert.deepEqual([fields[8], fields[9], fields[10], fields[13], fields[14]], ['1161', '1001', '120', '0', '16']);
+  assert.deepEqual([fields[8], fields[9], fields[10], fields[13], fields[14]], ['1161.07', '1000.50', '120.06', '0.49', '16.00']);
   assert.equal(sourceVoucher.totalAmountBs, 1161.07);
   assert.equal(sourceVoucher.taxableBaseBs, 1000.5);
   assert.equal(sourceVoucher.vatWithheldBs, 120.06);
-  assert.ok(fields.every(value => !/\d+\.\d+/.test(value)));
+  assert.ok(fields.every((value, index) => ![8, 9, 10, 13, 14].includes(index) || /^\d+\.\d{2}$/.test(value)));
 });
 
 test('IVA TXT column 11 exports the withheld VAT amount, not total VAT caused', () => {
@@ -448,8 +447,8 @@ test('IVA TXT column 11 exports the withheld VAT amount, not total VAT caused', 
     taxableBaseBs: 1000, taxRate: 16, vatAmountBs: 160,
     retentionRate: 75, vatWithheldBs: 120, totalAmountBs: 1160
   })], [purchase()]).split('\t');
-  assert.equal(fields[10], '120');
-  assert.notEqual(fields[10], '160');
+  assert.equal(fields[10], '120.00');
+  assert.notEqual(fields[10], '160.00');
 });
 
 test('IVA TXT permits an exempt document with zero taxable base and zero withholding', () => {
@@ -458,11 +457,11 @@ test('IVA TXT permits an exempt document with zero taxable base and zero withhol
     totalAmountBs: 450, exemptAmountBs: 450, taxableBaseBs: 0,
     taxRate: 0, vatAmountBs: 0, retentionRate: 75, vatWithheldBs: 0
   })], [purchase({ id: 'p-exempt', invoiceNumber: 'F-001' })]).split('\t');
-  assert.equal(fields[8], '450');
-  assert.equal(fields[9], '0');
-  assert.equal(fields[10], '0');
-  assert.equal(fields[13], '450');
-  assert.equal(fields[14], '0');
+  assert.equal(fields[8], '450.00');
+  assert.equal(fields[9], '0.00');
+  assert.equal(fields[10], '0.00');
+  assert.equal(fields[13], '450.00');
+  assert.equal(fields[14], '0.00');
 });
 
 
