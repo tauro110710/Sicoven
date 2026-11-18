@@ -5,6 +5,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { createBackup, verifyBackupDirectory } = require('./backup-restore.cjs');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
+const { restoreWindowFocus } = require('./window-focus.cjs');
 const { createRestoreStaging } = require('./restore-staging.cjs');
 const { createJournal, readJournal, transitionJournal } = require('./restore-journal.cjs');
 const { appendRestoreOutcome, reconcileRestoreAudit } = require('./restore-audit-ledger.cjs');
@@ -370,6 +371,7 @@ function registerRestoreIpc({
     const selection = parent
       ? await dialog.showOpenDialog(parent, { title: 'Seleccionar respaldo verificado de SICOVEN', properties: ['openDirectory'] })
       : await dialog.showOpenDialog({ title: 'Seleccionar respaldo verificado de SICOVEN', properties: ['openDirectory'] });
+    restoreWindowFocus(parent);
     if (selection.canceled || !selection.filePaths?.[0]) return { ok: false, canceled: true };
     const check = verifyBackupDirectory(selection.filePaths[0]);
     const confirm = parent
@@ -387,6 +389,7 @@ function registerRestoreIpc({
           detail: 'Respaldo: ' + path.basename(selection.filePaths[0]) + '\nDocumentos: ' + check.documentCount +
             '\nHuella SQLite: ' + check.databaseSha256 + '\nSe creará un snapshot de retorno antes del cambio.'
         });
+    restoreWindowFocus(parent);
     if (confirm.response !== 1) return { ok: false, canceled: true };
 
     const release = operationContext ? await operationContext.acquireMaintenanceLock() : () => {};

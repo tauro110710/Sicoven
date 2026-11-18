@@ -12,6 +12,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { Account, AccountType } from '../../types/accounting';
+import { requestNonBlockingConfirm } from '../../utils/safeAlert';
 
 export const CatalogoView: React.FC = () => {
   const { accounts, addAccount, updateAccount, deleteAccount, waitForPersistence } = useAccounting();
@@ -218,7 +219,7 @@ export const CatalogoView: React.FC = () => {
                         try { deleteAccount(acc.code); await waitForPersistence(); }
                         catch (error) {
                           const message = error instanceof Error ? error.message : 'No se pudo eliminar la cuenta.';
-                          if (message.includes('movimientos históricos') && window.confirm(message + ' ¿Desea inactivarla para conservar la trazabilidad?')) {
+                          if (message.includes('movimientos históricos') && (await requestNonBlockingConfirm(message + ' ¿Desea inactivarla para conservar la trazabilidad?'))) {
                             try { updateAccount(acc.code, { ...acc, isActive: false }); await waitForPersistence(); }
                             catch (inner) { window.alert(inner instanceof Error ? inner.message : 'No se pudo inactivar la cuenta.'); }
                           } else window.alert(message);

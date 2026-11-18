@@ -4,6 +4,7 @@ import { useAccounting, type AccountingAuditEvent } from '../context/AccountingC
 import { formatBs, formatUsd, formatDate } from '../utils/formatters';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation, type BankStatementReversalReadiness } from '../types/journalReversal';
 import type { VatFiscalIncident } from '../types/vatFiscalIncidents';
+import { requestNonBlockingConfirm } from '../utils/safeAlert';
 
 type CorrectionEmissionMedium = 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | '';
 const parseFiscalInput = (value: string) => { const raw = String(value ?? '').trim(); return Number(raw.includes(',') ? raw.split('.').join('').replace(',', '.') : raw); };
@@ -723,7 +724,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
 
   const submitReversal = async () => {
     if (!source || reversalDisabled || reversalSubmitting) return;
-    const confirmed = window.confirm(
+    const confirmed = await requestNonBlockingConfirm(
       'Se registrará un contra-asiento nuevo e inmutable. No se borrará el asiento original. La reversión contable no sustituye la nota de crédito ni la rectificación fiscal que legalmente corresponda. ¿Desea continuar?'
     );
     if (!confirmed) return;
@@ -745,7 +746,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   };
 
   const submitClose = async () => {
-    if (closingPeriodSubmitting || !window.confirm('Va a generar la depreciación financiera pendiente de los activos fijos de esta empresa y bloquear el período contable hasta '+closedDate+'. La fecha no podrá retroceder desde esta pantalla. ¿Confirma el cierre?')) return;
+    if (closingPeriodSubmitting || !(await requestNonBlockingConfirm('Va a generar la depreciación financiera pendiente de los activos fijos de esta empresa y bloquear el período contable hasta '+closedDate+'. La fecha no podrá retroceder desde esta pantalla. ¿Confirma el cierre?'))) return;
     setClosingPeriodSubmitting(true);
     try {
       const depreciationEntriesCreated = await closeAccountingPeriod(closedDate);

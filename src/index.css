@@ -241,6 +241,157 @@ div.fixed.inset-0[class*="z-"] > div > form textarea {
   }
 }
 
+
+/* Non-blocking in-app confirmation and prompt dialogs (never invoke native Chromium confirm/prompt). */
+.sicoven-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+.sicoven-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgb(15 23 42 / 55%);
+  backdrop-filter: blur(2px);
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+.sicoven-dialog-card {
+  width: min(100%, 34rem);
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  border-radius: 1rem;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 24px 48px rgb(15 23 42 / 28%);
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+.sicoven-dialog-card--warning {
+  border-top: 4px solid #d97706;
+}
+
+.sicoven-dialog-card--danger {
+  border-top: 4px solid #e11d48;
+}
+
+.sicoven-dialog-card--neutral {
+  border-top: 4px solid #059669;
+}
+
+.sicoven-dialog-header {
+  padding: 1rem 1.25rem 0.5rem;
+}
+
+.sicoven-dialog-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.sicoven-dialog-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.sicoven-dialog-message {
+  margin: 0;
+  padding: 0.25rem 1.25rem 1rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: #334155;
+}
+
+.sicoven-dialog-input {
+  margin: 0 1.25rem 1rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  color: #0f172a;
+  background: #ffffff;
+  pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-app-region: no-drag;
+}
+
+.sicoven-dialog-input:focus {
+  outline: 2px solid #059669;
+  outline-offset: 1px;
+}
+
+.sicoven-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  padding: 0.85rem 1.25rem 1.1rem;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.sicoven-dialog-cancel {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.55rem;
+  padding: 0.5rem 0.95rem;
+  background: #ffffff;
+  color: #334155;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sicoven-dialog-cancel:hover {
+  background: #f1f5f9;
+}
+
+.sicoven-dialog-confirm {
+  border: 0;
+  border-radius: 0.55rem;
+  padding: 0.5rem 1rem;
+  color: #ffffff;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sicoven-dialog-confirm--warning {
+  background: #d97706;
+}
+
+.sicoven-dialog-confirm--warning:hover {
+  background: #b45309;
+}
+
+.sicoven-dialog-confirm--danger {
+  background: #e11d48;
+}
+
+.sicoven-dialog-confirm--danger:hover {
+  background: #be123c;
+}
+
+.sicoven-dialog-confirm--neutral {
+  background: #059669;
+}
+
+.sicoven-dialog-confirm--neutral:hover {
+  background: #047857;
+}
+
 @media print {
   @page {
     size: letter;
@@ -254,7 +405,9 @@ div.fixed.inset-0[class*="z-"] > div > form textarea {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-  .no-print {
+  .no-print,
+  .sicoven-alert-layer,
+  .sicoven-dialog-layer {
     display: none !important;
   }
   .print-only {

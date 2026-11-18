@@ -25,6 +25,7 @@ import { buildOpeningEntryItems } from '../../types/accountingYearOpening';
 import { buildClosingEntryItems } from '../../types/accountingYearClosing';
 import { CompanyModal } from '../CompanyModal';
 import { formatBs, validateVenezuelanRif } from '../../utils/formatters';
+import { requestNonBlockingConfirm } from '../../utils/safeAlert';
 import { IntelligentMigrationWizard } from '../Migracion/IntelligentMigrationWizard';
 
 export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
@@ -291,7 +292,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
       setOpeningError('Prepare y revise los asientos de cierre y apertura antes de ejecutar el ciclo.');
       return;
     }
-    const confirmed = window.confirm(
+    const confirmed = await requestNonBlockingConfirm(
       'EJECUTAR CICLO CONTABLE ANUAL COMPLETO\n\nEmpresa: ' + currentCompany.name +
       '\nEjercicio: ' + currentCompany.fiscalYear +
       '\nCierre: ' + openingPeriodEnd +
@@ -443,9 +444,9 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     const legalIdentityChanged =
       rifValidation.formattedRif !== currentCompany.rif ||
       name.trim().toUpperCase() !== currentCompany.name;
-    if (legalIdentityChanged && !window.confirm(
+    if (legalIdentityChanged && !(await requestNonBlockingConfirm(
       'RECTIFICACIÓN DE IDENTIDAD DE LA EMPRESA\n\nSe cambiará la razón social o el RIF de la empresa activa. El cambio quedará registrado en la auditoría con los valores anteriores y nuevos, el usuario y la fecha. Verifique que la rectificación corresponda a la misma entidad jurídica y cuente con soporte documental.\n\n¿Desea continuar?'
-    )) return;
+    ))) return;
 
     if (companySaveInFlightRef.current) return;
     companySaveInFlightRef.current = true;
@@ -515,7 +516,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
 
   const handleRestoreGlobalBackup = async () => {
     if (!window.sicovenStore) return;
-    const confirmed = window.confirm(
+    const confirmed = await requestNonBlockingConfirm(
       'RESTAURACIÓN GLOBAL DE SICOVEN\n\nSe reemplazarán la base de control, todas las bases SQLite de las empresas y sus documentos por el contenido del respaldo verificado. Se creará un snapshot de retorno antes del cambio.\n\n¿Deseas continuar?'
     );
     if (!confirmed) return;
@@ -535,15 +536,15 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     }
   };
 
-  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.currentTarget;
     const file = input.files?.[0];
     if (!file) return;
-    const confirmed = window.confirm(
+    const confirmed = await requestNonBlockingConfirm(
       'RESTAURAR COPIA DE SEGURIDAD SICOVEN\n\nEsta operación reemplazará todas las empresas y sus datos contables actuales (asientos, compras, ventas, inventario, movimientos, retenciones, bancos y liquidaciones) por el contenido del archivo. No se puede deshacer.\n\n¿Deseas continuar?'
     );
     if (!confirmed) {
-      e.target.value = '';
+      input.value = '';
       return;
     }
     const reader = new FileReader();
@@ -581,7 +582,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
       alert('Seleccione la fecha hasta la cual desea cerrar la contabilidad.');
       return;
     }
-    const confirmed = window.confirm(
+    const confirmed = await requestNonBlockingConfirm(
       'CIERRE CONTABLE DEL PERÍODO\n\nSe bloquearán en SQLite las nuevas operaciones retroactivas con fecha igual o anterior a ' +
       periodCloseDate +
       '. El cierre no puede retrocederse desde esta pantalla; una reapertura requerirá un procedimiento formal y auditado.\n\n¿Confirma el cierre?'
@@ -615,9 +616,9 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
         ? 'Se conservará el bloqueo hasta ' + target + ' y se habilitarán operaciones posteriores.'
         : 'Se reabrirá íntegramente el período, sin eliminar el registro histórico del cierre.';
     const heading = hasActiveAnnualClose ? 'REAPERTURA FORMAL DEL EJERCICIO ANUAL' : 'REAPERTURA FORMAL DE PERÍODO';
-    if (!window.confirm(heading + '\n\nEmpresa: ' + currentCompany.name +
+    if (!(await requestNonBlockingConfirm(heading + '\n\nEmpresa: ' + currentCompany.name +
         '\nCierre vigente: ' + currentCompany.closedThroughDate + '\n' + scope +
-        '\n\nMotivo: ' + reason + '\n\nLa operación quedará registrada en la bitácora inmutable. ¿Confirma?')) return;
+        '\n\nMotivo: ' + reason + '\n\nLa operación quedará registrada en la bitácora inmutable. ¿Confirma?'))) return;
     setReopenBusy(true);
     setReopenError(null);
     try {
@@ -1355,7 +1356,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
             <button hidden={Boolean(window.sicovenStore)}
               disabled={factoryResetBusy}
               onClick={async () => {
-                if (!confirm('¿Restablecer el sistema a los datos de muestra iniciales? Se sobrescribirán los datos actuales.')) return;
+                if (!(await requestNonBlockingConfirm('¿Restablecer el sistema a los datos de muestra iniciales? Se sobrescribirán los datos actuales.', { tone: 'danger' }))) return;
                 setFactoryResetBusy(true);
                 setFactoryResetStage('Guardando restablecimiento en SQLite…');
                 try {
@@ -1377,9 +1378,9 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
             <button
               disabled={factoryResetBusy}
               onClick={async () => {
-                const first = window.confirm('RESET DE FÁBRICA SICOVEN\n\nSe recomienda crear un Respaldo global antes de borrar, pero no es obligatorio. Si no tienes respaldo, puedes continuar igualmente. Se eliminarán todas las empresas y sus bases SQLite locales, asientos, compras, ventas, inventario, retenciones, conciliaciones y demás datos operativos. Se conservarán los usuarios, la licencia y la auditoría general. Esta acción no se puede deshacer. ¿Deseas continuar?');
+                const first = await requestNonBlockingConfirm('RESET DE FÁBRICA SICOVEN\n\nSe recomienda crear un Respaldo global antes de borrar, pero no es obligatorio. Si no tienes respaldo, puedes continuar igualmente. Se eliminarán todas las empresas y sus bases SQLite locales, asientos, compras, ventas, inventario, retenciones, conciliaciones y demás datos operativos. Se conservarán los usuarios, la licencia y la auditoría general. Esta acción no se puede deshacer. ¿Deseas continuar?');
                 if (!first) return;
-                const confirmDelete = window.confirm('CONFIRMAR BORRADO\n\n¿Confirmas que deseas ejecutar el RESET DE FÁBRICA y eliminar definitivamente todos los datos operativos?');
+                const confirmDelete = await requestNonBlockingConfirm('CONFIRMAR BORRADO\n\n¿Confirmas que deseas ejecutar el RESET DE FÁBRICA y eliminar definitivamente todos los datos operativos?');
                 if (!confirmDelete) return;
                 setFactoryResetBusy(true);
                 setFactoryResetStage('Preparando el reinicio…');

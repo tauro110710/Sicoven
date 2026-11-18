@@ -61,6 +61,7 @@ if (!hasSingleInstanceLock) {
 const { migrateAuthUserRoles, hasFullSystemAccess } = require('./auth-roles.cjs');
 const { assertSqliteIntegrity, assertSafeSqliteSidecars } = require('./sqlite-integrity.cjs');
 const { reconcileRestoreAudit } = require('./restore-audit-ledger.cjs');
+const { restoreWindowFocus } = require('./window-focus.cjs');
 const { registerBackupIpc } = require('./backup-restore.cjs');
 const { registerRestoreIpc } = require('./restore-engine.cjs');
 const { recoverPendingRestore } = require('./restore-engine.cjs');
@@ -341,6 +342,7 @@ function startAutomaticUpdates() {
       buttons: ['Reiniciar e instalar ahora', 'Más tarde'], defaultId: 1, cancelId: 1, noLink: true
     });
     updateInstallPromptOpen = false;
+    restoreWindowFocus(window, BrowserWindow);
     if (result.response === 0) {
       app.isQuitting = true;
       autoUpdater.quitAndInstall(false, true);
@@ -398,6 +400,7 @@ function createWindow() {
         defaultPath: path.join(app.getPath('documents'), path.basename(item.getFilename())),
         filters: [{ name: 'Documento PDF', extensions: ['pdf'] }]
       });
+      restoreWindowFocus(win, BrowserWindow);
       if (result.canceled || !result.filePath) {
         item.cancel();
         return;
@@ -490,11 +493,13 @@ app.whenReady().then(async () => {
     if (buffer.length < 8 || buffer.length > 50 * 1024 * 1024 || buffer.subarray(0, 5).toString('ascii') !== '%PDF-') {
       throw new Error('El documento generado no tiene una estructura PDF válida.');
     }
-    const result = await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender), {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showSaveDialog(ownerWindow, {
       title: 'Guardar PDF oficial de SICOVEN',
       defaultPath: path.join(app.getPath('documents'), fileName),
       filters: [{ name: 'Documento PDF', extensions: ['pdf'] }]
     });
+    restoreWindowFocus(ownerWindow, BrowserWindow);
     if (result.canceled || !result.filePath) return { ok: false, canceled: true };
     await fs.promises.writeFile(result.filePath, buffer);
     shell.showItemInFolder(result.filePath);

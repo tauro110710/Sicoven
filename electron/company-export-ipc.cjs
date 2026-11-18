@@ -4,6 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
 const { exportCompanyData } = require('./company-data-export.cjs');
+const { restoreWindowFocus } = require('./window-focus.cjs');
 
 function registerCompanyExportIpc({
   ipcMain, runtime, operationContext, companySessionContext,
@@ -36,12 +37,14 @@ function registerCompanyExportIpc({
       const selection = parent
         ? await dialog.showOpenDialog(parent, { title: 'Elegir carpeta para entregar la base de la empresa', properties: ['openDirectory', 'createDirectory'] })
         : await dialog.showOpenDialog({ title: 'Elegir carpeta para entregar la base de la empresa', properties: ['openDirectory', 'createDirectory'] });
+      restoreWindowFocus(parent);
       if (selection.canceled || !selection.filePaths?.[0]) return { ok: false, canceled: true };
       destination = path.join(selection.filePaths[0], 'SICOVEN-' + safeRif + '-' + stamp);
     } else {
       const selection = parent
         ? await dialog.showSaveDialog(parent, { title: 'Guardar entrega JSON de la empresa', defaultPath: path.join(app.getPath('documents'), 'SICOVEN-' + safeRif + '-' + stamp + '.json'), filters: [{ name: 'Datos SICOVEN JSON', extensions: ['json'] }] })
         : await dialog.showSaveDialog({ title: 'Guardar entrega JSON de la empresa', defaultPath: path.join(app.getPath('documents'), 'SICOVEN-' + safeRif + '-' + stamp + '.json'), filters: [{ name: 'Datos SICOVEN JSON', extensions: ['json'] }] });
+      restoreWindowFocus(parent);
       if (selection.canceled || !selection.filePath) return { ok: false, canceled: true };
       destination = selection.filePath;
     }

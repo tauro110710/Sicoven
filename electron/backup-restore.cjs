@@ -4,6 +4,7 @@ const path = require('node:path');
 const Database = require('better-sqlite3');
 const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
+const { restoreWindowFocus } = require('./window-focus.cjs');
 
 const FORMAT = 'SICOVEN_BACKUP_V1';
 const DB_FILE = 'sicoven.sqlite';
@@ -398,6 +399,7 @@ function registerBackupIpc({ ipcMain, db, licenseView, getActiveSession, dialog,
     const parentWindow = getWindow?.();
     const options = { title: 'Seleccionar carpeta para el respaldo completo de SICOVEN', properties: ['openDirectory', 'createDirectory'] };
     const selection = parentWindow ? await dialog.showOpenDialog(parentWindow, options) : await dialog.showOpenDialog(options);
+    restoreWindowFocus(parentWindow);
     if (selection.canceled || !selection.filePaths?.[0]) return { ok: false, canceled: true };
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const destination = path.join(selection.filePaths[0], 'SICOVEN-backup-' + stamp);

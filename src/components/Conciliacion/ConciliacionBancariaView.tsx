@@ -28,6 +28,7 @@ import { BankStatementMovement } from '../../types/accounting';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportConciliacionPdf } from '../../utils/pdfGenerator';
 import { calculateBankReconciliationBalances } from '../../types/bankStatementMatching';
+import { requestNonBlockingConfirm } from '../../utils/safeAlert';
 
 export const ConciliacionBancariaView: React.FC = () => {
   const {
@@ -225,7 +226,7 @@ export const ConciliacionBancariaView: React.FC = () => {
   };
 
   const handleUnreconcileAll = async () => {
-    const confirmed = window.confirm('¿Desea desconciliar todos los movimientos de esta cuenta bancaria?');
+    const confirmed = await requestNonBlockingConfirm('¿Desea desconciliar todos los movimientos de esta cuenta bancaria?', { tone: 'warning' });
     if (!confirmed) return;
     await runReconciliationWrite(() => unreconcileAll(activeBank.id));
   };

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, FileText, Receipt, ShoppingCart, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs } from '../../utils/formatters';
+import { requestNonBlockingPrompt } from '../../utils/safeAlert';
 import { getVatOwnOutstandingBalance, getReceivedVatWithholdingSales, resolveVatOwnDailySalesSources, calculateVatOwnPosition, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, buildVatOwnSourceSnapshots, areVatOwnSourceSnapshotsCurrent, getUnfiledVatOwnActivityPeriods, getVatOwnFiledLaterPeriods, resolveVatOwnPaymentBcvRate, isValidVatOwnDeclarationPeriod } from '../../types/vatOwnDeclaration';
 
 const money = (value: number | undefined) => Number.isFinite(value) ? Number(value) : 0;
@@ -516,7 +517,7 @@ export const IvaDeclaracionesView: React.FC = () => {
                 <span className="font-semibold">{event.eventType==='FILED'?'Presentación':event.eventType==='PAYMENT'?'Pago':'Reversión'} · {event.reference || event.declarationNumber || event.note || 'Evento fiscal'}{event.journalEntryId?' · Asiento '+event.journalEntryId:''}</span>
                 <span className="flex items-center gap-2 text-slate-500">{event.occurredAt.slice(0,10)}{event.amountBs? ' · '+format(event.amountBs):''}
                   {event.eventType==='PAYMENT'&&!reversed&&<button type="button" disabled={workflowBusy} onClick={async()=>{
-                    const reason=window.prompt('Indica el motivo de reversión del pago. El asiento original se conservará en el historial.');
+                    const reason=await requestNonBlockingPrompt('Indica el motivo de reversión del pago. El asiento original se conservará en el historial.',{title:'Motivo de reversión del pago',placeholder:'Describa el motivo de la reversión...',confirmLabel:'Revertir pago'});
                     if(!reason?.trim())return;
                     setWorkflowBusy(true);setWorkflowError('');setWorkflowMessage('');
                     try { await recordVatOwnDeclarationEvent(savedDeclaration.id,{companyId:currentCompany.id,eventType:'REVERSAL',occurredAt:localIsoDateTime(new Date()),idempotencyKey:'REVERSAL:'+event.id,reversalOfEventId:event.id,note:reason.trim()});setWorkflowMessage('Pago revertido mediante contra-asiento.'); }

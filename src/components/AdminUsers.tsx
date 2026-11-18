@@ -11,6 +11,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import sicovenNavLogo from '../assets/sicoven-logo-horizontal-nav.svg';
+import { requestNonBlockingConfirm } from '../utils/safeAlert';
 
 interface AdminUsersProps {
   token: string;
@@ -116,7 +117,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
   };
 
   const handleRemoveSeed = async () => {
-    if (!confirm('¿Confirma que desea eliminar el administrador semilla predeterminado "admin"?')) {
+    if (!(await requestNonBlockingConfirm('¿Confirma que desea eliminar el administrador semilla predeterminado "admin"?', { tone: 'danger' }))) {
       return;
     }
     try {

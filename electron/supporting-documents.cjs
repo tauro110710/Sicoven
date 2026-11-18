@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { restoreWindowFocus } = require('./window-focus.cjs');
 
 const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
 const FORMATS = Object.freeze({
@@ -226,6 +227,7 @@ function registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, 
     const options = { title: 'Adjuntar soporte documental a SICOVEN', properties: ['openFile'], filters: [{ name: 'Documentos admitidos', extensions: ['pdf','jpg','jpeg','png','webp'] }] };
     const parentWindow = getWindow?.();
     const selection = parentWindow ? await dialog.showOpenDialog(parentWindow, options) : await dialog.showOpenDialog(options);
+    restoreWindowFocus(parentWindow);
     if (selection.canceled || !selection.filePaths?.[0]) return { ok: false, canceled: true };
     const source = selection.filePaths[0], stat = fs.statSync(source);
     if (!stat.isFile() || stat.size < 1 || stat.size > MAX_DOCUMENT_BYTES) throw new Error('El archivo debe tener entre 1 byte y 20 MB.');
