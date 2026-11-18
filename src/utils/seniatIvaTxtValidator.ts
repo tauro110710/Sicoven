@@ -23,7 +23,7 @@ const FIELD_NAMES = [
 
 const MAX_LENGTHS = [10, 6, 10, 1, 2, 10, 20, 20, 15, 15, 15, 20, 14, 15, 5, 15];
 const NUMERIC_COLUMNS = [8, 9, 10, 13, 14];
-const SENIAT_DECIMAL_PATTERN = /^\\d+\\.\\d{2}$/;
+const SENIAT_DECIMAL_PATTERN = /^\d+\.\d{2}$/;
 const roundToTwo = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
 function isValidIsoDate(value: string): boolean {
