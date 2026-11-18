@@ -23,6 +23,8 @@ const FIELD_NAMES = [
 
 const MAX_LENGTHS = [10, 6, 10, 1, 2, 10, 20, 20, 15, 15, 15, 20, 14, 15, 5, 15];
 const NUMERIC_COLUMNS = [8, 9, 10, 13, 14];
+const SENIAT_DECIMAL_PATTERN = /^\\d+\\.\\d{2}$/;
+const roundToTwo = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
 function isValidIsoDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -128,21 +130,22 @@ export function validateSeniatIvaTxt(content: string): SeniatIvaTxtValidation {
     if (!controlNumber) add(line, 'MISSING_CONTROL_NUMBER', 'Falta el número de control.', 8);
 
     NUMERIC_COLUMNS.forEach(index => {
-      if (!/^\d+$/.test(fields[index])) {
-        add(line, 'INVALID_NUMERIC_FORMAT', 'El campo debe contener un número entero, sin separadores de miles ni decimales.', index + 1);
+      if (!SENIAT_DECIMAL_PATTERN.test(fields[index])) {
+        add(line, 'INVALID_NUMERIC_FORMAT', 'El campo debe ser numérico con punto decimal y exactamente dos cifras decimales, sin separadores de miles.', index + 1);
       }
     });
-    // El TXT no incluye retentionRate; se contrasta el importe entero exportado con el IVA total redondeado.
-    if (supplierRif === '0' && /^\d+$/.test(base) && /^\d+$/.test(withheld) && /^\d+$/.test(rate)) {
-      const expectedFullWithholding = Math.round(Number(base) * Number(rate) / 100);
+    // El TXT no incluye retentionRate; para RIF 0 se exige retención del 100%
+    // del IVA calculado, conservando dos decimales como en el esquema SENIAT.
+    if (supplierRif === '0' && SENIAT_DECIMAL_PATTERN.test(base) && SENIAT_DECIMAL_PATTERN.test(withheld) && SENIAT_DECIMAL_PATTERN.test(rate)) {
+      const expectedFullWithholding = roundToTwo(Number(base) * Number(rate) / 100);
       if (Number(withheld) !== expectedFullWithholding) {
         add(line, 'SUPPLIER_RIF_ZERO_REQUIRES_FULL_WITHHOLDING', 'El RIF proveedor 0 solo se admite cuando el IVA retenido equivale al 100% del IVA calculado sobre la base y alícuota exportadas.', 6);
       }
     }
-    if (/^\d+$/.test(total) && /^\d+$/.test(base) && /^\d+$/.test(exempt) && Number(total) < Number(base) + Number(exempt)) {
+    if (SENIAT_DECIMAL_PATTERN.test(total) && SENIAT_DECIMAL_PATTERN.test(base) && SENIAT_DECIMAL_PATTERN.test(exempt) && Number(total) < Number(base) + Number(exempt)) {
       add(line, 'TOTAL_BELOW_BASES', 'El monto total no puede ser inferior a la suma de la base imponible y el monto exento.', 9);
     }
-    if (/^\d+$/.test(rate) && Number(rate) > 100) {
+    if (SENIAT_DECIMAL_PATTERN.test(rate) && Number(rate) > 100) {
       add(line, 'INVALID_TAX_RATE', 'La alícuota no puede superar el 100%.', 15);
     }
     if (documentType === '01' && affectedDocument !== '0') {
