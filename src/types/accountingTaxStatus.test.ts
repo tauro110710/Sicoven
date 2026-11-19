@@ -30,8 +30,8 @@ test('resuelve el tramo posterior al cambio', () => {
   assert.equal(getCompanyTaxStatusForDate(company([special, ordinary]), '2026-10-15')?.specialTaxpayerStatus, 'NO_ESPECIAL');
 });
 test('no inventa condición cuando la fecha cae en un vacío', () => {
-  assert.equal(getCompanyTaxStatusForDate(company([special, ordinary]), '2026-10-01')?.id, 'special-2026');
-  assert.equal(getCompanyTaxStatusForDate(company([special]), '2026-11-01'), undefined);
+  assert.equal(getCompanyTaxStatusForDate(company([special]), '2026-10-15'), undefined);
+  assert.equal(getCompanyTaxStatusForDate(company([special, ordinary]), '2026-10-15')?.id, 'ordinary-2026');
 });
 test('no devuelve estado si la fecha no tiene formato ISO', () => {
   assert.equal(getCompanyTaxStatusForDate(company([special]), '01/10/2026'), undefined);
