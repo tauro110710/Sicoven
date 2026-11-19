@@ -36,3 +36,7 @@ test('no inventa condición cuando la fecha cae en un vacío', () => {
 test('no devuelve estado si la fecha no tiene formato ISO', () => {
   assert.equal(getCompanyTaxStatusForDate(company([special]), '01/10/2026'), undefined);
 });
+
+test('rechaza fechas ISO imposibles del calendario', () => {
+  assert.equal(getCompanyTaxStatusForDate(company([special]), '2026-02-30'), undefined);
+});
