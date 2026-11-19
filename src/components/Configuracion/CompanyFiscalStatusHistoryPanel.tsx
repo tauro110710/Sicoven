@@ -141,6 +141,7 @@ export const CompanyFiscalStatusHistoryPanel: React.FC<{ company: Company }> = (
         <div className="rounded-lg bg-white border border-slate-200 p-3"><span className="block text-slate-500">Sujeto Pasivo Especial hoy</span><strong>{current.taxpayerType === 'ESPECIAL' ? 'Sí, con calificación especial' : 'No calificado como especial'}</strong></div>
         <div className="rounded-lg bg-white border border-slate-200 p-3"><span className="block text-slate-500">Condición frente al IVA hoy</span><strong>{statusLabel('IVA_TAX_STATUS', current.ivaTaxStatus)}</strong></div>
         <div className="rounded-lg bg-white border border-slate-200 p-3"><span className="block text-slate-500">Agente de retención IVA hoy</span><strong>{statusLabel('IVA_RETENTION_AGENT', current.ivaRetentionAgentBasis)}</strong></div>
+        <div className="rounded-lg bg-white border border-slate-200 p-3"><span className="block text-slate-500">Firma personal hoy</span><strong>{current.isPersonalFirm ? 'Sí' : 'No'}</strong></div>
         <div className="rounded-lg bg-white border border-slate-200 p-3"><span className="block text-slate-500">Agente de percepción IGTF hoy</span><strong>{current.isIgtfPerceptionAgent ? 'Sí' : 'No'}</strong></div>
       </div>
 
