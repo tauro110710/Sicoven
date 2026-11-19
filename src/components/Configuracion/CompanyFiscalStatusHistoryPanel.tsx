@@ -82,8 +82,7 @@ export const CompanyFiscalStatusHistoryPanel: React.FC<{ company: Company }> = (
     setMessage('');
   };
 
-  const save = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const save = async () => {
     if (busy) return;
     const newEvent: CompanyFiscalStatusEvent = {
       id: crypto.randomUUID(),
@@ -144,7 +143,7 @@ export const CompanyFiscalStatusHistoryPanel: React.FC<{ company: Company }> = (
         <div className="rounded-lg bg-white border border-slate-200 p-3"><span className="block text-slate-500">Agente de percepción IGTF hoy</span><strong>{current.isIgtfPerceptionAgent ? 'Sí' : 'No'}</strong></div>
       </div>
 
-      <form onSubmit={save} className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
         <div className="flex items-center gap-2 text-xs font-bold text-slate-800"><PlusCircle className="h-4 w-4 text-emerald-600" /> Registrar nuevo cambio fiscal</div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block text-xs font-semibold text-slate-700">Condición que cambia
@@ -176,10 +175,10 @@ export const CompanyFiscalStatusHistoryPanel: React.FC<{ company: Company }> = (
         {specialNoticeRequired && <p className="text-[11px] text-amber-800">La calificación o pérdida de la condición de Sujeto Pasivo Especial requiere registrar el acto/notificación individual que respalda el cambio; no se presume por una reforma ni por umbrales.</p>}
         {error && <p role="alert" className="text-xs text-rose-700">{error}</p>}
         {message && <p role="status" className="text-xs text-emerald-700">{message}</p>}
-        <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
+        <button type="button" onClick={() => void save()} disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
           <ShieldCheck className="h-4 w-4" /> {busy ? 'Guardando…' : 'Guardar cambio y conservar historial'}
         </button>
-      </form>
+      </div>
 
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-xs font-bold text-slate-800"><FileText className="h-4 w-4" /> Eventos registrados ({ordered.length})</div>
