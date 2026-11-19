@@ -1,6 +1,6 @@
 import type { Company, IvaRetentionAgentBasis, TaxpayerType } from './accounting';
 
-export type CompanyVatTaxStatus = 'ORDINARY' | 'FORMAL' | 'EXEMPT' | 'NON_SUBJECT' | 'NON_REGISTERED' | 'UNKNOWN';
+export type CompanyVatTaxStatus = 'ORDINARY' | 'FORMAL' | 'EXEMPT' | 'EXONERATED' | 'NON_SUBJECT' | 'UNKNOWN';
 export type CompanyIgtfAgentStatus = 'AGENT' | 'NOT_AGENT';
 export type CompanyPersonalFirmStatus = 'FIRM' | 'NOT_FIRM';
 export type CompanyFiscalStatusDimension =
@@ -43,7 +43,7 @@ export interface CompanyFiscalProfileAtDate {
 
 const ALLOWED: Record<CompanyFiscalStatusDimension, readonly string[]> = {
   SENIAT_SPECIAL_TAXPAYER: ['ESPECIAL', 'ORDINARIO'],
-  IVA_TAX_STATUS: ['ORDINARY', 'FORMAL', 'EXEMPT', 'NON_SUBJECT', 'NON_REGISTERED', 'UNKNOWN'],
+  IVA_TAX_STATUS: ['ORDINARY', 'FORMAL', 'EXEMPT', 'EXONERATED', 'NON_SUBJECT', 'UNKNOWN'],
   IVA_RETENTION_AGENT: ['ARTICLE_1_SPECIAL_DESIGNATED', 'ARTICLE_2_METALS', 'ARTICLE_1_AND_2', 'NOT_AGENT', 'UNCONFIRMED'],
   IVA_PERSONAL_FIRM: ['FIRM', 'NOT_FIRM'],
   IGTF_PERCEPTION_AGENT: ['AGENT', 'NOT_AGENT']
