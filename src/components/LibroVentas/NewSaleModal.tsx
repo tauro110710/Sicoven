@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { TrendingUp, X, Check } from 'lucide-react';
 import { formatBs, formatUsd, formatRif } from '../../utils/formatters';
+import { getCompanyTaxStatusForDate } from '../../types/accounting';
 
 interface NewSaleModalProps {
   isOpen: boolean;
