@@ -59,7 +59,7 @@ export function validateCompanyFiscalStatusEvent(event: CompanyFiscalStatusEvent
   const errors: string[] = [];
   if (!event || typeof event !== 'object') return ['El evento fiscal no tiene un formato válido.'];
   if (!event.id?.trim()) errors.push('El evento requiere un identificador.');
-  if (!(event.dimension in ALLOWED)) errors.push('Seleccione una dimensión fiscal válida.');
+  if (typeof event.dimension !== 'string' || !(event.dimension in ALLOWED)) errors.push('Seleccione una dimensión fiscal válida.');
   else if (!ALLOWED[event.dimension].includes(String(event.status))) errors.push('El estado no corresponde a la dimensión fiscal seleccionada.');
   if (!isValidFiscalIsoDate(event.effectiveDate)) errors.push('La fecha de vigencia debe ser una fecha válida.');
   if (!event.recordedAt || !Number.isFinite(Date.parse(event.recordedAt))) errors.push('El evento requiere fecha de registro válida.');
