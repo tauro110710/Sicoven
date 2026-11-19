@@ -27,6 +27,7 @@ import { CompanyModal } from '../CompanyModal';
 import { formatBs, validateVenezuelanRif } from '../../utils/formatters';
 import { requestNonBlockingConfirm } from '../../utils/safeAlert';
 import { IntelligentMigrationWizard } from '../Migracion/IntelligentMigrationWizard';
+import { TaxStatusHistoryPanel } from './TaxStatusHistoryPanel';
 
 export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
   const {
@@ -1047,6 +1048,8 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
           </div>
         </form>
       </div>
+
+      <TaxStatusHistoryPanel />
 
       {/* Cierre contable y control de períodos */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
