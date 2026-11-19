@@ -40,3 +40,8 @@ test('no devuelve estado si la fecha no tiene formato ISO', () => {
 test('rechaza fechas ISO imposibles del calendario', () => {
   assert.equal(getCompanyTaxStatusForDate(company([special]), '2026-02-30'), undefined);
 });
+
+test('no elige arbitrariamente un tramo cuando el historial tiene solapamientos', () => {
+  const overlapping = { ...ordinary, effectiveFrom: '2026-10-10' };
+  assert.equal(getCompanyTaxStatusForDate(company([special, overlapping]), '2026-10-12'), undefined);
+});
