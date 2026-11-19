@@ -58,6 +58,19 @@ test('rechaza una entrada de Kardex de otro proveedor aunque coincida factura y 
   }), /no pertenece a la factura y al artículo seleccionados/);
 });
 
+test('una NC emitida después del cambio de régimen conserva la tasa y retenciones de la factura Especial de origen', () => {
+  const result = calculatePurchaseCreditNote({
+    ...draft(),
+    returnDate: '2026-11-01'
+  });
+  assert.equal(purchase.invoiceDate, '2026-10-01');
+  assert.equal(result.taxableBaseBs, 100);
+  assert.equal(result.vatAmountBs, 16);
+  assert.equal(result.vatWithheldBs, 12);
+  assert.equal(result.islrWithheldBs, 1);
+  assert.equal(result.igtfAmountBs, 3.48);
+});
+
 test('calcula nota de crédito parcial y revierte proporcionalmente IVA, retenciones e IGTF', () => {
   const result = calculatePurchaseCreditNote(draft());
   assert.equal(result.inventoryCostBs, 100);
