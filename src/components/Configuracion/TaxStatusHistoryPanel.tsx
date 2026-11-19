@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { CalendarClock, Plus, Save, ShieldCheck } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
-import type { CompanyTaxStatusPeriod, IvaTaxStatus, SpecialTaxpayerStatus, IvaRetentionAgentBasis } from '../../types/accounting';
+import { isValidCompanyTaxStatusDate, type CompanyTaxStatusPeriod, type IvaTaxStatus, type SpecialTaxpayerStatus, type IvaRetentionAgentBasis } from '../../types/accounting';
 
 const newDraft = (company: ReturnType<typeof useAccounting>['currentCompany']) => ({
   effectiveFrom: '', effectiveTo: '',
@@ -55,7 +55,7 @@ export const TaxStatusHistoryPanel: React.FC = () => {
         const current = all[i];
         const next = all[i + 1];
         if (!current) continue;
-        if (!current.effectiveFrom || (current.effectiveTo && current.effectiveTo < current.effectiveFrom)) throw new Error('Revise las fechas de vigencia de los períodos.');
+        if (!isValidCompanyTaxStatusDate(current.effectiveFrom) || (current.effectiveTo && (!isValidCompanyTaxStatusDate(current.effectiveTo) || current.effectiveTo < current.effectiveFrom))) throw new Error('Revise las fechas de vigencia de los períodos.');
         if (next && (!current.effectiveTo || current.effectiveTo >= next.effectiveFrom)) throw new Error('Los períodos deben estar cerrados y no superponerse.');
       }
       await updateCompany({ ...currentCompany, taxStatusHistory: all });
