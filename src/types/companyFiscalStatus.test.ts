@@ -56,7 +56,7 @@ test('requires authority evidence for SENIAT qualification changes', () => {
   delete invalid.authorityReference;
   delete invalid.authorityDate;
   assert.ok(validateCompanyFiscalStatusEvent(invalid).some(error => /referencia/.test(error)));
-  assert.ok(validateCompanyFiscalStatusEvent(invalid).some(error => /fecha del acto/.test(error)));
+  assert.ok(validateCompanyFiscalStatusEvent(invalid).some(error => /fecha de la notificación/.test(error)));
 });
 
 test('history is append-only and rejects duplicate dimension/effective date', () => {
