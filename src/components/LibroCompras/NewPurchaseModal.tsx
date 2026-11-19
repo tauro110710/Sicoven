@@ -4,7 +4,7 @@ import { ShoppingCart, X, Check, Calculator, ShieldCheck } from 'lucide-react';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../../data/islrConcepts';
 import { formatBs, formatUsd, cleanRif, formatRif } from '../../utils/formatters';
 import { calculatePurchaseIgtf, type PurchasePaymentMethod } from '../../types/purchaseTaxes';
-import { getPurchaseAccountCreditDate, type PurchaseIvaRetentionSnapshot } from '../../types/accounting';
+import { getPurchaseAccountCreditDate, getCompanyTaxStatusForDate, type PurchaseIvaRetentionSnapshot } from '../../types/accounting';
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus, type IvaArticle3Exclusion, type IvaSupplierTaxStatus } from '../../types/ivaRetentionEligibility';
 import { getCompanyPurchasePaymentAccounts } from '../../types/purchaseAccounting';
 
@@ -88,7 +88,16 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const supplierRifKeyForProfile = String(supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
   const supplierProfilePurchase = purchases.filter(item => item.companyId === currentCompany.id && String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierRifKeyForProfile && item.supplierTaxStatus).sort((a, b) => b.opNumber - a.opNumber)[0];
   const resolvedSupplierTaxStatus: IvaSupplierTaxStatus = supplierTaxStatus === 'AUTO' ? (supplierProfilePurchase?.supplierTaxStatus || 'UNKNOWN') : supplierTaxStatus;
-  const buyerAgentStatus = resolveIvaBuyerAgentStatus({ agentBasis: currentCompany.ivaRetentionAgentBasis, taxpayerType: currentCompany.taxpayerType, rif: currentCompany.rif, isPersonalFirm: currentCompany.isPersonalFirm });
+  const effectiveCompanyTaxStatus = getCompanyTaxStatusForDate(currentCompany, accountCreditDate || invoiceDate);
+  const hasTaxStatusHistory = (currentCompany.taxStatusHistory || []).length > 0;
+  const buyerAgentStatus = resolveIvaBuyerAgentStatus({
+    agentBasis: effectiveCompanyTaxStatus?.ivaRetentionAgentBasis ?? (hasTaxStatusHistory ? 'UNCONFIRMED' : currentCompany.ivaRetentionAgentBasis),
+    taxpayerType: effectiveCompanyTaxStatus
+      ? (effectiveCompanyTaxStatus.specialTaxpayerStatus === 'ESPECIAL' ? 'ESPECIAL' : 'ORDINARIO')
+      : (hasTaxStatusHistory ? 'PENDIENTE' : currentCompany.taxpayerType),
+    rif: currentCompany.rif,
+    isPersonalFirm: effectiveCompanyTaxStatus?.isPersonalFirm ?? (!hasTaxStatusHistory ? currentCompany.isPersonalFirm : false)
+  });
   const ivaEligibility = evaluateIvaRetentionEligibility({ buyerAgentStatus, supplierTaxStatus: resolvedSupplierTaxStatus, article2Transaction, article3Exclusions: article3Exclusion ? [article3Exclusion] : [], portalArticle3ExclusionConfirmed, supplierImportPerceptionConfirmed, operationAmountBs, unitTaxValueBs: islrUnitTaxValueBs ?? undefined, vatAmount: vatAmountBs, ...(vatNotDiscriminated ? { vatNotDiscriminated: true, taxableAmountIncludingVat: taxableGrossBs } : {}), taxRate, invoiceFormalDefect, portalRetentionRate: portalRetentionRate === '' ? null : Number(portalRetentionRate) as 75 | 100 });
   const retentionRate = ivaEligibility.retentionRate;
   const invoiceSubtotalBs = operationAmountBs;
