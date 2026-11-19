@@ -3,7 +3,6 @@ import { CalendarClock, Plus, Save, ShieldCheck } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import type { CompanyTaxStatusPeriod, IvaTaxStatus, SpecialTaxpayerStatus, IvaRetentionAgentBasis } from '../../types/accounting';
 
-const today = () => new Date().toISOString().slice(0, 10);
 const newDraft = (company: ReturnType<typeof useAccounting>['currentCompany']) => ({
   effectiveFrom: '', effectiveTo: '',
   ivaTaxStatus: 'ORDINARIO' as IvaTaxStatus,
@@ -36,7 +35,8 @@ export const TaxStatusHistoryPanel: React.FC = () => {
     if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(draft.effectiveFrom)) { setError('Indique una fecha inicial de vigencia válida.'); return; }
     if (draft.effectiveTo && draft.effectiveTo < draft.effectiveFrom) { setError('La fecha final no puede ser anterior a la fecha inicial.'); return; }
     if (draft.specialTaxpayerStatus === 'ESPECIAL' && (!draft.notificationReference.trim() || !draft.notificationDate)) { setError('La condición de Sujeto Pasivo Especial requiere referencia y fecha de notificación.'); return; }
-    if (draft.ivaRetentionAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED' && draft.specialTaxpayerStatus !== 'ESPECIAL') { setError('La designación del artículo 1 requiere que el tramo esté calificado como Sujeto Pasivo Especial.'); return; }
+    if (['ARTICLE_1_SPECIAL_DESIGNATED', 'ARTICLE_1_AND_2'].includes(draft.ivaRetentionAgentBasis) && draft.specialTaxpayerStatus !== 'ESPECIAL') { setError('La designación del artículo 1 requiere que el tramo esté calificado como Sujeto Pasivo Especial.'); return; }
+    if (draft.specialTaxpayerStatus === 'NO_ESPECIAL' && !draft.supportingDocumentReference.trim() && !draft.notificationReference.trim()) { setError('Para registrar la pérdida o revocación de la condición especial, indique la referencia del acto o documento que la respalda. No se presume por un cambio normativo.'); return; }
     const candidate: CompanyTaxStatusPeriod = { ...draft, id: 'tax-period-' + crypto.randomUUID(), effectiveTo: draft.effectiveTo || undefined, notificationReference: draft.notificationReference.trim() || undefined, supportingDocumentReference: draft.supportingDocumentReference.trim() || undefined, notes: draft.notes.trim() || undefined, recordedAt: new Date().toISOString() };
     const all = [...periods, candidate].sort((a,b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
     for (let i=0;i<all.length-1;i++) {
