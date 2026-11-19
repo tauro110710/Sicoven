@@ -195,9 +195,14 @@ export function isValidCompanyTaxStatusDate(date: string): boolean {
 /** Devuelve la condición documentada aplicable a una fecha; undefined significa que no hay tramo registrado. */
 export function getCompanyTaxStatusForDate(company: Company, date: string): CompanyTaxStatusPeriod | undefined {
   if (!isValidCompanyTaxStatusDate(date)) return undefined;
-  return (company.taxStatusHistory || []).find(period =>
+  const matchingPeriods = (company.taxStatusHistory || []).filter(period =>
+    isValidCompanyTaxStatusDate(period.effectiveFrom) &&
+    (!period.effectiveTo || (isValidCompanyTaxStatusDate(period.effectiveTo) && period.effectiveTo >= period.effectiveFrom)) &&
     period.effectiveFrom <= date && (!period.effectiveTo || date <= period.effectiveTo)
   );
+  // Un historial corrupto o con solapamientos no debe resolverse eligiendo
+  // arbitrariamente uno de los tramos.
+  return matchingPeriods.length === 1 ? matchingPeriods[0] : undefined;
 }
 
 export type AccountType = 'ACTIVO' | 'PASIVO' | 'PATRIMONIO' | 'INGRESOS' | 'COSTOS' | 'GASTOS';
