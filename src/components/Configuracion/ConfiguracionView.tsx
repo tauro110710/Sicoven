@@ -701,7 +701,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
                       c.taxpayerType === 'ESPECIAL' ? 'bg-purple-100 text-purple-800' : 'bg-sky-100 text-sky-800'
                     }`}>
-                      {c.taxpayerType === 'ESPECIAL' ? 'Contribuyente Especial' : 'Contribuyente Ordinario'}
+                      {c.taxpayerType === 'ESPECIAL' ? 'Sujeto Pasivo Especial' : 'No calificado como especial'}
                     </span>
                   </div>
                 </div>
@@ -896,7 +896,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Calificación SENIAT</label>
+              <label className="block font-semibold text-slate-700 mb-1">Sujeto Pasivo Especial — SENIAT</label>
               <select
                 disabled
                 value={taxpayerType}
