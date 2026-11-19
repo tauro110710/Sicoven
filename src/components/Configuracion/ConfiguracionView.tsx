@@ -916,9 +916,9 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
             {taxpayerType === 'ESPECIAL' && (
               <div className="sm:col-span-3 rounded-lg border border-purple-200 bg-purple-50 p-3 space-y-2">
                 <label className="block font-semibold text-slate-800">Notificación expresa del SENIAT</label>
-                <input value={specialTaxpayerNotificationReference} onChange={e => setSpecialTaxpayerNotificationReference(e.target.value)} placeholder="Número o referencia de la notificación" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
-                <input type="date" value={specialTaxpayerNotificationDate} onChange={e => setSpecialTaxpayerNotificationDate(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
-                <p className="text-[11px] text-slate-600">La condición debe estar respaldada por notificación expresa. Los registros históricos especiales sin estos metadatos se conservan; para nuevas calificaciones, complete ambos datos.</p>
+                <input disabled value={specialTaxpayerNotificationReference} onChange={e => setSpecialTaxpayerNotificationReference(e.target.value)} placeholder="Número o referencia de la notificación" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
+                <input type="date" disabled value={specialTaxpayerNotificationDate} onChange={e => setSpecialTaxpayerNotificationDate(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
+                <p className="text-[11px] text-slate-600">Referencia histórica conservada. Los nuevos cambios, incluidas las revocaciones, se registran exclusivamente en el historial fiscal con fecha efectiva y soporte documental.</p>
               </div>
             )}
             <div>
