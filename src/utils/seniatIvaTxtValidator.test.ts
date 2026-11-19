@@ -4,8 +4,8 @@ import { validateSeniatIvaTxt } from './seniatIvaTxtValidator';
 
 const validRow = [
   'J123456789', '202610', '2026-10-05', 'C', '01', 'J987654321',
-  'F-001', '00-123', '1160', '1000', '120', '0',
-  '20261000000001', '0', '16', '0'
+  'F-001', '00-123', '1160.00', '1000.00', '120.00', '0',
+  '20261000000001', '0.00', '16.00', '0'
 ].join('\t');
 
 test('SENIAT IVA preflight accepts a valid 16-column row', () => {
@@ -13,6 +13,27 @@ test('SENIAT IVA preflight accepts a valid 16-column row', () => {
   assert.equal(result.isValid, true);
   assert.equal(result.rowCount, 1);
   assert.deepEqual(result.issues, []);
+});
+
+test('SENIAT IVA preflight accepts the exact one-row sample confirmed by the Portal Fiscal test upload', () => {
+  const portalAcceptedRow = [
+    'J303396496', '202609', '2026-09-29', 'C', '01', 'J308687073',
+    '20316', '00-00015066', '351334.07', '302874.20', '36344.90', '0',
+    '20260900000001', '0.00', '16.00', '0'
+  ].join('\t');
+  const result = validateSeniatIvaTxt(portalAcceptedRow);
+  assert.equal(result.isValid, true, JSON.stringify(result.issues));
+  assert.equal(result.rowCount, 1);
+  assert.deepEqual(result.issues, []);
+});
+
+test('SENIAT IVA preflight accepts two-decimal amounts and rejects integer serialization', () => {
+  const valid = validateSeniatIvaTxt(validRow);
+  assert.equal(valid.isValid, true);
+  const integerAmounts = validRow.split('\t');
+  integerAmounts[8] = '1160';
+  const result = validateSeniatIvaTxt(integerAmounts.join('\t'));
+  assert.ok(result.issues.some(issue => issue.code === 'INVALID_NUMERIC_FORMAT' && issue.column === 9));
 });
 
 test('SENIAT IVA preflight rejects wrong column count and blank fields', () => {
@@ -86,7 +107,7 @@ test('SENIAT IVA preflight enforces one agent and one period per file', () => {
 test('SENIAT IVA preflight permits supplier RIF 0 only when the exported withholding is 100% of VAT', () => {
   const fullRetention = validRow.split('\t');
   fullRetention[5] = '0';
-  fullRetention[10] = '160';
+  fullRetention[10] = '160.00';
   const accepted = validateSeniatIvaTxt(fullRetention.join('\t'));
   assert.equal(accepted.isValid, true);
   assert.deepEqual(accepted.issues, []);

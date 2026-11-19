@@ -95,18 +95,17 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
       throw new Error('Comprobante de retención IVA incompleto o inválido. Revise período, fecha, RIF, numeración, alícuota e importes; no se generan valores sustitutos.');
     }
     const docType = documentType;
-    // El TXT del Portal Fiscal se serializa en bolívares enteros, según la
-    // validación operativa reportada por el contribuyente. El redondeo afecta
-    // únicamente la representación exportada: nunca modifica los comprobantes,
-    // cálculos, libros, asientos ni saldos almacenados.
-    const formatSeniatInteger = (value: number) =>
-      String(Math.round(Number(value) + Number.EPSILON));
-    const totalAmount = formatSeniatInteger(v.totalAmountBs);
-    const baseAmount = formatSeniatInteger(v.taxableBaseBs);
-    const withheldAmount = formatSeniatInteger(v.vatWithheldBs);
+    // El instructivo técnico SENIAT RI_DRIVA2020-IT01V3_0_0 define
+    // NUMBER(15,2) para montos y NUMBER(5,2) para alícuota. Se conservan
+    // los céntimos en el TXT; nunca se redondean importes a bolívares enteros.
+    const formatSeniatDecimal = (value: number) =>
+      (Math.round((Number(value) + Number.EPSILON) * 100) / 100).toFixed(2);
+    const totalAmount = formatSeniatDecimal(v.totalAmountBs);
+    const baseAmount = formatSeniatDecimal(v.taxableBaseBs);
+    const withheldAmount = formatSeniatDecimal(v.vatWithheldBs);
     const affectedDoc = documentType === '01' ? '0' : affectedDocument;
-    const exemptAmount = formatSeniatInteger(v.exemptAmountBs || 0);
-    const rate = formatSeniatInteger(v.taxRate);
+    const exemptAmount = formatSeniatDecimal(v.exemptAmountBs || 0);
+    const rate = formatSeniatDecimal(v.taxRate);
     const expeditionNum = '0';
 
     // Fila de agente de retención: la columna 11 es el IVA efectivamente retenido.
