@@ -112,6 +112,26 @@ export interface AccountingBcvRateHistoryEntry {
   correctionOfId?: string;
 }
 
+export type IvaTaxStatus = 'ORDINARIO' | 'FORMAL' | 'NO_SUJETO' | 'EXENTO' | 'EXONERADO' | 'PENDIENTE';
+export type SpecialTaxpayerStatus = 'ESPECIAL' | 'NO_ESPECIAL' | 'PENDIENTE';
+
+/** Condiciones fiscales documentadas por tramo de vigencia. No reemplaza ni reescribe documentos históricos. */
+export interface CompanyTaxStatusPeriod {
+  id: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  ivaTaxStatus: IvaTaxStatus;
+  specialTaxpayerStatus: SpecialTaxpayerStatus;
+  ivaRetentionAgentBasis: IvaRetentionAgentBasis;
+  defaultIvaRetentionRate: 0 | 75 | 100;
+  isIgtfPerceptionAgent: boolean;
+  notificationReference?: string;
+  notificationDate?: string;
+  supportingDocumentReference?: string;
+  notes?: string;
+  recordedAt: string;
+}
+
 export interface Company {
   id: string;
   rif: string; // e.g., "J-40892182-3"
@@ -121,6 +141,8 @@ export interface Company {
   phone: string;
   email: string;
   taxpayerType: TaxpayerType;
+  /** Historial de condiciones tributarias por fechas de vigencia; opcional para compatibilidad con empresas existentes. */
+  taxStatusHistory?: CompanyTaxStatusPeriod[];
   /** Referencia y fecha de la notificación expresa del SENIAT que acredita la calificación de sujeto pasivo especial. */
   specialTaxpayerNotificationReference?: string;
   specialTaxpayerNotificationDate?: string;
