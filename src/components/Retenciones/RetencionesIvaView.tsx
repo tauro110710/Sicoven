@@ -234,6 +234,7 @@ export const RetencionesIvaView: React.FC = () => {
               <span className="text-xs font-semibold text-slate-600">
                 RIF: {currentCompany.rif}
               </span>
+              {hasTaxStatusHistory && !effectiveTaxStatus && <span role="alert" className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">Sin tramo fiscal registrado para {effectivePeriod}</span>}
             </div>
             <h1 className="text-xl font-bold text-slate-900 mt-1">
               Comprobantes de Retención de IVA & Generador TXT
