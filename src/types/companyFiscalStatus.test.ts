@@ -71,3 +71,16 @@ test('rejects retroactive additions after a condition timeline has been establis
   const backdated = event('e2', 'SENIAT_SPECIAL_TAXPAYER', 'ORDINARIO', '2025-12-31');
   assert.throws(() => validateCompanyFiscalStatusHistory([first], [first, backdated]), /orden cronológico|retroactivo/);
 });
+
+test('keeps VAT registration status independent from SENIAT special qualification', () => {
+  const c = company([
+    event('v1', 'IVA_TAX_STATUS', 'FORMAL', '2026-01-01'),
+    event('s1', 'SENIAT_SPECIAL_TAXPAYER', 'ESPECIAL', '2026-03-01')
+  ]);
+  const january = resolveCompanyFiscalProfileAtDate(c, '2026-02-28');
+  const march = resolveCompanyFiscalProfileAtDate(c, '2026-03-01');
+  assert.equal(january.ivaTaxStatus, 'FORMAL');
+  assert.equal(january.taxpayerType, 'ORDINARIO');
+  assert.equal(march.ivaTaxStatus, 'FORMAL');
+  assert.equal(march.taxpayerType, 'ESPECIAL');
+});
