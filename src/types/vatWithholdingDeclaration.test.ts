@@ -51,6 +51,32 @@ test('declaration snapshots only vouchers in the selected company and exact half
   assert.equal(result.zeroOperations, false);
 });
 
+test('the final Special-regime withholding period remains declarable after the company becomes Ordinary', () => {
+  const finalSpecialVoucher = voucher({
+    id: 'special-final-period',
+    voucherNumber: '20261000000099',
+    date: '2026-10-31',
+    fiscalDate: '2026-10-31',
+    period: '202610',
+    vatWithheldBs: 75,
+    vatWithheldUsd: 0.75
+  });
+  const declaration = buildVatWithholdingDeclaration({
+    id: 'decl-final-special',
+    companyId: 'company-1',
+    year: 2026,
+    month: 10,
+    window: 'SECOND_HALF',
+    vouchers: [finalSpecialVoucher],
+    existingDeclarations: [],
+    createdAt: '2026-11-16T10:00:00.000Z'
+  });
+  assert.deepEqual(declaration.voucherIds, ['special-final-period']);
+  assert.equal(declaration.voucherSnapshots[0].fiscalDate, '2026-10-31');
+  assert.equal(declaration.totalWithheldBs, 75);
+  assert.equal(declaration.zeroOperations, false);
+});
+
 test('zero-operation declaration is explicit and rejected if any voucher exists', () => {
   assert.throws(() => draft({ zeroOperations: true }), /existen comprobantes/);
   const result = buildVatWithholdingDeclaration({
