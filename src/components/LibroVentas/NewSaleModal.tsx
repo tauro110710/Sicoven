@@ -63,7 +63,13 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const vatAmountBs = Math.round(taxableBaseBs * (vatRate / 100) * 100) / 100;
   const additionalLuxuryTaxBs = taxRate === 31 ? Math.round(taxableBaseBs * 0.15 * 100) / 100 : 0;
   const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs + additionalLuxuryTaxBs) * 100) / 100;
-  const igtfEligible = currentCompany.isIgtfPerceptionAgent === true && paymentTerm === 'CONTADO' && (paymentCurrency === 'FOREIGN_CASH' || paymentCurrency === 'CRYPTO');
+  const effectiveCompanyTaxStatus = getCompanyTaxStatusForDate(currentCompany, invoiceDate);
+  const hasTaxStatusHistory = (currentCompany.taxStatusHistory || []).length > 0;
+  const isIgtfPerceptionAgentForDate = effectiveCompanyTaxStatus
+    ? effectiveCompanyTaxStatus.isIgtfPerceptionAgent
+    : (!hasTaxStatusHistory && currentCompany.isIgtfPerceptionAgent === true);
+  const taxStatusMissingForDate = hasTaxStatusHistory && !effectiveCompanyTaxStatus;
+  const igtfEligible = !taxStatusMissingForDate && isIgtfPerceptionAgentForDate && paymentTerm === 'CONTADO' && (paymentCurrency === 'FOREIGN_CASH' || paymentCurrency === 'CRYPTO');
   const igtfApplicable = igtfEligible && applyIgtf;
   const igtfAmountBs = igtfApplicable ? Math.round(invoiceSubtotalBs * 0.03 * 100) / 100 : 0;
   const totalAmountBs = Math.round((invoiceSubtotalBs + igtfAmountBs) * 100) / 100;
@@ -150,6 +156,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   };
 
   return (
+    {taxStatusMissingForDate && <div role="alert" className="fixed left-4 right-4 top-4 z-[1200] rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">No hay un período de condición tributaria registrado para {invoiceDate}. Complete el historial en Configuración antes de aplicar parámetros fiscales históricos.</div>}
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
         <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white flex-shrink-0">
@@ -400,8 +407,8 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
           <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-xl space-y-3">
             <span className="font-bold text-slate-800 uppercase tracking-wider block">6. IGTF — percepción de grandes transacciones financieras</span>
             <label className="flex items-start gap-2 font-semibold text-slate-700 cursor-pointer">
-              <input type="checkbox" checked={currentCompany.isIgtfPerceptionAgent === true} readOnly disabled className="mt-0.5 rounded text-sky-600 focus:ring-sky-500" />
-              <span>Agente de percepción configurado: <strong>{currentCompany.isIgtfPerceptionAgent === true ? 'Sí' : 'No'}</strong>. Para cambiarlo, vaya a Configuración de la empresa.</span>
+              <input type="checkbox" checked={isIgtfPerceptionAgentForDate} readOnly disabled className="mt-0.5 rounded text-sky-600 focus:ring-sky-500" />
+              <span>Agente de percepción configurado: <strong>{isIgtfPerceptionAgentForDate ? 'Sí' : 'No'}</strong>. Para cambiarlo, vaya a Configuración de la empresa.</span>
             </label>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Moneda / medio de pago</label>
