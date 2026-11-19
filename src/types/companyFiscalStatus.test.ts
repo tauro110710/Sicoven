@@ -52,7 +52,7 @@ test('does not use future events for earlier operations and falls back to legacy
 });
 
 test('requires authority evidence for SENIAT qualification changes', () => {
-  const invalid = event('e1', 'SENIAT_SPECIAL_TAXPAYER', 'ORDINARIO', '2026-10-01');
+  const invalid = event('e1', 'SENIAT_SPECIAL_TAXPAYER', 'ESPECIAL', '2026-10-01');
   delete invalid.authorityReference;
   delete invalid.authorityDate;
   assert.ok(validateCompanyFiscalStatusEvent(invalid).some(error => /referencia/.test(error)));
