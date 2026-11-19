@@ -236,8 +236,24 @@ export const VatWithholdingDeclarationsPanel: React.FC = () => {
     } finally { setIncidentBusy(false); }
   };
 
-  const selectedScheduledDueDate = selected && currentCompany.taxpayerType === 'ESPECIAL'
-    ? getSeniatVatWithholdingDueDate(currentCompany.rif, selected.period, selected.window, currentCompany.ivaRetentionAgentBasis || '', currentCompany.isPersonalFirm === true)
+  const selectedHasTaxStatusHistory = (currentCompany.taxStatusHistory || []).length > 0;
+  const selectedStatusAtWindowStart = selected
+    ? getCompanyTaxStatusForDate(currentCompany, selected.startDate)
+    : undefined;
+  const selectedStatusCoversWindow = Boolean(selected && selectedStatusAtWindowStart &&
+    selectedStatusAtWindowStart.effectiveFrom <= selected.startDate &&
+    (!selectedStatusAtWindowStart.effectiveTo || selectedStatusAtWindowStart.effectiveTo >= selected.endDate));
+  const selectedSpecialAgent = selectedStatusCoversWindow
+    ? selectedStatusAtWindowStart?.specialTaxpayerStatus === 'ESPECIAL'
+    : Boolean(selected && !selectedHasTaxStatusHistory && currentCompany.taxpayerType === 'ESPECIAL');
+  const selectedAgentBasis = selectedStatusCoversWindow
+    ? selectedStatusAtWindowStart?.ivaRetentionAgentBasis || ''
+    : !selectedHasTaxStatusHistory ? currentCompany.ivaRetentionAgentBasis || '' : 'UNCONFIRMED';
+  const selectedPersonalFirm = selectedStatusCoversWindow
+    ? selectedStatusAtWindowStart?.isPersonalFirm === true
+    : !selectedHasTaxStatusHistory && currentCompany.isPersonalFirm === true;
+  const selectedScheduledDueDate = selected && selectedSpecialAgent
+    ? getSeniatVatWithholdingDueDate(currentCompany.rif, selected.period, selected.window, selectedAgentBasis, selectedPersonalFirm)
     : null;
 
   return (
