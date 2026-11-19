@@ -1,3 +1,4 @@
+import type { CompanyFiscalStatusEvent, CompanyVatTaxStatus } from './companyFiscalStatus';
 export type TaxpayerType = 'ESPECIAL' | 'ORDINARIO';
 export type AccountingFramework = 'VEN_NIF_GE' | 'VEN_NIF_PYME';
 export type IvaRetentionAgentBasis = 'ARTICLE_1_SPECIAL_DESIGNATED' | 'ARTICLE_2_METALS' | 'ARTICLE_1_AND_2' | 'NOT_AGENT' | 'UNCONFIRMED';
@@ -120,7 +121,12 @@ export interface Company {
   address: string;
   phone: string;
   email: string;
+  /** Calificación SENIAT como Sujeto Pasivo Especial; se conserva por compatibilidad como estado vigente. */
   taxpayerType: TaxpayerType;
+  /** Condición IVA independiente de la calificación como Sujeto Pasivo Especial. */
+  ivaTaxStatus?: CompanyVatTaxStatus;
+  /** Eventos fiscales efectivos por fecha; append-only y por dimensión. */
+  fiscalStatusHistory?: CompanyFiscalStatusEvent[];
   /** Referencia y fecha de la notificación expresa del SENIAT que acredita la calificación de sujeto pasivo especial. */
   specialTaxpayerNotificationReference?: string;
   specialTaxpayerNotificationDate?: string;
