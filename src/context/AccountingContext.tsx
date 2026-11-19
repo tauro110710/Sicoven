@@ -7191,6 +7191,21 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // documentos que ya tienen asientos, Kardex o referencias fiscales. Para
     // volver físicamente a un punto anterior se usa el restaurador SQLite verificado.
     const incoming = JSON.parse(jsonData);
+    if (Array.isArray(incoming?.companies)) {
+      const incomingCompanies = new Map<string, Company>(
+        incoming.companies.filter((company: any) => company && typeof company.id === 'string')
+          .map((company: Company) => [company.id, company])
+      );
+      for (const current of companies) {
+        const restored = incomingCompanies.get(current.id);
+        if (restored) validateCompanyFiscalStatusHistory(current.fiscalStatusHistory || [], restored.fiscalStatusHistory || []);
+      }
+      for (const restored of incomingCompanies.values()) {
+        if (!companies.some(current => current.id === restored.id)) {
+          validateCompanyFiscalStatusHistory([], restored.fiscalStatusHistory || []);
+        }
+      }
+    }
     const protectedCollections: Array<[string, string, Array<{ id?: string }>]> = [
       ['empresas', 'companies', companies], ['asientos', 'journalEntries', journalEntries], ['compras', 'purchases', purchases],
       ['ventas', 'sales', sales], ['artículos', 'products', products],
