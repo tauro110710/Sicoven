@@ -264,7 +264,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
                 <div>
                   <span className="block font-bold">Sujeto Pasivo Especial (con notificación SENIAT)</span>
                   <span className="text-[11px] font-normal text-slate-500">
-                    Agente de Retención designado por el SENIAT (75% / 100% IVA e ISLR).
+                    La calificación especial no implica por sí sola la designación como agente de retención; esa condición se registra por separado.
                   </span>
                 </div>
               </label>
@@ -292,7 +292,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
                 <div>
                   <span className="block font-bold">No calificado como Sujeto Pasivo Especial</span>
                   <span className="text-[11px] font-normal text-slate-500">
-                    No designado como agente de retención de IVA.
+                    La ausencia de calificación especial no descarta otros supuestos de designación como agente (por ejemplo, artículo 2).
                   </span>
                 </div>
               </label>
