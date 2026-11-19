@@ -71,6 +71,14 @@ function assertLinkedEntity(db, input) {
   if (!(Array.isArray(state.companies) ? state.companies : []).some(c => String(c.id) === companyId)) throw new Error('La empresa asociada al documento no existe en SQLite.');
   const entityType = requiredText(input.entityType, 'Tipo de operación', 50).toUpperCase();
   const entityId = requiredText(input.entityId, 'Identificador de operación', 120);
+  if (entityType === 'COMPANY_TAX_STATUS_PERIOD') {
+    const company = (Array.isArray(state.companies) ? state.companies : []).find(item => String(item.id) === companyId);
+    const period = company && Array.isArray(company.taxStatusHistory)
+      ? company.taxStatusHistory.find(item => String(item.id) === entityId)
+      : null;
+    if (!period) throw new Error('El período de condición tributaria no existe o no pertenece a la empresa seleccionada.');
+    return { companyId, entityType, entityId };
+  }
   if (entityType === 'CORRECTION_CASE') {
     const correctionCase = db.prepare('SELECT id FROM accounting_correction_cases WHERE id=? AND company_id=?').get(entityId,companyId);
     if (!correctionCase) throw new Error('El expediente de corrección no existe o no pertenece a la empresa seleccionada.');
