@@ -59,8 +59,11 @@ export const TaxStatusHistoryPanel: React.FC = () => {
         if (!isValidCompanyTaxStatusDate(current.effectiveFrom) || (current.effectiveTo && (!isValidCompanyTaxStatusDate(current.effectiveTo) || current.effectiveTo < current.effectiveFrom))) throw new Error('Revise las fechas de vigencia de los períodos.');
         if (next && (!current.effectiveTo || current.effectiveTo >= next.effectiveFrom)) throw new Error('Los períodos deben estar cerrados y no superponerse.');
       }
+      // Registrar el waiter antes de publicar el cambio: así no se pierde
+      // la confirmación si React ejecuta el efecto SQLite inmediatamente.
+      const persistenceConfirmation = waitForPersistence();
       await updateCompany({ ...currentCompany, taxStatusHistory: all });
-      await waitForPersistence();
+      await persistenceConfirmation;
       setSuccess(true);
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar el historial tributario en SQLite.'); }
     finally { setBusy(false); }
