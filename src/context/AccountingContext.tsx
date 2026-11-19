@@ -61,6 +61,7 @@ import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
+import { resolveCompanyFiscalProfileAtDate, validateCompanyFiscalStatusHistory } from '../types/companyFiscalStatus';
 import { buildBankAuxiliaryAccounts } from '../types/bankAccountAccounting';
 import { calculateBankAvailableBalance, calculateCashAccountAvailableBalance, validateBankOutgoingAvailability } from '../types/bankAccountAvailability';
 import { createBankOutgoingLock } from '../types/bankOutgoingLock';
@@ -520,6 +521,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const updateCompany = async (updated: Company): Promise<void> => {
     assertSQLitePersistenceReady('Actualizar la empresa');
+    const existingCompany = companies.find(company => company.id === updated.id);
+    if (!existingCompany) throw new Error('La empresa que intenta actualizar ya no existe en la sesión activa.');
+    validateCompanyFiscalStatusHistory(existingCompany.fiscalStatusHistory || [], updated.fiscalStatusHistory || []);
     if (window.sicovenStore) {
       const result = await window.sicovenStore.updateCompanyMetadata(token, {
         companyId: updated.id, name: updated.name, rif: updated.rif
@@ -3157,7 +3161,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     if (purchaseData.ivaRetentionDecision) {
       const snapshot = purchaseData.ivaRetentionDecision;
-      const expectedBuyerAgentStatus = resolveIvaBuyerAgentStatus({ agentBasis: targetCompany.ivaRetentionAgentBasis, taxpayerType: targetCompany.taxpayerType, rif: targetCompany.rif, isPersonalFirm: targetCompany.isPersonalFirm });
+      const purchaseFiscalProfile = resolveCompanyFiscalProfileAtDate(targetCompany, getPurchaseAccountCreditDate(purchaseData));
+      const expectedBuyerAgentStatus = resolveIvaBuyerAgentStatus({ agentBasis: purchaseFiscalProfile.ivaRetentionAgentBasis, taxpayerType: purchaseFiscalProfile.taxpayerType, rif: targetCompany.rif, isPersonalFirm: purchaseFiscalProfile.isPersonalFirm });
       if (snapshot.buyerAgentStatus !== expectedBuyerAgentStatus) throw new Error('La condición de agente de retención de la empresa cambió o no coincide. Actualice la evaluación antes de registrar.');
       const expectedOperationAmountBs = Math.round((Number(purchaseData.taxableBaseBs) + Number(purchaseData.exemptAmountBs) + Number(purchaseData.vatAmountBs) + Number(purchaseData.additionalLuxuryTaxBs || 0) + Number.EPSILON) * 100) / 100;
       const fiscalPeriodStart = getPurchaseAccountCreditDate(purchaseData).slice(0, 7);
@@ -4362,7 +4367,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('No se permite registrar IGTF en una venta sin confirmación expresa.');
     }
     if (saleData.igtfApplicable) {
-      const eligibleSaleIgtf = targetCompany.isIgtfPerceptionAgent === true &&
+      const saleFiscalProfile = resolveCompanyFiscalProfileAtDate(targetCompany, saleData.invoiceDate);
+      const eligibleSaleIgtf = saleFiscalProfile.isIgtfPerceptionAgent === true &&
         saleData.paymentTerm === 'CONTADO' &&
         (saleData.paymentCurrency === 'FOREIGN_CASH' || saleData.paymentCurrency === 'CRYPTO');
       if (!eligibleSaleIgtf) {
