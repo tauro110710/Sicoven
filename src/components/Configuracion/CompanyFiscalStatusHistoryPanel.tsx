@@ -29,7 +29,6 @@ const OPTIONS: Record<CompanyFiscalStatusDimension, Array<{ value: CompanyFiscal
     { value: 'EXEMPT', label: 'Exento' },
     { value: 'EXONERATED', label: 'Exonerado' },
     { value: 'NON_SUBJECT', label: 'No sujeto' },
-    { value: 'NON_REGISTERED', label: 'No inscrito en el RIF' },
     { value: 'UNKNOWN', label: 'Pendiente de confirmar' }
   ],
   IVA_RETENTION_AGENT: [
