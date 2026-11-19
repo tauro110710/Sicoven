@@ -523,7 +523,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     assertSQLitePersistenceReady('Actualizar la empresa');
     const existingCompany = companies.find(company => company.id === updated.id);
     if (!existingCompany) throw new Error('La empresa que intenta actualizar ya no existe en la sesión activa.');
-    validateCompanyFiscalStatusHistory(existingCompany.fiscalStatusHistory || [], updated.fiscalStatusHistory || []);
+    validateCompanyFiscalStatusHistory(existingCompany.fiscalStatusHistory || [], updated.fiscalStatusHistory || [], existingCompany.taxpayerType);
     if (window.sicovenStore) {
       const result = await window.sicovenStore.updateCompanyMetadata(token, {
         companyId: updated.id, name: updated.name, rif: updated.rif
@@ -7198,11 +7198,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       for (const current of companies) {
         const restored = incomingCompanies.get(current.id);
-        if (restored) validateCompanyFiscalStatusHistory(current.fiscalStatusHistory || [], restored.fiscalStatusHistory || []);
+        if (restored) validateCompanyFiscalStatusHistory(current.fiscalStatusHistory || [], restored.fiscalStatusHistory || [], current.taxpayerType);
       }
       for (const restored of incomingCompanies.values()) {
         if (!companies.some(current => current.id === restored.id)) {
-          validateCompanyFiscalStatusHistory([], restored.fiscalStatusHistory || []);
+          validateCompanyFiscalStatusHistory([], restored.fiscalStatusHistory || [], restored.taxpayerType);
         }
       }
     }
