@@ -93,7 +93,9 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const buyerAgentStatus = resolveIvaBuyerAgentStatus({
     agentBasis: effectiveCompanyTaxStatus?.ivaRetentionAgentBasis ?? (hasTaxStatusHistory ? 'UNCONFIRMED' : currentCompany.ivaRetentionAgentBasis),
     taxpayerType: effectiveCompanyTaxStatus
-      ? (effectiveCompanyTaxStatus.specialTaxpayerStatus === 'ESPECIAL' ? 'ESPECIAL' : 'ORDINARIO')
+      ? (effectiveCompanyTaxStatus.specialTaxpayerStatus === 'ESPECIAL'
+        ? 'ESPECIAL'
+        : effectiveCompanyTaxStatus.specialTaxpayerStatus === 'NO_ESPECIAL' ? 'ORDINARIO' : 'PENDIENTE')
       : (hasTaxStatusHistory ? 'PENDIENTE' : currentCompany.taxpayerType),
     rif: currentCompany.rif,
     isPersonalFirm: effectiveCompanyTaxStatus?.isPersonalFirm ?? (!hasTaxStatusHistory ? currentCompany.isPersonalFirm : false)
