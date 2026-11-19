@@ -125,6 +125,7 @@ export interface CompanyTaxStatusPeriod {
   ivaRetentionAgentBasis: IvaRetentionAgentBasis;
   defaultIvaRetentionRate: 0 | 75 | 100;
   isIgtfPerceptionAgent: boolean;
+  isPersonalFirm?: boolean;
   notificationReference?: string;
   notificationDate?: string;
   supportingDocumentReference?: string;
