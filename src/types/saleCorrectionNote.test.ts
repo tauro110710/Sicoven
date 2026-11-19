@@ -67,7 +67,7 @@ test('calculates cash-sale corrections; treasury selection is validated by the a
   assert.equal(result.netReceivableAdjustmentBs, 68);
 });
 
-test('separates 16% VAT, 15% luxury tax and 3% IGTF on combined-rate source invoices', () => {
+test('a November correction preserves the October source invoice 16% VAT, 15% luxury tax and 3% IGTF breakdown', () => {
   const combined: SaleRecord = {
     ...source, taxableBaseBs: 1000, exemptAmountBs: 0, taxRate: 31,
     vatAmountBs: 160, additionalLuxuryTaxBs: 150, igtfApplicable: true,
