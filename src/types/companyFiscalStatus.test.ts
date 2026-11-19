@@ -84,3 +84,19 @@ test('keeps VAT registration status independent from SENIAT special qualificatio
   assert.equal(march.ivaTaxStatus, 'FORMAL');
   assert.equal(march.taxpayerType, 'ESPECIAL');
 });
+
+test('allows an ordinary initial baseline but requires an individual act when ending a special designation', () => {
+  const ordinaryBaseline = event('o1', 'SENIAT_SPECIAL_TAXPAYER', 'ORDINARIO', '2026-01-01');
+  delete ordinaryBaseline.authorityReference;
+  delete ordinaryBaseline.authorityDate;
+  assert.doesNotThrow(() => validateCompanyFiscalStatusHistory([], [ordinaryBaseline]));
+
+  const special = event('s1', 'SENIAT_SPECIAL_TAXPAYER', 'ESPECIAL', '2026-01-01');
+  const revokedWithoutAct = event('o2', 'SENIAT_SPECIAL_TAXPAYER', 'ORDINARIO', '2026-10-01');
+  delete revokedWithoutAct.authorityReference;
+  delete revokedWithoutAct.authorityDate;
+  assert.throws(() => validateCompanyFiscalStatusHistory([special], [special, revokedWithoutAct]), /pérdida de la calificación/);
+
+  const revokedWithAct = event('o3', 'SENIAT_SPECIAL_TAXPAYER', 'ORDINARIO', '2026-10-01');
+  assert.doesNotThrow(() => validateCompanyFiscalStatusHistory([special], [special, revokedWithAct]));
+});
