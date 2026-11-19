@@ -7192,10 +7192,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // volver físicamente a un punto anterior se usa el restaurador SQLite verificado.
     const incoming = JSON.parse(jsonData);
     if (Array.isArray(incoming?.companies)) {
-      const incomingCompanies = new Map<string, Company>(
-        incoming.companies.filter((company: any) => company && typeof company.id === 'string')
-          .map((company: Company) => [company.id, company])
-      );
+      const incomingCompanies = new Map<string, Company>();
+      for (const restored of incoming.companies) {
+        if (restored && typeof restored.id === 'string') incomingCompanies.set(restored.id, restored as Company);
+      }
       for (const current of companies) {
         const restored = incomingCompanies.get(current.id);
         if (restored) validateCompanyFiscalStatusHistory(current.fiscalStatusHistory || [], restored.fiscalStatusHistory || []);
