@@ -125,7 +125,12 @@ export const CompanyFiscalStatusHistoryPanel: React.FC<{ company: Company }> = (
     }
   };
 
-  const specialNoticeRequired = dimension === 'SENIAT_SPECIAL_TAXPAYER';
+  const priorSeniatStatus = [...history]
+    .filter(item => item.dimension === 'SENIAT_SPECIAL_TAXPAYER')
+    .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate))
+    .at(-1)?.status || company.taxpayerType;
+  const specialNoticeRequired = dimension === 'SENIAT_SPECIAL_TAXPAYER' &&
+    (status === 'ESPECIAL' || priorSeniatStatus === 'ESPECIAL');
 
   return (
     <section className="rounded-2xl border border-amber-200 bg-amber-50/50 p-5 space-y-4">
@@ -174,7 +179,7 @@ export const CompanyFiscalStatusHistoryPanel: React.FC<{ company: Company }> = (
             <textarea value={notes} onChange={event => setNotes(event.target.value)} rows={2} maxLength={2000} placeholder="Contexto del cambio y cualquier precisión profesional" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal" />
           </label>
         </div>
-        {specialNoticeRequired && <p className="text-[11px] text-amber-800">La calificación o pérdida de la condición de Sujeto Pasivo Especial requiere registrar el acto/notificación individual que respalda el cambio; no se presume por una reforma ni por umbrales.</p>}
+        {specialNoticeRequired && <p className="text-[11px] text-amber-800">La calificación como Sujeto Pasivo Especial y su eventual revocación requieren el acto/notificación individual correspondiente. No se presume un cambio por una reforma ni por umbrales.</p>}
         {error && <p role="alert" className="text-xs text-rose-700">{error}</p>}
         {message && <p role="status" className="text-xs text-emerald-700">{message}</p>}
         <button type="button" onClick={() => void save()} disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
