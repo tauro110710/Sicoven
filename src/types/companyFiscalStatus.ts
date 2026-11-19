@@ -66,9 +66,9 @@ export function validateCompanyFiscalStatusEvent(event: CompanyFiscalStatusEvent
   if (event.authorityReference && event.authorityReference.length > 240) errors.push('La referencia de autoridad supera 240 caracteres.');
   if (event.supportingDocumentRef && event.supportingDocumentRef.length > 500) errors.push('La referencia del soporte supera 500 caracteres.');
   if (event.notes && event.notes.length > 2000) errors.push('Las observaciones superan 2.000 caracteres.');
-  if (event.dimension === 'SENIAT_SPECIAL_TAXPAYER') {
-    if (!event.authorityReference?.trim()) errors.push('El cambio de calificación SENIAT requiere referencia del acto o notificación.');
-    if (!isValidFiscalIsoDate(event.authorityDate)) errors.push('El cambio de calificación SENIAT requiere la fecha del acto o notificación.');
+  if (event.dimension === 'SENIAT_SPECIAL_TAXPAYER' && event.status === 'ESPECIAL') {
+    if (!event.authorityReference?.trim()) errors.push('La calificación como Sujeto Pasivo Especial requiere referencia de la notificación expresa del SENIAT.');
+    if (!isValidFiscalIsoDate(event.authorityDate)) errors.push('La calificación como Sujeto Pasivo Especial requiere la fecha de la notificación expresa.');
   }
   if (event.authorityDate && !isValidFiscalIsoDate(event.authorityDate)) errors.push('La fecha del documento de autoridad no es válida.');
   return errors;
@@ -101,9 +101,11 @@ export function validateCompanyFiscalStatusHistory(
   // información previa debe existir un flujo de rectificación separado: una
   // alta tardía no puede reescribir la condición que sustentó documentos emitidos.
   for (const dimension of Object.keys(ALLOWED) as CompanyFiscalStatusDimension[]) {
-    let lastDate = previous
+    const priorEvents = previous
       .filter(item => item.dimension === dimension && isValidFiscalIsoDate(item.effectiveDate))
-      .reduce((latest, item) => item.effectiveDate > latest ? item.effectiveDate : latest, '');
+      .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+    let lastDate = priorEvents.at(-1)?.effectiveDate || '';
+    let lastStatus = priorEvents.at(-1)?.status;
     const additions = next
       .filter(item => !oldById.has(String(item.id)) && item.dimension === dimension)
       .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
@@ -111,7 +113,12 @@ export function validateCompanyFiscalStatusHistory(
       if (lastDate && event.effectiveDate <= lastDate) {
         throw new Error('Los cambios de esta condición deben registrarse en orden cronológico. No se permite agregar un evento retroactivo que altere la condición usada por operaciones anteriores.');
       }
+      if (dimension === 'SENIAT_SPECIAL_TAXPAYER' && lastStatus === 'ESPECIAL' && event.status === 'ORDINARIO' &&
+          (!event.authorityReference?.trim() || !isValidFiscalIsoDate(event.authorityDate))) {
+        throw new Error('La pérdida de la calificación como Sujeto Pasivo Especial requiere referencia y fecha del acto o notificación individual que la respalda.');
+      }
       lastDate = event.effectiveDate;
+      lastStatus = event.status;
     }
   }
 }
