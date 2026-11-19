@@ -403,7 +403,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
             <span className="font-bold text-slate-800 uppercase tracking-wider block">6. IGTF — percepción de grandes transacciones financieras</span>
             <label className="flex items-start gap-2 font-semibold text-slate-700 cursor-pointer">
               <input type="checkbox" checked={saleFiscalProfile.isIgtfPerceptionAgent} readOnly disabled className="mt-0.5 rounded text-sky-600 focus:ring-sky-500" />
-              <span>Agente de percepción configurado: <strong>{currentCompany.isIgtfPerceptionAgent === true ? 'Sí' : 'No'}</strong>. Para cambiarlo, vaya a Configuración de la empresa.</span>
+              <span>Agente de percepción configurado: <strong>{saleFiscalProfile.isIgtfPerceptionAgent ? 'Sí' : 'No'}</strong> para la fecha de esta factura. Consulte el historial fiscal en Configuración para registrar cambios.</span>
             </label>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Moneda / medio de pago</label>
