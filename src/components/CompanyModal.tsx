@@ -241,7 +241,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
             <label className="block text-xs font-bold text-slate-800 uppercase tracking-wide">
               Sujeto Pasivo Especial — SENIAT
             </label>
-            <p className="text-[11px] text-slate-600">Marque Contribuyente Especial únicamente si existe notificación expresa del SENIAT. La categoría no se presume por ingresos ni por el RIF.</p>
+            <p className="text-[11px] text-slate-600">Indique si la empresa cuenta con calificación expresa como Sujeto Pasivo Especial. Esta condición es independiente de su condición frente al IVA y no se presume por ingresos ni por el RIF.</p>
             <div className="grid grid-cols-2 gap-3">
               <label
                 className={`flex items-start gap-3 p-3 rounded-xl border text-xs cursor-pointer transition ${
@@ -262,7 +262,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
                   className="mt-0.5 text-purple-600 focus:ring-purple-500"
                 />
                 <div>
-                  <span className="block font-bold">Contribuyente Especial (con notificación SENIAT)</span>
+                  <span className="block font-bold">Sujeto Pasivo Especial (con notificación SENIAT)</span>
                   <span className="text-[11px] font-normal text-slate-500">
                     Agente de Retención designado por el SENIAT (75% / 100% IVA e ISLR).
                   </span>
@@ -290,7 +290,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
                   className="mt-0.5 text-sky-600 focus:ring-sky-500"
                 />
                 <div>
-                  <span className="block font-bold">Contribuyente Ordinario</span>
+                  <span className="block font-bold">No calificado como Sujeto Pasivo Especial</span>
                   <span className="text-[11px] font-normal text-slate-500">
                     No designado como agente de retención de IVA.
                   </span>
@@ -331,7 +331,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
               <option value="ARTICLE_1_AND_2" disabled={taxpayerType !== 'ESPECIAL'}>Artículos 1 y 2 — Sujeto especial y comprador habitual de metales o piedras preciosas</option>
               <option value="NOT_AGENT">No es agente de retención bajo esta Providencia</option>
             </select>
-            <p className="text-[11px] text-slate-600">No se presume la designación por seleccionar “Contribuyente Especial”. Si queda pendiente, SICOVEN no calculará retenciones automáticamente.</p>
+            <p className="text-[11px] text-slate-600">No se presume la designación por seleccionar “Sujeto Pasivo Especial”. Si queda pendiente, SICOVEN no calculará retenciones automáticamente.</p>
             {['ARTICLE_1_SPECIAL_DESIGNATED', 'ARTICLE_1_AND_2'].includes(ivaRetentionAgentBasis) && /^[VEP]/.test(rif.replace(/[^A-Z0-9]/gi, '')) && (
               <label className="flex items-start gap-2 text-xs text-slate-800">
                 <input type="checkbox" checked={isPersonalFirm} onChange={e => setIsPersonalFirm(e.target.checked)} className="mt-0.5" />
