@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, Eye, FilePlus2, FileText, RefreshCw } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 
-type EntityType = 'PURCHASE' | 'SALE' | 'JOURNAL_ENTRY';
+type EntityType = 'PURCHASE' | 'SALE' | 'JOURNAL_ENTRY' | 'COMPANY_TAX_STATUS_PERIOD';
 interface Props {
   entityType: EntityType;
   entityId: string;
