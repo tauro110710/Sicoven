@@ -184,6 +184,14 @@ export interface Company {
   logoUrl?: string; // URL o base64 del logo de la empresa
 }
 
+/** Devuelve la condición documentada aplicable a una fecha; undefined significa que no hay tramo registrado. */
+export function getCompanyTaxStatusForDate(company: Company, date: string): CompanyTaxStatusPeriod | undefined {
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) return undefined;
+  return (company.taxStatusHistory || []).find(period =>
+    period.effectiveFrom <= date && (!period.effectiveTo || date <= period.effectiveTo)
+  );
+}
+
 export type AccountType = 'ACTIVO' | 'PASIVO' | 'PATRIMONIO' | 'INGRESOS' | 'COSTOS' | 'GASTOS';
 
 export type CashFlowActivity = 'EFECTIVO_EQUIVALENTE' | 'OPERACION' | 'INVERSION' | 'FINANCIACION' | 'NO_MONETARIO' | 'SIN_CLASIFICAR';
