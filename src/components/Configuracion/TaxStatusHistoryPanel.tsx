@@ -52,8 +52,11 @@ export const TaxStatusHistoryPanel: React.FC = () => {
     try {
       const all = [...periods].sort((a,b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
       for (let i=0;i<all.length;i++) {
-        if (!all[i].effectiveFrom || (all[i].effectiveTo && all[i].effectiveTo < all[i].effectiveFrom)) throw new Error('Revise las fechas de vigencia de los períodos.');
-        if (i < all.length-1 && (!all[i].effectiveTo || all[i].effectiveTo >= all[i+1].effectiveFrom)) throw new Error('Los períodos deben estar cerrados y no superponerse.');
+        const current = all[i];
+        const next = all[i + 1];
+        if (!current) continue;
+        if (!current.effectiveFrom || (current.effectiveTo && current.effectiveTo < current.effectiveFrom)) throw new Error('Revise las fechas de vigencia de los períodos.');
+        if (next && (!current.effectiveTo || current.effectiveTo >= next.effectiveFrom)) throw new Error('Los períodos deben estar cerrados y no superponerse.');
       }
       await updateCompany({ ...currentCompany, taxStatusHistory: all });
       await waitForPersistence();
