@@ -239,7 +239,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
           {/* Calificación SENIAT */}
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
             <label className="block text-xs font-bold text-slate-800 uppercase tracking-wide">
-              Calificación Tributaria SENIAT
+              Sujeto Pasivo Especial — SENIAT
             </label>
             <p className="text-[11px] text-slate-600">Marque Contribuyente Especial únicamente si existe notificación expresa del SENIAT. La categoría no se presume por ingresos ni por el RIF.</p>
             <div className="grid grid-cols-2 gap-3">
