@@ -24,6 +24,7 @@ import { validateFunctionalCurrencyAssessment, validateExchangeabilityAssessment
 import { buildOpeningEntryItems } from '../../types/accountingYearOpening';
 import { buildClosingEntryItems } from '../../types/accountingYearClosing';
 import { CompanyModal } from '../CompanyModal';
+import { CompanyFiscalStatusHistoryPanel } from './CompanyFiscalStatusHistoryPanel';
 import { formatBs, validateVenezuelanRif } from '../../utils/formatters';
 import { requestNonBlockingConfirm } from '../../utils/safeAlert';
 import { IntelligentMigrationWizard } from '../Migracion/IntelligentMigrationWizard';
@@ -897,6 +898,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Calificación SENIAT</label>
               <select
+                disabled
                 value={taxpayerType}
                 onChange={e => {
                   const val = e.target.value as TaxpayerType;
@@ -907,8 +909,9 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-semibold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               >
                 <option value="ESPECIAL">Contribuyente Especial (con notificación SENIAT)</option>
-                <option value="ORDINARIO">Contribuyente Ordinario</option>
+                <option value="ORDINARIO">No calificado como Sujeto Pasivo Especial</option>
               </select>
+              <p className="mt-1 text-[10px] text-slate-500">Los cambios se registran en el historial fiscal con su fecha efectiva y soporte.</p>
             </div>
             {taxpayerType === 'ESPECIAL' && (
               <div className="sm:col-span-3 rounded-lg border border-purple-200 bg-purple-50 p-3 space-y-2">
@@ -933,7 +936,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
             </div>
             <div className="sm:col-span-3 rounded-lg border border-purple-200 bg-purple-50 p-3 space-y-2">
               <label className="block font-semibold text-slate-800">Condición como agente de retención de IVA — Providencia SNAT/2025/000054</label>
-              <select value={ivaRetentionAgentBasis} onChange={e => setIvaRetentionAgentBasis(e.target.value as IvaRetentionAgentBasis)} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-semibold">
+              <select disabled value={ivaRetentionAgentBasis} onChange={e => setIvaRetentionAgentBasis(e.target.value as IvaRetentionAgentBasis)} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-semibold">
                 <option value="UNCONFIRMED">Pendiente de confirmar</option>
                 <option value="ARTICLE_1_SPECIAL_DESIGNATED" disabled={taxpayerType !== 'ESPECIAL'}>Artículo 1 — Sujeto especial calificado y notificado</option>
                 <option value="ARTICLE_2_METALS">Artículo 2 — Comprador habitual de metales o piedras preciosas</option>
@@ -943,17 +946,19 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
               <p className="text-[11px] text-slate-600">La calificación de contribuyente especial por sí sola no sustituye la confirmación de la designación. Si queda pendiente, SICOVEN dejará la retención en revisión.</p>
               {['ARTICLE_1_SPECIAL_DESIGNATED', 'ARTICLE_1_AND_2'].includes(ivaRetentionAgentBasis) && /^[VEP]/.test(rif.replace(/[^A-Z0-9]/gi, '')) && (
                 <label className="flex items-start gap-2 text-xs text-slate-800">
-                  <input type="checkbox" checked={isPersonalFirm} onChange={e => setIsPersonalFirm(e.target.checked)} className="mt-0.5" />
+                  <input type="checkbox" disabled checked={isPersonalFirm} onChange={e => setIsPersonalFirm(e.target.checked)} className="mt-0.5" />
                   <span><strong>La persona natural está constituida como firma personal</strong><span className="block text-[11px] text-slate-600 mt-1">La Providencia incluye a personas naturales especiales únicamente cuando actúan como firma personal.</span></span>
                 </label>
               )}
             </div>
             <div className="sm:col-span-2 rounded-lg border border-sky-200 bg-sky-50 p-3">
               <label className="flex items-start gap-2 text-sm text-slate-800 cursor-pointer">
-                <input type="checkbox" checked={isIgtfPerceptionAgent} onChange={e => setIsIgtfPerceptionAgent(e.target.checked)} className="mt-0.5" />
+                <input type="checkbox" disabled checked={isIgtfPerceptionAgent} onChange={e => setIsIgtfPerceptionAgent(e.target.checked)} className="mt-0.5" />
                 <span><strong>Empresa designada agente de percepción del IGTF</strong><span className="block text-xs text-slate-600 mt-1">Actívelo únicamente si la designación aplica legalmente a esta empresa. Este parámetro habilita el cálculo en las facturas elegibles.</span></span>
               </label>
             </div></div>
+
+          <CompanyFiscalStatusHistoryPanel key={currentCompany.id} company={currentCompany} />
 
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Dirección Fiscal Completa</label>
