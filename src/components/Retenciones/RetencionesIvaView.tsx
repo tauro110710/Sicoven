@@ -94,7 +94,7 @@ export const RetencionesIvaView: React.FC = () => {
     const status = getVatDeclarationStatus(item, vatWithholdingDeclarationEvents);
     return status === 'PREPARED' || status === 'REVIEWED' || status === 'FILED' || status === 'PARTIALLY_PAID';
   }).length;
-  const selectedPeriodDate = /^\\d{6}$/.test(effectivePeriod) ? `${effectivePeriod.slice(0, 4)}-${effectivePeriod.slice(4, 6)}-01` : '';
+  const selectedPeriodDate = /^\d{6}$/.test(effectivePeriod) ? `${effectivePeriod.slice(0, 4)}-${effectivePeriod.slice(4, 6)}-01` : '';
   const effectiveTaxStatus = selectedPeriodDate ? getCompanyTaxStatusForDate(currentCompany, selectedPeriodDate) : undefined;
   const hasTaxStatusHistory = (currentCompany.taxStatusHistory || []).length > 0;
   const displayedAgentBasis = effectiveTaxStatus?.ivaRetentionAgentBasis ?? (hasTaxStatusHistory ? 'UNCONFIRMED' : currentCompany.ivaRetentionAgentBasis);
