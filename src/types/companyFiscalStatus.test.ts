@@ -100,3 +100,10 @@ test('allows an ordinary initial baseline but requires an individual act when en
   const revokedWithAct = event('o3', 'SENIAT_SPECIAL_TAXPAYER', 'ORDINARIO', '2026-10-01');
   assert.doesNotThrow(() => validateCompanyFiscalStatusHistory([special], [special, revokedWithAct]));
 });
+
+test('legacy special company status still requires evidence when the first history event revokes it', () => {
+  const firstOrdinary = event('o1', 'SENIAT_SPECIAL_TAXPAYER', 'ORDINARIO', '2026-10-01');
+  delete firstOrdinary.authorityReference;
+  delete firstOrdinary.authorityDate;
+  assert.throws(() => validateCompanyFiscalStatusHistory([], [firstOrdinary], 'ESPECIAL'), /pérdida de la calificación/);
+});
