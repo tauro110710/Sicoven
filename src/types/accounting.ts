@@ -185,11 +185,16 @@ export interface Company {
   logoUrl?: string; // URL o base64 del logo de la empresa
 }
 
+/** Valida una fecha ISO real, no solo su forma textual. */
+export function isValidCompanyTaxStatusDate(date: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const parsedDate = new Date(date + 'T00:00:00.000Z');
+  return Number.isFinite(parsedDate.getTime()) && parsedDate.toISOString().slice(0, 10) === date;
+}
+
 /** Devuelve la condición documentada aplicable a una fecha; undefined significa que no hay tramo registrado. */
 export function getCompanyTaxStatusForDate(company: Company, date: string): CompanyTaxStatusPeriod | undefined {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return undefined;
-  const parsedDate = new Date(date + 'T00:00:00.000Z');
-  if (!Number.isFinite(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date) return undefined;
+  if (!isValidCompanyTaxStatusDate(date)) return undefined;
   return (company.taxStatusHistory || []).find(period =>
     period.effectiveFrom <= date && (!period.effectiveTo || date <= period.effectiveTo)
   );
