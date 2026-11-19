@@ -16,7 +16,7 @@ function fixture() {
   db.exec("CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime('now')))");
   db.exec("CREATE TABLE app_state(state_key TEXT PRIMARY KEY,state_json TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT (datetime('now')))");
   db.prepare('INSERT INTO app_state(state_key,state_json) VALUES(?,?)').run('accounting', JSON.stringify({
-    companies: [{ id: 'co-1', name: 'Empresa de prueba' }],
+    companies: [{ id: 'co-1', name: 'Empresa de prueba', taxStatusHistory: [{ id: 'tax-period-1', effectiveFrom: '2026-01-01', specialTaxpayerStatus: 'ESPECIAL' }] }],
     purchases: [{ id: 'purchase-1', companyId: 'co-1', invoiceNumber: 'FC-001' }],
     sales: [], journalEntries: [], vatVouchers: [], islrVouchers: [], movements: [], bankStatementMovements: []
   }));
@@ -119,6 +119,17 @@ test('correction case evidence is attached to the exact case and company',()=>{
   assert.equal(result.document.entityId,'case-1');
   assert.equal(listDocuments(h.db,{companyId:'co-1',entityType:'CORRECTION_CASE',entityId:'case-1'}).length,1);
   assert.throws(()=>attachDocument(h.db,{storageDir:h.storageDir,input:{companyId:'other',entityType:'CORRECTION_CASE',entityId:'case-1',documentType:'PAPEL_TRABAJO',title:'Soporte',fileName:'soporte.pdf'},buffer:pdf,actor}),/empresa asociada/);
+ }finally{h.close();}
+});
+
+test('tax status period evidence is attached to the exact company and historical period',()=>{
+ const h=fixture();try{
+  const result=attachDocument(h.db,{storageDir:h.storageDir,input:{companyId:'co-1',entityType:'COMPANY_TAX_STATUS_PERIOD',entityId:'tax-period-1',documentType:'SOPORTE_CONDICION_TRIBUTARIA',title:'Providencia de calificación',fileName:'acto.pdf'},buffer:pdf,actor});
+  assert.equal(result.document.entityType,'COMPANY_TAX_STATUS_PERIOD');
+  assert.equal(result.document.entityId,'tax-period-1');
+  assert.equal(listDocuments(h.db,{companyId:'co-1',entityType:'COMPANY_TAX_STATUS_PERIOD',entityId:'tax-period-1'}).length,1);
+  assert.throws(()=>attachDocument(h.db,{storageDir:h.storageDir,input:{companyId:'co-1',entityType:'COMPANY_TAX_STATUS_PERIOD',entityId:'missing-period',documentType:'SOPORTE_CONDICION_TRIBUTARIA',title:'Soporte',fileName:'acto.pdf'},buffer:pdf,actor}),/no existe o no pertenece/);
+  assert.throws(()=>attachDocument(h.db,{storageDir:h.storageDir,input:{companyId:'other',entityType:'COMPANY_TAX_STATUS_PERIOD',entityId:'tax-period-1',documentType:'SOPORTE_CONDICION_TRIBUTARIA',title:'Soporte',fileName:'acto.pdf'},buffer:pdf,actor}),/empresa asociada/);
  }finally{h.close();}
 });
 
