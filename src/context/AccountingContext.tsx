@@ -521,7 +521,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const updateCompany = async (updated: Company): Promise<void> => {
     assertSQLitePersistenceReady('Actualizar la empresa');
-    if (window.sicovenStore) {
+    const existing = companies.find(company => company.id === updated.id);
+    const identityChanged = !existing || existing.name !== updated.name || existing.rif !== updated.rif;
+    // Los cambios de configuración (por ejemplo, el historial tributario) se
+    // guardan mediante el snapshot SQLite. No se debe invocar la escritura
+    // auxiliar de identidad si nombre y RIF permanecen iguales.
+    if (identityChanged && window.sicovenStore) {
       const result = await window.sicovenStore.updateCompanyMetadata(token, {
         companyId: updated.id, name: updated.name, rif: updated.rif
       });
