@@ -33,7 +33,8 @@ export const TaxStatusHistoryPanel: React.FC = () => {
   const updateEnd = (id: string, effectiveTo: string) => setPeriods(previous => previous.map(item => item.id === id ? { ...item, effectiveTo: effectiveTo || undefined } : item));
   const addPeriod = () => {
     setError(''); setSuccess(false);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.effectiveFrom)) { setError('Indique una fecha inicial de vigencia válida.'); return; }
+    if (!isValidCompanyTaxStatusDate(draft.effectiveFrom)) { setError('Indique una fecha inicial de vigencia válida.'); return; }
+    if (draft.effectiveTo && !isValidCompanyTaxStatusDate(draft.effectiveTo)) { setError('Indique una fecha final de vigencia válida.'); return; }
     if (draft.effectiveTo && draft.effectiveTo < draft.effectiveFrom) { setError('La fecha final no puede ser anterior a la fecha inicial.'); return; }
     if (draft.specialTaxpayerStatus === 'ESPECIAL' && (!draft.notificationReference.trim() || !draft.notificationDate)) { setError('La condición de Sujeto Pasivo Especial requiere referencia y fecha de notificación.'); return; }
     if (['ARTICLE_1_SPECIAL_DESIGNATED', 'ARTICLE_1_AND_2'].includes(draft.ivaRetentionAgentBasis) && draft.specialTaxpayerStatus !== 'ESPECIAL') { setError('La designación del artículo 1 requiere que el tramo esté calificado como Sujeto Pasivo Especial.'); return; }
