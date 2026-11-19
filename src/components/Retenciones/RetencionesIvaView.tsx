@@ -19,6 +19,7 @@ import { validateSeniatIvaTxt } from '../../utils/seniatIvaTxtValidator';
 import { VatWithholdingDeclarationsPanel } from './VatWithholdingDeclarationsPanel';
 import { getVatDeclarationStatus } from '../../types/vatWithholdingDeclaration';
 import { getVatVoucherDeliveryControl } from '../../utils/vatVoucherDelivery';
+import { getCompanyTaxStatusForDate } from '../../types/accounting';
 import { VatFiscalIncidentPanel } from './VatFiscalIncidentPanel';
 
 export const RetencionesIvaView: React.FC = () => {
@@ -93,17 +94,37 @@ export const RetencionesIvaView: React.FC = () => {
     const status = getVatDeclarationStatus(item, vatWithholdingDeclarationEvents);
     return status === 'PREPARED' || status === 'REVIEWED' || status === 'FILED' || status === 'PARTIALLY_PAID';
   }).length;
+  const selectedPeriodDate = /^\d{6}$/.test(effectivePeriod) ? effectivePeriod.slice(0, 4) + '-' + effectivePeriod.slice(4, 6) + '-01' : '';
+  const selectedPeriodEndDate = selectedPeriodDate
+    ? `${selectedPeriodDate.slice(0, 7)}-${String(new Date(Number(effectivePeriod.slice(0, 4)), Number(effectivePeriod.slice(4, 6)), 0).getDate()).padStart(2, '0')}`
+    : '';
+  const hasTaxStatusHistory = (currentCompany.taxStatusHistory || []).length > 0;
+  const periodTaxStatusCandidate = selectedPeriodDate ? getCompanyTaxStatusForDate(currentCompany, selectedPeriodDate) : undefined;
+  // La vista resume un mes completo: no presenta como uniforme una condición
+  // que cambió a mitad del mes o que no cubre todos sus días.
+  const periodTaxStatusIsComplete = Boolean(periodTaxStatusCandidate &&
+    periodTaxStatusCandidate.effectiveFrom <= selectedPeriodDate &&
+    (!periodTaxStatusCandidate.effectiveTo || periodTaxStatusCandidate.effectiveTo >= selectedPeriodEndDate));
+  const effectiveTaxStatus = periodTaxStatusIsComplete ? periodTaxStatusCandidate : undefined;
+  const taxStatusPeriodNeedsReview = hasTaxStatusHistory && !periodTaxStatusIsComplete;
+  const displayedAgentBasis = effectiveTaxStatus?.ivaRetentionAgentBasis ?? (hasTaxStatusHistory ? 'UNCONFIRMED' : currentCompany.ivaRetentionAgentBasis);
+  const displayedTaxpayerType = effectiveTaxStatus
+    ? (effectiveTaxStatus.specialTaxpayerStatus === 'ESPECIAL' ? 'ESPECIAL' : effectiveTaxStatus.specialTaxpayerStatus === 'NO_ESPECIAL' ? 'ORDINARIO' : 'PENDIENTE')
+    : (hasTaxStatusHistory ? 'PENDIENTE' : currentCompany.taxpayerType);
+  const displayedPersonalFirm = effectiveTaxStatus?.isPersonalFirm ?? (!hasTaxStatusHistory ? currentCompany.isPersonalFirm === true : false);
   const normalizedCompanyRif = String(currentCompany.rif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
-  const article1FirmConfirmed = currentCompany.taxpayerType === 'ESPECIAL' && (!/^[VEP]/.test(normalizedCompanyRif) || currentCompany.isPersonalFirm === true);
-  const agentBasisLabel = currentCompany.ivaRetentionAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED'
+  const article1FirmConfirmed = displayedTaxpayerType === 'ESPECIAL' && (!/^[VEP]/.test(normalizedCompanyRif) || displayedPersonalFirm);
+  const agentBasisLabel = displayedAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED'
     ? (article1FirmConfirmed ? 'Agente designado · Art. 1' : 'Firma personal por confirmar')
-    : currentCompany.ivaRetentionAgentBasis === 'ARTICLE_1_AND_2'
+    : displayedAgentBasis === 'ARTICLE_1_AND_2'
       ? (article1FirmConfirmed ? 'Agente designado · Arts. 1 y 2' : 'Firma personal por confirmar · Arts. 1 y 2')
-      : currentCompany.ivaRetentionAgentBasis === 'ARTICLE_2_METALS'
+      : displayedAgentBasis === 'ARTICLE_2_METALS'
       ? 'Agente por actividad · Art. 2'
-      : currentCompany.ivaRetentionAgentBasis === 'NOT_AGENT'
+      : displayedAgentBasis === 'NOT_AGENT'
         ? 'No agente de retención'
-        : 'Condición de agente por confirmar';
+        : taxStatusPeriodNeedsReview
+          ? 'Cambios / cobertura tributaria por revisar en el período'
+          : 'Condición de agente por confirmar';
 
   // El generador rechaza correctamente un archivo vacío; ese rechazo no debe tumbar
   // el render de la pantalla cuando el período aún no tiene comprobantes.
@@ -225,6 +246,7 @@ export const RetencionesIvaView: React.FC = () => {
               <span className="text-xs font-semibold text-slate-600">
                 RIF: {currentCompany.rif}
               </span>
+              {taxStatusPeriodNeedsReview && <span role="alert" className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">El período {effectivePeriod} incluye un cambio o una cobertura tributaria incompleta; revise las fechas antes de usar esta condición como resumen mensual.</span>}
             </div>
             <h1 className="text-xl font-bold text-slate-900 mt-1">
               Comprobantes de Retención de IVA & Generador TXT

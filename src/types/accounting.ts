@@ -112,6 +112,27 @@ export interface AccountingBcvRateHistoryEntry {
   correctionOfId?: string;
 }
 
+export type IvaTaxStatus = 'ORDINARIO' | 'FORMAL' | 'NO_SUJETO' | 'EXENTO' | 'EXONERADO' | 'PENDIENTE';
+export type SpecialTaxpayerStatus = 'ESPECIAL' | 'NO_ESPECIAL' | 'PENDIENTE';
+
+/** Condiciones fiscales documentadas por tramo de vigencia. No reemplaza ni reescribe documentos históricos. */
+export interface CompanyTaxStatusPeriod {
+  id: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  ivaTaxStatus: IvaTaxStatus;
+  specialTaxpayerStatus: SpecialTaxpayerStatus;
+  ivaRetentionAgentBasis: IvaRetentionAgentBasis;
+  defaultIvaRetentionRate: 0 | 75 | 100;
+  isIgtfPerceptionAgent: boolean;
+  isPersonalFirm?: boolean;
+  notificationReference?: string;
+  notificationDate?: string;
+  supportingDocumentReference?: string;
+  notes?: string;
+  recordedAt: string;
+}
+
 export interface Company {
   id: string;
   rif: string; // e.g., "J-40892182-3"
@@ -121,6 +142,8 @@ export interface Company {
   phone: string;
   email: string;
   taxpayerType: TaxpayerType;
+  /** Historial de condiciones tributarias por fechas de vigencia; opcional para compatibilidad con empresas existentes. */
+  taxStatusHistory?: CompanyTaxStatusPeriod[];
   /** Referencia y fecha de la notificación expresa del SENIAT que acredita la calificación de sujeto pasivo especial. */
   specialTaxpayerNotificationReference?: string;
   specialTaxpayerNotificationDate?: string;
@@ -160,6 +183,26 @@ export interface Company {
   /** Estrategia comercial predeterminada de esta empresa; cada producto puede sobrescribirla. */
   inventoryPricingDefaults?: InventoryPricingConfiguration;
   logoUrl?: string; // URL o base64 del logo de la empresa
+}
+
+/** Valida una fecha ISO real, no solo su forma textual. */
+export function isValidCompanyTaxStatusDate(date: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const parsedDate = new Date(date + 'T00:00:00.000Z');
+  return Number.isFinite(parsedDate.getTime()) && parsedDate.toISOString().slice(0, 10) === date;
+}
+
+/** Devuelve la condición documentada aplicable a una fecha; undefined significa que no hay tramo registrado. */
+export function getCompanyTaxStatusForDate(company: Company, date: string): CompanyTaxStatusPeriod | undefined {
+  if (!isValidCompanyTaxStatusDate(date)) return undefined;
+  const matchingPeriods = (company.taxStatusHistory || []).filter(period =>
+    isValidCompanyTaxStatusDate(period.effectiveFrom) &&
+    (!period.effectiveTo || (isValidCompanyTaxStatusDate(period.effectiveTo) && period.effectiveTo >= period.effectiveFrom)) &&
+    period.effectiveFrom <= date && (!period.effectiveTo || date <= period.effectiveTo)
+  );
+  // Un historial corrupto o con solapamientos no debe resolverse eligiendo
+  // arbitrariamente uno de los tramos.
+  return matchingPeriods.length === 1 ? matchingPeriods[0] : undefined;
 }
 
 export type AccountType = 'ACTIVO' | 'PASIVO' | 'PATRIMONIO' | 'INGRESOS' | 'COSTOS' | 'GASTOS';
