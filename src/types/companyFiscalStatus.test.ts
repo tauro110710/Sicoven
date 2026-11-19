@@ -65,3 +65,9 @@ test('history is append-only and rejects duplicate dimension/effective date', ()
   assert.throws(() => validateCompanyFiscalStatusHistory([], [first, { ...first, id: 'e2' }]), /duplicados|Ya existe/);
   assert.doesNotThrow(() => validateCompanyFiscalStatusHistory([], [first]));
 });
+
+test('rejects retroactive additions after a condition timeline has been established', () => {
+  const first = event('e1', 'SENIAT_SPECIAL_TAXPAYER', 'ESPECIAL', '2026-01-01');
+  const backdated = event('e2', 'SENIAT_SPECIAL_TAXPAYER', 'ORDINARIO', '2025-12-31');
+  assert.throws(() => validateCompanyFiscalStatusHistory([first], [first, backdated]), /orden cronológico|retroactivo/);
+});
