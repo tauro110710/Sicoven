@@ -77,7 +77,8 @@ export function validateCompanyFiscalStatusEvent(event: CompanyFiscalStatusEvent
 /** Valida que los eventos existentes no se editen ni eliminen al agregar uno nuevo. */
 export function validateCompanyFiscalStatusHistory(
   previous: CompanyFiscalStatusEvent[] = [],
-  next: CompanyFiscalStatusEvent[] = []
+  next: CompanyFiscalStatusEvent[] = [],
+  legacySeniatStatus?: TaxpayerType
 ): void {
   if (!Array.isArray(previous) || !Array.isArray(next)) throw new Error('El historial fiscal de la empresa no tiene un formato válido.');
   const oldById = new Map(previous.map(item => [String(item.id), item]));
@@ -105,7 +106,7 @@ export function validateCompanyFiscalStatusHistory(
       .filter(item => item.dimension === dimension && isValidFiscalIsoDate(item.effectiveDate))
       .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
     let lastDate = priorEvents.at(-1)?.effectiveDate || '';
-    let lastStatus = priorEvents.at(-1)?.status;
+    let lastStatus = priorEvents.at(-1)?.status ?? (dimension === 'SENIAT_SPECIAL_TAXPAYER' ? legacySeniatStatus : undefined);
     const additions = next
       .filter(item => !oldById.has(String(item.id)) && item.dimension === dimension)
       .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
