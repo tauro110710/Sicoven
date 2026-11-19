@@ -958,8 +958,6 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
               </label>
             </div></div>
 
-          <CompanyFiscalStatusHistoryPanel key={currentCompany.id} company={currentCompany} />
-
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Dirección Fiscal Completa</label>
             <input
@@ -1052,6 +1050,8 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
           </div>
         </form>
       </div>
+
+      <CompanyFiscalStatusHistoryPanel key={currentCompany.id} company={currentCompany} />
 
       {/* Cierre contable y control de períodos */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
