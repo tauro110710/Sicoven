@@ -8,6 +8,7 @@ import {
   JournalEntry,
   PurchaseRecord,
   getPurchaseAccountCreditDate,
+  getCompanyTaxStatusForDate,
   SaleRecord,
   InventoryProduct,
   InventoryMovement,
@@ -3157,7 +3158,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     if (purchaseData.ivaRetentionDecision) {
       const snapshot = purchaseData.ivaRetentionDecision;
-      const expectedBuyerAgentStatus = resolveIvaBuyerAgentStatus({ agentBasis: targetCompany.ivaRetentionAgentBasis, taxpayerType: targetCompany.taxpayerType, rif: targetCompany.rif, isPersonalFirm: targetCompany.isPersonalFirm });
+      const purchaseFiscalDate = getPurchaseAccountCreditDate(purchaseData);
+      const hasTaxStatusHistory = (targetCompany.taxStatusHistory || []).length > 0;
+      const effectiveCompanyTaxStatus = getCompanyTaxStatusForDate(targetCompany, purchaseFiscalDate);
+      const expectedBuyerAgentStatus = resolveIvaBuyerAgentStatus({
+        agentBasis: effectiveCompanyTaxStatus?.ivaRetentionAgentBasis ?? (hasTaxStatusHistory ? 'UNCONFIRMED' : targetCompany.ivaRetentionAgentBasis),
+        taxpayerType: effectiveCompanyTaxStatus
+          ? (effectiveCompanyTaxStatus.specialTaxpayerStatus === 'ESPECIAL'
+            ? 'ESPECIAL'
+            : effectiveCompanyTaxStatus.specialTaxpayerStatus === 'NO_ESPECIAL' ? 'ORDINARIO' : 'PENDIENTE')
+          : (hasTaxStatusHistory ? 'PENDIENTE' : targetCompany.taxpayerType),
+        rif: targetCompany.rif,
+        isPersonalFirm: effectiveCompanyTaxStatus?.isPersonalFirm ?? (!hasTaxStatusHistory ? targetCompany.isPersonalFirm : false)
+      });
       if (snapshot.buyerAgentStatus !== expectedBuyerAgentStatus) throw new Error('La condición de agente de retención de la empresa cambió o no coincide. Actualice la evaluación antes de registrar.');
       const expectedOperationAmountBs = Math.round((Number(purchaseData.taxableBaseBs) + Number(purchaseData.exemptAmountBs) + Number(purchaseData.vatAmountBs) + Number(purchaseData.additionalLuxuryTaxBs || 0) + Number.EPSILON) * 100) / 100;
       const fiscalPeriodStart = getPurchaseAccountCreditDate(purchaseData).slice(0, 7);
