@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Company, IslrRetentionVoucher } from '../../types/accounting';
+import { Company, IslrRetentionVoucher, getCompanyTaxStatusForDate } from '../../types/accounting';
 import { X, Printer, ShieldCheck } from 'lucide-react';
 import { formatBs, formatUsd, formatDate, formatNumberVe } from '../../utils/formatters';
 import { requiresSnat2026DocumentReference } from '../../types/retentionVoucherCompliance';
@@ -28,6 +28,19 @@ export const IslrVoucherModal: React.FC<IslrVoucherModalProps> = ({ voucher, com
   const agentName = voucher.agentNameSnapshot || company.name;
   const agentRif = voucher.agentRifSnapshot || company.rif;
   const agentAddress = voucher.agentAddressSnapshot || company.address;
+
+  // El comprobante es histórico: su calificación debe corresponder a la fecha
+  // de emisión, no a la condición tributaria actual de la empresa.
+  const historicalTaxStatus = getCompanyTaxStatusForDate(company, voucher.date);
+  const fiscalQualification = company.taxStatusHistory?.length
+    ? historicalTaxStatus?.specialTaxpayerStatus === 'ESPECIAL'
+      ? 'Contribuyente Especial'
+      : historicalTaxStatus?.specialTaxpayerStatus === 'NO_ESPECIAL'
+        ? 'Contribuyente Ordinario'
+        : 'No determinada para esta fecha'
+    : company.taxpayerType === 'ESPECIAL'
+      ? 'Contribuyente Especial'
+      : 'Contribuyente Ordinario';
 
   const handlePrint = () => {
     window.print();
@@ -117,7 +130,7 @@ export const IslrVoucherModal: React.FC<IslrVoucherModalProps> = ({ voucher, com
               <div>
                 <span className="font-bold">CALIFICACIÓN FISCAL DEL AGENTE: </span>
                 <span className="font-semibold uppercase">
-                  {company.taxpayerType === 'ESPECIAL' ? 'Contribuyente Especial' : 'Contribuyente Ordinario'}
+                  {fiscalQualification}
                 </span>
               </div>
               <div>
