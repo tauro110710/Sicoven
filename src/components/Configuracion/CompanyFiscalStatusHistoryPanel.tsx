@@ -27,6 +27,7 @@ const OPTIONS: Record<CompanyFiscalStatusDimension, Array<{ value: CompanyFiscal
     { value: 'ORDINARY', label: 'Contribuyente ordinario' },
     { value: 'FORMAL', label: 'Contribuyente formal' },
     { value: 'EXEMPT', label: 'Exento' },
+    { value: 'EXONERATED', label: 'Exonerado' },
     { value: 'NON_SUBJECT', label: 'No sujeto' },
     { value: 'NON_REGISTERED', label: 'No inscrito en el RIF' },
     { value: 'UNKNOWN', label: 'Pendiente de confirmar' }
@@ -132,7 +133,7 @@ export const CompanyFiscalStatusHistoryPanel: React.FC<{ company: Company }> = (
         <div className="rounded-lg bg-amber-100 p-2 text-amber-800"><CalendarClock className="h-5 w-5" /></div>
         <div>
           <h3 className="text-sm font-bold text-slate-900">Historial de condiciones fiscales por fecha</h3>
-          <p className="mt-1 text-xs text-slate-600">Registre cada cambio con su fecha efectiva. Las condiciones se mantienen separadas y SICOVEN puede resolver cuál estaba vigente en la fecha de cada operación.</p>
+          <p className="mt-1 text-xs text-slate-600">Registre cada cambio con su fecha efectiva y en orden cronológico. Las condiciones se mantienen separadas; SICOVEN aplica por fecha las que intervienen en validaciones habilitadas. La categoría IVA queda documentada sin recalcular automáticamente alícuotas ni declaraciones.</p>
         </div>
       </div>
 
