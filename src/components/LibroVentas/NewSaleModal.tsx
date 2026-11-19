@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { TrendingUp, X, Check } from 'lucide-react';
 import { formatBs, formatUsd, formatRif } from '../../utils/formatters';
+import { resolveCompanyFiscalProfileAtDate } from '../../types/companyFiscalStatus';
 
 interface NewSaleModalProps {
   isOpen: boolean;
@@ -63,7 +64,8 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const vatAmountBs = Math.round(taxableBaseBs * (vatRate / 100) * 100) / 100;
   const additionalLuxuryTaxBs = taxRate === 31 ? Math.round(taxableBaseBs * 0.15 * 100) / 100 : 0;
   const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs + additionalLuxuryTaxBs) * 100) / 100;
-  const igtfEligible = currentCompany.isIgtfPerceptionAgent === true && paymentTerm === 'CONTADO' && (paymentCurrency === 'FOREIGN_CASH' || paymentCurrency === 'CRYPTO');
+  const saleFiscalProfile = resolveCompanyFiscalProfileAtDate(currentCompany, invoiceDate);
+  const igtfEligible = saleFiscalProfile.isIgtfPerceptionAgent === true && paymentTerm === 'CONTADO' && (paymentCurrency === 'FOREIGN_CASH' || paymentCurrency === 'CRYPTO');
   const igtfApplicable = igtfEligible && applyIgtf;
   const igtfAmountBs = igtfApplicable ? Math.round(invoiceSubtotalBs * 0.03 * 100) / 100 : 0;
   const totalAmountBs = Math.round((invoiceSubtotalBs + igtfAmountBs) * 100) / 100;
@@ -400,7 +402,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
           <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-xl space-y-3">
             <span className="font-bold text-slate-800 uppercase tracking-wider block">6. IGTF — percepción de grandes transacciones financieras</span>
             <label className="flex items-start gap-2 font-semibold text-slate-700 cursor-pointer">
-              <input type="checkbox" checked={currentCompany.isIgtfPerceptionAgent === true} readOnly disabled className="mt-0.5 rounded text-sky-600 focus:ring-sky-500" />
+              <input type="checkbox" checked={saleFiscalProfile.isIgtfPerceptionAgent} readOnly disabled className="mt-0.5 rounded text-sky-600 focus:ring-sky-500" />
               <span>Agente de percepción configurado: <strong>{currentCompany.isIgtfPerceptionAgent === true ? 'Sí' : 'No'}</strong>. Para cambiarlo, vaya a Configuración de la empresa.</span>
             </label>
             <div>
