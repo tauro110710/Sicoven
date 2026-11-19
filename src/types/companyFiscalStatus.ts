@@ -97,6 +97,23 @@ export function validateCompanyFiscalStatusHistory(
     if (keys.has(key)) throw new Error('Ya existe un evento para esa dimensión y fecha de vigencia. Use una fecha distinta o revise el evento existente.');
     keys.add(key);
   }
+  // Los eventos se incorporan cronológicamente por dimensión. Para corregir
+  // información previa debe existir un flujo de rectificación separado: una
+  // alta tardía no puede reescribir la condición que sustentó documentos emitidos.
+  for (const dimension of Object.keys(ALLOWED) as CompanyFiscalStatusDimension[]) {
+    let lastDate = previous
+      .filter(item => item.dimension === dimension && isValidFiscalIsoDate(item.effectiveDate))
+      .reduce((latest, item) => item.effectiveDate > latest ? item.effectiveDate : latest, '');
+    const additions = next
+      .filter(item => !oldById.has(String(item.id)) && item.dimension === dimension)
+      .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+    for (const event of additions) {
+      if (lastDate && event.effectiveDate <= lastDate) {
+        throw new Error('Los cambios de esta condición deben registrarse en orden cronológico. No se permite agregar un evento retroactivo que altere la condición usada por operaciones anteriores.');
+      }
+      lastDate = event.effectiveDate;
+    }
+  }
 }
 
 export function resolveCompanyFiscalStatusAtDate(
