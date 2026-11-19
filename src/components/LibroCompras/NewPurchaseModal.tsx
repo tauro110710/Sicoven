@@ -336,6 +336,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      {hasTaxStatusHistory && !effectiveCompanyTaxStatus && <div role="alert" className="fixed left-4 right-4 top-4 z-[1200] rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 shadow-lg">No hay un período de condición tributaria registrado para la fecha de abono en cuenta {accountCreditDate || invoiceDate}. La condición del agente queda pendiente y la retención de IVA se enviará a revisión.</div>}
       <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white flex-shrink-0">
