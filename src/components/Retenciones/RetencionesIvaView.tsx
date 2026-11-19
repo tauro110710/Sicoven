@@ -19,6 +19,7 @@ import { validateSeniatIvaTxt } from '../../utils/seniatIvaTxtValidator';
 import { VatWithholdingDeclarationsPanel } from './VatWithholdingDeclarationsPanel';
 import { getVatDeclarationStatus } from '../../types/vatWithholdingDeclaration';
 import { getVatVoucherDeliveryControl } from '../../utils/vatVoucherDelivery';
+import { getCompanyTaxStatusForDate } from '../../types/accounting';
 import { VatFiscalIncidentPanel } from './VatFiscalIncidentPanel';
 
 export const RetencionesIvaView: React.FC = () => {
@@ -93,15 +94,23 @@ export const RetencionesIvaView: React.FC = () => {
     const status = getVatDeclarationStatus(item, vatWithholdingDeclarationEvents);
     return status === 'PREPARED' || status === 'REVIEWED' || status === 'FILED' || status === 'PARTIALLY_PAID';
   }).length;
+  const selectedPeriodDate = /^\\d{6}$/.test(effectivePeriod) ? `${effectivePeriod.slice(0, 4)}-${effectivePeriod.slice(4, 6)}-01` : '';
+  const effectiveTaxStatus = selectedPeriodDate ? getCompanyTaxStatusForDate(currentCompany, selectedPeriodDate) : undefined;
+  const hasTaxStatusHistory = (currentCompany.taxStatusHistory || []).length > 0;
+  const displayedAgentBasis = effectiveTaxStatus?.ivaRetentionAgentBasis ?? (hasTaxStatusHistory ? 'UNCONFIRMED' : currentCompany.ivaRetentionAgentBasis);
+  const displayedTaxpayerType = effectiveTaxStatus
+    ? (effectiveTaxStatus.specialTaxpayerStatus === 'ESPECIAL' ? 'ESPECIAL' : 'ORDINARIO')
+    : (hasTaxStatusHistory ? 'PENDIENTE' : currentCompany.taxpayerType);
+  const displayedPersonalFirm = effectiveTaxStatus?.isPersonalFirm ?? (!hasTaxStatusHistory ? currentCompany.isPersonalFirm === true : false);
   const normalizedCompanyRif = String(currentCompany.rif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
-  const article1FirmConfirmed = currentCompany.taxpayerType === 'ESPECIAL' && (!/^[VEP]/.test(normalizedCompanyRif) || currentCompany.isPersonalFirm === true);
-  const agentBasisLabel = currentCompany.ivaRetentionAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED'
+  const article1FirmConfirmed = displayedTaxpayerType === 'ESPECIAL' && (!/^[VEP]/.test(normalizedCompanyRif) || displayedPersonalFirm);
+  const agentBasisLabel = displayedAgentBasis === 'ARTICLE_1_SPECIAL_DESIGNATED'
     ? (article1FirmConfirmed ? 'Agente designado · Art. 1' : 'Firma personal por confirmar')
-    : currentCompany.ivaRetentionAgentBasis === 'ARTICLE_1_AND_2'
+    : displayedAgentBasis === 'ARTICLE_1_AND_2'
       ? (article1FirmConfirmed ? 'Agente designado · Arts. 1 y 2' : 'Firma personal por confirmar · Arts. 1 y 2')
-      : currentCompany.ivaRetentionAgentBasis === 'ARTICLE_2_METALS'
+      : displayedAgentBasis === 'ARTICLE_2_METALS'
       ? 'Agente por actividad · Art. 2'
-      : currentCompany.ivaRetentionAgentBasis === 'NOT_AGENT'
+      : displayedAgentBasis === 'NOT_AGENT'
         ? 'No agente de retención'
         : 'Condición de agente por confirmar';
 
