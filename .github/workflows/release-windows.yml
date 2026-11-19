@@ -364,7 +364,7 @@ jobs:
         if: >-
           startsWith(github.ref, 'refs/tags/v') ||
           (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release == true) ||
-          (github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'release: SICOVEN 1.0.36'))
+          (github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'release: SICOVEN'))
         env:
           GH_TOKEN: ${{ secrets.SICOVEN_RELEASE_TOKEN }}
           REF_NAME: ${{ github.ref_name }}
