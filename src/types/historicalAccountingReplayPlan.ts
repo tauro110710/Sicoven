@@ -163,6 +163,29 @@ const recordedAt = (record: HistoricalReplayRecord): string | null => {
  * selected company. Legacy events without a source declaration and without an
  * explicit companyId cannot safely block another company's reconstruction.
  */
+/**
+ * Detects explicit cross-company links between a withholding event and its
+ * source declaration. The mismatch is relevant to either company involved;
+ * it must never be silently reassigned to the declaration's company.
+ */
+export function findCrossCompanyVatWithholdingEvents(
+  events: HistoricalReplayRecord[],
+  declarations: HistoricalReplayRecord[],
+  companyId: string
+): HistoricalReplayRecord[] {
+  const declarationById = new Map(
+    declarations.map(declaration => [String(declaration.id || ''), declaration] as const)
+  );
+  return events.filter(event => {
+    const declaration = declarationById.get(String(event.declarationId || ''));
+    if (!declaration) return false;
+    const eventCompanyId = String(event.companyId || '').trim();
+    const declarationCompanyId = String(declaration.companyId || '').trim();
+    if (!eventCompanyId || !declarationCompanyId || eventCompanyId === declarationCompanyId) return false;
+    return eventCompanyId === companyId || declarationCompanyId === companyId;
+  });
+}
+
 export function findOrphanedVatWithholdingEvents(
   events: HistoricalReplayRecord[],
   declarations: HistoricalReplayRecord[],
