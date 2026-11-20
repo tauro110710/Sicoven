@@ -229,7 +229,7 @@ export function calculateWeightedAverageCost(
   ], 2);
   const totalCostUsd = decimalToNumber(roundDecimal(divideDecimal(totalCostBs, exchangeRate, 6), 6));
   const unitCostBs = quantity > 0 ? exactQuotient(totalCostBs, quantity) : 0;
-  const unitCostUsd = quantity > 0 ? exactQuotient(totalCostUsd, quantity) : 0;
+  const unitCostUsd = quantity > 0 ? exactQuotient(unitCostBs, exchangeRate) : 0;
   return { quantity, totalCostBs, totalCostUsd, unitCostBs, unitCostUsd };
 }
 
@@ -323,7 +323,7 @@ export function applyFifoAdjustment(layersInput: CostLayer[], delta: number, uni
   const quantity = Math.abs(delta);
   let totalCostBs = 0; let totalCostUsd = 0;
   if (delta > 0) {
-    totalCostBs = cents(quantity * unitCostBs); totalCostUsd = usdPrecision(quantity * unitCostUsd);
+    totalCostBs = exactRoundedProductSum([[quantity, unitCostBs]], 2); totalCostUsd = exactRoundedProductSum([[quantity, unitCostUsd]], 6);
     layers.push({ quantity, unitCostBs, unitCostUsd, date, documentRef });
   } else {
     if (quantity - available > 1e-8) throw new Error('Existencia insuficiente para PEPS: disponibles ' + available + ', solicitadas ' + quantity + '.');
@@ -333,8 +333,8 @@ export function applyFifoAdjustment(layersInput: CostLayer[], delta: number, uni
     if (remaining > 1e-8) throw new Error('No se pudo conciliar la reducción del ajuste con las capas PEPS.');
   }
   const remainingLayers = layers.filter(layer => layer.quantity > 1e-8);
-  const balanceTotalBs = cents(remainingLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0));
-  const balanceTotalUsd = usdPrecision(remainingLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0));
+  const balanceTotalBs = exactRoundedProductSum(remainingLayers.map(layer => [layer.quantity, layer.unitCostBs] as [number, number]), 2);
+  const balanceTotalUsd = exactRoundedProductSum(remainingLayers.map(layer => [layer.quantity, layer.unitCostUsd] as [number, number]), 6);
   return { quantity, totalCostBs, totalCostUsd, unitCostBs: totalCostBs / quantity, unitCostUsd: totalCostUsd / quantity, remainingLayers, balanceTotalBs, balanceTotalUsd };
 }
 /** Valida los datos comunes antes de aceptar un movimiento del libro de inventario. */
