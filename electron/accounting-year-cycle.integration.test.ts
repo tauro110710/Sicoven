@@ -146,6 +146,16 @@ test('recorre dos ciclos anuales reales con builders, persistencia SQLite, IPC y
       companies: [{ ...baseCompany, fiscalYear: 2026, closedThroughDate: '2025-12-31', fiscalExercises: firstCalendar }],
       journalEntries: [...baseEntries, firstCycle.closing, firstCycle.opening]
     };
+    const incompleteCalendarState = {
+      ...firstClosedState,
+      companies: [{ ...baseCompany, fiscalYear: 2026, closedThroughDate: '2025-12-31', fiscalExercises: initialCalendar }]
+    };
+    assert.throws(() => harness.save({}, 'valid-session', incompleteCalendarState),
+      /cierre anual, la apertura y el calendario fiscal deben confirmarse juntos/);
+    const stateAfterRejectedClose = harness.db.prepare(
+      "SELECT state_json FROM app_state WHERE state_key='accounting'"
+    ).get() as { state_json: string };
+    assert.equal(JSON.parse(stateAfterRejectedClose.state_json).journalEntries.length, baseEntries.length);
     harness.save({}, 'valid-session', firstClosedState);
 
     const firstReopen = harness.reopen({}, 'valid-session', {
