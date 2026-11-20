@@ -157,7 +157,7 @@ Trabajar en este orden, cerrando cada fase con PR integrada y pruebas satisfacto
 
 ### Fase 2 — recuperación idempotente de handlers especializados
 
-<badge>SUBGRUPOS 1 Y 2 INTEGRADOS; COBERTURA ESPECIALIZADA AÚN INCOMPLETA</badge>
+<badge>SUBGRUPO 1 INTEGRADO; SUBGRUPO 2 EN VALIDACIÓN</badge>
 
 **PR #178 — integrada en main**
 - URL: https://github.com/miguel110710/Sicoven/pull/178
@@ -176,13 +176,13 @@ Trabajar en este orden, cerrando cada fase con PR integrada y pruebas satisfacto
 - La PR se fusionó con el HEAD esperado `047cab144a1d09a81aa46d2364e439567105359a`; sin hilos de revisión pendientes.
 - No publicó versión; continúa v1.0.37.
 
-**Subgrupo 2 en desarrollo — `feat/durable-operation-intents`**
+**Subgrupo 2 en validación — `feat/durable-operation-intents` (PR #180)**
 - Añade un diario append-only `operation_intents` en cada SQLite de empresa, con ID, canal IPC permitido, hash y payload de solicitud, modo de invocación, actor y fecha.
 - El preload registra la intención en SQLite antes de llamar al handler especializado. La respuesta perdida o el cierre del proceso ya no destruyen el ID ni el payload.
 - `runIdempotentOperation` escribe el recibo y la marca de finalización de la intención en la misma transacción SQLite que el efecto de negocio.
 - La recuperación filtra por empresa y actor autenticado, valida canal/hash y vuelve a invocar la misma solicitud con el mismo ID.
 - Al reiniciar, SICOVEN consulta las pendientes y solicita confirmación explícita mediante el diálogo interno no bloqueante antes de reintentarlas; no ejecuta operaciones silenciosamente.
-- Incluye pruebas de persistencia tras cerrar/reabrir SQLite, commit conjunto, rollback, claves reutilizadas, aislamiento por actor y autorización IPC.
+- Incluye pruebas de recuperación de una intención pendiente después de cerrar/reabrir SQLite, reproducción del recibo original tras perder respuesta y reiniciar, commit conjunto, rollback, claves reutilizadas, aislamiento por actor y autorización IPC.
 - Añade ambas tablas al manifiesto de migración relacional opcional por empresa, preservando intenciones y finalizaciones al convertir bases heredadas a tenants.
 - Exclusiones explícitas: creación de empresa usa su protocolo especial y aún necesita un diario durable en la base de control; adjuntar soportes sigue pendiente por combinar filesystem y SQLite; actualización de ficha empresarial requiere saga entre base de control y base de tenant.
 - Las operaciones pendientes se conservan si no pueden confirmarse; no borrar ni descartar automáticamente solicitudes cuyo resultado no pueda demostrarse.
