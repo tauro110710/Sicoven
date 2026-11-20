@@ -182,7 +182,8 @@ Trabajar en este orden, cerrando cada fase con PR integrada y pruebas satisfacto
 **Pendiente dentro de esta fase**
 - Completar recuperación durable post-reinicio: crear/persistir intención e ID en el caller antes de ejecutar; recuperar estado/resultado al reabrir y permitir reintento seguro. Cubrir formularios de nómina, empresa, reaperturas, eventos fiscales, inflación y operaciones de documentos.
 - Documentos/soportes: diseñar protocolo de staging y reconciliación entre archivo físico y registro SQLite. No borrar archivos que puedan estar vinculados a un commit confirmado; identificar y recuperar huérfanos de forma explícita.
-- Auditar actualización de ficha de empresa y cualquier otro handler con escrituras directas.
+- Actualización de ficha de empresa: el handler `sicoven:company-update-metadata` modifica el registro/metadata mediante `runtime.updateCompanyMetadata` y después agrega auditoría en la SQLite de la empresa. Si falla la auditoría intenta compensar restaurando metadata anterior, pero registro central y auditoría de tenant no comparten transacción; una caída entre ambas escrituras puede dejar cambio sin evidencia auditada. Diseñar journal/saga recuperable con estados, clave estable, actor/hash y reconciliación al iniciar; no asumir atomicidad entre bases.
+- Auditar cualquier otro handler con escrituras directas.
 - Añadir pruebas de interrupción antes/después del commit, reintento, reinicio, concurrencia, aislamiento por empresa/actor y recuperación del resultado original para cada familia.
 - Actualizar este registro al cerrar cada subgrupo y al fusionar su PR.
 
