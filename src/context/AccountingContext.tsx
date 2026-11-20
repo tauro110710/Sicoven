@@ -84,7 +84,7 @@ import { calculateSaleCorrectionNote, type SaleCorrectionNoteRequest } from '../
 import { resolveNonInventoryPurchaseDebitAccount, resolveTreasuryAccountCurrency } from '../types/purchaseAccounting';
 import type { FixedAsset, FixedAssetDepreciationEvent, FixedAssetRegistrationDraft } from '../types/fixedAssets';
 import { calculateFixedAssetDepreciation, getNextFixedAssetDepreciationPeriod, getFixedAssetDepreciationScheduleThrough } from '../types/fixedAssets';
-import { buildHistoricalAccountingReplayPlan, type HistoricalAccountingReplayPlan, type HistoricalReplayRecord } from '../types/historicalAccountingReplayPlan';
+import { buildHistoricalAccountingReplayPlan, findOrphanedVatWithholdingEvents, type HistoricalAccountingReplayPlan, type HistoricalReplayRecord } from '../types/historicalAccountingReplayPlan';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -5290,7 +5290,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     assertSQLitePersistenceReady('Preparar plan de reconstrucción histórica');
     const companyId = currentCompany.id;
     const withholdingDeclarationById = new Map<string, VatWithholdingDeclaration>(vatWithholdingDeclarations.map(declaration => [declaration.id, declaration] as const));
-    const orphanedWithholdingEvents = vatWithholdingDeclarationEvents.filter(event => !withholdingDeclarationById.has(event.declarationId));
+    const orphanedWithholdingEvents = findOrphanedVatWithholdingEvents(
+      vatWithholdingDeclarationEvents as unknown as HistoricalReplayRecord[],
+      vatWithholdingDeclarations as unknown as HistoricalReplayRecord[],
+      companyId
+    );
     const verifiedLegacyFiscalDateByVoucherId = new Map<string, string>();
     const conflictingLegacyVoucherDates = new Set<string>();
     for (const declaration of vatWithholdingDeclarations) {
@@ -5337,7 +5341,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       vatWithholdingDeclarations: replayRecords(vatWithholdingDeclarations),
       vatWithholdingDeclarationEvents: replayRecords(vatWithholdingDeclarationEvents.map(event => ({
         ...event,
-        companyId: withholdingDeclarationById.get(event.declarationId)?.companyId || ''
+        companyId: withholdingDeclarationById.get(event.declarationId)?.companyId || event.companyId || ''
       }))),
       vatOwnDeclarations: replayRecords(vatOwnDeclarations.map(declaration => ({
         ...declaration,
