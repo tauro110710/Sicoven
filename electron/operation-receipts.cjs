@@ -84,6 +84,7 @@ function runIdempotentOperation(db, identity, execute) {
     if (prior.found) return prior.result;
     const result = execute();
     if (result && typeof result.then === 'function') throw new TypeError('Las operaciones idempotentes deben confirmar de forma síncrona dentro de una transacción SQLite.');
+    if (result && typeof result === 'object' && result.ok === false) return result;
     recordOperationReceipt(db, identity, result);
     return result;
   });
