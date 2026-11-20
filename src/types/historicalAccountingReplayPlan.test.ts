@@ -599,3 +599,46 @@ test('bloquea operaciones tributarias cuando existe historial con brechas de vig
   assert.ok(plan.blockers.some(item => item.includes('no tiene exactamente un tramo de condición tributaria vigente')));
   assert.equal(plan.canProceedToTransactionalReplay, false);
 });
+
+
+test('acepta operaciones cubiertas por un único tramo tributario vigente', () => {
+  const input = base();
+  input.company = {
+    id: 'company-1',
+    taxStatusHistory: [{
+      id: 'tax-all-years', effectiveFrom: '2010-01-01'
+    }]
+  };
+  input.sales = [{
+    id: 'sale-covered', companyId: 'company-1', invoiceDate: '2014-07-15'
+  }];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+
+  assert.equal(plan.blockers.some(item => item.includes('condición tributaria vigente')), false);
+  assert.equal(plan.canProceedToTransactionalReplay, true);
+});
+
+test('detecta vínculos de eventos fiscales revertidos y no mezcla empresas', () => {
+  const input = base();
+  input.islrFiscalEvents = [
+    { id: 'islr-original', companyId: 'company-1', fiscalDate: '2023-01-10' },
+    { id: 'islr-reversal', companyId: 'company-1', fiscalDate: '2023-02-10', reversalOfEventId: 'islr-original' }
+  ];
+  input.vatOwnDeclarations = [{
+    id: 'vat-own', companyId: 'company-1', periodEndDate: '2023-01-31',
+    sourceIds: ['sale-other-company']
+  }];
+  input.sales = [{
+    id: 'sale-other-company', companyId: 'company-2', invoiceDate: '2023-01-10'
+  }];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+
+  assert.ok(plan.sourceDependencies.some(item =>
+    item.sourceId === 'islr-reversal' && item.targetId === 'islr-original' &&
+    item.relationType === 'REVERSAL_OF_ISLR_EVENT'
+  ) === false);
+  assert.ok(plan.blockers.some(item => item.includes('no puede resolver de forma única')));
+  assert.equal(plan.canProceedToTransactionalReplay, false);
+});
