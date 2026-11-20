@@ -16,6 +16,20 @@ async function invokeRecoverableOperation(channel, token, input) {
     }
   }
 }
+
+async function invokeRecoverableOperationArgs(channel, token, args) {
+  const operationId = globalThis.crypto.randomUUID();
+  const requestArgs = [...args, operationId];
+  try {
+    return await ipcRenderer.invoke(channel, token, ...requestArgs);
+  } catch (firstError) {
+    try {
+      return await ipcRenderer.invoke(channel, token, ...requestArgs);
+    } catch {
+      throw firstError;
+    }
+  }
+}
 contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   getLicenseStatus: () => ipcRenderer.invoke('sicoven:license-status'),
   getImprovementConsent: () => ipcRenderer.invoke('sicoven:improvement-consent:get'),
@@ -78,22 +92,22 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   listPayrollSalaryHistory: (token, employeeId) => ipcRenderer.invoke('sicoven:payroll-salary-history-list', token, employeeId),
   listConfirmedPayrollSalaryEntries: (token, employeeId, fromDate, toDate) => ipcRenderer.invoke('sicoven:payroll-salary-entries-list', token, employeeId, fromDate, toDate),
   getPayrollSalaryForDate: (token, employeeId, effectiveDate) => ipcRenderer.invoke('sicoven:payroll-salary-for-date', token, employeeId, effectiveDate),
-  savePayrollEmployee: (token, input) => ipcRenderer.invoke('sicoven:payroll-employee-save', token, input),
+  savePayrollEmployee: (token, input) => invokeRecoverableOperation('sicoven:payroll-employee-save', token, input),
   listPayrollRuns: (token) => ipcRenderer.invoke('sicoven:payroll-runs-list', token),
   getPayrollRun: (token, runId) => ipcRenderer.invoke('sicoven:payroll-run-get', token, runId),
   listPayrollSeveranceHistory: (token, employeeId) => ipcRenderer.invoke('sicoven:payroll-severance-history-list', token, employeeId),
-  savePayrollSeveranceDeposit: (token, input) => ipcRenderer.invoke('sicoven:payroll-severance-deposit-save', token, input),
-  savePayrollSeveranceInterestMonth: (token, input) => ipcRenderer.invoke('sicoven:payroll-severance-interest-save', token, input),
+  savePayrollSeveranceDeposit: (token, input) => invokeRecoverableOperation('sicoven:payroll-severance-deposit-save', token, input),
+  savePayrollSeveranceInterestMonth: (token, input) => invokeRecoverableOperation('sicoven:payroll-severance-interest-save', token, input),
   calculatePayrollSeverance: (token, input) => ipcRenderer.invoke('sicoven:payroll-severance-calculate', token, input),
   calculatePayrollSeveranceInterest: (token, input) => ipcRenderer.invoke('sicoven:payroll-severance-interest-calculate', token, input),
   listPayrollLiquidations: (token, employeeId) => ipcRenderer.invoke('sicoven:payroll-liquidations-list', token, employeeId),
-  createPayrollLiquidation: (token, input) => ipcRenderer.invoke('sicoven:payroll-liquidation-create', token, input),
+  createPayrollLiquidation: (token, input) => invokeRecoverableOperation('sicoven:payroll-liquidation-create', token, input),
   calculatePayrollAnnualRights: (token, input) => ipcRenderer.invoke('sicoven:payroll-annual-rights-calculate', token, input),
   calculatePayrollProfitSharing: (token, input) => ipcRenderer.invoke('sicoven:payroll-profit-sharing-calculate', token, input),
-  createPayrollRun: (token, input) => ipcRenderer.invoke('sicoven:payroll-run-create', token, input),
-  confirmPayrollRun: (token, runId, journalEntryId) => ipcRenderer.invoke('sicoven:payroll-run-confirm', token, runId, journalEntryId),
+  createPayrollRun: (token, input) => invokeRecoverableOperation('sicoven:payroll-run-create', token, input),
+  confirmPayrollRun: (token, runId, journalEntryId) => invokeRecoverableOperationArgs('sicoven:payroll-run-confirm', token, [runId, journalEntryId]),
   listPayrollLegalRules: (token) => ipcRenderer.invoke('sicoven:payroll-rules-list', token),
-  savePayrollLegalRule: (token, input) => ipcRenderer.invoke('sicoven:payroll-rule-save', token, input),
+  savePayrollLegalRule: (token, input) => invokeRecoverableOperation('sicoven:payroll-rule-save', token, input),
   createVatFiscalIncident: (token, input) => ipcRenderer.invoke('sicoven:vat-fiscal-incident-create', token, input),
   listVatFiscalIncidents: (token, filters) => ipcRenderer.invoke('sicoven:vat-fiscal-incident-list', token, filters),
   recordVatFiscalIncidentEvent: (token, input) => ipcRenderer.invoke('sicoven:vat-fiscal-incident-event', token, input),
