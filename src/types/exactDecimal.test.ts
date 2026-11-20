@@ -44,6 +44,10 @@ test('admite notación científica de entradas numéricas y normaliza ceros', ()
   assert.equal(text(parseDecimal('-0.000')), '0');
 });
 
+test('permite escalas intermedias mayores al calcular divisiones de precisión máxima', () => {
+  assert.equal(text(divideDecimal('0.1', '0.1', 1000)), '1');
+});
+
 test('rechaza datos inválidos, división por cero y escalas fuera de rango', () => {
   assert.throws(() => parseDecimal('1,25'), /formato decimal/);
   assert.throws(() => parseDecimal(Number.NaN), /finito/);
