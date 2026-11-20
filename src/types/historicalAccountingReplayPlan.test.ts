@@ -165,3 +165,23 @@ test('rechaza fechas iniciales y finales inválidas', () => {
   assert.equal(plan.canProceedToTransactionalReplay, false);
   assert.equal(plan.blockers.length, 2);
 });
+
+test('usa fiscalDate para ubicar eventos ISLR en la cronología histórica', () => {
+  const input = base();
+  input.islrFiscalEvents = [{
+    id: 'islr-event-1',
+    companyId: 'company-1',
+    fiscalDate: '2023-04-12',
+    kind: 'ACCOUNT_CREDIT',
+    voucherId: 'islr-voucher-1',
+    journalEntryId: 'journal-islr-1',
+    createdAt: '2023-04-12T10:00:00.000Z'
+  }];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+
+  assert.equal(plan.sourceEvents.length, 1);
+  assert.equal(plan.sourceEvents[0].kind, 'ISLR_FISCAL_EVENT');
+  assert.equal(plan.sourceEvents[0].effectiveDate, '2023-04-12');
+  assert.equal(plan.sourceEvents[0].linkedJournalEntryId, 'journal-islr-1');
+});
