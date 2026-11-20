@@ -240,3 +240,5 @@ Trabajar en este orden, cerrando cada fase con PR integrada y pruebas satisfacto
 - Pendiente: ejecutar CI Linux y Windows Release con pasos y logs disponibles, revisar fallos, pruebas de concurrencia y validar restauración global. No fusionar ni publicar versión hasta superar esas verificaciones.
 
 - PR #182 abierta contra `main`: https://github.com/miguel110710/Sicoven/pull/182. Incluye los cambios de PR #181 como dependencia mientras #181 permanece en borrador. HEAD funcional anterior a esta nota: `d4130917c658f47c8dbaf786d26838ec00844a70`. Se dejó lista para revisión técnica para intentar disparar validaciones por sincronización; no se autoriza fusión hasta obtener CI Linux/Windows completo y resolver primero la dependencia #181. No se publicó versión.
+
+- Validación integrada de PR #182 en HEAD `949efe84837b0a7fc0e8a34849659c0d95a0cb34`: Linux run `44832582342`, job `136620941122`; Windows run `44832582315`, job `136620941192`. Ambos jobs finalizaron sin ejecutar pasos (lista de pasos vacía) y sin logs disponibles. No se puede declarar éxito ni atribuir fallo al código. PR #182 volvió a borrador; no fusionar ni publicar.
