@@ -3,6 +3,7 @@ const { validateAccountingSnapshot } = require('./accounting-integrity.cjs');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
 const { partitionAccountingSnapshot } = require('./tenant-snapshot.cjs');
 const { initializeAnnualReopeningSchema, reopenAccountingYear } = require('./accounting-year-reopening.cjs');
+const { initializeOperationReceiptSchema, hashOperationRequest, findOperationReceipt, recordOperationReceipt } = require('./operation-receipts.cjs');
 
 function syncPartyMasterRows(db, state) {
   if (!Array.isArray(state.customers) && !Array.isArray(state.suppliers)) return;
@@ -193,10 +194,18 @@ function validateFiscalExerciseCalendarSnapshot(state, nextEntries = [], priorBy
   }
 }
 
-function persistAccountingSnapshot(db, state, actor = null) {
+function persistAccountingSnapshot(db, state, actor = null, operationId = null) {
   const json = JSON.stringify(state);
   if (json.length > 50 * 1024 * 1024) throw new Error('El respaldo supera el límite permitido');
+  const operation = operationId ? {
+    operationId, companyId: String(state.currentCompanyId || state.companies?.[0]?.id || 'legacy'),
+    operationType: 'accounting.snapshot', requestHash: hashOperationRequest(json), actor
+  } : null;
   const save = db.transaction(() => {
+    if (operation) {
+      const prior = findOperationReceipt(db, operation);
+      if (prior.found) return prior.result;
+    }
     const priorRow = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     let priorState = {};
     if (priorRow) {
@@ -708,13 +717,16 @@ function persistAccountingSnapshot(db, state, actor = null) {
       ON CONFLICT(state_key) DO UPDATE SET state_json=excluded.state_json, updated_at=excluded.updated_at`)
       .run('accounting', json);
     auditInsert.run('state_saved', JSON.stringify({ bytes: Buffer.byteLength(json) }));
+    const result = { ok: true, savedAt: new Date().toISOString() };
+    if (operation) recordOperationReceipt(db, operation, result);
+    return result;
   });
-  save();
-  return { ok: true, savedAt: new Date().toISOString() };
+  return save();
 }
 
 function initializeAccountingPersistenceSchema(db) {
   if (!db || typeof db.exec !== 'function') throw new TypeError('Se requiere una conexión SQLite para inicializar el esquema contable.');
+  initializeOperationReceiptSchema(db);
 db.exec(`
   CREATE TABLE IF NOT EXISTS accounting_exercise_links (
     id TEXT PRIMARY KEY,
@@ -776,6 +788,7 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
       (withDatabase !== null && typeof withDatabase !== 'function')) {
     throw new Error('No se pudo registrar el puente de persistencia contable de SICOVEN.');
   }
+  initializeOperationReceiptSchema(db);
   if (!withDatabase) initializeAccountingPersistenceSchema(db);
   const runWithDatabase = (token, operation) => withDatabase
     ? withDatabase(token, (activeDb, companyId) => operation(activeDb, companyId))
@@ -878,7 +891,30 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
     return reopen();
     });
   });
-  ipcMain.handle('sicoven:save-state', (_event, token, state) => {
+  ipcMain.handle('sicoven:save-state-result', (_event, token, state, operationId) => {
+    const licensing = licenseView();
+    if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
+    const actor = getActiveSession(token);
+    if (!actor) throw new Error('Sesión no válida. Inicie sesión para consultar la confirmación de persistencia.');
+    if (!state || typeof state !== 'object' || Array.isArray(state) || !String(operationId || '').trim()) {
+      throw new Error('Solicitud de recuperación de persistencia inválida.');
+    }
+    return runWithDatabase(token, (activeDb, selectedCompanyId) => {
+      if (selectedCompanyId) {
+        const partitions = partitionAccountingSnapshot(state);
+        if (partitions.length !== 1 || String(partitions[0]?.companies?.[0]?.id || '') !== selectedCompanyId ||
+            String(state.currentCompanyId || '') !== selectedCompanyId) {
+          throw new Error('La solicitud de recuperación no pertenece a la empresa activa.');
+        }
+      }
+      const identity = {
+        operationId, companyId: String(selectedCompanyId || state.currentCompanyId || state.companies?.[0]?.id || 'legacy'),
+        operationType: 'accounting.snapshot', requestHash: hashOperationRequest(JSON.stringify(state)), actor
+      };
+      return findOperationReceipt(activeDb, identity);
+    });
+  });
+  ipcMain.handle('sicoven:save-state', (_event, token, state, operationId) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const actor = getActiveSession(token);
@@ -893,7 +929,7 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
           throw new Error('El snapshot no pertenece exclusivamente a la empresa activa. Se bloqueó el guardado para evitar mezclar datos.');
         }
       }
-      return persistAccountingSnapshot(activeDb, state, actor);
+      return persistAccountingSnapshot(activeDb, state, actor, operationId);
     });
   });
 }
