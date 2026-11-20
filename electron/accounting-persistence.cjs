@@ -114,9 +114,7 @@ function validateFiscalExerciseCalendarSnapshot(state, nextEntries = []) {
         if (cycle.reopenedAt) {
           const closingReversal = journal.find(entry => String(entry.id) === String(closing.reversedByEntryId));
           const openingReversal = journal.find(entry => String(entry.id) === String(opening.reversedByEntryId));
-          if (!cycle.reopeningId || !closing.reversalOfEntryId && !closingReversal ||
-              !opening.reversalOfEntryId && !openingReversal ||
-              !closing.isAdjusted || !opening.isAdjusted ||
+          if (!cycle.reopeningId || !closing.isAdjusted || !opening.isAdjusted ||
               !closingReversal || String(closingReversal.reversalOfEntryId) !== String(closing.id) ||
               !openingReversal || String(openingReversal.reversalOfEntryId) !== String(opening.id)) {
             throw new Error('El ciclo reabierto no conserva los contra-asientos y la trazabilidad originales.');
