@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildHistoricalAccountingReplayPlan,
+  findOrphanedVatWithholdingEvents,
   type HistoricalAccountingReplaySnapshot
 } from './historicalAccountingReplayPlan';
 
@@ -259,8 +260,7 @@ test('usa recordedAt de eventos fiscales para ordenar operaciones del mismo día
 });
 
 
-test('los eventos huérfanos de otra empresa no bloquean la reconstrucción seleccionada', async () => {
-  const { findOrphanedVatWithholdingEvents } = await import('./historicalAccountingReplayPlan');
+test('los eventos huérfanos de otra empresa no bloquean la reconstrucción seleccionada', () => {
   const events = [
     { id: 'orphan-other', companyId: 'company-2', declarationId: 'missing-2' },
     { id: 'orphan-own', companyId: 'company-1', declarationId: 'missing-1' },
@@ -273,8 +273,7 @@ test('los eventos huérfanos de otra empresa no bloquean la reconstrucción sele
   assert.deepEqual(selectedCompanyOrphans.map(event => event.id), ['orphan-own']);
 });
 
-test('no marca como huérfano un evento vinculado a declaración de otra empresa', async () => {
-  const { findOrphanedVatWithholdingEvents } = await import('./historicalAccountingReplayPlan');
+test('no marca como huérfano un evento vinculado a declaración de otra empresa', () => {
   const events = [{ id: 'event-other', companyId: 'company-1', declarationId: 'declaration-2' }];
   const declarations = [{ id: 'declaration-2', companyId: 'company-2' }];
   assert.deepEqual(findOrphanedVatWithholdingEvents(events, declarations, 'company-1'), []);
