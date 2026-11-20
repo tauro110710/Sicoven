@@ -7,7 +7,7 @@ const { hasFullSystemAccess } = require('./auth-roles.cjs');
 
 function createTenantRuntimeController({
   controlDb, userDataDir, Database, assertSqliteIntegrity,
-  getActiveSession, flushPendingWrites, canAccessCompany = hasFullSystemAccess, schemaVersion = 2
+  getActiveSession, flushPendingWrites, canAccessCompany = hasFullSystemAccess, schemaVersion = 3
 }) {
   if (!controlDb || !controlDb.open) throw new TypeError('La base SQLite de control debe estar abierta.');
   if (typeof getActiveSession !== 'function' || typeof flushPendingWrites !== 'function' ||
