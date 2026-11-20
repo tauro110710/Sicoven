@@ -74,6 +74,7 @@ export const InventarioContableTools: React.FC = () => {
   const [productionRef, setProductionRef] = useState('');
   const [reconstructionStartDate, setReconstructionStartDate] = useState('2026-01-01');
   const [reconstructionBusy, setReconstructionBusy] = useState(false);
+  const [reconstructionConfirmOpen, setReconstructionConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!companyProducts.some(product => product.id === productId)) setProductId(companyProducts[0]?.id || '');
@@ -106,12 +107,11 @@ export const InventarioContableTools: React.FC = () => {
       setError('No se puede preparar la reconstrucción: ' + nonZeroStock + ' artículos todavía tienen existencia distinta de cero.');
       return;
     }
-    const confirmed = window.confirm(
-      '¿Preparar ' + currentCompany.name + ' para reconstrucción histórica desde ' + reconstructionStartDate + '?\n\n' +
-      'Se pondrán en cero los costos promedio y últimos costos de todos los artículos y se limpiará su fecha/tasa BCV de apertura actual. ' +
-      'Se conservarán códigos, nombres, precios comerciales, cuentas y demás datos maestros. Esta acción solo se permite si la empresa aún no tiene movimientos ni compras/ventas registradas.'
-    );
-    if (!confirmed) return;
+    setReconstructionConfirmOpen(true);
+  };
+
+  const confirmHistoricalReconstruction = async () => {
+    setReconstructionConfirmOpen(false);
     setReconstructionBusy(true);
     try {
       const count = await prepareInventoryProductsForHistoricalReconstruction(reconstructionStartDate);
@@ -531,6 +531,17 @@ export const InventarioContableTools: React.FC = () => {
       <button type="button" onClick={() => void prepareHistoricalReconstruction()} disabled={reconstructionBusy || !isStorageReady || !companyProducts.length || companyProducts.some(product => Number(product.currentStock) !== 0)} className="rounded-lg bg-indigo-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-800 disabled:cursor-not-allowed disabled:opacity-50">
         {reconstructionBusy ? 'Preparando artículos en SQLite…' : 'Poner costos en cero y preparar reconstrucción'}
       </button>
+      {reconstructionConfirmOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="reconstruction-confirm-title">
+        <div className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl space-y-4">
+          <h3 id="reconstruction-confirm-title" className="text-lg font-bold text-slate-900">Confirmar preparación histórica</h3>
+          <p className="text-sm text-slate-700">¿Preparar {currentCompany.name} para reconstrucción desde {reconstructionStartDate}?</p>
+          <p className="text-sm text-slate-700">Se pondrán en cero los costos promedio y últimos costos en Bs. y USD, y se limpiará la fecha/tasa BCV de apertura de los artículos. Se conservarán códigos, nombres, precios comerciales, cuentas y demás datos maestros. No se borrarán movimientos, compras, ventas ni el historial general de tasas BCV.</p>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setReconstructionConfirmOpen(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm">Cancelar</button>
+            <button type="button" onClick={() => void confirmHistoricalReconstruction()} className="rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white">Confirmar y preparar</button>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
