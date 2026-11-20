@@ -36,7 +36,7 @@ test('schema v2 to v3 creates durable operation intent tables for existing tenan
       );
       INSERT INTO operation_receipts
         (company_id,operation_type,operation_id,request_hash,actor_user_id,result_json)
-      VALUES('company-a','accounting.test','old-receipt','${'a'.repeat(64)}',7,'{"ok":true}');
+      VALUES('company-a','accounting.test','old-receipt','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',7,'{"ok":true}');
     `);
     migrateTenantDatabase(db, { fromVersion: 2, toVersion: 3 });
     const tables = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(row => row.name));
