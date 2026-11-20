@@ -1,12 +1,13 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const Database=require('better-sqlite3');
+const { initializeOperationReceiptSchema } = require('./operation-receipts.cjs');
 const {initializeInflationClassificationSchema,saveInflationClassification,reviewInflationClassification,listInflationClassifications,registerInflationClassificationIpc}=require('./inflation-classifications.cjs');
 function makeDb(){
  const db=new Database(':memory:');db.pragma('foreign_keys=ON');
  db.exec('CREATE TABLE app_state(state_key TEXT PRIMARY KEY,state_json TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT (datetime(\'now\')));CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime(\'now\')));');
  db.prepare('INSERT INTO app_state(state_key,state_json) VALUES(?,?)').run('accounting',JSON.stringify({companies:[{id:'company-1'},{id:'company-2'}],accounts:[{code:'1.1.1',type:'ACTIVO',isMovement:true},{code:'1.1.2',type:'ACTIVO',isMovement:true},{code:'4.1.1',type:'INGRESOS',isMovement:true},{code:'1.1',type:'ACTIVO',isMovement:false}]}));
- initializeInflationClassificationSchema(db);return db;
+ initializeInflationClassificationSchema(db);initializeOperationReceiptSchema(db);return db;
 }
 const admin={id:1,username:'admin',role:'admin'};
 const draft=(overrides={})=>({id:'d1',version:1,companyId:'company-1',fiscalYear:2026,accountCode:'1.1.1',scope:'ACCOUNT_DEFAULT',classification:'MONETARY',measurementBasis:'CASH_OR_FIXED_CURRENCY',rationale:'La partida representa efectivo disponible.',normativeReference:'NIC 29, párrafo 12.',status:'PENDING_REVIEW',...overrides});
