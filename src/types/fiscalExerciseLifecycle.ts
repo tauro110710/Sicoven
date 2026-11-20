@@ -1,4 +1,24 @@
-import type { PersistedFiscalExercise } from './accounting';
+import type { Company, PersistedFiscalExercise } from './accounting';
+
+/** The first ordinary SICOVEN period follows accountingStartDate, never the historical operational start. */
+export function getFiscalExerciseStartDate(company: Pick<Company, 'accountingStartDate'>, fiscalYear: number): string {
+  if (!Number.isInteger(fiscalYear) || fiscalYear < 1900 || fiscalYear > 9999) {
+    throw new Error('El ejercicio fiscal indicado no es válido.');
+  }
+  const configuredStart = company.accountingStartDate;
+  if (configuredStart !== undefined && configuredStart !== '') {
+    if (!isValidIsoDate(configuredStart)) {
+      throw new Error('La fecha de inicio contable de SICOVEN no es válida.');
+    }
+    const configuredYear = Number(configuredStart.slice(0, 4));
+    if (configuredYear > fiscalYear) {
+      throw new Error('El ejercicio fiscal activo es anterior al inicio contable configurado.');
+    }
+    if (configuredYear === fiscalYear) return configuredStart;
+  }
+  return String(fiscalYear).padStart(4, '0') + '-01-01';
+}
+
 
 export interface FiscalExerciseCycleInput {
   exercises: PersistedFiscalExercise[];
