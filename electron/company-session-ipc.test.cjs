@@ -131,6 +131,93 @@ test('updates registry metadata and records one recoverable tenant audit receipt
 });
 
 
+test('recovers metadata audit after a crash between control registry commit and tenant audit', async () => {
+  let companyRecord = { id: 'company-a', name: 'Empresa A', rif: 'J-1', status: 'ACTIVE' };
+  let failOpen = true;
+  const tenantDb = new Database(':memory:');
+  initializeOperationReceiptSchema(tenantDb);
+  tenantDb.exec('CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL);');
+  const { handlers, controlDb } = fixture({
+    runtime: {
+      listCompanies: () => [companyRecord],
+      createCompany: async company => ({ ok: true, company }),
+      updateCompanyMetadata: company => { companyRecord = { ...companyRecord, ...company }; return companyRecord; },
+      getCompanyDatabase: () => {
+        if (failOpen) { failOpen = false; throw new Error('simulated tenant open interruption'); }
+        return tenantDb;
+      }
+    }
+  });
+  const input = {
+    operationId: 'company-metadata-recover-before-audit',
+    companyId: 'company-a', name: 'EMPRESA A NUEVA', rif: 'J-12345678-9'
+  };
+  await assert.rejects(
+    () => handlers.get('sicoven:company-update-metadata')({}, 'valid-token', input),
+    /simulated tenant open interruption/
+  );
+  assert.equal(companyRecord.name, 'EMPRESA A NUEVA');
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_metadata_intents').get().count, 1);
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_metadata_completions').get().count, 0);
+  assert.equal(tenantDb.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 0);
+  await handlers.get('sicoven:company-list-accessible')({}, 'valid-token');
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_metadata_completions').get().count, 1);
+  assert.equal(tenantDb.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 1);
+  await handlers.get('sicoven:company-list-accessible')({}, 'valid-token');
+  assert.equal(tenantDb.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 1);
+  tenantDb.close();
+});
+
+test('recovery after tenant audit commit but lost control completion does not duplicate the audit', async () => {
+  let companyRecord = { id: 'company-a', name: 'Empresa A', rif: 'J-1', status: 'ACTIVE' };
+  const tenantDb = new Database(':memory:');
+  initializeOperationReceiptSchema(tenantDb);
+  tenantDb.exec('CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL);');
+  const { handlers, controlDb } = fixture({
+    runtime: {
+      listCompanies: () => [companyRecord],
+      createCompany: async company => ({ ok: true, company }),
+      updateCompanyMetadata: company => { companyRecord = { ...companyRecord, ...company }; return companyRecord; },
+      getCompanyDatabase: () => tenantDb
+    }
+  });
+  controlDb.exec(`CREATE TRIGGER fail_metadata_completion BEFORE INSERT ON company_metadata_completions
+    BEGIN SELECT RAISE(ABORT, 'simulated control completion interruption'); END;`);
+  const input = {
+    operationId: 'company-metadata-recover-after-audit',
+    companyId: 'company-a', name: 'EMPRESA A NUEVA', rif: 'J-12345678-9'
+  };
+  await assert.rejects(
+    () => handlers.get('sicoven:company-update-metadata')({}, 'valid-token', input),
+    /simulated control completion interruption/
+  );
+  assert.equal(tenantDb.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 1);
+  assert.equal(tenantDb.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 1);
+  controlDb.exec('DROP TRIGGER fail_metadata_completion');
+  await handlers.get('sicoven:company-list-accessible')({}, 'valid-token');
+  assert.equal(tenantDb.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 1);
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_metadata_completions').get().count, 1);
+  tenantDb.close();
+});
+
+test('metadata intent and registry update roll back together when registry validation fails', async () => {
+  const { handlers, controlDb } = fixture({
+    runtime: {
+      listCompanies: () => [{ id: 'company-a', name: 'Empresa A', rif: 'J-1', status: 'ACTIVE' }],
+      createCompany: async company => ({ ok: true, company }),
+      updateCompanyMetadata: () => { throw new Error('duplicate RIF'); }
+    }
+  });
+  await assert.rejects(
+    () => handlers.get('sicoven:company-update-metadata')({}, 'valid-token', {
+      operationId: 'company-metadata-rollback-001',
+      companyId: 'company-a', name: 'EMPRESA A NUEVA', rif: 'J-12345678-9'
+    }),
+    /duplicate RIF/
+  );
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_metadata_intents').get().count, 0);
+});
+
 test('company creation retries recover the same tenant instead of creating a duplicate', async () => {
   let companyRecord = null;
   let creationCount = 0;
