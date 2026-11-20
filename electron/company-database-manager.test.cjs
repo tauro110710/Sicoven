@@ -22,6 +22,7 @@ function fixture(t, overrides = {}) {
       `);
       db.prepare('INSERT INTO company_metadata(company_id) VALUES(?)').run(companyId);
     },
+    schemaVersion: 1,
     ...overrides
   });
   const managers = [manager];
