@@ -93,6 +93,41 @@ test('recreates company metadata saga tables after a global database restore', a
   assert.ok(tables.has('company_metadata_completions'));
 });
 
+test('rebinds metadata intent storage to the restored control database', async () => {
+  const oldControlDb = new Database(':memory:');
+  const restoredControlDb = new Database(':memory:');
+  for (const db of [oldControlDb, restoredControlDb]) {
+    db.exec("CREATE TABLE app_state(state_key TEXT PRIMARY KEY,state_json TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT (datetime('now')));");
+  }
+  let activeControlDb = oldControlDb;
+  const handlers = new Map();
+  const runtime = {
+    get controlDb() { return activeControlDb; },
+    listCompanies: () => [],
+    createCompany: async company => ({ ok: true, company }),
+    getCompanyDatabase: () => { throw new Error('No tenant expected'); }
+  };
+  registerCompanySessionIpc({
+    ipcMain: { handle: (name, handler) => handlers.set(name, handler) },
+    companySessionContext: {
+      listAccessibleCompanies: async () => [],
+      selectCompany: async (_token, companyId) => ({ ok: true, companyId }),
+      getSelectedCompanyId: () => ''
+    },
+    runtime,
+    operationContext: { acquireMaintenanceLock: async () => () => {} },
+    controlDb: oldControlDb,
+    licenseView: () => ({ authorized: true }),
+    getActiveSession: () => ({ id: 1, username: 'admin', role: 'admin' })
+  });
+  assert.ok(oldControlDb.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='company_metadata_intents'").get());
+  activeControlDb = restoredControlDb;
+  await handlers.get('sicoven:company-list-accessible')({}, 'valid-token');
+  assert.ok(restoredControlDb.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='company_metadata_intents'").get());
+  oldControlDb.close();
+  restoredControlDb.close();
+});
+
 test('updates registry metadata and records one recoverable tenant audit receipt', async () => {
   let companyRecord = { id: 'company-a', name: 'Empresa A', rif: 'J-1', status: 'ACTIVE' };
   let acquired = 0, released = 0;
