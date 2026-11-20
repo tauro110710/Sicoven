@@ -643,3 +643,26 @@ test('detecta vínculos de eventos fiscales revertidos y no mezcla empresas', ()
   assert.ok(plan.blockers.some(item => item.includes('de otra empresa')));
   assert.equal(plan.canProceedToTransactionalReplay, false);
 });
+
+
+test('bloquea pagos y reembolsos sin cuenta de tesorería verificable', () => {
+  const input = base();
+  input.vatOwnDeclarationEvents = [{
+    id: 'vat-payment', companyId: 'company-1', occurredAt: '2023-02-10',
+    eventType: 'PAYMENT', declarationId: 'vat-own'
+  }];
+  input.vatOwnDeclarations = [{
+    id: 'vat-own', companyId: 'company-1', periodEndDate: '2023-01-31'
+  }];
+  input.supplierAdvanceSettlements = [{
+    id: 'advance-refund', companyId: 'company-1', date: '2023-02-11',
+    kind: 'REFUND_RECEIVED'
+  }];
+  input.accounts = [];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+
+  assert.ok(plan.blockers.some(item => item.includes('no identifica la cuenta de tesorería')));
+  assert.ok(plan.blockers.some(item => item.includes('no identifica la cuenta real de caja o banco')));
+  assert.equal(plan.canProceedToTransactionalReplay, false);
+});
