@@ -94,4 +94,4 @@ function inspectLegacyDatabase(db) {
   });
 }
 
-module.exports = { CONTROL_TABLES, OPTIONAL_CONTROL_TABLES, SNAPSHOT_TABLES, AUDIT_TABLES, REQUIRED_RELATIONAL_TABLES, inspectLegacyDatabase };
+module.exports = { CONTROL_TABLES, SNAPSHOT_TABLES, AUDIT_TABLES, REQUIRED_RELATIONAL_TABLES, inspectLegacyDatabase };
