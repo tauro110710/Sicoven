@@ -16,7 +16,7 @@ const MAX_SCALE = 1000;
 const POWERS_OF_TEN: bigint[] = [1n];
 
 function powerOfTen(exponent: number): bigint {
-  if (!Number.isInteger(exponent) || exponent < 0 || exponent > MAX_SCALE) {
+  if (!Number.isInteger(exponent) || exponent < 0 || exponent > MAX_SCALE * 2) {
     throw new Error('La escala decimal solicitada está fuera del rango permitido.');
   }
   while (POWERS_OF_TEN.length <= exponent) {
