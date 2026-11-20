@@ -228,3 +228,13 @@ Trabajar en este orden, cerrando cada fase con PR integrada y pruebas satisfacto
 - Últimos workflows de la rama: Linux `44829935543` y Windows `44829935432`, HEAD `fbe88973a4c0d94f89a7c1618bbe87fb0abcf34b`; ambos terminan sin pasos/logs disponibles. Se mantiene bloqueada la fusión por falta de validación ejecutable.
 
 - Se reintentaron los workflows del HEAD actual `234cb7996a336941930dfbb463b82d94b735a288`: Linux run `44830034770` (job `136616582211`) y Windows run `44830034797` (job `136616596611`). Ambos volvieron a terminar en 2–4 segundos, sin pasos ejecutados ni logs disponibles. Se mantiene la PR #181 en borrador; no hay evidencia suficiente para declarar éxito ni atribuir un fallo al código.
+
+#### Seguimiento PR siguiente — recuperación durable de creación de empresas
+
+- Rama de trabajo `feat/durable-company-creation`, apilada sobre `feat/company-metadata-saga` mientras PR #181 espera validación ejecutable de GitHub Actions.
+- Añade en SQLite de control los diarios append-only `company_creation_intents` y `company_creation_completions`. La intención con solicitud/hash/empresa/actor se confirma antes de crear el archivo tenant; la finalización solo se registra después de verificar la empresa.
+- El gestor de bases puede registrar un archivo huérfano únicamente tras abrirlo en solo lectura, comprobar integridad SQLite, ruta/directorios/sidecars seguros, identidad interna y versión de esquema exactas, y recibir verificación de contenido.
+- El runtime verifica snapshot inicial, razón social/RIF, evento append-only `company_created`, actor original, hash de solicitud y recibo `accounting.snapshot`. Un archivo incompleto, corrupto o que no coincida permanece intacto y no se registra ni sobrescribe.
+- Al listar empresas se reconcilian intenciones pendientes: si no existe archivo se puede completar la creación originalmente solicitada; si existe un tenant completo sin fila de registro se registra después de verificarlo; si ya existe registro se valida la evidencia. Las finalizaciones previas no recrean empresas retiradas ni reactivan empresas archivadas.
+- Pruebas añadidas para recuperar un tenant huérfano válido, preservar y rechazar un tenant alterado, comprobar actor/hash, recuperar interrupciones antes/después de registrar la empresa y evitar recreación después de una eliminación.
+- Pendiente: ejecutar CI Linux y Windows Release con pasos y logs disponibles, revisar fallos, pruebas de concurrencia y validar restauración global. No fusionar ni publicar versión hasta superar esas verificaciones.
