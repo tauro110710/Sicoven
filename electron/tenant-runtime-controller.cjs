@@ -27,6 +27,7 @@ function createTenantRuntimeController({
     loadAccounting: (...args) => implementation.loadAccounting(...args),
     saveAccounting: (...args) => implementation.saveAccounting(...args),
     createCompany: (...args) => implementation.createCompany(...args),
+    recoverOrphanedCompany: (...args) => implementation.recoverOrphanedCompany(...args),
     migrateLegacyDatabase: (...args) => implementation.migrateLegacyDatabase(...args),
     updateCompanyMetadata: (...args) => implementation.updateCompanyMetadata(...args),
     closeCompany: (...args) => implementation.closeCompany(...args),
