@@ -11,7 +11,8 @@ import {
   getDefaultInventoryAccountCode,
   calculateVnrWriteDown,
   calculatePeriodicCostOfSales,
-  calculateVnrProvisionLedgerBalance
+  calculateVnrProvisionLedgerBalance,
+  prepareProductsForHistoricalReconstruction
 } from './inventoryAccounting';
 
 describe('motor de inventario contable', () => {
