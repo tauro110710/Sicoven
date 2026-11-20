@@ -155,7 +155,7 @@ function findOperationReceipt(db, input) {
 function normalizeIntentActor(actor) {
   const userId = Number(actor?.id);
   const username = String(actor?.username || '').trim();
-  if (!Number.isSafeInteger(userId) || userId <= 0 || !username || username.length > 120) {
+  if (!Number.isSafeInteger(userId) || userId <= 0 || !username || username.length > 128) {
     throw new Error('La sesión no contiene una identidad válida para registrar la intención de la operación.');
   }
   return { userId, username };
