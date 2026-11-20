@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const Database = require('better-sqlite3');
 const { createCompanySessionContext } = require('./company-session-context.cjs');
 const { registerCompanySessionIpc } = require('./company-session-ipc.cjs');
 
@@ -246,14 +247,12 @@ test('rechecks company status and access before every tenant database operation'
 
 test('company creation IPC serializes tenant creation and persists the selected-company preference', async () => {
   const handlers = new Map();
-  const preferences = new Map();
   let createdActor = null;
   let selectedCompanyId = null;
   let createdCompany = null;
   let acquired = 0, released = 0;
-  const controlDb = {
-    prepare: () => ({ run: (_json) => preferences.set('active_company_preference', _json) })
-  };
+  const controlDb = new Database(':memory:');
+  controlDb.exec("CREATE TABLE app_state(state_key TEXT PRIMARY KEY,state_json TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT (datetime('now')));");
   registerCompanySessionIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
     companySessionContext: {
@@ -262,6 +261,9 @@ test('company creation IPC serializes tenant creation and persists the selected-
       getSelectedCompanyId: () => selectedCompanyId
     },
     runtime: {
+      listCompanies: () => [],
+      recoverOrphanedCompany: () => ({ found: false }),
+      verifyCompanyCreation: () => true,
       createCompany: async (company, actor) => { createdCompany = company; createdActor = actor; return { ok: true, company }; }
     },
     operationContext: {
@@ -283,5 +285,7 @@ test('company creation IPC serializes tenant creation and persists the selected-
   assert.equal(acquired, 1);
   assert.equal(released, 1);
   assert.equal(createdActor.username, 'admin');
-  assert.ok(preferences.has('active_company_preference'));
+  const preference = controlDb.prepare("SELECT state_json FROM app_state WHERE state_key='active_company_preference'").get();
+  assert.equal(JSON.parse(preference.state_json).companyId, createdCompany.id);
+  controlDb.close();
 });
