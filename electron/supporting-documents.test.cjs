@@ -8,6 +8,7 @@ const {
   initializeDocumentVaultSchema, assertNoSymlinkPath, attachDocument, listDocuments, reviewDocument, getDocument,
   registerDocumentVaultIpc
 } = require('./supporting-documents.cjs');
+const { initializeOperationReceiptSchema } = require('./operation-receipts.cjs');
 
 const actor = { id: 7, username: 'contador', role: 'admin' };
 function fixture() {
@@ -23,6 +24,7 @@ function fixture() {
   db.exec("CREATE TABLE accounting_correction_cases(id TEXT PRIMARY KEY,company_id TEXT NOT NULL)");
   db.prepare('INSERT INTO accounting_correction_cases(id,company_id) VALUES(?,?)').run('case-1','co-1');
   initializeDocumentVaultSchema(db);
+  initializeOperationReceiptSchema(db);
   const storageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-docs-'));
   return { db, storageDir, close() { db.close(); fs.rmSync(storageDir, { recursive: true, force: true }); } };
 }
@@ -175,6 +177,18 @@ test('document vault IPC reads and writes through the selected tenant database',
       documentType: 'FACTURA_COMPRA', title: 'Factura LAN', fileName: 'factura.pdf'
     });
     assert.equal(attachResult.ok, true);
+    const reviewInput = {
+      operationId: 'document-review-tenant-001',
+      documentId: attachResult.document.id,
+      decision: 'VERIFIED',
+      reason: 'Factura cotejada con el documento original y sus datos de control.'
+    };
+    const reviewed = await handlers.get('sicoven:document-review')({}, 'tenant-token', reviewInput);
+    const reviewRetry = await handlers.get('sicoven:document-review')({}, 'tenant-token', reviewInput);
+    assert.equal(reviewed.status, 'VERIFIED');
+    assert.equal(reviewRetry.replayed, true);
+    assert.equal(tenant.db.prepare("SELECT COUNT(*) AS n FROM supporting_document_events WHERE document_id=? AND event_type='REVIEWED'").get(attachResult.document.id).n, 1);
+    assert.equal(tenant.db.prepare('SELECT COUNT(*) AS n FROM operation_receipts').get().n, 1);
     const canonicalPath = path.join(tenant.storageDir, 'companies', 'co-1', 'supporting-documents', attachResult.document.id + '.pdf');
     assert.equal(fs.existsSync(canonicalPath), true);
     let openedPath = null;
