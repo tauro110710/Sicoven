@@ -339,6 +339,8 @@ export interface JournalEntry {
   /** Estado de la empresa inmediatamente anterior al cierre anual; evidencia para reapertura formal. */
   annualCloseState?: {
     previousFiscalYear: number;
+    /** Inicio real del ejercicio cerrado; permite el primer ejercicio fiscal parcial. */
+    priorPeriodStartDate?: string;
     previousClosedThroughDate: string | null;
     cycleNumber: number;
   };

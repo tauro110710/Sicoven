@@ -258,7 +258,11 @@ function reopenAccountingYear(db, input, actor) {
     if (!Number.isFinite(Date.parse(String(closing.createdAt || '')))) {
       throw new Error('El cierre anual no conserva una marca temporal verificable para detectar operaciones registradas posteriormente.');
     }
-    if (Number(company.fiscalYear) !== Number(evidence.previousFiscalYear) + 1 ||
+    const priorPeriodStartDate = evidence.priorPeriodStartDate === undefined
+      ? String(evidence.previousFiscalYear) + '-01-01'
+      : String(evidence.priorPeriodStartDate);
+    if (!isIsoDate(priorPeriodStartDate) || priorPeriodStartDate > closingDate ||
+        Number(company.fiscalYear) !== Number(evidence.previousFiscalYear) + 1 ||
         String(closing.date) !== String(evidence.previousFiscalYear) + '-12-31' ||
         (evidence.previousClosedThroughDate && evidence.previousClosedThroughDate >= closingDate)) {
       throw new Error('El estado actual de la empresa no coincide con la evidencia capturada al cerrar el ejercicio.');
@@ -281,7 +285,7 @@ function reopenAccountingYear(db, input, actor) {
       throw new Error('El asiento de apertura ya fue revertido o ajustado.');
     }
     if (String(opening.referenceDoc || '') !== 'APERTURA:' + companyId + ':' + openingDate ||
-        opening.exerciseLink?.priorPeriodStartDate !== closingDate.slice(0, 4) + '-01-01' ||
+        opening.exerciseLink?.priorPeriodStartDate !== priorPeriodStartDate ||
         (opening.exerciseLink?.cycleNumber !== undefined &&
           Number(opening.exerciseLink.cycleNumber) !== Number(evidence.cycleNumber))) {
       throw new Error('La apertura no conserva la referencia y el ciclo exactos del ejercicio cerrado.');
@@ -290,7 +294,7 @@ function reopenAccountingYear(db, input, actor) {
     assertBalancedAnnualEntry(opening, 'apertura anual');
     const link = db.prepare('SELECT * FROM accounting_exercise_links WHERE journal_entry_id=? AND company_id=?')
       .get(String(opening.id), companyId);
-    if (!link || link.prior_period_start_date !== closingDate.slice(0, 4) + '-01-01' ||
+    if (!link || link.prior_period_start_date !== priorPeriodStartDate ||
         link.prior_period_end_date !== closingDate || link.next_period_start_date !== openingDate ||
         Number(link.cycle_number) !== Number(evidence.cycleNumber)) {
       throw new Error('El vínculo SQLite entre cierre, apertura y número de ciclo no coincide; se bloqueó la reapertura.');

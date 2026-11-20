@@ -853,7 +853,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('Ya hay un cierre contable en proceso para esta empresa.');
     }
     const fiscalYear = Number(currentCompany.fiscalYear);
-    const expectedStart = String(fiscalYear) + '-01-01';
+    const configuredFirstStart = currentCompany.operationalStartDate || currentCompany.accountingStartDate;
+    const firstStartBelongsToYear = typeof configuredFirstStart === 'string' &&
+      configuredFirstStart.slice(0, 4) === String(fiscalYear);
+    const expectedStart = firstStartBelongsToYear ? configuredFirstStart : String(fiscalYear) + '-01-01';
     const expectedEnd = String(fiscalYear) + '-12-31';
     if (input.periodStartDate !== expectedStart || input.periodEndDate !== expectedEnd ||
         !isValidIsoDate(input.periodStartDate) || !isValidIsoDate(input.periodEndDate)) {
@@ -922,6 +925,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         workpaperNote: 'SICOVEN_AUTO_YEAR_CLOSE_V1',
         annualCloseState: {
           previousFiscalYear: fiscalYear,
+          priorPeriodStartDate: input.periodStartDate,
           previousClosedThroughDate: currentCompany.closedThroughDate || null,
           // Count against the freshly persisted ledger snapshot, not the
           // render-time state captured before pending writes were flushed.

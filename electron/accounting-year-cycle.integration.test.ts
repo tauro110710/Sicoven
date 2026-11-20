@@ -72,6 +72,7 @@ const buildCycle = (
   previousClosedThroughDate: string | null,
   createdAt: string
 ) => {
+  const periodStartDate = '2025-02-05';
   const closingDate = '2025-12-31';
   const openingDate = '2026-01-01';
   const closing: JournalEntry = {
@@ -87,7 +88,7 @@ const buildCycle = (
     },
     createdAt,
     items: buildClosingEntryItems({
-      companyId, periodStartDate: '2025-01-01', periodEndDate: closingDate,
+      companyId, periodStartDate, periodEndDate: closingDate,
       accounts, journalEntries, retainedEarningsAccountCode: '3.1.1'
     })
   };
@@ -97,14 +98,14 @@ const buildCycle = (
     type: 'APERTURA', bcvRate: 100,
     referenceDoc: 'APERTURA:' + companyId + ':' + openingDate,
     exerciseLink: {
-      priorPeriodStartDate: '2025-01-01',
+      priorPeriodStartDate: periodStartDate,
       priorPeriodEndDate: closingDate,
       nextPeriodStartDate: openingDate,
       cycleNumber
     },
     createdAt,
     items: buildOpeningEntryItems({
-      companyId, periodStartDate: '2025-01-01', periodEndDate: closingDate,
+      companyId, periodStartDate, periodEndDate: closingDate,
       openingDate, accounts, journalEntries: [...journalEntries, closing],
       retainedEarningsAccountCode: '3.1.1'
     })
@@ -116,7 +117,7 @@ test('recorre dos ciclos anuales reales con builders, persistencia SQLite, IPC y
   const harness = makeHarness();
   try {
     const baseState = {
-      companies: [{ id: companyId, name: 'Empresa ciclo anual', fiscalYear: 2025 }],
+      companies: [{ id: companyId, name: 'Empresa ciclo anual', fiscalYear: 2025, operationalStartDate: '2025-02-05' }],
       currentCompanyId: companyId,
       accounts,
       journalEntries: baseEntries,
