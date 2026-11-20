@@ -29,6 +29,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
   const [ivaRetentionAgentBasis, setIvaRetentionAgentBasis] = useState<IvaRetentionAgentBasis>('UNCONFIRMED');
   const [isPersonalFirm, setIsPersonalFirm] = useState(false);
   const [isIgtfPerceptionAgent, setIsIgtfPerceptionAgent] = useState(false);
+  const [operationalStartDate, setOperationalStartDate] = useState('');
   const [fiscalYear, setFiscalYear] = useState<string>(String(new Date().getFullYear()));
   const [accountingFramework, setAccountingFramework] = useState<AccountingFramework | ''>('');
   const [accountingFrameworkVersion, setAccountingFrameworkVersion] = useState('');
@@ -64,6 +65,10 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       return;
     }
     if (!name.trim()) return;
+    if (!operationalStartDate || !/^\\d{4}-\\d{2}-\\d{2}$/.test(operationalStartDate) || new Date(operationalStartDate + 'T00:00:00.000Z').toISOString().slice(0, 10) !== operationalStartDate) {
+      window.alert('Indique la fecha real en que la empresa inició operaciones. Esta fecha determina desde qué ejercicio puede reconstruirse su contabilidad.');
+      return;
+    }
     if (taxpayerType === 'ESPECIAL' && (!specialTaxpayerNotificationReference.trim() || !specialTaxpayerNotificationDate)) {
       window.alert('Para registrar una empresa como Contribuyente Especial, indique la referencia y fecha de la notificación expresa del SENIAT.');
       return;
@@ -86,6 +91,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       phone: phone.trim() || '(0212) 000-0000',
       email: email.trim() || 'contacto@empresa.com.ve',
       taxpayerType,
+      operationalStartDate,
       ...(taxpayerType === 'ESPECIAL' ? { specialTaxpayerNotificationReference: specialTaxpayerNotificationReference.trim(), specialTaxpayerNotificationDate } : {}),
       ...(accountingFramework ? {
         accountingFramework,
@@ -386,11 +392,25 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
               />
             </div>
           </div>
+          {/* Inicio histórico real de la empresa */}
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-1.5">
+            <label className="block text-xs font-bold text-slate-800">
+              Fecha real de inicio de operaciones *
+            </label>
+            <input
+              type="date"
+              required
+              value={operationalStartDate}
+              onChange={e => setOperationalStartDate(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+            />
+            <p className="text-[10px] leading-4 text-slate-600">Indique cuándo comenzó realmente a operar la empresa, aunque no haya llevado contabilidad formal. SICOVEN generará los ejercicios anuales desde esa fecha, sin límite mínimo de antigüedad. No use la fecha de registro del sistema ni la fecha de hoy, salvo que coincidan con el inicio real.</p>
+          </div>
+
           {/* Ejercicio económico */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
               Ejercicio Económico (Año)
-            </label>
               <input
                 type="text"
                 inputMode="numeric"
