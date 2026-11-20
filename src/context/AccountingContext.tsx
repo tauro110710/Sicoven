@@ -1507,6 +1507,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Reanuda operaciones cuyo ID, solicitud y actor quedaron registrados en SQLite
+  // antes de que el proceso se cerrara. Los recibos siguen siendo la autoridad:
+  // una operación ya confirmada devuelve su resultado original y no se repite.
+  useEffect(() => {
+    if (!storageReady || !currentCompanyId || !window.sicovenStore?.recoverPendingOperationIntents) return;
+    let cancelled = false;
+    void window.sicovenStore.recoverPendingOperationIntents(token).then(results => {
+      if (cancelled) return;
+      const pending = results.filter(result => result.status === 'PENDING');
+      if (pending.length) {
+        console.error('SICOVEN conserva operaciones pendientes que requieren revisión:', pending);
+      }
+    }).catch(error => {
+      if (!cancelled) console.error('No se pudieron recuperar las operaciones pendientes de SQLite:', error);
+    });
+    return () => { cancelled = true; };
+  }, [storageReady, token, currentCompanyId]);
+
   useEffect(() => {
     if (!storageReady) return;
     const waitersForSnapshot = persistenceWaitersRef.current.splice(0);
