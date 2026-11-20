@@ -58,6 +58,7 @@ export interface HistoricalAccountingReplaySnapshot {
 
 export type HistoricalReplaySourceKind =
   | 'PURCHASE'
+  | 'PURCHASE_ACCOUNT_CREDIT'
   | 'SALE'
   | 'INVENTORY_MOVEMENT'
   | 'BANK_STATEMENT_MOVEMENT'
@@ -117,7 +118,7 @@ type CollectionSpec = {
 };
 
 const SOURCE_COLLECTIONS: CollectionSpec[] = [
-  { collection: 'purchases', kind: 'PURCHASE', dateFields: ['accountCreditDate', 'invoiceDate', 'date'], referenceFields: ['invoiceNumber', 'controlNumber'] },
+  { collection: 'purchases', kind: 'PURCHASE', dateFields: ['invoiceDate', 'date'], referenceFields: ['invoiceNumber', 'controlNumber'] },
   { collection: 'sales', kind: 'SALE', dateFields: ['invoiceDate', 'date'], referenceFields: ['invoiceNumber', 'controlNumber'] },
   { collection: 'movements', kind: 'INVENTORY_MOVEMENT', dateFields: ['date'], referenceFields: ['documentRef', 'concept'] },
   { collection: 'bankStatementMovements', kind: 'BANK_STATEMENT_MOVEMENT', dateFields: ['date'], referenceFields: ['reference', 'description'] },
@@ -205,9 +206,28 @@ export function buildHistoricalAccountingReplayPlan(
         effectiveDate,
         recordedAt: created,
         reference: firstText(record, spec.referenceFields),
-        linkedJournalEntryId: typeof record.journalEntryId === 'string' ? record.journalEntryId : null,
+        linkedJournalEntryId: spec.kind === 'PURCHASE' ? null : (typeof record.journalEntryId === 'string' ? record.journalEntryId : null),
         sourceIndex: sourceIndex++
       });
+      if (spec.kind === 'PURCHASE' && record.accountCreditDate !== undefined && record.accountCreditDate !== null && record.accountCreditDate !== '') {
+        const accountCreditDate = String(record.accountCreditDate).slice(0, 10);
+        if (!isIsoDate(accountCreditDate)) {
+          blockers.push('La compra ' + id + ' no conserva una fecha válida de abono en cuenta.');
+        } else if (accountCreditDate >= startDate) {
+          collected.push({
+            key: 'purchases:' + id + ':account-credit',
+            collection: 'purchases.accountCreditDate',
+            sourceId: id,
+            companyId,
+            kind: 'PURCHASE_ACCOUNT_CREDIT',
+            effectiveDate: accountCreditDate,
+            recordedAt: created,
+            reference: firstText(record, spec.referenceFields),
+            linkedJournalEntryId: typeof record.journalEntryId === 'string' ? record.journalEntryId : null,
+            sourceIndex: sourceIndex++
+          });
+        }
+      }
       if (spec.kind === 'VAT_OWN_DECLARATION' && (record.status === 'FILED' || Boolean(record.filedAt))) {
         externalDependencies.push('Declaración IVA propio presentada: ' + id + '. Su rectificación debe coordinarse con el procedimiento fiscal correspondiente.');
       } else if (spec.kind === 'VAT_WITHHOLDING_DECLARATION' &&
