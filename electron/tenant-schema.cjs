@@ -36,7 +36,6 @@ function initializeTenantDatabase(db) {
   `);
 
   initializeAccountingPersistenceSchema(db);
-  initializeOperationReceiptSchema(db);
   initializeCorrectionWorkflow(db);
   initializeInflationIndexSchema(db);
   initializeInflationClassificationSchema(db);
