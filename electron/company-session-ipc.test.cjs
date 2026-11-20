@@ -141,6 +141,26 @@ test('updates registry metadata and records one recoverable tenant audit receipt
 });
 
 
+test('does not create a metadata saga or audit event when the registry values are unchanged', async () => {
+  const companyRecord = { id: 'company-a', name: 'EMPRESA A', rif: 'J-12345678-9', status: 'ACTIVE' };
+  let updateCalls = 0;
+  const { handlers, controlDb } = fixture({
+    runtime: {
+      listCompanies: () => [companyRecord],
+      createCompany: async company => ({ ok: true, company }),
+      updateCompanyMetadata: () => { updateCalls += 1; throw new Error('must not update unchanged metadata'); }
+    }
+  });
+  const result = await handlers.get('sicoven:company-update-metadata')({}, 'valid-token', {
+    operationId: 'company-metadata-unchanged-001',
+    companyId: 'company-a', name: 'empresa a', rif: 'j-12345678-9'
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.unchanged, true);
+  assert.equal(updateCalls, 0);
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_metadata_intents').get().count, 0);
+});
+
 test('recovers metadata audit after a crash between control registry commit and tenant audit', async () => {
   let companyRecord = { id: 'company-a', name: 'Empresa A', rif: 'J-1', status: 'ACTIVE' };
   let failOpen = true;
