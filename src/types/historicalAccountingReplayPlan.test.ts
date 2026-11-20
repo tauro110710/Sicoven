@@ -54,17 +54,41 @@ test('bloquea registros de la empresa seleccionada sin fecha efectiva válida', 
   assert.match(plan.blockers.join(' '), /fecha efectiva válida/);
 });
 
-test('usa la fecha contable de crédito para ubicar compras cuando existe', () => {
+test('separa la fecha fiscal/inventario de la fecha de abono en cuenta de una compra', () => {
   const input = base();
   input.purchases = [{
     id: 'purchase-credit-date',
     companyId: 'company-1',
     invoiceDate: '2023-02-01',
-    accountCreditDate: '2023-02-05'
+    accountCreditDate: '2023-02-05',
+    journalEntryId: 'journal-purchase'
   }];
 
   const plan = buildHistoricalAccountingReplayPlan(input);
 
+  assert.deepEqual(plan.sourceEvents.map(event => [event.kind, event.effectiveDate]), [
+    ['PURCHASE', '2023-02-01'],
+    ['PURCHASE_ACCOUNT_CREDIT', '2023-02-05']
+  ]);
+  assert.equal(plan.sourceEvents[0].linkedJournalEntryId, null);
+  assert.equal(plan.sourceEvents[1].linkedJournalEntryId, 'journal-purchase');
+});
+
+test('incluye abono en cuenta dentro del rango aunque la factura sea anterior al inicio', () => {
+  const input = base();
+  input.startDate = '2023-02-05';
+  input.purchases = [{
+    id: 'purchase-prior-invoice',
+    companyId: 'company-1',
+    invoiceDate: '2023-02-01',
+    accountCreditDate: '2023-02-05',
+    journalEntryId: 'journal-purchase'
+  }];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+
+  assert.equal(plan.sourceEvents.length, 1);
+  assert.equal(plan.sourceEvents[0].kind, 'PURCHASE_ACCOUNT_CREDIT');
   assert.equal(plan.sourceEvents[0].effectiveDate, '2023-02-05');
 });
 
@@ -90,7 +114,7 @@ test('incluye depreciaciones como eventos independientes y calcula los ejercicio
   const input = base();
   input.fixedAssets = [{
     id: 'asset-1', companyId: 'company-1', acquisitionDate: '2023-04-01',
-    assetCode: 'AF-001',
+    serviceDate: '2023-04-15', sourceJournalEntryId: 'journal-asset', assetCode: 'AF-001',
     depreciationEvents: [
       { id: 'dep-1', companyId: 'company-1', date: '2023-12-31', createdAt: '2023-12-31T23:00:00.000Z' },
       { id: 'dep-2', companyId: 'company-1', date: '2024-12-31', createdAt: '2024-12-31T23:00:00.000Z' }
@@ -101,8 +125,11 @@ test('incluye depreciaciones como eventos independientes y calcula los ejercicio
   const plan = buildHistoricalAccountingReplayPlan(input);
 
   assert.deepEqual(plan.sourceEvents.map(event => event.kind), [
-    'FIXED_ASSET', 'FIXED_ASSET_DEPRECIATION', 'FIXED_ASSET_DEPRECIATION'
+    'FIXED_ASSET', 'FIXED_ASSET_PLACED_IN_SERVICE',
+    'FIXED_ASSET_DEPRECIATION', 'FIXED_ASSET_DEPRECIATION'
   ]);
+  assert.equal(plan.sourceEvents[0].linkedJournalEntryId, 'journal-asset');
+  assert.equal(plan.sourceEvents[1].effectiveDate, '2023-04-15');
   assert.deepEqual(plan.affectedExercises.map(item => item.fiscalYear), [2023, 2024]);
   assert.equal(plan.affectedExercises[0].includesYearEndClose, true);
   assert.equal(plan.affectedExercises[0].includesNextYearOpening, true);
@@ -137,4 +164,24 @@ test('rechaza fechas iniciales y finales inválidas', () => {
 
   assert.equal(plan.canProceedToTransactionalReplay, false);
   assert.equal(plan.blockers.length, 2);
+});
+
+test('usa fiscalDate para ubicar eventos ISLR en la cronología histórica', () => {
+  const input = base();
+  input.islrFiscalEvents = [{
+    id: 'islr-event-1',
+    companyId: 'company-1',
+    fiscalDate: '2023-04-12',
+    kind: 'ACCOUNT_CREDIT',
+    voucherId: 'islr-voucher-1',
+    journalEntryId: 'journal-islr-1',
+    createdAt: '2023-04-12T10:00:00.000Z'
+  }];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+
+  assert.equal(plan.sourceEvents.length, 1);
+  assert.equal(plan.sourceEvents[0].kind, 'ISLR_FISCAL_EVENT');
+  assert.equal(plan.sourceEvents[0].effectiveDate, '2023-04-12');
+  assert.equal(plan.sourceEvents[0].linkedJournalEntryId, 'journal-islr-1');
 });

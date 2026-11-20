@@ -26,6 +26,7 @@ export interface HistoricalReplayRecord {
   invoiceNumber?: string;
   documentType?: string;
   journalEntryId?: string;
+  sourceJournalEntryId?: string;
   isCancelled?: boolean;
   isReversed?: boolean;
   filedAt?: string;
@@ -58,6 +59,7 @@ export interface HistoricalAccountingReplaySnapshot {
 
 export type HistoricalReplaySourceKind =
   | 'PURCHASE'
+  | 'PURCHASE_ACCOUNT_CREDIT'
   | 'SALE'
   | 'INVENTORY_MOVEMENT'
   | 'BANK_STATEMENT_MOVEMENT'
@@ -65,6 +67,7 @@ export type HistoricalReplaySourceKind =
   | 'SUPPLIER_ADVANCE_SETTLEMENT'
   | 'SUPPLIER_DIRECT_ADVANCE'
   | 'FIXED_ASSET'
+  | 'FIXED_ASSET_PLACED_IN_SERVICE'
   | 'FIXED_ASSET_DEPRECIATION'
   | 'VAT_VOUCHER'
   | 'ISLR_VOUCHER'
@@ -117,21 +120,21 @@ type CollectionSpec = {
 };
 
 const SOURCE_COLLECTIONS: CollectionSpec[] = [
-  { collection: 'purchases', kind: 'PURCHASE', dateFields: ['accountCreditDate', 'invoiceDate', 'date'], referenceFields: ['invoiceNumber', 'controlNumber'] },
+  { collection: 'purchases', kind: 'PURCHASE', dateFields: ['invoiceDate', 'date'], referenceFields: ['invoiceNumber', 'controlNumber'] },
   { collection: 'sales', kind: 'SALE', dateFields: ['invoiceDate', 'date'], referenceFields: ['invoiceNumber', 'controlNumber'] },
   { collection: 'movements', kind: 'INVENTORY_MOVEMENT', dateFields: ['date'], referenceFields: ['documentRef', 'concept'] },
   { collection: 'bankStatementMovements', kind: 'BANK_STATEMENT_MOVEMENT', dateFields: ['date'], referenceFields: ['reference', 'description'] },
   { collection: 'creditSettlements', kind: 'CREDIT_SETTLEMENT', dateFields: ['settlementDate', 'date'], referenceFields: ['reference', 'documentId'] },
   { collection: 'supplierAdvanceSettlements', kind: 'SUPPLIER_ADVANCE_SETTLEMENT', dateFields: ['settlementDate', 'date'], referenceFields: ['targetPurchaseId', 'supplierRif'] },
   { collection: 'supplierDirectAdvances', kind: 'SUPPLIER_DIRECT_ADVANCE', dateFields: ['date'], referenceFields: ['reference', 'supplierRif'] },
-  { collection: 'fixedAssets', kind: 'FIXED_ASSET', dateFields: ['acquisitionDate', 'serviceDate'], referenceFields: ['assetCode', 'description'] },
+  { collection: 'fixedAssets', kind: 'FIXED_ASSET', dateFields: ['acquisitionDate'], referenceFields: ['assetCode', 'description'] },
   { collection: 'vatVouchers', kind: 'VAT_VOUCHER', dateFields: ['date'], referenceFields: ['documentNumber', 'reference'] },
   { collection: 'islrVouchers', kind: 'ISLR_VOUCHER', dateFields: ['date'], referenceFields: ['documentNumber', 'reference'] },
   { collection: 'vatWithholdingDeclarations', kind: 'VAT_WITHHOLDING_DECLARATION', dateFields: ['periodEndDate', 'endDate', 'date'], referenceFields: ['period', 'declarationNumber'] },
   { collection: 'vatWithholdingDeclarationEvents', kind: 'VAT_WITHHOLDING_EVENT', dateFields: ['date', 'occurredAt'], referenceFields: ['declarationId', 'eventType'] },
   { collection: 'vatOwnDeclarations', kind: 'VAT_OWN_DECLARATION', dateFields: ['periodEndDate', 'endDate', 'date'], referenceFields: ['period', 'declarationNumber'] },
   { collection: 'vatOwnDeclarationEvents', kind: 'VAT_OWN_EVENT', dateFields: ['occurredAt', 'date'], referenceFields: ['declarationId', 'eventType'] },
-  { collection: 'islrFiscalEvents', kind: 'ISLR_FISCAL_EVENT', dateFields: ['date', 'occurredAt'], referenceFields: ['voucherId', 'eventType'] }
+  { collection: 'islrFiscalEvents', kind: 'ISLR_FISCAL_EVENT', dateFields: ['fiscalDate'], referenceFields: ['voucherId', 'kind'] }
 ];
 
 const isIsoDate = (value: string): boolean => {
@@ -194,8 +197,27 @@ export function buildHistoricalAccountingReplayPlan(
         blockers.push('El registro ' + String(spec.collection) + '/' + id + ' no conserva una fecha efectiva válida.');
         continue;
       }
-      if (effectiveDate < startDate) continue;
       const created = recordedAt(record);
+      if (spec.kind === 'PURCHASE' && record.accountCreditDate !== undefined && record.accountCreditDate !== null && record.accountCreditDate !== '') {
+        const accountCreditDate = String(record.accountCreditDate).slice(0, 10);
+        if (!isIsoDate(accountCreditDate)) {
+          blockers.push('La compra ' + id + ' no conserva una fecha válida de abono en cuenta.');
+        } else if (accountCreditDate >= startDate) {
+          collected.push({
+            key: 'purchases:' + id + ':account-credit',
+            collection: 'purchases.accountCreditDate',
+            sourceId: id,
+            companyId,
+            kind: 'PURCHASE_ACCOUNT_CREDIT',
+            effectiveDate: accountCreditDate,
+            recordedAt: created,
+            reference: firstText(record, spec.referenceFields),
+            linkedJournalEntryId: typeof record.journalEntryId === 'string' ? record.journalEntryId : null,
+            sourceIndex: sourceIndex++
+          });
+        }
+      }
+      if (effectiveDate < startDate) continue;
       collected.push({
         key: String(spec.collection) + ':' + id,
         collection: String(spec.collection),
@@ -205,7 +227,7 @@ export function buildHistoricalAccountingReplayPlan(
         effectiveDate,
         recordedAt: created,
         reference: firstText(record, spec.referenceFields),
-        linkedJournalEntryId: typeof record.journalEntryId === 'string' ? record.journalEntryId : null,
+        linkedJournalEntryId: spec.kind === 'PURCHASE' ? null : (spec.kind === 'FIXED_ASSET' ? (typeof record.sourceJournalEntryId === 'string' ? record.sourceJournalEntryId : null) : (typeof record.journalEntryId === 'string' ? record.journalEntryId : null)),
         sourceIndex: sourceIndex++
       });
       if (spec.kind === 'VAT_OWN_DECLARATION' && (record.status === 'FILED' || Boolean(record.filedAt))) {
@@ -223,6 +245,25 @@ export function buildHistoricalAccountingReplayPlan(
   for (const asset of (Array.isArray(input.fixedAssets) ? input.fixedAssets : [])) {
     if (String(asset.companyId || '') !== companyId) continue;
     const assetId = String(asset.id || '').trim();
+    const serviceDate = String(asset.serviceDate || '').slice(0, 10);
+    if (serviceDate && serviceDate !== String(asset.acquisitionDate || '').slice(0, 10)) {
+      if (!isIsoDate(serviceDate)) {
+        blockers.push('El activo fijo ' + assetId + ' no conserva una fecha válida de puesta en servicio.');
+      } else if (serviceDate >= startDate) {
+        collected.push({
+          key: 'fixedAssets:' + assetId + ':service',
+          collection: 'fixedAssets.serviceDate',
+          sourceId: assetId,
+          companyId,
+          kind: 'FIXED_ASSET_PLACED_IN_SERVICE',
+          effectiveDate: serviceDate,
+          recordedAt: recordedAt(asset),
+          reference: String(asset.assetCode || assetId),
+          linkedJournalEntryId: null,
+          sourceIndex: sourceIndex++
+        });
+      }
+    }
     for (const event of (Array.isArray(asset.depreciationEvents) ? asset.depreciationEvents : [])) {
       const eventId = String(event.id || '').trim();
       const effectiveDate = String(event.date || '').slice(0, 10);
