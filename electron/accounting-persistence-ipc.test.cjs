@@ -904,7 +904,7 @@ test('tenant-routed persistence writes only to the selected company database', a
     assert.equal(saved.companies[0].id, 'company-a');
     assert.equal(controlDb.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='app_state'").get().count, 0);
     assert.equal(tenantDb.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 1);
-    assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 0);
+    assert.equal(controlDb.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='operation_receipts'").get().count, 0);
   } finally {
     tenantDb.close();
     controlDb.close();
