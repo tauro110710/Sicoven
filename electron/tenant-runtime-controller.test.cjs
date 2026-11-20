@@ -111,7 +111,7 @@ test('upgrades an existing v1 company database transactionally to the idempotent
   }));
   const registryVersion = h.controlDb.prepare('SELECT schema_version FROM company_database_registry WHERE company_id=?').get(company.id).schema_version;
   assert.equal(migrated.hasReceipts, true);
-  assert.equal(migrated.schemaVersion, '2');
+  assert.equal(migrated.schemaVersion, '3');
   assert.equal(registryVersion, 2);
   assert.equal(migrated.snapshot, original.snapshot);
   assert.equal(migrated.auditCount, original.auditCount);
