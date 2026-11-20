@@ -15,7 +15,7 @@ test('suma y resta decimales alineando escalas sin errores binarios', () => {
 
 test('multiplica importes y cantidades con precisión decimal exacta', () => {
   assert.equal(text(multiplyDecimal('0.1', '0.2')), '0.02');
-  assert.equal(text(multiplyDecimal('12345678901234567890.1234', '0.00000001')), '123.456789012345678901234');
+  assert.equal(text(multiplyDecimal('12345678901234567890.1234', '0.00000001')), '123456789012.345678901234');
 });
 
 test('divide con precisión explícita y redondeo simétrico fuera de cero', () => {
