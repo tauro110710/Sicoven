@@ -133,11 +133,12 @@ test('successful receipt and durable intent completion commit together', () => {
   try {
     const request = { amount: 12, reference: 'REC-001' };
     prepareOperationIntent(db, durableIntent('durable-commit-001', request), 'company-1', durableActor);
+    const normalizedBusinessRequest = { ...request, normalizedByHandler: true };
     const key = {
       operationId: 'durable-commit-001',
       companyId: 'company-1',
-      operationType: 'accounting.test_operation',
-      requestHash: hashOperationRequest(JSON.stringify(request)),
+      operationType: 'accounting.audit_correction',
+      requestHash: hashOperationRequest(JSON.stringify(normalizedBusinessRequest)),
       actor: durableActor
     };
     const result = runIdempotentOperation(db, key, () => ({ ok: true, id: 'saved-1' }));
