@@ -10,6 +10,7 @@ const {
 const { persistAccountingSnapshot } = require('./accounting-persistence.cjs');
 const { createEmptyAccountingSnapshot } = require('./tenant-snapshot.cjs');
 const { createTenantMigrationOrchestrator } = require('./tenant-migration-orchestrator.cjs');
+const { hashOperationRequest } = require('./operation-receipts.cjs');
 
 function createTenantRuntime({
   controlDb,
