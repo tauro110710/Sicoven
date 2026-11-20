@@ -603,6 +603,7 @@ test('bloquea operaciones tributarias cuando existe historial con brechas de vig
 
 test('acepta operaciones cubiertas por un único tramo tributario vigente', () => {
   const input = base();
+  input.startDate = '2010-01-01';
   input.company = {
     id: 'company-1',
     taxStatusHistory: [{
@@ -638,7 +639,7 @@ test('detecta vínculos de eventos fiscales revertidos y no mezcla empresas', ()
   assert.ok(plan.sourceDependencies.some(item =>
     item.sourceId === 'islr-reversal' && item.targetId === 'islr-original' &&
     item.relationType === 'REVERSAL_OF_ISLR_EVENT'
-  ) === false);
-  assert.ok(plan.blockers.some(item => item.includes('no puede resolver de forma única')));
+  ));
+  assert.ok(plan.blockers.some(item => item.includes('de otra empresa')));
   assert.equal(plan.canProceedToTransactionalReplay, false);
 });
