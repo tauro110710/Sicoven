@@ -157,7 +157,7 @@ Trabajar en este orden, cerrando cada fase con PR integrada y pruebas satisfacto
 
 ### Fase 2 — recuperación idempotente de handlers especializados
 
-<badge>SUBGRUPO 1 INTEGRADO; SUBGRUPO 2 EN VALIDACIÓN</badge>
+<badge>SUBGRUPOS 1 Y 2 INTEGRADOS; SUBGRUPO 3 EN VALIDACIÓN</badge>
 
 **PR #178 — integrada en main**
 - URL: https://github.com/miguel110710/Sicoven/pull/178
@@ -176,21 +176,32 @@ Trabajar en este orden, cerrando cada fase con PR integrada y pruebas satisfacto
 - La PR se fusionó con el HEAD esperado `047cab144a1d09a81aa46d2364e439567105359a`; sin hilos de revisión pendientes.
 - No publicó versión; continúa v1.0.37.
 
-**Subgrupo 2 en validación — `feat/durable-operation-intents` (PR #180)**
-- Añade un diario append-only `operation_intents` en cada SQLite de empresa, con ID, canal IPC permitido, hash y payload de solicitud, modo de invocación, actor y fecha.
-- El preload registra la intención en SQLite antes de llamar al handler especializado. La respuesta perdida o el cierre del proceso ya no destruyen el ID ni el payload.
-- `runIdempotentOperation` escribe el recibo y la marca de finalización de la intención en la misma transacción SQLite que el efecto de negocio.
-- La recuperación filtra por empresa y actor autenticado, valida canal/hash y vuelve a invocar la misma solicitud con el mismo ID.
-- Al reiniciar, SICOVEN consulta las pendientes y solicita confirmación explícita mediante el diálogo interno no bloqueante antes de reintentarlas; no ejecuta operaciones silenciosamente.
-- Incluye pruebas de recuperación de una intención pendiente después de cerrar/reabrir SQLite, reproducción del recibo original tras perder respuesta y reiniciar, commit conjunto, rollback, claves reutilizadas, aislamiento por actor y autorización IPC.
-- Añade ambas tablas al manifiesto de migración relacional opcional por empresa, preservando intenciones y finalizaciones al convertir bases heredadas a tenants.
-- Exclusiones explícitas: creación de empresa usa su protocolo especial y aún necesita un diario durable en la base de control; adjuntar soportes sigue pendiente por combinar filesystem y SQLite; actualización de ficha empresarial requiere saga entre base de control y base de tenant.
-- Las operaciones pendientes se conservan si no pueden confirmarse; no borrar ni descartar automáticamente solicitudes cuyo resultado no pueda demostrarse.
+**PR #180 — integrada en main**
+- URL: https://github.com/miguel110710/Sicoven/pull/180
+- Commit squash: `c1a69b356385a5426e7467cbf00cf86e8cdbd7c6`.
+- Añade el diario append-only `operation_intents` y `operation_intent_completions` en SQLite de cada empresa, con ID, canal IPC permitido, tipo de operación, hash/payload, modo de invocación, actor y secuencia durable.
+- El preload registra la intención antes del handler. El recibo y la finalización se confirman en la misma transacción SQLite que el efecto de negocio.
+- La recuperación valida canal, tipo, hash y actor estable por ID; solicita confirmación explícita antes de reintentar. No reejecuta operaciones silenciosamente.
+- La migración relacional conserva las intenciones y finalizaciones al convertir bases heredadas a tenants.
+- Linux CI run `44826799162`: SUCCESS; tests, TypeScript y build producción.
+- Windows Release run `44826799271`: SUCCESS; pruebas contables, typecheck, build sin demo, auditorías, empaquetado, smoke install/launch, migración E2E y upgrade desde v1.0.17 conservando SQLite.
+- No publicó instalador ni actualizó la release; continúa v1.0.37.
+- Los workflows push-main posteriores (`44827742157` y `44827742120`) fallaron antes de asignar runner y ejecutar pasos; el reintento tuvo el mismo resultado. Esto queda como incidencia de ejecución de Actions, separada de la validación Linux/Windows exitosa de la PR.
 
-**Pendiente dentro de esta fase**
-- Terminar CI Linux/Windows y revisar todos los handlers que usan `invokeRecoverableOperation`; corregir incompatibilidades de hash, actor, canal o formato antes de integrar.
-- Añadir recuperación durable para creación de empresa y actualización de metadata con protocolo separado en la base de control y saga entre bases.
-- Completar el protocolo de soportes/documentos: staging, hash, journal, commit/reconciliación SQLite-filesystem y recuperación segura de huérfanos.
+**Subgrupo 3 en validación — `feat/company-metadata-saga` (PR siguiente)**
+- Convierte la actualización de ficha empresarial, que afecta la base de control y la base tenant, en una saga recuperable.
+- `company_metadata_intents` registra en la base de control la solicitud, hash, valores anteriores/nuevos y actor, dentro de la misma transacción que actualiza el registro de empresa.
+- La base tenant registra el evento de auditoría y su recibo idempotente en una transacción local. La base de control registra la finalización después de confirmar el recibo tenant.
+- Si SICOVEN se cierra entre ambas bases, la intención permanece y se reconcilia al consultar/listar empresas; el recibo evita duplicar el evento de auditoría.
+- La reconciliación conserva el actor original y no revierte metadata ya confirmada. Las empresas archivadas o eliminadas no se abren ni se sustituyen para intentar recuperar la operación.
+- La actualización recibe un ID estable y el preload reintenta la misma solicitud dentro de la invocación.
+- Se detectó que PR #180 añadió las tablas de intención a empresas con esquema v2 sin subir el número de esquema. Esta rama corrige el punto: esquema tenant v3, migraciones v1→v3 y v2→v3, y pruebas de creación de las tablas en bases existentes.
+- Incluye pruebas de interrupción antes del audit tenant, después del audit tenant y antes de la finalización de control, recuperación idempotente, rollback de metadata/intent y recreación del esquema tras restauración global.
+- Aún no integra el diario durable de creación de empresa; sigue pendiente porque puede quedar un archivo SQLite tenant huérfano antes de registrar la empresa.
+
+**Pendiente dentro de la fase de límites transaccionales**
+- Completar diario durable de creación de empresa en la base de control y reconciliar bases tenant huérfanas verificando identidad, snapshot inicial y recibo `company_created`; nunca sobrescribir ni borrar un archivo no verificado.
+- Completar el protocolo de adjuntar soportes/documentos: staging, hash, journal, commit/reconciliación SQLite-filesystem y recuperación segura de huérfanos.
 - Auditar handlers de escritura directa que todavía no usan recibos/intenciones; no asumir cobertura universal.
 - Resolver de forma visible intenciones que fallan validación o quedan pendientes; el usuario debe poder revisar, reintentar o cerrar de forma auditada, nunca perderlas silenciosamente.
 - Probar fallos antes/después de COMMIT, reinicio, reintento, concurrencia, aislamiento multiempresa/actor y recuperación del resultado original.
