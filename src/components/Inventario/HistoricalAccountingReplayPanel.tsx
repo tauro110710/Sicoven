@@ -11,7 +11,7 @@ const formatDate = (value: string | null | undefined): string => {
 
 export const HistoricalAccountingReplayPanel: React.FC = () => {
   const { currentCompany, prepareHistoricalAccountingReplayPlan, isStorageReady } = useAccounting();
-  const [startDate, setStartDate] = useState(currentCompany.operationalStartDate || '');
+  const [startDate, setStartDate] = useState(currentCompany.operationalStartDate || currentCompany.accountingStartDate || '');
   const [throughDate, setThroughDate] = useState('');
   const [plan, setPlan] = useState<HistoricalAccountingReplayPlan | null>(null);
   const [busy, setBusy] = useState(false);
@@ -20,9 +20,9 @@ export const HistoricalAccountingReplayPanel: React.FC = () => {
   useEffect(() => {
     setPlan(null);
     setError('');
-    setStartDate(currentCompany.operationalStartDate || '');
+    setStartDate(currentCompany.operationalStartDate || currentCompany.accountingStartDate || '');
     setThroughDate('');
-  }, [currentCompany.id, currentCompany.operationalStartDate]);
+  }, [currentCompany.id, currentCompany.operationalStartDate, currentCompany.accountingStartDate]);
 
   const reviewPlan = () => {
     setBusy(true);
@@ -50,14 +50,14 @@ export const HistoricalAccountingReplayPanel: React.FC = () => {
       </div>
       <p className="text-sm text-slate-700">
         Examina las operaciones y dependencias reales de la empresa seleccionada, ordenadas por fecha efectiva.
-        La revisión debe comenzar en la fecha real de inicio de operaciones y abarcar todos los ejercicios posteriores. Este análisis es de solo lectura: no modifica documentos, asientos, impuestos, inventario, cierres ni SQLite.
+        La reconstrucción debe abarcar desde el inicio real de operaciones cuando se conoce, incluso si es anterior a la fecha de inicio del registro ordinario en SICOVEN. Si esa fecha histórica no está documentada, el contador debe indicar el comienzo del período que va a reconstruir y verificar que no omita años que deban incluirse. Este análisis es de solo lectura: no modifica documentos, asientos, impuestos, inventario, cierres ni SQLite.
       </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="text-sm font-medium text-slate-700">
-          Desde (inicio real de operaciones)
+          Desde (inicio de la reconstrucción histórica)
           <input type="date" value={startDate} onChange={event => setStartDate(event.target.value)}
             className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />
-          <span className="mt-1 block text-xs font-normal text-slate-500">Inicio real registrado en la ficha de empresa: {currentCompany.operationalStartDate || 'No documentado; debe indicarse y luego actualizarse en la ficha de empresa'}. No hay límite de antigüedad.</span>
+          <span className="mt-1 block text-xs font-normal text-slate-500">Fecha real de inicio: {currentCompany.operationalStartDate || 'No documentada'}. Fecha inicial del registro/reconstrucción en SICOVEN: {currentCompany.accountingStartDate || 'No indicada'}. Si el inicio real no está documentado, indique aquí el primer período que abarcan los soportes disponibles. No hay límite de antigüedad.</span>
         </label>
         <label className="text-sm font-medium text-slate-700">
           Hasta (opcional)
@@ -73,7 +73,7 @@ export const HistoricalAccountingReplayPanel: React.FC = () => {
         {busy ? 'Analizando registros…' : 'Generar plan de revisión'}
       </button>
       {currentCompany.operationalStartDate && startDate !== currentCompany.operationalStartDate && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">La reconstrucción integral debe comenzar en la fecha real de inicio de operaciones registrada para esta empresa ({formatDate(currentCompany.operationalStartDate)}). No se permite omitir ejercicios anteriores.</p>}
-      {!currentCompany.operationalStartDate && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Esta empresa fue creada antes de incorporar la fecha de inicio de operaciones. Indique la fecha real y actualice la ficha de empresa antes de autorizar cualquier reconstrucción integral.</p>}
+      {!currentCompany.operationalStartDate && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">No hay una fecha real de inicio de operaciones documentada en la ficha. Verifique los antecedentes y los soportes disponibles para confirmar que la fecha inicial seleccionada no omita períodos que deban reconstruirse.</p>}
       {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
       {plan && <>
         <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
