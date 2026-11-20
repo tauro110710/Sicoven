@@ -263,6 +263,73 @@ function createCompanyDatabaseManager({
     return getRecord(company.companyId);
   }
 
+  function recoverOrphanedCompany(companyInput, verifyDatabase) {
+    const company = normalizeCompanyMetadata(companyInput);
+    if (typeof verifyDatabase !== 'function') {
+      throw new TypeError('La recuperación de una base huérfana requiere un verificador de identidad y contenido.');
+    }
+    if (selectRecord.get(company.companyId)) {
+      throw new Error('La empresa ya está registrada; la recuperación de huérfanos no puede sustituir su registro.');
+    }
+    const duplicate = controlDb.prepare(
+      'SELECT company_id FROM ' + REGISTRY_TABLE + ' WHERE upper(rif)=? AND company_id<>?'
+    ).get(company.rif, company.companyId);
+    if (duplicate) throw new Error('El RIF ya está asociado a otra empresa del registro local.');
+
+    const relativePath = expectedRelativePath(company.companyId);
+    const filePath = path.resolve(root, relativePath);
+    if (fs.existsSync(companiesRoot)) assertSafeDirectory(companiesRoot, 'La carpeta companies');
+    const companyDirectory = path.dirname(filePath);
+    if (fs.existsSync(companyDirectory)) assertSafeDirectory(companyDirectory, 'La carpeta de la empresa');
+    if (!fs.existsSync(filePath)) return { found: false };
+    if (!fs.existsSync(companiesRoot) || !fs.existsSync(companyDirectory)) {
+      throw new Error('La ruta de la base huérfana no está completa; se conservó intacta para inspección.');
+    }
+    assertSafeDatabaseFile(filePath);
+
+    let storedVersion;
+    const tenantDb = new Database(filePath, { readonly: true, fileMustExist: true });
+    try {
+      assertSqliteIntegrity(tenantDb);
+      const metadataTable = tenantDb.prepare(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?"
+      ).get(TENANT_META_TABLE);
+      if (!metadataTable) throw new Error('La base huérfana no contiene metadatos de identidad; no se registrará.');
+      const meta = tenantDb.prepare('SELECT meta_value FROM ' + TENANT_META_TABLE + ' WHERE meta_key=?');
+      const storedId = String(meta.get('company_id')?.meta_value || '');
+      storedVersion = Number(meta.get('schema_version')?.meta_value);
+      if (storedId !== company.companyId || storedVersion !== schemaVersion) {
+        throw new Error('La identidad o versión de la base huérfana no coincide con la solicitud; el archivo se conserva sin cambios.');
+      }
+      if (verifyDatabase(tenantDb, company) !== true) {
+        throw new Error('La verificación de contenido de la base huérfana no fue aprobada; el archivo se conserva sin cambios.');
+      }
+    } finally {
+      if (tenantDb.open) tenantDb.close();
+    }
+
+    const insert = controlDb.transaction(() => {
+      const current = selectRecord.get(company.companyId);
+      if (current) {
+        if (String(current.rif).toUpperCase() !== company.rif || String(current.name) !== company.name) {
+          throw new Error('El registro de empresa apareció con datos diferentes durante la recuperación.');
+        }
+        return;
+      }
+      const rifOwner = controlDb.prepare(
+        'SELECT company_id FROM ' + REGISTRY_TABLE + ' WHERE upper(rif)=? AND company_id<>?'
+      ).get(company.rif, company.companyId);
+      if (rifOwner) throw new Error('El RIF ya está asociado a otra empresa del registro local.');
+      controlDb.prepare(`
+        INSERT INTO ${REGISTRY_TABLE}
+          (company_id,rif,name,relative_path,schema_version,status)
+        VALUES(?,?,?,?,?,'ACTIVE')
+      `).run(company.companyId, company.rif, company.name, relativePath, storedVersion);
+    });
+    insert();
+    return { found: true, company: getRecord(company.companyId), recovered: true };
+  }
+
   function openCompany(companyIdInput) {
     const companyId = normalizeCompanyId(companyIdInput);
     if (openDatabases.has(companyId)) return openDatabases.get(companyId);
@@ -406,6 +473,7 @@ function createCompanyDatabaseManager({
   return Object.freeze({
     registerCompany,
     registerExistingCompanies,
+    recoverOrphanedCompany,
     updateCompanyMetadata,
     openCompany,
     closeCompany,
