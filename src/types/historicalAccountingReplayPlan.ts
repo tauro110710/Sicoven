@@ -534,7 +534,7 @@ export function buildHistoricalAccountingReplayPlan(
     }
   }
 
-  const company = input.company || {};
+  const company: HistoricalReplayRecord = input.company || {};
   const taxStatusHistory = Array.isArray(company.taxStatusHistory) ? company.taxStatusHistory as HistoricalReplayRecord[] : [];
   const bcvHistory = Array.isArray(company.accountingBcvRateHistory) ? company.accountingBcvRateHistory as HistoricalReplayRecord[] : [];
   const functionalCurrencyAssessments = Array.isArray(company.functionalCurrencyAssessments) ? company.functionalCurrencyAssessments as HistoricalReplayRecord[] : [];
