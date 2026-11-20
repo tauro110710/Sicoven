@@ -1,3 +1,5 @@
+import { addDecimal, decimalToNumber, divideDecimal, multiplyDecimal, parseDecimal, roundDecimal } from './exactDecimal';
+
 export interface VnrProvisionLedgerBalance {
   provisionBs: number;
   provisionUsd: number;
@@ -195,8 +197,15 @@ export function reconstructFifoLayers(
   return layers.filter(layer => layer.quantity > 1e-8);
 }
 
-const cents = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
-const usdPrecision = (value: number): number => Math.round((value + Number.EPSILON) * 1000000) / 1000000;
+const cents = (value: number): number => decimalToNumber(roundDecimal(value, 2));
+const usdPrecision = (value: number): number => decimalToNumber(roundDecimal(value, 6));
+const exactProductSum = (pairs: Array<[number, number]>): ReturnType<typeof parseDecimal> =>
+  pairs.reduce((sum, [quantity, unitCost]) =>
+    addDecimal(sum.coefficient === 0n ? 0n : sum.coefficient, multiplyDecimal(quantity, unitCost)), parseDecimal(0));
+const exactRoundedProductSum = (pairs: Array<[number, number]>, places: number): number =>
+  decimalToNumber(roundDecimal(exactProductSum(pairs), places));
+const exactQuotient = (dividend: number, divisor: number): number =>
+  divisor === 0 ? 0 : decimalToNumber(divideDecimal(dividend, divisor, 18));
 const validPositive = (value: number): boolean => Number.isFinite(value) && value > 0;
 const validNonNegative = (value: number): boolean => Number.isFinite(value) && value >= 0;
 
@@ -213,17 +222,15 @@ export function calculateWeightedAverageCost(
       !validPositive(exchangeRate)) {
     throw new Error('Cantidades, costos o tasa BCV inválidos para recalcular el costo promedio.');
   }
-  const quantity = existingQuantity + incomingQuantity;
-  const totalCostBs = cents(existingQuantity * existingUnitCostBs + incomingQuantity * incomingUnitCostBs);
-  const unitCostBs = quantity > 0 ? totalCostBs / quantity : 0;
-  const unitCostUsd = unitCostBs / exchangeRate;
-  return {
-    quantity,
-    totalCostBs,
-    totalCostUsd: usdPrecision(totalCostBs / exchangeRate),
-    unitCostBs,
-    unitCostUsd
-  };
+  const quantity = decimalToNumber(addDecimal(existingQuantity, incomingQuantity));
+  const totalCostBs = exactRoundedProductSum([
+    [existingQuantity, existingUnitCostBs],
+    [incomingQuantity, incomingUnitCostBs]
+  ], 2);
+  const totalCostUsd = decimalToNumber(roundDecimal(divideDecimal(totalCostBs, exchangeRate, 6), 6));
+  const unitCostBs = quantity > 0 ? exactQuotient(totalCostBs, quantity) : 0;
+  const unitCostUsd = quantity > 0 ? exactQuotient(totalCostUsd, quantity) : 0;
+  return { quantity, totalCostBs, totalCostUsd, unitCostBs, unitCostUsd };
 }
 
 /** Recalcula el costo promedio ponderado preservando por separado la valoración histórica en Bs. y USD. */
@@ -240,16 +247,22 @@ export function calculateWeightedAverageCostDual(
       !validNonNegative(incomingUnitCostBs) || !validNonNegative(incomingUnitCostUsd)) {
     throw new Error('Cantidades o costos históricos Bs./USD inválidos para recalcular el costo promedio.');
   }
-  const quantity = existingQuantity + incomingQuantity;
-  const totalCostBs = cents(existingQuantity * existingUnitCostBs + incomingQuantity * incomingUnitCostBs);
-  const totalCostUsd = usdPrecision(existingQuantity * existingUnitCostUsd + incomingQuantity * incomingUnitCostUsd);
+  const quantity = decimalToNumber(addDecimal(existingQuantity, incomingQuantity));
+  const totalCostBs = exactRoundedProductSum([
+    [existingQuantity, existingUnitCostBs],
+    [incomingQuantity, incomingUnitCostBs]
+  ], 2);
+  const totalCostUsd = exactRoundedProductSum([
+    [existingQuantity, existingUnitCostUsd],
+    [incomingQuantity, incomingUnitCostUsd]
+  ], 6);
   if (!Number.isFinite(quantity) || !Number.isFinite(totalCostBs) || !Number.isFinite(totalCostUsd)) {
     throw new Error('La valoración ponderada dual produjo un importe no finito.');
   }
   return {
     quantity, totalCostBs, totalCostUsd,
-    unitCostBs: quantity > 0 ? totalCostBs / quantity : 0,
-    unitCostUsd: quantity > 0 ? totalCostUsd / quantity : 0
+    unitCostBs: quantity > 0 ? exactQuotient(totalCostBs, quantity) : 0,
+    unitCostUsd: quantity > 0 ? exactQuotient(totalCostUsd, quantity) : 0
   };
 }
 
@@ -274,26 +287,24 @@ export function calculateFifoIssue(layersInput: CostLayer[], quantityToIssue: nu
     throw new Error(`Existencia insuficiente para PEPS: disponibles ${available}, solicitadas ${quantityToIssue}.`);
   }
   let remaining = quantityToIssue;
-  let totalBs = 0;
-  let totalUsd = 0;
+  const consumedLayers: Array<[number, number, number]> = [];
   for (const layer of layers) {
     if (remaining <= 1e-8) break;
     const consumed = Math.min(remaining, layer.quantity);
-    totalBs += consumed * layer.unitCostBs;
-    totalUsd += consumed * layer.unitCostUsd;
+    consumedLayers.push([consumed, layer.unitCostBs, layer.unitCostUsd]);
     remaining -= consumed;
   }
-  if (remaining > 1e-8 || !Number.isFinite(totalBs) || !Number.isFinite(totalUsd)) {
+  if (remaining > 1e-8) {
     throw new Error('No se pudo conciliar el consumo PEPS con las capas disponibles.');
   }
-  const totalCostBs = cents(totalBs);
-  const totalCostUsd = usdPrecision(totalUsd);
+  const totalCostBs = exactRoundedProductSum(consumedLayers.map(([q, bs]) => [q, bs]), 2);
+  const totalCostUsd = exactRoundedProductSum(consumedLayers.map(([q, _bs, usd]) => [q, usd]), 6);
   return {
     quantity: quantityToIssue,
     totalCostBs,
     totalCostUsd,
-    unitCostBs: totalCostBs / quantityToIssue,
-    unitCostUsd: totalCostUsd / quantityToIssue
+    unitCostBs: exactQuotient(totalCostBs, quantityToIssue),
+    unitCostUsd: exactQuotient(totalCostUsd, quantityToIssue)
   };
 }
 
