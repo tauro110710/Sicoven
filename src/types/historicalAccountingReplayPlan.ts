@@ -20,6 +20,7 @@ export interface HistoricalReplayRecord {
   endDate?: string;
   occurredAt?: string;
   createdAt?: string;
+  recordedAt?: string;
   entryNumber?: number;
   type?: string;
   referenceDoc?: string;
@@ -128,7 +129,7 @@ const SOURCE_COLLECTIONS: CollectionSpec[] = [
   { collection: 'supplierAdvanceSettlements', kind: 'SUPPLIER_ADVANCE_SETTLEMENT', dateFields: ['settlementDate', 'date'], referenceFields: ['targetPurchaseId', 'supplierRif'] },
   { collection: 'supplierDirectAdvances', kind: 'SUPPLIER_DIRECT_ADVANCE', dateFields: ['date'], referenceFields: ['reference', 'supplierRif'] },
   { collection: 'fixedAssets', kind: 'FIXED_ASSET', dateFields: ['acquisitionDate'], referenceFields: ['assetCode', 'description'] },
-  { collection: 'vatVouchers', kind: 'VAT_VOUCHER', dateFields: ['date'], referenceFields: ['documentNumber', 'reference'] },
+  { collection: 'vatVouchers', kind: 'VAT_VOUCHER', dateFields: ['fiscalDate'], referenceFields: ['voucherNumber', 'invoiceNumber', 'controlNumber'] },
   { collection: 'islrVouchers', kind: 'ISLR_VOUCHER', dateFields: ['date'], referenceFields: ['documentNumber', 'reference'] },
   { collection: 'vatWithholdingDeclarations', kind: 'VAT_WITHHOLDING_DECLARATION', dateFields: ['periodEndDate', 'endDate', 'date'], referenceFields: ['period', 'declarationNumber'] },
   { collection: 'vatWithholdingDeclarationEvents', kind: 'VAT_WITHHOLDING_EVENT', dateFields: ['date', 'occurredAt'], referenceFields: ['declarationId', 'eventType'] },
@@ -153,9 +154,52 @@ const firstText = (record: HistoricalReplayRecord, fields: string[]): string | n
 };
 
 const recordedAt = (record: HistoricalReplayRecord): string | null => {
-  const value = typeof record.createdAt === 'string' ? record.createdAt : null;
+  const value = typeof record.createdAt === 'string' ? record.createdAt : typeof record.recordedAt === 'string' ? record.recordedAt : null;
   return value && Number.isFinite(Date.parse(value)) ? value : null;
 };
+
+/**
+ * Returns only orphaned withholding events that can be attributed to the
+ * selected company. Legacy events without a source declaration and without an
+ * explicit companyId cannot safely block another company's reconstruction.
+ */
+/**
+ * Detects explicit cross-company links between a withholding event and its
+ * source declaration. The mismatch is relevant to either company involved;
+ * it must never be silently reassigned to the declaration's company.
+ */
+export function findCrossCompanyVatWithholdingEvents(
+  events: HistoricalReplayRecord[],
+  declarations: HistoricalReplayRecord[],
+  companyId: string
+): HistoricalReplayRecord[] {
+  const declarationById = new Map(
+    declarations.map(declaration => [String(declaration.id || ''), declaration] as const)
+  );
+  return events.filter(event => {
+    const declaration = declarationById.get(String(event.declarationId || ''));
+    if (!declaration) return false;
+    const eventCompanyId = String(event.companyId || '').trim();
+    const declarationCompanyId = String(declaration.companyId || '').trim();
+    if (!eventCompanyId || !declarationCompanyId || eventCompanyId === declarationCompanyId) return false;
+    return eventCompanyId === companyId || declarationCompanyId === companyId;
+  });
+}
+
+export function findOrphanedVatWithholdingEvents(
+  events: HistoricalReplayRecord[],
+  declarations: HistoricalReplayRecord[],
+  companyId: string
+): HistoricalReplayRecord[] {
+  const declarationById = new Map(
+    declarations.map(declaration => [String(declaration.id || ''), declaration] as const)
+  );
+  return events.filter(event => {
+    const declaration = declarationById.get(String(event.declarationId || ''));
+    if (declaration) return false;
+    return String(event.companyId || '') === companyId;
+  });
+}
 
 /**
  * Creates a stable, read-only chronological plan for one company.
@@ -236,6 +280,9 @@ export function buildHistoricalAccountingReplayPlan(
           (record.status === 'FILED' || Boolean(record.filedAt))) {
         externalDependencies.push('Declaración de retenciones IVA presentada: ' + id + '. Su rectificación debe coordinarse con el procedimiento fiscal correspondiente.');
       }
+      if ((spec.kind === 'VAT_WITHHOLDING_EVENT' || spec.kind === 'VAT_OWN_EVENT') && record.eventType === 'FILED') {
+        externalDependencies.push('Declaración fiscal presentada mediante evento ' + id + '. Su rectificación debe coordinarse con el procedimiento fiscal correspondiente.');
+      }
       if (spec.kind === 'BANK_STATEMENT_MOVEMENT' && record.isReconciled === true) {
         externalDependencies.push('Movimiento bancario conciliado: ' + id + '. Requiere recalcular y volver a validar la conciliación.');
       }
@@ -295,7 +342,13 @@ export function buildHistoricalAccountingReplayPlan(
     (latest, event) => event.effectiveDate > latest ? event.effectiveDate : latest,
     startDate
   );
-  const throughDate = requestedThroughDate || latestSourceDate;
+  const latestJournalEntryDate = (Array.isArray(input.journalEntries) ? input.journalEntries : [])
+    .filter(entry => String(entry.companyId || '') === companyId)
+    .map(entry => String(entry.date || '').slice(0, 10))
+    .filter(date => isIsoDate(date) && date >= startDate)
+    .reduce((latest, date) => date > latest ? date : latest, startDate);
+  const latestKnownDate = latestJournalEntryDate > latestSourceDate ? latestJournalEntryDate : latestSourceDate;
+  const throughDate = requestedThroughDate || latestKnownDate;
   if (isIsoDate(startDate) && isIsoDate(throughDate) && throughDate < startDate) {
     blockers.push('La fecha final no puede ser anterior a la fecha inicial.');
   }

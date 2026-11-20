@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildHistoricalAccountingReplayPlan,
+  findOrphanedVatWithholdingEvents,
+  findCrossCompanyVatWithholdingEvents,
   type HistoricalAccountingReplaySnapshot
 } from './historicalAccountingReplayPlan';
 
@@ -184,4 +186,109 @@ test('usa fiscalDate para ubicar eventos ISLR en la cronología histórica', () 
   assert.equal(plan.sourceEvents[0].kind, 'ISLR_FISCAL_EVENT');
   assert.equal(plan.sourceEvents[0].effectiveDate, '2023-04-12');
   assert.equal(plan.sourceEvents[0].linkedJournalEntryId, 'journal-islr-1');
+});
+
+
+test('exige fecha fiscal efectiva para comprobantes de retención IVA', () => {
+  const input = base();
+  input.vatVouchers = [{
+    id: 'vat-voucher-1',
+    companyId: 'company-1',
+    date: '2023-04-02',
+    fiscalDate: '2023-04-05',
+    voucherNumber: '20230400000001'
+  }];
+  const plan = buildHistoricalAccountingReplayPlan(input);
+  assert.equal(plan.sourceEvents[0].effectiveDate, '2023-04-05');
+  assert.equal(plan.sourceEvents[0].linkedJournalEntryId, null);
+});
+
+test('bloquea comprobantes IVA históricos sin fecha fiscal efectiva verificable', () => {
+  const input = base();
+  input.vatVouchers = [{
+    id: 'vat-voucher-legacy',
+    companyId: 'company-1',
+    date: '2023-04-02',
+    voucherNumber: '20230400000001'
+  }];
+  const plan = buildHistoricalAccountingReplayPlan(input);
+  assert.equal(plan.canProceedToTransactionalReplay, false);
+  assert.match(plan.blockers.join(' '), /vatVouchers\/vat-voucher-legacy/);
+});
+
+test('marca como dependencia externa la presentación de una declaración por evento', () => {
+  const input = base();
+  input.vatOwnDeclarationEvents = [{
+    id: 'vat-own-filed-1',
+    companyId: 'company-1',
+    declarationId: 'vat-own-1',
+    eventType: 'FILED',
+    occurredAt: '2023-04-30T12:00:00.000Z',
+    recordedAt: '2023-04-30T12:00:00.000Z'
+  }];
+  const plan = buildHistoricalAccountingReplayPlan(input);
+  assert.ok(plan.externalDependencies.some(item => item.includes('vat-own-filed-1')));
+});
+
+
+test('extiende la fecha final automática hasta el último asiento de la empresa', () => {
+  const input = base();
+  input.purchases = [{
+    id: 'purchase-1',
+    companyId: 'company-1',
+    invoiceDate: '2023-02-01'
+  }];
+  input.journalEntries = [{
+    id: 'journal-later',
+    companyId: 'company-1',
+    date: '2024-06-30'
+  }];
+  const plan = buildHistoricalAccountingReplayPlan(input);
+  assert.equal(plan.throughDate, '2024-06-30');
+  assert.deepEqual(plan.derivedJournalEntryIds, ['journal-later']);
+});
+
+
+test('usa recordedAt de eventos fiscales para ordenar operaciones del mismo día', () => {
+  const input = base();
+  input.vatOwnDeclarationEvents = [
+    { id: 'event-later', companyId: 'company-1', declarationId: 'vat-own-1', eventType: 'REVIEWED', occurredAt: '2023-04-30T00:00:00.000Z', recordedAt: '2023-04-30T12:00:00.000Z' },
+    { id: 'event-earlier', companyId: 'company-1', declarationId: 'vat-own-1', eventType: 'PAYMENT', occurredAt: '2023-04-30T00:00:00.000Z', recordedAt: '2023-04-30T10:00:00.000Z' }
+  ];
+  const plan = buildHistoricalAccountingReplayPlan(input);
+  assert.deepEqual(plan.sourceEvents.map(event => event.sourceId), ['event-earlier', 'event-later']);
+  assert.equal(plan.warnings.some(item => item.includes('carece de marca de registro')), false);
+});
+
+
+test('los eventos huérfanos de otra empresa no bloquean la reconstrucción seleccionada', () => {
+  const events = [
+    { id: 'orphan-other', companyId: 'company-2', declarationId: 'missing-2' },
+    { id: 'orphan-own', companyId: 'company-1', declarationId: 'missing-1' },
+    { id: 'orphan-unknown', declarationId: 'missing-unknown' }
+  ];
+  const declarations = [
+    { id: 'declaration-other', companyId: 'company-2' }
+  ];
+  const selectedCompanyOrphans = findOrphanedVatWithholdingEvents(events, declarations, 'company-1');
+  assert.deepEqual(selectedCompanyOrphans.map(event => event.id), ['orphan-own']);
+});
+
+test('un vínculo cruzado entre evento y declaración se detecta sin clasificarlo como huérfano', () => {
+  const events = [{ id: 'event-cross', companyId: 'company-1', declarationId: 'declaration-2' }];
+  const declarations = [{ id: 'declaration-2', companyId: 'company-2' }];
+  assert.deepEqual(findOrphanedVatWithholdingEvents(events, declarations, 'company-1'), []);
+  assert.deepEqual(findCrossCompanyVatWithholdingEvents(events, declarations, 'company-1').map(event => event.id), ['event-cross']);
+  assert.deepEqual(findCrossCompanyVatWithholdingEvents(events, declarations, 'company-2').map(event => event.id), ['event-cross']);
+  assert.deepEqual(findCrossCompanyVatWithholdingEvents(events, declarations, 'company-3'), []);
+});
+
+test('no confunde eventos sin empresa explícita ni declaración con cruces entre empresas', () => {
+  const events = [
+    { id: 'legacy-unknown', declarationId: 'declaration-2' },
+    { id: 'legacy-orphan', declarationId: 'missing' }
+  ];
+  const declarations = [{ id: 'declaration-2', companyId: 'company-2' }];
+  assert.deepEqual(findCrossCompanyVatWithholdingEvents(events, declarations, 'company-1'), []);
+  assert.deepEqual(findCrossCompanyVatWithholdingEvents(events, declarations, 'company-2'), []);
 });
