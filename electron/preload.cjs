@@ -7,8 +7,10 @@ async function invokeRecoverableOperation(channel, token, input) {
     return await ipcRenderer.invoke(channel, token, request);
   } catch (firstError) {
     // A rejected IPC promise does not prove SQLite rolled back. Retry the exact
-    // request with the same durable operation ID; the main process returns the
-    // committed receipt instead of applying the business effect twice.
+    // request with the same operation ID during this invocation; the main process
+    // returns the committed receipt instead of applying the business effect twice.
+    // Callers that need recovery after an application restart must persist and
+    // resubmit their own operationId; this preload-generated fallback is not durable.
     try {
       return await ipcRenderer.invoke(channel, token, request);
     } catch {
