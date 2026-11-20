@@ -9,6 +9,7 @@ import {
   PurchaseRecord,
   getPurchaseAccountCreditDate,
   getCompanyTaxStatusForDate,
+  getCompanyIgtfPerceptionAgentForDate,
   SaleRecord,
   InventoryProduct,
   InventoryMovement,
@@ -4381,11 +4382,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('No se permite registrar IGTF en una venta sin confirmación expresa.');
     }
     if (saleData.igtfApplicable) {
-      const eligibleSaleIgtf = targetCompany.isIgtfPerceptionAgent === true &&
+      const effectiveIgtfAgentStatus = getCompanyIgtfPerceptionAgentForDate(targetCompany, saleData.invoiceDate);
+      if (effectiveIgtfAgentStatus === undefined) {
+        throw new Error('No se puede validar el IGTF: no existe un único tramo de condición tributaria vigente para la fecha de la factura. Corrija el historial antes de registrar la venta.');
+      }
+      const eligibleSaleIgtf = effectiveIgtfAgentStatus === true &&
         saleData.paymentTerm === 'CONTADO' &&
         (saleData.paymentCurrency === 'FOREIGN_CASH' || saleData.paymentCurrency === 'CRYPTO');
       if (!eligibleSaleIgtf) {
-        throw new Error('El IGTF en ventas requiere agente de percepción configurado y cobro de contado en un medio elegible.');
+        throw new Error('El IGTF en ventas requiere que la empresa estuviera designada como agente de percepción en la fecha de la factura y que el cobro sea de contado en un medio elegible.');
       }
       const expectedIgtf = Math.round((saleData.taxableBaseBs + saleData.exemptAmountBs + saleData.vatAmountBs + Number(saleData.additionalLuxuryTaxBs || 0)) * 3) / 100;
       if (Math.abs(saleIgtf - expectedIgtf) > 0.01 || Number(saleData.igtfRate || 0) !== 3) {
