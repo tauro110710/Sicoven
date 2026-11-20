@@ -1,7 +1,12 @@
 'use strict';
 const crypto = require('node:crypto');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
+const { createOperationReceiptIdentity, runIdempotentOperation } = require('./operation-receipts.cjs');
 
+function operationRequest(input) {
+  const { operationId, ...request } = input || {};
+  return request;
+}
 function requiredText(value, label, max = 2000, min = 1) {
   const result = String(value ?? '').trim();
   if (result.length < min || result.length > max) throw new Error(label + ' debe contener entre ' + min + ' y ' + max + ' caracteres.');
@@ -285,7 +290,9 @@ function registerVatFiscalIncidentIpc({ ipcMain, db, licenseView, getActiveSessi
     const actor = authenticate(token);
     return runWithDatabase(token, (activeDb, companyId) => {
       if (companyId && String(input?.companyId || '') !== companyId) throw new Error('La incidencia no pertenece a la empresa activa.');
-      return createVatFiscalIncident(activeDb, input, actor);
+      const identity = createOperationReceiptIdentity(input, companyId || input?.companyId,
+        'fiscal.vat_incident_create', operationRequest(input), actor);
+      return runIdempotentOperation(activeDb, identity, () => createVatFiscalIncident(activeDb, input, actor));
     });
   });
   ipcMain.handle('sicoven:vat-fiscal-incident-list', (_event, token, filters) => {
@@ -303,7 +310,9 @@ function registerVatFiscalIncidentIpc({ ipcMain, db, licenseView, getActiveSessi
     return runWithDatabase(token, (activeDb, companyId) => {
       const incident = activeDb.prepare('SELECT company_id AS companyId FROM vat_fiscal_incidents WHERE id=?').get(String(input?.incidentId || ''));
       if (!incident || (companyId && String(incident.companyId) !== companyId)) throw new Error('La incidencia no pertenece a la empresa activa.');
-      return recordVatFiscalIncidentEvent(activeDb, input, actor);
+      const identity = createOperationReceiptIdentity(input, incident.companyId,
+        'fiscal.vat_incident_event', operationRequest(input), actor);
+      return runIdempotentOperation(activeDb, identity, () => recordVatFiscalIncidentEvent(activeDb, input, actor));
     });
   });
 }
