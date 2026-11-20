@@ -54,17 +54,41 @@ test('bloquea registros de la empresa seleccionada sin fecha efectiva válida', 
   assert.match(plan.blockers.join(' '), /fecha efectiva válida/);
 });
 
-test('usa la fecha contable de crédito para ubicar compras cuando existe', () => {
+test('separa la fecha fiscal/inventario de la fecha de abono en cuenta de una compra', () => {
   const input = base();
   input.purchases = [{
     id: 'purchase-credit-date',
     companyId: 'company-1',
     invoiceDate: '2023-02-01',
-    accountCreditDate: '2023-02-05'
+    accountCreditDate: '2023-02-05',
+    journalEntryId: 'journal-purchase'
   }];
 
   const plan = buildHistoricalAccountingReplayPlan(input);
 
+  assert.deepEqual(plan.sourceEvents.map(event => [event.kind, event.effectiveDate]), [
+    ['PURCHASE', '2023-02-01'],
+    ['PURCHASE_ACCOUNT_CREDIT', '2023-02-05']
+  ]);
+  assert.equal(plan.sourceEvents[0].linkedJournalEntryId, null);
+  assert.equal(plan.sourceEvents[1].linkedJournalEntryId, 'journal-purchase');
+});
+
+test('incluye abono en cuenta dentro del rango aunque la factura sea anterior al inicio', () => {
+  const input = base();
+  input.startDate = '2023-02-05';
+  input.purchases = [{
+    id: 'purchase-prior-invoice',
+    companyId: 'company-1',
+    invoiceDate: '2023-02-01',
+    accountCreditDate: '2023-02-05',
+    journalEntryId: 'journal-purchase'
+  }];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+
+  assert.equal(plan.sourceEvents.length, 1);
+  assert.equal(plan.sourceEvents[0].kind, 'PURCHASE_ACCOUNT_CREDIT');
   assert.equal(plan.sourceEvents[0].effectiveDate, '2023-02-05');
 });
 
