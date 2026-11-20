@@ -102,13 +102,13 @@ function registerCompanySessionIpc({
       id: Number(intent.actor_user_id),
       username: String(intent.actor_username || '')
     };
-    const identity = createOperationReceiptIdentity({
-      operationId: String(intent.operation_id),
-      companyId: String(intent.company_id),
-      operationType: 'company.metadata_update',
+    const identity = createOperationReceiptIdentity(
+      { operationId: String(intent.operation_id) },
+      String(intent.company_id),
+      'company.metadata_update',
       request,
       actor
-    });
+    );
     const tenantDb = runtime.getCompanyDatabase(String(intent.company_id));
     const receipt = runIdempotentOperation(tenantDb, identity, () => {
       const details = {
