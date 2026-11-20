@@ -122,6 +122,7 @@ function registerCompanySessionIpc({
     if (!operationId || operationId.length > 128) throw new Error('Falta el identificador estable de creación de empresa.');
     const requestPayload = { ...company };
     delete requestPayload.operationId;
+    delete company.operationId;
     const requestHash = hashOperationRequest(JSON.stringify(requestPayload));
     company.id = operationId;
     if (!String(company.name || '').trim() || !String(company.rif || '').trim()) {
