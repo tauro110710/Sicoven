@@ -1294,7 +1294,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // no deben competir y permitir que una instantánea antigua sobrescriba una nueva.
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   // Mantiene una sola instantánea pendiente: los cambios rápidos se consolidan sin perder confirmaciones.
-  const pendingSnapshotRef = useRef<{ snapshot: any; waiters: Array<{ resolve: () => void; reject: (error: Error) => void }> } | null>(null);
+  const pendingSnapshotRef = useRef<{ snapshot: any; operationId: string; waiters: Array<{ resolve: () => void; reject: (error: Error) => void }> } | null>(null);
   const persistencePumpInFlightRef = useRef(false);
   const persistenceFaultRef = useRef(false);
   const lastPersistedSnapshotRef = useRef<any>(null);
@@ -1499,7 +1499,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         pending.snapshot = stateSnapshot;
         pending.waiters.push(...waitersForSnapshot);
       } else {
-        pendingSnapshotRef.current = { snapshot: stateSnapshot, waiters: waitersForSnapshot };
+        pendingSnapshotRef.current = { snapshot: stateSnapshot, operationId: window.crypto.randomUUID(), waiters: waitersForSnapshot };
       }
 
       if (!persistencePumpInFlightRef.current) {
@@ -1509,7 +1509,28 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             const batch = pendingSnapshotRef.current;
             pendingSnapshotRef.current = null;
             try {
-              const result = await window.sicovenStore!.save(token, batch.snapshot);
+              let result;
+              try {
+                result = await window.sicovenStore!.save(token, batch.snapshot, batch.operationId);
+              } catch (saveError) {
+                // A lost IPC reply does not prove that SQLite rolled back. First
+                // ask for the durable receipt; if absent, retry the exact same
+                // operation ID so a late/duplicate delivery cannot post twice.
+                const receipt = await window.sicovenStore!.resolveSave(token, batch.snapshot, batch.operationId)
+                  .catch(() => ({ found: false as const }));
+                if (receipt.found && receipt.result?.ok === true) {
+                  result = receipt.result;
+                } else {
+                  try {
+                    result = await window.sicovenStore!.save(token, batch.snapshot, batch.operationId);
+                  } catch (retryError) {
+                    const confirmed = await window.sicovenStore!.resolveSave(token, batch.snapshot, batch.operationId)
+                      .catch(() => ({ found: false as const }));
+                    if (confirmed.found && confirmed.result?.ok === true) result = confirmed.result;
+                    else throw retryError;
+                  }
+                }
+              }
               if (result?.ok !== true) throw new Error('SQLite no confirmó el guardado del estado contable.');
               lastPersistedSnapshotRef.current = batch.snapshot;
               setStorageError(null);
@@ -1518,7 +1539,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               const normalized = error instanceof Error ? error : new Error('Error desconocido al guardar en SQLite.');
               console.error('Error guardando los datos contables en SQLite:', normalized);
               persistenceFaultRef.current = true;
-              const queued = pendingSnapshotRef.current as { snapshot: any; waiters: Array<{ resolve: () => void; reject: (error: Error) => void }> } | null;
+              const queued = pendingSnapshotRef.current as { snapshot: any; operationId: string; waiters: Array<{ resolve: () => void; reject: (error: Error) => void }> } | null;
               pendingSnapshotRef.current = null;
               const confirmed = lastPersistedSnapshotRef.current;
               if (confirmed) {
