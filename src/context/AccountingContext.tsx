@@ -5287,11 +5287,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const prepareHistoricalAccountingReplayPlan = (startDate: string, throughDate?: string): HistoricalAccountingReplayPlan => {
+    assertSQLitePersistenceReady('Preparar plan de reconstrucción histórica');
     const companyId = currentCompany.id;
     const withholdingDeclarationById = new Map(vatWithholdingDeclarations.map(declaration => [declaration.id, declaration]));
     const orphanedWithholdingEvents = vatWithholdingDeclarationEvents.filter(event => !withholdingDeclarationById.has(event.declarationId));
     const monthEnd = (period: string): string => {
-      const match = /^(\\d{4})-?(\\d{2})$/.exec(String(period || ''));
+      const match = /^(\d{4})-?(\d{2})$/.exec(String(period || ''));
       if (!match) return '';
       const year = Number(match[1]);
       const month = Number(match[2]);
