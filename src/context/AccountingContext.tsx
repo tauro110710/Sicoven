@@ -1580,18 +1580,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const addCompany = async (comp: Omit<Company, 'id'>): Promise<Company> => {
     assertSQLitePersistenceReady('Registrar la empresa');
+    // La fecha de registro es administrativa y automática; nunca sustituye la
+    // fecha histórica desde la que el contador reconstruirá la contabilidad.
+    const companyToCreate: Omit<Company, 'id'> = {
+      ...comp,
+      registeredAt: comp.registeredAt || new Date().toISOString()
+    };
     if (window.sicovenStore) {
-      const created = await window.sicovenStore.createCompany(token, comp as unknown as Record<string, unknown>);
+      const created = await window.sicovenStore.createCompany(token, companyToCreate as unknown as Record<string, unknown>);
       if (!created?.ok || !created.company?.id) {
         throw new Error('SQLite no confirmó la creación de la base independiente de la empresa.');
       }
       // The new tenant is selected by the main process. Reloading hydrates its
       // empty, verified snapshot; never copy the previous company's in-memory
       // collections into the new database.
-      return { ...comp, id: created.company.id };
+      return { ...companyToCreate, id: created.company.id };
     }
     const newComp: Company = {
-      ...comp,
+      ...companyToCreate,
       id: `comp-${Date.now()}`
     };
     setCompanies(prev => [...prev, newComp]);
