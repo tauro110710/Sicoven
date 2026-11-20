@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
+const { createOperationReceiptIdentity, runIdempotentOperation } = require('./operation-receipts.cjs');
 
 const MAX_SOURCE_BYTES = 5 * 1024 * 1024;
 const MAX_OBSERVATIONS = 600;
@@ -131,6 +132,10 @@ function initializeInflationIndexSchema(db) {
       BEGIN SELECT RAISE(ABORT, 'inflation_index_approvals is append-only'); END;
   `);
 }
+function operationRequest(input) {
+  const { operationId, ...request } = input || {};
+  return request;
+}
 function validateImportInput(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Solicitud de importación inválida.');
   const seriesCode = String(input.seriesCode || ''); const metricType = String(input.metricType || '');
@@ -248,11 +253,19 @@ function registerInflationIndexIpc({ ipcMain, db, licenseView, getActiveSession,
   });
   ipcMain.handle('sicoven:inflation-index-import', (_event, token, input) => {
     const actor = authenticate(token);
-    return runWithDatabase(token, activeDb => importInflationIndexSeries(activeDb, input, actor));
+    return runWithDatabase(token, (activeDb, companyId) => {
+      const identity = createOperationReceiptIdentity(input, companyId || '__SYSTEM__',
+        'inflation.index_import', operationRequest(input), actor);
+      return runIdempotentOperation(activeDb, identity, () => importInflationIndexSeries(activeDb, input, actor));
+    });
   });
   ipcMain.handle('sicoven:inflation-index-review', (_event, token, input) => {
     const actor = authenticate(token);
-    return runWithDatabase(token, activeDb => approveInflationIndexSeries(activeDb, input?.seriesId, input?.decision, input?.reason, actor));
+    return runWithDatabase(token, (activeDb, companyId) => {
+      const identity = createOperationReceiptIdentity(input, companyId || '__SYSTEM__',
+        'inflation.index_review', operationRequest(input), actor);
+      return runIdempotentOperation(activeDb, identity, () => approveInflationIndexSeries(activeDb, input?.seriesId, input?.decision, input?.reason, actor));
+    });
   });
 }
 module.exports = { parseInflationIndexCsv, initializeInflationIndexSchema, validateImportInput,
