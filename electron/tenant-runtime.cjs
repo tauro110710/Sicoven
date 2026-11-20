@@ -132,6 +132,8 @@ function createTenantRuntime({
     if (!audit || String(audit.companyId || '') !== String(company.id) ||
         String(audit.operationId || '') !== operationId ||
         String(audit.requestHash || '') !== requestHash ||
+        String(audit.name || '').trim() !== String(company.name || '').trim() ||
+        String(audit.rif || '').trim().toUpperCase() !== String(company.rif || '').trim().toUpperCase() ||
         Number(audit.actorUserId) !== actorId ||
         String(audit.actorUsername || '') !== actorUsername) {
       throw new Error('La evidencia append-only de creación no coincide con la intención durable.');
