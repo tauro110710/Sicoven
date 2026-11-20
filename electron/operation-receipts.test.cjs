@@ -188,7 +188,7 @@ test('failed business transaction leaves the durable intent pending for recovery
     const key = {
       operationId: 'durable-failed-001',
       companyId: 'company-1',
-      operationType: 'accounting.test_operation',
+      operationType: 'accounting.audit_correction',
       requestHash: hashOperationRequest(JSON.stringify(request)),
       actor: durableActor
     };
@@ -212,7 +212,7 @@ test('intent completion failure rolls back the receipt and business effect', () 
     const key = {
       operationId: 'durable-rollback-001',
       companyId: 'company-1',
-      operationType: 'accounting.test_operation',
+      operationType: 'accounting.audit_correction',
       requestHash: hashOperationRequest(JSON.stringify(request)),
       actor: durableActor
     };
