@@ -157,34 +157,43 @@ Trabajar en este orden, cerrando cada fase con PR integrada y pruebas satisfacto
 
 ### Fase 2 — recuperación idempotente de handlers especializados
 
-<badge>EN CURSO; SUBGRUPO 1 INTEGRADO</badge>
+<badge>SUBGRUPO 1 INTEGRADO; SUBGRUPO 2 EN VALIDACIÓN</badge>
 
 **PR #178 — integrada en main**
 - URL: https://github.com/miguel110710/Sicoven/pull/178
 - Commit squash: `645d40114a0768a536b665e471d90b906fa0ffba`.
 - Incluye ejecutor transaccional de operaciones idempotentes, recibos por empresa/tipo/ID, hash de solicitud, actor y resultado original.
-- Integra reaperturas de período/ejercicio, auditoría y expedientes correctivos, creación/ejecución de correcciones, operaciones de nómina y creación de empresa.
+- Integra reaperturas de período/ejercicio, auditoría y expedientes correctivos, operaciones de nómina y creación de empresa.
 - Linux y Windows Release SUCCESS; Windows incluyó typecheck, build sin demo, auditorías, empaquetado de validación, smoke install/launch, migración E2E y upgrade desde v1.0.17 conservando SQLite.
-- Los checks de PR no tuvieron comentarios de revisión abiertos al fusionar.
-- Límite expresamente documentado: operationId fallback generado dentro de preload solo permite reintento en la misma invocación IPC. No garantiza recuperación después de reiniciar si el caller no persiste su propio ID. No afirmar recuperación post-reinicio ni idempotencia universal.
+- Límite: IDs fallback generados dentro de preload solo protegían reintentos de la misma invocación; no garantizaban recuperación post-reinicio.
 
-**PR en curso — `feat/recoverable-fiscal-inflation-operations`**
-- Centraliza `createOperationReceiptIdentity` en `operation-receipts.cjs` y lo reutiliza desde main y handlers especializados.
-- Integra recibos transaccionales en creación y eventos de incidencias fiscales IVA.
-- Integra recibos en importación/revisión de series de índices de inflación.
-- Integra recibos en alta/revisión de clasificaciones de partidas para RE/MRE.
-- Integra recibos en creación/revisión de expedientes de fuentes alternativas de inflación.
-- Integra recibos en revisión de soportes documentales (operación SQLite-only).
-- Preload aplica reintento con la misma clave a esos canales; los IDs fallback siguen teniendo vida limitada a la invocación si el caller no los persiste.
-- Añade prueba de integración SQLite para reintentos de incidencias fiscales y prueba unitaria de identidad estable. La validación CI completa y revisión de todos los flujos aún están pendientes.
-- No incluye adjuntar documentos: el flujo combina filesystem y SQLite y requiere protocolo durable de staging, hash, journal/recuperación y limpieza segura antes de integrar.
+**PR #179 — integrada en main**
+- URL: https://github.com/miguel110710/Sicoven/pull/179
+- Commit squash: `3fa829200930421c1abc2e2beb58786bb887c504`.
+- Centraliza `createOperationReceiptIdentity` y añade recibos transaccionales a incidencias fiscales IVA, importación/revisión de índices de inflación, clasificaciones RE/MRE, expedientes de fuentes alternativas y revisión documental SQLite-only.
+- Linux CI run `44823092661`: SUCCESS.
+- Windows Release run `44823092640`: SUCCESS; typecheck, pruebas, build sin demo, auditorías, instalador de validación, smoke install/launch, migración E2E y upgrade desde v1.0.17 preservando SQLite.
+- La PR se fusionó con el HEAD esperado `047cab144a1d09a81aa46d2364e439567105359a`; sin hilos de revisión pendientes.
+- No publicó versión; continúa v1.0.37.
+
+**Subgrupo 2 en validación — `feat/durable-operation-intents` (PR #180)**
+- Añade un diario append-only `operation_intents` en cada SQLite de empresa, con ID, canal IPC permitido, hash y payload de solicitud, modo de invocación, actor y fecha.
+- El preload registra la intención en SQLite antes de llamar al handler especializado. La respuesta perdida o el cierre del proceso ya no destruyen el ID ni el payload.
+- `runIdempotentOperation` escribe el recibo y la marca de finalización de la intención en la misma transacción SQLite que el efecto de negocio.
+- La recuperación filtra por empresa y actor autenticado, valida canal/hash y vuelve a invocar la misma solicitud con el mismo ID.
+- Al reiniciar, SICOVEN consulta las pendientes y solicita confirmación explícita mediante el diálogo interno no bloqueante antes de reintentarlas; no ejecuta operaciones silenciosamente.
+- Incluye pruebas de recuperación de una intención pendiente después de cerrar/reabrir SQLite, reproducción del recibo original tras perder respuesta y reiniciar, commit conjunto, rollback, claves reutilizadas, aislamiento por actor y autorización IPC.
+- Añade ambas tablas al manifiesto de migración relacional opcional por empresa, preservando intenciones y finalizaciones al convertir bases heredadas a tenants.
+- Exclusiones explícitas: creación de empresa usa su protocolo especial y aún necesita un diario durable en la base de control; adjuntar soportes sigue pendiente por combinar filesystem y SQLite; actualización de ficha empresarial requiere saga entre base de control y base de tenant.
+- Las operaciones pendientes se conservan si no pueden confirmarse; no borrar ni descartar automáticamente solicitudes cuyo resultado no pueda demostrarse.
 
 **Pendiente dentro de esta fase**
-- Completar recuperación durable post-reinicio: crear/persistir intención e ID en el caller antes de ejecutar; recuperar estado/resultado al reabrir y permitir reintento seguro. Cubrir formularios de nómina, empresa, reaperturas, eventos fiscales, inflación y operaciones de documentos.
-- Documentos/soportes: diseñar protocolo de staging y reconciliación entre archivo físico y registro SQLite. No borrar archivos que puedan estar vinculados a un commit confirmado; identificar y recuperar huérfanos de forma explícita.
-- Actualización de ficha de empresa: el handler `sicoven:company-update-metadata` modifica el registro/metadata mediante `runtime.updateCompanyMetadata` y después agrega auditoría en la SQLite de la empresa. Si falla la auditoría intenta compensar restaurando metadata anterior, pero registro central y auditoría de tenant no comparten transacción; una caída entre ambas escrituras puede dejar cambio sin evidencia auditada. Diseñar journal/saga recuperable con estados, clave estable, actor/hash y reconciliación al iniciar; no asumir atomicidad entre bases.
-- Auditar cualquier otro handler con escrituras directas.
-- Añadir pruebas de interrupción antes/después del commit, reintento, reinicio, concurrencia, aislamiento por empresa/actor y recuperación del resultado original para cada familia.
+- Terminar CI Linux/Windows y revisar todos los handlers que usan `invokeRecoverableOperation`; corregir incompatibilidades de hash, actor, canal o formato antes de integrar.
+- Añadir recuperación durable para creación de empresa y actualización de metadata con protocolo separado en la base de control y saga entre bases.
+- Completar el protocolo de soportes/documentos: staging, hash, journal, commit/reconciliación SQLite-filesystem y recuperación segura de huérfanos.
+- Auditar handlers de escritura directa que todavía no usan recibos/intenciones; no asumir cobertura universal.
+- Resolver de forma visible intenciones que fallan validación o quedan pendientes; el usuario debe poder revisar, reintentar o cerrar de forma auditada, nunca perderlas silenciosamente.
+- Probar fallos antes/después de COMMIT, reinicio, reintento, concurrencia, aislamiento multiempresa/actor y recuperación del resultado original.
 - Actualizar este registro al cerrar cada subgrupo y al fusionar su PR.
 
 ### Estado de publicación

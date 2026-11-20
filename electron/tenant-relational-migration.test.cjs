@@ -25,7 +25,23 @@ function createSchema(db) {
     else db.exec('CREATE TABLE "' + parent + '"(id TEXT PRIMARY KEY, company_id TEXT NOT NULL)');
   }
   for (const item of OPTIONAL_COMPANY_TABLES) {
-    db.exec('CREATE TABLE "' + item.table + '"(id TEXT PRIMARY KEY, company_id TEXT NOT NULL)');
+    if (item.table === 'operation_intents') {
+      db.exec(`CREATE TABLE operation_intents (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT, operation_id TEXT NOT NULL, company_id TEXT NOT NULL,
+        ipc_channel TEXT NOT NULL, operation_type TEXT NOT NULL, request_mode TEXT NOT NULL,
+        request_hash TEXT NOT NULL, request_json TEXT NOT NULL, actor_user_id INTEGER NOT NULL,
+        actor_username TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        UNIQUE(company_id, operation_id)
+      )`);
+    } else if (item.table === 'operation_intent_completions') {
+      db.exec(`CREATE TABLE operation_intent_completions (
+        company_id TEXT NOT NULL, operation_id TEXT NOT NULL, operation_type TEXT NOT NULL,
+        completed_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY(company_id, operation_id),
+        FOREIGN KEY(company_id, operation_id) REFERENCES operation_intents(company_id, operation_id)
+      )`);
+    } else {
+      db.exec('CREATE TABLE "' + item.table + '"(id TEXT PRIMARY KEY, company_id TEXT NOT NULL)');
+    }
   }
   for (const item of CHILD_TABLES) {
     db.exec('CREATE TABLE "' + item.table + '"(id TEXT PRIMARY KEY, "' + item.foreignKey + '" TEXT NOT NULL REFERENCES "' +
@@ -116,4 +132,40 @@ test('copies optional payroll liquidation snapshots into the correct company ten
   assert.equal(target.prepare('SELECT COUNT(*) AS count FROM payroll_liquidations').get().count,1);
   assert.equal(target.prepare('SELECT id FROM payroll_liquidations').get().id,'liq-a');
   source.close(); target.close();
+});
+
+
+test('preserves pending and completed operation intents only for the selected tenant', () => {
+  const source = new Database(':memory:');
+  const target = new Database(':memory:');
+  createSchema(source);
+  createSchema(target);
+  const hash = 'a'.repeat(64);
+  insert(source, 'operation_intents', {
+    operation_id: 'pending-a', company_id: 'company-a',
+    ipc_channel: 'sicoven:audit-record-correction', operation_type: 'accounting.audit_correction',
+    request_mode: 'object', request_hash: hash, request_json: '{"reason":"test"}',
+    actor_user_id: 7, actor_username: 'contador'
+  });
+  insert(source, 'operation_intents', {
+    operation_id: 'pending-b', company_id: 'company-b',
+    ipc_channel: 'sicoven:audit-record-correction', operation_type: 'accounting.audit_correction',
+    request_mode: 'object', request_hash: hash, request_json: '{"reason":"other"}',
+    actor_user_id: 8, actor_username: 'otro'
+  });
+  insert(source, 'operation_intent_completions', {
+    company_id: 'company-a', operation_id: 'pending-a', operation_type: 'accounting.audit_correction'
+  });
+  const result = copyCompanyRelationalData(source, target, 'company-a');
+  assert.equal(result.counts.operation_intents, 1);
+  assert.equal(result.counts.operation_intent_completions, 1);
+  assert.deepEqual(target.prepare('SELECT operation_id,company_id FROM operation_intents').all(), [
+    { operation_id: 'pending-a', company_id: 'company-a' }
+  ]);
+  assert.deepEqual(target.prepare('SELECT operation_id,company_id FROM operation_intent_completions').all(), [
+    { operation_id: 'pending-a', company_id: 'company-a' }
+  ]);
+  assert.deepEqual(target.pragma('foreign_key_check'), []);
+  source.close();
+  target.close();
 });

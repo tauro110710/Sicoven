@@ -50,6 +50,7 @@ declare global {
       listAuditEvents: (token: string, limit?: number) => Promise<{ ok: boolean; message?: string; events?: Array<{ id: number; eventType: string; details: Record<string, unknown>; createdAt: string }> }>;
       save: (token: string, state: Record<string, unknown>, operationId?: string) => Promise<{ ok: boolean; savedAt: string; replayed?: boolean }>;
       resolveSave: (token: string, state: Record<string, unknown>, operationId: string) => Promise<{ found: boolean; result?: { ok: boolean; savedAt: string; replayed?: boolean } }>;
+      recoverPendingOperationIntents: (token: string, confirmed?: boolean) => Promise<Array<{ operationId: string; channel: string; status: 'RECOVERED' | 'PENDING'; message?: string }>>;
 
       reopenAccountingPeriod: (token: string, input: { companyId: string; reopenedThroughDate: string | null; reason: string; operationId?: string }) => Promise<{ ok: boolean; reopeningId: string; company?: { id: string; name: string; closedThroughDate?: string } }>;
       resetAccounting: (token: string) => Promise<{ ok: boolean; cleared?: boolean; verified?: boolean; canceled?: boolean; removedCompanies?: number; backupDestination?: string }>;

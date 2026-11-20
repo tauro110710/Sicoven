@@ -27,7 +27,9 @@ const OPTIONAL_COMPANY_TABLES = Object.freeze([
   { table: 'payroll_severance_deposits', companyColumn: 'company_id' },
   { table: 'payroll_severance_interest_months', companyColumn: 'company_id' },
   { table: 'payroll_liquidations', companyColumn: 'company_id' },
-  { table: 'operation_receipts', companyColumn: 'company_id' }
+  { table: 'operation_receipts', companyColumn: 'company_id' },
+  { table: 'operation_intents', companyColumn: 'company_id' },
+  { table: 'operation_intent_completions', companyColumn: 'company_id' }
 ]);
 
 const CHILD_TABLES = Object.freeze([

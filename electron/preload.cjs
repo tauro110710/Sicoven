@@ -2,17 +2,21 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 async function invokeRecoverableOperation(channel, token, input) {
   const operationId = String(input?.operationId || globalThis.crypto.randomUUID());
-  const request = { ...input, operationId };
+  const request = { ...input };
+  delete request.operationId;
+  // The durable intent is committed to the selected tenant SQLite database
+  // before the business handler is invoked. It survives renderer/app restarts.
+  if (channel !== 'sicoven:company-create') {
+    await ipcRenderer.invoke('sicoven:operation-intent-prepare', token, {
+      operationId, channel, request, requestMode: 'object'
+    });
+  }
+  const requestWithId = { ...request, operationId };
   try {
-    return await ipcRenderer.invoke(channel, token, request);
+    return await ipcRenderer.invoke(channel, token, requestWithId);
   } catch (firstError) {
-    // A rejected IPC promise does not prove SQLite rolled back. Retry the exact
-    // request with the same operation ID during this invocation; the main process
-    // returns the committed receipt instead of applying the business effect twice.
-    // Callers that need recovery after an application restart must persist and
-    // resubmit their own operationId; this preload-generated fallback is not durable.
     try {
-      return await ipcRenderer.invoke(channel, token, request);
+      return await ipcRenderer.invoke(channel, token, requestWithId);
     } catch {
       throw firstError;
     }
@@ -21,6 +25,10 @@ async function invokeRecoverableOperation(channel, token, input) {
 
 async function invokeRecoverableOperationArgs(channel, token, args) {
   const operationId = globalThis.crypto.randomUUID();
+  const request = { runId: args[0], journalEntryId: args[1] };
+  await ipcRenderer.invoke('sicoven:operation-intent-prepare', token, {
+    operationId, channel, request, requestMode: 'payroll-run-confirm'
+  });
   const requestArgs = [...args, operationId];
   try {
     return await ipcRenderer.invoke(channel, token, ...requestArgs);
@@ -31,6 +39,42 @@ async function invokeRecoverableOperationArgs(channel, token, args) {
       throw firstError;
     }
   }
+}
+
+async function recoverPendingOperationIntents(token, confirmed = false) {
+  const pending = await ipcRenderer.invoke('sicoven:operation-intent-list', token);
+  if (!confirmed) {
+    return (pending || []).map(intent => ({
+      operationId: intent.operationId, channel: intent.channel, status: 'PENDING'
+    }));
+  }
+  const results = [];
+  for (const intent of pending || []) {
+    try {
+      let result;
+      if (intent.requestMode === 'payroll-run-confirm') {
+        result = await ipcRenderer.invoke(intent.channel, token,
+          intent.request.runId, intent.request.journalEntryId, intent.operationId);
+      } else if (intent.requestMode === 'object') {
+        result = await ipcRenderer.invoke(intent.channel, token,
+          { ...intent.request, operationId: intent.operationId });
+      } else {
+        throw new Error('El formato de una operación pendiente no está reconocido.');
+      }
+      if (result && typeof result === 'object' && result.ok === false) {
+        throw new Error(String(result.message || 'La operación pendiente no pudo completarse.'));
+      }
+      results.push({ operationId: intent.operationId, channel: intent.channel, status: 'RECOVERED' });
+    } catch (error) {
+      results.push({
+        operationId: intent.operationId,
+        channel: intent.channel,
+        status: 'PENDING',
+        message: error instanceof Error ? error.message : 'No se pudo recuperar la operación pendiente.'
+      });
+    }
+  }
+  return results;
 }
 contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   getLicenseStatus: () => ipcRenderer.invoke('sicoven:license-status'),
@@ -115,6 +159,7 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   recordVatFiscalIncidentEvent: (token, input) => invokeRecoverableOperation('sicoven:vat-fiscal-incident-event', token, input),
   savePdf: (input) => ipcRenderer.invoke('sicoven:pdf-save', input),
   saveTextFile: (input) => ipcRenderer.invoke('sicoven:text-save', input),
+  recoverPendingOperationIntents: (token, confirmed) => recoverPendingOperationIntents(token, confirmed),
   createBackup: (token) => ipcRenderer.invoke('sicoven:backup-create', token),
   restoreBackup: (token) => ipcRenderer.invoke('sicoven:restore-execute', token),
   exportCompanyData: (token, input) => ipcRenderer.invoke('sicoven:company-export-data', token, input)
