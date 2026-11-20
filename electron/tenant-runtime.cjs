@@ -108,6 +108,57 @@ function createTenantRuntime({
     return manager.updateCompanyMetadata(company);
   }
 
+  function verifyCompanyCreationEvidence(db, company, operation) {
+    const operationId = String(operation?.operationId || '');
+    const requestHash = String(operation?.requestHash || '');
+    const actorId = Number(operation?.actor?.id);
+    const actorUsername = String(operation?.actor?.username || '');
+    if (!operationId || operationId !== String(company.id) ||
+        !/^[a-f0-9]{64}$/i.test(requestHash) ||
+        !Number.isSafeInteger(actorId) || actorId <= 0 || !actorUsername) {
+      throw new Error('La intención de creación no conserva una identidad verificable.');
+    }
+    const snapshot = readTenantSnapshot(db, company.id);
+    const storedCompany = snapshot.companies[0];
+    if (String(storedCompany.name || '').trim() !== String(company.name || '').trim() ||
+        String(storedCompany.rif || '').trim().toUpperCase() !== String(company.rif || '').trim().toUpperCase()) {
+      throw new Error('La ficha del snapshot huérfano no coincide con la solicitud de creación.');
+    }
+    const auditRow = db.prepare(
+      "SELECT details_json FROM audit_events WHERE event_type='company_created' ORDER BY id DESC LIMIT 1"
+    ).get();
+    let audit;
+    try { audit = auditRow ? JSON.parse(auditRow.details_json) : null; } catch {}
+    if (!audit || String(audit.companyId || '') !== String(company.id) ||
+        String(audit.operationId || '') !== operationId ||
+        String(audit.requestHash || '') !== requestHash ||
+        Number(audit.actorUserId) !== actorId ||
+        String(audit.actorUsername || '') !== actorUsername) {
+      throw new Error('La evidencia append-only de creación no coincide con la intención durable.');
+    }
+    const receiptRow = db.prepare(`
+      SELECT request_hash,actor_user_id,actor_username,result_json
+      FROM operation_receipts
+      WHERE company_id=? AND operation_type='accounting.snapshot' AND operation_id=?
+    `).get(String(company.id), operationId);
+    let receiptResult;
+    try { receiptResult = receiptRow ? JSON.parse(receiptRow.result_json) : null; } catch {}
+    if (!receiptRow || !/^[a-f0-9]{64}$/i.test(String(receiptRow.request_hash || '')) ||
+        Number(receiptRow.actor_user_id) !== actorId ||
+        (receiptRow.actor_username != null && String(receiptRow.actor_username) !== actorUsername) ||
+        !receiptResult || receiptResult.ok !== true) {
+      throw new Error('El snapshot inicial no contiene un recibo contable verificable para esta creación.');
+    }
+    return true;
+  }
+
+  function recoverOrphanedCompany(company, operation) {
+    return manager.recoverOrphanedCompany(
+      company,
+      db => verifyCompanyCreationEvidence(db, company, operation)
+    );
+  }
+
   function closeCompany(companyId) {
     return manager.closeCompany(companyId);
   }
@@ -126,6 +177,7 @@ function createTenantRuntime({
     loadAccounting,
     saveAccounting,
     createCompany,
+    recoverOrphanedCompany,
     migrateLegacyDatabase,
     updateCompanyMetadata,
     closeCompany,
