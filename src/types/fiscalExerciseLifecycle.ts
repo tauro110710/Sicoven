@@ -121,6 +121,82 @@ export function validatePersistedFiscalExerciseCalendar(
   }
 }
 
+/**
+ * Builds a safe calendar from the ordinary accounting start and verifiable
+ * close/open journal-entry pairs. Historical periods without both entries
+ * remain ABIERTO; operationalStartDate is intentionally never consulted.
+ */
+export function buildPersistedFiscalExerciseCalendar(
+  company: Pick<Company, 'id' | 'fiscalYear' | 'accountingStartDate' | 'fiscalExercises'>,
+  journalEntries: Array<Pick<import('./accounting').JournalEntry,
+    'id' | 'companyId' | 'date' | 'type' | 'referenceDoc' | 'createdAt' |
+    'isAdjusted' | 'reversedByEntryId' | 'annualCloseState' | 'exerciseLink'>>
+): PersistedFiscalExercise[] {
+  const companyId = String(company.id || '').trim();
+  const currentYear = Number(company.fiscalYear);
+  if (!companyId || !Number.isInteger(currentYear) || currentYear < 1900 || currentYear > 9999) {
+    throw new Error('No se puede inicializar el calendario fiscal sin empresa y ejercicio vigente válidos.');
+  }
+  if (Array.isArray(company.fiscalExercises) && company.fiscalExercises.length > 0) {
+    validatePersistedFiscalExerciseCalendar(company.fiscalExercises, companyId);
+    return company.fiscalExercises.slice().sort((a, b) => a.startDate.localeCompare(b.startDate));
+  }
+
+  const historicalStarts = journalEntries
+    .filter(entry => String(entry.companyId) === companyId && entry.type === 'CIERRE' &&
+      String(entry.referenceDoc || '').startsWith('CIERRE:') &&
+      isValidIsoDate(String(entry.annualCloseState?.priorPeriodStartDate || '')))
+    .map(entry => String(entry.annualCloseState!.priorPeriodStartDate));
+  const configuredStart = company.accountingStartDate;
+  const firstStart = configuredStart
+    ? (isValidIsoDate(configuredStart) ? configuredStart : (() => { throw new Error('La fecha de inicio contable configurada no es válida.'); })())
+    : historicalStarts.sort()[0] || String(currentYear).padStart(4, '0') + '-01-01';
+  const firstYear = Number(firstStart.slice(0, 4));
+  if (firstYear > currentYear || currentYear - firstYear > 250) {
+    throw new Error('El rango de ejercicios requerido para inicializar el calendario no es válido.');
+  }
+
+  const exercises: PersistedFiscalExercise[] = [];
+  for (let year = firstYear; year <= currentYear + 1; year += 1) {
+    const startDate = year === firstYear ? firstStart : String(year).padStart(4, '0') + '-01-01';
+    exercises.push({
+      id: 'fiscal-exercise:' + companyId + ':' + year,
+      companyId,
+      fiscalYear: year,
+      startDate,
+      endDate: String(year).padStart(4, '0') + '-12-31',
+      status: 'ABIERTO'
+    });
+  }
+
+  const activeEntries = journalEntries.filter(entry => String(entry.companyId) === companyId &&
+    entry.isAdjusted !== true && !entry.reversedByEntryId);
+  for (const opening of activeEntries) {
+    const link = opening.exerciseLink;
+    if (opening.type !== 'APERTURA' || !link ||
+        !isValidIsoDate(link.priorPeriodStartDate) ||
+        !isValidIsoDate(link.priorPeriodEndDate) ||
+        !isValidIsoDate(link.nextPeriodStartDate) ||
+        opening.date !== link.nextPeriodStartDate) continue;
+    const closing = activeEntries.find(entry => entry.type === 'CIERRE' &&
+      String(entry.referenceDoc || '').startsWith('CIERRE:') &&
+      entry.date === link.priorPeriodEndDate &&
+      entry.annualCloseState?.priorPeriodStartDate === link.priorPeriodStartDate);
+    if (!closing) continue;
+    const target = exercises.find(item => item.startDate === link.priorPeriodStartDate &&
+      item.endDate === link.priorPeriodEndDate);
+    const next = exercises.find(item => item.startDate === link.nextPeriodStartDate);
+    const closedAt = String(closing.createdAt || '').slice(0, 10);
+    if (!target || !next || !isValidIsoDate(closedAt) || target.status !== 'ABIERTO') continue;
+    target.status = 'CERRADO';
+    target.closingEntryId = String(closing.id);
+    target.closedAt = closedAt;
+    next.openingEntryId = String(opening.id);
+  }
+  validatePersistedFiscalExerciseCalendar(exercises, companyId);
+  return exercises;
+}
+
 function addOneDay(value: string): string {
   const date = new Date(value + 'T00:00:00.000Z');
   date.setUTCDate(date.getUTCDate() + 1);
