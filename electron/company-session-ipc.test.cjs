@@ -77,9 +77,9 @@ test('rejects malformed company identifiers before invoking the context', async 
   assert.deepEqual(calls, []);
 });
 
-test('returns the active company only through the authenticated session binding', () => {
+test('returns the active company only through the authenticated session binding', async () => {
   const { handlers, calls } = fixture();
-  assert.deepEqual(handlers.get('sicoven:company-get-active')({}, 'valid-token'), { companyId: 'company-a' });
+  assert.deepEqual(await handlers.get('sicoven:company-get-active')({}, 'valid-token'), { companyId: 'company-a' });
   assert.deepEqual(calls, [['active', 'valid-token']]);
 });
 
