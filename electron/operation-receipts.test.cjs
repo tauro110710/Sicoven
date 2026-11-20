@@ -3,8 +3,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const {
-  initializeOperationReceiptSchema, createOperationReceiptIdentity, hashOperationRequest, runIdempotentOperation
+  initializeOperationReceiptSchema, createOperationReceiptIdentity, hashOperationRequest, runIdempotentOperation,
+  prepareOperationIntent, listPendingOperationIntents, registerOperationIntentIpc
 } = require('./operation-receipts.cjs');
 
 function setup() {
@@ -86,5 +90,142 @@ test('operation key cannot be reused for another request or actor', () => {
       /ya fue utilizada con otros datos/);
     assert.throws(() => runIdempotentOperation(db, { ...key, actor: { id: 8, username: 'otro' } }, () => ({ ok: true })),
       /ya fue utilizada con otros datos/);
+  } finally { db.close(); }
+});
+
+
+const durableActor = { id: 7, username: 'contador' };
+const durableRequest = { amount: 12, reference: 'REC-001' };
+function durableIntent(operationId = 'durable-001', request = durableRequest) {
+  return {
+    operationId,
+    channel: 'sicoven:audit-record-correction',
+    requestMode: 'object',
+    request
+  };
+}
+
+test('pending operation intent survives closing and reopening the tenant SQLite database', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-operation-intents-'));
+  const databasePath = path.join(directory, 'tenant.sqlite');
+  let db = new Database(databasePath);
+  try {
+    initializeOperationReceiptSchema(db);
+    const prepared = prepareOperationIntent(db, durableIntent(), 'company-1', durableActor);
+    assert.equal(prepared.prepared, true);
+    db.close();
+    db = new Database(databasePath);
+    initializeOperationReceiptSchema(db);
+    assert.deepEqual(listPendingOperationIntents(db, 'company-1', durableActor), [{
+      operationId: 'durable-001',
+      channel: 'sicoven:audit-record-correction',
+      requestMode: 'object',
+      request: durableRequest
+    }]);
+  } finally {
+    if (db.open) db.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('successful receipt and durable intent completion commit together', () => {
+  const db = setup();
+  try {
+    const request = { amount: 12, reference: 'REC-001' };
+    prepareOperationIntent(db, durableIntent('durable-commit-001', request), 'company-1', durableActor);
+    const key = {
+      operationId: 'durable-commit-001',
+      companyId: 'company-1',
+      operationType: 'accounting.test_operation',
+      requestHash: hashOperationRequest(JSON.stringify(request)),
+      actor: durableActor
+    };
+    const result = runIdempotentOperation(db, key, () => ({ ok: true, id: 'saved-1' }));
+    assert.equal(result.id, 'saved-1');
+    assert.deepEqual(listPendingOperationIntents(db, 'company-1', durableActor), []);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 1);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM operation_intent_completions').get().count, 1);
+  } finally { db.close(); }
+});
+
+test('failed business transaction leaves the durable intent pending for recovery', () => {
+  const db = setup();
+  try {
+    const request = { amount: 12, reference: 'REC-001' };
+    prepareOperationIntent(db, durableIntent('durable-failed-001', request), 'company-1', durableActor);
+    const key = {
+      operationId: 'durable-failed-001',
+      companyId: 'company-1',
+      operationType: 'accounting.test_operation',
+      requestHash: hashOperationRequest(JSON.stringify(request)),
+      actor: durableActor
+    };
+    assert.throws(() => runIdempotentOperation(db, key, () => {
+      throw new Error('interrupted before commit');
+    }), /interrupted before commit/);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM operation_intent_completions').get().count, 0);
+    assert.equal(listPendingOperationIntents(db, 'company-1', durableActor).length, 1);
+  } finally { db.close(); }
+});
+
+test('intent completion failure rolls back the receipt and business effect', () => {
+  const db = setup();
+  try {
+    db.exec('CREATE TABLE effects(id TEXT PRIMARY KEY)');
+    const request = { amount: 12, reference: 'REC-001' };
+    prepareOperationIntent(db, durableIntent('durable-rollback-001', request), 'company-1', durableActor);
+    db.exec(`CREATE TRIGGER fail_intent_completion BEFORE INSERT ON operation_intent_completions
+      BEGIN SELECT RAISE(ABORT, 'completion interrupted'); END;`);
+    const key = {
+      operationId: 'durable-rollback-001',
+      companyId: 'company-1',
+      operationType: 'accounting.test_operation',
+      requestHash: hashOperationRequest(JSON.stringify(request)),
+      actor: durableActor
+    };
+    assert.throws(() => runIdempotentOperation(db, key, () => {
+      db.prepare('INSERT INTO effects(id) VALUES(?)').run('effect-1');
+      return { ok: true, id: 'effect-1' };
+    }), /completion interrupted/);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM effects').get().count, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 0);
+    assert.equal(listPendingOperationIntents(db, 'company-1', durableActor).length, 1);
+  } finally { db.close(); }
+});
+
+test('intent keys cannot be reused across requests, channels or actors', () => {
+  const db = setup();
+  try {
+    prepareOperationIntent(db, durableIntent(), 'company-1', durableActor);
+    assert.throws(() => prepareOperationIntent(db,
+      durableIntent('durable-001', { amount: 13, reference: 'REC-001' }), 'company-1', durableActor),
+    /ya está asociada/);
+    assert.throws(() => prepareOperationIntent(db,
+      { ...durableIntent(), channel: 'sicoven:untrusted-write' }, 'company-1', durableActor),
+    /no contiene una identidad/);
+    assert.throws(() => prepareOperationIntent(db, durableIntent(), 'company-1',
+      { id: 8, username: 'otro' }), /ya está asociada/);
+    assert.equal(listPendingOperationIntents(db, 'company-1', { id: 8, username: 'otro' }).length, 0);
+  } finally { db.close(); }
+});
+
+test('durable operation intent IPC requires a valid license and authenticated tenant session', () => {
+  const db = setup();
+  const handlers = new Map();
+  try {
+    registerOperationIntentIpc({
+      ipcMain: { handle: (name, handler) => handlers.set(name, handler) },
+      licenseView: () => ({ authorized: true }),
+      getActiveSession: token => token === 'valid' ? durableActor : null,
+      withDatabase: (_token, operation) => operation(db, 'company-1')
+    });
+    assert.throws(() => handlers.get('sicoven:operation-intent-prepare')({}, 'bad', {
+      ...durableIntent(), operationId: 'ipc-intent-001'
+    }), /Sesión no válida/);
+    assert.equal(handlers.get('sicoven:operation-intent-prepare')({}, 'valid', {
+      ...durableIntent(), operationId: 'ipc-intent-001'
+    }).prepared, true);
+    assert.equal(handlers.get('sicoven:operation-intent-list')({}, 'valid').length, 1);
   } finally { db.close(); }
 });
