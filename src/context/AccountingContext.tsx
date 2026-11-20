@@ -5289,7 +5289,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const prepareHistoricalAccountingReplayPlan = (startDate: string, throughDate?: string): HistoricalAccountingReplayPlan => {
     assertSQLitePersistenceReady('Preparar plan de reconstrucción histórica');
     const companyId = currentCompany.id;
-    const withholdingDeclarationById = new Map(vatWithholdingDeclarations.map(declaration => [declaration.id, declaration]));
+    const withholdingDeclarationById = new Map<string, VatWithholdingDeclaration>(vatWithholdingDeclarations.map(declaration => [declaration.id, declaration] as const));
     const orphanedWithholdingEvents = vatWithholdingDeclarationEvents.filter(event => !withholdingDeclarationById.has(event.declarationId));
     const verifiedLegacyFiscalDateByVoucherId = new Map<string, string>();
     const conflictingLegacyVoucherDates = new Set<string>();
