@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildHistoricalAccountingReplayPlan,
   findOrphanedVatWithholdingEvents,
+  findCrossCompanyVatWithholdingEvents,
   type HistoricalAccountingReplaySnapshot
 } from './historicalAccountingReplayPlan';
 
@@ -273,8 +274,21 @@ test('los eventos huérfanos de otra empresa no bloquean la reconstrucción sele
   assert.deepEqual(selectedCompanyOrphans.map(event => event.id), ['orphan-own']);
 });
 
-test('no marca como huérfano un evento vinculado a declaración de otra empresa', () => {
-  const events = [{ id: 'event-other', companyId: 'company-1', declarationId: 'declaration-2' }];
+test('un vínculo cruzado entre evento y declaración se detecta sin clasificarlo como huérfano', () => {
+  const events = [{ id: 'event-cross', companyId: 'company-1', declarationId: 'declaration-2' }];
   const declarations = [{ id: 'declaration-2', companyId: 'company-2' }];
   assert.deepEqual(findOrphanedVatWithholdingEvents(events, declarations, 'company-1'), []);
+  assert.deepEqual(findCrossCompanyVatWithholdingEvents(events, declarations, 'company-1').map(event => event.id), ['event-cross']);
+  assert.deepEqual(findCrossCompanyVatWithholdingEvents(events, declarations, 'company-2').map(event => event.id), ['event-cross']);
+  assert.deepEqual(findCrossCompanyVatWithholdingEvents(events, declarations, 'company-3'), []);
+});
+
+test('no confunde eventos sin empresa explícita ni declaración con cruces entre empresas', () => {
+  const events = [
+    { id: 'legacy-unknown', declarationId: 'declaration-2' },
+    { id: 'legacy-orphan', declarationId: 'missing' }
+  ];
+  const declarations = [{ id: 'declaration-2', companyId: 'company-2' }];
+  assert.deepEqual(findCrossCompanyVatWithholdingEvents(events, declarations, 'company-1'), []);
+  assert.deepEqual(findCrossCompanyVatWithholdingEvents(events, declarations, 'company-2'), []);
 });
