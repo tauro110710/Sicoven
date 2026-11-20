@@ -409,7 +409,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
           {/* Inicio del registro contable ordinario en SICOVEN */}
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-1.5">
             <label className="block text-xs font-bold text-slate-800">
-              Fecha de inicio del registro contable en SICOVEN *
+              Fecha inicial del registro/reconstrucción contable en SICOVEN *
             </label>
             <input
               type="date"
@@ -418,7 +418,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
               onChange={e => setAccountingStartDate(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
             />
-            <p className="text-[10px] leading-4 text-slate-600">Desde esta fecha comenzará el registro contable ordinario de la empresa en SICOVEN. Esta fecha no limita la reconstrucción histórica: el contador podrá preparar y reconstruir períodos anteriores cuando sea necesario, conservando las fechas reales y de incorporación.</p>
+            <p className="text-[10px] leading-4 text-slate-600">Desde esta fecha se incorporarán las operaciones del registro o reconstrucción contable. Puede ser una fecha histórica anterior al día en que registra la empresa. SICOVEN guardará automáticamente la fecha y hora de registro por separado.</p>
           </div>
 
           {/* Inicio real de operaciones, dato histórico opcional */}
@@ -432,7 +432,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
               onChange={e => setOperationalStartDate(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-slate-400 focus:outline-none"
             />
-            <p className="text-[10px] leading-4 text-slate-600">Solo como referencia de la antigüedad real de la empresa. No es requisito para registrarla ni establece un límite obligatorio a los períodos que pueden reconstruirse.</p>
+            <p className="text-[10px] leading-4 text-slate-600">Indique cuándo comenzó realmente a operar la empresa, si conoce y tiene documentada esa fecha. Sirve para comprobar que la reconstrucción no omita períodos anteriores; no es requisito para registrar la empresa.</p>
           </div>
 
           {/* Ejercicio económico */}
