@@ -67,6 +67,8 @@ function initializeOperationReceiptSchema(db) {
     );
     CREATE INDEX IF NOT EXISTS operation_intents_company_sequence_idx
       ON operation_intents(company_id, sequence);
+    CREATE INDEX IF NOT EXISTS operation_intents_actor_sequence_idx
+      ON operation_intents(company_id, actor_user_id, sequence);
     CREATE TABLE IF NOT EXISTS operation_intent_completions (
       company_id TEXT NOT NULL,
       operation_id TEXT NOT NULL,
