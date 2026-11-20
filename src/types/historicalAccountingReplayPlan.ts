@@ -88,6 +88,8 @@ export interface HistoricalReplaySourceEvent {
   recordedAt: string | null;
   reference: string | null;
   linkedJournalEntryId: string | null;
+  /** Other journal entries related to the source document, including entries posted on a different effective date. */
+  relatedJournalEntryIds?: string[];
   sourceIndex: number;
 }
 
@@ -158,6 +160,24 @@ const recordedAt = (record: HistoricalReplayRecord): string | null => {
   return value && Number.isFinite(Date.parse(value)) ? value : null;
 };
 
+const collectRelatedJournalEntryIds = (record: HistoricalReplayRecord): string[] => {
+  const ids: unknown[] = [
+    record.journalEntryId,
+    record.sourceJournalEntryId,
+    record.reconciledWithJournalEntryId,
+    record.cancelledByJournalEntryId,
+    record.correctionEntryId,
+    record.reversedByJournalEntryId
+  ];
+  for (const field of ['reconciledJournalEntryIds', 'correctionEntryIds']) {
+    const value = record[field];
+    if (Array.isArray(value)) ids.push(...value);
+  }
+  return [...new Set(ids.filter((value): value is string =>
+    typeof value === 'string' && value.trim().length > 0
+  ).map(value => value.trim()))];
+};
+
 /**
  * Returns only orphaned withholding events that can be attributed to the
  * selected company. Legacy events without a source declaration and without an
@@ -214,6 +234,26 @@ export function buildHistoricalAccountingReplayPlan(
   const blockers: string[] = [];
   const warnings: string[] = [];
   const externalDependencies: string[] = [];
+  const purchaseById = new Map(
+    (Array.isArray(input.purchases) ? input.purchases : []).map(record => [String(record.id || ''), record] as const)
+  );
+  const relatedJournalEntryIdsFor = (kind: HistoricalReplaySourceKind, record: HistoricalReplayRecord): string[] => {
+    const ids = collectRelatedJournalEntryIds(record);
+    if (kind === 'VAT_VOUCHER' && record.purchaseRecordId) {
+      const purchase = purchaseById.get(String(record.purchaseRecordId));
+      if (purchase && String(purchase.companyId || '') === companyId) {
+        ids.push(...collectRelatedJournalEntryIds(purchase));
+      }
+    }
+    if (kind === 'ISLR_VOUCHER') {
+      for (const event of (Array.isArray(input.islrFiscalEvents) ? input.islrFiscalEvents : [])) {
+        if (String(event.companyId || '') === companyId && String(event.voucherId || '') === String(record.id || '')) {
+          ids.push(...collectRelatedJournalEntryIds(event));
+        }
+      }
+    }
+    return [...new Set(ids)];
+  };
 
   if (!companyId) blockers.push('Seleccione una empresa antes de preparar la reconstrucción.');
   if (!isIsoDate(startDate)) blockers.push('La fecha inicial de reconstrucción no es válida.');
@@ -257,6 +297,7 @@ export function buildHistoricalAccountingReplayPlan(
             recordedAt: created,
             reference: firstText(record, spec.referenceFields),
             linkedJournalEntryId: typeof record.journalEntryId === 'string' ? record.journalEntryId : null,
+            relatedJournalEntryIds: relatedJournalEntryIdsFor(spec.kind, record),
             sourceIndex: sourceIndex++
           });
         }
@@ -272,6 +313,7 @@ export function buildHistoricalAccountingReplayPlan(
         recordedAt: created,
         reference: firstText(record, spec.referenceFields),
         linkedJournalEntryId: spec.kind === 'PURCHASE' ? null : (spec.kind === 'FIXED_ASSET' ? (typeof record.sourceJournalEntryId === 'string' ? record.sourceJournalEntryId : null) : (typeof record.journalEntryId === 'string' ? record.journalEntryId : null)),
+        relatedJournalEntryIds: relatedJournalEntryIdsFor(spec.kind, record),
         sourceIndex: sourceIndex++
       });
       if (spec.kind === 'VAT_OWN_DECLARATION' && (record.status === 'FILED' || Boolean(record.filedAt))) {
@@ -307,6 +349,7 @@ export function buildHistoricalAccountingReplayPlan(
           recordedAt: recordedAt(asset),
           reference: String(asset.assetCode || assetId),
           linkedJournalEntryId: null,
+          relatedJournalEntryIds: relatedJournalEntryIdsFor('FIXED_ASSET_PLACED_IN_SERVICE', asset),
           sourceIndex: sourceIndex++
         });
       }
@@ -329,6 +372,7 @@ export function buildHistoricalAccountingReplayPlan(
         recordedAt: recordedAt(event),
         reference: String(asset.assetCode || assetId),
         linkedJournalEntryId: typeof event.journalEntryId === 'string' ? event.journalEntryId : null,
+        relatedJournalEntryIds: relatedJournalEntryIdsFor('FIXED_ASSET_DEPRECIATION', event),
         sourceIndex: sourceIndex++
       });
     }
@@ -351,6 +395,25 @@ export function buildHistoricalAccountingReplayPlan(
   const throughDate = requestedThroughDate || latestKnownDate;
   if (isIsoDate(startDate) && isIsoDate(throughDate) && throughDate < startDate) {
     blockers.push('La fecha final no puede ser anterior a la fecha inicial.');
+  }
+
+  const journalEntries = Array.isArray(input.journalEntries) ? input.journalEntries : [];
+  const journalEntryById = new Map(journalEntries.map(entry => [String(entry.id || ''), entry] as const));
+  const validatedLinks = new Set<string>();
+  for (const event of collected) {
+    for (const journalEntryId of event.relatedJournalEntryIds || []) {
+      const validationKey = event.key + '|' + journalEntryId;
+      if (validatedLinks.has(validationKey)) continue;
+      validatedLinks.add(validationKey);
+      const linkedEntry = journalEntryById.get(journalEntryId);
+      if (!linkedEntry) {
+        blockers.push('El documento ' + event.collection + '/' + event.sourceId +
+          ' referencia el asiento contable inexistente ' + journalEntryId + '.');
+      } else if (String(linkedEntry.companyId || '') !== companyId) {
+        blockers.push('El documento ' + event.collection + '/' + event.sourceId +
+          ' referencia el asiento ' + journalEntryId + ' de otra empresa.');
+      }
+    }
   }
 
   const inRangeEvents = collected.filter(event => event.effectiveDate <= throughDate);
