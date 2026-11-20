@@ -327,7 +327,7 @@ function createCompanyDatabaseManager({
       `).run(company.companyId, company.rif, company.name, relativePath, storedVersion);
     });
     insert();
-    return { found: true, company: getRecord(company.companyId), recovered: true };
+    return { found: true, company: listCompanies().find(item => item.id === company.companyId), recovered: true };
   }
 
   function openCompany(companyIdInput) {
