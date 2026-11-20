@@ -124,6 +124,8 @@ test('rebinds metadata intent storage to the restored control database', async (
   activeControlDb = restoredControlDb;
   await handlers.get('sicoven:company-list-accessible')({}, 'valid-token');
   assert.ok(restoredControlDb.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='company_metadata_intents'").get());
+  assert.ok(restoredControlDb.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='company_creation_intents'").get());
+  assert.ok(restoredControlDb.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='company_creation_completions'").get());
   oldControlDb.close();
   restoredControlDb.close();
 });
