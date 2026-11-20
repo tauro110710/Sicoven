@@ -1010,3 +1010,37 @@ test('snapshot and idempotency receipt roll back together when receipt insertion
     harness.db.close();
   }
 });
+
+
+test('a committed accounting-period reopening returns its original result on retry without duplicate history', () => {
+  const harness = createHarness();
+  try {
+    const state = emptyState();
+    state.companies = [{ id: 'company-reopen', name: 'Empresa Reapertura', rif: 'J-12345678-9', closedThroughDate: '2025-12-31' }];
+    persistAccountingSnapshot(harness.db, state, { id: 1, username: 'auditor' });
+    const input = {
+      companyId: 'company-reopen',
+      reopenedThroughDate: '2025-06-30',
+      reason: 'Corrección documentada del cierre contable del período.',
+      operationId: 'period-reopen-operation-001'
+    };
+    const first = harness.reopenHandler({}, 'valid-session', input);
+    const recovered = harness.reopenHandler({}, 'valid-session', input);
+    assert.equal(first.ok, true);
+    assert.equal(recovered.ok, true);
+    assert.equal(recovered.reopeningId, first.reopeningId);
+    assert.equal(recovered.replayed, true);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM period_reopenings').get().count, 1);
+    assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_period_reopened'").get().count, 1);
+    const saved = JSON.parse(harness.db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
+    assert.equal(saved.companies[0].closedThroughDate, '2025-06-30');
+    assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM operation_receipts WHERE operation_type='accounting.reopen_period'").get().count, 1);
+    assert.throws(
+      () => harness.reopenHandler({}, 'valid-session', { ...input, reason: 'Otro motivo distinto para reutilizar la misma clave.' }),
+      /ya fue utilizada con otros datos/
+    );
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM period_reopenings').get().count, 1);
+  } finally {
+    harness.db.close();
+  }
+});
