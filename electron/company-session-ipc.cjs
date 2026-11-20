@@ -452,7 +452,7 @@ function registerCompanySessionIpc({
   ipcMain.handle('sicoven:company-create', async (_event, token, input) => {
     assertOperationalReady();
     ensureCompanyMetadataOperationSchema();
-    const actor = requireAuthorizedSession(token);
+    requireAuthorizedSession(token);
     const company = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : null;
     if (!company) throw new Error('Los datos de la empresa no son válidos.');
     const operationId = String(company.operationId || crypto.randomUUID()).trim();
