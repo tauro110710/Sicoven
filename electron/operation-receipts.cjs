@@ -219,7 +219,7 @@ function listPendingOperationIntents(db, companyId, actor) {
   const selectedCompanyId = String(companyId || '').trim();
   const identity = normalizeIntentActor(actor);
   const rows = db.prepare(`
-    SELECT i.operation_id,i.ipc_channel,i.request_mode,i.request_json
+    SELECT i.operation_id,i.ipc_channel,i.request_mode,i.request_hash,i.request_json
     FROM operation_intents i
     LEFT JOIN operation_intent_completions c
       ON c.company_id=i.company_id AND c.operation_id=i.operation_id
@@ -233,8 +233,9 @@ function listPendingOperationIntents(db, companyId, actor) {
     let request;
     try { request = JSON.parse(row.request_json); }
     catch { throw new Error('Una operación pendiente contiene una solicitud ilegible; se bloqueó su recuperación automática.'); }
-    if (!request || typeof request !== 'object' || Array.isArray(request)) {
-      throw new Error('Una operación pendiente contiene una solicitud inválida; se bloqueó su recuperación automática.');
+    if (!request || typeof request !== 'object' || Array.isArray(request) ||
+        hashOperationRequest(JSON.stringify(request)) !== String(row.request_hash)) {
+      throw new Error('Una operación pendiente contiene una solicitud inválida o alterada; se bloqueó su recuperación automática.');
     }
     return {
       operationId: String(row.operation_id),
@@ -247,15 +248,19 @@ function listPendingOperationIntents(db, companyId, actor) {
 
 function completeOperationIntent(db, identityInput) {
   const identity = normalizeOperationIdentity(identityInput);
+  const table = db.prepare("SELECT 1 AS found FROM sqlite_master WHERE type='table' AND name='operation_intents'").get();
+  if (!table) return false;
   const intent = db.prepare(`
-    SELECT request_hash,actor_user_id,actor_username
+    SELECT actor_user_id,actor_username
     FROM operation_intents WHERE company_id=? AND operation_id=?
   `).get(identity.companyId, identity.operationId);
   if (!intent) return false;
-  if (String(intent.request_hash) !== identity.requestHash ||
-      Number(intent.actor_user_id) !== identity.actorUserId ||
+  // El recibo valida el hash de negocio. La intención conserva el hash de la
+  // solicitud original del renderer, que puede diferir tras normalizaciones
+  // legítimas aplicadas por el handler antes de crear el recibo.
+  if (Number(intent.actor_user_id) !== identity.actorUserId ||
       String(intent.actor_username) !== String(identity.actorUsername || '')) {
-    throw new Error('La operación confirmada no coincide con la intención durable registrada; se bloqueó el cierre automático.');
+    throw new Error('La operación confirmada no pertenece al mismo usuario que preparó la intención durable.');
   }
   const existing = db.prepare(`
     SELECT 1 AS found FROM operation_intent_completions
