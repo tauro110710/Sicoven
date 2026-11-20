@@ -737,6 +737,8 @@ export type VatWithholdingDeclarationEventType = 'REVIEWED' | 'FILED' | 'PAYMENT
 
 export interface VatWithholdingDeclarationEvent {
   id: string;
+  /** Empresa propietaria para poder auditar eventos huérfanos sin mezclar compañías. */
+  companyId?: string;
   declarationId: string;
   eventType: VatWithholdingDeclarationEventType;
   occurredAt: string;
