@@ -898,14 +898,16 @@ app.whenReady().then(async () => {
     const identity = createOperationReceiptIdentity(input, companyId, 'accounting.correction_case_execute',
       { caseId: String(input?.caseId || ''), executionRef: reference, reason: String(input?.reason || '') }, actor);
     return runIdempotentOperation(activeDb, identity, () => {
-    if (item.status === 'EXECUTED') return markCorrectionExecuted(activeDb,{...input,executionRef:reference},actor) || getCorrectionCase(activeDb, item.id);
+    const currentItem = activeDb.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(input?.caseId || ''));
+    if (!currentItem || String(currentItem.company_id) !== companyId) throw new Error('El expediente de corrección no existe en la empresa activa.');
+    if (currentItem.status === 'EXECUTED') return markCorrectionExecuted(activeDb,{...input,executionRef:reference},actor) || getCorrectionCase(activeDb, currentItem.id);
     requireApprovedCorrectionCase(activeDb,{
-      companyId:item.company_id,entityType:item.entity_type,entityId:item.entity_id,
-      sourceDocumentRef:item.source_ref,correctionDocumentRef:item.correction_ref
+      companyId:currentItem.company_id,entityType:currentItem.entity_type,entityId:currentItem.entity_id,
+      sourceDocumentRef:currentItem.source_ref,correctionDocumentRef:currentItem.correction_ref
     },actor);
     const row = activeDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     const state = row ? JSON.parse(row.state_json) : {};
-    const evidence = findLinkedCorrectionEvidence(state,item,reference);
+    const evidence = findLinkedCorrectionEvidence(state,currentItem,reference);
     if (!evidence) {
       throw new Error('No se encontró un documento correctivo de la misma empresa con referencia coincidente y vínculo explícito al registro origen. La corrección permanece abierta; la operación no se marca como finalizada.');
     }
