@@ -20,6 +20,7 @@ export interface HistoricalReplayRecord {
   endDate?: string;
   occurredAt?: string;
   createdAt?: string;
+  recordedAt?: string;
   entryNumber?: number;
   type?: string;
   referenceDoc?: string;
@@ -153,7 +154,7 @@ const firstText = (record: HistoricalReplayRecord, fields: string[]): string | n
 };
 
 const recordedAt = (record: HistoricalReplayRecord): string | null => {
-  const value = typeof record.createdAt === 'string' ? record.createdAt : null;
+  const value = typeof record.createdAt === 'string' ? record.createdAt : typeof record.recordedAt === 'string' ? record.recordedAt : null;
   return value && Number.isFinite(Date.parse(value)) ? value : null;
 };
 
