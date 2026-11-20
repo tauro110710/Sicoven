@@ -5,7 +5,7 @@ import Database from 'better-sqlite3';
 import { buildClosingEntryItems } from '../src/types/accountingYearClosing';
 import { buildOpeningEntryItems } from '../src/types/accountingYearOpening';
 import type { Account, Company, JournalEntry } from '../src/types/accounting';
-import { buildPersistedFiscalExerciseCalendar, confirmFiscalExerciseCycle } from '../src/types/fiscalExerciseLifecycle';
+import { ensureFiscalExerciseCalendar, confirmFiscalExerciseCycle } from '../src/types/fiscalExerciseLifecycle';
 
 const require = createRequire(import.meta.url);
 const { persistAccountingSnapshot, registerAccountingPersistenceHandler } =
@@ -124,7 +124,7 @@ test('recorre dos ciclos anuales reales con builders, persistencia SQLite, IPC y
       rif: 'J-00000000-0', address: '', phone: '', email: '', taxpayerType: 'ORDINARIO',
       defaultIvaRetentionRate: 0, bcvRate: 100
     };
-    const initialCalendar = buildPersistedFiscalExerciseCalendar(baseCompany, baseEntries);
+    const initialCalendar = ensureFiscalExerciseCalendar(baseCompany, 2025);
     const baseState = {
       companies: [baseCompany],
       currentCompanyId: companyId,
@@ -154,8 +154,11 @@ test('recorre dos ciclos anuales reales con builders, persistencia SQLite, IPC y
     assert.equal(firstReopen.ok, true);
     assert.equal(firstReopen.company.fiscalYear, 2025);
     assert.equal(firstReopen.company.closedThroughDate, undefined);
-    assert.equal(firstReopen.company.fiscalExercises[0].status, 'ABIERTO');
-    assert.equal(firstReopen.company.fiscalExercises[0].closingEntryId, undefined);
+    assert.equal(firstReopen.company.fiscalExercises[0].status, 'REABIERTO');
+    assert.equal(firstReopen.company.fiscalExercises[0].closingEntryId, firstCycle.closing.id);
+    assert.equal(firstReopen.company.fiscalExercises[0].openingEntryId, firstCycle.opening.id);
+    assert.equal(firstReopen.company.fiscalExercises[0].cycles[0].reopenedAt, new Date().toISOString().slice(0, 10));
+    assert.ok(firstReopen.company.fiscalExercises[0].cycles[0].reopeningId);
     assert.equal(firstReopen.company.fiscalExercises[1].openingEntryId, undefined);
     assert.equal(firstReopen.reversalEntries.length, 2);
 
@@ -170,7 +173,7 @@ test('recorre dos ciclos anuales reales con builders, persistencia SQLite, IPC y
     );
     const afterFirstCompany = afterFirst.companies.find((company: { id: string }) => company.id === companyId) as Company;
     const secondCalendar = confirmFiscalExerciseCycle({
-      exercises: buildPersistedFiscalExerciseCalendar(afterFirstCompany, afterFirst.journalEntries),
+      exercises: ensureFiscalExerciseCalendar(afterFirstCompany, 2025),
       companyId, exerciseId: 'fiscal-exercise:' + companyId + ':2025',
       closingEntryId: secondCycle.closing.id, openingEntryId: secondCycle.opening.id, closedAt: '2025-12-31'
     });
@@ -188,8 +191,10 @@ test('recorre dos ciclos anuales reales con builders, persistencia SQLite, IPC y
     });
     assert.equal(secondReopen.ok, true);
     assert.equal(secondReopen.company.fiscalYear, 2025);
-    assert.equal(secondReopen.company.fiscalExercises[0].status, 'ABIERTO');
-    assert.equal(secondReopen.company.fiscalExercises[0].closingEntryId, undefined);
+    assert.equal(secondReopen.company.fiscalExercises[0].status, 'REABIERTO');
+    assert.equal(secondReopen.company.fiscalExercises[0].closingEntryId, secondCycle.closing.id);
+    assert.equal(secondReopen.company.fiscalExercises[0].cycles.length, 2);
+    assert.ok(secondReopen.company.fiscalExercises[0].cycles.every((cycle: { reopenedAt?: string; reopeningId?: string }) => cycle.reopenedAt && cycle.reopeningId));
     assert.equal(secondReopen.company.fiscalExercises[1].openingEntryId, undefined);
     assert.equal(secondReopen.reversalEntries.length, 2);
 
