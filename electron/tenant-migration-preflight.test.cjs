@@ -35,6 +35,7 @@ test('accepts a fully classified legacy database and returns exact company IDs',
     assert.deepEqual(result.companyIds, ['company-a', 'company-b']);
     assert.deepEqual(result.unknownTables, []);
     assert.deepEqual(result.errors, []);
+    assert.equal(result.tables.find(table => table.name === 'operation_receipts')?.category, 'COMPANY');
   } finally { db.close(); }
 });
 
