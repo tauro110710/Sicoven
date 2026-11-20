@@ -3,6 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 const { initializeTenantDatabase, migrateTenantDatabase } = require('./tenant-schema.cjs');
+const { recordOperationReceipt } = require('./operation-receipts.cjs');
 
 test('tenant schema initializes all operational tables without duplicating control authentication or license tables', () => {
   const db = new Database(':memory:');
@@ -33,12 +34,22 @@ test('schema v2 to v3 creates durable operation intent tables for existing tenan
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         PRIMARY KEY(company_id,operation_type,operation_id)
       );
+      INSERT INTO operation_receipts
+        (company_id,operation_type,operation_id,request_hash,actor_user_id,result_json)
+      VALUES('company-a','accounting.test','old-receipt','${'a'.repeat(64)}',7,'{"ok":true}');
     `);
     migrateTenantDatabase(db, { fromVersion: 2, toVersion: 3 });
     const tables = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(row => row.name));
     assert.ok(tables.has('operation_intents'));
     assert.ok(tables.has('operation_intent_completions'));
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='operation_intents_actor_sequence_idx'").get());
+    const legacy = db.prepare("SELECT result_json,actor_username FROM operation_receipts WHERE operation_id='old-receipt'").get();
+    assert.deepEqual(legacy, { result_json: '{"ok":true}', actor_username: null });
+    recordOperationReceipt(db, {
+      operationId: 'new-receipt', companyId: 'company-a', operationType: 'company.metadata_update',
+      requestHash: 'b'.repeat(64), actor: { id: 8, username: 'admin' }
+    }, { ok: true });
+    assert.equal(db.prepare("SELECT actor_username FROM operation_receipts WHERE operation_id='new-receipt'").get().actor_username, 'admin');
   } finally { db.close(); }
 });
 
