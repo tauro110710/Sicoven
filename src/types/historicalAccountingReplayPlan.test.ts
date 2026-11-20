@@ -372,3 +372,131 @@ test('bloquea vínculos explícitos a asientos inexistentes o de otra empresa', 
   assert.match(plan.blockers.join(' '), /asiento journal-other-company de otra empresa/);
   assert.equal(plan.canProceedToTransactionalReplay, false);
 });
+
+
+test('captura el contexto contable, tributario, BCV y maestros de la empresa', () => {
+  const input = base();
+  input.company = {
+    id: 'company-1',
+    taxStatusHistory: [{ id: 'tax-1', effectiveFrom: '2020-01-01', effectiveTo: '2024-12-31' }],
+    accountingBcvRateHistory: [{ id: 'bcv-1', effectiveDate: '2023-01-01', rate: 20 }],
+    functionalCurrencyAssessments: [{ id: 'currency-1' }],
+    exchangeabilityAssessments: [{ id: 'exchange-1' }]
+  };
+  input.accounts = [{ code: '1.1.1.01', isMovement: true }];
+  input.products = [{ id: 'product-1', companyId: 'company-1' }];
+  input.bankAccounts = [{ id: 'bank-1', companyId: 'company-1', accountCode: '1.1.1.01' }];
+  input.customers = [{ id: 'customer-1', companyId: 'company-1' }];
+  input.suppliers = [{ id: 'supplier-1', companyId: 'company-1' }];
+  input.financialDisclosures = [{ id: 'disclosure-1', companyId: 'company-1' }];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+
+  assert.deepEqual(plan.contextCoverage, {
+    companyMetadata: true,
+    taxStatusPeriods: 1,
+    accountingBcvRateEntries: 1,
+    functionalCurrencyAssessments: 1,
+    exchangeabilityAssessments: 1,
+    chartOfAccounts: 1,
+    inventoryProducts: 1,
+    bankAccounts: 1,
+    customers: 1,
+    suppliers: 1,
+    financialDisclosures: 1
+  });
+});
+
+test('bloquea tramos tributarios solapados y tasas BCV históricas inválidas', () => {
+  const input = base();
+  input.company = {
+    id: 'company-1',
+    taxStatusHistory: [
+      { id: 'tax-1', effectiveFrom: '2020-01-01', effectiveTo: '2023-12-31' },
+      { id: 'tax-2', effectiveFrom: '2023-06-01', effectiveTo: '2024-12-31' }
+    ],
+    accountingBcvRateHistory: [{ id: 'bcv-bad', effectiveDate: '2023-02-30', rate: 0 }]
+  };
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+
+  assert.ok(plan.blockers.some(item => item.includes('tramos solapados')));
+  assert.ok(plan.blockers.some(item => item.includes('historial BCV contable')));
+  assert.equal(plan.canProceedToTransactionalReplay, false);
+});
+
+test('incluye la cadena de reversión y ajuste entre asientos relacionados', () => {
+  const input = base();
+  input.sales = [{
+    id: 'sale-1', companyId: 'company-1', invoiceDate: '2023-01-10',
+    journalEntryId: 'journal-sale'
+  }];
+  input.journalEntries = [
+    {
+      id: 'journal-sale', companyId: 'company-1', date: '2023-01-10',
+      reversedByEntryId: 'journal-reversal'
+    },
+    {
+      id: 'journal-reversal', companyId: 'company-1', date: '2023-02-10',
+      reversalOfEntryId: 'journal-sale',
+      adjustmentForEntryId: 'journal-adjustment'
+    },
+    {
+      id: 'journal-adjustment', companyId: 'company-1', date: '2023-02-11'
+    }
+  ];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+
+  assert.deepEqual(plan.derivedJournalEntryIds.sort(), [
+    'journal-adjustment', 'journal-reversal', 'journal-sale'
+  ]);
+  assert.ok(plan.journalEntryRelationships.some(item =>
+    item.entryId === 'journal-reversal' && item.relatedEntryId === 'journal-sale' && item.relationType === 'REVERSAL_OF'
+  ));
+  assert.ok(plan.journalEntryRelationships.some(item =>
+    item.entryId === 'journal-reversal' && item.relatedEntryId === 'journal-adjustment' && item.relationType === 'ADJUSTMENT_FOR'
+  ));
+});
+
+test('bloquea relaciones de reversión o ajuste entre empresas distintas', () => {
+  const input = base();
+  input.journalEntries = [
+    {
+      id: 'journal-own', companyId: 'company-1', date: '2023-01-10',
+      reversedByEntryId: 'journal-other'
+    },
+    { id: 'journal-other', companyId: 'company-2', date: '2023-01-11' }
+  ];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+
+  assert.ok(plan.blockers.some(item => item.includes('de otra empresa')));
+  assert.equal(plan.canProceedToTransactionalReplay, false);
+});
+
+test('bloquea movimientos bancarios, inventario y cuentas con maestros inexistentes', () => {
+  const input = base();
+  input.movements = [{
+    id: 'movement-1', companyId: 'company-1', date: '2023-01-10',
+    productId: 'missing-product'
+  }];
+  input.bankStatementMovements = [{
+    id: 'bank-movement-1', companyId: 'company-1', date: '2023-01-10',
+    bankAccountId: 'missing-bank'
+  }];
+  input.journalEntries = [{
+    id: 'journal-1', companyId: 'company-1', date: '2023-01-10',
+    items: [{ accountCode: '9.9.9.99' }]
+  }];
+  input.products = [];
+  input.bankAccounts = [];
+  input.accounts = [];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+
+  assert.ok(plan.blockers.some(item => item.includes('artículo inexistente')));
+  assert.ok(plan.blockers.some(item => item.includes('cuenta bancaria inexistente')));
+  assert.ok(plan.blockers.some(item => item.includes('cuenta no encontrada')));
+  assert.equal(plan.canProceedToTransactionalReplay, false);
+});
