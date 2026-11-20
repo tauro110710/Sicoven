@@ -60,6 +60,14 @@ function registerCompanySessionIpc({
     throw new TypeError('No se pudo registrar el IPC seguro de selección y creación de empresa.');
   }
 
+  function getControlDatabase() {
+    const db = runtime.controlDb || controlDb;
+    if (!db || !db.open || typeof db.prepare !== 'function' || typeof db.exec !== 'function') {
+      throw new Error('La base SQLite de control no está disponible para recuperar la operación.');
+    }
+    return db;
+  }
+
   function requireAuthorizedSession(token) {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
@@ -69,13 +77,14 @@ function registerCompanySessionIpc({
   }
 
   function ensureCompanyMetadataOperationSchema() {
-    initializeCompanyMetadataOperationSchema(controlDb);
+    initializeCompanyMetadataOperationSchema(getControlDatabase());
   }
 
   ensureCompanyMetadataOperationSchema();
 
   function completeCompanyMetadataIntent(intent) {
-    const existing = controlDb.prepare(`
+    const db = getControlDatabase();
+    const existing = db.prepare(`
       SELECT company_id,request_hash FROM company_metadata_completions WHERE operation_id=?
     `).get(intent.operation_id);
     if (existing) {
@@ -85,7 +94,7 @@ function registerCompanySessionIpc({
       }
       return { completed: true, replayed: true };
     }
-    controlDb.prepare(`
+    db.prepare(`
       INSERT INTO company_metadata_completions(operation_id,company_id,request_hash)
       VALUES(?,?,?)
     `).run(intent.operation_id, intent.company_id, intent.request_hash);
@@ -146,7 +155,7 @@ function registerCompanySessionIpc({
 
   async function reconcilePendingCompanyMetadataOperations() {
     ensureCompanyMetadataOperationSchema();
-    const pending = controlDb.prepare(`
+    const pending = getControlDatabase().prepare(`
       SELECT i.* FROM company_metadata_intents i
       LEFT JOIN company_metadata_completions c ON c.operation_id=i.operation_id
       WHERE c.operation_id IS NULL
@@ -183,7 +192,7 @@ function registerCompanySessionIpc({
   }
 
   function saveActiveCompanyPreference(companyId) {
-    controlDb.prepare(`INSERT INTO app_state(state_key,state_json,updated_at)
+    getControlDatabase().prepare(`INSERT INTO app_state(state_key,state_json,updated_at)
       VALUES('active_company_preference',?,datetime('now'))
       ON CONFLICT(state_key) DO UPDATE SET state_json=excluded.state_json,updated_at=datetime('now')`)
       .run(JSON.stringify({ companyId: String(companyId), updatedAt: new Date().toISOString() }));
@@ -250,7 +259,8 @@ function registerCompanySessionIpc({
       if (companySessionContext.getSelectedCompanyId(token) !== companyId) {
         throw new Error('La empresa activa cambió durante la actualización de su ficha.');
       }
-      const existing = controlDb.prepare('SELECT * FROM company_metadata_intents WHERE operation_id=?').get(operationId);
+      const control = getControlDatabase();
+      const existing = control.prepare('SELECT * FROM company_metadata_intents WHERE operation_id=?').get(operationId);
       let intent = existing;
       if (existing) {
         if (String(existing.company_id) !== companyId ||
@@ -267,8 +277,8 @@ function registerCompanySessionIpc({
             String(current.rif || '').trim().toUpperCase() === rif) {
           return { ok: true, company: current, unchanged: true };
         }
-        const createIntentAndUpdate = controlDb.transaction(() => {
-          controlDb.prepare(`
+        const createIntentAndUpdate = control.transaction(() => {
+          control.prepare(`
             INSERT INTO company_metadata_intents
               (operation_id,company_id,request_hash,request_json,previous_name,previous_rif,
                next_name,next_rif,actor_user_id,actor_username)
@@ -277,7 +287,7 @@ function registerCompanySessionIpc({
             String(current.name || ''), String(current.rif || ''), name, rif,
             Number(currentSession.id), String(currentSession.username || ''));
           runtime.updateCompanyMetadata({ companyId, name, rif });
-          return controlDb.prepare('SELECT * FROM company_metadata_intents WHERE operation_id=?').get(operationId);
+          return control.prepare('SELECT * FROM company_metadata_intents WHERE operation_id=?').get(operationId);
         });
         intent = createIntentAndUpdate();
       }
