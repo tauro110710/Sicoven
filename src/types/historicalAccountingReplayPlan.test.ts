@@ -257,3 +257,25 @@ test('usa recordedAt de eventos fiscales para ordenar operaciones del mismo día
   assert.deepEqual(plan.sourceEvents.map(event => event.sourceId), ['event-earlier', 'event-later']);
   assert.equal(plan.warnings.some(item => item.includes('carece de marca de registro')), false);
 });
+
+
+test('los eventos huérfanos de otra empresa no bloquean la reconstrucción seleccionada', async () => {
+  const { findOrphanedVatWithholdingEvents } = await import('./historicalAccountingReplayPlan');
+  const events = [
+    { id: 'orphan-other', companyId: 'company-2', declarationId: 'missing-2' },
+    { id: 'orphan-own', companyId: 'company-1', declarationId: 'missing-1' },
+    { id: 'orphan-unknown', declarationId: 'missing-unknown' }
+  ];
+  const declarations = [
+    { id: 'declaration-other', companyId: 'company-2' }
+  ];
+  const selectedCompanyOrphans = findOrphanedVatWithholdingEvents(events, declarations, 'company-1');
+  assert.deepEqual(selectedCompanyOrphans.map(event => event.id), ['orphan-own']);
+});
+
+test('no marca como huérfano un evento vinculado a declaración de otra empresa', async () => {
+  const { findOrphanedVatWithholdingEvents } = await import('./historicalAccountingReplayPlan');
+  const events = [{ id: 'event-other', companyId: 'company-1', declarationId: 'declaration-2' }];
+  const declarations = [{ id: 'declaration-2', companyId: 'company-2' }];
+  assert.deepEqual(findOrphanedVatWithholdingEvents(events, declarations, 'company-1'), []);
+});
