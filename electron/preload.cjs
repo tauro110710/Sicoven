@@ -41,8 +41,13 @@ async function invokeRecoverableOperationArgs(channel, token, args) {
   }
 }
 
-async function recoverPendingOperationIntents(token) {
+async function recoverPendingOperationIntents(token, confirmed = false) {
   const pending = await ipcRenderer.invoke('sicoven:operation-intent-list', token);
+  if (!confirmed) {
+    return (pending || []).map(intent => ({
+      operationId: intent.operationId, channel: intent.channel, status: 'PENDING'
+    }));
+  }
   const results = [];
   for (const intent of pending || []) {
     try {
