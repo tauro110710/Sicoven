@@ -83,6 +83,7 @@ const buildCycle = (
     workpaperNote: 'SICOVEN_AUTO_YEAR_CLOSE_V1',
     annualCloseState: {
       previousFiscalYear: 2025,
+      priorPeriodStartDate: periodStartDate,
       previousClosedThroughDate,
       cycleNumber
     },
