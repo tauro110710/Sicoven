@@ -148,6 +148,13 @@ async function main() {
   console.log('E2E: formulario de empresa abierto mediante el flujo disponible en pantalla.');
   await setInput('input[placeholder="J-12345678-9"]', 'J-12345678-9');
   await setInput('input[placeholder="EJEMPLO COMERCIAL, C.A."]', 'E2E MIGRATION TEST, C.A.');
+  // The historical start date is mandatory for every newly registered company.
+  // Use a deterministic fixture date so the test exercises the real form contract.
+  // Scope the date selector to the dedicated historical-start-date field.
+  // The company form also contains optional adoption/notification dates.
+  await setInput('.company-registration-form .border-emerald-200 input[type="date"]', '2015-01-01');
+  const operationalDate = await evaluate('document.querySelector(".company-registration-form .border-emerald-200 input[type=date]")?.value || ""');
+  assert(operationalDate === '2015-01-01', 'No se estableció la fecha real de inicio de operaciones.');
   const savedCompany = await evaluate('(() => { const form = document.querySelector(".company-registration-form"); if (!form) return false; form.querySelector("button[type=submit]")?.click(); return true; })()');
   assert(savedCompany, 'No se pudo enviar el registro de empresa.');
   await waitFor(() => evaluate("!document.querySelector('.company-registration-modal')"), 'La empresa de prueba no se guardó');

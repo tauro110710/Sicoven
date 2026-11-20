@@ -11,7 +11,7 @@ const formatDate = (value: string | null | undefined): string => {
 
 export const HistoricalAccountingReplayPanel: React.FC = () => {
   const { currentCompany, prepareHistoricalAccountingReplayPlan, isStorageReady } = useAccounting();
-  const [startDate, setStartDate] = useState('');
+  const [startDate, setStartDate] = useState(currentCompany.operationalStartDate || '');
   const [throughDate, setThroughDate] = useState('');
   const [plan, setPlan] = useState<HistoricalAccountingReplayPlan | null>(null);
   const [busy, setBusy] = useState(false);
@@ -20,7 +20,9 @@ export const HistoricalAccountingReplayPanel: React.FC = () => {
   useEffect(() => {
     setPlan(null);
     setError('');
-  }, [currentCompany.id]);
+    setStartDate(currentCompany.operationalStartDate || '');
+    setThroughDate('');
+  }, [currentCompany.id, currentCompany.operationalStartDate]);
 
   const reviewPlan = () => {
     setBusy(true);
@@ -48,14 +50,14 @@ export const HistoricalAccountingReplayPanel: React.FC = () => {
       </div>
       <p className="text-sm text-slate-700">
         Examina las operaciones y dependencias reales de la empresa seleccionada, ordenadas por fecha efectiva.
-        Este análisis es de solo lectura: no modifica documentos, asientos, impuestos, inventario, cierres ni SQLite.
+        La revisión debe comenzar en la fecha real de inicio de operaciones y abarcar todos los ejercicios posteriores. Este análisis es de solo lectura: no modifica documentos, asientos, impuestos, inventario, cierres ni SQLite.
       </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="text-sm font-medium text-slate-700">
           Desde (inicio real de operaciones)
           <input type="date" value={startDate} onChange={event => setStartDate(event.target.value)}
             className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />
-          <span className="mt-1 block text-xs font-normal text-slate-500">Indique la primera fecha en que esta empresa comenzó a operar. No hay límite de antigüedad: puede seleccionar cualquier año disponible.</span>
+          <span className="mt-1 block text-xs font-normal text-slate-500">Inicio real registrado en la ficha de empresa: {currentCompany.operationalStartDate || 'No documentado; debe indicarse y luego actualizarse en la ficha de empresa'}. No hay límite de antigüedad.</span>
         </label>
         <label className="text-sm font-medium text-slate-700">
           Hasta (opcional)
@@ -65,11 +67,13 @@ export const HistoricalAccountingReplayPanel: React.FC = () => {
           <span className="mt-1 block text-xs font-normal text-slate-500">Si se deja vacío, el motor toma como límite el último asiento contable registrado.</span>
         </label>
       </div>
-      <button type="button" onClick={reviewPlan} disabled={!isStorageReady || busy || !startDate || Boolean(throughDate && throughDate < startDate)}
+      <button type="button" onClick={reviewPlan} disabled={!isStorageReady || busy || !startDate || Boolean(currentCompany.operationalStartDate && startDate !== currentCompany.operationalStartDate) || Boolean(throughDate && throughDate < startDate)}
         className="inline-flex items-center gap-2 rounded-lg bg-violet-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50">
         {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ClipboardList className="h-4 w-4" />}
         {busy ? 'Analizando registros…' : 'Generar plan de revisión'}
       </button>
+      {currentCompany.operationalStartDate && startDate !== currentCompany.operationalStartDate && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">La reconstrucción integral debe comenzar en la fecha real de inicio de operaciones registrada para esta empresa ({formatDate(currentCompany.operationalStartDate)}). No se permite omitir ejercicios anteriores.</p>}
+      {!currentCompany.operationalStartDate && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Esta empresa fue creada antes de incorporar la fecha de inicio de operaciones. Indique la fecha real y actualice la ficha de empresa antes de autorizar cualquier reconstrucción integral.</p>}
       {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
       {plan && <>
         <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
