@@ -245,3 +245,15 @@ test('extiende la fecha final automática hasta el último asiento de la empresa
   assert.equal(plan.throughDate, '2024-06-30');
   assert.deepEqual(plan.derivedJournalEntryIds, ['journal-later']);
 });
+
+
+test('usa recordedAt de eventos fiscales para ordenar operaciones del mismo día', () => {
+  const input = base();
+  input.vatOwnDeclarationEvents = [
+    { id: 'event-later', companyId: 'company-1', declarationId: 'vat-own-1', eventType: 'REVIEWED', occurredAt: '2023-04-30T00:00:00.000Z', recordedAt: '2023-04-30T12:00:00.000Z' },
+    { id: 'event-earlier', companyId: 'company-1', declarationId: 'vat-own-1', eventType: 'PAYMENT', occurredAt: '2023-04-30T00:00:00.000Z', recordedAt: '2023-04-30T10:00:00.000Z' }
+  ];
+  const plan = buildHistoricalAccountingReplayPlan(input);
+  assert.deepEqual(plan.sourceEvents.map(event => event.sourceId), ['event-earlier', 'event-later']);
+  assert.equal(plan.warnings.some(item => item.includes('carece de marca de registro')), false);
+});
