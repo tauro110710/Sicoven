@@ -431,5 +431,5 @@ export function prepareProductsForHistoricalReconstruction<T extends {
     lastCostUsd: 0,
     openingDate: startDate,
     openingBcvRate: 0
-  }));
+  } as T));
 }
