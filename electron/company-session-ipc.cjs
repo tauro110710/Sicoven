@@ -94,14 +94,23 @@ function registerCompanySessionIpc({
 
   function finishCompanyMetadataIntent(intent) {
     const request = JSON.parse(String(intent.request_json || 'null'));
-    if (!request || typeof request !== 'object' ||
+    const expectedRequest = {
+      companyId: String(intent.company_id),
+      name: String(intent.next_name),
+      rif: String(intent.next_rif)
+    };
+    if (!request || typeof request !== 'object' || Array.isArray(request) ||
+        JSON.stringify(request) !== JSON.stringify(expectedRequest) ||
         hashOperationRequest(JSON.stringify(request)) !== String(intent.request_hash)) {
-      throw new Error('La solicitud durable de metadata está dañada o no coincide con su huella.');
+      throw new Error('La solicitud durable de metadata está dañada o no coincide con sus valores y huella.');
     }
     const actor = {
       id: Number(intent.actor_user_id),
       username: String(intent.actor_username || '')
     };
+    if (!Number.isSafeInteger(actor.id) || actor.id <= 0 || !actor.username) {
+      throw new Error('La intención durable de metadata no conserva una identidad de usuario válida.');
+    }
     const identity = createOperationReceiptIdentity(
       { operationId: String(intent.operation_id) },
       String(intent.company_id),
