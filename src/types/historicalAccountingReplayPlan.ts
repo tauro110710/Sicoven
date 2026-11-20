@@ -776,6 +776,52 @@ export function buildHistoricalAccountingReplayPlan(
     }
   }
 
+  if (input.accounts) {
+    const requireMovementAccount = (label: string, accountCodeValue: unknown): void => {
+      const accountCode = String(accountCodeValue || '').trim();
+      if (!accountCode) return;
+      const account = accountByCode.get(accountCode);
+      if (!account) blockers.push(label + ' referencia una cuenta contable inexistente: ' + accountCode + '.');
+      else if (account.isMovement === false) blockers.push(label + ' referencia una cuenta contable no imputable: ' + accountCode + '.');
+    };
+    for (const bank of bankAccounts) requireMovementAccount('La cuenta bancaria ' + String(bank.id || ''), bank.accountCode);
+    for (const product of products) {
+      for (const field of ['inventoryAccountCode', 'costOfSalesAccountCode', 'adjustmentAccountCode', 'openingBalanceAccountCode']) {
+        requireMovementAccount('El artículo ' + String(product.id || ''), product[field]);
+      }
+    }
+    for (const purchase of sourceCollections.purchases.filter(item => String(item.companyId || '') === companyId)) {
+      requireMovementAccount('La compra ' + String(purchase.id || ''), purchase.paymentAccountCode);
+      const review = purchase.supplierDebitNoteReview;
+      if (review && typeof review === 'object') {
+        const reviewRecord = review as HistoricalReplayRecord;
+        for (const field of ['debitAccountCode', 'payableAccountCode', 'vatAccountCode']) {
+          requireMovementAccount('La revisión de nota de débito de proveedor ' + String(purchase.id || ''), reviewRecord[field]);
+        }
+      }
+    }
+    for (const advance of sourceCollections.supplierDirectAdvances.filter(item => String(item.companyId || '') === companyId)) {
+      requireMovementAccount('El anticipo directo ' + String(advance.id || ''), advance.treasuryAccountCode);
+    }
+    for (const settlement of sourceCollections.supplierAdvanceSettlements.filter(item => String(item.companyId || '') === companyId)) {
+      if (settlement.kind === 'REFUND_RECEIVED' && !settlement.treasuryAccountCode) {
+        blockers.push('El reembolso de anticipo ' + String(settlement.id || '') + ' no identifica la cuenta real de caja o banco.');
+      }
+      requireMovementAccount('La liquidación de anticipo ' + String(settlement.id || ''), settlement.treasuryAccountCode);
+    }
+    for (const event of sourceCollections.vatOwnDeclarationEvents.filter(item => String(item.companyId || '') === companyId)) {
+      if (event.eventType === 'PAYMENT' && !event.treasuryAccountCode) {
+        blockers.push('El pago de IVA propio ' + String(event.id || '') + ' no identifica la cuenta de tesorería utilizada.');
+      }
+      requireMovementAccount('El evento de IVA propio ' + String(event.id || ''), event.treasuryAccountCode);
+    }
+    for (const asset of sourceCollections.fixedAssets.filter(item => String(item.companyId || '') === companyId)) {
+      for (const field of ['assetAccountCode', 'accumulatedDepreciationAccountCode', 'depreciationExpenseAccountCode']) {
+        requireMovementAccount('El activo fijo ' + String(asset.id || ''), asset[field]);
+      }
+    }
+  }
+
   const firstYear = isIsoDate(startDate) ? Number(startDate.slice(0, 4)) : 0;
   const lastYear = isIsoDate(throughDate) ? Number(throughDate.slice(0, 4)) : firstYear;
   const affectedExercises: HistoricalReplayExercise[] = [];
