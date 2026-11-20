@@ -211,7 +211,7 @@ test('bloquea comprobantes IVA históricos sin fecha fiscal efectiva verificable
   }];
   const plan = buildHistoricalAccountingReplayPlan(input);
   assert.equal(plan.canProceedToTransactionalReplay, false);
-  assert.match(plan.blockers.join(' '), /vatVouchers\\/vat-voucher-legacy/);
+  assert.match(plan.blockers.join(' '), /vatVouchers\/vat-voucher-legacy/);
 });
 
 test('marca como dependencia externa la presentación de una declaración por evento', () => {
