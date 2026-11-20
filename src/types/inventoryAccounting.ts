@@ -1,4 +1,4 @@
-import { addDecimal, decimalToNumber, divideDecimal, multiplyDecimal, parseDecimal, roundDecimal } from './exactDecimal';
+import { addDecimal, decimalToNumber, decimalToString, divideDecimal, multiplyDecimal, parseDecimal, roundDecimal } from './exactDecimal';
 
 export interface VnrProvisionLedgerBalance {
   provisionBs: number;
@@ -201,7 +201,7 @@ const cents = (value: number): number => decimalToNumber(roundDecimal(value, 2))
 const usdPrecision = (value: number): number => decimalToNumber(roundDecimal(value, 6));
 const exactProductSum = (pairs: Array<[number, number]>): ReturnType<typeof parseDecimal> =>
   pairs.reduce((sum, [quantity, unitCost]) =>
-    addDecimal(sum.coefficient === 0n ? 0n : sum.coefficient, multiplyDecimal(quantity, unitCost)), parseDecimal(0));
+    addDecimal(decimalToString(sum), decimalToString(multiplyDecimal(quantity, unitCost))), parseDecimal(0));
 const exactRoundedProductSum = (pairs: Array<[number, number]>, places: number): number =>
   decimalToNumber(roundDecimal(exactProductSum(pairs), places));
 const exactQuotient = (dividend: number, divisor: number): number =>
