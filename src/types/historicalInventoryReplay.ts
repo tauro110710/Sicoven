@@ -112,7 +112,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
   }
 
   const replayed: InventoryMovement[] = [];
-  const originalById = new Map(input.movements.map(movement => [movement.id, movement]));
+  const replayedById = new Map<string, InventoryMovement>();
   const returnedBySale = new Map<string, number>();
 
   for (const { movement: source } of ordered) {
@@ -156,7 +156,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       let entryUnitCostBs = effectiveUnitCostBs;
       let entryUnitCostUsd = roundUsd(effectiveUnitCostBs / rate);
       if (source.concept === 'DEVOLUCION_CLIENTE') {
-        const original = source.correctionForMovementId ? originalById.get(source.correctionForMovementId) : undefined;
+        const original = source.correctionForMovementId ? replayedById.get(source.correctionForMovementId) : undefined;
         if (!original || original.type !== 'SALIDA' || original.concept !== 'VENTA' ||
             original.productId !== source.productId || source.date < original.date) {
           throw new Error('La devolución de cliente ' + (source.documentRef || id) + ' no está vinculada a una salida de venta válida.');
@@ -298,6 +298,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
     state.averageBs = nextAverageBs;
     state.averageUsd = nextAverageUsd;
     state.history.push(nextMovement);
+    replayedById.set(nextMovement.id, nextMovement);
     replayed.push(nextMovement);
   }
 
