@@ -10,6 +10,7 @@ function fixture(overrides = {}) {
   const handlers = new Map();
   const calls = [];
   const controlDb = new Database(':memory:');
+  controlDb.pragma('foreign_keys = ON');
   controlDb.exec('CREATE TABLE app_state(state_key TEXT PRIMARY KEY,state_json TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT (datetime(\'now\')));');
   const context = {
     async listAccessibleCompanies(token) {
