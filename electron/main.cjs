@@ -33,7 +33,7 @@ const verifyPassword = (password, salt, expected) => {
 const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
-const { createOperationReceiptIdentity, hashOperationRequest, runIdempotentOperation } = require('./operation-receipts.cjs');
+const { createOperationReceiptIdentity, runIdempotentOperation } = require('./operation-receipts.cjs');
 const { registerPersistenceFlushIpc } = require('./persistence-flush-ipc.cjs');
 const { registerTenantMigrationPreflightIpc, registerTenantMigrationExecuteIpc } = require('./tenant-migration-preflight-ipc.cjs');
 const { createTenantRuntimeController } = require('./tenant-runtime-controller.cjs');
