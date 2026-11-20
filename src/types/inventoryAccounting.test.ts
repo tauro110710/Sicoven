@@ -33,6 +33,25 @@ describe('motor de inventario contable', () => {
     assert.equal(result.unitCostUsd, 32.5 / 15);
   });
 
+  it('applies explicit half-away-from-zero rounding to weighted dual-currency totals', () => {
+    const result = calculateWeightedAverageCostDual(1, 1.005, 1.0000005, 1, 0, 0);
+    assert.equal(result.totalCostBs, 1.01);
+    assert.equal(result.totalCostUsd, 1.000001);
+    assert.equal(result.unitCostBs, 0.505);
+    assert.equal(result.unitCostUsd, 0.5000005);
+  });
+
+  it('accumulates PEPS layer products exactly before the currency rounding boundary', () => {
+    const result = calculateFifoIssue([
+      { quantity: 1, unitCostBs: 1.005, unitCostUsd: 1.0000005, date: '2026-01-01' },
+      { quantity: 1, unitCostBs: 0, unitCostUsd: 0, date: '2026-01-02' }
+    ], 2);
+    assert.equal(result.totalCostBs, 1.01);
+    assert.equal(result.totalCostUsd, 1.000001);
+    assert.equal(result.unitCostBs, 0.505);
+    assert.equal(result.unitCostUsd, 0.5000005);
+  });
+
   it('capitalizes landed costs into the weighted average', () => {
     const result = calculateWeightedAverageCost(10, 100, 5, 180, 80);
     assert.ok(Math.abs(result.unitCostBs - (1900 / 15)) < 1e-8);
