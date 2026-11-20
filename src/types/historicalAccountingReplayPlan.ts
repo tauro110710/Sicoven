@@ -298,7 +298,13 @@ export function buildHistoricalAccountingReplayPlan(
     (latest, event) => event.effectiveDate > latest ? event.effectiveDate : latest,
     startDate
   );
-  const throughDate = requestedThroughDate || latestSourceDate;
+  const latestJournalEntryDate = (Array.isArray(input.journalEntries) ? input.journalEntries : [])
+    .filter(entry => String(entry.companyId || '') === companyId)
+    .map(entry => String(entry.date || '').slice(0, 10))
+    .filter(date => isIsoDate(date) && date >= startDate)
+    .reduce((latest, date) => date > latest ? date : latest, startDate);
+  const latestKnownDate = latestJournalEntryDate > latestSourceDate ? latestJournalEntryDate : latestSourceDate;
+  const throughDate = requestedThroughDate || latestKnownDate;
   if (isIsoDate(startDate) && isIsoDate(throughDate) && throughDate < startDate) {
     blockers.push('La fecha final no puede ser anterior a la fecha inicial.');
   }
