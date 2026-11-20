@@ -983,3 +983,30 @@ test('an idempotency key cannot be reused with a different accounting snapshot',
     harness.db.close();
   }
 });
+
+
+test('snapshot and idempotency receipt roll back together when receipt insertion fails', () => {
+  const harness = createHarness();
+  try {
+    const state = emptyState();
+    const operationId = 'snapshot-rollback-001';
+    harness.db.exec(`CREATE TRIGGER reject_test_receipt BEFORE INSERT ON operation_receipts
+      WHEN NEW.operation_id='snapshot-rollback-001'
+      BEGIN SELECT RAISE(ABORT, 'receipt insertion interrupted'); END;`);
+    assert.throws(
+      () => harness.handler({}, 'valid-session', state, operationId),
+      /receipt insertion interrupted/
+    );
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM app_state').get().count, 0);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 0);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 0);
+
+    harness.db.exec('DROP TRIGGER reject_test_receipt');
+    const retried = harness.handler({}, 'valid-session', state, operationId);
+    assert.equal(retried.ok, true);
+    assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='state_saved'").get().count, 1);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 1);
+  } finally {
+    harness.db.close();
+  }
+});
