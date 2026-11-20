@@ -41,11 +41,11 @@ assert.match(main, /hasFullSystemAccess\(actor\)/);
 assert.match(main, /sicoven:load-state', async \(_event, token\)/);
 const persistence = read('electron/accounting-persistence.cjs');
 assert.match(main, /registerAccountingPersistenceHandler\(\{ ipcMain, db, licenseView, getActiveSession, withDatabase \}\)/);
-assert.match(persistence, /ipcMain\.handle\('sicoven:save-state', \(_event, token, state\)/);
+assert.match(persistence, /ipcMain\\.handle\\('sicoven:save-state', \\(_event, token, state, operationId\\)/);
 assert.match(persistence, /if \(!licensing\.authorized\)/);
 assert.match(persistence, /const actor = getActiveSession\(token\)/);
 assert.match(persistence, /if \(!actor\)/);
-assert.match(persistence, /persistAccountingSnapshot\(activeDb, state, actor\)/);
+assert.match(persistence, /persistAccountingSnapshot\\(activeDb, state, actor, operationId\\)/);
 
 assert.match(main, /function getActiveSession/);
 assert.match(main, /expiry <= Date/);
