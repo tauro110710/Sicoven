@@ -260,7 +260,7 @@ test('VAT fiscal incident IPC writes only to the authenticated tenant database',
     }
   });
   try {
-    const created = await handlers.get('sicoven:vat-fiscal-incident-create')({}, 'tenant-token', createInput());
+    const created = await handlers.get('sicoven:vat-fiscal-incident-create')({}, 'tenant-token', { ...createInput(), operationId: 'vat-tenant-create-001' });
     assert.ok(created.id);
     assert.equal(tenant.prepare('SELECT COUNT(*) AS n FROM vat_fiscal_incidents').get().n, 1);
     assert.equal(control.prepare('SELECT COUNT(*) AS n FROM vat_fiscal_incidents').get().n, 0);
