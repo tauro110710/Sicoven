@@ -261,6 +261,23 @@ function registerCompanySessionIpc({
     const company = { ...request, id: companyId };
     const operation = { operationId: companyId, requestHash: String(intent.request_hash), actor };
     const registered = runtime.listCompanies().find(item => String(item.id) === companyId);
+    const completed = getControlDatabase().prepare(
+      'SELECT company_id,request_hash FROM company_creation_completions WHERE operation_id=?'
+    ).get(companyId);
+    if (completed) {
+      if (String(completed.company_id) !== companyId ||
+          String(completed.request_hash) !== String(intent.request_hash)) {
+        throw new Error('La creación ya finalizada no coincide con la solicitud durable; se bloqueó el reintento.');
+      }
+      if (!registered) {
+        throw new Error('Esta empresa fue creada y posteriormente retirada del registro. No se recreará automáticamente; utilice un nuevo registro de empresa.');
+      }
+      if (String(registered.status) !== 'ACTIVE') {
+        throw new Error('Esta empresa fue creada y posteriormente archivada. No se reactivará automáticamente.');
+      }
+      runtime.verifyCompanyCreation(company, operation);
+      return { ok: true, company: registered, replayed: true };
+    }
     let result;
     if (registered) {
       if (String(registered.status) !== 'ACTIVE') {
