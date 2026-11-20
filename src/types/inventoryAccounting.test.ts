@@ -11,7 +11,8 @@ import {
   getDefaultInventoryAccountCode,
   calculateVnrWriteDown,
   calculatePeriodicCostOfSales,
-  calculateVnrProvisionLedgerBalance
+  calculateVnrProvisionLedgerBalance,
+  prepareProductsForHistoricalReconstruction
 } from './inventoryAccounting';
 
 describe('motor de inventario contable', () => {
@@ -224,4 +225,41 @@ describe('reconstrucción de provisión VNR desde el Libro Diario', () => {
       { id:'vnr-1', referenceDoc:'VNR-ART-01-2026-01-31', items:[line({creditUsd:Number.NaN})] }
     ]), /importes inválidos/i);
   });
+  it('clears current costs and opening BCV snapshot while preserving catalog and selling prices', () => {
+    const [prepared] = prepareProductsForHistoricalReconstruction([{
+      id: 'p-1', code: 'ART-001', name: 'Artículo', currentStock: 0,
+      avgCostBs: 917.7751, avgCostUsd: 1, lastCostBs: 917.7751, lastCostUsd: 1,
+      openingDate: '2026-11-19', openingBcvRate: 917.7751,
+      price1: 12.5, salesPriceBs: 11470, salesPriceUsd: 12.5
+    }], '2026-01-01');
+    assert.equal(prepared.avgCostBs, 0);
+    assert.equal(prepared.avgCostUsd, 0);
+    assert.equal(prepared.lastCostBs, 0);
+    assert.equal(prepared.lastCostUsd, 0);
+    assert.equal(prepared.openingDate, '2026-01-01');
+    assert.equal(prepared.openingBcvRate, 0);
+    assert.equal(prepared.currentStock, 0);
+    assert.equal(prepared.code, 'ART-001');
+    assert.equal(prepared.name, 'Artículo');
+    assert.equal(prepared.price1, 12.5);
+    assert.equal(prepared.salesPriceBs, 11470);
+  });
+
+  it('accepts reconstruction start dates in prior accounting years such as 2010 and 2000', () => {
+    for (const startDate of ['2010-01-01', '2000-01-01']) {
+      const [prepared] = prepareProductsForHistoricalReconstruction([{
+        id: 'historical-' + startDate, code: 'ART-HIST', name: 'Artículo histórico', currentStock: 0,
+        avgCostBs: 100, avgCostUsd: 1, lastCostBs: 100, lastCostUsd: 1,
+        openingDate: '2026-01-01', openingBcvRate: 874.7
+      }], startDate);
+      assert.equal(prepared.openingDate, startDate);
+      assert.equal(prepared.openingBcvRate, 0);
+      assert.equal(prepared.avgCostBs, 0);
+    }
+  });
+
+  it('rejects an invalid historical reconstruction start date', () => {
+    assert.throws(() => prepareProductsForHistoricalReconstruction([], '2026-02-30'), /fecha inicial/i);
+  });
+
 });
