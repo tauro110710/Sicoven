@@ -1507,21 +1507,30 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reanuda operaciones cuyo ID, solicitud y actor quedaron registrados en SQLite
-  // antes de que el proceso se cerrara. Los recibos siguen siendo la autoridad:
-  // una operación ya confirmada devuelve su resultado original y no se repite.
+  // Las intenciones sobreviven al cierre, pero SICOVEN nunca las ejecuta
+  // silenciosamente al reiniciar: primero informa y solicita confirmación.
   useEffect(() => {
     if (!storageReady || !currentCompanyId || !window.sicovenStore?.recoverPendingOperationIntents) return;
     let cancelled = false;
-    void window.sicovenStore.recoverPendingOperationIntents(token).then(results => {
-      if (cancelled) return;
-      const pending = results.filter(result => result.status === 'PENDING');
-      if (pending.length) {
-        console.error('SICOVEN conserva operaciones pendientes que requieren revisión:', pending);
+    void (async () => {
+      try {
+        const pending = await window.sicovenStore!.recoverPendingOperationIntents(token, false);
+        if (cancelled || pending.length === 0) return;
+        const channels = [...new Set(pending.map(item => item.channel.replace('sicoven:', '')))];
+        const accepted = window.confirm(
+          'SICOVEN encontró ' + pending.length + ' operación(es) que quedaron sin respuesta confirmada en esta empresa (' +
+          channels.join(', ') + '). Si acepta, reintentará exactamente las solicitudes guardadas en SQLite; los recibos impedirán duplicar operaciones ya confirmadas. Si cancela, permanecerán pendientes para una revisión posterior. ¿Desea reintentarlas ahora?'
+        );
+        if (!accepted || cancelled) return;
+        const results = await window.sicovenStore!.recoverPendingOperationIntents(token, true);
+        const unresolved = results.filter(result => result.status === 'PENDING');
+        if (unresolved.length) {
+          console.error('SICOVEN conserva operaciones pendientes que requieren revisión:', unresolved);
+        }
+      } catch (error) {
+        if (!cancelled) console.error('No se pudieron consultar las operaciones pendientes de SQLite:', error);
       }
-    }).catch(error => {
-      if (!cancelled) console.error('No se pudieron recuperar las operaciones pendientes de SQLite:', error);
-    });
+    })();
     return () => { cancelled = true; };
   }, [storageReady, token, currentCompanyId]);
 
