@@ -84,6 +84,7 @@ import { calculateSaleCorrectionNote, type SaleCorrectionNoteRequest } from '../
 import { resolveNonInventoryPurchaseDebitAccount, resolveTreasuryAccountCurrency } from '../types/purchaseAccounting';
 import type { FixedAsset, FixedAssetDepreciationEvent, FixedAssetRegistrationDraft } from '../types/fixedAssets';
 import { calculateFixedAssetDepreciation, getNextFixedAssetDepreciationPeriod, getFixedAssetDepreciationScheduleThrough } from '../types/fixedAssets';
+import { buildHistoricalAccountingReplayPlan, type HistoricalAccountingReplayPlan, type HistoricalReplayRecord } from '../types/historicalAccountingReplayPlan';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -190,6 +191,7 @@ interface AccountingContextType {
   getCompanyInventoryMovements: (companyId: string) => InventoryMovement[];
   importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[], targetCompanyId?: string) => Promise<number>;
   prepareInventoryProductsForHistoricalReconstruction: (startDate: string) => Promise<number>;
+  prepareHistoricalAccountingReplayPlan: (startDate: string, throughDate?: string) => HistoricalAccountingReplayPlan;
   importInventoryMovements: (movements: InventoryMovementImportDraft[], targetCompanyId?: string, options?: { accountingMode?: 'post' | 'kardex-only' }) => number;
   executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => Promise<InventoryMovement[]>;
   updateProduct: (product: InventoryProduct, reason: string, workpaperNote: string) => Promise<void>;
@@ -5284,6 +5286,58 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
+  const prepareHistoricalAccountingReplayPlan = (startDate: string, throughDate?: string): HistoricalAccountingReplayPlan => {
+    const companyId = currentCompany.id;
+    const withholdingDeclarationById = new Map(vatWithholdingDeclarations.map(declaration => [declaration.id, declaration]));
+    const orphanedWithholdingEvents = vatWithholdingDeclarationEvents.filter(event => !withholdingDeclarationById.has(event.declarationId));
+    const monthEnd = (period: string): string => {
+      const match = /^(\\d{4})-?(\\d{2})$/.exec(String(period || ''));
+      if (!match) return '';
+      const year = Number(match[1]);
+      const month = Number(match[2]);
+      if (month < 1 || month > 12) return '';
+      return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+    };
+    const replayRecords = (records: unknown[]): HistoricalReplayRecord[] =>
+      records as HistoricalReplayRecord[];
+    const plan = buildHistoricalAccountingReplayPlan({
+      companyId,
+      startDate,
+      ...(throughDate ? { throughDate } : {}),
+      purchases: replayRecords(purchases),
+      sales: replayRecords(sales),
+      movements: replayRecords(movements),
+      bankStatementMovements: replayRecords(bankStatementMovements.map(movement => ({
+        ...movement,
+        journalEntryId: movement.reconciledWithJournalEntryId || undefined
+      }))),
+      creditSettlements: replayRecords(creditSettlements),
+      supplierAdvanceSettlements: replayRecords(supplierAdvanceSettlements),
+      supplierDirectAdvances: replayRecords(supplierDirectAdvances),
+      fixedAssets: replayRecords(fixedAssets),
+      vatVouchers: replayRecords(vatVouchers),
+      islrVouchers: replayRecords(islrVouchers),
+      vatWithholdingDeclarations: replayRecords(vatWithholdingDeclarations),
+      vatWithholdingDeclarationEvents: replayRecords(vatWithholdingDeclarationEvents.map(event => ({
+        ...event,
+        companyId: withholdingDeclarationById.get(event.declarationId)?.companyId || ''
+      }))),
+      vatOwnDeclarations: replayRecords(vatOwnDeclarations.map(declaration => ({
+        ...declaration,
+        endDate: monthEnd(declaration.period)
+      }))),
+      vatOwnDeclarationEvents: replayRecords(vatOwnDeclarationEvents),
+      islrFiscalEvents: replayRecords(islrFiscalEvents),
+      journalEntries: replayRecords(journalEntries)
+    });
+    if (orphanedWithholdingEvents.length) {
+      plan.blockers.push('Hay ' + orphanedWithholdingEvents.length +
+        ' evento(s) de declaración de retenciones IVA sin declaración de origen; deben resolverse antes de reconstruir.');
+      plan.canProceedToTransactionalReplay = false;
+    }
+    return plan;
+  };
+
   const prepareInventoryProductsForHistoricalReconstruction = async (startDate: string): Promise<number> => {
     assertSQLitePersistenceReady('Preparar productos para reconstrucción histórica');
     if (!isValidIsoDate(startDate)) throw new Error('La fecha inicial de reconstrucción no es válida.');
@@ -7771,6 +7825,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         getCompanyInventoryMovements,
         importInventoryProducts,
         prepareInventoryProductsForHistoricalReconstruction,
+        prepareHistoricalAccountingReplayPlan,
         importInventoryMovements,
         executeProduction,
         updateProduct,
