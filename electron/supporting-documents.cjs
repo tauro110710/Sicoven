@@ -229,7 +229,7 @@ function attachDocument(db, { storageDir, trustedRoot = path.dirname(path.resolv
       companyId: linked.companyId, entityType: linked.entityType, entityId: linked.entityId,
       replacesDocumentId: input.replacesDocumentId ? String(input.replacesDocumentId) : null,
       documentId: id, storageKey: id + normalized.extension, stagingKey: operationId + '.pending',
-      ...normalized
+      ...normalized, fileName: normalized.originalFileName
     };
     if (request.replacesDocumentId) {
       const replaced = db.prepare('SELECT * FROM supporting_documents WHERE id=?').get(request.replacesDocumentId);
