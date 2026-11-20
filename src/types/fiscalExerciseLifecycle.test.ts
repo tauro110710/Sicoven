@@ -121,6 +121,6 @@ test('la reapertura conserva el ciclo original y permite un segundo ciclo sin bo
 test('rechaza calendario activo discontinuo en vez de fabricar ejercicios omitidos', () => {
   const broken = exercises().filter(item => item.fiscalYear !== 2016);
   assert.throws(() => ensureFiscalExerciseCalendar({
-    id: 'co-1', fiscalYear: 2017, accountingStartDate: '2015-02-05', fiscalExercises: broken
+    id: 'co-1', accountingStartDate: '2015-02-05', fiscalExercises: broken
   }, 2017));
 });
