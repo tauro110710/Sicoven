@@ -1466,7 +1466,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               displayCurrency: 'DUAL' as const
             };
             const initialOperationId = window.crypto.randomUUID();
-            let initialSave;
+            let initialSave: { ok: boolean; savedAt: string; replayed?: boolean } | undefined;
             try {
               initialSave = await window.sicovenStore.save(token, emptyAccountingState, initialOperationId);
             } catch {
@@ -1528,7 +1528,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             const batch = pendingSnapshotRef.current;
             pendingSnapshotRef.current = null;
             try {
-              let result;
+              let result: { ok: boolean; savedAt: string; replayed?: boolean } | undefined;
               try {
                 result = await window.sicovenStore!.save(token, batch.snapshot, batch.operationId);
               } catch (saveError) {
