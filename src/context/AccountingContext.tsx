@@ -993,10 +993,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       await persistenceConfirmation;
       return { closingEntry, openingEntry, depreciationEntriesCreated };
     } catch (error) {
-      // Si la segunda pieza no pudo construirse, retirar el primer asiento antes de publicar un cierre parcial.
-      if (closingEntry && !openingEntry && !persistenceFaultRef.current) {
-        setJournalEntries(prev => prev.filter(entry => entry.id !== closingEntry!.id));
-        try { await waitForPersistence(); } catch { /* El estado SQLite queda en modo de protección. */ }
+      // Si el calendario o el snapshot no pudieron confirmarse, retirar ambos
+      // asientos todavía no comprometidos. Si SQLite ya falló, no intentar una
+      // compensación ciega: la aplicación permanece protegida hasta recargar.
+      if (closingEntry && !persistenceFaultRef.current) {
+        const uncommittedIds = new Set([closingEntry.id, openingEntry?.id].filter(Boolean));
+        setJournalEntries(prev => prev.filter(entry => !uncommittedIds.has(entry.id)));
+        try { await waitForPersistence(); } catch { /* SQLite queda en modo de protección. */ }
       }
       throw error;
     } finally {
