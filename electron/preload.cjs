@@ -1,4 +1,37 @@
 const { contextBridge, ipcRenderer } = require('electron');
+
+async function invokeRecoverableOperation(channel, token, input) {
+  const operationId = String(input?.operationId || globalThis.crypto.randomUUID());
+  const request = { ...input, operationId };
+  try {
+    return await ipcRenderer.invoke(channel, token, request);
+  } catch (firstError) {
+    // A rejected IPC promise does not prove SQLite rolled back. Retry the exact
+    // request with the same operation ID during this invocation; the main process
+    // returns the committed receipt instead of applying the business effect twice.
+    // Callers that need recovery after an application restart must persist and
+    // resubmit their own operationId; this preload-generated fallback is not durable.
+    try {
+      return await ipcRenderer.invoke(channel, token, request);
+    } catch {
+      throw firstError;
+    }
+  }
+}
+
+async function invokeRecoverableOperationArgs(channel, token, args) {
+  const operationId = globalThis.crypto.randomUUID();
+  const requestArgs = [...args, operationId];
+  try {
+    return await ipcRenderer.invoke(channel, token, ...requestArgs);
+  } catch (firstError) {
+    try {
+      return await ipcRenderer.invoke(channel, token, ...requestArgs);
+    } catch {
+      throw firstError;
+    }
+  }
+}
 contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   getLicenseStatus: () => ipcRenderer.invoke('sicoven:license-status'),
   getImprovementConsent: () => ipcRenderer.invoke('sicoven:improvement-consent:get'),
@@ -23,23 +56,23 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   listAccessibleCompanies: (token) => ipcRenderer.invoke('sicoven:company-list-accessible', token),
   getTenantRegistryStatus: (token) => ipcRenderer.invoke('sicoven:company-registry-status', token),
   selectActiveCompany: (token, companyId) => ipcRenderer.invoke('sicoven:company-select-active', token, { companyId }),
-  createCompany: (token, input) => ipcRenderer.invoke('sicoven:company-create', token, input),
+  createCompany: (token, input) => invokeRecoverableOperation('sicoven:company-create', token, input),
   getActiveCompany: (token) => ipcRenderer.invoke('sicoven:company-get-active', token),
   updateCompanyMetadata: (token, input) => ipcRenderer.invoke('sicoven:company-update-metadata', token, input),
   listAuditEvents: (token, limit) => ipcRenderer.invoke('sicoven:audit-list', token, limit),
-  recordAuditCorrection: (token, input) => ipcRenderer.invoke('sicoven:audit-record-correction', token, input),
-  createCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-create', token, input),
+  recordAuditCorrection: (token, input) => invokeRecoverableOperation('sicoven:audit-record-correction', token, input),
+  createCorrectionCase: (token, input) => invokeRecoverableOperation('sicoven:correction-case-create', token, input),
   reviewCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-review', token, input),
-  authorizeCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-authorize', token, input),
+  authorizeCorrectionCase: (token, input) => invokeRecoverableOperation('sicoven:correction-case-authorize', token, input),
   observeCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-observe', token, input),
   resubmitCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-resubmit', token, input),
   withdrawCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-withdraw', token, input),
-  executeCorrectionCase: (token, input) => ipcRenderer.invoke('sicoven:correction-case-execute', token, input),
+  executeCorrectionCase: (token, input) => invokeRecoverableOperation('sicoven:correction-case-execute', token, input),
   listCorrectionCases: (token, companyId) => ipcRenderer.invoke('sicoven:correction-case-list', token, companyId),
   save: (token, state, operationId) => ipcRenderer.invoke('sicoven:save-state', token, state, operationId),
   resolveSave: (token, state, operationId) => ipcRenderer.invoke('sicoven:save-state-result', token, state, operationId),
-  reopenAccountingPeriod: (token, input) => ipcRenderer.invoke('sicoven:reopen-accounting-period', token, input),
-  reopenAccountingYear: (token, input) => ipcRenderer.invoke('sicoven:reopen-accounting-year', token, input),
+  reopenAccountingPeriod: (token, input) => invokeRecoverableOperation('sicoven:reopen-accounting-period', token, input),
+  reopenAccountingYear: (token, input) => invokeRecoverableOperation('sicoven:reopen-accounting-year', token, input),
   resetAccounting: (token, options) => ipcRenderer.invoke('sicoven:reset-accounting', token, options),
   listInflationIndexSeries: (token) => ipcRenderer.invoke('sicoven:inflation-index-list', token),
   previewInflationIndexImport: (token, input) => ipcRenderer.invoke('sicoven:inflation-index-preview', token, input),
@@ -61,22 +94,22 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   listPayrollSalaryHistory: (token, employeeId) => ipcRenderer.invoke('sicoven:payroll-salary-history-list', token, employeeId),
   listConfirmedPayrollSalaryEntries: (token, employeeId, fromDate, toDate) => ipcRenderer.invoke('sicoven:payroll-salary-entries-list', token, employeeId, fromDate, toDate),
   getPayrollSalaryForDate: (token, employeeId, effectiveDate) => ipcRenderer.invoke('sicoven:payroll-salary-for-date', token, employeeId, effectiveDate),
-  savePayrollEmployee: (token, input) => ipcRenderer.invoke('sicoven:payroll-employee-save', token, input),
+  savePayrollEmployee: (token, input) => invokeRecoverableOperation('sicoven:payroll-employee-save', token, input),
   listPayrollRuns: (token) => ipcRenderer.invoke('sicoven:payroll-runs-list', token),
   getPayrollRun: (token, runId) => ipcRenderer.invoke('sicoven:payroll-run-get', token, runId),
   listPayrollSeveranceHistory: (token, employeeId) => ipcRenderer.invoke('sicoven:payroll-severance-history-list', token, employeeId),
-  savePayrollSeveranceDeposit: (token, input) => ipcRenderer.invoke('sicoven:payroll-severance-deposit-save', token, input),
-  savePayrollSeveranceInterestMonth: (token, input) => ipcRenderer.invoke('sicoven:payroll-severance-interest-save', token, input),
+  savePayrollSeveranceDeposit: (token, input) => invokeRecoverableOperation('sicoven:payroll-severance-deposit-save', token, input),
+  savePayrollSeveranceInterestMonth: (token, input) => invokeRecoverableOperation('sicoven:payroll-severance-interest-save', token, input),
   calculatePayrollSeverance: (token, input) => ipcRenderer.invoke('sicoven:payroll-severance-calculate', token, input),
   calculatePayrollSeveranceInterest: (token, input) => ipcRenderer.invoke('sicoven:payroll-severance-interest-calculate', token, input),
   listPayrollLiquidations: (token, employeeId) => ipcRenderer.invoke('sicoven:payroll-liquidations-list', token, employeeId),
-  createPayrollLiquidation: (token, input) => ipcRenderer.invoke('sicoven:payroll-liquidation-create', token, input),
+  createPayrollLiquidation: (token, input) => invokeRecoverableOperation('sicoven:payroll-liquidation-create', token, input),
   calculatePayrollAnnualRights: (token, input) => ipcRenderer.invoke('sicoven:payroll-annual-rights-calculate', token, input),
   calculatePayrollProfitSharing: (token, input) => ipcRenderer.invoke('sicoven:payroll-profit-sharing-calculate', token, input),
-  createPayrollRun: (token, input) => ipcRenderer.invoke('sicoven:payroll-run-create', token, input),
-  confirmPayrollRun: (token, runId, journalEntryId) => ipcRenderer.invoke('sicoven:payroll-run-confirm', token, runId, journalEntryId),
+  createPayrollRun: (token, input) => invokeRecoverableOperation('sicoven:payroll-run-create', token, input),
+  confirmPayrollRun: (token, runId, journalEntryId) => invokeRecoverableOperationArgs('sicoven:payroll-run-confirm', token, [runId, journalEntryId]),
   listPayrollLegalRules: (token) => ipcRenderer.invoke('sicoven:payroll-rules-list', token),
-  savePayrollLegalRule: (token, input) => ipcRenderer.invoke('sicoven:payroll-rule-save', token, input),
+  savePayrollLegalRule: (token, input) => invokeRecoverableOperation('sicoven:payroll-rule-save', token, input),
   createVatFiscalIncident: (token, input) => ipcRenderer.invoke('sicoven:vat-fiscal-incident-create', token, input),
   listVatFiscalIncidents: (token, filters) => ipcRenderer.invoke('sicoven:vat-fiscal-incident-list', token, filters),
   recordVatFiscalIncidentEvent: (token, input) => ipcRenderer.invoke('sicoven:vat-fiscal-incident-event', token, input),

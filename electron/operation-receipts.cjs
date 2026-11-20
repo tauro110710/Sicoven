@@ -76,6 +76,21 @@ function findOperationReceipt(db, input) {
   return { found: true, result: { ...result, replayed: true } };
 }
 
+function runIdempotentOperation(db, identity, execute) {
+  if (!db || typeof db.transaction !== 'function') throw new TypeError('Se requiere SQLite para ejecutar una operación idempotente.');
+  if (typeof execute !== 'function') throw new TypeError('La operación idempotente requiere una función síncrona.');
+  const transaction = db.transaction(() => {
+    const prior = findOperationReceipt(db, identity);
+    if (prior.found) return prior.result;
+    const result = execute();
+    if (result && typeof result.then === 'function') throw new TypeError('Las operaciones idempotentes deben confirmar de forma síncrona dentro de una transacción SQLite.');
+    if (result && typeof result === 'object' && result.ok === false) return result;
+    recordOperationReceipt(db, identity, result);
+    return result;
+  });
+  return transaction();
+}
+
 function recordOperationReceipt(db, input, result) {
   const identity = normalizeOperationIdentity(input);
   if (!result || typeof result !== 'object' || Array.isArray(result) ||
@@ -98,5 +113,6 @@ module.exports = {
   initializeOperationReceiptSchema,
   hashOperationRequest,
   findOperationReceipt,
-  recordOperationReceipt
+  recordOperationReceipt,
+  runIdempotentOperation
 };

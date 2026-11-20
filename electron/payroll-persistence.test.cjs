@@ -857,3 +857,33 @@ test('reproduces the TSJ eight-years-nine-months case: 35 quarterly deposits plu
     assert.equal(result.guaranteeDays,541);
   } finally { db.close(); }
 });
+
+
+test('payroll employee save recovers the original result after an IPC retry without duplicate salary history', async () => {
+  const db = setup();
+  try {
+    const handlers = new Map();
+    registerPayrollIpc({
+      ipcMain: { handle: (name, fn) => handlers.set(name, fn) },
+      getActiveSession: token => token === 'valid' ? { id: 7, username: 'contador', role: 'contador' } : null,
+      withDatabase: async (token, operation) => operation(db, 'co-a')
+    });
+    const input = {
+      operationId: 'payroll-employee-save-001',
+      fiscalId: 'V-901', fullName: 'María de Prueba', hireDate: '2024-02-01',
+      frequency: 'BIWEEKLY', baseSalary: 1350
+    };
+    const first = await handlers.get('sicoven:payroll-employee-save')({}, 'valid', input);
+    const recovered = await handlers.get('sicoven:payroll-employee-save')({}, 'valid', input);
+    assert.equal(first.id, recovered.id);
+    assert.equal(recovered.replayed, true);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM payroll_employees').get().count, 1);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM payroll_salary_history').get().count, 1);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM operation_receipts WHERE operation_type='payroll.employee_save'").get().count, 1);
+    await assert.rejects(
+      () => handlers.get('sicoven:payroll-employee-save')({}, 'valid', { ...input, fullName: 'Otro nombre' }),
+      /ya fue utilizada con otros datos/
+    );
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM payroll_employees').get().count, 1);
+  } finally { db.close(); }
+});

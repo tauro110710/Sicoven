@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
+const { hashOperationRequest } = require('./operation-receipts.cjs');
 
 function registerCompanySessionIpc({
   ipcMain, companySessionContext, runtime, operationContext, controlDb,
@@ -117,16 +118,39 @@ function registerCompanySessionIpc({
     const actor = requireAuthorizedSession(token);
     const company = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : null;
     if (!company) throw new Error('Los datos de la empresa no son válidos.');
-    company.id = crypto.randomUUID();
+    const operationId = String(company.operationId || crypto.randomUUID()).trim();
+    if (!/^[A-Za-z0-9_-]{1,120}$/.test(operationId) || operationId === '.' || operationId === '..') throw new Error('Falta un identificador estable válido para la creación de empresa.');
+    const requestPayload = { ...company };
+    delete requestPayload.operationId;
+    delete company.operationId;
+    const requestHash = hashOperationRequest(JSON.stringify(requestPayload));
+    company.id = operationId;
     if (!String(company.name || '').trim() || !String(company.rif || '').trim()) {
       throw new Error('La razón social y el RIF son obligatorios para crear la empresa.');
     }
     const release = await operationContext.acquireMaintenanceLock();
     let created;
     try {
-      // The runtime writes the initial snapshot and company_created audit
-      // event in the same SQLite transaction before registry visibility.
-      created = await runtime.createCompany(company, actor);
+      assertOperationalReady();
+      requireAuthorizedSession(token);
+      const registeredCompanies = typeof runtime.listCompanies === 'function' ? runtime.listCompanies() : [];
+      const existing = registeredCompanies.find(item => String(item.id) === operationId && String(item.status) === 'ACTIVE');
+      if (existing) {
+        const tenantDb = runtime.getCompanyDatabase(operationId);
+        const receiptRow = tenantDb.prepare("SELECT details_json FROM audit_events WHERE event_type='company_created' ORDER BY id DESC LIMIT 1").get();
+        let details = null;
+        try { details = receiptRow ? JSON.parse(receiptRow.details_json) : null; } catch {}
+        if (!details || String(details.operationId || '') !== operationId ||
+            String(details.requestHash || '') !== requestHash ||
+            Number(details.actorUserId) !== Number(actor.id)) {
+          throw new Error('La clave de creación ya está asociada a otra empresa, solicitud o usuario; no se repetirá la creación.');
+        }
+        created = { ok: true, company: existing, replayed: true };
+      } else {
+        // The runtime commits the initial snapshot, its idempotency receipt and
+        // the company-created audit evidence before registry visibility.
+        created = await runtime.createCompany(company, actor, { operationId, requestHash });
+      }
     } finally {
       release();
     }

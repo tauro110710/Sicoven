@@ -108,3 +108,59 @@ test('updates registry identity and records a tenant audit event under maintenan
   assert.equal(acquired, 1);
   assert.equal(released, 1);
 });
+
+
+test('company creation retries recover the same tenant instead of creating a duplicate', async () => {
+  let companyRecord = null;
+  let creationCount = 0;
+  let creationAudit = null;
+  const selections = [];
+  const tenantDb = {
+    prepare: () => ({
+      get: () => creationAudit ? { details_json: JSON.stringify(creationAudit) } : undefined,
+      run: () => ({ lastInsertRowid: 1 })
+    })
+  };
+  const { handlers } = fixture({
+    context: {
+      async selectCompany(token, companyId) {
+        selections.push(companyId);
+        return { ok: true, companyId };
+      }
+    },
+    runtime: {
+      listCompanies: () => companyRecord ? [companyRecord] : [],
+      getCompanyDatabase: () => tenantDb,
+      createCompany: async (company, actor, operation) => {
+        creationCount += 1;
+        companyRecord = { id: company.id, name: company.name, rif: company.rif, status: 'ACTIVE' };
+        creationAudit = {
+          operationId: operation.operationId,
+          requestHash: operation.requestHash,
+          actorUserId: actor.id
+        };
+        return { ok: true, company: companyRecord };
+      }
+    }
+  });
+  const input = {
+    operationId: 'company-create-operation-001',
+    name: 'EMPRESA HISTORICA',
+    rif: 'J-12345678-9',
+    accountingStartDate: '2015-02-05'
+  };
+  const first = await handlers.get('sicoven:company-create')({}, 'valid-token', input);
+  const recovered = await handlers.get('sicoven:company-create')({}, 'valid-token', input);
+  assert.equal(first.ok, true);
+  assert.equal(recovered.ok, true);
+  assert.equal(recovered.replayed, true);
+  assert.equal(first.company.id, input.operationId);
+  assert.equal(recovered.company.id, first.company.id);
+  assert.equal(creationCount, 1);
+  assert.deepEqual(selections, [input.operationId, input.operationId]);
+  await assert.rejects(
+    () => handlers.get('sicoven:company-create')({}, 'valid-token', { ...input, name: 'OTRA EMPRESA' }),
+    /clave de creación ya está asociada/
+  );
+  assert.equal(creationCount, 1);
+});

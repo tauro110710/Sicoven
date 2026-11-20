@@ -31,8 +31,16 @@ const verifyPassword = (password, salt, expected) => {
   }
 };
 const normalizeUsername = value => String(value || '').trim().toLowerCase();
+function createOperationReceiptIdentity(input, companyId, operationType, request, actor) {
+  const operationId = String(input?.operationId || '').trim();
+  if (!operationId) throw new Error('Falta el identificador estable de la operación. Actualice SICOVEN e inténtelo nuevamente.');
+  return { operationId, companyId: String(companyId || '').trim(), operationType,
+    requestHash: hashOperationRequest(JSON.stringify(request)), actor };
+}
+
 const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
+const { hashOperationRequest, runIdempotentOperation } = require('./operation-receipts.cjs');
 const { registerPersistenceFlushIpc } = require('./persistence-flush-ipc.cjs');
 const { registerTenantMigrationPreflightIpc, registerTenantMigrationExecuteIpc } = require('./tenant-migration-preflight-ipc.cjs');
 const { createTenantRuntimeController } = require('./tenant-runtime-controller.cjs');
@@ -72,7 +80,7 @@ const { registerInflationSourceDossierIpc } = require('./inflation-source-dossie
 const { registerDocumentVaultIpc } = require('./supporting-documents.cjs');
 const { registerVatFiscalIncidentIpc } = require('./vat-fiscal-incidents.cjs');
 const { registerPayrollIpc } = require('./payroll-persistence.cjs');
-const { initializeCorrectionWorkflow, registerCorrectionRequest, reviewCorrectionRequest, markCorrectionExecuted, listCorrectionCases, findLinkedCorrectionEvidence, observeCorrectionRequest, resubmitCorrectionRequest, withdrawCorrectionRequest, requireApprovedCorrectionCase } = require('./accounting-correction-workflow.cjs');
+const { initializeCorrectionWorkflow, registerCorrectionRequest, reviewCorrectionRequest, markCorrectionExecuted, getCorrectionCase, listCorrectionCases, findLinkedCorrectionEvidence, observeCorrectionRequest, resubmitCorrectionRequest, withdrawCorrectionRequest, requireApprovedCorrectionCase } = require('./accounting-correction-workflow.cjs');
 
 let db;
 let persistenceFlushBridge = null;
@@ -780,7 +788,10 @@ app.whenReady().then(async () => {
         sourceDocumentRef.length > 160 || correctionDocumentRef.length > 160 || journalEntryId.length > 160) {
       return { ok: false, message: 'Los datos del evento de auditoría están incompletos o no son válidos.' };
     }
-    return withOperationalDatabase(token, activeDb => {
+    const identity = createOperationReceiptIdentity(input, companyId, 'accounting.audit_correction',
+      { eventType, entityType, companyId, entityId, correctionType, reason, workpaperNote,
+        sourceDocumentRef, correctionDocumentRef, journalEntryId, fiscalEmissionMedium, sameMediumAsOriginal }, actor);
+    return withOperationalDatabase(token, activeDb => runIdempotentOperation(activeDb, identity, () => {
     const savedRow = activeDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     let savedState = {};
     try { savedState = savedRow ? JSON.parse(savedRow.state_json) : {}; } catch {}
@@ -817,7 +828,7 @@ app.whenReady().then(async () => {
     const inserted = activeDb.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
       .run(eventType, JSON.stringify(details));
     return { ok: true, id: Number(inserted.lastInsertRowid), createdAt: occurredAt };
-    });
+    }));
   });
 
   const correctionActor = token => {
@@ -829,7 +840,12 @@ app.whenReady().then(async () => {
   };
   ipcMain.handle('sicoven:correction-case-create', async (_event, token, input) => {
     const actor = correctionActor(token);
-    return withOperationalDatabase(token, activeDb => {
+    const companyId = String(input?.companyId || '').trim();
+    const identity = createOperationReceiptIdentity(input, companyId, 'accounting.correction_case_create',
+      { companyId, entityType: input?.entityType, entityId: input?.entityId,
+        correctionType: input?.correctionType, sourceDocumentRef: input?.sourceDocumentRef,
+        correctionDocumentRef: input?.correctionDocumentRef, reason: input?.reason, workpaperNote: input?.workpaperNote }, actor);
+    return withOperationalDatabase(token, activeDb => runIdempotentOperation(activeDb, identity, () => {
     const row = activeDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     const state = row ? JSON.parse(row.state_json) : {};
     const collections = { SALE:'sales', PURCHASE:'purchases', JOURNAL_ENTRY:'journalEntries',
@@ -849,11 +865,16 @@ app.whenReady().then(async () => {
       throw new Error('La referencia documental no coincide con el registro de origen. Verifique factura, asiento, comprobante o movimiento.');
     }
     return registerCorrectionRequest(activeDb,input,actor);
-    });
+    }));
   });
   ipcMain.handle('sicoven:correction-case-authorize', async (_event, token, input) => {
     const actor = correctionActor(token);
-    return withOperationalDatabase(token, activeDb => requireApprovedCorrectionCase(activeDb, input, actor));
+    const companyId = String(input?.companyId || '').trim();
+    const identity = createOperationReceiptIdentity(input, companyId, 'accounting.correction_case_authorize',
+      { companyId, entityType: input?.entityType, entityId: input?.entityId,
+        sourceDocumentRef: input?.sourceDocumentRef, correctionDocumentRef: input?.correctionDocumentRef }, actor);
+    return withOperationalDatabase(token, activeDb =>
+      runIdempotentOperation(activeDb, identity, () => requireApprovedCorrectionCase(activeDb, input, actor)));
   });
   ipcMain.handle('sicoven:correction-case-review', () => {
     throw new Error('La revisión y aprobación previa ya no forman parte del Centro de Correcciones.');
@@ -873,18 +894,25 @@ app.whenReady().then(async () => {
     const item = activeDb.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(input?.caseId || ''));
     if (!item) throw new Error('El expediente de corrección no existe.');
     const reference = String(input?.executionRef || '').trim();
-    if (item.status === 'EXECUTED') return markCorrectionExecuted(activeDb,{...input,executionRef:reference},actor);
+    const companyId = String(item.company_id);
+    const identity = createOperationReceiptIdentity(input, companyId, 'accounting.correction_case_execute',
+      { caseId: String(input?.caseId || ''), executionRef: reference, reason: String(input?.reason || '') }, actor);
+    return runIdempotentOperation(activeDb, identity, () => {
+    const currentItem = activeDb.prepare('SELECT * FROM accounting_correction_cases WHERE id=?').get(String(input?.caseId || ''));
+    if (!currentItem || String(currentItem.company_id) !== companyId) throw new Error('El expediente de corrección no existe en la empresa activa.');
+    if (currentItem.status === 'EXECUTED') return markCorrectionExecuted(activeDb,{...input,executionRef:reference},actor) || getCorrectionCase(activeDb, currentItem.id);
     requireApprovedCorrectionCase(activeDb,{
-      companyId:item.company_id,entityType:item.entity_type,entityId:item.entity_id,
-      sourceDocumentRef:item.source_ref,correctionDocumentRef:item.correction_ref
+      companyId:currentItem.company_id,entityType:currentItem.entity_type,entityId:currentItem.entity_id,
+      sourceDocumentRef:currentItem.source_ref,correctionDocumentRef:currentItem.correction_ref
     },actor);
     const row = activeDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     const state = row ? JSON.parse(row.state_json) : {};
-    const evidence = findLinkedCorrectionEvidence(state,item,reference);
+    const evidence = findLinkedCorrectionEvidence(state,currentItem,reference);
     if (!evidence) {
       throw new Error('No se encontró un documento correctivo de la misma empresa con referencia coincidente y vínculo explícito al registro origen. La corrección permanece abierta; la operación no se marca como finalizada.');
     }
     return markCorrectionExecuted(activeDb,{...input,evidenceRecordId:evidence.id,evidenceCollection:evidence.__evidenceCollection},actor);
+    });
     });
   });
   ipcMain.handle('sicoven:correction-case-list', async (_event, token, companyId) => {

@@ -3,7 +3,7 @@ const { validateAccountingSnapshot } = require('./accounting-integrity.cjs');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
 const { partitionAccountingSnapshot } = require('./tenant-snapshot.cjs');
 const { initializeAnnualReopeningSchema, reopenAccountingYear } = require('./accounting-year-reopening.cjs');
-const { initializeOperationReceiptSchema, hashOperationRequest, findOperationReceipt, recordOperationReceipt } = require('./operation-receipts.cjs');
+const { initializeOperationReceiptSchema, hashOperationRequest, findOperationReceipt, recordOperationReceipt, runIdempotentOperation } = require('./operation-receipts.cjs');
 
 function syncPartyMasterRows(db, state) {
   if (!Array.isArray(state.customers) && !Array.isArray(state.suppliers)) return;
@@ -804,7 +804,12 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
       if (selectedCompanyId && selectedCompanyId !== companyId) {
         throw new Error('La reapertura anual solicitada no pertenece a la empresa activa.');
       }
-      return reopenAccountingYear(activeDb, input, actor);
+      const operationId = String(input.operationId || '').trim();
+      if (!operationId) return reopenAccountingYear(activeDb, input, actor);
+      const request = { companyId, reason: String(input.reason || '').trim() };
+      const identity = { operationId, companyId, operationType: 'accounting.reopen_year',
+        requestHash: hashOperationRequest(JSON.stringify(request)), actor };
+      return runIdempotentOperation(activeDb, identity, () => reopenAccountingYear(activeDb, input, actor));
     });
   });
   ipcMain.handle('sicoven:reopen-accounting-period', (_event, token, input) => {
@@ -833,6 +838,11 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
     if (selectedCompanyId && selectedCompanyId !== companyId) {
       throw new Error('La reapertura solicitada no pertenece a la empresa activa.');
     }
+    const operationId = String(input.operationId || '').trim();
+    const request = { companyId, reopenedThroughDate, reason };
+    const identity = operationId ? { operationId, companyId, operationType: 'accounting.reopen_period',
+      requestHash: hashOperationRequest(JSON.stringify(request)), actor } : null;
+    const executeReopen = () => {
     const reopen = activeDb.transaction(() => {
       const row = activeDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
       if (!row) throw new Error('No existe un estado contable persistido para reabrir.');
@@ -888,6 +898,8 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
       return { ok: true, company: nextState.companies.find(item => String(item.id) === companyId), reopeningId };
     });
     return reopen();
+    };
+    return identity ? runIdempotentOperation(activeDb, identity, executeReopen) : executeReopen();
     });
   });
   ipcMain.handle('sicoven:save-state-result', (_event, token, state, operationId) => {

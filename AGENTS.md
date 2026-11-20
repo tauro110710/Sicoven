@@ -138,3 +138,46 @@ Trabajar en este orden, cerrando cada fase con PR integrada y pruebas satisfacto
 - No inventar datos, soportes, saldos, tasas ni resultados para hacer pasar pruebas. Usar fixtures identificados como tales y pruebas de integración con datos controlados.
 - Mantener un registro de fases terminadas, pendientes, PR, commits, workflows y bloqueos en `AGENTS.md` o documentación de proyecto versionada, actualizándolo al cerrar cada fase.
 - Priorizar velocidad mediante trabajo agrupado y pruebas focalizadas, nunca omitiendo auditorías, integridad, migraciones o validaciones Windows requeridas.
+
+
+## 6. Registro de avance del objetivo histórico (actualizado 2026-11-20)
+
+### Fase 1 — recuperación del snapshot contable central
+
+<badge>TERMINADA E INTEGRADA</badge>
+
+- PR #177: https://github.com/miguel110710/Sicoven/pull/177
+- Commit integrado en `main`: `041a3c8c2cc2e174a6cc8cca8098a5999b468f53`.
+- Incluye recibos idempotentes append-only por empresa/tipo/ID, hash de solicitud y resultado original, en la misma transacción SQLite del snapshot y la auditoría.
+- Incluye recuperación/reintento del guardado central desde renderer y migración del esquema multiempresa v1→v2.
+- Linux CI del commit de código `a303206372c4367ecdc5e374229537f3f9bad579`: SUCCESS (tests, TypeScript y build).
+- Windows Release run `44813601173`: SUCCESS; incluye build completo sin datos demo, smoke de instalación/arranque, E2E de migración y actualización desde v1.0.17 conservando SQLite.
+- El commit final de la PR añadió este plan de trabajo a `AGENTS.md`. La documentación no cambia el runtime.
+- La recuperación universal sigue pendiente; esta fase cubrió el snapshot central únicamente.
+
+### Fase 2 — recuperación idempotente de handlers especializados
+
+<badge>EN IMPLEMENTACIÓN; NO INTEGRADA</badge>
+
+Rama actual de trabajo: `feat/recoverable-specialized-operations`.
+
+Alcance inicial en esta rama:
+- Helper `runIdempotentOperation`: comprueba recibo, ejecuta el efecto y escribe resultado dentro de una transacción SQLite única; no registra resultados rechazados.
+- Reapertura de período y ejercicio: recibo por empresa/tipo/ID estable, hash de parámetros y actor.
+- Centro de Correcciones: registro de auditoría, creación de expediente, inicio/autorización de ejecución y finalización con recuperación del resultado.
+- Preload reintenta el mismo request con el mismo ID dentro de la invocación IPC; nunca genera un ID nuevo en ese reintento. El ID fallback creado dentro de preload no sobrevive por sí mismo al cierre/reinicio del renderer o de la aplicación. No afirmar recuperación post-reinicio hasta que cada caller persista una clave/intent durable y exista consulta/reanudación verificable al iniciar.
+- Pruebas añadidas para helper, reapertura anual y reapertura de período. Aún deben pasar CI/Windows y revisión completa antes de integrar.
+
+Pendiente dentro de esta fase:
+- Nómina: revisar y cubrir individualmente altas/cambios salariales, depósitos e intereses de prestaciones, liquidaciones, creación y confirmación de nómina, reglas legales y cualquier handler que escriba.
+- Documentos/soportes: diseñar recuperación que contemple staging y filesystem; no declarar atomicidad SQLite+filesystem sin protocolo verificable de archivos, hashes y rollback.
+- Eventos e incidencias fiscales: integrar recibos por evento y operación sin modificar declaraciones/eventos históricos ni permitir dobles pagos/enteramientos.
+- Módulos de inflación/expedientes y demás handlers con escrituras directas: auditar cada uno y determinar su contrato idempotente.
+- Pruebas de fallo antes/después del commit, reintento con la misma clave, reinicio, concurrencia, aislamiento por empresa/actor y recuperación del resultado original.
+- Actualizar este registro al terminar cada subgrupo y al fusionar su PR.
+
+### Estado de publicación
+
+- Última versión publicada conocida: `v1.0.37`.
+- No se ha publicado una versión nueva por estas fases.
+- La siguiente versión solo se publicará cuando se cumplan todos los criterios de activación histórica de la sección 5. No publicar fundamentos parciales como si la reconstrucción integral estuviera habilitada.

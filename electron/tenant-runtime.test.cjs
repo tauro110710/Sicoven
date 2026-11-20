@@ -93,3 +93,22 @@ test('exposes factory reset through the tenant runtime and removes only register
   assert.equal(fs.readFileSync(path.join(orphanDirectory, 'conservar.txt'), 'utf8'), 'no registrado');
   assert.equal(controlDb.open, true);
 });
+
+
+test('company creation commits its initial snapshot receipt and operation identity with the audit event', async t => {
+  const { runtime } = fixture(t);
+  const operationId = 'runtime-create-operation-001';
+  const requestHash = 'a'.repeat(64);
+  const company = { id: operationId, name: 'Empresa con recibo', rif: 'J-12345678-9' };
+  await runtime.createCompany(company, { id: 7, username: 'admin' }, { operationId, requestHash });
+  const tenantDb = runtime.getCompanyDatabase(operationId);
+  const receipt = tenantDb.prepare("SELECT operation_id,company_id,operation_type,actor_user_id FROM operation_receipts WHERE operation_id=?").get(operationId);
+  assert.equal(receipt.operation_id, operationId);
+  assert.equal(receipt.company_id, operationId);
+  assert.equal(receipt.operation_type, 'accounting.snapshot');
+  assert.equal(receipt.actor_user_id, 7);
+  const event = tenantDb.prepare("SELECT details_json FROM audit_events WHERE event_type='company_created'").get();
+  const details = JSON.parse(event.details_json);
+  assert.equal(details.operationId, operationId);
+  assert.equal(details.requestHash, requestHash);
+});
