@@ -93,6 +93,33 @@ test('preserves but refuses to register an orphan tenant whose initial snapshot 
   verify.close();
 });
 
+test('refuses orphan recovery when the durable creation actor or request hash differs', async t => {
+  const { runtime, controlDb } = fixture(t);
+  const operationId = 'runtime-orphan-identity-check';
+  const requestHash = 'd'.repeat(64);
+  const actor = { id: 7, username: 'admin' };
+  const company = { id: operationId, name: 'Empresa protegida', rif: 'J-12345678-9' };
+  await runtime.createCompany(company, actor, { operationId, requestHash });
+  const filePath = runtime.getCompanyDatabasePath(operationId);
+  runtime.closeCompany(operationId);
+  controlDb.prepare('DELETE FROM company_database_registry WHERE company_id=?').run(operationId);
+
+  assert.throws(
+    () => runtime.recoverOrphanedCompany(company, {
+      operationId, requestHash: 'e'.repeat(64), actor
+    }),
+    /evidencia append-only de creación no coincide/i
+  );
+  assert.throws(
+    () => runtime.recoverOrphanedCompany(company, {
+      operationId, requestHash, actor: { id: 8, username: 'otro-admin' }
+    }),
+    /evidencia append-only de creación no coincide/i
+  );
+  assert.equal(runtime.listCompanies().length, 0);
+  assert.equal(fs.existsSync(filePath), true);
+});
+
 test('company operational writes remain isolated across local databases', async t => {
   const { runtime } = fixture(t);
   const a = { id: 'runtime-c', name: 'Empresa C', rif: 'J-12345678-9' };
