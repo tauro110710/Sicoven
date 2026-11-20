@@ -500,3 +500,102 @@ test('bloquea movimientos bancarios, inventario y cuentas con maestros inexisten
   assert.ok(plan.blockers.some(item => item.includes('cuenta no encontrada')));
   assert.equal(plan.canProceedToTransactionalReplay, false);
 });
+
+
+test('construye vínculos entre documentos, liquidaciones, retenciones y declaraciones', () => {
+  const input = base();
+  input.purchases = [
+    { id: 'purchase-original', companyId: 'company-1', invoiceDate: '2023-01-01' },
+    { id: 'purchase-credit', companyId: 'company-1', invoiceDate: '2023-02-01', originalPurchaseId: 'purchase-original' }
+  ];
+  input.sales = [
+    { id: 'sale-original', companyId: 'company-1', invoiceDate: '2023-01-02' },
+    { id: 'sale-credit', companyId: 'company-1', invoiceDate: '2023-02-02', originalSaleId: 'sale-original' }
+  ];
+  input.movements = [
+    { id: 'movement-original', companyId: 'company-1', date: '2023-01-01' },
+    { id: 'movement-correction', companyId: 'company-1', date: '2023-02-03', correctionForMovementId: 'movement-original' }
+  ];
+  input.bankStatementMovements = [{ id: 'bank-movement', companyId: 'company-1', date: '2023-03-01' }];
+  input.vatVouchers = [{
+    id: 'vat-voucher', companyId: 'company-1', fiscalDate: '2023-01-05',
+    purchaseRecordId: 'purchase-original'
+  }];
+  input.vatWithholdingDeclarations = [{
+    id: 'vat-declaration', companyId: 'company-1', periodEndDate: '2023-01-31',
+    voucherIds: ['vat-voucher']
+  }];
+  input.vatWithholdingDeclarationEvents = [{
+    id: 'vat-event', companyId: 'company-1', date: '2023-02-10',
+    declarationId: 'vat-declaration', bankStatementMovementIds: ['bank-movement']
+  }];
+  input.islrVouchers = [{ id: 'islr-voucher', companyId: 'company-1', date: '2023-01-05' }];
+  input.islrFiscalEvents = [{
+    id: 'islr-event', companyId: 'company-1', fiscalDate: '2023-01-05',
+    voucherId: 'islr-voucher', allocations: [{ purchaseId: 'purchase-original' }]
+  }];
+  input.vatOwnDeclarations = [{
+    id: 'vat-own', companyId: 'company-1', periodEndDate: '2023-01-31',
+    sourceIds: ['purchase-original', 'sale-original']
+  }];
+  input.vatOwnDeclarationEvents = [{
+    id: 'vat-own-event', companyId: 'company-1', date: '2023-02-15',
+    declarationId: 'vat-own'
+  }];
+  input.creditSettlements = [{
+    id: 'settlement', companyId: 'company-1', documentId: 'sale-original',
+    kind: 'SALE_COLLECTION', settlementDate: '2023-02-20'
+  }];
+  input.supplierDirectAdvances = [{ id: 'direct-advance', companyId: 'company-1', date: '2023-01-10' }];
+  input.supplierAdvanceSettlements = [{
+    id: 'advance-settlement', companyId: 'company-1', date: '2023-02-25',
+    sourceCreditNoteIds: ['purchase-credit'], sourceDirectAdvanceIds: ['direct-advance'],
+    targetPurchaseId: 'purchase-original'
+  }];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+  const relations = new Set(plan.sourceDependencies.map(item => item.relationType));
+
+  for (const expected of [
+    'CORRECTS_PURCHASE', 'CORRECTS_SALE', 'CORRECTS_INVENTORY_MOVEMENT',
+    'VAT_WITHHOLDING_FOR_PURCHASE', 'DECLARATION_INCLUDES_VAT_VOUCHER',
+    'VAT_WITHHOLDING_EVENT_FOR_DECLARATION', 'VAT_WITHHOLDING_PAYMENT_BANK_SUPPORT',
+    'ISLR_EVENT_FOR_VOUCHER', 'ISLR_EVENT_FOR_PURCHASE',
+    'VAT_OWN_DECLARATION_SOURCE', 'VAT_OWN_EVENT_FOR_DECLARATION',
+    'SETTLEMENT_FOR_DOCUMENT', 'SUPPLIER_ADVANCE_FROM_CREDIT_NOTE',
+    'SUPPLIER_ADVANCE_FROM_DIRECT_DISBURSEMENT', 'SUPPLIER_ADVANCE_APPLIED_TO_PURCHASE'
+  ]) assert.ok(relations.has(expected), 'Falta relación ' + expected);
+
+  assert.equal(plan.blockers.length, 0);
+});
+
+test('bloquea vínculos de corrección a documentos inexistentes', () => {
+  const input = base();
+  input.sales = [{
+    id: 'sale-credit', companyId: 'company-1', invoiceDate: '2023-02-01',
+    originalSaleId: 'sale-missing'
+  }];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+
+  assert.ok(plan.blockers.some(item => item.includes('sales/sale-missing')));
+  assert.equal(plan.canProceedToTransactionalReplay, false);
+});
+
+test('bloquea operaciones tributarias cuando existe historial con brechas de vigencia', () => {
+  const input = base();
+  input.company = {
+    id: 'company-1',
+    taxStatusHistory: [{
+      id: 'tax-current', effectiveFrom: '2023-02-01', effectiveTo: '2023-12-31'
+    }]
+  };
+  input.sales = [{
+    id: 'sale-before-status', companyId: 'company-1', invoiceDate: '2023-01-15'
+  }];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+
+  assert.ok(plan.blockers.some(item => item.includes('no tiene exactamente un tramo de condición tributaria vigente')));
+  assert.equal(plan.canProceedToTransactionalReplay, false);
+});
