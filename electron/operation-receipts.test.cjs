@@ -214,6 +214,25 @@ test('a receipt from another operation type cannot complete a prepared intent', 
   } finally { db.close(); }
 });
 
+test('payroll confirmation intent preserves its positional request shape', () => {
+  const db = setup();
+  try {
+    const request = { runId: 'payroll-run-1', journalEntryId: 'journal-1' };
+    prepareOperationIntent(db, {
+      operationId: 'payroll-confirm-001',
+      channel: 'sicoven:payroll-run-confirm',
+      requestMode: 'payroll-run-confirm',
+      request
+    }, 'company-1', durableActor);
+    assert.deepEqual(listPendingOperationIntents(db, 'company-1', durableActor), [{
+      operationId: 'payroll-confirm-001',
+      channel: 'sicoven:payroll-run-confirm',
+      requestMode: 'payroll-run-confirm',
+      request
+    }]);
+  } finally { db.close(); }
+});
+
 test('intent keys cannot be reused across requests, channels or actors', () => {
   const db = setup();
   try {
