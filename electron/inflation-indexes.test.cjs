@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
+const { initializeOperationReceiptSchema } = require('./operation-receipts.cjs');
 const {
   parseInflationIndexCsv,
   initializeInflationIndexSchema,
@@ -22,6 +23,7 @@ function database() {
     );
   `);
   initializeInflationIndexSchema(db);
+  initializeOperationReceiptSchema(db);
   return db;
 }
 const admin = { id: 1, username: 'admin', role: 'admin' };
@@ -150,15 +152,15 @@ test('IPC requires a valid session and permits administrator and accountant impo
     assert.throws(() => handlers.get('sicoven:inflation-index-list')({}, 'bad-token'), /Sesión no válida/);
     const preview = handlers.get('sicoven:inflation-index-preview')({}, 'admin-token', importerInput());
     assert.equal(preview.observationCount, 2);
-    const imported = handlers.get('sicoven:inflation-index-import')({}, 'admin-token', importerInput());
+    const imported = handlers.get('sicoven:inflation-index-import')({}, 'admin-token', { ...importerInput(), operationId: 'index-admin-import-001' });
     assert.equal(imported.ok, true);
     const reviewed = handlers.get('sicoven:inflation-index-review')({}, 'admin-token', {
-      seriesId: imported.seriesId, decision: 'APPROVED', reason: 'Verificado por administración.'
+      operationId: 'index-admin-review-001', seriesId: imported.seriesId, decision: 'APPROVED', reason: 'Verificado por administración.'
     });
     assert.equal(reviewed.ok, true);
-    const accountantImport = handlers.get('sicoven:inflation-index-import')({}, 'contador-token', importerInput({ sourceTitle: 'Serie importada por contador' }));
+    const accountantImport = handlers.get('sicoven:inflation-index-import')({}, 'contador-token', importerInput({ sourceTitle: 'Serie importada por contador', operationId: 'index-accountant-import-001' }));
     assert.equal(accountantImport.ok, true);
-    const accountantReview = handlers.get('sicoven:inflation-index-review')({}, 'contador-token', { seriesId: accountantImport.seriesId, decision: 'APPROVED', reason: 'Verificado por el contador responsable.' });
+    const accountantReview = handlers.get('sicoven:inflation-index-review')({}, 'contador-token', { operationId: 'index-accountant-review-001', seriesId: accountantImport.seriesId, decision: 'APPROVED', reason: 'Verificado por el contador responsable.' });
     assert.equal(accountantReview.ok, true);
   } finally { db.close(); }
 });
@@ -179,7 +181,7 @@ test('inflation index IPC routes reads and writes through the authenticated tena
     }
   });
   try {
-    const imported = await handlers.get('sicoven:inflation-index-import')({}, 'tenant-token', importerInput());
+    const imported = await handlers.get('sicoven:inflation-index-import')({}, 'tenant-token', { ...importerInput(), operationId: 'index-tenant-import-001' });
     assert.equal(imported.ok, true);
     assert.equal(tenantDb.prepare('SELECT COUNT(*) AS n FROM inflation_index_series').get().n, 1);
     assert.equal(controlDb.prepare('SELECT COUNT(*) AS n FROM inflation_index_series').get().n, 0);

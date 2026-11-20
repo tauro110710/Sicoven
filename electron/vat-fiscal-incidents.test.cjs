@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
+const { initializeOperationReceiptSchema } = require('./operation-receipts.cjs');
 const {
   initializeVatFiscalIncidentSchema, createVatFiscalIncident,
   recordVatFiscalIncidentEvent, getVatFiscalIncident,
@@ -36,6 +37,7 @@ function fixture() {
   };
   db.prepare('INSERT INTO app_state(state_key,state_json) VALUES(?,?)').run('accounting', JSON.stringify(state));
   initializeVatFiscalIncidentSchema(db);
+  initializeOperationReceiptSchema(db);
   return { db, state };
 }
 function createInput(overrides = {}) {
@@ -260,7 +262,7 @@ test('VAT fiscal incident IPC writes only to the authenticated tenant database',
     }
   });
   try {
-    const created = await handlers.get('sicoven:vat-fiscal-incident-create')({}, 'tenant-token', createInput());
+    const created = await handlers.get('sicoven:vat-fiscal-incident-create')({}, 'tenant-token', { ...createInput(), operationId: 'vat-tenant-create-001' });
     assert.ok(created.id);
     assert.equal(tenant.prepare('SELECT COUNT(*) AS n FROM vat_fiscal_incidents').get().n, 1);
     assert.equal(control.prepare('SELECT COUNT(*) AS n FROM vat_fiscal_incidents').get().n, 0);

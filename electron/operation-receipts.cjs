@@ -29,6 +29,20 @@ function initializeOperationReceiptSchema(db) {
   `);
 }
 
+function createOperationReceiptIdentity(input, companyId, operationType, request, actor) {
+  const operationId = String(input?.operationId || '').trim();
+  if (!operationId) throw new Error('Falta el identificador estable de la operación. Actualice SICOVEN e inténtelo nuevamente.');
+  const serialized = JSON.stringify(request);
+  if (typeof serialized !== 'string') throw new TypeError('La solicitud idempotente no se pudo serializar.');
+  return {
+    operationId,
+    companyId: String(companyId || '').trim(),
+    operationType,
+    requestHash: hashOperationRequest(serialized),
+    actor
+  };
+}
+
 function hashOperationRequest(serializedRequest) {
   if (typeof serializedRequest !== 'string') {
     throw new TypeError('La solicitud idempotente debe estar serializada como texto.');
@@ -111,6 +125,7 @@ function recordOperationReceipt(db, input, result) {
 
 module.exports = {
   initializeOperationReceiptSchema,
+  createOperationReceiptIdentity,
   hashOperationRequest,
   findOperationReceipt,
   recordOperationReceipt,

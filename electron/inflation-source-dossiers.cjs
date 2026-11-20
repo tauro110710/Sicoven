@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
+const { createOperationReceiptIdentity, runIdempotentOperation } = require('./operation-receipts.cjs');
 
 const SOURCE_REQUIREMENTS = Object.freeze({
   ESTIMACION_EXPERTO: [
@@ -21,6 +22,10 @@ const PURPOSES = new Set(['REME_FINANCIAL_STATEMENTS', 'REME_SUPPORTING_ANALYSIS
 const MAX_EVIDENCE_BYTES = 5 * 1024 * 1024;
 const MAX_TOTAL_EVIDENCE_BYTES = 20 * 1024 * 1024;
 
+function operationRequest(input) {
+  const { operationId, ...request } = input || {};
+  return request;
+}
 function requiredText(value, label, max = 500) {
   const result = String(value ?? '').trim();
   if (!result || result.length > max) throw new Error(label + ' es obligatorio y no puede exceder ' + max + ' caracteres.');
@@ -383,7 +388,9 @@ function registerInflationSourceDossierIpc({ ipcMain, db, licenseView, getActive
     const actor = authenticate(token);
     return runWithDatabase(token, (activeDb, companyId) => {
       assertCompanyScope(companyId, input?.companyId);
-      return createInflationSourceDossier(activeDb, input, actor);
+      const identity = createOperationReceiptIdentity(input, companyId || input?.companyId,
+        'inflation.source_dossier_create', operationRequest(input), actor);
+      return runIdempotentOperation(activeDb, identity, () => createInflationSourceDossier(activeDb, input, actor));
     });
   });
   ipcMain.handle('sicoven:inflation-source-dossier-review', (_event, token, input) => {
@@ -391,7 +398,9 @@ function registerInflationSourceDossierIpc({ ipcMain, db, licenseView, getActive
     return runWithDatabase(token, (activeDb, companyId) => {
       const row = activeDb.prepare('SELECT company_id AS companyId FROM inflation_source_dossiers WHERE id=?').get(String(input?.dossierId || ''));
       if (!row || (companyId && String(row.companyId) !== companyId)) throw new Error('El expediente no pertenece a la empresa activa.');
-      return reviewInflationSourceDossier(activeDb, input, actor);
+      const identity = createOperationReceiptIdentity(input, row.companyId,
+        'inflation.source_dossier_review', operationRequest(input), actor);
+      return runIdempotentOperation(activeDb, identity, () => reviewInflationSourceDossier(activeDb, input, actor));
     });
   });
 }

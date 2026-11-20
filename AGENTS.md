@@ -157,24 +157,35 @@ Trabajar en este orden, cerrando cada fase con PR integrada y pruebas satisfacto
 
 ### Fase 2 — recuperación idempotente de handlers especializados
 
-<badge>EN IMPLEMENTACIÓN; NO INTEGRADA</badge>
+<badge>EN CURSO; SUBGRUPO 1 INTEGRADO</badge>
 
-Rama actual de trabajo: `feat/recoverable-specialized-operations`.
+**PR #178 — integrada en main**
+- URL: https://github.com/miguel110710/Sicoven/pull/178
+- Commit squash: `645d40114a0768a536b665e471d90b906fa0ffba`.
+- Incluye ejecutor transaccional de operaciones idempotentes, recibos por empresa/tipo/ID, hash de solicitud, actor y resultado original.
+- Integra reaperturas de período/ejercicio, auditoría y expedientes correctivos, creación/ejecución de correcciones, operaciones de nómina y creación de empresa.
+- Linux y Windows Release SUCCESS; Windows incluyó typecheck, build sin demo, auditorías, empaquetado de validación, smoke install/launch, migración E2E y upgrade desde v1.0.17 conservando SQLite.
+- Los checks de PR no tuvieron comentarios de revisión abiertos al fusionar.
+- Límite expresamente documentado: operationId fallback generado dentro de preload solo permite reintento en la misma invocación IPC. No garantiza recuperación después de reiniciar si el caller no persiste su propio ID. No afirmar recuperación post-reinicio ni idempotencia universal.
 
-Alcance inicial en esta rama:
-- Helper `runIdempotentOperation`: comprueba recibo, ejecuta el efecto y escribe resultado dentro de una transacción SQLite única; no registra resultados rechazados.
-- Reapertura de período y ejercicio: recibo por empresa/tipo/ID estable, hash de parámetros y actor.
-- Centro de Correcciones: registro de auditoría, creación de expediente, inicio/autorización de ejecución y finalización con recuperación del resultado.
-- Preload reintenta el mismo request con el mismo ID dentro de la invocación IPC; nunca genera un ID nuevo en ese reintento. El ID fallback creado dentro de preload no sobrevive por sí mismo al cierre/reinicio del renderer o de la aplicación. No afirmar recuperación post-reinicio hasta que cada caller persista una clave/intent durable y exista consulta/reanudación verificable al iniciar.
-- Pruebas añadidas para helper, reapertura anual y reapertura de período. Aún deben pasar CI/Windows y revisión completa antes de integrar.
+**PR en curso — `feat/recoverable-fiscal-inflation-operations`**
+- Centraliza `createOperationReceiptIdentity` en `operation-receipts.cjs` y lo reutiliza desde main y handlers especializados.
+- Integra recibos transaccionales en creación y eventos de incidencias fiscales IVA.
+- Integra recibos en importación/revisión de series de índices de inflación.
+- Integra recibos en alta/revisión de clasificaciones de partidas para RE/MRE.
+- Integra recibos en creación/revisión de expedientes de fuentes alternativas de inflación.
+- Integra recibos en revisión de soportes documentales (operación SQLite-only).
+- Preload aplica reintento con la misma clave a esos canales; los IDs fallback siguen teniendo vida limitada a la invocación si el caller no los persiste.
+- Añade prueba de integración SQLite para reintentos de incidencias fiscales y prueba unitaria de identidad estable. La validación CI completa y revisión de todos los flujos aún están pendientes.
+- No incluye adjuntar documentos: el flujo combina filesystem y SQLite y requiere protocolo durable de staging, hash, journal/recuperación y limpieza segura antes de integrar.
 
-Pendiente dentro de esta fase:
-- Nómina: revisar y cubrir individualmente altas/cambios salariales, depósitos e intereses de prestaciones, liquidaciones, creación y confirmación de nómina, reglas legales y cualquier handler que escriba.
-- Documentos/soportes: diseñar recuperación que contemple staging y filesystem; no declarar atomicidad SQLite+filesystem sin protocolo verificable de archivos, hashes y rollback.
-- Eventos e incidencias fiscales: integrar recibos por evento y operación sin modificar declaraciones/eventos históricos ni permitir dobles pagos/enteramientos.
-- Módulos de inflación/expedientes y demás handlers con escrituras directas: auditar cada uno y determinar su contrato idempotente.
-- Pruebas de fallo antes/después del commit, reintento con la misma clave, reinicio, concurrencia, aislamiento por empresa/actor y recuperación del resultado original.
-- Actualizar este registro al terminar cada subgrupo y al fusionar su PR.
+**Pendiente dentro de esta fase**
+- Completar recuperación durable post-reinicio: crear/persistir intención e ID en el caller antes de ejecutar; recuperar estado/resultado al reabrir y permitir reintento seguro. Cubrir formularios de nómina, empresa, reaperturas, eventos fiscales, inflación y operaciones de documentos.
+- Documentos/soportes: diseñar protocolo de staging y reconciliación entre archivo físico y registro SQLite. No borrar archivos que puedan estar vinculados a un commit confirmado; identificar y recuperar huérfanos de forma explícita.
+- Actualización de ficha de empresa: el handler `sicoven:company-update-metadata` modifica el registro/metadata mediante `runtime.updateCompanyMetadata` y después agrega auditoría en la SQLite de la empresa. Si falla la auditoría intenta compensar restaurando metadata anterior, pero registro central y auditoría de tenant no comparten transacción; una caída entre ambas escrituras puede dejar cambio sin evidencia auditada. Diseñar journal/saga recuperable con estados, clave estable, actor/hash y reconciliación al iniciar; no asumir atomicidad entre bases.
+- Auditar cualquier otro handler con escrituras directas.
+- Añadir pruebas de interrupción antes/después del commit, reintento, reinicio, concurrencia, aislamiento por empresa/actor y recuperación del resultado original para cada familia.
+- Actualizar este registro al cerrar cada subgrupo y al fusionar su PR.
 
 ### Estado de publicación
 

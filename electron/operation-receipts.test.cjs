@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 const {
-  initializeOperationReceiptSchema, hashOperationRequest, runIdempotentOperation
+  initializeOperationReceiptSchema, createOperationReceiptIdentity, hashOperationRequest, runIdempotentOperation
 } = require('./operation-receipts.cjs');
 
 function setup() {
@@ -19,6 +19,20 @@ function identity(operationId = 'operation-001', request = { amount: 12 }) {
     actor: { id: 7, username: 'contador' }
   };
 }
+
+test('operation identity requires a caller-supplied stable ID and binds company, type, request and actor', () => {
+  const actor = { id: 7, username: 'contador' };
+  assert.throws(() => createOperationReceiptIdentity({}, 'company-1', 'accounting.test_operation', { amount: 12 }, actor),
+    /Falta el identificador estable/);
+  const identity = createOperationReceiptIdentity(
+    { operationId: 'stable-001' }, 'company-1', 'accounting.test_operation', { amount: 12 }, actor
+  );
+  assert.equal(identity.operationId, 'stable-001');
+  assert.equal(identity.companyId, 'company-1');
+  assert.equal(identity.operationType, 'accounting.test_operation');
+  assert.equal(identity.requestHash, hashOperationRequest(JSON.stringify({ amount: 12 })));
+  assert.deepEqual(identity.actor, actor);
+});
 
 test('atomic operation receipt returns the original result without repeating effects', () => {
   const db = setup();
