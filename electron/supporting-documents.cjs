@@ -373,19 +373,33 @@ function registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, 
   };
   ipcMain.handle('sicoven:document-attach', async (_event, token, input) => {
     const actor = authenticate(token);
-    const options = { title: 'Adjuntar soporte documental a SICOVEN', properties: ['openFile'], filters: [{ name: 'Documentos admitidos', extensions: ['pdf','jpg','jpeg','png','webp'] }] };
+    const userDataDir = app.getPath('userData');
+    const attach = (activeDb, companyId, payload, buffer) => {
+      if (companyId && String(payload?.companyId || '') !== companyId) throw new Error('El documento no pertenece a la empresa activa.');
+      return attachDocument(activeDb, {
+        trustedRoot: userDataDir,
+        storageDir: path.join(userDataDir, 'companies', companyId || 'legacy', 'supporting-documents'),
+        input: payload, buffer, actor
+      });
+    };
+    try {
+      const existing = await runWithDatabase(token, (activeDb, companyId) => attach(activeDb, companyId, input, null));
+      return existing;
+    } catch (error) {
+      if (error?.code !== 'SICOVEN_DOCUMENT_SOURCE_REQUIRED') throw error;
+    }
+    const options = { title: 'Adjuntar o recuperar soporte documental en SICOVEN', properties: ['openFile'], filters: [{ name: 'Documentos admitidos', extensions: ['pdf','jpg','jpeg','png','webp'] }] };
     const parentWindow = getWindow?.();
     const selection = parentWindow ? await dialog.showOpenDialog(parentWindow, options) : await dialog.showOpenDialog(options);
     restoreWindowFocus(parentWindow);
-    if (selection.canceled || !selection.filePaths?.[0]) return { ok: false, canceled: true };
-    const source = selection.filePaths[0], stat = fs.statSync(source);
-    if (!stat.isFile() || stat.size < 1 || stat.size > MAX_DOCUMENT_BYTES) throw new Error('El archivo debe tener entre 1 byte y 20 MB.');
+    if (selection.canceled || !selection.filePaths?.[0]) return { ok: false, canceled: true, pending: Boolean(input?.operationId) };
+    const source = selection.filePaths[0], stat = fs.lstatSync(source);
+    if (stat.isSymbolicLink() || !stat.isFile() || stat.size < 1 || stat.size > MAX_DOCUMENT_BYTES) {
+      throw new Error('El archivo debe ser un archivo regular seguro de entre 1 byte y 20 MB.');
+    }
     const buffer = fs.readFileSync(source);
-    return runWithDatabase(token, (activeDb, companyId) => {
-      if (companyId && String(input?.companyId || '') !== companyId) throw new Error('El documento no pertenece a la empresa activa.');
-      const userDataDir = app.getPath('userData');
-      return attachDocument(activeDb, { trustedRoot: userDataDir, storageDir: path.join(userDataDir, 'companies', companyId || 'legacy', 'supporting-documents'), input, buffer, actor });
-    });
+    const payload = { ...(input || {}), fileName: path.basename(source) };
+    return runWithDatabase(token, (activeDb, companyId) => attach(activeDb, companyId, payload, buffer));
   });
   ipcMain.handle('sicoven:document-list', (_event, token, filters) => {
     authenticate(token);
