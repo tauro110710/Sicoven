@@ -894,11 +894,17 @@ test('tenant-routed persistence writes only to the selected company database', a
     const state = createEmptyAccountingSnapshot();
     state.companies = [{ id: 'company-a', name: 'Empresa A', rif: 'J-12345678-9' }];
     state.currentCompanyId = 'company-a';
-    const result = await handlers.get('sicoven:save-state')({}, 'valid-session', state);
+    const operationId = 'tenant-snapshot-operation-001';
+    const result = await handlers.get('sicoven:save-state')({}, 'valid-session', state, operationId);
     assert.equal(result.ok, true);
+    const recovered = await handlers.get('sicoven:save-state-result')({}, 'valid-session', state, operationId);
+    assert.equal(recovered.found, true);
+    assert.equal(recovered.result.savedAt, result.savedAt);
     const saved = JSON.parse(tenantDb.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
     assert.equal(saved.companies[0].id, 'company-a');
     assert.equal(controlDb.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='app_state'").get().count, 0);
+    assert.equal(tenantDb.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 1);
+    assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 0);
   } finally {
     tenantDb.close();
     controlDb.close();
