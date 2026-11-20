@@ -326,9 +326,32 @@ function reopenAccountingYear(db, input, actor) {
       if (String(entry.id) === String(opening.id)) return { ...entry, isAdjusted: true, reversedByEntryId: openingReversal.id };
       return entry;
     }).concat(closingReversal, openingReversal);
+    let fiscalExercises = company.fiscalExercises;
+    if (Array.isArray(fiscalExercises) && fiscalExercises.length > 0) {
+      const closingIndex = fiscalExercises.findIndex(item =>
+        String(item.companyId) === companyId && String(item.closingEntryId || '') === String(closing.id));
+      const openingIndex = fiscalExercises.findIndex(item =>
+        String(item.companyId) === companyId && String(item.openingEntryId || '') === String(opening.id));
+      if (closingIndex < 0 || openingIndex !== closingIndex + 1 ||
+          fiscalExercises[closingIndex].status !== 'CERRADO') {
+        throw new Error('El calendario fiscal no coincide con los asientos originales del ciclo; se bloqueó la reapertura.');
+      }
+      fiscalExercises = fiscalExercises.map((item, index) => {
+        if (index === closingIndex) {
+          const { closingEntryId, closedAt, ...rest } = item;
+          return { ...rest, status: 'ABIERTO' };
+        }
+        if (index === openingIndex) {
+          const { openingEntryId, ...rest } = item;
+          return rest;
+        }
+        return item;
+      });
+    }
     const restoredCompany = {
       ...company,
       fiscalYear: Number(evidence.previousFiscalYear),
+      ...(Array.isArray(fiscalExercises) ? { fiscalExercises } : {}),
       ...(evidence.previousClosedThroughDate
         ? { closedThroughDate: evidence.previousClosedThroughDate }
         : { closedThroughDate: undefined })
