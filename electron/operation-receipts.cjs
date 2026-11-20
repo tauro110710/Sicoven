@@ -168,7 +168,7 @@ function prepareOperationIntent(db, input, companyId, actor) {
   const selectedCompanyId = String(companyId || '').trim();
   const request = input?.request;
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(operationId) || !selectedCompanyId || selectedCompanyId.length > 120 ||
-      !DURABLE_OPERATION_TYPES[channel] ||
+      !Object.prototype.hasOwnProperty.call(DURABLE_OPERATION_TYPES, channel) ||
       !['object','payroll-run-confirm'].includes(requestMode) ||
       !request || typeof request !== 'object' || Array.isArray(request)) {
     throw new TypeError('La intención de operación no contiene una identidad, canal o solicitud válida.');
@@ -229,7 +229,7 @@ function listPendingOperationIntents(db, companyId, actor) {
     ORDER BY i.created_at,i.operation_id
   `).all(selectedCompanyId, identity.userId, identity.username);
   return rows.map(row => {
-    if (!DURABLE_OPERATION_TYPES[String(row.ipc_channel)]) {
+    if (!Object.prototype.hasOwnProperty.call(DURABLE_OPERATION_TYPES, String(row.ipc_channel))) {
       throw new Error('Existe una operación pendiente con un canal no reconocido; se bloqueó su recuperación automática.');
     }
     let request;
