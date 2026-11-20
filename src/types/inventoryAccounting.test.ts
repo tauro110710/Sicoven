@@ -249,7 +249,8 @@ describe('reconstrucción de provisión VNR desde el Libro Diario', () => {
     for (const startDate of ['2010-01-01', '2000-01-01']) {
       const [prepared] = prepareProductsForHistoricalReconstruction([{
         id: 'historical-' + startDate, code: 'ART-HIST', name: 'Artículo histórico', currentStock: 0,
-        avgCostBs: 100, avgCostUsd: 1, lastCostBs: 100, lastCostUsd: 1
+        avgCostBs: 100, avgCostUsd: 1, lastCostBs: 100, lastCostUsd: 1,
+        openingDate: '2026-01-01', openingBcvRate: 874.7
       }], startDate);
       assert.equal(prepared.openingDate, startDate);
       assert.equal(prepared.openingBcvRate, 0);
