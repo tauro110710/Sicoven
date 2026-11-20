@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 const { reopenAccountingYear, initializeAnnualReopeningSchema } = require('./accounting-year-reopening.cjs');
+const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
 
 function fixture({ withEvidence = true } = {}) {
   const db = new Database(':memory:');
@@ -305,4 +306,36 @@ test('no bloquea la reapertura por actividad de otra empresa ni por borradores d
   assert.equal(result.company.fiscalYear, 2025);
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM accounting_year_reopenings').get().count, 1);
   db.close();
+});
+
+
+test('una reapertura anual confirmada recupera el resultado original al reintentar por IPC', () => {
+  const { db } = fixture();
+  try {
+    const handlers = new Map();
+    registerAccountingPersistenceHandler({
+      ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+      db,
+      licenseView: () => ({ authorized: true }),
+      getActiveSession: () => ({ id: 7, username: 'contador', role: 'contador' })
+    });
+    const handler = handlers.get('sicoven:reopen-accounting-year');
+    const input = {
+      companyId: 'co-1',
+      reason: 'Corrección integral del cierre anual.',
+      operationId: 'annual-reopen-operation-001'
+    };
+    const first = handler({}, 'valid-session', input);
+    const recovered = handler({}, 'valid-session', input);
+    assert.equal(first.ok, true);
+    assert.equal(recovered.ok, true);
+    assert.equal(recovered.replayed, true);
+    assert.equal(recovered.reopening.id, first.reopening.id);
+    assert.deepEqual(recovered.reversalEntries.map(entry => entry.id), first.reversalEntries.map(entry => entry.id));
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM accounting_year_reopenings').get().count, 1);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_year_reopened'").get().count, 1);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM operation_receipts WHERE operation_type='accounting.reopen_year'").get().count, 1);
+  } finally {
+    db.close();
+  }
 });
