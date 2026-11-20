@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
+const { initializeOperationReceiptSchema } = require('./operation-receipts.cjs');
 const {
   initializeVatFiscalIncidentSchema, createVatFiscalIncident,
   recordVatFiscalIncidentEvent, getVatFiscalIncident,
@@ -36,6 +37,7 @@ function fixture() {
   };
   db.prepare('INSERT INTO app_state(state_key,state_json) VALUES(?,?)').run('accounting', JSON.stringify(state));
   initializeVatFiscalIncidentSchema(db);
+  initializeOperationReceiptSchema(db);
   return { db, state };
 }
 function createInput(overrides = {}) {
