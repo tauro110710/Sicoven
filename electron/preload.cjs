@@ -1,4 +1,21 @@
 const { contextBridge, ipcRenderer } = require('electron');
+
+async function invokeRecoverableOperation(channel, token, input) {
+  const operationId = String(input?.operationId || globalThis.crypto.randomUUID());
+  const request = { ...input, operationId };
+  try {
+    return await ipcRenderer.invoke(channel, token, request);
+  } catch (firstError) {
+    // A rejected IPC promise does not prove SQLite rolled back. Retry the exact
+    // request with the same durable operation ID; the main process returns the
+    // committed receipt instead of applying the business effect twice.
+    try {
+      return await ipcRenderer.invoke(channel, token, request);
+    } catch {
+      throw firstError;
+    }
+  }
+}
 contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   getLicenseStatus: () => ipcRenderer.invoke('sicoven:license-status'),
   getImprovementConsent: () => ipcRenderer.invoke('sicoven:improvement-consent:get'),
@@ -38,8 +55,8 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   listCorrectionCases: (token, companyId) => ipcRenderer.invoke('sicoven:correction-case-list', token, companyId),
   save: (token, state, operationId) => ipcRenderer.invoke('sicoven:save-state', token, state, operationId),
   resolveSave: (token, state, operationId) => ipcRenderer.invoke('sicoven:save-state-result', token, state, operationId),
-  reopenAccountingPeriod: (token, input) => ipcRenderer.invoke('sicoven:reopen-accounting-period', token, input),
-  reopenAccountingYear: (token, input) => ipcRenderer.invoke('sicoven:reopen-accounting-year', token, input),
+  reopenAccountingPeriod: (token, input) => invokeRecoverableOperation('sicoven:reopen-accounting-period', token, input),
+  reopenAccountingYear: (token, input) => invokeRecoverableOperation('sicoven:reopen-accounting-year', token, input),
   resetAccounting: (token, options) => ipcRenderer.invoke('sicoven:reset-accounting', token, options),
   listInflationIndexSeries: (token) => ipcRenderer.invoke('sicoven:inflation-index-list', token),
   previewInflationIndexImport: (token, input) => ipcRenderer.invoke('sicoven:inflation-index-preview', token, input),
