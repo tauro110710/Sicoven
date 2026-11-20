@@ -269,8 +269,9 @@ export function buildHistoricalAccountingReplayPlan(
   const purchaseById = new Map(
     (Array.isArray(input.purchases) ? input.purchases : []).map(record => [String(record.id || ''), record] as const)
   );
-  const companyJournalEntries = (Array.isArray(input.journalEntries) ? input.journalEntries : [])
-    .filter(entry => String(entry.companyId || '') === companyId);
+  const allJournalEntries = Array.isArray(input.journalEntries) ? input.journalEntries : [];
+  const allJournalEntryById = new Map(allJournalEntries.map(entry => [String(entry.id || ''), entry] as const));
+  const companyJournalEntries = allJournalEntries.filter(entry => String(entry.companyId || '') === companyId);
   const journalEntryById = new Map(companyJournalEntries.map(entry => [String(entry.id || ''), entry] as const));
   const expandJournalEntryDependencies = (seedIds: string[]): string[] => {
     const visited = new Set<string>();
@@ -456,7 +457,7 @@ export function buildHistoricalAccountingReplayPlan(
       const validationKey = event.key + '|' + journalEntryId;
       if (validatedLinks.has(validationKey)) continue;
       validatedLinks.add(validationKey);
-      const linkedEntry = journalEntryById.get(journalEntryId);
+      const linkedEntry = allJournalEntryById.get(journalEntryId);
       if (!linkedEntry) {
         blockers.push('El documento ' + event.collection + '/' + event.sourceId +
           ' referencia el asiento contable inexistente ' + journalEntryId + '.');
@@ -503,8 +504,7 @@ export function buildHistoricalAccountingReplayPlan(
       const relatedValue = entry[field];
       if (typeof relatedValue !== 'string' || !relatedValue.trim()) continue;
       const relatedId = relatedValue.trim();
-      const relatedEntry = (Array.isArray(input.journalEntries) ? input.journalEntries : [])
-        .find(candidate => String(candidate.id || '') === relatedId);
+      const relatedEntry = allJournalEntryById.get(relatedId);
       if (!relatedEntry) {
         blockers.push('El asiento ' + entryId + ' referencia el asiento relacionado inexistente ' + relatedId + '.');
       } else if (String(relatedEntry.companyId || '') !== companyId) {
@@ -527,8 +527,7 @@ export function buildHistoricalAccountingReplayPlan(
     .filter(Boolean);
   const derivedJournalEntryIds = expandJournalEntryDependencies(inRangeJournalEntryIds);
   for (const id of derivedJournalEntryIds) {
-    const entry = (Array.isArray(input.journalEntries) ? input.journalEntries : [])
-      .find(candidate => String(candidate.id || '') === id);
+    const entry = allJournalEntryById.get(id);
     if (entry && isIsoDate(String(entry.date || '')) &&
         (String(entry.date) < startDate || String(entry.date) > throughDate)) {
       externalDependencies.push('El asiento relacionado ' + id + ' está fuera del rango solicitado y debe revisarse junto con su vínculo de reversión o ajuste.');
