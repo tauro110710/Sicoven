@@ -33,7 +33,7 @@ export function confirmFiscalExerciseCycle(input: FiscalExerciseCycleInput): Per
   const duplicateOpening = exercises.find(item => item.openingEntryId === openingEntryId);
   if (target.status === 'CERRADO' &&
       target.closingEntryId === closingEntryId &&
-      exercises.some(item => item.openingEntryId === openingEntryId)) {
+      exercises[targetIndex + 1]?.openingEntryId === openingEntryId) {
     return exercises;
   }
   if (duplicateClosing || duplicateOpening) {
@@ -73,6 +73,8 @@ export function validatePersistedFiscalExerciseCalendar(
     throw new Error('El calendario no contiene ejercicios para la empresa indicada.');
   }
   const ids = new Set<string>();
+  const closingIds = new Set<string>();
+  const openingIds = new Set<string>();
   for (let index = 0; index < companyExercises.length; index += 1) {
     const item = companyExercises[index];
     if (!item.id.trim() || ids.has(item.id)) throw new Error('El calendario contiene identificadores de ejercicio duplicados.');
@@ -84,7 +86,16 @@ export function validatePersistedFiscalExerciseCalendar(
     if (index > 0 && item.startDate !== addOneDay(companyExercises[index - 1].endDate)) {
       throw new Error('El calendario contiene un salto o solapamiento entre ejercicios.');
     }
-    if (item.status === 'CERRADO' && (!item.closingEntryId || !item.openingEntryId || !item.closedAt)) {
+    if (item.closingEntryId) {
+      if (closingIds.has(item.closingEntryId)) throw new Error('Un asiento de cierre está vinculado a más de un ejercicio.');
+      closingIds.add(item.closingEntryId);
+    }
+    if (item.openingEntryId) {
+      if (openingIds.has(item.openingEntryId)) throw new Error('Un asiento de apertura está vinculado a más de un ejercicio.');
+      openingIds.add(item.openingEntryId);
+    }
+    if (item.status === 'CERRADO' && (!item.closingEntryId || !item.closedAt ||
+        !companyExercises[index + 1]?.openingEntryId)) {
       throw new Error('Un ejercicio cerrado debe conservar el asiento de cierre, la apertura siguiente y la fecha de confirmación.');
     }
   }
