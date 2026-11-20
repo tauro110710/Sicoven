@@ -212,3 +212,13 @@ Trabajar en este orden, cerrando cada fase con PR integrada y pruebas satisfacto
 - Última versión publicada conocida: `v1.0.37`.
 - No se ha publicado una versión nueva por estas fases.
 - La siguiente versión solo se publicará cuando se cumplan todos los criterios de activación histórica de la sección 5. No publicar fundamentos parciales como si la reconstrucción integral estuviera habilitada.
+
+
+#### Seguimiento PR #181 — 2026-11-20
+
+- Se reforzó la saga para resolver siempre la conexión SQLite de control vigente mediante `runtime.controlDb`; esto evita conservar prepared statements/conexiones antiguas después de una restauración global que reemplace la conexión.
+- Se añadió prueba de rebind: registra el esquema inicial, sustituye la base de control y verifica que la consulta siguiente inicialice/reutilice las tablas en la conexión restaurada.
+- La recuperación comprueba que el JSON durable coincida exactamente con empresa, razón social y RIF registrados en la intención, y valida la identidad del actor original antes de crear el evento tenant.
+- HEAD de trabajo: `99a89fbddd263d66e14cce5e8319403c68bb6e3c` (puede avanzar con commits posteriores).
+- CI Linux y Windows se han iniciado en tres HEADs de esta rama, pero los jobs terminaron en 2–5 segundos sin pasos ejecutados, sin URL de logs y sin artefactos de log (`BlobNotFound`). Se reintentaron dos veces; no hay salida de pruebas que permita atribuir el fallo al código ni declarar éxito.
+- No fusionar PR #181 ni publicar versión hasta obtener ejecuciones Linux y Windows con pasos y resultados verificables. Si Actions sigue sin asignar runner, tratarlo como bloqueo de infraestructura del repositorio y conservar la PR en borrador.
