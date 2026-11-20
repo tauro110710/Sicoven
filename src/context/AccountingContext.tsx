@@ -31,7 +31,7 @@ import { validateJournalEntryAccounts, isJournalEntryBalanced } from '../types/j
 import { matchesBankStatementDualCurrency, validateBankMovementFxSnapshot, isDuplicateBankStatementMovement } from '../types/bankStatementMatching';
 import { buildOpeningEntryItems } from '../types/accountingYearOpening';
 import { buildClosingEntryItems } from '../types/accountingYearClosing';
-import { buildPersistedFiscalExerciseCalendar, confirmFiscalExerciseCycle } from '../types/fiscalExerciseLifecycle';
+import { ensureFiscalExerciseCalendar, confirmFiscalExerciseCycle } from '../types/fiscalExerciseLifecycle';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
 import {
   INITIAL_COMPANIES,
@@ -970,10 +970,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
       // El cierre, ambos asientos y el cambio de ejercicio se confirman juntos en un snapshot SQLite.
       const persistenceConfirmation = waitForPersistence();
-      const exerciseCalendar = buildPersistedFiscalExerciseCalendar(
-        currentCompany,
-        [...confirmedEntries, closingEntry, openingEntry]
-      );
+      const exerciseCalendar = ensureFiscalExerciseCalendar(currentCompany, fiscalYear);
       const confirmedCalendar = confirmFiscalExerciseCycle({
         exercises: exerciseCalendar,
         companyId: currentCompany.id,
