@@ -508,7 +508,7 @@ export const InventarioContableTools: React.FC = () => {
   return <div className="space-y-5">
     <section className="rounded-2xl border border-indigo-200 bg-indigo-50/40 p-5 shadow-sm space-y-4">
       <div className="flex items-center gap-2"><Scale className="h-5 w-5 text-indigo-700" /><h2 className="font-bold text-slate-900">Preparación para reconstrucción histórica</h2></div>
-      <p className="text-sm text-slate-700">Prepara el catálogo existente para comenzar a registrar operaciones desde una fecha anterior, sin volver a importar ni duplicar artículos.</p>
+      <p className="text-sm text-slate-700">Prepara el catálogo existente para comenzar a registrar operaciones desde cualquier fecha histórica válida, incluso años anteriores al 2026 (por ejemplo, 2010 o 2000), sin volver a importar ni duplicar artículos. El 01/01/2026 es solo una fecha sugerida; no existe un año mínimo fijado en este control.</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <label className="text-sm font-medium text-slate-700">Primer día de reconstrucción
           <input type="date" value={reconstructionStartDate} onChange={e => setReconstructionStartDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />
