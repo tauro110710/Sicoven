@@ -44,7 +44,7 @@ function createHarness({ authorized = true, validSession = true, role = 'admin',
       return validSession && token === 'valid-session' ? { id: 1, username: 'auditor', role } : null;
     }
   });
-  return { db, handler: handlers.get('sicoven:save-state'), reopenHandler: handlers.get('sicoven:reopen-accounting-period'), reopenYearHandler: handlers.get('sicoven:reopen-accounting-year'), calls };
+  return { db, handler: handlers.get('sicoven:save-state'), resolveHandler: handlers.get('sicoven:save-state-result'), reopenHandler: handlers.get('sicoven:reopen-accounting-period'), reopenYearHandler: handlers.get('sicoven:reopen-accounting-year'), calls };
 }
 
 test('Electron IPC rejects persistence without an authorized license', () => {
@@ -932,5 +932,48 @@ test('tenant-routed persistence rejects snapshots containing more than the selec
   } finally {
     tenantDb.close();
     controlDb.close();
+  }
+});
+
+
+test('a committed accounting snapshot can be recovered and replayed without duplicate audit effects', () => {
+  const harness = createHarness();
+  try {
+    const state = emptyState();
+    const operationId = 'snapshot-operation-001';
+    const first = harness.handler({}, 'valid-session', state, operationId);
+    assert.equal(first.ok, true);
+    assert.equal(first.replayed, undefined);
+
+    const recovered = harness.resolveHandler({}, 'valid-session', state, operationId);
+    assert.equal(recovered.found, true);
+    assert.equal(recovered.result.ok, true);
+    assert.equal(recovered.result.savedAt, first.savedAt);
+    assert.equal(recovered.result.replayed, true);
+
+    const retried = harness.handler({}, 'valid-session', state, operationId);
+    assert.equal(retried.ok, true);
+    assert.equal(retried.savedAt, first.savedAt);
+    assert.equal(retried.replayed, true);
+    assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='state_saved'").get().count, 1);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 1);
+  } finally {
+    harness.db.close();
+  }
+});
+
+test('an idempotency key cannot be reused with a different accounting snapshot', () => {
+  const harness = createHarness();
+  try {
+    const first = emptyState();
+    harness.handler({}, 'valid-session', first, 'snapshot-operation-002');
+    const changed = { ...first, displayCurrency: 'BS' };
+    assert.throws(
+      () => harness.handler({}, 'valid-session', changed, 'snapshot-operation-002'),
+      /ya fue utilizada con otros datos/
+    );
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 1);
+  } finally {
+    harness.db.close();
   }
 });
