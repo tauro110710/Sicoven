@@ -51,7 +51,7 @@ declare global {
       save: (token: string, state: Record<string, unknown>, operationId?: string) => Promise<{ ok: boolean; savedAt: string; replayed?: boolean }>;
       resolveSave: (token: string, state: Record<string, unknown>, operationId: string) => Promise<{ found: boolean; result?: { ok: boolean; savedAt: string; replayed?: boolean } }>;
 
-      reopenAccountingPeriod: (token: string, input: { companyId: string; reopenedThroughDate: string | null; reason: string }) => Promise<{ ok: boolean; reopeningId: string; company?: { id: string; name: string; closedThroughDate?: string } }>;
+      reopenAccountingPeriod: (token: string, input: { companyId: string; reopenedThroughDate: string | null; reason: string; operationId?: string }) => Promise<{ ok: boolean; reopeningId: string; company?: { id: string; name: string; closedThroughDate?: string } }>;
       resetAccounting: (token: string) => Promise<{ ok: boolean; cleared?: boolean; verified?: boolean; canceled?: boolean; removedCompanies?: number; backupDestination?: string }>;
       listInflationIndexSeries: (token: string) => Promise<Array<Record<string, unknown>>>;
       previewInflationIndexImport: (token: string, input: InflationIndexImportInput) => Promise<{ ok: boolean; seriesCode: InflationIndexImportInput['seriesCode']; metricType: InflationIndexImportInput['metricType']; basePeriod?: string | null; firstPeriod: string; lastPeriod: string; observationCount: number; missingMonths: string[]; statusCounts: Record<string, number>; sourceSha256: string; sourceBytes: number }>;
