@@ -194,12 +194,11 @@ test('exige fecha fiscal efectiva para comprobantes de retención IVA', () => {
     companyId: 'company-1',
     date: '2023-04-02',
     fiscalDate: '2023-04-05',
-    voucherNumber: '20230400000001',
-    journalEntryId: 'journal-vat-1'
+    voucherNumber: '20230400000001'
   }];
   const plan = buildHistoricalAccountingReplayPlan(input);
   assert.equal(plan.sourceEvents[0].effectiveDate, '2023-04-05');
-  assert.equal(plan.sourceEvents[0].linkedJournalEntryId, 'journal-vat-1');
+  assert.equal(plan.sourceEvents[0].linkedJournalEntryId, null);
 });
 
 test('bloquea comprobantes IVA históricos sin fecha fiscal efectiva verificable', () => {
