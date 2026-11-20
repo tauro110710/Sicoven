@@ -241,7 +241,7 @@ function registerCompanySessionIpc({
     return { completed: true, replayed: false };
   }
 
-  function finishCompanyCreationIntent(intent) {
+  async function finishCompanyCreationIntent(intent) {
     const request = JSON.parse(String(intent.request_json || 'null'));
     if (!request || typeof request !== 'object' || Array.isArray(request) ||
         hashOperationRequest(JSON.stringify(request)) !== String(intent.request_hash)) {
