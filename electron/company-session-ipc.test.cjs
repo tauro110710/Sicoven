@@ -392,6 +392,35 @@ test('retries a durable creation intent when no tenant file was created before i
   assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_creation_completions').get().count, 1);
 });
 
+test('does not recreate a company after a completed creation was later removed', async () => {
+  let companyRecord = null;
+  let creationCount = 0;
+  const { handlers } = fixture({
+    runtime: {
+      listCompanies: () => companyRecord ? [companyRecord] : [],
+      recoverOrphanedCompany: () => ({ found: false }),
+      verifyCompanyCreation: () => true,
+      createCompany: async company => {
+        creationCount += 1;
+        companyRecord = { id: company.id, name: company.name, rif: company.rif, status: 'ACTIVE' };
+        return { ok: true, company: companyRecord };
+      }
+    }
+  });
+  const input = {
+    operationId: 'company-create-removed-001',
+    name: 'EMPRESA RETIRADA',
+    rif: 'J-12345678-9'
+  };
+  await handlers.get('sicoven:company-create')({}, 'valid-token', input);
+  companyRecord = null;
+  await assert.rejects(
+    () => handlers.get('sicoven:company-create')({}, 'valid-token', input),
+    /posteriormente retirada.*No se recreará automáticamente/i
+  );
+  assert.equal(creationCount, 1);
+});
+
 test('company creation retries recover the same tenant instead of creating a duplicate', async () => {
   let companyRecord = null;
   let creationCount = 0;
