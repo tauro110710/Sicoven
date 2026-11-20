@@ -1,7 +1,7 @@
 'use strict';
 
 const { createCompanyDatabaseManager } = require('./company-database-manager.cjs');
-const { initializeTenantDatabase } = require('./tenant-schema.cjs');
+const { initializeTenantDatabase, migrateTenantDatabase } = require('./tenant-schema.cjs');
 const {
   loadTenantAccountingSnapshot,
   saveTenantAccountingSnapshot,
@@ -16,7 +16,7 @@ function createTenantRuntime({
   userDataDir,
   Database,
   assertSqliteIntegrity,
-  schemaVersion
+  schemaVersion = 2
 }) {
   if (!controlDb || typeof controlDb.prepare !== 'function' || !controlDb.open) {
     throw new TypeError('La base local de control debe estar abierta antes de crear el runtime multiempresa.');
@@ -27,6 +27,7 @@ function createTenantRuntime({
     Database,
     assertSqliteIntegrity,
     initializeCompanyDatabase: initializeTenantDatabase,
+    migrateCompanyDatabase: migrateTenantDatabase,
     schemaVersion
   });
 
