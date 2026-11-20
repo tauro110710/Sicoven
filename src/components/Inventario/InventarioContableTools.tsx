@@ -107,7 +107,7 @@ export const InventarioContableTools: React.FC = () => {
       return;
     }
     const confirmed = window.confirm(
-      '¿Preparar ' + currentCompany.name + ' para reconstrucción histórica desde ' + reconstructionStartDate + '?\\n\\n' +
+      '¿Preparar ' + currentCompany.name + ' para reconstrucción histórica desde ' + reconstructionStartDate + '?\n\n' +
       'Se pondrán en cero los costos promedio y últimos costos de todos los artículos y se limpiará su fecha/tasa BCV de apertura actual. ' +
       'Se conservarán códigos, nombres, precios comerciales, cuentas y demás datos maestros. Esta acción solo se permite si la empresa aún no tiene movimientos ni compras/ventas registradas.'
     );
