@@ -174,7 +174,16 @@ function validateFiscalExerciseCalendarSnapshot(state, nextEntries = []) {
       : null;
     if (!exercise || !closing || !opening ||
         String(company.closedThroughDate || '') !== String(closing.date)) {
-      throw new Error('El cierre anual, la apertura y el calendario fiscal deben confirmarse juntos en una sola transacción SQLite.');
+      throw new Error('El cierre anual, la apertura y el calendario fiscal deben confirmarse juntos en una sola transacción SQLite. ' +
+        JSON.stringify({
+          entryId: String(entry.id), entryType: entry.type,
+          exerciseFound: Boolean(exercise), closingFound: Boolean(closing), openingFound: Boolean(opening),
+          closedThroughDate: company.closedThroughDate || null, closingDate: closing?.date || null,
+          calendar: companyExercises.map(item => ({
+            fiscalYear: item.fiscalYear, status: item.status,
+            closingEntryId: item.closingEntryId || null, openingEntryId: item.openingEntryId || null
+          }))
+        }));
     }
   }
 }
