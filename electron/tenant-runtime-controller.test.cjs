@@ -81,3 +81,38 @@ test('rebinds the tenant registry to the restored control database without stale
   );
   assert.deepEqual(snapshot.companies.map(item => item.id), [company.id]);
 });
+
+
+test('upgrades an existing v1 company database transactionally to the idempotent receipt schema', async t => {
+  const h = fixture(t);
+  const company = { id: 'tenant-v1-upgrade', name: 'Empresa migrada', rif: 'J-12345678-9' };
+  await h.controller.runtime.createCompany(company);
+  await h.controller.companySessionContext.selectCompany(token, company.id, { skipFlush: true });
+  const original = await h.controller.withDatabase(token, db => ({
+    snapshot: db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json,
+    auditCount: db.prepare('SELECT COUNT(*) AS n FROM audit_events').get().n
+  }));
+  const filePath = h.controller.runtime.getCompanyDatabasePath(company.id);
+  h.controller.runtime.closeCompany(company.id);
+  const legacyDb = new Database(filePath);
+  try {
+    legacyDb.exec('DROP TABLE operation_receipts');
+    legacyDb.prepare("UPDATE sicoven_database_meta SET meta_value='1' WHERE meta_key='schema_version'").run();
+  } finally {
+    legacyDb.close();
+  }
+  h.controlDb.prepare("UPDATE company_database_registry SET schema_version=1 WHERE company_id=?").run(company.id);
+
+  const migrated = await h.controller.withDatabase(token, db => ({
+    hasReceipts: Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='operation_receipts'").get()),
+    schemaVersion: db.prepare("SELECT meta_value FROM sicoven_database_meta WHERE meta_key='schema_version'").get().meta_value,
+    snapshot: db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json,
+    auditCount: db.prepare('SELECT COUNT(*) AS n FROM audit_events').get().n
+  }));
+  const registryVersion = h.controlDb.prepare('SELECT schema_version FROM company_database_registry WHERE company_id=?').get(company.id).schema_version;
+  assert.equal(migrated.hasReceipts, true);
+  assert.equal(migrated.schemaVersion, '2');
+  assert.equal(registryVersion, 2);
+  assert.equal(migrated.snapshot, original.snapshot);
+  assert.equal(migrated.auditCount, original.auditCount);
+});
