@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
-const { initializeTenantDatabase } = require('./tenant-schema.cjs');
+const { initializeTenantDatabase, migrateTenantDatabase } = require('./tenant-schema.cjs');
 
 test('tenant schema initializes all operational tables without duplicating control authentication or license tables', () => {
   const db = new Database(':memory:');
@@ -20,6 +20,36 @@ test('tenant schema initializes all operational tables without duplicating contr
     assert.ok(triggers.has('audit_events_no_delete'));
     assert.ok(triggers.has('operation_receipts_no_update'));
     assert.ok(triggers.has('operation_receipts_no_delete'));
+  } finally { db.close(); }
+});
+
+test('schema v2 to v3 creates durable operation intent tables for existing tenants', () => {
+  const db = new Database(':memory:');
+  try {
+    db.exec(`
+      CREATE TABLE operation_receipts (
+        company_id TEXT NOT NULL, operation_type TEXT NOT NULL, operation_id TEXT NOT NULL,
+        request_hash TEXT NOT NULL, actor_user_id INTEGER NOT NULL, result_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY(company_id,operation_type,operation_id)
+      );
+    `);
+    migrateTenantDatabase(db, { fromVersion: 2, toVersion: 3 });
+    const tables = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(row => row.name));
+    assert.ok(tables.has('operation_intents'));
+    assert.ok(tables.has('operation_intent_completions'));
+    assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='operation_intents_actor_sequence_idx'").get());
+  } finally { db.close(); }
+});
+
+test('schema v1 upgrades directly to v3 without requiring an intermediate application launch', () => {
+  const db = new Database(':memory:');
+  try {
+    migrateTenantDatabase(db, { fromVersion: 1, toVersion: 3 });
+    const tables = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(row => row.name));
+    assert.ok(tables.has('operation_receipts'));
+    assert.ok(tables.has('operation_intents'));
+    assert.ok(tables.has('operation_intent_completions'));
   } finally { db.close(); }
 });
 
