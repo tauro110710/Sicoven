@@ -135,7 +135,9 @@ export interface CompanyTaxStatusPeriod {
 
 export interface Company {
   id: string;
-  /** Fecha real desde la que la empresa comenzó a operar; habilita ejercicios históricos sin año mínimo. */
+  /** Fecha desde la que la empresa comienza su registro contable ordinario en SICOVEN. No limita la reconstrucción histórica de períodos anteriores. */
+  accountingStartDate?: string;
+  /** Fecha real desde la que la empresa comenzó a operar; referencia histórica opcional para reconstrucciones. */
   operationalStartDate?: string;
   rif: string; // e.g., "J-40892182-3"
   name: string; // Razón Social
