@@ -133,6 +133,19 @@ export interface CompanyTaxStatusPeriod {
   recordedAt: string;
 }
 
+/** Persisted fiscal calendar record; links are written only after the SQLite close/open transaction succeeds. */
+export interface PersistedFiscalExercise {
+  id: string;
+  companyId: string;
+  fiscalYear: number;
+  startDate: string;
+  endDate: string;
+  status: 'ABIERTO' | 'EN_CIERRE' | 'CERRADO';
+  closingEntryId?: string;
+  openingEntryId?: string;
+  closedAt?: string;
+}
+
 export interface Company {
   id: string;
   /** Fecha y hora en que la empresa fue registrada en esta instalación de SICOVEN; la asigna el sistema. */
@@ -178,6 +191,8 @@ export interface Company {
   inventoryBcvRateEffectiveDate?: string;
   inventoryBcvRateFetchedAt?: string;
   inventoryBcvRateHistory?: InventoryBcvHistoryEntry[];
+  /** Calendario fiscal persistido por ejercicio; ausente en empresas anteriores hasta su inicialización segura. */
+  fiscalExercises?: PersistedFiscalExercise[];
   /** Último día incluido en un período contable bloqueado. */
   closedThroughDate?: string;
   /** Historial de evaluaciones NIC 21; ausencia = pendiente, nunca se asigna moneda por defecto. */
