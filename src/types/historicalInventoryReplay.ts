@@ -153,6 +153,18 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       : requestedUnitCostBs;
 
     if (source.type === 'ENTRADA') {
+      if (source.concept === 'DEVOLUCION_CLIENTE') {
+        const original = source.correctionForMovementId ? originalById.get(source.correctionForMovementId) : undefined;
+        if (!original || original.type !== 'SALIDA' || original.concept !== 'VENTA' ||
+            original.productId !== source.productId || source.date < original.date) {
+          throw new Error('La devolución de cliente ' + (source.documentRef || id) + ' no está vinculada a una salida de venta válida.');
+        }
+        const returned = (returnedBySale.get(original.id) || 0) + requestedQuantity;
+        if (returned - Number(original.quantity) > 1e-8) {
+          throw new Error('Las devoluciones acumuladas superan la cantidad de la venta original ' + (original.documentRef || original.id) + '.');
+        }
+        returnedBySale.set(original.id, returned);
+      }
       if (!validNonNegative(effectiveUnitCostBs)) {
         throw new Error('El costo efectivo de entrada no es válido en ' + (source.documentRef || id) + '.');
       }
