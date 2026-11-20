@@ -203,7 +203,7 @@ const exactProductSum = (pairs: Array<[number, number]>): ReturnType<typeof pars
   pairs.reduce((sum, [quantity, unitCost]) =>
     addDecimal(decimalToString(sum), decimalToString(multiplyDecimal(quantity, unitCost))), parseDecimal(0));
 const exactRoundedProductSum = (pairs: Array<[number, number]>, places: number): number =>
-  decimalToNumber(roundDecimal(exactProductSum(pairs), places));
+  decimalToNumber(roundDecimal(decimalToString(exactProductSum(pairs)), places));
 const exactQuotient = (dividend: number, divisor: number): number =>
   divisor === 0 ? 0 : decimalToNumber(divideDecimal(dividend, divisor, 18));
 const validPositive = (value: number): boolean => Number.isFinite(value) && value > 0;
