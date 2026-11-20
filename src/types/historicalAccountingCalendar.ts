@@ -150,7 +150,7 @@ export function roundHistoricalPresentationAmount(amount: string | number, decim
     throw new Error('La precisión de presentación debe estar entre 0 y 12 decimales.');
   }
   const raw = String(amount).trim();
-  if (!/^-?\\d+(\\.\\d+)?$/.test(raw)) throw new Error('El importe debe ser un número decimal válido.');
+  if (!/^-?\d+(\.\d+)?$/.test(raw)) throw new Error('El importe debe ser un número decimal válido.');
   const negative = raw.startsWith('-');
   const unsigned = negative ? raw.slice(1) : raw;
   const [whole, fraction = ''] = unsigned.split('.');
