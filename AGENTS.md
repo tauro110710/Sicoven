@@ -222,3 +222,7 @@ Trabajar en este orden, cerrando cada fase con PR integrada y pruebas satisfacto
 - HEAD de trabajo: `99a89fbddd263d66e14cce5e8319403c68bb6e3c` (puede avanzar con commits posteriores).
 - CI Linux y Windows se han iniciado en tres HEADs de esta rama, pero los jobs terminaron en 2–5 segundos sin pasos ejecutados, sin URL de logs y sin artefactos de log (`BlobNotFound`). Se reintentaron dos veces; no hay salida de pruebas que permita atribuir el fallo al código ni declarar éxito.
 - No fusionar PR #181 ni publicar versión hasta obtener ejecuciones Linux y Windows con pasos y resultados verificables. Si Actions sigue sin asignar runner, tratarlo como bloqueo de infraestructura del repositorio y conservar la PR en borrador.
+
+
+- Se detectó una compatibilidad adicional de esquema: algunas bases tenant v2 podían tener `operation_receipts` sin `actor_username`. `initializeOperationReceiptSchema` ahora agrega esa columna de forma aditiva, sin reescribir recibos históricos; la prueba de migración conserva un recibo anterior y confirma que un recibo nuevo guarda el usuario.
+- Últimos workflows de la rama: Linux `44829935543` y Windows `44829935432`, HEAD `fbe88973a4c0d94f89a7c1618bbe87fb0abcf34b`; ambos terminan sin pasos/logs disponibles. Se mantiene bloqueada la fusión por falta de validación ejecutable.
