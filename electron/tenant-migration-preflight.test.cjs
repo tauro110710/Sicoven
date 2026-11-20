@@ -14,6 +14,7 @@ function createLegacyDb() {
     CREATE TABLE auth_sessions(token_hash TEXT PRIMARY KEY,user_id INTEGER);
     CREATE TABLE license_state(id INTEGER PRIMARY KEY,status TEXT);
     CREATE TABLE company_database_registry(company_id TEXT PRIMARY KEY);
+    CREATE TABLE operation_receipts(operation_id TEXT PRIMARY KEY, company_id TEXT NOT NULL, operation_type TEXT NOT NULL, request_hash TEXT NOT NULL, result_json TEXT NOT NULL);
   `);
   const { REQUIRED_RELATIONAL_TABLES } = require('./tenant-migration-preflight.cjs');
   for (const table of REQUIRED_RELATIONAL_TABLES) db.exec("CREATE TABLE \"" + table + "\" (id TEXT PRIMARY KEY)");
