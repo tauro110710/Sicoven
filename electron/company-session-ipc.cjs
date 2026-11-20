@@ -118,7 +118,7 @@ function registerCompanySessionIpc({
     const actor = requireAuthorizedSession(token);
     const company = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : null;
     if (!company) throw new Error('Los datos de la empresa no son válidos.');
-    const operationId = String(company.operationId || '').trim();
+    const operationId = String(company.operationId || crypto.randomUUID()).trim();
     if (!/^[A-Za-z0-9_-]{1,120}$/.test(operationId) || operationId === '.' || operationId === '..') throw new Error('Falta un identificador estable válido para la creación de empresa.');
     const requestPayload = { ...company };
     delete requestPayload.operationId;
