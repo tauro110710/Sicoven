@@ -80,7 +80,7 @@ const { registerInflationSourceDossierIpc } = require('./inflation-source-dossie
 const { registerDocumentVaultIpc } = require('./supporting-documents.cjs');
 const { registerVatFiscalIncidentIpc } = require('./vat-fiscal-incidents.cjs');
 const { registerPayrollIpc } = require('./payroll-persistence.cjs');
-const { initializeCorrectionWorkflow, registerCorrectionRequest, reviewCorrectionRequest, markCorrectionExecuted, listCorrectionCases, findLinkedCorrectionEvidence, observeCorrectionRequest, resubmitCorrectionRequest, withdrawCorrectionRequest, requireApprovedCorrectionCase } = require('./accounting-correction-workflow.cjs');
+const { initializeCorrectionWorkflow, registerCorrectionRequest, reviewCorrectionRequest, markCorrectionExecuted, getCorrectionCase, listCorrectionCases, findLinkedCorrectionEvidence, observeCorrectionRequest, resubmitCorrectionRequest, withdrawCorrectionRequest, requireApprovedCorrectionCase } = require('./accounting-correction-workflow.cjs');
 
 let db;
 let persistenceFlushBridge = null;
