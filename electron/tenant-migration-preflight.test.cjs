@@ -88,3 +88,15 @@ test('rejects duplicate company IDs and duplicate RIF values before staging', ()
     assert.match(result.errors.join(' '), /RIF.*duplicados/);
   } finally { db.close(); }
 });
+
+
+test('accepts a valid legacy database created before optional idempotency receipts existed', () => {
+  const db = createLegacyDb();
+  try {
+    db.exec('DROP TABLE operation_receipts');
+    const result = inspectLegacyDatabase(db);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.unknownTables, []);
+    assert.deepEqual(result.errors, []);
+  } finally { db.close(); }
+});
