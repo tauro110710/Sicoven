@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { restoreWindowFocus } = require('./window-focus.cjs');
+const { createOperationReceiptIdentity, runIdempotentOperation } = require('./operation-receipts.cjs');
 
 const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
 const FORMATS = Object.freeze({
@@ -41,6 +42,10 @@ function assertNoSymlinkPath(trustedRoot, target, label = 'El almacén documenta
     }
   }
   return destination;
+}
+function operationRequest(input) {
+  const { operationId, ...request } = input || {};
+  return request;
 }
 function requiredText(value, label, max = 180) {
   const result = String(value ?? '').trim();
@@ -258,7 +263,9 @@ function registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, 
     return runWithDatabase(token, (activeDb, companyId) => {
       const row = activeDb.prepare('SELECT company_id AS companyId FROM supporting_documents WHERE id=?').get(String(input?.documentId || ''));
       if (!row || (companyId && String(row.companyId) !== companyId)) throw new Error('El documento no pertenece a la empresa activa.');
-      return reviewDocument(activeDb, input || {}, actor);
+      const identity = createOperationReceiptIdentity(input, row.companyId,
+        'documents.review', operationRequest(input), actor);
+      return runIdempotentOperation(activeDb, identity, () => reviewDocument(activeDb, input || {}, actor));
     });
   });
   ipcMain.handle('sicoven:document-open', async (_event, token, documentId) => {
