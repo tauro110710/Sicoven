@@ -467,7 +467,17 @@ function registerCompanySessionIpc({
       throw new Error('La razón social y el RIF son obligatorios para crear la empresa.');
     }
     const normalizedRif = String(company.rif).trim().toUpperCase();
-    const duplicateRif = runtime.listCompanies().find(item =>
+    const registeredCompanies = runtime.listCompanies();
+    const existingCompany = registeredCompanies.find(item => String(item.id) === operationId);
+    if (existingCompany && String(existingCompany.status) !== 'ACTIVE') {
+      throw new Error('El identificador de esta empresa pertenece a un registro archivado; no se reactivará ni reutilizará.');
+    }
+    if (existingCompany &&
+        (String(existingCompany.rif || '').trim().toUpperCase() !== normalizedRif ||
+         String(existingCompany.name || '').trim() !== String(company.name || '').trim())) {
+      throw new Error('El identificador de creación ya pertenece a otra ficha empresarial; utilice una nueva operación.');
+    }
+    const duplicateRif = registeredCompanies.find(item =>
       String(item.id) !== operationId &&
       String(item.rif || '').trim().toUpperCase() === normalizedRif
     );
