@@ -18,7 +18,7 @@ function setup() {
 }
 function identity(operationId = 'operation-001', request = { amount: 12 }) {
   return {
-    operationId, companyId: 'company-1', operationType: 'accounting.test_operation',
+    operationId, companyId: 'company-1', operationType: 'accounting.audit_correction',
     requestHash: hashOperationRequest(JSON.stringify(request)),
     actor: { id: 7, username: 'contador' }
   };
