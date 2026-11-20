@@ -227,3 +227,21 @@ test('marca como dependencia externa la presentación de una declaración por ev
   const plan = buildHistoricalAccountingReplayPlan(input);
   assert.ok(plan.externalDependencies.some(item => item.includes('vat-own-filed-1')));
 });
+
+
+test('extiende la fecha final automática hasta el último asiento de la empresa', () => {
+  const input = base();
+  input.purchases = [{
+    id: 'purchase-1',
+    companyId: 'company-1',
+    invoiceDate: '2023-02-01'
+  }];
+  input.journalEntries = [{
+    id: 'journal-later',
+    companyId: 'company-1',
+    date: '2024-06-30'
+  }];
+  const plan = buildHistoricalAccountingReplayPlan(input);
+  assert.equal(plan.throughDate, '2024-06-30');
+  assert.deepEqual(plan.derivedJournalEntryIds, ['journal-later']);
+});
