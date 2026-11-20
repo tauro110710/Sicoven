@@ -84,12 +84,13 @@ export const HistoricalAccountingReplayPanel: React.FC = () => {
               {blockers.length ? 'Revisión bloqueada' : 'Sin bloqueos detectados'}
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
             <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Operaciones fuente</span><strong className="block text-xl text-slate-900">{sourceEvents.length}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Asientos derivados</span><strong className="block text-xl text-slate-900">{plan.derivedJournalEntryIds.length}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Ejercicios afectados</span><strong className="block text-xl text-slate-900">{plan.affectedExercises.length}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Dependencias externas</span><strong className="block text-xl text-slate-900">{plan.externalDependencies.length}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Vínculos entre asientos</span><strong className="block text-xl text-slate-900">{plan.journalEntryRelationships.length}</strong></div>
+            <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Vínculos entre documentos</span><strong className="block text-xl text-slate-900">{plan.sourceDependencies.length}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Fuentes de contexto</span><strong className="block text-xl text-slate-900">{plan.contextCoverage.taxStatusPeriods + plan.contextCoverage.accountingBcvRateEntries + plan.contextCoverage.chartOfAccounts + plan.contextCoverage.inventoryProducts + plan.contextCoverage.bankAccounts}</strong></div>
           </div>
           <p className="text-xs text-slate-600">Contexto cargado: {plan.contextCoverage.taxStatusPeriods} tramos tributarios, {plan.contextCoverage.accountingBcvRateEntries} tasas BCV históricas, {plan.contextCoverage.chartOfAccounts} cuentas, {plan.contextCoverage.inventoryProducts} artículos y {plan.contextCoverage.bankAccounts} cuentas bancarias.
