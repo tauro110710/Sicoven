@@ -466,6 +466,14 @@ function registerCompanySessionIpc({
     if (!String(company.name || '').trim() || !String(company.rif || '').trim()) {
       throw new Error('La razón social y el RIF son obligatorios para crear la empresa.');
     }
+    const normalizedRif = String(company.rif).trim().toUpperCase();
+    const duplicateRif = runtime.listCompanies().find(item =>
+      String(item.id) !== operationId &&
+      String(item.rif || '').trim().toUpperCase() === normalizedRif
+    );
+    if (duplicateRif) {
+      throw new Error('El RIF ya está asociado a otra empresa del registro local.');
+    }
     const requestJson = JSON.stringify(requestPayload);
     const requestHash = hashOperationRequest(requestJson);
     const release = await operationContext.acquireMaintenanceLock();
