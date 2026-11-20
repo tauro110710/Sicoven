@@ -246,6 +246,9 @@ test('intent keys cannot be reused across requests, channels or actors', () => {
     assert.throws(() => prepareOperationIntent(db, durableIntent(), 'company-1',
       { id: 8, username: 'otro' }), /ya está asociada/);
     assert.equal(listPendingOperationIntents(db, 'company-1', { id: 8, username: 'otro' }).length, 0);
+    assert.equal(listPendingOperationIntents(db, 'company-1', { id: 7, username: 'contador-renombrado' }).length, 1);
+    assert.equal(prepareOperationIntent(db, durableIntent(), 'company-1',
+      { id: 7, username: 'contador-renombrado' }).replayed, true);
   } finally { db.close(); }
 });
 
