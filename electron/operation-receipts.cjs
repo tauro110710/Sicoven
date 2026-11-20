@@ -52,6 +52,7 @@ function initializeOperationReceiptSchema(db) {
       BEFORE DELETE ON operation_receipts
       BEGIN SELECT RAISE(ABORT, 'operation_receipts is append-only'); END;
     CREATE TABLE IF NOT EXISTS operation_intents (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
       operation_id TEXT NOT NULL,
       company_id TEXT NOT NULL,
       ipc_channel TEXT NOT NULL,
@@ -61,11 +62,11 @@ function initializeOperationReceiptSchema(db) {
       request_json TEXT NOT NULL,
       actor_user_id INTEGER NOT NULL,
       actor_username TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      PRIMARY KEY(company_id, operation_id)
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      UNIQUE(company_id, operation_id)
     );
-    CREATE INDEX IF NOT EXISTS operation_intents_company_created_idx
-      ON operation_intents(company_id, created_at);
+    CREATE INDEX IF NOT EXISTS operation_intents_company_sequence_idx
+      ON operation_intents(company_id, sequence);
     CREATE TABLE IF NOT EXISTS operation_intent_completions (
       company_id TEXT NOT NULL,
       operation_id TEXT NOT NULL,
@@ -226,7 +227,7 @@ function listPendingOperationIntents(db, companyId, actor) {
     LEFT JOIN operation_intent_completions c
       ON c.company_id=i.company_id AND c.operation_id=i.operation_id
     WHERE i.company_id=? AND i.actor_user_id=? AND i.actor_username=? AND c.operation_id IS NULL
-    ORDER BY i.created_at,i.operation_id
+    ORDER BY i.sequence
   `).all(selectedCompanyId, identity.userId, identity.username);
   return rows.map(row => {
     if (!Object.prototype.hasOwnProperty.call(DURABLE_OPERATION_TYPES, String(row.ipc_channel))) {
