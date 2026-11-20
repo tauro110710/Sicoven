@@ -137,6 +137,22 @@ test('pending operation intent survives closing and reopening the tenant SQLite 
     assert.equal(effectCalls, 1);
     assert.deepEqual(listPendingOperationIntents(db, 'company-1', durableActor), []);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 1);
+    db.close();
+    db = new Database(databasePath);
+    initializeOperationReceiptSchema(db);
+    const afterLostReply = runIdempotentOperation(db, {
+      operationId: 'durable-001',
+      companyId: 'company-1',
+      operationType: 'accounting.audit_correction',
+      requestHash: hashOperationRequest(JSON.stringify(durableRequest)),
+      actor: durableActor
+    }, () => {
+      effectCalls += 1;
+      return { ok: true, id: 'must-not-run-twice' };
+    });
+    assert.equal(afterLostReply.id, 'recovered-after-restart');
+    assert.equal(afterLostReply.replayed, true);
+    assert.equal(effectCalls, 1);
   } finally {
     if (db.open) db.close();
     fs.rmSync(directory, { recursive: true, force: true });
