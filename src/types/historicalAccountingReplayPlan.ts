@@ -198,21 +198,6 @@ export function buildHistoricalAccountingReplayPlan(
         continue;
       }
       const created = recordedAt(record);
-      // El abono en cuenta es un evento contable independiente: debe evaluarse
-      // incluso cuando la factura original queda antes del inicio del rango.
-      if (effectiveDate < startDate) continue;
-      collected.push({
-        key: String(spec.collection) + ':' + id,
-        collection: String(spec.collection),
-        sourceId: id,
-        companyId,
-        kind: spec.kind,
-        effectiveDate,
-        recordedAt: created,
-        reference: firstText(record, spec.referenceFields),
-        linkedJournalEntryId: spec.kind === 'PURCHASE' ? null : (spec.kind === 'FIXED_ASSET' ? (typeof record.sourceJournalEntryId === 'string' ? record.sourceJournalEntryId : null) : (typeof record.journalEntryId === 'string' ? record.journalEntryId : null)),
-        sourceIndex: sourceIndex++
-      });
       if (spec.kind === 'PURCHASE' && record.accountCreditDate !== undefined && record.accountCreditDate !== null && record.accountCreditDate !== '') {
         const accountCreditDate = String(record.accountCreditDate).slice(0, 10);
         if (!isIsoDate(accountCreditDate)) {
@@ -232,6 +217,19 @@ export function buildHistoricalAccountingReplayPlan(
           });
         }
       }
+      if (effectiveDate < startDate) continue;
+      collected.push({
+        key: String(spec.collection) + ':' + id,
+        collection: String(spec.collection),
+        sourceId: id,
+        companyId,
+        kind: spec.kind,
+        effectiveDate,
+        recordedAt: created,
+        reference: firstText(record, spec.referenceFields),
+        linkedJournalEntryId: spec.kind === 'PURCHASE' ? null : (spec.kind === 'FIXED_ASSET' ? (typeof record.sourceJournalEntryId === 'string' ? record.sourceJournalEntryId : null) : (typeof record.journalEntryId === 'string' ? record.journalEntryId : null)),
+        sourceIndex: sourceIndex++
+      });
       if (spec.kind === 'VAT_OWN_DECLARATION' && (record.status === 'FILED' || Boolean(record.filedAt))) {
         externalDependencies.push('Declaración IVA propio presentada: ' + id + '. Su rectificación debe coordinarse con el procedimiento fiscal correspondiente.');
       } else if (spec.kind === 'VAT_WITHHOLDING_DECLARATION' &&
