@@ -373,6 +373,10 @@ function registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, 
   };
   ipcMain.handle('sicoven:document-attach', async (_event, token, input) => {
     const actor = authenticate(token);
+    const operationInput = {
+      ...(input && typeof input === 'object' && !Array.isArray(input) ? input : {}),
+      operationId: String(input?.operationId || crypto.randomUUID())
+    };
     const userDataDir = app.getPath('userData');
     const attach = (activeDb, companyId, payload, buffer) => {
       if (companyId && String(payload?.companyId || '') !== companyId) throw new Error('El documento no pertenece a la empresa activa.');
@@ -383,7 +387,7 @@ function registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, 
       });
     };
     try {
-      const existing = await runWithDatabase(token, (activeDb, companyId) => attach(activeDb, companyId, input, null));
+      const existing = await runWithDatabase(token, (activeDb, companyId) => attach(activeDb, companyId, operationInput, null));
       return existing;
     } catch (error) {
       if (error?.code !== 'SICOVEN_DOCUMENT_SOURCE_REQUIRED') throw error;
@@ -392,13 +396,13 @@ function registerDocumentVaultIpc({ ipcMain, db, licenseView, getActiveSession, 
     const parentWindow = getWindow?.();
     const selection = parentWindow ? await dialog.showOpenDialog(parentWindow, options) : await dialog.showOpenDialog(options);
     restoreWindowFocus(parentWindow);
-    if (selection.canceled || !selection.filePaths?.[0]) return { ok: false, canceled: true, pending: Boolean(input?.operationId) };
+    if (selection.canceled || !selection.filePaths?.[0]) return { ok: false, canceled: true, pending: Boolean(operationInput.operationId) };
     const source = selection.filePaths[0], stat = fs.lstatSync(source);
     if (stat.isSymbolicLink() || !stat.isFile() || stat.size < 1 || stat.size > MAX_DOCUMENT_BYTES) {
       throw new Error('El archivo debe ser un archivo regular seguro de entre 1 byte y 20 MB.');
     }
     const buffer = fs.readFileSync(source);
-    const payload = { ...(input || {}), fileName: path.basename(source) };
+    const payload = { ...operationInput, fileName: path.basename(source) };
     return runWithDatabase(token, (activeDb, companyId) => attach(activeDb, companyId, payload, buffer));
   });
   ipcMain.handle('sicoven:document-list', (_event, token, filters) => {
