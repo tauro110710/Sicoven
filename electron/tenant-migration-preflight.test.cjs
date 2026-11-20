@@ -14,6 +14,7 @@ function createLegacyDb() {
     CREATE TABLE auth_sessions(token_hash TEXT PRIMARY KEY,user_id INTEGER);
     CREATE TABLE license_state(id INTEGER PRIMARY KEY,status TEXT);
     CREATE TABLE company_database_registry(company_id TEXT PRIMARY KEY);
+    CREATE TABLE operation_receipts(operation_id TEXT PRIMARY KEY, company_id TEXT NOT NULL, operation_type TEXT NOT NULL, request_hash TEXT NOT NULL, result_json TEXT NOT NULL);
   `);
   const { REQUIRED_RELATIONAL_TABLES } = require('./tenant-migration-preflight.cjs');
   for (const table of REQUIRED_RELATIONAL_TABLES) db.exec("CREATE TABLE \"" + table + "\" (id TEXT PRIMARY KEY)");
@@ -34,6 +35,7 @@ test('accepts a fully classified legacy database and returns exact company IDs',
     assert.deepEqual(result.companyIds, ['company-a', 'company-b']);
     assert.deepEqual(result.unknownTables, []);
     assert.deepEqual(result.errors, []);
+    assert.equal(result.tables.find(table => table.name === 'operation_receipts')?.category, 'COMPANY');
   } finally { db.close(); }
 });
 
@@ -85,5 +87,17 @@ test('rejects duplicate company IDs and duplicate RIF values before staging', ()
     assert.equal(result.ok, false);
     assert.match(result.errors.join(' '), /identificadores.*duplicados/);
     assert.match(result.errors.join(' '), /RIF.*duplicados/);
+  } finally { db.close(); }
+});
+
+
+test('accepts a valid legacy database created before optional idempotency receipts existed', () => {
+  const db = createLegacyDb();
+  try {
+    db.exec('DROP TABLE operation_receipts');
+    const result = inspectLegacyDatabase(db);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.unknownTables, []);
+    assert.deepEqual(result.errors, []);
   } finally { db.close(); }
 });

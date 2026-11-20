@@ -7,7 +7,7 @@ const { hasFullSystemAccess } = require('./auth-roles.cjs');
 
 function createTenantRuntimeController({
   controlDb, userDataDir, Database, assertSqliteIntegrity,
-  getActiveSession, flushPendingWrites, canAccessCompany = hasFullSystemAccess
+  getActiveSession, flushPendingWrites, canAccessCompany = hasFullSystemAccess, schemaVersion = 2
 }) {
   if (!controlDb || !controlDb.open) throw new TypeError('La base SQLite de control debe estar abierta.');
   if (typeof getActiveSession !== 'function' || typeof flushPendingWrites !== 'function' ||
@@ -15,7 +15,7 @@ function createTenantRuntimeController({
     throw new TypeError('El controlador multiempresa requiere validadores de sesión, acceso y persistencia.');
   }
 
-  const runtimeOptions = { userDataDir, Database, assertSqliteIntegrity };
+  const runtimeOptions = { userDataDir, Database, assertSqliteIntegrity, schemaVersion };
   let activeControlDb = controlDb;
   let implementation = createTenantRuntime({ ...runtimeOptions, controlDb: activeControlDb });
 

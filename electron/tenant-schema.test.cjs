@@ -18,6 +18,8 @@ test('tenant schema initializes all operational tables without duplicating contr
     const triggers = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='trigger'").all().map(row => row.name));
     assert.ok(triggers.has('audit_events_no_update'));
     assert.ok(triggers.has('audit_events_no_delete'));
+    assert.ok(triggers.has('operation_receipts_no_update'));
+    assert.ok(triggers.has('operation_receipts_no_delete'));
   } finally { db.close(); }
 });
 
