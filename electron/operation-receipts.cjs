@@ -199,8 +199,7 @@ function prepareOperationIntent(db, input, companyId, actor) {
         String(existing.ipc_channel) !== channel ||
         String(existing.operation_type) !== DURABLE_OPERATION_TYPES[channel] ||
         String(existing.request_mode) !== requestMode ||
-        Number(existing.actor_user_id) !== identity.userId ||
-        String(existing.actor_username) !== identity.username) {
+        Number(existing.actor_user_id) !== identity.userId) {
       throw new Error('La clave de operación pendiente ya está asociada a otra solicitud, canal, empresa o usuario.');
     }
     const completed = db.prepare(`
@@ -226,9 +225,9 @@ function listPendingOperationIntents(db, companyId, actor) {
     FROM operation_intents i
     LEFT JOIN operation_intent_completions c
       ON c.company_id=i.company_id AND c.operation_id=i.operation_id
-    WHERE i.company_id=? AND i.actor_user_id=? AND i.actor_username=? AND c.operation_id IS NULL
+    WHERE i.company_id=? AND i.actor_user_id=? AND c.operation_id IS NULL
     ORDER BY i.sequence
-  `).all(selectedCompanyId, identity.userId, identity.username);
+  `).all(selectedCompanyId, identity.userId);
   return rows.map(row => {
     const channel = String(row.ipc_channel);
     const requestMode = String(row.request_mode);
@@ -268,8 +267,7 @@ function completeOperationIntent(db, identityInput) {
   // solicitud original del renderer, que puede diferir tras normalizaciones
   // legítimas aplicadas por el handler antes de crear el recibo.
   if (String(intent.operation_type) !== identity.operationType ||
-      Number(intent.actor_user_id) !== identity.actorUserId ||
-      String(intent.actor_username) !== String(identity.actorUsername || '')) {
+      Number(intent.actor_user_id) !== identity.actorUserId) {
     throw new Error('La operación confirmada no coincide con el tipo o el usuario de la intención durable.');
   }
   const existing = db.prepare(`
