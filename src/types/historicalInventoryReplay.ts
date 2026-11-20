@@ -159,11 +159,12 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       unitCostBs = effectiveUnitCostBs;
       unitCostUsd = roundUsd(effectiveUnitCostBs / rate);
       if (state.product.costingMethod === 'PEPS') {
+        const priorLayers = reconstructFifoLayers(state.history.map(toFifoSnapshot), state.quantity);
         totalCostBs = roundBs(requestedQuantity * effectiveUnitCostBs);
         totalCostUsd = roundUsd(totalCostBs / rate);
         nextQuantity += requestedQuantity;
-        const totalBs = roundBs(state.quantity * state.averageBs + totalCostBs);
-        const totalUsd = roundUsd(state.quantity * state.averageUsd + totalCostUsd);
+        const totalBs = roundBs(priorLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0) + totalCostBs);
+        const totalUsd = roundUsd(priorLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0) + totalCostUsd);
         nextAverageBs = nextQuantity > 0 ? totalBs / nextQuantity : 0;
         nextAverageUsd = nextQuantity > 0 ? totalUsd / nextQuantity : 0;
       } else {
@@ -180,25 +181,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       state.lastCostBs = unitCostBs;
       state.lastCostUsd = unitCostUsd;
     } else if (source.type === 'SALIDA') {
-      if (source.correctionForMovementId) {
-        const original = originalById.get(source.correctionForMovementId);
-        if (!original || original.type !== 'ENTRADA' || original.concept !== 'COMPRA' ||
-            original.productId !== source.productId) {
-          throw new Error('La salida correctiva ' + (source.documentRef || id) + ' no identifica una entrada de compra válida.');
-        }
-      }
-      if (source.concept === 'DEVOLUCION_CLIENTE') {
-        const original = source.correctionForMovementId ? originalById.get(source.correctionForMovementId) : undefined;
-        if (!original || original.type !== 'SALIDA' || original.concept !== 'VENTA' ||
-            original.productId !== source.productId || source.date < original.date) {
-          throw new Error('La devolución de cliente ' + (source.documentRef || id) + ' no está vinculada a una salida de venta válida.');
-        }
-        const returned = (returnedBySale.get(original.id) || 0) + requestedQuantity;
-        if (returned - Number(original.quantity) > 1e-8) {
-          throw new Error('Las devoluciones acumuladas superan la cantidad de la venta original ' + (original.documentRef || original.id) + '.');
-        }
-        returnedBySale.set(original.id, returned);
-      }
+
       if (requestedQuantity - state.quantity > 1e-8) {
         throw new Error('Existencia insuficiente al reconstruir ' + (source.documentRef || id) + ': disponibles ' + state.quantity + ', solicitadas ' + requestedQuantity + '.');
       }
@@ -209,8 +192,17 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
         totalCostUsd = fifo.totalCostUsd;
         unitCostBs = fifo.unitCostBs;
         unitCostUsd = fifo.unitCostUsd;
-        const remainingBs = Math.max(0, roundBs(state.quantity * state.averageBs - totalCostBs));
-        const remainingUsd = Math.max(0, roundUsd(state.quantity * state.averageUsd - totalCostUsd));
+        let remaining = requestedQuantity;
+        const remainingLayers = layers.map(layer => ({ ...layer }));
+        for (const layer of remainingLayers) {
+          if (remaining <= 1e-8) break;
+          const consumed = Math.min(layer.quantity, remaining);
+          layer.quantity -= consumed;
+          remaining -= consumed;
+        }
+        if (remaining > 1e-8) throw new Error('No se pudieron consumir las capas PEPS durante la reconstrucción.');
+        const remainingBs = roundBs(remainingLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0));
+        const remainingUsd = roundUsd(remainingLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0));
         nextQuantity = state.quantity - requestedQuantity;
         nextAverageBs = nextQuantity > 0 ? remainingBs / nextQuantity : 0;
         nextAverageUsd = nextQuantity > 0 ? remainingUsd / nextQuantity : 0;
