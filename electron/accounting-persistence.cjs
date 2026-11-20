@@ -146,8 +146,9 @@ function validateFiscalExerciseCalendarSnapshot(state, nextEntries = []) {
     }
   }
 
-  // An automatic annual close and its opening must enter the same snapshot as
-  // the calendar transition; a partial close snapshot is rejected atomically.
+  // Companies using the persisted fiscal calendar must commit the close,
+  // opening and calendar transition in the same SQLite snapshot. Legacy
+  // snapshots without accountingStartDate/calendar retain their old path.
   for (const entry of nextEntries) {
     const isAutomaticClose = entry.type === 'CIERRE' &&
       String(entry.referenceDoc || '').startsWith('CIERRE:');
@@ -155,22 +156,24 @@ function validateFiscalExerciseCalendarSnapshot(state, nextEntries = []) {
       String(entry.referenceDoc || '').startsWith('APERTURA:') && entry.exerciseLink;
     if (!isAutomaticClose && !isAutomaticOpening) continue;
     const company = companies.find(item => String(item.id) === String(entry.companyId));
-    const opening = isAutomaticClose
-      ? journal.find(item => String(item.companyId) === String(entry.companyId) &&
-          item.type === 'APERTURA' && item.exerciseLink?.priorPeriodEndDate === entry.date &&
-          Number(item.exerciseLink?.cycleNumber) === Number(entry.annualCloseState?.cycleNumber))
-      : entry;
-    const closing = isAutomaticOpening
-      ? journal.find(item => String(item.companyId) === String(entry.companyId) &&
-          item.type === 'CIERRE' && item.date === entry.exerciseLink?.priorPeriodEndDate &&
-          Number(item.annualCloseState?.cycleNumber) === Number(entry.exerciseLink?.cycleNumber))
-      : entry;
-    const exercise = (Array.isArray(company?.fiscalExercises) ? company.fiscalExercises : [])
-      .find(item => String(item.companyId) === String(entry.companyId) &&
-        item.closingEntryId === String(closing?.id) && item.openingEntryId === String(opening?.id) &&
-        item.status === 'CERRADO');
-    if (!company || !opening || !closing || String(company.closedThroughDate || '') !== String(closing.date) ||
-        !exercise) {
+    if (!company) throw new Error('No existe la empresa del cierre o apertura anual.');
+    const requiresFiscalCalendar = company.accountingStartDate !== undefined ||
+      Array.isArray(company.fiscalExercises);
+    if (!requiresFiscalCalendar) continue;
+    const companyExercises = Array.isArray(company.fiscalExercises) ? company.fiscalExercises : [];
+    const exercise = companyExercises.find(item => String(item.companyId) === String(entry.companyId) &&
+      item.status === 'CERRADO' &&
+      (isAutomaticClose
+        ? String(item.closingEntryId || '') === String(entry.id)
+        : String(item.openingEntryId || '') === String(entry.id)));
+    const closing = exercise
+      ? journal.find(item => String(item.id) === String(exercise.closingEntryId))
+      : null;
+    const opening = exercise
+      ? journal.find(item => String(item.id) === String(exercise.openingEntryId))
+      : null;
+    if (!exercise || !closing || !opening ||
+        String(company.closedThroughDate || '') !== String(closing.date)) {
       throw new Error('El cierre anual, la apertura y el calendario fiscal deben confirmarse juntos en una sola transacción SQLite.');
     }
   }
