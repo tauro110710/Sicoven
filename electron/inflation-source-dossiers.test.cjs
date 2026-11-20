@@ -11,6 +11,7 @@ const {
   registerInflationSourceDossierIpc
 } = require('./inflation-source-dossiers.cjs');
 const { initializeInflationIndexSchema, importInflationIndexSeries } = require('./inflation-indexes.cjs');
+const { initializeOperationReceiptSchema } = require('./operation-receipts.cjs');
 
 const admin = { username: 'admin-a', role: 'admin' };
 const accountant = { username: 'contador-a', role: 'contador' };
@@ -23,6 +24,7 @@ function database() {
   db.prepare('INSERT INTO app_state(state_key,state_json) VALUES(?,?)').run('accounting', JSON.stringify({ companies: [{ id: 'company-001', name: 'Empresa de prueba' }] }));
   initializeInflationIndexSchema(db);
   initializeInflationSourceDossierSchema(db);
+  initializeOperationReceiptSchema(db);
   return db;
 }
 function makeSeries(db, code = 'ESTIMACION_EXPERTO') {
@@ -210,16 +212,37 @@ test('inflation source dossier IPC is bound to the selected company database', a
       ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
       db: controlDb,
       licenseView: () => ({ authorized: true }),
-      getActiveSession: token => token === 'tenant-token' ? accountant : null,
+      getActiveSession: token => token === 'tenant-token' ? accountant : token === 'reviewer-token' ? reviewer : null,
       withDatabase: async (token, operation) => {
-        assert.equal(token, 'tenant-token');
+        assert.ok(['tenant-token', 'reviewer-token'].includes(token));
         return operation(tenantDb, 'company-001');
       }
     });
+    const createInput = { ...dossierInput(series.seriesId), operationId: 'source-dossier-create-001' };
+    const created = await handlers.get('sicoven:inflation-source-dossier-create')({}, 'tenant-token', createInput);
+    const createRetry = await handlers.get('sicoven:inflation-source-dossier-create')({}, 'tenant-token', createInput);
+    assert.equal(created.dossierId, createRetry.dossierId);
+    assert.equal(createRetry.replayed, true);
+
+    const reviewInput = {
+      operationId: 'source-dossier-review-001',
+      dossierId: created.dossierId,
+      decision: 'NEEDS_EVIDENCE',
+      reason: 'Se requiere completar evidencia antes de la aprobación formal.',
+      reviewerProfessionalName: 'Profesional revisor independiente',
+      reviewerCredential: 'Credencial profesional de revisión verificable'
+    };
+    const reviewed = await handlers.get('sicoven:inflation-source-dossier-review')({}, 'reviewer-token', reviewInput);
+    const reviewRetry = await handlers.get('sicoven:inflation-source-dossier-review')({}, 'reviewer-token', reviewInput);
+    assert.equal(reviewed.reviewId, reviewRetry.reviewId);
+    assert.equal(reviewRetry.replayed, true);
+
     const rows = await handlers.get('sicoven:inflation-source-dossier-list')({}, 'tenant-token', { companyId: 'company-001' });
-    assert.equal(rows.length, 1);
+    assert.equal(rows.length, 2);
     assert.equal(controlDb.prepare('SELECT COUNT(*) AS n FROM inflation_source_dossiers').get().n, 0);
-    assert.equal(tenantDb.prepare('SELECT COUNT(*) AS n FROM inflation_source_dossiers').get().n, 1);
+    assert.equal(tenantDb.prepare('SELECT COUNT(*) AS n FROM inflation_source_dossiers').get().n, 2);
+    assert.equal(tenantDb.prepare('SELECT COUNT(*) AS n FROM inflation_source_dossier_reviews').get().n, 1);
+    assert.equal(tenantDb.prepare('SELECT COUNT(*) AS n FROM operation_receipts').get().n, 2);
   } finally {
     controlDb.close();
     tenantDb.close();
