@@ -5295,7 +5295,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('La empresa ya tiene compras o ventas registradas. La preparación no puede borrar sus efectos históricos.');
     }
     const inventoryLedgerExists = journalEntries.some(entry => entry.companyId === companyId &&
-      entry.items.some(item => /^1\\.1\\.4\\./.test(item.accountCode) &&
+      entry.items.some(item => /^1\.1\.4\./.test(item.accountCode) &&
         [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].some(value => Number(value || 0) !== 0)));
     if (inventoryLedgerExists) {
       throw new Error('La empresa ya tiene asientos con saldos de inventario. No se modificó ningún dato.');
