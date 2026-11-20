@@ -49,7 +49,7 @@ function createTenantRuntime({
     return saveTenantAccountingSnapshot(manager, state, actor);
   }
 
-  async function createCompany(company, actor = null) {
+  async function createCompany(company, actor = null, operation = null) {
     if (!company || typeof company !== 'object') throw new TypeError('La ficha de empresa es obligatoria.');
     const existing = manager.listCompanies().find(item => String(item.id) === String(company.id));
     if (existing) throw new Error('La empresa ya está registrada. No se reemplazará ni reinicializará su base SQLite.');
@@ -60,7 +60,7 @@ function createTenantRuntime({
       // The manager keeps the tenant out of the control registry until this
       // callback commits the initial snapshot together with schema creation.
       manager.registerCompany(company, tenantDb => {
-        const saved = persistAccountingSnapshot(tenantDb, empty, actor);
+        const saved = persistAccountingSnapshot(tenantDb, empty, actor, operation?.operationId || null);
         if (saved?.ok !== true) {
           throw new Error('SQLite no confirmó el snapshot inicial de la empresa.');
         }
@@ -68,6 +68,7 @@ function createTenantRuntime({
           .run('company_created', JSON.stringify({
             companyId: String(company.id), rif: String(company.rif), name: String(company.name),
             actorUserId: actor?.id ?? null, actorUsername: actor?.username || 'system',
+            operationId: operation?.operationId || null, requestHash: operation?.requestHash || null,
             createdAt: new Date().toISOString()
           }));
       });
