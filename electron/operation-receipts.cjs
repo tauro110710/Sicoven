@@ -2,30 +2,30 @@
 
 const crypto = require('node:crypto');
 
-const DURABLE_OPERATION_CHANNELS = new Set([
-  'sicoven:audit-record-correction',
-  'sicoven:correction-case-create',
-  'sicoven:correction-case-authorize',
-  'sicoven:correction-case-execute',
-  'sicoven:reopen-accounting-period',
-  'sicoven:reopen-accounting-year',
-  'sicoven:inflation-index-import',
-  'sicoven:inflation-index-review',
-  'sicoven:inflation-classification-save',
-  'sicoven:inflation-classification-review',
-  'sicoven:inflation-source-dossier-create',
-  'sicoven:inflation-source-dossier-review',
-  'sicoven:document-review',
-  'sicoven:payroll-employee-save',
-  'sicoven:payroll-severance-deposit-save',
-  'sicoven:payroll-severance-interest-save',
-  'sicoven:payroll-liquidation-create',
-  'sicoven:payroll-run-create',
-  'sicoven:payroll-run-confirm',
-  'sicoven:payroll-rule-save',
-  'sicoven:vat-fiscal-incident-create',
-  'sicoven:vat-fiscal-incident-event'
-]);
+const DURABLE_OPERATION_TYPES = Object.freeze({
+  'sicoven:audit-record-correction': 'accounting.audit_correction',
+  'sicoven:correction-case-create': 'accounting.correction_case_create',
+  'sicoven:correction-case-authorize': 'accounting.correction_case_authorize',
+  'sicoven:correction-case-execute': 'accounting.correction_case_execute',
+  'sicoven:reopen-accounting-period': 'accounting.reopen_period',
+  'sicoven:reopen-accounting-year': 'accounting.reopen_year',
+  'sicoven:inflation-index-import': 'inflation.index_import',
+  'sicoven:inflation-index-review': 'inflation.index_review',
+  'sicoven:inflation-classification-save': 'inflation.classification_save',
+  'sicoven:inflation-classification-review': 'inflation.classification_review',
+  'sicoven:inflation-source-dossier-create': 'inflation.source_dossier_create',
+  'sicoven:inflation-source-dossier-review': 'inflation.source_dossier_review',
+  'sicoven:document-review': 'documents.review',
+  'sicoven:payroll-employee-save': 'payroll.employee_save',
+  'sicoven:payroll-severance-deposit-save': 'payroll.severance_deposit',
+  'sicoven:payroll-severance-interest-save': 'payroll.severance_interest',
+  'sicoven:payroll-liquidation-create': 'payroll.liquidation_create',
+  'sicoven:payroll-run-create': 'payroll.run_create',
+  'sicoven:payroll-run-confirm': 'payroll.run_confirm',
+  'sicoven:payroll-rule-save': 'payroll.rule_save',
+  'sicoven:vat-fiscal-incident-create': 'fiscal.vat_incident_create',
+  'sicoven:vat-fiscal-incident-event': 'fiscal.vat_incident_event'
+});
 
 function initializeOperationReceiptSchema(db) {
   if (!db || typeof db.exec !== 'function') {
@@ -55,6 +55,7 @@ function initializeOperationReceiptSchema(db) {
       operation_id TEXT NOT NULL,
       company_id TEXT NOT NULL,
       ipc_channel TEXT NOT NULL,
+      operation_type TEXT NOT NULL,
       request_mode TEXT NOT NULL CHECK(request_mode IN ('object','payroll-run-confirm')),
       request_hash TEXT NOT NULL,
       request_json TEXT NOT NULL,
@@ -167,7 +168,7 @@ function prepareOperationIntent(db, input, companyId, actor) {
   const selectedCompanyId = String(companyId || '').trim();
   const request = input?.request;
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(operationId) || !selectedCompanyId || selectedCompanyId.length > 120 ||
-      !DURABLE_OPERATION_CHANNELS.has(channel) ||
+      !DURABLE_OPERATION_TYPES[channel] ||
       !['object','payroll-run-confirm'].includes(requestMode) ||
       !request || typeof request !== 'object' || Array.isArray(request)) {
     throw new TypeError('La intención de operación no contiene una identidad, canal o solicitud válida.');
@@ -189,12 +190,13 @@ function prepareOperationIntent(db, input, companyId, actor) {
   const requestHash = hashOperationRequest(serialized);
   const identity = normalizeIntentActor(actor);
   const existing = db.prepare(`
-    SELECT request_hash,ipc_channel,request_mode,actor_user_id,actor_username
+    SELECT request_hash,ipc_channel,operation_type,request_mode,actor_user_id,actor_username
     FROM operation_intents WHERE company_id=? AND operation_id=?
   `).get(selectedCompanyId, operationId);
   if (existing) {
     if (String(existing.request_hash) !== requestHash ||
         String(existing.ipc_channel) !== channel ||
+        String(existing.operation_type) !== DURABLE_OPERATION_TYPES[channel] ||
         String(existing.request_mode) !== requestMode ||
         Number(existing.actor_user_id) !== identity.userId ||
         String(existing.actor_username) !== identity.username) {
@@ -208,9 +210,9 @@ function prepareOperationIntent(db, input, companyId, actor) {
   }
   db.prepare(`
     INSERT INTO operation_intents
-      (operation_id,company_id,ipc_channel,request_mode,request_hash,request_json,actor_user_id,actor_username)
-    VALUES(?,?,?,?,?,?,?,?)
-  `).run(operationId, selectedCompanyId, channel, requestMode, requestHash, serialized, identity.userId, identity.username);
+      (operation_id,company_id,ipc_channel,operation_type,request_mode,request_hash,request_json,actor_user_id,actor_username)
+    VALUES(?,?,?,?,?,?,?,?,?)
+  `).run(operationId, selectedCompanyId, channel, DURABLE_OPERATION_TYPES[channel], requestMode, requestHash, serialized, identity.userId, identity.username);
   return { ok: true, operationId, prepared: true, completed: false };
 }
 
@@ -227,7 +229,7 @@ function listPendingOperationIntents(db, companyId, actor) {
     ORDER BY i.created_at,i.operation_id
   `).all(selectedCompanyId, identity.userId, identity.username);
   return rows.map(row => {
-    if (!DURABLE_OPERATION_CHANNELS.has(String(row.ipc_channel))) {
+    if (!DURABLE_OPERATION_TYPES[String(row.ipc_channel)]) {
       throw new Error('Existe una operación pendiente con un canal no reconocido; se bloqueó su recuperación automática.');
     }
     let request;
@@ -251,14 +253,15 @@ function completeOperationIntent(db, identityInput) {
   const table = db.prepare("SELECT 1 AS found FROM sqlite_master WHERE type='table' AND name='operation_intents'").get();
   if (!table) return false;
   const intent = db.prepare(`
-    SELECT actor_user_id,actor_username
+    SELECT operation_type,actor_user_id,actor_username
     FROM operation_intents WHERE company_id=? AND operation_id=?
   `).get(identity.companyId, identity.operationId);
   if (!intent) return false;
   // El recibo valida el hash de negocio. La intención conserva el hash de la
   // solicitud original del renderer, que puede diferir tras normalizaciones
   // legítimas aplicadas por el handler antes de crear el recibo.
-  if (Number(intent.actor_user_id) !== identity.actorUserId ||
+  if (String(intent.operation_type) !== identity.operationType ||
+      Number(intent.actor_user_id) !== identity.actorUserId ||
       String(intent.actor_username) !== String(identity.actorUsername || '')) {
     throw new Error('La operación confirmada no pertenece al mismo usuario que preparó la intención durable.');
   }
