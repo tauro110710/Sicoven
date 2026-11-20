@@ -123,6 +123,16 @@ export interface HistoricalReplayContextCoverage {
   financialDisclosures: number;
 }
 
+export interface HistoricalReplaySourceDependency {
+  sourceKey: string;
+  targetKey: string;
+  sourceCollection: string;
+  sourceId: string;
+  targetCollection: string;
+  targetId: string;
+  relationType: string;
+}
+
 export interface HistoricalReplayJournalEntryRelationship {
   entryId: string;
   relatedEntryId: string;
@@ -139,6 +149,7 @@ export interface HistoricalAccountingReplayPlan {
   sourceEvents: HistoricalReplaySourceEvent[];
   derivedJournalEntryIds: string[];
   journalEntryRelationships: HistoricalReplayJournalEntryRelationship[];
+  sourceDependencies: HistoricalReplaySourceDependency[];
   contextCoverage: HistoricalReplayContextCoverage;
   affectedExercises: HistoricalReplayExercise[];
   externalDependencies: string[];
@@ -308,6 +319,127 @@ export function buildHistoricalAccountingReplayPlan(
     }
     return expandJournalEntryDependencies([...new Set(ids)]);
   };
+
+  const sourceCollections: Record<string, HistoricalReplayRecord[]> = {
+    purchases: (Array.isArray(input.purchases) ? input.purchases : []) as HistoricalReplayRecord[],
+    sales: (Array.isArray(input.sales) ? input.sales : []) as HistoricalReplayRecord[],
+    movements: (Array.isArray(input.movements) ? input.movements : []) as HistoricalReplayRecord[],
+    bankStatementMovements: (Array.isArray(input.bankStatementMovements) ? input.bankStatementMovements : []) as HistoricalReplayRecord[],
+    creditSettlements: (Array.isArray(input.creditSettlements) ? input.creditSettlements : []) as HistoricalReplayRecord[],
+    supplierAdvanceSettlements: (Array.isArray(input.supplierAdvanceSettlements) ? input.supplierAdvanceSettlements : []) as HistoricalReplayRecord[],
+    supplierDirectAdvances: (Array.isArray(input.supplierDirectAdvances) ? input.supplierDirectAdvances : []) as HistoricalReplayRecord[],
+    fixedAssets: (Array.isArray(input.fixedAssets) ? input.fixedAssets : []) as HistoricalReplayRecord[],
+    vatVouchers: (Array.isArray(input.vatVouchers) ? input.vatVouchers : []) as HistoricalReplayRecord[],
+    islrVouchers: (Array.isArray(input.islrVouchers) ? input.islrVouchers : []) as HistoricalReplayRecord[],
+    vatWithholdingDeclarations: (Array.isArray(input.vatWithholdingDeclarations) ? input.vatWithholdingDeclarations : []) as HistoricalReplayRecord[],
+    vatWithholdingDeclarationEvents: (Array.isArray(input.vatWithholdingDeclarationEvents) ? input.vatWithholdingDeclarationEvents : []) as HistoricalReplayRecord[],
+    vatOwnDeclarations: (Array.isArray(input.vatOwnDeclarations) ? input.vatOwnDeclarations : []) as HistoricalReplayRecord[],
+    vatOwnDeclarationEvents: (Array.isArray(input.vatOwnDeclarationEvents) ? input.vatOwnDeclarationEvents : []) as HistoricalReplayRecord[],
+    islrFiscalEvents: (Array.isArray(input.islrFiscalEvents) ? input.islrFiscalEvents : []) as HistoricalReplayRecord[],
+    journalEntries: allJournalEntries as HistoricalReplayRecord[]
+  };
+  const findSourceRecord = (collection: string, id: string): HistoricalReplayRecord | undefined =>
+    (sourceCollections[collection] || []).find(item => String(item.id || '') === id);
+  const sourceDependencies: HistoricalReplaySourceDependency[] = [];
+  const addSourceDependency = (
+    sourceCollection: string, sourceIdValue: unknown,
+    targetCollection: string, targetIdValue: unknown, relationType: string
+  ): void => {
+    const sourceId = String(sourceIdValue || '').trim();
+    const targetId = String(targetIdValue || '').trim();
+    if (!sourceId || !targetId) return;
+    const sourceRecord = findSourceRecord(sourceCollection, sourceId);
+    if (!sourceRecord || String(sourceRecord.companyId || '') !== companyId) return;
+    const targetRecord = findSourceRecord(targetCollection, targetId);
+    if (!targetRecord) {
+      blockers.push('El registro ' + sourceCollection + '/' + sourceId +
+        ' referencia el registro inexistente ' + targetCollection + '/' + targetId + '.');
+      return;
+    }
+    if (String(targetRecord.companyId || '') !== companyId) {
+      blockers.push('El registro ' + sourceCollection + '/' + sourceId +
+        ' referencia ' + targetCollection + '/' + targetId + ' de otra empresa.');
+      return;
+    }
+    sourceDependencies.push({
+      sourceKey: sourceCollection + ':' + sourceId,
+      targetKey: targetCollection + ':' + targetId,
+      sourceCollection, sourceId, targetCollection, targetId, relationType
+    });
+  };
+
+  for (const purchase of sourceCollections.purchases.filter(item => String(item.companyId || '') === companyId)) {
+    if (purchase.originalPurchaseId) addSourceDependency('purchases', purchase.id, 'purchases', purchase.originalPurchaseId, 'CORRECTS_PURCHASE');
+  }
+  for (const sale of sourceCollections.sales.filter(item => String(item.companyId || '') === companyId)) {
+    if (sale.originalSaleId) addSourceDependency('sales', sale.id, 'sales', sale.originalSaleId, 'CORRECTS_SALE');
+  }
+  for (const movement of sourceCollections.movements.filter(item => String(item.companyId || '') === companyId)) {
+    if (movement.correctionForMovementId) addSourceDependency('movements', movement.id, 'movements', movement.correctionForMovementId, 'CORRECTS_INVENTORY_MOVEMENT');
+  }
+  for (const voucher of sourceCollections.vatVouchers.filter(item => String(item.companyId || '') === companyId)) {
+    if (voucher.purchaseRecordId) addSourceDependency('vatVouchers', voucher.id, 'purchases', voucher.purchaseRecordId, 'VAT_WITHHOLDING_FOR_PURCHASE');
+  }
+  for (const event of sourceCollections.islrFiscalEvents.filter(item => String(item.companyId || '') === companyId)) {
+    if (event.voucherId) addSourceDependency('islrFiscalEvents', event.id, 'islrVouchers', event.voucherId, 'ISLR_EVENT_FOR_VOUCHER');
+    if (event.reversalOfEventId) addSourceDependency('islrFiscalEvents', event.id, 'islrFiscalEvents', event.reversalOfEventId, 'REVERSAL_OF_ISLR_EVENT');
+    for (const allocation of (Array.isArray(event.allocations) ? event.allocations : []) as HistoricalReplayRecord[]) {
+      if (allocation.purchaseId) addSourceDependency('islrFiscalEvents', event.id, 'purchases', allocation.purchaseId, 'ISLR_EVENT_FOR_PURCHASE');
+    }
+  }
+  for (const declaration of sourceCollections.vatWithholdingDeclarations.filter(item => String(item.companyId || '') === companyId)) {
+    for (const voucherId of (Array.isArray(declaration.voucherIds) ? declaration.voucherIds : [])) {
+      addSourceDependency('vatWithholdingDeclarations', declaration.id, 'vatVouchers', voucherId, 'DECLARATION_INCLUDES_VAT_VOUCHER');
+    }
+  }
+  for (const event of sourceCollections.vatWithholdingDeclarationEvents.filter(item => String(item.companyId || '') === companyId)) {
+    if (event.declarationId) addSourceDependency('vatWithholdingDeclarationEvents', event.id, 'vatWithholdingDeclarations', event.declarationId, 'VAT_WITHHOLDING_EVENT_FOR_DECLARATION');
+    for (const movementId of (Array.isArray(event.bankStatementMovementIds) ? event.bankStatementMovementIds : [])) {
+      addSourceDependency('vatWithholdingDeclarationEvents', event.id, 'bankStatementMovements', movementId, 'VAT_WITHHOLDING_PAYMENT_BANK_SUPPORT');
+    }
+  }
+  for (const declaration of sourceCollections.vatOwnDeclarations.filter(item => String(item.companyId || '') === companyId)) {
+    for (const sourceId of [...(Array.isArray(declaration.sourceIds) ? declaration.sourceIds : []),
+      ...(Array.isArray(declaration.relatedSourceIds) ? declaration.relatedSourceIds : [])]) {
+      const candidates = ['sales', 'purchases', 'journalEntries'].filter(collection =>
+        Boolean(findSourceRecord(collection, String(sourceId || '')))
+      );
+      if (candidates.length !== 1) {
+        blockers.push('La declaración de IVA propio ' + String(declaration.id || '') +
+          ' no puede resolver de forma única su fuente ' + String(sourceId || '') + '.');
+      } else {
+        addSourceDependency('vatOwnDeclarations', declaration.id, candidates[0], sourceId, 'VAT_OWN_DECLARATION_SOURCE');
+      }
+    }
+  }
+  for (const event of sourceCollections.vatOwnDeclarationEvents.filter(item => String(item.companyId || '') === companyId)) {
+    if (event.declarationId) addSourceDependency('vatOwnDeclarationEvents', event.id, 'vatOwnDeclarations', event.declarationId, 'VAT_OWN_EVENT_FOR_DECLARATION');
+    if (event.reversalOfEventId) addSourceDependency('vatOwnDeclarationEvents', event.id, 'vatOwnDeclarationEvents', event.reversalOfEventId, 'REVERSAL_OF_VAT_OWN_EVENT');
+  }
+  for (const settlement of sourceCollections.creditSettlements.filter(item => String(item.companyId || '') === companyId)) {
+    const targetCollection = settlement.kind === 'SALE_COLLECTION' ? 'sales' : 'purchases';
+    addSourceDependency('creditSettlements', settlement.id, targetCollection, settlement.documentId, 'SETTLEMENT_FOR_DOCUMENT');
+    if (settlement.bankAccountId) {
+      const bank = (Array.isArray(input.bankAccounts) ? input.bankAccounts : [])
+        .find(item => String(item.id || '') === String(settlement.bankAccountId) && String(item.companyId || '') === companyId);
+      if (!bank) blockers.push('La liquidación ' + String(settlement.id || '') + ' referencia una cuenta bancaria inexistente o de otra empresa.');
+    }
+  }
+  for (const settlement of sourceCollections.supplierAdvanceSettlements.filter(item => String(item.companyId || '') === companyId)) {
+    for (const creditNoteId of (Array.isArray(settlement.sourceCreditNoteIds) ? settlement.sourceCreditNoteIds : [])) {
+      addSourceDependency('supplierAdvanceSettlements', settlement.id, 'purchases', creditNoteId, 'SUPPLIER_ADVANCE_FROM_CREDIT_NOTE');
+    }
+    for (const directAdvanceId of (Array.isArray(settlement.sourceDirectAdvanceIds) ? settlement.sourceDirectAdvanceIds : [])) {
+      addSourceDependency('supplierAdvanceSettlements', settlement.id, 'supplierDirectAdvances', directAdvanceId, 'SUPPLIER_ADVANCE_FROM_DIRECT_DISBURSEMENT');
+    }
+    if (settlement.targetPurchaseId) addSourceDependency('supplierAdvanceSettlements', settlement.id, 'purchases', settlement.targetPurchaseId, 'SUPPLIER_ADVANCE_APPLIED_TO_PURCHASE');
+  }
+  for (const asset of sourceCollections.fixedAssets.filter(item => String(item.companyId || '') === companyId)) {
+    if (asset.sourceJournalEntryId) addSourceDependency('fixedAssets', asset.id, 'journalEntries', asset.sourceJournalEntryId, 'FIXED_ASSET_ACQUISITION_ENTRY');
+    for (const event of (Array.isArray(asset.depreciationEvents) ? asset.depreciationEvents : []) as HistoricalReplayRecord[]) {
+      if (event.journalEntryId) addSourceDependency('fixedAssets', asset.id, 'journalEntries', event.journalEntryId, 'FIXED_ASSET_DEPRECIATION_ENTRY');
+    }
+  }
 
   if (!companyId) blockers.push('Seleccione una empresa antes de preparar la reconstrucción.');
   if (!isIsoDate(startDate)) blockers.push('La fecha inicial de reconstrucción no es válida.');
@@ -582,6 +714,23 @@ export function buildHistoricalAccountingReplayPlan(
       ['PURCHASE', 'PURCHASE_ACCOUNT_CREDIT', 'SALE', 'VAT_VOUCHER', 'ISLR_VOUCHER', 'VAT_WITHHOLDING_DECLARATION', 'VAT_WITHHOLDING_EVENT', 'VAT_OWN_DECLARATION', 'VAT_OWN_EVENT', 'ISLR_FISCAL_EVENT'].includes(event.kind))) {
     warnings.push('La empresa no tiene historial tributario por vigencia documentado; la reconstrucción deberá validar expresamente la condición aplicable a cada fecha sin inferirla.');
   }
+  if (taxStatusHistory.length > 0) {
+    const taxSensitiveKinds = new Set<HistoricalReplaySourceKind>([
+      'PURCHASE', 'PURCHASE_ACCOUNT_CREDIT', 'SALE', 'VAT_VOUCHER', 'ISLR_VOUCHER', 'ISLR_FISCAL_EVENT'
+    ]);
+    for (const event of orderedEvents) {
+      if (!taxSensitiveKinds.has(event.kind)) continue;
+      const matchingPeriods = taxPeriodsSorted.filter(period => {
+        const from = String(period.effectiveFrom || '');
+        const to = period.effectiveTo ? String(period.effectiveTo) : '';
+        return from <= event.effectiveDate && (!to || event.effectiveDate <= to);
+      });
+      if (matchingPeriods.length !== 1) {
+        blockers.push('La operación ' + event.collection + '/' + event.sourceId +
+          ' no tiene exactamente un tramo de condición tributaria vigente para ' + event.effectiveDate + '.');
+      }
+    }
+  }
   if (!company.accountingFramework || !company.accountingFrameworkVersion || !company.accountingFrameworkAdoptionDate) {
     warnings.push('El marco contable, su versión o su fecha documentada de adopción están incompletos; requieren criterio profesional antes de recalcular estados históricos.');
   }
@@ -657,6 +806,7 @@ export function buildHistoricalAccountingReplayPlan(
     sourceEvents: orderedEvents,
     derivedJournalEntryIds: [...new Set(derivedJournalEntryIds)],
     journalEntryRelationships: [...new Map(journalEntryRelationships.map(item => [item.entryId + '|' + item.relatedEntryId + '|' + item.relationType, item])).values()],
+    sourceDependencies: [...new Map(sourceDependencies.map(item => [item.sourceKey + '|' + item.targetKey + '|' + item.relationType, item])).values()],
     contextCoverage,
     affectedExercises,
     externalDependencies: [...new Set(externalDependencies)],
