@@ -541,7 +541,7 @@ export const InventarioContableTools: React.FC = () => {
             <button type="button" onClick={() => void confirmHistoricalReconstruction()} className="rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white">Confirmar y preparar</button>
           </div>
         </div>
-      </div>
+      </div>}
     </section>
 
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
