@@ -208,12 +208,11 @@ export function buildHistoricalAccountingReplayPlan(
         linkedJournalEntryId: typeof record.journalEntryId === 'string' ? record.journalEntryId : null,
         sourceIndex: sourceIndex++
       });
-      if (spec.kind === 'VAT_OWN_DECLARATION' && record.status === 'FILED') {
+      if (spec.kind === 'VAT_OWN_DECLARATION' && (record.status === 'FILED' || Boolean(record.filedAt))) {
         externalDependencies.push('Declaración IVA propio presentada: ' + id + '. Su rectificación debe coordinarse con el procedimiento fiscal correspondiente.');
-      }
-      if ((spec.kind === 'VAT_WITHHOLDING_DECLARATION' || spec.kind === 'VAT_OWN_DECLARATION') &&
+      } else if (spec.kind === 'VAT_WITHHOLDING_DECLARATION' &&
           (record.status === 'FILED' || Boolean(record.filedAt))) {
-        externalDependencies.push('Declaración fiscal presentada vinculada al período: ' + id + '.');
+        externalDependencies.push('Declaración de retenciones IVA presentada: ' + id + '. Su rectificación debe coordinarse con el procedimiento fiscal correspondiente.');
       }
       if (spec.kind === 'BANK_STATEMENT_MOVEMENT' && record.isReconciled === true) {
         externalDependencies.push('Movimiento bancario conciliado: ' + id + '. Requiere recalcular y volver a validar la conciliación.');
