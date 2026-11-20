@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
+const { initializeOperationReceiptSchema } = require('./operation-receipts.cjs');
 const {
   parseInflationIndexCsv,
   initializeInflationIndexSchema,
@@ -22,6 +23,7 @@ function database() {
     );
   `);
   initializeInflationIndexSchema(db);
+  initializeOperationReceiptSchema(db);
   return db;
 }
 const admin = { id: 1, username: 'admin', role: 'admin' };
