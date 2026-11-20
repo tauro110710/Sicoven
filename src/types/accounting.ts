@@ -133,6 +133,30 @@ export interface CompanyTaxStatusPeriod {
   recordedAt: string;
 }
 
+/** One immutable accounting close/open cycle; reopened cycles remain in history. */
+export interface PersistedFiscalExerciseCycle {
+  cycleNumber: number;
+  closingEntryId: string;
+  openingEntryId: string;
+  closedAt: string;
+  reopenedAt?: string;
+  reopeningId?: string;
+}
+
+/** Persisted fiscal calendar record. A reopened cycle keeps its original entry links. */
+export interface PersistedFiscalExercise {
+  id: string;
+  companyId: string;
+  fiscalYear: number;
+  startDate: string;
+  endDate: string;
+  status: 'ABIERTO' | 'EN_CIERRE' | 'CERRADO' | 'REABIERTO';
+  closingEntryId?: string;
+  openingEntryId?: string;
+  closedAt?: string;
+  cycles?: PersistedFiscalExerciseCycle[];
+}
+
 export interface Company {
   id: string;
   /** Fecha y hora en que la empresa fue registrada en esta instalación de SICOVEN; la asigna el sistema. */
@@ -178,6 +202,8 @@ export interface Company {
   inventoryBcvRateEffectiveDate?: string;
   inventoryBcvRateFetchedAt?: string;
   inventoryBcvRateHistory?: InventoryBcvHistoryEntry[];
+  /** Calendario fiscal persistido por ejercicio; ausente en empresas anteriores hasta su inicialización segura. */
+  fiscalExercises?: PersistedFiscalExercise[];
   /** Último día incluido en un período contable bloqueado. */
   closedThroughDate?: string;
   /** Historial de evaluaciones NIC 21; ausencia = pendiente, nunca se asigna moneda por defecto. */
@@ -324,6 +350,8 @@ export interface JournalEntry {
   /** Estado de la empresa inmediatamente anterior al cierre anual; evidencia para reapertura formal. */
   annualCloseState?: {
     previousFiscalYear: number;
+    /** Inicio real del ejercicio cerrado; permite el primer ejercicio fiscal parcial. */
+    priorPeriodStartDate?: string;
     previousClosedThroughDate: string | null;
     cycleNumber: number;
   };

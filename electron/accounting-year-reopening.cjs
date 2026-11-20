@@ -258,7 +258,11 @@ function reopenAccountingYear(db, input, actor) {
     if (!Number.isFinite(Date.parse(String(closing.createdAt || '')))) {
       throw new Error('El cierre anual no conserva una marca temporal verificable para detectar operaciones registradas posteriormente.');
     }
-    if (Number(company.fiscalYear) !== Number(evidence.previousFiscalYear) + 1 ||
+    const priorPeriodStartDate = evidence.priorPeriodStartDate === undefined
+      ? String(evidence.previousFiscalYear) + '-01-01'
+      : String(evidence.priorPeriodStartDate);
+    if (!isIsoDate(priorPeriodStartDate) || priorPeriodStartDate > closingDate ||
+        Number(company.fiscalYear) !== Number(evidence.previousFiscalYear) + 1 ||
         String(closing.date) !== String(evidence.previousFiscalYear) + '-12-31' ||
         (evidence.previousClosedThroughDate && evidence.previousClosedThroughDate >= closingDate)) {
       throw new Error('El estado actual de la empresa no coincide con la evidencia capturada al cerrar el ejercicio.');
@@ -281,7 +285,7 @@ function reopenAccountingYear(db, input, actor) {
       throw new Error('El asiento de apertura ya fue revertido o ajustado.');
     }
     if (String(opening.referenceDoc || '') !== 'APERTURA:' + companyId + ':' + openingDate ||
-        opening.exerciseLink?.priorPeriodStartDate !== closingDate.slice(0, 4) + '-01-01' ||
+        opening.exerciseLink?.priorPeriodStartDate !== priorPeriodStartDate ||
         (opening.exerciseLink?.cycleNumber !== undefined &&
           Number(opening.exerciseLink.cycleNumber) !== Number(evidence.cycleNumber))) {
       throw new Error('La apertura no conserva la referencia y el ciclo exactos del ejercicio cerrado.');
@@ -290,7 +294,7 @@ function reopenAccountingYear(db, input, actor) {
     assertBalancedAnnualEntry(opening, 'apertura anual');
     const link = db.prepare('SELECT * FROM accounting_exercise_links WHERE journal_entry_id=? AND company_id=?')
       .get(String(opening.id), companyId);
-    if (!link || link.prior_period_start_date !== closingDate.slice(0, 4) + '-01-01' ||
+    if (!link || link.prior_period_start_date !== priorPeriodStartDate ||
         link.prior_period_end_date !== closingDate || link.next_period_start_date !== openingDate ||
         Number(link.cycle_number) !== Number(evidence.cycleNumber)) {
       throw new Error('El vínculo SQLite entre cierre, apertura y número de ciclo no coincide; se bloqueó la reapertura.');
@@ -322,9 +326,48 @@ function reopenAccountingYear(db, input, actor) {
       if (String(entry.id) === String(opening.id)) return { ...entry, isAdjusted: true, reversedByEntryId: openingReversal.id };
       return entry;
     }).concat(closingReversal, openingReversal);
+    const reopeningId = crypto.randomUUID();
+    const reopenedAt = new Date().toISOString().slice(0, 10);
+    let fiscalExercises = company.fiscalExercises;
+    if (Array.isArray(fiscalExercises) && fiscalExercises.length > 0) {
+      const closingIndex = fiscalExercises.findIndex(item =>
+        String(item.companyId) === companyId &&
+        (String(item.closingEntryId || '') === String(closing.id) ||
+          (Array.isArray(item.cycles) && item.cycles.some(cycle =>
+            String(cycle.closingEntryId || '') === String(closing.id)))));
+      const openingIndex = closingIndex >= 0
+        ? fiscalExercises.findIndex((item, index) => index > closingIndex &&
+          String(item.companyId) === companyId && String(item.openingEntryId || '') === String(opening.id))
+        : -1;
+      const target = closingIndex >= 0 ? fiscalExercises[closingIndex] : null;
+      const next = closingIndex >= 0 ? fiscalExercises[closingIndex + 1] : null;
+      const cycles = Array.isArray(target?.cycles) && target.cycles.length
+        ? target.cycles
+        : (target?.closingEntryId && target?.openingEntryId && target?.closedAt
+          ? [{ cycleNumber: Number(evidence.cycleNumber), closingEntryId: target.closingEntryId,
+              openingEntryId: target.openingEntryId, closedAt: target.closedAt }]
+          : []);
+      const cycleIndex = cycles.findIndex(cycle =>
+        String(cycle.closingEntryId) === String(closing.id) &&
+        String(cycle.openingEntryId) === String(opening.id));
+      if (!target || !next || openingIndex !== closingIndex + 1 ||
+          target.status !== 'CERRADO' || cycleIndex !== cycles.length - 1 ||
+          cycles[cycleIndex].reopenedAt || String(next.openingEntryId || '') !== String(opening.id)) {
+        throw new Error('El calendario fiscal no coincide con el último ciclo y sus asientos originales; se bloqueó la reapertura.');
+      }
+      const updatedCycles = cycles.map((cycle, index) => index === cycleIndex
+        ? { ...cycle, reopenedAt, reopeningId }
+        : cycle);
+      fiscalExercises = fiscalExercises.map((item, index) => {
+        if (index === closingIndex) return { ...item, status: 'REABIERTO', cycles: updatedCycles };
+        if (index === openingIndex) return { ...item, openingEntryId: undefined };
+        return item;
+      });
+    }
     const restoredCompany = {
       ...company,
       fiscalYear: Number(evidence.previousFiscalYear),
+      ...(Array.isArray(fiscalExercises) ? { fiscalExercises } : {}),
       ...(evidence.previousClosedThroughDate
         ? { closedThroughDate: evidence.previousClosedThroughDate }
         : { closedThroughDate: undefined })
@@ -335,7 +378,7 @@ function reopenAccountingYear(db, input, actor) {
       journalEntries
     };
     const details = {
-      id: crypto.randomUUID(), companyId, companyName: String(company.name || ''),
+      id: reopeningId, companyId, companyName: String(company.name || ''),
       cycleNumber: Number(evidence.cycleNumber), closingEntryId: closing.id,
       openingEntryId: opening.id, closingReversalEntryId: closingReversal.id,
       openingReversalEntryId: openingReversal.id,

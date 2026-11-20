@@ -4,7 +4,8 @@ import { createRequire } from 'node:module';
 import Database from 'better-sqlite3';
 import { buildClosingEntryItems } from '../src/types/accountingYearClosing';
 import { buildOpeningEntryItems } from '../src/types/accountingYearOpening';
-import type { Account, JournalEntry } from '../src/types/accounting';
+import type { Account, Company, JournalEntry } from '../src/types/accounting';
+import { ensureFiscalExerciseCalendar, confirmFiscalExerciseCycle } from '../src/types/fiscalExerciseLifecycle';
 
 const require = createRequire(import.meta.url);
 const { persistAccountingSnapshot, registerAccountingPersistenceHandler } =
@@ -72,6 +73,7 @@ const buildCycle = (
   previousClosedThroughDate: string | null,
   createdAt: string
 ) => {
+  const periodStartDate = '2025-02-05';
   const closingDate = '2025-12-31';
   const openingDate = '2026-01-01';
   const closing: JournalEntry = {
@@ -82,12 +84,13 @@ const buildCycle = (
     workpaperNote: 'SICOVEN_AUTO_YEAR_CLOSE_V1',
     annualCloseState: {
       previousFiscalYear: 2025,
+      priorPeriodStartDate: periodStartDate,
       previousClosedThroughDate,
       cycleNumber
     },
     createdAt,
     items: buildClosingEntryItems({
-      companyId, periodStartDate: '2025-01-01', periodEndDate: closingDate,
+      companyId, periodStartDate, periodEndDate: closingDate,
       accounts, journalEntries, retainedEarningsAccountCode: '3.1.1'
     })
   };
@@ -97,14 +100,14 @@ const buildCycle = (
     type: 'APERTURA', bcvRate: 100,
     referenceDoc: 'APERTURA:' + companyId + ':' + openingDate,
     exerciseLink: {
-      priorPeriodStartDate: '2025-01-01',
+      priorPeriodStartDate: periodStartDate,
       priorPeriodEndDate: closingDate,
       nextPeriodStartDate: openingDate,
       cycleNumber
     },
     createdAt,
     items: buildOpeningEntryItems({
-      companyId, periodStartDate: '2025-01-01', periodEndDate: closingDate,
+      companyId, periodStartDate, periodEndDate: closingDate,
       openingDate, accounts, journalEntries: [...journalEntries, closing],
       retainedEarningsAccountCode: '3.1.1'
     })
@@ -115,8 +118,15 @@ const buildCycle = (
 test('recorre dos ciclos anuales reales con builders, persistencia SQLite, IPC y reaperturas', () => {
   const harness = makeHarness();
   try {
+    const baseCompany: Company = {
+      id: companyId, name: 'Empresa ciclo anual', fiscalYear: 2025,
+      accountingStartDate: '2025-02-05', operationalStartDate: '2015-02-05',
+      rif: 'J-00000000-0', address: '', phone: '', email: '', taxpayerType: 'ORDINARIO',
+      defaultIvaRetentionRate: 0, bcvRate: 100
+    };
+    const initialCalendar = ensureFiscalExerciseCalendar(baseCompany, 2025);
     const baseState = {
-      companies: [{ id: companyId, name: 'Empresa ciclo anual', fiscalYear: 2025 }],
+      companies: [baseCompany],
       currentCompanyId: companyId,
       accounts,
       journalEntries: baseEntries,
@@ -127,11 +137,25 @@ test('recorre dos ciclos anuales reales con builders, persistencia SQLite, IPC y
     persistAccountingSnapshot(harness.db, baseState, { id: 1, username: 'contador-prueba' });
 
     const firstCycle = buildCycle(baseEntries, 1, null, '2025-12-31T20:00:00.000Z');
+    const firstCalendar = confirmFiscalExerciseCycle({
+      exercises: initialCalendar, companyId, exerciseId: 'fiscal-exercise:' + companyId + ':2025',
+      closingEntryId: firstCycle.closing.id, openingEntryId: firstCycle.opening.id, closedAt: '2025-12-31'
+    });
     const firstClosedState = {
       ...baseState,
-      companies: [{ ...baseState.companies[0], fiscalYear: 2026, closedThroughDate: '2025-12-31' }],
+      companies: [{ ...baseCompany, fiscalYear: 2026, closedThroughDate: '2025-12-31', fiscalExercises: firstCalendar }],
       journalEntries: [...baseEntries, firstCycle.closing, firstCycle.opening]
     };
+    const incompleteCalendarState = {
+      ...firstClosedState,
+      companies: [{ ...baseCompany, fiscalYear: 2026, closedThroughDate: '2025-12-31', fiscalExercises: initialCalendar }]
+    };
+    assert.throws(() => harness.save({}, 'valid-session', incompleteCalendarState),
+      /cierre anual, la apertura y el calendario fiscal deben confirmarse juntos/);
+    const stateAfterRejectedClose = harness.db.prepare(
+      "SELECT state_json FROM app_state WHERE state_key='accounting'"
+    ).get() as { state_json: string };
+    assert.equal(JSON.parse(stateAfterRejectedClose.state_json).journalEntries.length, baseEntries.length);
     harness.save({}, 'valid-session', firstClosedState);
 
     const firstReopen = harness.reopen({}, 'valid-session', {
@@ -140,6 +164,12 @@ test('recorre dos ciclos anuales reales con builders, persistencia SQLite, IPC y
     assert.equal(firstReopen.ok, true);
     assert.equal(firstReopen.company.fiscalYear, 2025);
     assert.equal(firstReopen.company.closedThroughDate, undefined);
+    assert.equal(firstReopen.company.fiscalExercises[0].status, 'REABIERTO');
+    assert.equal(firstReopen.company.fiscalExercises[0].closingEntryId, firstCycle.closing.id);
+    assert.equal(firstReopen.company.fiscalExercises[0].openingEntryId, firstCycle.opening.id);
+    assert.equal(firstReopen.company.fiscalExercises[0].cycles[0].reopenedAt, new Date().toISOString().slice(0, 10));
+    assert.ok(firstReopen.company.fiscalExercises[0].cycles[0].reopeningId);
+    assert.equal(firstReopen.company.fiscalExercises[1].openingEntryId, undefined);
     assert.equal(firstReopen.reversalEntries.length, 2);
 
     const afterFirstRow = harness.db.prepare(
@@ -151,10 +181,16 @@ test('recorre dos ciclos anuales reales con builders, persistencia SQLite, IPC y
       afterFirst.journalEntries, 2, null,
       new Date(Date.now() + 10_000).toISOString()
     );
+    const afterFirstCompany = afterFirst.companies.find((company: { id: string }) => company.id === companyId) as Company;
+    const secondCalendar = confirmFiscalExerciseCycle({
+      exercises: ensureFiscalExerciseCalendar(afterFirstCompany, 2025),
+      companyId, exerciseId: 'fiscal-exercise:' + companyId + ':2025',
+      closingEntryId: secondCycle.closing.id, openingEntryId: secondCycle.opening.id, closedAt: '2025-12-31'
+    });
     const secondClosedState = {
       ...afterFirst,
       companies: afterFirst.companies.map((company: { id: string }) => company.id === companyId
-        ? { ...company, fiscalYear: 2026, closedThroughDate: '2025-12-31' }
+        ? { ...company, fiscalYear: 2026, closedThroughDate: '2025-12-31', fiscalExercises: secondCalendar }
         : company),
       journalEntries: [...afterFirst.journalEntries, secondCycle.closing, secondCycle.opening]
     };
@@ -165,6 +201,11 @@ test('recorre dos ciclos anuales reales con builders, persistencia SQLite, IPC y
     });
     assert.equal(secondReopen.ok, true);
     assert.equal(secondReopen.company.fiscalYear, 2025);
+    assert.equal(secondReopen.company.fiscalExercises[0].status, 'REABIERTO');
+    assert.equal(secondReopen.company.fiscalExercises[0].closingEntryId, secondCycle.closing.id);
+    assert.equal(secondReopen.company.fiscalExercises[0].cycles.length, 2);
+    assert.ok(secondReopen.company.fiscalExercises[0].cycles.every((cycle: { reopenedAt?: string; reopeningId?: string }) => cycle.reopenedAt && cycle.reopeningId));
+    assert.equal(secondReopen.company.fiscalExercises[1].openingEntryId, undefined);
     assert.equal(secondReopen.reversalEntries.length, 2);
 
     const finalStateRow = harness.db.prepare(

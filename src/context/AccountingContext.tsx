@@ -31,6 +31,7 @@ import { validateJournalEntryAccounts, isJournalEntryBalanced } from '../types/j
 import { matchesBankStatementDualCurrency, validateBankMovementFxSnapshot, isDuplicateBankStatementMovement } from '../types/bankStatementMatching';
 import { buildOpeningEntryItems } from '../types/accountingYearOpening';
 import { buildClosingEntryItems } from '../types/accountingYearClosing';
+import { ensureFiscalExerciseCalendar, confirmFiscalExerciseCycle } from '../types/fiscalExerciseLifecycle';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
 import {
   INITIAL_COMPANIES,
@@ -85,6 +86,7 @@ import { resolveNonInventoryPurchaseDebitAccount, resolveTreasuryAccountCurrency
 import type { FixedAsset, FixedAssetDepreciationEvent, FixedAssetRegistrationDraft } from '../types/fixedAssets';
 import { calculateFixedAssetDepreciation, getNextFixedAssetDepreciationPeriod, getFixedAssetDepreciationScheduleThrough } from '../types/fixedAssets';
 import { buildHistoricalAccountingReplayPlan, findOrphanedVatWithholdingEvents, findCrossCompanyVatWithholdingEvents, type HistoricalAccountingReplayPlan, type HistoricalReplayRecord } from '../types/historicalAccountingReplayPlan';
+import { getFiscalExerciseStartDate } from '../types/fiscalExerciseLifecycle';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -853,7 +855,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('Ya hay un cierre contable en proceso para esta empresa.');
     }
     const fiscalYear = Number(currentCompany.fiscalYear);
-    const expectedStart = String(fiscalYear) + '-01-01';
+    // La fecha real de inicio de operaciones es un dato histórico; el ejercicio ordinario
+    // de SICOVEN comienza en accountingStartDate. No mezclar ambas fechas.
+    const expectedStart = getFiscalExerciseStartDate(currentCompany, fiscalYear);
     const expectedEnd = String(fiscalYear) + '-12-31';
     if (input.periodStartDate !== expectedStart || input.periodEndDate !== expectedEnd ||
         !isValidIsoDate(input.periodStartDate) || !isValidIsoDate(input.periodEndDate)) {
@@ -922,6 +926,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         workpaperNote: 'SICOVEN_AUTO_YEAR_CLOSE_V1',
         annualCloseState: {
           previousFiscalYear: fiscalYear,
+          priorPeriodStartDate: input.periodStartDate,
           previousClosedThroughDate: currentCompany.closedThroughDate || null,
           // Count against the freshly persisted ledger snapshot, not the
           // render-time state captured before pending writes were flushed.
@@ -965,16 +970,33 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
       // El cierre, ambos asientos y el cambio de ejercicio se confirman juntos en un snapshot SQLite.
       const persistenceConfirmation = waitForPersistence();
+      const exerciseCalendar = ensureFiscalExerciseCalendar(currentCompany, fiscalYear);
+      const confirmedCalendar = confirmFiscalExerciseCycle({
+        exercises: exerciseCalendar,
+        companyId: currentCompany.id,
+        exerciseId: 'fiscal-exercise:' + currentCompany.id + ':' + fiscalYear,
+        closingEntryId: closingEntry.id,
+        openingEntryId: openingEntry.id,
+        closedAt: String(closingEntry.createdAt || '').slice(0, 10)
+      });
       setCompanies(prev => prev.map(company => company.id === currentCompany.id
-        ? { ...company, closedThroughDate: input.periodEndDate, fiscalYear: fiscalYear + 1 }
+        ? {
+            ...company,
+            closedThroughDate: input.periodEndDate,
+            fiscalYear: fiscalYear + 1,
+            fiscalExercises: confirmedCalendar
+          }
         : company));
       await persistenceConfirmation;
       return { closingEntry, openingEntry, depreciationEntriesCreated };
     } catch (error) {
-      // Si la segunda pieza no pudo construirse, retirar el primer asiento antes de publicar un cierre parcial.
-      if (closingEntry && !openingEntry && !persistenceFaultRef.current) {
-        setJournalEntries(prev => prev.filter(entry => entry.id !== closingEntry!.id));
-        try { await waitForPersistence(); } catch { /* El estado SQLite queda en modo de protección. */ }
+      // Si el calendario o el snapshot no pudieron confirmarse, retirar ambos
+      // asientos todavía no comprometidos. Si SQLite ya falló, no intentar una
+      // compensación ciega: la aplicación permanece protegida hasta recargar.
+      if (closingEntry && !persistenceFaultRef.current) {
+        const uncommittedIds = new Set([closingEntry.id, openingEntry?.id].filter(Boolean));
+        setJournalEntries(prev => prev.filter(entry => !uncommittedIds.has(entry.id)));
+        try { await waitForPersistence(); } catch { /* SQLite queda en modo de protección. */ }
       }
       throw error;
     } finally {

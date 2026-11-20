@@ -43,6 +43,156 @@ function syncPartyMasterRows(db, state) {
       updated_at=datetime('now')`);
   for (const row of prepared) insert.run(row.id, row.companyId, row.partyType, row.name, row.fiscalId, row.fiscalIdType, row.normalizedFiscalId, row.address, row.phone, row.email, row.active);
 }
+function validateFiscalExerciseCalendarSnapshot(state, nextEntries = [], priorById = new Map()) {
+  const companies = Array.isArray(state.companies) ? state.companies : [];
+  const journal = Array.isArray(state.journalEntries) ? state.journalEntries : [];
+  const validDate = value => {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const parsed = new Date(value + 'T00:00:00.000Z');
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  };
+  const nextDay = value => {
+    const date = new Date(value + 'T00:00:00.000Z');
+    date.setUTCDate(date.getUTCDate() + 1);
+    return date.toISOString().slice(0, 10);
+  };
+  const usedEntryIds = new Set();
+  for (const company of companies) {
+    if (company.fiscalExercises === undefined) continue;
+    if (!Array.isArray(company.fiscalExercises)) {
+      throw new Error('El calendario fiscal de la empresa debe ser una lista válida.');
+    }
+    const exercises = company.fiscalExercises.filter(item => String(item.companyId) === String(company.id))
+      .slice().sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
+    for (let index = 0; index < exercises.length; index += 1) {
+      const exercise = exercises[index];
+      if (!String(exercise.id || '').trim() || !Number.isInteger(Number(exercise.fiscalYear)) ||
+          !validDate(exercise.startDate) || !validDate(exercise.endDate) ||
+          exercise.startDate > exercise.endDate ||
+          exercise.endDate !== String(exercise.fiscalYear) + '-12-31') {
+        throw new Error('El calendario fiscal contiene un ejercicio con fechas o año inválidos.');
+      }
+      if (index > 0 && (exercise.startDate !== nextDay(exercises[index - 1].endDate) ||
+          Number(exercise.fiscalYear) !== Number(exercises[index - 1].fiscalYear) + 1)) {
+        throw new Error('El calendario fiscal contiene un salto o solapamiento entre ejercicios.');
+      }
+      let cycles = Array.isArray(exercise.cycles) ? exercise.cycles : [];
+      if (!cycles.length && exercise.closingEntryId && exercise.openingEntryId && exercise.closedAt) {
+        cycles = [{ cycleNumber: 1, closingEntryId: exercise.closingEntryId,
+          openingEntryId: exercise.openingEntryId, closedAt: exercise.closedAt }];
+      }
+      let priorCycleNumber = 0;
+      for (let cycleIndex = 0; cycleIndex < cycles.length; cycleIndex += 1) {
+        const cycle = cycles[cycleIndex];
+        if (!Number.isInteger(Number(cycle.cycleNumber)) || Number(cycle.cycleNumber) <= priorCycleNumber ||
+            !String(cycle.closingEntryId || '').trim() || !String(cycle.openingEntryId || '').trim() ||
+            !validDate(cycle.closedAt) || cycle.closedAt < exercise.endDate ||
+            (cycle.reopenedAt !== undefined && !validDate(cycle.reopenedAt)) ||
+            (cycle.reopeningId !== undefined && !String(cycle.reopeningId).trim())) {
+          throw new Error('El historial de ciclos fiscales contiene evidencia inválida.');
+        }
+        for (const id of [String(cycle.closingEntryId), String(cycle.openingEntryId)]) {
+          if (usedEntryIds.has(id)) throw new Error('Un asiento está vinculado a más de un ciclo fiscal.');
+          usedEntryIds.add(id);
+        }
+        const closing = journal.find(entry => String(entry.id) === String(cycle.closingEntryId));
+        const opening = journal.find(entry => String(entry.id) === String(cycle.openingEntryId));
+        if (!closing || !opening || String(closing.companyId) !== String(company.id) ||
+            String(opening.companyId) !== String(company.id) || closing.type !== 'CIERRE' ||
+            opening.type !== 'APERTURA' || closing.date !== exercise.endDate ||
+            opening.date !== nextDay(exercise.endDate) ||
+            String(closing.referenceDoc || '') !== 'CIERRE:' + company.id + ':' + exercise.endDate ||
+            String(opening.referenceDoc || '') !== 'APERTURA:' + company.id + ':' + opening.date ||
+            String(closing.annualCloseState?.priorPeriodStartDate || '') !== exercise.startDate ||
+            Number(closing.annualCloseState?.cycleNumber) !== Number(cycle.cycleNumber) ||
+            opening.exerciseLink?.priorPeriodStartDate !== exercise.startDate ||
+            opening.exerciseLink?.priorPeriodEndDate !== exercise.endDate ||
+            opening.exerciseLink?.nextPeriodStartDate !== opening.date ||
+            Number(opening.exerciseLink?.cycleNumber) !== Number(cycle.cycleNumber)) {
+          throw new Error('Los asientos originales no coinciden con el ciclo y rango fiscal registrados.');
+        }
+        if (cycle.reopenedAt) {
+          const closingReversal = journal.find(entry => String(entry.id) === String(closing.reversedByEntryId));
+          const openingReversal = journal.find(entry => String(entry.id) === String(opening.reversedByEntryId));
+          if (!cycle.reopeningId || !closing.isAdjusted || !opening.isAdjusted ||
+              !closingReversal || String(closingReversal.reversalOfEntryId) !== String(closing.id) ||
+              !openingReversal || String(openingReversal.reversalOfEntryId) !== String(opening.id)) {
+            throw new Error('El ciclo reabierto no conserva los contra-asientos y la trazabilidad originales.');
+          }
+        } else if (cycleIndex !== cycles.length - 1) {
+          throw new Error('Solo el último ciclo fiscal puede permanecer vigente.');
+        }
+        priorCycleNumber = Number(cycle.cycleNumber);
+      }
+      const latest = cycles[cycles.length - 1];
+      if (exercise.status === 'CERRADO') {
+        const next = exercises[index + 1];
+        if (!latest || latest.reopenedAt || exercise.closingEntryId !== latest.closingEntryId ||
+            exercise.openingEntryId !== latest.openingEntryId || exercise.closedAt !== latest.closedAt ||
+            !next || next.openingEntryId !== latest.openingEntryId) {
+          throw new Error('Un ejercicio cerrado debe enlazar su último cierre y apertura vigente en el ejercicio siguiente.');
+        }
+      } else if (exercise.status === 'REABIERTO') {
+        const next = exercises[index + 1];
+        if (!latest?.reopenedAt || !latest.reopeningId ||
+            exercise.closingEntryId !== latest.closingEntryId ||
+            exercise.openingEntryId !== latest.openingEntryId ||
+            next?.openingEntryId === latest.openingEntryId) {
+          throw new Error('Un ejercicio reabierto debe conservar el ciclo original y su evidencia de reapertura.');
+        }
+      } else if (!['ABIERTO', 'EN_CIERRE'].includes(String(exercise.status))) {
+        throw new Error('El calendario contiene un estado de ejercicio no reconocido.');
+      }
+    }
+  }
+
+  // Companies using the persisted fiscal calendar must commit the close,
+  // opening and calendar transition in the same SQLite snapshot. Legacy
+  // snapshots without accountingStartDate/calendar retain their old path.
+  for (const entry of nextEntries) {
+    // Existing entries may appear in nextEntries when a formal reopening adds
+    // reversal links/adjustment flags. Their complete historical evidence is
+    // already checked above; only newly inserted entries must match the
+    // calendar transition in this snapshot.
+    if (priorById.has(String(entry.id))) continue;
+    const isAutomaticClose = entry.type === 'CIERRE' &&
+      String(entry.referenceDoc || '').startsWith('CIERRE:');
+    const isAutomaticOpening = entry.type === 'APERTURA' &&
+      String(entry.referenceDoc || '').startsWith('APERTURA:') && entry.exerciseLink;
+    if (!isAutomaticClose && !isAutomaticOpening) continue;
+    const company = companies.find(item => String(item.id) === String(entry.companyId));
+    if (!company) throw new Error('No existe la empresa del cierre o apertura anual.');
+    const requiresFiscalCalendar = company.accountingStartDate !== undefined ||
+      Array.isArray(company.fiscalExercises);
+    if (!requiresFiscalCalendar) continue;
+    const companyExercises = Array.isArray(company.fiscalExercises) ? company.fiscalExercises : [];
+    const exercise = companyExercises.find(item => String(item.companyId) === String(entry.companyId) &&
+      item.status === 'CERRADO' &&
+      (isAutomaticClose
+        ? String(item.closingEntryId || '') === String(entry.id)
+        : String(item.openingEntryId || '') === String(entry.id)));
+    const closing = exercise
+      ? journal.find(item => String(item.id) === String(exercise.closingEntryId))
+      : null;
+    const opening = exercise
+      ? journal.find(item => String(item.id) === String(exercise.openingEntryId))
+      : null;
+    if (!exercise || !closing || !opening ||
+        String(company.closedThroughDate || '') !== String(closing.date)) {
+      throw new Error('El cierre anual, la apertura y el calendario fiscal deben confirmarse juntos en una sola transacción SQLite. ' +
+        JSON.stringify({
+          entryId: String(entry.id), entryType: entry.type,
+          exerciseFound: Boolean(exercise), closingFound: Boolean(closing), openingFound: Boolean(opening),
+          closedThroughDate: company.closedThroughDate || null, closingDate: closing?.date || null,
+          calendar: companyExercises.map(item => ({
+            fiscalYear: item.fiscalYear, status: item.status,
+            closingEntryId: item.closingEntryId || null, openingEntryId: item.openingEntryId || null
+          }))
+        }));
+    }
+  }
+}
+
 function persistAccountingSnapshot(db, state, actor = null) {
   const json = JSON.stringify(state);
   if (json.length > 50 * 1024 * 1024) throw new Error('El respaldo supera el límite permitido');
@@ -54,6 +204,7 @@ function persistAccountingSnapshot(db, state, actor = null) {
       catch { throw new Error('La base SQLite contiene un estado contable ilegible; se bloqueó la escritura para proteger el historial.'); }
     }
     const { nextEntries, priorById } = validateAccountingSnapshot(priorState, state);
+    validateFiscalExerciseCalendarSnapshot(state, nextEntries, priorById);
     const auditInsert = db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)');
     for (const entry of nextEntries) {
       if (priorById.has(String(entry.id))) continue;
