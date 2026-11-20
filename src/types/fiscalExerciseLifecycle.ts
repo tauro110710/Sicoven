@@ -139,7 +139,24 @@ export function buildPersistedFiscalExerciseCalendar(
   }
   if (Array.isArray(company.fiscalExercises) && company.fiscalExercises.length > 0) {
     validatePersistedFiscalExerciseCalendar(company.fiscalExercises, companyId);
-    return company.fiscalExercises.slice().sort((a, b) => a.startDate.localeCompare(b.startDate));
+    const existing = company.fiscalExercises.slice().sort((a, b) => a.startDate.localeCompare(b.startDate));
+    const lastYear = existing[existing.length - 1].fiscalYear;
+    if (lastYear > currentYear + 1) return existing;
+    for (let year = lastYear + 1; year <= currentYear + 1; year += 1) {
+      const prior = existing[existing.length - 1];
+      const startDate = String(year).padStart(4, '0') + '-01-01';
+      if (prior.endDate !== String(year - 1).padStart(4, '0') + '-12-31') {
+        throw new Error('El calendario fiscal existente no permite extenderse sin saltos ni solapamientos.');
+      }
+      existing.push({
+        id: 'fiscal-exercise:' + companyId + ':' + year,
+        companyId, fiscalYear: year, startDate,
+        endDate: String(year).padStart(4, '0') + '-12-31',
+        status: 'ABIERTO'
+      });
+    }
+    validatePersistedFiscalExerciseCalendar(existing, companyId);
+    return existing;
   }
 
   const historicalStarts = journalEntries
