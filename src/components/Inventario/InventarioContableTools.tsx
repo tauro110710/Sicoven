@@ -6,6 +6,7 @@ import type { InventoryProduct } from '../../types/accounting';
 import { validateOpeningInventoryRow, validateMovementImportRow } from '../../types/inventoryImport';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
+import { HistoricalAccountingReplayPanel } from './HistoricalAccountingReplayPanel';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -543,6 +544,8 @@ export const InventarioContableTools: React.FC = () => {
         </div>
       </div>}
     </section>
+
+    <HistoricalAccountingReplayPanel />
 
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
       <div className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5 text-emerald-700" /><h2 className="font-bold text-slate-900">Importación y exportación contable</h2></div>
