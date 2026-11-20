@@ -113,7 +113,7 @@ test('inflation index import and approval return their original results on retry
       operationId: 'inflation-index-import-001',
       seriesCode: 'INPC_BCV',
       metricType: 'INDEX_LEVEL',
-      sourceText: 'period,value\\n2025-01,100\\n2025-02,101',
+      sourceText: 'period,value\n2025-01,100\n2025-02,101',
       sourceTitle: 'Índice de precios de prueba',
       issuer: 'Emisor documental de prueba',
       sourceReference: 'Documento de soporte 2025-01',
