@@ -185,3 +185,46 @@ test('usa fiscalDate para ubicar eventos ISLR en la cronología histórica', () 
   assert.equal(plan.sourceEvents[0].effectiveDate, '2023-04-12');
   assert.equal(plan.sourceEvents[0].linkedJournalEntryId, 'journal-islr-1');
 });
+
+
+test('exige fecha fiscal efectiva para comprobantes de retención IVA', () => {
+  const input = base();
+  input.vatVouchers = [{
+    id: 'vat-voucher-1',
+    companyId: 'company-1',
+    date: '2023-04-02',
+    fiscalDate: '2023-04-05',
+    voucherNumber: '20230400000001',
+    journalEntryId: 'journal-vat-1'
+  }];
+  const plan = buildHistoricalAccountingReplayPlan(input);
+  assert.equal(plan.sourceEvents[0].effectiveDate, '2023-04-05');
+  assert.equal(plan.sourceEvents[0].linkedJournalEntryId, 'journal-vat-1');
+});
+
+test('bloquea comprobantes IVA históricos sin fecha fiscal efectiva verificable', () => {
+  const input = base();
+  input.vatVouchers = [{
+    id: 'vat-voucher-legacy',
+    companyId: 'company-1',
+    date: '2023-04-02',
+    voucherNumber: '20230400000001'
+  }];
+  const plan = buildHistoricalAccountingReplayPlan(input);
+  assert.equal(plan.canProceedToTransactionalReplay, false);
+  assert.match(plan.blockers.join(' '), /vatVouchers\\/vat-voucher-legacy/);
+});
+
+test('marca como dependencia externa la presentación de una declaración por evento', () => {
+  const input = base();
+  input.vatOwnDeclarationEvents = [{
+    id: 'vat-own-filed-1',
+    companyId: 'company-1',
+    declarationId: 'vat-own-1',
+    eventType: 'FILED',
+    occurredAt: '2023-04-30T12:00:00.000Z',
+    recordedAt: '2023-04-30T12:00:00.000Z'
+  }];
+  const plan = buildHistoricalAccountingReplayPlan(input);
+  assert.ok(plan.externalDependencies.some(item => item.includes('vat-own-filed-1')));
+});
