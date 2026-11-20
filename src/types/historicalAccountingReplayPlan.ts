@@ -134,7 +134,7 @@ const SOURCE_COLLECTIONS: CollectionSpec[] = [
   { collection: 'vatWithholdingDeclarationEvents', kind: 'VAT_WITHHOLDING_EVENT', dateFields: ['date', 'occurredAt'], referenceFields: ['declarationId', 'eventType'] },
   { collection: 'vatOwnDeclarations', kind: 'VAT_OWN_DECLARATION', dateFields: ['periodEndDate', 'endDate', 'date'], referenceFields: ['period', 'declarationNumber'] },
   { collection: 'vatOwnDeclarationEvents', kind: 'VAT_OWN_EVENT', dateFields: ['occurredAt', 'date'], referenceFields: ['declarationId', 'eventType'] },
-  { collection: 'islrFiscalEvents', kind: 'ISLR_FISCAL_EVENT', dateFields: ['date', 'occurredAt'], referenceFields: ['voucherId', 'eventType'] }
+  { collection: 'islrFiscalEvents', kind: 'ISLR_FISCAL_EVENT', dateFields: ['fiscalDate'], referenceFields: ['voucherId', 'kind'] }
 ];
 
 const isIsoDate = (value: string): boolean => {
