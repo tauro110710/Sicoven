@@ -1,6 +1,7 @@
 'use strict';
 
 const { initializeAccountingPersistenceSchema } = require('./accounting-persistence.cjs');
+const { initializeOperationReceiptSchema } = require('./operation-receipts.cjs');
 const { initializeCorrectionWorkflow } = require('./accounting-correction-workflow.cjs');
 const { initializeInflationIndexSchema } = require('./inflation-indexes.cjs');
 const { initializeInflationClassificationSchema } = require('./inflation-classifications.cjs');
@@ -35,6 +36,7 @@ function initializeTenantDatabase(db) {
   `);
 
   initializeAccountingPersistenceSchema(db);
+  initializeOperationReceiptSchema(db);
   initializeCorrectionWorkflow(db);
   initializeInflationIndexSchema(db);
   initializeInflationClassificationSchema(db);
@@ -45,7 +47,7 @@ function initializeTenantDatabase(db) {
 
   return Object.freeze({
     operationalTables: [
-      'app_state', 'audit_events', 'accounting_exercise_links', 'accounting_year_reopenings', 'party_masters',
+      'app_state', 'audit_events', 'operation_receipts', 'accounting_exercise_links', 'accounting_year_reopenings', 'party_masters',
       'period_reopenings', 'accounting_correction_cases', 'accounting_correction_case_events',
       'accounting_correction_case_workflow_events', 'inflation_index_sources',
       'inflation_index_series', 'inflation_index_observations', 'inflation_index_approvals',
@@ -59,4 +61,12 @@ function initializeTenantDatabase(db) {
   });
 }
 
-module.exports = { initializeTenantDatabase };
+function migrateTenantDatabase(db, { fromVersion, toVersion } = {}) {
+  if (fromVersion === 1 && toVersion === 2) {
+    initializeOperationReceiptSchema(db);
+    return;
+  }
+  throw new Error('No existe una migración SICOVEN registrada de esquema ' + fromVersion + ' a ' + toVersion + '.');
+}
+
+module.exports = { initializeTenantDatabase, migrateTenantDatabase };
