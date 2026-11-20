@@ -12,7 +12,8 @@ const CONTROL_TABLES = Object.freeze([
   'auth_users',
   'auth_sessions',
   'license_state',
-  'company_database_registry'
+  'company_database_registry',
+  'operation_receipts'
 ]);
 const SNAPSHOT_TABLES = Object.freeze(['app_state']);
 const AUDIT_TABLES = Object.freeze(['audit_events']);
