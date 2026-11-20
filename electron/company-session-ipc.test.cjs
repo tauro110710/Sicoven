@@ -141,7 +141,7 @@ test('updates registry metadata and records one recoverable tenant audit receipt
       listCompanies: () => [companyRecord],
       createCompany: async company => ({ ok: true, company }),
       updateCompanyMetadata: company => {
-        companyRecord = { ...companyRecord, ...company };
+        companyRecord = { ...companyRecord, name: company.name, rif: company.rif };
         return companyRecord;
       },
       getCompanyDatabase: () => tenantDb
