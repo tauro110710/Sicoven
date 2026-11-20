@@ -11,6 +11,11 @@ const {
   registerVatFiscalIncidentIpc
 } = require('./vat-fiscal-incidents.cjs');
 
+const {
+  initializeInflationIndexSchema,
+  registerInflationIndexIpc
+} = require('./inflation-indexes.cjs');
+
 function setup() {
   const db = new Database(':memory:');
   db.exec(`
@@ -86,3 +91,59 @@ test('VAT fiscal incident event returns its original aggregate without duplicati
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM operation_receipts').get().n, 2);
   } finally { db.close(); }
 });
+
+test('inflation index import and approval return their original results on retry', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime('now')));
+  `);
+  initializeOperationReceiptSchema(db);
+  initializeInflationIndexSchema(db);
+  const handlers = new Map();
+  const actor = { id: 7, username: 'contador', role: 'admin' };
+  registerInflationIndexIpc({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    db,
+    licenseView: () => ({ authorized: true }),
+    getActiveSession: () => actor,
+    withDatabase: (_token, callback) => callback(db, 'company-1')
+  });
+  try {
+    const input = {
+      operationId: 'inflation-index-import-001',
+      seriesCode: 'INPC_BCV',
+      metricType: 'INDEX_LEVEL',
+      sourceText: 'period,value\\n2025-01,100\\n2025-02,101',
+      sourceTitle: 'Índice de precios de prueba',
+      issuer: 'Emisor documental de prueba',
+      sourceReference: 'Documento de soporte 2025-01',
+      fileName: 'inpc-2025.csv',
+      basePeriod: '2025-01',
+      sourcePublishedAt: '2025-03-01'
+    };
+    const importHandler = handlers.get('sicoven:inflation-index-import');
+    const first = importHandler({}, 'session', input);
+    const retry = importHandler({}, 'session', input);
+    assert.equal(first.seriesId, retry.seriesId);
+    assert.equal(retry.replayed, true);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM inflation_index_series').get().n, 1);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM inflation_index_sources').get().n, 1);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM inflation_index_observations').get().n, 2);
+
+    const reviewInput = {
+      operationId: 'inflation-index-review-001',
+      seriesId: first.seriesId,
+      decision: 'APPROVED',
+      reason: 'La evidencia documental de la serie fue revisada y validada.'
+    };
+    const reviewHandler = handlers.get('sicoven:inflation-index-review');
+    const reviewed = reviewHandler({}, 'session', reviewInput);
+    const reviewRetry = reviewHandler({}, 'session', reviewInput);
+    assert.equal(reviewed.approvalId, reviewRetry.approvalId);
+    assert.equal(reviewRetry.replayed, true);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM inflation_index_approvals').get().n, 1);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM operation_receipts').get().n, 2);
+  } finally { db.close(); }
+});
+
+
