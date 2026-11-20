@@ -194,6 +194,25 @@ test('intent completion failure rolls back the receipt and business effect', () 
   } finally { db.close(); }
 });
 
+test('a receipt from another operation type cannot complete a prepared intent', () => {
+  const db = setup();
+  try {
+    const request = { amount: 12, reference: 'REC-001' };
+    prepareOperationIntent(db, durableIntent('durable-type-mismatch-001', request), 'company-1', durableActor);
+    const wrongType = {
+      operationId: 'durable-type-mismatch-001',
+      companyId: 'company-1',
+      operationType: 'accounting.correction_case_create',
+      requestHash: hashOperationRequest(JSON.stringify(request)),
+      actor: durableActor
+    };
+    assert.throws(() => runIdempotentOperation(db, wrongType, () => ({ ok: true, id: 'wrong' })),
+      /no pertenece al mismo usuario/);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 0);
+    assert.equal(listPendingOperationIntents(db, 'company-1', durableActor).length, 1);
+  } finally { db.close(); }
+});
+
 test('intent keys cannot be reused across requests, channels or actors', () => {
   const db = setup();
   try {
