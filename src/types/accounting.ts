@@ -205,6 +205,18 @@ export function getCompanyTaxStatusForDate(company: Company, date: string): Comp
   return matchingPeriods.length === 1 ? matchingPeriods[0] : undefined;
 }
 
+/**
+ * Resuelve la designación de agente de percepción IGTF en la fecha de la
+ * operación. Si existe historial, nunca recurre al indicador legacy cuando
+ * falta un tramo o hay solapamientos: undefined obliga al flujo a detenerse.
+ */
+export function getCompanyIgtfPerceptionAgentForDate(company: Company, date: string): boolean | undefined {
+  if ((company.taxStatusHistory || []).length > 0) {
+    return getCompanyTaxStatusForDate(company, date)?.isIgtfPerceptionAgent;
+  }
+  return company.isIgtfPerceptionAgent === true;
+}
+
 export type AccountType = 'ACTIVO' | 'PASIVO' | 'PATRIMONIO' | 'INGRESOS' | 'COSTOS' | 'GASTOS';
 
 export type CashFlowActivity = 'EFECTIVO_EQUIVALENTE' | 'OPERACION' | 'INVERSION' | 'FINANCIACION' | 'NO_MONETARIO' | 'SIN_CLASIFICAR';
