@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getCompanyTaxStatusForDate } from './accounting';
+import { getCompanyTaxStatusForDate, getCompanyIgtfPerceptionAgentForDate } from './accounting';
 import type { Company, CompanyTaxStatusPeriod } from './accounting';
 
 const special: CompanyTaxStatusPeriod = {
@@ -44,4 +44,27 @@ test('rechaza fechas ISO imposibles del calendario', () => {
 test('no elige arbitrariamente un tramo cuando el historial tiene solapamientos', () => {
   const overlapping = { ...ordinary, effectiveFrom: '2026-10-10' };
   assert.equal(getCompanyTaxStatusForDate(company([special, overlapping]), '2026-10-12'), undefined);
+});
+
+test('resuelve la designación IGTF según la fecha y no según el perfil actual', () => {
+  const historical = [
+    { ...special, isIgtfPerceptionAgent: true },
+    { ...ordinary, isIgtfPerceptionAgent: false }
+  ];
+  const entity = { ...company(historical), isIgtfPerceptionAgent: false };
+  assert.equal(getCompanyIgtfPerceptionAgentForDate(entity, '2026-10-14'), true);
+  assert.equal(getCompanyIgtfPerceptionAgentForDate(entity, '2026-10-15'), false);
+});
+
+test('no usa el indicador legacy cuando el historial tiene un vacío o solapamiento', () => {
+  const gap = { ...special, effectiveTo: '2026-10-10', isIgtfPerceptionAgent: true };
+  const entity = { ...company([gap]), isIgtfPerceptionAgent: true };
+  assert.equal(getCompanyIgtfPerceptionAgentForDate(entity, '2026-10-11'), undefined);
+  const overlap = { ...ordinary, effectiveFrom: '2026-10-05', isIgtfPerceptionAgent: false };
+  assert.equal(getCompanyIgtfPerceptionAgentForDate(company([gap, overlap]), '2026-10-07'), undefined);
+});
+
+test('mantiene compatibilidad con empresas que aún no tienen historial tributario', () => {
+  assert.equal(getCompanyIgtfPerceptionAgentForDate({ ...company([]), isIgtfPerceptionAgent: true }, '2010-01-01'), true);
+  assert.equal(getCompanyIgtfPerceptionAgentForDate(company([]), '2010-01-01'), false);
 });
