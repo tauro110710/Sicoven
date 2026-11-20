@@ -135,6 +135,8 @@ export interface CompanyTaxStatusPeriod {
 
 export interface Company {
   id: string;
+  /** Fecha real desde la que la empresa comenzó a operar; habilita ejercicios históricos sin año mínimo. */
+  operationalStartDate?: string;
   rif: string; // e.g., "J-40892182-3"
   name: string; // Razón Social
   tradeName?: string; // Nombre Comercial
@@ -299,6 +301,7 @@ export interface JournalEntry {
   id: string;
   companyId: string;
   entryNumber: number;
+  /** Fecha contable efectiva del hecho económico; no es la fecha de digitación. */
   date: string; // YYYY-MM-DD
   description: string;
   type: EntryType;
@@ -306,6 +309,7 @@ export interface JournalEntry {
   items: JournalEntryItem[];
   isAdjusted?: boolean;
   referenceDoc?: string;
+  /** Fecha/hora real de incorporación del asiento al sistema; se conserva separada de date. */
   createdAt: string;
   /** Enlace de auditoría para contra-asientos inmutables. */
   reversalOfEntryId?: string;
