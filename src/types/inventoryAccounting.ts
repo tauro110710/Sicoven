@@ -297,8 +297,8 @@ export function calculateFifoIssue(layersInput: CostLayer[], quantityToIssue: nu
   if (remaining > 1e-8) {
     throw new Error('No se pudo conciliar el consumo PEPS con las capas disponibles.');
   }
-  const totalCostBs = exactRoundedProductSum(consumedLayers.map(([q, bs]) => [q, bs]), 2);
-  const totalCostUsd = exactRoundedProductSum(consumedLayers.map(([q, _bs, usd]) => [q, usd]), 6);
+  const totalCostBs = exactRoundedProductSum(consumedLayers.map(([q, bs]) => [q, bs] as [number, number]), 2);
+  const totalCostUsd = exactRoundedProductSum(consumedLayers.map(([q, _bs, usd]) => [q, usd] as [number, number]), 6);
   return {
     quantity: quantityToIssue,
     totalCostBs,
