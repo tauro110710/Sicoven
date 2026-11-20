@@ -54,7 +54,7 @@ export const TaxStatusHistoryPanel: React.FC = () => {
       if (end >= all[i+1].effectiveFrom) { setError('Hay períodos superpuestos. Cierre el tramo anterior el día previo al inicio del nuevo período.'); return; }
     }
     setPeriods(all);
-    setDraft({ ...newDraft(currentCompany), effectiveFrom: '', effectiveTo: '' });
+    setDraft({ ...newDraft({ ...currentCompany, taxStatusHistory: all }), effectiveFrom: '', effectiveTo: '' });
   };
   const save = async () => {
     setBusy(true); setError(''); setSuccess(false);
