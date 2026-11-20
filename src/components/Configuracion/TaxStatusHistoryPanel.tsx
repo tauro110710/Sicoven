@@ -4,18 +4,23 @@ import { useAccounting } from '../../context/AccountingContext';
 import { SupportingDocumentsPanel } from '../shared/SupportingDocumentsPanel';
 import { isValidCompanyTaxStatusDate, type CompanyTaxStatusPeriod, type IvaTaxStatus, type SpecialTaxpayerStatus, type IvaRetentionAgentBasis } from '../../types/accounting';
 
-const newDraft = (company: ReturnType<typeof useAccounting>['currentCompany']) => ({
-  effectiveFrom: '', effectiveTo: '',
-  ivaTaxStatus: 'ORDINARIO' as IvaTaxStatus,
-  specialTaxpayerStatus: (company.taxpayerType === 'ESPECIAL' ? 'ESPECIAL' : 'NO_ESPECIAL') as SpecialTaxpayerStatus,
-  ivaRetentionAgentBasis: (company.ivaRetentionAgentBasis || 'UNCONFIRMED') as IvaRetentionAgentBasis,
-  defaultIvaRetentionRate: (company.defaultIvaRetentionRate === 100 ? 100 : company.defaultIvaRetentionRate === 75 ? 75 : 0) as 0 | 75 | 100,
-  isIgtfPerceptionAgent: company.isIgtfPerceptionAgent === true,
-  isPersonalFirm: company.isPersonalFirm === true,
-  notificationReference: company.specialTaxpayerNotificationReference || '',
-  notificationDate: company.specialTaxpayerNotificationDate || '',
-  supportingDocumentReference: '', notes: ''
-});
+const newDraft = (company: ReturnType<typeof useAccounting>['currentCompany']) => {
+  // El borrador parte del último tramo documentado, no de campos legacy que
+  // podrían haber quedado desactualizados después de una transición.
+  const latest = [...(company.taxStatusHistory || [])].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom)).at(-1);
+  return {
+    effectiveFrom: '', effectiveTo: '',
+    ivaTaxStatus: (latest?.ivaTaxStatus || 'ORDINARIO') as IvaTaxStatus,
+    specialTaxpayerStatus: (latest?.specialTaxpayerStatus || (company.taxpayerType === 'ESPECIAL' ? 'ESPECIAL' : 'NO_ESPECIAL')) as SpecialTaxpayerStatus,
+    ivaRetentionAgentBasis: (latest?.ivaRetentionAgentBasis || company.ivaRetentionAgentBasis || 'UNCONFIRMED') as IvaRetentionAgentBasis,
+    defaultIvaRetentionRate: (latest?.defaultIvaRetentionRate ?? (company.defaultIvaRetentionRate === 100 ? 100 : company.defaultIvaRetentionRate === 75 ? 75 : 0)) as 0 | 75 | 100,
+    isIgtfPerceptionAgent: latest?.isIgtfPerceptionAgent ?? company.isIgtfPerceptionAgent === true,
+    isPersonalFirm: latest?.isPersonalFirm ?? company.isPersonalFirm === true,
+    notificationReference: latest?.notificationReference || company.specialTaxpayerNotificationReference || '',
+    notificationDate: latest?.notificationDate || company.specialTaxpayerNotificationDate || '',
+    supportingDocumentReference: '', notes: ''
+  };
+};
 
 export const TaxStatusHistoryPanel: React.FC = () => {
   const { currentCompany, updateCompany, waitForPersistence, isStorageReady } = useAccounting();
@@ -37,9 +42,11 @@ export const TaxStatusHistoryPanel: React.FC = () => {
     if (!isValidCompanyTaxStatusDate(draft.effectiveFrom)) { setError('Indique una fecha inicial de vigencia válida.'); return; }
     if (draft.effectiveTo && !isValidCompanyTaxStatusDate(draft.effectiveTo)) { setError('Indique una fecha final de vigencia válida.'); return; }
     if (draft.effectiveTo && draft.effectiveTo < draft.effectiveFrom) { setError('La fecha final no puede ser anterior a la fecha inicial.'); return; }
-    if (draft.specialTaxpayerStatus === 'ESPECIAL' && (!draft.notificationReference.trim() || !draft.notificationDate)) { setError('La condición de Sujeto Pasivo Especial requiere referencia y fecha de notificación.'); return; }
+    if (draft.notificationDate && !isValidCompanyTaxStatusDate(draft.notificationDate)) { setError('La fecha de notificación debe ser una fecha válida.'); return; }
+    if (draft.specialTaxpayerStatus === 'ESPECIAL' && (!draft.notificationReference.trim() || !isValidCompanyTaxStatusDate(draft.notificationDate))) { setError('La condición de Sujeto Pasivo Especial requiere referencia y fecha válida de notificación.'); return; }
     if (['ARTICLE_1_SPECIAL_DESIGNATED', 'ARTICLE_1_AND_2'].includes(draft.ivaRetentionAgentBasis) && draft.specialTaxpayerStatus !== 'ESPECIAL') { setError('La designación del artículo 1 requiere que el tramo esté calificado como Sujeto Pasivo Especial.'); return; }
     if (draft.specialTaxpayerStatus === 'NO_ESPECIAL' && !draft.supportingDocumentReference.trim() && !draft.notificationReference.trim()) { setError('Para registrar la pérdida o revocación de la condición especial, indique la referencia del acto o documento que la respalda. No se presume por un cambio normativo.'); return; }
+    if (draft.specialTaxpayerStatus === 'NO_ESPECIAL' && draft.notificationReference.trim() && !isValidCompanyTaxStatusDate(draft.notificationDate)) { setError('El cambio a no especial debe conservar la fecha de la notificación o acto que lo respalda.'); return; }
     const candidate: CompanyTaxStatusPeriod = { ...draft, id: 'tax-period-' + crypto.randomUUID(), effectiveTo: draft.effectiveTo || undefined, notificationReference: draft.notificationReference.trim() || undefined, supportingDocumentReference: draft.supportingDocumentReference.trim() || undefined, notes: draft.notes.trim() || undefined, recordedAt: new Date().toISOString() };
     const all = [...periods, candidate].sort((a,b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
     for (let i=0;i<all.length-1;i++) {
@@ -63,7 +70,21 @@ export const TaxStatusHistoryPanel: React.FC = () => {
       // Registrar el waiter antes de publicar el cambio: así no se pierde
       // la confirmación si React ejecuta el efecto SQLite inmediatamente.
       const persistenceConfirmation = waitForPersistence();
-      await updateCompany({ ...currentCompany, taxStatusHistory: all });
+      const latest = all[all.length - 1];
+      const updatedCompany: typeof currentCompany = { ...currentCompany, taxStatusHistory: all };
+      if (latest) {
+        // Mantener sincronizados los campos de compatibilidad usados por
+        // pantallas antiguas, sin reemplazar el historial fechado.
+        if (latest.specialTaxpayerStatus === 'ESPECIAL') updatedCompany.taxpayerType = 'ESPECIAL';
+        else if (latest.specialTaxpayerStatus === 'NO_ESPECIAL') updatedCompany.taxpayerType = 'ORDINARIO';
+        updatedCompany.ivaRetentionAgentBasis = latest.ivaRetentionAgentBasis;
+        updatedCompany.defaultIvaRetentionRate = latest.defaultIvaRetentionRate;
+        updatedCompany.isPersonalFirm = latest.isPersonalFirm === true;
+        updatedCompany.isIgtfPerceptionAgent = latest.isIgtfPerceptionAgent;
+        updatedCompany.specialTaxpayerNotificationReference = latest.notificationReference;
+        updatedCompany.specialTaxpayerNotificationDate = latest.notificationDate;
+      }
+      await updateCompany(updatedCompany);
       await persistenceConfirmation;
       setSuccess(true);
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar el historial tributario en SQLite.'); }
