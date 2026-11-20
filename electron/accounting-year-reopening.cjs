@@ -331,7 +331,10 @@ function reopenAccountingYear(db, input, actor) {
     let fiscalExercises = company.fiscalExercises;
     if (Array.isArray(fiscalExercises) && fiscalExercises.length > 0) {
       const closingIndex = fiscalExercises.findIndex(item =>
-        String(item.companyId) === companyId && String(item.closingEntryId || '') === String(closing.id));
+        String(item.companyId) === companyId &&
+        (String(item.closingEntryId || '') === String(closing.id) ||
+          (Array.isArray(item.cycles) && item.cycles.some(cycle =>
+            String(cycle.closingEntryId || '') === String(closing.id)))));
       const openingIndex = closingIndex >= 0
         ? fiscalExercises.findIndex((item, index) => index > closingIndex &&
           String(item.companyId) === companyId && String(item.openingEntryId || '') === String(opening.id))
@@ -341,7 +344,7 @@ function reopenAccountingYear(db, input, actor) {
       const cycles = Array.isArray(target?.cycles) && target.cycles.length
         ? target.cycles
         : (target?.closingEntryId && target?.openingEntryId && target?.closedAt
-          ? [{ cycleNumber: 1, closingEntryId: target.closingEntryId,
+          ? [{ cycleNumber: Number(evidence.cycleNumber), closingEntryId: target.closingEntryId,
               openingEntryId: target.openingEntryId, closedAt: target.closedAt }]
           : []);
       const cycleIndex = cycles.findIndex(cycle =>
