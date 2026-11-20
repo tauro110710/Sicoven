@@ -68,7 +68,11 @@ function registerCompanySessionIpc({
     return actor;
   }
 
-  initializeCompanyMetadataOperationSchema(controlDb);
+  function ensureCompanyMetadataOperationSchema() {
+    initializeCompanyMetadataOperationSchema(controlDb);
+  }
+
+  ensureCompanyMetadataOperationSchema();
 
   function completeCompanyMetadataIntent(intent) {
     const existing = controlDb.prepare(`
@@ -132,6 +136,7 @@ function registerCompanySessionIpc({
   }
 
   async function reconcilePendingCompanyMetadataOperations() {
+    ensureCompanyMetadataOperationSchema();
     const pending = controlDb.prepare(`
       SELECT i.* FROM company_metadata_intents i
       LEFT JOIN company_metadata_completions c ON c.operation_id=i.operation_id
@@ -144,7 +149,10 @@ function registerCompanySessionIpc({
     try {
       assertOperationalReady();
       release = await operationContext.acquireMaintenanceLock();
+      const activeCompanies = new Set(runtime.listCompanies()
+        .filter(item => String(item.status) === 'ACTIVE').map(item => String(item.id)));
       for (const intent of pending) {
+        if (!activeCompanies.has(String(intent.company_id))) continue;
         try {
           const receipt = finishCompanyMetadataIntent(intent);
           results.push({ operationId: String(intent.operation_id), recovered: true, receipt });
@@ -210,7 +218,8 @@ function registerCompanySessionIpc({
 
   ipcMain.handle('sicoven:company-update-metadata', async (_event, token, input) => {
     assertOperationalReady();
-    const actor = requireAuthorizedSession(token);
+    ensureCompanyMetadataOperationSchema();
+    requireAuthorizedSession(token);
     const companyId = String(input?.companyId || '').trim();
     if (!companyId || companyId !== companySessionContext.getSelectedCompanyId(token)) {
       throw new Error('Solo se puede actualizar la ficha de la empresa activa.');
