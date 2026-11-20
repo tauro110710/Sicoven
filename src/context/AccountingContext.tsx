@@ -5325,6 +5325,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       records as HistoricalReplayRecord[];
     const plan = buildHistoricalAccountingReplayPlan({
       companyId,
+      company: currentCompany as unknown as HistoricalReplayRecord,
+      accounts: replayRecords(accounts),
+      products: replayRecords(products),
+      bankAccounts: replayRecords(bankAccounts),
+      customers: replayRecords(customers),
+      suppliers: replayRecords(suppliers),
+      financialDisclosures: replayRecords(financialDisclosures),
       startDate,
       ...(throughDate ? { throughDate } : {}),
       purchases: replayRecords(purchases),

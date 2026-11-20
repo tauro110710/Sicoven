@@ -11,7 +11,7 @@ const formatDate = (value: string | null | undefined): string => {
 
 export const HistoricalAccountingReplayPanel: React.FC = () => {
   const { currentCompany, prepareHistoricalAccountingReplayPlan, isStorageReady } = useAccounting();
-  const [startDate, setStartDate] = useState('2026-01-01');
+  const [startDate, setStartDate] = useState('');
   const [throughDate, setThroughDate] = useState('');
   const [plan, setPlan] = useState<HistoricalAccountingReplayPlan | null>(null);
   const [busy, setBusy] = useState(false);
@@ -52,9 +52,10 @@ export const HistoricalAccountingReplayPanel: React.FC = () => {
       </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="text-sm font-medium text-slate-700">
-          Desde
+          Desde (inicio real de operaciones)
           <input type="date" value={startDate} onChange={event => setStartDate(event.target.value)}
             className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />
+          <span className="mt-1 block text-xs font-normal text-slate-500">Indique la primera fecha en que esta empresa comenzó a operar. No hay límite de antigüedad: puede seleccionar cualquier año disponible.</span>
         </label>
         <label className="text-sm font-medium text-slate-700">
           Hasta (opcional)
@@ -83,12 +84,16 @@ export const HistoricalAccountingReplayPanel: React.FC = () => {
               {blockers.length ? 'Revisión bloqueada' : 'Sin bloqueos detectados'}
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Operaciones fuente</span><strong className="block text-xl text-slate-900">{sourceEvents.length}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Asientos derivados</span><strong className="block text-xl text-slate-900">{plan.derivedJournalEntryIds.length}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Ejercicios afectados</span><strong className="block text-xl text-slate-900">{plan.affectedExercises.length}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Dependencias externas</span><strong className="block text-xl text-slate-900">{plan.externalDependencies.length}</strong></div>
+            <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Vínculos entre asientos</span><strong className="block text-xl text-slate-900">{plan.journalEntryRelationships.length}</strong></div>
+            <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Fuentes de contexto</span><strong className="block text-xl text-slate-900">{plan.contextCoverage.taxStatusPeriods + plan.contextCoverage.accountingBcvRateEntries + plan.contextCoverage.chartOfAccounts + plan.contextCoverage.inventoryProducts + plan.contextCoverage.bankAccounts}</strong></div>
           </div>
+          <p className="text-xs text-slate-600">Contexto cargado: {plan.contextCoverage.taxStatusPeriods} tramos tributarios, {plan.contextCoverage.accountingBcvRateEntries} tasas BCV históricas, {plan.contextCoverage.chartOfAccounts} cuentas, {plan.contextCoverage.inventoryProducts} artículos y {plan.contextCoverage.bankAccounts} cuentas bancarias.
+          </p>
           <p className="text-xs text-slate-600">Resultado técnico: {plan.mode}. {plan.canProceedToTransactionalReplay && blockers.length === 0
             ? 'El plan no encontró bloqueos conocidos para continuar con una etapa posterior de diseño y validación.'
             : 'No debe avanzarse a una ejecución transaccional hasta resolver los bloqueos y validar las dependencias.'}

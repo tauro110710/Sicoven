@@ -56,6 +56,13 @@ export interface HistoricalAccountingReplaySnapshot {
   vatOwnDeclarationEvents?: HistoricalReplayRecord[];
   islrFiscalEvents?: HistoricalReplayRecord[];
   journalEntries?: HistoricalReplayRecord[];
+  company?: HistoricalReplayRecord;
+  accounts?: HistoricalReplayRecord[];
+  products?: HistoricalReplayRecord[];
+  bankAccounts?: HistoricalReplayRecord[];
+  customers?: HistoricalReplayRecord[];
+  suppliers?: HistoricalReplayRecord[];
+  financialDisclosures?: HistoricalReplayRecord[];
 }
 
 export type HistoricalReplaySourceKind =
@@ -101,6 +108,29 @@ export interface HistoricalReplayExercise {
   includesNextYearOpening: boolean;
 }
 
+
+export interface HistoricalReplayContextCoverage {
+  companyMetadata: boolean;
+  taxStatusPeriods: number;
+  accountingBcvRateEntries: number;
+  functionalCurrencyAssessments: number;
+  exchangeabilityAssessments: number;
+  chartOfAccounts: number;
+  inventoryProducts: number;
+  bankAccounts: number;
+  customers: number;
+  suppliers: number;
+  financialDisclosures: number;
+}
+
+export interface HistoricalReplayJournalEntryRelationship {
+  entryId: string;
+  relatedEntryId: string;
+  relationType: 'REVERSAL_OF' | 'REVERSED_BY' | 'ADJUSTMENT_FOR';
+  entryDate: string;
+  relatedEntryDate: string;
+}
+
 export interface HistoricalAccountingReplayPlan {
   companyId: string;
   startDate: string;
@@ -108,6 +138,8 @@ export interface HistoricalAccountingReplayPlan {
   mode: 'READ_ONLY_PLAN';
   sourceEvents: HistoricalReplaySourceEvent[];
   derivedJournalEntryIds: string[];
+  journalEntryRelationships: HistoricalReplayJournalEntryRelationship[];
+  contextCoverage: HistoricalReplayContextCoverage;
   affectedExercises: HistoricalReplayExercise[];
   externalDependencies: string[];
   warnings: string[];
@@ -237,6 +269,28 @@ export function buildHistoricalAccountingReplayPlan(
   const purchaseById = new Map(
     (Array.isArray(input.purchases) ? input.purchases : []).map(record => [String(record.id || ''), record] as const)
   );
+  const allJournalEntries = Array.isArray(input.journalEntries) ? input.journalEntries : [];
+  const allJournalEntryById = new Map(allJournalEntries.map(entry => [String(entry.id || ''), entry] as const));
+  const companyJournalEntries = allJournalEntries.filter(entry => String(entry.companyId || '') === companyId);
+  const journalEntryById = new Map(companyJournalEntries.map(entry => [String(entry.id || ''), entry] as const));
+  const expandJournalEntryDependencies = (seedIds: string[]): string[] => {
+    const visited = new Set<string>();
+    const queue = [...seedIds];
+    while (queue.length) {
+      const id = String(queue.shift() || '').trim();
+      if (!id || visited.has(id)) continue;
+      visited.add(id);
+      const entry = journalEntryById.get(id);
+      if (!entry) continue;
+      for (const field of ['reversalOfEntryId', 'reversedByEntryId', 'adjustmentForEntryId']) {
+        const relatedId = entry[field];
+        if (typeof relatedId === 'string' && relatedId.trim() && !visited.has(relatedId.trim())) {
+          queue.push(relatedId.trim());
+        }
+      }
+    }
+    return [...visited];
+  };
   const relatedJournalEntryIdsFor = (kind: HistoricalReplaySourceKind, record: HistoricalReplayRecord): string[] => {
     const ids = collectRelatedJournalEntryIds(record);
     if (kind === 'VAT_VOUCHER' && record.purchaseRecordId) {
@@ -252,7 +306,7 @@ export function buildHistoricalAccountingReplayPlan(
         }
       }
     }
-    return [...new Set(ids)];
+    return expandJournalEntryDependencies([...new Set(ids)]);
   };
 
   if (!companyId) blockers.push('Seleccione una empresa antes de preparar la reconstrucción.');
@@ -397,15 +451,13 @@ export function buildHistoricalAccountingReplayPlan(
     blockers.push('La fecha final no puede ser anterior a la fecha inicial.');
   }
 
-  const journalEntries = Array.isArray(input.journalEntries) ? input.journalEntries : [];
-  const journalEntryById = new Map(journalEntries.map(entry => [String(entry.id || ''), entry] as const));
   const validatedLinks = new Set<string>();
   for (const event of collected) {
     for (const journalEntryId of event.relatedJournalEntryIds || []) {
       const validationKey = event.key + '|' + journalEntryId;
       if (validatedLinks.has(validationKey)) continue;
       validatedLinks.add(validationKey);
-      const linkedEntry = journalEntryById.get(journalEntryId);
+      const linkedEntry = allJournalEntryById.get(journalEntryId);
       if (!linkedEntry) {
         blockers.push('El documento ' + event.collection + '/' + event.sourceId +
           ' referencia el asiento contable inexistente ' + journalEntryId + '.');
@@ -435,12 +487,145 @@ export function buildHistoricalAccountingReplayPlan(
     }
   }
 
-  const derivedJournalEntryIds = (Array.isArray(input.journalEntries) ? input.journalEntries : [])
-    .filter(entry => String(entry.companyId || '') === companyId &&
-      isIsoDate(String(entry.date || '')) &&
+  const journalEntryRelationships: HistoricalReplayJournalEntryRelationship[] = [];
+  const relationshipFields = [
+    ['reversalOfEntryId', 'REVERSAL_OF'],
+    ['reversedByEntryId', 'REVERSED_BY'],
+    ['adjustmentForEntryId', 'ADJUSTMENT_FOR']
+  ] as const;
+  for (const entry of companyJournalEntries) {
+    const entryId = String(entry.id || '').trim();
+    const entryDate = String(entry.date || '').slice(0, 10);
+    if (!entryId || !isIsoDate(entryDate)) {
+      blockers.push('Hay un asiento de la empresa sin identificador o fecha válida.');
+      continue;
+    }
+    for (const [field, relationType] of relationshipFields) {
+      const relatedValue = entry[field];
+      if (typeof relatedValue !== 'string' || !relatedValue.trim()) continue;
+      const relatedId = relatedValue.trim();
+      const relatedEntry = allJournalEntryById.get(relatedId);
+      if (!relatedEntry) {
+        blockers.push('El asiento ' + entryId + ' referencia el asiento relacionado inexistente ' + relatedId + '.');
+      } else if (String(relatedEntry.companyId || '') !== companyId) {
+        blockers.push('El asiento ' + entryId + ' referencia el asiento relacionado ' + relatedId + ' de otra empresa.');
+      } else {
+        const relatedDate = String(relatedEntry.date || '').slice(0, 10);
+        if (!isIsoDate(relatedDate)) {
+          blockers.push('El asiento relacionado ' + relatedId + ' no conserva una fecha válida.');
+        } else {
+          journalEntryRelationships.push({ entryId, relatedEntryId: relatedId, relationType, entryDate, relatedEntryDate: relatedDate });
+        }
+      }
+    }
+  }
+
+  const inRangeJournalEntryIds = companyJournalEntries
+    .filter(entry => isIsoDate(String(entry.date || '')) &&
       String(entry.date) >= startDate && String(entry.date) <= throughDate)
     .map(entry => String(entry.id || '').trim())
     .filter(Boolean);
+  const derivedJournalEntryIds = expandJournalEntryDependencies(inRangeJournalEntryIds);
+  for (const id of derivedJournalEntryIds) {
+    const entry = allJournalEntryById.get(id);
+    if (entry && isIsoDate(String(entry.date || '')) &&
+        (String(entry.date) < startDate || String(entry.date) > throughDate)) {
+      externalDependencies.push('El asiento relacionado ' + id + ' está fuera del rango solicitado y debe revisarse junto con su vínculo de reversión o ajuste.');
+    }
+  }
+
+  const company: HistoricalReplayRecord = input.company || {};
+  const taxStatusHistory = Array.isArray(company.taxStatusHistory) ? company.taxStatusHistory as HistoricalReplayRecord[] : [];
+  const bcvHistory = Array.isArray(company.accountingBcvRateHistory) ? company.accountingBcvRateHistory as HistoricalReplayRecord[] : [];
+  const functionalCurrencyAssessments = Array.isArray(company.functionalCurrencyAssessments) ? company.functionalCurrencyAssessments as HistoricalReplayRecord[] : [];
+  const exchangeabilityAssessments = Array.isArray(company.exchangeabilityAssessments) ? company.exchangeabilityAssessments as HistoricalReplayRecord[] : [];
+  const accounts = Array.isArray(input.accounts) ? input.accounts : [];
+  const products = (Array.isArray(input.products) ? input.products : []).filter(item => String(item.companyId || '') === companyId);
+  const bankAccounts = (Array.isArray(input.bankAccounts) ? input.bankAccounts : []).filter(item => String(item.companyId || '') === companyId);
+  const contextCoverage: HistoricalReplayContextCoverage = {
+    companyMetadata: String(company.id || '') === companyId,
+    taxStatusPeriods: taxStatusHistory.length,
+    accountingBcvRateEntries: bcvHistory.length,
+    functionalCurrencyAssessments: functionalCurrencyAssessments.length,
+    exchangeabilityAssessments: exchangeabilityAssessments.length,
+    chartOfAccounts: accounts.length,
+    inventoryProducts: products.length,
+    bankAccounts: bankAccounts.length,
+    customers: (Array.isArray(input.customers) ? input.customers : []).filter(item => String(item.companyId || '') === companyId).length,
+    suppliers: (Array.isArray(input.suppliers) ? input.suppliers : []).filter(item => String(item.companyId || '') === companyId).length,
+    financialDisclosures: (Array.isArray(input.financialDisclosures) ? input.financialDisclosures : []).filter(item => String(item.companyId || '') === companyId).length
+  };
+
+  if (input.company && String(input.company.id || '') !== companyId) {
+    blockers.push('Los datos generales de la empresa no corresponden a la empresa seleccionada.');
+  }
+  const taxPeriodsSorted = [...taxStatusHistory].sort((a, b) => String(a.effectiveFrom || '').localeCompare(String(b.effectiveFrom || '')));
+  let previousTaxPeriodEnd = '';
+  for (const period of taxPeriodsSorted) {
+    const from = String(period.effectiveFrom || '');
+    const to = period.effectiveTo ? String(period.effectiveTo) : '';
+    if (!isIsoDate(from) || (to && (!isIsoDate(to) || to < from))) {
+      blockers.push('El historial de condición tributaria contiene un tramo con fechas inválidas.');
+      continue;
+    }
+    if (previousTaxPeriodEnd && from <= previousTaxPeriodEnd) {
+      blockers.push('El historial de condición tributaria contiene tramos solapados.');
+    }
+    previousTaxPeriodEnd = to || '9999-12-31';
+  }
+  for (const rate of bcvHistory) {
+    if (!isIsoDate(String(rate.effectiveDate || '')) || !Number.isFinite(Number(rate.rate)) || Number(rate.rate) <= 0) {
+      blockers.push('El historial BCV contable contiene una tasa o fecha inválida.');
+    }
+  }
+  if (taxStatusHistory.length === 0 && orderedEvents.some(event =>
+      ['PURCHASE', 'PURCHASE_ACCOUNT_CREDIT', 'SALE', 'VAT_VOUCHER', 'ISLR_VOUCHER', 'VAT_WITHHOLDING_DECLARATION', 'VAT_WITHHOLDING_EVENT', 'VAT_OWN_DECLARATION', 'VAT_OWN_EVENT', 'ISLR_FISCAL_EVENT'].includes(event.kind))) {
+    warnings.push('La empresa no tiene historial tributario por vigencia documentado; la reconstrucción deberá validar expresamente la condición aplicable a cada fecha sin inferirla.');
+  }
+  if (!company.accountingFramework || !company.accountingFrameworkVersion || !company.accountingFrameworkAdoptionDate) {
+    warnings.push('El marco contable, su versión o su fecha documentada de adopción están incompletos; requieren criterio profesional antes de recalcular estados históricos.');
+  }
+
+  const accountByCode = new Map(accounts.map(account => [String(account.code || ''), account] as const));
+  if (input.accounts) {
+    for (const entry of companyJournalEntries.filter(item => isIsoDate(String(item.date || '')) &&
+        String(item.date) >= startDate && String(item.date) <= throughDate)) {
+      for (const line of (Array.isArray(entry.items) ? entry.items : []) as HistoricalReplayRecord[]) {
+        const code = String(line.accountCode || '');
+        const account = accountByCode.get(code);
+        if (!account) blockers.push('El asiento ' + String(entry.id || '') + ' utiliza una cuenta no encontrada en el catálogo actual: ' + code + '.');
+        else if (account.isMovement === false) blockers.push('El asiento ' + String(entry.id || '') + ' utiliza una cuenta no imputable: ' + code + '.');
+      }
+    }
+  }
+  if (input.products) {
+    const productIds = new Set(products.map(product => String(product.id || '')));
+    for (const movement of (Array.isArray(input.movements) ? input.movements : []).filter(item => String(item.companyId || '') === companyId)) {
+      if (!productIds.has(String(movement.productId || ''))) {
+        blockers.push('El movimiento de inventario ' + String(movement.id || '') + ' referencia un artículo inexistente en el catálogo de la empresa.');
+      }
+    }
+    for (const purchase of (Array.isArray(input.purchases) ? input.purchases : []).filter(item => String(item.companyId || '') === companyId)) {
+      for (const line of (Array.isArray(purchase.inventoryLines) ? purchase.inventoryLines : []) as HistoricalReplayRecord[]) {
+        if (!productIds.has(String(line.productId || ''))) blockers.push('La compra ' + String(purchase.id || '') + ' contiene una línea de inventario sin artículo maestro válido.');
+      }
+    }
+    for (const sale of (Array.isArray(input.sales) ? input.sales : []).filter(item => String(item.companyId || '') === companyId)) {
+      for (const line of (Array.isArray(sale.inventoryLines) ? sale.inventoryLines : []) as HistoricalReplayRecord[]) {
+        if (!productIds.has(String(line.productId || ''))) blockers.push('La venta ' + String(sale.id || '') + ' contiene una línea de inventario sin artículo maestro válido.');
+      }
+    }
+  }
+  if (input.bankAccounts) {
+    const bankAccountById = new Map(bankAccounts.map(account => [String(account.id || ''), account] as const));
+    for (const movement of (Array.isArray(input.bankStatementMovements) ? input.bankStatementMovements : []).filter(item => String(item.companyId || '') === companyId)) {
+      const bank = bankAccountById.get(String(movement.bankAccountId || ''));
+      if (!bank) blockers.push('El movimiento bancario ' + String(movement.id || '') + ' referencia una cuenta bancaria inexistente.');
+      else if (input.accounts && !accountByCode.has(String(bank.accountCode || ''))) {
+        blockers.push('La cuenta bancaria ' + String(bank.id || '') + ' referencia una cuenta contable inexistente: ' + String(bank.accountCode || '') + '.');
+      }
+    }
+  }
 
   const firstYear = isIsoDate(startDate) ? Number(startDate.slice(0, 4)) : 0;
   const lastYear = isIsoDate(throughDate) ? Number(throughDate.slice(0, 4)) : firstYear;
@@ -471,10 +656,12 @@ export function buildHistoricalAccountingReplayPlan(
     mode: 'READ_ONLY_PLAN',
     sourceEvents: orderedEvents,
     derivedJournalEntryIds: [...new Set(derivedJournalEntryIds)],
+    journalEntryRelationships: [...new Map(journalEntryRelationships.map(item => [item.entryId + '|' + item.relatedEntryId + '|' + item.relationType, item])).values()],
+    contextCoverage,
     affectedExercises,
     externalDependencies: [...new Set(externalDependencies)],
     warnings,
-    blockers,
+    blockers: [...new Set(blockers)],
     canProceedToTransactionalReplay: blockers.length === 0 && orderedEvents.length > 0
   };
 }
