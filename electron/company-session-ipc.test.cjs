@@ -84,6 +84,15 @@ test('returns the active company only through the authenticated session binding'
 });
 
 
+test('recreates company metadata saga tables after a global database restore', async () => {
+  const { handlers, controlDb } = fixture();
+  controlDb.exec('DROP TABLE company_metadata_completions; DROP TABLE company_metadata_intents;');
+  await handlers.get('sicoven:company-list-accessible')({}, 'valid-token');
+  const tables = new Set(controlDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(row => row.name));
+  assert.ok(tables.has('company_metadata_intents'));
+  assert.ok(tables.has('company_metadata_completions'));
+});
+
 test('updates registry metadata and records one recoverable tenant audit receipt', async () => {
   let companyRecord = { id: 'company-a', name: 'Empresa A', rif: 'J-1', status: 'ACTIVE' };
   let acquired = 0, released = 0;
