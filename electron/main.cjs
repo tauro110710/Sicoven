@@ -898,7 +898,7 @@ app.whenReady().then(async () => {
     const identity = createOperationReceiptIdentity(input, companyId, 'accounting.correction_case_execute',
       { caseId: String(input?.caseId || ''), executionRef: reference, reason: String(input?.reason || '') }, actor);
     return runIdempotentOperation(activeDb, identity, () => {
-    if (item.status === 'EXECUTED') return markCorrectionExecuted(activeDb,{...input,executionRef:reference},actor);
+    if (item.status === 'EXECUTED') return markCorrectionExecuted(activeDb,{...input,executionRef:reference},actor) || getCorrectionCase(activeDb, item.id);
     requireApprovedCorrectionCase(activeDb,{
       companyId:item.company_id,entityType:item.entity_type,entityId:item.entity_id,
       sourceDocumentRef:item.source_ref,correctionDocumentRef:item.correction_ref
