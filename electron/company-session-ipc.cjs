@@ -133,7 +133,8 @@ function registerCompanySessionIpc({
     try {
       assertOperationalReady();
       requireAuthorizedSession(token);
-      const existing = runtime.listCompanies().find(item => String(item.id) === operationId && String(item.status) === 'ACTIVE');
+      const registeredCompanies = typeof runtime.listCompanies === 'function' ? runtime.listCompanies() : [];
+      const existing = registeredCompanies.find(item => String(item.id) === operationId && String(item.status) === 'ACTIVE');
       if (existing) {
         const tenantDb = runtime.getCompanyDatabase(operationId);
         const receiptRow = tenantDb.prepare("SELECT details_json FROM audit_events WHERE event_type='company_created' ORDER BY id DESC LIMIT 1").get();
