@@ -46,6 +46,7 @@ import {
   INITIAL_STATEMENT_MOVEMENTS
 } from '../data/initialData';
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
+import { requestNonBlockingConfirm } from '../utils/safeAlert';
 import { validateRetentionVoucherSupplierEmail } from '../types/retentionVoucherCompliance';
 import { formatIslrVoucherNumber, getMaxIslrVoucherSequence } from '../utils/islrVoucherNumber';
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus } from '../types/ivaRetentionEligibility';
@@ -1517,9 +1518,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const pending = await window.sicovenStore!.recoverPendingOperationIntents(token, false);
         if (cancelled || pending.length === 0) return;
         const channels = [...new Set(pending.map(item => item.channel.replace('sicoven:', '')))];
-        const accepted = window.confirm(
+        const accepted = await requestNonBlockingConfirm(
           'SICOVEN encontró ' + pending.length + ' operación(es) que quedaron sin respuesta confirmada en esta empresa (' +
-          channels.join(', ') + '). Si acepta, reintentará exactamente las solicitudes guardadas en SQLite; los recibos impedirán duplicar operaciones ya confirmadas. Si cancela, permanecerán pendientes para una revisión posterior. ¿Desea reintentarlas ahora?'
+          channels.join(', ') + '). Si acepta, reintentará exactamente las solicitudes guardadas en SQLite; los recibos impedirán duplicar operaciones ya confirmadas. Si cancela, permanecerán pendientes para una revisión posterior. ¿Desea reintentarlas ahora?',
+          { title: 'Operaciones pendientes', confirmLabel: 'Reintentar', cancelLabel: 'Más tarde', tone: 'warning' }
         );
         if (!accepted || cancelled) return;
         const results = await window.sicovenStore!.recoverPendingOperationIntents(token, true);
