@@ -114,7 +114,7 @@ test('incluye depreciaciones como eventos independientes y calcula los ejercicio
   const input = base();
   input.fixedAssets = [{
     id: 'asset-1', companyId: 'company-1', acquisitionDate: '2023-04-01',
-    assetCode: 'AF-001',
+    serviceDate: '2023-04-15', sourceJournalEntryId: 'journal-asset', assetCode: 'AF-001',
     depreciationEvents: [
       { id: 'dep-1', companyId: 'company-1', date: '2023-12-31', createdAt: '2023-12-31T23:00:00.000Z' },
       { id: 'dep-2', companyId: 'company-1', date: '2024-12-31', createdAt: '2024-12-31T23:00:00.000Z' }
@@ -125,8 +125,11 @@ test('incluye depreciaciones como eventos independientes y calcula los ejercicio
   const plan = buildHistoricalAccountingReplayPlan(input);
 
   assert.deepEqual(plan.sourceEvents.map(event => event.kind), [
-    'FIXED_ASSET', 'FIXED_ASSET_DEPRECIATION', 'FIXED_ASSET_DEPRECIATION'
+    'FIXED_ASSET', 'FIXED_ASSET_PLACED_IN_SERVICE',
+    'FIXED_ASSET_DEPRECIATION', 'FIXED_ASSET_DEPRECIATION'
   ]);
+  assert.equal(plan.sourceEvents[0].linkedJournalEntryId, 'journal-asset');
+  assert.equal(plan.sourceEvents[1].effectiveDate, '2023-04-15');
   assert.deepEqual(plan.affectedExercises.map(item => item.fiscalYear), [2023, 2024]);
   assert.equal(plan.affectedExercises[0].includesYearEndClose, true);
   assert.equal(plan.affectedExercises[0].includesNextYearOpening, true);
