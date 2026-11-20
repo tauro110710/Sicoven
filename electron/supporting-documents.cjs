@@ -2,7 +2,10 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { restoreWindowFocus } = require('./window-focus.cjs');
-const { createOperationReceiptIdentity, runIdempotentOperation } = require('./operation-receipts.cjs');
+const {
+  initializeOperationReceiptSchema, prepareOperationIntent, createOperationReceiptIdentity,
+  findOperationReceipt, runIdempotentOperation, hashOperationRequest
+} = require('./operation-receipts.cjs');
 
 const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
 const FORMATS = Object.freeze({
@@ -114,39 +117,172 @@ function currentDocumentStatus(db, documentId) {
   if (!row) return 'ATTACHED_UNREVIEWED';
   return row.event_type === 'REVIEWED' ? 'VERIFIED' : row.event_type === 'OBSERVATION_RECORDED' ? 'OBSERVATION_REQUIRED' : row.event_type === 'REPLACED' ? 'REPLACED' : 'ATTACHED_UNREVIEWED';
 }
-function attachDocument(db, { storageDir, trustedRoot = path.dirname(path.resolve(storageDir)), input, buffer, actor }) {
-  if (!actor?.username) throw new Error('Sesión no válida.');
-  const linked = assertLinkedEntity(db, input);
-  const normalized = normalizeDocument(input, buffer);
-  const id = crypto.randomUUID(), storageKey = id + normalized.extension, now = new Date().toISOString();
-  const root = assertNoSymlinkPath(trustedRoot, storageDir, 'El almacén documental');
-  fs.mkdirSync(root, { recursive: true });
-  assertNoSymlinkPath(trustedRoot, root, 'El almacén documental');
-  const target = path.join(root, storageKey), temporary = path.join(root, id + '.tmp');
-  let written = false;
-  try {
-    fs.writeFileSync(temporary, buffer, { flag: 'wx', mode: 0o600 });
-    fs.renameSync(temporary, target); written = true;
-    db.transaction(() => {
-      let replaced = null;
-      if (input.replacesDocumentId) {
-        replaced = db.prepare('SELECT * FROM supporting_documents WHERE id=?').get(String(input.replacesDocumentId));
-        if (!replaced || replaced.company_id !== linked.companyId || replaced.entity_type !== linked.entityType || replaced.entity_id !== linked.entityId) throw new Error('El documento sustituido no pertenece a esta misma operación.');
-        if (currentDocumentStatus(db, replaced.id) === 'REPLACED') throw new Error('El documento indicado ya fue sustituido.');
-      }
-      db.prepare('INSERT INTO supporting_documents(id,company_id,entity_type,entity_id,document_type,title,description,original_file_name,mime_type,extension,storage_key,sha256,byte_size,uploaded_by_user_id,uploaded_by_username,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        .run(id, linked.companyId, linked.entityType, linked.entityId, normalized.documentType, normalized.title, normalized.description, normalized.originalFileName, normalized.mimeType, normalized.extension, storageKey, normalized.sha256, normalized.byteSize, actor.id ?? null, actor.username, now);
-      const event = db.prepare('INSERT INTO supporting_document_events(document_id,event_type,details_json,actor_user_id,actor_username,created_at) VALUES(?,?,?,?,?,?)');
-      event.run(id, 'ATTACHED', JSON.stringify({ sha256: normalized.sha256, byteSize: normalized.byteSize }), actor.id ?? null, actor.username, now);
-      if (replaced) event.run(replaced.id, 'REPLACED', JSON.stringify({ replacedByDocumentId: id }), actor.id ?? null, actor.username, now);
-      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('supporting_document_attached', JSON.stringify({ documentId: id, companyId: linked.companyId, entityType: linked.entityType, entityId: linked.entityId, documentType: normalized.documentType, sha256: normalized.sha256, byteSize: normalized.byteSize, replacedDocumentId: replaced?.id || null, actor: actor.username }));
-    })();
-  } catch (error) {
-    try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {}
-    if (written) { try { fs.unlinkSync(target); } catch {} }
+function readDocumentIntent(db, companyId, operationId, actor) {
+  const row = db.prepare(`
+    SELECT i.operation_type,i.ipc_channel,i.request_hash,i.request_json,i.actor_user_id,i.actor_username,
+      c.operation_id AS completed_operation_id
+    FROM operation_intents i
+    LEFT JOIN operation_intent_completions c
+      ON c.company_id=i.company_id AND c.operation_id=i.operation_id
+    WHERE i.company_id=? AND i.operation_id=?
+  `).get(companyId, operationId);
+  if (!row) return null;
+  if (row.ipc_channel !== 'sicoven:document-attach' || row.operation_type !== 'documents.attach' ||
+      Number(row.actor_user_id) !== Number(actor.id) ||
+      String(row.actor_username) !== String(actor.username)) {
+    throw new Error('La clave de adjunto ya pertenece a otra operación o usuario; se bloqueó el reintento.');
+  }
+  let request;
+  try { request = JSON.parse(row.request_json); } catch {}
+  if (!request || typeof request !== 'object' || Array.isArray(request) ||
+      hashOperationRequest(JSON.stringify(request)) !== String(row.request_hash)) {
+    throw new Error('La intención durable del documento está dañada o no coincide con su huella.');
+  }
+  return { request, requestHash: String(row.request_hash), completed: Boolean(row.completed_operation_id) };
+}
+
+function assertDocumentFile(filePath, expectedHash, expectedSize) {
+  let stat;
+  try { stat = fs.lstatSync(filePath); }
+  catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+  if (stat.isSymbolicLink() || !stat.isFile()) throw new Error('El archivo documental pendiente no es un archivo regular seguro.');
+  if (stat.size !== Number(expectedSize) || crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex') !== expectedHash) {
+    throw new Error('El archivo documental pendiente no coincide con el tamaño y SHA-256 de la intención; se conserva intacto.');
+  }
+  return true;
+}
+
+function persistStagedDocumentFile({ root, request, buffer }) {
+  const staging = path.join(root, request.stagingKey);
+  const target = path.join(root, request.storageKey);
+  if (path.dirname(staging) !== root || path.dirname(target) !== root) {
+    throw new Error('La intención contiene una ruta documental fuera del almacén autorizado.');
+  }
+  const stageExists = assertDocumentFile(staging, request.sha256, request.byteSize);
+  let targetExists = assertDocumentFile(target, request.sha256, request.byteSize);
+  if (!stageExists && !targetExists && buffer) {
+    const digest = crypto.createHash('sha256').update(buffer).digest('hex');
+    if (buffer.length !== Number(request.byteSize) || digest !== request.sha256) {
+      throw new Error('El archivo seleccionado no coincide con el SHA-256 de la intención pendiente.');
+    }
+    const fd = fs.openSync(staging, 'wx', 0o600);
+    try { fs.writeFileSync(fd, buffer); fs.fsyncSync(fd); }
+    finally { fs.closeSync(fd); }
+  }
+  const nowStageExists = assertDocumentFile(staging, request.sha256, request.byteSize);
+  targetExists = assertDocumentFile(target, request.sha256, request.byteSize);
+  if (!targetExists && nowStageExists) {
+    try { fs.linkSync(staging, target); }
+    catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      assertDocumentFile(target, request.sha256, request.byteSize);
+    }
+    targetExists = assertDocumentFile(target, request.sha256, request.byteSize);
+  }
+  if (!targetExists) {
+    const error = new Error('La operación documental conserva una intención pendiente, pero falta el archivo original. Seleccione nuevamente el mismo soporte para recuperarla.');
+    error.code = 'SICOVEN_DOCUMENT_SOURCE_REQUIRED';
     throw error;
   }
-  return { ok: true, document: { id, ...linked, documentType: normalized.documentType, title: normalized.title, fileName: normalized.originalFileName, mimeType: normalized.mimeType, sha256: normalized.sha256, byteSize: normalized.byteSize, status: 'ATTACHED_UNREVIEWED', createdAt: now } };
+  if (nowStageExists) {
+    assertDocumentFile(staging, request.sha256, request.byteSize);
+    fs.unlinkSync(staging);
+  }
+  return target;
+}
+
+function attachDocument(db, { storageDir, trustedRoot = path.dirname(path.resolve(storageDir)), input, buffer = null, actor }) {
+  if (!actor?.username) throw new Error('Sesión no válida.');
+  initializeOperationReceiptSchema(db);
+  const operationId = String(input?.operationId || crypto.randomUUID()).trim();
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(operationId)) throw new Error('El identificador estable del adjunto no es válido.');
+  const companyId = requiredText(input?.companyId, 'Empresa', 120);
+  let intent = readDocumentIntent(db, companyId, operationId, actor);
+  let request;
+  if (intent) {
+    request = intent.request;
+    if (String(request.companyId) !== companyId ||
+        String(request.stagingKey) !== operationId + '.pending' ||
+        !/^[a-f0-9-]{36}\.(pdf|jpg|png|webp)$/.test(String(request.storageKey || '')) ||
+        !/^[a-f0-9]{64}$/.test(String(request.sha256 || '')) ||
+        !Number.isSafeInteger(Number(request.byteSize)) || Number(request.byteSize) < 1 || Number(request.byteSize) > MAX_DOCUMENT_BYTES) {
+      throw new Error('La intención de adjunto contiene metadatos o rutas no válidas; se conservó para inspección.');
+    }
+    if (buffer) {
+      const candidate = normalizeDocument(input, buffer);
+      for (const key of ['originalFileName','documentType','title','description','mimeType','extension','sha256','byteSize']) {
+        if ((candidate[key] ?? null) !== (request[key] ?? null)) {
+          throw new Error('El archivo o los datos seleccionados no coinciden con la intención pendiente; no se sustituyó el soporte original.');
+        }
+      }
+    }
+  } else {
+    if (!buffer) {
+      const missing = new Error('Se requiere seleccionar el archivo original para iniciar el adjunto.');
+      missing.code = 'SICOVEN_DOCUMENT_SOURCE_REQUIRED';
+      throw missing;
+    }
+    const linked = assertLinkedEntity(db, input);
+    const normalized = normalizeDocument(input, buffer);
+    const id = crypto.randomUUID();
+    request = {
+      companyId: linked.companyId, entityType: linked.entityType, entityId: linked.entityId,
+      replacesDocumentId: input.replacesDocumentId ? String(input.replacesDocumentId) : null,
+      documentId: id, storageKey: id + normalized.extension, stagingKey: operationId + '.pending',
+      ...normalized
+    };
+    if (request.replacesDocumentId) {
+      const replaced = db.prepare('SELECT * FROM supporting_documents WHERE id=?').get(request.replacesDocumentId);
+      if (!replaced || replaced.company_id !== linked.companyId || replaced.entity_type !== linked.entityType || replaced.entity_id !== linked.entityId) {
+        throw new Error('El documento sustituido no pertenece a esta misma operación.');
+      }
+      if (currentDocumentStatus(db, replaced.id) === 'REPLACED') throw new Error('El documento indicado ya fue sustituido.');
+    }
+    prepareOperationIntent(db, {
+      operationId, channel: 'sicoven:document-attach', requestMode: 'object', request
+    }, linked.companyId, actor);
+    intent = readDocumentIntent(db, linked.companyId, operationId, actor);
+  }
+
+  const identity = createOperationReceiptIdentity({ operationId }, companyId, 'documents.attach', request, actor);
+  const root = assertNoSymlinkPath(trustedRoot, storageDir, 'El almacén documental');
+  fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+  assertNoSymlinkPath(trustedRoot, root, 'El almacén documental');
+  const target = persistStagedDocumentFile({ root, request, buffer });
+  const prior = findOperationReceipt(db, identity);
+  if (prior.found) return prior.result;
+
+  const now = new Date().toISOString();
+  return runIdempotentOperation(db, identity, () => {
+    const linked = assertLinkedEntity(db, request);
+    let replaced = null;
+    if (request.replacesDocumentId) {
+      replaced = db.prepare('SELECT * FROM supporting_documents WHERE id=?').get(String(request.replacesDocumentId));
+      if (!replaced || replaced.company_id !== linked.companyId || replaced.entity_type !== linked.entityType || replaced.entity_id !== linked.entityId) {
+        throw new Error('El documento sustituido no pertenece a esta misma operación.');
+      }
+      if (currentDocumentStatus(db, replaced.id) === 'REPLACED') throw new Error('El documento indicado ya fue sustituido.');
+    }
+    if (!assertDocumentFile(target, request.sha256, request.byteSize)) {
+      throw new Error('El archivo final no está disponible para confirmar el registro documental.');
+    }
+    db.prepare('INSERT INTO supporting_documents(id,company_id,entity_type,entity_id,document_type,title,description,original_file_name,mime_type,extension,storage_key,sha256,byte_size,uploaded_by_user_id,uploaded_by_username,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .run(request.documentId, linked.companyId, linked.entityType, linked.entityId, request.documentType, request.title, request.description, request.originalFileName, request.mimeType, request.extension, request.storageKey, request.sha256, request.byteSize, actor.id ?? null, actor.username, now);
+    const event = db.prepare('INSERT INTO supporting_document_events(document_id,event_type,details_json,actor_user_id,actor_username,created_at) VALUES(?,?,?,?,?,?)');
+    event.run(request.documentId, 'ATTACHED', JSON.stringify({ sha256: request.sha256, byteSize: request.byteSize }), actor.id ?? null, actor.username, now);
+    if (replaced) event.run(replaced.id, 'REPLACED', JSON.stringify({ replacedByDocumentId: request.documentId }), actor.id ?? null, actor.username, now);
+    const result = { ok: true, document: {
+      id: request.documentId, ...linked, documentType: request.documentType, title: request.title,
+      fileName: request.originalFileName, mimeType: request.mimeType, sha256: request.sha256,
+      byteSize: request.byteSize, status: 'ATTACHED_UNREVIEWED', createdAt: now
+    } };
+    db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('supporting_document_attached', JSON.stringify({
+      documentId: request.documentId, companyId: linked.companyId, entityType: linked.entityType,
+      entityId: linked.entityId, documentType: request.documentType, sha256: request.sha256,
+      byteSize: request.byteSize, replacedDocumentId: replaced?.id || null, actor: actor.username
+    }));
+    return result;
+  });
 }
 function listDocuments(db, filters = {}) {
   const clauses = [], values = [];
