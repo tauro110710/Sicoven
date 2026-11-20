@@ -5948,6 +5948,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ...draft,
       ...(journalEntry ? { journalEntryId: journalEntry.id } : {}),
       id: 'vat-decl-event-' + Date.now() + '-' + Math.floor(Math.random() * 1000000),
+      companyId: currentCompany.id,
       declarationId,
       recordedAt: new Date().toISOString()
     };
