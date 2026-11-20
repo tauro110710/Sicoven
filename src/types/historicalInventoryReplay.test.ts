@@ -101,5 +101,7 @@ test('bloquea movimientos anteriores a la fecha de inicio y movimientos de otra 
 test('exige productos preparados y fechas válidas', () => {
   assert.throws(() => replay([{ ...makeProduct(), currentStock: 1 }], []), /existencia y costos iniciales en cero/);
   assert.throws(() => replay([{ ...makeProduct(), openingDate: '2026-01-01' }], []), /no está preparado/);
-  assert.throws(() => replay([makeProduct()], [] as InventoryMovement[]), /no tiene artículos|Kardex/);
+  const empty = replay([makeProduct()], [] as InventoryMovement[]);
+  assert.equal(empty.movements.length, 0);
+  assert.equal(empty.products[0].currentStock, 0);
 });
