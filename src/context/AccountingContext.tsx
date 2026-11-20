@@ -85,6 +85,7 @@ import { resolveNonInventoryPurchaseDebitAccount, resolveTreasuryAccountCurrency
 import type { FixedAsset, FixedAssetDepreciationEvent, FixedAssetRegistrationDraft } from '../types/fixedAssets';
 import { calculateFixedAssetDepreciation, getNextFixedAssetDepreciationPeriod, getFixedAssetDepreciationScheduleThrough } from '../types/fixedAssets';
 import { buildHistoricalAccountingReplayPlan, findOrphanedVatWithholdingEvents, findCrossCompanyVatWithholdingEvents, type HistoricalAccountingReplayPlan, type HistoricalReplayRecord } from '../types/historicalAccountingReplayPlan';
+import { getFiscalExerciseStartDate } from '../types/fiscalExerciseLifecycle';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -853,10 +854,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('Ya hay un cierre contable en proceso para esta empresa.');
     }
     const fiscalYear = Number(currentCompany.fiscalYear);
-    const configuredFirstStart = currentCompany.operationalStartDate || currentCompany.accountingStartDate;
-    const firstStartBelongsToYear = typeof configuredFirstStart === 'string' &&
-      configuredFirstStart.slice(0, 4) === String(fiscalYear);
-    const expectedStart = firstStartBelongsToYear ? configuredFirstStart : String(fiscalYear) + '-01-01';
+    // La fecha real de inicio de operaciones es un dato histórico; el ejercicio ordinario
+    // de SICOVEN comienza en accountingStartDate. No mezclar ambas fechas.
+    const expectedStart = getFiscalExerciseStartDate(currentCompany, fiscalYear);
     const expectedEnd = String(fiscalYear) + '-12-31';
     if (input.periodStartDate !== expectedStart || input.periodEndDate !== expectedEnd ||
         !isValidIsoDate(input.periodStartDate) || !isValidIsoDate(input.periodEndDate)) {
