@@ -65,6 +65,7 @@ test('separa la fecha fiscal/inventario de la fecha de abono en cuenta de una co
     accountCreditDate: '2023-02-05',
     journalEntryId: 'journal-purchase'
   }];
+  input.journalEntries = [{ id: 'journal-purchase', companyId: 'company-1', date: '2023-02-05' }];
 
   const plan = buildHistoricalAccountingReplayPlan(input);
 
@@ -74,6 +75,8 @@ test('separa la fecha fiscal/inventario de la fecha de abono en cuenta de una co
   ]);
   assert.equal(plan.sourceEvents[0].linkedJournalEntryId, null);
   assert.equal(plan.sourceEvents[1].linkedJournalEntryId, 'journal-purchase');
+  assert.deepEqual(plan.sourceEvents[0].relatedJournalEntryIds, ['journal-purchase']);
+  assert.deepEqual(plan.sourceEvents[1].relatedJournalEntryIds, ['journal-purchase']);
 });
 
 test('incluye abono en cuenta dentro del rango aunque la factura sea anterior al inicio', () => {
@@ -86,6 +89,7 @@ test('incluye abono en cuenta dentro del rango aunque la factura sea anterior al
     accountCreditDate: '2023-02-05',
     journalEntryId: 'journal-purchase'
   }];
+  input.journalEntries = [{ id: 'journal-purchase', companyId: 'company-1', date: '2023-02-05' }];
 
   const plan = buildHistoricalAccountingReplayPlan(input);
 
@@ -118,11 +122,16 @@ test('incluye depreciaciones como eventos independientes y calcula los ejercicio
     id: 'asset-1', companyId: 'company-1', acquisitionDate: '2023-04-01',
     serviceDate: '2023-04-15', sourceJournalEntryId: 'journal-asset', assetCode: 'AF-001',
     depreciationEvents: [
-      { id: 'dep-1', companyId: 'company-1', date: '2023-12-31', createdAt: '2023-12-31T23:00:00.000Z' },
-      { id: 'dep-2', companyId: 'company-1', date: '2024-12-31', createdAt: '2024-12-31T23:00:00.000Z' }
+      { id: 'dep-1', companyId: 'company-1', date: '2023-12-31', journalEntryId: 'journal-dep-1', createdAt: '2023-12-31T23:00:00.000Z' },
+      { id: 'dep-2', companyId: 'company-1', date: '2024-12-31', journalEntryId: 'journal-dep-2', createdAt: '2024-12-31T23:00:00.000Z' }
     ]
   }];
   input.throughDate = '2024-12-31';
+  input.journalEntries = [
+    { id: 'journal-asset', companyId: 'company-1', date: '2023-04-01' },
+    { id: 'journal-dep-1', companyId: 'company-1', date: '2023-12-31' },
+    { id: 'journal-dep-2', companyId: 'company-1', date: '2024-12-31' }
+  ];
 
   const plan = buildHistoricalAccountingReplayPlan(input);
 
@@ -131,6 +140,8 @@ test('incluye depreciaciones como eventos independientes y calcula los ejercicio
     'FIXED_ASSET_DEPRECIATION', 'FIXED_ASSET_DEPRECIATION'
   ]);
   assert.equal(plan.sourceEvents[0].linkedJournalEntryId, 'journal-asset');
+  assert.deepEqual(plan.sourceEvents[1].relatedJournalEntryIds, ['journal-asset']);
+  assert.equal(plan.sourceEvents[2].linkedJournalEntryId, 'journal-dep-1');
   assert.equal(plan.sourceEvents[1].effectiveDate, '2023-04-15');
   assert.deepEqual(plan.affectedExercises.map(item => item.fiscalYear), [2023, 2024]);
   assert.equal(plan.affectedExercises[0].includesYearEndClose, true);
@@ -179,6 +190,7 @@ test('usa fiscalDate para ubicar eventos ISLR en la cronología histórica', () 
     journalEntryId: 'journal-islr-1',
     createdAt: '2023-04-12T10:00:00.000Z'
   }];
+  input.journalEntries = [{ id: 'journal-islr-1', companyId: 'company-1', date: '2023-04-12' }];
 
   const plan = buildHistoricalAccountingReplayPlan(input);
 
@@ -196,11 +208,19 @@ test('exige fecha fiscal efectiva para comprobantes de retención IVA', () => {
     companyId: 'company-1',
     date: '2023-04-02',
     fiscalDate: '2023-04-05',
-    voucherNumber: '20230400000001'
+    voucherNumber: '20230400000001',
+    purchaseRecordId: 'purchase-vat-parent'
   }];
+  input.purchases = [{
+    id: 'purchase-vat-parent', companyId: 'company-1', invoiceDate: '2023-04-01',
+    accountCreditDate: '2023-04-05', journalEntryId: 'journal-vat-parent'
+  }];
+  input.journalEntries = [{ id: 'journal-vat-parent', companyId: 'company-1', date: '2023-04-05' }];
   const plan = buildHistoricalAccountingReplayPlan(input);
-  assert.equal(plan.sourceEvents[0].effectiveDate, '2023-04-05');
-  assert.equal(plan.sourceEvents[0].linkedJournalEntryId, null);
+  const voucherEvent = plan.sourceEvents.find(event => event.collection === 'vatVouchers');
+  assert.equal(voucherEvent?.effectiveDate, '2023-04-05');
+  assert.equal(voucherEvent?.linkedJournalEntryId, null);
+  assert.deepEqual(voucherEvent?.relatedJournalEntryIds, ['journal-vat-parent']);
 });
 
 test('bloquea comprobantes IVA históricos sin fecha fiscal efectiva verificable', () => {
@@ -291,4 +311,64 @@ test('no confunde eventos sin empresa explícita ni declaración con cruces entr
   const declarations = [{ id: 'declaration-2', companyId: 'company-2' }];
   assert.deepEqual(findCrossCompanyVatWithholdingEvents(events, declarations, 'company-1'), []);
   assert.deepEqual(findCrossCompanyVatWithholdingEvents(events, declarations, 'company-2'), []);
+});
+
+
+test('resuelve asientos de un comprobante ISLR mediante su evento fiscal vinculado', () => {
+  const input = base();
+  input.islrVouchers = [{
+    id: 'islr-voucher-1', companyId: 'company-1', date: '2023-04-12',
+    voucherNumber: 'ISLR-001', invoiceDate: '2023-04-01'
+  }];
+  input.islrFiscalEvents = [{
+    id: 'islr-event-1', companyId: 'company-1', fiscalDate: '2023-04-12',
+    voucherId: 'islr-voucher-1', journalEntryId: 'journal-islr-voucher'
+  }];
+  input.journalEntries = [{
+    id: 'journal-islr-voucher', companyId: 'company-1', date: '2023-04-12'
+  }];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+  const voucher = plan.sourceEvents.find(event => event.collection === 'islrVouchers');
+
+  assert.deepEqual(voucher?.relatedJournalEntryIds, ['journal-islr-voucher']);
+  assert.equal(plan.blockers.length, 0);
+});
+
+test('conserva los asientos actuales e históricos de una conciliación bancaria', () => {
+  const input = base();
+  input.bankStatementMovements = [{
+    id: 'bank-link-1', companyId: 'company-1', date: '2023-05-01',
+    isReconciled: true, journalEntryId: 'journal-bank-current',
+    reconciledWithJournalEntryId: 'journal-bank-current',
+    reconciledJournalEntryIds: ['journal-bank-old', 'journal-bank-current']
+  }];
+  input.journalEntries = [
+    { id: 'journal-bank-old', companyId: 'company-1', date: '2023-04-30' },
+    { id: 'journal-bank-current', companyId: 'company-1', date: '2023-05-01' }
+  ];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+  const bankEvent = plan.sourceEvents[0];
+
+  assert.equal(bankEvent.linkedJournalEntryId, 'journal-bank-current');
+  assert.deepEqual(bankEvent.relatedJournalEntryIds, ['journal-bank-current', 'journal-bank-old']);
+  assert.equal(plan.blockers.length, 0);
+});
+
+test('bloquea vínculos explícitos a asientos inexistentes o de otra empresa', () => {
+  const input = base();
+  input.sales = [
+    { id: 'sale-missing-entry', companyId: 'company-1', invoiceDate: '2023-06-01', journalEntryId: 'journal-missing' },
+    { id: 'sale-cross-company', companyId: 'company-1', invoiceDate: '2023-06-02', journalEntryId: 'journal-other-company' }
+  ];
+  input.journalEntries = [{
+    id: 'journal-other-company', companyId: 'company-2', date: '2023-06-02'
+  }];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+
+  assert.match(plan.blockers.join(' '), /asiento contable inexistente journal-missing/);
+  assert.match(plan.blockers.join(' '), /asiento journal-other-company de otra empresa/);
+  assert.equal(plan.canProceedToTransactionalReplay, false);
 });
