@@ -159,6 +159,26 @@ const recordedAt = (record: HistoricalReplayRecord): string | null => {
 };
 
 /**
+ * Returns only orphaned withholding events that can be attributed to the
+ * selected company. Legacy events without a source declaration and without an
+ * explicit companyId cannot safely block another company's reconstruction.
+ */
+export function findOrphanedVatWithholdingEvents(
+  events: HistoricalReplayRecord[],
+  declarations: HistoricalReplayRecord[],
+  companyId: string
+): HistoricalReplayRecord[] {
+  const declarationById = new Map(
+    declarations.map(declaration => [String(declaration.id || ''), declaration] as const)
+  );
+  return events.filter(event => {
+    const declaration = declarationById.get(String(event.declarationId || ''));
+    if (declaration) return false;
+    return String(event.companyId || '') === companyId;
+  });
+}
+
+/**
  * Creates a stable, read-only chronological plan for one company.
  * Same-day events use recordedAt when available; missing timestamps are
  * surfaced as warnings instead of inventing a business ordering.
