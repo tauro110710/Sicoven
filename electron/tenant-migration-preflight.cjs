@@ -12,15 +12,16 @@ const CONTROL_TABLES = Object.freeze([
   'auth_users',
   'auth_sessions',
   'license_state',
-  'company_database_registry',
-  'operation_receipts'
+  'company_database_registry'
 ]);
+const OPTIONAL_CONTROL_TABLES = Object.freeze(['operation_receipts']);
 const SNAPSHOT_TABLES = Object.freeze(['app_state']);
 const AUDIT_TABLES = Object.freeze(['audit_events']);
 const INTERNAL_TABLES = Object.freeze(['sqlite_sequence', 'sqlite_stat1', 'sqlite_stat4']);
 
 const CLASSIFICATION = new Map([
   ...CONTROL_TABLES.map(name => [name, 'CONTROL']),
+  ...OPTIONAL_CONTROL_TABLES.map(name => [name, 'CONTROL']),
   ...SNAPSHOT_TABLES.map(name => [name, 'SNAPSHOT']),
   ...AUDIT_TABLES.map(name => [name, 'AUDIT']),
   ...GLOBAL_REFERENCE_TABLES.map(name => [name, 'GLOBAL_REFERENCE']),
@@ -95,4 +96,4 @@ function inspectLegacyDatabase(db) {
   });
 }
 
-module.exports = { CONTROL_TABLES, SNAPSHOT_TABLES, AUDIT_TABLES, REQUIRED_RELATIONAL_TABLES, inspectLegacyDatabase };
+module.exports = { CONTROL_TABLES, OPTIONAL_CONTROL_TABLES, SNAPSHOT_TABLES, AUDIT_TABLES, REQUIRED_RELATIONAL_TABLES, inspectLegacyDatabase };
