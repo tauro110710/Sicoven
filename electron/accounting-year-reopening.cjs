@@ -326,25 +326,38 @@ function reopenAccountingYear(db, input, actor) {
       if (String(entry.id) === String(opening.id)) return { ...entry, isAdjusted: true, reversedByEntryId: openingReversal.id };
       return entry;
     }).concat(closingReversal, openingReversal);
+    const reopeningId = crypto.randomUUID();
+    const reopenedAt = new Date().toISOString().slice(0, 10);
     let fiscalExercises = company.fiscalExercises;
     if (Array.isArray(fiscalExercises) && fiscalExercises.length > 0) {
       const closingIndex = fiscalExercises.findIndex(item =>
         String(item.companyId) === companyId && String(item.closingEntryId || '') === String(closing.id));
-      const openingIndex = fiscalExercises.findIndex(item =>
-        String(item.companyId) === companyId && String(item.openingEntryId || '') === String(opening.id));
-      if (closingIndex < 0 || openingIndex !== closingIndex + 1 ||
-          fiscalExercises[closingIndex].status !== 'CERRADO') {
-        throw new Error('El calendario fiscal no coincide con los asientos originales del ciclo; se bloqueó la reapertura.');
+      const openingIndex = closingIndex >= 0
+        ? fiscalExercises.findIndex((item, index) => index > closingIndex &&
+          String(item.companyId) === companyId && String(item.openingEntryId || '') === String(opening.id))
+        : -1;
+      const target = closingIndex >= 0 ? fiscalExercises[closingIndex] : null;
+      const next = closingIndex >= 0 ? fiscalExercises[closingIndex + 1] : null;
+      const cycles = Array.isArray(target?.cycles) && target.cycles.length
+        ? target.cycles
+        : (target?.closingEntryId && target?.openingEntryId && target?.closedAt
+          ? [{ cycleNumber: 1, closingEntryId: target.closingEntryId,
+              openingEntryId: target.openingEntryId, closedAt: target.closedAt }]
+          : []);
+      const cycleIndex = cycles.findIndex(cycle =>
+        String(cycle.closingEntryId) === String(closing.id) &&
+        String(cycle.openingEntryId) === String(opening.id));
+      if (!target || !next || openingIndex !== closingIndex + 1 ||
+          target.status !== 'CERRADO' || cycleIndex !== cycles.length - 1 ||
+          cycles[cycleIndex].reopenedAt || String(next.openingEntryId || '') !== String(opening.id)) {
+        throw new Error('El calendario fiscal no coincide con el último ciclo y sus asientos originales; se bloqueó la reapertura.');
       }
+      const updatedCycles = cycles.map((cycle, index) => index === cycleIndex
+        ? { ...cycle, reopenedAt, reopeningId }
+        : cycle);
       fiscalExercises = fiscalExercises.map((item, index) => {
-        if (index === closingIndex) {
-          const { closingEntryId, closedAt, ...rest } = item;
-          return { ...rest, status: 'ABIERTO' };
-        }
-        if (index === openingIndex) {
-          const { openingEntryId, ...rest } = item;
-          return rest;
-        }
+        if (index === closingIndex) return { ...item, status: 'REABIERTO', cycles: updatedCycles };
+        if (index === openingIndex) return { ...item, openingEntryId: undefined };
         return item;
       });
     }
@@ -362,7 +375,7 @@ function reopenAccountingYear(db, input, actor) {
       journalEntries
     };
     const details = {
-      id: crypto.randomUUID(), companyId, companyName: String(company.name || ''),
+      id: reopeningId, companyId, companyName: String(company.name || ''),
       cycleNumber: Number(evidence.cycleNumber), closingEntryId: closing.id,
       openingEntryId: opening.id, closingReversalEntryId: closingReversal.id,
       openingReversalEntryId: openingReversal.id,
