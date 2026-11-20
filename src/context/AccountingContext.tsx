@@ -5291,6 +5291,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const companyId = currentCompany.id;
     const withholdingDeclarationById = new Map(vatWithholdingDeclarations.map(declaration => [declaration.id, declaration]));
     const orphanedWithholdingEvents = vatWithholdingDeclarationEvents.filter(event => !withholdingDeclarationById.has(event.declarationId));
+    const verifiedLegacyFiscalDateByVoucherId = new Map<string, string>();
+    const conflictingLegacyVoucherDates = new Set<string>();
+    for (const declaration of vatWithholdingDeclarations) {
+      if (declaration.companyId !== companyId) continue;
+      for (const assignment of declaration.legacyDateAssignments || []) {
+        const priorDate = verifiedLegacyFiscalDateByVoucherId.get(assignment.voucherId);
+        if (priorDate && priorDate !== assignment.confirmedFiscalDate) conflictingLegacyVoucherDates.add(assignment.voucherId);
+        else verifiedLegacyFiscalDateByVoucherId.set(assignment.voucherId, assignment.confirmedFiscalDate);
+      }
+    }
     const monthEnd = (period: string): string => {
       const match = /^(\d{4})-?(\d{2})$/.exec(String(period || ''));
       if (!match) return '';
@@ -5310,13 +5320,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       movements: replayRecords(movements),
       bankStatementMovements: replayRecords(bankStatementMovements.map(movement => ({
         ...movement,
-        journalEntryId: movement.reconciledWithJournalEntryId || undefined
+        journalEntryId: movement.isReconciled ? movement.reconciledWithJournalEntryId : undefined
       }))),
       creditSettlements: replayRecords(creditSettlements),
       supplierAdvanceSettlements: replayRecords(supplierAdvanceSettlements),
       supplierDirectAdvances: replayRecords(supplierDirectAdvances),
       fixedAssets: replayRecords(fixedAssets),
-      vatVouchers: replayRecords(vatVouchers),
+      vatVouchers: replayRecords(vatVouchers.map(voucher => ({
+        ...voucher,
+        fiscalDate: voucher.fiscalDate || verifiedLegacyFiscalDateByVoucherId.get(voucher.id)
+      }))),
       islrVouchers: replayRecords(islrVouchers),
       vatWithholdingDeclarations: replayRecords(vatWithholdingDeclarations),
       vatWithholdingDeclarationEvents: replayRecords(vatWithholdingDeclarationEvents.map(event => ({
@@ -5334,8 +5347,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (orphanedWithholdingEvents.length) {
       plan.blockers.push('Hay ' + orphanedWithholdingEvents.length +
         ' evento(s) de declaración de retenciones IVA sin declaración de origen; deben resolverse antes de reconstruir.');
-      plan.canProceedToTransactionalReplay = false;
     }
+    if (conflictingLegacyVoucherDates.size) {
+      plan.blockers.push('Hay comprobantes de retención IVA con fechas fiscales históricas verificadas contradictorias: ' +
+        [...conflictingLegacyVoucherDates].join(', ') + '.');
+    }
+    if (plan.blockers.length) plan.canProceedToTransactionalReplay = false;
     return plan;
   };
 
