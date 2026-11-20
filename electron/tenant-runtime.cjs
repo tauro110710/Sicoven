@@ -138,6 +138,7 @@ function createTenantRuntime({
         String(audit.actorUsername || '') !== actorUsername) {
       throw new Error('La evidencia append-only de creación no coincide con la intención durable.');
     }
+    const snapshotRow = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     const receiptRow = db.prepare(`
       SELECT request_hash,actor_user_id,actor_username,result_json
       FROM operation_receipts
@@ -145,7 +146,9 @@ function createTenantRuntime({
     `).get(String(company.id), operationId);
     let receiptResult;
     try { receiptResult = receiptRow ? JSON.parse(receiptRow.result_json) : null; } catch {}
-    if (!receiptRow || !/^[a-f0-9]{64}$/i.test(String(receiptRow.request_hash || '')) ||
+    if (!snapshotRow || !receiptRow ||
+        !/^[a-f0-9]{64}$/i.test(String(receiptRow.request_hash || '')) ||
+        hashOperationRequest(String(snapshotRow.state_json)) !== String(receiptRow.request_hash) ||
         Number(receiptRow.actor_user_id) !== actorId ||
         (receiptRow.actor_username != null && String(receiptRow.actor_username) !== actorUsername) ||
         !receiptResult || receiptResult.ok !== true) {
