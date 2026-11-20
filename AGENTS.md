@@ -165,7 +165,7 @@ Alcance inicial en esta rama:
 - Helper `runIdempotentOperation`: comprueba recibo, ejecuta el efecto y escribe resultado dentro de una transacción SQLite única; no registra resultados rechazados.
 - Reapertura de período y ejercicio: recibo por empresa/tipo/ID estable, hash de parámetros y actor.
 - Centro de Correcciones: registro de auditoría, creación de expediente, inicio/autorización de ejecución y finalización con recuperación del resultado.
-- Preload reintenta el mismo request con el mismo ID si la promesa IPC falla; nunca genera un ID nuevo en el reintento.
+- Preload reintenta el mismo request con el mismo ID dentro de la invocación IPC; nunca genera un ID nuevo en ese reintento. El ID fallback creado dentro de preload no sobrevive por sí mismo al cierre/reinicio del renderer o de la aplicación. No afirmar recuperación post-reinicio hasta que cada caller persista una clave/intent durable y exista consulta/reanudación verificable al iniciar.
 - Pruebas añadidas para helper, reapertura anual y reapertura de período. Aún deben pasar CI/Windows y revisión completa antes de integrar.
 
 Pendiente dentro de esta fase:
