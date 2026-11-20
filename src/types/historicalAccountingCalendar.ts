@@ -150,20 +150,23 @@ export function roundHistoricalPresentationAmount(amount: string | number, decim
     throw new Error('La precisión de presentación debe estar entre 0 y 12 decimales.');
   }
   const raw = String(amount).trim();
-  if (!/^-?\d+(\.\d+)?$/.test(raw)) throw new Error('El importe debe ser un número decimal válido.');
-  const [whole, fraction = ''] = raw.split('.');
-  const coefficient = BigInt(whole + fraction.padEnd(decimalPlaces + 1, '0').slice(0, decimalPlaces + 1));
-  const divisor = 10n ** BigInt(Math.max(0, fraction.length - decimalPlaces));
-  let rounded = coefficient;
+  if (!/^-?\\d+(\\.\\d+)?$/.test(raw)) throw new Error('El importe debe ser un número decimal válido.');
+  const negative = raw.startsWith('-');
+  const unsigned = negative ? raw.slice(1) : raw;
+  const [whole, fraction = ''] = unsigned.split('.');
+  let rounded: bigint;
   if (fraction.length > decimalPlaces) {
-    const remainder = coefficient % 10n;
-    rounded = coefficient / 10n + (remainder >= 5n ? 1n : 0n);
-  } else if (fraction.length < decimalPlaces) {
+    const kept = whole + fraction.slice(0, decimalPlaces);
+    const nextDigit = Number(fraction[decimalPlaces]);
+    rounded = BigInt(kept || '0') + (nextDigit >= 5 ? 1n : 0n);
+  } else {
     rounded = BigInt(whole + fraction.padEnd(decimalPlaces, '0'));
   }
   const digits = rounded.toString().padStart(decimalPlaces + 1, '0');
-  if (decimalPlaces === 0) return digits;
-  return digits.slice(0, -decimalPlaces) + '.' + digits.slice(-decimalPlaces);
+  const formatted = decimalPlaces === 0
+    ? digits
+    : digits.slice(0, -decimalPlaces) + '.' + digits.slice(-decimalPlaces);
+  return negative && rounded !== 0n ? '-' + formatted : formatted;
 }
 
 function isValidIsoDate(value: string): boolean {
