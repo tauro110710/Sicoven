@@ -159,6 +159,11 @@ function createTenantRuntime({
     );
   }
 
+  function verifyCompanyCreation(company, operation) {
+    const db = manager.openCompany(company.id);
+    return verifyCompanyCreationEvidence(db, company, operation);
+  }
+
   function closeCompany(companyId) {
     return manager.closeCompany(companyId);
   }
@@ -178,6 +183,7 @@ function createTenantRuntime({
     saveAccounting,
     createCompany,
     recoverOrphanedCompany,
+    verifyCompanyCreation,
     migrateLegacyDatabase,
     updateCompanyMetadata,
     closeCompany,
