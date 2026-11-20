@@ -245,6 +245,18 @@ describe('reconstrucción de provisión VNR desde el Libro Diario', () => {
     assert.equal(prepared.salesPriceBs, 11470);
   });
 
+  it('accepts reconstruction start dates in prior accounting years such as 2010 and 2000', () => {
+    for (const startDate of ['2010-01-01', '2000-01-01']) {
+      const [prepared] = prepareProductsForHistoricalReconstruction([{
+        id: 'historical-' + startDate, code: 'ART-HIST', name: 'Artículo histórico', currentStock: 0,
+        avgCostBs: 100, avgCostUsd: 1, lastCostBs: 100, lastCostUsd: 1
+      }], startDate);
+      assert.equal(prepared.openingDate, startDate);
+      assert.equal(prepared.openingBcvRate, 0);
+      assert.equal(prepared.avgCostBs, 0);
+    }
+  });
+
   it('rejects an invalid historical reconstruction start date', () => {
     assert.throws(() => prepareProductsForHistoricalReconstruction([], '2026-02-30'), /fecha inicial/i);
   });
