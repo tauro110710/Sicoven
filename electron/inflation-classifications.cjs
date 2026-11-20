@@ -1,10 +1,15 @@
 const crypto = require('node:crypto');
 const { hasFullSystemAccess } = require('./auth-roles.cjs');
+const { createOperationReceiptIdentity, runIdempotentOperation } = require('./operation-receipts.cjs');
 const CLASSIFICATIONS = new Set(['MONETARY','NON_MONETARY','MIXED','NOT_APPLICABLE']);
 const BASES = new Set(['CASH_OR_FIXED_CURRENCY','INDEX_LINKED','GOODS_OR_SERVICES','HISTORICAL_COST','FAIR_VALUE','NET_REALIZABLE_VALUE','REVALUED','MIXED','FLOW']);
 const BALANCE_TYPES = new Set(['ACTIVO','PASIVO','PATRIMONIO']);
 const FLOW_TYPES = new Set(['INGRESOS','COSTOS','GASTOS']);
 
+function operationRequest(input) {
+  const { operationId, ...request } = input || {};
+  return request;
+}
 function validDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(value + 'T00:00:00.000Z');
@@ -152,7 +157,9 @@ function registerInflationClassificationIpc({ipcMain,db,licenseView,getActiveSes
     const actor=requireAdmin(licenseView,getActiveSession,token);
     return runWithDatabase(token,(activeDb,companyId)=>{
       if(companyId&&String(input?.companyId||'')!==companyId) throw new Error('La clasificación no pertenece a la empresa activa.');
-      return saveInflationClassification(activeDb,input,actor);
+      const identity = createOperationReceiptIdentity(input, companyId || input?.companyId,
+        'inflation.classification_save', operationRequest(input), actor);
+      return runIdempotentOperation(activeDb, identity, () => saveInflationClassification(activeDb,input,actor));
     });
   });
   ipcMain.handle('sicoven:inflation-classification-review',(_event,token,input)=>{
@@ -162,7 +169,9 @@ function registerInflationClassificationIpc({ipcMain,db,licenseView,getActiveSes
         const existing=activeDb.prepare('SELECT company_id FROM inflation_classification_decisions WHERE id=?').get(String(input?.decisionId||''));
         if(!existing||String(existing.company_id)!==companyId) throw new Error('La revisión no pertenece a la empresa activa.');
       }
-      return reviewInflationClassification(activeDb,input,actor);
+      const identity = createOperationReceiptIdentity(input, existing.company_id,
+        'inflation.classification_review', operationRequest(input), actor);
+      return runIdempotentOperation(activeDb, identity, () => reviewInflationClassification(activeDb,input,actor));
     });
   });
 }
