@@ -133,17 +133,28 @@ export interface CompanyTaxStatusPeriod {
   recordedAt: string;
 }
 
-/** Persisted fiscal calendar record; links are written only after the SQLite close/open transaction succeeds. */
+/** One immutable accounting close/open cycle; reopened cycles remain in history. */
+export interface PersistedFiscalExerciseCycle {
+  cycleNumber: number;
+  closingEntryId: string;
+  openingEntryId: string;
+  closedAt: string;
+  reopenedAt?: string;
+  reopeningId?: string;
+}
+
+/** Persisted fiscal calendar record. A reopened cycle keeps its original entry links. */
 export interface PersistedFiscalExercise {
   id: string;
   companyId: string;
   fiscalYear: number;
   startDate: string;
   endDate: string;
-  status: 'ABIERTO' | 'EN_CIERRE' | 'CERRADO';
+  status: 'ABIERTO' | 'EN_CIERRE' | 'CERRADO' | 'REABIERTO';
   closingEntryId?: string;
   openingEntryId?: string;
   closedAt?: string;
+  cycles?: PersistedFiscalExerciseCycle[];
 }
 
 export interface Company {
