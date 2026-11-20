@@ -788,7 +788,6 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
       (withDatabase !== null && typeof withDatabase !== 'function')) {
     throw new Error('No se pudo registrar el puente de persistencia contable de SICOVEN.');
   }
-  initializeOperationReceiptSchema(db);
   if (!withDatabase) initializeAccountingPersistenceSchema(db);
   const runWithDatabase = (token, operation) => withDatabase
     ? withDatabase(token, (activeDb, companyId) => operation(activeDb, companyId))
