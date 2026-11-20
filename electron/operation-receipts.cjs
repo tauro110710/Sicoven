@@ -185,7 +185,7 @@ function prepareOperationIntent(db, input, companyId, actor) {
     throw new Error('La intención no pertenece a la empresa activa.');
   }
   const serialized = JSON.stringify(request);
-  if (typeof serialized !== 'string' || serialized.length > 1024 * 1024) {
+  if (typeof serialized !== 'string' || serialized.length > 8 * 1024 * 1024) {
     throw new Error('La solicitud pendiente supera el límite permitido de almacenamiento local.');
   }
   const requestHash = hashOperationRequest(serialized);
@@ -230,8 +230,14 @@ function listPendingOperationIntents(db, companyId, actor) {
     ORDER BY i.sequence
   `).all(selectedCompanyId, identity.userId, identity.username);
   return rows.map(row => {
-    if (!Object.prototype.hasOwnProperty.call(DURABLE_OPERATION_TYPES, String(row.ipc_channel))) {
+    const channel = String(row.ipc_channel);
+    const requestMode = String(row.request_mode);
+    if (!Object.prototype.hasOwnProperty.call(DURABLE_OPERATION_TYPES, channel)) {
       throw new Error('Existe una operación pendiente con un canal no reconocido; se bloqueó su recuperación automática.');
+    }
+    if (!['object','payroll-run-confirm'].includes(requestMode) ||
+        (requestMode === 'payroll-run-confirm') !== (channel === 'sicoven:payroll-run-confirm')) {
+      throw new Error('Una operación pendiente contiene un modo de invocación incompatible; se bloqueó su recuperación automática.');
     }
     let request;
     try { request = JSON.parse(row.request_json); }
@@ -243,7 +249,7 @@ function listPendingOperationIntents(db, companyId, actor) {
     return {
       operationId: String(row.operation_id),
       channel: String(row.ipc_channel),
-      requestMode: String(row.request_mode),
+      requestMode,
       request
     };
   });
