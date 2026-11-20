@@ -197,8 +197,10 @@ export function buildHistoricalAccountingReplayPlan(
         blockers.push('El registro ' + String(spec.collection) + '/' + id + ' no conserva una fecha efectiva válida.');
         continue;
       }
-      if (effectiveDate < startDate) continue;
       const created = recordedAt(record);
+      // El abono en cuenta es un evento contable independiente: debe evaluarse
+      // incluso cuando la factura original queda antes del inicio del rango.
+      if (effectiveDate < startDate) continue;
       collected.push({
         key: String(spec.collection) + ':' + id,
         collection: String(spec.collection),
