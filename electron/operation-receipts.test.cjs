@@ -207,7 +207,7 @@ test('a receipt from another operation type cannot complete a prepared intent', 
       actor: durableActor
     };
     assert.throws(() => runIdempotentOperation(db, wrongType, () => ({ ok: true, id: 'wrong' })),
-      /no pertenece al mismo usuario/);
+      /no coincide con el tipo o el usuario/);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 0);
     assert.equal(listPendingOperationIntents(db, 'company-1', durableActor).length, 1);
   } finally { db.close(); }
