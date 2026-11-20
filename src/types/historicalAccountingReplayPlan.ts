@@ -26,6 +26,7 @@ export interface HistoricalReplayRecord {
   invoiceNumber?: string;
   documentType?: string;
   journalEntryId?: string;
+  sourceJournalEntryId?: string;
   isCancelled?: boolean;
   isReversed?: boolean;
   filedAt?: string;
@@ -66,6 +67,7 @@ export type HistoricalReplaySourceKind =
   | 'SUPPLIER_ADVANCE_SETTLEMENT'
   | 'SUPPLIER_DIRECT_ADVANCE'
   | 'FIXED_ASSET'
+  | 'FIXED_ASSET_PLACED_IN_SERVICE'
   | 'FIXED_ASSET_DEPRECIATION'
   | 'VAT_VOUCHER'
   | 'ISLR_VOUCHER'
@@ -125,7 +127,7 @@ const SOURCE_COLLECTIONS: CollectionSpec[] = [
   { collection: 'creditSettlements', kind: 'CREDIT_SETTLEMENT', dateFields: ['settlementDate', 'date'], referenceFields: ['reference', 'documentId'] },
   { collection: 'supplierAdvanceSettlements', kind: 'SUPPLIER_ADVANCE_SETTLEMENT', dateFields: ['settlementDate', 'date'], referenceFields: ['targetPurchaseId', 'supplierRif'] },
   { collection: 'supplierDirectAdvances', kind: 'SUPPLIER_DIRECT_ADVANCE', dateFields: ['date'], referenceFields: ['reference', 'supplierRif'] },
-  { collection: 'fixedAssets', kind: 'FIXED_ASSET', dateFields: ['acquisitionDate', 'serviceDate'], referenceFields: ['assetCode', 'description'] },
+  { collection: 'fixedAssets', kind: 'FIXED_ASSET', dateFields: ['acquisitionDate'], referenceFields: ['assetCode', 'description'] },
   { collection: 'vatVouchers', kind: 'VAT_VOUCHER', dateFields: ['date'], referenceFields: ['documentNumber', 'reference'] },
   { collection: 'islrVouchers', kind: 'ISLR_VOUCHER', dateFields: ['date'], referenceFields: ['documentNumber', 'reference'] },
   { collection: 'vatWithholdingDeclarations', kind: 'VAT_WITHHOLDING_DECLARATION', dateFields: ['periodEndDate', 'endDate', 'date'], referenceFields: ['period', 'declarationNumber'] },
@@ -206,7 +208,7 @@ export function buildHistoricalAccountingReplayPlan(
         effectiveDate,
         recordedAt: created,
         reference: firstText(record, spec.referenceFields),
-        linkedJournalEntryId: spec.kind === 'PURCHASE' ? null : (typeof record.journalEntryId === 'string' ? record.journalEntryId : null),
+        linkedJournalEntryId: spec.kind === 'PURCHASE' ? null : (spec.kind === 'FIXED_ASSET' ? (typeof record.sourceJournalEntryId === 'string' ? record.sourceJournalEntryId : null) : (typeof record.journalEntryId === 'string' ? record.journalEntryId : null)),
         sourceIndex: sourceIndex++
       });
       if (spec.kind === 'PURCHASE' && record.accountCreditDate !== undefined && record.accountCreditDate !== null && record.accountCreditDate !== '') {
@@ -243,6 +245,25 @@ export function buildHistoricalAccountingReplayPlan(
   for (const asset of (Array.isArray(input.fixedAssets) ? input.fixedAssets : [])) {
     if (String(asset.companyId || '') !== companyId) continue;
     const assetId = String(asset.id || '').trim();
+    const serviceDate = String(asset.serviceDate || '').slice(0, 10);
+    if (serviceDate && serviceDate !== String(asset.acquisitionDate || '').slice(0, 10)) {
+      if (!isIsoDate(serviceDate)) {
+        blockers.push('El activo fijo ' + assetId + ' no conserva una fecha válida de puesta en servicio.');
+      } else if (serviceDate >= startDate) {
+        collected.push({
+          key: 'fixedAssets:' + assetId + ':service',
+          collection: 'fixedAssets.serviceDate',
+          sourceId: assetId,
+          companyId,
+          kind: 'FIXED_ASSET_PLACED_IN_SERVICE',
+          effectiveDate: serviceDate,
+          recordedAt: recordedAt(asset),
+          reference: String(asset.assetCode || assetId),
+          linkedJournalEntryId: null,
+          sourceIndex: sourceIndex++
+        });
+      }
+    }
     for (const event of (Array.isArray(asset.depreciationEvents) ? asset.depreciationEvents : [])) {
       const eventId = String(event.id || '').trim();
       const effectiveDate = String(event.date || '').slice(0, 10);
