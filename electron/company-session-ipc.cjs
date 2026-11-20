@@ -475,7 +475,7 @@ function registerCompanySessionIpc({
     if (existingCompany &&
         (String(existingCompany.rif || '').trim().toUpperCase() !== normalizedRif ||
          String(existingCompany.name || '').trim() !== String(company.name || '').trim())) {
-      throw new Error('El identificador de creación ya pertenece a otra ficha empresarial; utilice una nueva operación.');
+      throw new Error('La clave de creación ya está asociada a otra empresa o ficha; utilice una nueva operación.');
     }
     const duplicateRif = registeredCompanies.find(item =>
       String(item.id) !== operationId &&
