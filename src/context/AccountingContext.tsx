@@ -1465,7 +1465,26 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               financialDisclosures: [],
               displayCurrency: 'DUAL' as const
             };
-            const initialSave = await window.sicovenStore.save(token, emptyAccountingState);
+            const initialOperationId = window.crypto.randomUUID();
+            let initialSave;
+            try {
+              initialSave = await window.sicovenStore.save(token, emptyAccountingState, initialOperationId);
+            } catch {
+              const receipt = await window.sicovenStore.resolveSave(token, emptyAccountingState, initialOperationId)
+                .catch(() => ({ found: false as const }));
+              if (receipt.found && receipt.result?.ok === true) {
+                initialSave = receipt.result;
+              } else {
+                try {
+                  initialSave = await window.sicovenStore.save(token, emptyAccountingState, initialOperationId);
+                } catch (retryError) {
+                  const confirmed = await window.sicovenStore.resolveSave(token, emptyAccountingState, initialOperationId)
+                    .catch(() => ({ found: false as const }));
+                  if (confirmed.found && confirmed.result?.ok === true) initialSave = confirmed.result;
+                  else throw retryError;
+                }
+              }
+            }
             if (initialSave?.ok !== true) {
               throw new Error('SQLite no confirmó la inicialización del estado contable vacío.');
             }
