@@ -153,6 +153,8 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       : requestedUnitCostBs;
 
     if (source.type === 'ENTRADA') {
+      let entryUnitCostBs = effectiveUnitCostBs;
+      let entryUnitCostUsd = roundUsd(effectiveUnitCostBs / rate);
       if (source.concept === 'DEVOLUCION_CLIENTE') {
         const original = source.correctionForMovementId ? originalById.get(source.correctionForMovementId) : undefined;
         if (!original || original.type !== 'SALIDA' || original.concept !== 'VENTA' ||
@@ -164,16 +166,21 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
           throw new Error('Las devoluciones acumuladas superan la cantidad de la venta original ' + (original.documentRef || original.id) + '.');
         }
         returnedBySale.set(original.id, returned);
+        if (state.product.costingMethod === 'PEPS') {
+          throw new Error('La devolución PEPS requiere conservar el detalle de capas consumidas por la venta original; no se aplicará un costo promedio estimado.');
+        }
+        entryUnitCostBs = Number(original.unitCostBs);
+        entryUnitCostUsd = Number(original.unitCostUsd);
       }
-      if (!validNonNegative(effectiveUnitCostBs)) {
+      if (!validNonNegative(entryUnitCostBs) || !validNonNegative(entryUnitCostUsd)) {
         throw new Error('El costo efectivo de entrada no es válido en ' + (source.documentRef || id) + '.');
       }
-      unitCostBs = effectiveUnitCostBs;
-      unitCostUsd = roundUsd(effectiveUnitCostBs / rate);
+      unitCostBs = entryUnitCostBs;
+      unitCostUsd = entryUnitCostUsd;
       if (state.product.costingMethod === 'PEPS') {
         const priorLayers = reconstructFifoLayers(state.history.map(toFifoSnapshot), state.quantity);
-        totalCostBs = roundBs(requestedQuantity * effectiveUnitCostBs);
-        totalCostUsd = roundUsd(totalCostBs / rate);
+        totalCostBs = roundBs(requestedQuantity * entryUnitCostBs);
+        totalCostUsd = roundUsd(requestedQuantity * entryUnitCostUsd);
         nextQuantity += requestedQuantity;
         const totalBs = roundBs(priorLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0) + totalCostBs);
         const totalUsd = roundUsd(priorLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0) + totalCostUsd);
@@ -182,10 +189,10 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       } else {
         const weighted = calculateWeightedAverageCostDual(
           state.quantity, state.averageBs, state.averageUsd,
-          requestedQuantity, effectiveUnitCostBs, unitCostUsd
+          requestedQuantity, entryUnitCostBs, entryUnitCostUsd
         );
-        totalCostBs = roundBs(requestedQuantity * effectiveUnitCostBs);
-        totalCostUsd = roundUsd(requestedQuantity * unitCostUsd);
+        totalCostBs = roundBs(requestedQuantity * entryUnitCostBs);
+        totalCostUsd = roundUsd(requestedQuantity * entryUnitCostUsd);
         nextQuantity = weighted.quantity;
         nextAverageBs = weighted.unitCostBs;
         nextAverageUsd = weighted.unitCostUsd;
