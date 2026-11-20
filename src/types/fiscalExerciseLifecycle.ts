@@ -69,6 +69,14 @@ export function ensureFiscalExerciseCalendar(
   return exercises;
 }
 
+/** Builds only the active and immediately following periods; it never labels undocumented prior years as closed. */
+export function buildPersistedFiscalExerciseCalendar(
+  company: Pick<Company, 'id' | 'accountingStartDate' | 'fiscalYear' | 'fiscalExercises'>,
+  _journalEntries: unknown[] = []
+): PersistedFiscalExercise[] {
+  return ensureFiscalExerciseCalendar(company, Number(company.fiscalYear));
+}
+
 export interface FiscalExerciseCycleInput {
   exercises: PersistedFiscalExercise[];
   companyId: string;
