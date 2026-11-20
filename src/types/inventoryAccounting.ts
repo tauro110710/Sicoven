@@ -227,7 +227,7 @@ export function calculateWeightedAverageCost(
     [existingQuantity, existingUnitCostBs],
     [incomingQuantity, incomingUnitCostBs]
   ], 2);
-  const totalCostUsd = decimalToNumber(roundDecimal(divideDecimal(totalCostBs, exchangeRate, 6), 6));
+  const totalCostUsd = decimalToNumber(roundDecimal(decimalToString(divideDecimal(totalCostBs, exchangeRate, 6)), 6));
   const unitCostBs = quantity > 0 ? exactQuotient(totalCostBs, quantity) : 0;
   const unitCostUsd = quantity > 0 ? exactQuotient(unitCostBs, exchangeRate) : 0;
   return { quantity, totalCostBs, totalCostUsd, unitCostBs, unitCostUsd };
