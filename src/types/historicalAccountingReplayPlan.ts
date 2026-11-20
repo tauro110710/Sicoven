@@ -128,7 +128,7 @@ const SOURCE_COLLECTIONS: CollectionSpec[] = [
   { collection: 'supplierAdvanceSettlements', kind: 'SUPPLIER_ADVANCE_SETTLEMENT', dateFields: ['settlementDate', 'date'], referenceFields: ['targetPurchaseId', 'supplierRif'] },
   { collection: 'supplierDirectAdvances', kind: 'SUPPLIER_DIRECT_ADVANCE', dateFields: ['date'], referenceFields: ['reference', 'supplierRif'] },
   { collection: 'fixedAssets', kind: 'FIXED_ASSET', dateFields: ['acquisitionDate'], referenceFields: ['assetCode', 'description'] },
-  { collection: 'vatVouchers', kind: 'VAT_VOUCHER', dateFields: ['date'], referenceFields: ['documentNumber', 'reference'] },
+  { collection: 'vatVouchers', kind: 'VAT_VOUCHER', dateFields: ['fiscalDate'], referenceFields: ['voucherNumber', 'invoiceNumber', 'controlNumber'] },
   { collection: 'islrVouchers', kind: 'ISLR_VOUCHER', dateFields: ['date'], referenceFields: ['documentNumber', 'reference'] },
   { collection: 'vatWithholdingDeclarations', kind: 'VAT_WITHHOLDING_DECLARATION', dateFields: ['periodEndDate', 'endDate', 'date'], referenceFields: ['period', 'declarationNumber'] },
   { collection: 'vatWithholdingDeclarationEvents', kind: 'VAT_WITHHOLDING_EVENT', dateFields: ['date', 'occurredAt'], referenceFields: ['declarationId', 'eventType'] },
@@ -235,6 +235,9 @@ export function buildHistoricalAccountingReplayPlan(
       } else if (spec.kind === 'VAT_WITHHOLDING_DECLARATION' &&
           (record.status === 'FILED' || Boolean(record.filedAt))) {
         externalDependencies.push('Declaración de retenciones IVA presentada: ' + id + '. Su rectificación debe coordinarse con el procedimiento fiscal correspondiente.');
+      }
+      if ((spec.kind === 'VAT_WITHHOLDING_EVENT' || spec.kind === 'VAT_OWN_EVENT') && record.eventType === 'FILED') {
+        externalDependencies.push('Declaración fiscal presentada mediante evento ' + id + '. Su rectificación debe coordinarse con el procedimiento fiscal correspondiente.');
       }
       if (spec.kind === 'BANK_STATEMENT_MOVEMENT' && record.isReconciled === true) {
         externalDependencies.push('Movimiento bancario conciliado: ' + id + '. Requiere recalcular y volver a validar la conciliación.');
