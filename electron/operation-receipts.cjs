@@ -263,7 +263,7 @@ function completeOperationIntent(db, identityInput) {
   if (String(intent.operation_type) !== identity.operationType ||
       Number(intent.actor_user_id) !== identity.actorUserId ||
       String(intent.actor_username) !== String(identity.actorUsername || '')) {
-    throw new Error('La operación confirmada no pertenece al mismo usuario que preparó la intención durable.');
+    throw new Error('La operación confirmada no coincide con el tipo o el usuario de la intención durable.');
   }
   const existing = db.prepare(`
     SELECT 1 AS found FROM operation_intent_completions
