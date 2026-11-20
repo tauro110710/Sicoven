@@ -5296,6 +5296,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     for (const declaration of vatWithholdingDeclarations) {
       if (declaration.companyId !== companyId) continue;
       for (const assignment of declaration.legacyDateAssignments || []) {
+        if (!declaration.voucherIds.includes(assignment.voucherId) ||
+            !isValidIsoDate(assignment.confirmedFiscalDate) ||
+            String(assignment.note || '').trim().length < 10) continue;
         const priorDate = verifiedLegacyFiscalDateByVoucherId.get(assignment.voucherId);
         if (priorDate && priorDate !== assignment.confirmedFiscalDate) conflictingLegacyVoucherDates.add(assignment.voucherId);
         else verifiedLegacyFiscalDateByVoucherId.set(assignment.voucherId, assignment.confirmedFiscalDate);
