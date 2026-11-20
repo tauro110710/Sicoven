@@ -40,7 +40,7 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   listAccessibleCompanies: (token) => ipcRenderer.invoke('sicoven:company-list-accessible', token),
   getTenantRegistryStatus: (token) => ipcRenderer.invoke('sicoven:company-registry-status', token),
   selectActiveCompany: (token, companyId) => ipcRenderer.invoke('sicoven:company-select-active', token, { companyId }),
-  createCompany: (token, input) => ipcRenderer.invoke('sicoven:company-create', token, input),
+  createCompany: (token, input) => invokeRecoverableOperation('sicoven:company-create', token, input),
   getActiveCompany: (token) => ipcRenderer.invoke('sicoven:company-get-active', token),
   updateCompanyMetadata: (token, input) => ipcRenderer.invoke('sicoven:company-update-metadata', token, input),
   listAuditEvents: (token, limit) => ipcRenderer.invoke('sicoven:audit-list', token, limit),
