@@ -414,7 +414,8 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
               Ejercicio Económico (Año)
-              <input
+            </label>
+            <input
                 type="text"
                 inputMode="numeric"
                 maxLength={4}
