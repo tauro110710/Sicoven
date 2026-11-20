@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { confirmFiscalExerciseCycle, validatePersistedFiscalExerciseCalendar } from './fiscalExerciseLifecycle';
+import { confirmFiscalExerciseCycle, getFiscalExerciseStartDate, validatePersistedFiscalExerciseCalendar } from './fiscalExerciseLifecycle';
 import type { PersistedFiscalExercise } from './accounting';
 
 const exercises = (): PersistedFiscalExercise[] => [
@@ -65,4 +65,13 @@ test('rechaza asientos ya vinculados a otro ejercicio', () => {
     closingEntryId: 'entry-close-2015', openingEntryId: 'entry-open-2016',
     closedAt: '2016-01-02'
   }));
+});
+
+
+test('el inicio del ejercicio ordinario usa accountingStartDate y no operationalStartDate', () => {
+  assert.equal(getFiscalExerciseStartDate({ accountingStartDate: '2025-02-05' }, 2025), '2025-02-05');
+  assert.equal(getFiscalExerciseStartDate({ accountingStartDate: '2015-02-05' }, 2026), '2026-01-01');
+  assert.equal(getFiscalExerciseStartDate({}, 2026), '2026-01-01');
+  assert.throws(() => getFiscalExerciseStartDate({ accountingStartDate: '2025-02-30' }, 2025));
+  assert.throws(() => getFiscalExerciseStartDate({ accountingStartDate: '2027-01-01' }, 2026));
 });
