@@ -283,6 +283,115 @@ test('metadata intent and registry update roll back together when registry valid
   assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_metadata_intents').get().count, 0);
 });
 
+test('recovers a company creation after tenant and registry commit but before control completion', async () => {
+  let companyRecord = null;
+  let creationCount = 0;
+  const tenantDb = { prepare: () => ({ get: () => ({ details_json: JSON.stringify({
+    operationId: 'company-create-after-commit',
+    requestHash: 'a'.repeat(64),
+    actorUserId: 1,
+    actorUsername: 'admin'
+  }) }) }) };
+  const { handlers, controlDb } = fixture({
+    runtime: {
+      listCompanies: () => companyRecord ? [companyRecord] : [],
+      getCompanyDatabase: () => tenantDb,
+      recoverOrphanedCompany: () => ({ found: false }),
+      verifyCompanyCreation: () => true,
+      createCompany: async company => {
+        creationCount += 1;
+        companyRecord = { id: company.id, name: company.name, rif: company.rif, status: 'ACTIVE' };
+        return { ok: true, company: companyRecord };
+      }
+    }
+  });
+  controlDb.exec(`CREATE TRIGGER fail_creation_completion BEFORE INSERT ON company_creation_completions
+    BEGIN SELECT RAISE(ABORT, 'simulated completion interruption'); END;`);
+  const input = {
+    operationId: 'company-create-after-commit',
+    name: 'EMPRESA COMMIT',
+    rif: 'J-12345678-9',
+    accountingStartDate: '2015-02-05'
+  };
+  await assert.rejects(
+    () => handlers.get('sicoven:company-create')({}, 'valid-token', input),
+    /simulated completion interruption/
+  );
+  assert.equal(creationCount, 1);
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_creation_intents').get().count, 1);
+  controlDb.exec('DROP TRIGGER fail_creation_completion');
+  await handlers.get('sicoven:company-list-accessible')({}, 'valid-token');
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_creation_completions').get().count, 1);
+  assert.equal(creationCount, 1);
+});
+
+test('recovers a verified orphan tenant created before the registry insert', async () => {
+  let orphanExists = false;
+  let companyRecord = null;
+  let createCalls = 0;
+  const { handlers, controlDb } = fixture({
+    runtime: {
+      listCompanies: () => companyRecord ? [companyRecord] : [],
+      recoverOrphanedCompany: (company, operation) => {
+        assert.equal(operation.operationId, company.id);
+        if (!orphanExists) return { found: false };
+        companyRecord = { id: company.id, name: company.name, rif: company.rif, status: 'ACTIVE' };
+        return { found: true, recovered: true, company: companyRecord };
+      },
+      verifyCompanyCreation: () => true,
+      createCompany: async () => {
+        createCalls += 1;
+        orphanExists = true;
+        throw new Error('simulated interruption after tenant file commit');
+      }
+    }
+  });
+  const input = {
+    operationId: 'company-create-orphan-001',
+    name: 'EMPRESA HUERFANA',
+    rif: 'J-12345678-9'
+  };
+  await assert.rejects(
+    () => handlers.get('sicoven:company-create')({}, 'valid-token', input),
+    /simulated interruption after tenant file commit/
+  );
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_creation_completions').get().count, 0);
+  await handlers.get('sicoven:company-list-accessible')({}, 'valid-token');
+  assert.equal(companyRecord.id, input.operationId);
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_creation_completions').get().count, 1);
+  assert.equal(createCalls, 1);
+});
+
+test('retries a durable creation intent when no tenant file was created before interruption', async () => {
+  let companyRecord = null;
+  let createCalls = 0;
+  const { handlers, controlDb } = fixture({
+    runtime: {
+      listCompanies: () => companyRecord ? [companyRecord] : [],
+      recoverOrphanedCompany: () => ({ found: false }),
+      verifyCompanyCreation: () => true,
+      createCompany: async company => {
+        createCalls += 1;
+        if (createCalls === 1) throw new Error('simulated interruption before tenant creation');
+        companyRecord = { id: company.id, name: company.name, rif: company.rif, status: 'ACTIVE' };
+        return { ok: true, company: companyRecord };
+      }
+    }
+  });
+  const input = {
+    operationId: 'company-create-no-file-001',
+    name: 'EMPRESA REINTENTO',
+    rif: 'J-12345678-9'
+  };
+  await assert.rejects(
+    () => handlers.get('sicoven:company-create')({}, 'valid-token', input),
+    /simulated interruption before tenant creation/
+  );
+  await handlers.get('sicoven:company-list-accessible')({}, 'valid-token');
+  assert.equal(createCalls, 2);
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_creation_completions').get().count, 1);
+});
+
 test('company creation retries recover the same tenant instead of creating a duplicate', async () => {
   let companyRecord = null;
   let creationCount = 0;
@@ -304,6 +413,8 @@ test('company creation retries recover the same tenant instead of creating a dup
     runtime: {
       listCompanies: () => companyRecord ? [companyRecord] : [],
       getCompanyDatabase: () => tenantDb,
+      recoverOrphanedCompany: () => ({ found: false }),
+      verifyCompanyCreation: () => true,
       createCompany: async (company, actor, operation) => {
         creationCount += 1;
         companyRecord = { id: company.id, name: company.name, rif: company.rif, status: 'ACTIVE' };
