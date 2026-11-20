@@ -1,7 +1,23 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { hashOperationRequest, runIdempotentOperation } = require('./operation-receipts.cjs');
 const { completedYears, completedCalendarMonths, calculateVacationSalaryBasis, calculateAnnualLaborRights, calculateProfitSharingDistribution, calculateSeverance, calculateSeveranceInterest, calculateSeveranceSalaryBasis, calculateFinalLiquidation } = require('./payroll-legal-calculations.cjs');
+
+function runPayrollMutation(db, companyId, input, actor, operationType, request, execute) {
+  const operationId = String(input?.operationId || '').trim();
+  if (!operationId) return execute();
+  return runIdempotentOperation(db, {
+    operationId, companyId, operationType,
+    requestHash: hashOperationRequest(JSON.stringify(request)), actor
+  }, execute);
+}
+
+function payrollRequest(input) {
+  const request = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : {};
+  delete request.operationId;
+  return request;
+}
 
 function text(value, label, max = 240, min = 1) {
   const result = String(value ?? '').trim();
@@ -871,16 +887,17 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
     return withDatabase(token, (db, companyId) => listPayrollSalaryHistory(db, companyId, employeeId));
   });
   ipcMain.handle('sicoven:payroll-employee-save', async (_event, token, input) => {
-    authenticate(token);
-    return withDatabase(token, (db, companyId) => savePayrollEmployee(db, companyId, input));
+    const actor = authenticate(token);
+    return withDatabase(token, (db, companyId) => runPayrollMutation(db, companyId, input, actor, 'payroll.employee_save', payrollRequest(input), () => savePayrollEmployee(db, companyId, input)));
   });
   ipcMain.handle('sicoven:payroll-run-get', async (_event, token, runId) => {
     authenticate(token);
     return withDatabase(token, (db, companyId) => getPayrollRun(db, companyId, runId));
   });
-  ipcMain.handle('sicoven:payroll-run-confirm', async (_event, token, runId, journalEntryId) => {
-    authenticate(token);
-    return withDatabase(token, (db, companyId) => confirmPayrollRun(db, companyId, runId, journalEntryId));
+  ipcMain.handle('sicoven:payroll-run-confirm', async (_event, token, runId, journalEntryId, operationId) => {
+    const actor = authenticate(token);
+    const input = { runId, journalEntryId, operationId };
+    return withDatabase(token, (db, companyId) => runPayrollMutation(db, companyId, input, actor, 'payroll.run_confirm', { runId, journalEntryId }, () => confirmPayrollRun(db, companyId, runId, journalEntryId)));
   });
   ipcMain.handle('sicoven:payroll-salary-entries-list', async (_event, token, employeeId, fromDate, toDate) => {
     authenticate(token);
@@ -899,12 +916,12 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
     return withDatabase(token, (db, companyId) => listPayrollSeveranceHistory(db, companyId, employeeId));
   });
   ipcMain.handle('sicoven:payroll-severance-deposit-save', async (_event, token, input) => {
-    authenticate(token);
-    return withDatabase(token, (db, companyId) => savePayrollSeveranceDeposit(db, companyId, input));
+    const actor = authenticate(token);
+    return withDatabase(token, (db, companyId) => runPayrollMutation(db, companyId, input, actor, 'payroll.severance_deposit', payrollRequest(input), () => savePayrollSeveranceDeposit(db, companyId, input)));
   });
   ipcMain.handle('sicoven:payroll-severance-interest-save', async (_event, token, input) => {
-    authenticate(token);
-    return withDatabase(token, (db, companyId) => savePayrollSeveranceInterestMonth(db, companyId, input));
+    const actor = authenticate(token);
+    return withDatabase(token, (db, companyId) => runPayrollMutation(db, companyId, input, actor, 'payroll.severance_interest', payrollRequest(input), () => savePayrollSeveranceInterestMonth(db, companyId, input)));
   });
   ipcMain.handle('sicoven:payroll-severance-calculate', async (_event, token, input) => {
     authenticate(token);
@@ -919,12 +936,12 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
     return withDatabase(token, (db, companyId) => listPayrollLiquidations(db, companyId, employeeId));
   });
   ipcMain.handle('sicoven:payroll-liquidation-create', async (_event, token, input) => {
-    authenticate(token);
-    return withDatabase(token, (db, companyId) => createPayrollLiquidation(db, companyId, input));
+    const actor = authenticate(token);
+    return withDatabase(token, (db, companyId) => runPayrollMutation(db, companyId, input, actor, 'payroll.liquidation_create', payrollRequest(input), () => createPayrollLiquidation(db, companyId, input)));
   });
   ipcMain.handle('sicoven:payroll-run-create', async (_event, token, input) => {
-    authenticate(token);
-    return withDatabase(token, (db, companyId) => createPayrollRun(db, companyId, input));
+    const actor = authenticate(token);
+    return withDatabase(token, (db, companyId) => runPayrollMutation(db, companyId, input, actor, 'payroll.run_create', payrollRequest(input), () => createPayrollRun(db, companyId, input)));
   });
   ipcMain.handle('sicoven:payroll-runs-list', async (_event, token) => {
     authenticate(token);
@@ -935,8 +952,8 @@ function registerPayrollIpc({ ipcMain, getActiveSession, withDatabase }) {
     return withDatabase(token, (db, companyId) => listPayrollLegalRules(db, companyId));
   });
   ipcMain.handle('sicoven:payroll-rule-save', async (_event, token, input) => {
-    authenticate(token);
-    return withDatabase(token, (db, companyId) => savePayrollLegalRule(db, companyId, input));
+    const actor = authenticate(token);
+    return withDatabase(token, (db, companyId) => runPayrollMutation(db, companyId, input, actor, 'payroll.rule_save', payrollRequest(input), () => savePayrollLegalRule(db, companyId, input)));
   });
 }
 module.exports = {
