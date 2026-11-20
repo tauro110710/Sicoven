@@ -105,7 +105,10 @@ export function confirmFiscalExerciseCycle(input: FiscalExerciseCycleInput): Per
     cycle.closingEntryId === closingEntryId && cycle.openingEntryId === openingEntryId && !cycle.reopenedAt);
   if (repeated && target.status === 'CERRADO') return exercises;
   const allCycles = exercises.flatMap(normalizeCycles);
-  if (allCycles.some(cycle => cycle.closingEntryId === closingEntryId || cycle.openingEntryId === openingEntryId)) {
+  const directDuplicate = exercises.some(item =>
+    item.closingEntryId === closingEntryId || item.openingEntryId === openingEntryId);
+  if (directDuplicate || allCycles.some(cycle =>
+    cycle.closingEntryId === closingEntryId || cycle.openingEntryId === openingEntryId)) {
     throw new Error('Uno de los asientos ya está vinculado a otro ciclo; se bloqueó la duplicación.');
   }
   if (target.status !== 'ABIERTO' && target.status !== 'EN_CIERRE' && target.status !== 'REABIERTO') {
