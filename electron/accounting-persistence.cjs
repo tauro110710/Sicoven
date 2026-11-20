@@ -43,7 +43,7 @@ function syncPartyMasterRows(db, state) {
       updated_at=datetime('now')`);
   for (const row of prepared) insert.run(row.id, row.companyId, row.partyType, row.name, row.fiscalId, row.fiscalIdType, row.normalizedFiscalId, row.address, row.phone, row.email, row.active);
 }
-function validateFiscalExerciseCalendarSnapshot(state, nextEntries = []) {
+function validateFiscalExerciseCalendarSnapshot(state, nextEntries = [], priorById = new Map()) {
   const companies = Array.isArray(state.companies) ? state.companies : [];
   const journal = Array.isArray(state.journalEntries) ? state.journalEntries : [];
   const validDate = value => {
@@ -150,6 +150,11 @@ function validateFiscalExerciseCalendarSnapshot(state, nextEntries = []) {
   // opening and calendar transition in the same SQLite snapshot. Legacy
   // snapshots without accountingStartDate/calendar retain their old path.
   for (const entry of nextEntries) {
+    // Existing entries may appear in nextEntries when a formal reopening adds
+    // reversal links/adjustment flags. Their complete historical evidence is
+    // already checked above; only newly inserted entries must match the
+    // calendar transition in this snapshot.
+    if (priorById.has(String(entry.id))) continue;
     const isAutomaticClose = entry.type === 'CIERRE' &&
       String(entry.referenceDoc || '').startsWith('CIERRE:');
     const isAutomaticOpening = entry.type === 'APERTURA' &&
@@ -199,7 +204,7 @@ function persistAccountingSnapshot(db, state, actor = null) {
       catch { throw new Error('La base SQLite contiene un estado contable ilegible; se bloqueó la escritura para proteger el historial.'); }
     }
     const { nextEntries, priorById } = validateAccountingSnapshot(priorState, state);
-    validateFiscalExerciseCalendarSnapshot(state, nextEntries);
+    validateFiscalExerciseCalendarSnapshot(state, nextEntries, priorById);
     const auditInsert = db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)');
     for (const entry of nextEntries) {
       if (priorById.has(String(entry.id))) continue;
