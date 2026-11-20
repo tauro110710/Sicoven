@@ -900,6 +900,7 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
     return reopen();
     };
     return identity ? runIdempotentOperation(activeDb, identity, executeReopen) : executeReopen();
+    });
   });
   ipcMain.handle('sicoven:save-state-result', (_event, token, state, operationId) => {
     const licensing = licenseView();
