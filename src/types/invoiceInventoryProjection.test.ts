@@ -91,3 +91,8 @@ test('refuses to guess posting order for same-product purchase and sale on the s
   const sameDaySale = sale({ invoiceDate: '2025-01-02' });
   assert.throws(() => deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [sameDayPurchase], sales: [sameDaySale] }), /sin secuencia de registro común/);
 });
+
+test('accepts a valid leap-day invoice date after calendar validation', () => {
+  const result = deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase({ invoiceDate: '2024-02-29' })], sales: [] });
+  assert.equal(result[0].date, '2024-02-29');
+});
