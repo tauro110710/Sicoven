@@ -132,8 +132,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
     const requestedUnitCostBs = Number(source.unitCostBs);
     const requestedUnitCostUsd = Number(source.unitCostUsd);
     const landedCostsBs = Number(source.additionalLandedCostsBs || 0);
-    const needsHistoricalConversion = source.type !== 'SALIDA' && requestedUnitCostUsd <= 0 && requestedUnitCostBs > 0;
-    if (!validNonNegative(rate) || (needsHistoricalConversion && !validPositive(rate)) || !validPositive(requestedQuantity) ||
+    if (!validNonNegative(rate) || !validPositive(requestedQuantity) ||
         !validNonNegative(requestedUnitCostBs) || !validNonNegative(requestedUnitCostUsd) ||
         !validNonNegative(landedCostsBs)) {
       throw new Error('El movimiento ' + (source.documentRef || id) + ' contiene tasa, cantidad o costos inválidos.');
