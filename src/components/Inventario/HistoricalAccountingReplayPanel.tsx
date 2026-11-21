@@ -32,7 +32,7 @@ export const HistoricalAccountingReplayPanel: React.FC = () => {
       setPlan(result);
     } catch (cause) {
       setPlan(null);
-      setError(cause instanceof Error ? cause.message : 'No se pudo preparar el plan de revisión histórica.');
+      setError(cause instanceof Error ? cause.message : 'No se pudo preparar el diagnóstico histórico.');
     } finally {
       setBusy(false);
     }
@@ -46,7 +46,7 @@ export const HistoricalAccountingReplayPanel: React.FC = () => {
     <section className="rounded-2xl border border-violet-200 bg-violet-50/40 p-5 shadow-sm space-y-4">
       <div className="flex items-center gap-2">
         <ClipboardList className="h-5 w-5 text-violet-700" />
-        <h2 className="font-bold text-slate-900">Revisión de reconstrucción contable histórica</h2>
+        <h2 className="font-bold text-slate-900">Diagnóstico de dependencias de reconstrucción histórica</h2>
       </div>
       <p className="text-sm text-slate-700">
         Examina las operaciones y dependencias reales de la empresa seleccionada, ordenadas por fecha efectiva.
@@ -70,7 +70,7 @@ export const HistoricalAccountingReplayPanel: React.FC = () => {
       <button type="button" onClick={reviewPlan} disabled={!isStorageReady || busy || !startDate || Boolean(throughDate && throughDate < startDate)}
         className="inline-flex items-center gap-2 rounded-lg bg-violet-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50">
         {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ClipboardList className="h-4 w-4" />}
-        {busy ? 'Analizando registros…' : 'Generar plan de revisión'}
+        {busy ? 'Analizando registros…' : 'Analizar dependencias históricas'}
       </button>
       <p className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600">El inicio seleccionado define el alcance de esta reconstrucción. SICOVEN no impone 2010 ni exige revisar períodos anteriores al criterio profesional.</p>
       {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
@@ -89,7 +89,7 @@ export const HistoricalAccountingReplayPanel: React.FC = () => {
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
             <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Operaciones fuente</span><strong className="block text-xl text-slate-900">{sourceEvents.length}</strong></div>
-            <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Asientos derivados</span><strong className="block text-xl text-slate-900">{plan.derivedJournalEntryIds.length}</strong></div>
+            <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Asientos relacionados</span><strong className="block text-xl text-slate-900">{plan.derivedJournalEntryIds.length}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Ejercicios afectados</span><strong className="block text-xl text-slate-900">{plan.affectedExercises.length}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Dependencias externas</span><strong className="block text-xl text-slate-900">{plan.externalDependencies.length}</strong></div>
             <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Vínculos entre asientos</span><strong className="block text-xl text-slate-900">{plan.journalEntryRelationships.length}</strong></div>
@@ -98,9 +98,9 @@ export const HistoricalAccountingReplayPanel: React.FC = () => {
           </div>
           <p className="text-xs text-slate-600">Contexto cargado: {plan.contextCoverage.taxStatusPeriods} tramos tributarios, {plan.contextCoverage.accountingBcvRateEntries} tasas BCV históricas, {plan.contextCoverage.chartOfAccounts} cuentas, {plan.contextCoverage.inventoryProducts} artículos y {plan.contextCoverage.bankAccounts} cuentas bancarias.
           </p>
-          <p className="text-xs text-slate-600">Resultado técnico: {plan.mode}. {plan.canProceedToTransactionalReplay && blockers.length === 0
-            ? 'El plan no encontró bloqueos conocidos para continuar con una etapa posterior de diseño y validación.'
-            : 'No debe avanzarse a una ejecución transaccional hasta resolver los bloqueos y validar las dependencias.'}
+          <p className="text-xs text-slate-600">Diagnóstico técnico: {plan.mode}. {plan.canProceedToTransactionalReplay && blockers.length === 0
+            ? 'No se encontraron bloqueos conocidos en este análisis preliminar. Esto no ejecuta ni confirma la reconstrucción.'
+            : 'La reconstrucción real aún requiere implementar y validar el motor cronológico transaccional.'}
             {' '}Este resultado no ejecuta ni autoriza por sí solo una reconstrucción.</p>
         </div>
 
