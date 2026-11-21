@@ -538,7 +538,7 @@ test('construye vínculos entre documentos, liquidaciones, retenciones y declara
     purchaseRecordId: 'purchase-original'
   }];
   input.vatWithholdingDeclarations = [{
-    id: 'vat-declaration', companyId: 'company-1', periodEndDate: '2023-01-31',
+    id: 'vat-declaration', companyId: 'company-1', periodEndDate: '2023-01-31', createdAt: '2023-01-31T08:00:00.000Z',
     voucherIds: ['vat-voucher']
   }];
   input.vatWithholdingDeclarationEvents = [{
@@ -551,7 +551,7 @@ test('construye vínculos entre documentos, liquidaciones, retenciones y declara
     voucherId: 'islr-voucher', allocations: [{ purchaseId: 'purchase-original' }]
   }];
   input.vatOwnDeclarations = [{
-    id: 'vat-own', companyId: 'company-1', periodEndDate: '2023-01-31',
+    id: 'vat-own', companyId: 'company-1', periodEndDate: '2023-01-31', createdAt: '2023-01-31T09:00:00.000Z',
     sourceIds: ['purchase-original', 'sale-original']
   }];
   input.vatOwnDeclarationEvents = [{
