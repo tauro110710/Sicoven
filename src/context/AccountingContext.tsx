@@ -65,6 +65,7 @@ import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers, prepareProductsForHistoricalReconstruction } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
+import { validateAccountingStartDate } from '../types/accountingStartDateValidation';
 import { buildBankAuxiliaryAccounts } from '../types/bankAccountAccounting';
 import { calculateBankAvailableBalance, calculateCashAccountAvailableBalance, validateBankOutgoingAvailability } from '../types/bankAccountAvailability';
 import { createBankOutgoingLock } from '../types/bankOutgoingLock';
@@ -1880,6 +1881,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('El asiento requiere SQLite local de escritorio disponible y lista. No se registró.');
     }
     if (!isValidIsoDate(entry.date)) throw new Error('El asiento requiere una fecha válida.');
+    const journalStartDateError = validateAccountingStartDate(targetCompany.accountingStartDate, entry.date, 'El asiento');
+    if (journalStartDateError) throw new Error(journalStartDateError);
     const authorizedYearClose = allowSystemYearClosing && entry.type === 'CIERRE' &&
       entry.date === String(targetCompany.fiscalYear) + '-12-31' &&
       entry.referenceDoc === 'CIERRE:' + targetCompany.id + ':' + entry.date;
@@ -3239,6 +3242,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         !String(purchaseData.controlNumber || '').trim()) {
       throw new Error('La compra requiere fecha de emisión y fecha de abono en cuenta válidas, número de factura y número de control.');
     }
+    const purchaseStartDateError = validateAccountingStartDate(targetCompany.accountingStartDate, purchaseData.invoiceDate, 'La compra');
+    if (purchaseStartDateError) throw new Error(purchaseStartDateError);
+    const purchaseCreditStartDateError = validateAccountingStartDate(targetCompany.accountingStartDate, purchaseData.accountCreditDate || '', 'La fecha de abono en cuenta de la compra');
+    if (purchaseCreditStartDateError) throw new Error(purchaseCreditStartDateError);
     if (!String(purchaseData.supplierName || '').trim() || !validateVenezuelanRif(purchaseData.supplierRif).isValid) {
       throw new Error('La compra requiere razón social y un RIF venezolano con estructura válida.');
     }
@@ -4458,6 +4465,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         !String(saleData.customerName || '').trim()) {
       throw new Error('La venta requiere fecha válida, número de factura y nombre del cliente.');
     }
+    const saleStartDateError = validateAccountingStartDate(targetCompany.accountingStartDate, saleData.invoiceDate, 'La venta');
+    if (saleStartDateError) throw new Error(saleStartDateError);
     if (saleData.documentType !== '01') {
       throw new Error('Las notas de débito/crédito de clientes requieren un flujo de reversión fiscal y contable que aún no está habilitado. Registra solo facturas (01) en este módulo.');
     }
