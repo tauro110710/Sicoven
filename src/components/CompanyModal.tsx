@@ -416,7 +416,6 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
               onChange={e => {
                 const year = e.target.value;
                 setAccountingStartDate(year ? year + '-01-01' : '');
-                if (year) setFiscalYear(year);
               }}
               required
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
@@ -435,7 +434,6 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
               value={accountingStartDate}
               onChange={e => {
                 setAccountingStartDate(e.target.value);
-                if (e.target.value) setFiscalYear(e.target.value.slice(0, 4));
               }}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
             />
