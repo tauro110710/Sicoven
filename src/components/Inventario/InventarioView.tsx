@@ -20,7 +20,7 @@ import { NewProductModal } from './NewProductModal';
 import { NewMovementModal } from './NewMovementModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
-import { calculateVnrProvisionLedgerBalance } from '../../types/inventoryAccounting';
+import { calculateVnrProvisionLedgerBalance, isUsdInventoryValuationAvailable } from '../../types/inventoryAccounting';
 import { InventarioContableTools } from './InventarioContableTools';
 import { InventoryMovementImport } from './InventoryMovementImport';
 
@@ -43,11 +43,8 @@ export const InventarioView: React.FC = () => {
   }, [companyProducts, companyJournalEntries]);
   const hasUnreconciledVnr = companyProducts.some(product => vnrLedgerBalances.get(product.id) === null);
   // No presentar como cero la valoración USD de existencias activas cuyo costo histórico no tiene tasa BCV.
-  const productsMissingUsdValuation = companyProducts.filter(product => product.currentStock > 0 &&
-    (!Number.isFinite(Number(product.avgCostUsd)) || Number(product.avgCostUsd) <= 0 ||
-      !Number.isFinite(Number(product.openingBcvRate)) || Number(product.openingBcvRate) <= 0 ||
-      companyMovements.some(movement => movement.productId === product.id &&
-        (!Number.isFinite(Number(movement.bcvRate)) || Number(movement.bcvRate) <= 0))));
+  const productsMissingUsdValuation = companyProducts.filter(product =>
+    !isUsdInventoryValuationAvailable(product, companyMovements.filter(movement => movement.productId === product.id)));
   const hasMissingUsdValuation = productsMissingUsdValuation.length > 0;
 
 
@@ -296,7 +293,7 @@ export const InventarioView: React.FC = () => {
                   filteredProducts.map(prod => {
                     const vnrBalance = vnrLedgerBalances.get(prod.id) || null;
                     const totalValBs = vnrBalance ? Math.max(0, prod.currentStock * prod.avgCostBs - vnrBalance.provisionBs) : null;
-                    const totalValUsd = vnrBalance && prod.currentStock > 0 && prod.avgCostUsd > 0 && Number(prod.openingBcvRate) > 0 && !companyMovements.some(movement => movement.productId === prod.id && Number(movement.bcvRate) <= 0) ? Math.max(0, prod.currentStock * prod.avgCostUsd - vnrBalance.provisionUsd) : null;
+                    const totalValUsd = vnrBalance && isUsdInventoryValuationAvailable(prod, companyMovements.filter(movement => movement.productId === prod.id)) ? Math.max(0, prod.currentStock * prod.avgCostUsd - vnrBalance.provisionUsd) : null;
                     const isLow = prod.currentStock <= prod.minStock;
 
                     return (
@@ -319,7 +316,7 @@ export const InventarioView: React.FC = () => {
                         <td className="py-2.5 px-4 text-right font-mono text-slate-800">
                           {formatBs(prod.avgCostBs)}
                           {true && (
-                            <span className="block text-[10px] text-slate-400">{prod.currentStock > 0 && productsMissingUsdValuation.some(item => item.id === prod.id) ? 'Costo USD pendiente BCV' : formatUsd(prod.avgCostUsd)}</span>
+                            <span className="block text-[10px] text-slate-400">{prod.currentStock > 0 && !isUsdInventoryValuationAvailable(prod, companyMovements.filter(movement => movement.productId === prod.id)) ? 'Costo USD pendiente BCV' : formatUsd(prod.avgCostUsd)}</span>
                           )}
                         </td>
                         <td className="py-2.5 px-4 text-right font-mono font-semibold text-emerald-700">
