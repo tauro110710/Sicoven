@@ -198,7 +198,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   const totalCreditUsd = items.reduce((sum, item) => sum + (Number(item.creditUsd) || 0), 0);
   const diffBs = Math.abs(totalDebitBs - totalCreditBs);
   const diffUsd = Math.abs(totalDebitUsd - totalCreditUsd);
-  const isBalanced = diffBs < 0.01 && (!parsedBcvRate || diffUsd < 0.000001) && totalDebitBs > 0;
+  const isBalanced = diffBs < 0.01 && (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0 || diffUsd < 0.000001) && totalDebitBs > 0;
   const isZeroTotal = totalDebitBs === 0 && totalCreditBs === 0 && totalDebitUsd === 0 && totalCreditUsd === 0;
 
   // Lado que falta para cuadrar
@@ -288,6 +288,11 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+
+    if (bcvRate.trim() && (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0)) {
+      setSubmitError('La tasa BCV ingresada no es válida. Corríjala o déjela vacía si el asiento no requiere equivalencia USD.');
+      return;
+    }
 
     // Verificación estricta de cuadre antes de guardar
     if (!isBalanced) {
