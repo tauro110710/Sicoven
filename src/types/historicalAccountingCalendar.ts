@@ -169,6 +169,47 @@ export function roundHistoricalPresentationAmount(amount: string | number, decim
   return negative && rounded !== 0n ? '-' + formatted : formatted;
 }
 
+/** Resolve and convert bolivar denominations from a movement's effective date. */
+export function convertVenezuelanAmountByDate(
+  amount: string | number,
+  fromDate: string,
+  toDate: string
+): string {
+  const source = getVenezuelanMonetaryEra(fromDate);
+  const target = getVenezuelanMonetaryEra(toDate);
+  return convertVenezuelanAmount(amount, source.id, target.id);
+}
+
+/** Normalize a historical nominal bolivar amount into the post-2021 scale. */
+export function normalizeBolivarAmountByDate(amount: string | number, operationDate: string): string {
+  const source = getVenezuelanMonetaryEra(operationDate);
+  return convertVenezuelanAmount(amount, source.id, 'BOLIVAR_DIGITAL');
+}
+
+/** Express a current-scale bolivar amount in the denomination that was valid on a date. */
+export function expressBolivarAmountByDate(amount: string | number, targetDate: string): string {
+  const target = getVenezuelanMonetaryEra(targetDate);
+  return convertVenezuelanAmount(amount, 'BOLIVAR_DIGITAL', target.id);
+}
+
+/** Era and scale metadata for annotating historical documents and reports. */
+export function getBolivarScaleMetadataByDate(date: string): {
+  eraId: VenezuelanMonetaryEraId;
+  label: string;
+  effectiveFrom: string;
+  factorToCurrent: string;
+  legalReference: string;
+} {
+  const era = getVenezuelanMonetaryEra(date);
+  return {
+    eraId: era.id,
+    label: era.label,
+    effectiveFrom: era.effectiveFrom,
+    factorToCurrent: '1' + '0'.repeat(era.cumulativeScaleExponent),
+    legalReference: era.legalReference
+  };
+}
+
 function isValidIsoDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(value + 'T00:00:00.000Z');
