@@ -149,7 +149,7 @@ test('incluye depreciaciones como eventos independientes y calcula los ejercicio
   assert.equal(plan.affectedExercises[1].includesYearEndClose, true);
 });
 
-test('advierte cuando varias operaciones del mismo día carecen de marca temporal', () => {
+test('bloquea la reconstrucción cuando varias operaciones del mismo día carecen de marca temporal', () => {
   const input = base();
   input.sales = [{ id: 'sale-1', companyId: 'company-1', invoiceDate: '2023-05-01' }];
   input.purchases = [{ id: 'purchase-1', companyId: 'company-1', invoiceDate: '2023-05-01' }];
@@ -157,7 +157,9 @@ test('advierte cuando varias operaciones del mismo día carecen de marca tempora
   const plan = buildHistoricalAccountingReplayPlan(input);
 
   assert.equal(plan.sourceEvents.length, 2);
-  assert.match(plan.warnings.join(' '), /orden original/);
+  assert.match(plan.warnings.join(' '), /orden cronológico real/);
+  assert.match(plan.blockers.join(' '), /orden cronológico real/);
+  assert.equal(plan.canProceedToTransactionalReplay, false);
 });
 
 test('no inventa una reconstrucción cuando el rango no contiene operaciones', () => {
