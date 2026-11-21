@@ -1511,12 +1511,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // Las intenciones sobreviven al cierre. Cada recuperación exige confirmación
   // individual y conserva el operationId original para impedir duplicados.
   useEffect(() => {
-    if (!storageReady || !currentCompanyId || !window.sicovenStore?.recoverPendingOperationIntents ||
+    if (!storageReady || !currentCompanyId || !window.sicovenStore?.listRecoverableOperationIntents ||
         !window.sicovenStore?.recoverPendingOperationIntent) return;
     let cancelled = false;
     void (async () => {
       try {
-        const pending = await window.sicovenStore!.recoverPendingOperationIntents(token, false);
+        const pending = await window.sicovenStore!.listRecoverableOperationIntents(token);
         if (cancelled || pending.length === 0) return;
         const failed: Array<{ operationId: string; channel?: string; message?: string }> = [];
         for (const item of pending) {
