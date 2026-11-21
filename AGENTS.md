@@ -275,3 +275,10 @@ Trabajar en este orden, cerrando cada fase con PR integrada y pruebas satisfacto
 - Estados y cierre: un recibo existente sin completion se debe reconciliar de forma idempotente, sin volver a ejecutar el handler de negocio. Cerrar/descartar requiere motivo obligatorio, auditoría append-only con empresa, ID, actor y fecha; bloquear cuando haya recibo, hash inválido, estado desconocido/corrupto, error de SQLite o ambigüedad.
 - Se mantiene el comportamiento fail-closed del validador de intenciones: canal/modo desconocido, payload ilegible o hash alterado bloquean recuperación automática. No relajar estas validaciones para mejorar la interfaz.
 - Implementación aún pendiente: no hay cambios funcionales en esta subfase, no se ejecutaron pruebas y no se debe presentar el hallazgo como solución. Próximo paso: diseñar API de metadata segura y retry por ID, después construir la bandeja individual y cierre auditable, con pruebas unitarias/IPC, reinicio, fallos antes/después del commit, concurrencia y aislamiento empresa/actor.
+
+
+#### Matiz de autorización identificado en la revisión — #185
+
+- `electron/auth-roles.cjs` define `hasFullSystemAccess` como acceso de sistema para ambos roles (`admin` y `contador`). No existe en esa función una distinción de privilegio administrativo. Por tanto, no se debe reutilizar `hasFullSystemAccess` como permiso para consultar pendientes de otros actores sin definir y probar un permiso específico; tampoco se debe ampliar acceso por defecto a contadores.
+- `electron/company-session-ipc.cjs` demuestra el patrón existente para validar sesión/rol en backend y operar con runtime de empresa, pero sus permisos de administración de compañías no equivalen automáticamente a permisos para revisar/cerrar operaciones pendientes. La nueva autorización debe quedar explícita, documentada y validada en el handler, manteniendo aislamiento por empresa.
+- No se encontraron pruebas existentes mediante búsqueda del repositorio para la nueva bandeja/revisión de pendientes. La cobertura deberá crearse junto con la implementación; no inferir que las pruebas ya existen.
