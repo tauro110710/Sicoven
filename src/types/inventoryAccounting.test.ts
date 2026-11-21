@@ -12,8 +12,22 @@ import {
   calculateVnrWriteDown,
   calculatePeriodicCostOfSales,
   calculateVnrProvisionLedgerBalance,
+  isUsdInventoryValuationAvailable,
   prepareProductsForHistoricalReconstruction
 } from './inventoryAccounting';
+
+describe('disponibilidad de valoración USD del inventario', () => {
+  it('marca como no disponible el USD si la existencia activa no conserva costo/tasa histórica', () => {
+    assert.equal(isUsdInventoryValuationAvailable({ currentStock: 4, avgCostUsd: 0, openingBcvRate: 0 }, []), false);
+    assert.equal(isUsdInventoryValuationAvailable({ currentStock: 4, avgCostUsd: 2, openingBcvRate: 100 }, [{ bcvRate: 0 }]), false);
+    assert.equal(isUsdInventoryValuationAvailable({ currentStock: 4, avgCostUsd: 2, openingBcvRate: 100 }, [{ bcvRate: Number.NaN }]), false);
+  });
+  it('permite USD cuando existencia activa tiene costos y tasas positivas, y no bloquea productos sin stock', () => {
+    assert.equal(isUsdInventoryValuationAvailable({ currentStock: 3, avgCostUsd: 1.25, openingBcvRate: 100 }, [{ bcvRate: 100 }, { bcvRate: 200 }]), true);
+    assert.equal(isUsdInventoryValuationAvailable({ currentStock: 0, avgCostUsd: 0, openingBcvRate: 0 }, []), true);
+  });
+});
+
 
 describe('motor de inventario contable', () => {
   it('recalcula el costo promedio ponderado sin perder el costo previo', () => {
