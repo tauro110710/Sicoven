@@ -170,7 +170,7 @@ export function reconstructFifoLayers(
         if (Math.abs(restoredQuantity - quantity) > 1e-8 || movement.fifoLayers.some(layer =>
           !validPositive(Number(layer.quantity)) || !validNonNegative(Number(layer.unitCostBs)) ||
           !validNonNegative(Number(layer.unitCostUsd)) || !layer.date ||
-          !/^\d{4}-\d{2}-\d{2}$/.test(layer.date))) {
+          (() => { const value = String(layer.date || ''); const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(value + 'T00:00:00.000Z') : null; return !parsed || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value; })())) {
           throw new Error('Las capas PEPS restauradas en la devolución no concilian con su cantidad o costos.');
         }
         for (const restoredLayer of movement.fifoLayers) {
