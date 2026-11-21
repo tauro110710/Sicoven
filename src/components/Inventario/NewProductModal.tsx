@@ -6,6 +6,7 @@ import type { InventoryProduct } from '../../types/accounting';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
 import { calculateInventoryPrices, DEFAULT_INVENTORY_PRICING } from '../../types/inventoryPricing';
 import type { InventoryPricingConfiguration } from '../../types/accounting';
+import { getBolivarScaleMetadataByDate, getVenezuelanMonetaryEra } from '../../types/historicalAccountingCalendar';
 
 interface NewProductModalProps {
   isOpen: boolean;
@@ -177,7 +178,9 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
         salesPriceBs: 0,
         salesPriceUsd: 0,
         inventoryAccountCode, costOfSalesAccountCode, adjustmentAccountCode, openingBalanceAccountCode,
-        costingMethod, vatTreatment, itemType, openingDate, openingBcvRate: bcvRate
+        costingMethod, vatTreatment, itemType, openingDate, openingBcvRate: bcvRate,
+        openingMonetaryScaleSnapshot: getBolivarScaleMetadataByDate(openingDate),
+        openingSourceMonetaryAmounts: { initialUnitCostBs: avgCostInput, openingBcvRate: openingBcvRateInput, initialStock: currentStockInput, priceCurrency, prices: JSON.stringify(priceInputs) }
       });
       await waitForPersistence();
     }
