@@ -69,40 +69,13 @@ async function invokeRecoverableCompanyMetadata(token, input) {
   }
 }
 
-async function recoverPendingOperationIntents(token, confirmed = false) {
+async function listRecoverableOperationIntents(token) {
   const pending = await ipcRenderer.invoke('sicoven:operation-intent-list', token);
-  if (!confirmed) {
-    return (pending || []).map(intent => ({
-      operationId: intent.operationId, channel: intent.channel, status: 'PENDING'
-    }));
-  }
-  const results = [];
-  for (const intent of pending || []) {
-    try {
-      let result;
-      if (intent.requestMode === 'payroll-run-confirm') {
-        result = await ipcRenderer.invoke(intent.channel, token,
-          intent.request.runId, intent.request.journalEntryId, intent.operationId);
-      } else if (intent.requestMode === 'object') {
-        result = await ipcRenderer.invoke(intent.channel, token,
-          { ...intent.request, operationId: intent.operationId });
-      } else {
-        throw new Error('El formato de una operación pendiente no está reconocido.');
-      }
-      if (result && typeof result === 'object' && result.ok === false) {
-        throw new Error(String(result.message || 'La operación pendiente no pudo completarse.'));
-      }
-      results.push({ operationId: intent.operationId, channel: intent.channel, status: 'RECOVERED' });
-    } catch (error) {
-      results.push({
-        operationId: intent.operationId,
-        channel: intent.channel,
-        status: 'PENDING',
-        message: error instanceof Error ? error.message : 'No se pudo recuperar la operación pendiente.'
-      });
-    }
-  }
-  return results;
+  return (pending || []).map(intent => ({
+    operationId: String(intent.operationId),
+    channel: String(intent.channel),
+    status: 'PENDING'
+  }));
 }
 async function recoverPendingOperationIntent(token, operationId) {
   const pending = await ipcRenderer.invoke('sicoven:operation-intent-list', token);
@@ -212,7 +185,7 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   recordVatFiscalIncidentEvent: (token, input) => invokeRecoverableOperation('sicoven:vat-fiscal-incident-event', token, input),
   savePdf: (input) => ipcRenderer.invoke('sicoven:pdf-save', input),
   saveTextFile: (input) => ipcRenderer.invoke('sicoven:text-save', input),
-  recoverPendingOperationIntents: (token, confirmed) => recoverPendingOperationIntents(token, confirmed),
+  listRecoverableOperationIntents: (token) => listRecoverableOperationIntents(token),
   recoverPendingOperationIntent: (token, operationId) => recoverPendingOperationIntent(token, operationId),
   createBackup: (token) => ipcRenderer.invoke('sicoven:backup-create', token),
   restoreBackup: (token) => ipcRenderer.invoke('sicoven:restore-execute', token),
