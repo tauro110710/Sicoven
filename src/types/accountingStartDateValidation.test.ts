@@ -19,3 +19,9 @@ test('does not impose a start date on legacy companies without one', () => {
 test('rejects a corrupt configured start date', () => {
   assert.match(validateAccountingStartDate('2010-02-31', '2010-03-01') || '', /fecha de inicio contable configurada/);
 });
+
+
+test('rejects malformed or impossible operation dates when a start date is configured', () => {
+  assert.match(validateAccountingStartDate('2010-02-01', '2010-02-xx') || '', /fecha válida/);
+  assert.match(validateAccountingStartDate('2010-02-01', '2010-02-31') || '', /fecha válida/);
+});
