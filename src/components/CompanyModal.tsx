@@ -30,7 +30,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
   const [isPersonalFirm, setIsPersonalFirm] = useState(false);
   const [isIgtfPerceptionAgent, setIsIgtfPerceptionAgent] = useState(false);
   const [accountingStartDate, setAccountingStartDate] = useState('');
-  const [operationalStartDate, setOperationalStartDate] = useState('');
+  const [accountingStartMonth, setAccountingStartMonth] = useState('01');
   const [fiscalYear, setFiscalYear] = useState<string>(String(new Date().getFullYear()));
   const [accountingFramework, setAccountingFramework] = useState<AccountingFramework | ''>('');
   const [accountingFrameworkVersion, setAccountingFrameworkVersion] = useState('');
@@ -399,24 +399,42 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
           {/* Inicio del registro contable ordinario en SICOVEN */}
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-1.5">
             <label className="block text-xs font-bold text-slate-800">
-              Año de inicio contable *
+              Inicio del registro contable *
             </label>
-            <select
-              value={accountingStartDate.slice(0, 4)}
-              onChange={e => {
-                const year = e.target.value;
-                setAccountingStartDate(year ? year + '-01-01' : '');
-                if (year) setFiscalYear(year);
-              }}
-              required
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-            >
-              <option value="">Seleccione desde qué año comenzar</option>
-              {Array.from({ length: new Date().getFullYear() - 1980 + 1 }, (_, i) => String(new Date().getFullYear() - i)).map(year => (
-                <option key={year} value={year}>{year} — desde el 1 de enero</option>
-              ))}
-            </select>
-            <p className="text-[10px] leading-4 text-slate-600">Desde este año comenzará el registro de la empresa. Puede ingresar las operaciones con sus fechas reales y SICOVEN las organizará cronológicamente.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={accountingStartDate.slice(0, 4)}
+                onChange={e => {
+                  const year = e.target.value;
+                  setAccountingStartDate(year ? year + '-' + accountingStartMonth + '-01' : '');
+                  if (year) setFiscalYear(year);
+                }}
+                required
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              >
+                <option value="">Año</option>
+                {Array.from({ length: new Date().getFullYear() - 1980 + 1 }, (_, i) => String(new Date().getFullYear() - i)).map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+              <select
+                aria-label="Mes de inicio contable"
+                value={accountingStartMonth}
+                onChange={e => {
+                  const month = e.target.value;
+                  setAccountingStartMonth(month);
+                  const year = accountingStartDate.slice(0, 4);
+                  if (year) setAccountingStartDate(year + '-' + month + '-01');
+                }}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              >
+                {[
+                  ['01','Enero'],['02','Febrero'],['03','Marzo'],['04','Abril'],['05','Mayo'],['06','Junio'],
+                  ['07','Julio'],['08','Agosto'],['09','Septiembre'],['10','Octubre'],['11','Noviembre'],['12','Diciembre']
+                ].map(([month,label]) => <option key={month} value={month}>{label}</option>)}
+              </select>
+            </div>
+            <p className="text-[10px] leading-4 text-slate-600">Desde el primer día del mes elegido comenzará el registro ordinario de esta empresa. SICOVEN no reconstruye ni importa operaciones anteriores.</p>
           </div>
 
           <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">
