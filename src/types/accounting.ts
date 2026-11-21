@@ -662,6 +662,9 @@ export interface InventoryMovement {
   type: 'ENTRADA' | 'SALIDA' | 'AJUSTE';
   concept: string; // 'COMPRA' | 'VENTA' | 'INVENTARIO_INICIAL' | 'MERMA' | 'AJUSTE'
   documentRef: string;
+  /** Date-era denomination and original typed monetary values for historical scale audit. */
+  monetaryScaleSnapshot?: { eraId: string; label: string; effectiveFrom: string; factorToCurrent: string; legalReference: string };
+  sourceMonetaryAmounts?: Record<string, string>;
   quantity: number;
   unitCostBs: number;
   unitCostUsd: number;
