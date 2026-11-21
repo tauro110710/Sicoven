@@ -5497,7 +5497,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const addMovement = (movData: Omit<InventoryMovement, 'id' | 'companyId'>): InventoryMovement => {
-  const addMovement = (movData: Omit<InventoryMovement, 'id' | 'companyId'>): InventoryMovement => {
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('El movimiento de inventario requiere SQLite local de escritorio disponible y lista.');
     }
