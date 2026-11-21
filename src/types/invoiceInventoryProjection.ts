@@ -44,7 +44,7 @@ export function deriveInvoiceInventoryMovements(input: {
       const sameSource = duplicate.companyId === movement.companyId && duplicate.productId === movement.productId &&
         duplicate.date === movement.date && duplicate.type === movement.type && duplicate.concept === movement.concept &&
         normalizeDocumentRef(duplicate.documentRef) === normalizeDocumentRef(movement.documentRef) && Math.abs(Number(duplicate.quantity) - movement.quantity) < 1e-8 &&
-        (movement.concept !== 'COMPRA' || Math.abs(Number(duplicate.unitCostBs) - movement.unitCostBs) < 1e-8) &&
+        (movement.concept !== 'COMPRA' || (Math.abs(Number(duplicate.unitCostBs) - movement.unitCostBs) < 1e-8 && Math.abs(Number(duplicate.unitCostUsd) - movement.unitCostUsd) < 1e-8)) &&
         (duplicate.counterpartyRif || '') === (movement.counterpartyRif || '') &&
         (duplicate.documentType || '') === (movement.documentType || '');
       if (!sameSource) throw new Error('La factura ' + movement.documentRef + ' coincide con un movimiento existente, pero sus datos difieren; requiere revisión antes de reconstruir.');
