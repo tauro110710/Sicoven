@@ -70,7 +70,7 @@ export function convertBolivarAmountBetweenDates(
 ): string {
   const from = getVenezuelanMonetaryPeriod(fromDate);
   const to = getVenezuelanMonetaryPeriod(toDate);
-  return decimalToString(shiftDecimal(amount, from.currentExponent - to.currentExponent));
+  return decimalToString(shiftDecimal(amount, to.currentExponent - from.currentExponent));
 }
 
 /** Human-readable historical denomination metadata for document/report annotations. */
