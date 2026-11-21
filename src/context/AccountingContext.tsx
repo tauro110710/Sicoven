@@ -1910,7 +1910,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         !isJournalEntryBalanced({ debitBs: totalDebitBs, creditBs: totalCreditBs, debitUsd: totalDebitUsd, creditUsd: totalCreditUsd }, 0.01, 0.000001, hasUsdMovement) ||
         totalDebitBs <= 0) {
       throw new Error(
-        `Verificación de asiento fallida. Bs: Debe ${totalDebitBs.toFixed(2)} / Haber ${totalCreditBs.toFixed(2)} (dif. ${diff.toFixed(2))}${hasUsdMovement ? '; USD: Debe ' + totalDebitUsd.toFixed(2) + ' / Haber ' + totalCreditUsd.toFixed(2) + ' (dif. ' + diffUsd.toFixed(6) + ')' : '; USD no aplicable a este asiento'}. Revise líneas, importes y cuentas.`
+        `Verificación de asiento fallida. Bs: Debe ${totalDebitBs.toFixed(2)} / Haber ${totalCreditBs.toFixed(2)} (dif. ${diff.toFixed(2)}${hasUsdMovement ? '; USD: Debe ' + totalDebitUsd.toFixed(2) + ' / Haber ' + totalCreditUsd.toFixed(2) + ' (dif. ' + diffUsd.toFixed(6) + ')' : '; USD no aplicable a este asiento'}. Revise líneas, importes y cuentas.`
       );
     }
     // Domain-level backstop: every newly posted credit to a bank auxiliary is
