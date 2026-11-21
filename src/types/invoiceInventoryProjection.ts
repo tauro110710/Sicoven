@@ -123,7 +123,7 @@ export function deriveInvoiceInventoryMovements(input: {
     sameDayByProduct.set(key, kinds);
   }
   if (Array.from(sameDayByProduct.values()).some(kinds => kinds.has('ENTRADA') && kinds.has('SALIDA'))) {
-    throw new Error('Hay compras y ventas del mismo artículo en una misma fecha sin secuencia de registro común; la reconstrucción requiere ordenar esos documentos antes de continuar.');
+    throw new Error('Hay compras y ventas del mismo artículo en una misma fecha sin secuencia de registro verificable; la reconstrucción requiere ordenar esos documentos antes de continuar.');
   }
   // Stable date-only sorting is safe after same-day conflicting event order is rejected.
   return result.sort((a, b) => a.date.localeCompare(b.date));
