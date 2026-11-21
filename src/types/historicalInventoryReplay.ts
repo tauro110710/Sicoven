@@ -111,7 +111,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
 
   const seenIds = new Set<string>();
   const ordered = input.movements.map((movement, index) => ({ movement, index }))
-    .filter(({ movement }) => movement.companyId === companyId && movement.date >= startDate && (throughDate === undefined || movement.date <= throughDate))
+    .filter(({ movement }) => movement.companyId === companyId && (throughDate === undefined || movement.date <= throughDate))
     .sort((a, b) => a.movement.date.localeCompare(b.movement.date) || a.index - b.index);
 
   if (input.movements.some(movement => movement.companyId !== companyId)) {
