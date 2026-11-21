@@ -69,6 +69,23 @@ describe('motor de inventario contable', () => {
     assert.equal(layers[1].unitCostBs, 20);
   });
 
+  it('restaura devoluciones de clientes PEPS como capas originales independientes', () => {
+    const layers = reconstructFifoLayers([
+      { id: 'purchase-1', type: 'ENTRADA', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1, date: '2026-01-01', balanceQty: 2 },
+      { id: 'purchase-2', type: 'ENTRADA', quantity: 2, unitCostBs: 20, unitCostUsd: 0.2, date: '2026-01-02', balanceQty: 4 },
+      { id: 'sale-1', type: 'SALIDA', concept: 'VENTA', quantity: 3, unitCostBs: 0, unitCostUsd: 0, date: '2026-01-03', balanceQty: 1 },
+      { id: 'return-1', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1, date: '2026-01-04', balanceQty: 2,
+        fifoLayers: [{ quantity: 1, unitCostBs: 10, unitCostUsd: 0.1, date: '2026-01-04', sourceMovementId: 'purchase-1' }] }
+    ], 2);
+    assert.deepEqual(layers.map(layer => [layer.quantity, layer.unitCostBs, layer.sourceMovementId]), [[1, 20, 'purchase-2'], [1, 10, 'purchase-1']]);
+    assert.throws(() => reconstructFifoLayers([
+      { id: 'purchase-1', type: 'ENTRADA', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1, date: '2026-01-01', balanceQty: 1 },
+      { id: 'return-1', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1, date: '2026-01-02', balanceQty: 2,
+        fifoLayers: [{ quantity: 1, unitCostBs: 10, unitCostUsd: 0.1, date: '2026-02-30' }] }
+    ], 2), /no concilian con su cantidad o costos/);
+  });
+
+
   it('descarga una devolución a proveedor de su capa PEPS original y no de la capa más antigua', () => {
     const layers = reconstructFifoLayers([
       { id: 'purchase-old', type: 'ENTRADA', quantity: 5, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', documentRef: 'FAC-OLD', balanceQty: 5 },
