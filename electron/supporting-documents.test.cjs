@@ -235,3 +235,87 @@ test('document vault rejects symlinked parent directories before opening or writ
     fs.rmSync(outside, { recursive: true, force: true });
   }
 });
+
+
+test('durable attachment retries replay the same receipt without duplicate metadata', () => {
+  const h = fixture();
+  try {
+    const request = { operationId: 'document-durable-replay-001', companyId: 'co-1', entityType: 'PURCHASE', entityId: 'purchase-1', documentType: 'FACTURA_COMPRA', title: 'Factura recuperable', fileName: 'factura.pdf' };
+    const first = attachDocument(h.db, { storageDir: h.storageDir, input: request, buffer: pdf, actor });
+    const replay = attachDocument(h.db, { storageDir: h.storageDir, input: request, buffer: null, actor });
+    assert.equal(first.ok, true);
+    assert.equal(replay.replayed, true);
+    assert.equal(h.db.prepare('SELECT COUNT(*) AS count FROM supporting_documents').get().count, 1);
+    assert.equal(h.db.prepare("SELECT COUNT(*) AS count FROM operation_receipts WHERE operation_type='documents.attach'").get().count, 1);
+  } finally { h.close(); }
+});
+
+test('durable attachment recovers when SQLite fails after the document file is persisted', () => {
+  const h = fixture();
+  try {
+    const request = { operationId: 'document-durable-recover-001', companyId: 'co-1', entityType: 'PURCHASE', entityId: 'purchase-1', documentType: 'FACTURA_COMPRA', title: 'Factura recuperable', fileName: 'factura.pdf' };
+    h.db.exec("CREATE TRIGGER reject_supporting_document BEFORE INSERT ON supporting_documents BEGIN SELECT RAISE(ABORT, 'simulated metadata interruption'); END");
+    assert.throws(() => attachDocument(h.db, { storageDir: h.storageDir, input: request, buffer: pdf, actor }), /simulated metadata interruption/);
+    assert.equal(h.db.prepare('SELECT COUNT(*) AS count FROM operation_intents').get().count, 1);
+    assert.equal(h.db.prepare('SELECT COUNT(*) AS count FROM supporting_documents').get().count, 0);
+    h.db.exec('DROP TRIGGER reject_supporting_document');
+    const recovered = attachDocument(h.db, { storageDir: h.storageDir, input: request, buffer: pdf, actor });
+    assert.equal(recovered.ok, true);
+    assert.equal(h.db.prepare('SELECT COUNT(*) AS count FROM supporting_documents').get().count, 1);
+    assert.equal(h.db.prepare("SELECT COUNT(*) AS count FROM operation_receipts WHERE operation_type='documents.attach'").get().count, 1);
+  } finally { h.close(); }
+});
+
+test('durable attachment rejects a different source file for the same operation ID', () => {
+  const h = fixture();
+  try {
+    const request = { operationId: 'document-durable-source-001', companyId: 'co-1', entityType: 'PURCHASE', entityId: 'purchase-1', documentType: 'FACTURA_COMPRA', title: 'Factura recuperable', fileName: 'factura.pdf' };
+    h.db.exec("CREATE TRIGGER reject_supporting_document BEFORE INSERT ON supporting_documents BEGIN SELECT RAISE(ABORT, 'simulated metadata interruption'); END");
+    assert.throws(() => attachDocument(h.db, { storageDir: h.storageDir, input: request, buffer: pdf, actor }), /simulated metadata interruption/);
+    const intent = h.db.prepare('SELECT request_json FROM operation_intents WHERE operation_id=?').get(request.operationId);
+    const target = path.join(h.storageDir, JSON.parse(intent.request_json).storageKey);
+    const original = fs.readFileSync(target);
+    h.db.exec('DROP TRIGGER reject_supporting_document');
+    const changed = Buffer.from('%PDF-1.7\nALTERACION DEL SOPORTE\n%%EOF\n');
+    assert.throws(() => attachDocument(h.db, { storageDir: h.storageDir, input: request, buffer: changed, actor }), /no coinciden con la intención pendiente/);
+    assert.deepEqual(fs.readFileSync(target), original);
+    assert.equal(h.db.prepare('SELECT COUNT(*) AS count FROM supporting_documents').get().count, 0);
+  } finally { h.close(); }
+});
+
+test('corrupted pending attachment is preserved and never registered as valid evidence', () => {
+  const h = fixture();
+  try {
+    const request = { operationId: 'document-durable-corrupt-001', companyId: 'co-1', entityType: 'PURCHASE', entityId: 'purchase-1', documentType: 'FACTURA_COMPRA', title: 'Factura recuperable', fileName: 'factura.pdf' };
+    h.db.exec("CREATE TRIGGER reject_supporting_document BEFORE INSERT ON supporting_documents BEGIN SELECT RAISE(ABORT, 'simulated metadata interruption'); END");
+    assert.throws(() => attachDocument(h.db, { storageDir: h.storageDir, input: request, buffer: pdf, actor }), /simulated metadata interruption/);
+    const intent = h.db.prepare('SELECT request_json FROM operation_intents WHERE operation_id=?').get(request.operationId);
+    const target = path.join(h.storageDir, JSON.parse(intent.request_json).storageKey);
+    const tampered = Buffer.from('%PDF-1.7\nARCHIVO ALTERADO\n%%EOF\n');
+    fs.writeFileSync(target, tampered);
+    h.db.exec('DROP TRIGGER reject_supporting_document');
+    assert.throws(() => attachDocument(h.db, { storageDir: h.storageDir, input: request, buffer: pdf, actor }), /no coincide con el tamaño y SHA-256/);
+    assert.deepEqual(fs.readFileSync(target), tampered);
+    assert.equal(h.db.prepare('SELECT COUNT(*) AS count FROM supporting_documents').get().count, 0);
+  } finally { h.close(); }
+});
+
+test('document attachment refuses a symlinked tenant directory without writing outside the data root', () => {
+  const h = fixture();
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-docs-outside-'));
+  try {
+    const companiesDir = path.join(h.storageDir, 'companies');
+    fs.symlinkSync(outside, companiesDir, 'dir');
+    const targetDir = path.join(companiesDir, 'co-1', 'supporting-documents');
+    assert.throws(() => attachDocument(h.db, {
+      trustedRoot: h.storageDir, storageDir: targetDir,
+      input: { operationId: 'document-symlink-001', companyId: 'co-1', entityType: 'PURCHASE', entityId: 'purchase-1', documentType: 'FACTURA_COMPRA', title: 'Factura', fileName: 'factura.pdf' },
+      buffer: pdf, actor
+    }), /directorio intermedio.*seguro/i);
+    assert.deepEqual(fs.readdirSync(outside), []);
+    assert.equal(h.db.prepare('SELECT COUNT(*) AS count FROM supporting_documents').get().count, 0);
+  } finally {
+    h.close();
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+});
