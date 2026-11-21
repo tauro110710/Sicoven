@@ -4,6 +4,7 @@ import { ArrowLeftRight, X, Check } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
+import { getBcvRateRequirement } from '../../types/bcvRatePolicy';
 import { getBolivarScaleMetadataByDate, getVenezuelanMonetaryEra } from '../../types/historicalAccountingCalendar';
 
 interface NewMovementModalProps {
@@ -79,6 +80,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const unitCostBs = parseDecimalInput(unitCostInput);
   const additionalLandedCostsBs = parseDecimalInput(additionalLandedCostsInput);
   const bcvRate = parseDecimalInput(bcvRateInput);
+  const bcvRateRequirement = getBcvRateRequirement(date, true);
   const unitCostUsd = bcvRate > 0 ? unitCostBs / bcvRate : 0;
   const totalCostBs = type === 'ENTRADA'
     ? quantity * unitCostBs + additionalLandedCostsBs
@@ -99,7 +101,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!Number.isFinite(quantity) || !Number.isFinite(unitCostBs) || !Number.isFinite(additionalLandedCostsBs) || quantity < 0 || (type !== 'AJUSTE' && quantity <= 0) || unitCostBs < 0 || additionalLandedCostsBs < 0 || !Number.isFinite(bcvRate) || bcvRate <= 0) { setError('Verifique que la cantidad, los costos y la tasa BCV sean válidos.'); return; }
+    if (!Number.isFinite(quantity) || !Number.isFinite(unitCostBs) || !Number.isFinite(additionalLandedCostsBs) || quantity < 0 || (type !== 'AJUSTE' && quantity <= 0) || unitCostBs < 0 || additionalLandedCostsBs < 0 || !['OPTIONAL', 'REQUIRED'].includes(bcvRateRequirement) || (bcvRateRequirement === 'REQUIRED' && (!Number.isFinite(bcvRate) || bcvRate <= 0)) || (bcvRateInput.trim() !== '' && (!Number.isFinite(bcvRate) || bcvRate <= 0))) { setError('Verifique la cantidad, los costos y la tasa BCV según el período de la operación.'); return; }
     if (type === 'SALIDA' && concept === 'DEVOLUCION_COMPRA') {
       if (!selectedReturnSource) { setError('Seleccione la entrada original de Kardex que se devuelve.'); return; }
       if (quantity > selectedReturnSource.remaining + 1e-8) { setError('La cantidad supera las unidades recibidas menos devoluciones previas (' + selectedReturnSource.remaining + ').'); return; }
@@ -284,8 +286,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
               </select>
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) · {getVenezuelanMonetaryEra(date).label} *</label>
-              <input type="text" inputMode="decimal" required placeholder="Ej.: 889,67" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) · {getVenezuelanMonetaryEra(date).label} {bcvRateRequirement === 'REQUIRED' ? '*' : '(opcional)'}</label>
+              <input type="text" inputMode="decimal" required placeholder={bcvRateRequirement === 'REQUIRED' ? 'Ej.: 889,67 (obligatoria)' : 'Ej.: 889,67 (opcional)' } value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">RIF proveedor / cliente</label>
