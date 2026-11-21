@@ -13,10 +13,22 @@ import {
   calculatePeriodicCostOfSales,
   calculateVnrProvisionLedgerBalance,
   isUsdInventoryValuationAvailable,
-  normalizeFifoLayersToCurrentBolivarScale
+  normalizeFifoLayersToCurrentBolivarScale,
+  calculateWeightedAverageCostAcrossReconversion
 } from './inventoryAccounting';
 
 describe('proyección PEPS en escala Bs. actual para reconversiones', () => {
+  it('promedia costos de bases monetarias distintas después de normalizarlos, preservando USD', () => {
+    const result = calculateWeightedAverageCostAcrossReconversion(
+      2, 1000000, '2018-08-20', 2,
+      1, 10, '2021-10-01', 3
+    );
+    assert.equal(result.quantity, 3);
+    assert.equal(result.totalCostBs, 12);
+    assert.equal(result.unitCostBs, 4);
+    assert.equal(result.totalCostUsd, 7);
+    assert.equal(result.unitCostUsd, 7 / 3);
+  });
   it('normaliza costos según fecha preservando costo nominal de origen, USD y fecha', () => {
     const layers = normalizeFifoLayersToCurrentBolivarScale([
       { quantity: 2, unitCostBs: 100000000000, unitCostUsd: 4, date: '2008-01-01', documentRef: 'OPEN-1' },
