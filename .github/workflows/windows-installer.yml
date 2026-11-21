@@ -5,9 +5,6 @@ name: SICOVEN Windows installer
 # deliberate installer/release builds to protect the GitHub Free allowance.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - feat/historical-accounting-reconstruction
 
 permissions:
   actions: read
