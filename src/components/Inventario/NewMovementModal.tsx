@@ -4,6 +4,7 @@ import { ArrowLeftRight, X, Check } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
+import { getBolivarScaleMetadataByDate, getVenezuelanMonetaryEra } from '../../types/historicalAccountingCalendar';
 
 interface NewMovementModalProps {
   isOpen: boolean;
@@ -49,6 +50,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   }, [currentCompany.id]);
 
   const selectedProduct = companyProducts.find(p => p.id === productId) || companyProducts[0];
+  const monetaryScaleSnapshot = getBolivarScaleMetadataByDate(date);
   const supplierReturnSources = companyMovements.filter(m => m.companyId === currentCompany.id && m.productId === productId && m.type === 'ENTRADA' && m.concept === 'COMPRA' && !m.correctionForMovementId).map(m => ({...m, remaining: m.quantity - companyMovements.filter(x => x.companyId === currentCompany.id && x.correctionForMovementId === m.id).reduce((sum,x)=>sum+Number(x.quantity||0),0)})).filter(m=>m.remaining>1e-8);
   const selectedReturnSource = supplierReturnSources.find(m=>m.id===correctionMovementId);
 
@@ -149,6 +151,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
       productName: selectedProduct.name,
       productCode: selectedProduct.code,
       date,
+      monetaryScaleSnapshot,
+      sourceMonetaryAmounts: { unitCost: unitCostInput, additionalLandedCosts: additionalLandedCostsInput, bcvRate: bcvRateInput },
       type,
       concept,
       documentRef: documentRef.trim() || `MOV-${Date.now().toString().slice(-6)}`,
@@ -280,7 +284,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
               </select>
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) *</label>
+              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) · {getVenezuelanMonetaryEra(date).label} *</label>
               <input type="text" inputMode="decimal" required placeholder="Ej.: 889,67" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
             </div>
             <div>
