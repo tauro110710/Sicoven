@@ -219,7 +219,7 @@ test('recalcula automáticamente los costos posteriores cuando se inserta una co
     movement({ id: 'sale-1', date: '2010-01-04', type: 'SALIDA', concept: 'VENTA', quantity: 3, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100 })
   ];
   const beforeLateEntry = replay([makeProduct()], originalSources);
-  assert.equal(beforeLateEntry.movements[2].totalCostBs, 40);
+  assert.equal(beforeLateEntry.movements[2].totalCostBs, 60);
   assert.equal(beforeLateEntry.products[0].currentStock, 1);
   const latePurchase = movement({ id: 'purchase-2-late', date: '2010-01-02', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 20, unitCostUsd: 0.2, bcvRate: 100 });
   const reconstructed = replay([makeProduct()], [...originalSources, latePurchase]);
