@@ -96,7 +96,7 @@ test('upgrades an existing v1 company database transactionally to the idempotent
   h.controller.runtime.closeCompany(company.id);
   const legacyDb = new Database(filePath);
   try {
-    legacyDb.exec('DROP TABLE operation_receipts');
+    legacyDb.exec('DROP TABLE operation_intent_completions; DROP TABLE operation_intents; DROP TABLE operation_receipts;');
     legacyDb.prepare("UPDATE sicoven_database_meta SET meta_value='1' WHERE meta_key='schema_version'").run();
   } finally {
     legacyDb.close();
@@ -105,14 +105,18 @@ test('upgrades an existing v1 company database transactionally to the idempotent
 
   const migrated = await h.controller.withDatabase(token, db => ({
     hasReceipts: Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='operation_receipts'").get()),
+    hasIntents: Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='operation_intents'").get()),
+    hasIntentCompletions: Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='operation_intent_completions'").get()),
     schemaVersion: db.prepare("SELECT meta_value FROM sicoven_database_meta WHERE meta_key='schema_version'").get().meta_value,
     snapshot: db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json,
     auditCount: db.prepare('SELECT COUNT(*) AS n FROM audit_events').get().n
   }));
   const registryVersion = h.controlDb.prepare('SELECT schema_version FROM company_database_registry WHERE company_id=?').get(company.id).schema_version;
   assert.equal(migrated.hasReceipts, true);
-  assert.equal(migrated.schemaVersion, '2');
-  assert.equal(registryVersion, 2);
+  assert.equal(migrated.hasIntents, true);
+  assert.equal(migrated.hasIntentCompletions, true);
+  assert.equal(migrated.schemaVersion, '3');
+  assert.equal(registryVersion, 3);
   assert.equal(migrated.snapshot, original.snapshot);
   assert.equal(migrated.auditCount, original.auditCount);
 });

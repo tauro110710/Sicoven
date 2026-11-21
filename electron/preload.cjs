@@ -41,6 +41,20 @@ async function invokeRecoverableOperationArgs(channel, token, args) {
   }
 }
 
+async function invokeRecoverableCompanyMetadata(token, input) {
+  const operationId = String(input?.operationId || globalThis.crypto.randomUUID());
+  const request = { ...input, operationId };
+  try {
+    return await ipcRenderer.invoke('sicoven:company-update-metadata', token, request);
+  } catch (firstError) {
+    try {
+      return await ipcRenderer.invoke('sicoven:company-update-metadata', token, request);
+    } catch {
+      throw firstError;
+    }
+  }
+}
+
 async function recoverPendingOperationIntents(token, confirmed = false) {
   const pending = await ipcRenderer.invoke('sicoven:operation-intent-list', token);
   if (!confirmed) {
@@ -102,7 +116,7 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   selectActiveCompany: (token, companyId) => ipcRenderer.invoke('sicoven:company-select-active', token, { companyId }),
   createCompany: (token, input) => invokeRecoverableOperation('sicoven:company-create', token, input),
   getActiveCompany: (token) => ipcRenderer.invoke('sicoven:company-get-active', token),
-  updateCompanyMetadata: (token, input) => ipcRenderer.invoke('sicoven:company-update-metadata', token, input),
+  updateCompanyMetadata: (token, input) => invokeRecoverableCompanyMetadata(token, input),
   listAuditEvents: (token, limit) => ipcRenderer.invoke('sicoven:audit-list', token, limit),
   recordAuditCorrection: (token, input) => invokeRecoverableOperation('sicoven:audit-record-correction', token, input),
   createCorrectionCase: (token, input) => invokeRecoverableOperation('sicoven:correction-case-create', token, input),

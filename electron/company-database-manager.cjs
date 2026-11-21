@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const DEFAULT_SCHEMA_VERSION = 1;
+const DEFAULT_SCHEMA_VERSION = 3;
 const REGISTRY_TABLE = 'company_database_registry';
 const TENANT_META_TABLE = 'sicoven_database_meta';
 

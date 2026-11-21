@@ -61,7 +61,10 @@ function initializeTenantDatabase(db) {
 }
 
 function migrateTenantDatabase(db, { fromVersion, toVersion } = {}) {
-  if (fromVersion === 1 && toVersion === 2) {
+  if ((fromVersion === 1 && (toVersion === 2 || toVersion === 3)) ||
+      (fromVersion === 2 && toVersion === 3)) {
+    // Additive and idempotent: schema v3 adds durable operation intents and
+    // completions to databases that already contain operation receipts.
     initializeOperationReceiptSchema(db);
     return;
   }

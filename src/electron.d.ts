@@ -46,7 +46,7 @@ declare global {
       selectActiveCompany: (token: string, companyId: string) => Promise<{ ok: boolean; changed: boolean; companyId: string; previousCompanyId?: string | null }>;
       createCompany: (token: string, input: Record<string, unknown>) => Promise<{ ok: boolean; company: { id: string; name: string; rif: string }; selection: { ok: boolean; changed: boolean; companyId: string } }>;
       getActiveCompany: (token: string) => Promise<{ companyId: string }>;
-      updateCompanyMetadata: (token: string, input: { companyId: string; name: string; rif: string }) => Promise<{ ok: boolean; company: { id: string; name: string; rif: string } }>;
+      updateCompanyMetadata: (token: string, input: { companyId: string; name: string; rif: string; operationId?: string }) => Promise<{ ok: boolean; company: { id: string; name: string; rif: string }; replayed?: boolean; unchanged?: boolean; receipt?: { operationId: string; companyId: string; auditEventId: number; requestHash: string; replayed?: boolean } }>;
       listAuditEvents: (token: string, limit?: number) => Promise<{ ok: boolean; message?: string; events?: Array<{ id: number; eventType: string; details: Record<string, unknown>; createdAt: string }> }>;
       save: (token: string, state: Record<string, unknown>, operationId?: string) => Promise<{ ok: boolean; savedAt: string; replayed?: boolean }>;
       resolveSave: (token: string, state: Record<string, unknown>, operationId: string) => Promise<{ found: boolean; result?: { ok: boolean; savedAt: string; replayed?: boolean } }>;

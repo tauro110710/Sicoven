@@ -91,6 +91,12 @@ function initializeOperationReceiptSchema(db) {
       BEFORE DELETE ON operation_intent_completions
       BEGIN SELECT RAISE(ABORT, 'operation_intent_completions is append-only'); END;
   `);
+  // Schema v2 databases may already have operation_receipts without the
+  // username column. Add it without rewriting or deleting historical receipts.
+  const receiptColumns = new Set(db.pragma('table_info(operation_receipts)').map(column => String(column.name)));
+  if (!receiptColumns.has('actor_username')) {
+    db.exec('ALTER TABLE operation_receipts ADD COLUMN actor_username TEXT');
+  }
 }
 
 function createOperationReceiptIdentity(input, companyId, operationType, request, actor) {

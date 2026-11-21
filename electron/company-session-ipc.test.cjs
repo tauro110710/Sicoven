@@ -2,11 +2,16 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const Database = require('better-sqlite3');
+const { initializeOperationReceiptSchema } = require('./operation-receipts.cjs');
 const { registerCompanySessionIpc } = require('./company-session-ipc.cjs');
 
 function fixture(overrides = {}) {
   const handlers = new Map();
   const calls = [];
+  const controlDb = new Database(':memory:');
+  controlDb.pragma('foreign_keys = ON');
+  controlDb.exec('CREATE TABLE app_state(state_key TEXT PRIMARY KEY,state_json TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT (datetime(\'now\')));');
   const context = {
     async listAccessibleCompanies(token) {
       calls.push(['list', token]);
@@ -33,12 +38,12 @@ function fixture(overrides = {}) {
       getActiveCompanyId: () => 'company-a',
       acquireMaintenanceLock: async () => () => {}
     },
-    controlDb: { prepare: () => ({ run: () => ({ changes: 1 }) }) },
+    controlDb,
     licenseView: () => ({ authorized: true }),
-    getActiveSession: token => token === 'valid-token' ? { id: 1, role: 'admin' } : null,
+    getActiveSession: token => token === 'valid-token' ? { id: 1, username: 'admin', role: 'admin' } : null,
     ...overrides
   });
-  return { handlers, calls };
+  return { handlers, calls, controlDb };
 }
 
 test('lists only companies returned by the authenticated context', async () => {
@@ -72,23 +77,71 @@ test('rejects malformed company identifiers before invoking the context', async 
   assert.deepEqual(calls, []);
 });
 
-test('returns the active company only through the authenticated session binding', () => {
+test('returns the active company only through the authenticated session binding', async () => {
   const { handlers, calls } = fixture();
-  assert.deepEqual(handlers.get('sicoven:company-get-active')({}, 'valid-token'), { companyId: 'company-a' });
+  assert.deepEqual(await handlers.get('sicoven:company-get-active')({}, 'valid-token'), { companyId: 'company-a' });
   assert.deepEqual(calls, [['active', 'valid-token']]);
 });
 
 
-test('updates registry identity and records a tenant audit event under maintenance lock', async () => {
-  let updatedMetadata = null;
-  const auditEvents = [];
+test('recreates company metadata saga tables after a global database restore', async () => {
+  const { handlers, controlDb } = fixture();
+  controlDb.exec('DROP TABLE company_metadata_completions; DROP TABLE company_metadata_intents;');
+  await handlers.get('sicoven:company-list-accessible')({}, 'valid-token');
+  const tables = new Set(controlDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(row => row.name));
+  assert.ok(tables.has('company_metadata_intents'));
+  assert.ok(tables.has('company_metadata_completions'));
+});
+
+test('rebinds metadata intent storage to the restored control database', async () => {
+  const oldControlDb = new Database(':memory:');
+  const restoredControlDb = new Database(':memory:');
+  for (const db of [oldControlDb, restoredControlDb]) {
+    db.exec("CREATE TABLE app_state(state_key TEXT PRIMARY KEY,state_json TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT (datetime('now')));");
+  }
+  let activeControlDb = oldControlDb;
+  const handlers = new Map();
+  const runtime = {
+    get controlDb() { return activeControlDb; },
+    listCompanies: () => [],
+    createCompany: async company => ({ ok: true, company }),
+    getCompanyDatabase: () => { throw new Error('No tenant expected'); }
+  };
+  registerCompanySessionIpc({
+    ipcMain: { handle: (name, handler) => handlers.set(name, handler) },
+    companySessionContext: {
+      listAccessibleCompanies: async () => [],
+      selectCompany: async (_token, companyId) => ({ ok: true, companyId }),
+      getSelectedCompanyId: () => ''
+    },
+    runtime,
+    operationContext: { acquireMaintenanceLock: async () => () => {} },
+    controlDb: oldControlDb,
+    licenseView: () => ({ authorized: true }),
+    getActiveSession: () => ({ id: 1, username: 'admin', role: 'admin' })
+  });
+  assert.ok(oldControlDb.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='company_metadata_intents'").get());
+  activeControlDb = restoredControlDb;
+  await handlers.get('sicoven:company-list-accessible')({}, 'valid-token');
+  assert.ok(restoredControlDb.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='company_metadata_intents'").get());
+  oldControlDb.close();
+  restoredControlDb.close();
+});
+
+test('updates registry metadata and records one recoverable tenant audit receipt', async () => {
+  let companyRecord = { id: 'company-a', name: 'Empresa A', rif: 'J-1', status: 'ACTIVE' };
   let acquired = 0, released = 0;
-  const tenantDb = { prepare: () => ({ run: (...args) => auditEvents.push(args) }) };
-  const { handlers } = fixture({
+  const tenantDb = new Database(':memory:');
+  initializeOperationReceiptSchema(tenantDb);
+  tenantDb.exec(`CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL);`);
+  const { handlers, controlDb } = fixture({
     runtime: {
-      listCompanies: () => [{ id: 'company-a', name: 'Empresa A', rif: 'J-1', status: 'ACTIVE' }],
+      listCompanies: () => [companyRecord],
       createCompany: async company => ({ ok: true, company }),
-      updateCompanyMetadata: company => { updatedMetadata = company; return { ...company, status: 'ACTIVE' }; },
+      updateCompanyMetadata: company => {
+        companyRecord = { ...companyRecord, name: company.name, rif: company.rif };
+        return companyRecord;
+      },
       getCompanyDatabase: () => tenantDb
     },
     operationContext: {
@@ -99,16 +152,136 @@ test('updates registry identity and records a tenant audit event under maintenan
       }
     }
   });
-  const result = await handlers.get('sicoven:company-update-metadata')({}, 'valid-token', {
+  const input = {
+    operationId: 'company-metadata-operation-001',
     companyId: 'company-a', name: 'EMPRESA A ACTUALIZADA', rif: 'J-12345678-9'
-  });
+  };
+  const result = await handlers.get('sicoven:company-update-metadata')({}, 'valid-token', input);
   assert.equal(result.ok, true);
-  assert.deepEqual(updatedMetadata, { companyId: 'company-a', name: 'EMPRESA A ACTUALIZADA', rif: 'J-12345678-9' });
-  assert.equal(auditEvents[0][0], 'company_metadata_updated');
-  assert.equal(acquired, 1);
-  assert.equal(released, 1);
+  assert.deepEqual(companyRecord, { id: 'company-a', name: 'EMPRESA A ACTUALIZADA', rif: 'J-12345678-9', status: 'ACTIVE' });
+  const auditEvents = tenantDb.prepare('SELECT event_type,details_json FROM audit_events').all();
+  assert.equal(auditEvents.length, 1);
+  assert.equal(auditEvents[0].event_type, 'company_metadata_updated');
+  const details = JSON.parse(auditEvents[0].details_json);
+  assert.equal(details.operationId, input.operationId);
+  assert.equal(details.actorUserId, 1);
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_metadata_intents').get().count, 1);
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_metadata_completions').get().count, 1);
+  const replay = await handlers.get('sicoven:company-update-metadata')({}, 'valid-token', input);
+  assert.equal(replay.replayed, true);
+  assert.equal(tenantDb.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 1);
+  assert.equal(acquired, 2);
+  assert.equal(released, 2);
+  tenantDb.close();
 });
 
+
+test('does not create a metadata saga or audit event when the registry values are unchanged', async () => {
+  const companyRecord = { id: 'company-a', name: 'EMPRESA A', rif: 'J-12345678-9', status: 'ACTIVE' };
+  let updateCalls = 0;
+  const { handlers, controlDb } = fixture({
+    runtime: {
+      listCompanies: () => [companyRecord],
+      createCompany: async company => ({ ok: true, company }),
+      updateCompanyMetadata: () => { updateCalls += 1; throw new Error('must not update unchanged metadata'); }
+    }
+  });
+  const result = await handlers.get('sicoven:company-update-metadata')({}, 'valid-token', {
+    operationId: 'company-metadata-unchanged-001',
+    companyId: 'company-a', name: 'empresa a', rif: 'j-12345678-9'
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.unchanged, true);
+  assert.equal(updateCalls, 0);
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_metadata_intents').get().count, 0);
+});
+
+test('recovers metadata audit after a crash between control registry commit and tenant audit', async () => {
+  let companyRecord = { id: 'company-a', name: 'Empresa A', rif: 'J-1', status: 'ACTIVE' };
+  let failOpen = true;
+  const tenantDb = new Database(':memory:');
+  initializeOperationReceiptSchema(tenantDb);
+  tenantDb.exec('CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL);');
+  const { handlers, controlDb } = fixture({
+    runtime: {
+      listCompanies: () => [companyRecord],
+      createCompany: async company => ({ ok: true, company }),
+      updateCompanyMetadata: company => { companyRecord = { ...companyRecord, ...company }; return companyRecord; },
+      getCompanyDatabase: () => {
+        if (failOpen) { failOpen = false; throw new Error('simulated tenant open interruption'); }
+        return tenantDb;
+      }
+    }
+  });
+  const input = {
+    operationId: 'company-metadata-recover-before-audit',
+    companyId: 'company-a', name: 'EMPRESA A NUEVA', rif: 'J-12345678-9'
+  };
+  await assert.rejects(
+    () => handlers.get('sicoven:company-update-metadata')({}, 'valid-token', input),
+    /simulated tenant open interruption/
+  );
+  assert.equal(companyRecord.name, 'EMPRESA A NUEVA');
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_metadata_intents').get().count, 1);
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_metadata_completions').get().count, 0);
+  assert.equal(tenantDb.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 0);
+  await handlers.get('sicoven:company-list-accessible')({}, 'valid-token');
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_metadata_completions').get().count, 1);
+  assert.equal(tenantDb.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 1);
+  await handlers.get('sicoven:company-list-accessible')({}, 'valid-token');
+  assert.equal(tenantDb.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 1);
+  tenantDb.close();
+});
+
+test('recovery after tenant audit commit but lost control completion does not duplicate the audit', async () => {
+  let companyRecord = { id: 'company-a', name: 'Empresa A', rif: 'J-1', status: 'ACTIVE' };
+  const tenantDb = new Database(':memory:');
+  initializeOperationReceiptSchema(tenantDb);
+  tenantDb.exec('CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL);');
+  const { handlers, controlDb } = fixture({
+    runtime: {
+      listCompanies: () => [companyRecord],
+      createCompany: async company => ({ ok: true, company }),
+      updateCompanyMetadata: company => { companyRecord = { ...companyRecord, ...company }; return companyRecord; },
+      getCompanyDatabase: () => tenantDb
+    }
+  });
+  controlDb.exec(`CREATE TRIGGER fail_metadata_completion BEFORE INSERT ON company_metadata_completions
+    BEGIN SELECT RAISE(ABORT, 'simulated control completion interruption'); END;`);
+  const input = {
+    operationId: 'company-metadata-recover-after-audit',
+    companyId: 'company-a', name: 'EMPRESA A NUEVA', rif: 'J-12345678-9'
+  };
+  await assert.rejects(
+    () => handlers.get('sicoven:company-update-metadata')({}, 'valid-token', input),
+    /simulated control completion interruption/
+  );
+  assert.equal(tenantDb.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 1);
+  assert.equal(tenantDb.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 1);
+  controlDb.exec('DROP TRIGGER fail_metadata_completion');
+  await handlers.get('sicoven:company-list-accessible')({}, 'valid-token');
+  assert.equal(tenantDb.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 1);
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_metadata_completions').get().count, 1);
+  tenantDb.close();
+});
+
+test('metadata intent and registry update roll back together when registry validation fails', async () => {
+  const { handlers, controlDb } = fixture({
+    runtime: {
+      listCompanies: () => [{ id: 'company-a', name: 'Empresa A', rif: 'J-1', status: 'ACTIVE' }],
+      createCompany: async company => ({ ok: true, company }),
+      updateCompanyMetadata: () => { throw new Error('duplicate RIF'); }
+    }
+  });
+  await assert.rejects(
+    () => handlers.get('sicoven:company-update-metadata')({}, 'valid-token', {
+      operationId: 'company-metadata-rollback-001',
+      companyId: 'company-a', name: 'EMPRESA A NUEVA', rif: 'J-12345678-9'
+    }),
+    /duplicate RIF/
+  );
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_metadata_intents').get().count, 0);
+});
 
 test('company creation retries recover the same tenant instead of creating a duplicate', async () => {
   let companyRecord = null;

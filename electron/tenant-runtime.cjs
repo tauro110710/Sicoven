@@ -16,7 +16,7 @@ function createTenantRuntime({
   userDataDir,
   Database,
   assertSqliteIntegrity,
-  schemaVersion = 2
+  schemaVersion = 3
 }) {
   if (!controlDb || typeof controlDb.prepare !== 'function' || !controlDb.open) {
     throw new TypeError('La base local de control debe estar abierta antes de crear el runtime multiempresa.');
