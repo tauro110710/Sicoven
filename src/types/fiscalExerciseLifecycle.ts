@@ -30,8 +30,19 @@ export function ensureFiscalExerciseCalendar(
   }
   const exercises = [...(company.fiscalExercises || [])];
   if (!exercises.length) {
-    exercises.push(createExercise(companyId, fiscalYear, getFiscalExerciseStartDate(company, fiscalYear)));
-    exercises.push(createExercise(companyId, fiscalYear + 1, String(fiscalYear + 1) + '-01-01'));
+    const configuredStart = company.accountingStartDate;
+    const startYear = configuredStart ? Number(configuredStart.slice(0, 4)) : fiscalYear;
+    if (configuredStart && (!isValidIsoDate(configuredStart) || startYear > fiscalYear)) {
+      throw new Error('La fecha de inicio contable configurada no permite inicializar el calendario.');
+    }
+    // Initialize every ordinary fiscal year from the accountant's chosen start year
+    // through the active year and the following year. No prior year is marked closed.
+    for (let year = startYear; year <= fiscalYear + 1; year += 1) {
+      const startDate = year === startYear
+        ? getFiscalExerciseStartDate(company, year)
+        : String(year) + '-01-01';
+      exercises.push(createExercise(companyId, year, startDate));
+    }
     validatePersistedFiscalExerciseCalendar(exercises, companyId);
     return exercises;
   }
