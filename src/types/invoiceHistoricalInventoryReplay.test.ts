@@ -67,3 +67,9 @@ test('reconciles already posted invoice movement and prevents it from being repl
   assert.equal(result.movements.length, 2);
   assert.equal(result.products[0].currentStock, 2);
 });
+
+test('rejects invalid reconstruction start and end dates', () => {
+  assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({ startDate: '2025-02-30' })), /fecha inicial/);
+  assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({ throughDate: '2025-02-30' })), /fecha final/);
+  assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({ throughDate: '2024-12-31' })), /fecha final/);
+});
