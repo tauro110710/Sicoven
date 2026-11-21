@@ -92,6 +92,66 @@ test('archiving closes the database and prevents future operational opens', t =>
   assert.equal(fs.existsSync(manager.getDatabasePath('comp-archive')), true);
 });
 
+test('registers a verified orphan tenant without reinitializing or overwriting its SQLite data', t => {
+  const { manager, userDataDir, controlDb } = fixture(t);
+  const filePath = path.join(userDataDir, 'companies', 'comp-recover', 'accounting.sqlite');
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const orphan = new Database(filePath);
+  orphan.exec(`
+    CREATE TABLE sicoven_database_meta(meta_key TEXT PRIMARY KEY,meta_value TEXT NOT NULL);
+    INSERT INTO sicoven_database_meta(meta_key,meta_value) VALUES('company_id','comp-recover'),('schema_version','1');
+    CREATE TABLE preserved(value TEXT NOT NULL);
+    INSERT INTO preserved(value) VALUES('initial snapshot retained');
+  `);
+  orphan.close();
+
+  const result = manager.recoverOrphanedCompany(
+    { id: 'comp-recover', rif: 'J-12345678-9', name: 'Empresa recuperada' },
+    db => db.prepare('SELECT value FROM preserved').get()?.value === 'initial snapshot retained'
+  );
+  assert.equal(result.found, true);
+  assert.equal(result.recovered, true);
+  assert.equal(result.company.id, 'comp-recover');
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_database_registry').get().count, 1);
+  const opened = manager.openCompany('comp-recover');
+  assert.equal(opened.prepare('SELECT value FROM preserved').get().value, 'initial snapshot retained');
+});
+
+test('refuses an orphan tenant whose verifier rejects its contents and preserves the file', t => {
+  const { manager, userDataDir, controlDb } = fixture(t);
+  const filePath = path.join(userDataDir, 'companies', 'comp-unverified', 'accounting.sqlite');
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const orphan = new Database(filePath);
+  orphan.exec(`
+    CREATE TABLE sicoven_database_meta(meta_key TEXT PRIMARY KEY,meta_value TEXT NOT NULL);
+    INSERT INTO sicoven_database_meta(meta_key,meta_value) VALUES('company_id','comp-unverified'),('schema_version','1');
+    CREATE TABLE preserved(value TEXT NOT NULL);
+    INSERT INTO preserved(value) VALUES('do-not-change');
+  `);
+  orphan.close();
+
+  assert.throws(
+    () => manager.recoverOrphanedCompany(
+      { id: 'comp-unverified', rif: 'J-12345678-9', name: 'No verificada' },
+      () => false
+    ),
+    /verificación de contenido.*no fue aprobada/i
+  );
+  assert.equal(controlDb.prepare('SELECT COUNT(*) AS count FROM company_database_registry').get().count, 0);
+  const verify = new Database(filePath, { readonly: true, fileMustExist: true });
+  assert.equal(verify.prepare('SELECT value FROM preserved').get().value, 'do-not-change');
+  verify.close();
+});
+
+test('returns not found when no orphan tenant file exists', t => {
+  const { manager } = fixture(t);
+  const result = manager.recoverOrphanedCompany(
+    { id: 'comp-not-created', rif: 'J-12345678-9', name: 'Todavía no creada' },
+    () => true
+  );
+  assert.deepEqual(result, { found: false });
+});
+
 test('does not overwrite an orphan SQLite file without a registry record', t => {
   const { manager, userDataDir } = fixture(t);
   const orphanPath = path.join(userDataDir, 'companies', 'comp-orphan', 'accounting.sqlite');
