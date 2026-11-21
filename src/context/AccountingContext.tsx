@@ -1532,7 +1532,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           if (result.status !== 'RECOVERED') failed.push(result);
         }
         if (!cancelled && failed.length) {
-          const details = failed.map(item => item.operationId + ' — ' + (item.message || 'Sigue pendiente')).join('\n');
+          const details = failed.map(item => item.operationId + ' — Reintento no confirmado; requiere revisión.').join('\n');
           await requestNonBlockingConfirm(
             'No se pudieron confirmar ' + failed.length + ' operación(es). Permanecen pendientes y no se marcaron como cerradas:\n' + details,
             { title: 'Recuperación incompleta', confirmLabel: 'Entendido', cancelLabel: 'Cerrar', tone: 'warning' }
