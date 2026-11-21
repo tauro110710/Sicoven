@@ -94,7 +94,7 @@ test('bloquea salidas anteriores a la primera entrada y no inventa existencia in
 test('rejects duplicate movement IDs even when one record falls after the replay cutoff', () => {
   const first = movement({ id: 'same-id', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 1, unitCostBs: 5, unitCostUsd: 0.05, bcvRate: 100 });
   const laterDuplicate = movement({ id: 'same-id', date: '2010-01-10', type: 'ENTRADA', concept: 'COMPRA', quantity: 1, unitCostBs: 7, unitCostUsd: 0.07, bcvRate: 100 });
-  assert.throws(() => replay([makeProduct()], [first, laterDuplicate]), /identificadores.*duplicados/);
+  assert.throws(() => replayHistoricalInventory({ companyId, startDate: '2010-01-01', throughDate: '2010-01-05', products: [makeProduct()], movements: [first, laterDuplicate] }), /identificadores.*duplicados/);
 });
 
 test('bloquea movimientos anteriores a la fecha de inicio y movimientos de otra empresa', () => {
