@@ -4,7 +4,8 @@ import {
   calculateFifoIssue,
   calculateWeightedAverageCostDual,
   reconstructFifoLayers,
-  type FifoMovementSnapshot
+  type FifoMovementSnapshot,
+  type CostLayer
 } from './inventoryAccounting';
 
 export interface HistoricalInventoryReplayInput {
@@ -129,7 +130,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
   const replayed: InventoryMovement[] = [];
   const replayedById = new Map<string, InventoryMovement>();
   const returnedBySale = new Map<string, number>();
-  const fifoLayersByMovementId = new Map<string, Array<{ quantity: number; unitCostBs: number; unitCostUsd: number; date: string; documentRef?: string; sourceMovementId?: string }>>();
+  const fifoLayersByMovementId = new Map<string, CostLayer[]>();
 
   for (const { movement: source } of ordered) {
     const id = String(source.id || '').trim();
