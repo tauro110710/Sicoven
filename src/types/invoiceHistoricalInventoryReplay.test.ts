@@ -76,6 +76,10 @@ test('rejects an existing purchase ledger entry with a mismatched USD unit cost'
   })), /datos difieren/);
 });
 
+test('rejects explicitly empty replay end date instead of treating it as omitted', () => {
+  assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({ throughDate: '' })), /fecha final/);
+});
+
 test('rejects invalid reconstruction start and end dates', () => {
   assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({ startDate: '2025-02-30' })), /fecha inicial/);
   assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({ throughDate: '2025-02-30' })), /fecha final/);
