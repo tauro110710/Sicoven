@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FileUp, FileSpreadsheet, AlertTriangle } from 'lucide-react';
+import { FileUp, FileSpreadsheet, AlertTriangle, Scale } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { calculateVnrWriteDown, calculatePeriodicCostOfSales, calculateVnrProvisionLedgerBalance } from '../../types/inventoryAccounting';
 import type { InventoryProduct } from '../../types/accounting';
