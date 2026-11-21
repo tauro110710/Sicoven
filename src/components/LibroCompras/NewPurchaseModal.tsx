@@ -77,7 +77,6 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   if (!isOpen) return null;
 
   function parseDecimalInput(value: string) { const raw = value.trim(); if (!raw) return 0; return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); }
-  function parseBolivarInput(value: string, date: string) { const raw = value.trim(); if (!raw) return 0; const normalized = raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw; const era = getVenezuelanMonetaryEra(date); return Number(convertVenezuelanAmount(normalized, era.id, 'BOLIVAR_DIGITAL')); }
   const monetaryScaleSnapshot = getBolivarScaleMetadataByDate(invoiceDate);
   const rateScaleSnapshot = getBolivarScaleMetadataByDate(accountCreditDate || invoiceDate);
 
