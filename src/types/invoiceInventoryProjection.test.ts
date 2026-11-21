@@ -57,10 +57,10 @@ describe('deriveInvoiceInventoryMovements', () => {
     const existing = deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [] }).map(m => ({ ...m, quantity: 4 }));
     expect(() => deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [], existingMovements: existing })).toThrow(/datos difieren/);
   });
-  it('keeps stable source order when purchase and sale share a date', () => {
+  it('refuses to guess posting order for same-product purchase and sale on the same day', () => {
     const sameDayPurchase = purchase({ invoiceDate: '2025-01-02' });
     const sameDaySale = sale({ invoiceDate: '2025-01-02' });
-    const result = deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [sameDayPurchase], sales: [sameDaySale] });
-    expect(result.map(m => m.type)).toEqual(['ENTRADA', 'SALIDA']);
+    expect(() => deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [sameDayPurchase], sales: [sameDaySale] }))
+      .toThrow(/sin secuencia de registro común/);
   });
 });
