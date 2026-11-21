@@ -76,6 +76,25 @@ export function calculateVnrProvisionLedgerBalance(
   };
 }
 
+/**
+ * USD valuation is available only when the current positive stock carries a positive
+ * USD unit cost and its opening BCV snapshot plus all movements retain valid rates.
+ * Empty-stock products do not block valuation totals.
+ */
+export function isUsdInventoryValuationAvailable(
+  product: { currentStock: number; avgCostUsd: number; openingBcvRate?: number },
+  movements: Array<{ bcvRate?: number }>
+): boolean {
+  const stock = Number(product.currentStock);
+  if (!Number.isFinite(stock) || stock < 0) return false;
+  if (stock <= 0) return true;
+  if (!Number.isFinite(Number(product.avgCostUsd)) || Number(product.avgCostUsd) <= 0 ||
+      !Number.isFinite(Number(product.openingBcvRate)) || Number(product.openingBcvRate) <= 0) return false;
+  return Array.isArray(movements) && movements.every(movement =>
+    Number.isFinite(Number(movement.bcvRate)) && Number(movement.bcvRate) > 0);
+}
+
+
 export type InventoryCostingMethod = 'PROMEDIO_PONDERADO' | 'PEPS';
 export type InventoryVatTreatment = 'GENERAL_16' | 'REDUCIDA_8' | 'EXENTO' | 'EXONERADO';
 export type InventoryItemType = 'MERCANCIA' | 'MATERIA_PRIMA' | 'PRODUCTO_EN_PROCESO' | 'PRODUCTO_TERMINADO' | 'SUBPRODUCTO';
