@@ -6907,6 +6907,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         parsedDate.toISOString().slice(0, 10) !== movData.date) {
       throw new Error('La fecha del movimiento bancario no es válida.');
     }
+    const startDateError = validateAccountingStartDate(currentCompany.accountingStartDate, movData.date, 'El movimiento bancario');
+    if (startDateError) throw new Error(startDateError);
     if (movData.type !== 'DEBIT' && movData.type !== 'CREDIT') {
       throw new Error('La naturaleza del movimiento bancario debe ser débito o crédito.');
     }
@@ -6982,6 +6984,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           !item.reference?.trim() || !item.description?.trim()) {
         throw new Error('La importación contiene fecha, naturaleza, referencia o descripción inválida.');
       }
+      const startDateError = validateAccountingStartDate(currentCompany.accountingStartDate, item.date, 'El movimiento de extracto');
+      if (startDateError) throw new Error(startDateError);
       const amountBs = Number(item.amountBs), amountUsd = Number(item.amountUsd), bcvRate = Number(item.bcvRate);
       validateBankMovementFxSnapshot({
         date: item.date, amountBs, amountUsd, bcvRate,
