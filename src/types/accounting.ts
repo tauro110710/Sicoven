@@ -675,6 +675,8 @@ export interface InventoryMovement {
   costingMethod?: InventoryCostingMethod;
   /** Fletes y gastos de importación asignados a esta entrada, en Bs. */
   additionalLandedCostsBs?: number;
+  /** Exact PEPS layer composition consumed by a sale or restored by a customer return. */
+  fifoLayers?: Array<{ quantity: number; unitCostBs: number; unitCostUsd: number; date: string; documentRef?: string; sourceMovementId?: string }>;
 }
 
 export interface VatRetentionVoucher {
