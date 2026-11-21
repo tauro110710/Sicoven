@@ -57,6 +57,20 @@ describe('deriveInvoiceInventoryMovements', () => {
     const existing = deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [] }).map(m => ({ ...m, quantity: 4 }));
     expect(() => deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [], existingMovements: existing })).toThrow(/datos difieren/);
   });
+  it('rejects ambiguous duplicate existing Kardex records for one invoice source', () => {
+    const existing = deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [] });
+    const duplicateLedger = [...existing, { ...existing[0], id: 'duplicate-row' }];
+    expect(() => deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [], existingMovements: duplicateLedger }))
+      .toThrow(/varios movimientos del Kardex/);
+  });
+
+  it('blocks matching source movements when supplier metadata differs', () => {
+    const existing = deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [] })
+      .map(m => ({ ...m, counterpartyRif: 'J-OTHER' }));
+    expect(() => deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [], existingMovements: existing }))
+      .toThrow(/datos difieren/);
+  });
+
   it('refuses to guess posting order for same-product purchase and sale on the same day', () => {
     const sameDayPurchase = purchase({ invoiceDate: '2025-01-02' });
     const sameDaySale = sale({ invoiceDate: '2025-01-02' });
