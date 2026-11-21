@@ -220,3 +220,11 @@ El contador debe poder iniciar el registro ordinario desde cualquier período el
 - Resolver la representación monetaria del ledger: que una operación sin tasa aplicable pueda contabilizarse de manera válida sin fabricar equivalentes USD, y que saldos, cierres y reportes respeten moneda funcional/presentación. Requiere revisión de arquitectura, no un bypass de validación.
 - Auditar el calendario ordinario para que una empresa iniciada en febrero de 2010 pueda navegar y registrar períodos consecutivos hasta el actual, sin generar documentos ni reconstruir actividad.
 - No marcar nada de este apartado como terminado por documentación o por la existencia de helpers; solo cuando esté integrado en runtime, persistido y cubierto por pruebas.
+
+
+### Avance adicional — fecha de inicio de registro aplicada a operaciones ordinarias
+- Se creó `src/types/accountingStartDateValidation.ts` con validación central para fecha inicial configurada, fechas corruptas y bloqueo de operaciones anteriores al inicio contable de la empresa; las empresas heredadas sin fecha no reciben restricción automática.
+- Integrado en `AccountingContext.tsx`: asientos manuales, compras (fecha de factura y abono en cuenta) y ventas rechazan fechas anteriores al inicio elegido.
+- Pruebas unitarias añadidas en `accountingStartDateValidation.test.ts` para fechas límite, períodos posteriores, legado y fecha inválida. No se ejecutaron localmente en esta sesión por falta de checkout/runner disponible; se requiere CI.
+- Commits verificados en GitHub: helper `f97758b3e40403c1e3053b177862f91efa9d7e0c`; tests `96df61acfdcf12b6668540aec60558870a53146b`; integración `a514cb80913eab14d9ac77e5939375fae997b479`.
+- La validación no cubre todavía todos los módulos secundarios (nómina, activos, bancos, impuestos, movimientos de inventario y otros handlers especializados); ampliar con auditoría y pruebas antes de declarar cobertura completa.
