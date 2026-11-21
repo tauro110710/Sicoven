@@ -5500,61 +5500,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const prepareInventoryProductsForHistoricalReconstruction = async (startDate: string): Promise<number> => {
     assertSQLitePersistenceReady('Preparar productos para reconstrucción histórica');
     if (!isValidIsoDate(startDate)) throw new Error('La fecha inicial de reconstrucción no es válida.');
-    const companyId = currentCompany.id;
-    const companyProducts = products.filter(product => product.companyId === companyId);
-    if (!companyProducts.length) throw new Error('La empresa no tiene artículos de inventario para preparar.');
-    if (companyProducts.some(product => Number(product.currentStock) !== 0)) {
-      throw new Error('La preparación exige que todos los artículos tengan existencia cero. No se modificó ningún producto.');
-    }
-    if (movements.some(movement => movement.companyId === companyId)) {
-      throw new Error('La empresa ya tiene movimientos de Kardex. No se borrarán ni alterarán; primero debe resolverse su historial.');
-    }
-    if (purchases.some(purchase => purchase.companyId === companyId) || sales.some(sale => sale.companyId === companyId)) {
-      throw new Error('La empresa ya tiene compras o ventas registradas. La preparación no puede borrar sus efectos históricos.');
-    }
-    const inventoryLedgerExists = journalEntries.some(entry => entry.companyId === companyId &&
-      entry.items.some(item => /^1\.1\.4\./.test(item.accountCode) &&
-        [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].some(value => Number(value || 0) !== 0)));
-    if (inventoryLedgerExists) {
-      throw new Error('La empresa ya tiene asientos con saldos de inventario. No se modificó ningún dato.');
-    }
-    if (currentCompany.closedThroughDate && currentCompany.closedThroughDate >= startDate) {
-      throw new Error('La fecha inicial seleccionada pertenece a un período contable cerrado. No se modificó ningún dato.');
-    }
-    const preparedProducts = prepareProductsForHistoricalReconstruction(companyProducts, startDate);
-    const preparedById = new Map(preparedProducts.map(product => [product.id, product]));
-    const reason = 'Preparación autorizada para reconstrucción histórica desde ' + startDate;
-    const workpaperNote = 'Se ponen en cero los costos actuales y se limpia la fecha/tasa BCV de apertura del producto. Se conservan código, nombre, existencia cero, precios comerciales, cuentas y demás datos maestros. No se elimina el historial general de tasas BCV.';
-    for (const original of companyProducts) {
-      const prepared = preparedById.get(original.id)!;
-      await recordCorrectionAudit({
-        eventType: 'accounting_correction_requested', entityType: 'INVENTORY_PRODUCT',
-        companyId, entityId: original.id, correctionType: 'HISTORICAL_RECONSTRUCTION_PREPARATION',
-        sourceDocumentRef: original.code + ' · ' + original.name,
-        correctionDocumentRef: original.code + ' · ' + original.name + ' · inicio ' + startDate,
-        reason, workpaperNote
-      });
-    }
-    setProducts(prev => prev.map(product => product.companyId === companyId
-      ? (preparedById.get(product.id) || product) : product));
-    try {
-      await waitForPersistence();
-    } catch (error) {
-      throw new Error('SQLite no confirmó la preparación de los artículos. No continúe con la reconstrucción hasta verificar el estado de la empresa. ' +
-        (error instanceof Error ? error.message : 'Error de persistencia.'));
-    }
-    for (const original of companyProducts) {
-      await recordCorrectionAudit({
-        eventType: 'accounting_correction_executed', entityType: 'INVENTORY_PRODUCT',
-        companyId, entityId: original.id, correctionType: 'HISTORICAL_RECONSTRUCTION_PREPARATION',
-        sourceDocumentRef: original.code + ' · ' + original.name,
-        correctionDocumentRef: original.code + ' · ' + original.name + ' · inicio ' + startDate,
-        reason, workpaperNote
-      });
-    }
-    return preparedProducts.length;
+    // SAFETY: historical reconstruction must reconcile authentic opening balances.
+    // This legacy preparation path resets product costs and therefore is disabled.
+    // Do not mutate products, inventory, or persisted data until a non-destructive,
+    // transactional opening/reconciliation workflow replaces it.
+    throw new Error('Preparación destructiva de inventario deshabilitada. La reconstrucción histórica debe reconciliar las existencias y costos de apertura auténticos sin poner productos en cero ni borrar datos.');
   };
-
   const inventoryCorrectionAuthorizationRef = useRef<string | null>(null);
   const journalCorrectionAuthorizationRef = useRef<string | null>(null);
   const addMovement = (movData: Omit<InventoryMovement, 'id' | 'companyId'>): InventoryMovement => {
