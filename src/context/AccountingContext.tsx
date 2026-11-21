@@ -414,6 +414,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [supplierAdvanceSettlements, setSupplierAdvanceSettlements] = useState<SupplierAdvanceSettlement[]>([]);
   const [supplierDirectAdvances, setSupplierDirectAdvances] = useState<SupplierDirectAdvance[]>([]);
   const bankStatementImportInFlightRef = useRef(false);
+  // Autorizaciones temporales de corrección: se consumen al ejecutar el movimiento/ asiento corregido.
+  const inventoryCorrectionAuthorizationRef = useRef<string | null>(null);
+  const journalCorrectionAuthorizationRef = useRef<string | null>(null);
   type PendingBankOutgoingReservation = { release: () => void; waiter: { resolve: () => void; reject: (error: Error) => void } };
   type ActiveAccountingImportBatch = { journalEntries: JournalEntry[]; sales: SaleRecord[]; purchases: PurchaseRecord[]; creditSettlements: CreditSettlement[]; supplierDirectAdvances: SupplierDirectAdvance[]; supplierAdvanceSettlements: SupplierAdvanceSettlement[]; reservedBankLockKeys: Set<string> };
   const bankOutgoingReservationsRef = useRef<PendingBankOutgoingReservation[]>([]);
