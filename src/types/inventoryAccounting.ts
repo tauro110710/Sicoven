@@ -124,7 +124,7 @@ export function normalizeFifoLayersToCurrentBolivarScale(layersInput: CostLayer[
   if (!Array.isArray(layersInput)) throw new Error('Las capas PEPS no son válidas para normalizar su escala monetaria.');
   return layersInput.map(layer => {
     const date = String(layer.date || '');
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) ||
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) ||
         new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) !== date ||
         !validNonNegative(Number(layer.unitCostBs)) || !validNonNegative(Number(layer.unitCostUsd))) {
       throw new Error('Una capa PEPS requiere fecha y costos originales válidos para normalizar.');
