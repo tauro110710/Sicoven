@@ -11,7 +11,7 @@ const formatDate = (value: string | null | undefined): string => {
 
 export const HistoricalAccountingReplayPanel: React.FC = () => {
   const { currentCompany, prepareHistoricalAccountingReplayPlan, isStorageReady } = useAccounting();
-  const [startDate, setStartDate] = useState(currentCompany.operationalStartDate || currentCompany.accountingStartDate || '');
+  const [startDate, setStartDate] = useState('');
   const [throughDate, setThroughDate] = useState('');
   const [plan, setPlan] = useState<HistoricalAccountingReplayPlan | null>(null);
   const [busy, setBusy] = useState(false);
@@ -20,7 +20,7 @@ export const HistoricalAccountingReplayPanel: React.FC = () => {
   useEffect(() => {
     setPlan(null);
     setError('');
-    setStartDate(currentCompany.operationalStartDate || currentCompany.accountingStartDate || '');
+    setStartDate('');
     setThroughDate('');
   }, [currentCompany.id, currentCompany.operationalStartDate, currentCompany.accountingStartDate]);
 
@@ -57,7 +57,7 @@ export const HistoricalAccountingReplayPanel: React.FC = () => {
           Desde (inicio de la reconstrucción histórica)
           <input type="date" value={startDate} onChange={event => setStartDate(event.target.value)}
             className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />
-          <span className="mt-1 block text-xs font-normal text-slate-500">No hay límite de antigüedad: seleccione el año/período que necesita reconstruir.</span>
+          <span className="mt-1 block text-xs font-normal text-slate-500">La fecha de inicio la determina el Contador Público Colegiado para este trabajo; no existe un año mínimo predeterminado.</span>
         </label>
         <label className="text-sm font-medium text-slate-700">
           Hasta (opcional)
@@ -72,7 +72,7 @@ export const HistoricalAccountingReplayPanel: React.FC = () => {
         {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ClipboardList className="h-4 w-4" />}
         {busy ? 'Analizando registros…' : 'Generar plan de revisión'}
       </button>
-      {!currentCompany.operationalStartDate && <p className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600">La fecha de inicio real no está registrada en la ficha; puede comenzar desde cualquier período que necesite.</p>}
+      <p className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600">El inicio seleccionado define el alcance de esta reconstrucción. SICOVEN no impone 2010 ni exige revisar períodos anteriores al criterio profesional.</p>
       {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
       {plan && <>
         <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
