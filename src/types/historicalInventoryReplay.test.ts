@@ -165,3 +165,15 @@ test('reconstruye compras, salidas y ajustes en bolívares sin exigir tasa cambi
   assert.equal(result.products[0].avgCostUsd, 0);
   assert.equal(result.products[0].lastCostUsd, 0);
 });
+
+test('conserva costos USD expresos en registros históricos sin tasa de conversión', () => {
+  const result = replay([makeProduct()], [
+    movement({ id: 'purchase-usd', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 2, bcvRate: 0 }),
+    movement({ id: 'sale-usd', date: '2010-01-02', type: 'SALIDA', concept: 'VENTA', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 0 }),
+    movement({ id: 'adjustment-usd', date: '2010-01-03', type: 'AJUSTE', concept: 'AJUSTE', quantity: 1, unitCostBs: 5, unitCostUsd: 1, bcvRate: 0, balanceQty: 2 })
+  ]);
+  assert.equal(result.movements[0].totalCostUsd, 4);
+  assert.equal(result.movements[1].totalCostUsd, 2);
+  assert.equal(result.movements[2].totalCostUsd, 1);
+  assert.equal(result.products[0].avgCostUsd, 1.5);
+});
