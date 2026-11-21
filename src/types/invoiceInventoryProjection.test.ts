@@ -96,3 +96,10 @@ test('accepts a valid leap-day invoice date after calendar validation', () => {
   const result = deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase({ invoiceDate: '2024-02-29' })], sales: [] });
   assert.equal(result[0].date, '2024-02-29');
 });
+
+test('reconciles an existing invoice Kardex movement with case and whitespace differences in its reference', () => {
+  const existing = deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [] })
+    .map(m => ({ ...m, id: 'manual-kardex-1', documentRef: '  fac-p-001  ' }));
+  const result = deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [], existingMovements: existing });
+  assert.deepEqual(result, []);
+});
