@@ -138,11 +138,11 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
     }
     const state = states.get(source.productId);
     if (!state) throw new Error('El movimiento ' + (source.documentRef || id) + ' referencia un artículo inexistente en la empresa.');
-    const rate = Number(source.bcvRate || 0);
+    const rate = Number(source.bcvRate ?? 0);
     const requestedQuantity = Number(source.quantity);
     const requestedUnitCostBs = Number(source.unitCostBs);
     const requestedUnitCostUsd = Number(source.unitCostUsd);
-    const landedCostsBs = Number(source.additionalLandedCostsBs || 0);
+    const landedCostsBs = Number(source.additionalLandedCostsBs ?? 0);
     if (!validNonNegative(rate) || !validPositive(requestedQuantity) ||
         !validNonNegative(requestedUnitCostBs) || !validNonNegative(requestedUnitCostUsd) ||
         !validNonNegative(landedCostsBs)) {
