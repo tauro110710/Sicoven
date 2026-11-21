@@ -246,3 +246,26 @@ Trabajar en este orden, cerrando cada fase con PR integrada y pruebas satisfacto
 - No se trasladaron modificaciones antiguas de company-session-ipc.cjs, tenant-runtime.cjs, creación de empresas, esquema ni sus pruebas; main conserva exactamente la implementación de creación durable que pasó validaciones en #183.
 - Se añadieron pruebas de reintento idempotente, recuperación tras fallo SQLite luego de persistir el archivo, rechazo de otro archivo o entidad/documento sustituido con el mismo operationId, preservación de archivo alterado y bloqueo de rutas con symlink. Los reintentos quedan ligados a empresa, operación contable, tipo, título, descripción y destino de sustitución originales.
 - Pendiente: auditoría final del protocolo filesystem/SQLite (incluida durabilidad de entradas de directorio, concurrencia y restauración), ejecución CI Linux/G13/Windows Release, corrección de fallos y validación completa antes de fusionar. No habilitar reconstrucción histórica integral ni publicar versión con esta fase parcial.
+
+
+## 7. DIRECTIVA PERMANENTE E INNEGOCIABLE: NO DESVIARSE DE LA RECONSTRUCCIÓN HISTÓRICA
+
+**La prioridad absoluta es implementar el procesamiento cronológico REAL de los registros y reconstruir sus efectos contables desde el período elegido hasta la actualidad. Este objetivo no debe desviarse, diluirse, posponerse ni sustituirse NUNCA MÁS por mecanismos accesorios.**
+
+El trabajo debe concentrarse directamente en que SICOVEN procese y recalcule, en orden cronológico y con resultados persistidos correctos:
+- registros y documentos fuente;
+- saldos y movimientos de cuentas;
+- inventario, Kardex, existencias y capas/costos;
+- costos de compras, ventas, salidas y devoluciones;
+- asientos contables y sus auxiliares;
+- cierres y aperturas entre ejercicios, desde el primer período reconstruido hasta el último.
+
+### Prohibición de desviación
+- No volver a priorizar colas de operaciones, permisos, aprobaciones, formularios, paneles de revisión, flujos burocráticos, mecanismos genéricos de recuperación, infraestructura accesoria ni mejoras de otros módulos, salvo que una dependencia concreta sea **directamente indispensable** para ejecutar, persistir o verificar la reconstrucción cronológica.
+- No crear nuevos planes, listas de requisitos, fases burocráticas, PR de temas laterales o documentación extensa como sustituto de implementar la funcionalidad central.
+- No detener el trabajo para pedir confirmaciones innecesarias. Resolver directamente decisiones técnicas razonables y continuar.
+- Si surge un defecto o dependencia, corregirlo en el contexto del trabajo de reconstrucción y volver inmediatamente al objetivo central.
+- La seguridad, integridad de SQLite, idempotencia, trazabilidad y pruebas deben ser controles integrados y proporcionados a la implementación; nunca una excusa para construir procesos que impidan al contador trabajar.
+- Mantener este objetivo como prioridad hasta que la reconstrucción cronológica real esté implementada, probada, habilitada y verificada. No cambiar de objetivo por iniciativa propia ni declarar terminado por haber creado un panel, plan de solo lectura, simulación, documentación o fundamentos aislados.
+
+**Definición práctica de éxito:** el contador elige la fecha/período de inicio, ejecuta la reconstrucción y SICOVEN recalcula de forma real, coherente y cronológica registros, saldos, inventario, costos, asientos y cierres de ejercicios hasta la actualidad, conservando fuentes y sin duplicar operaciones. Todo trabajo que no acerque directamente a este resultado queda fuera de prioridad.
