@@ -246,3 +246,12 @@ test('recalcula automáticamente los costos posteriores cuando se inserta una co
   assert.equal(reconstructed.products[0].avgCostBs, 20);
   assert.equal(originalSources[2].totalCostBs, 0, 'los movimientos fuente no se modifican al recalcular');
 });
+
+
+test('garantiza fecha en las capas PEPS reconstruidas', () => {
+  const result = replay([makeProduct('PEPS')], [
+    movement({ id: 'purchase-date', date: '2010-02-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 3, unitCostBs: 15, unitCostUsd: 0.15, bcvRate: 100 }),
+    movement({ id: 'sale-date', date: '2010-02-02', type: 'SALIDA', concept: 'VENTA', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100 })
+  ]);
+  assert.ok(result.movements[1].fifoLayers?.every(layer => layer.date === '2010-02-01'));
+});
