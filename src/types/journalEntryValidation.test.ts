@@ -84,3 +84,9 @@ test('mantiene conciliación USD al dividir un importe en varios renglones', () 
   const creditUsd = convertBsToUsdAmount(10, 3);
   assert.ok(Math.abs(debitUsd - creditUsd) < 0.000001);
 });
+
+
+test('acepta asiento exclusivamente en Bs. cuando no se requiere equivalencia USD', () => {
+  assert.equal(isJournalEntryBalanced({ debitBs: 1250, creditBs: 1250, debitUsd: 0, creditUsd: 0 }, 0.01, 0.000001, false), true);
+  assert.equal(isJournalEntryBalanced({ debitBs: 1250, creditBs: 1250, debitUsd: 0, creditUsd: 0 }), false);
+});
