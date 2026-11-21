@@ -39,11 +39,12 @@ export function validateJournalEntryAccounts(
 }
 
 
-/** An entry is balanced only when both Bs. and USD totals balance. */
+/** Validates Bs. always and USD only when the entry actually carries USD amounts. */
 export function isJournalEntryBalanced(
   totals: { debitBs: number; creditBs: number; debitUsd: number; creditUsd: number },
   toleranceBs = 0.01,
-  toleranceUsd = 0.000001
+  toleranceUsd = 0.000001,
+  requireUsdBalance = true
 ): boolean {
   const values = [totals.debitBs, totals.creditBs, totals.debitUsd, totals.creditUsd];
   if (!values.every(value => Number.isFinite(value) && value >= 0)) return false;
@@ -51,5 +52,5 @@ export function isJournalEntryBalanced(
     totals.debitUsd > 0 || totals.creditUsd > 0;
   return hasMovement &&
     Math.abs(totals.debitBs - totals.creditBs) < toleranceBs &&
-    Math.abs(totals.debitUsd - totals.creditUsd) < toleranceUsd;
+    (!requireUsdBalance || Math.abs(totals.debitUsd - totals.creditUsd) < toleranceUsd);
 }
