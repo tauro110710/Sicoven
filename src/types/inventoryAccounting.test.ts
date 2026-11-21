@@ -12,8 +12,31 @@ import {
   calculateVnrWriteDown,
   calculatePeriodicCostOfSales,
   calculateVnrProvisionLedgerBalance,
-  isUsdInventoryValuationAvailable
+  isUsdInventoryValuationAvailable,
+  normalizeFifoLayersToCurrentBolivarScale
 } from './inventoryAccounting';
+
+describe('proyección PEPS en escala Bs. actual para reconversiones', () => {
+  it('normaliza costos según fecha preservando costo nominal de origen, USD y fecha', () => {
+    const layers = normalizeFifoLayersToCurrentBolivarScale([
+      { quantity: 2, unitCostBs: 100000000000, unitCostUsd: 4, date: '2008-01-01', documentRef: 'OPEN-1' },
+      { quantity: 3, unitCostBs: 1000000, unitCostUsd: 5, date: '2018-08-20', documentRef: 'OPEN-2' },
+      { quantity: 1, unitCostBs: 100, unitCostUsd: 6, date: '2021-10-01', documentRef: 'OPEN-3' }
+    ]);
+    assert.equal(layers[0].unitCostBs, 1);
+    assert.equal(layers[0].sourceUnitCostBs, 100000000000);
+    assert.equal(layers[0].unitCostUsd, 4);
+    assert.equal(layers[0].date, '2008-01-01');
+    assert.equal(layers[1].unitCostBs, 1);
+    assert.equal(layers[1].sourceUnitCostBs, 1000000);
+    assert.equal(layers[2].unitCostBs, 100);
+    assert.equal(layers[2].monetaryScaleSnapshot?.eraId, 'BOLIVAR_DIGITAL');
+  });
+  it('no normaliza capas sin fecha ni costos inválidos', () => {
+    assert.throws(() => normalizeFifoLayersToCurrentBolivarScale([{ quantity: 1, unitCostBs: 100, unitCostUsd: 1 }]), /fecha y costos originales válidos/);
+    assert.throws(() => normalizeFifoLayersToCurrentBolivarScale([{ quantity: 1, unitCostBs: -1, unitCostUsd: 1, date: '2021-10-01' }]), /fecha y costos originales válidos/);
+  });
+});
 
 describe('disponibilidad de valoración USD del inventario', () => {
   it('marca como no disponible el USD si la existencia activa no conserva costo/tasa histórica', () => {
