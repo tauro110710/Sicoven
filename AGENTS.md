@@ -25,6 +25,16 @@ Esta aclaración prevalece sobre cualquier mención posterior incompatible en es
 - Prioridad de implementación: definir y probar un coordinador puro que recalcule un artículo desde el historial real y las fuentes (incluyendo facturas cuando proceda), luego diseñar el commit atómico SQLite y las relaciones de asientos; integrar después los flujos ordinarios de registro e importación. Preservar períodos cerrados, fecha de inicio, secuencia de registro de operaciones del mismo día, vínculos a documentos y reversos/correcciones.
 - Auditoría actual de estos hallazgos: inspección de `AccountingContext.tsx`, `historicalAccountingReplayPlan.ts`, `historicalInventoryReplay.ts`, `invoiceHistoricalInventoryReplay.ts`. No se ejecutaron pruebas ni build en este entorno; no reportar como verificados.
 
+## AMPLIACIÓN DE AUDITORÍA — FLUJOS CON ORDEN CRONOLÓGICO BLOQUEADO (2026-11-21)
+
+Se identificaron bloqueos cronológicos adicionales que no deben retirarse de manera aislada:
+- `addMovement()`: rechaza movimientos anteriores al último Kardex del artículo; su costo promedio/PEPS, saldo y asiento se calculan usando el saldo vivo.
+- `importInventoryMovements()`: simula el lote secuencialmente en mapas virtuales, valida saldos esperados, duplicados y genera asientos, pero también exige que el lote no retroceda respecto al último movimiento existente. La validación y los cálculos usan los productos/movimientos virtuales; el lote se publica mediante setters después de procesarlo.
+- Registro de compras: se encontró una protección que rechaza la fecha de compra anterior al último movimiento de Kardex de los artículos incluidos. Debe auditarse en el contexto de facturas, pagos, IVA/retenciones y asientos, antes de habilitar compras atrasadas.
+- Producción: también se bloquea una fecha de producción anterior al último Kardex de los artículos involucrados. La producción afecta consumo de componentes, productos en proceso/terminados y cuentas, por lo que requiere recálculo coordinado.
+- Por lo tanto, la corrección no puede limitarse a eliminar los mensajes de error. Un recálculo seguro debe considerar las fuentes de compra/venta/producción/importación y todas las salidas/correcciones posteriores del mismo artículo, reconstruir los estados afectados y vincular/reconciliar sus asientos sin duplicarlos. Las operaciones del mismo día necesitan orden original de registro demostrable; si no existe, detener y pedir revisión, sin inventar orden.
+- Estas barreras son conservadoras y, por ahora, preservan integridad. La auditoría continuará para definir un coordinador compartido, atomicidad de persistencia y límites de períodos cerrados antes de modificarlas.
+
 ## Principio rector definitivo
 SICOVEN no está diseñado para rescatar contabilidades dañadas ni para reconstruir empresas que nunca han existido dentro de él. Está diseñado para que un contador pueda crear una empresa, escoger desde cuándo la lleva, empezar a registrar sus operaciones y llevarla hasta el presente o el futuro, sin que el sistema le complique el trabajo.
 
