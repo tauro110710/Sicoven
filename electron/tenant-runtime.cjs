@@ -114,7 +114,7 @@ function createTenantRuntime({
     if (!receipt || String(receipt.company_id) !== companyId ||
         String(receipt.operation_type) !== 'accounting.snapshot' ||
         Number(receipt.actor_user_id) !== Number(actor.id)) {
-      throw new Error('El recibo durable del snapshot inicial no coincide con la creación.');
+      throw new Error('La evidencia append-only de creación no coincide con el actor o la huella de solicitud.');
     }
     const events = db.prepare(
       "SELECT details_json FROM audit_events WHERE event_type='company_created' ORDER BY id"
@@ -167,7 +167,7 @@ function createTenantRuntime({
     if (!receipt || String(receipt.company_id) !== companyId ||
         String(receipt.operation_type) !== 'accounting.snapshot' ||
         Number(receipt.actor_user_id) !== Number(actor.id)) {
-      throw new Error('El recibo durable del snapshot inicial no coincide con la creación.');
+      throw new Error('La evidencia append-only de creación no coincide con el actor o la huella de solicitud.');
     }
     const events = db.prepare(
       "SELECT details_json FROM audit_events WHERE event_type='company_created' ORDER BY id"
