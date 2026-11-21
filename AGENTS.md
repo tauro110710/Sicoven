@@ -219,79 +219,14 @@ No declarar la reconstrucción funcional hasta que el procesamiento cronológico
 - CI Linux y Windows se han iniciado en tres HEADs de esta rama, pero los jobs terminaron en 2–5 segundos sin pasos ejecutados, sin URL de logs y sin artefactos de log (`BlobNotFound`). Se reintentaron dos veces; no hay salida de pruebas que permita atribuir el fallo al código ni declarar éxito.
 - No fusionar PR #181 ni publicar versión hasta obtener ejecuciones Linux y Windows con pasos y resultados verificables. Si Actions sigue sin asignar runner, tratarlo como bloqueo de infraestructura del repositorio y conservar la PR en borrador.
 
+## 7. NUEVOS REQUISITOS DEL CONTADOR — HISTORIA EXTENSA Y PRESENTACIÓN MONETARIA (2026-11-21)
 
-- Se detectó una compatibilidad adicional de esquema: algunas bases tenant v2 podían tener `operation_receipts` sin `actor_username`. `initializeOperationReceiptSchema` ahora agrega esa columna de forma aditiva, sin reescribir recibos históricos; la prueba de migración conserva un recibo anterior y confirma que un recibo nuevo guarda el usuario.
-- Últimos workflows de la rama: Linux `44829935543` y Windows `44829935432`, HEAD `fbe88973a4c0d94f89a7c1618bbe87fb0abcf34b`; ambos terminan sin pasos/logs disponibles. Se mantiene bloqueada la fusión por falta de validación ejecutable.
+Estos requisitos amplían la reconstrucción histórica provisional y se integran al mismo motor cronológico. No son un motor aparte ni sustituyen los modos ordinario/reconstrucción ya definidos.
 
-- Se reintentaron los workflows del HEAD actual `234cb7996a336941930dfbb463b82d94b735a288`: Linux run `44830034770` (job `136616582211`) y Windows run `44830034797` (job `136616596611`). Ambos volvieron a terminar en 2–4 segundos, sin pasos ejecutados ni logs disponibles. Se mantiene la PR #181 en borrador; no hay evidencia suficiente para declarar éxito ni atribuir un fallo al código.
+- **Apertura en ejercicios antiguos sin exigir empezar en cero:** permitir iniciar reconstrucción en ejercicios anteriores, incluyendo 2010 en adelante. Crear un asiento de apertura de reconstrucción a la fecha seleccionada, identificado claramente como tal, con soporte o estimación profesional, motivo, actor, fecha de registro y auditoría. No exigir saldos cero ni inventar actividad previa.
+- **Conservar escala monetaria original y habilitar presentación unificada:** el registro y auditoría deben conservar el importe, moneda/unidad y escala monetaria original del asiento/documento, por ejemplo bolívares correspondientes a 2014. Las vistas comparativas/evolutivas podrán expresar equivalencias en una escala común actual mediante conversiones históricas trazables. Las equivalencias son valores de presentación derivados: no reemplazan ni modifican cifras originales, documentos, asientos ni saldos fuente; mostrar metodología, factores, fecha de conversión y redondeo.
+- **Reconversiones acumuladas venezolanas:** para comparaciones entre la escala previa a la reconversión de agosto de 2018 y la unidad vigente desde octubre de 2021, contemplar el factor acumulado de eliminación de 11 ceros (10^11), aplicando cada reconversión en su período y sentido correcto. Desde la escala de 2018, la eliminación de 6 ceros de 2021 corresponde a 10^6. No asumir que todos los importes históricos son comparables sin conocer su escala; validar y documentar factores/fechas antes de integrar cálculos.
+- **Contabilidad reconstruida y declaración fiscal no son equivalentes:** etiquetar y distinguir los asientos/documentos/estimaciones de reconstrucción provisional, su nivel y tipo de soporte, y la depuración profesional. Mantenerlos en contabilidad e informes gerenciales/históricos con trazabilidad. No convertir automáticamente estimaciones, aperturas o reconstrucción histórica en declaraciones fiscales formales ni contaminar los flujos fiscales actuales; separar explícitamente ambos ámbitos y sus validaciones.
+- **Arrastres y recálculo seguro por períodos:** si se modifica/incorpora una operación auténtica en un período anterior ya procesado (ej., 2014 con contabilidad hasta 2019), identificar todos los ejercicios posteriores afectados, sus saldos de arrastre, cierres, aperturas y reportes. Avisar de forma visible qué períodos/años quedan pendientes de recalcular/validar, registrar la causa y alcance del cambio y su auditoría. No romper ni actualizar el mayor silenciosamente, no duplicar operaciones y no presentar como actualizados saldos derivados hasta que el recálculo controlado haya finalizado.
+- **Orden de implementación:** alta/inicio de empresa y asiento de apertura de reconstrucción; almacenamiento de escala original y conversiones de presentación; distintivo reconstrucción/estimación y separación de reportes fiscales; detección de ejercicios dependientes y estado pendiente de recalculo. Integrar todo en el uso real y probar persistencia, conversiones, auditoría, idempotencia y recálculo; no considerar satisfecho por documentación o helpers solamente.
 
-
-#### Seguimiento de integración — 2026-11-21
-
-- PR #181 fue validada y fusionada en `main` mediante squash. Commit integrado: `0ff7af591a4a0db3ccdd4d19646df0d19ccb54c0`.
-- Validación de PR #181: CI Linux SUCCESS; G13 Linux/Windows SUCCESS; Windows Release SUCCESS, incluyendo empaquetado del instalador de validación, verificación de metadatos, smoke install/launch, migración E2E y actualización desde v1.0.17 preservando datos SQLite.
-- La rama original de PR #182 quedó divergente tras el squash de PR #181. Para evitar reintroducir cambios ya integrados, se creó `feat/durable-company-creation-mainline` desde el nuevo `main` y se trasladó únicamente el delta de creación durable de empresas.
-- La nueva rama está 12 commits adelante y 0 detrás de `main`; el diff funcional contiene siete archivos. Debe completar CI Linux y Windows Release sobre esta base antes de reemplazar/cerrar la PR #182 original.
-- No se publicó versión; la última versión publicada continúa siendo `v1.0.37`. La reconstrucción histórica provisional sigue en desarrollo; debe implementarse como modo opcional sobre el mismo motor cronológico que la contabilidad ordinaria, sin inventar ni simular operaciones.
-
-#### Seguimiento de integración — 2026-11-21 (adjuntos documentales)
-
-- PR #183 de creación durable de empresas quedó integrada en main mediante squash, commit f76b25d78601e4afa0408d49b7045ecba6bd1459; CI Linux, G13 Linux/Windows y Windows Release terminaron SUCCESS. PR #182, rama antigua divergente, fue cerrada como sustituida por #183.
-- La rama antigua feat/recoverable-supporting-document-attachments no se integra directamente: contiene 58 commits heredados y mezcla una variante de recuperación de creación durable ya sustituida por la implementación validada de #183.
-- Se creó feat/recoverable-supporting-documents-mainline desde el main posterior a #183. Se trasladó únicamente el delta específico de adjuntos: intención durable documents.attach, staging y recuperación por SHA-256, almacenamiento con controles de rutas/symlinks, recibo idempotente y reintento estable en preload.
-- No se trasladaron modificaciones antiguas de company-session-ipc.cjs, tenant-runtime.cjs, creación de empresas, esquema ni sus pruebas; main conserva exactamente la implementación de creación durable que pasó validaciones en #183.
-- Se añadieron pruebas de reintento idempotente, recuperación tras fallo SQLite luego de persistir el archivo, rechazo de otro archivo o entidad/documento sustituido con el mismo operationId, preservación de archivo alterado y bloqueo de rutas con symlink. Los reintentos quedan ligados a empresa, operación contable, tipo, título, descripción y destino de sustitución originales.
-- Pendiente: auditoría final del protocolo filesystem/SQLite (incluida durabilidad de entradas de directorio, concurrencia y restauración), ejecución CI Linux/G13/Windows Release, corrección de fallos y validación completa antes de fusionar. No habilitar reconstrucción histórica integral ni publicar versión con esta fase parcial.
-
-
-## 7. DIRECTIVA PERMANENTE: CONTABILIDAD ORDINARIA DESDE EL PERÍODO ELEGIDO
-
-El propósito vigente de SICOVEN es que el contador registre clientes y lleve su contabilidad normalmente desde el período que seleccione. Las antiguas instrucciones de reconstrucción/replay que aparecen en el historial de trabajo anterior quedan **superseded y no deben guiar nuevas implementaciones**.
-
-### Flujo práctico
-- Al registrar la empresa, elegir el año y mes (y cuando proceda, fecha) desde el cual comenzará el servicio contable en SICOVEN.
-- Desde ese punto, introducir operaciones ordinarias con sus fechas reales y avanzar mes a mes, año a año, hasta el período actual y continuar.
-- No generar, reconstruir, importar ni simular operaciones anteriores al inicio seleccionado. No crear un motor de reconstrucción histórica para esta finalidad.
-- SICOVEN debe manejar automáticamente las reconversiones monetarias venezolanas por fecha, incluyendo las unidades/escala monetaria correctas y la aplicabilidad de BCV descrita en la sección 5.
-- Integrar estas reglas en las operaciones y reportes reales; evitar paneles técnicos, modos especiales y pasos burocráticos.
-- Mantener las fuentes originales, fechas efectivas, trazabilidad, consistencia y persistencia SQLite. No modificar documentos contables anteriores como efecto colateral de cambios posteriores.
-
-### Definición práctica de éxito
-El contador puede registrar una empresa con un inicio contable elegido, comenzar a ingresar sus operaciones reales desde ese período, y SICOVEN las procesa correctamente conforme a las reglas contables, monetarias y de reconversión que correspondan a cada fecha, sin pedir datos BCV cuando no aplican ni inventar datos cuando sí aplican.
-
-No tocar `main`, no fusionar, publicar ni desplegar sin autorización explícita.
-
-
-## 7. Auditoría del calendario y tratamiento monetario venezolano (2026-11-21)
-
-### Objetivo funcional confirmado
-El contador debe poder iniciar el registro ordinario desde cualquier período elegido y continuar mes a mes hasta el período actual. SICOVEN debe reconocer automáticamente la escala monetaria vigente para la fecha de cada documento y aplicar equivalencias cuando el cálculo o la presentación requieran comparar escalas; no debe pedir al contador que seleccione reconversiones.
-
-### Reconversiones de referencia
-- 2008-01-01: bolívar anterior → bolívar fuerte, factor 1.000 (3 ceros).
-- 2018-08-20: bolívar fuerte → bolívar soberano, factor 100.000 (5 ceros).
-- 2021-10-01: bolívar soberano → bolívar digital, factor 1.000.000 (6 ceros).
-- El calendario y los factores deben verificarse con fuentes normativas antes de integrar cambios de cálculo; las cifras originales y fechas de documentos se preservan sin alteración.
-
-### Hallazgos de auditoría de código (no corregidos aún)
-1. `src/context/AccountingContext.tsx`: `addPurchase` exige `purchaseData.bcvRate > 0` sin evaluar fecha ni moneda/criterio contable de la operación.
-2. `src/context/AccountingContext.tsx`: `addSale` exige `saleData.bcvRate > 0` sin evaluar fecha ni moneda/criterio contable.
-3. `src/types/journalEntryValidation.ts`: los asientos se validan con igualdad tanto en Bs como USD; la arquitectura de doble moneda obliga a construir valores USD aunque el período o la operación no requieran tasa BCV. No eliminar esta condición sin rediseñar y probar el modelo de moneda funcional, presentación y saldos.
-4. `src/types/historicalAccountingCalendar.ts` contiene las eras monetarias y el convertidor `convertVenezuelanAmount`, pero no se identificó su integración en los flujos ordinarios de compras/ventas ni en el contexto contable. Tratar como helper aislado hasta demostrar usos reales.
-5. `src/types/fiscalExerciseLifecycle.ts` inicializa solo el ejercicio fiscal activo y el siguiente; no genera el calendario mensual desde la fecha de inicio elegida hasta el período actual. El calendario histórico alternativo no se debe confundir con reconstrucción de operaciones: solo representa períodos de servicio/registro ordinario.
-6. El cierre anual exige tasas BCV positivas para cierre y apertura (`closingBcvRate` y `openingBcvRate`) sin evidencia de una política condicional por período. Revisar la moneda de cada saldo y el fundamento de las tasas antes de alterar.
-
-### Próximas prioridades de implementación
-- Diseñar una resolución central por fecha para escala monetaria y política de tasa, con reglas históricas verificadas y casos donde la tasa no es aplicable; mantener tasa desconocida como desconocida, no inventarla.
-- Integrar esa resolución a compra, venta, asiento manual, cierres/aperturas, reportes y cálculos, con pruebas de regresión de cada era y transiciones.
-- Resolver la representación monetaria del ledger: que una operación sin tasa aplicable pueda contabilizarse de manera válida sin fabricar equivalentes USD, y que saldos, cierres y reportes respeten moneda funcional/presentación. Requiere revisión de arquitectura, no un bypass de validación.
-- Auditar el calendario ordinario para que una empresa iniciada en febrero de 2010 pueda navegar y registrar períodos consecutivos hasta el actual, sin generar documentos ni reconstruir actividad.
-- No marcar nada de este apartado como terminado por documentación o por la existencia de helpers; solo cuando esté integrado en runtime, persistido y cubierto por pruebas.
-
-
-### Avance adicional — fecha de inicio de registro aplicada a operaciones ordinarias
-- Se creó `src/types/accountingStartDateValidation.ts` con validación central para fecha inicial configurada, fechas corruptas y bloqueo de operaciones anteriores al inicio contable de la empresa; las empresas heredadas sin fecha no reciben restricción automática.
-- Integrado en `AccountingContext.tsx`: asientos manuales, compras (fecha de factura y abono en cuenta) y ventas rechazan fechas anteriores al inicio elegido.
-- Pruebas unitarias añadidas en `accountingStartDateValidation.test.ts` para fechas límite, períodos posteriores, legado y fecha inválida. No se ejecutaron localmente en esta sesión por falta de checkout/runner disponible; se requiere CI.
-- Commits verificados en GitHub: helper `f97758b3e40403c1e3053b177862f91efa9d7e0c`; tests `96df61acfdcf12b6668540aec60558870a53146b`; integración `a514cb80913eab14d9ac77e5939375fae997b479`.
-- La validación no cubre todavía todos los módulos secundarios (nómina, activos, bancos, impuestos, movimientos de inventario y otros handlers especializados); ampliar con auditoría y pruebas antes de declarar cobertura completa.
