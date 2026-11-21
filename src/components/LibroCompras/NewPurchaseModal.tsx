@@ -7,6 +7,7 @@ import { calculatePurchaseIgtf, type PurchasePaymentMethod } from '../../types/p
 import { getPurchaseAccountCreditDate, getCompanyTaxStatusForDate, type PurchaseIvaRetentionSnapshot } from '../../types/accounting';
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus, type IvaArticle3Exclusion, type IvaSupplierTaxStatus } from '../../types/ivaRetentionEligibility';
 import { getCompanyPurchasePaymentAccounts } from '../../types/purchaseAccounting';
+import { convertVenezuelanAmount, getBolivarScaleMetadataByDate, getVenezuelanMonetaryEra } from '../../types/historicalAccountingCalendar';
 
 interface NewPurchaseModalProps {
   isOpen: boolean;
@@ -32,7 +33,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [invoiceFormalDefect, setInvoiceFormalDefect] = useState(false);
   const [vatNotDiscriminated, setVatNotDiscriminated] = useState(false);
   const [taxableGrossInput, setTaxableGrossInput] = useState('');
-  const taxableGrossBs = parseDecimalInput(taxableGrossInput);
+  const taxableGrossBs = parseBolivarInput(taxableGrossInput, invoiceDate);
   const [portalRetentionRate, setPortalRetentionRate] = useState<'' | '75' | '100'>('');
   const [invoiceNumber, setInvoiceNumber] = useState<string>('');
   const [controlNumber, setControlNumber] = useState<string>('');
@@ -41,9 +42,9 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
 
   // Amounts
   const [taxableBaseInput, setTaxableBaseInput] = useState('');
-  const taxableBaseBs = parseDecimalInput(taxableBaseInput);
+  const taxableBaseBs = parseBolivarInput(taxableBaseInput, invoiceDate);
   const [exemptAmountInput, setExemptAmountInput] = useState('');
-  const exemptAmountBs = parseDecimalInput(exemptAmountInput);
+  const exemptAmountBs = parseBolivarInput(exemptAmountInput, invoiceDate);
   const [taxRate, setTaxRate] = useState<number>(16);
   const [vatCreditTreatment, setVatCreditTreatment] = useState<'TAXABLE' | 'EXEMPT' | 'COMMON'>('COMMON');
 
@@ -55,7 +56,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
 
   // Currency
   const [bcvRateInput, setBcvRateInput] = useState('');
-  const bcvRate = parseDecimalInput(bcvRateInput);
+  const bcvRate = parseBolivarInput(bcvRateInput, accountCreditDate || invoiceDate);
   const [notes, setNotes] = useState<string>('');
   // Clasificación explícita: mercancía al Kardex o cuenta específica de gasto/activo.
   const [linkInventory, setLinkInventory] = useState(true);
@@ -168,12 +169,12 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const vatWithheldUsd = bcvRate > 0 ? vatWithheldBs / bcvRate : 0;
   const islrWithheldUsd = bcvRate > 0 ? islrWithheldBs / bcvRate : 0;
 
-  const inventoryLineTotal = inventoryLines.reduce((sum,line) => sum + Math.max(0,parseDecimalInput(line.quantity)||0) * Math.max(0,parseDecimalInput(line.unitCostBs)||0),0);
+  const inventoryLineTotal = inventoryLines.reduce((sum,line) => sum + Math.max(0,parseDecimalInput(line.quantity)||0) * Math.max(0,parseBolivarInput(line.unitCostBs, invoiceDate)||0),0);
   const inventoryLinesValid = !linkInventory || (
     inventoryLines.length > 0 &&
     inventoryLines.every(line => products.some(p => p.id === line.productId && p.companyId === currentCompany.id) &&
       Number.isFinite(parseDecimalInput(line.quantity)) && parseDecimalInput(line.quantity) > 0 &&
-      Number.isFinite(parseDecimalInput(line.unitCostBs)) && parseDecimalInput(line.unitCostBs) > 0) &&
+      Number.isFinite(parseBolivarInput(line.unitCostBs, invoiceDate)) && parseBolivarInput(line.unitCostBs, invoiceDate) > 0) &&
     Math.abs(inventoryLineTotal - (effectiveTaxableBaseBs + exemptAmountBs)) <= 0.02 &&
     new Set(inventoryLines.map(line=>line.productId)).size === inventoryLines.length
   );
@@ -251,6 +252,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       addPurchase({
       invoiceDate,
       accountCreditDate,
+      monetaryScaleSnapshot,
+      sourceMonetaryAmounts: { taxableBase: taxableBaseInput, exemptAmount: exemptAmountInput, taxableGross: taxableGrossInput, bcvRate: bcvRateInput, inventoryUnitCosts: JSON.stringify(inventoryLines.map(line => ({ productId: line.productId, unitCost: line.unitCostBs }))) },
       supplierRif: formatRif(supplierRif),
       supplierName: supplierName.trim().toUpperCase(),
       supplierAddress: supplierAddress.trim() || undefined,
@@ -305,13 +308,13 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       currencyPricingMode,
       fiscalAdjustmentMode,
       purchaseDebitAccountCode: linkInventory ? undefined : purchaseDebitAccountCode,
-      inventoryLines: linkInventory ? inventoryLines.map(line => ({productId:line.productId,quantity:parseDecimalInput(line.quantity),unitCostBs:parseDecimalInput(line.unitCostBs)})) : undefined
+      inventoryLines: linkInventory ? inventoryLines.map(line => ({productId:line.productId,quantity:parseDecimalInput(line.quantity),unitCostBs:parseBolivarInput(line.unitCostBs, invoiceDate)})) : undefined
       });
       if (linkInventory) {
         for (const line of inventoryLines) {
           const product = products.find(p => p.id === line.productId && p.companyId === currentCompany.id)!;
           const quantity = parseDecimalInput(line.quantity);
-          const unitCostBs = parseDecimalInput(line.unitCostBs);
+          const unitCostBs = parseBolivarInput(line.unitCostBs, invoiceDate);
           addMovement({
             productId: product.id, productName: product.name, productCode: product.code,
             date: invoiceDate, type: 'ENTRADA', concept: 'COMPRA',
@@ -511,7 +514,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                 </span>
               </div>
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Monto Exento / Exonerado (Bs.)</label>
+                <label className="block font-semibold text-slate-700 mb-1">Monto Exento / Exonerado (Bs. — {getVenezuelanMonetaryEra(invoiceDate).label})</label>
                 <input
                   type="text"
                   inputMode="decimal"
