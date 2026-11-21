@@ -86,7 +86,19 @@ export function deriveInvoiceInventoryMovements(input: {
       });
     }
   }
-  // Stable date-only ordering preserves source-array order for same-day events;
-  // sorting by synthetic ID would silently reorder posting history and distort PEPS.
+  // Invoice collections are separate and do not carry a shared posting sequence.
+  // If both a purchase and sale of the same product occur on one date, their
+  // true order cannot be inferred safely; refuse rather than manufacture PEPS/average-cost history.
+  const sameDayByProduct = new Map<string, Set<string>>();
+  for (const movement of result) {
+    const key = movement.productId + '|' + movement.date;
+    const kinds = sameDayByProduct.get(key) || new Set<string>();
+    kinds.add(movement.type);
+    sameDayByProduct.set(key, kinds);
+  }
+  if (Array.from(sameDayByProduct.values()).some(kinds => kinds.has('ENTRADA') && kinds.has('SALIDA'))) {
+    throw new Error('Hay compras y ventas del mismo artículo en una misma fecha sin secuencia de registro común; la reconstrucción requiere ordenar esos documentos antes de continuar.');
+  }
+  // Stable date-only sorting is safe after same-day conflicting event order is rejected.
   return result.sort((a, b) => a.date.localeCompare(b.date));
 }
