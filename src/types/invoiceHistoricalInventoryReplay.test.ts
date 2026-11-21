@@ -44,7 +44,7 @@ test('fails closed on existing ledger movements with malformed dates instead of 
     quantity: 1, unitCostBs: 5, unitCostUsd: 0.05, totalCostBs: 5, totalCostUsd: 0.05,
     balanceQty: 0, balanceTotalBs: 0, balanceTotalUsd: 0, bcvRate: 100
   } as InventoryMovement;
-  assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({ purchases: [], sales: [], existingMovements: [badMovement] })), /fecha inválida (fechas inválidas)/);
+  assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({ purchases: [], sales: [], existingMovements: [badMovement] })), /fechas inválidas/);
 });
 
 test('honors throughDate and does not include later invoices or ledger movements', () => {
