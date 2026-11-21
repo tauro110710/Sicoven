@@ -453,16 +453,7 @@ export function calculatePeriodicCostOfSales(input: {
 }
 
 
-/**
- * Clears only the current product cost/opening snapshot before a historical
- * reconstruction. Catalog identity, stock, commercial prices and accounting
- * configuration remain unchanged. The opening BCV snapshot is cleared so a
- * current-day rate is not carried back to the selected reconstruction date.
- */
-export function prepareProductsForHistoricalReconstruction<T extends {
-  avgCostBs: number; avgCostUsd: number; lastCostBs: number; lastCostUsd: number;
-  openingDate?: string; openingBcvRate?: number;
-}>(products: T[], startDate: string): T[] {
+>(products: T[], startDate: string): T[] {
   const parsed = /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? new Date(startDate + 'T00:00:00.000Z') : null;
   if (!parsed || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== startDate) {
     throw new Error('La fecha inicial de reconstrucción no es válida.');
