@@ -110,6 +110,11 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
   }
 
   const seenIds = new Set<string>();
+  for (const movement of input.movements) {
+    const id = String(movement.id || '').trim();
+    if (!id || seenIds.has(id)) throw new Error('El historial contiene identificadores de movimiento vacíos o duplicados.');
+    seenIds.add(id);
+  }
   const ordered = input.movements.map((movement, index) => ({ movement, index }))
     .filter(({ movement }) => movement.companyId === companyId && (throughDate === undefined || movement.date <= throughDate))
     .sort((a, b) => a.movement.date.localeCompare(b.movement.date) || a.index - b.index);
