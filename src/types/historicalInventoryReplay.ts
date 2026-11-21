@@ -123,7 +123,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
     throw new Error('El lote contiene movimientos de otra empresa; no se mezclará información entre empresas.');
   }
   if (input.movements.some(movement => movement.companyId === companyId && !validDate(movement.date))) {
-    throw new Error('El historial contiene movimientos con fecha inválida; no se excluirán silenciosamente del recálculo.');
+    throw new Error('El historial contiene movimientos con fechas inválidas; no se excluirán silenciosamente del recálculo.');
   }
 
   const replayed: InventoryMovement[] = [];
