@@ -423,6 +423,10 @@ export interface PurchaseRecord {
   companyId: string;
   opNumber: number;
   invoiceDate: string; // YYYY-MM-DD, fecha original del documento
+  /** Escala nominal original del documento y factor de normalización conservados para auditoría. */
+  monetaryScaleSnapshot?: { eraId: string; label: string; effectiveFrom: string; factorToCurrent: string; legalReference: string };
+  /** Valores nominales digitados originalmente; los importes contables se almacenan normalizados a escala vigente. */
+  sourceMonetaryAmounts?: Record<string, string>;
   /** Fecha efectiva en que se reconoce/abona en cuenta el pasivo; ausente solo en históricos legacy. */
   accountCreditDate?: string; // YYYY-MM-DD
   supplierRif: string; // e.g. "J-12345678-9"
@@ -523,6 +527,10 @@ export interface SaleRecord {
   companyId: string;
   opNumber: number;
   invoiceDate: string; // YYYY-MM-DD
+  /** Escala nominal original del documento y factor de normalización conservados para auditoría. */
+  monetaryScaleSnapshot?: { eraId: string; label: string; effectiveFrom: string; factorToCurrent: string; legalReference: string };
+  /** Valores nominales digitados originalmente; los importes contables se almacenan normalizados a escala vigente. */
+  sourceMonetaryAmounts?: Record<string, string>;
   customerRif: string;
   customerName: string;
   customerAddress?: string;
