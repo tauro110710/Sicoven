@@ -319,7 +319,7 @@ export const InventarioView: React.FC = () => {
                         <td className="py-2.5 px-4 text-right font-mono text-slate-800">
                           {formatBs(prod.avgCostBs)}
                           {true && (
-                            <span className="block text-[10px] text-slate-400">{prod.currentStock > 0 && (!prod.avgCostUsd || !prod.openingBcvRate) ? 'Costo USD pendiente BCV' : formatUsd(prod.avgCostUsd)}</span>
+                            <span className="block text-[10px] text-slate-400">{prod.currentStock > 0 && productsMissingUsdValuation.some(item => item.id === prod.id) ? 'Costo USD pendiente BCV' : formatUsd(prod.avgCostUsd)}</span>
                           )}
                         </td>
                         <td className="py-2.5 px-4 text-right font-mono font-semibold text-emerald-700">
