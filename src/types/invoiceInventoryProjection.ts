@@ -86,5 +86,7 @@ export function deriveInvoiceInventoryMovements(input: {
       });
     }
   }
-  return result.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  // Stable date-only ordering preserves source-array order for same-day events;
+  // sorting by synthetic ID would silently reorder posting history and distort PEPS.
+  return result.sort((a, b) => a.date.localeCompare(b.date));
 }
