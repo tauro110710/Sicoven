@@ -43,6 +43,15 @@ test('reconstruye promedio ponderado cronológicamente aunque las fuentes llegue
   assert.equal(source[0].balanceQty, 0, 'no modifica los documentos fuente');
 });
 
+test('rechaza tasas BCV NaN y fletes NaN sin normalizarlos a cero', () => {
+  assert.throws(() => replay([makeProduct()], [
+    movement({ id: 'bad-rate', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: Number.NaN })
+  ]), /tasa, cantidad o costos inválidos/);
+  assert.throws(() => replay([makeProduct()], [
+    movement({ id: 'bad-landed-cost', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100, additionalLandedCostsBs: Number.NaN })
+  ]), /tasa, cantidad o costos inválidos/);
+});
+
 test('capitaliza fletes de entrada y recalcula el costo promedio', () => {
   const result = replay([makeProduct()], [
     movement({ id: 'purchase-1', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100, additionalLandedCostsBs: 4 })
