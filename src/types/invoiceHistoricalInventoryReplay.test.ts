@@ -37,6 +37,13 @@ test('replays invoice-only purchase and sale history into inventory balances and
   assert.equal(product.currentStock, 500, 'does not modify live product snapshot');
 });
 
+test('honors throughDate and does not include later invoices or ledger movements', () => {
+  const result = prepareInvoiceHistoricalInventoryReplay(input({ throughDate: '2025-01-01' }));
+  assert.equal(result.movements.length, 1);
+  assert.equal(result.products[0].currentStock, 4);
+  assert.equal(result.endDate, '2025-01-01');
+});
+
 test('rejects same-day invoice order rather than assigning arbitrary FIFO/average cost sequence', () => {
   assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({
     purchases: [purchase({ invoiceDate: '2025-01-02' })],
