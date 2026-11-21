@@ -642,6 +642,9 @@ export interface InventoryProduct {
   itemType?: InventoryItemType;
   openingDate?: string;
   openingBcvRate?: number;
+  /** Nominal denomination metadata for initial stock/cost values entered on openingDate. */
+  openingMonetaryScaleSnapshot?: { eraId: string; label: string; effectiveFrom: string; factorToCurrent: string; legalReference: string };
+  openingSourceMonetaryAmounts?: Record<string, string>;
   vnrProvisionBs?: number;
   vnrEstimatedSellingPriceBs?: number;
   vnrCompletionCostBs?: number;
