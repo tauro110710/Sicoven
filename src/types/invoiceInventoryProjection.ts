@@ -11,15 +11,30 @@ export function deriveInvoiceInventoryMovements(input: {
   products: InventoryProduct[];
   purchases: PurchaseRecord[];
   sales: SaleRecord[];
+  existingMovements?: InventoryMovement[];
 }): InventoryMovement[] {
   const companyId = String(input.companyId || '').trim();
   if (!companyId) throw new Error('La derivación de Kardex requiere empresa.');
   const products = new Map(input.products.filter(p => p.companyId === companyId).map(p => [p.id, p]));
   const result: InventoryMovement[] = [];
+  const existingMovements = input.existingMovements || [];
   const seen = new Set<string>();
   const add = (movement: InventoryMovement) => {
     if (seen.has(movement.id)) throw new Error('El documento fuente genera un movimiento duplicado.');
     seen.add(movement.id);
+    const sameId = existingMovements.find(existing => existing.id === movement.id);
+    const sourceMatch = existingMovements.find(existing => existing.companyId === companyId &&
+      existing.productId === movement.productId && existing.date === movement.date &&
+      existing.type === movement.type && existing.concept === movement.concept &&
+      existing.documentRef === movement.documentRef);
+    const duplicate = sameId || sourceMatch;
+    if (duplicate) {
+      const sameSource = duplicate.companyId === movement.companyId && duplicate.productId === movement.productId &&
+        duplicate.date === movement.date && duplicate.type === movement.type && duplicate.concept === movement.concept &&
+        duplicate.documentRef === movement.documentRef && Math.abs(Number(duplicate.quantity) - movement.quantity) < 1e-8;
+      if (!sameSource) throw new Error('La factura ' + movement.documentRef + ' coincide con un movimiento existente, pero sus datos difieren; requiere revisión antes de reconstruir.');
+      return;
+    }
     result.push(movement);
   };
   for (const purchase of input.purchases) {
