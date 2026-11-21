@@ -19,7 +19,7 @@ const movement = (overrides: Partial<InventoryMovement> & Pick<InventoryMovement
   documentRef: overrides.documentRef || overrides.id,
   quantity: overrides.quantity, unitCostBs: overrides.unitCostBs,
   unitCostUsd: overrides.unitCostUsd, totalCostBs: 0, totalCostUsd: 0,
-  balanceQty: 0, balanceTotalBs: 0, balanceTotalUsd: 0,
+  balanceQty: overrides.balanceQty ?? 0, balanceTotalBs: 0, balanceTotalUsd: 0,
   bcvRate: overrides.bcvRate,
   ...(overrides.correctionForMovementId ? { correctionForMovementId: overrides.correctionForMovementId } : {}),
   ...(overrides.additionalLandedCostsBs !== undefined ? { additionalLandedCostsBs: overrides.additionalLandedCostsBs } : {})
@@ -130,12 +130,14 @@ test('reconstruye sin preparar ni alterar saldos almacenados del catálogo', () 
   assert.equal(empty.products[0].currentStock, 0);
 });
 
-test('bloquea devoluciones PEPS de ventas legacy sin detalle de capas', () => {
-  assert.throws(() => replay([makeProduct('PEPS')], [
+test('reconstruye devolución PEPS desde compra y venta históricas verificables', () => {
+  const result = replay([makeProduct('PEPS')], [
     movement({ id: 'purchase-1', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100 }),
     movement({ id: 'sale-1', date: '2010-01-02', type: 'SALIDA', concept: 'VENTA', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100 }),
     movement({ id: 'return-1', date: '2010-01-03', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100, correctionForMovementId: 'sale-1' })
-  ]), /no puede reconstruirse con precisión/);
+  ]);
+  assert.equal(result.products[0].currentStock, 2);
+  assert.equal(result.movements[2].totalCostBs, 10);
 });
 
 test('reconstruye devoluciones PEPS con capas exactas y conserva su composición para ventas posteriores', () => {
@@ -165,7 +167,7 @@ test('distribuye varias devoluciones parciales de una venta PEPS sin repetir cap
   assert.deepEqual(result.movements[3].fifoLayers?.map(layer => [layer.quantity, layer.unitCostBs]), [[1, 10]]);
   assert.deepEqual(result.movements[4].fifoLayers?.map(layer => [layer.quantity, layer.unitCostBs]), [[1, 10]]);
   assert.equal(result.movements[5].totalCostBs, 30);
-  assert.equal(result.products[0].currentStock, 0);
+  assert.equal(result.products[0].currentStock, 1, 'una unidad queda en existencia porque la venta original fue de 3 y solo se devolvieron 2');
 });
 test('reconstruye compras, salidas y ajustes en bolívares sin exigir tasa cambiaria', () => {
   const result = replay([makeProduct()], [
