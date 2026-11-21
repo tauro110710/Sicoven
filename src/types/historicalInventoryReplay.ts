@@ -132,7 +132,8 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
     const requestedUnitCostBs = Number(source.unitCostBs);
     const requestedUnitCostUsd = Number(source.unitCostUsd);
     const landedCostsBs = Number(source.additionalLandedCostsBs || 0);
-    if (!validPositive(rate) || !validPositive(requestedQuantity) ||
+    const needsHistoricalConversion = source.type !== 'SALIDA' && requestedUnitCostUsd <= 0 && requestedUnitCostBs > 0;
+    if (!validNonNegative(rate) || (needsHistoricalConversion && !validPositive(rate)) || !validPositive(requestedQuantity) ||
         !validNonNegative(requestedUnitCostBs) || !validNonNegative(requestedUnitCostUsd) ||
         !validNonNegative(landedCostsBs)) {
       throw new Error('El movimiento ' + (source.documentRef || id) + ' contiene tasa, cantidad o costos inválidos.');
@@ -157,7 +158,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
 
     if (source.type === 'ENTRADA') {
       let entryUnitCostBs = effectiveUnitCostBs;
-      let entryUnitCostUsd = roundUsd(effectiveUnitCostBs / rate);
+      let entryUnitCostUsd = rate > 0 ? roundUsd(effectiveUnitCostBs / rate) : 0;
       if (source.concept === 'DEVOLUCION_CLIENTE') {
         const original = source.correctionForMovementId ? replayedById.get(source.correctionForMovementId) : undefined;
         if (!original || original.type !== 'SALIDA' || original.concept !== 'VENTA' ||
@@ -277,7 +278,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       if (state.product.costingMethod === 'PEPS') {
         const layers = reconstructFifoLayers(state.history.map(toFifoSnapshot), state.quantity);
         const adjusted = applyFifoAdjustment(layers, delta, requestedUnitCostBs,
-          roundUsd(requestedUnitCostBs / rate), source.date, source.documentRef);
+          rate > 0 ? roundUsd(requestedUnitCostBs / rate) : 0, source.date, source.documentRef);
         totalCostBs = adjusted.totalCostBs;
         totalCostUsd = adjusted.totalCostUsd;
         unitCostBs = adjusted.unitCostBs;
@@ -288,12 +289,12 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       } else if (delta > 0) {
         const weighted = calculateWeightedAverageCostDual(
           state.quantity, state.averageBs, state.averageUsd,
-          delta, requestedUnitCostBs, roundUsd(requestedUnitCostBs / rate)
+          delta, requestedUnitCostBs, rate > 0 ? roundUsd(requestedUnitCostBs / rate) : 0
         );
         totalCostBs = roundBs(delta * requestedUnitCostBs);
-        totalCostUsd = roundUsd(delta * requestedUnitCostBs / rate);
+        totalCostUsd = rate > 0 ? roundUsd(delta * requestedUnitCostBs / rate) : 0;
         unitCostBs = requestedUnitCostBs;
-        unitCostUsd = roundUsd(requestedUnitCostBs / rate);
+        unitCostUsd = rate > 0 ? roundUsd(requestedUnitCostBs / rate) : 0;
         nextQuantity = weighted.quantity;
         nextAverageBs = weighted.unitCostBs;
         nextAverageUsd = weighted.unitCostUsd;
