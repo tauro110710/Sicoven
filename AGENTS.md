@@ -45,18 +45,19 @@ El propietario del proyecto autoriza expresamente que, cuando SICOVEN esté list
 El propósito de SICOVEN es facilitar al contador el registro de una empresa y sus operaciones, sin convertirlo en operador de procesos técnicos.
 
 ### Flujo normal requerido
-- Registrar una empresa y escoger el año/periodo desde el que se empezará a cargar información.
-- El contador captura compras, ventas, pagos, cobros, inventario y demás operaciones con sus fechas reales. La captura debe sentirse como el registro ordinario, sin paneles ni procedimientos especiales de reconstrucción.
-- SICOVEN ordena internamente las fuentes por fecha efectiva y calcula sus efectos cronológicos, desde el periodo inicial elegido hasta el último registro.
-- Si se incorpora o corrige una operación de fecha anterior, SICOVEN recalcula automáticamente los efectos posteriores que dependan de ella.
+- Registrar una empresa/cliente nuevo y seleccionar la fecha (año, mes o día de inicio) desde la que el contador comenzará a llevar su contabilidad en SICOVEN.
+- Esa fecha es solo el inicio del servicio/registro contable en SICOVEN; no implica reconstruir, migrar, recuperar ni simular operaciones anteriores.
+- El contador registra normalmente compras, ventas, pagos, cobros, inventario y demás operaciones con fechas reales a partir de la fecha de inicio elegida.
+- SICOVEN procesa y contabiliza esas operaciones normalmente, en orden cronológico, sin paneles técnicos ni procesos especiales.
+- No se reconstruye contabilidad previa de clientes nuevos ni se importa automáticamente historial anterior. Las operaciones previas a la fecha de inicio quedan fuera del alcance, salvo que el contador las registre expresamente como parte de un procedimiento normal permitido.
 
 ### Prioridad de implementación
-Implementar directamente el procesamiento cronológico real y persistido de fuentes, inventario/Kardex, existencias, PEPS/promedio, costos, cuentas auxiliares, asientos, saldos y cierres/aperturas de ejercicios. El motor debe reproducir el resultado de los registros históricos y posteriores en orden temporal.
+Priorizar el flujo ordinario de alta de empresa, elección de fecha de inicio contable y registro diario de operaciones posteriores. Mantener consistencia cronológica, validaciones, asientos, saldos, inventario/Kardex, costos, cuentas auxiliares y cierres/aperturas que correspondan a los ejercicios atendidos desde ese inicio. No desarrollar un motor de reconstrucción/replay de contabilidades anteriores para clientes nuevos.
 
-Mantener documentos originales, fechas efectivas, fecha de incorporación, referencias y soportes. Recalcular solo resultados derivados, sin duplicar ni modificar documentos fuente. Las operaciones y resultados deben persistirse coherentemente en SQLite.
+Mantener documentos originales, fechas efectivas, fecha de incorporación, referencias y soportes. Persistir de forma coherente las operaciones y resultados en SQLite, sin duplicar ni modificar documentos fuente.
 
-### Reglas históricas
-- Aplicar la escala monetaria y reconversiones venezolanas que correspondan a la fecha de cada operación.
+### Reglas
+- Aplicar la escala monetaria y reconversiones venezolanas que correspondan a la fecha de cada operación registrada.
 - No exigir BCV para operaciones documentadas íntegramente en bolívares cuando no corresponda; en operaciones en moneda extranjera conservar monto/moneda originales y tratar la conversión según la evidencia y regla aplicable al período.
 - Nunca inventar tasas, soportes, saldos iniciales ni documentos. Resolver las diferencias pendientes con mensajes claros y concretos, sin burocracia innecesaria.
 
