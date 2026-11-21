@@ -15,6 +15,16 @@ La lógica interna de replay/recalculo cronológico **puede conservarse y reutil
 Esta aclaración prevalece sobre cualquier mención posterior incompatible en este archivo que ordene eliminar replay/recalculo interno útil, y no reintroduce una función de reconstrucción independiente.
 
 
+## AUDITORÍA DE INTEGRACIÓN — RECÁLCULO ORDINARIO (2026-11-21)
+
+- `prepareHistoricalAccountingReplayPlan()` en `AccountingContext.tsx` arma un plan de solo lectura y lo expone en el contexto; no se encontró un consumidor que ejecute transaccionalmente el plan. No confundir este análisis de dependencias con una función operativa terminada.
+- `replayHistoricalInventory()` y `prepareInvoiceHistoricalInventoryReplay()` son cálculos puros: derivan resultados de historial y facturas, no persisten ni modifican documentos fuente. Aún no están integrados en `AccountingContext.addMovement()`.
+- `addMovement()` actualmente rechaza cualquier movimiento con fecha anterior al último movimiento del mismo artículo. Esta barrera evita recálculos incompletos: quitarla sin reconstruir saldos, costos, PEPS, asientos vinculados y persistencia atómica produciría inconsistencias. **No quitarla hasta que el recálculo transaccional completo esté implementado, probado y verificado.**
+- El flujo actual de `addMovement()` deriva el nuevo costo y saldo a partir del estado vivo del producto y el historial previo, genera asientos para salidas/ajustes/devoluciones aplicables y publica cambios mediante setters React que luego pasan por el pump de persistencia SQLite. El replay debe preparar un snapshot coherente completo y persistirlo como una sola operación confirmada/idempotente antes de publicar estado.
+- La importación de movimientos (`importInventoryMovements()`) mantiene su propio cálculo secuencial con productos y movimientos virtuales; debe auditarse por separado para garantizar orden cronológico, integridad de lote, rollback y ausencia de duplicados. No asumir que corregir `addMovement()` corrige importaciones.
+- Prioridad de implementación: definir y probar un coordinador puro que recalcule un artículo desde el historial real y las fuentes (incluyendo facturas cuando proceda), luego diseñar el commit atómico SQLite y las relaciones de asientos; integrar después los flujos ordinarios de registro e importación. Preservar períodos cerrados, fecha de inicio, secuencia de registro de operaciones del mismo día, vínculos a documentos y reversos/correcciones.
+- Auditoría actual de estos hallazgos: inspección de `AccountingContext.tsx`, `historicalAccountingReplayPlan.ts`, `historicalInventoryReplay.ts`, `invoiceHistoricalInventoryReplay.ts`. No se ejecutaron pruebas ni build en este entorno; no reportar como verificados.
+
 ## Principio rector definitivo
 SICOVEN no está diseñado para rescatar contabilidades dañadas ni para reconstruir empresas que nunca han existido dentro de él. Está diseñado para que un contador pueda crear una empresa, escoger desde cuándo la lleva, empezar a registrar sus operaciones y llevarla hasta el presente o el futuro, sin que el sistema le complique el trabajo.
 
