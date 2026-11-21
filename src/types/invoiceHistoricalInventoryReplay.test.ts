@@ -37,6 +37,16 @@ test('replays invoice-only purchase and sale history into inventory balances and
   assert.equal(product.currentStock, 500, 'does not modify live product snapshot');
 });
 
+test('fails closed on existing ledger movements with malformed dates instead of silently omitting them', () => {
+  const badMovement = {
+    id: 'bad-date', companyId, productId: product.id, productName: product.name, productCode: product.code,
+    date: 'bad-date', type: 'ENTRADA', concept: 'COMPRA', documentRef: 'BAD',
+    quantity: 1, unitCostBs: 5, unitCostUsd: 0.05, totalCostBs: 5, totalCostUsd: 0.05,
+    balanceQty: 0, balanceTotalBs: 0, balanceTotalUsd: 0, bcvRate: 100
+  } as InventoryMovement;
+  assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({ purchases: [], sales: [], existingMovements: [badMovement] })), /fecha inválida/);
+});
+
 test('honors throughDate and does not include later invoices or ledger movements', () => {
   const result = prepareInvoiceHistoricalInventoryReplay(input({ throughDate: '2025-01-01' }));
   assert.equal(result.movements.length, 1);
