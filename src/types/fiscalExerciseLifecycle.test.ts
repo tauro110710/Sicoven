@@ -124,3 +124,18 @@ test('rechaza calendario activo discontinuo en vez de fabricar ejercicios omitid
     id: 'co-1', accountingStartDate: '2015-02-05', fiscalExercises: broken
   }, 2017));
 });
+
+test('inicializa todos los ejercicios ordinarios desde el mes de inicio hasta el siguiente año fiscal', () => {
+  const calendar = ensureFiscalExerciseCalendar({
+    id: 'co-long', accountingStartDate: '2010-02-01', fiscalExercises: []
+  }, 2026);
+  assert.equal(calendar.length, 18);
+  assert.equal(calendar[0].fiscalYear, 2010);
+  assert.equal(calendar[0].startDate, '2010-02-01');
+  assert.equal(calendar[0].endDate, '2010-12-31');
+  assert.equal(calendar[16].fiscalYear, 2026);
+  assert.equal(calendar[17].fiscalYear, 2027);
+  assert.ok(calendar.every(item => item.status === 'ABIERTO'));
+  assert.ok(calendar.every(item => !item.closingEntryId && !item.closedAt));
+  validatePersistedFiscalExerciseCalendar(calendar, 'co-long');
+});
