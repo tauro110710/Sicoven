@@ -1,5 +1,4 @@
 import { addDecimal, decimalToNumber, decimalToString, divideDecimal, multiplyDecimal, parseDecimal, roundDecimal } from './exactDecimal';
-import { getBolivarScaleMetadataByDate, normalizeBolivarAmountByDate } from './historicalAccountingCalendar';
 
 export interface VnrProvisionLedgerBalance {
   provisionBs: number;
@@ -110,9 +109,6 @@ export function getDefaultInventoryAccountCode(itemType?: InventoryItemType): st
 export interface CostLayer {
   quantity: number;
   unitCostBs: number;
-  /** Cost expressed in the current Bs. scale, derived without modifying source history. */
-  sourceUnitCostBs?: number;
-  monetaryScaleSnapshot?: ReturnType<typeof getBolivarScaleMetadataByDate>;
   unitCostUsd: number;
   date?: string;
   documentRef?: string;
@@ -120,55 +116,6 @@ export interface CostLayer {
 }
 
 /** Creates a non-destructive canonical-Bs projection of dated PEPS layers. Original costs and USD remain unchanged. */
-export function normalizeFifoLayersToCurrentBolivarScale(layersInput: CostLayer[]): CostLayer[] {
-  if (!Array.isArray(layersInput)) throw new Error('Las capas PEPS no son válidas para normalizar su escala monetaria.');
-  return layersInput.map(layer => {
-    const date = String(layer.date || '');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) ||
-        new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) !== date ||
-        !validNonNegative(Number(layer.unitCostBs)) || !validNonNegative(Number(layer.unitCostUsd))) {
-      throw new Error('Una capa PEPS requiere fecha y costos originales válidos para normalizar.');
-    }
-    const normalized = Number(normalizeBolivarAmountByDate(String(layer.unitCostBs), date));
-    if (!Number.isFinite(normalized) || normalized < 0) throw new Error('La normalización monetaria de una capa PEPS produjo un costo inválido.');
-    return { ...layer, sourceUnitCostBs: Number(layer.unitCostBs), unitCostBs: normalized, monetaryScaleSnapshot: getBolivarScaleMetadataByDate(date) };
-  });
-}
-
-
-/** Calculates weighted average after converting both Bs. costs to current scale; USD costs remain historical and separate. */
-export function calculateWeightedAverageCostAcrossReconversion(
-  existingQuantity: number,
-  existingUnitCostBs: number,
-  existingCostBasisDate: string,
-  existingUnitCostUsd: number,
-  incomingQuantity: number,
-  incomingUnitCostBs: number,
-  incomingCostDate: string,
-  incomingUnitCostUsd: number
-): InventoryCostResult {
-  const validIsoDate = (date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date) &&
-    Number.isFinite(Date.parse(date)) && new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) === date;
-  if (!validNonNegative(existingQuantity) || !validPositive(incomingQuantity) ||
-      !validNonNegative(existingUnitCostBs) || !validNonNegative(incomingUnitCostBs) ||
-      !validNonNegative(existingUnitCostUsd) || !validNonNegative(incomingUnitCostUsd) ||
-      (existingQuantity > 0 && !validIsoDate(existingCostBasisDate)) || !validIsoDate(incomingCostDate) ||
-      (existingQuantity === 0 && (existingUnitCostBs !== 0 || existingUnitCostUsd !== 0))) {
-    throw new Error('Las cantidades, costos o fechas base no son válidos para normalizar costos históricos.');
-  }
-  const existingBs = existingQuantity > 0
-    ? Number(normalizeBolivarAmountByDate(String(existingUnitCostBs), existingCostBasisDate))
-    : 0;
-  const incomingBs = Number(normalizeBolivarAmountByDate(String(incomingUnitCostBs), incomingCostDate));
-  if (!Number.isFinite(existingBs) || existingBs < 0 || !Number.isFinite(incomingBs) || incomingBs < 0 ||
-      !Number.isFinite(existingUnitCostUsd) || existingUnitCostUsd < 0 || !Number.isFinite(incomingUnitCostUsd) || incomingUnitCostUsd < 0) {
-    throw new Error('Los costos históricos no se pudieron normalizar de forma segura.');
-  }
-  return calculateWeightedAverageCostDual(existingQuantity, existingBs, existingUnitCostUsd,
-    incomingQuantity, incomingBs, incomingUnitCostUsd);
-}
-
-
 export interface InventoryCostResult {
   quantity: number;
   totalCostBs: number;
