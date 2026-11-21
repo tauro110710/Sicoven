@@ -193,3 +193,30 @@ El propósito vigente de SICOVEN es que el contador registre clientes y lleve su
 El contador puede registrar una empresa con un inicio contable elegido, comenzar a ingresar sus operaciones reales desde ese período, y SICOVEN las procesa correctamente conforme a las reglas contables, monetarias y de reconversión que correspondan a cada fecha, sin pedir datos BCV cuando no aplican ni inventar datos cuando sí aplican.
 
 No tocar `main`, no fusionar, publicar ni desplegar sin autorización explícita.
+
+
+## 7. Auditoría del calendario y tratamiento monetario venezolano (2026-11-21)
+
+### Objetivo funcional confirmado
+El contador debe poder iniciar el registro ordinario desde cualquier período elegido y continuar mes a mes hasta el período actual. SICOVEN debe reconocer automáticamente la escala monetaria vigente para la fecha de cada documento y aplicar equivalencias cuando el cálculo o la presentación requieran comparar escalas; no debe pedir al contador que seleccione reconversiones.
+
+### Reconversiones de referencia
+- 2008-01-01: bolívar anterior → bolívar fuerte, factor 1.000 (3 ceros).
+- 2018-08-20: bolívar fuerte → bolívar soberano, factor 100.000 (5 ceros).
+- 2021-10-01: bolívar soberano → bolívar digital, factor 1.000.000 (6 ceros).
+- El calendario y los factores deben verificarse con fuentes normativas antes de integrar cambios de cálculo; las cifras originales y fechas de documentos se preservan sin alteración.
+
+### Hallazgos de auditoría de código (no corregidos aún)
+1. `src/context/AccountingContext.tsx`: `addPurchase` exige `purchaseData.bcvRate > 0` sin evaluar fecha ni moneda/criterio contable de la operación.
+2. `src/context/AccountingContext.tsx`: `addSale` exige `saleData.bcvRate > 0` sin evaluar fecha ni moneda/criterio contable.
+3. `src/types/journalEntryValidation.ts`: los asientos se validan con igualdad tanto en Bs como USD; la arquitectura de doble moneda obliga a construir valores USD aunque el período o la operación no requieran tasa BCV. No eliminar esta condición sin rediseñar y probar el modelo de moneda funcional, presentación y saldos.
+4. `src/types/historicalAccountingCalendar.ts` contiene las eras monetarias y el convertidor `convertVenezuelanAmount`, pero no se identificó su integración en los flujos ordinarios de compras/ventas ni en el contexto contable. Tratar como helper aislado hasta demostrar usos reales.
+5. `src/types/fiscalExerciseLifecycle.ts` inicializa solo el ejercicio fiscal activo y el siguiente; no genera el calendario mensual desde la fecha de inicio elegida hasta el período actual. El calendario histórico alternativo no se debe confundir con reconstrucción de operaciones: solo representa períodos de servicio/registro ordinario.
+6. El cierre anual exige tasas BCV positivas para cierre y apertura (`closingBcvRate` y `openingBcvRate`) sin evidencia de una política condicional por período. Revisar la moneda de cada saldo y el fundamento de las tasas antes de alterar.
+
+### Próximas prioridades de implementación
+- Diseñar una resolución central por fecha para escala monetaria y política de tasa, con reglas históricas verificadas y casos donde la tasa no es aplicable; mantener tasa desconocida como desconocida, no inventarla.
+- Integrar esa resolución a compra, venta, asiento manual, cierres/aperturas, reportes y cálculos, con pruebas de regresión de cada era y transiciones.
+- Resolver la representación monetaria del ledger: que una operación sin tasa aplicable pueda contabilizarse de manera válida sin fabricar equivalentes USD, y que saldos, cierres y reportes respeten moneda funcional/presentación. Requiere revisión de arquitectura, no un bypass de validación.
+- Auditar el calendario ordinario para que una empresa iniciada en febrero de 2010 pueda navegar y registrar períodos consecutivos hasta el actual, sin generar documentos ni reconstruir actividad.
+- No marcar nada de este apartado como terminado por documentación o por la existencia de helpers; solo cuando esté integrado en runtime, persistido y cubierto por pruebas.
