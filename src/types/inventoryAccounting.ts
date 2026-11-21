@@ -136,6 +136,28 @@ export function normalizeFifoLayersToCurrentBolivarScale(layersInput: CostLayer[
 }
 
 
+/** Calculates weighted average after converting both Bs. costs to current scale; USD costs remain historical and separate. */
+export function calculateWeightedAverageCostAcrossReconversion(
+  existingQuantity: number,
+  existingUnitCostBs: number,
+  existingCostBasisDate: string,
+  existingUnitCostUsd: number,
+  incomingQuantity: number,
+  incomingUnitCostBs: number,
+  incomingCostDate: string,
+  incomingUnitCostUsd: number
+): InventoryCostResult {
+  const existingBs = Number(normalizeBolivarAmountByDate(String(existingUnitCostBs), existingCostBasisDate));
+  const incomingBs = Number(normalizeBolivarAmountByDate(String(incomingUnitCostBs), incomingCostDate));
+  if (!Number.isFinite(existingBs) || existingBs < 0 || !Number.isFinite(incomingBs) || incomingBs < 0 ||
+      !Number.isFinite(existingUnitCostUsd) || existingUnitCostUsd < 0 || !Number.isFinite(incomingUnitCostUsd) || incomingUnitCostUsd < 0) {
+    throw new Error('Los costos históricos no se pudieron normalizar de forma segura.');
+  }
+  return calculateWeightedAverageCostDual(existingQuantity, existingBs, existingUnitCostUsd,
+    incomingQuantity, incomingBs, incomingUnitCostUsd);
+}
+
+
 export interface InventoryCostResult {
   quantity: number;
   totalCostBs: number;
