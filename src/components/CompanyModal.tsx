@@ -73,15 +73,6 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       window.alert('Indique una fecha válida desde la que esta empresa comenzará su registro contable ordinario en SICOVEN.');
       return;
     }
-    if (operationalStartDate) {
-      const parsedOperationalStartDate = new Date(operationalStartDate + 'T00:00:00.000Z');
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(operationalStartDate) ||
-          !Number.isFinite(parsedOperationalStartDate.getTime()) ||
-          parsedOperationalStartDate.toISOString().slice(0, 10) !== operationalStartDate) {
-        window.alert('La fecha real de inicio de operaciones debe ser una fecha válida.');
-        return;
-      }
-    }
     if (taxpayerType === 'ESPECIAL' && (!specialTaxpayerNotificationReference.trim() || !specialTaxpayerNotificationDate)) {
       window.alert('Para registrar una empresa como Contribuyente Especial, indique la referencia y fecha de la notificación expresa del SENIAT.');
       return;
@@ -105,7 +96,6 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       email: email.trim() || 'contacto@empresa.com.ve',
       taxpayerType,
       accountingStartDate,
-      ...(operationalStartDate ? { operationalStartDate } : {}),
       ...(taxpayerType === 'ESPECIAL' ? { specialTaxpayerNotificationReference: specialTaxpayerNotificationReference.trim(), specialTaxpayerNotificationDate } : {}),
       ...(accountingFramework ? {
         accountingFramework,
@@ -426,50 +416,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
                 <option key={year} value={year}>{year} — desde el 1 de enero</option>
               ))}
             </select>
-            <label className="block text-xs font-semibold text-slate-700 mt-2">
-              O fecha exacta de inicio *
-            </label>
-            <input
-              type="date"
-              required
-              value={accountingStartDate}
-              onChange={e => {
-                setAccountingStartDate(e.target.value);
-                if (e.target.value) setFiscalYear(e.target.value.slice(0, 4));
-              }}
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-            />
-            <p className="text-[10px] leading-4 text-slate-600">Desde esta fecha se incorporarán las operaciones del registro o reconstrucción contable. Puede ser una fecha histórica anterior al día en que registra la empresa. SICOVEN guardará automáticamente la fecha y hora de registro por separado.</p>
-          </div>
-
-          {/* Inicio real de operaciones, dato histórico opcional */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-700">
-              Fecha real de inicio de operaciones (opcional)
-            </label>
-            <input
-              type="date"
-              value={operationalStartDate}
-              onChange={e => setOperationalStartDate(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-slate-400 focus:outline-none"
-            />
-            <p className="text-[10px] leading-4 text-slate-600">Indique cuándo comenzó realmente a operar la empresa, si conoce y tiene documentada esa fecha. Sirve para comprobar que la reconstrucción no omita períodos anteriores; no es requisito para registrar la empresa.</p>
-          </div>
-
-          {/* Ejercicio económico */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Ejercicio Económico (Año)
-            </label>
-            <input
-                type="text"
-                inputMode="numeric"
-                maxLength={4}
-                required
-                value={fiscalYear}
-                onChange={e => setFiscalYear(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              />
+            <p className="text-[10px] leading-4 text-slate-600">Seleccione el año desde el que comenzará el registro. SICOVEN procesará los movimientos por su fecha, aplicará las reglas históricas correspondientes y avanzará hasta la fecha actual.</p>
           </div>
 
           <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">
