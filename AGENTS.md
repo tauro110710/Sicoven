@@ -80,7 +80,9 @@ Validar los flujos afectados con pruebas automatizadas, TypeScript, build y, en 
 ### 5.6. Autorización de trabajo
 El propietario autoriza trabajar directamente en `main` y fusionar cambios cuando sea conveniente, siempre después de auditar el diff y completar las validaciones requeridas. Mantener SICOVEN como único alcance. La autorización no elimina las verificaciones ni permite declarar éxito sin evidencia.
 
-## 6. Registro de avance del objetivo histórico (actualizado 2026-11-20)
+## 6. ARCHIVO DE AVANCE HISTÓRICO — REFERENCIA, NO DIRECTIVA VIGENTE
+
+Los estados, requisitos y planes de reconstrucción descritos a continuación son registros históricos de trabajo. No deben tratarse como instrucciones activas cuando contradigan la sección 5 (flujo contable ordinario único). Conservar este archivo de progreso por trazabilidad, pero no crear modos/paneles/procesos independientes a partir de él.
 
 ### Fase 1 — recuperación del snapshot contable central
 
