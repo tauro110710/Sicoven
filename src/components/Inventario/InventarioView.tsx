@@ -326,7 +326,7 @@ export const InventarioView: React.FC = () => {
                         <td className="py-2.5 px-4 text-right font-mono font-black text-slate-900 bg-slate-50/50">
                           {totalValBs === null ? 'Pendiente conciliar' : formatBs(totalValBs)}
                           {true && (
-                            <span className="block text-[10px] text-slate-400 font-normal">{totalValUsd === null ? (prod.currentStock > 0 && (!prod.avgCostUsd || !prod.openingBcvRate) ? 'Pendiente BCV USD' : 'Pendiente conciliar') : formatUsd(totalValUsd)}</span>
+                            <span className="block text-[10px] text-slate-400 font-normal">{totalValUsd === null ? (prod.currentStock > 0 && !isUsdInventoryValuationAvailable(prod, companyMovements.filter(movement => movement.productId === prod.id)) ? 'Pendiente BCV USD' : 'Pendiente conciliar') : formatUsd(totalValUsd)}</span>
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-center">
