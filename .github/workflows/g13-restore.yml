@@ -8,6 +8,10 @@ on:
       - 'electron/company-session-context.cjs'
       - 'electron/company-session-context.test.cjs'
       - 'electron/restore-*.cjs'
+      - 'electron/supporting-documents.cjs'
+      - 'electron/supporting-documents.test.cjs'
+      - 'electron/operation-receipts.cjs'
+      - 'electron/preload.cjs'
       - '.github/workflows/g13-restore.yml'
       - 'package.json'
       - 'package-lock.json'
@@ -20,6 +24,10 @@ on:
       - 'electron/company-session-context.cjs'
       - 'electron/company-session-context.test.cjs'
       - 'electron/restore-*.cjs'
+      - 'electron/supporting-documents.cjs'
+      - 'electron/supporting-documents.test.cjs'
+      - 'electron/operation-receipts.cjs'
+      - 'electron/preload.cjs'
       - '.github/workflows/g13-restore.yml'
       - 'package.json'
       - 'package-lock.json'
@@ -51,4 +59,4 @@ jobs:
       - name: Install locked dependencies
         run: npm install --no-audit --no-fund
       - name: Run G13 restore and recovery tests
-        run: npx tsx --test electron/backup-restore.test.cjs electron/company-session-context.test.cjs electron/restore-engine.test.cjs electron/restore-journal.test.cjs electron/restore-audit-ledger.test.cjs
+        run: npx tsx --test electron/backup-restore.test.cjs electron/company-session-context.test.cjs electron/restore-engine.test.cjs electron/restore-journal.test.cjs electron/restore-audit-ledger.test.cjs electron/supporting-documents.test.cjs
