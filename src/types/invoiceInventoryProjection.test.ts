@@ -103,3 +103,10 @@ test('reconciles an existing invoice Kardex movement with case and whitespace di
   const result = deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [], existingMovements: existing });
   assert.deepEqual(result, []);
 });
+
+test('reconciles an existing invoice Kardex movement even when internal reference whitespace differs', () => {
+  const existing = deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [] })
+    .map(m => ({ ...m, id: 'manual-kardex-2', documentRef: 'F A C - P - 0 0 1' }));
+  const result = deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [], existingMovements: existing });
+  assert.deepEqual(result, []);
+});
