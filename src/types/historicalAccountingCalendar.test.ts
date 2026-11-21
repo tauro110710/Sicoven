@@ -96,3 +96,16 @@ test('date-scale metadata is suitable for historical report annotations', () => 
   });
   assert.equal(expressBolivarAmountByDate('2.5', '2010-01-01'), '250000000000');
 });
+
+test('reconversiones cubren los límites efectivos de 2008, 2018 y 2021 y normalizan sus unidades', () => {
+  assert.equal(getVenezuelanMonetaryEra('2007-12-31').id, 'BOLIVAR_ORIGINAL');
+  assert.equal(getVenezuelanMonetaryEra('2008-01-01').id, 'BOLIVAR_FUERTE');
+  assert.equal(normalizeBolivarAmountByDate('100000000000000', '2007-12-31'), '1');
+  assert.equal(normalizeBolivarAmountByDate('100000000000', '2008-01-01'), '1');
+  assert.equal(normalizeBolivarAmountByDate('1000000', '2018-08-20'), '1');
+  assert.equal(normalizeBolivarAmountByDate('1', '2021-10-01'), '1');
+  assert.equal(getBolivarScaleMetadataByDate('2007-12-31').factorToCurrent, '100000000000000');
+  assert.equal(getBolivarScaleMetadataByDate('2008-01-01').factorToCurrent, '100000000000');
+  assert.equal(getBolivarScaleMetadataByDate('2018-08-20').factorToCurrent, '1000000');
+  assert.equal(getBolivarScaleMetadataByDate('2021-10-01').factorToCurrent, '1');
+});
