@@ -1,4 +1,5 @@
 import { addDecimal, decimalToNumber, decimalToString, divideDecimal, multiplyDecimal, parseDecimal, roundDecimal } from './exactDecimal';
+import { getBolivarScaleMetadataByDate, normalizeBolivarAmountByDate } from './historicalAccountingCalendar';
 
 export interface VnrProvisionLedgerBalance {
   provisionBs: number;
@@ -109,11 +110,31 @@ export function getDefaultInventoryAccountCode(itemType?: InventoryItemType): st
 export interface CostLayer {
   quantity: number;
   unitCostBs: number;
+  /** Cost expressed in the current Bs. scale, derived without modifying source history. */
+  sourceUnitCostBs?: number;
+  monetaryScaleSnapshot?: ReturnType<typeof getBolivarScaleMetadataByDate>;
   unitCostUsd: number;
   date?: string;
   documentRef?: string;
   sourceMovementId?: string;
 }
+
+/** Creates a non-destructive canonical-Bs projection of dated PEPS layers. Original costs and USD remain unchanged. */
+export function normalizeFifoLayersToCurrentBolivarScale(layersInput: CostLayer[]): CostLayer[] {
+  if (!Array.isArray(layersInput)) throw new Error('Las capas PEPS no son válidas para normalizar su escala monetaria.');
+  return layersInput.map(layer => {
+    const date = String(layer.date || '');
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) ||
+        new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) !== date ||
+        !validNonNegative(Number(layer.unitCostBs)) || !validNonNegative(Number(layer.unitCostUsd))) {
+      throw new Error('Una capa PEPS requiere fecha y costos originales válidos para normalizar.');
+    }
+    const normalized = Number(normalizeBolivarAmountByDate(String(layer.unitCostBs), date));
+    if (!Number.isFinite(normalized) || normalized < 0) throw new Error('La normalización monetaria de una capa PEPS produjo un costo inválido.');
+    return { ...layer, sourceUnitCostBs: Number(layer.unitCostBs), unitCostBs: normalized, monetaryScaleSnapshot: getBolivarScaleMetadataByDate(date) };
+  });
+}
+
 
 export interface InventoryCostResult {
   quantity: number;
