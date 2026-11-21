@@ -68,6 +68,14 @@ test('reconciles already posted invoice movement and prevents it from being repl
   assert.equal(result.products[0].currentStock, 2);
 });
 
+test('rejects an existing purchase ledger entry with a mismatched USD unit cost', () => {
+  const projected = prepareInvoiceHistoricalInventoryReplay(input({ sales: [] })).movements[0];
+  const inconsistentExisting = { ...projected, unitCostUsd: projected.unitCostUsd + 1 };
+  assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({
+    sales: [], existingMovements: [inconsistentExisting]
+  })), /datos difieren/);
+});
+
 test('rejects invalid reconstruction start and end dates', () => {
   assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({ startDate: '2025-02-30' })), /fecha inicial/);
   assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({ throughDate: '2025-02-30' })), /fecha final/);
