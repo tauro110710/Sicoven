@@ -131,10 +131,11 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
   const returnedBySale = new Map<string, number>();
   const fifoLayersByMovementId = new Map<string, Array<{ quantity: number; unitCostBs: number; unitCostUsd: number; date: string; documentRef?: string; sourceMovementId?: string }>>();
 
+  const processedIds = new Set<string>();
   for (const { movement: source } of ordered) {
     const id = String(source.id || '').trim();
-    if (!id || seenIds.has(id)) throw new Error('El historial contiene identificadores de movimiento vacíos o duplicados.');
-    seenIds.add(id);
+    if (!id || processedIds.has(id)) throw new Error('El historial contiene identificadores de movimiento vacíos o duplicados.');
+    processedIds.add(id);
     if (!validDate(source.date) || source.date < startDate) {
       throw new Error('El movimiento ' + (source.documentRef || id) + ' está fuera del rango o tiene una fecha inválida.');
     }
