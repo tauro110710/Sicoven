@@ -236,6 +236,22 @@ function attachDocument(db, { storageDir, trustedRoot = path.dirname(path.resolv
         !Number.isSafeInteger(Number(request.byteSize)) || Number(request.byteSize) < 1 || Number(request.byteSize) > MAX_DOCUMENT_BYTES) {
       throw new Error('La intención de adjunto contiene metadatos o rutas no válidas; se conservó para inspección.');
     }
+    const retryMetadata = {
+      entityType: requiredText(input?.entityType, 'Tipo de operación', 50).toUpperCase(),
+      entityId: requiredText(input?.entityId, 'Identificador de operación', 120),
+      documentType: requiredText(input?.documentType, 'Tipo de documento', 80).toUpperCase(),
+      title: requiredText(input?.title, 'Título', 240),
+      description: String(input?.description || '').trim().slice(0, 2000) || null,
+      replacesDocumentId: input?.replacesDocumentId ? String(input.replacesDocumentId) : null
+    };
+    for (const key of Object.keys(retryMetadata)) {
+      if ((retryMetadata[key] ?? null) !== (request[key] ?? null)) {
+        throw new Error('La solicitud no coincide con la intención documental pendiente; se bloqueó el reintento.');
+      }
+    }
+    if (input?.fileName && path.basename(requiredText(input.fileName, 'Nombre del archivo', 255)) !== request.originalFileName) {
+      throw new Error('El nombre del archivo no coincide con la intención documental pendiente.');
+    }
     if (buffer) {
       const candidate = normalizeDocument(input, buffer);
       for (const key of ['originalFileName','documentType','title','description','mimeType','extension','sha256','byteSize']) {
