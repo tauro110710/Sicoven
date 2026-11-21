@@ -2,6 +2,19 @@
 
 **Esta directiva sustituye de forma definitiva las instrucciones anteriores incompatibles de este archivo. SICOVEN NO tendrá un modo, panel, asistente, motor, simulador ni proceso especial de «reconstrucción histórica».**
 
+## ACLARACIÓN VIGENTE — RECÁLCULO CRONOLÓGICO INTERNO (2026-11-21)
+
+La lógica interna de replay/recalculo cronológico **puede conservarse y reutilizarse** si es necesaria para mantener la contabilidad ordinaria consistente, incluso cuando la fecha de inicio contable elegida sea distinta. No se considera por sí misma un modo o producto de reconstrucción.
+
+- No crear ni mantener una experiencia separada para «reconstrucción histórica»: sin paneles, modos, asistentes, simuladores, motores como función independiente de usuario ni procesos manuales especiales.
+- Sí conservar/refactorizar cálculos internos que permitan reordenar y recalcular automáticamente, a partir de la fecha efectiva de una operación atrasada o corregida, los efectos posteriores pertinentes (Kardex/inventario, costos, PEPS/promedio, asientos, saldos, cuentas por cobrar/pagar, caja, impuestos y reportes).
+- Mantener operaciones originales, fechas, documentos/soportes, relaciones de corrección, trazabilidad, idempotencia y protección de períodos cerrados. La fecha de inicio contable define el alcance de los registros ordinarios; no debe bloquear arbitrariamente la consistencia interna que requiera el recálculo, ni autoriza alterar períodos protegidos.
+- Antes de eliminar helpers como `historicalInventoryReplay`, `historicalAccountingReplayPlan` u otros nombres similares, auditar dependencias y determinar si son reutilizables como mecanismos internos. No retirarlos por su nombre.
+- El recálculo debe ocurrir dentro del flujo normal al registrar/corregir operaciones reales, sin que el contador active o ejecute un proceso especial.
+
+Esta aclaración prevalece sobre cualquier mención posterior incompatible en este archivo que ordene eliminar replay/recalculo interno útil, y no reintroduce una función de reconstrucción independiente.
+
+
 ## Principio rector definitivo
 SICOVEN no está diseñado para rescatar contabilidades dañadas ni para reconstruir empresas que nunca han existido dentro de él. Está diseñado para que un contador pueda crear una empresa, escoger desde cuándo la lleva, empezar a registrar sus operaciones y llevarla hasta el presente o el futuro, sin que el sistema le complique el trabajo.
 
