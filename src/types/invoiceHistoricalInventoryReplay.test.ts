@@ -1,0 +1,52 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import type { InventoryMovement, InventoryProduct, PurchaseRecord, SaleRecord } from './accounting';
+import { prepareInvoiceHistoricalInventoryReplay } from './invoiceHistoricalInventoryReplay';
+
+const companyId = 'co-replay';
+const product = {
+  id: 'product-1', companyId, code: 'SKU-1', name: 'Producto',
+  category: 'General', unit: 'Unid', minStock: 0, currentStock: 500,
+  avgCostBs: 999, avgCostUsd: 9.99, lastCostBs: 999, lastCostUsd: 9.99,
+  salesPriceBs: 0, salesPriceUsd: 0, costingMethod: 'PROMEDIO_PONDERADO'
+} as InventoryProduct;
+const purchase = (overrides: Partial<PurchaseRecord> = {}) => ({
+  id: 'p-1', companyId, invoiceDate: '2025-01-01', invoiceNumber: 'P-1',
+  documentType: '01', bcvRate: 100, supplierRif: 'J-1', supplierName: 'Proveedor',
+  inventoryLines: [{ productId: product.id, quantity: 4, unitCostBs: 10 }],
+  ...overrides
+} as PurchaseRecord);
+const sale = (overrides: Partial<SaleRecord> = {}) => ({
+  id: 's-1', companyId, invoiceDate: '2025-01-02', invoiceNumber: 'S-1',
+  documentType: '01', bcvRate: 100, customerRif: 'V-1', customerName: 'Cliente',
+  inventoryLines: [{ productId: product.id, productCode: product.code, productName: product.name,
+    quantity: 2, unitPriceBs: 30, netAmountBs: 60, taxRate: 0, vatAmountBs: 0, exemptAmountBs: 60, totalBs: 60 }],
+  ...overrides
+} as SaleRecord);
+const input = (patch: Partial<Parameters<typeof prepareInvoiceHistoricalInventoryReplay>[0]> = {}) => ({
+  companyId, startDate: '2025-01-01', products: [product], purchases: [purchase()], sales: [sale()],
+  existingMovements: [] as InventoryMovement[], ...patch
+});
+
+test('replays invoice-only purchase and sale history into inventory balances and derived sale cost', () => {
+  const result = prepareInvoiceHistoricalInventoryReplay(input());
+  assert.deepEqual(result.movements.map(movement => movement.concept), ['COMPRA', 'VENTA']);
+  assert.equal(result.movements[1].totalCostBs, 20);
+  assert.equal(result.products[0].currentStock, 2);
+  assert.equal(result.products[0].avgCostBs, 10);
+  assert.equal(product.currentStock, 500, 'does not modify live product snapshot');
+});
+
+test('rejects same-day invoice order rather than assigning arbitrary FIFO/average cost sequence', () => {
+  assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({
+    purchases: [purchase({ invoiceDate: '2025-01-02' })],
+    sales: [sale({ invoiceDate: '2025-01-02' })]
+  })), /secuencia de registro verificable/);
+});
+
+test('reconciles already posted invoice movement and prevents it from being replayed twice', () => {
+  const existing = prepareInvoiceHistoricalInventoryReplay(input()).movements;
+  const result = prepareInvoiceHistoricalInventoryReplay(input({ existingMovements: existing }));
+  assert.equal(result.movements.length, 2);
+  assert.equal(result.products[0].currentStock, 2);
+});
