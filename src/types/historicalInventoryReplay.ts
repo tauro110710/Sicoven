@@ -341,7 +341,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       balanceQty: Math.max(0, nextQuantity),
       balanceTotalBs: roundBs(Math.max(0, nextQuantity) * nextAverageBs),
       balanceTotalUsd: roundUsd(Math.max(0, nextQuantity) * nextAverageUsd),
-      ...(fifoLayersByMovementId.has(id) ? { fifoLayers: fifoLayersByMovementId.get(id) } : {})
+      ...(fifoLayersByMovementId.has(id) ? { fifoLayers: (fifoLayersByMovementId.get(id) || []).map(layer => ({ ...layer, date: layer.date || source.date })) } : {})
     };
     state.quantity = Math.max(0, nextQuantity);
     state.averageBs = nextAverageBs;
