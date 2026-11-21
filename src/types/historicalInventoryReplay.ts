@@ -293,9 +293,9 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
           delta, requestedUnitCostBs, requestedUnitCostUsd > 0 ? requestedUnitCostUsd : (rate > 0 ? roundUsd(requestedUnitCostBs / rate) : 0)
         );
         totalCostBs = roundBs(delta * requestedUnitCostBs);
-        totalCostUsd = roundUsd(delta * unitCostUsd);
         unitCostBs = requestedUnitCostBs;
         unitCostUsd = requestedUnitCostUsd > 0 ? requestedUnitCostUsd : (rate > 0 ? roundUsd(requestedUnitCostBs / rate) : 0);
+        totalCostUsd = roundUsd(delta * unitCostUsd);
         nextQuantity = weighted.quantity;
         nextAverageBs = weighted.unitCostBs;
         nextAverageUsd = weighted.unitCostUsd;
