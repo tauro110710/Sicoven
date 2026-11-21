@@ -143,7 +143,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
 
     let movementQuantity = requestedQuantity;
     let unitCostBs = requestedUnitCostBs;
-    let unitCostUsd = requestedUnitCostUsd > 0 ? requestedUnitCostUsd : roundUsd(requestedUnitCostBs / rate);
+    let unitCostUsd = requestedUnitCostUsd > 0 ? requestedUnitCostUsd : (rate > 0 ? roundUsd(requestedUnitCostBs / rate) : 0);
     let totalCostBs = 0;
     let totalCostUsd = 0;
     let nextQuantity = state.quantity;
