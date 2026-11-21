@@ -1,5 +1,11 @@
 import type { InventoryMovement, InventoryProduct, PurchaseRecord, SaleRecord } from './accounting';
 
+const validInvoiceDate = (value: string): boolean => {
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  const parsed = new Date(value + 'T00:00:00.000Z');
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
+
 /**
  * Converts source invoice merchandise lines into stable, derived Kardex inputs.
  * This is a projection only: it never mutates invoice documents or product balances.
@@ -54,7 +60,7 @@ export function deriveInvoiceInventoryMovements(input: {
       const product = products.get(line.productId);
       const quantity = Number(line.quantity);
       const unitCostBs = Number(line.unitCostBs);
-      if (!product || productIds.has(line.productId) || !Number.isFinite(quantity) || quantity <= 0 ||
+      if (!validInvoiceDate(purchase.invoiceDate) || !product || productIds.has(line.productId) || !Number.isFinite(quantity) || quantity <= 0 ||
           !Number.isFinite(unitCostBs) || unitCostBs <= 0) {
         throw new Error('Factura de compra ' + ref + ': línea de inventario inválida, duplicada o sin artículo.');
       }
@@ -79,7 +85,7 @@ export function deriveInvoiceInventoryMovements(input: {
     for (const line of sale.inventoryLines) {
       const product = products.get(line.productId);
       const quantity = Number(line.quantity);
-      if (!product || productIds.has(line.productId) || !Number.isFinite(quantity) || quantity <= 0) {
+      if (!validInvoiceDate(sale.invoiceDate) || !product || productIds.has(line.productId) || !Number.isFinite(quantity) || quantity <= 0) {
         throw new Error('Factura de venta ' + ref + ': línea de inventario inválida, duplicada o sin artículo.');
       }
       productIds.add(line.productId);
