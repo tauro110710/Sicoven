@@ -1518,7 +1518,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       try {
         const pending = await window.sicovenStore!.recoverPendingOperationIntents(token, false);
         if (cancelled || pending.length === 0) return;
-        const failed: Array<{ operationId: string; channel: string; message?: string }> = [];
+        const failed: Array<{ operationId: string; channel?: string; message?: string }> = [];
         for (const item of pending) {
           if (cancelled) break;
           const label = item.channel.replace('sicoven:', '').replace(/-/g, ' ');
