@@ -10,6 +10,7 @@ import {
 export interface HistoricalInventoryReplayInput {
   companyId: string;
   startDate: string;
+  throughDate?: string;
   products: InventoryProduct[];
   movements: InventoryMovement[];
 }
@@ -72,6 +73,10 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
   const startDate = String(input.startDate || '');
   if (!companyId) throw new Error('La reconstrucción de inventario requiere una empresa.');
   if (!validDate(startDate)) throw new Error('La fecha inicial de reconstrucción no es válida.');
+  const throughDate = input.throughDate === undefined ? undefined : String(input.throughDate);
+  if (throughDate !== undefined && (!validDate(throughDate) || throughDate < startDate)) {
+    throw new Error('La fecha final de reconstrucción no es válida o es anterior a la fecha inicial.');
+  }
   if (!Array.isArray(input.products) || !input.products.length) {
     throw new Error('La empresa no tiene artículos para reconstruir.');
   }
@@ -106,7 +111,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
 
   const seenIds = new Set<string>();
   const ordered = input.movements.map((movement, index) => ({ movement, index }))
-    .filter(({ movement }) => movement.companyId === companyId)
+    .filter(({ movement }) => movement.companyId === companyId && movement.date >= startDate && (throughDate === undefined || movement.date <= throughDate))
     .sort((a, b) => a.movement.date.localeCompare(b.movement.date) || a.index - b.index);
 
   if (input.movements.some(movement => movement.companyId !== companyId)) {
