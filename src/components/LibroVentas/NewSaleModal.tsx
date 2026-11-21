@@ -116,7 +116,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
       addSale({
       invoiceDate,
       monetaryScaleSnapshot,
-      sourceMonetaryAmounts: { taxableBase: taxableBaseInput, exemptAmount: exemptAmountInput, bcvRate: bcvRateInput },
+      sourceMonetaryAmounts: { taxableBase: taxableBaseInput, exemptAmount: exemptAmountInput, bcvRate: bcvRateInput, bcvRateScale: monetaryScaleSnapshot.label },
       customerRif: formatRif(customerRif),
       customerName: customerName.trim().toUpperCase(),
       customerAddress: customerAddress.trim() || undefined,
@@ -274,7 +274,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Base Imponible Gravada (Bs.) *</label>
+                <label className="block font-semibold text-slate-700 mb-1">Base Imponible Gravada (Bs. — {getVenezuelanMonetaryEra(invoiceDate).label}) *</label>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -289,7 +289,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                 </span>
               </div>
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Monto Exento / Exonerado (Bs.)</label>
+                <label className="block font-semibold text-slate-700 mb-1">Monto Exento / Exonerado (Bs. — {getVenezuelanMonetaryEra(invoiceDate).label})</label>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -322,7 +322,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Tasa BCV aplicada (Bs. por USD) · {invoiceDate} *</label>
+                <label className="block font-semibold text-slate-700 mb-1">Tasa BCV aplicada (Bs. por USD) · {invoiceDate} · {getVenezuelanMonetaryEra(invoiceDate).label} *</label>
                 <input
                   type="text"
                   inputMode="decimal"
