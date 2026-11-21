@@ -668,3 +668,20 @@ test('bloquea pagos y reembolsos sin cuenta de tesorería verificable', () => {
   assert.ok(plan.blockers.some(item => item.includes('no identifica la cuenta real de caja o banco')));
   assert.equal(plan.canProceedToTransactionalReplay, false);
 });
+
+test('bloquea marcas de registro repetidas que no permiten ordenar operaciones del mismo día', () => {
+  const input = base();
+  input.sales = [{
+    id: 'sale-1', companyId: 'company-1', invoiceDate: '2023-05-01',
+    createdAt: '2023-05-01T10:00:00.000Z'
+  }];
+  input.purchases = [{
+    id: 'purchase-1', companyId: 'company-1', invoiceDate: '2023-05-01',
+    createdAt: '2023-05-01T10:00:00.000Z'
+  }];
+
+  const plan = buildHistoricalAccountingReplayPlan(input);
+
+  assert.equal(plan.canProceedToTransactionalReplay, false);
+  assert.match(plan.blockers.join(' '), /marcas de registro repetidas/);
+});
