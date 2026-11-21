@@ -189,3 +189,25 @@ test('ajuste negativo conserva costos USD y saldos finitos cuando no existe tasa
   assert.equal(result.products[0].avgCostUsd, 2);
   assert.ok(result.movements.every(item => Number.isFinite(item.totalCostUsd) && Number.isFinite(item.balanceTotalUsd)));
 });
+
+
+test('limita el recálculo a la fecha final solicitada sin incluir movimientos posteriores', () => {
+  const products = [makeProduct()];
+  const movements = [
+    movement({ id: 'buy-1', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 5, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100 }),
+    movement({ id: 'sale-1', date: '2010-01-02', type: 'SALIDA', concept: 'VENTA', quantity: 2, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100 }),
+    movement({ id: 'buy-later', date: '2010-01-03', type: 'ENTRADA', concept: 'COMPRA', quantity: 4, unitCostBs: 20, unitCostUsd: 0.2, bcvRate: 100 })
+  ];
+  const result = replayHistoricalInventory({ companyId, startDate: '2010-01-01', throughDate: '2010-01-02', products, movements });
+  assert.deepEqual(result.processedMovementIds, ['buy-1', 'sale-1']);
+  assert.equal(result.products[0].currentStock, 3);
+  assert.equal(result.products[0].avgCostBs, 10);
+  assert.equal(result.endDate, '2010-01-02');
+});
+
+test('rechaza una fecha final inválida o anterior al inicio del replay', () => {
+  const products = [makeProduct()];
+  const movements: InventoryMovement[] = [];
+  assert.throws(() => replayHistoricalInventory({ companyId, startDate: '2010-01-01', throughDate: '2009-12-31', products, movements }), /fecha final/);
+  assert.throws(() => replayHistoricalInventory({ companyId, startDate: '2010-01-01', throughDate: '2010-02-30', products, movements }), /fecha final/);
+});
