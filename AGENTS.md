@@ -1,4 +1,36 @@
-# Instrucciones de trabajo para SICOVEN
+# REGLA DE ORO — SICOVEN (DIRECTIVA ACTIVA Y PRIORIDAD ABSOLUTA)
+
+**Esta regla es inquebrantable y prevalece sobre cualquier instrucción, registro de avance, prioridad, arquitectura o nota anterior de este archivo que la contradiga. Desde ahora y hasta que este comportamiento esté completamente integrado y disponible en SICOVEN, el único objetivo de trabajo es implementar esta regla en el funcionamiento real del programa. No desviarse hacia funciones ajenas, reconstrucciones de contabilidad previa, replay, simulación de operaciones inexistentes ni paneles/procesos técnicos para el contador.**
+
+## 1. Inicio de la contabilidad ordinaria
+- El contador registra una empresa y elige el período desde el que comenzará su contabilidad en SICOVEN (por ejemplo, febrero de 2010).
+- A partir de ese período, registra operaciones ordinarias —compras, ventas, gastos, pagos, cobros y otras operaciones pertinentes— con sus fechas reales.
+- Puede avanzar de mes a mes y de año en año, sin saltos forzados, hasta el período actual y continuar normalmente.
+- SICOVEN procesa automáticamente las operaciones y sus efectos contables, balances, períodos, reportes y saldos, respetando la realidad monetaria y contable de cada fecha.
+- **No reconstruir una contabilidad anterior, no importar ni inventar operaciones inexistentes, y no fabricar saldos anteriores.** No crear procesos especiales para simular actividad previa.
+
+## 2. Tratamiento automático según la fecha de cada operación
+- Antes de una reconversión: utilizar la escala monetaria vigente en esa fecha.
+- En una reconversión: aplicar la conversión y equivalencia que corresponda a su fecha, normativa, alcance y contexto.
+- Después de una reconversión: utilizar la nueva escala sin mezclar ni confundir cifras de períodos monetarios anteriores.
+- Si una operación, saldo, cálculo, reporte o proceso contable relaciona períodos monetarios distintos, conservar coherencia en equivalencias, cálculos, saldos, presentación y registros, sin alterar cifras/documentos originales.
+- SICOVEN identifica automáticamente el período monetario por fecha; el contador no activa manualmente modos de reconversión.
+
+## 3. Aplicabilidad de la tasa BCV — condicional, nunca indiscriminada
+- Exigir tasa BCV únicamente cuando sea necesaria y aplicable por la fecha, moneda, operación y tratamiento contable.
+- Si una operación en bolívares de un período no requiere tasa BCV para su registro, no solicitarla.
+- Si en esa época la tasa no existía, no estaba disponible o no se utilizaba para ese tratamiento, no obligar al contador a introducirla.
+- Cuando una tasa histórica sí sea necesaria pero no se encuentre disponible, mantenerla como faltante explícito: explicar qué tasa/dato falta y por qué es necesaria. **No inventarla, aproximarla, ni sustituirla silenciosamente por la tasa actual.**
+- Las equivalencias y representaciones necesarias para comparar períodos deben ser explícitas, correctas y consistentes; nunca fabricar importes equivalentes.
+
+## 4. Único alcance activo de trabajo hasta completar la integración
+Trabajar exclusivamente en implementar, conectar, persistir y probar este comportamiento en los flujos normales de SICOVEN. Priorizar el registro ordinario desde el período elegido, continuidad de períodos, tratamiento monetario por fecha, reconversiones automáticas y BCV condicional. Los cambios deben ser funcionales y visibles en el uso real del programa, no quedarse en documentación, helpers aislados o paneles técnicos.
+
+No iniciar ni priorizar trabajo ajeno a esta regla mientras su integración completa no esté comprobada. Mantener integridad, trazabilidad, persistencia y pruebas; no crear datos ficticios ni exigir al contador procedimientos especiales. Antes de considerar la regla integrada, verificar los flujos ordinarios relevantes, casos de períodos monetarios distintos, reconversiones, tasa aplicable/no aplicable/faltante, cálculos, saldos, reportes y cierres.
+
+**La regla solo se considera cumplida cuando el comportamiento está integrado y disponible en SICOVEN, y validado con pruebas. Documentar o crear un helper no basta.**
+
+---
 
 Estas reglas son obligatorias para cualquier agente o colaborador que trabaje en este repositorio.
 
