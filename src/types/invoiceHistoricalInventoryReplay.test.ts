@@ -73,3 +73,13 @@ test('rejects invalid reconstruction start and end dates', () => {
   assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({ throughDate: '2025-02-30' })), /fecha final/);
   assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({ throughDate: '2024-12-31' })), /fecha final/);
 });
+
+test('does not silently skip malformed ledger dates beyond the replay cutoff', () => {
+  const badMovement = {
+    id: 'bad-date-after-cutoff', companyId, productId: product.id, productName: product.name, productCode: product.code,
+    date: 'zzz-invalid', type: 'ENTRADA', concept: 'COMPRA', documentRef: 'BAD-DATE',
+    quantity: 1, unitCostBs: 5, unitCostUsd: 0.05, totalCostBs: 5, totalCostUsd: 0.05,
+    balanceQty: 0, balanceTotalBs: 0, balanceTotalUsd: 0, bcvRate: 100
+  } as InventoryMovement;
+  assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({ throughDate: '2025-01-31', purchases: [], sales: [], existingMovements: [badMovement] })), /fechas inválidas/);
+});
