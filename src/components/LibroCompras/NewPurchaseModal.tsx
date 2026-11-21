@@ -7,7 +7,7 @@ import { calculatePurchaseIgtf, type PurchasePaymentMethod } from '../../types/p
 import { getPurchaseAccountCreditDate, getCompanyTaxStatusForDate, type PurchaseIvaRetentionSnapshot } from '../../types/accounting';
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus, type IvaArticle3Exclusion, type IvaSupplierTaxStatus } from '../../types/ivaRetentionEligibility';
 import { getCompanyPurchasePaymentAccounts } from '../../types/purchaseAccounting';
-import { convertVenezuelanAmount, getBolivarScaleMetadataByDate, getVenezuelanMonetaryEra } from '../../types/historicalAccountingCalendar';
+import { convertVenezuelanAmount, expressBolivarAmountByDate, getBolivarScaleMetadataByDate, getVenezuelanMonetaryEra } from '../../types/historicalAccountingCalendar';
 
 interface NewPurchaseModalProps {
   isOpen: boolean;
@@ -257,7 +257,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       invoiceDate,
       accountCreditDate,
       monetaryScaleSnapshot,
-      sourceMonetaryAmounts: { taxableBase: taxableBaseInput, exemptAmount: exemptAmountInput, taxableGross: taxableGrossInput, bcvRate: bcvRateInput, inventoryUnitCosts: JSON.stringify(inventoryLines.map(line => ({ productId: line.productId, unitCost: line.unitCostBs }))) },
+      sourceMonetaryAmounts: { taxableBase: taxableBaseInput, exemptAmount: exemptAmountInput, taxableGross: taxableGrossInput, bcvRate: bcvRateInput, bcvRateScale: rateScaleSnapshot.label, inventoryUnitCosts: JSON.stringify(inventoryLines.map(line => ({ productId: line.productId, unitCost: line.unitCostBs }))) },
       supplierRif: formatRif(supplierRif),
       supplierName: supplierName.trim().toUpperCase(),
       supplierAddress: supplierAddress.trim() || undefined,
@@ -376,7 +376,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
             <span className="font-bold text-slate-800 uppercase tracking-wider block">
               1. Datos del Proveedor y Factura
             </span>
-            <label className="flex items-center gap-2 text-slate-700 font-medium"><input type="checkbox" checked={vatNotDiscriminated} disabled={taxRate <= 0} onChange={e => { const checked = e.target.checked; setVatNotDiscriminated(checked); if (checked) setTaxableGrossInput(String(Math.round((taxableBaseBs + vatAmountBs) * 100) / 100)); }} /> La factura no discrimina el IVA (art. 5.1)</label>
+            <label className="flex items-center gap-2 text-slate-700 font-medium"><input type="checkbox" checked={vatNotDiscriminated} disabled={taxRate <= 0} onChange={e => { const checked = e.target.checked; setVatNotDiscriminated(checked); if (checked) setTaxableGrossInput(expressBolivarAmountByDate(String(Math.round((taxableBaseBs + vatAmountBs) * 100) / 100), invoiceDate)); }} /> La factura no discrimina el IVA (art. 5.1)</label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">RIF Proveedor *</label>
@@ -503,7 +503,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">{vatNotDiscriminated ? 'Precio gravado con IVA incluido (Bs.) *' : 'Base Imponible (Bs.) *'}</label>
+                <label className="block font-semibold text-slate-700 mb-1">{vatNotDiscriminated ? 'Precio gravado con IVA incluido (Bs. — {getVenezuelanMonetaryEra(invoiceDate).label}) *' : 'Base Imponible (Bs. — {getVenezuelanMonetaryEra(invoiceDate).label}) *'}</label>
                 <input
                   type="text"
                   inputMode="decimal"
