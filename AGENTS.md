@@ -1,41 +1,33 @@
-# DIRECTIVA CENTRAL SICOVEN — OBJETIVO REESTRUCTURADO (2026-11-21)
+# DIRECTIVA CENTRAL SICOVEN — FLUJO CONTABLE ÚNICO (2026-11-21)
 
-**Esta directiva reemplaza cualquier instrucción anterior incompatible dentro de este archivo. Es obligatoria y no debe desviarse.** SICOVEN tendrá DOS MODOS DE INICIO/ALCANCE CONTABLE: (A) CONTABILIDAD ORDINARIA y (B) RECONSTRUCCIÓN HISTÓRICA PROVISIONAL. Ambos utilizan el MISMO motor contable y el mismo flujo cronológico real; la reconstrucción no es un motor paralelo, simulador ni replay.
+**Esta directiva sustituye de forma definitiva las instrucciones anteriores incompatibles de este archivo. SICOVEN NO tendrá un modo, panel, asistente, motor, simulador ni proceso especial de «reconstrucción histórica».**
 
-## Objetivo
-Crear una herramienta práctica para el contador independiente que lleva contabilidades de pequeñas y medianas empresas en Venezuela. Operar realmente, con datos auténticos y trazables, desde la fecha elegida, en secuencia día a día, mes a mes y año a año. No desviarse a funciones ajenas, paneles técnicos, simulaciones, documentación aislada ni reconstrucción/replay como motor separado.
+## Principio rector definitivo
+SICOVEN no está diseñado para rescatar contabilidades dañadas ni para reconstruir empresas que nunca han existido dentro de él. Está diseñado para que un contador pueda crear una empresa, escoger desde cuándo la lleva, empezar a registrar sus operaciones y llevarla hasta el presente o el futuro, sin que el sistema le complique el trabajo.
 
-## Los dos modos (ambos opcionales según el inicio seleccionado)
-- **Modo ordinario:** el contador elige el período desde el que comienza su servicio/registro en SICOVEN, registra operaciones reales desde ese punto y avanza cronológicamente. No se fabrican ni reconstruyen operaciones anteriores. Si requiere saldos de apertura, se manejan mediante los mecanismos ordinarios permitidos y documentados, sin simular actividad previa.
-- **Modo de reconstrucción histórica provisional:** el contador elige un período anterior para reconstruir la contabilidad real atrasada de la empresa, desde ese punto y en orden cronológico, hasta el período actual. No se inventan operaciones. Se pueden incorporar posteriormente operaciones reales omitidas en su fecha efectiva; SICOVEN valida, recalcula automáticamente y en orden cronológico todos los efectos posteriores afectados, conserva datos/soportes originales y registra auditoría. La reconstrucción es provisional y debe diferenciar estimaciones patrimoniales o saldos iniciales sustentados/explicados de operaciones reales y de obligaciones fiscales formales actuales.
+**Si el contador comienza en 2012, SICOVEN comienza en 2012. Si comienza en 2026, comienza en 2026. No hay reconstrucción, simulación ni procesos especiales: hay contabilidad normal desde la fecha de inicio elegida.**
 
-## Flujo cronológico único, obligatorio en ambos modos
-- **Diario:** registrar operaciones reales con fecha efectiva (compras, ventas, gastos, cobros, pagos, caja/bancos, inventario y otras); validar y contabilizar en secuencia.
-- **Mensual:** revisión, conciliación, controles fiscales, ajustes y cierre del período según corresponda.
-- **Anual:** cierre, resultado, estados financieros, balances y traslado de saldos al siguiente ejercicio.
-- Si una operación real atrasada se incorpora en reconstrucción a un período ya procesado, recalcular en secuencia los efectos posteriores afectados (Kardex/capas y costos, inventario, precios si la política lo determina, impuestos, cuentas por cobrar/pagar, caja, asientos, saldos, cierres, reportes y aperturas), marcar períodos afectados y proteger los cerrados con controles explícitos. No duplicar ni alterar silenciosamente documentos fuente.
-
-## Requisitos exclusivos de reconstrucción provisional
-- Registrar saldo patrimonial de apertura a la fecha de inicio, con soporte o estimación identificada, motivo y auditoría.
-- Incorporar soportes flexiblemente (factura, extracto bancario, relación de caja, estimación profesional u otros) y registrar quién/cuándo/por qué.
-- Inventario inicial sustentado; método de costeo configurable (PEPS o promedio ponderado) y movimientos/Kardex íntegros.
-- Cuentas por cobrar/pagar antiguas se regularizan solo mediante asientos auditables, no borrado silencioso.
-- Activos fijos: fecha de adquisición, costo/escala original, vida útil, método y depreciación anual.
-- Separar claramente contabilidad financiera de estimaciones y módulos de declaración fiscal; las estimaciones históricas no se convierten automáticamente en declaraciones formales actuales.
-- Informes tanto en escala original como comparativa/consolidada cuando aplique. Toda conversión y redondeo debe ser trazable.
-- Proteger períodos cerrados; cambios previos requieren autorización/justificación, auditoría y recalculo controlado en cascada.
+## Flujo único obligatorio
+- Crear empresa y elegir libremente una fecha de inicio válida (cualquier año/fecha que el profesional necesite).
+- Desde esa fecha, registrar operaciones auténticas, normalmente y en orden cronológico.
+- SICOVEN procesa y contabiliza cada operación y mantiene libros, balances, inventario/Kardex, costos, impuestos, bancos, caja, cuentas por cobrar/pagar, cierres, aperturas y reportes pertinentes.
+- La fecha de inicio solo delimita desde cuándo SICOVEN lleva los registros; no obliga a reconstruir, recuperar, simular ni inventar operaciones previas.
+- Si una operación real atrasada se incorpora o corrige, el sistema normal valida y recalcula cronológicamente los efectos posteriores que corresponda, con integridad, trazabilidad e idempotencia. Los períodos cerrados requieren controles normales de reapertura.
+- Si se necesitan saldos de apertura, usar el flujo contable normal, con evidencia o estimación claramente identificada; no fabricar documentos ni actividad.
+- El tratamiento monetario y las reconversiones venezolanas se aplican automáticamente según la fecha efectiva; exigir tasa BCV solo cuando corresponda al caso.
+- No crear paneles técnicos, modos separados, herramientas ni documentación aislada para reconstrucción histórica. Los componentes, pruebas, helpers y lógica exclusivos de reconstrucción deben retirarse después de comprobar dependencias; conservar y reutilizar únicamente la lógica útil para el flujo contable ordinario.
+- Priorizar el producto funcional, estable y listo para pruebas en PC; no prolongar tareas teóricas ni informes sin cambios reales.
 
 ## Reglas que no se negocian
-- La contabilidad ordinaria no debe convertirse en reconstrucción ni exigir funciones de reconstrucción.
-- Reconstrucción provisional no significa simular/replay ni inventar operaciones: procesa operaciones reales con el mismo motor cronológico.
-- Nunca crear operaciones ficticias, tasas BCV, documentos, soportes o saldos. No sustituir datos faltantes silenciosamente.
-- Reconversiones monetarias venezolanas y escala se resuelven automáticamente por fecha efectiva. BCV se exige solo cuando corresponda a la operación/tratamiento; política funcional vigente: desde 2018-09-07 es obligatorio si hay conversión aplicable, antes de esa fecha opcional cuando proceda; Bs-only está exento. Validar fuentes legales antes de afirmar certeza normativa.
-- No hacer cambios en `main`, fusionar, lanzar versión ni desplegar sin autorización expresa. Mantener el trabajo en la rama indicada.
-
-## Prioridad absoluta de trabajo
-Implementar e integrar runtime real, persistencia, UI práctica, validaciones, auditoría y pruebas para estos dos modos y el motor cronológico compartido. Resolver defectos encontrados en el camino que afecten directamente al objetivo. No desviar el trabajo. No considerar logrado por helpers/documentación solamente; exigir integración y verificación.
+- La contabilidad se inicia en la fecha que el contador elige, y se lleva con un flujo único.
+- No inventar operaciones, tasas, soportes, saldos ni documentos.
+- No complicar el flujo normal con reconstrucción histórica.
+- No modificar `main`, fusionar, publicar ni desplegar sin autorización específica. Mantener el trabajo en la rama de trabajo indicada.
 
 ---
+
+## INSTRUCCIONES Y REGISTROS ANTERIORES — SUPERSEDED
+Las menciones posteriores en este archivo a «modo de reconstrucción histórica provisional», «panel de reconstrucción», «replay», «reconstrucción», «requisitos exclusivos de reconstrucción» o procesos separados de reconstrucción son antecedentes obsoletos y quedan supersedidos por el principio rector de arriba. No usarlos como requisitos activos ni seguir invirtiendo trabajo en ellos. Al simplificar/eliminar código, preservar lo que sí sea necesario para la contabilidad ordinaria y verificar dependencias antes de retirar funcionalidades.
 
 ## 1. Inicio de la contabilidad ordinaria
 - El contador registra una empresa y elige el período desde el que comenzará su contabilidad en SICOVEN (por ejemplo, febrero de 2010).
