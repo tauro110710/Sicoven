@@ -107,10 +107,25 @@ test('exige productos preparados y fechas válidas', () => {
   assert.equal(empty.products[0].currentStock, 0);
 });
 
-test('bloquea devolución PEPS si no se conserva el detalle de capas de la venta', () => {
+test('bloquea devoluciones PEPS de ventas legacy sin detalle de capas', () => {
   assert.throws(() => replay([makeProduct('PEPS')], [
     movement({ id: 'purchase-1', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100 }),
     movement({ id: 'sale-1', date: '2010-01-02', type: 'SALIDA', concept: 'VENTA', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100 }),
     movement({ id: 'return-1', date: '2010-01-03', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100, correctionForMovementId: 'sale-1' })
-  ]), /detalle de capas consumidas/);
+  ]), /no puede reconstruirse con precisión/);
+});
+
+test('reconstruye devoluciones PEPS con capas exactas y conserva su composición para ventas posteriores', () => {
+  const result = replay([makeProduct('PEPS')], [
+    movement({ id: 'purchase-1', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100 }),
+    movement({ id: 'purchase-2', date: '2010-01-02', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 20, unitCostUsd: 0.2, bcvRate: 100 }),
+    movement({ id: 'sale-1', date: '2010-01-03', type: 'SALIDA', concept: 'VENTA', quantity: 3, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100 }),
+    movement({ id: 'return-1', date: '2010-01-04', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 1, unitCostBs: 999, unitCostUsd: 9.99, bcvRate: 100, correctionForMovementId: 'sale-1' }),
+    movement({ id: 'sale-2', date: '2010-01-05', type: 'SALIDA', concept: 'VENTA', quantity: 2, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100 })
+  ]);
+  assert.deepEqual(result.movements[2].fifoLayers?.map(layer => [layer.quantity, layer.unitCostBs]), [[2, 10], [1, 20]]);
+  assert.deepEqual(result.movements[3].fifoLayers?.map(layer => [layer.quantity, layer.unitCostBs]), [[1, 10]]);
+  assert.equal(result.movements[3].totalCostBs, 10);
+  assert.equal(result.movements[4].totalCostBs, 30, 'la siguiente salida consume primero la capa remanente de 20 Bs y luego la devolución de 10 Bs');
+  assert.equal(result.products[0].currentStock, 0);
 });
