@@ -20,16 +20,21 @@ export function prepareInvoiceHistoricalInventoryReplay(input: {
   const companyId = String(input.companyId || '').trim();
   const startDate = String(input.startDate || '');
   if (!companyId) throw new Error('La reconstrucción de inventario requiere empresa.');
-  const companyMovements = input.existingMovements.filter(movement => movement.companyId === companyId);
+  const inRange = (date: string): boolean => date >= startDate && (!input.throughDate || date <= input.throughDate);
+  const relevantPurchase = (purchase: PurchaseRecord): boolean => purchase.companyId === companyId &&
+    (!/^\\d{4}-\\d{2}-\\d{2}$/.test(purchase.invoiceDate) || inRange(purchase.invoiceDate));
+  const relevantSale = (sale: SaleRecord): boolean => sale.companyId === companyId &&
+    (!/^\\d{4}-\\d{2}-\\d{2}$/.test(sale.invoiceDate) || inRange(sale.invoiceDate));
+  const companyMovements = input.existingMovements.filter(movement => movement.companyId === companyId && inRange(movement.date));
   const sourceMovements = deriveInvoiceInventoryMovements({
     companyId,
     products: input.products,
-    purchases: input.purchases,
-    sales: input.sales,
+    purchases: input.purchases.filter(relevantPurchase),
+    sales: input.sales.filter(relevantSale),
     existingMovements: companyMovements
   });
-  const existingInRange = companyMovements.filter(movement => movement.date >= startDate);
-  const sourceInRange = sourceMovements.filter(movement => movement.date >= startDate);
+  const existingInRange = companyMovements;
+  const sourceInRange = sourceMovements;
   const combined = [...existingInRange, ...sourceInRange];
   const dateByProduct = new Map<string, string[]>();
   for (const movement of combined) {
