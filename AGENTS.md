@@ -246,3 +246,20 @@ Trabajar en este orden, cerrando cada fase con PR integrada y pruebas satisfacto
 - No se trasladaron modificaciones antiguas de company-session-ipc.cjs, tenant-runtime.cjs, creación de empresas, esquema ni sus pruebas; main conserva exactamente la implementación de creación durable que pasó validaciones en #183.
 - Se añadieron pruebas de reintento idempotente, recuperación tras fallo SQLite luego de persistir el archivo, rechazo de otro archivo o entidad/documento sustituido con el mismo operationId, preservación de archivo alterado y bloqueo de rutas con symlink. Los reintentos quedan ligados a empresa, operación contable, tipo, título, descripción y destino de sustitución originales.
 - Pendiente: auditoría final del protocolo filesystem/SQLite (incluida durabilidad de entradas de directorio, concurrencia y restauración), ejecución CI Linux/G13/Windows Release, corrección de fallos y validación completa antes de fusionar. No habilitar reconstrucción histórica integral ni publicar versión con esta fase parcial.
+
+#### Seguimiento de integración — 2026-11-21 (recuperación de adjuntos)
+
+- PR #184 quedó fusionada y cerrada mediante squash. Commit integrado en `main`: `8c0953fd351e8b8cb2b4269a204c0f8c5ba64993`.
+- HEAD validado de la PR: `261d0ccfe07b459022d3fb318728e6ff4b393f54`. CI Linux, G13 Linux/Windows y Windows Release terminaron SUCCESS.
+- Windows Release verificó instalador de validación, metadatos, instalación/arranque, migración E2E y actualización desde v1.0.17 conservando SQLite. Los pasos de publicación/carga se omitieron por tratarse de una PR; no se publicó versión.
+- Se completó el protocolo de adjuntos recuperables con staging, SHA-256, protección de rutas/symlinks, recuperación idempotente y vínculo estable a empresa/entidad/tipo/título/descripción/destino de sustitución.
+- La rama antigua `feat/recoverable-supporting-document-attachments` permanece obsoleta y no debe fusionarse: arrastra commits heredados y variantes de creación durable ya sustituidas.
+
+#### Siguiente subfase — resolución visible de intenciones pendientes
+
+- Se creó `feat/recoverable-specialized-operations-mainline` directamente desde el `main` integrado (`8c0953fd351e8b8cb2b4269a204c0f8c5ba64993`) para auditar y corregir el siguiente bloque sin mezclar ramas divergentes.
+- La rama histórica `feat/recoverable-specialized-operations` no se integra directamente: está divergida (31 commits adelante y 7 detrás) y conserva versiones antiguas de `preload.cjs` y `operation-receipts.cjs` que no incluyen los protocolos posteriores de intenciones, creación durable y adjuntos.
+- Auditoría inicial del `main` actual: las mutaciones especializadas de nómina y correcciones usan recibos transaccionales y el preload prepara intenciones durables antes de invocarlas. La interfaz consulta intenciones pendientes y pide confirmación para reintentar.
+- Hallazgo pendiente: si la recuperación falla, el resultado queda únicamente en `console.error`; no existe una vista persistente para inspeccionar cada intención no resuelta ni un cierre explícito, motivado y auditado. Además, las intenciones se listan filtradas por el actor original, lo que debe revisarse para que no queden ocultas a un administrador autorizado.
+- Próximo trabajo: diseñar e implementar consulta segura por empresa, revisión individual, reintento con la misma identidad y cierre auditado con motivo; conservar evidencia append-only, impedir cerrar una operación que ya tenga recibo recuperable y probar interrupciones antes/después del commit, reinicio, concurrencia y aislamiento empresa/actor.
+- No habilitar reconstrucción histórica integral ni publicar versión durante esta subfase.
