@@ -336,6 +336,9 @@ export interface JournalEntry {
   description: string;
   type: EntryType;
   bcvRate: number;
+  /** Scale of nominal bolivar amounts entered for this journal date. */
+  monetaryScaleSnapshot?: { eraId: string; label: string; effectiveFrom: string; factorToCurrent: string; legalReference: string };
+  sourceMonetaryAmounts?: Record<string, string>;
   items: JournalEntryItem[];
   isAdjusted?: boolean;
   referenceDoc?: string;
