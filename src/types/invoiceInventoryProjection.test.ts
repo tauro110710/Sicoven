@@ -35,6 +35,13 @@ describe('deriveInvoiceInventoryMovements', () => {
     expect(result).toEqual([]);
   });
 
+  it('rejects invalid dates in invoice sources before projecting Kardex', () => {
+    expect(() => deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase({ invoiceDate: '2025-02-30' })], sales: [] }))
+      .toThrow(/línea de inventario inválida/);
+    expect(() => deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [], sales: [sale({ invoiceDate: 'not-a-date' })] }))
+      .toThrow(/línea de inventario inválida/);
+  });
+
   it('rejects duplicate product lines in a source invoice instead of generating duplicate stock', () => {
     expect(() => deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [
       purchase({ inventoryLines: [{ productId: 'p-1', quantity: 1, unitCostBs: 2 }, { productId: 'p-1', quantity: 2, unitCostBs: 2 }] })
