@@ -3,6 +3,7 @@ import { useAccounting } from '../../context/AccountingContext';
 import { TrendingUp, X, Check } from 'lucide-react';
 import { formatBs, formatUsd, formatRif } from '../../utils/formatters';
 import { getCompanyTaxStatusForDate } from '../../types/accounting';
+import { convertVenezuelanAmount, getBolivarScaleMetadataByDate, getVenezuelanMonetaryEra } from '../../types/historicalAccountingCalendar';
 
 interface NewSaleModalProps {
   isOpen: boolean;
@@ -25,9 +26,9 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
 
   // Amounts
   const [taxableBaseInput, setTaxableBaseInput] = useState('');
-  const taxableBaseBs = parseDecimalInput(taxableBaseInput);
+  const taxableBaseBs = parseBolivarInput(taxableBaseInput, invoiceDate);
   const [exemptAmountInput, setExemptAmountInput] = useState('');
-  const exemptAmountBs = parseDecimalInput(exemptAmountInput);
+  const exemptAmountBs = parseBolivarInput(exemptAmountInput, invoiceDate);
   const [taxRate, setTaxRate] = useState<number>(16);
 
   // Client Withholding
@@ -40,7 +41,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
 
   // Currency
   const [bcvRateInput, setBcvRateInput] = useState('');
-  const bcvRate = parseDecimalInput(bcvRateInput);
+  const bcvRate = parseBolivarInput(bcvRateInput, invoiceDate);
   // La tasa BCV no es una configuración de empresa: se captura manualmente
   // en cada operación y queda asociada únicamente al documento que la utiliza.
   React.useEffect(() => {
@@ -57,6 +58,9 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   if (!isOpen) return null;
 
   function parseDecimalInput(value: string) { const raw = value.trim(); if (!raw) return 0; return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); }
+  function parseBolivarInput(value: string, date: string) { const raw = value.trim(); if (!raw) return 0; const normalized = raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw; const era = getVenezuelanMonetaryEra(date); return Number(convertVenezuelanAmount(normalized, era.id, 'BOLIVAR_DIGITAL')); }
+  const monetaryScaleSnapshot = getBolivarScaleMetadataByDate(invoiceDate);
+
 
   // La tasa de la empresa es la única fuente autorizada; nunca se inventa una tasa de respaldo.
   // Real-time calculations
@@ -111,6 +115,8 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
     try {
       addSale({
       invoiceDate,
+      monetaryScaleSnapshot,
+      sourceMonetaryAmounts: { taxableBase: taxableBaseInput, exemptAmount: exemptAmountInput, bcvRate: bcvRateInput },
       customerRif: formatRif(customerRif),
       customerName: customerName.trim().toUpperCase(),
       customerAddress: customerAddress.trim() || undefined,
