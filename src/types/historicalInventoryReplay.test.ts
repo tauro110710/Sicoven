@@ -177,3 +177,15 @@ test('conserva costos USD expresos en registros históricos sin tasa de conversi
   assert.equal(result.movements[2].totalCostUsd, 1);
   assert.equal(result.products[0].avgCostUsd, 1.5);
 });
+
+test('ajuste negativo conserva costos USD y saldos finitos cuando no existe tasa BCV', () => {
+  const result = replay([makeProduct()], [
+    movement({ id: 'purchase-negative-usd', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 2, bcvRate: 0 }),
+    movement({ id: 'adjustment-negative-usd', date: '2010-01-02', type: 'AJUSTE', concept: 'AJUSTE', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 0, balanceQty: 1 })
+  ]);
+  assert.equal(result.movements[1].totalCostUsd, 2);
+  assert.equal(result.movements[1].unitCostUsd, 2);
+  assert.equal(result.products[0].currentStock, 1);
+  assert.equal(result.products[0].avgCostUsd, 2);
+  assert.ok(result.movements.every(item => Number.isFinite(item.totalCostUsd) && Number.isFinite(item.balanceTotalUsd)));
+});
