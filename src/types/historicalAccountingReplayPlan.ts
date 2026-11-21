@@ -618,6 +618,15 @@ export function buildHistoricalAccountingReplayPlan(
       const message = 'El día ' + date + ' contiene varias operaciones y al menos una carece de marca de registro; no se puede establecer el orden cronológico real y la reconstrucción queda bloqueada.';
       warnings.push(message);
       blockers.push(message);
+      continue;
+    }
+    if (events.length > 1) {
+      const timestamps = events.map(event => String(event.recordedAt || ''));
+      if ( new Set(timestamps).size !== timestamps.length ) {
+        const message = 'El día ' + date + ' contiene marcas de registro repetidas; no se puede determinar el orden real de esas operaciones y la reconstrucción queda bloqueada.';
+        warnings.push(message);
+        blockers.push(message);
+      }
     }
   }
 
