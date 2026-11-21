@@ -82,15 +82,16 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
     if (product.companyId !== companyId || !String(product.id || '').trim() || states.has(product.id)) {
       throw new Error('El catálogo contiene artículos duplicados o pertenecientes a otra empresa.');
     }
-    const openingValues = [
+    // Cached product balances are deliberately ignored: this replay derives the
+    // result solely from the selected historical source movements. Validate cache
+    // fields for corruption, but never require the live catalog to be zeroed or
+    // manually prepared before a replay.
+    const cachedValues = [
       product.currentStock, product.avgCostBs, product.avgCostUsd,
       product.lastCostBs, product.lastCostUsd
     ].map(Number);
-    if (openingValues.some(value => !Number.isFinite(value) || value !== 0)) {
-      throw new Error('La reconstrucción exige artículos preparados con existencia y costos iniciales en cero. No se inventarán saldos de apertura.');
-    }
-    if (product.openingDate !== startDate || Number(product.openingBcvRate || 0) !== 0) {
-      throw new Error('El artículo no está preparado para la fecha inicial seleccionada. Ejecute primero la preparación histórica autorizada.');
+    if (cachedValues.some(value => !Number.isFinite(value) || value < 0)) {
+      throw new Error('El artículo contiene saldos o costos almacenados inválidos.');
     }
     states.set(product.id, {
       product: { ...product },
