@@ -1508,26 +1508,35 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Las intenciones sobreviven al cierre, pero SICOVEN nunca las ejecuta
-  // silenciosamente al reiniciar: primero informa y solicita confirmación.
+    // Las intenciones sobreviven al cierre. Cada recuperación exige confirmación
+  // individual y conserva el operationId original para impedir duplicados.
   useEffect(() => {
-    if (!storageReady || !currentCompanyId || !window.sicovenStore?.recoverPendingOperationIntents) return;
+    if (!storageReady || !currentCompanyId || !window.sicovenStore?.recoverPendingOperationIntents ||
+        !window.sicovenStore?.recoverPendingOperationIntent) return;
     let cancelled = false;
     void (async () => {
       try {
         const pending = await window.sicovenStore!.recoverPendingOperationIntents(token, false);
         if (cancelled || pending.length === 0) return;
-        const channels = [...new Set(pending.map(item => item.channel.replace('sicoven:', '')))];
-        const accepted = await requestNonBlockingConfirm(
-          'SICOVEN encontró ' + pending.length + ' operación(es) que quedaron sin respuesta confirmada en esta empresa (' +
-          channels.join(', ') + '). Si acepta, reintentará exactamente las solicitudes guardadas en SQLite; los recibos impedirán duplicar operaciones ya confirmadas. Si cancela, permanecerán pendientes para una revisión posterior. ¿Desea reintentarlas ahora?',
-          { title: 'Operaciones pendientes', confirmLabel: 'Reintentar', cancelLabel: 'Más tarde', tone: 'warning' }
-        );
-        if (!accepted || cancelled) return;
-        const results = await window.sicovenStore!.recoverPendingOperationIntents(token, true);
-        const unresolved = results.filter(result => result.status === 'PENDING');
-        if (unresolved.length) {
-          console.error('SICOVEN conserva operaciones pendientes que requieren revisión:', unresolved);
+        const failed: Array<{ operationId: string; channel: string; message?: string }> = [];
+        for (const item of pending) {
+          if (cancelled) break;
+          const label = item.channel.replace('sicoven:', '').replace(/-/g, ' ');
+          const accepted = await requestNonBlockingConfirm(
+            'Operación pendiente: ' + label + '\nIdentificador: ' + item.operationId +
+            '\nSICOVEN reintentará únicamente esta operación usando su identificador original. Si ya fue registrada, el recibo idempotente evita duplicarla. ¿Desea reintentar?',
+            { title: 'Recuperación individual', confirmLabel: 'Reintentar', cancelLabel: 'Dejar pendiente', tone: 'warning' }
+          );
+          if (!accepted || cancelled) continue;
+          const result = await window.sicovenStore!.recoverPendingOperationIntent(token, item.operationId);
+          if (result.status !== 'RECOVERED') failed.push(result);
+        }
+        if (!cancelled && failed.length) {
+          const details = failed.map(item => item.operationId + ' — ' + (item.message || 'Sigue pendiente')).join('\n');
+          await requestNonBlockingConfirm(
+            'No se pudieron confirmar ' + failed.length + ' operación(es). Permanecen pendientes y no se marcaron como cerradas:\n' + details,
+            { title: 'Recuperación incompleta', confirmLabel: 'Entendido', cancelLabel: 'Cerrar', tone: 'warning' }
+          );
         }
       } catch (error) {
         if (!cancelled) console.error('No se pudieron consultar las operaciones pendientes de SQLite:', error);
