@@ -21,7 +21,15 @@ export function deriveInvoiceInventoryMovements(input: {
 }): InventoryMovement[] {
   const companyId = String(input.companyId || '').trim();
   if (!companyId) throw new Error('La derivación de Kardex requiere empresa.');
-  const products = new Map(input.products.filter(p => p.companyId === companyId).map(p => [p.id, p]));
+  const products = new Map<string, InventoryProduct>();
+  for (const product of input.products) {
+    if (product.companyId !== companyId) continue;
+    const id = String(product.id || '').trim();
+    if (!id || products.has(id)) {
+      throw new Error('El catálogo contiene artículos con identificadores vacíos o duplicados.');
+    }
+    products.set(id, product);
+  }
   const result: InventoryMovement[] = [];
   const existingMovements = input.existingMovements || [];
   const normalizeDocumentRef = (value: string): string => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
