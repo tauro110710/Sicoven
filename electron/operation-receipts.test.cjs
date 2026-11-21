@@ -8,7 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {
   initializeOperationReceiptSchema, createOperationReceiptIdentity, hashOperationRequest, runIdempotentOperation,
-  prepareOperationIntent, listPendingOperationIntents, registerOperationIntentIpc
+  prepareOperationIntent, listPendingOperationIntents, registerOperationIntentIpc, recordOperationReceipt
 } = require('./operation-receipts.cjs');
 
 function setup() {
@@ -198,6 +198,35 @@ test('failed business transaction leaves the durable intent pending for recovery
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 0);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM operation_intent_completions').get().count, 0);
     assert.equal(listPendingOperationIntents(db, 'company-1', durableActor).length, 1);
+  } finally { db.close(); }
+});
+
+test('recovery reconciles an existing receipt without re-executing the business handler', () => {
+  const db = setup();
+  try {
+    const request = { amount: 12, reference: 'REC-001' };
+    prepareOperationIntent(db, durableIntent('durable-receipt-only-001', request), 'company-1', durableActor);
+    const key = {
+      operationId: 'durable-receipt-only-001',
+      companyId: 'company-1',
+      operationType: 'accounting.audit_correction',
+      requestHash: hashOperationRequest(JSON.stringify(request)),
+      actor: durableActor
+    };
+    // Simulate interruption after the receipt was persisted but before any
+    // intent-completion marker was written.
+    recordOperationReceipt(db, key, { ok: true, id: 'already-committed' });
+    assert.equal(listPendingOperationIntents(db, 'company-1', durableActor).length, 1);
+    let businessHandlerCalls = 0;
+    const reconciled = runIdempotentOperation(db, key, () => {
+      businessHandlerCalls += 1;
+      return { ok: true, id: 'must-not-run' };
+    });
+    assert.deepEqual(reconciled, { ok: true, id: 'already-committed', replayed: true });
+    assert.equal(businessHandlerCalls, 0);
+    assert.equal(listPendingOperationIntents(db, 'company-1', durableActor).length, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM operation_receipts').get().count, 1);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM operation_intent_completions').get().count, 1);
   } finally { db.close(); }
 });
 
