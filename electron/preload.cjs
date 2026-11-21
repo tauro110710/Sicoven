@@ -104,6 +104,31 @@ async function recoverPendingOperationIntents(token, confirmed = false) {
   }
   return results;
 }
+async function recoverPendingOperationIntent(token, operationId) {
+  const pending = await ipcRenderer.invoke('sicoven:operation-intent-list', token);
+  const intent = (pending || []).find(item => String(item.operationId) === String(operationId));
+  if (!intent) return { operationId: String(operationId), status: 'NOT_PENDING' };
+  try {
+    let result;
+    if (intent.requestMode === 'payroll-run-confirm') {
+      result = await ipcRenderer.invoke(intent.channel, token,
+        intent.request.runId, intent.request.journalEntryId, intent.operationId);
+    } else if (intent.requestMode === 'object') {
+      result = await ipcRenderer.invoke(intent.channel, token,
+        { ...intent.request, operationId: intent.operationId });
+    } else {
+      throw new Error('El formato de una operación pendiente no está reconocido.');
+    }
+    if (result && typeof result === 'object' && result.ok === false) {
+      throw new Error(String(result.message || 'La operación pendiente no pudo completarse.'));
+    }
+    return { operationId: intent.operationId, channel: intent.channel, status: 'RECOVERED' };
+  } catch (error) {
+    return { operationId: intent.operationId, channel: intent.channel, status: 'PENDING',
+      message: error instanceof Error ? error.message : 'No se pudo recuperar la operación pendiente.' };
+  }
+}
+
 contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   getLicenseStatus: () => ipcRenderer.invoke('sicoven:license-status'),
   getImprovementConsent: () => ipcRenderer.invoke('sicoven:improvement-consent:get'),
@@ -188,6 +213,7 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   savePdf: (input) => ipcRenderer.invoke('sicoven:pdf-save', input),
   saveTextFile: (input) => ipcRenderer.invoke('sicoven:text-save', input),
   recoverPendingOperationIntents: (token, confirmed) => recoverPendingOperationIntents(token, confirmed),
+  recoverPendingOperationIntent: (token, operationId) => recoverPendingOperationIntent(token, operationId),
   createBackup: (token) => ipcRenderer.invoke('sicoven:backup-create', token),
   restoreBackup: (token) => ipcRenderer.invoke('sicoven:restore-execute', token),
   exportCompanyData: (token, input) => ipcRenderer.invoke('sicoven:company-export-data', token, input)
