@@ -4,7 +4,9 @@ import {
   buildHistoricalFiscalExercises,
   convertVenezuelanAmount,
   getVenezuelanMonetaryEra,
-  roundHistoricalPresentationAmount
+  roundHistoricalPresentationAmount,
+  convertVenezuelanAmountByDate, normalizeBolivarAmountByDate,
+  expressBolivarAmountByDate, getBolivarScaleMetadataByDate
 } from './historicalAccountingCalendar';
 
 test('genera ejercicios desde el inicio real de operaciones sin imponer año mínimo', () => {
@@ -72,4 +74,25 @@ test('bloquea fechas e importes inválidos y ejercicios con cronología incorrec
     operationalStartDate: '2026-02-01',
     throughDate: '2025-12-31'
   }));
+});
+
+
+test('date wrappers use the operation-date denomination and exact redenomination boundaries', () => {
+  assert.equal(normalizeBolivarAmountByDate('100000000000000', '2007-12-31'), '1');
+  assert.equal(normalizeBolivarAmountByDate('100000000000', '2018-08-19'), '1');
+  assert.equal(normalizeBolivarAmountByDate('1000000', '2018-08-20'), '1');
+  assert.equal(normalizeBolivarAmountByDate('1', '2021-10-01'), '1');
+  assert.equal(convertVenezuelanAmountByDate('100000000000', '2010-01-01', '2019-01-01'), '1000000');
+  assert.equal(convertVenezuelanAmountByDate('1', '2022-01-01', '2010-01-01'), '100000000000');
+});
+
+test('date-scale metadata is suitable for historical report annotations', () => {
+  assert.deepEqual(getBolivarScaleMetadataByDate('2019-04-02'), {
+    eraId: 'BOLIVAR_SOBERANO',
+    label: 'Bolívar Soberano (Bs.S)',
+    effectiveFrom: '2018-08-20',
+    factorToCurrent: '1000000',
+    legalReference: 'Decreto N° 3.548; G.O. N° 41.446; vigencia efectiva 2018-08-20'
+  });
+  assert.equal(expressBolivarAmountByDate('2.5', '2010-01-01'), '250000000000');
 });
