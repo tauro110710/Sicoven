@@ -399,7 +399,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
           {/* Inicio del registro contable ordinario en SICOVEN */}
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-1.5">
             <label className="block text-xs font-bold text-slate-800">
-              Ejercicio inicial de reconstrucción contable *
+              Año de inicio contable *
             </label>
             <select
               value={accountingStartDate.slice(0, 4)}
@@ -416,7 +416,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
                 <option key={year} value={year}>{year} — desde el 1 de enero</option>
               ))}
             </select>
-            <p className="text-[10px] leading-4 text-slate-600">Seleccione el año desde el que comenzará el registro. SICOVEN procesará los movimientos por su fecha, aplicará las reglas históricas correspondientes y avanzará hasta la fecha actual.</p>
+            <p className="text-[10px] leading-4 text-slate-600">Desde este año comenzará el registro de la empresa. Puede ingresar las operaciones con sus fechas reales y SICOVEN las organizará cronológicamente.</p>
           </div>
 
           <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">
