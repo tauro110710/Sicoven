@@ -15,6 +15,7 @@ import {
   Info
 } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
+import { getBolivarScaleMetadataByDate, getVenezuelanMonetaryEra } from '../../types/historicalAccountingCalendar';
 
 interface NewEntryModalProps {
   isOpen: boolean;
@@ -118,6 +119,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   }, [parsedBcvRate]);
 
   if (!isOpen) return null;
+  const monetaryScaleSnapshot = getBolivarScaleMetadataByDate(date);
 
   const handleAccountChange = (index: number, code: string) => {
     const acc = movementAccounts.find(a => a.code === code);
@@ -326,6 +328,8 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
       addJournalEntry({
         entryNumber: 0, // calculado automáticamente
         date,
+        monetaryScaleSnapshot,
+        sourceMonetaryAmounts: { bcvRate, lines: JSON.stringify(items.map(item => ({ accountCode: item.accountCode, debitBs: item.debitBs, creditBs: item.creditBs }))) },
         description: description.trim(),
         type,
         bcvRate: parsedBcvRate,
@@ -370,7 +374,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
               )}
             </div>
             <p className="text-xs text-slate-400 truncate">
-              Libro Diario General • Verificación Automática VEN-NIF • {currentCompany.name}
+              Libro Diario General • Verificación Automática VEN-NIF • {currentCompany.name} • {getVenezuelanMonetaryEra(date).label}
             </p>
           </div>
           <button
