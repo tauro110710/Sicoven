@@ -66,6 +66,14 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       return;
     }
     if (!name.trim()) return;
+    const currentMonthStart = new Date();
+    currentMonthStart.setDate(1);
+    currentMonthStart.setHours(0, 0, 0, 0);
+    const selectedStartMonth = new Date(accountingStartDate + 'T00:00:00.000Z');
+    if (selectedStartMonth > new Date(Date.UTC(currentMonthStart.getFullYear(), currentMonthStart.getMonth(), 1))) {
+      window.alert('El inicio contable no puede ser posterior al mes actual.');
+      return;
+    }
     const parsedAccountingStartDate = new Date(accountingStartDate + 'T00:00:00.000Z');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(accountingStartDate) ||
         !Number.isFinite(parsedAccountingStartDate.getTime()) ||
@@ -431,7 +439,13 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
                 {[
                   ['01','Enero'],['02','Febrero'],['03','Marzo'],['04','Abril'],['05','Mayo'],['06','Junio'],
                   ['07','Julio'],['08','Agosto'],['09','Septiembre'],['10','Octubre'],['11','Noviembre'],['12','Diciembre']
-                ].map(([month,label]) => <option key={month} value={month}>{label}</option>)}
+                ].map(([month,label]) => {
+                  const selectedYear = Number(accountingStartDate.slice(0, 4));
+                  const currentYear = new Date().getFullYear();
+                  const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+                  const isFuture = selectedYear === currentYear && month > currentMonth;
+                  return <option key={month} value={month} disabled={isFuture}>{label}</option>;
+                })}
               </select>
             </div>
             <p className="text-[10px] leading-4 text-slate-600">Desde el primer día del mes elegido comenzará el registro ordinario de esta empresa. SICOVEN no reconstruye ni importa operaciones anteriores.</p>
