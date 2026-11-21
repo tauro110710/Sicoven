@@ -207,7 +207,7 @@ No declarar la reconstrucción funcional hasta que el procesamiento cronológico
 
 - Última versión publicada conocida: `v1.0.37`.
 - No se ha publicado una versión nueva por estas fases.
-- La siguiente versión solo se publicará cuando se cumplan todos los criterios de activación histórica de la sección 5. No publicar fundamentos parciales como si la reconstrucción integral estuviera habilitada.
+- La siguiente versión solo se publicará cuando se cumplan los criterios de lanzamiento. La reconstrucción provisional opcional se considerará habilitada únicamente cuando el modo y el motor cronológico compartido estén integrados, persistidos y validados de extremo a extremo; no confundir avances parciales con funcionalidad completa.
 
 
 #### Seguimiento PR #181 — 2026-11-20
