@@ -5189,6 +5189,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         throw new Error('Importación bloqueada en fila ' + (index + 2) + ': las devoluciones a proveedor requieren una nota de crédito conciliada con factura, Kardex, CxP e impuestos. No se importó ningún movimiento.');
       }
       if (targetCompany.closedThroughDate && row.date <= targetCompany.closedThroughDate) throw new Error('Fila ' + (index + 2) + ': la fecha está dentro del período cerrado hasta ' + targetCompany.closedThroughDate + '.');
+      const startDateError = validateAccountingStartDate(targetCompany.accountingStartDate, row.date, 'El movimiento de inventario');
+      if (startDateError) throw new Error('Fila ' + (index + 2) + ': ' + startDateError);
       const product = virtualProducts.get(row.productId);
       if (!product) throw new Error('Fila ' + (index + 2) + ': artículo no encontrado en la empresa destino.');
       if (!row.documentRef || !String(row.documentRef).trim()) throw new Error('Fila ' + (index + 2) + ': la referencia documental es obligatoria.');
@@ -5553,6 +5555,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const prod = products.find(p => p.id === movData.productId && p.companyId === currentCompany.id);
     if (!prod) throw new Error('El artículo no existe en la empresa activa.');
     if (!isValidIsoDate(movData.date)) throw new Error('La fecha del movimiento no es válida.');
+    const startDateError = validateAccountingStartDate(currentCompany.accountingStartDate, movData.date, 'El movimiento de inventario');
+    if (startDateError) throw new Error(startDateError);
     if (currentCompany.closedThroughDate && movData.date <= currentCompany.closedThroughDate) {
       throw new Error('No se permiten movimientos ni devoluciones en un período cerrado hasta ' + currentCompany.closedThroughDate + '.');
     }
@@ -5840,6 +5844,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!Number.isFinite(bcvRateInput) || bcvRateInput <= 0) throw new Error('La tasa BCV histórica debe ser mayor que cero.');
     const parsedProductionDate = new Date(date + 'T00:00:00Z');
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(parsedProductionDate.getTime()) || parsedProductionDate.toISOString().slice(0,10) !== date) throw new Error('La fecha de producción no es válida.');
+    const startDateError = validateAccountingStartDate(currentCompany.accountingStartDate, date, 'La orden de producción');
+    if (startDateError) throw new Error(startDateError);
     const recipe = normalizeProductionRecipe(finished.bomComponents || [], finishedProductId);
     const productionReference = String(documentRef || '').trim();
     if (!productionReference) throw new Error('La orden de producción requiere una referencia única.');
