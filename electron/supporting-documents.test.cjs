@@ -188,7 +188,8 @@ test('document vault IPC reads and writes through the selected tenant database',
     assert.equal(reviewed.status, 'VERIFIED');
     assert.equal(reviewRetry.replayed, true);
     assert.equal(tenant.db.prepare("SELECT COUNT(*) AS n FROM supporting_document_events WHERE document_id=? AND event_type='REVIEWED'").get(attachResult.document.id).n, 1);
-    assert.equal(tenant.db.prepare('SELECT COUNT(*) AS n FROM operation_receipts').get().n, 1);
+    assert.equal(tenant.db.prepare("SELECT COUNT(*) AS n FROM operation_receipts WHERE operation_type='documents.attach'").get().n, 1);
+    assert.equal(tenant.db.prepare("SELECT COUNT(*) AS n FROM operation_receipts WHERE operation_type='documents.review'").get().n, 1);
     const canonicalPath = path.join(tenant.storageDir, 'companies', 'co-1', 'supporting-documents', attachResult.document.id + '.pdf');
     assert.equal(fs.existsSync(canonicalPath), true);
     let openedPath = null;
