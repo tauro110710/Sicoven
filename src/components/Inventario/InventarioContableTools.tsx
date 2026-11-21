@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FileUp, Scale, FileSpreadsheet, AlertTriangle } from 'lucide-react';
+import { FileUp, FileSpreadsheet, AlertTriangle } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { calculateVnrWriteDown, calculatePeriodicCostOfSales, calculateVnrProvisionLedgerBalance } from '../../types/inventoryAccounting';
 import type { InventoryProduct } from '../../types/accounting';
@@ -34,7 +34,7 @@ const downloadCsv = (filename: string, headers: string[], rows: unknown[][]) => 
 };
 
 export const InventarioContableTools: React.FC = () => {
-  const { currentCompany, products: allProducts, movements: allMovements, accounts, journalEntries: allJournalEntries, importInventoryProducts, importInventoryMovements, prepareInventoryProductsForHistoricalReconstruction, updateProduct, addJournalEntry, executeProduction, waitForPersistence, isStorageReady, storageError } = useAccounting();
+  const { currentCompany, products: allProducts, movements: allMovements, accounts, journalEntries: allJournalEntries, importInventoryProducts, importInventoryMovements, updateProduct, addJournalEntry, executeProduction, waitForPersistence, isStorageReady, storageError } = useAccounting();
   const companyProducts = filterEntriesByCompany(allProducts, currentCompany.id);
   const companyMovements = filterEntriesByCompany(allMovements, currentCompany.id);
   const companyJournalEntries = filterEntriesByCompany(allJournalEntries, currentCompany.id);
@@ -72,9 +72,6 @@ export const InventarioContableTools: React.FC = () => {
   const [productionDate, setProductionDate] = useState(new Date().toISOString().slice(0,10));
   const [productionRate, setProductionRate] = useState(String(currentCompany.inventoryBcvRate || ''));
   const [productionRef, setProductionRef] = useState('');
-  const [reconstructionStartDate, setReconstructionStartDate] = useState('2026-01-01');
-  const [reconstructionBusy, setReconstructionBusy] = useState(false);
-  const [reconstructionConfirmOpen, setReconstructionConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!companyProducts.some(product => product.id === productId)) setProductId(companyProducts[0]?.id || '');
@@ -99,29 +96,6 @@ export const InventarioContableTools: React.FC = () => {
       setProductionRate(String(currentCompany.inventoryBcvRate));
     } else setProductionRate('');
   }, [currentCompany.id, currentCompany.inventoryBcvRate, currentCompany.inventoryBcvRateEffectiveDate, currentCompany.inventoryBcvRateHistory, productionDate]);
-
-  const prepareHistoricalReconstruction = async () => {
-    setError(''); setMessage('');
-    const nonZeroStock = companyProducts.filter(product => Number(product.currentStock) !== 0).length;
-    if (nonZeroStock > 0) {
-      setError('No se puede preparar la reconstrucción: ' + nonZeroStock + ' artículos todavía tienen existencia distinta de cero.');
-      return;
-    }
-    setReconstructionConfirmOpen(true);
-  };
-
-  const confirmHistoricalReconstruction = async () => {
-    setReconstructionConfirmOpen(false);
-    setReconstructionBusy(true);
-    try {
-      const count = await prepareInventoryProductsForHistoricalReconstruction(reconstructionStartDate);
-      setMessage('Preparación confirmada en SQLite: ' + count + ' artículos listos para reconstruir desde ' + reconstructionStartDate + '. Costos en cero y apertura BCV anterior limpiada. No se modificaron precios ni el historial general de tasas BCV.');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo preparar el catálogo para reconstrucción histórica.');
-    } finally {
-      setReconstructionBusy(false);
-    }
-  };
 
   const selectedProduct = companyProducts.find(product => product.id === productId);
   const selectedFinishedProduct = companyProducts.find(product => product.id === finishedProductId);
@@ -506,44 +480,6 @@ export const InventarioContableTools: React.FC = () => {
   };
 
   return <div className="space-y-5">
-    <section className="rounded-2xl border border-indigo-200 bg-indigo-50/40 p-5 shadow-sm space-y-4">
-      <div className="flex items-center gap-2"><Scale className="h-5 w-5 text-indigo-700" /><h2 className="font-bold text-slate-900">Preparación para reconstrucción histórica</h2></div>
-      <p className="text-sm text-slate-700">Prepara el catálogo existente para comenzar a registrar operaciones desde cualquier fecha histórica válida, incluso años anteriores al 2026 (por ejemplo, 2010 o 2000), sin volver a importar ni duplicar artículos. El 01/01/2026 es solo una fecha sugerida; no existe un año mínimo fijado en este control.</p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <label className="text-sm font-medium text-slate-700">Primer día de reconstrucción
-          <input type="date" value={reconstructionStartDate} onChange={e => setReconstructionStartDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />
-        </label>
-        <div className="rounded-lg border border-indigo-100 bg-white p-3">
-          <span className="text-xs text-slate-500">Artículos de la empresa</span>
-          <strong className="mt-1 block text-lg text-slate-900">{companyProducts.length}</strong>
-        </div>
-        <div className="rounded-lg border border-indigo-100 bg-white p-3">
-          <span className="text-xs text-slate-500">Artículos con existencia distinta de cero</span>
-          <strong className="mt-1 block text-lg text-slate-900">{companyProducts.filter(product => Number(product.currentStock) !== 0).length}</strong>
-        </div>
-      </div>
-      <div className="rounded-lg border border-indigo-100 bg-white p-3 text-xs text-slate-600 space-y-1">
-        <p>• Pone en cero costo promedio y último costo, en Bs. y USD.</p>
-        <p>• Limpia de cada artículo la fecha y tasa BCV de apertura anteriores; deja la fecha de apertura alineada con el primer día elegido y la tasa de apertura en cero.</p>
-        <p>• Conserva códigos, nombres, categorías, unidades, existencias (que deben estar en cero), precios comerciales, cuentas y configuración de los artículos.</p>
-        <p>• No borra el historial general de tasas BCV ni elimina compras, ventas, movimientos o asientos. Si ya existen, la operación se bloquea.</p>
-      </div>
-      <button type="button" onClick={() => void prepareHistoricalReconstruction()} disabled={reconstructionBusy || !isStorageReady || !companyProducts.length || companyProducts.some(product => Number(product.currentStock) !== 0)} className="rounded-lg bg-indigo-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-800 disabled:cursor-not-allowed disabled:opacity-50">
-        {reconstructionBusy ? 'Preparando artículos en SQLite…' : 'Poner costos en cero y preparar reconstrucción'}
-      </button>
-      {reconstructionConfirmOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="reconstruction-confirm-title">
-        <div className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl space-y-4">
-          <h3 id="reconstruction-confirm-title" className="text-lg font-bold text-slate-900">Confirmar preparación histórica</h3>
-          <p className="text-sm text-slate-700">¿Preparar {currentCompany.name} para reconstrucción desde {reconstructionStartDate}?</p>
-          <p className="text-sm text-slate-700">Se pondrán en cero los costos promedio y últimos costos en Bs. y USD, y se limpiará la fecha/tasa BCV de apertura de los artículos. Se conservarán códigos, nombres, precios comerciales, cuentas y demás datos maestros. No se borrarán movimientos, compras, ventas ni el historial general de tasas BCV.</p>
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setReconstructionConfirmOpen(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm">Cancelar</button>
-            <button type="button" onClick={() => void confirmHistoricalReconstruction()} className="rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white">Confirmar y preparar</button>
-          </div>
-        </div>
-      </div>}
-    </section>
-
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
       <div className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5 text-emerald-700" /><h2 className="font-bold text-slate-900">Importación y exportación contable</h2></div>
       <p className="text-sm text-slate-600">Importe el inventario inicial desde CSV guardado por Excel. La importación valida códigos duplicados, tasas, costos y cuentas; si hay existencias iniciales, crea movimientos de apertura y sus asientos contables.</p>
