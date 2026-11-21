@@ -24,6 +24,7 @@ export function deriveInvoiceInventoryMovements(input: {
   const products = new Map(input.products.filter(p => p.companyId === companyId).map(p => [p.id, p]));
   const result: InventoryMovement[] = [];
   const existingMovements = input.existingMovements || [];
+  const normalizeDocumentRef = (value: string): string => String(value || '').trim().toUpperCase();
   const matchedExistingSources: InventoryMovement[] = [];
   const seen = new Set<string>();
   const add = (movement: InventoryMovement) => {
@@ -33,7 +34,7 @@ export function deriveInvoiceInventoryMovements(input: {
     const sourceCandidates = existingMovements.filter(existing => existing.companyId === companyId &&
       existing.productId === movement.productId && existing.date === movement.date &&
       existing.type === movement.type && existing.concept === movement.concept &&
-      existing.documentRef === movement.documentRef);
+      normalizeDocumentRef(existing.documentRef) === normalizeDocumentRef(movement.documentRef));
     if (sourceCandidates.length > 1) {
       throw new Error('La factura ' + movement.documentRef + ' coincide con varios movimientos del Kardex; requiere conciliación manual.');
     }
@@ -42,7 +43,7 @@ export function deriveInvoiceInventoryMovements(input: {
     if (duplicate) {
       const sameSource = duplicate.companyId === movement.companyId && duplicate.productId === movement.productId &&
         duplicate.date === movement.date && duplicate.type === movement.type && duplicate.concept === movement.concept &&
-        duplicate.documentRef === movement.documentRef && Math.abs(Number(duplicate.quantity) - movement.quantity) < 1e-8 &&
+        normalizeDocumentRef(duplicate.documentRef) === normalizeDocumentRef(movement.documentRef) && Math.abs(Number(duplicate.quantity) - movement.quantity) < 1e-8 &&
         (movement.concept !== 'COMPRA' || Math.abs(Number(duplicate.unitCostBs) - movement.unitCostBs) < 1e-8) &&
         (duplicate.counterpartyRif || '') === (movement.counterpartyRif || '') &&
         (duplicate.documentType || '') === (movement.documentType || '');
