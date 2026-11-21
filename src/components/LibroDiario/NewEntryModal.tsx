@@ -98,7 +98,13 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   // Si la tasa cambia después de capturar los importes, recalcular los equivalentes
   // sin alterar los importes originales en Bs. ni redondear cada renglón a centavos.
   useEffect(() => {
-    if (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0) return;
+    if (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0) {
+      setItems(prev => {
+        const next = prev.map(item => item.debitUsd === 0 && item.creditUsd === 0 ? item : { ...item, debitUsd: 0, creditUsd: 0 });
+        return next.some((item, index) => item !== prev[index]) ? next : prev;
+      });
+      return;
+    }
     setItems(prev => {
       let changed = false;
       const next = prev.map(item => {
@@ -231,7 +237,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
       }
       return;
     }
-    const rate = parsedBcvRate > 0 ? parsedBcvRate : 1;
+    const rate = parsedBcvRate;
     setSubmitError(null);
 
     if (totalDebitBs > totalCreditBs) {
