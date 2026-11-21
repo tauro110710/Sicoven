@@ -161,7 +161,7 @@ test('reconstruye compras, salidas y ajustes en bolívares sin exigir tasa cambi
   assert.deepEqual(result.movements.map(item => item.balanceQty), [3, 2, 3]);
   assert.deepEqual(result.movements.map(item => item.totalCostBs), [36, 12, 7]);
   assert.equal(result.products[0].currentStock, 3);
-  assert.equal(result.products[0].avgCostBs, 11);
+  assert.equal(result.products[0].avgCostBs, 31 / 3);
   assert.equal(result.products[0].avgCostUsd, 0);
   assert.equal(result.products[0].lastCostUsd, 0);
 });
