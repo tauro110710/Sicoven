@@ -16,6 +16,20 @@ const base = (): HistoricalAccountingReplaySnapshot => ({
   journalEntries: []
 });
 
+test('bloquea plan cuando falta la empresa o la fecha inicial es inválida', () => {
+  const missingCompany = base();
+  missingCompany.companyId = '';
+  const companyPlan = buildHistoricalAccountingReplayPlan(missingCompany);
+  assert.ok(companyPlan.blockers.some(item => item.includes('empresa válida')));
+  assert.equal(companyPlan.canProceedToTransactionalReplay, false);
+
+  const invalidStart = base();
+  invalidStart.startDate = '2023-02-30';
+  const datePlan = buildHistoricalAccountingReplayPlan(invalidStart);
+  assert.ok(datePlan.blockers.some(item => item.includes('fecha inicial de reconstrucción no es válida')));
+  assert.equal(datePlan.canProceedToTransactionalReplay, false);
+});
+
 test('ordena las operaciones por fecha y conserva la referencia a documentos fuente', () => {
   const input = base();
   input.purchases = [
