@@ -18,6 +18,16 @@ const sale = (overrides: Partial<SaleRecord> = {}) => ({
   ...overrides
 } as SaleRecord);
 
+test('rejects duplicate catalog product IDs rather than silently selecting the last one', () => {
+  const duplicate = { ...product, name: 'Producto duplicado' };
+  assert.throws(() => deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product, duplicate], purchases: [purchase()], sales: [] }), /identificadores vacíos o duplicados/);
+});
+
+test('rejects blank catalog product IDs for the target company', () => {
+  const blankId = { ...product, id: '   ' };
+  assert.throws(() => deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [blankId], purchases: [purchase()], sales: [] }), /identificadores vacíos o duplicados/);
+});
+
 test('creates stable purchase entries and zero-cost sale issues from invoice sources', () => {
   const result = deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [sale()] });
   assert.equal(result.length, 2);
