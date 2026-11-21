@@ -3,7 +3,7 @@ import { useAccounting } from '../../context/AccountingContext';
 import { TrendingUp, X, Check } from 'lucide-react';
 import { formatBs, formatUsd, formatRif } from '../../utils/formatters';
 import { getCompanyTaxStatusForDate } from '../../types/accounting';
-import { convertVenezuelanAmount, getBolivarScaleMetadataByDate, getVenezuelanMonetaryEra } from '../../types/historicalAccountingCalendar';
+import { getBolivarScaleMetadataByDate, getVenezuelanMonetaryEra } from '../../types/historicalAccountingCalendar';
 
 interface NewSaleModalProps {
   isOpen: boolean;
@@ -26,9 +26,9 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
 
   // Amounts
   const [taxableBaseInput, setTaxableBaseInput] = useState('');
-  const taxableBaseBs = parseBolivarInput(taxableBaseInput, invoiceDate);
+  const taxableBaseBs = parseDecimalInput(taxableBaseInput);
   const [exemptAmountInput, setExemptAmountInput] = useState('');
-  const exemptAmountBs = parseBolivarInput(exemptAmountInput, invoiceDate);
+  const exemptAmountBs = parseDecimalInput(exemptAmountInput);
   const [taxRate, setTaxRate] = useState<number>(16);
 
   // Client Withholding
@@ -41,7 +41,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
 
   // Currency
   const [bcvRateInput, setBcvRateInput] = useState('');
-  const bcvRate = parseBolivarInput(bcvRateInput, invoiceDate);
+  const bcvRate = parseDecimalInput(bcvRateInput);
   // La tasa BCV no es una configuración de empresa: se captura manualmente
   // en cada operación y queda asociada únicamente al documento que la utiliza.
   React.useEffect(() => {
