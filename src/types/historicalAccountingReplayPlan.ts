@@ -615,7 +615,9 @@ export function buildHistoricalAccountingReplayPlan(
   }
   for (const [date, events] of byDate) {
     if (events.length > 1 && events.some(event => !event.recordedAt)) {
-      warnings.push('El día ' + date + ' contiene varias operaciones y al menos una carece de marca de registro; debe confirmarse el orden original antes de ejecutar la reconstrucción.');
+      const message = 'El día ' + date + ' contiene varias operaciones y al menos una carece de marca de registro; no se puede establecer el orden cronológico real y la reconstrucción queda bloqueada.';
+      warnings.push(message);
+      blockers.push(message);
     }
   }
 
