@@ -26,10 +26,10 @@ export function prepareInvoiceHistoricalInventoryReplay(input: {
     return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
   };
   if (!validDate(startDate)) throw new Error('La fecha inicial de reconstrucción no es válida.');
-  if (input.throughDate && (!validDate(input.throughDate) || input.throughDate < startDate)) {
+  if (input.throughDate !== undefined && (!validDate(input.throughDate) || input.throughDate < startDate)) {
     throw new Error('La fecha final de reconstrucción no es válida o es anterior a la inicial.');
   }
-  const inRange = (date: string): boolean => date >= startDate && (!input.throughDate || date <= input.throughDate);
+  const inRange = (date: string): boolean => date >= startDate && (input.throughDate === undefined || date <= input.throughDate);
   const relevantPurchase = (purchase: PurchaseRecord): boolean => purchase.companyId === companyId &&
     (!/^\d{4}-\d{2}-\d{2}$/.test(purchase.invoiceDate) || inRange(purchase.invoiceDate));
   const relevantSale = (sale: SaleRecord): boolean => sale.companyId === companyId &&
@@ -58,7 +58,7 @@ export function prepareInvoiceHistoricalInventoryReplay(input: {
   return replayHistoricalInventory({
     companyId,
     startDate,
-    ...(input.throughDate ? { throughDate: input.throughDate } : {}),
+    ...(input.throughDate !== undefined ? { throughDate: input.throughDate } : {}),
     products: input.products.filter(product => product.companyId === companyId),
     movements: combined
   });
