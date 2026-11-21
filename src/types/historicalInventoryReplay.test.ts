@@ -99,9 +99,17 @@ test('bloquea movimientos anteriores a la fecha de inicio y movimientos de otra 
   assert.throws(() => replay([makeProduct()], [foreign]), /otra empresa/);
 });
 
-test('exige productos preparados y fechas válidas', () => {
-  assert.throws(() => replay([{ ...makeProduct(), currentStock: 1 }], []), /existencia y costos iniciales en cero/);
-  assert.throws(() => replay([{ ...makeProduct(), openingDate: '2026-01-01' }], []), /no está preparado/);
+test('reconstruye sin preparar ni alterar saldos almacenados del catálogo', () => {
+  const liveProduct = { ...makeProduct(), currentStock: 99, avgCostBs: 450, avgCostUsd: 4.5, lastCostBs: 500, lastCostUsd: 5, openingDate: '2025-01-01', openingBcvRate: 200 };
+  const sourceBefore = { ...liveProduct };
+  const result = replay([liveProduct], [
+    movement({ id: 'purchase-1', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 3, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100 }),
+    movement({ id: 'sale-1', date: '2010-01-02', type: 'SALIDA', concept: 'VENTA', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100 })
+  ]);
+  assert.equal(result.products[0].currentStock, 2);
+  assert.equal(result.products[0].avgCostBs, 10);
+  assert.equal(result.products[0].lastCostBs, 10);
+  assert.deepEqual(liveProduct, sourceBefore, 'no cambia el catálogo vivo');
   const empty = replay([makeProduct()], [] as InventoryMovement[]);
   assert.equal(empty.movements.length, 0);
   assert.equal(empty.products[0].currentStock, 0);
