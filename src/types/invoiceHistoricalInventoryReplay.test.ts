@@ -44,7 +44,7 @@ test('fails closed on existing ledger movements with malformed dates instead of 
     quantity: 1, unitCostBs: 5, unitCostUsd: 0.05, totalCostBs: 5, totalCostUsd: 0.05,
     balanceQty: 0, balanceTotalBs: 0, balanceTotalUsd: 0, bcvRate: 100
   } as InventoryMovement;
-  assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({ purchases: [], sales: [], existingMovements: [badMovement] })), /fecha inválida/);
+  assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({ purchases: [], sales: [], existingMovements: [badMovement] })), /fecha inválida (fechas inválidas)/);
 });
 
 test('honors throughDate and does not include later invoices or ledger movements', () => {
@@ -58,7 +58,7 @@ test('rejects same-day invoice order rather than assigning arbitrary FIFO/averag
   assert.throws(() => prepareInvoiceHistoricalInventoryReplay(input({
     purchases: [purchase({ invoiceDate: '2025-01-02' })],
     sales: [sale({ invoiceDate: '2025-01-02' })]
-  })), /secuencia de registro verificable/);
+  })), /secuencia de registro común verificable/);
 });
 
 test('reconciles already posted invoice movement and prevents it from being replayed twice', () => {
