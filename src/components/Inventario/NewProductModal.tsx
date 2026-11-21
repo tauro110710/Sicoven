@@ -180,7 +180,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
         inventoryAccountCode, costOfSalesAccountCode, adjustmentAccountCode, openingBalanceAccountCode,
         costingMethod, vatTreatment, itemType, openingDate, openingBcvRate: bcvRate,
         openingMonetaryScaleSnapshot: getBolivarScaleMetadataByDate(openingDate),
-        openingSourceMonetaryAmounts: { initialUnitCostBs: avgCostInput, openingBcvRate: openingBcvRateInput, initialStock: currentStockInput, priceCurrency, prices: JSON.stringify(priceInputs) }
+        openingSourceMonetaryAmounts: { initialCostUsd: avgCostInput, openingBcvRate: openingBcvRateInput, initialStock: currentStockInput, priceCurrency, prices: JSON.stringify(priceInputs) }
       });
       await waitForPersistence();
     }
