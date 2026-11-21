@@ -1989,6 +1989,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!isValidIsoDate(draft.acquisitionDate) || source.date < draft.acquisitionDate || !isValidIsoDate(draft.serviceDate)) {
       throw new Error('Las fechas deben ser válidas; el asiento de capitalización no puede ser anterior a la adquisición.');
     }
+    const assetAcquisitionStartError = validateAccountingStartDate(currentCompany.accountingStartDate, draft.acquisitionDate, 'La adquisición del activo');
+    if (assetAcquisitionStartError) throw new Error(assetAcquisitionStartError);
+    const assetServiceStartError = validateAccountingStartDate(currentCompany.accountingStartDate, draft.serviceDate, 'La fecha de puesta en servicio del activo');
+    if (assetServiceStartError) throw new Error(assetServiceStartError);
+    const assetSourceStartError = validateAccountingStartDate(currentCompany.accountingStartDate, source.date, 'El asiento de adquisición del activo');
+    if (assetSourceStartError) throw new Error(assetSourceStartError);
     const sourceLine = source.items[draft.sourceJournalLineIndex];
     const assetAccount = accounts.find(account => account.code === draft.assetAccountCode);
     const accumulatedAccount = accounts.find(account => account.code === draft.accumulatedDepreciationAccountCode);
@@ -2050,6 +2056,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const period = getNextFixedAssetDepreciationPeriod(asset);
     if (!period) throw new Error('El activo ya alcanzó su valor residual o no tiene depreciación pendiente.');
     const calculation = calculateFixedAssetDepreciation(asset, period);
+    const depreciationStartError = validateAccountingStartDate(currentCompany.accountingStartDate, calculation.postingDate, 'La depreciación del activo');
+    if (depreciationStartError) throw new Error(depreciationStartError);
     if (calculation.amountBs <= 0 || calculation.amountUsd <= 0) {
       throw new Error('El período no genera importes positivos en ambas monedas. Revise el costo, valor residual y vida útil del activo.');
     }
