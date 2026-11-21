@@ -76,6 +76,7 @@ export function deriveInvoiceInventoryMovements(input: {
       productIds.add(line.productId);
       const id = 'source-purchase-' + purchase.id + '-' + line.productId;
       const rate = Number(purchase.bcvRate || 0);
+      if (!Number.isFinite(rate) || rate < 0) throw new Error('Factura de compra ' + ref + ': tasa BCV inválida.');
       add({
         id, companyId, productId: product.id, productName: product.name, productCode: product.code,
         date: purchase.invoiceDate, type: 'ENTRADA', concept: 'COMPRA', documentRef: ref,
@@ -99,11 +100,13 @@ export function deriveInvoiceInventoryMovements(input: {
       }
       productIds.add(line.productId);
       const id = 'source-sale-' + sale.id + '-' + line.productId;
+      const saleRate = Number(sale.bcvRate || 0);
+      if (!Number.isFinite(saleRate) || saleRate < 0) throw new Error('Factura de venta ' + ref + ': tasa BCV inválida.');
       add({
         id, companyId, productId: product.id, productName: line.productName || product.name, productCode: line.productCode || product.code,
         date: sale.invoiceDate, type: 'SALIDA', concept: 'VENTA', documentRef: ref,
         quantity, unitCostBs: 0, unitCostUsd: 0, totalCostBs: 0, totalCostUsd: 0,
-        balanceQty: 0, balanceTotalBs: 0, balanceTotalUsd: 0, bcvRate: Number(sale.bcvRate || 0),
+        balanceQty: 0, balanceTotalBs: 0, balanceTotalUsd: 0, bcvRate: saleRate,
         documentType: 'Factura de venta', counterpartyRif: sale.customerRif, counterpartyName: sale.customerName,
         costingMethod: product.costingMethod
       });
