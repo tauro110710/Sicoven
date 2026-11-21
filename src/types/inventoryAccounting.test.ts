@@ -18,6 +18,11 @@ import {
 } from './inventoryAccounting';
 
 describe('proyección PEPS en escala Bs. actual para reconversiones', () => {
+  it('rechaza cantidades, costos y fechas base inválidas antes de normalizar', () => {
+    assert.throws(() => calculateWeightedAverageCostAcrossReconversion(-1, 10, '2021-10-01', 1, 1, 10, '2021-10-01', 1), /cantidades, costos o fechas base no son válidos/);
+    assert.throws(() => calculateWeightedAverageCostAcrossReconversion(1, 10, '2021-02-30', 1, 1, 10, '2021-10-01', 1), /cantidades, costos o fechas base no son válidos/);
+    assert.throws(() => calculateWeightedAverageCostAcrossReconversion(1, 10, '2021-10-01', 1, 0, 10, '2021-10-01', 1), /cantidades, costos o fechas base no son válidos/);
+  });
   it('promedia costos de bases monetarias distintas después de normalizarlos, preservando USD', () => {
     const result = calculateWeightedAverageCostAcrossReconversion(
       2, 1000000, '2018-08-20', 2,
