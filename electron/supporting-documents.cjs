@@ -152,6 +152,31 @@ function assertDocumentFile(filePath, expectedHash, expectedSize) {
   return true;
 }
 
+function syncDirectory(directory) {
+  // Windows does not expose portable directory fsync through Node. File contents
+  // are fsynced before linking; POSIX directory entries are flushed explicitly.
+  if (process.platform === 'win32') return;
+  let descriptor;
+  try {
+    descriptor = fs.openSync(directory, fs.constants.O_RDONLY);
+    fs.fsyncSync(descriptor);
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+}
+function syncDirectoryChain(directory, trustedRoot) {
+  const boundary = path.resolve(trustedRoot);
+  let current = path.resolve(directory);
+  while (true) {
+    syncDirectory(current);
+    if (current === boundary) break;
+    const parent = path.dirname(current);
+    if (parent === current || !current.startsWith(boundary + path.sep)) {
+      throw new Error('No se pudo asegurar la durabilidad de la ruta documental local.');
+    }
+    current = parent;
+  }
+}
 function persistStagedDocumentFile({ root, request, buffer }) {
   const staging = path.join(root, request.stagingKey);
   const target = path.join(root, request.storageKey);
@@ -168,6 +193,7 @@ function persistStagedDocumentFile({ root, request, buffer }) {
     const fd = fs.openSync(staging, 'wx', 0o600);
     try { fs.writeFileSync(fd, buffer); fs.fsyncSync(fd); }
     finally { fs.closeSync(fd); }
+    syncDirectory(root);
   }
   const nowStageExists = assertDocumentFile(staging, request.sha256, request.byteSize);
   targetExists = assertDocumentFile(target, request.sha256, request.byteSize);
@@ -178,6 +204,7 @@ function persistStagedDocumentFile({ root, request, buffer }) {
       assertDocumentFile(target, request.sha256, request.byteSize);
     }
     targetExists = assertDocumentFile(target, request.sha256, request.byteSize);
+    syncDirectory(root);
   }
   if (!targetExists) {
     const error = new Error('La operación documental conserva una intención pendiente, pero falta el archivo original. Seleccione nuevamente el mismo soporte para recuperarla.');
@@ -187,6 +214,7 @@ function persistStagedDocumentFile({ root, request, buffer }) {
   if (nowStageExists) {
     assertDocumentFile(staging, request.sha256, request.byteSize);
     fs.unlinkSync(staging);
+    syncDirectory(root);
   }
   return target;
 }
@@ -248,6 +276,7 @@ function attachDocument(db, { storageDir, trustedRoot = path.dirname(path.resolv
   const root = assertNoSymlinkPath(trustedRoot, storageDir, 'El almacén documental');
   fs.mkdirSync(root, { recursive: true, mode: 0o700 });
   assertNoSymlinkPath(trustedRoot, root, 'El almacén documental');
+  syncDirectoryChain(root, trustedRoot);
   const target = persistStagedDocumentFile({ root, request, buffer });
   const prior = findOperationReceipt(db, identity);
   if (prior.found) return prior.result;
