@@ -229,3 +229,12 @@ Se comprobó el flujo runtime de `AccountingContext.tsx` que expone `prepareInve
 - El motor cronológico debe incorporar ese saldo inicial como evento de apertura real del período, y procesar operaciones desde la fecha elegida sin duplicar movimientos. Si el sistema ya contiene actividad, conciliar y resolverla explícitamente; nunca borrar ni resetear para forzar el flujo.
 - Este hallazgo es prioritario y debe resolverse dentro del mismo objetivo del motor cronológico; no dar por funcional la reconstrucción provisional mientras el contador esté obligado a preparar productos en cero o sin historial.
 
+
+
+## ACLARACIÓN DE ALCANCE — FECHA DE INICIO DE RECONSTRUCCIÓN (2026-11-21)
+
+- La reconstrucción histórica **no tiene un año mínimo fijo ni está obligada a comenzar en 2010**. El año 2010 mencionado en ejemplos anteriores es ilustrativo, no una regla ni un requisito de diseño.
+- La fecha de inicio de la reconstrucción la determina el Contador Público Colegiado responsable, de acuerdo con la situación de la empresa, la documentación disponible, su criterio profesional y el alcance del trabajo que asumió.
+- SICOVEN debe permitir seleccionar libremente la fecha/período de inicio pertinente (incluido cualquier año que corresponda), sin imponer 2010, un número predeterminado de años, ni obligar a reconstruir períodos que el contador no haya incluido en su alcance.
+- La apertura y los saldos se establecen para esa fecha seleccionada; la secuencia cronológica, los soportes, las marcas de reconstrucción/estimación y la detección de arrastres aplican desde el inicio definido. No se inventa ni se exige reconstruir historia anterior a ese punto.
+- En los flujos y textos de UI, no mostrar 2010 como fecha mínima, requisito, sugerencia preseleccionada ni límite. Si se usa en ejemplos, debe quedar claramente etiquetado como ejemplo.
