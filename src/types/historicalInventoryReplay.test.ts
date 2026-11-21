@@ -152,3 +152,16 @@ test('distribuye varias devoluciones parciales de una venta PEPS sin repetir cap
   assert.equal(result.movements[5].totalCostBs, 30);
   assert.equal(result.products[0].currentStock, 0);
 });
+test('reconstruye compras, salidas y ajustes en bolívares sin exigir tasa cambiaria', () => {
+  const result = replay([makeProduct()], [
+    movement({ id: 'purchase-bs', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 3, unitCostBs: 12, unitCostUsd: 0, bcvRate: 0 }),
+    movement({ id: 'sale-bs', date: '2010-01-02', type: 'SALIDA', concept: 'VENTA', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 0 }),
+    movement({ id: 'adjustment-bs', date: '2010-01-03', type: 'AJUSTE', concept: 'AJUSTE', quantity: 1, unitCostBs: 7, unitCostUsd: 0, bcvRate: 0, balanceQty: 3 })
+  ]);
+  assert.deepEqual(result.movements.map(item => item.balanceQty), [3, 2, 3]);
+  assert.deepEqual(result.movements.map(item => item.totalCostBs), [36, 12, 7]);
+  assert.equal(result.products[0].currentStock, 3);
+  assert.equal(result.products[0].avgCostBs, 11);
+  assert.equal(result.products[0].avgCostUsd, 0);
+  assert.equal(result.products[0].lastCostUsd, 0);
+});
