@@ -75,7 +75,7 @@ export function deriveInvoiceInventoryMovements(input: {
       }
       productIds.add(line.productId);
       const id = 'source-purchase-' + purchase.id + '-' + line.productId;
-      const rate = Number(purchase.bcvRate || 0);
+      const rate = Number(purchase.bcvRate ?? 0);
       if (!Number.isFinite(rate) || rate < 0) throw new Error('Factura de compra ' + ref + ': tasa BCV inválida.');
       add({
         id, companyId, productId: product.id, productName: product.name, productCode: product.code,
@@ -100,7 +100,7 @@ export function deriveInvoiceInventoryMovements(input: {
       }
       productIds.add(line.productId);
       const id = 'source-sale-' + sale.id + '-' + line.productId;
-      const saleRate = Number(sale.bcvRate || 0);
+      const saleRate = Number(sale.bcvRate ?? 0);
       if (!Number.isFinite(saleRate) || saleRate < 0) throw new Error('Factura de venta ' + ref + ': tasa BCV inválida.');
       add({
         id, companyId, productId: product.id, productName: line.productName || product.name, productCode: line.productCode || product.code,
