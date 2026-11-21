@@ -56,9 +56,12 @@ Priorizar el flujo ordinario de alta de empresa, elección de fecha de inicio co
 
 Mantener documentos originales, fechas efectivas, fecha de incorporación, referencias y soportes. Persistir de forma coherente las operaciones y resultados en SQLite, sin duplicar ni modificar documentos fuente.
 
-### Reglas
-- Aplicar la escala monetaria y reconversiones venezolanas que correspondan a la fecha de cada operación registrada.
-- No exigir BCV para operaciones documentadas íntegramente en bolívares cuando no corresponda; en operaciones en moneda extranjera conservar monto/moneda originales y tratar la conversión según la evidencia y regla aplicable al período.
+### Reglas monetarias y reconversiones venezolanas por período
+- SICOVEN debe identificar automáticamente, según la fecha efectiva de cada operación, la unidad monetaria vigente y las reglas de conversión aplicables en cada reconversión monetaria venezolana; tratar correctamente operaciones en bolívares de períodos distintos sin mezclar escalas.
+- Las reconversiones deben estar definidas por sus fechas efectivas y alcance, y su tratamiento integrado en los flujos ordinarios de compras, ventas, pagos, cobros, caja, inventario, asientos, reportes y cierres. No se le debe pedir al contador que active manualmente un modo especial para cada reconversión.
+- El sistema debe distinguir los períodos y contextos en los que la tasa BCV era exigible, utilizada o necesaria para el tratamiento contable de la operación, de aquellos en los que no existía, no se publicaba, no se utilizaba o no era aplicable. **Solo solicitar BCV cuando sea requerido por la fecha, la operación y su tratamiento contable**; no imponer una tasa a operaciones íntegramente en bolívares de períodos en los que no corresponda.
+- Cuando BCV sí sea aplicable, exigir la tasa válida y la evidencia que corresponda; no reutilizar la tasa actual para operaciones antiguas ni inventar o aproximar tasas faltantes. Si la fuente o tasa aplicable no está disponible, indicar de forma clara qué dato falta y por qué se necesita.
+- Conservar la cifra, moneda y documento original; usar representaciones normalizadas solo para cálculos comparables, sin alterar la fuente ni provocar errores por redondeo o mezcla de unidades.
 - Nunca inventar tasas, soportes, saldos iniciales ni documentos. Resolver las diferencias pendientes con mensajes claros y concretos, sin burocracia innecesaria.
 
 ### Simplicidad y alcance
@@ -174,24 +177,19 @@ No declarar la reconstrucción funcional hasta que el procesamiento cronológico
 - Pendiente: auditoría final del protocolo filesystem/SQLite (incluida durabilidad de entradas de directorio, concurrencia y restauración), ejecución CI Linux/G13/Windows Release, corrección de fallos y validación completa antes de fusionar. No habilitar reconstrucción histórica integral ni publicar versión con esta fase parcial.
 
 
-## 7. DIRECTIVA PERMANENTE E INNEGOCIABLE: NO DESVIARSE DE LA RECONSTRUCCIÓN HISTÓRICA
+## 7. DIRECTIVA PERMANENTE: CONTABILIDAD ORDINARIA DESDE EL PERÍODO ELEGIDO
 
-**La prioridad absoluta es implementar el procesamiento cronológico REAL de los registros y reconstruir sus efectos contables desde el período elegido hasta la actualidad. Este objetivo no debe desviarse, diluirse, posponerse ni sustituirse NUNCA MÁS por mecanismos accesorios.**
+El propósito vigente de SICOVEN es que el contador registre clientes y lleve su contabilidad normalmente desde el período que seleccione. Las antiguas instrucciones de reconstrucción/replay que aparecen en el historial de trabajo anterior quedan **superseded y no deben guiar nuevas implementaciones**.
 
-El trabajo debe concentrarse directamente en que SICOVEN procese y recalcule, en orden cronológico y con resultados persistidos correctos:
-- registros y documentos fuente;
-- saldos y movimientos de cuentas;
-- inventario, Kardex, existencias y capas/costos;
-- costos de compras, ventas, salidas y devoluciones;
-- asientos contables y sus auxiliares;
-- cierres y aperturas entre ejercicios, desde el primer período reconstruido hasta el último.
+### Flujo práctico
+- Al registrar la empresa, elegir el año y mes (y cuando proceda, fecha) desde el cual comenzará el servicio contable en SICOVEN.
+- Desde ese punto, introducir operaciones ordinarias con sus fechas reales y avanzar mes a mes, año a año, hasta el período actual y continuar.
+- No generar, reconstruir, importar ni simular operaciones anteriores al inicio seleccionado. No crear un motor de reconstrucción histórica para esta finalidad.
+- SICOVEN debe manejar automáticamente las reconversiones monetarias venezolanas por fecha, incluyendo las unidades/escala monetaria correctas y la aplicabilidad de BCV descrita en la sección 5.
+- Integrar estas reglas en las operaciones y reportes reales; evitar paneles técnicos, modos especiales y pasos burocráticos.
+- Mantener las fuentes originales, fechas efectivas, trazabilidad, consistencia y persistencia SQLite. No modificar documentos contables anteriores como efecto colateral de cambios posteriores.
 
-### Prohibición de desviación
-- No volver a priorizar colas de operaciones, permisos, aprobaciones, formularios, paneles de revisión, flujos burocráticos, mecanismos genéricos de recuperación, infraestructura accesoria ni mejoras de otros módulos, salvo que una dependencia concreta sea **directamente indispensable** para ejecutar, persistir o verificar la reconstrucción cronológica.
-- No crear nuevos planes, listas de requisitos, fases burocráticas, PR de temas laterales o documentación extensa como sustituto de implementar la funcionalidad central.
-- No detener el trabajo para pedir confirmaciones innecesarias. Resolver directamente decisiones técnicas razonables y continuar.
-- Si surge un defecto o dependencia, corregirlo en el contexto del trabajo de reconstrucción y volver inmediatamente al objetivo central.
-- La seguridad, integridad de SQLite, idempotencia, trazabilidad y pruebas deben ser controles integrados y proporcionados a la implementación; nunca una excusa para construir procesos que impidan al contador trabajar.
-- Mantener este objetivo como prioridad hasta que la reconstrucción cronológica real esté implementada, probada, habilitada y verificada. No cambiar de objetivo por iniciativa propia ni declarar terminado por haber creado un panel, plan de solo lectura, simulación, documentación o fundamentos aislados.
+### Definición práctica de éxito
+El contador puede registrar una empresa con un inicio contable elegido, comenzar a ingresar sus operaciones reales desde ese período, y SICOVEN las procesa correctamente conforme a las reglas contables, monetarias y de reconversión que correspondan a cada fecha, sin pedir datos BCV cuando no aplican ni inventar datos cuando sí aplican.
 
-**Definición práctica de éxito:** el contador elige la fecha/período de inicio, ejecuta la reconstrucción y SICOVEN recalcula de forma real, coherente y cronológica registros, saldos, inventario, costos, asientos y cierres de ejercicios hasta la actualidad, conservando fuentes y sin duplicar operaciones. Todo trabajo que no acerque directamente a este resultado queda fuera de prioridad.
+No tocar `main`, no fusionar, publicar ni desplegar sin autorización explícita.
