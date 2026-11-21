@@ -334,11 +334,11 @@ test('resuelve asientos de un comprobante ISLR mediante su evento fiscal vincula
   const input = base();
   input.islrVouchers = [{
     id: 'islr-voucher-1', companyId: 'company-1', date: '2023-04-12',
-    voucherNumber: 'ISLR-001', invoiceDate: '2023-04-01'
+    voucherNumber: 'ISLR-001', invoiceDate: '2023-04-01', createdAt: '2023-04-12T09:00:00.000Z'
   }];
   input.islrFiscalEvents = [{
     id: 'islr-event-1', companyId: 'company-1', fiscalDate: '2023-04-12',
-    voucherId: 'islr-voucher-1', journalEntryId: 'journal-islr-voucher'
+    voucherId: 'islr-voucher-1', journalEntryId: 'journal-islr-voucher', createdAt: '2023-04-12T10:00:00.000Z'
   }];
   input.journalEntries = [{
     id: 'journal-islr-voucher', companyId: 'company-1', date: '2023-04-12'
@@ -521,7 +521,7 @@ test('bloquea movimientos bancarios, inventario y cuentas con maestros inexisten
 test('construye vínculos entre documentos, liquidaciones, retenciones y declaraciones', () => {
   const input = base();
   input.purchases = [
-    { id: 'purchase-original', companyId: 'company-1', invoiceDate: '2023-01-01' },
+    { id: 'purchase-original', companyId: 'company-1', invoiceDate: '2023-01-01', createdAt: '2023-01-01T08:00:00.000Z' },
     { id: 'purchase-credit', companyId: 'company-1', invoiceDate: '2023-02-01', originalPurchaseId: 'purchase-original' }
   ];
   input.sales = [
@@ -529,12 +529,12 @@ test('construye vínculos entre documentos, liquidaciones, retenciones y declara
     { id: 'sale-credit', companyId: 'company-1', invoiceDate: '2023-02-02', originalSaleId: 'sale-original' }
   ];
   input.movements = [
-    { id: 'movement-original', companyId: 'company-1', date: '2023-01-01' },
+    { id: 'movement-original', companyId: 'company-1', date: '2023-01-01', createdAt: '2023-01-01T09:00:00.000Z' },
     { id: 'movement-correction', companyId: 'company-1', date: '2023-02-03', correctionForMovementId: 'movement-original' }
   ];
   input.bankStatementMovements = [{ id: 'bank-movement', companyId: 'company-1', date: '2023-03-01' }];
   input.vatVouchers = [{
-    id: 'vat-voucher', companyId: 'company-1', fiscalDate: '2023-01-05',
+    id: 'vat-voucher', companyId: 'company-1', fiscalDate: '2023-01-05', createdAt: '2023-01-05T08:00:00.000Z',
     purchaseRecordId: 'purchase-original'
   }];
   input.vatWithholdingDeclarations = [{
@@ -545,9 +545,9 @@ test('construye vínculos entre documentos, liquidaciones, retenciones y declara
     id: 'vat-event', companyId: 'company-1', date: '2023-02-10',
     declarationId: 'vat-declaration', bankStatementMovementIds: ['bank-movement']
   }];
-  input.islrVouchers = [{ id: 'islr-voucher', companyId: 'company-1', date: '2023-01-05' }];
+  input.islrVouchers = [{ id: 'islr-voucher', companyId: 'company-1', date: '2023-01-05', createdAt: '2023-01-05T09:00:00.000Z' }];
   input.islrFiscalEvents = [{
-    id: 'islr-event', companyId: 'company-1', fiscalDate: '2023-01-05',
+    id: 'islr-event', companyId: 'company-1', fiscalDate: '2023-01-05', createdAt: '2023-01-05T10:00:00.000Z',
     voucherId: 'islr-voucher', allocations: [{ purchaseId: 'purchase-original' }]
   }];
   input.vatOwnDeclarations = [{
