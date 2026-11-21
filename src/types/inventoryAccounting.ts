@@ -152,10 +152,13 @@ export function calculateWeightedAverageCostAcrossReconversion(
   if (!validNonNegative(existingQuantity) || !validPositive(incomingQuantity) ||
       !validNonNegative(existingUnitCostBs) || !validNonNegative(incomingUnitCostBs) ||
       !validNonNegative(existingUnitCostUsd) || !validNonNegative(incomingUnitCostUsd) ||
-      !validIsoDate(existingCostBasisDate) || !validIsoDate(incomingCostDate)) {
+      (existingQuantity > 0 && !validIsoDate(existingCostBasisDate)) || !validIsoDate(incomingCostDate) ||
+      (existingQuantity === 0 && (existingUnitCostBs !== 0 || existingUnitCostUsd !== 0))) {
     throw new Error('Las cantidades, costos o fechas base no son válidos para normalizar costos históricos.');
   }
-  const existingBs = Number(normalizeBolivarAmountByDate(String(existingUnitCostBs), existingCostBasisDate));
+  const existingBs = existingQuantity > 0
+    ? Number(normalizeBolivarAmountByDate(String(existingUnitCostBs), existingCostBasisDate))
+    : 0;
   const incomingBs = Number(normalizeBolivarAmountByDate(String(incomingUnitCostBs), incomingCostDate));
   if (!Number.isFinite(existingBs) || existingBs < 0 || !Number.isFinite(incomingBs) || incomingBs < 0 ||
       !Number.isFinite(existingUnitCostUsd) || existingUnitCostUsd < 0 || !Number.isFinite(incomingUnitCostUsd) || incomingUnitCostUsd < 0) {
