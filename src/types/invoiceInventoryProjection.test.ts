@@ -71,6 +71,17 @@ describe('deriveInvoiceInventoryMovements', () => {
       .toThrow(/datos difieren/);
   });
 
+  it('still detects same-day ordering ambiguity when both invoice movements already exist in Kardex', () => {
+    const sameDayPurchase = purchase({ invoiceDate: '2025-01-02' });
+    const sameDaySale = sale({ invoiceDate: '2025-01-02' });
+    const existing = [
+      ...deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [sameDayPurchase], sales: [] }),
+      ...deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [], sales: [sameDaySale] })
+    ];
+    expect(() => deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [sameDayPurchase], sales: [sameDaySale], existingMovements: existing }))
+      .toThrow(/sin secuencia de registro común/);
+  });
+
   it('refuses to guess posting order for same-product purchase and sale on the same day', () => {
     const sameDayPurchase = purchase({ invoiceDate: '2025-01-02' });
     const sameDaySale = sale({ invoiceDate: '2025-01-02' });
