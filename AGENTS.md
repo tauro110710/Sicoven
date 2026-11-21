@@ -238,3 +238,19 @@ Se comprobó el flujo runtime de `AccountingContext.tsx` que expone `prepareInve
 - SICOVEN debe permitir seleccionar libremente la fecha/período de inicio pertinente (incluido cualquier año que corresponda), sin imponer 2010, un número predeterminado de años, ni obligar a reconstruir períodos que el contador no haya incluido en su alcance.
 - La apertura y los saldos se establecen para esa fecha seleccionada; la secuencia cronológica, los soportes, las marcas de reconstrucción/estimación y la detección de arrastres aplican desde el inicio definido. No se inventa ni se exige reconstruir historia anterior a ese punto.
 - En los flujos y textos de UI, no mostrar 2010 como fecha mínima, requisito, sugerencia preseleccionada ni límite. Si se usa en ejemplos, debe quedar claramente etiquetado como ejemplo.
+
+
+## REQUISITOS FUNCIONALES ADICIONALES — CONTABILIDAD DE RECONSTRUCCIÓN HISTÓRICA
+
+Los siguientes requisitos se incorporan al objetivo de reconstrucción histórica y deben implementarse, probarse y auditarse. No sustituyen el criterio del Contador Público Colegiado ni autorizan inventar operaciones, soportes o saldos.
+
+1. **Apertura histórica sin exigir empezar en cero:** permitir iniciar un ejercicio/período histórico según la fecha que determine el contador y registrar un asiento de apertura de reconstrucción identificable, con trazabilidad, soporte y clasificación de saldo confirmado/estimado. No exigir borrar o vaciar inventario, cuentas, movimientos ni documentos preexistentes.
+2. **Escala monetaria original y vista unificada/comparativa:** conservar y auditar cada asiento y operación en su escala monetaria original, correspondiente a su fecha. Los informes comparativos y de evolución podrán mostrar una vista unificada convertida entre escalas, sin alterar ni sobrescribir valores originales. La conversión debe aplicar el régimen y divisor válidos en cada reconversión y fecha; para comparar la escala previa a agosto de 2018 con la vigente desde octubre de 2021, el factor acumulado es 10^11 (5 ceros suprimidos en 2018 y 6 en 2021). Documentar precisión, redondeo y conversión inversa; nunca convertir mediante tasas BCV salvo cuando la operación/tipo de reporte requiera una tasa cambiaria.
+3. **Separación contable reconstruida vs. fiscal formal:** identificar visiblemente asientos y períodos que pertenecen a reconstrucción, estimaciones, soportes parciales o depuración. Mantenerlos distinguibles de declaraciones, liquidaciones y cumplimiento fiscal formal. No permitir que datos provisionales se presenten como declaraciones fiscales preparadas, presentadas o aceptadas.
+4. **Arrastres y recálculo seguro:** al modificar, insertar o corregir una operación de un período ya reconstruido, identificar el primer período afectado y todas las dependencias posteriores (saldos, inventario/Kardex, costos, cuentas, caja, impuestos y reportes). Mostrar qué períodos/años quedaron pendientes de recalcular y bloquear la presentación silenciosa de resultados desactualizados. Recalcular cronológicamente, preservando originales, auditoría y posibilidad de revisión; períodos cerrados requieren reapertura controlada.
+
+### Criterios mínimos de aceptación
+- Tests para apertura histórica con saldos no cero y sin borrar el historial existente.
+- Tests de asiento original y vista comparativa unificada que verifiquen conversión entre escalas y conservación exacta del dato original.
+- Tests que impidan confundir reconstrucción/estimaciones con datos fiscales formales.
+- Tests de inserción/corrección en un período pasado que marquen todos los períodos dependientes como pendientes, y que solo los limpien tras un recálculo verificable.
