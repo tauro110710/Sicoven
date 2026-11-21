@@ -24,7 +24,7 @@ export function deriveInvoiceInventoryMovements(input: {
   const products = new Map(input.products.filter(p => p.companyId === companyId).map(p => [p.id, p]));
   const result: InventoryMovement[] = [];
   const existingMovements = input.existingMovements || [];
-  const normalizeDocumentRef = (value: string): string => String(value || '').trim().toUpperCase();
+  const normalizeDocumentRef = (value: string): string => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
   const matchedExistingSources: InventoryMovement[] = [];
   const seen = new Set<string>();
   const add = (movement: InventoryMovement) => {
