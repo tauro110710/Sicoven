@@ -115,6 +115,7 @@ export interface FifoMovementSnapshot {
   id?: string;
   concept?: string;
   correctionForMovementId?: string;
+  fifoLayers?: CostLayer[];
 }
 
 /**
@@ -164,7 +165,20 @@ export function reconstructFifoLayers(
     }
     if (movement.type === 'ENTRADA') {
       if (!validPositive(quantity)) throw new Error('Una entrada PEPS debe contener una cantidad positiva.');
-      layers.push({ quantity, unitCostBs, unitCostUsd, date, documentRef: movement.documentRef, sourceMovementId: movement.id });
+      if (movement.concept === 'DEVOLUCION_CLIENTE' && Array.isArray(movement.fifoLayers) && movement.fifoLayers.length) {
+        const restoredQuantity = movement.fifoLayers.reduce((sum, layer) => sum + Number(layer.quantity), 0);
+        if (Math.abs(restoredQuantity - quantity) > 1e-8 || movement.fifoLayers.some(layer =>
+          !validPositive(Number(layer.quantity)) || !validNonNegative(Number(layer.unitCostBs)) ||
+          !validNonNegative(Number(layer.unitCostUsd)) || !layer.date ||
+          !/^\\d{4}-\\d{2}-\\d{2}$/.test(layer.date))) {
+          throw new Error('Las capas PEPS restauradas en la devolución no concilian con su cantidad o costos.');
+        }
+        for (const restoredLayer of movement.fifoLayers) {
+          layers.push({ ...restoredLayer, date, documentRef: movement.documentRef });
+        }
+      } else {
+        layers.push({ quantity, unitCostBs, unitCostUsd, date, documentRef: movement.documentRef, sourceMovementId: movement.id });
+      }
       runningQuantity += quantity;
     } else if (movement.type === 'SALIDA') {
       if (!validPositive(quantity)) throw new Error('Una salida PEPS debe contener una cantidad positiva.');
