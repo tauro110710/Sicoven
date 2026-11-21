@@ -42,6 +42,13 @@ export const InventarioView: React.FC = () => {
     return balances;
   }, [companyProducts, companyJournalEntries]);
   const hasUnreconciledVnr = companyProducts.some(product => vnrLedgerBalances.get(product.id) === null);
+  // No presentar como cero la valoración USD de existencias activas cuyo costo histórico no tiene tasa BCV.
+  const productsMissingUsdValuation = companyProducts.filter(product => product.currentStock > 0 &&
+    (!Number.isFinite(Number(product.avgCostUsd)) || Number(product.avgCostUsd) <= 0 ||
+      !Number.isFinite(Number(product.openingBcvRate)) || Number(product.openingBcvRate) <= 0 ||
+      companyMovements.some(movement => movement.productId === product.id &&
+        (!Number.isFinite(Number(movement.bcvRate)) || Number(movement.bcvRate) <= 0))));
+  const hasMissingUsdValuation = productsMissingUsdValuation.length > 0;
 
 
   const [activeTab, setActiveTab] = useState<'EXISTENCIAS' | 'KARDEX' | 'CONTABILIDAD'>('EXISTENCIAS');
@@ -87,7 +94,7 @@ export const InventarioView: React.FC = () => {
     const vnr = vnrLedgerBalances.get(product.id)!;
     return sum + Math.max(0, product.currentStock * product.avgCostBs - vnr.provisionBs);
   }, 0);
-  const totalInventoryValueUsd = hasUnreconciledVnr ? null : companyProducts.reduce((sum, product) => {
+  const totalInventoryValueUsd = hasUnreconciledVnr || hasMissingUsdValuation ? null : companyProducts.reduce((sum, product) => {
     const vnr = vnrLedgerBalances.get(product.id)!;
     return sum + Math.max(0, product.currentStock * product.avgCostUsd - vnr.provisionUsd);
   }, 0);
@@ -144,6 +151,11 @@ export const InventarioView: React.FC = () => {
             Hay artículos cuya provisión VNR en la ficha no concilia con el saldo de la cuenta correctora 1.1.4.03 en el Libro Diario. Sus valores netos no se presentan en USD ni Bs. hasta revisar el historial.
           </p>
         )}
+        {hasMissingUsdValuation && (
+          <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+            Valoración USD incompleta: {productsMissingUsdValuation.length} artículo(s) con existencia no conserva(n) una tasa BCV/costo USD histórico verificable. El total USD no se muestra para evitar confundir una valoración faltante con cero.
+          </p>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6">
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
@@ -154,7 +166,7 @@ export const InventarioView: React.FC = () => {
               {totalInventoryValueBs === null ? 'Pendiente conciliar VNR' : formatBs(totalInventoryValueBs)}
             </div>
             <div className="text-xs font-mono text-slate-500">
-              {totalInventoryValueUsd === null ? 'Pendiente conciliar VNR' : formatUsd(totalInventoryValueUsd)}
+              {totalInventoryValueUsd === null ? (hasMissingUsdValuation ? 'Pendiente tasa histórica USD' : 'Pendiente conciliar VNR') : formatUsd(totalInventoryValueUsd)}
             </div>
           </div>
 
@@ -284,7 +296,7 @@ export const InventarioView: React.FC = () => {
                   filteredProducts.map(prod => {
                     const vnrBalance = vnrLedgerBalances.get(prod.id) || null;
                     const totalValBs = vnrBalance ? Math.max(0, prod.currentStock * prod.avgCostBs - vnrBalance.provisionBs) : null;
-                    const totalValUsd = vnrBalance ? Math.max(0, prod.currentStock * prod.avgCostUsd - vnrBalance.provisionUsd) : null;
+                    const totalValUsd = vnrBalance && prod.currentStock > 0 && prod.avgCostUsd > 0 && Number(prod.openingBcvRate) > 0 && !companyMovements.some(movement => movement.productId === prod.id && Number(movement.bcvRate) <= 0) ? Math.max(0, prod.currentStock * prod.avgCostUsd - vnrBalance.provisionUsd) : null;
                     const isLow = prod.currentStock <= prod.minStock;
 
                     return (
@@ -307,7 +319,7 @@ export const InventarioView: React.FC = () => {
                         <td className="py-2.5 px-4 text-right font-mono text-slate-800">
                           {formatBs(prod.avgCostBs)}
                           {true && (
-                            <span className="block text-[10px] text-slate-400">{formatUsd(prod.avgCostUsd)}</span>
+                            <span className="block text-[10px] text-slate-400">{prod.currentStock > 0 && (!prod.avgCostUsd || !prod.openingBcvRate) ? 'Costo USD pendiente BCV' : formatUsd(prod.avgCostUsd)}</span>
                           )}
                         </td>
                         <td className="py-2.5 px-4 text-right font-mono font-semibold text-emerald-700">
@@ -317,7 +329,7 @@ export const InventarioView: React.FC = () => {
                         <td className="py-2.5 px-4 text-right font-mono font-black text-slate-900 bg-slate-50/50">
                           {totalValBs === null ? 'Pendiente conciliar' : formatBs(totalValBs)}
                           {true && (
-                            <span className="block text-[10px] text-slate-400 font-normal">{totalValUsd === null ? 'Pendiente conciliar' : formatUsd(totalValUsd)}</span>
+                            <span className="block text-[10px] text-slate-400 font-normal">{totalValUsd === null ? (prod.currentStock > 0 && (!prod.avgCostUsd || !prod.openingBcvRate) ? 'Pendiente BCV USD' : 'Pendiente conciliar') : formatUsd(totalValUsd)}</span>
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-center">
