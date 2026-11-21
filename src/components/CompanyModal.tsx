@@ -409,13 +409,34 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
           {/* Inicio del registro contable ordinario en SICOVEN */}
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-1.5">
             <label className="block text-xs font-bold text-slate-800">
-              Fecha inicial del registro/reconstrucción contable en SICOVEN *
+              Ejercicio inicial de reconstrucción contable *
+            </label>
+            <select
+              value={accountingStartDate.slice(0, 4)}
+              onChange={e => {
+                const year = e.target.value;
+                setAccountingStartDate(year ? year + '-01-01' : '');
+                if (year) setFiscalYear(year);
+              }}
+              required
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+            >
+              <option value="">Seleccione desde qué año comenzar</option>
+              {Array.from({ length: new Date().getFullYear() - 1980 + 1 }, (_, i) => String(new Date().getFullYear() - i)).map(year => (
+                <option key={year} value={year}>{year} — desde el 1 de enero</option>
+              ))}
+            </select>
+            <label className="block text-xs font-semibold text-slate-700 mt-2">
+              O fecha exacta de inicio *
             </label>
             <input
               type="date"
               required
               value={accountingStartDate}
-              onChange={e => setAccountingStartDate(e.target.value)}
+              onChange={e => {
+                setAccountingStartDate(e.target.value);
+                if (e.target.value) setFiscalYear(e.target.value.slice(0, 4));
+              }}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
             />
             <p className="text-[10px] leading-4 text-slate-600">Desde esta fecha se incorporarán las operaciones del registro o reconstrucción contable. Puede ser una fecha histórica anterior al día en que registra la empresa. SICOVEN guardará automáticamente la fecha y hora de registro por separado.</p>
