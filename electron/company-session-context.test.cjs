@@ -261,6 +261,9 @@ test('company creation IPC serializes tenant creation and persists the selected-
       getSelectedCompanyId: () => selectedCompanyId
     },
     runtime: {
+      listCompanies: () => [],
+      recoverOrphanedCompany: () => ({ found: false }),
+      verifyCompanyCreation: () => true,
       createCompany: async (company, actor) => { createdCompany = company; createdActor = actor; return { ok: true, company }; }
     },
     operationContext: {

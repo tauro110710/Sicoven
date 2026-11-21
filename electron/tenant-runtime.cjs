@@ -88,6 +88,105 @@ function createTenantRuntime({
     }
   }
 
+  function verifyCompanyCreation(company, operation) {
+    if (!company || typeof company !== 'object' || !operation || typeof operation !== 'object') {
+      throw new TypeError('La verificación de creación requiere la empresa y su identidad durable.');
+    }
+    const companyId = String(company.id || '').trim();
+    const operationId = String(operation.operationId || '').trim();
+    const requestHash = String(operation.requestHash || '').trim();
+    const actor = operation.actor;
+    if (!companyId || operationId !== companyId || !/^[a-f0-9]{64}$/i.test(requestHash) ||
+        !actor || !Number.isSafeInteger(Number(actor.id)) || Number(actor.id) <= 0 ||
+        !String(actor.username || '').trim()) {
+      throw new Error('La identidad durable de creación está incompleta o no es válida.');
+    }
+    const db = manager.openCompany(companyId);
+    const snapshot = readTenantSnapshot(db, companyId);
+    const savedCompany = snapshot.companies[0];
+    if (String(savedCompany.name || '').trim() !== String(company.name || '').trim() ||
+        String(savedCompany.rif || '').trim().toUpperCase() !== String(company.rif || '').trim().toUpperCase()) {
+      throw new Error('El snapshot inicial no coincide con la identidad durable de creación.');
+    }
+    const receipt = db.prepare(
+      'SELECT operation_id,company_id,operation_type,actor_user_id FROM operation_receipts WHERE operation_id=?'
+    ).get(operationId);
+    if (!receipt || String(receipt.company_id) !== companyId ||
+        String(receipt.operation_type) !== 'accounting.snapshot' ||
+        Number(receipt.actor_user_id) !== Number(actor.id)) {
+      throw new Error('La evidencia append-only de creación no coincide con el actor o la huella de solicitud.');
+    }
+    const events = db.prepare(
+      "SELECT details_json FROM audit_events WHERE event_type='company_created' ORDER BY id"
+    ).all();
+    const matches = events.some(event => {
+      let details;
+      try { details = JSON.parse(event.details_json); } catch { return false; }
+      return String(details.companyId || '') === companyId &&
+        String(details.operationId || '') === operationId &&
+        String(details.requestHash || '') === requestHash &&
+        Number(details.actorUserId) === Number(actor.id) &&
+        String(details.actorUsername || '') === String(actor.username);
+    });
+    if (!matches) {
+      throw new Error('La evidencia append-only de creación no coincide con el actor o la huella de solicitud.');
+    }
+    return { ok: true, company: manager.listCompanies().find(item => String(item.id) === companyId) || null };
+  }
+
+  function recoverOrphanedCompany(company, operation) {
+    if (!operation || typeof operation !== 'object') {
+      throw new TypeError('La recuperación requiere la identidad durable de creación.');
+    }
+    const result = manager.recoverOrphanedCompany(company, db => {
+      verifyCompanyCreationDatabase(db, company, operation);
+      return true;
+    });
+    return result;
+  }
+
+  function verifyCompanyCreationDatabase(db, company, operation) {
+    const companyId = String(company?.id || '').trim();
+    const operationId = String(operation?.operationId || '').trim();
+    const requestHash = String(operation?.requestHash || '').trim();
+    const actor = operation?.actor;
+    if (!companyId || operationId !== companyId || !/^[a-f0-9]{64}$/i.test(requestHash) ||
+        !actor || !Number.isSafeInteger(Number(actor.id)) || Number(actor.id) <= 0 ||
+        !String(actor.username || '').trim()) {
+      throw new Error('La identidad durable de creación está incompleta o no es válida.');
+    }
+    const snapshot = readTenantSnapshot(db, companyId);
+    const savedCompany = snapshot.companies[0];
+    if (String(savedCompany.name || '').trim() !== String(company.name || '').trim() ||
+        String(savedCompany.rif || '').trim().toUpperCase() !== String(company.rif || '').trim().toUpperCase()) {
+      throw new Error('El snapshot huérfano no coincide con la solicitud durable de creación.');
+    }
+    const receipt = db.prepare(
+      'SELECT operation_id,company_id,operation_type,actor_user_id FROM operation_receipts WHERE operation_id=?'
+    ).get(operationId);
+    if (!receipt || String(receipt.company_id) !== companyId ||
+        String(receipt.operation_type) !== 'accounting.snapshot' ||
+        Number(receipt.actor_user_id) !== Number(actor.id)) {
+      throw new Error('La evidencia append-only de creación no coincide con el actor o la huella de solicitud.');
+    }
+    const events = db.prepare(
+      "SELECT details_json FROM audit_events WHERE event_type='company_created' ORDER BY id"
+    ).all();
+    const matches = events.some(event => {
+      let details;
+      try { details = JSON.parse(event.details_json); } catch { return false; }
+      return String(details.companyId || '') === companyId &&
+        String(details.operationId || '') === operationId &&
+        String(details.requestHash || '') === requestHash &&
+        Number(details.actorUserId) === Number(actor.id) &&
+        String(details.actorUsername || '') === String(actor.username);
+    });
+    if (!matches) {
+      throw new Error('La evidencia append-only de creación no coincide con el actor o la huella de solicitud.');
+    }
+    return true;
+  }
+
   async function migrateLegacyDatabase({ sourceDb, acquireMaintenanceLock, getDocumentsRoot } = {}) {
     if (!sourceDb || !sourceDb.open) throw new TypeError('La base SQLite heredada debe permanecer abierta durante la migración.');
     if (typeof acquireMaintenanceLock !== 'function') throw new TypeError('La migración requiere un bloqueo de mantenimiento exclusivo.');
@@ -126,6 +225,8 @@ function createTenantRuntime({
     loadAccounting,
     saveAccounting,
     createCompany,
+    recoverOrphanedCompany,
+    verifyCompanyCreation,
     migrateLegacyDatabase,
     updateCompanyMetadata,
     closeCompany,

@@ -41,6 +41,37 @@ function initializeCompanyMetadataOperationSchema(controlDb) {
     CREATE TRIGGER IF NOT EXISTS company_metadata_completions_no_delete
       BEFORE DELETE ON company_metadata_completions
       BEGIN SELECT RAISE(ABORT, 'company_metadata_completions is append-only'); END;
+    CREATE TABLE IF NOT EXISTS company_creation_intents (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      operation_id TEXT NOT NULL UNIQUE,
+      company_id TEXT NOT NULL UNIQUE,
+      request_hash TEXT NOT NULL,
+      request_json TEXT NOT NULL,
+      actor_user_id INTEGER NOT NULL,
+      actor_username TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS company_creation_intents_sequence_idx
+      ON company_creation_intents(sequence);
+    CREATE TABLE IF NOT EXISTS company_creation_completions (
+      operation_id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      request_hash TEXT NOT NULL,
+      completed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      FOREIGN KEY(operation_id) REFERENCES company_creation_intents(operation_id)
+    );
+    CREATE TRIGGER IF NOT EXISTS company_creation_intents_no_update
+      BEFORE UPDATE ON company_creation_intents
+      BEGIN SELECT RAISE(ABORT, 'company_creation_intents is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS company_creation_intents_no_delete
+      BEFORE DELETE ON company_creation_intents
+      BEGIN SELECT RAISE(ABORT, 'company_creation_intents is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS company_creation_completions_no_update
+      BEFORE UPDATE ON company_creation_completions
+      BEGIN SELECT RAISE(ABORT, 'company_creation_completions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS company_creation_completions_no_delete
+      BEFORE DELETE ON company_creation_completions
+      BEGIN SELECT RAISE(ABORT, 'company_creation_completions is append-only'); END;
   `);
 }
 
@@ -191,6 +222,124 @@ function registerCompanySessionIpc({
     return results;
   }
 
+  function completeCompanyCreationIntent(intent) {
+    const db = getControlDatabase();
+    const existing = db.prepare(
+      'SELECT company_id,request_hash FROM company_creation_completions WHERE operation_id=?'
+    ).get(intent.operation_id);
+    if (existing) {
+      if (String(existing.company_id) !== String(intent.company_id) ||
+          String(existing.request_hash) !== String(intent.request_hash)) {
+        throw new Error('La finalización de creación no coincide con su intención durable.');
+      }
+      return { completed: true, replayed: true };
+    }
+    db.prepare(`
+      INSERT INTO company_creation_completions(operation_id,company_id,request_hash)
+      VALUES(?,?,?)
+    `).run(intent.operation_id, intent.company_id, intent.request_hash);
+    return { completed: true, replayed: false };
+  }
+
+  async function finishCompanyCreationIntent(intent) {
+    const request = JSON.parse(String(intent.request_json || 'null'));
+    if (!request || typeof request !== 'object' || Array.isArray(request) ||
+        hashOperationRequest(JSON.stringify(request)) !== String(intent.request_hash)) {
+      throw new Error('La solicitud durable de creación está dañada o no coincide con su huella.');
+    }
+    const companyId = String(intent.company_id);
+    if (String(intent.operation_id) !== companyId) {
+      throw new Error('La identidad durable de creación no coincide con el ID de empresa.');
+    }
+    const actor = {
+      id: Number(intent.actor_user_id),
+      username: String(intent.actor_username || '')
+    };
+    if (!Number.isSafeInteger(actor.id) || actor.id <= 0 || !actor.username) {
+      throw new Error('La intención durable de creación no conserva una identidad de usuario válida.');
+    }
+    const company = { ...request, id: companyId };
+    const operation = { operationId: companyId, requestHash: String(intent.request_hash), actor };
+    const registered = runtime.listCompanies().find(item => String(item.id) === companyId);
+    const completed = getControlDatabase().prepare(
+      'SELECT company_id,request_hash FROM company_creation_completions WHERE operation_id=?'
+    ).get(companyId);
+    if (completed) {
+      if (String(completed.company_id) !== companyId ||
+          String(completed.request_hash) !== String(intent.request_hash)) {
+        throw new Error('La creación ya finalizada no coincide con la solicitud durable; se bloqueó el reintento.');
+      }
+      if (!registered) {
+        throw new Error('Esta empresa fue creada y posteriormente retirada del registro. No se recreará automáticamente; utilice un nuevo registro de empresa.');
+      }
+      if (String(registered.status) !== 'ACTIVE') {
+        throw new Error('Esta empresa fue creada y posteriormente archivada. No se reactivará automáticamente.');
+      }
+      runtime.verifyCompanyCreation(company, operation);
+      return { ok: true, company: registered, replayed: true };
+    }
+    let result;
+    if (registered) {
+      if (String(registered.status) !== 'ACTIVE') {
+        throw new Error('La empresa de esta creación durable está archivada; no se reactivará automáticamente.');
+      }
+      if (String(registered.rif || '').trim().toUpperCase() !== String(company.rif || '').trim().toUpperCase() ||
+          String(registered.name || '').trim() !== String(company.name || '').trim()) {
+        throw new Error('El registro existente no coincide con la identidad de la solicitud de creación.');
+      }
+      runtime.verifyCompanyCreation(company, operation);
+      result = { ok: true, company: registered, replayed: true };
+    } else {
+      const orphan = runtime.recoverOrphanedCompany(company, operation);
+      if (orphan.found) {
+        result = { ok: true, company: orphan.company, replayed: true, recoveredOrphan: true };
+      } else {
+        result = await runtime.createCompany(company, actor, {
+          operationId: companyId,
+          requestHash: String(intent.request_hash)
+        });
+        runtime.verifyCompanyCreation(company, operation);
+      }
+    }
+    completeCompanyCreationIntent(intent);
+    return result;
+  }
+
+  async function reconcilePendingCompanyCreationOperations() {
+    ensureCompanyMetadataOperationSchema();
+    const pending = getControlDatabase().prepare(`
+      SELECT i.* FROM company_creation_intents i
+      LEFT JOIN company_creation_completions c ON c.operation_id=i.operation_id
+      WHERE c.operation_id IS NULL
+      ORDER BY i.sequence
+    `).all();
+    if (!pending.length) return [];
+    let release;
+    const results = [];
+    try {
+      assertOperationalReady();
+      release = await operationContext.acquireMaintenanceLock();
+      for (const intent of pending) {
+        try {
+          const result = await finishCompanyCreationIntent(intent);
+          results.push({ operationId: String(intent.operation_id), recovered: true, result });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error('SICOVEN conserva una creación de empresa pendiente de reconciliación:', {
+            operationId: String(intent.operation_id), companyId: String(intent.company_id), message
+          });
+          results.push({ operationId: String(intent.operation_id), recovered: false, message });
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('No se pudo iniciar la reconciliación de creaciones empresariales:', message);
+    } finally {
+      if (release) release();
+    }
+    return results;
+  }
+
   function saveActiveCompanyPreference(companyId) {
     getControlDatabase().prepare(`INSERT INTO app_state(state_key,state_json,updated_at)
       VALUES('active_company_preference',?,datetime('now'))
@@ -200,6 +349,7 @@ function registerCompanySessionIpc({
 
   ipcMain.handle('sicoven:company-list-accessible', async (_event, token) => {
     requireAuthorizedSession(token);
+    await reconcilePendingCompanyCreationOperations();
     await reconcilePendingCompanyMetadataOperations();
     return companySessionContext.listAccessibleCompanies(token);
   });
@@ -301,42 +451,67 @@ function registerCompanySessionIpc({
 
   ipcMain.handle('sicoven:company-create', async (_event, token, input) => {
     assertOperationalReady();
-    const actor = requireAuthorizedSession(token);
+    ensureCompanyMetadataOperationSchema();
+    requireAuthorizedSession(token);
     const company = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : null;
     if (!company) throw new Error('Los datos de la empresa no son válidos.');
     const operationId = String(company.operationId || crypto.randomUUID()).trim();
-    if (!/^[A-Za-z0-9_-]{1,120}$/.test(operationId) || operationId === '.' || operationId === '..') throw new Error('Falta un identificador estable válido para la creación de empresa.');
+    if (!/^[A-Za-z0-9_-]{1,120}$/.test(operationId) || operationId === '.' || operationId === '..') {
+      throw new Error('Falta un identificador estable válido para la creación de empresa.');
+    }
     const requestPayload = { ...company };
     delete requestPayload.operationId;
     delete company.operationId;
-    const requestHash = hashOperationRequest(JSON.stringify(requestPayload));
     company.id = operationId;
     if (!String(company.name || '').trim() || !String(company.rif || '').trim()) {
       throw new Error('La razón social y el RIF son obligatorios para crear la empresa.');
     }
+    const normalizedRif = String(company.rif).trim().toUpperCase();
+    const registeredCompanies = runtime.listCompanies();
+    const existingCompany = registeredCompanies.find(item => String(item.id) === operationId);
+    if (existingCompany && String(existingCompany.status) !== 'ACTIVE') {
+      throw new Error('El identificador de esta empresa pertenece a un registro archivado; no se reactivará ni reutilizará.');
+    }
+    if (existingCompany &&
+        (String(existingCompany.rif || '').trim().toUpperCase() !== normalizedRif ||
+         String(existingCompany.name || '').trim() !== String(company.name || '').trim())) {
+      throw new Error('La clave de creación ya está asociada a otra empresa o ficha; utilice una nueva operación.');
+    }
+    const duplicateRif = registeredCompanies.find(item =>
+      String(item.id) !== operationId &&
+      String(item.rif || '').trim().toUpperCase() === normalizedRif
+    );
+    if (duplicateRif) {
+      throw new Error('El RIF ya está asociado a otra empresa del registro local.');
+    }
+    const requestJson = JSON.stringify(requestPayload);
+    const requestHash = hashOperationRequest(requestJson);
     const release = await operationContext.acquireMaintenanceLock();
     let created;
     try {
       assertOperationalReady();
-      requireAuthorizedSession(token);
-      const registeredCompanies = typeof runtime.listCompanies === 'function' ? runtime.listCompanies() : [];
-      const existing = registeredCompanies.find(item => String(item.id) === operationId && String(item.status) === 'ACTIVE');
-      if (existing) {
-        const tenantDb = runtime.getCompanyDatabase(operationId);
-        const receiptRow = tenantDb.prepare("SELECT details_json FROM audit_events WHERE event_type='company_created' ORDER BY id DESC LIMIT 1").get();
-        let details = null;
-        try { details = receiptRow ? JSON.parse(receiptRow.details_json) : null; } catch {}
-        if (!details || String(details.operationId || '') !== operationId ||
-            String(details.requestHash || '') !== requestHash ||
-            Number(details.actorUserId) !== Number(actor.id)) {
-          throw new Error('La clave de creación ya está asociada a otra empresa, solicitud o usuario; no se repetirá la creación.');
+      const currentActor = requireAuthorizedSession(token);
+      const control = getControlDatabase();
+      let intent = control.prepare('SELECT * FROM company_creation_intents WHERE operation_id=?').get(operationId);
+      if (intent) {
+        if (String(intent.company_id) !== operationId ||
+            String(intent.request_hash) !== requestHash ||
+            Number(intent.actor_user_id) !== Number(currentActor.id)) {
+          throw new Error('La clave de creación ya está asociada a otra empresa, solicitud o usuario.');
         }
-        created = { ok: true, company: existing, replayed: true };
       } else {
-        // The runtime commits the initial snapshot, its idempotency receipt and
-        // the company-created audit evidence before registry visibility.
-        created = await runtime.createCompany(company, actor, { operationId, requestHash });
+        const insertIntent = control.transaction(() => {
+          control.prepare(`
+            INSERT INTO company_creation_intents
+              (operation_id,company_id,request_hash,request_json,actor_user_id,actor_username)
+            VALUES(?,?,?,?,?,?)
+          `).run(operationId, operationId, requestHash, requestJson,
+            Number(currentActor.id), String(currentActor.username || ''));
+          return control.prepare('SELECT * FROM company_creation_intents WHERE operation_id=?').get(operationId);
+        });
+        intent = insertIntent();
       }
+      created = await finishCompanyCreationIntent(intent);
     } finally {
       release();
     }
