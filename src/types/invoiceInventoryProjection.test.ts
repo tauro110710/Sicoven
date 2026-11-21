@@ -48,6 +48,7 @@ test('ignores canceled invoices, notes and other-company sources', () => {
 test('rejects non-finite or negative BCV rates on invoice sources', () => {
   assert.throws(() => deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase({ bcvRate: Number.NaN })], sales: [] }), /tasa BCV inválida/);
   assert.throws(() => deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [], sales: [sale({ bcvRate: -1 })] }), /tasa BCV inválida/);
+  assert.throws(() => deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [], sales: [sale({ bcvRate: Number.NaN })] }), /tasa BCV inválida/);
 });
 
 test('rejects invalid dates in invoice sources before projecting Kardex', () => {
