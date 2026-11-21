@@ -194,7 +194,6 @@ interface AccountingContextType {
   getCompanyInventoryProducts: (companyId: string) => InventoryProduct[];
   getCompanyInventoryMovements: (companyId: string) => InventoryMovement[];
   importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[], targetCompanyId?: string) => Promise<number>;
-  prepareInventoryProductsForHistoricalReconstruction: (startDate: string) => Promise<number>;
   prepareHistoricalAccountingReplayPlan: (startDate: string, throughDate?: string) => HistoricalAccountingReplayPlan;
   importInventoryMovements: (movements: InventoryMovementImportDraft[], targetCompanyId?: string, options?: { accountingMode?: 'post' | 'kardex-only' }) => number;
   executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => Promise<InventoryMovement[]>;
@@ -5497,17 +5496,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return plan;
   };
 
-  const prepareInventoryProductsForHistoricalReconstruction = async (startDate: string): Promise<number> => {
-    assertSQLitePersistenceReady('Preparar productos para reconstrucción histórica');
-    if (!isValidIsoDate(startDate)) throw new Error('La fecha inicial de reconstrucción no es válida.');
-    // SAFETY: historical reconstruction must reconcile authentic opening balances.
-    // This legacy preparation path resets product costs and therefore is disabled.
-    // Do not mutate products, inventory, or persisted data until a non-destructive,
-    // transactional opening/reconciliation workflow replaces it.
-    throw new Error('Preparación destructiva de inventario deshabilitada. La reconstrucción histórica debe reconciliar las existencias y costos de apertura auténticos sin poner productos en cero ni borrar datos.');
-  };
-  const inventoryCorrectionAuthorizationRef = useRef<string | null>(null);
-  const journalCorrectionAuthorizationRef = useRef<string | null>(null);
+  const prepareInventoryProductsForHistoricalReconstruction = async (startDate: string): PromisctionAuthorizationRef = useRef<string | null>(null);
   const addMovement = (movData: Omit<InventoryMovement, 'id' | 'companyId'>): InventoryMovement => {
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('El movimiento de inventario requiere SQLite local de escritorio disponible y lista.');
@@ -7943,7 +7932,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         getCompanyInventoryProducts,
         getCompanyInventoryMovements,
         importInventoryProducts,
-        prepareInventoryProductsForHistoricalReconstruction,
         prepareHistoricalAccountingReplayPlan,
         importInventoryMovements,
         executeProduction,
