@@ -41,6 +41,20 @@ async function invokeRecoverableOperationArgs(channel, token, args) {
   }
 }
 
+async function invokeRecoverableDocumentAttachment(token, input) {
+  const operationId = String(input?.operationId || globalThis.crypto.randomUUID());
+  const request = { ...input, operationId };
+  try {
+    return await ipcRenderer.invoke('sicoven:document-attach', token, request);
+  } catch (firstError) {
+    try {
+      return await ipcRenderer.invoke('sicoven:document-attach', token, request);
+    } catch {
+      throw firstError;
+    }
+  }
+}
+
 async function invokeRecoverableCompanyMetadata(token, input) {
   const operationId = String(input?.operationId || globalThis.crypto.randomUUID());
   const request = { ...input, operationId };
@@ -144,7 +158,7 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   listInflationSourceDossiers: (token, filters) => ipcRenderer.invoke('sicoven:inflation-source-dossier-list', token, filters),
   createInflationSourceDossier: (token, input) => invokeRecoverableOperation('sicoven:inflation-source-dossier-create', token, input),
   reviewInflationSourceDossier: (token, input) => invokeRecoverableOperation('sicoven:inflation-source-dossier-review', token, input),
-  attachSupportingDocument: (token, input) => ipcRenderer.invoke('sicoven:document-attach', token, input),
+  attachSupportingDocument: (token, input) => invokeRecoverableDocumentAttachment(token, input),
   listSupportingDocuments: (token, filters) => ipcRenderer.invoke('sicoven:document-list', token, filters),
   reviewSupportingDocument: (token, input) => invokeRecoverableOperation('sicoven:document-review', token, input),
   openSupportingDocument: (token, documentId) => ipcRenderer.invoke('sicoven:document-open', token, documentId),

@@ -237,3 +237,12 @@ Trabajar en este orden, cerrando cada fase con PR integrada y pruebas satisfacto
 - La rama original de PR #182 quedó divergente tras el squash de PR #181. Para evitar reintroducir cambios ya integrados, se creó `feat/durable-company-creation-mainline` desde el nuevo `main` y se trasladó únicamente el delta de creación durable de empresas.
 - La nueva rama está 12 commits adelante y 0 detrás de `main`; el diff funcional contiene siete archivos. Debe completar CI Linux y Windows Release sobre esta base antes de reemplazar/cerrar la PR #182 original.
 - No se publicó versión; la última versión publicada continúa siendo `v1.0.37`. La reconstrucción histórica integral sigue deshabilitada.
+
+#### Seguimiento de integración — 2026-11-21 (adjuntos documentales)
+
+- PR #183 de creación durable de empresas quedó integrada en main mediante squash, commit f76b25d78601e4afa0408d49b7045ecba6bd1459; CI Linux, G13 Linux/Windows y Windows Release terminaron SUCCESS. PR #182, rama antigua divergente, fue cerrada como sustituida por #183.
+- La rama antigua feat/recoverable-supporting-document-attachments no se integra directamente: contiene 58 commits heredados y mezcla una variante de recuperación de creación durable ya sustituida por la implementación validada de #183.
+- Se creó feat/recoverable-supporting-documents-mainline desde el main posterior a #183. Se trasladó únicamente el delta específico de adjuntos: intención durable documents.attach, staging y recuperación por SHA-256, almacenamiento con controles de rutas/symlinks, recibo idempotente y reintento estable en preload.
+- No se trasladaron modificaciones antiguas de company-session-ipc.cjs, tenant-runtime.cjs, creación de empresas, esquema ni sus pruebas; main conserva exactamente la implementación de creación durable que pasó validaciones en #183.
+- Se añadieron pruebas de reintento idempotente, recuperación tras fallo SQLite luego de persistir el archivo, rechazo de otro archivo o entidad/documento sustituido con el mismo operationId, preservación de archivo alterado y bloqueo de rutas con symlink. Los reintentos quedan ligados a empresa, operación contable, tipo, título, descripción y destino de sustitución originales.
+- Pendiente: auditoría final del protocolo filesystem/SQLite (incluida durabilidad de entradas de directorio, concurrencia y restauración), ejecución CI Linux/G13/Windows Release, corrección de fallos y validación completa antes de fusionar. No habilitar reconstrucción histórica integral ni publicar versión con esta fase parcial.

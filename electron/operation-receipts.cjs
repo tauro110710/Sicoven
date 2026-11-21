@@ -16,6 +16,7 @@ const DURABLE_OPERATION_TYPES = Object.freeze({
   'sicoven:inflation-source-dossier-create': 'inflation.source_dossier_create',
   'sicoven:inflation-source-dossier-review': 'inflation.source_dossier_review',
   'sicoven:document-review': 'documents.review',
+  'sicoven:document-attach': 'documents.attach',
   'sicoven:payroll-employee-save': 'payroll.employee_save',
   'sicoven:payroll-severance-deposit-save': 'payroll.severance_deposit',
   'sicoven:payroll-severance-interest-save': 'payroll.severance_interest',
