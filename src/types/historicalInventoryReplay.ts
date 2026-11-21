@@ -157,7 +157,9 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
 
     if (source.type === 'ENTRADA') {
       let entryUnitCostBs = effectiveUnitCostBs;
-      let entryUnitCostUsd = rate > 0 ? roundUsd(effectiveUnitCostBs / rate) : 0;
+      let entryUnitCostUsd = requestedUnitCostUsd > 0
+        ? roundUsd(requestedUnitCostUsd + (rate > 0 ? landedCostsBs / requestedQuantity / rate : 0))
+        : (rate > 0 ? roundUsd(effectiveUnitCostBs / rate) : 0);
       if (source.concept === 'DEVOLUCION_CLIENTE') {
         const original = source.correctionForMovementId ? replayedById.get(source.correctionForMovementId) : undefined;
         if (!original || original.type !== 'SALIDA' || original.concept !== 'VENTA' ||
@@ -277,7 +279,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       if (state.product.costingMethod === 'PEPS') {
         const layers = reconstructFifoLayers(state.history.map(toFifoSnapshot), state.quantity);
         const adjusted = applyFifoAdjustment(layers, delta, requestedUnitCostBs,
-          rate > 0 ? roundUsd(requestedUnitCostBs / rate) : 0, source.date, source.documentRef);
+          requestedUnitCostUsd > 0 ? requestedUnitCostUsd : (rate > 0 ? roundUsd(requestedUnitCostBs / rate) : 0), source.date, source.documentRef);
         totalCostBs = adjusted.totalCostBs;
         totalCostUsd = adjusted.totalCostUsd;
         unitCostBs = adjusted.unitCostBs;
@@ -288,12 +290,12 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       } else if (delta > 0) {
         const weighted = calculateWeightedAverageCostDual(
           state.quantity, state.averageBs, state.averageUsd,
-          delta, requestedUnitCostBs, rate > 0 ? roundUsd(requestedUnitCostBs / rate) : 0
+          delta, requestedUnitCostBs, requestedUnitCostUsd > 0 ? requestedUnitCostUsd : (rate > 0 ? roundUsd(requestedUnitCostBs / rate) : 0)
         );
         totalCostBs = roundBs(delta * requestedUnitCostBs);
-        totalCostUsd = rate > 0 ? roundUsd(delta * requestedUnitCostBs / rate) : 0;
+        totalCostUsd = roundUsd(delta * unitCostUsd);
         unitCostBs = requestedUnitCostBs;
-        unitCostUsd = rate > 0 ? roundUsd(requestedUnitCostBs / rate) : 0;
+        unitCostUsd = requestedUnitCostUsd > 0 ? requestedUnitCostUsd : (rate > 0 ? roundUsd(requestedUnitCostBs / rate) : 0);
         nextQuantity = weighted.quantity;
         nextAverageBs = weighted.unitCostBs;
         nextAverageUsd = weighted.unitCostUsd;
