@@ -129,3 +129,18 @@ test('reconstruye devoluciones PEPS con capas exactas y conserva su composición
   assert.equal(result.movements[4].totalCostBs, 30, 'la siguiente salida consume primero la capa remanente de 20 Bs y luego la devolución de 10 Bs');
   assert.equal(result.products[0].currentStock, 0);
 });
+
+test('distribuye varias devoluciones parciales de una venta PEPS sin repetir capas', () => {
+  const result = replay([makeProduct('PEPS')], [
+    movement({ id: 'purchase-1', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100 }),
+    movement({ id: 'purchase-2', date: '2010-01-02', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 20, unitCostUsd: 0.2, bcvRate: 100 }),
+    movement({ id: 'sale-1', date: '2010-01-03', type: 'SALIDA', concept: 'VENTA', quantity: 3, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100 }),
+    movement({ id: 'return-1', date: '2010-01-04', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100, correctionForMovementId: 'sale-1' }),
+    movement({ id: 'return-2', date: '2010-01-04', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100, correctionForMovementId: 'sale-1' }),
+    movement({ id: 'sale-2', date: '2010-01-05', type: 'SALIDA', concept: 'VENTA', quantity: 2, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100 })
+  ]);
+  assert.deepEqual(result.movements[3].fifoLayers?.map(layer => [layer.quantity, layer.unitCostBs]), [[1, 10]]);
+  assert.deepEqual(result.movements[4].fifoLayers?.map(layer => [layer.quantity, layer.unitCostBs]), [[1, 10]]);
+  assert.equal(result.movements[5].totalCostBs, 30);
+  assert.equal(result.products[0].currentStock, 0);
+});
