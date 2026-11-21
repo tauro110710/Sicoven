@@ -147,6 +147,14 @@ export function calculateWeightedAverageCostAcrossReconversion(
   incomingCostDate: string,
   incomingUnitCostUsd: number
 ): InventoryCostResult {
+  const validIsoDate = (date: string) => /^\\d{4}-\\d{2}-\\d{2}$/.test(date) &&
+    Number.isFinite(Date.parse(date)) && new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) === date;
+  if (!validNonNegative(existingQuantity) || !validPositive(incomingQuantity) ||
+      !validNonNegative(existingUnitCostBs) || !validNonNegative(incomingUnitCostBs) ||
+      !validNonNegative(existingUnitCostUsd) || !validNonNegative(incomingUnitCostUsd) ||
+      !validIsoDate(existingCostBasisDate) || !validIsoDate(incomingCostDate)) {
+    throw new Error('Las cantidades, costos o fechas base no son válidos para normalizar costos históricos.');
+  }
   const existingBs = Number(normalizeBolivarAmountByDate(String(existingUnitCostBs), existingCostBasisDate));
   const incomingBs = Number(normalizeBolivarAmountByDate(String(incomingUnitCostBs), incomingCostDate));
   if (!Number.isFinite(existingBs) || existingBs < 0 || !Number.isFinite(incomingBs) || incomingBs < 0 ||
