@@ -47,4 +47,14 @@ describe('deriveInvoiceInventoryMovements', () => {
       sale({ inventoryLines: [{ ...sale().inventoryLines![0], quantity: 0 }] })
     ] })).toThrow(/línea de inventario inválida/);
   });
+  it('suppresses a previously recorded invoice Kardex movement when it matches the source exactly', () => {
+    const projected = deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [] });
+    const result = deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [], existingMovements: projected });
+    expect(result).toEqual([]);
+  });
+
+  it('blocks a source invoice whose existing ledger entry has a conflicting quantity', () => {
+    const existing = deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [] }).map(m => ({ ...m, quantity: 4 }));
+    expect(() => deriveInvoiceInventoryMovements({ companyId: 'co-1', products: [product], purchases: [purchase()], sales: [], existingMovements: existing })).toThrow(/datos difieren/);
+  });
 });
