@@ -22,7 +22,7 @@ export interface VenezuelanMonetaryPeriod {
 }
 
 function validateIsoDate(date: string): void {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) throw new Error('La fecha monetaria debe tener formato AAAA-MM-DD.');
+  if (!/^\d{4}-\\d{2}-\\d{2}$/.test(date)) throw new Error('La fecha monetaria debe tener formato AAAA-MM-DD.');
   const parsed = new Date(date + 'T00:00:00.000Z');
   if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) throw new Error('La fecha monetaria no es válida.');
 }
