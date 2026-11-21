@@ -18,6 +18,7 @@ export function deriveInvoiceInventoryMovements(input: {
   const products = new Map(input.products.filter(p => p.companyId === companyId).map(p => [p.id, p]));
   const result: InventoryMovement[] = [];
   const existingMovements = input.existingMovements || [];
+  const matchedExistingSources: InventoryMovement[] = [];
   const seen = new Set<string>();
   const add = (movement: InventoryMovement) => {
     if (seen.has(movement.id)) throw new Error('El documento fuente genera un movimiento duplicado.');
@@ -40,6 +41,7 @@ export function deriveInvoiceInventoryMovements(input: {
         (duplicate.counterpartyRif || '') === (movement.counterpartyRif || '') &&
         (duplicate.documentType || '') === (movement.documentType || '');
       if (!sameSource) throw new Error('La factura ' + movement.documentRef + ' coincide con un movimiento existente, pero sus datos difieren; requiere revisión antes de reconstruir.');
+      matchedExistingSources.push(duplicate);
       return;
     }
     result.push(movement);
@@ -96,7 +98,7 @@ export function deriveInvoiceInventoryMovements(input: {
   // If both a purchase and sale of the same product occur on one date, their
   // true order cannot be inferred safely; refuse rather than manufacture PEPS/average-cost history.
   const sameDayByProduct = new Map<string, Set<string>>();
-  for (const movement of result) {
+  for (const movement of [...result, ...matchedExistingSources]) {
     const key = movement.productId + '|' + movement.date;
     const kinds = sameDayByProduct.get(key) || new Set<string>();
     kinds.add(movement.type);
