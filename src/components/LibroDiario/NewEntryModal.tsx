@@ -129,7 +129,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   };
 
   const handleDebitChange = (index: number, val: number) => {
-    const rate = parsedBcvRate > 0 ? parsedBcvRate : 1;
+    const rate = parsedBcvRate;
     setSubmitError(null);
     setItems(prev =>
       prev.map((item, i) =>
@@ -137,7 +137,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
           ? {
               ...item,
               debitBs: val,
-              debitUsd: convertBsToUsdAmount(val, rate),
+              debitUsd: rate > 0 ? convertBsToUsdAmount(val, rate) : 0,
               creditBs: 0,
               creditUsd: 0
             }
@@ -147,7 +147,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   };
 
   const handleCreditChange = (index: number, val: number) => {
-    const rate = parsedBcvRate > 0 ? parsedBcvRate : 1;
+    const rate = parsedBcvRate;
     setSubmitError(null);
     setItems(prev =>
       prev.map((item, i) =>
@@ -155,7 +155,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
           ? {
               ...item,
               creditBs: val,
-              creditUsd: convertBsToUsdAmount(val, rate),
+              creditUsd: rate > 0 ? convertBsToUsdAmount(val, rate) : 0,
               debitBs: 0,
               debitUsd: 0
             }
@@ -192,7 +192,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   const totalCreditUsd = items.reduce((sum, item) => sum + (Number(item.creditUsd) || 0), 0);
   const diffBs = Math.abs(totalDebitBs - totalCreditBs);
   const diffUsd = Math.abs(totalDebitUsd - totalCreditUsd);
-  const isBalanced = diffBs < 0.01 && diffUsd < 0.000001 && totalDebitBs > 0 && totalDebitUsd > 0;
+  const isBalanced = diffBs < 0.01 && (!parsedBcvRate || diffUsd < 0.000001) && totalDebitBs > 0;
   const isZeroTotal = totalDebitBs === 0 && totalCreditBs === 0 && totalDebitUsd === 0 && totalCreditUsd === 0;
 
   // Lado que falta para cuadrar
@@ -206,7 +206,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   // Reglas de Verificación de Asientos
   const rules = {
     partidaDoble: isBalanced,
-    montoMayorCero: totalDebitBs > 0 && totalDebitUsd > 0,
+    montoMayorCero: totalDebitBs > 0,
     minimoRenglones: items.length >= 2,
     cuentasValidas: items.every(it => !!it.accountCode && movementAccounts.some(a => a.code === it.accountCode)),
     sinDobleImputacion: items.every(it =>
@@ -250,7 +250,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
             debitBs: 0,
             creditBs: missingCredit,
             debitUsd: 0,
-            creditUsd: convertBsToUsdAmount(missingCredit, rate),
+            creditUsd: rate > 0 ? convertBsToUsdAmount(missingCredit, rate) : 0,
             description: 'Contrapartida de cuadre'
           }
         ]);
@@ -270,7 +270,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
             accountName: defaultAcc?.name || 'Caja Principal',
             debitBs: missingDebit,
             creditBs: 0,
-            debitUsd: convertBsToUsdAmount(missingDebit, rate),
+            debitUsd: rate > 0 ? convertBsToUsdAmount(missingDebit, rate) : 0,
             creditUsd: 0,
             description: 'Contrapartida de cuadre'
           }
@@ -282,16 +282,11 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // La tasa es obligatoria para este asiento, pero se valida después de permitir la edición libre.
-    if (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0) {
-      setSubmitError('Ingrese la tasa BCV aplicable al asiento, por ejemplo 889,67.');
-      return;
-    }
 
     // Verificación estricta de cuadre antes de guardar
     if (!isBalanced) {
       setSubmitError(
-        `Verificación de Asiento Bloqueada: diferencia Bs. ${formatBs(diffBs)} / USD ${formatUsd(diffUsd)}. Debe y Haber deben cuadrar en ambas monedas.`
+        `Verificación de Asiento Bloqueada: diferencia Bs. ${formatBs(diffBs)}${parsedBcvRate > 0 ? ' / USD ' + formatUsd(diffUsd) : ''}. Debe y Haber deben cuadrar en las monedas aplicables.`
       );
       return;
     }
@@ -424,13 +419,12 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Tasa Oficial BCV ($)
+                Tasa BCV (si aplica)
               </label>
               <input
                 type="text"
                 inputMode="decimal"
                 autoComplete="off"
-                required
                 value={bcvRate}
                 onChange={e => setBcvRate(e.target.value)}
                 className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
@@ -585,10 +579,10 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                       {formatBs(totalCreditBs)}
                     </td>
                     <td className="p-3 text-right font-mono text-slate-600">
-                      {formatUsd(totalDebitBs / (parsedBcvRate || 1))}
+                      {parsedBcvRate > 0 ? formatUsd(totalDebitBs / parsedBcvRate) : '—'}
                     </td>
                     <td className="p-3 text-right font-mono text-slate-600">
-                      {formatUsd(totalCreditBs / (parsedBcvRate || 1))}
+                      {parsedBcvRate > 0 ? formatUsd(totalCreditBs / parsedBcvRate) : '—'}
                     </td>
                     <td></td>
                   </tr>
@@ -671,7 +665,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                       ? 'Los débitos y créditos son idénticos. La partida doble se cumple rigurosamente.'
                       : isZeroTotal
                       ? 'Ingrese los montos en los renglones correspondientes para validar la partida doble.'
-                      : `Diferencia pendiente: Bs. ${formatBs(diffBs)} / USD ${formatUsd(diffUsd)}. El asiento debe cuadrar en ambas monedas.`}
+                      : `Diferencia pendiente: Bs. ${formatBs(diffBs)}${parsedBcvRate > 0 ? ' / USD ' + formatUsd(diffUsd) : ''}. El asiento debe cuadrar en las monedas aplicables.`}
                   </p>
                 </div>
               </div>
@@ -703,7 +697,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                     <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
                   )}
                   <span>
-                    <strong>Partida Doble:</strong> Débitos = Créditos (Δ Bs. {formatBs(diffBs)} / Δ USD {formatUsd(diffUsd)})
+                    <strong>Partida Doble:</strong> Débitos = Créditos (Δ Bs. {formatBs(diffBs)}{parsedBcvRate > 0 ? ' / Δ USD ' + formatUsd(diffUsd) : ''})
                   </span>
                 </div>
 
