@@ -211,3 +211,21 @@ test('rechaza una fecha final inválida o anterior al inicio del replay', () => 
   assert.throws(() => replayHistoricalInventory({ companyId, startDate: '2010-01-01', throughDate: '2009-12-31', products, movements }), /fecha final/);
   assert.throws(() => replayHistoricalInventory({ companyId, startDate: '2010-01-01', throughDate: '2010-02-30', products, movements }), /fecha final/);
 });
+
+test('recalcula automáticamente los costos posteriores cuando se inserta una compra histórica tardía', () => {
+  const originalSources = [
+    movement({ id: 'purchase-1', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100 }),
+    movement({ id: 'purchase-3', date: '2010-01-03', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 30, unitCostUsd: 0.3, bcvRate: 100 }),
+    movement({ id: 'sale-1', date: '2010-01-04', type: 'SALIDA', concept: 'VENTA', quantity: 3, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100 })
+  ];
+  const beforeLateEntry = replay([makeProduct()], originalSources);
+  assert.equal(beforeLateEntry.movements[2].totalCostBs, 40);
+  assert.equal(beforeLateEntry.products[0].currentStock, 1);
+  const latePurchase = movement({ id: 'purchase-2-late', date: '2010-01-02', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 20, unitCostUsd: 0.2, bcvRate: 100 });
+  const reconstructed = replay([makeProduct()], [...originalSources, latePurchase]);
+  assert.deepEqual(reconstructed.movements.map(item => item.id), ['purchase-1', 'purchase-2-late', 'purchase-3', 'sale-1']);
+  assert.equal(reconstructed.movements[3].totalCostBs, 45, 'la salida debe usar el costo promedio cronológico actualizado');
+  assert.equal(reconstructed.products[0].currentStock, 3);
+  assert.equal(reconstructed.products[0].avgCostBs, 25);
+  assert.equal(originalSources[2].totalCostBs, 0, 'los movimientos fuente no se modifican al recalcular');
+});
