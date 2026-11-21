@@ -276,6 +276,8 @@ export function buildHistoricalAccountingReplayPlan(
   const startDate = String(input.startDate || '');
   const blockers: string[] = [];
   const warnings: string[] = [];
+  if (!companyId) blockers.push('La reconstrucción histórica requiere una empresa válida.');
+  if (!isIsoDate(startDate)) blockers.push('La fecha inicial de reconstrucción no es válida.');
   const externalDependencies: string[] = [];
   const purchaseById = new Map(
     (Array.isArray(input.purchases) ? input.purchases : []).map(record => [String(record.id || ''), record] as const)
