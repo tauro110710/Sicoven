@@ -320,3 +320,26 @@ test('document attachment refuses a symlinked tenant directory without writing o
     fs.rmSync(outside, { recursive: true, force: true });
   }
 });
+
+
+test('durable attachment retry remains bound to the original accounting entity and replacement target', () => {
+  const h = fixture();
+  try {
+    const request = { operationId: 'document-durable-entity-binding-001', companyId: 'co-1', entityType: 'PURCHASE', entityId: 'purchase-1', documentType: 'FACTURA_COMPRA', title: 'Factura recuperable', fileName: 'factura.pdf' };
+    h.db.exec("CREATE TRIGGER reject_supporting_document BEFORE INSERT ON supporting_documents BEGIN SELECT RAISE(ABORT, 'simulated metadata interruption'); END");
+    assert.throws(() => attachDocument(h.db, { storageDir: h.storageDir, input: request, buffer: pdf, actor }), /simulated metadata interruption/);
+    const intent = h.db.prepare('SELECT request_json FROM operation_intents WHERE operation_id=?').get(request.operationId);
+    const target = path.join(h.storageDir, JSON.parse(intent.request_json).storageKey);
+    const original = fs.readFileSync(target);
+    h.db.exec('DROP TRIGGER reject_supporting_document');
+
+    assert.throws(() => attachDocument(h.db, {
+      storageDir: h.storageDir, input: { ...request, entityId: 'another-purchase' }, buffer: pdf, actor
+    }), /no coincide con la intención documental pendiente/);
+    assert.throws(() => attachDocument(h.db, {
+      storageDir: h.storageDir, input: { ...request, replacesDocumentId: 'another-document' }, buffer: pdf, actor
+    }), /no coincide con la intención documental pendiente/);
+    assert.deepEqual(fs.readFileSync(target), original);
+    assert.equal(h.db.prepare('SELECT COUNT(*) AS count FROM supporting_documents').get().count, 0);
+  } finally { h.close(); }
+});
