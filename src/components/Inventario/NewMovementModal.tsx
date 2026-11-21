@@ -101,7 +101,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!Number.isFinite(quantity) || !Number.isFinite(unitCostBs) || !Number.isFinite(additionalLandedCostsBs) || quantity < 0 || (type !== 'AJUSTE' && quantity <= 0) || unitCostBs < 0 || additionalLandedCostsBs < 0 || !['OPTIONAL', 'REQUIRED'].includes(bcvRateRequirement) || (bcvRateRequirement === 'REQUIRED' && (!Number.isFinite(bcvRate) || bcvRate <= 0)) || (bcvRateInput.trim() !== '' && (!Number.isFinite(bcvRate) || bcvRate <= 0))) { setError('Verifique la cantidad, los costos y la tasa BCV según el período de la operación.'); return; }
+    if (!Number.isFinite(quantity) || !Number.isFinite(unitCostBs) || !Number.isFinite(additionalLandedCostsBs) || quantity < 0 || (type !== 'AJUSTE' && quantity <= 0) || unitCostBs < 0 || additionalLandedCostsBs < 0 || !['OPTIONAL', 'REQUIRED'].includes(bcvRateRequirement) || (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('Verifique la cantidad, los costos y una tasa BCV válida: el inventario mantiene costos y saldos en Bs y USD.'); return; }
     if (type === 'SALIDA' && concept === 'DEVOLUCION_COMPRA') {
       if (!selectedReturnSource) { setError('Seleccione la entrada original de Kardex que se devuelve.'); return; }
       if (quantity > selectedReturnSource.remaining + 1e-8) { setError('La cantidad supera las unidades recibidas menos devoluciones previas (' + selectedReturnSource.remaining + ').'); return; }
