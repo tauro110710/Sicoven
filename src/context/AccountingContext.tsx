@@ -65,6 +65,7 @@ import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers, prepareProductsForHistoricalReconstruction } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
+import { isOperationDateWithinAccountingStart } from '../utils/isoDateValidation';
 import { buildBankAuxiliaryAccounts } from '../types/bankAccountAccounting';
 import { calculateBankAvailableBalance, calculateCashAccountAvailableBalance, validateBankOutgoingAvailability } from '../types/bankAccountAvailability';
 import { createBankOutgoingLock } from '../types/bankOutgoingLock';
@@ -5819,8 +5820,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const prod = products.find(p => p.id === movData.productId && p.companyId === currentCompany.id);
     if (!prod) throw new Error('El artículo no existe en la empresa activa.');
     if (!isValidIsoDate(movData.date)) throw new Error('La fecha del movimiento no es válida.');
-    if (currentCompany.accountingStartDate && movData.date < currentCompany.accountingStartDate) {
-      throw new Error('La fecha del movimiento no puede ser anterior al inicio contable de la empresa (' + currentCompany.accountingStartDate + ').');
+    if (!isOperationDateWithinAccountingStart(movData.date, currentCompany.accountingStartDate)) {
+      throw new Error('La fecha del movimiento no puede ser anterior al inicio contable de la empresa (' + (currentCompany.accountingStartDate || 'no definido') + ') o no es válida.');
     }
     if (currentCompany.closedThroughDate && movData.date <= currentCompany.closedThroughDate) {
       throw new Error('No se permiten movimientos ni devoluciones en un período cerrado hasta ' + currentCompany.closedThroughDate + '.');
