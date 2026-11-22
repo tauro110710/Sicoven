@@ -4835,7 +4835,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         }
         const newStock = Math.max(0, pState.currentStock - qty);
         const newAverageBs = newStock > 0 ? pState.avgCostBs : 0;
-        const newAverageUsd = toUsd(newAverageBs);
+        // El saldo USD remanente conserva su costo promedio histórico; no se reexpresa con la tasa de venta.
+        const newAverageUsd = newStock > 0 ? pState.avgCostUsd : 0;
         const saleMovId = `mov-auto-sale-${saleId}-${line.productId}-${Date.now()}`;
         const saleAutoMov: InventoryMovement = {
           id: saleMovId,
