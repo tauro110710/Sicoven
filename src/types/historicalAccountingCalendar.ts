@@ -99,9 +99,10 @@ export function buildHistoricalFiscalExercises(
   return exercises;
 }
 
-/** Valid accounting registration start date for SICOVEN's 2012+ workflow. */
+/** Valid accounting registration start date; no artificial minimum year. */
 export function isValidAccountingStartDate(date: string): boolean {
-  return isValidIsoDate(date) && date >= '2012-01-01';
+  return isValidIsoDate(date);
+}
 }
 
 export function getVenezuelanMonetaryEra(date: string): VenezuelanMonetaryEra {
