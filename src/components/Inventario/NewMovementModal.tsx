@@ -19,6 +19,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   defaultProductId
 }) => {
   const { currentCompany, products: allProducts, movements: allMovements, purchases: allPurchases, journalEntries: allJournalEntries, addMovement, waitForPersistence } = useAccounting();
+  const formatLocalIsoDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   const companyProducts = filterEntriesByCompany(allProducts, currentCompany.id);
   const companyMovements = filterEntriesByCompany(allMovements, currentCompany.id);
   const companyPurchases = filterEntriesByCompany(allPurchases, currentCompany.id);
@@ -34,10 +35,10 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
     // para que el contador parta automáticamente del período histórico correcto.
     const start = currentCompany?.accountingStartDate;
     if (start && /^\d{4}-\d{2}-\d{2}$/.test(start)) {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = formatLocalIsoDate(new Date());
       if (start < today) return start;
     }
-    return new Date().toISOString().split('T')[0];
+    return formatLocalIsoDate(new Date());
   });
   const [type, setType] = useState<'ENTRADA' | 'SALIDA' | 'AJUSTE'>('ENTRADA');
   const [concept, setConcept] = useState<'COMPRA' | 'VENTA' | 'MERMA' | 'AJUSTE' | 'DEVOLUCION_COMPRA' | 'DEVOLUCION_CLIENTE' | 'AUTOCONSUMO' | 'INVENTARIO_INICIAL'>('COMPRA');
