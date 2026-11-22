@@ -33,6 +33,9 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
     return (s && /^\d{4}-\d{2}-\d{2}$/.test(s) && s < todayIso) ? s : todayIso;
   })();
   const [date, setDate] = useState<string>(entryStartDate);
+  useEffect(() => {
+    setDate(entryStartDate);
+  }, [currentCompany.id, currentCompany.accountingStartDate]);
   const [description, setDescription] = useState<string>('');
   const [type, setType] = useState<EntryType>('MANUAL');
   const [bcvRate, setBcvRate] = useState<string>('');
