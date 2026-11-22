@@ -3,6 +3,7 @@ import { useAccounting } from '../context/AccountingContext';
 import { Building2, X, ShieldAlert, Check, AlertCircle } from 'lucide-react';
 import { AccountingFramework, TaxpayerType, IvaRetentionAgentBasis } from '../types/accounting';
 import { validateVenezuelanRif } from '../utils/formatters';
+import { isValidAccountingStartDate } from '../types/historicalAccountingCalendar';
 
 interface CompanyModalProps {
   isOpen: boolean;
@@ -67,7 +68,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
     }
     if (!name.trim()) return;
     const parsedAccountingStartDate = new Date(accountingStartDate + 'T00:00:00.000Z');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(accountingStartDate) ||
+    if (!isValidAccountingStartDate(accountingStartDate) ||
         !Number.isFinite(parsedAccountingStartDate.getTime()) ||
         parsedAccountingStartDate.toISOString().slice(0, 10) !== accountingStartDate) {
       window.alert('Indique una fecha válida desde la que esta empresa comenzará su registro contable ordinario en SICOVEN.');
@@ -409,16 +410,17 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
           {/* Inicio del registro contable ordinario en SICOVEN */}
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-1.5">
             <label className="block text-xs font-bold text-slate-800">
-              Fecha inicial del registro/reconstrucción contable en SICOVEN *
+              Fecha de inicio contable en SICOVEN *
             </label>
             <input
               type="date"
               required
+              min="2012-01-01"
               value={accountingStartDate}
               onChange={e => setAccountingStartDate(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
             />
-            <p className="text-[10px] leading-4 text-slate-600">Desde esta fecha se incorporarán las operaciones del registro o reconstrucción contable. Puede ser una fecha histórica anterior al día en que registra la empresa. SICOVEN guardará automáticamente la fecha y hora de registro por separado.</p>
+            <p className="text-[10px] leading-4 text-slate-600">Desde esta fecha se registrarán las operaciones contables ordinarias. Puede iniciar desde el 01/01/2012. SICOVEN guarda por separado la fecha administrativa de registro.</p>
           </div>
 
           {/* Inicio real de operaciones, dato histórico opcional */}
