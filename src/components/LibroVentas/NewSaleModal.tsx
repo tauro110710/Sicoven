@@ -11,7 +11,7 @@ interface NewSaleModalProps {
 }
 
 export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, addSale, waitForPersistence } = useAccounting();
+  const { currentCompany, addSale, waitForPersistence, products } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
@@ -65,6 +65,11 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const [currencyPricingMode, setCurrencyPricingMode] = useState<'USD_FIJO' | 'BS_AJUSTABLE' | 'REVISION_MANUAL'>('USD_FIJO');
   const [fiscalAdjustmentMode, setFiscalAdjustmentMode] = useState<'IVA_ORIGINAL_DIF_CAMBIARIA' | 'AJUSTE_BASE_IVA' | 'REVISION_CONTADOR'>('REVISION_CONTADOR');
   const dueDate = (() => { const d = new Date(invoiceDate + 'T12:00:00'); d.setDate(d.getDate() + creditDays); return d.toISOString().slice(0, 10); })();
+  // Vinculación de líneas de inventario al Kardex
+  const [linkInventory, setLinkInventory] = useState(false);
+  const [saleInventoryLines, setSaleInventoryLines] = useState<Array<{productId:string; quantity:string; unitPriceBs:string}>>([
+    {productId:'',quantity:'1',unitPriceBs:''}
+  ]);
 
   if (!isOpen) return null;
 
@@ -98,6 +103,28 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validar líneas de inventario si el contador las activó.
+    if (linkInventory) {
+      const companyProducts = products.filter(p => p.companyId === currentCompany.id);
+      const saleLineTotal = saleInventoryLines.reduce((sum, line) =>
+        sum + Math.max(0, parseDecimalInput(line.quantity)) * Math.max(0, parseDecimalInput(line.unitPriceBs)), 0);
+      const allLinesValid = saleInventoryLines.length > 0 &&
+        saleInventoryLines.every(line =>
+          companyProducts.some(p => p.id === line.productId) &&
+          parseDecimalInput(line.quantity) > 0 &&
+          parseDecimalInput(line.unitPriceBs) > 0
+        ) &&
+        new Set(saleInventoryLines.map(l => l.productId)).size === saleInventoryLines.length;
+      if (!allLinesValid) {
+        window.alert('Cada línea de inventario necesita un artículo válido, cantidad y precio mayor a cero, sin artículos repetidos.');
+        return;
+      }
+      if (Math.abs(saleLineTotal - (taxableBaseBs + exemptAmountBs)) > 0.02) {
+        window.alert(`El total de las líneas de inventario (${saleLineTotal.toFixed(2)} Bs.) debe coincidir con la base imponible + monto exento (${(taxableBaseBs + exemptAmountBs).toFixed(2)} Bs.). Ajuste las cantidades o precios.`);
+        return;
+      }
+    }
     // La tasa BCV solo es obligatoria cuando el cobro es en divisas o se requiere equivalencia.
     // Para ventas nominales en bolívares la equivalencia USD queda como pendiente (0).
     const saleNeedsUsd = paymentCurrency === 'FOREIGN_CASH' || paymentCurrency === 'FOREIGN_TRANSFER' || paymentCurrency === 'CRYPTO';
@@ -164,7 +191,21 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
       creditDays: paymentTerm === 'CREDITO' ? creditDays : 0,
       dueDate: paymentTerm === 'CREDITO' ? dueDate : invoiceDate,
       currencyPricingMode,
-      fiscalAdjustmentMode
+      fiscalAdjustmentMode,
+      inventoryLines: linkInventory && saleInventoryLines.length > 0
+        ? saleInventoryLines.map(line => ({
+            productId: line.productId,
+            productCode: products.find(p => p.id === line.productId)?.code ?? '',
+            productName: products.find(p => p.id === line.productId)?.name ?? '',
+            quantity: parseDecimalInput(line.quantity),
+            unitPriceBs: parseDecimalInput(line.unitPriceBs),
+            netAmountBs: Math.round(parseDecimalInput(line.quantity) * parseDecimalInput(line.unitPriceBs) * 100) / 100,
+            taxRate,
+            vatAmountBs: Math.round(parseDecimalInput(line.quantity) * parseDecimalInput(line.unitPriceBs) * (vatRate / 100) * 100) / 100,
+            exemptAmountBs: 0,
+            totalBs: Math.round(parseDecimalInput(line.quantity) * parseDecimalInput(line.unitPriceBs) * (1 + vatRate / 100) * 100) / 100,
+          }))
+        : undefined
       });
       await waitForPersistence();
       onClose();
@@ -459,6 +500,67 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
               <strong className="font-mono text-sky-800">{formatBs(igtfAmountBs)} ({formatUsd(bcvRate > 0 ? igtfAmountBs / bcvRate : 0)})</strong>
             </div>
             <p className="text-[11px] text-slate-600">Este formulario estima la percepción del 3% solo para cobros de contado en efectivo en moneda extranjera o criptoactivos, cuando la empresa esté designada agente de percepción. No calcula automáticamente transferencias bancarias en divisas: su tratamiento depende del supuesto legal concreto. En ventas a crédito, registre la percepción cuando ocurra el cobro sujeto, sin anticiparla ni duplicarla. Valide el caso con su contador antes de emitir el comprobante.</p>
+          </div>
+
+          {/* Inventory Lines */}
+          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-800 uppercase tracking-wider text-xs">7. Líneas de Inventario (Kardex) — Opcional</span>
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                <input type="checkbox" checked={linkInventory} onChange={e => setLinkInventory(e.target.checked)} className="rounded text-emerald-600 focus:ring-emerald-500" />
+                Vincular artículos al Kardex
+              </label>
+            </div>
+            {linkInventory && (() => {
+              const companyProducts = products.filter(p => p.companyId === currentCompany.id).sort((a, b) => a.code.localeCompare(b.code));
+              const saleLineTotal = saleInventoryLines.reduce((sum, line) =>
+                sum + Math.max(0, parseDecimalInput(line.quantity)) * Math.max(0, parseDecimalInput(line.unitPriceBs)), 0);
+              const diff = Math.abs(saleLineTotal - (taxableBaseBs + exemptAmountBs));
+              return (
+                <div className="space-y-2">
+                  <p className="text-[11px] text-slate-500">Registre cada artículo vendido para actualizar automáticamente el Kardex y generar el asiento de Costo de Ventas. El total de las líneas debe coincidir con la base imponible + monto exento.</p>
+                  {saleInventoryLines.map((line, idx) => (
+                    <div key={idx} className="flex gap-2 items-end">
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-slate-600 mb-0.5">Artículo</label>
+                        <select
+                          value={line.productId}
+                          onChange={e => setSaleInventoryLines(prev => prev.map((l, i) => i === idx ? {...l, productId: e.target.value} : l))}
+                          className="w-full px-2 py-1.5 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-emerald-500"
+                        >
+                          <option value="">— Seleccionar —</option>
+                          {companyProducts.map(p => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+                        </select>
+                      </div>
+                      <div className="w-20">
+                        <label className="block text-xs font-medium text-slate-600 mb-0.5">Cantidad</label>
+                        <input type="text" inputMode="decimal" placeholder="0" value={line.quantity}
+                          onChange={e => setSaleInventoryLines(prev => prev.map((l, i) => i === idx ? {...l, quantity: e.target.value} : l))}
+                          className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs text-right font-mono focus:ring-1 focus:ring-emerald-500" />
+                      </div>
+                      <div className="w-28">
+                        <label className="block text-xs font-medium text-slate-600 mb-0.5">P. Unitario Bs.</label>
+                        <input type="text" inputMode="decimal" placeholder="0,00" value={line.unitPriceBs}
+                          onChange={e => setSaleInventoryLines(prev => prev.map((l, i) => i === idx ? {...l, unitPriceBs: e.target.value} : l))}
+                          className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs text-right font-mono focus:ring-1 focus:ring-emerald-500" />
+                      </div>
+                      <button type="button" onClick={() => setSaleInventoryLines(prev => prev.filter((_, i) => i !== idx))}
+                        className="px-2 py-1.5 text-slate-400 hover:text-red-500 transition text-xs" title="Eliminar línea">✕</button>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between gap-2">
+                    <button type="button" onClick={() => setSaleInventoryLines(prev => [...prev, {productId:'',quantity:'1',unitPriceBs:''}])}
+                      className="text-xs text-emerald-700 hover:text-emerald-900 font-semibold py-1 px-2 rounded border border-emerald-300 hover:bg-emerald-50 transition">
+                      + Agregar línea
+                    </button>
+                    <span className={`text-xs font-mono font-semibold ${diff <= 0.02 ? 'text-emerald-700' : 'text-amber-600'}`}>
+                      Total líneas: {formatBs(saleLineTotal)} {diff <= 0.02 ? '✓ Cuadra' : `(dif. ${formatBs(diff)})`}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+            {!linkInventory && <p className="text-[11px] text-slate-400">Marque la casilla si esta venta incluye mercancía del inventario y desea actualizar el Kardex y registrar el Costo de Ventas automáticamente.</p>}
           </div>
 
           {/* Summary Box */}
