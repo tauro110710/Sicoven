@@ -4679,8 +4679,25 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     activeImportBatchRef.current?.journalEntries.push(createdJournalEntry);
     setJournalEntries(prev => [...prev, createdJournalEntry]);
 
+    const normalizedSaleAmounts = {
+      total: normalizeBolivarAmountForDate(saleData.totalAmountBs, saleData.invoiceDate),
+      taxable: normalizeBolivarAmountForDate(saleData.taxableBaseBs, saleData.invoiceDate),
+      exempt: normalizeBolivarAmountForDate(saleData.exemptAmountBs, saleData.invoiceDate),
+      vat: normalizeBolivarAmountForDate(saleData.vatAmountBs, saleData.invoiceDate),
+      luxuryTax: normalizeBolivarAmountForDate(saleData.additionalLuxuryTaxBs || 0, saleData.invoiceDate),
+      vatWithheld: normalizeBolivarAmountForDate(saleData.vatWithheldBs || 0, saleData.invoiceDate),
+      igtf: normalizeBolivarAmountForDate(saleIgtf, saleData.invoiceDate)
+    };
     const finalSale: SaleRecord = {
       ...saleData,
+      monetaryEraId: normalizedSaleAmounts.total.sourceEra.id,
+      totalAmountDigitalBs: normalizedSaleAmounts.total.digitalBolivars,
+      taxableBaseDigitalBs: normalizedSaleAmounts.taxable.digitalBolivars,
+      exemptAmountDigitalBs: normalizedSaleAmounts.exempt.digitalBolivars,
+      vatAmountDigitalBs: normalizedSaleAmounts.vat.digitalBolivars,
+      additionalLuxuryTaxDigitalBs: normalizedSaleAmounts.luxuryTax.digitalBolars,
+      vatWithheldDigitalBs: normalizedSaleAmounts.vatWithheld.digitalBolars,
+      igtfAmountDigitalBs: normalizedSaleAmounts.igtf.digitalBolivars,
       // El registro conserva la tasa efectiva usada en su asiento y equivalentes
       // USD coherentes con los importes nominales de la factura.
       bcvRate: rate,
