@@ -101,8 +101,7 @@ export function buildHistoricalFiscalExercises(
 
 /** Valid accounting registration start date; no artificial minimum year. */
 export function isValidAccountingStartDate(date: string): boolean {
-  return isValidIsoDate(date);
-}
+  return isValidIsoDate(date) && date >= '2012-01-01';
 }
 
 export function getVenezuelanMonetaryEra(date: string): VenezuelanMonetaryEra {
