@@ -301,6 +301,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
               <input
                 type="date"
                 required
+                min={currentCompany.accountingStartDate || '2012-01-01'}
                 value={date}
                 onChange={e => setDate(e.target.value)}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
