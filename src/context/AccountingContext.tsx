@@ -5350,6 +5350,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const normalizedImportCost = normalizeBolivarAmountForDate(unitCostBs, row.date);
       const normalizedImportTotal = normalizeBolivarAmountForDate(totalCostBs, row.date);
       const normalizedImportBalance = normalizeBolivarAmountForDate(Math.round(newStock * newAverageBs * 100) / 100, row.date);
+      const normalizedImportLandedCosts = normalizeBolivarAmountForDate(landedCostsBs, row.date);
       const movement: InventoryMovement = {
         ...movementDraft, monetaryEraId: normalizedImportCost.sourceEra.id,
         unitCostDigitalBs: normalizedImportCost.digitalBolivars,
