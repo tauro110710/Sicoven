@@ -56,6 +56,9 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
     const validDefault = defaultProductId ? companyProducts.some(product => product.id === defaultProductId) : false;
     if (!validCurrent) setProductId(validDefault ? defaultProductId! : (companyProducts[0]?.id || ''));
     setCorrectionMovementId('');
+    const start = currentCompany?.accountingStartDate;
+    const today = new Date().toISOString().slice(0, 10);
+    setDate((start && /^\d{4}-\d{2}-\d{2}$/.test(start) && start < today) ? start : today);
   }, [currentCompany.id]);
 
   const selectedProduct = companyProducts.find(p => p.id === productId) || companyProducts[0];
