@@ -3632,7 +3632,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           productStateMap.set(product.id, {
             currentStock: product.currentStock,
             avgCostBs: product.avgCostBs,
-            avgCostUsd: product.avgCostUsd || toUsd(product.avgCostBs)
+            avgCostUsd: Number(product.avgCostUsd || 0)
           });
         }
       }
@@ -3646,7 +3646,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const effectiveUnitCost = unitCostBs + (qty > 0 ? landedCostsBs / qty : 0);
         const totalCostBs = Math.round(qty * effectiveUnitCost * 100) / 100;
         const totalCostUsd = toUsd(totalCostBs);
-        const weighted = calculateWeightedAverageCost(pState.currentStock, pState.avgCostBs, qty, effectiveUnitCost, rate);
+        const weighted = rate > 0
+          ? calculateWeightedAverageCost(pState.currentStock, pState.avgCostBs, qty, effectiveUnitCost, rate)
+          : calculateWeightedAverageCostDual(pState.currentStock, pState.avgCostBs, pState.avgCostUsd, qty, effectiveUnitCost, toUsd(effectiveUnitCost));
         const newStock = weighted.quantity;
         const newAverageBs = weighted.unitCostBs;
         const newAverageUsd = weighted.unitCostUsd;
