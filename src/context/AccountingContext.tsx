@@ -5506,7 +5506,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const totalCostUsd = row.type === 'AJUSTE' && product.costingMethod === 'PEPS'
         ? adjustmentUsd! : (rate > 0 ? Math.round(totalCostBs / rate * 1000000) / 1000000 : 0);
       const newAverageUsd = row.type === 'AJUSTE' && product.costingMethod === 'PEPS'
-        ? adjustmentAverageUsd! : (rate > 0 ? newAverageBs / rate : 0);
+        ? adjustmentAverageUsd! : (rate > 0 ? newAverageBs / rate : Number(product.avgCostUsd || 0));
       if (expectedBalanceQty !== undefined && (!Number.isFinite(expectedBalanceQty) || Math.abs(expectedBalanceQty - newStock) > 0.000001)) {
         throw new Error('Fila ' + (index + 2) + ': la existencia final declarada (' + expectedBalanceQty + ') no coincide con la existencia calculada (' + newStock + ') para ' + product.code + '. Revise el orden y los movimientos previos.');
       }
