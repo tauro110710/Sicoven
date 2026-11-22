@@ -1675,6 +1675,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     assertSQLitePersistenceReady('Registrar la empresa');
     // La fecha de registro es administrativa y automática; nunca sustituye la
     // fecha histórica desde la que el contador reconstruirá la contabilidad.
+    if (!isValidIsoDate(comp.accountingStartDate)) {
+      throw new Error('La empresa requiere una fecha de inicio contable válida.');
+    }
+    if (comp.operationalStartDate && !isValidIsoDate(comp.operationalStartDate)) {
+      throw new Error('La fecha real de inicio de operaciones debe ser válida.');
+    }
     const companyToCreate: Omit<Company, 'id'> = {
       ...comp,
       registeredAt: comp.registeredAt || new Date().toISOString()
