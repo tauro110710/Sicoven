@@ -23,6 +23,12 @@ export const TesoreriaView: React.FC = () => {
     const now = new Date();
     return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   });
+  React.useEffect(() => {
+    const startDate = currentCompany?.accountingStartDate;
+    const now = new Date();
+    const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    setDate((startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) ? startDate : today);
+  }, [currentCompany.id, currentCompany.accountingStartDate]);
   const [reference, setReference] = useState('');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
