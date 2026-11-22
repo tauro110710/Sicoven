@@ -12,6 +12,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import { normalizeBolivarAmountForDate } from '../../types/historicalAccountingCalendar';
 import { NewSaleModal } from './NewSaleModal';
 import { CreditSettlementModal } from '../shared/CreditSettlementModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
