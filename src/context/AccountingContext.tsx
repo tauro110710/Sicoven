@@ -26,7 +26,7 @@ import {
   BankStatementMovement
 } from '../types/accounting';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
-import { normalizeBolivarAmountForDate } from '../types/historicalAccountingCalendar';
+import { normalizeBolivarAmountForDate, isValidAccountingStartDate } from '../types/historicalAccountingCalendar';
 import { prepareAccountForCatalog } from '../types/chartOfAccounts';
 import { validateJournalEntryAccounts, isJournalEntryBalanced } from '../types/journalEntryValidation';
 import { matchesBankStatementDualCurrency, validateBankMovementFxSnapshot, isDuplicateBankStatementMovement } from '../types/bankStatementMatching';
@@ -1672,8 +1672,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const addCompany = async (comp: Omit<Company, 'id'>): Promise<Company> => {
     assertSQLitePersistenceReady('Registrar la empresa');
-    // La fecha de registro es administrativa y automática; nunca sustituye la
-    // fecha histórica desde la que el contador reconstruirá la contabilidad.
+    if (!isValidAccountingStartDate(comp.accountingStartDate || '')) {
+      throw new Error('La empresa debe tener una fecha de inicio contable válida desde el 01/01/2012.');
+    }
+    // La fecha administrativa de registro es independiente del inicio contable.
     const companyToCreate: Omit<Company, 'id'> = {
       ...comp,
       registeredAt: comp.registeredAt || new Date().toISOString()
