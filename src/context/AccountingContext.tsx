@@ -1945,7 +1945,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const normalizedJournalItems = entry.items.map(item => ({
       ...item,
       debitDigitalBs: normalizeBolivarAmountForDate(item.debitBs, entry.date).digitalBolivars,
-      creditDigitalBs: normalizeBolivarAmountForDate(item.creditBs, entry.date).digitalBolars
+      creditDigitalBs: normalizeBolivarAmountForDate(item.creditBs, entry.date).digitalBolivars
     }));
     const entryMonetaryEra = normalizeBolivarAmountForDate(0, entry.date).sourceEra.id;
     const newEntry: JournalEntry = {
@@ -3572,7 +3572,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const nextEntryNum = Math.max(companyEntries.reduce((max, entry) => Math.max(max, entry.entryNumber || 0), 0), journalSequenceRef.current[companyKey] || 0) + 1;
     journalSequenceRef.current[companyKey] = nextEntryNum;
 
+    const normalizedPurchaseJournalItems = items.map(item => ({
+      ...item,
+      debitDigitalBs: normalizeBolivarAmountForDate(item.debitBs, purchaseData.accountCreditDate!).digitalBolivars,
+      creditDigitalBs: normalizeBolivarAmountForDate(item.creditBs, purchaseData.accountCreditDate!).digitalBolivars
+    }));
+    const createdJournalEra = normalizeBolivarAmountForDate(0, purchaseData.accountCreditDate!).sourceEra.id;
     const createdJournalEntry: JournalEntry = {
+      monetaryEraId: createdJournalEra,
+      items: normalizedPurchaseJournalItems,
       id: `entry-pur-${companyKey}-${nextEntryNum}-${Date.now()}`,
       companyId: targetCompany.id,
       entryNumber: nextEntryNum,
