@@ -53,10 +53,8 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   React.useEffect(() => {
     const resolved = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, invoiceDate);
     setSuggestedBcvRate(resolved);
-    if (resolved && !bcvRateInput) {
-      setBcvRateInput(String(resolved));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // La tasa anterior no debe quedar asociada a una fecha distinta.
+    setBcvRateInput(resolved ? String(resolved) : '');
   }, [invoiceDate, currentCompany.id, currentCompany.accountingBcvRateHistory]);
   const hasValidBcvRate = Number.isFinite(bcvRate) && bcvRate > 0;
   const [notes, setNotes] = useState<string>('');
