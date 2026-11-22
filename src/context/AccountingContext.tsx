@@ -3589,7 +3589,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       type: 'COMPRA',
       bcvRate: rate,
       referenceDoc: `FAC-${purchaseData.invoiceNumber}`,
-      items,
       createdAt: new Date().toISOString()
     };
 
@@ -5860,7 +5859,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         companyId: currentCompany.id, entryNumber: companyEntries.reduce((max,e) => Math.max(max,e.entryNumber),0) + generatedEntries.length + 1,
         date: movData.date, description: `${isSale ? 'Costo de venta' : isCustomerReturn ? 'Devolución de cliente' : isSupplierReturn ? 'Devolución a proveedor' : isPositiveAdjustment ? 'Sobrante de inventario' : 'Ajuste/merma de inventario'}: ${prod.name} · ${movData.documentRef}`,
         type: 'INVENTARIO', bcvRate: rate, referenceDoc: movData.documentRef,
-        items, createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString()
       });
     }
     if (generatedEntries.length > 0) newMov.journalEntryId = generatedEntries[0].id;
