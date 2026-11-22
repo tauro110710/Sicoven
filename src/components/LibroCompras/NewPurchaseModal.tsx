@@ -19,7 +19,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const todayIso = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
   const accountingStartDate = currentCompany?.accountingStartDate;
   const defaultHistoricalDate = accountingStartDate && /^\d{4}-\d{2}-\d{2}$/.test(accountingStartDate) && accountingStartDate < todayIso
     ? accountingStartDate
