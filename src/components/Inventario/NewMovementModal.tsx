@@ -107,7 +107,9 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
     if (type !== 'SALIDA' || selectedProduct.costingMethod !== 'PEPS') return undefined;
     try {
       const prior = companyMovements.filter(m => m.productId === selectedProduct.id && m.date <= date);
-      const layers = reconstructFifoLayers(prior, selectedProduct.currentStock);
+      const priorOrdered = [...prior].sort((x, y) => x.date.localeCompare(y.date));
+      const stockAtDate = priorOrdered.length ? Number(priorOrdered[priorOrdered.length - 1].balanceQty) : 0;
+      const layers = reconstructFifoLayers(prior, stockAtDate);
       return calculateFifoIssue(layers, quantity);
     } catch {
       return undefined;
