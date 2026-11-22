@@ -3,6 +3,7 @@ import { useAccounting } from '../../context/AccountingContext';
 import { BankAccount, BankMovementType } from '../../types/accounting';
 import { Landmark, X, Check } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
+import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 
 interface NewBankMovementModalProps {
   isOpen: boolean;
@@ -15,17 +16,31 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
   onClose,
   bankAccount
 }) => {
-  const { addBankStatementMovement, waitForPersistence } = useAccounting();
+  const { currentCompany, addBankStatementMovement, waitForPersistence } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
-  const [date, setDate] = useState<string>(() => { const now = new Date(); const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000); return local.toISOString().slice(0, 10); });
+  const [date, setDate] = useState<string>(() => {
+    const s = currentCompany?.accountingStartDate;
+    const today = new Date().toISOString().slice(0, 10);
+    return (s && /^\d{4}-\d{2}-\d{2}$/.test(s) && s < today) ? s : today;
+  });
   const [reference, setReference] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [type, setType] = useState<BankMovementType>('CREDIT');
   const [amountBs, setAmountBs] = useState<string>('');
   const [bcvRateEffectiveDate, setBcvRateEffectiveDate] = useState<string>('');
   const [movementBcvRate, setMovementBcvRate] = useState<string>('');
+
+  // Para cuentas USD: sugerir tasa histórica del historial general de la empresa.
+  React.useEffect(() => {
+    if (bankAccount.currency !== 'USD') return;
+    const resolved = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, date);
+    if (resolved && !movementBcvRate) {
+      setMovementBcvRate(String(resolved));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, currentCompany.id, currentCompany.accountingBcvRateHistory, bankAccount.currency]);
 
   if (!isOpen) return null;
 

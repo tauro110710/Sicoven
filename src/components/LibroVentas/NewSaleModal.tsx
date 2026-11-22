@@ -3,6 +3,7 @@ import { useAccounting } from '../../context/AccountingContext';
 import { TrendingUp, X, Check } from 'lucide-react';
 import { formatBs, formatUsd, formatRif } from '../../utils/formatters';
 import { getCompanyTaxStatusForDate } from '../../types/accounting';
+import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 
 interface NewSaleModalProps {
   isOpen: boolean;
@@ -14,7 +15,13 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
-  const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const todayIso = new Date().toISOString().split('T')[0];
+  const startDate = (() => {
+    const s = currentCompany?.accountingStartDate;
+    return (s && /^\d{4}-\d{2}-\d{2}$/.test(s) && s < todayIso) ? s : todayIso;
+  })();
+
+  const [invoiceDate, setInvoiceDate] = useState<string>(startDate);
   const [customerRif, setCustomerRif] = useState<string>('J-');
   const [customerName, setCustomerName] = useState<string>('');
   const [customerAddress, setCustomerAddress] = useState<string>('');
@@ -38,14 +45,19 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const [paymentCurrency, setPaymentCurrency] = useState<'BS' | 'FOREIGN_CASH' | 'FOREIGN_TRANSFER' | 'CRYPTO'>('BS');
   const [applyIgtf, setApplyIgtf] = useState(false);
 
-  // Currency
   const [bcvRateInput, setBcvRateInput] = useState('');
   const bcvRate = parseDecimalInput(bcvRateInput);
-  // La tasa BCV no es una configuración de empresa: se captura manualmente
-  // en cada operación y queda asociada únicamente al documento que la utiliza.
+  // Sugerir tasa BCV histórica del historial general de la empresa.
+  // No se borra lo que el contador ya escribió; solo pre-llena si el campo está vacío.
+  const [suggestedBcvRate, setSuggestedBcvRate] = React.useState<number | undefined>(undefined);
   React.useEffect(() => {
-    setBcvRateInput('');
-  }, [isOpen, invoiceDate]);
+    const resolved = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, invoiceDate);
+    setSuggestedBcvRate(resolved);
+    if (resolved && !bcvRateInput) {
+      setBcvRateInput(String(resolved));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceDate, currentCompany.id, currentCompany.accountingBcvRateHistory]);
   const hasValidBcvRate = Number.isFinite(bcvRate) && bcvRate > 0;
   const [notes, setNotes] = useState<string>('');
   const [paymentTerm, setPaymentTerm] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
@@ -326,6 +338,15 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                   onChange={e => setBcvRateInput(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-blue-500 focus:outline-none read-only:bg-slate-100 read-only:text-slate-600"
                 />
+                {suggestedBcvRate && suggestedBcvRate > 0 && String(suggestedBcvRate) !== bcvRateInput && (
+                  <button
+                    type="button"
+                    onClick={() => setBcvRateInput(String(suggestedBcvRate))}
+                    className="mt-1 text-xs text-emerald-600 hover:text-emerald-800 underline"
+                  >
+                    Usar tasa del historial: {suggestedBcvRate}
+                  </button>
+                )}
               </div>
               <div className="text-xs text-slate-700">
                 Ingrese manualmente la tasa oficial correspondiente a la fecha de esta factura. No existe una tasa BCV global ni se reutiliza la tasa de otra operación. El valor quedará guardado como parte de este documento y de su asiento contable.

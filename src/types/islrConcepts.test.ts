@@ -24,15 +24,43 @@ test('catalogue exposes only verified fixed-rate codes and has no duplicate iden
   assert.equal(ISLR_FORMULA_FACTOR, 83.3334);
 });
 
-test('monthly ISLR UT uses the value in force at the start of the period', () => {
-  assert.equal(getIslrUnitTaxValueForPeriod('2025-06'), 9);
-  assert.equal(getIslrUnitTaxValueForPeriod('2025-07'), 43);
-  assert.equal(getIslrUnitTaxValueForPeriod('2023-05'), 0.4);
-  assert.equal(getIslrUnitTaxValueForPeriod('2023-06'), 9);
-  assert.equal(getIslrUnitTaxValueForPeriod('2021-10'), 0.02);
-  assert.equal(getIslrUnitTaxValueForPeriod('2021-09'), null);
-  assert.equal(getIslrUnitTaxValueForPeriod('invalid'), null);
+test('monthly ISLR UT uses the value in force at the start of the period — all three monetary eras', () => {
+  // — Era BsD —
+  assert.equal(getIslrUnitTaxValueForPeriod('2025-07'), 43);       // G.O. 43.140
+  assert.equal(getIslrUnitTaxValueForPeriod('2025-06'), 9);        // still BsD 9 before Jul
+  assert.equal(getIslrUnitTaxValueForPeriod('2023-06'), 9);        // G.O. 42.623
+  assert.equal(getIslrUnitTaxValueForPeriod('2023-05'), 0.4);      // still BsD 0.4 before Jun
+  assert.equal(getIslrUnitTaxValueForPeriod('2022-05'), 0.4);      // G.O. 42.359
+  assert.equal(getIslrUnitTaxValueForPeriod('2022-04'), 0.02);     // still BsD 0.02 before May
+  assert.equal(getIslrUnitTaxValueForPeriod('2021-10'), 0.02);     // G.O. 42.100 — reconversión oct-2021
+
+  // — Era BsS —
+  assert.equal(getIslrUnitTaxValueForPeriod('2021-09'), 1500);     // 1.500 BsS — vigente sep-2021
+  assert.equal(getIslrUnitTaxValueForPeriod('2020-01'), 1500);     // G.O. 41.788 — inicio BsS 1.500
+  assert.equal(getIslrUnitTaxValueForPeriod('2019-12'), 50);       // 50 BsS — fin era 50 BsS
+  assert.equal(getIslrUnitTaxValueForPeriod('2019-01'), 50);       // G.O. 41.566
+  assert.equal(getIslrUnitTaxValueForPeriod('2018-12'), 0.005);    // reconversión ago-2018: 500 BsF / 100.000
+  assert.equal(getIslrUnitTaxValueForPeriod('2018-08'), 0.005);    // primer mes post-reconversión
+
+  // — Era BsF —
+  assert.equal(getIslrUnitTaxValueForPeriod('2018-07'), 500);      // último mes pre-reconversión
+  assert.equal(getIslrUnitTaxValueForPeriod('2018-02'), 500);      // G.O. 41.344
+  assert.equal(getIslrUnitTaxValueForPeriod('2018-01'), 300);      // aún vigente 300 BsF
+  assert.equal(getIslrUnitTaxValueForPeriod('2017-02'), 300);      // G.O. 41.099
+  assert.equal(getIslrUnitTaxValueForPeriod('2017-01'), 177);      // aún vigente 177 BsF
+  assert.equal(getIslrUnitTaxValueForPeriod('2016-02'), 177);      // G.O. 40.846
+  assert.equal(getIslrUnitTaxValueForPeriod('2016-01'), 150);      // aún vigente 150 BsF
+  assert.equal(getIslrUnitTaxValueForPeriod('2015-02'), 150);      // G.O. 40.616
+  assert.equal(getIslrUnitTaxValueForPeriod('2015-01'), 127);      // aún vigente 127 BsF
+  assert.equal(getIslrUnitTaxValueForPeriod('2014-02'), 127);      // G.O. 40.359
+
+  // — Sin valor documentado —
+  assert.equal(getIslrUnitTaxValueForPeriod('2014-01'), null);     // anterior a feb-2014
+  assert.equal(getIslrUnitTaxValueForPeriod('2013-12'), null);     // fuera del rango
+  assert.equal(getIslrUnitTaxValueForPeriod('invalid'), null);     // formato inválido
+  assert.equal(getIslrUnitTaxValueForPeriod(''), null);            // vacío
 });
+
 
 test('ISLR calculation uses the UT snapshot applicable to the period', () => {
   const june = calculateIslrRetention(10000, concept('002'), 9);
