@@ -4,6 +4,7 @@ import { ArrowLeftRight, X, Check } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
+import { normalizeBolivarAmountForDate } from '../../types/historicalAccountingCalendar';
 
 interface NewMovementModalProps {
   isOpen: boolean;
