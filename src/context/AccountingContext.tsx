@@ -5960,9 +5960,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (movData.type === 'ENTRADA') {
       unitCostBs = effectiveUnitCost;
       unitCostUsd = toUsd(unitCostBs);
-      const weighted = rate > 0
-        ? calculateWeightedAverageCost(prod.currentStock, prod.avgCostBs, Number(movData.quantity), effectiveUnitCost, rate)
-        : calculateWeightedAverageCostDual(prod.currentStock, prod.avgCostBs, Number(prod.avgCostUsd || 0), Number(movData.quantity), effectiveUnitCost, unitCostUsd);
+      // Preservar la valoración USD histórica del inventario existente, aunque haya una tasa BCV
+      // nueva para la entrada: Bs y USD se ponderan independientemente para evitar revaluación retroactiva.
+      const weighted = calculateWeightedAverageCostDual(
+        prod.currentStock, prod.avgCostBs, Number(prod.avgCostUsd || 0),
+        Number(movData.quantity), effectiveUnitCost, unitCostUsd
+      );
       newStock = weighted.quantity;
       newAverageBs = weighted.unitCostBs;
       newAverageUsd = weighted.unitCostUsd;
@@ -5983,9 +5986,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         newAverageUsd = newStock > 0 ? Math.max(0, fifoLayerValueUsd - totalCostUsd) / newStock : 0;
       } else {
         unitCostBs = prod.avgCostBs;
-        unitCostUsd = rate > 0 ? toUsd(unitCostBs) : Number(prod.avgCostUsd || 0);
+        // La salida por promedio consume el costo histórico en USD, no lo convierte
+        // nuevamente usando la tasa del día de salida.
+        unitCostUsd = Number(prod.avgCostUsd || 0);
         totalCostBs = Math.round(Number(movData.quantity) * unitCostBs * 100) / 100;
-        totalCostUsd = rate > 0 ? toUsd(totalCostBs) : Math.round(Number(movData.quantity) * unitCostUsd * 100) / 100;
+        totalCostUsd = Math.round(Number(movData.quantity) * unitCostUsd * 1000000) / 1000000;
         newStock = prod.currentStock - Number(movData.quantity);
       }
     } else {
