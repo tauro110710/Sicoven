@@ -4659,7 +4659,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       type: 'VENTA',
       bcvRate: rate,
       referenceDoc: `FAC-${saleData.invoiceNumber}`,
-      items,
       createdAt: new Date().toISOString()
     };
 
