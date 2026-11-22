@@ -28,6 +28,10 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
 
   const [invoiceDate, setInvoiceDate] = useState<string>(startDate);
   const [accountCreditDate, setAccountCreditDate] = useState<string>(startDate);
+  React.useEffect(() => {
+    setInvoiceDate(startDate);
+    setAccountCreditDate(startDate);
+  }, [currentCompany.id, currentCompany.accountingStartDate]);
   const [supplierRif, setSupplierRif] = useState<string>('J-');
   const [supplierName, setSupplierName] = useState<string>('');
   const [supplierAddress, setSupplierAddress] = useState<string>('');
