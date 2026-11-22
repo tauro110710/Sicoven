@@ -42,6 +42,18 @@ test('permite reconstruir ejercicios anteriores a 2015 cuando esa fue la fecha r
   assert.equal(exercises[0].startDate, '1998-09-03');
 });
 
+test('mantiene fechas ISO con cuatro dígitos al generar ejercicios antes del año 1000', () => {
+  const exercises = buildHistoricalFiscalExercises({
+    companyId: 'company-ancient',
+    operationalStartDate: '0001-06-15',
+    throughDate: '0003-12-31'
+  });
+  assert.deepEqual(exercises.map(item => item.fiscalYear), [1, 2, 3]);
+  assert.equal(exercises[0].startDate, '0001-06-15');
+  assert.equal(exercises[1].startDate, '0002-01-01');
+  assert.equal(exercises[1].endDate, '0002-12-31');
+});
+
 test('permite cualquier fecha contable válida, incluido 2012 y años anteriores', () => {
   assert.equal(isValidAccountingStartDate('2012-01-01'), true);
   assert.equal(isValidAccountingStartDate('2012-05-17'), true);
