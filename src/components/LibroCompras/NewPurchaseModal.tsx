@@ -19,7 +19,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
-  const todayIso = new Date().toISOString().split('T')[0];
+  const formatLocalIsoDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const todayIso = formatLocalIsoDate(new Date());
   // Si la empresa tiene inicio contable histórico, partir desde esa fecha.
   const startDate = (() => {
     const s = currentCompany?.accountingStartDate;
@@ -94,7 +95,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [fiscalAdjustmentMode, setFiscalAdjustmentMode] = useState<'IVA_ORIGINAL_DIF_CAMBIARIA' | 'AJUSTE_BASE_IVA' | 'REVISION_CONTADOR'>('REVISION_CONTADOR');
   const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>('BS');
   const [applyIgtf, setApplyIgtf] = useState(false);
-  const dueDate = (() => { const d = new Date(invoiceDate + 'T12:00:00'); d.setDate(d.getDate() + creditDays); return d.toISOString().slice(0, 10); })();
+  const dueDate = (() => { const d = new Date(invoiceDate + 'T12:00:00'); d.setDate(d.getDate() + creditDays); return formatLocalIsoDate(d); })();
 
   if (!isOpen) return null;
 
