@@ -417,7 +417,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
               required
               min="2012-01-01"
               value={accountingStartDate}
-              onChange={e => { const value = e.target.value; setAccountingStartDate(value); if (/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) setFiscalYear(value.slice(0, 4)); }}
+              onChange={e => { const value = e.target.value; setAccountingStartDate(value); if (/^\d{4}-\d{2}-\d{2}$/.test(value)) setFiscalYear(value.slice(0, 4)); }}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
             />
             <p className="text-[10px] leading-4 text-slate-600">Desde esta fecha se registrarán las operaciones contables ordinarias. Puede iniciar desde el 01/01/2012. SICOVEN guarda por separado la fecha administrativa de registro.</p>
