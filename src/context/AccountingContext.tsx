@@ -88,6 +88,7 @@ import type { FixedAsset, FixedAssetDepreciationEvent, FixedAssetRegistrationDra
 import { calculateFixedAssetDepreciation, getNextFixedAssetDepreciationPeriod, getFixedAssetDepreciationScheduleThrough } from '../types/fixedAssets';
 import { buildHistoricalAccountingReplayPlan, findOrphanedVatWithholdingEvents, findCrossCompanyVatWithholdingEvents, type HistoricalAccountingReplayPlan, type HistoricalReplayRecord } from '../types/historicalAccountingReplayPlan';
 import { getFiscalExerciseStartDate } from '../types/fiscalExerciseLifecycle';
+import { getVenezuelanMonetaryEra } from '../types/historicalAccountingCalendar';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -234,7 +235,7 @@ interface AccountingContextType {
   // Conciliación Bancaria
   bankAccounts: BankAccount[];
   bankStatementMovements: BankStatementMovement[];
-  addBankAccount: (bank: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'> & { bcvRate?: number; parentAccountCode: string }) => BankAccount;
+  addBankAccount: (bank: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'> & { bcvRate?: number; parentAccountCode: string; openingDate?: string }) => BankAccount;
   registerTreasuryMovement: (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; bcvRate: number; counterpartAccountCode?: string; destinationBankAccountId?: string }) => JournalEntry;
   addBankStatementMovement: (movement: Omit<BankStatementMovement, 'id' | 'companyId'>) => BankStatementMovement;
   addBankStatementMovements: (movements: Array<{ bankAccountId: string; date: string; reference: string; description: string; type: 'DEBIT' | 'CREDIT'; amountBs: number; amountUsd: number; bcvRate: number; bcvRateEffectiveDate: string }>) => Promise<BankStatementMovement[]>;
@@ -415,7 +416,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [supplierDirectAdvances, setSupplierDirectAdvances] = useState<SupplierDirectAdvance[]>([]);
   const bankStatementImportInFlightRef = useRef(false);
   type PendingBankOutgoingReservation = { release: () => void; waiter: { resolve: () => void; reject: (error: Error) => void } };
-  type ActiveAccountingImportBatch = { journalEntries: JournalEntry[]; sales: SaleRecord[]; purchases: PurchaseRecord[]; creditSettlements: CreditSettlement[]; supplierDirectAdvances: SupplierDirectAdvance[]; supplierAdvanceSettlements: SupplierAdvanceSettlement[]; reservedBankLockKeys: Set<string> };
+  type ActiveAccountingImportBatch = { journalEntries: JournalEntry[]; sales: SaleRecord[]; purchases: PurchaseRecord[]; creditSettlements: CreditSettlement[]; supplierDirectAdvances: SupplierDirectAdvance[]; supplierAdvanceSettlements: SupplierAdvanceSettlement[]; reservedBankLockKeys: Set<string>; inventoryMovements: InventoryMovement[] };
   const bankOutgoingReservationsRef = useRef<PendingBankOutgoingReservation[]>([]);
   const activeImportBatchRef = useRef<ActiveAccountingImportBatch | null>(null);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
@@ -485,7 +486,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('No se permiten importaciones contables anidadas.');
     }
     const previousBatch = activeImportBatchRef.current;
-    activeImportBatchRef.current = { journalEntries: [], sales: [], purchases: [], creditSettlements: [], supplierDirectAdvances: [], supplierAdvanceSettlements: [], reservedBankLockKeys: new Set<string>() };
+    activeImportBatchRef.current = { journalEntries: [], sales: [], purchases: [], creditSettlements: [], supplierDirectAdvances: [], supplierAdvanceSettlements: [], reservedBankLockKeys: new Set<string>(), inventoryMovements: [] };
     try {
       const result = operation();
       activeImportBatchRef.current = previousBatch;
@@ -1941,12 +1942,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const currentSequence = Math.max(maxEntryNum, journalSequenceRef.current[sequenceKey] || 0);
     const nextEntryNum = entry.entryNumber && entry.entryNumber > currentSequence ? entry.entryNumber : currentSequence + 1;
     journalSequenceRef.current[sequenceKey] = Math.max(journalSequenceRef.current[sequenceKey] || 0, nextEntryNum);
+    // Determinar la escala monetaria venezolana de la fecha efectiva del asiento.
+    // Si la fecha no es válida (no debería llegar aquí), omitir el campo.
+    let monetaryEraId: string | undefined;
+    try { monetaryEraId = getVenezuelanMonetaryEra(entry.date).id; } catch { monetaryEraId = undefined; }
     const newEntry: JournalEntry = {
       ...entry,
       id: `entry-${sequenceKey}-${nextEntryNum}-${Date.now()}`,
       companyId: targetCompany.id,
       entryNumber: nextEntryNum,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      monetaryEraId
     };
     if (!['APERTURA', 'CIERRE'].includes(newEntry.type)) reserveBankOutgoingAccounts(newEntry.companyId, newEntry.items);
     activeImportBatchRef.current?.journalEntries.push(newEntry);
@@ -3190,7 +3196,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       validateRetentionVoucherSupplierEmail(purchaseData.supplierEmail, issueDate);
     }
     const rate = Number(purchaseData.bcvRate);
-    if (!Number.isFinite(rate) || rate <= 0) throw new Error('La tasa BCV manual debe ser mayor que cero.');
+    // La tasa BCV es obligatoria solo cuando el medio de pago requiere equivalencia en divisas
+    // (IGTF, Zelle, transferencia internacional, criptomonedas, efectivo extranjero).
+    // Para compras nominales en bolívares sin divisa, la tasa es opcional; los importes USD
+    // quedan en cero (equivalencia pendiente) hasta que el contador suministre la tasa histórica.
+    const PURCHASE_FOREIGN_METHODS = ['FOREIGN_CASH', 'ZELLE', 'INTERNATIONAL_TRANSFER', 'CRYPTO', 'FOREIGN_TRANSFER'];
+    const purchaseNeedsRate = PURCHASE_FOREIGN_METHODS.includes(purchaseData.paymentMethod || '');
+    const purchaseNeedsHistoricalRate = isValidIsoDate(purchaseData.invoiceDate) && purchaseData.invoiceDate >= '2018-01-01';
+    if ((purchaseNeedsRate || purchaseNeedsHistoricalRate) && (!Number.isFinite(rate) || rate <= 0)) {
+      throw new Error('La tasa BCV es obligatoria para compras desde 2018 y para operaciones pagadas en divisas. Registre la tasa histórica antes de guardar.');
+    }
+    // Para los cálculos de equivalencia USD: si no hay tasa, resultado = 0 (pendiente).
+    const toUsd = (bs: number) => (Number.isFinite(rate) && rate > 0) ? bs / rate : 0;
+
     const amounts = [
       purchaseData.totalAmountBs, purchaseData.taxableBaseBs, purchaseData.exemptAmountBs,
       purchaseData.vatAmountBs, purchaseData.additionalLuxuryTaxBs || 0, purchaseData.vatWithheldBs, purchaseData.islrWithheldBs || 0,
@@ -3449,9 +3467,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         items.push({
           accountCode, accountName: group.name,
           debitBs: amountBs, creditBs: 0,
-          debitUsd: amountBs / rate, creditUsd: 0,
+          debitUsd: toUsd(amountBs), creditUsd: 0,
           description: `Inventario compra Fac. ${purchaseData.invoiceNumber} · ${group.productCodes.join(', ')}`
         });
+
       }
     } else {
       const baseBs = Number(purchaseData.taxableBaseBs) + Number(purchaseData.exemptAmountBs);
@@ -3459,7 +3478,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (baseBs > 0 && debitAccount) items.push({
         accountCode: debitAccount.code,
         accountName: debitAccount.name,
-        debitBs: baseBs, creditBs: 0, debitUsd: baseBs / rate, creditUsd: 0,
+        debitBs: baseBs, creditBs: 0, debitUsd: toUsd(baseBs), creditUsd: 0,
         description: `Compra ${debitAccount.type === 'GASTOS' ? 'no inventariable' : debitAccount.type === 'COSTOS' ? 'de costo de servicio' : 'de activo'} Fac. ${purchaseData.invoiceNumber} - ${purchaseData.supplierName}`
       });
     }
@@ -3471,7 +3490,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         accountName: `Crédito Fiscal IVA Compras (${purchaseData.taxRate}%)`,
         debitBs: purchaseData.vatAmountBs,
         creditBs: 0,
-        debitUsd: purchaseData.vatAmountBs / rate,
+        debitUsd: toUsd(purchaseData.vatAmountBs),
         creditUsd: 0,
         description: `IVA ${purchaseData.taxRate}% Fac. ${purchaseData.invoiceNumber}`
       });
@@ -3483,12 +3502,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!luxuryExpense) throw new Error('Falta la cuenta de gasto 6.1.1.13 para el impuesto adicional no recuperable.');
       const amountBs = Number(purchaseData.additionalLuxuryTaxBs);
       items.push({ accountCode: luxuryExpense.code, accountName: luxuryExpense.name, debitBs: amountBs, creditBs: 0,
-        debitUsd: amountBs / rate, creditUsd: 0, description: 'Impuesto adicional al consumo suntuario 15% Fac. ' + purchaseData.invoiceNumber });
+        debitUsd: toUsd(amountBs), creditUsd: 0, description: 'Impuesto adicional al consumo suntuario 15% Fac. ' + purchaseData.invoiceNumber });
     }
 
     // Debe: IGTF de compra explícitamente confirmado por el usuario.
     if (Number(purchaseData.igtfAmountBs || 0) > 0) {
-      items.push({ accountCode: '6.1.1.11', accountName: 'Gasto por IGTF en compras', debitBs: Number(purchaseData.igtfAmountBs), creditBs: 0, debitUsd: Number(purchaseData.igtfAmountUsd || (Number(purchaseData.igtfAmountBs) / rate)), creditUsd: 0, description: `IGTF ${purchaseData.igtfRate || 3}% compra Fac. ${purchaseData.invoiceNumber}` });
+      items.push({ accountCode: '6.1.1.11', accountName: 'Gasto por IGTF en compras', debitBs: Number(purchaseData.igtfAmountBs), creditBs: 0, debitUsd: Number(purchaseData.igtfAmountUsd || toUsd(Number(purchaseData.igtfAmountBs))), creditUsd: 0, description: `IGTF ${purchaseData.igtfRate || 3}% compra Fac. ${purchaseData.invoiceNumber}` });
     }
 
     // Haber: Retención IVA por enterar al SENIAT (si la empresa retuvo)
@@ -3499,7 +3518,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         debitBs: 0,
         creditBs: purchaseData.vatWithheldBs,
         debitUsd: 0,
-        creditUsd: purchaseData.vatWithheldBs / rate,
+        creditUsd: toUsd(purchaseData.vatWithheldBs),
         description: `Retención IVA ${purchaseData.retentionRate}% s/Fac. ${purchaseData.invoiceNumber}`
       });
     }
@@ -3512,7 +3531,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         debitBs: 0,
         creditBs: purchaseData.islrWithheldBs,
         debitUsd: 0,
-        creditUsd: purchaseData.islrWithheldBs / rate,
+        creditUsd: toUsd(purchaseData.islrWithheldBs),
         description: `Retención ISLR ${purchaseData.islrRate}% s/Fac. ${purchaseData.invoiceNumber}`
       });
     }
@@ -3538,14 +3557,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
       validateBankOutgoingAvailability({
         availableBalance,
-        requestedAmount: bankPaymentAccount.currency === 'USD' ? netPayableBs / rate : netPayableBs,
+        requestedAmount: bankPaymentAccount.currency === 'USD' ? toUsd(netPayableBs) : netPayableBs,
         currency: bankPaymentAccount.currency
       });
     }
     items.push({
       accountCode: cashPurchase ? paymentAccount!.code : '2.1.1.01',
       accountName: cashPurchase ? paymentAccount!.name : 'Cuentas por Pagar Proveedores Nacionales',
-      debitBs: 0, creditBs: netPayableBs, debitUsd: 0, creditUsd: netPayableBs / rate,
+      debitBs: 0, creditBs: netPayableBs, debitUsd: 0, creditUsd: toUsd(netPayableBs),
       description: cashPurchase
         ? `Pago contado Fac. ${purchaseData.invoiceNumber} · Soporte ${purchaseData.paymentReference}`
         : `Neto a pagar Fac. ${purchaseData.invoiceNumber}`
@@ -3584,12 +3603,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ...purchaseData,
       // Persistir la tasa explícita y validada usada en el asiento.
       bcvRate: rate,
-      totalAmountUsd: purchaseData.totalAmountBs / rate,
-      taxableBaseUsd: purchaseData.taxableBaseBs / rate,
-      vatAmountUsd: purchaseData.vatAmountBs / rate,
-      vatWithheldUsd: purchaseData.vatWithheldBs / rate,
-      islrWithheldUsd: (purchaseData.islrWithheldBs || 0) / rate,
-      igtfAmountUsd: igtfAmount / rate,
+      totalAmountUsd: toUsd(purchaseData.totalAmountBs),
+      taxableBaseUsd: toUsd(purchaseData.taxableBaseBs),
+      vatAmountUsd: toUsd(purchaseData.vatAmountBs),
+      vatWithheldUsd: toUsd(purchaseData.vatWithheldBs),
+      islrWithheldUsd: toUsd(purchaseData.islrWithheldBs || 0),
+      igtfAmountUsd: toUsd(igtfAmount),
       id: purchaseId,
       companyId: targetCompany.id,
       opNumber: nextOp,
@@ -3599,6 +3618,95 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     activeImportBatchRef.current?.purchases.push(finalPurchase);
     setPurchases(prev => [...prev, finalPurchase]);
+
+    // 1b. Generar entradas automáticas de Kardex por cada línea de inventario.
+    // Esto conecta la cadena Compra → Kardex → Inventario → Costos sin que el
+    // contador tenga que crear el movimiento manualmente.
+    if (hasInventoryLines && purchaseData.inventoryLines!.length > 0) {
+      const autoMovements: InventoryMovement[] = [];
+      const productStateMap = new Map<string, { currentStock: number; avgCostBs: number; avgCostUsd: number }>();
+      // Inicializar el mapa con el estado actual de cada producto implicado.
+      for (const line of purchaseData.inventoryLines!) {
+        const product = products.find(p => p.id === line.productId && p.companyId === targetCompany.id);
+        if (product && !productStateMap.has(product.id)) {
+          productStateMap.set(product.id, {
+            currentStock: product.currentStock,
+            avgCostBs: product.avgCostBs,
+            avgCostUsd: Number(product.avgCostUsd || 0)
+          });
+        }
+      }
+      for (const line of purchaseData.inventoryLines!) {
+        const product = products.find(p => p.id === line.productId && p.companyId === targetCompany.id);
+        if (!product) continue;
+        const pState = productStateMap.get(product.id)!;
+        const qty = Number(line.quantity);
+        const unitCostBs = Number(line.unitCostBs);
+        const landedCostsBs = Number(line.additionalLandedCostsBs || 0);
+        const effectiveUnitCost = unitCostBs + (qty > 0 ? landedCostsBs / qty : 0);
+        const totalCostBs = Math.round(qty * effectiveUnitCost * 100) / 100;
+        const unitCostUsd = rate > 0 ? toUsd(effectiveUnitCost) : pState.avgCostUsd;
+        const totalCostUsd = Math.round(qty * unitCostUsd * 1000000) / 1000000;
+        // Ponderar Bs y USD independientemente: la tasa nueva solo valora la entrada,
+        // nunca reexpresa el costo USD histórico de las existencias anteriores.
+        const weighted = calculateWeightedAverageCostDual(
+          pState.currentStock, pState.avgCostBs, pState.avgCostUsd,
+          qty, effectiveUnitCost, unitCostUsd
+        );
+        const newStock = weighted.quantity;
+        const newAverageBs = weighted.unitCostBs;
+        const newAverageUsd = weighted.unitCostUsd;
+        const movId = `mov-auto-pur-${purchaseId}-${line.productId}-${Date.now()}`;
+        const autoMov: InventoryMovement = {
+          id: movId,
+          companyId: targetCompany.id,
+          productId: line.productId,
+          productName: product.name,
+          productCode: product.code,
+          date: purchaseData.invoiceDate,
+          type: 'ENTRADA',
+          concept: 'COMPRA',
+          documentType: 'Factura',
+          documentRef: `FAC-${purchaseData.invoiceNumber}`,
+          quantity: qty,
+          unitCostBs: effectiveUnitCost,
+          unitCostUsd,
+          totalCostBs,
+          totalCostUsd,
+          balanceQty: newStock,
+          balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
+          balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
+          bcvRate: rate,
+          costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO',
+          journalEntryId: createdJournalEntry.id
+        };
+        autoMovements.push(autoMov);
+        // Actualizar el estado virtual del producto para la siguiente línea.
+        productStateMap.set(product.id, {
+          currentStock: newStock,
+          avgCostBs: newAverageBs,
+          avgCostUsd: newAverageUsd
+        });
+      }
+      if (autoMovements.length > 0) {
+        setMovements(prev => [...prev, ...autoMovements]);
+        // Actualizar saldo/costo del producto en el catálogo.
+        setProducts(prev => prev.map(p => {
+          const updated = productStateMap.get(p.id);
+          if (!updated || p.companyId !== targetCompany.id) return p;
+          return {
+            ...p,
+            currentStock: updated.currentStock,
+            avgCostBs: updated.avgCostBs,
+            avgCostUsd: updated.avgCostUsd,
+            lastCostBs: autoMovements.filter(m => m.productId === p.id).slice(-1)[0]?.unitCostBs ?? p.lastCostBs,
+            lastCostUsd: autoMovements.filter(m => m.productId === p.id).slice(-1)[0]?.unitCostUsd ?? p.lastCostUsd
+          };
+        }));
+        // Registrar en batch de importación si está activo.
+        autoMovements.forEach(m => activeImportBatchRef.current?.inventoryMovements?.push(m));
+      }
+    }
 
     // 2. Si retuvo IVA, crear el comprobante oficial de retención de IVA
     if (purchaseData.vatWithheldBs > 0 && voucherNum) {
@@ -3675,7 +3783,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         withheldAmountBs: purchaseData.islrWithheldBs,
         bcvRate: rate,
         baseAmountUsd: purchaseData.taxableBaseUsd,
-        withheldAmountUsd: purchaseData.islrWithheldUsd || (purchaseData.islrWithheldBs / rate),
+        withheldAmountUsd: purchaseData.islrWithheldUsd || toUsd(purchaseData.islrWithheldBs),
         unitTaxValueBs: purchaseData.islrUnitTaxValueBs,
         formulaFactor: purchaseData.islrFormulaFactor,
         basePercentage: purchaseData.islrBasePercentage
@@ -4443,11 +4551,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (settlementModeError) throw new Error(settlementModeError);
     if (!targetCompany) throw new Error('Selecciona una empresa antes de registrar la venta.');
     const rate = Number(saleData.bcvRate);
+    // La tasa BCV es obligatoria solo cuando el cobro es en divisas.
+    // Para ventas nominales en bolívares, se permite rate = 0 (equivalencia pendiente).
+    const SALE_FOREIGN_METHODS = ['FOREIGN_CASH', 'FOREIGN_TRANSFER', 'CRYPTO'];
+    const saleNeedsRate = SALE_FOREIGN_METHODS.includes(saleData.paymentCurrency || '');
+    if (saleNeedsRate && (!Number.isFinite(rate) || rate <= 0)) {
+      throw new Error('La tasa BCV es obligatoria para ventas cobradas en divisas. Registre la tasa histórica antes de guardar.');
+    }
+    const toUsd = (bs: number) => (Number.isFinite(rate) && rate > 0) ? bs / rate : 0;
     const saleAmounts = [
       saleData.totalAmountBs, saleData.taxableBaseBs, saleData.exemptAmountBs,
       saleData.vatAmountBs, saleData.additionalLuxuryTaxBs || 0, saleData.vatWithheldBs || 0, saleData.igtfAmountBs || 0
     ];
-    if (!Number.isFinite(rate) || rate <= 0) throw new Error('La venta requiere una tasa BCV válida mayor que cero.');
     if (saleAmounts.some(value => !Number.isFinite(value) || value < 0) || saleData.totalAmountBs <= 0) {
       throw new Error('La venta contiene importes inválidos o negativos.');
     }
@@ -4510,6 +4625,31 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     );
     if (duplicateSale) throw new Error('Ya existe una venta registrada con ese tipo de documento y número de factura.');
 
+    // Validación de stock en el contexto antes de crear factura/asientos:
+    // evita ventas con cantidades inválidas, productos de otra empresa o sobreventa.
+    if (saleData.inventoryLines !== undefined) {
+      if (!Array.isArray(saleData.inventoryLines)) {
+        throw new Error('Las líneas de inventario de la venta no son válidas.');
+      }
+      const requestedByProduct = new Map<string, number>();
+      for (const line of saleData.inventoryLines) {
+        const quantity = Number(line.quantity);
+        const productId = String(line.productId || '').trim();
+        const product = products.find(p => p.id === productId && p.companyId === targetCompany.id);
+        if (!product) throw new Error('Una línea de venta referencia un producto inexistente o de otra empresa.');
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+          throw new Error('Cada línea vinculada al inventario debe tener una cantidad válida mayor que cero.');
+        }
+        requestedByProduct.set(productId, (requestedByProduct.get(productId) || 0) + quantity);
+      }
+      for (const [productId, requestedQuantity] of requestedByProduct) {
+        const product = products.find(p => p.id === productId && p.companyId === targetCompany.id);
+        if (!product || !Number.isFinite(product.currentStock) || requestedQuantity > product.currentStock + 1e-8) {
+          throw new Error('Existencia insuficiente para ' + (product?.name || productId) + '. Venta no registrada.');
+        }
+      }
+    }
+
     const companySales = sales.filter(s => s.companyId === targetCompany.id);
     const companyKey = targetCompany.id;
     const nextOp = Math.max(companySales.reduce((max, sale) => Math.max(max, sale.opNumber || 0), 0), saleSequenceRef.current[companyKey] || 0) + 1;
@@ -4525,7 +4665,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         accountName: 'Retenciones de IVA Acumuladas por Descontar',
         debitBs: saleData.vatWithheldBs,
         creditBs: 0,
-        debitUsd: saleData.vatWithheldBs / rate,
+        debitUsd: toUsd(saleData.vatWithheldBs),
         creditUsd: 0,
         description: `Comprobante Retención IVA Cliente ${saleData.customerName}`
       });
@@ -4538,7 +4678,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       accountName: 'Cuentas por Cobrar Clientes Comerciales',
       debitBs: receivableBs,
       creditBs: 0,
-      debitUsd: receivableBs / rate,
+      debitUsd: toUsd(receivableBs),
       creditUsd: 0,
       description: `Por cobrar Fac. Venta ${saleData.invoiceNumber}`
     });
@@ -4552,7 +4692,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         debitBs: 0,
         creditBs: igtfBs,
         debitUsd: 0,
-        creditUsd: igtfBs / rate,
+        creditUsd: toUsd(igtfBs),
         description: `IGTF percibido 3% Fac. ${saleData.invoiceNumber}`
       });
     }
@@ -4564,7 +4704,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       debitBs: 0,
       creditBs: saleData.taxableBaseBs,
       debitUsd: 0,
-      creditUsd: saleData.taxableBaseBs / rate,
+      creditUsd: toUsd(saleData.taxableBaseBs),
       description: `Ingreso por venta Fac. ${saleData.invoiceNumber}`
     });
 
@@ -4577,7 +4717,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         debitBs: 0,
         creditBs: saleData.exemptAmountBs,
         debitUsd: 0,
-        creditUsd: saleData.exemptAmountBs / rate,
+        creditUsd: toUsd(saleData.exemptAmountBs),
         description: `Ingreso exento por venta Fac. ${saleData.invoiceNumber}`
       });
     }
@@ -4587,7 +4727,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const luxuryTaxBs = Number(saleData.additionalLuxuryTaxBs || 0);
       const luxuryTaxAccount = accounts.find(account => account.code === '2.1.2.08' && account.isMovement && account.type === 'PASIVO');
       if (!luxuryTaxAccount) throw new Error('El plan de cuentas no contiene la cuenta de impuesto adicional al consumo suntuario.');
-      items.push({ accountCode: luxuryTaxAccount.code, accountName: luxuryTaxAccount.name, debitBs: 0, creditBs: luxuryTaxBs, debitUsd: 0, creditUsd: luxuryTaxBs / rate, description: `Impuesto adicional al consumo suntuario 15% Fac. ${saleData.invoiceNumber}` });
+      items.push({ accountCode: luxuryTaxAccount.code, accountName: luxuryTaxAccount.name, debitBs: 0, creditBs: luxuryTaxBs, debitUsd: 0, creditUsd: toUsd(luxuryTaxBs), description: `Impuesto adicional al consumo suntuario 15% Fac. ${saleData.invoiceNumber}` });
     }
 
     // Haber: Débito Fiscal IVA Ventas
@@ -4598,7 +4738,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         debitBs: 0,
         creditBs: saleData.vatAmountBs,
         debitUsd: 0,
-        creditUsd: saleData.vatAmountBs / rate,
+        creditUsd: toUsd(saleData.vatAmountBs),
         description: `Débito fiscal ${saleData.taxRate}% Fac. ${saleData.invoiceNumber}`
       });
     }
@@ -4634,16 +4774,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     const finalSale: SaleRecord = {
       ...saleData,
-      // El registro conserva la tasa efectiva usada en su asiento y equivalentes
-      // USD coherentes con los importes nominales de la factura.
       bcvRate: rate,
-      totalAmountUsd: saleData.totalAmountBs / rate,
-      taxableBaseUsd: saleData.taxableBaseBs / rate,
-      vatAmountUsd: saleData.vatAmountBs / rate,
+      totalAmountUsd: toUsd(saleData.totalAmountBs),
+      taxableBaseUsd: toUsd(saleData.taxableBaseBs),
+      vatAmountUsd: toUsd(saleData.vatAmountBs),
       additionalLuxuryTaxBs: Number(saleData.additionalLuxuryTaxBs || 0),
-      additionalLuxuryTaxUsd: Number(saleData.additionalLuxuryTaxBs || 0) / rate,
-      vatWithheldUsd: (saleData.vatWithheldBs || 0) / rate,
-      igtfAmountUsd: saleIgtf / rate,
+      additionalLuxuryTaxUsd: toUsd(Number(saleData.additionalLuxuryTaxBs || 0)),
+      vatWithheldUsd: toUsd(saleData.vatWithheldBs || 0),
+      igtfAmountUsd: toUsd(saleIgtf),
       id: saleId,
       companyId: targetCompany.id,
       opNumber: nextOp,
@@ -4652,6 +4790,130 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     activeImportBatchRef.current?.sales.push(finalSale);
     setSales(prev => [...prev, finalSale]);
+
+    // Generar salidas automáticas de Kardex + asiento de Costo de Ventas
+    // cuando la venta incluye líneas de inventario detalladas.
+    const hasSaleInventoryLines = Array.isArray(saleData.inventoryLines) && saleData.inventoryLines!.length > 0;
+    if (hasSaleInventoryLines) {
+      const saleAutoMovements: InventoryMovement[] = [];
+      const cogsItems: JournalEntryItem[] = [];
+      const saleProductStateMap = new Map<string, { currentStock: number; avgCostBs: number; avgCostUsd: number }>();
+      // Inicializar estado actual de cada producto.
+      for (const line of saleData.inventoryLines!) {
+        const product = products.find(p => p.id === line.productId && p.companyId === targetCompany.id);
+        if (product && !saleProductStateMap.has(product.id)) {
+          saleProductStateMap.set(product.id, {
+            currentStock: product.currentStock,
+            avgCostBs: product.avgCostBs,
+            avgCostUsd: product.avgCostUsd || toUsd(product.avgCostBs)
+          });
+        }
+      }
+      for (const line of saleData.inventoryLines!) {
+        const product = products.find(p => p.id === line.productId && p.companyId === targetCompany.id);
+        if (!product) continue;
+        const pState = saleProductStateMap.get(product.id)!;
+        const qty = Number(line.quantity);
+        if (qty <= 0 || pState.currentStock <= 0) continue;
+        let totalCostBs = 0;
+        let totalCostUsd = 0;
+        let unitCostBs = 0;
+        let unitCostUsd = 0;
+        if (product.costingMethod === 'PEPS') {
+          const history = movements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
+          const layers = reconstructFifoLayers(history, pState.currentStock);
+          const fifoResult = calculateFifoIssue(layers, qty);
+          totalCostBs = fifoResult.totalCostBs;
+          totalCostUsd = fifoResult.totalCostUsd;
+          unitCostBs = fifoResult.unitCostBs;
+          unitCostUsd = fifoResult.unitCostUsd;
+        } else {
+          unitCostBs = pState.avgCostBs;
+          unitCostUsd = pState.avgCostUsd;
+          totalCostBs = Math.round(qty * unitCostBs * 100) / 100;
+          totalCostUsd = Math.round(qty * unitCostUsd * 1000000) / 1000000;
+        }
+        const newStock = Math.max(0, pState.currentStock - qty);
+        const newAverageBs = newStock > 0 ? pState.avgCostBs : 0;
+        // El saldo USD remanente conserva su costo promedio histórico; no se reexpresa con la tasa de venta.
+        const newAverageUsd = newStock > 0 ? pState.avgCostUsd : 0;
+        const saleMovId = `mov-auto-sale-${saleId}-${line.productId}-${Date.now()}`;
+        const saleAutoMov: InventoryMovement = {
+          id: saleMovId,
+          companyId: targetCompany.id,
+          productId: line.productId,
+          productName: product.name,
+          productCode: product.code,
+          date: saleData.invoiceDate,
+          type: 'SALIDA',
+          concept: 'VENTA',
+          documentType: 'Factura',
+          documentRef: `FAC-${saleData.invoiceNumber}`,
+          quantity: qty,
+          unitCostBs,
+          unitCostUsd,
+          totalCostBs,
+          totalCostUsd,
+          balanceQty: newStock,
+          balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
+          balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
+          bcvRate: rate,
+          costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO',
+          journalEntryId: createdJournalEntry.id
+        };
+        saleAutoMovements.push(saleAutoMov);
+        saleProductStateMap.set(product.id, {
+          currentStock: newStock,
+          avgCostBs: newAverageBs,
+          avgCostUsd: newAverageUsd
+        });
+        // Acumular costo de ventas para el asiento.
+        const cogsAccount = accounts.find(a => a.code === (product.costOfSalesAccountCode || '5.1.1.01') && a.isMovement);
+        const inventoryAccount = accounts.find(a => a.code === (product.inventoryAccountCode || '1.1.4.01') && a.isMovement);
+        if (cogsAccount && inventoryAccount && totalCostBs > 0) {
+          cogsItems.push(
+            { accountCode: cogsAccount.code, accountName: cogsAccount.name, debitBs: totalCostBs, creditBs: 0, debitUsd: totalCostUsd, creditUsd: 0, description: `CMV ${product.code} · ${qty} und · Fac. ${saleData.invoiceNumber}` },
+            { accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: 0, creditBs: totalCostBs, debitUsd: 0, creditUsd: totalCostUsd, description: `Salida inventario ${product.code} · venta Fac. ${saleData.invoiceNumber}` }
+          );
+        }
+      }
+      if (saleAutoMovements.length > 0) {
+        setMovements(prev => [...prev, ...saleAutoMovements]);
+        setProducts(prev => prev.map(p => {
+          const updated = saleProductStateMap.get(p.id);
+          if (!updated || p.companyId !== targetCompany.id) return p;
+          return { ...p, currentStock: updated.currentStock, avgCostBs: updated.avgCostBs, avgCostUsd: updated.avgCostUsd };
+        }));
+        saleAutoMovements.forEach(m => activeImportBatchRef.current?.inventoryMovements?.push(m));
+      }
+      // Asiento de Costo de Ventas separado (tipo INVENTARIO, vinculado a la venta).
+      if (cogsItems.length > 0) {
+        const cogsDebitBs = cogsItems.reduce((s, i) => s + i.debitBs, 0);
+        const cogsCreditBs = cogsItems.reduce((s, i) => s + i.creditBs, 0);
+        if (Math.abs(cogsDebitBs - cogsCreditBs) < 0.02) {
+          const cogsEntryNum = Math.max(
+            journalEntries.filter(e => e.companyId === targetCompany.id).reduce((max, e) => Math.max(max, e.entryNumber || 0), 0),
+            journalSequenceRef.current[companyKey] || 0
+          ) + 1;
+          journalSequenceRef.current[companyKey] = cogsEntryNum;
+          const cogsEntry: JournalEntry = {
+            id: `entry-cogs-${saleId}`,
+            companyId: targetCompany.id,
+            entryNumber: cogsEntryNum,
+            date: saleData.invoiceDate,
+            description: `Costo de Ventas Fac. ${saleData.invoiceNumber} - ${saleData.customerName}`,
+            type: 'INVENTARIO',
+            bcvRate: rate,
+            referenceDoc: `FAC-${saleData.invoiceNumber}`,
+            items: cogsItems,
+            createdAt: new Date().toISOString()
+          };
+          activeImportBatchRef.current?.journalEntries.push(cogsEntry);
+          setJournalEntries(prev => [...prev, cogsEntry]);
+        }
+      }
+    }
+
     return finalSale;
   };
 
@@ -5031,7 +5293,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const offsetAccount = accounts.find(a => a.code === newProd.openingBalanceAccountCode && a.isMovement);
       if (!offsetAccount) throw new Error(`La cuenta contrapartida de apertura ${newProd.openingBalanceAccountCode} no existe o no admite movimientos.`);
       const openingValueBs = Math.round(initialQuantity * initialCostBs * 100) / 100;
-      const openingValueUsd = Math.round(openingValueBs / rate * 1000000) / 1000000;
+      const openingValueUsd = rate > 0 ? Math.round(openingValueBs / rate * 1000000) / 1000000 : 0;
       const entryNumber = journalEntries.filter(e => e.companyId === currentCompany.id).reduce((max,e) => Math.max(max,e.entryNumber),0) + 1;
       openingEntry = {
         id: `entry-inventory-opening-${newProd.id}`, companyId: currentCompany.id, entryNumber,
@@ -5047,7 +5309,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         productId: newProd.id, productName: newProd.name, productCode: newProd.code,
         date: openingEntry.date, type: 'ENTRADA', concept: 'INVENTARIO_INICIAL',
         documentRef: openingEntry.referenceDoc || 'APERTURA-INVENTARIO', quantity: initialQuantity, unitCostBs: initialCostBs,
-        unitCostUsd: initialCostBs / rate, totalCostBs: openingValueBs,
+        unitCostUsd: rate > 0 ? initialCostBs / rate : 0, totalCostBs: openingValueBs,
         totalCostUsd: openingValueUsd, balanceQty: initialQuantity,
         balanceTotalBs: openingValueBs, balanceTotalUsd: openingValueUsd,
         bcvRate: rate, costingMethod: newProd.costingMethod, journalEntryId: openingEntry.id
@@ -5129,7 +5391,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const offsetAccount = accounts.find(a => a.code === product.openingBalanceAccountCode && a.isMovement);
         if (!offsetAccount) throw new Error('Cuenta de contrapartida de apertura inválida para el artículo ' + code + '.');
         const totalBs = Math.round(quantity * unitCostBs * 100) / 100;
-        const totalUsd = Math.round(totalBs / rate * 1000000) / 1000000;
+        const totalUsd = rate > 0 ? Math.round(totalBs / rate * 1000000) / 1000000 : 0;
         const entry: JournalEntry = {
           id: 'entry-inventory-opening-' + product.id, companyId: targetCompanyId, entryNumber: nextEntryNumber++,
           date, description: 'Asiento de apertura de inventario · ' + code + ' · ' + name, type: 'APERTURA',
@@ -5144,7 +5406,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           id: 'mov-opening-' + product.id, companyId: targetCompanyId, productId: product.id,
           productName: name, productCode: code, date, type: 'ENTRADA', concept: 'INVENTARIO_INICIAL',
           documentRef: entry.referenceDoc || 'APERTURA-INVENTARIO', quantity, unitCostBs,
-          unitCostUsd: unitCostBs / rate, totalCostBs: totalBs, totalCostUsd: totalUsd,
+          unitCostUsd: rate > 0 ? unitCostBs / rate : 0, totalCostBs: totalBs, totalCostUsd: totalUsd,
           balanceQty: quantity, balanceTotalBs: totalBs, balanceTotalUsd: totalUsd,
           bcvRate: rate, costingMethod: product.costingMethod, journalEntryId: entry.id
         });
@@ -5210,12 +5472,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       let unitCostBs = requestedCost;
       let totalCostBs = 0;
+      let salidaFifoUsdCost: number | null = null;
+      let salidaFifoUsdUnit: number | null = null;
       let newStock = product.currentStock;
       let newAverageBs = product.avgCostBs;
       let movementQuantity = Number(row.quantity);
       if (row.type === 'ENTRADA') {
         unitCostBs = effectiveUnitCost;
-        const weighted = calculateWeightedAverageCost(product.currentStock, product.avgCostBs, Number(row.quantity), effectiveUnitCost, rate);
+        const weighted = rate > 0
+          ? calculateWeightedAverageCost(product.currentStock, product.avgCostBs, Number(row.quantity), effectiveUnitCost, rate)
+          : calculateWeightedAverageCostDual(product.currentStock, product.avgCostBs, Number(product.avgCostUsd || 0), Number(row.quantity), effectiveUnitCost, 0);
         newStock = weighted.quantity; newAverageBs = weighted.unitCostBs;
         totalCostBs = Math.round(Number(row.quantity) * effectiveUnitCost * 100) / 100;
       } else if (row.type === 'SALIDA') {
@@ -5223,7 +5489,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           const history = virtualMovements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
           const layers = reconstructFifoLayers(history, product.currentStock);
           const fifoLayerValue = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0);
-          totalCostBs = calculateFifoIssue(layers, Number(row.quantity)).totalCostBs;
+          const fifoIssue = calculateFifoIssue(layers, Number(row.quantity));
+          totalCostBs = fifoIssue.totalCostBs;
+          salidaFifoUsdCost = fifoIssue.totalCostUsd;
+          salidaFifoUsdUnit = fifoIssue.unitCostUsd;
           newStock = Math.max(0, product.currentStock - Number(row.quantity));
           newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValue - totalCostBs) / newStock : 0;
         } else totalCostBs = Math.round(Number(row.quantity) * product.avgCostBs * 100) / 100;
@@ -5236,7 +5505,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           const history = virtualMovements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
           const layers = reconstructFifoLayers(history, product.currentStock);
           const fifoAdjustment = applyFifoAdjustment(layers, targetStock - product.currentStock,
-            requestedCost, requestedCost / rate, row.date, row.documentRef);
+            requestedCost, rate > 0 ? requestedCost / rate : 0, row.date, row.documentRef);
           totalCostBs = fifoAdjustment.totalCostBs;
           unitCostBs = fifoAdjustment.unitCostBs;
           var adjustmentUsd = fifoAdjustment.totalCostUsd;
@@ -5252,16 +5521,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         }
       }
       const totalCostUsd = row.type === 'AJUSTE' && product.costingMethod === 'PEPS'
-        ? adjustmentUsd! : Math.round(totalCostBs / rate * 1000000) / 1000000;
+        ? adjustmentUsd! : (row.type === 'SALIDA' && product.costingMethod === 'PEPS' && salidaFifoUsdCost !== null
+          ? salidaFifoUsdCost : (rate > 0 ? Math.round(totalCostBs / rate * 1000000) / 1000000 : (row.type === 'SALIDA' ? Math.round(Number(row.quantity) * Number(product.avgCostUsd || 0) * 1000000) / 1000000 : 0)));
       const newAverageUsd = row.type === 'AJUSTE' && product.costingMethod === 'PEPS'
-        ? adjustmentAverageUsd! : newAverageBs / rate;
+        ? adjustmentAverageUsd! : (rate > 0 ? newAverageBs / rate : Number(product.avgCostUsd || 0));
       if (expectedBalanceQty !== undefined && (!Number.isFinite(expectedBalanceQty) || Math.abs(expectedBalanceQty - newStock) > 0.000001)) {
         throw new Error('Fila ' + (index + 2) + ': la existencia final declarada (' + expectedBalanceQty + ') no coincide con la existencia calculada (' + newStock + ') para ' + product.code + '. Revise el orden y los movimientos previos.');
       }
       const { expectedBalanceQty: _expectedBalanceQty, ...movementDraft } = row;
       const movement: InventoryMovement = {
         ...movementDraft, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
-        companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: row.type === 'AJUSTE' && product.costingMethod === 'PEPS' ? adjustmentUsd! / movementQuantity : unitCostBs / rate, additionalLandedCostsBs: landedCostsBs,
+        companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: row.type === 'AJUSTE' && product.costingMethod === 'PEPS' ? adjustmentUsd! / movementQuantity : (row.type === 'SALIDA' && product.costingMethod === 'PEPS' && salidaFifoUsdUnit !== null ? salidaFifoUsdUnit : (rate > 0 ? unitCostBs / rate : (row.type === 'SALIDA' ? Number(product.avgCostUsd || 0) : 0))), additionalLandedCostsBs: landedCostsBs,
         totalCostBs, totalCostUsd, balanceQty: newStock,
         balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
         balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
@@ -5312,7 +5582,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       virtualProducts.set(product.id, {
         ...product, currentStock: newStock, avgCostBs: newAverageBs, avgCostUsd: newAverageUsd,
         lastCostBs: row.type === 'ENTRADA' ? effectiveUnitCost : product.lastCostBs,
-        lastCostUsd: row.type === 'ENTRADA' ? effectiveUnitCost / rate : product.lastCostUsd
+        lastCostUsd: row.type === 'ENTRADA' ? (rate > 0 ? effectiveUnitCost / rate : 0) : product.lastCostUsd
       });
     }
     importedEntries.forEach(entry => reserveBankOutgoingAccounts(entry.companyId, entry.items));
@@ -5681,40 +5951,50 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       .slice().sort((a, b) => a.date.localeCompare(b.date));
     if (prior.length && movData.date < prior[prior.length - 1].date) throw new Error('El movimiento está fechado antes del último registro del Kardex. Importe primero los períodos históricos en orden cronológico para evitar saldos y costos incorrectos.');
     let unitCostBs = requestedCost;
-    let unitCostUsd = requestedCost / rate;
+    // Helper seguro: si no hay tasa, equivalencia USD = 0 (pendiente).
+    const toUsd = (bs: number) => (Number.isFinite(rate) && rate > 0) ? bs / rate : 0;
+    let unitCostUsd = toUsd(requestedCost);
     let totalCostBs = 0;
     let totalCostUsd = 0;
     let newStock = prod.currentStock;
     let newAverageBs = prod.avgCostBs;
-    let newAverageUsd = prod.avgCostBs / rate;
+    let newAverageUsd = rate > 0 ? toUsd(prod.avgCostBs) : Number(prod.avgCostUsd || 0);
     let movementQuantity = Number(movData.quantity);
 
     if (movData.type === 'ENTRADA') {
       unitCostBs = effectiveUnitCost;
-      unitCostUsd = unitCostBs / rate;
-      const weighted = calculateWeightedAverageCost(prod.currentStock, prod.avgCostBs, Number(movData.quantity), effectiveUnitCost, rate);
+      unitCostUsd = toUsd(unitCostBs);
+      // Preservar la valoración USD histórica del inventario existente, aunque haya una tasa BCV
+      // nueva para la entrada: Bs y USD se ponderan independientemente para evitar revaluación retroactiva.
+      const weighted = calculateWeightedAverageCostDual(
+        prod.currentStock, prod.avgCostBs, Number(prod.avgCostUsd || 0),
+        Number(movData.quantity), effectiveUnitCost, unitCostUsd
+      );
       newStock = weighted.quantity;
       newAverageBs = weighted.unitCostBs;
       newAverageUsd = weighted.unitCostUsd;
       totalCostBs = Math.round(Number(movData.quantity) * effectiveUnitCost * 100) / 100;
-      totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
+      totalCostUsd = toUsd(totalCostBs);
     } else if (movData.type === 'SALIDA') {
       if (prod.costingMethod === 'PEPS') {
         const layers = reconstructFifoLayers(prior, prod.currentStock);
-        const fifoLayerValue = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0);
+        const fifoLayerValueBs = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0);
+        const fifoLayerValueUsd = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0);
         const fifo = calculateFifoIssue(layers, Number(movData.quantity));
         totalCostBs = fifo.totalCostBs;
-        totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
+        totalCostUsd = fifo.totalCostUsd;
         unitCostBs = fifo.unitCostBs;
-        unitCostUsd = unitCostBs / rate;
+        unitCostUsd = fifo.unitCostUsd;
         newStock = Math.max(0, prod.currentStock - Number(movData.quantity));
-        newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValue - totalCostBs) / newStock : 0;
-        newAverageUsd = newAverageBs / rate;
+        newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValueBs - totalCostBs) / newStock : 0;
+        newAverageUsd = newStock > 0 ? Math.max(0, fifoLayerValueUsd - totalCostUsd) / newStock : 0;
       } else {
         unitCostBs = prod.avgCostBs;
-        unitCostUsd = unitCostBs / rate;
+        // La salida por promedio consume el costo histórico en USD, no lo convierte
+        // nuevamente usando la tasa del día de salida.
+        unitCostUsd = Number(prod.avgCostUsd || 0);
         totalCostBs = Math.round(Number(movData.quantity) * unitCostBs * 100) / 100;
-        totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
+        totalCostUsd = Math.round(Number(movData.quantity) * unitCostUsd * 1000000) / 1000000;
         newStock = prod.currentStock - Number(movData.quantity);
       }
     } else {
@@ -5725,7 +6005,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (prod.costingMethod === 'PEPS') {
         const layers = reconstructFifoLayers(prior, prod.currentStock);
         const fifoAdjustment = applyFifoAdjustment(layers, targetStock - prod.currentStock,
-          requestedCost, requestedCost / rate, movData.date, movData.documentRef);
+          requestedCost, toUsd(requestedCost), movData.date, movData.documentRef);
         totalCostBs = fifoAdjustment.totalCostBs;
         totalCostUsd = fifoAdjustment.totalCostUsd;
         unitCostBs = fifoAdjustment.unitCostBs;
@@ -5739,9 +6019,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           newAverageUsd = weighted.unitCostUsd;
         }
         totalCostBs = Math.round(actualQuantity * (targetStock < prod.currentStock ? prod.avgCostBs : requestedCost) * 100) / 100;
-        totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
+        totalCostUsd = toUsd(totalCostBs);
         unitCostBs = actualQuantity > 0 ? totalCostBs / actualQuantity : 0;
-        unitCostUsd = unitCostBs / rate;
+        unitCostUsd = toUsd(unitCostBs);
       }
     }
 
@@ -5809,7 +6089,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setProducts(prev => prev.map(p => p.id === prod.id ? {
       ...p, currentStock: newStock, avgCostBs: newAverageBs, avgCostUsd: newAverageUsd,
       lastCostBs: movData.type === 'ENTRADA' ? effectiveUnitCost : p.lastCostBs,
-      lastCostUsd: movData.type === 'ENTRADA' ? effectiveUnitCost / rate : p.lastCostUsd
+      lastCostUsd: movData.type === 'ENTRADA' ? toUsd(effectiveUnitCost) : p.lastCostUsd
     } : p));
     if (generatedEntries.length > 0) setJournalEntries(prev => [...prev, ...generatedEntries]);
     return newMov;
@@ -6733,7 +7013,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   // Tesorería: alta bancaria y creación automática del auxiliar contable.
-  const addBankAccount = (bankData: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'> & { bcvRate?: number; parentAccountCode: string }): BankAccount => {
+  const addBankAccount = (bankData: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'> & { bcvRate?: number; parentAccountCode: string; openingDate?: string }): BankAccount => {
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('Registrar una cuenta bancaria requiere SQLite local de escritorio disponible y lista.');
     }
@@ -6781,8 +7061,22 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // La validación del asiento debe reconocer el auxiliar recién generado.
     // Se valida contra el catálogo proyectado y luego se guardan ambos estados juntos.
     if (hasOpeningBalance && equity) {
+      // Usar la fecha histórica del saldo inicial si el contador la proporcionó;
+      // si no, usar la fecha de hoy. El asiento de apertura queda en la fecha
+      // real de la cuenta, no en la fecha en que el contador la registró en SICOVEN.
+      let openingEntryDate: string;
+      const candidateDate = bankData.openingDate;
+      if (candidateDate && /^\d{4}-\d{2}-\d{2}$/.test(candidateDate)) {
+        const parsed = new Date(candidateDate + 'T00:00:00.000Z');
+        openingEntryDate = Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === candidateDate
+          ? candidateDate
+          : (() => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); })();
+      } else {
+        const now = new Date();
+        openingEntryDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+      }
       addJournalEntry({
-        entryNumber: 0, date: (() => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); })(),
+        entryNumber: 0, date: openingEntryDate,
         description: `Apertura de cuenta bancaria: ${auxName}`, type: 'APERTURA', bcvRate: rate,
         referenceDoc: `APERTURA-${digits}`,
         items: [

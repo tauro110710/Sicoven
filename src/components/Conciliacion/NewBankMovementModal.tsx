@@ -3,6 +3,7 @@ import { useAccounting } from '../../context/AccountingContext';
 import { BankAccount, BankMovementType } from '../../types/accounting';
 import { Landmark, X, Check } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
+import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 
 interface NewBankMovementModalProps {
   isOpen: boolean;
@@ -15,17 +16,43 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
   onClose,
   bankAccount
 }) => {
-  const { addBankStatementMovement, waitForPersistence } = useAccounting();
+  const { currentCompany, addBankStatementMovement, waitForPersistence } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
-  const [date, setDate] = useState<string>(() => { const now = new Date(); const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000); return local.toISOString().slice(0, 10); });
+  const [date, setDate] = useState<string>(() => {
+    const s = currentCompany?.accountingStartDate;
+    const today = new Date().toISOString().slice(0, 10);
+    return (s && /^\d{4}-\d{2}-\d{2}$/.test(s) && s < today) ? s : today;
+  });
   const [reference, setReference] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [type, setType] = useState<BankMovementType>('CREDIT');
   const [amountBs, setAmountBs] = useState<string>('');
   const [bcvRateEffectiveDate, setBcvRateEffectiveDate] = useState<string>('');
   const [movementBcvRate, setMovementBcvRate] = useState<string>('');
+
+  // Actualizar la fecha cuando se cambia de empresa mientras el modal permanece montado.
+  React.useEffect(() => {
+    const s = currentCompany?.accountingStartDate;
+    const today = new Date().toISOString().slice(0, 10);
+    setDate((s && /^\d{4}-\d{2}-\d{2}$/.test(s) && s < today) ? s : today);
+  }, [currentCompany.id, currentCompany.accountingStartDate]);
+
+  // La tasa sugerida debe corresponder siempre a la fecha del movimiento,
+  // tanto para cuentas Bs como USD (la equivalencia USD también se calcula en cuentas Bs).
+  React.useEffect(() => {
+    const history = currentCompany.accountingBcvRateHistory || [];
+    let best;
+    for (const entry of history) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.effectiveDate) || entry.effectiveDate > date) continue;
+      const rate = Number(entry.rate);
+      if (!Number.isFinite(rate) || rate <= 0) continue;
+      if (!best || entry.effectiveDate >= best.effectiveDate) best = entry;
+    }
+    setMovementBcvRate(best ? String(best.rate) : '');
+    setBcvRateEffectiveDate(best ? best.effectiveDate : '');
+  }, [date, currentCompany.id, currentCompany.accountingBcvRateHistory]);
 
   if (!isOpen) return null;
 
@@ -111,6 +138,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
                   const nextDate = e.target.value;
                   setDate(nextDate);
                   setMovementBcvRate('');
+          setBcvRateEffectiveDate('');
                 }}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               />

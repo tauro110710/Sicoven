@@ -7,6 +7,7 @@ import { calculatePurchaseIgtf, type PurchasePaymentMethod } from '../../types/p
 import { getPurchaseAccountCreditDate, getCompanyTaxStatusForDate, type PurchaseIvaRetentionSnapshot } from '../../types/accounting';
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus, type IvaArticle3Exclusion, type IvaSupplierTaxStatus } from '../../types/ivaRetentionEligibility';
 import { getCompanyPurchasePaymentAccounts } from '../../types/purchaseAccounting';
+import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 
 interface NewPurchaseModalProps {
   isOpen: boolean;
@@ -14,12 +15,24 @@ interface NewPurchaseModalProps {
 }
 
 export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, accounts, bankAccounts, products, movements, purchases, addPurchase, addMovement, runAtomicInvoiceImport, waitForPersistence } = useAccounting();
+  const { currentCompany, accounts, bankAccounts, products, movements, purchases, addPurchase, runAtomicInvoiceImport, waitForPersistence } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
-  const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [accountCreditDate, setAccountCreditDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const formatLocalIsoDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const todayIso = formatLocalIsoDate(new Date());
+  // Si la empresa tiene inicio contable histórico, partir desde esa fecha.
+  const startDate = (() => {
+    const s = currentCompany?.accountingStartDate;
+    return (s && /^\d{4}-\d{2}-\d{2}$/.test(s) && s < todayIso) ? s : todayIso;
+  })();
+
+  const [invoiceDate, setInvoiceDate] = useState<string>(startDate);
+  const [accountCreditDate, setAccountCreditDate] = useState<string>(startDate);
+  React.useEffect(() => {
+    setInvoiceDate(startDate);
+    setAccountCreditDate(startDate);
+  }, [currentCompany.id, currentCompany.accountingStartDate]);
   const [supplierRif, setSupplierRif] = useState<string>('J-');
   const [supplierName, setSupplierName] = useState<string>('');
   const [supplierAddress, setSupplierAddress] = useState<string>('');
@@ -56,6 +69,17 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   // Currency
   const [bcvRateInput, setBcvRateInput] = useState('');
   const bcvRate = parseDecimalInput(bcvRateInput);
+
+  // Sugerencia de tasa BCV histórica basada en el historial de la empresa.
+  // Solo se muestra si el campo está vacío; el contador puede aplicarla con un clic.
+  const [suggestedBcvRate, setSuggestedBcvRate] = React.useState<number | undefined>(undefined);
+  React.useEffect(() => {
+    // La tasa BCV corresponde a la fecha de factura, no a la fecha de abono en cuenta.
+    const resolved = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, invoiceDate);
+    setSuggestedBcvRate(resolved);
+    // Al cambiar la fecha, evitar conservar una tasa de otro período.
+    setBcvRateInput(resolved ? String(resolved) : '');
+  }, [invoiceDate, currentCompany.id, currentCompany.accountingBcvRateHistory]);
   const [notes, setNotes] = useState<string>('');
   // Clasificación explícita: mercancía al Kardex o cuenta específica de gasto/activo.
   const [linkInventory, setLinkInventory] = useState(true);
@@ -71,7 +95,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [fiscalAdjustmentMode, setFiscalAdjustmentMode] = useState<'IVA_ORIGINAL_DIF_CAMBIARIA' | 'AJUSTE_BASE_IVA' | 'REVISION_CONTADOR'>('REVISION_CONTADOR');
   const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>('BS');
   const [applyIgtf, setApplyIgtf] = useState(false);
-  const dueDate = (() => { const d = new Date(invoiceDate + 'T12:00:00'); d.setDate(d.getDate() + creditDays); return d.toISOString().slice(0, 10); })();
+  const dueDate = (() => { const d = new Date(invoiceDate + 'T12:00:00'); d.setDate(d.getDate() + creditDays); return formatLocalIsoDate(d); })();
 
   if (!isOpen) return null;
 
@@ -200,8 +224,20 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       window.alert('El historial ISLR mensual contiene operaciones anteriores con parámetros o importes incompletos. Se requiere conciliación fiscal antes de acumular.');
       return;
     }
-    if (!Number.isFinite(bcvRate) || bcvRate <= 0) {
-      window.alert('No se puede registrar la compra sin una tasa BCV manual válida mayor que cero. Verifica la tasa de la empresa e inténtalo de nuevo.');
+    // La tasa BCV es obligatoria solo cuando la operación requiere equivalencia monetaria
+    // (pago en divisas, método IGTF, o cuando el contador la ingresó y es inválida).
+    // Para operaciones nominales en bolívares sin equivalencia requerida,
+    // se permite bcvRate = 0 y la equivalencia USD queda como pendiente (0).
+    const paymentNeedsUsd = ['FOREIGN_CASH', 'ZELLE', 'INTERNATIONAL_TRANSFER', 'CRYPTO', 'FOREIGN_TRANSFER'].includes(paymentMethod);
+    // Desde 2018 la tasa BCV se exige para el registro contable de compras, aunque el pago sea nominal en Bs.
+    const purchaseRequiresBcv = invoiceDate >= '2018-01-01';
+    const bcvExplicitlyInvalid = bcvRateInput.trim().length > 0 && (!Number.isFinite(bcvRate) || bcvRate <= 0);
+    if ((paymentNeedsUsd || purchaseRequiresBcv) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) {
+      window.alert('La tasa BCV es obligatoria para compras desde 2018 y para operaciones en divisas. Ingrese la tasa correspondiente a la fecha o use el historial de la empresa.');
+      return;
+    }
+    if (bcvExplicitlyInvalid) {
+      window.alert('La tasa BCV ingresada no es válida. Corríjala o bórrela para dejarla como pendiente.');
       return;
     }
     if (!Number.isFinite(totalAmountBs) || totalAmountBs <= 0) {
@@ -307,24 +343,6 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       purchaseDebitAccountCode: linkInventory ? undefined : purchaseDebitAccountCode,
       inventoryLines: linkInventory ? inventoryLines.map(line => ({productId:line.productId,quantity:parseDecimalInput(line.quantity),unitCostBs:parseDecimalInput(line.unitCostBs)})) : undefined
       });
-      if (linkInventory) {
-        for (const line of inventoryLines) {
-          const product = products.find(p => p.id === line.productId && p.companyId === currentCompany.id)!;
-          const quantity = parseDecimalInput(line.quantity);
-          const unitCostBs = parseDecimalInput(line.unitCostBs);
-          addMovement({
-            productId: product.id, productName: product.name, productCode: product.code,
-            date: invoiceDate, type: 'ENTRADA', concept: 'COMPRA',
-            documentRef: 'FAC-' + invoiceNumber.trim(), documentType: 'Factura de compra',
-            counterpartyRif: formatRif(supplierRif), counterpartyName: supplierName.trim().toUpperCase(),
-            bcvRate, quantity, unitCostBs, unitCostUsd: unitCostBs / bcvRate,
-            totalCostBs: quantity * unitCostBs, totalCostUsd: quantity * unitCostBs / bcvRate,
-            balanceQty: product.currentStock + quantity,
-            balanceTotalBs: (product.currentStock + quantity) * product.avgCostBs,
-            balanceTotalUsd: (product.currentStock + quantity) * product.avgCostUsd
-          });
-        }
-      }
       });
       await waitForPersistence();
       onClose();
@@ -488,9 +506,20 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               <span className="font-bold text-slate-800 uppercase tracking-wider block">
                 2. Montos e Impuesto al Valor Agregado (IVA)
               </span>
-              <div className="text-slate-500 font-mono-nums">
-                Tasa BCV aplicable a la factura
-                <input required type="text" inputMode="decimal" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} placeholder="Ej.: 889,67" className="ml-2 w-36 rounded-lg border border-slate-300 bg-white px-2 py-1 font-mono" />
+              <div className="text-slate-500 font-mono-nums flex flex-col items-end gap-0.5">
+                <div className="flex items-center gap-1">
+                  Tasa BCV aplicable a la factura
+                  <input type="text" inputMode="decimal" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} placeholder="Ej.: 889,67" className="ml-2 w-36 rounded-lg border border-slate-300 bg-white px-2 py-1 font-mono" />
+                </div>
+                {suggestedBcvRate && suggestedBcvRate > 0 && String(suggestedBcvRate) !== bcvRateInput && (
+                  <button
+                    type="button"
+                    onClick={() => setBcvRateInput(String(suggestedBcvRate))}
+                    className="text-xs text-emerald-600 hover:text-emerald-800 underline"
+                  >
+                    Usar tasa del historial: {suggestedBcvRate}
+                  </button>
+                )}
               </div>
             </div>
 

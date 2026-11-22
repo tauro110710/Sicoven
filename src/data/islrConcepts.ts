@@ -84,19 +84,44 @@ export const ISLR_FORMULA_FACTOR = 83.3334;
 
 /**
  * UT aplicable al período mensual, según el valor vigente al inicio del mes.
- * Fuentes versionadas: SNAT/2021/000023 (G.O. 42.100), SNAT/2022/000023
- * (G.O. 42.359), SNAT/2023/000031 (G.O. 42.623) y SNAT/2025/000048
- * (G.O. 43.140). La providencia de junio de 2025 rige desde el 02/06/2025,
- * por lo que junio conserva UT 9 y julio 2025 inicia con UT 43. No se extrapolan
- * valores anteriores a octubre de 2021, cuando entró en vigor la reconversión.
+ * Los importes se expresan en la misma escala monetaria operacional del período:
+ *   - BsD (bolivar digital)  : desde oct-2021 en adelante.
+ *   - BsS (bolívar soberano) : ago-2018 → sep-2021 (reconversión 20/08/2018, factor 100.000).
+ *   - BsF (bolívar fuerte)   : hasta jul-2018.
+ *
+ * Fuentes por era:
+ *   BsD — SNAT/2021/000023 (G.O. 42.100), SNAT/2022/000023 (G.O. 42.359),
+ *          SNAT/2023/000031 (G.O. 42.623), SNAT/2025/000048 (G.O. 43.140).
+ *   BsS — SNAT/2019/0005 (G.O. 41.566), SNAT/2020/0011 (G.O. 41.788).
+ *          Ago-dic 2018: 500 BsF / 100.000 (factor reconversión).
+ *   BsF — SNAT/2014/0005 (G.O. 40.359), SNAT/2015/0003 (G.O. 40.616),
+ *          SNAT/2016/0004 (G.O. 40.846), SNAT/2017/0003 (G.O. 41.099),
+ *          SNAT/2018/0007 (G.O. 41.344).
+ *
+ * No se extrapolan valores anteriores a feb-2014.
  */
 export function getIslrUnitTaxValueForPeriod(period: string): number | null {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return null;
-  if (period >= '2025-07') return 43;
-  if (period >= '2023-06') return 9;
-  if (period >= '2022-05') return 0.4;
-  if (period >= '2021-10') return 0.02;
-  return null;
+
+  // — Era BsD (bolívar digital, reconversión oct-2021) —
+  if (period >= '2025-07') return 43;      // G.O. 43.140 (02/06/2025)
+  if (period >= '2023-06') return 9;       // G.O. 42.623 (SNAT/2023/000031)
+  if (period >= '2022-05') return 0.4;     // G.O. 42.359 (SNAT/2022/000023)
+  if (period >= '2021-10') return 0.02;    // G.O. 42.100 (SNAT/2021/000023)
+
+  // — Era BsS (bolívar soberano, reconversión ago-2018 → sep-2021) —
+  if (period >= '2020-01') return 1500;    // 1.500 BsS — G.O. 41.788 (SNAT/2020/0011, 30/01/2020)
+  if (period >= '2019-01') return 50;      // 50 BsS    — G.O. 41.566 (SNAT/2019/0005, 22/01/2019)
+  if (period >= '2018-08') return 0.005;   // 0,005 BsS — 500 BsF / 100.000 (factor reconversión 20/08/2018)
+
+  // — Era BsF (bolívar fuerte, hasta 19/08/2018) —
+  if (period >= '2018-02') return 500;     // 500 BsF — G.O. 41.344 (SNAT/2018/0007, 12/02/2018)
+  if (period >= '2017-02') return 300;     // 300 BsF — G.O. 41.099 (SNAT/2017/0003, 09/02/2017)
+  if (period >= '2016-02') return 177;     // 177 BsF — G.O. 40.846 (SNAT/2016/0004, 11/02/2016)
+  if (period >= '2015-02') return 150;     // 150 BsF — G.O. 40.616 (SNAT/2015/0003, 12/02/2015)
+  if (period >= '2014-02') return 127;     // 127 BsF — G.O. 40.359 (SNAT/2014/0005, 19/02/2014)
+
+  return null; // anterior a feb-2014: sin valor documentado en SICOVEN
 }
 
 export function calculateIslrRetention(baseAmountBs: number, concept: IslrConcept, unitTaxValueBs: number = VALOR_UNIDAD_TRIBUTARIA_BS): {

@@ -4,6 +4,8 @@ import { ArrowLeftRight, X, Check } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
+import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
+import { calculateFifoIssue, reconstructFifoLayers } from '../../types/inventoryAccounting';
 
 interface NewMovementModalProps {
   isOpen: boolean;
@@ -17,6 +19,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   defaultProductId
 }) => {
   const { currentCompany, products: allProducts, movements: allMovements, purchases: allPurchases, journalEntries: allJournalEntries, addMovement, waitForPersistence } = useAccounting();
+  const formatLocalIsoDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   const companyProducts = filterEntriesByCompany(allProducts, currentCompany.id);
   const companyMovements = filterEntriesByCompany(allMovements, currentCompany.id);
   const companyPurchases = filterEntriesByCompany(allPurchases, currentCompany.id);
@@ -27,7 +30,16 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const [productId, setProductId] = useState<string>(
     defaultProductId || companyProducts[0]?.id || ''
   );
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(() => {
+    // Iniciar en la fecha de inicio contable si existe y es anterior a hoy,
+    // para que el contador parta automáticamente del período histórico correcto.
+    const start = currentCompany?.accountingStartDate;
+    if (start && /^\d{4}-\d{2}-\d{2}$/.test(start)) {
+      const today = formatLocalIsoDate(new Date());
+      if (start < today) return start;
+    }
+    return formatLocalIsoDate(new Date());
+  });
   const [type, setType] = useState<'ENTRADA' | 'SALIDA' | 'AJUSTE'>('ENTRADA');
   const [concept, setConcept] = useState<'COMPRA' | 'VENTA' | 'MERMA' | 'AJUSTE' | 'DEVOLUCION_COMPRA' | 'DEVOLUCION_CLIENTE' | 'AUTOCONSUMO' | 'INVENTARIO_INICIAL'>('COMPRA');
   const [correctionMovementId, setCorrectionMovementId] = useState('');
@@ -46,6 +58,9 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
     const validDefault = defaultProductId ? companyProducts.some(product => product.id === defaultProductId) : false;
     if (!validCurrent) setProductId(validDefault ? defaultProductId! : (companyProducts[0]?.id || ''));
     setCorrectionMovementId('');
+    const start = currentCompany?.accountingStartDate;
+    const today = formatLocalIsoDate(new Date());
+    setDate((start && /^\d{4}-\d{2}-\d{2}$/.test(start) && start < today) ? start : today);
   }, [currentCompany.id]);
 
   const selectedProduct = companyProducts.find(p => p.id === productId) || companyProducts[0];
@@ -60,15 +75,26 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   }, [productId, selectedProduct]);
 
   React.useEffect(() => {
-    const historicalRate = resolveInventoryBcvRate(currentCompany.inventoryBcvRateHistory || [], date);
-    if (historicalRate) {
-      setBcvRateInput(String(historicalRate.rate));
-    } else if (date === currentCompany.inventoryBcvRateEffectiveDate && currentCompany.inventoryBcvRate) {
-      setBcvRateInput(String(currentCompany.inventoryBcvRate));
-    } else {
-      setBcvRateInput('');
+    // Prioridad 1: historial BCV específico de inventario.
+    const inventoryRate = resolveInventoryBcvRate(currentCompany.inventoryBcvRateHistory || [], date);
+    if (inventoryRate) {
+      setBcvRateInput(String(inventoryRate.rate));
+      return;
     }
-  }, [date, currentCompany.id, currentCompany.inventoryBcvRate, currentCompany.inventoryBcvRateEffectiveDate, currentCompany.inventoryBcvRateHistory]);
+    // Prioridad 2: tasa BCV puntual del módulo de inventario (campo simple).
+    if (date === currentCompany.inventoryBcvRateEffectiveDate && currentCompany.inventoryBcvRate) {
+      setBcvRateInput(String(currentCompany.inventoryBcvRate));
+      return;
+    }
+    // Prioridad 3: historial BCV general de la empresa (Configuración → BCV).
+    // Útil para períodos históricos donde el contador registró tasas en ese módulo.
+    const generalRate = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, date);
+    if (generalRate) {
+      setBcvRateInput(String(generalRate));
+      return;
+    }
+    setBcvRateInput('');
+  }, [date, currentCompany.id, currentCompany.inventoryBcvRate, currentCompany.inventoryBcvRateEffectiveDate, currentCompany.inventoryBcvRateHistory, currentCompany.accountingBcvRateHistory]);
 
   if (!isOpen || !selectedProduct) return null;
 
@@ -78,12 +104,28 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const additionalLandedCostsBs = parseDecimalInput(additionalLandedCostsInput);
   const bcvRate = parseDecimalInput(bcvRateInput);
   const unitCostUsd = bcvRate > 0 ? unitCostBs / bcvRate : 0;
+  const fifoPreview = React.useMemo(() => {
+    if (type !== 'SALIDA' || selectedProduct.costingMethod !== 'PEPS') return undefined;
+    try {
+      const prior = companyMovements.filter(m => m.productId === selectedProduct.id && m.date <= date);
+      const priorOrdered = [...prior].sort((x, y) => x.date.localeCompare(y.date));
+      const stockAtDate = priorOrdered.length ? Number(priorOrdered[priorOrdered.length - 1].balanceQty) : 0;
+      const layers = reconstructFifoLayers(prior, stockAtDate);
+      return calculateFifoIssue(layers, quantity);
+    } catch {
+      return undefined;
+    }
+  }, [type, selectedProduct.id, selectedProduct.costingMethod, selectedProduct.currentStock, companyMovements, date, quantity]);
   const totalCostBs = type === 'ENTRADA'
     ? quantity * unitCostBs + additionalLandedCostsBs
     : type === 'SALIDA'
-      ? quantity * selectedProduct.avgCostBs
+      ? (fifoPreview?.totalCostBs ?? quantity * selectedProduct.avgCostBs)
       : Math.abs(quantity - selectedProduct.currentStock) * (quantity < selectedProduct.currentStock ? selectedProduct.avgCostBs : unitCostBs);
-  const totalCostUsd = bcvRate > 0 ? totalCostBs / bcvRate : 0;
+  const totalCostUsd = type === 'SALIDA' && selectedProduct.costingMethod === 'PEPS' && fifoPreview
+    ? fifoPreview.totalCostUsd
+    : type === 'SALIDA' && selectedProduct.costingMethod !== 'PEPS'
+      ? quantity * Number(selectedProduct.avgCostUsd || 0)
+      : bcvRate > 0 ? totalCostBs / bcvRate : 0;
 
   // Compute prospective balance
   let balanceQty = selectedProduct.currentStock;
@@ -97,7 +139,11 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!Number.isFinite(quantity) || !Number.isFinite(unitCostBs) || !Number.isFinite(additionalLandedCostsBs) || quantity < 0 || (type !== 'AJUSTE' && quantity <= 0) || unitCostBs < 0 || additionalLandedCostsBs < 0 || !Number.isFinite(bcvRate) || bcvRate <= 0) { setError('Verifique que la cantidad, los costos y la tasa BCV sean válidos.'); return; }
+    if (!Number.isFinite(quantity) || !Number.isFinite(unitCostBs) || !Number.isFinite(additionalLandedCostsBs) || quantity < 0 || (type !== 'AJUSTE' && quantity <= 0) || unitCostBs < 0 || additionalLandedCostsBs < 0) { setError('Verifique que la cantidad y los costos sean válidos.'); return; }
+    // La tasa BCV es opcional para movimientos en bolívares; solo se rechaza si el contador
+    // ingresó un valor explícito que no es un número positivo válido.
+    if (bcvRateInput.trim().length > 0 && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('La tasa BCV ingresada no es válida. Corríjala o bórrela para dejarla como pendiente.'); return; }
+
     if (type === 'SALIDA' && concept === 'DEVOLUCION_COMPRA') {
       if (!selectedReturnSource) { setError('Seleccione la entrada original de Kardex que se devuelve.'); return; }
       if (quantity > selectedReturnSource.remaining + 1e-8) { setError('La cantidad supera las unidades recibidas menos devoluciones previas (' + selectedReturnSource.remaining + ').'); return; }
@@ -280,8 +326,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
               </select>
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) *</label>
-              <input type="text" inputMode="decimal" required placeholder="Ej.: 889,67" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) (opcional)</label>
+              <input type="text" inputMode="decimal" placeholder="Ej.: 889,67 (dejar vacío si pendiente)" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">RIF proveedor / cliente</label>

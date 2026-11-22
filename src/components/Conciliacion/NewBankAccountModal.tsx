@@ -23,6 +23,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
   const [parentAccountCode, setParentAccountCode] = useState('1.1.1.03');
   const [initialBalanceBs, setInitialBalanceBs] = useState<string>('');
   const [bcvRateInput, setBcvRateInput] = useState<string>('');
+  const [openingDate, setOpeningDate] = useState<string>('');
 
   if (!isOpen) return null;
 
@@ -54,6 +55,16 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
     savingRef.current = true;
     setSaving(true);
     try {
+      // Validar la fecha de apertura si se proporcionó
+      if (openingDate) {
+        const parsedOpeningDate = new Date(openingDate + 'T00:00:00.000Z');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(openingDate) ||
+            !Number.isFinite(parsedOpeningDate.getTime()) ||
+            parsedOpeningDate.toISOString().slice(0, 10) !== openingDate) {
+          window.alert('La fecha del saldo inicial no es válida. Use el formato AAAA-MM-DD.');
+          return;
+        }
+      }
       addBankAccount({
         bankName: bankName.trim(),
         accountHolderName: accountHolderName.trim() || undefined,
@@ -65,7 +76,8 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
         initialBalanceBs: Math.round(openingBalanceBs * 100) / 100,
         initialBalanceUsd: Math.round(openingBalanceUsd * 1000000) / 1000000,
         accountType,
-        checkbookNumber: checkbookNumber.trim() || undefined
+        checkbookNumber: checkbookNumber.trim() || undefined,
+        openingDate: openingDate || undefined
       });
       await waitForPersistence();
       // Dejar el formulario limpio para la próxima alta, sin datos residuales.
@@ -79,6 +91,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
       setParentAccountCode('1.1.1.03');
       setInitialBalanceBs('');
       setBcvRateInput('');
+      setOpeningDate('');
       onClose();
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'No se pudo registrar la cuenta bancaria.');
@@ -212,6 +225,17 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
             <label className="block font-semibold text-slate-700 mb-1">Tasa BCV aplicable al saldo inicial (Bs./USD) {currency === 'USD' ? '*' : '(opcional)'}</label>
             <input type="text" inputMode="decimal" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} placeholder="Ej.: 889,67" required className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
           </div>}
+
+          <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 space-y-1">
+            <label className="block font-semibold text-slate-700">Fecha del saldo inicial (opcional)</label>
+            <input
+              type="date"
+              value={openingDate}
+              onChange={e => setOpeningDate(e.target.value)}
+              className="pointer-events-auto w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white focus:ring-1 focus:ring-amber-500 focus:outline-none"
+            />
+            <p className="text-[10px] text-slate-500">Si la cuenta existía antes del día de hoy, indique la fecha real del saldo inicial para que el asiento de apertura quede en la fecha correcta. Si se deja en blanco se usa la fecha de hoy.</p>
+          </div>
 
           <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">
             <button

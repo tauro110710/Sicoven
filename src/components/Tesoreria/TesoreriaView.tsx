@@ -4,6 +4,7 @@ import { NewBankAccountModal } from '../Conciliacion/NewBankAccountModal';
 import { Landmark, Plus, ArrowDownLeft, ArrowUpRight, ArrowRightLeft, Wallet, ReceiptText } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import { calculateBankAvailableBalance } from '../../types/bankAccountAvailability';
+import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 
 type MovementKind = 'INCOME' | 'EXPENSE' | 'TRANSFER';
 
@@ -14,7 +15,20 @@ export const TesoreriaView: React.FC = () => {
   const [showNewBank, setShowNewBank] = useState(false);
   const [selectedBankId, setSelectedBankId] = useState('');
   const [kind, setKind] = useState<MovementKind>('INCOME');
-  const [date, setDate] = useState(() => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); });
+  const [date, setDate] = useState(() => {
+    // Inicializar en la fecha de inicio contable de la empresa si existe;
+    // así el contador parte automáticamente desde el año histórico correcto.
+    const startDate = currentCompany?.accountingStartDate;
+    if (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) return startDate;
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  });
+  React.useEffect(() => {
+    const startDate = currentCompany?.accountingStartDate;
+    const now = new Date();
+    const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    setDate((startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) ? startDate : today);
+  }, [currentCompany.id, currentCompany.accountingStartDate]);
   const [reference, setReference] = useState('');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
@@ -44,8 +58,32 @@ export const TesoreriaView: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (savingRef.current) return;
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0 || !Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0) {
-      setMessage('Ingrese un monto positivo y la tasa BCV histórica aplicable (por ejemplo 889,67).');
+    // Para cuentas USD la tasa BCV es siempre obligatoria (hay conversión real).
+    // Para cuentas BS es obligatoria solo si el contador la ingresó; si no,
+    // se intenta resolver del historial de la empresa y, si tampoco existe,
+    // se bloquea con mensaje claro en lugar de usar la tasa actual.
+    const isUsdAccount = activeBank?.currency === 'USD';
+    const resolvedBcvRate = (() => {
+      if (parsedBcvRate > 0) return parsedBcvRate;
+      if (!isUsdAccount) {
+        const historical = resolveBcvRateForDate(
+          currentCompany.accountingBcvRateHistory,
+          date
+        );
+        return historical ?? 0;
+      }
+      return 0;
+    })();
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setMessage('Ingrese un monto positivo.');
+      return;
+    }
+    if (isUsdAccount && resolvedBcvRate <= 0) {
+      setMessage('La cuenta es en dólares: ingrese la tasa BCV histórica aplicable a esta fecha (Bs./USD).');
+      return;
+    }
+    if (!isUsdAccount && resolvedBcvRate <= 0) {
+      setMessage('No se encontró tasa BCV registrada para esta fecha. Registre la tasa BCV en el módulo de configuración o ingrésela manualmente.');
       return;
     }
     savingRef.current = true;
@@ -54,12 +92,12 @@ export const TesoreriaView: React.FC = () => {
     try {
       const entry = registerTreasuryMovement({
         bankAccountId: activeBank?.id || selectedBankId,
-        date, reference, description, type: kind, amount: parsedAmount, bcvRate: parsedBcvRate,
+        date, reference, description, type: kind, amount: parsedAmount, bcvRate: resolvedBcvRate,
         counterpartAccountCode: kind === 'TRANSFER' ? undefined : counterpartCode,
         destinationBankAccountId: kind === 'TRANSFER' ? destinationBankId : undefined
       });
       await waitForPersistence();
-      setMessage('SQLite confirmó el movimiento contabilizado en el asiento #' + entry.entryNumber + '.');
+      setMessage('SQLite confirmó el movimiento contabilizado en el asiento #' + entry.entryNumber + (resolvedBcvRate !== parsedBcvRate ? ' (tasa BCV autoresuelta: ' + resolvedBcvRate.toFixed(4) + ' Bs./USD).' : '.'));
       setReference(''); setDescription(''); setAmount(''); setBcvRateInput('');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo registrar el movimiento.');
@@ -116,7 +154,24 @@ export const TesoreriaView: React.FC = () => {
           <div><label className="mb-1 block text-xs font-semibold text-slate-700">Referencia / cheque / transferencia</label><input required value={reference} onChange={e=>setReference(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs" placeholder="N.º de operación"/></div>
           <div><label className="mb-1 block text-xs font-semibold text-slate-700">Concepto</label><input required value={description} onChange={e=>setDescription(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs" placeholder="Descripción de la operación"/></div>
           <div><label className="mb-1 block text-xs font-semibold text-slate-700">Importe ({activeBank?.currency === 'USD' ? '$ USD' : 'Bs.'})</label><input required type="text" inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm" placeholder="0,00"/></div>
-          <div><label className="mb-1 block text-xs font-semibold text-slate-700">Tasa BCV aplicable a este movimiento (Bs./USD) *</label><input required type="text" inputMode="decimal" value={bcvRateInput} onChange={e=>setBcvRateInput(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm" placeholder="Ej.: 889,67"/></div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-slate-700">
+              Tasa BCV aplicable (Bs./USD){activeBank?.currency === 'USD' ? ' *' : ' — opcional para cuentas Bs.'}
+            </label>
+            <input
+              type="text" inputMode="decimal"
+              value={bcvRateInput}
+              onChange={e=>setBcvRateInput(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
+              placeholder={activeBank?.currency === 'USD' ? 'Obligatorio para USD' : 'Dejar vacío para usar tasa histórica registrada'}
+            />
+            {activeBank?.currency !== 'USD' && (() => {
+              const suggested = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, date);
+              return suggested
+                ? <p className="mt-1 text-[10px] text-slate-500">Tasa en historial para {date}: <strong>{suggested.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</strong> Bs./USD — se usará si deja el campo vacío.</p>
+                : <p className="mt-1 text-[10px] text-amber-600">No hay tasa BCV registrada para {date}. Regîstrela en Configuración o ingrésela aquí.</p>;
+            })()}
+          </div>
           <button type="submit" disabled={saving} className="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-40">{saving ? "Confirmando SQLite..." : "Contabilizar movimiento"}</button>
           {message && <p role="status" className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700">{message}</p>}
         </form>
