@@ -97,3 +97,14 @@ test('converts decimal values expressed in scientific notation exactly as their 
   assert.equal(convertVenezuelanAmount('1.25e3', 'BOLIVAR_DIGITAL', 'BOLIVAR_DIGITAL'), '1250');
   assert.equal(convertVenezuelanAmount('-2.5e-3', 'BOLIVAR_DIGITAL', 'BOLIVAR_DIGITAL'), '-0.0025');
 });
+
+test('suma decimales de balances con precisión exacta, sin errores de coma flotante', () => {
+  const { addExactDecimals } = require('./historicalAccountingCalendar') as typeof import('./historicalAccountingCalendar');
+  assert.equal(addExactDecimals('0.1', '0.2'), '0.3');
+  assert.equal(addExactDecimals('999999999999999999.99', '0.01'), '1000000000000000000');
+  assert.equal(addExactDecimals('-0.25', '0.1'), '-0.15');
+  assert.equal(addExactDecimals('1.200', '0.008'), '1.208');
+  assert.equal(addExactDecimals('10', '-10'), '0');
+  assert.equal(addExactDecimals('0.00000000000001', '0.00000000000009'), '0.0000000000001');
+  assert.throws(() => addExactDecimals('NaN', '1'));
+});
