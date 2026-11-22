@@ -120,7 +120,11 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
     : type === 'SALIDA'
       ? (fifoPreview?.totalCostBs ?? quantity * selectedProduct.avgCostBs)
       : Math.abs(quantity - selectedProduct.currentStock) * (quantity < selectedProduct.currentStock ? selectedProduct.avgCostBs : unitCostBs);
-  const totalCostUsd = bcvRate > 0 ? totalCostBs / bcvRate : 0;
+  const totalCostUsd = type === 'SALIDA' && selectedProduct.costingMethod === 'PEPS' && fifoPreview
+    ? fifoPreview.totalCostUsd
+    : type === 'SALIDA' && selectedProduct.costingMethod !== 'PEPS'
+      ? quantity * Number(selectedProduct.avgCostUsd || 0)
+      : bcvRate > 0 ? totalCostBs / bcvRate : 0;
 
   // Compute prospective balance
   let balanceQty = selectedProduct.currentStock;
