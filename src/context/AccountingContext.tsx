@@ -4642,7 +4642,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const nextEntryNum = Math.max(companyEntries.reduce((max, entry) => Math.max(max, entry.entryNumber || 0), 0), journalSequenceRef.current[companyKey] || 0) + 1;
     journalSequenceRef.current[companyKey] = nextEntryNum;
 
+    const normalizedSaleJournalItems = items.map(item => ({
+      ...item,
+      debitDigitalBs: normalizeBolivarAmountForDate(item.debitBs, saleData.invoiceDate).digitalBolivars,
+      creditDigitalBs: normalizeBolivarAmountForDate(item.creditBs, saleData.invoiceDate).digitalBolivars
+    }));
+    const createdSaleJournalEra = normalizeBolivarAmountForDate(0, saleData.invoiceDate).sourceEra.id;
     const createdJournalEntry: JournalEntry = {
+      monetaryEraId: createdSaleJournalEra,
+      items: normalizedSaleJournalItems,
       id: `entry-sale-${companyKey}-${nextEntryNum}-${Date.now()}`,
       companyId: targetCompany.id,
       entryNumber: nextEntryNum,
@@ -5069,7 +5077,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           { accountCode: offsetAccount.code, accountName: offsetAccount.name, debitBs: 0, creditBs: openingValueBs, debitUsd: 0, creditUsd: openingValueUsd, description: `Contrapartida de apertura de inventario ${newProd.code}` }
         ], createdAt: new Date().toISOString()
       };
+      openingEntry.monetaryEraId = normalizeBolivarAmountForDate(0, openingDateValue).sourceEra.id;
+      openingEntry.items = openingEntry.items.map(item => ({
+        ...item,
+        debitDigitalBs: normalizeBolivarAmountForDate(item.debitBs, openingDateValue).digitalBolivars,
+        creditDigitalBs: normalizeBolivarAmountForDate(item.creditBs, openingDateValue).digitalBolivars
+      }));
+      const normalizedProductOpeningCost = normalizeBolivarAmountForDate(initialCostBs, openingDateValue);
+      const normalizedProductOpeningTotal = normalizeBolivarAmountForDate(openingValueBs, openingDateValue);
       opening = {
+        monetaryEraId: normalizedProductOpeningCost.sourceEra.id,
+        unitCostDigitalBs: normalizedProductOpeningCost.digitalBolivars,
+        totalCostDigitalBs: normalizedProductOpeningTotal.digitalBolivars,
+        balanceTotalDigitalBs: normalizedProductOpeningTotal.digitalBolivars,
         id: `mov-opening-${newProd.id}`, companyId: currentCompany.id,
         productId: newProd.id, productName: newProd.name, productCode: newProd.code,
         date: openingEntry.date, type: 'ENTRADA', concept: 'INVENTARIO_INICIAL',
@@ -5350,6 +5370,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           type: 'INVENTARIO', bcvRate: rate, referenceDoc: row.documentRef, items: lines, createdAt: new Date().toISOString()
         };
         movement.journalEntryId = entry.id;
+        entry.monetaryEraId = normalizeBolivarAmountForDate(0, row.date).sourceEra.id;
+        entry.items = entry.items.map(item => ({
+          ...item,
+          debitDigitalBs: normalizeBolivarAmountForDate(item.debitBs, row.date).digitalBolivars,
+          creditDigitalBs: normalizeBolivarAmountForDate(item.creditBs, row.date).digitalBolivars
+        }));
         importedEntries.push(entry);
       }
       importedMovements.push(movement);
