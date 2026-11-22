@@ -163,7 +163,7 @@ export function roundHistoricalPresentationAmount(amount: string | number, decim
   if (!Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 12) {
     throw new Error('La precisión de presentación debe estar entre 0 y 12 decimales.');
   }
-  const raw = String(amount).trim();
+  const raw = expandScientificDecimal(String(amount).trim());
   if (!/^-?\d+(\.\d+)?$/.test(raw)) throw new Error('El importe debe ser un número decimal válido.');
   const negative = raw.startsWith('-');
   const unsigned = negative ? raw.slice(1) : raw;
@@ -185,6 +185,25 @@ export function roundHistoricalPresentationAmount(amount: string | number, decim
 
 function expandScientificDecimal(raw: string): string {
   const match = raw.match(/^(-?)(\d+)(?:\.(\d*))?[eE]([+-]?\d+)$/);
+  if (!match) return raw;
+  const sign = match[1];
+  const integer = match[2];
+  const fraction = match[3] || '';
+  const exponent = Number(match[4]);
+  const digits = integer + fraction;
+  const decimalPosition = integer.length + exponent;
+  if (decimalPosition <= 0) return sign + '0.' + '0'.repeat(-decimalPosition) + digits;
+  if (decimalPosition >= digits.length) return sign + digits + '0'.repeat(decimalPosition - digits.length);
+  return sign + digits.slice(0, decimalPosition) + '.' + digits.slice(decimalPosition);
+}
+
+function expandScientificDecimal(raw: string): string {
+  const match = raw.match(new RegExp('^(-?)([0-9]+)(?:\\.([0-9]*))?[eE]([+-]?[0-9]+)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(value + 'T00:00:00.000Z');
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+));
   if (!match) return raw;
   const sign = match[1];
   const integer = match[2];
