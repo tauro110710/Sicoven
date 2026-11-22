@@ -7,6 +7,7 @@ import { calculatePurchaseIgtf, type PurchasePaymentMethod } from '../../types/p
 import { getPurchaseAccountCreditDate, getCompanyTaxStatusForDate, type PurchaseIvaRetentionSnapshot } from '../../types/accounting';
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus, type IvaArticle3Exclusion, type IvaSupplierTaxStatus } from '../../types/ivaRetentionEligibility';
 import { getCompanyPurchasePaymentAccounts } from '../../types/purchaseAccounting';
+import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 
 interface NewPurchaseModalProps {
   isOpen: boolean;
@@ -18,8 +19,15 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
-  const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [accountCreditDate, setAccountCreditDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const todayIso = new Date().toISOString().split('T')[0];
+  // Si la empresa tiene inicio contable histórico, partir desde esa fecha.
+  const startDate = (() => {
+    const s = currentCompany?.accountingStartDate;
+    return (s && /^\d{4}-\d{2}-\d{2}$/.test(s) && s < todayIso) ? s : todayIso;
+  })();
+
+  const [invoiceDate, setInvoiceDate] = useState<string>(startDate);
+  const [accountCreditDate, setAccountCreditDate] = useState<string>(startDate);
   const [supplierRif, setSupplierRif] = useState<string>('J-');
   const [supplierName, setSupplierName] = useState<string>('');
   const [supplierAddress, setSupplierAddress] = useState<string>('');
@@ -56,6 +64,19 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   // Currency
   const [bcvRateInput, setBcvRateInput] = useState('');
   const bcvRate = parseDecimalInput(bcvRateInput);
+
+  // Sugerencia de tasa BCV histórica basada en el historial de la empresa.
+  // Solo se muestra si el campo está vacío; el contador puede aplicarla con un clic.
+  const [suggestedBcvRate, setSuggestedBcvRate] = React.useState<number | undefined>(undefined);
+  React.useEffect(() => {
+    const resolved = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, accountCreditDate);
+    setSuggestedBcvRate(resolved);
+    // Solo pre-llenar si el campo sigue vacío (no pisar lo que ya escribió el contador)
+    if (resolved && !bcvRateInput) {
+      setBcvRateInput(String(resolved));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountCreditDate, currentCompany.id, currentCompany.accountingBcvRateHistory]);
   const [notes, setNotes] = useState<string>('');
   // Clasificación explícita: mercancía al Kardex o cuenta específica de gasto/activo.
   const [linkInventory, setLinkInventory] = useState(true);
@@ -488,9 +509,20 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               <span className="font-bold text-slate-800 uppercase tracking-wider block">
                 2. Montos e Impuesto al Valor Agregado (IVA)
               </span>
-              <div className="text-slate-500 font-mono-nums">
-                Tasa BCV aplicable a la factura
-                <input required type="text" inputMode="decimal" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} placeholder="Ej.: 889,67" className="ml-2 w-36 rounded-lg border border-slate-300 bg-white px-2 py-1 font-mono" />
+              <div className="text-slate-500 font-mono-nums flex flex-col items-end gap-0.5">
+                <div className="flex items-center gap-1">
+                  Tasa BCV aplicable a la factura
+                  <input required type="text" inputMode="decimal" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} placeholder="Ej.: 889,67" className="ml-2 w-36 rounded-lg border border-slate-300 bg-white px-2 py-1 font-mono" />
+                </div>
+                {suggestedBcvRate && suggestedBcvRate > 0 && String(suggestedBcvRate) !== bcvRateInput && (
+                  <button
+                    type="button"
+                    onClick={() => setBcvRateInput(String(suggestedBcvRate))}
+                    className="text-xs text-emerald-600 hover:text-emerald-800 underline"
+                  >
+                    Usar tasa del historial: {suggestedBcvRate}
+                  </button>
+                )}
               </div>
             </div>
 

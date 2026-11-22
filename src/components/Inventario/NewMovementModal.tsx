@@ -4,6 +4,7 @@ import { ArrowLeftRight, X, Check } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
+import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 
 interface NewMovementModalProps {
   isOpen: boolean;
@@ -27,7 +28,16 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const [productId, setProductId] = useState<string>(
     defaultProductId || companyProducts[0]?.id || ''
   );
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(() => {
+    // Iniciar en la fecha de inicio contable si existe y es anterior a hoy,
+    // para que el contador parta automáticamente del período histórico correcto.
+    const start = currentCompany?.accountingStartDate;
+    if (start && /^\d{4}-\d{2}-\d{2}$/.test(start)) {
+      const today = new Date().toISOString().slice(0, 10);
+      if (start < today) return start;
+    }
+    return new Date().toISOString().split('T')[0];
+  });
   const [type, setType] = useState<'ENTRADA' | 'SALIDA' | 'AJUSTE'>('ENTRADA');
   const [concept, setConcept] = useState<'COMPRA' | 'VENTA' | 'MERMA' | 'AJUSTE' | 'DEVOLUCION_COMPRA' | 'DEVOLUCION_CLIENTE' | 'AUTOCONSUMO' | 'INVENTARIO_INICIAL'>('COMPRA');
   const [correctionMovementId, setCorrectionMovementId] = useState('');
@@ -60,15 +70,26 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   }, [productId, selectedProduct]);
 
   React.useEffect(() => {
-    const historicalRate = resolveInventoryBcvRate(currentCompany.inventoryBcvRateHistory || [], date);
-    if (historicalRate) {
-      setBcvRateInput(String(historicalRate.rate));
-    } else if (date === currentCompany.inventoryBcvRateEffectiveDate && currentCompany.inventoryBcvRate) {
-      setBcvRateInput(String(currentCompany.inventoryBcvRate));
-    } else {
-      setBcvRateInput('');
+    // Prioridad 1: historial BCV específico de inventario.
+    const inventoryRate = resolveInventoryBcvRate(currentCompany.inventoryBcvRateHistory || [], date);
+    if (inventoryRate) {
+      setBcvRateInput(String(inventoryRate.rate));
+      return;
     }
-  }, [date, currentCompany.id, currentCompany.inventoryBcvRate, currentCompany.inventoryBcvRateEffectiveDate, currentCompany.inventoryBcvRateHistory]);
+    // Prioridad 2: tasa BCV puntual del módulo de inventario (campo simple).
+    if (date === currentCompany.inventoryBcvRateEffectiveDate && currentCompany.inventoryBcvRate) {
+      setBcvRateInput(String(currentCompany.inventoryBcvRate));
+      return;
+    }
+    // Prioridad 3: historial BCV general de la empresa (Configuración → BCV).
+    // Útil para períodos históricos donde el contador registró tasas en ese módulo.
+    const generalRate = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, date);
+    if (generalRate) {
+      setBcvRateInput(String(generalRate));
+      return;
+    }
+    setBcvRateInput('');
+  }, [date, currentCompany.id, currentCompany.inventoryBcvRate, currentCompany.inventoryBcvRateEffectiveDate, currentCompany.inventoryBcvRateHistory, currentCompany.accountingBcvRateHistory]);
 
   if (!isOpen || !selectedProduct) return null;
 
