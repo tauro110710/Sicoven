@@ -5462,6 +5462,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       let unitCostBs = requestedCost;
       let totalCostBs = 0;
+      let salidaFifoUsdCost: number | null = null;
+      let salidaFifoUsdUnit: number | null = null;
       let newStock = product.currentStock;
       let newAverageBs = product.avgCostBs;
       let movementQuantity = Number(row.quantity);
@@ -5475,7 +5477,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           const history = virtualMovements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
           const layers = reconstructFifoLayers(history, product.currentStock);
           const fifoLayerValue = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0);
-          totalCostBs = calculateFifoIssue(layers, Number(row.quantity)).totalCostBs;
+          const fifoIssue = calculateFifoIssue(layers, Number(row.quantity));
+          totalCostBs = fifoIssue.totalCostBs;
+          salidaFifoUsdCost = fifoIssue.totalCostUsd;
+          salidaFifoUsdUnit = fifoIssue.unitCostUsd;
           newStock = Math.max(0, product.currentStock - Number(row.quantity));
           newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValue - totalCostBs) / newStock : 0;
         } else totalCostBs = Math.round(Number(row.quantity) * product.avgCostBs * 100) / 100;
@@ -5504,7 +5509,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         }
       }
       const totalCostUsd = row.type === 'AJUSTE' && product.costingMethod === 'PEPS'
-        ? adjustmentUsd! : (rate > 0 ? Math.round(totalCostBs / rate * 1000000) / 1000000 : (row.type === 'SALIDA' ? Math.round(Number(row.quantity) * Number(product.avgCostUsd || 0) * 1000000) / 1000000 : 0));
+        ? adjustmentUsd! : (row.type === 'SALIDA' && product.costingMethod === 'PEPS' && salidaFifoUsdCost !== null
+          ? salidaFifoUsdCost : (rate > 0 ? Math.round(totalCostBs / rate * 1000000) / 1000000 : (row.type === 'SALIDA' ? Math.round(Number(row.quantity) * Number(product.avgCostUsd || 0) * 1000000) / 1000000 : 0)));
       const newAverageUsd = row.type === 'AJUSTE' && product.costingMethod === 'PEPS'
         ? adjustmentAverageUsd! : (rate > 0 ? newAverageBs / rate : Number(product.avgCostUsd || 0));
       if (expectedBalanceQty !== undefined && (!Number.isFinite(expectedBalanceQty) || Math.abs(expectedBalanceQty - newStock) > 0.000001)) {
@@ -5513,7 +5519,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const { expectedBalanceQty: _expectedBalanceQty, ...movementDraft } = row;
       const movement: InventoryMovement = {
         ...movementDraft, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
-        companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: row.type === 'AJUSTE' && product.costingMethod === 'PEPS' ? adjustmentUsd! / movementQuantity : (rate > 0 ? unitCostBs / rate : (row.type === 'SALIDA' ? Number(product.avgCostUsd || 0) : 0)), additionalLandedCostsBs: landedCostsBs,
+        companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: row.type === 'AJUSTE' && product.costingMethod === 'PEPS' ? adjustmentUsd! / movementQuantity : (row.type === 'SALIDA' && product.costingMethod === 'PEPS' && salidaFifoUsdUnit !== null ? salidaFifoUsdUnit : (rate > 0 ? unitCostBs / rate : (row.type === 'SALIDA' ? Number(product.avgCostUsd || 0) : 0))), additionalLandedCostsBs: landedCostsBs,
         totalCostBs, totalCostUsd, balanceQty: newStock,
         balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
         balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
