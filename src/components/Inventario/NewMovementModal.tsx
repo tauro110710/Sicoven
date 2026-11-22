@@ -5,6 +5,7 @@ import { formatBs, formatUsd } from '../../utils/formatters';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
 import { normalizeBolivarAmountForDate } from '../../types/historicalAccountingCalendar';
+import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 
 interface NewMovementModalProps {
   isOpen: boolean;
@@ -73,9 +74,10 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
     } else if (date === currentCompany.inventoryBcvRateEffectiveDate && currentCompany.inventoryBcvRate) {
       setBcvRateInput(String(currentCompany.inventoryBcvRate));
     } else {
-      setBcvRateInput('');
+      const accountingRate = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory || [], date);
+      setBcvRateInput(accountingRate ? String(accountingRate) : '');
     }
-  }, [date, currentCompany.id, currentCompany.inventoryBcvRate, currentCompany.inventoryBcvRateEffectiveDate, currentCompany.inventoryBcvRateHistory]);
+  }, [date, currentCompany.id, currentCompany.inventoryBcvRate, currentCompany.inventoryBcvRateEffectiveDate, currentCompany.inventoryBcvRateHistory, currentCompany.accountingBcvRateHistory]);
 
   if (!isOpen || !selectedProduct) return null;
 
