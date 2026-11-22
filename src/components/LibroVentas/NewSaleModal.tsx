@@ -10,7 +10,7 @@ interface NewSaleModalProps {
 }
 
 export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, addSale, waitForPersistence } = useAccounting();
+  const { currentCompany, addSale, runAtomicInvoiceImport, waitForPersistence } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
@@ -109,6 +109,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
     savingRef.current = true;
     setSaving(true);
     try {
+      runAtomicInvoiceImport(() => {
       addSale({
       invoiceDate,
       customerRif: formatRif(customerRif),
@@ -145,6 +146,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
       dueDate: paymentTerm === 'CREDITO' ? dueDate : invoiceDate,
       currencyPricingMode,
       fiscalAdjustmentMode
+      });
       });
       await waitForPersistence();
       onClose();
