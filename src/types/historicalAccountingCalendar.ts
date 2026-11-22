@@ -99,6 +99,11 @@ export function buildHistoricalFiscalExercises(
   return exercises;
 }
 
+/** Valid accounting registration start date for SICOVEN's 2012+ workflow. */
+export function isValidAccountingStartDate(date: string): boolean {
+  return isValidIsoDate(date) && date >= '2012-01-01';
+}
+
 export function getVenezuelanMonetaryEra(date: string): VenezuelanMonetaryEra {
   if (!isValidIsoDate(date)) throw new Error('La fecha de la operación no es válida para determinar su escala monetaria.');
   let selected = VENEZUELAN_MONETARY_ERAS[0];
