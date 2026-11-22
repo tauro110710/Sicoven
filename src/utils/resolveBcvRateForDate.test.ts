@@ -80,3 +80,11 @@ test("handles historical BsF/BsS rates for pre-2021 periods", () => {
   assert.equal(resolveBcvRateForDate(h, "2024-06-01"), 36.50);
   assert.equal(resolveBcvRateForDate(h, "2013-12-31"), undefined);
 });
+
+test("accepts February 29 in leap years and rejects it in non-leap years", () => {
+  const h = [entry("2024-02-28", 100), entry("2024-02-29", 101), entry("2024-03-01", 102)];
+  assert.equal(resolveBcvRateForDate(h, "2024-02-29"), 101);
+  assert.equal(resolveBcvRateForDate(h, "2023-02-29"), undefined);
+  assert.equal(resolveBcvRateForDate(h, "2024-02-30"), undefined);
+});
+
