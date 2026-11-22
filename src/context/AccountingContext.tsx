@@ -1881,7 +1881,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('El asiento requiere SQLite local de escritorio disponible y lista. No se registró.');
     }
-    if (!isValidIsoDate(entry.date)) throw new Error('El asiento requiere una fecha válida.');
+    if (!isOperationDateWithinAccountingStart(entry.date, targetCompany.accountingStartDate)) {
+      throw new Error('La fecha del asiento no puede ser anterior al inicio contable de la empresa (' + (targetCompany.accountingStartDate || 'no definido') + ') o no es válida.');
+    }
     const authorizedYearClose = allowSystemYearClosing && entry.type === 'CIERRE' &&
       entry.date === String(targetCompany.fiscalYear) + '-12-31' &&
       entry.referenceDoc === 'CIERRE:' + targetCompany.id + ':' + entry.date;
