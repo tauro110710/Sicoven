@@ -4486,7 +4486,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (targetCompany.closedThroughDate && saleData.invoiceDate <= targetCompany.closedThroughDate) {
       throw new Error('El período está cerrado hasta ' + targetCompany.closedThroughDate + '. Registre el documento en el período abierto o solicite una corrección formal.');
     }
-    if (!isValidIsoDate(saleData.invoiceDate) || !String(saleData.invoiceNumber || '').trim() ||
+    if (!isValidIsoDate(saleData.invoiceDate) || saleData.invoiceDate < (targetCompany.accountingStartDate || '2012-01-01') || !String(saleData.invoiceNumber || '').trim() ||
         !String(saleData.customerName || '').trim()) {
       throw new Error('La venta requiere fecha válida, número de factura y nombre del cliente.');
     }
