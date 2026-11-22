@@ -31,7 +31,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const [date, setDate] = useState<string>(() => {
     const startDate = currentCompany?.accountingStartDate;
     const today = new Date().toISOString().slice(0, 10);
-    return startDate && /^\\d{4}-\\d{2}-\\d{2}$/.test(startDate) && startDate < today
+    return startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate) && startDate < today
       ? startDate
       : today;
   });
