@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs, formatUsd } from '../../utils/formatters';
 import { selectHistoricalReportEntries } from '../../types/accountingReportIntegrity';
-import { normalizeVenezuelanAmountToCurrentScale } from '../../types/historicalAccountingCalendar';
+import { addExactDecimals, normalizeVenezuelanAmountToCurrentScale } from '../../types/historicalAccountingCalendar';
 import { History, ArrowLeftRight, Printer } from 'lucide-react';
 
 type ReportKind = 'SITUACION' | 'RESULTADOS';
@@ -27,12 +27,14 @@ export const HistoricalBalancesView: React.FC<{ onBack: () => void }> = ({ onBac
   const summaries = useMemo(() => selectedYears.map(year => {
     const entries = selectHistoricalReportEntries(journalEntries, currentCompany.id, year, kind);
     const rows = accounts.map(account => {
-      let debitBs=0, creditBs=0, debitUsd=0, creditUsd=0;
+      let debitBsExact='0', creditBsExact='0', debitUsdExact='0', creditUsdExact='0';
       for (const entry of entries) for (const item of entry.items) if (item.accountCode === account.code) {
-        debitBs += Number(normalizeVenezuelanAmountToCurrentScale(String(item.debitBs || 0), entry.date));
-        creditBs += Number(normalizeVenezuelanAmountToCurrentScale(String(item.creditBs || 0), entry.date));
-        debitUsd += Number(item.debitUsd || 0); creditUsd += Number(item.creditUsd || 0);
+        debitBsExact = addExactDecimals(debitBsExact, normalizeVenezuelanAmountToCurrentScale(String(item.debitBs || 0), entry.date));
+        creditBsExact = addExactDecimals(creditBsExact, normalizeVenezuelanAmountToCurrentScale(String(item.creditBs || 0), entry.date));
+        debitUsdExact = addExactDecimals(debitUsdExact, String(item.debitUsd || 0));
+        creditUsdExact = addExactDecimals(creditUsdExact, String(item.creditUsd || 0));
       }
+      const debitBs=Number(debitBsExact), creditBs=Number(creditBsExact), debitUsd=Number(debitUsdExact), creditUsd=Number(creditUsdExact);
       const balanceBs = kind === 'SITUACION'
         ? (account.type === 'ACTIVO' ? debitBs-creditBs : ['PASIVO','PATRIMONIO'].includes(account.type) ? creditBs-debitBs : account.type === 'INGRESOS' ? creditBs-debitBs : ['COSTOS','GASTOS'].includes(account.type) ? debitBs-creditBs : 0)
         : (account.type === 'INGRESOS' ? creditBs-debitBs : ['COSTOS','GASTOS'].includes(account.type) ? debitBs-creditBs : 0);
