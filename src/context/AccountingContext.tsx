@@ -5504,7 +5504,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         }
       }
       const totalCostUsd = row.type === 'AJUSTE' && product.costingMethod === 'PEPS'
-        ? adjustmentUsd! : (rate > 0 ? Math.round(totalCostBs / rate * 1000000) / 1000000 : 0);
+        ? adjustmentUsd! : (rate > 0 ? Math.round(totalCostBs / rate * 1000000) / 1000000 : (row.type === 'SALIDA' ? Math.round(Number(row.quantity) * Number(product.avgCostUsd || 0) * 1000000) / 1000000 : 0));
       const newAverageUsd = row.type === 'AJUSTE' && product.costingMethod === 'PEPS'
         ? adjustmentAverageUsd! : (rate > 0 ? newAverageBs / rate : Number(product.avgCostUsd || 0));
       if (expectedBalanceQty !== undefined && (!Number.isFinite(expectedBalanceQty) || Math.abs(expectedBalanceQty - newStock) > 0.000001)) {
@@ -5513,7 +5513,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const { expectedBalanceQty: _expectedBalanceQty, ...movementDraft } = row;
       const movement: InventoryMovement = {
         ...movementDraft, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
-        companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: row.type === 'AJUSTE' && product.costingMethod === 'PEPS' ? adjustmentUsd! / movementQuantity : (rate > 0 ? unitCostBs / rate : 0), additionalLandedCostsBs: landedCostsBs,
+        companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: row.type === 'AJUSTE' && product.costingMethod === 'PEPS' ? adjustmentUsd! / movementQuantity : (rate > 0 ? unitCostBs / rate : (row.type === 'SALIDA' ? Number(product.avgCostUsd || 0) : 0)), additionalLandedCostsBs: landedCostsBs,
         totalCostBs, totalCostUsd, balanceQty: newStock,
         balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
         balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
