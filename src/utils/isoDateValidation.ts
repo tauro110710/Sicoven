@@ -5,6 +5,13 @@ export function isValidIsoCalendarDate(value: unknown): value is string {
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
+/** Returns true when an operation date is valid and not before the accounting start date. */
+export function isOperationDateWithinAccountingStart(date: unknown, accountingStartDate?: unknown): boolean {
+  if (!isValidIsoCalendarDate(date)) return false;
+  if (accountingStartDate == null || accountingStartDate === '') return true;
+  return isValidIsoCalendarDate(accountingStartDate) && date >= accountingStartDate;
+}
+
 /** Formats a Date using local calendar fields, avoiding UTC day shifts. */
 export function getLocalISODate(date: Date = new Date()): string {
   const year = String(date.getFullYear()).padStart(4, '0');
