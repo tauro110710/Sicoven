@@ -14,6 +14,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import { normalizeBolivarAmountForDate } from '../../types/historicalAccountingCalendar';
 import { NewPurchaseModal } from './NewPurchaseModal';
 import { CreditSettlementModal } from '../shared/CreditSettlementModal';
 import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators';
