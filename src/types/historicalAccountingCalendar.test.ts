@@ -45,8 +45,8 @@ test('permite reconstruir ejercicios anteriores a 2015 cuando esa fue la fecha r
 test('permite iniciar registro contable desde 2012 y rechaza fechas anteriores o inválidas', () => {
   assert.equal(isValidAccountingStartDate('2012-01-01'), true);
   assert.equal(isValidAccountingStartDate('2012-05-17'), true);
-  assert.equal(isValidAccountingStartDate('2011-12-31'), true);
-  assert.equal(isValidAccountingStartDate('1995-01-01'), true);
+  assert.equal(isValidAccountingStartDate('2011-12-31'), false);
+  assert.equal(isValidAccountingStartDate('1995-01-01'), false);
   assert.equal(isValidAccountingStartDate('2026-02-30'), false);
 });
 
