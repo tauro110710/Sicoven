@@ -5449,6 +5449,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (row.type === 'SALIDA' && row.concept === 'DEVOLUCION_COMPRA') {
         throw new Error('Importación bloqueada en fila ' + (index + 2) + ': las devoluciones a proveedor requieren una nota de crédito conciliada con factura, Kardex, CxP e impuestos. No se importó ningún movimiento.');
       }
+      if (!isOperationDateWithinAccountingStart(row.date, targetCompany.accountingStartDate)) throw new Error('Fila ' + (index + 2) + ': la fecha del movimiento es inválida o anterior al inicio contable de la empresa (' + (targetCompany.accountingStartDate || 'no definido') + ').');
       if (targetCompany.closedThroughDate && row.date <= targetCompany.closedThroughDate) throw new Error('Fila ' + (index + 2) + ': la fecha está dentro del período cerrado hasta ' + targetCompany.closedThroughDate + '.');
       const product = virtualProducts.get(row.productId);
       if (!product) throw new Error('Fila ' + (index + 2) + ': artículo no encontrado en la empresa destino.');
@@ -6122,6 +6123,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!Number.isFinite(bcvRateInput) || bcvRateInput <= 0) throw new Error('La tasa BCV histórica debe ser mayor que cero.');
     const parsedProductionDate = new Date(date + 'T00:00:00Z');
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(parsedProductionDate.getTime()) || parsedProductionDate.toISOString().slice(0,10) !== date) throw new Error('La fecha de producción no es válida.');
+    if (!isOperationDateWithinAccountingStart(date, currentCompany.accountingStartDate)) throw new Error('La fecha de producción es inválida o anterior al inicio contable de la empresa (' + (currentCompany.accountingStartDate || 'no definido') + ').');
     const recipe = normalizeProductionRecipe(finished.bomComponents || [], finishedProductId);
     const productionReference = String(documentRef || '').trim();
     if (!productionReference) throw new Error('La orden de producción requiere una referencia única.');
