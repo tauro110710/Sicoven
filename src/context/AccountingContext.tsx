@@ -4695,8 +4695,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       taxableBaseDigitalBs: normalizedSaleAmounts.taxable.digitalBolivars,
       exemptAmountDigitalBs: normalizedSaleAmounts.exempt.digitalBolivars,
       vatAmountDigitalBs: normalizedSaleAmounts.vat.digitalBolivars,
-      additionalLuxuryTaxDigitalBs: normalizedSaleAmounts.luxuryTax.digitalBolars,
-      vatWithheldDigitalBs: normalizedSaleAmounts.vatWithheld.digitalBolars,
+      additionalLuxuryTaxDigitalBs: normalizedSaleAmounts.luxuryTax.digitalBolivars,
+      vatWithheldDigitalBs: normalizedSaleAmounts.vatWithheld.digitalBolivars,
       igtfAmountDigitalBs: normalizedSaleAmounts.igtf.digitalBolivars,
       // El registro conserva la tasa efectiva usada en su asiento y equivalentes
       // USD coherentes con los importes nominales de la factura.
