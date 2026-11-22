@@ -5957,15 +5957,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     } else if (movData.type === 'SALIDA') {
       if (prod.costingMethod === 'PEPS') {
         const layers = reconstructFifoLayers(prior, prod.currentStock);
-        const fifoLayerValue = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0);
+        const fifoLayerValueBs = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0);
+        const fifoLayerValueUsd = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0);
         const fifo = calculateFifoIssue(layers, Number(movData.quantity));
         totalCostBs = fifo.totalCostBs;
-        totalCostUsd = toUsd(totalCostBs);
+        totalCostUsd = fifo.totalCostUsd;
         unitCostBs = fifo.unitCostBs;
-        unitCostUsd = toUsd(unitCostBs);
+        unitCostUsd = fifo.unitCostUsd;
         newStock = Math.max(0, prod.currentStock - Number(movData.quantity));
-        newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValue - totalCostBs) / newStock : 0;
-        newAverageUsd = toUsd(newAverageBs);
+        newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValueBs - totalCostBs) / newStock : 0;
+        newAverageUsd = newStock > 0 ? Math.max(0, fifoLayerValueUsd - totalCostUsd) / newStock : 0;
       } else {
         unitCostBs = prod.avgCostBs;
         unitCostUsd = toUsd(unitCostBs);
