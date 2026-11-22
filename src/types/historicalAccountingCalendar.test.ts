@@ -5,7 +5,8 @@ import {
   convertVenezuelanAmount,
   normalizeVenezuelanAmountToCurrentScale,
   getVenezuelanMonetaryEra,
-  roundHistoricalPresentationAmount
+  roundHistoricalPresentationAmount,
+  addExactDecimals
 } from './historicalAccountingCalendar';
 
 test('genera ejercicios desde el inicio real de operaciones sin imponer año mínimo', () => {
@@ -99,7 +100,6 @@ test('converts decimal values expressed in scientific notation exactly as their 
 });
 
 test('suma decimales de balances con precisión exacta, sin errores de coma flotante', () => {
-  const { addExactDecimals } = require('./historicalAccountingCalendar') as typeof import('./historicalAccountingCalendar');
   assert.equal(addExactDecimals('0.1', '0.2'), '0.3');
   assert.equal(addExactDecimals('999999999999999999.99', '0.01'), '1000000000000000000');
   assert.equal(addExactDecimals('-0.25', '0.1'), '-0.15');
