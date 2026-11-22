@@ -569,7 +569,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
               <span className="text-slate-400">Tasa BCV aplicada ({invoiceDate}):</span>
               <span className="font-mono">{hasValidBcvRate ? `${bcvRate.toLocaleString('es-VE')} Bs./USD` : 'Pendiente de ingresar'}</span>
             </div>
-            {!hasValidBcvRate && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-amber-200">Ingrese la tasa BCV aplicable a esta operación en la sección 3. Se guardará únicamente con esta factura.</p>}
+            {!hasValidBcvRate && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-amber-200">Ingrese la tasa BCV si esta operación requiere equivalencia en dólares. Para ventas en bolívares puede dejarla pendiente (0).</p>}
             {additionalLuxuryTaxBs > 0 && <div className="flex justify-between items-center text-xs text-amber-300"><span>Impuesto adicional al consumo suntuario (15%):</span><span className="font-mono">{formatBs(additionalLuxuryTaxBs)} ({formatUsd(additionalLuxuryTaxUsd)})</span></div>}
             <div className="flex justify-between items-center text-xs">
               <span className="text-slate-400">Total Factura (IVA, adicional e IGTF si aplica):</span>
@@ -598,7 +598,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
             </button>
             <button
               type="submit"
-              disabled={saving || !hasValidBcvRate || totalAmountBs <= 0}
+              disabled={saving || totalAmountBs <= 0}
               className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer disabled:opacity-40"
             >
               <Check className="w-4 h-4" />

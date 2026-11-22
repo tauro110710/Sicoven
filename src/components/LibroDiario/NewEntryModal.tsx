@@ -26,7 +26,13 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  // Fecha inicial: si la empresa tiene inicio contable histórico y es anterior a hoy, partir desde ahí.
+  const todayIso = new Date().toISOString().split('T')[0];
+  const entryStartDate = (() => {
+    const s = currentCompany?.accountingStartDate;
+    return (s && /^\d{4}-\d{2}-\d{2}$/.test(s) && s < todayIso) ? s : todayIso;
+  })();
+  const [date, setDate] = useState<string>(entryStartDate);
   const [description, setDescription] = useState<string>('');
   const [type, setType] = useState<EntryType>('MANUAL');
   const [bcvRate, setBcvRate] = useState<string>('');
@@ -282,9 +288,19 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // La tasa es obligatoria para este asiento, pero se valida después de permitir la edición libre.
-    if (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0) {
-      setSubmitError('Ingrese la tasa BCV aplicable al asiento, por ejemplo 889,67.');
+    // La tasa BCV es obligatoria cuando el asiento incluye columnas USD (debitUsd/creditUsd > 0).
+    // Para asientos contables en bolívares puros sin equivalencia en divisas se acepta bcvRate = 0;
+    // la equivalencia USD quedará como pendiente hasta que el contador registre la tasa.
+    const entryHasUsdAmounts = items.some(
+      item => (Number(item.debitUsd) || 0) > 0 || (Number(item.creditUsd) || 0) > 0
+    );
+    const bcvExplicitlyInvalid = bcvRate.trim().length > 0 && (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0);
+    if (entryHasUsdAmounts && (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0)) {
+      setSubmitError('La tasa BCV es obligatoria cuando el asiento incluye montos en USD. Ingrese la tasa, por ejemplo 889,67.');
+      return;
+    }
+    if (bcvExplicitlyInvalid) {
+      setSubmitError('La tasa BCV ingresada no es válida. Corríjala o bórrela para dejarla como pendiente (0).');
       return;
     }
 
@@ -425,12 +441,13 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Tasa Oficial BCV ($)
+                <span className="ml-1 text-slate-400 font-normal">(opcional en Bs.)</span>
               </label>
               <input
                 type="text"
                 inputMode="decimal"
                 autoComplete="off"
-                required
+                placeholder="Ej: 889,67"
                 value={bcvRate}
                 onChange={e => setBcvRate(e.target.value)}
                 className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
