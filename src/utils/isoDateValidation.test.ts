@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isValidIsoCalendarDate } from './isoDateValidation';
+import { isValidIsoCalendarDate, getLocalISODate } from './isoDateValidation';
 
 test('accepts dates without an artificial start-year limit, including pre-2012', () => {
   assert.equal(isValidIsoCalendarDate('1900-01-01'), true);
@@ -18,4 +18,9 @@ test('rejects impossible dates and malformed ISO strings', () => {
   for (const value of ['', '2024-2-01', '2024-02-30', '2024-13-01', '2024-00-10', '2024-01-00', 'abcd-ef-gh', null, undefined, 20240101]) {
     assert.equal(isValidIsoCalendarDate(value), false, String(value));
   }
+});
+
+test('formats dates using local calendar fields and does not shift the day through UTC', () => {
+  assert.equal(getLocalISODate(new Date(2024, 1, 29, 23, 59, 59)), '2024-02-29');
+  assert.equal(getLocalISODate(new Date(2099, 11, 31, 0, 0, 0)), '2099-12-31');
 });

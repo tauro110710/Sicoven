@@ -4573,6 +4573,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         !String(saleData.customerName || '').trim()) {
       throw new Error('La venta requiere fecha válida, número de factura y nombre del cliente.');
     }
+    if (targetCompany.accountingStartDate && saleData.invoiceDate < targetCompany.accountingStartDate) {
+      throw new Error('La fecha de la venta no puede ser anterior al inicio contable de la empresa (' + targetCompany.accountingStartDate + ').');
+    }
     if (saleData.documentType !== '01') {
       throw new Error('Las notas de débito/crédito de clientes requieren un flujo de reversión fiscal y contable que aún no está habilitado. Registra solo facturas (01) en este módulo.');
     }
