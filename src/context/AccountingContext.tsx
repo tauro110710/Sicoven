@@ -416,7 +416,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [supplierDirectAdvances, setSupplierDirectAdvances] = useState<SupplierDirectAdvance[]>([]);
   const bankStatementImportInFlightRef = useRef(false);
   type PendingBankOutgoingReservation = { release: () => void; waiter: { resolve: () => void; reject: (error: Error) => void } };
-  type ActiveAccountingImportBatch = { journalEntries: JournalEntry[]; sales: SaleRecord[]; purchases: PurchaseRecord[]; creditSettlements: CreditSettlement[]; supplierDirectAdvances: SupplierDirectAdvance[]; supplierAdvanceSettlements: SupplierAdvanceSettlement[]; reservedBankLockKeys: Set<string> };
+  type ActiveAccountingImportBatch = { journalEntries: JournalEntry[]; sales: SaleRecord[]; purchases: PurchaseRecord[]; creditSettlements: CreditSettlement[]; supplierDirectAdvances: SupplierDirectAdvance[]; supplierAdvanceSettlements: SupplierAdvanceSettlement[]; reservedBankLockKeys: Set<string>; inventoryMovements: InventoryMovement[] };
   const bankOutgoingReservationsRef = useRef<PendingBankOutgoingReservation[]>([]);
   const activeImportBatchRef = useRef<ActiveAccountingImportBatch | null>(null);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
@@ -486,7 +486,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('No se permiten importaciones contables anidadas.');
     }
     const previousBatch = activeImportBatchRef.current;
-    activeImportBatchRef.current = { journalEntries: [], sales: [], purchases: [], creditSettlements: [], supplierDirectAdvances: [], supplierAdvanceSettlements: [], reservedBankLockKeys: new Set<string>() };
+    activeImportBatchRef.current = { journalEntries: [], sales: [], purchases: [], creditSettlements: [], supplierDirectAdvances: [], supplierAdvanceSettlements: [], reservedBankLockKeys: new Set<string>(), inventoryMovements: [] };
     try {
       const result = operation();
       activeImportBatchRef.current = previousBatch;
@@ -3670,7 +3670,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
           balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
           bcvRate: rate,
-          additionalLandedCostsBs: landedCostsBs,
           costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO',
           journalEntryId: createdJournalEntry.id
         };

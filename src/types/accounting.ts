@@ -378,6 +378,8 @@ export interface PurchaseInventoryLine {
   productId: string;
   quantity: number;
   unitCostBs: number;
+  /** Fletes y gastos adicionales asociados a esta línea; se distribuyen por unidad. */
+  additionalLandedCostsBs?: number;
 }
 
 export interface PurchaseCreditNoteLine {
