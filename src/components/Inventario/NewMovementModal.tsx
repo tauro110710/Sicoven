@@ -93,6 +93,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
 
   const balanceTotalBs = balanceQty * unitCostBs;
   const balanceTotalUsd = bcvRate > 0 ? balanceTotalBs / bcvRate : 0;
+  const monetaryScalePreview = (() => { try { return { era: normalizeBolivarAmountForDate(0, date).sourceEra, unitCostDigital: normalizeBolivarAmountForDate(unitCostBs, date).digitalBolivars, totalDigital: normalizeBolivarAmountForDate(totalCostBs, date).digitalBolivars }; } catch { return null; } })();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -364,6 +365,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
             </div>
           </div>
 
+          {monetaryScalePreview && <p className="mt-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">Escala automática por fecha: <strong>{monetaryScalePreview.era.label}</strong> · Costo unitario equivalente digital: {monetaryScalePreview.unitCostDigital} Bs. · Total equivalente digital: {monetaryScalePreview.totalDigital} Bs.</p>}
           {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-rose-700">{error}</p>}
 
           <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">
