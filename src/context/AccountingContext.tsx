@@ -3618,6 +3618,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       taxableBaseDigitalBs: normalizedPurchaseAmounts.taxable.digitalBolivars,
       exemptAmountDigitalBs: normalizedPurchaseAmounts.exempt.digitalBolivars,
       vatAmountDigitalBs: normalizedPurchaseAmounts.vat.digitalBolivars,
+      additionalLuxuryTaxDigitalBs: normalizedPurchaseAmounts.luxuryTax.digitalBolivars,
+      vatWithheldDigitalBs: normalizedPurchaseAmounts.vatWithheld.digitalBolivars,
+      islrWithheldDigitalBs: normalizedPurchaseAmounts.islrWithheld.digitalBolivars,
+      igtfAmountDigitalBs: normalizedPurchaseAmounts.igtf.digitalBolivars,
       // Persistir la tasa explícita y validada usada en el asiento.
       bcvRate: rate,
       totalAmountUsd: purchaseData.totalAmountBs / rate,
