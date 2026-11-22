@@ -17,6 +17,7 @@ import {
   X
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import { normalizeBolivarAmountForDate } from '../../types/historicalAccountingCalendar';
 import { NewEntryModal } from './NewEntryModal';
 import { EntryType } from '../../types/accounting';
 
