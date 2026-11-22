@@ -199,7 +199,7 @@ function isValidIsoDate(value: string): boolean {
 export function addExactDecimals(left: string | number, right: string | number): string {
   const parse = (input: string | number) => {
     const raw = expandDecimalExponent(String(input).trim());
-    if (!/^-?\d+(?:\\.\d+)?$/.test(raw)) throw new Error('Invalid decimal amount.');
+    if (!/^-?\d+(?:\.\d+)?$/.test(raw)) throw new Error('Invalid decimal amount.');
     const negative = raw.startsWith('-');
     const unsigned = negative ? raw.slice(1) : raw;
     const [whole, fraction = ''] = unsigned.split('.');
