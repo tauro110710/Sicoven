@@ -80,8 +80,9 @@ export function buildHistoricalFiscalExercises(
   const endYear = Number(throughDate.slice(0, 4));
   const exercises: HistoricalFiscalExercise[] = [];
   for (let year = startYear; year <= endYear; year += 1) {
-    const startDate = year === startYear ? operationalStartDate : year + '-01-01';
-    const endDate = year === endYear ? throughDate : year + '-12-31';
+    const calendarYear = String(year).padStart(4, '0');
+    const startDate = year === startYear ? operationalStartDate : calendarYear + '-01-01';
+    const endDate = year === endYear ? throughDate : calendarYear + '-12-31';
     const status = closedThroughDate && endDate <= closedThroughDate
       ? 'CERRADO'
       : closingYears.has(year)
