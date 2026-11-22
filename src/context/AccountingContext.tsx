@@ -4618,6 +4618,31 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     );
     if (duplicateSale) throw new Error('Ya existe una venta registrada con ese tipo de documento y número de factura.');
 
+    // Validación de stock en el contexto antes de crear factura/asientos:
+    // evita ventas con cantidades inválidas, productos de otra empresa o sobreventa.
+    if (saleData.inventoryLines !== undefined) {
+      if (!Array.isArray(saleData.inventoryLines)) {
+        throw new Error('Las líneas de inventario de la venta no son válidas.');
+      }
+      const requestedByProduct = new Map<string, number>();
+      for (const line of saleData.inventoryLines) {
+        const quantity = Number(line.quantity);
+        const productId = String(line.productId || '').trim();
+        const product = products.find(p => p.id === productId && p.companyId === targetCompany.id);
+        if (!product) throw new Error('Una línea de venta referencia un producto inexistente o de otra empresa.');
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+          throw new Error('Cada línea vinculada al inventario debe tener una cantidad válida mayor que cero.');
+        }
+        requestedByProduct.set(productId, (requestedByProduct.get(productId) || 0) + quantity);
+      }
+      for (const [productId, requestedQuantity] of requestedByProduct) {
+        const product = products.find(p => p.id === productId && p.companyId === targetCompany.id);
+        if (!product || !Number.isFinite(product.currentStock) || requestedQuantity > product.currentStock + 1e-8) {
+          throw new Error('Existencia insuficiente para ' + (product?.name || productId) + '. Venta no registrada.');
+        }
+      }
+    }
+
     const companySales = sales.filter(s => s.companyId === targetCompany.id);
     const companyKey = targetCompany.id;
     const nextOp = Math.max(companySales.reduce((max, sale) => Math.max(max, sale.opNumber || 0), 0), saleSequenceRef.current[companyKey] || 0) + 1;
