@@ -5980,7 +5980,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       type: 'INVENTARIO', bcvRate: rate, referenceDoc: documentRef || ('PROD-' + Date.now()), items: journalItems
     });
     for (const movement of movementsToAdd) movement.journalEntryId = entry.id;
+    const normalizedFinishedCost = normalizeBolivarAmountForDate(productionUnitCostBs, date);
+    const normalizedFinishedTotal = normalizeBolivarAmountForDate(totalFinishedBs, date);
+    const normalizedFinishedBalance = normalizeBolivarAmountForDate(weightedFinished.totalCostBs, date);
     const finishedMovement: InventoryMovement = {
+      monetaryEraId: normalizedFinishedCost.sourceEra.id,
+      unitCostDigitalBs: normalizedFinishedCost.digitalBolivars,
+      totalCostDigitalBs: normalizedFinishedTotal.digitalBolivars,
+      balanceTotalDigitalBs: normalizedFinishedBalance.digitalBolivars,
       id: 'mov-prod-finished-' + Date.now(), companyId: currentCompany.id, productId: finished.id, productName: finished.name, productCode: finished.code,
       date, type: 'ENTRADA', concept: 'PRODUCCION', documentRef: entry.referenceDoc || '', documentType: 'Orden de producción',
       quantity: outputQuantity, unitCostBs: productionUnitCostBs, unitCostUsd: productionUnitCostBs / rate,
