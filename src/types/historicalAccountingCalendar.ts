@@ -194,3 +194,27 @@ function isValidIsoDate(value: string): boolean {
   const date = new Date(value + 'T00:00:00.000Z');
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
+
+/** Exact base-10 addition for historical report aggregation. */
+export function addExactDecimals(left: string | number, right: string | number): string {
+  const parse = (input: string | number) => {
+    const raw = String(input).trim();
+    if (!/^-?\\d+(?:\\.\\d+)?$/.test(raw)) throw new Error('Invalid decimal amount.');
+    const negative = raw.startsWith('-');
+    const unsigned = negative ? raw.slice(1) : raw;
+    const [whole, fraction = ''] = unsigned.split('.');
+    return { sign: negative ? -1n : 1n, scale: fraction.length, coefficient: BigInt(whole + fraction) };
+  };
+  const a = parse(left), b = parse(right);
+  const scale = Math.max(a.scale, b.scale);
+  const ac = a.sign * a.coefficient * 10n ** BigInt(scale - a.scale);
+  const bc = b.sign * b.coefficient * 10n ** BigInt(scale - b.scale);
+  const sum = ac + bc, negative = sum < 0n;
+  let digits = (negative ? -sum : sum).toString().padStart(scale + 1, '0');
+  if (scale > 0) digits = digits.slice(0, -scale) + '.' + digits.slice(-scale);
+  const [whole, fraction = ''] = digits.split('.');
+  const normalizedWhole = whole.replace(/^0+(?=\\d)/, '') || '0';
+  const normalizedFraction = fraction.replace(/0+$/, '');
+  const result = normalizedFraction ? normalizedWhole + '.' + normalizedFraction : normalizedWhole;
+  return negative && result !== '0' ? '-' + result : result;
+}
