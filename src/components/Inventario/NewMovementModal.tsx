@@ -28,7 +28,13 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const [productId, setProductId] = useState<string>(
     defaultProductId || companyProducts[0]?.id || ''
   );
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(() => {
+    const startDate = currentCompany?.accountingStartDate;
+    const today = new Date().toISOString().slice(0, 10);
+    return startDate && /^\\d{4}-\\d{2}-\\d{2}$/.test(startDate) && startDate < today
+      ? startDate
+      : today;
+  });
   const [type, setType] = useState<'ENTRADA' | 'SALIDA' | 'AJUSTE'>('ENTRADA');
   const [concept, setConcept] = useState<'COMPRA' | 'VENTA' | 'MERMA' | 'AJUSTE' | 'DEVOLUCION_COMPRA' | 'DEVOLUCION_CLIENTE' | 'AUTOCONSUMO' | 'INVENTARIO_INICIAL'>('COMPRA');
   const [correctionMovementId, setCorrectionMovementId] = useState('');
@@ -99,7 +105,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!Number.isFinite(quantity) || !Number.isFinite(unitCostBs) || !Number.isFinite(additionalLandedCostsBs) || quantity < 0 || (type !== 'AJUSTE' && quantity <= 0) || unitCostBs < 0 || additionalLandedCostsBs < 0 || !Number.isFinite(bcvRate) || bcvRate <= 0) { setError('Verifique que la cantidad, los costos y la tasa BCV sean válidos.'); return; }
+    if (!Number.isFinite(quantity) || !Number.isFinite(unitCostBs) || !Number.isFinite(additionalLandedCostsBs) || quantity < 0 || (type !== 'AJUSTE' && quantity <= 0) || unitCostBs < 0 || additionalLandedCostsBs < 0 || !Number.isFinite(bcvRate) || bcvRate < 0) { setError('Verifique que la cantidad y los costos sean válidos; la tasa BCV es opcional y debe ser positiva si se indica.'); return; }
     if (type === 'SALIDA' && concept === 'DEVOLUCION_COMPRA') {
       if (!selectedReturnSource) { setError('Seleccione la entrada original de Kardex que se devuelve.'); return; }
       if (quantity > selectedReturnSource.remaining + 1e-8) { setError('La cantidad supera las unidades recibidas menos devoluciones previas (' + selectedReturnSource.remaining + ').'); return; }
@@ -159,9 +165,9 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
       correctionForMovementId: type === 'SALIDA' && concept === 'DEVOLUCION_COMPRA' ? selectedReturnSource?.id : undefined,
       quantity,
       unitCostBs,
-      unitCostUsd: Number(unitCostUsd.toFixed(2)),
+      unitCostUsd: Number(unitCostUsd.toFixed(2)), // 0 = equivalencia USD pendiente por falta de tasa histórica
       totalCostBs,
-      totalCostUsd: Number(totalCostUsd.toFixed(2)),
+      totalCostUsd: Number(totalCostUsd.toFixed(2)), // 0 = equivalencia USD pendiente por falta de tasa histórica
       balanceQty,
       balanceTotalBs,
       balanceTotalUsd: Number(balanceTotalUsd.toFixed(2))
@@ -282,8 +288,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
               </select>
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) *</label>
-              <input type="text" inputMode="decimal" required placeholder="Ej.: 889,67" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) (opcional)</label>
+              <input type="text" inputMode="decimal" placeholder="Ej.: 889,67 (opcional)" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">RIF proveedor / cliente</label>
