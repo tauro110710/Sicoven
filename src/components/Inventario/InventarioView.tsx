@@ -15,6 +15,7 @@ import {
   FileUp
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import { normalizeBolivarAmountForDate } from '../../types/historicalAccountingCalendar';
 import type { InventoryProduct } from '../../types/accounting';
 import { NewProductModal } from './NewProductModal';
 import { NewMovementModal } from './NewMovementModal';
