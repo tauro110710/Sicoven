@@ -3202,8 +3202,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // quedan en cero (equivalencia pendiente) hasta que el contador suministre la tasa histórica.
     const PURCHASE_FOREIGN_METHODS = ['FOREIGN_CASH', 'ZELLE', 'INTERNATIONAL_TRANSFER', 'CRYPTO', 'FOREIGN_TRANSFER'];
     const purchaseNeedsRate = PURCHASE_FOREIGN_METHODS.includes(purchaseData.paymentMethod || '');
-    if (purchaseNeedsRate && (!Number.isFinite(rate) || rate <= 0)) {
-      throw new Error('La tasa BCV es obligatoria para compras pagadas en divisas o mediante IGTF. Registre la tasa histórica antes de guardar.');
+    const purchaseNeedsHistoricalRate = isValidIsoDate(purchaseData.invoiceDate) && purchaseData.invoiceDate >= '2018-01-01';
+    if ((purchaseNeedsRate || purchaseNeedsHistoricalRate) && (!Number.isFinite(rate) || rate <= 0)) {
+      throw new Error('La tasa BCV es obligatoria para compras desde 2018 y para operaciones pagadas en divisas. Registre la tasa histórica antes de guardar.');
     }
     // Para los cálculos de equivalencia USD: si no hay tasa, resultado = 0 (pendiente).
     const toUsd = (bs: number) => (Number.isFinite(rate) && rate > 0) ? bs / rate : 0;
