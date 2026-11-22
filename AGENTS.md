@@ -4,7 +4,7 @@ Esta directiva prevalece sobre cualquier backlog, fase, pendiente, plan históri
 
 
 ## Objetivos únicos prioritarios
-1. **Alta de empresa e inicio contable desde 2012:** permitir crear empresas con cualquier fecha de inicio contable válida, sin límites artificiales de año. 2012 debe ser una fecha válida, no un mínimo ni un máximo; fecha administrativa separada; persistencia y aislamiento correctos.
+1. **Alta de empresa e inicio contable sin límites de año:** permitir cualquier fecha válida, pasada o futura, sin mínimo ni máximo artificial. 2012 es una fecha válida de ejemplo, no un límite; fecha administrativa separada; persistencia y aislamiento correctos.
 2. **Reconversiones monetarias automáticas por fecha:** aplicar la escala monetaria venezolana correcta a cada operación por su fecha efectiva, conservar importes/escala originales, equivalencias exactas, trazabilidad y evitar doble conversión o pérdida de precisión. Tasa BCV histórica solo cuando corresponda y sea necesaria.
 3. **Integración real de compras, inventario/Kardex, costos y contabilidad:** conectar las conversiones con compras y sus fechas, entradas de Kardex, existencias, costos, CxP, impuestos y asientos, incluidos los recálculos cronológicos de operaciones atrasadas que afecten estos flujos, sin duplicar ni alterar documentos originales.
 
