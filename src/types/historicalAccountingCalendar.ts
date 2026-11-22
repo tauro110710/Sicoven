@@ -114,6 +114,20 @@ export function getVenezuelanMonetaryEra(date: string): VenezuelanMonetaryEra {
  * Decimal strings are used internally so large 2015-era amounts do not lose integer precision.
  * Rounding belongs only to the applicable presentation/payment rule, never to source evidence.
  */
+function expandDecimalExponent(raw: string): string {
+  const match = raw.match(/^(-?)(\d+)(?:\.(\d*))?(?:e([+-]?\d+))?$/i);
+  if (!match || !match[4]) return raw;
+  const sign = match[1];
+  const whole = match[2];
+  const fraction = match[3] || '';
+  const digits = whole + fraction;
+  const point = whole.length + Number(match[4]);
+  if (!Number.isInteger(point) || Math.abs(point) > 10000) return raw;
+  if (point <= 0) return sign + '0.' + '0'.repeat(-point) + digits;
+  if (point >= digits.length) return sign + digits + '0'.repeat(point - digits.length);
+  return sign + digits.slice(0, point) + '.' + digits.slice(point);
+}
+
 export function convertVenezuelanAmount(
   amount: string | number,
   fromEraId: VenezuelanMonetaryEraId,
@@ -122,7 +136,7 @@ export function convertVenezuelanAmount(
   const source = VENEZUELAN_MONETARY_ERAS.find(era => era.id === fromEraId);
   const target = VENEZUELAN_MONETARY_ERAS.find(era => era.id === toEraId);
   if (!source || !target) throw new Error('La escala monetaria de origen o destino no está reconocida.');
-  const raw = String(amount).trim();
+  const raw = expandDecimalExponent(String(amount).trim();
   if (!/^-?\d+(\.\d+)?$/.test(raw)) throw new Error('El importe debe ser un número decimal válido.');
   const negative = raw.startsWith('-');
   const unsigned = negative ? raw.slice(1) : raw;
@@ -144,6 +158,12 @@ export function convertVenezuelanAmount(
   const result = normalizedFraction ? normalizedWhole + '.' + normalizedFraction : normalizedWhole;
   return negative && result !== '0' ? '-' + result : result;
 }
+
+/** Normalize historical bolivar values to the current scale for comparative reports, without changing originals. */
+export function normalizeVenezuelanAmountToCurrentScale(amount: string | number, effectiveDate: string): string {
+  return convertVenezuelanAmount(amount, getVenezuelanMonetaryEra(effectiveDate).id, 'BOLIVAR_DIGITAL');
+}
+
 
 export function roundHistoricalPresentationAmount(amount: string | number, decimalPlaces = 2): string {
   if (!Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 12) {
