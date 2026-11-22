@@ -5836,7 +5836,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             ? [makeLine('2.1.1.01', amountBs, 0, amountUsd, 0, 'Devolución de mercancía al proveedor'), makeLine(inventoryAccountCode, 0, amountBs, 0, amountUsd, 'Salida por devolución de compra')]
             : [makeLine(debitCode, amountBs, 0, amountUsd, 0, isSale ? 'Costo de ventas según método de costeo' : 'Merma, faltante o ajuste de inventario'), makeLine(inventoryAccountCode, 0, amountBs, 0, amountUsd, 'Descargo de inventario')];
       const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
+      const normalizedInventoryJournalItems = items.map(item => ({
+        ...item,
+        debitDigitalBs: normalizeBolivarAmountForDate(item.debitBs, movData.date).digitalBolivars,
+        creditDigitalBs: normalizeBolivarAmountForDate(item.creditBs, movData.date).digitalBolivars
+      }));
       generatedEntries.push({
+        monetaryEraId: normalizeBolivarAmountForDate(0, movData.date).sourceEra.id,
+        items: normalizedInventoryJournalItems,
         id: `entry-inventory-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
         companyId: currentCompany.id, entryNumber: companyEntries.reduce((max,e) => Math.max(max,e.entryNumber),0) + generatedEntries.length + 1,
         date: movData.date, description: `${isSale ? 'Costo de venta' : isCustomerReturn ? 'Devolución de cliente' : isSupplierReturn ? 'Devolución a proveedor' : isPositiveAdjustment ? 'Sobrante de inventario' : 'Ajuste/merma de inventario'}: ${prod.name} · ${movData.documentRef}`,
