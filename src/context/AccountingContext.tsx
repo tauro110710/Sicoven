@@ -3592,7 +3592,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       monetaryEraId: normalizedPurchaseAmounts.total.sourceEra.id,
       totalAmountDigitalBs: normalizedPurchaseAmounts.total.digitalBolivars,
       taxableBaseDigitalBs: normalizedPurchaseAmounts.taxable.digitalBolivars,
-      exemptAmountDigitalBs: normalizedPurchaseAmounts.exempt.digitalBolars,
+      exemptAmountDigitalBs: normalizedPurchaseAmounts.exempt.digitalBolivars,
       vatAmountDigitalBs: normalizedPurchaseAmounts.vat.digitalBolivars,
       // Persistir la tasa explícita y validada usada en el asiento.
       bcvRate: rate,
@@ -5271,8 +5271,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         throw new Error('Fila ' + (index + 2) + ': la existencia final declarada (' + expectedBalanceQty + ') no coincide con la existencia calculada (' + newStock + ') para ' + product.code + '. Revise el orden y los movimientos previos.');
       }
       const { expectedBalanceQty: _expectedBalanceQty, ...movementDraft } = row;
+      const normalizedImportCost = normalizeBolivarAmountForDate(unitCostBs, row.date);
+      const normalizedImportTotal = normalizeBolivarAmountForDate(totalCostBs, row.date);
+      const normalizedImportBalance = normalizeBolivarAmountForDate(Math.round(newStock * newAverageBs * 100) / 100, row.date);
       const movement: InventoryMovement = {
-        ...movementDraft, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
+        ...movementDraft, monetaryEraId: normalizedImportCost.sourceEra.id,
+        unitCostDigitalBs: normalizedImportCost.digitalBolivars,
+        totalCostDigitalBs: normalizedImportTotal.digitalBolivars,
+        balanceTotalDigitalBs: normalizedImportBalance.digitalBolivars, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
         companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: row.type === 'AJUSTE' && product.costingMethod === 'PEPS' ? adjustmentUsd! / movementQuantity : unitCostBs / rate, additionalLandedCostsBs: landedCostsBs,
         totalCostBs, totalCostUsd, balanceQty: newStock,
         balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
@@ -5909,7 +5915,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const inventoryAccount = accounts.find(a => a.code === inventoryCode && a.isMovement);
       if (!inventoryAccount) throw new Error('La cuenta de inventario del componente ' + component.code + ' no es válida.');
       const movementId = 'mov-prod-consume-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+      const normalizedProductionUnitCost = normalizeBolivarAmountForDate(unitCostBs, date);
+      const normalizedProductionTotalCost = normalizeBolivarAmountForDate(totalBs, date);
+      const normalizedProductionBalance = normalizeBolivarAmountForDate(Math.round(Math.max(0, component.currentStock - requiredQuantity) * componentNewAverageBs * 100) / 100, date);
       const outMovement: InventoryMovement = {
+        monetaryEraId: normalizedProductionUnitCost.sourceEra.id,
+        unitCostDigitalBs: normalizedProductionUnitCost.digitalBolivars,
+        totalCostDigitalBs: normalizedProductionTotalCost.digitalBolivars,
+        balanceTotalDigitalBs: normalizedProductionBalance.digitalBolivars,
         id: movementId, companyId: currentCompany.id, productId: component.id, productName: component.name, productCode: component.code,
         date, type: 'SALIDA', concept: 'PRODUCCION', documentRef: documentRef || ('PROD-' + Date.now()), documentType: 'Orden de producción',
         quantity: requiredQuantity, unitCostBs, unitCostUsd: unitCostBs / rate, totalCostBs: totalBs, totalCostUsd: totalBs / rate,
