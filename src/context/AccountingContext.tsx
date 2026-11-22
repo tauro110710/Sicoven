@@ -5819,6 +5819,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const prod = products.find(p => p.id === movData.productId && p.companyId === currentCompany.id);
     if (!prod) throw new Error('El artículo no existe en la empresa activa.');
     if (!isValidIsoDate(movData.date)) throw new Error('La fecha del movimiento no es válida.');
+    if (currentCompany.accountingStartDate && movData.date < currentCompany.accountingStartDate) {
+      throw new Error('La fecha del movimiento no puede ser anterior al inicio contable de la empresa (' + currentCompany.accountingStartDate + ').');
+    }
     if (currentCompany.closedThroughDate && movData.date <= currentCompany.closedThroughDate) {
       throw new Error('No se permiten movimientos ni devoluciones en un período cerrado hasta ' + currentCompany.closedThroughDate + '.');
     }
