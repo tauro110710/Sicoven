@@ -2,7 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { resolveBcvRateForDate } from "./resolveBcvRateForDate";
 
-const entry = (effectiveDate: string, rate: number) => ({ effectiveDate, rate });
+const entry = (effectiveDate: string, rate: number) => ({
+  id: `test-${effectiveDate}-${rate}`,
+  effectiveDate,
+  rate,
+  recordedAt: `${effectiveDate}T00:00:00.000Z`,
+  source: 'MANUAL' as const,
+});
 
 test("returns undefined when history is empty or missing", () => {
   assert.equal(resolveBcvRateForDate(undefined, "2024-01-15"), undefined);
