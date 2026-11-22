@@ -72,6 +72,7 @@ test('normaliza importes en bolívares según fecha a escala digital', () => {
   assert.equal(normalizeBolivarAmountForDate('100000', '2019-05-01').digitalBolivars, '0.1');
   assert.equal(normalizeBolivarAmountForDate('1000000', '2021-09-30').digitalBolivars, '1');
   assert.equal(normalizeBolivarAmountForDate('1.25', '2022-01-01').digitalBolivars, '1.25');
+  assert.equal(normalizeBolivarAmountForDate(1e21, '2022-01-01').digitalBolivars, '1000000000000000000000');
 });
 
 test('separa la conversión nominal del redondeo de presentación', () => {
