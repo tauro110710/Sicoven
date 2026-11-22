@@ -88,6 +88,7 @@ import type { FixedAsset, FixedAssetDepreciationEvent, FixedAssetRegistrationDra
 import { calculateFixedAssetDepreciation, getNextFixedAssetDepreciationPeriod, getFixedAssetDepreciationScheduleThrough } from '../types/fixedAssets';
 import { buildHistoricalAccountingReplayPlan, findOrphanedVatWithholdingEvents, findCrossCompanyVatWithholdingEvents, type HistoricalAccountingReplayPlan, type HistoricalReplayRecord } from '../types/historicalAccountingReplayPlan';
 import { getFiscalExerciseStartDate } from '../types/fiscalExerciseLifecycle';
+import { getVenezuelanMonetaryEra } from '../types/historicalAccountingCalendar';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -234,7 +235,7 @@ interface AccountingContextType {
   // Conciliación Bancaria
   bankAccounts: BankAccount[];
   bankStatementMovements: BankStatementMovement[];
-  addBankAccount: (bank: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'> & { bcvRate?: number; parentAccountCode: string }) => BankAccount;
+  addBankAccount: (bank: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'> & { bcvRate?: number; parentAccountCode: string; openingDate?: string }) => BankAccount;
   registerTreasuryMovement: (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; bcvRate: number; counterpartAccountCode?: string; destinationBankAccountId?: string }) => JournalEntry;
   addBankStatementMovement: (movement: Omit<BankStatementMovement, 'id' | 'companyId'>) => BankStatementMovement;
   addBankStatementMovements: (movements: Array<{ bankAccountId: string; date: string; reference: string; description: string; type: 'DEBIT' | 'CREDIT'; amountBs: number; amountUsd: number; bcvRate: number; bcvRateEffectiveDate: string }>) => Promise<BankStatementMovement[]>;
@@ -1941,12 +1942,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const currentSequence = Math.max(maxEntryNum, journalSequenceRef.current[sequenceKey] || 0);
     const nextEntryNum = entry.entryNumber && entry.entryNumber > currentSequence ? entry.entryNumber : currentSequence + 1;
     journalSequenceRef.current[sequenceKey] = Math.max(journalSequenceRef.current[sequenceKey] || 0, nextEntryNum);
+    // Determinar la escala monetaria venezolana de la fecha efectiva del asiento.
+    // Si la fecha no es válida (no debería llegar aquí), omitir el campo.
+    let monetaryEraId: string | undefined;
+    try { monetaryEraId = getVenezuelanMonetaryEra(entry.date).id; } catch { monetaryEraId = undefined; }
     const newEntry: JournalEntry = {
       ...entry,
       id: `entry-${sequenceKey}-${nextEntryNum}-${Date.now()}`,
       companyId: targetCompany.id,
       entryNumber: nextEntryNum,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      monetaryEraId
     };
     if (!['APERTURA', 'CIERRE'].includes(newEntry.type)) reserveBankOutgoingAccounts(newEntry.companyId, newEntry.items);
     activeImportBatchRef.current?.journalEntries.push(newEntry);
@@ -6733,7 +6739,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   // Tesorería: alta bancaria y creación automática del auxiliar contable.
-  const addBankAccount = (bankData: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'> & { bcvRate?: number; parentAccountCode: string }): BankAccount => {
+  const addBankAccount = (bankData: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'> & { bcvRate?: number; parentAccountCode: string; openingDate?: string }): BankAccount => {
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('Registrar una cuenta bancaria requiere SQLite local de escritorio disponible y lista.');
     }
@@ -6781,8 +6787,22 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // La validación del asiento debe reconocer el auxiliar recién generado.
     // Se valida contra el catálogo proyectado y luego se guardan ambos estados juntos.
     if (hasOpeningBalance && equity) {
+      // Usar la fecha histórica del saldo inicial si el contador la proporcionó;
+      // si no, usar la fecha de hoy. El asiento de apertura queda en la fecha
+      // real de la cuenta, no en la fecha en que el contador la registró en SICOVEN.
+      let openingEntryDate: string;
+      const candidateDate = bankData.openingDate;
+      if (candidateDate && /^\d{4}-\d{2}-\d{2}$/.test(candidateDate)) {
+        const parsed = new Date(candidateDate + 'T00:00:00.000Z');
+        openingEntryDate = Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === candidateDate
+          ? candidateDate
+          : (() => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); })();
+      } else {
+        const now = new Date();
+        openingEntryDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+      }
       addJournalEntry({
-        entryNumber: 0, date: (() => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); })(),
+        entryNumber: 0, date: openingEntryDate,
         description: `Apertura de cuenta bancaria: ${auxName}`, type: 'APERTURA', bcvRate: rate,
         referenceDoc: `APERTURA-${digits}`,
         items: [

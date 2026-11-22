@@ -366,6 +366,12 @@ export interface JournalEntry {
     nextPeriodStartDate: string;
     cycleNumber?: number;
   };
+  /**
+   * Escala monetaria venezolana aplicable a la fecha efectiva del asiento.
+   * Asignada automáticamente al guardar mediante `getVenezuelanMonetaryEra`.
+   * Permite que reportes y auditorías distingan la denominación sin recalcular.
+   */
+  monetaryEraId?: string;
 }
 
 export interface PurchaseInventoryLine {
