@@ -308,8 +308,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
               </select>
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) *</label>
-              <input type="text" inputMode="decimal" required placeholder="Ej.: 889,67" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) (opcional)</label>
+              <input type="text" inputMode="decimal" placeholder="Ej.: 889,67 (dejar vacío si pendiente)" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">RIF proveedor / cliente</label>
