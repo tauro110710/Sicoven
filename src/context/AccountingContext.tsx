@@ -5054,7 +5054,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const offsetAccount = accounts.find(a => a.code === newProd.openingBalanceAccountCode && a.isMovement);
       if (!offsetAccount) throw new Error(`La cuenta contrapartida de apertura ${newProd.openingBalanceAccountCode} no existe o no admite movimientos.`);
       const openingValueBs = Math.round(initialQuantity * initialCostBs * 100) / 100;
-      const openingValueUsd = Math.round(openingValueBs / rate * 1000000) / 1000000;
+      const openingValueUsd = rate > 0 ? Math.round(openingValueBs / rate * 1000000) / 1000000 : 0;
       const entryNumber = journalEntries.filter(e => e.companyId === currentCompany.id).reduce((max,e) => Math.max(max,e.entryNumber),0) + 1;
       openingEntry = {
         id: `entry-inventory-opening-${newProd.id}`, companyId: currentCompany.id, entryNumber,
@@ -5070,7 +5070,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         productId: newProd.id, productName: newProd.name, productCode: newProd.code,
         date: openingEntry.date, type: 'ENTRADA', concept: 'INVENTARIO_INICIAL',
         documentRef: openingEntry.referenceDoc || 'APERTURA-INVENTARIO', quantity: initialQuantity, unitCostBs: initialCostBs,
-        unitCostUsd: initialCostBs / rate, totalCostBs: openingValueBs,
+        unitCostUsd: rate > 0 ? initialCostBs / rate : 0, totalCostBs: openingValueBs,
         totalCostUsd: openingValueUsd, balanceQty: initialQuantity,
         balanceTotalBs: openingValueBs, balanceTotalUsd: openingValueUsd,
         bcvRate: rate, costingMethod: newProd.costingMethod, journalEntryId: openingEntry.id
@@ -5152,7 +5152,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const offsetAccount = accounts.find(a => a.code === product.openingBalanceAccountCode && a.isMovement);
         if (!offsetAccount) throw new Error('Cuenta de contrapartida de apertura inválida para el artículo ' + code + '.');
         const totalBs = Math.round(quantity * unitCostBs * 100) / 100;
-        const totalUsd = Math.round(totalBs / rate * 1000000) / 1000000;
+        const totalUsd = rate > 0 ? Math.round(totalBs / rate * 1000000) / 1000000 : 0;
         const entry: JournalEntry = {
           id: 'entry-inventory-opening-' + product.id, companyId: targetCompanyId, entryNumber: nextEntryNumber++,
           date, description: 'Asiento de apertura de inventario · ' + code + ' · ' + name, type: 'APERTURA',
@@ -5167,7 +5167,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           id: 'mov-opening-' + product.id, companyId: targetCompanyId, productId: product.id,
           productName: name, productCode: code, date, type: 'ENTRADA', concept: 'INVENTARIO_INICIAL',
           documentRef: entry.referenceDoc || 'APERTURA-INVENTARIO', quantity, unitCostBs,
-          unitCostUsd: unitCostBs / rate, totalCostBs: totalBs, totalCostUsd: totalUsd,
+          unitCostUsd: rate > 0 ? unitCostBs / rate : 0, totalCostBs: totalBs, totalCostUsd: totalUsd,
           balanceQty: quantity, balanceTotalBs: totalBs, balanceTotalUsd: totalUsd,
           bcvRate: rate, costingMethod: product.costingMethod, journalEntryId: entry.id
         });
@@ -5259,7 +5259,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           const history = virtualMovements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
           const layers = reconstructFifoLayers(history, product.currentStock);
           const fifoAdjustment = applyFifoAdjustment(layers, targetStock - product.currentStock,
-            requestedCost, requestedCost / rate, row.date, row.documentRef);
+            requestedCost, rate > 0 ? requestedCost / rate : 0, row.date, row.documentRef);
           totalCostBs = fifoAdjustment.totalCostBs;
           unitCostBs = fifoAdjustment.unitCostBs;
           var adjustmentUsd = fifoAdjustment.totalCostUsd;
@@ -5275,16 +5275,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         }
       }
       const totalCostUsd = row.type === 'AJUSTE' && product.costingMethod === 'PEPS'
-        ? adjustmentUsd! : Math.round(totalCostBs / rate * 1000000) / 1000000;
+        ? adjustmentUsd! : (rate > 0 ? Math.round(totalCostBs / rate * 1000000) / 1000000 : 0);
       const newAverageUsd = row.type === 'AJUSTE' && product.costingMethod === 'PEPS'
-        ? adjustmentAverageUsd! : newAverageBs / rate;
+        ? adjustmentAverageUsd! : (rate > 0 ? newAverageBs / rate : 0);
       if (expectedBalanceQty !== undefined && (!Number.isFinite(expectedBalanceQty) || Math.abs(expectedBalanceQty - newStock) > 0.000001)) {
         throw new Error('Fila ' + (index + 2) + ': la existencia final declarada (' + expectedBalanceQty + ') no coincide con la existencia calculada (' + newStock + ') para ' + product.code + '. Revise el orden y los movimientos previos.');
       }
       const { expectedBalanceQty: _expectedBalanceQty, ...movementDraft } = row;
       const movement: InventoryMovement = {
         ...movementDraft, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
-        companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: row.type === 'AJUSTE' && product.costingMethod === 'PEPS' ? adjustmentUsd! / movementQuantity : unitCostBs / rate, additionalLandedCostsBs: landedCostsBs,
+        companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: row.type === 'AJUSTE' && product.costingMethod === 'PEPS' ? adjustmentUsd! / movementQuantity : (rate > 0 ? unitCostBs / rate : 0), additionalLandedCostsBs: landedCostsBs,
         totalCostBs, totalCostUsd, balanceQty: newStock,
         balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
         balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
@@ -5335,7 +5335,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       virtualProducts.set(product.id, {
         ...product, currentStock: newStock, avgCostBs: newAverageBs, avgCostUsd: newAverageUsd,
         lastCostBs: row.type === 'ENTRADA' ? effectiveUnitCost : product.lastCostBs,
-        lastCostUsd: row.type === 'ENTRADA' ? effectiveUnitCost / rate : product.lastCostUsd
+        lastCostUsd: row.type === 'ENTRADA' ? (rate > 0 ? effectiveUnitCost / rate : 0) : product.lastCostUsd
       });
     }
     importedEntries.forEach(entry => reserveBankOutgoingAccounts(entry.companyId, entry.items));
