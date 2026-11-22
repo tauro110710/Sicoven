@@ -3647,9 +3647,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const totalCostBs = Math.round(qty * effectiveUnitCost * 100) / 100;
         const unitCostUsd = rate > 0 ? toUsd(effectiveUnitCost) : pState.avgCostUsd;
         const totalCostUsd = Math.round(qty * unitCostUsd * 1000000) / 1000000;
-        const weighted = rate > 0
-          ? calculateWeightedAverageCost(pState.currentStock, pState.avgCostBs, qty, effectiveUnitCost, rate)
-          : calculateWeightedAverageCostDual(pState.currentStock, pState.avgCostBs, pState.avgCostUsd, qty, effectiveUnitCost, unitCostUsd);
+        // Ponderar Bs y USD independientemente: la tasa nueva solo valora la entrada,
+        // nunca reexpresa el costo USD histórico de las existencias anteriores.
+        const weighted = calculateWeightedAverageCostDual(
+          pState.currentStock, pState.avgCostBs, pState.avgCostUsd,
+          qty, effectiveUnitCost, unitCostUsd
+        );
         const newStock = weighted.quantity;
         const newAverageBs = weighted.unitCostBs;
         const newAverageUsd = weighted.unitCostUsd;
