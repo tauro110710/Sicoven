@@ -22,6 +22,9 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   })();
 
   const [invoiceDate, setInvoiceDate] = useState<string>(startDate);
+  React.useEffect(() => {
+    setInvoiceDate(startDate);
+  }, [currentCompany.id, currentCompany.accountingStartDate]);
   const [customerRif, setCustomerRif] = useState<string>('J-');
   const [customerName, setCustomerName] = useState<string>('');
   const [customerAddress, setCustomerAddress] = useState<string>('');
