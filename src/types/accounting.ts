@@ -410,6 +410,10 @@ export interface PurchaseRecord {
   taxableBaseDigitalBs?: string;
   exemptAmountDigitalBs?: string;
   vatAmountDigitalBs?: string;
+  additionalLuxuryTaxDigitalBs?: string;
+  vatWithheldDigitalBs?: string;
+  islrWithheldDigitalBs?: string;
+  igtfAmountDigitalBs?: string;
   /** Líneas de mercancía vinculadas al Kardex; ausente en facturas históricas sin detalle. */
   inventoryLines?: PurchaseInventoryLine[];
   /** Cuenta explícita de débito para compras no inventariables; nunca se infiere por defecto. */
