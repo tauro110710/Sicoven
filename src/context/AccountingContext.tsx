@@ -3256,7 +3256,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     if (targetCompany.accountingStartDate &&
         (purchaseData.invoiceDate < targetCompany.accountingStartDate ||
-         purchaseData.accountCreditDate < targetCompany.accountingStartDate)) {
+         (purchaseData.accountCreditDate || '') < targetCompany.accountingStartDate)) {
       throw new Error('Las fechas de la compra no pueden ser anteriores al inicio contable de la empresa (' + targetCompany.accountingStartDate + ').');
     }
     if (!String(purchaseData.supplierName || '').trim() || !validateVenezuelanRif(purchaseData.supplierRif).isValid) {
