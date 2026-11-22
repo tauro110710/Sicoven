@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildHistoricalFiscalExercises,
+  isValidAccountingStartDate,
   convertVenezuelanAmount,
   getVenezuelanMonetaryEra,
   roundHistoricalPresentationAmount
@@ -38,6 +39,13 @@ test('permite reconstruir ejercicios anteriores a 2015 cuando esa fue la fecha r
   });
   assert.deepEqual(exercises.map(item => item.fiscalYear), [1998, 1999, 2000]);
   assert.equal(exercises[0].startDate, '1998-09-03');
+});
+
+test('permite iniciar registro contable desde 2012 y rechaza fechas anteriores o inválidas', () => {
+  assert.equal(isValidAccountingStartDate('2012-01-01'), true);
+  assert.equal(isValidAccountingStartDate('2012-05-17'), true);
+  assert.equal(isValidAccountingStartDate('2011-12-31'), false);
+  assert.equal(isValidAccountingStartDate('2026-02-30'), false);
 });
 
 test('determina la escala monetaria histórica por la fecha efectiva legal', () => {
