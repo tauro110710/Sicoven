@@ -534,6 +534,15 @@ export interface SaleInventoryLine {
 export interface SaleRecord {
   /** Detalle comercial histórico importado; sus salidas de Kardex se conservan como movimientos enlazados por factura. */
   inventoryLines?: SaleInventoryLine[];
+  /** Automatic digital-bolivar equivalencies derived from invoice date. */
+  monetaryEraId?: 'BOLIVAR_ORIGINAL' | 'BOLIVAR_FUERTE' | 'BOLIVAR_SOBERANO' | 'BOLIVAR_DIGITAL';
+  totalAmountDigitalBs?: string;
+  taxableBaseDigitalBs?: string;
+  exemptAmountDigitalBs?: string;
+  vatAmountDigitalBs?: string;
+  additionalLuxuryTaxDigitalBs?: string;
+  vatWithheldDigitalBs?: string;
+  igtfAmountDigitalBs?: string;
   id: string;
   companyId: string;
   opNumber: number;
