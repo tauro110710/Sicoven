@@ -36,7 +36,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
   React.useEffect(() => {
     const s = currentCompany?.accountingStartDate;
     const today = new Date().toISOString().slice(0, 10);
-    setDate((s && /^\\d{4}-\\d{2}-\\d{2}$/.test(s) && s < today) ? s : today);
+    setDate((s && /^\d{4}-\d{2}-\d{2}$/.test(s) && s < today) ? s : today);
   }, [currentCompany.id, currentCompany.accountingStartDate]);
 
   // La tasa sugerida debe corresponder siempre a la fecha del movimiento,
@@ -45,7 +45,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
     const history = currentCompany.accountingBcvRateHistory || [];
     let best;
     for (const entry of history) {
-      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(entry.effectiveDate) || entry.effectiveDate > date) continue;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.effectiveDate) || entry.effectiveDate > date) continue;
       const rate = Number(entry.rate);
       if (!Number.isFinite(rate) || rate <= 0) continue;
       if (!best || entry.effectiveDate >= best.effectiveDate) best = entry;
