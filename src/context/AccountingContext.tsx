@@ -3692,8 +3692,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             currentStock: updated.currentStock,
             avgCostBs: updated.avgCostBs,
             avgCostUsd: updated.avgCostUsd,
-            lastCostBs: p.lastCostBs, // se actualiza al primer movimiento del día
-            lastCostUsd: p.lastCostUsd
+            lastCostBs: autoMovements.filter(m => m.productId === p.id).slice(-1)[0]?.unitCostBs ?? p.lastCostBs,
+            lastCostUsd: autoMovements.filter(m => m.productId === p.id).slice(-1)[0]?.unitCostUsd ?? p.lastCostUsd
           };
         }));
         // Registrar en batch de importación si está activo.
