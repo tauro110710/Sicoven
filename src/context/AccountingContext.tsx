@@ -5944,7 +5944,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (movData.type === 'ENTRADA') {
       unitCostBs = effectiveUnitCost;
       unitCostUsd = toUsd(unitCostBs);
-      const weighted = calculateWeightedAverageCost(prod.currentStock, prod.avgCostBs, Number(movData.quantity), effectiveUnitCost, rate);
+      const weighted = rate > 0
+        ? calculateWeightedAverageCost(prod.currentStock, prod.avgCostBs, Number(movData.quantity), effectiveUnitCost, rate)
+        : calculateWeightedAverageCostDual(prod.currentStock, prod.avgCostBs, Number(prod.avgCostUsd || 0), Number(movData.quantity), effectiveUnitCost, unitCostUsd);
       newStock = weighted.quantity;
       newAverageBs = weighted.unitCostBs;
       newAverageUsd = weighted.unitCostUsd;
