@@ -3618,6 +3618,90 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     activeImportBatchRef.current?.purchases.push(finalPurchase);
     setPurchases(prev => [...prev, finalPurchase]);
 
+    // 1b. Generar entradas automáticas de Kardex por cada línea de inventario.
+    // Esto conecta la cadena Compra → Kardex → Inventario → Costos sin que el
+    // contador tenga que crear el movimiento manualmente.
+    if (hasInventoryLines && purchaseData.inventoryLines!.length > 0) {
+      const autoMovements: InventoryMovement[] = [];
+      const productStateMap = new Map<string, { currentStock: number; avgCostBs: number; avgCostUsd: number }>();
+      // Inicializar el mapa con el estado actual de cada producto implicado.
+      for (const line of purchaseData.inventoryLines!) {
+        const product = products.find(p => p.id === line.productId && p.companyId === targetCompany.id);
+        if (product && !productStateMap.has(product.id)) {
+          productStateMap.set(product.id, {
+            currentStock: product.currentStock,
+            avgCostBs: product.avgCostBs,
+            avgCostUsd: product.avgCostUsd || toUsd(product.avgCostBs)
+          });
+        }
+      }
+      for (const line of purchaseData.inventoryLines!) {
+        const product = products.find(p => p.id === line.productId && p.companyId === targetCompany.id);
+        if (!product) continue;
+        const pState = productStateMap.get(product.id)!;
+        const qty = Number(line.quantity);
+        const unitCostBs = Number(line.unitCostBs);
+        const landedCostsBs = Number(line.additionalLandedCostsBs || 0);
+        const effectiveUnitCost = unitCostBs + (qty > 0 ? landedCostsBs / qty : 0);
+        const totalCostBs = Math.round(qty * effectiveUnitCost * 100) / 100;
+        const totalCostUsd = toUsd(totalCostBs);
+        const weighted = calculateWeightedAverageCost(pState.currentStock, pState.avgCostBs, qty, effectiveUnitCost, rate);
+        const newStock = weighted.quantity;
+        const newAverageBs = weighted.unitCostBs;
+        const newAverageUsd = weighted.unitCostUsd;
+        const movId = `mov-auto-pur-${purchaseId}-${line.productId}-${Date.now()}`;
+        const autoMov: InventoryMovement = {
+          id: movId,
+          companyId: targetCompany.id,
+          productId: line.productId,
+          productName: product.name,
+          productCode: product.code,
+          date: purchaseData.invoiceDate,
+          type: 'ENTRADA',
+          concept: 'COMPRA',
+          documentType: 'Factura',
+          documentRef: `FAC-${purchaseData.invoiceNumber}`,
+          quantity: qty,
+          unitCostBs: effectiveUnitCost,
+          unitCostUsd: toUsd(effectiveUnitCost),
+          totalCostBs,
+          totalCostUsd,
+          balanceQty: newStock,
+          balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
+          balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
+          bcvRate: rate,
+          additionalLandedCostsBs: landedCostsBs,
+          costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO',
+          journalEntryId: createdJournalEntry.id
+        };
+        autoMovements.push(autoMov);
+        // Actualizar el estado virtual del producto para la siguiente línea.
+        productStateMap.set(product.id, {
+          currentStock: newStock,
+          avgCostBs: newAverageBs,
+          avgCostUsd: newAverageUsd
+        });
+      }
+      if (autoMovements.length > 0) {
+        setMovements(prev => [...prev, ...autoMovements]);
+        // Actualizar saldo/costo del producto en el catálogo.
+        setProducts(prev => prev.map(p => {
+          const updated = productStateMap.get(p.id);
+          if (!updated || p.companyId !== targetCompany.id) return p;
+          return {
+            ...p,
+            currentStock: updated.currentStock,
+            avgCostBs: updated.avgCostBs,
+            avgCostUsd: updated.avgCostUsd,
+            lastCostBs: p.lastCostBs, // se actualiza al primer movimiento del día
+            lastCostUsd: p.lastCostUsd
+          };
+        }));
+        // Registrar en batch de importación si está activo.
+        autoMovements.forEach(m => activeImportBatchRef.current?.inventoryMovements?.push(m));
+      }
+    }
+
     // 2. Si retuvo IVA, crear el comprobante oficial de retención de IVA
     if (purchaseData.vatWithheldBs > 0 && voucherNum) {
       const vatVoucher: VatRetentionVoucher = {
@@ -4675,6 +4759,124 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     activeImportBatchRef.current?.sales.push(finalSale);
     setSales(prev => [...prev, finalSale]);
+
+    // Generar salidas automáticas de Kardex + asiento de Costo de Ventas
+    // cuando la venta incluye líneas de inventario detalladas.
+    const hasSaleInventoryLines = Array.isArray(saleData.inventoryLines) && saleData.inventoryLines!.length > 0;
+    if (hasSaleInventoryLines) {
+      const saleAutoMovements: InventoryMovement[] = [];
+      const cogsItems: JournalEntryItem[] = [];
+      const saleProductStateMap = new Map<string, { currentStock: number; avgCostBs: number; avgCostUsd: number }>();
+      // Inicializar estado actual de cada producto.
+      for (const line of saleData.inventoryLines!) {
+        const product = products.find(p => p.id === line.productId && p.companyId === targetCompany.id);
+        if (product && !saleProductStateMap.has(product.id)) {
+          saleProductStateMap.set(product.id, {
+            currentStock: product.currentStock,
+            avgCostBs: product.avgCostBs,
+            avgCostUsd: product.avgCostUsd || toUsd(product.avgCostBs)
+          });
+        }
+      }
+      for (const line of saleData.inventoryLines!) {
+        const product = products.find(p => p.id === line.productId && p.companyId === targetCompany.id);
+        if (!product) continue;
+        const pState = saleProductStateMap.get(product.id)!;
+        const qty = Number(line.quantity);
+        if (qty <= 0 || pState.currentStock <= 0) continue;
+        let totalCostBs = 0;
+        let unitCostBs = 0;
+        if (product.costingMethod === 'PEPS') {
+          const history = movements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
+          const layers = reconstructFifoLayers(history, pState.currentStock);
+          const fifoResult = calculateFifoIssue(layers, qty);
+          totalCostBs = fifoResult.totalCostBs;
+          unitCostBs = qty > 0 ? totalCostBs / qty : 0;
+        } else {
+          unitCostBs = pState.avgCostBs;
+          totalCostBs = Math.round(qty * unitCostBs * 100) / 100;
+        }
+        const totalCostUsd = toUsd(totalCostBs);
+        const newStock = Math.max(0, pState.currentStock - qty);
+        const newAverageBs = newStock > 0 ? pState.avgCostBs : 0;
+        const newAverageUsd = toUsd(newAverageBs);
+        const saleMovId = `mov-auto-sale-${saleId}-${line.productId}-${Date.now()}`;
+        const saleAutoMov: InventoryMovement = {
+          id: saleMovId,
+          companyId: targetCompany.id,
+          productId: line.productId,
+          productName: product.name,
+          productCode: product.code,
+          date: saleData.invoiceDate,
+          type: 'SALIDA',
+          concept: 'VENTA',
+          documentType: 'Factura',
+          documentRef: `FAC-${saleData.invoiceNumber}`,
+          quantity: qty,
+          unitCostBs,
+          unitCostUsd: toUsd(unitCostBs),
+          totalCostBs,
+          totalCostUsd,
+          balanceQty: newStock,
+          balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
+          balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
+          bcvRate: rate,
+          costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO',
+          journalEntryId: createdJournalEntry.id
+        };
+        saleAutoMovements.push(saleAutoMov);
+        saleProductStateMap.set(product.id, {
+          currentStock: newStock,
+          avgCostBs: newAverageBs,
+          avgCostUsd: newAverageUsd
+        });
+        // Acumular costo de ventas para el asiento.
+        const cogsAccount = accounts.find(a => a.code === (product.costOfSalesAccountCode || '5.1.1.01') && a.isMovement);
+        const inventoryAccount = accounts.find(a => a.code === (product.inventoryAccountCode || '1.1.4.01') && a.isMovement);
+        if (cogsAccount && inventoryAccount && totalCostBs > 0) {
+          cogsItems.push(
+            { accountCode: cogsAccount.code, accountName: cogsAccount.name, debitBs: totalCostBs, creditBs: 0, debitUsd: totalCostUsd, creditUsd: 0, description: `CMV ${product.code} · ${qty} und · Fac. ${saleData.invoiceNumber}` },
+            { accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: 0, creditBs: totalCostBs, debitUsd: 0, creditUsd: totalCostUsd, description: `Salida inventario ${product.code} · venta Fac. ${saleData.invoiceNumber}` }
+          );
+        }
+      }
+      if (saleAutoMovements.length > 0) {
+        setMovements(prev => [...prev, ...saleAutoMovements]);
+        setProducts(prev => prev.map(p => {
+          const updated = saleProductStateMap.get(p.id);
+          if (!updated || p.companyId !== targetCompany.id) return p;
+          return { ...p, currentStock: updated.currentStock, avgCostBs: updated.avgCostBs, avgCostUsd: updated.avgCostUsd };
+        }));
+        saleAutoMovements.forEach(m => activeImportBatchRef.current?.inventoryMovements?.push(m));
+      }
+      // Asiento de Costo de Ventas separado (tipo INVENTARIO, vinculado a la venta).
+      if (cogsItems.length > 0) {
+        const cogsDebitBs = cogsItems.reduce((s, i) => s + i.debitBs, 0);
+        const cogsCreditBs = cogsItems.reduce((s, i) => s + i.creditBs, 0);
+        if (Math.abs(cogsDebitBs - cogsCreditBs) < 0.02) {
+          const cogsEntryNum = Math.max(
+            journalEntries.filter(e => e.companyId === targetCompany.id).reduce((max, e) => Math.max(max, e.entryNumber || 0), 0),
+            journalSequenceRef.current[companyKey] || 0
+          ) + 1;
+          journalSequenceRef.current[companyKey] = cogsEntryNum;
+          const cogsEntry: JournalEntry = {
+            id: `entry-cogs-${saleId}`,
+            companyId: targetCompany.id,
+            entryNumber: cogsEntryNum,
+            date: saleData.invoiceDate,
+            description: `Costo de Ventas Fac. ${saleData.invoiceNumber} - ${saleData.customerName}`,
+            type: 'INVENTARIO',
+            bcvRate: rate,
+            referenceDoc: `FAC-${saleData.invoiceNumber}`,
+            items: cogsItems,
+            createdAt: new Date().toISOString()
+          };
+          activeImportBatchRef.current?.journalEntries.push(cogsEntry);
+          setJournalEntries(prev => [...prev, cogsEntry]);
+        }
+      }
+    }
+
     return finalSale;
   };
 
