@@ -424,6 +424,7 @@ export const InventarioView: React.FC = () => {
                         </td>
                         <td className="py-2 px-4 text-right font-mono font-bold text-slate-900">
                           {formatBs(mov.totalCostBs)}
+                          <div className="text-[10px] font-normal text-indigo-600" title="Equivalencia automática a bolívares digitales según fecha del movimiento">Digital: {formatBs(Number(mov.totalCostDigitalBs || normalizeBolivarAmountForDate(mov.totalCostBs, mov.date).digitalBolivars))}</div>
                         </td>
                         <td className="py-2 px-4 text-right font-mono font-bold text-slate-900 bg-slate-50/50">
                           {mov.balanceQty}
