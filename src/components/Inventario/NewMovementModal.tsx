@@ -5,6 +5,7 @@ import { formatBs, formatUsd } from '../../utils/formatters';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
+import { calculateFifoIssue, reconstructFifoLayers } from '../../types/inventoryAccounting';
 
 interface NewMovementModalProps {
   isOpen: boolean;
@@ -102,10 +103,20 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const additionalLandedCostsBs = parseDecimalInput(additionalLandedCostsInput);
   const bcvRate = parseDecimalInput(bcvRateInput);
   const unitCostUsd = bcvRate > 0 ? unitCostBs / bcvRate : 0;
+  const fifoPreview = React.useMemo(() => {
+    if (type !== 'SALIDA' || selectedProduct.costingMethod !== 'PEPS') return undefined;
+    try {
+      const prior = companyMovements.filter(m => m.productId === selectedProduct.id && m.date <= date);
+      const layers = reconstructFifoLayers(prior, selectedProduct.currentStock);
+      return calculateFifoIssue(layers, quantity);
+    } catch {
+      return undefined;
+    }
+  }, [type, selectedProduct.id, selectedProduct.costingMethod, selectedProduct.currentStock, companyMovements, date, quantity]);
   const totalCostBs = type === 'ENTRADA'
     ? quantity * unitCostBs + additionalLandedCostsBs
     : type === 'SALIDA'
-      ? quantity * selectedProduct.avgCostBs
+      ? (fifoPreview?.totalCostBs ?? quantity * selectedProduct.avgCostBs)
       : Math.abs(quantity - selectedProduct.currentStock) * (quantity < selectedProduct.currentStock ? selectedProduct.avgCostBs : unitCostBs);
   const totalCostUsd = bcvRate > 0 ? totalCostBs / bcvRate : 0;
 
