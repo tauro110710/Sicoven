@@ -290,6 +290,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) (opcional)</label>
               <input type="text" inputMode="decimal" placeholder="Ej.: 889,67 (opcional)" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+              {!bcvRate && <p className="mt-1 text-[10px] text-amber-700">Sin tasa BCV: el movimiento se guarda en Bs. y la equivalencia USD queda pendiente (no se inventa una tasa).</p>}
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">RIF proveedor / cliente</label>
