@@ -1942,8 +1942,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const currentSequence = Math.max(maxEntryNum, journalSequenceRef.current[sequenceKey] || 0);
     const nextEntryNum = entry.entryNumber && entry.entryNumber > currentSequence ? entry.entryNumber : currentSequence + 1;
     journalSequenceRef.current[sequenceKey] = Math.max(journalSequenceRef.current[sequenceKey] || 0, nextEntryNum);
+    const normalizedJournalItems = entry.items.map(item => ({
+      ...item,
+      debitDigitalBs: normalizeBolivarAmountForDate(item.debitBs, entry.date).digitalBolivars,
+      creditDigitalBs: normalizeBolivarAmountForDate(item.creditBs, entry.date).digitalBolars
+    }));
+    const entryMonetaryEra = normalizeBolivarAmountForDate(0, entry.date).sourceEra.id;
     const newEntry: JournalEntry = {
       ...entry,
+      monetaryEraId: entryMonetaryEra,
+      items: normalizedJournalItems,
       id: `entry-${sequenceKey}-${nextEntryNum}-${Date.now()}`,
       companyId: targetCompany.id,
       entryNumber: nextEntryNum,
