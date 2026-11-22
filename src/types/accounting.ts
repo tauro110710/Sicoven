@@ -275,6 +275,9 @@ export interface Account {
 }
 
 export interface JournalEntryItem {
+  /** Bolivar-scale normalized values derived from the line's effective journal date. */
+  debitDigitalBs?: string;
+  creditDigitalBs?: string;
   accountCode: string;
   accountName: string;
   debitBs: number;
@@ -328,6 +331,8 @@ export interface FiscalZReportMetadata {
 }
 
 export interface JournalEntry {
+  /** Scale used by nominal Bs values on this entry's effective date. */
+  monetaryEraId?: 'BOLIVAR_ORIGINAL' | 'BOLIVAR_FUERTE' | 'BOLIVAR_SOBERANO' | 'BOLIVAR_DIGITAL';
   id: string;
   companyId: string;
   entryNumber: number;
