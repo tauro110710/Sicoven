@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildHistoricalFiscalExercises,
   isValidAccountingStartDate,
+  normalizeBolivarAmountForDate,
   convertVenezuelanAmount,
   getVenezuelanMonetaryEra,
   roundHistoricalPresentationAmount
@@ -62,6 +63,15 @@ test('convierte escalas sin redondear ni perder precisión decimal de origen', (
   assert.equal(convertVenezuelanAmount('100000000000000', 'BOLIVAR_ORIGINAL', 'BOLIVAR_DIGITAL'), '1');
   assert.equal(convertVenezuelanAmount('0.00000001', 'BOLIVAR_DIGITAL', 'BOLIVAR_SOBERANO'), '0.01');
   assert.equal(convertVenezuelanAmount('-1000000', 'BOLIVAR_SOBERANO', 'BOLIVAR_DIGITAL'), '-1');
+});
+
+test('normaliza importes en bolívares según fecha a escala digital', () => {
+  const historical2012Amount = normalizeBolivarAmountForDate('1000000', '2012-06-30');
+  assert.equal(historical2012Amount.sourceEra.id, 'BOLIVAR_FUERTE');
+  assert.equal(historical2012Amount.digitalBolivars, '0.00001');
+  assert.equal(normalizeBolivarAmountForDate('100000', '2019-05-01').digitalBolivars, '0.1');
+  assert.equal(normalizeBolivarAmountForDate('1000000', '2021-09-30').digitalBolivars, '1');
+  assert.equal(normalizeBolivarAmountForDate('1.25', '2022-01-01').digitalBolivars, '1.25');
 });
 
 test('separa la conversión nominal del redondeo de presentación', () => {
