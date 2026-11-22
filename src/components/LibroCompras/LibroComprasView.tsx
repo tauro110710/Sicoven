@@ -280,6 +280,7 @@ export const LibroComprasView: React.FC = () => {
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
                       {formatBs(signed(p, p.totalAmountBs))}
+                      <div className="text-[10px] text-indigo-600 font-normal" title="Equivalencia automática en bolívares digitales según fecha de factura">Escala {p.monetaryEraId || normalizeBolivarAmountForDate(p.totalAmountBs, p.invoiceDate).sourceEra.id} · Digital: {formatBs(Number(p.totalAmountDigitalBs || normalizeBolivarAmountForDate(p.totalAmountBs, p.invoiceDate).digitalBolivars))}</div>
                       {displayCurrency !== 'BS' && (
                         <div className="text-[10px] text-slate-400 font-normal">
                           {formatUsd(signed(p, p.totalAmountUsd))}
