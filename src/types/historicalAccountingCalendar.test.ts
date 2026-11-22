@@ -106,5 +106,7 @@ test('suma decimales de balances con precisión exacta, sin errores de coma flot
   assert.equal(addExactDecimals('1.200', '0.008'), '1.208');
   assert.equal(addExactDecimals('10', '-10'), '0');
   assert.equal(addExactDecimals('0.00000000000001', '0.00000000000009'), '0.0000000000001');
+  assert.equal(addExactDecimals('1e-8', '2e-8'), '0.00000003');
+  assert.equal(addExactDecimals('1.25e3', '-2.5e2'), '1000');
   assert.throws(() => addExactDecimals('NaN', '1'));
 });
