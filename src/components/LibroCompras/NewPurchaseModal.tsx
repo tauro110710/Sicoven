@@ -69,14 +69,12 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   // Solo se muestra si el campo está vacío; el contador puede aplicarla con un clic.
   const [suggestedBcvRate, setSuggestedBcvRate] = React.useState<number | undefined>(undefined);
   React.useEffect(() => {
-    const resolved = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, accountCreditDate);
+    // La tasa BCV corresponde a la fecha de factura, no a la fecha de abono en cuenta.
+    const resolved = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, invoiceDate);
     setSuggestedBcvRate(resolved);
-    // Solo pre-llenar si el campo sigue vacío (no pisar lo que ya escribió el contador)
-    if (resolved && !bcvRateInput) {
-      setBcvRateInput(String(resolved));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountCreditDate, currentCompany.id, currentCompany.accountingBcvRateHistory]);
+    // Al cambiar la fecha, evitar conservar una tasa de otro período.
+    setBcvRateInput(resolved ? String(resolved) : '');
+  }, [invoiceDate, currentCompany.id, currentCompany.accountingBcvRateHistory]);
   const [notes, setNotes] = useState<string>('');
   // Clasificación explícita: mercancía al Kardex o cuenta específica de gasto/activo.
   const [linkInventory, setLinkInventory] = useState(true);
