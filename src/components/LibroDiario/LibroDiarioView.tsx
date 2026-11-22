@@ -102,12 +102,13 @@ export const LibroDiarioView: React.FC = () => {
     .sort((a, b) => a.entryNumber - b.entryNumber);
 
   // Overall totals
+  // Aggregate Bs. across monetary eras in the normalized digital-bolivar scale.
   const totalDebitsBs = filteredEntries.reduce(
-    (acc, e) => acc + e.items.reduce((sum, it) => sum + (it.debitBs || 0), 0),
+    (acc, e) => acc + e.items.reduce((sum, it) => sum + Number(it.debitDigitalBs ?? normalizeBolivarAmountForDate(it.debitBs || 0, e.date).digitalBolivars), 0),
     0
   );
   const totalCreditsBs = filteredEntries.reduce(
-    (acc, e) => acc + e.items.reduce((sum, it) => sum + (it.creditBs || 0), 0),
+    (acc, e) => acc + e.items.reduce((sum, it) => sum + Number(it.creditDigitalBs ?? normalizeBolivarAmountForDate(it.creditBs || 0, e.date).digitalBolivars), 0),
     0
   );
   const totalDebitsUsd = filteredEntries.reduce(
@@ -556,7 +557,7 @@ export const LibroDiarioView: React.FC = () => {
           </div>
           <div className="flex flex-wrap items-center gap-6 text-right">
             <div>
-              <div className="text-[11px] text-slate-400">Total Débitos (Debe):</div>
+              <div className="text-[11px] text-slate-400">Total Débitos (Debe · Bs. digitales):</div>
               <div className="text-sm font-mono font-bold text-emerald-400">
                 {formatBs(totalDebitsBs)}
               </div>
@@ -565,7 +566,7 @@ export const LibroDiarioView: React.FC = () => {
               </div>
             </div>
             <div>
-              <div className="text-[11px] text-slate-400">Total Créditos (Haber):</div>
+              <div className="text-[11px] text-slate-400">Total Créditos (Haber · Bs. digitales):</div>
               <div className="text-sm font-mono font-bold text-emerald-400">
                 {formatBs(totalCreditsBs)}
               </div>
